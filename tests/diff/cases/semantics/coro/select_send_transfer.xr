@@ -1,37 +1,42 @@
 // anchor: coro-select-send-transfer
 // select send arms enforce the same explicit transfer as ch.send / go:
-// copy(...) clones once at the boundary (independent of the original),
-// move transfers ownership, and scalars send directly. VM and AOT must agree.
+// copy(...) clones local storage once at the boundary (independent of the
+// original), move transfers an owned source, and scalars send directly. VM and
+// AOT must agree.
 
-shared ch: Channel<Array<int>> = Channel(4)
-shared sch: Channel<int> = Channel(2)
+fn main() {
+    shared ch: Channel<Array<int>> = Channel(4)
+    shared sch: Channel<int> = Channel(2)
 
-var a = [1, 2, 3]
-select {
-    copy(a) to ch -> { print("copy sent") }
-    _ -> { print("copy full") }
+    var a = [1, 2, 3]
+    select {
+        copy(a) to ch -> { print("copy sent") }
+        _ -> { print("copy full") }
+    }
+    a[0] = 99  // mutate original; the boundary copy must stay unaffected
+
+    owned b = [4, 5, 6]
+    select {
+        move b to ch -> { print("move sent") }
+        _ -> { print("move full") }
+    }
+
+    select {
+        7 to sch -> { print("scalar sent") }
+        _ -> { print("scalar full") }
+    }
+
+    var r1 = match (ch.tryRecv()) { Recv.Value(v) -> v[0]  _ -> -1 }
+    var r2 = match (ch.tryRecv()) { Recv.Value(v) -> v[0]  _ -> -1 }
+    var r3 = match (sch.tryRecv()) { Recv.Value(v) -> v  _ -> -1 }
+
+    ch.close()
+    sch.close()
+
+    print(r1)     // 1  (copy taken before a[0] = 99)
+    print(r2)     // 4  (moved)
+    print(r3)     // 7  (scalar)
+    print(a[0])   // 99 (original mutated, proving copy independence)
 }
-a[0] = 99  // mutate original; the boundary copy must stay unaffected
 
-var b = [4, 5, 6]
-select {
-    move b to ch -> { print("move sent") }
-    _ -> { print("move full") }
-}
-
-select {
-    7 to sch -> { print("scalar sent") }
-    _ -> { print("scalar full") }
-}
-
-var r1 = match (ch.tryRecv()) { Recv.Value(v) -> v[0]  _ -> -1 }
-var r2 = match (ch.tryRecv()) { Recv.Value(v) -> v[0]  _ -> -1 }
-var r3 = match (sch.tryRecv()) { Recv.Value(v) -> v  _ -> -1 }
-
-ch.close()
-sch.close()
-
-print(r1)     // 1  (copy taken before a[0] = 99)
-print(r2)     // 4  (moved)
-print(r3)     // 7  (scalar)
-print(a[0])   // 99 (original mutated, proving copy independence)
+main()

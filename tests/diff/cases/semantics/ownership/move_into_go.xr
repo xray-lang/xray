@@ -1,9 +1,13 @@
-// 116 boundary: local `var` ownership transferred into a goroutine via `move`.
-// Deterministic via await; output must match across VM/JIT/AOT.
+// 203 boundary: an `owned` source is transferred into a goroutine via `move`.
+// Deterministic via await; output must match across VM/AOT.
 fn consume(data: Array<int>) -> int {
     return len(data)
 }
 
-var job: Array<int> = [1, 2, 3]
-var t = go consume(move job)
-print(await t)
+fn main() {
+    owned job: Array<int> = [1, 2, 3]
+    var t = go consume(move job)
+    print(await t)
+}
+
+main()
