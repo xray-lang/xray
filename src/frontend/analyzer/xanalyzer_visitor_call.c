@@ -2846,6 +2846,28 @@ static bool xa_call_mutates_receiver(XaInferContext *ctx, XrType *receiver_type,
     return xa_method_name_mutates_receiver(method_name);
 }
 
+static bool xa_class_name_matches_mono_base(const char *class_name, const char *base) {
+    if (!class_name || !base)
+        return false;
+    size_t n = strlen(base);
+    if (strncmp(class_name, base, n) != 0)
+        return false;
+    return class_name[n] == '\0' || class_name[n] == '$';
+}
+
+static bool xa_type_allows_shared_interior_mutation(XrType *type) {
+    if (xa_type_is_concurrency_handle(type))
+        return true;
+    static const char *const audited[] = {"Mutex",   "RwLock",      "Once", "Barrier",
+                                          "Condvar", "ThreadLocal", NULL};
+    const char *class_name = xr_type_get_class_name(type);
+    for (const char *const *p = audited; *p; p++) {
+        if (xa_class_name_matches_mono_base(class_name, *p))
+            return true;
+    }
+    return false;
+}
+
 static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *call_node,
                                                  XaSymbolLinks *callee_links,
                                                  const char *callee_name, AstNode *arg_node,
@@ -3336,7 +3358,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_call_mutates_receiver(ctx, callee_obj_type, method_name)) {
             XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
             bool readonly_receiver = xr_type_is_const(callee_obj_type);
-            if ((root && (root->is_readonly_binding || root->is_shared)) || readonly_receiver) {
+            bool shared_interior_mutation =
+                root && root->is_shared &&
+                (xa_type_allows_shared_interior_mutation(callee_obj_type) ||
+                 xa_type_allows_shared_interior_mutation(root->links.type));
+            if ((root &&
+                 (root->is_readonly_binding || (root->is_shared && !shared_interior_mutation))) ||
+                readonly_receiver) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[192];

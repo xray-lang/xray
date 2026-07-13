@@ -1,11 +1,11 @@
 @test
 fn test_shared_block_capture() {
-    shared payload = [1, 2, 3]
+    shared payload = Atomic<int>(3)
     var t = go fn() -> int {
-        payload.push(4)
-        return len(payload)
+        payload.fetchAdd(1)
+        return payload.load()
     }()
 
     assert_eq(await t, 4)
-    assert_eq(len(payload), 4)
+    assert_eq(payload.load(), 4)
 }

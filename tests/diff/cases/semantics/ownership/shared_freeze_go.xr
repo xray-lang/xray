@@ -1,12 +1,13 @@
-// 116 boundary: build a `shared` map, alias the same shared identity, then
-// pass it across two goroutines.
+// 203 boundary: build a local mutable map, publish an independent shared
+// snapshot, alias that same shared identity, then pass it across two goroutines.
 fn reader(t: Map<int, int>) -> int {
     return len(t)
 }
 
-shared table: Map<int, int> = #{}
-table.set(1, 10)
-table.set(2, 20)
+var local: Map<int, int> = #{}
+local.set(1, 10)
+local.set(2, 20)
+shared table: Map<int, int> = copy(local)
 shared ro = table
 var a = go reader(ro)
 var b = go reader(ro)

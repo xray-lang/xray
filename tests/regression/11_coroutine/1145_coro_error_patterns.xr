@@ -85,7 +85,7 @@ fn test_manual_error_check() {
 fn test_await_all_with_errors() {
     var tasks = [
         go fn() -> string { return "ok-1" }(),
-        go { throw CoroErr.Msg("fail-2") },
+        go fn() -> string { throw CoroErr.Msg("fail-2") }(),
         go fn() -> string { return "ok-3" }()
     ]
 
