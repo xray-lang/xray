@@ -1,0 +1,13 @@
+fn fill(x: out int) {
+    x = 42
+}
+
+fn forward(x: out int) {
+    fill(out x)
+}
+
+@test
+fn test_out_param_forward_initializes_caller() {
+    var value = 0
+    forward(out value)
+}
