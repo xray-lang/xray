@@ -7,5 +7,5 @@ fn stash(data: ref Array<int>) {
 }
 
 var values: Array<int> = [1, 2, 3, 4]
-stash(values)
+stash(ref values)
 print(closures[0]())

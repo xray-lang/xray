@@ -15,9 +15,9 @@ fn wrap(value: Array<int>, holder: ref Holder) {
 }
 
 fn stash(data: in Array<int>, holder: ref Holder) {
-    wrap(data, holder)
+    wrap(data, ref holder)
 }
 
 var values: Array<int> = [1, 2]
 var holder = Holder()
-stash(values, holder)
+stash(values, ref holder)

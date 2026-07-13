@@ -4,4 +4,4 @@ fn stash(data: in Array<int>, slots: ref Array<Array<int>>) {
 
 var values: Array<int> = [1, 2]
 var slots: Array<Array<int>> = [[0]]
-stash(values, slots)
+stash(values, ref slots)

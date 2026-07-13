@@ -16,6 +16,7 @@
 #define XAST_NODES_EXPR_H
 
 #include "xast_nodes_common.h"
+#include "../../shared/xr_param_mode.h"
 
 /* ========== Variable / Assignment ========== */
 
@@ -59,6 +60,7 @@ typedef struct DestructureAssignNode {
 typedef struct CallExprNode {
     AstNode *callee;
     AstNode **arguments;
+    XrCallArgAccess *arg_accesses;
     int arg_count;
     int supplied_arg_count;
     int default_arg_count;

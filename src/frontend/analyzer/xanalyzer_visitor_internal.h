@@ -182,6 +182,9 @@ XR_FUNC bool xa_expr_yields_shared_provenance(XaInferContext *ctx, AstNode *expr
 XR_FUNC void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
                                             AstNode *arg_node, XrType *arg_type,
                                             const char *boundary_label);
+XR_FUNC void xa_check_arg_access_authorization(XaInferContext *ctx, AstNode *call_node,
+                                               AstNode *arg_node, XrCallArgAccess access, int slot,
+                                               XrParamMode param_mode);
 
 // Unified function body visitor (collect + direct traversal)
 XR_FUNC void xa_visit_function_body_unified(XaInferContext *ctx, AstNode *body);

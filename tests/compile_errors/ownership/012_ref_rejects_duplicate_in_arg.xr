@@ -4,4 +4,4 @@ fn mutate_and_read(target: ref Array<int>, snapshot: in Array<int>) {
 }
 
 var values: Array<int> = [0]
-mutate_and_read(values, values)
+mutate_and_read(ref values, values)

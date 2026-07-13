@@ -123,12 +123,13 @@ XR_FUNC AstNode *xr_ast_function_expr(XrCompilerSession *session, XrParamNode **
 
 // Create function call node
 XR_FUNC AstNode *xr_ast_call_expr(XrCompilerSession *session, AstNode *callee, AstNode **arguments,
-                                  int arg_count, int line);
+                                  XrCallArgAccess *arg_accesses, int arg_count, int line);
 
 // Create function call node with generic type arguments
 XR_FUNC AstNode *xr_ast_call_expr_generic(XrCompilerSession *session, AstNode *callee,
-                                          AstNode **arguments, int arg_count, XrTypeRef **type_args,
-                                          int type_arg_count, int line);
+                                          AstNode **arguments, XrCallArgAccess *arg_accesses,
+                                          int arg_count, XrTypeRef **type_args, int type_arg_count,
+                                          int line);
 
 // Create return statement node
 XR_FUNC AstNode *xr_ast_return_stmt(XrCompilerSession *session, AstNode **values, int count,
@@ -239,7 +240,8 @@ XR_FUNC AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name
 
 // Create new expression node (supports new module.Class() and new Box<int>() syntax)
 XR_FUNC AstNode *xr_ast_new_expr(XrCompilerSession *session, const char *module_name,
-                                 const char *class_name, AstNode **arguments, int arg_count,
+                                 const char *class_name, AstNode **arguments,
+                                 XrCallArgAccess *arg_accesses, int arg_count,
                                  XrTypeRef **type_args, int type_arg_count, int line);
 
 // Create this expression node
@@ -247,7 +249,8 @@ XR_FUNC AstNode *xr_ast_this_expr(XrCompilerSession *session, int line);
 
 // Create super call node
 XR_FUNC AstNode *xr_ast_super_call(XrCompilerSession *session, const char *method_name,
-                                   AstNode **arguments, int arg_count, int line);
+                                   AstNode **arguments, XrCallArgAccess *arg_accesses,
+                                   int arg_count, int line);
 
 // Create member assignment node
 XR_FUNC AstNode *xr_ast_member_set(XrCompilerSession *session, AstNode *object, const char *member,

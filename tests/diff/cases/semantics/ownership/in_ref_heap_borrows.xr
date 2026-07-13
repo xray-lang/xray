@@ -44,11 +44,11 @@ values.push(4)
 print(sum(values))
 
 var table: Map<string, int> = #{}
-put(table, "x", 7)
+put(ref table, "x", 7)
 print(hasKey(table, "x"))
 print(table["x"])
 
 var box = Box(3)
 print(readBox(box))
-setBox(box, 8)
+setBox(ref box, 8)
 print(readBox(box))

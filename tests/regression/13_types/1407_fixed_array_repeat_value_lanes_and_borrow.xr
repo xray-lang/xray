@@ -47,7 +47,7 @@ fn test_fixed_array_repeat_nested_value_lanes_and_borrowing() {
 
     var pass: [byte; 4] = [1, 2, 3, 4]
     assert(sum_fixed_in(pass) == 3)
-    bump_fixed_ref(pass)
+    bump_fixed_ref(ref pass)
     assert(pass[3] == 42)
 
     var holder = Holder{names: ["x", "y"], blocks: [[11, 12], [13, 14]]}

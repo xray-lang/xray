@@ -3063,9 +3063,14 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                 XrCompilerSession *sess =
                     xr_compiler_session_current_for_isolate(ctx->analyzer->isolate);
                 AstNode **new_args = (AstNode **) xr_calloc((size_t) pc, sizeof(AstNode *));
-                if (new_args) {
+                XrCallArgAccess *new_accesses =
+                    (XrCallArgAccess *) xr_calloc((size_t) pc, sizeof(XrCallArgAccess));
+                if (new_args && new_accesses) {
                     for (int i = 0; i < ne->arg_count; i++)
                         new_args[i] = ne->arguments[i];
+                    for (int i = 0; i < ne->arg_count; i++)
+                        new_accesses[i] =
+                            ne->arg_accesses ? ne->arg_accesses[i] : XR_CALL_ARG_VALUE;
                     for (int i = ne->arg_count; i < pc; i++) {
                         AstNode *clone = xr_ast_clone_session(ctor_links->param_defaults[i], sess);
                         new_args[i] = clone;
@@ -3073,8 +3078,23 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                             xa_visit_infer_expr(ctx, clone);
                     }
                     ne->arguments = new_args;
+                    ne->arg_accesses = new_accesses;
                     ne->arg_count = pc;
+                } else {
+                    xr_free(new_args);
+                    xr_free(new_accesses);
                 }
+            }
+        }
+        XrType *ctor_type = ctor_links ? ctor_links->type : NULL;
+        if (ctor_type && XR_TYPE_IS_FUNCTION(ctor_type)) {
+            int ctor_pc = ctor_type->function.param_count;
+            int check_count = ctor_pc < ne->arg_count ? ctor_pc : ne->arg_count;
+            for (int i = 0; i < check_count; i++) {
+                XrCallArgAccess access = ne->arg_accesses ? ne->arg_accesses[i] : XR_CALL_ARG_VALUE;
+                xa_check_arg_access_authorization(ctx, node,
+                                                  ne->arguments ? ne->arguments[i] : NULL, access,
+                                                  i, xr_type_function_param_mode(ctor_type, i));
             }
         }
     }

@@ -312,8 +312,8 @@ static AstNode *defer_desugar_call(Parser *parser, AstNode *call_node, int line)
         snprintf(name, sizeof(name), "__xr_dtmp_%d", k);
         temp_refs[k] = xr_ast_variable(X, name, line);
     }
-    AstNode *new_call = xr_ast_call_expr_generic(X, call->callee, temp_refs, n, call->type_args,
-                                                 call->type_arg_count, line);
+    AstNode *new_call = xr_ast_call_expr_generic(X, call->callee, temp_refs, call->arg_accesses, n,
+                                                 call->type_args, call->type_arg_count, line);
 
     /* Outer block: snapshot args into temps, then defer the rewritten call. */
     AstNode *outer = xr_ast_block(X, line);

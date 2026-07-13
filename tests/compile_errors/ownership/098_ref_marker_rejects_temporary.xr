@@ -1,0 +1,9 @@
+fn bump(data: ref Array<int>) {
+    data.push(1)
+}
+
+fn make() -> Array<int> {
+    return []
+}
+
+bump(ref make())

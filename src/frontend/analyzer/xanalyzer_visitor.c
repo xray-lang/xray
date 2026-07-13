@@ -4552,6 +4552,21 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                         if (member) {
                             XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
                             if (ml && ml->type) {
+                                if (XR_TYPE_IS_FUNCTION(ml->type)) {
+                                    int pc = ml->type->function.param_count;
+                                    int check_count = pc < node->as.super_call.arg_count
+                                                          ? pc
+                                                          : node->as.super_call.arg_count;
+                                    for (int si = 0; si < check_count; si++) {
+                                        XrCallArgAccess access =
+                                            node->as.super_call.arg_accesses
+                                                ? node->as.super_call.arg_accesses[si]
+                                                : XR_CALL_ARG_VALUE;
+                                        xa_check_arg_access_authorization(
+                                            ctx, node, node->as.super_call.arguments[si], access,
+                                            si, xr_type_function_param_mode(ml->type, si));
+                                    }
+                                }
                                 /* Method type is a function type; extract
                                  * return type for the call result. */
                                 if (XR_TYPE_IS_FUNCTION(ml->type) &&
@@ -4565,6 +4580,25 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                         }
                     } else {
                         xa_check_constructor_visibility(ctx, node, cl->class_info->base);
+                        XaSymbol *ctor = xa_class_info_lookup_member(cl->class_info->base,
+                                                                     XR_KEYWORD_CONSTRUCTOR);
+                        XaSymbolLinks *ctor_links =
+                            ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
+                        XrType *ctor_type = ctor_links ? ctor_links->type : NULL;
+                        if (ctor_type && XR_TYPE_IS_FUNCTION(ctor_type)) {
+                            int pc = ctor_type->function.param_count;
+                            int check_count = pc < node->as.super_call.arg_count
+                                                  ? pc
+                                                  : node->as.super_call.arg_count;
+                            for (int si = 0; si < check_count; si++) {
+                                XrCallArgAccess access = node->as.super_call.arg_accesses
+                                                             ? node->as.super_call.arg_accesses[si]
+                                                             : XR_CALL_ARG_VALUE;
+                                xa_check_arg_access_authorization(
+                                    ctx, node, node->as.super_call.arguments[si], access, si,
+                                    xr_type_function_param_mode(ctor_type, si));
+                            }
+                        }
                     }
                 }
             }

@@ -1,0 +1,11 @@
+class Box {
+    value: int = 0
+
+    constructor(value: ref int) {
+        value = value + 1
+        this.value = value
+    }
+}
+
+var x = 1
+var box = Box(x)

@@ -1,0 +1,6 @@
+fn bump(data: ref Array<int>) {
+    data.push(1)
+}
+
+var values: Array<int> = []
+bump(values)

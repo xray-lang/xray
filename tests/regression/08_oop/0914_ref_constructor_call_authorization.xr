@@ -1,0 +1,25 @@
+class RefBox {
+    value: int = 0
+
+    constructor(value: ref int) {
+        value = value + 1
+        this.value = value
+    }
+}
+
+class RefChild extends RefBox {
+    constructor(value: ref int) {
+        super(ref value)
+    }
+}
+
+@test
+fn test_ref_constructor_call_authorization() {
+    var x = 1
+    var box = RefBox(ref x)
+    assert(box.value >= 0)
+
+    var y = 10
+    var child = RefChild(ref y)
+    assert(child.value >= 0)
+}
