@@ -3573,6 +3573,7 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
         sym->is_const = is_const;
         sym->is_readonly_binding = is_const;
         sym->is_shared = is_shared;
+        sym->is_shared_provenance = false;
         sym->is_owned = is_owned;
         sym->is_rebindable = !is_const && !is_shared && !is_owned;
 
@@ -3585,6 +3586,7 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
         sym->is_const = is_const;
         sym->is_readonly_binding = is_const;
         sym->is_shared = is_shared;
+        sym->is_shared_provenance = false;
         sym->is_owned = is_owned;
         sym->is_rebindable = !is_const && !is_shared && !is_owned;
     }

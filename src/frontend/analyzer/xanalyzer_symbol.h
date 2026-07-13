@@ -175,20 +175,21 @@ struct XaSymbol {
     XrLocation location;  // Definition location
 
     // Modifiers
-    bool is_const;             // const declaration / immutable field
-    bool is_rebindable;        // binding name may be assigned again
-    bool is_readonly_binding;  // binding exposes deep-readonly semantics
-    bool is_exported;          // export modifier
-    bool is_static;            // static member
-    bool is_private;           // private member (class-only visibility)
-    bool is_protected;         // protected member (class + subclass visibility)
-    bool is_override;          // analyzer-inferred exact-signature method override
-    bool is_shared;            // shared variable
-    bool is_owned;             // owned unique-root variable
-    bool is_imported;          // selective import binding; kind remains the exported semantic kind
-    bool is_builtin;           // built-in type member (Array.push, etc.)
-    bool mutates_receiver;     // method body writes through `this`
-    uint8_t passing_mode;      // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF (for parameters)
+    bool is_const;              // const declaration / immutable field
+    bool is_rebindable;         // binding name may be assigned again
+    bool is_readonly_binding;   // binding exposes deep-readonly semantics
+    bool is_exported;           // export modifier
+    bool is_static;             // static member
+    bool is_private;            // private member (class-only visibility)
+    bool is_protected;          // protected member (class + subclass visibility)
+    bool is_override;           // analyzer-inferred exact-signature method override
+    bool is_shared;             // shared variable
+    bool is_shared_provenance;  // current value derives from a shared root
+    bool is_owned;              // owned unique-root variable
+    bool is_imported;           // selective import binding; kind remains the exported semantic kind
+    bool is_builtin;            // built-in type member (Array.push, etc.)
+    bool mutates_receiver;      // method body writes through `this`
+    uint8_t passing_mode;       // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF (for parameters)
     uint32_t borrowed_root_symbol_id;  // local alias root for in/ref parameter borrowing
 
     // Parent references

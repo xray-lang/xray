@@ -5912,6 +5912,49 @@ XR_FUNC XaSymbol *xa_root_variable_symbol_for_expr(XaInferContext *ctx, AstNode 
     return NULL;
 }
 
+XR_FUNC bool xa_symbol_has_shared_provenance(const XaSymbol *sym) {
+    return sym && (sym->is_shared || sym->is_shared_provenance);
+}
+
+static XaSymbol *xa_shared_provenance_root_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_VARIABLE:
+                return expr->as.variable.name
+                           ? xa_lookup_visible_symbol(ctx, expr->as.variable.name)
+                           : NULL;
+            case AST_MEMBER_ACCESS:
+                expr = expr->as.member_access.object;
+                break;
+            case AST_INDEX_GET:
+                expr = expr->as.index_get.array;
+                break;
+            case AST_SLICE_EXPR:
+                expr = expr->as.slice_expr.source;
+                break;
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            case AST_AS_EXPR:
+                expr = expr->as.as_expr.expr;
+                break;
+            default:
+                return NULL;
+        }
+    }
+    return NULL;
+}
+
+XR_FUNC bool xa_expr_yields_shared_provenance(XaInferContext *ctx, AstNode *expr, XrType *type) {
+    if (!ctx || !expr || !xa_type_needs_borrow_escape_guard(type))
+        return false;
+    XaSymbol *root = xa_shared_provenance_root_symbol_for_expr(ctx, expr);
+    return xa_symbol_has_shared_provenance(root);
+}
+
 static XaActiveSpanBorrow *xa_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol *view_sym) {
     if (!ctx || !view_sym)
         return NULL;
@@ -7396,7 +7439,8 @@ static void xa_check_const_initializer_alias_boundary(XaInferContext *ctx, AstNo
         return;
 
     XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, var->initializer);
-    if (!root || root->kind != XA_SYM_VARIABLE || root->is_readonly_binding || root->is_shared)
+    if (!root || root->kind != XA_SYM_VARIABLE || root->is_readonly_binding ||
+        xa_symbol_has_shared_provenance(root))
         return;
 
     XrLocation loc = {
@@ -7773,8 +7817,14 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         var_type = xr_type_new_unknown(NULL);
     }
 
-    if (sym->is_readonly_binding && var_type)
+    bool shared_provenance = var->initializer
+                                 ? xa_expr_yields_shared_provenance(ctx, var->initializer, var_type)
+                                 : false;
+
+    if (sym->is_readonly_binding && !sym->is_rebindable && var_type)
         var_type = xr_type_make_const(ctx->analyzer->isolate, var_type);
+    if (!sym->is_const && !sym->is_shared && !sym->is_owned && sym->is_rebindable)
+        sym->is_shared_provenance = shared_provenance;
 
     if (var->initializer && xa_is_module_level_scope(ctx->analyzer) &&
         xa_type_contains_span_view(var_type)) {
@@ -7929,6 +7979,9 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     XrType *value_type = xa_visit_infer_expr(ctx, assign->value);
     ctx->expected_type = saved_expected;
     xa_check_assignment_owned_alias_boundary(ctx, node, value_type);
+    if (!sym->is_const && !sym->is_shared && !sym->is_owned && sym->is_rebindable)
+        sym->is_shared_provenance =
+            xa_expr_yields_shared_provenance(ctx, assign->value, value_type);
 
     // Mark as definitely assigned.
     if (links) {
@@ -8169,7 +8222,8 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             } else if (root && (root->kind == XA_SYM_VARIABLE || root->kind == XA_SYM_PARAMETER) &&
                        root->is_owned && is_move) {
                 xa_record_return_storage_owner(ctx, XR_STORAGE_OWNED_SYSTEM);
-            } else if (root && root->kind == XA_SYM_VARIABLE && root->is_shared) {
+            } else if (root && root->kind == XA_SYM_VARIABLE &&
+                       xa_symbol_has_shared_provenance(root)) {
                 xa_record_return_storage_owner(ctx, XR_STORAGE_SHARED_SYSTEM);
             } else {
                 AstNode *ret_expr = xa_storage_boundary_identity_source(ret->values[0]);
