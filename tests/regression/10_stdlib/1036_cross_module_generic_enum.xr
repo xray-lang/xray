@@ -1,7 +1,7 @@
 // 1036_cross_module_generic_enum.xr
 // 回归：跨模块导出的泛型 ADT enum 需要保留 payload 类型元数据。
 
-import { Result, makeBytes } from "./modules/generic_result_lib"
+import { Result, makeByteArray } from "./modules/generic_result_lib"
 
 fn byteScore(payload: Array<byte>) -> int {
     return len(payload) + payload[0]
@@ -9,7 +9,7 @@ fn byteScore(payload: Array<byte>) -> int {
 
 @test
 fn test_cross_module_generic_enum_payload_type() {
-    match (makeBytes()) {
+    match (makeByteArray()) {
         Result.Ok(payload) -> {
             assert_eq(byteScore(payload), 67)
         }

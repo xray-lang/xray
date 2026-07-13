@@ -1,4 +1,4 @@
-class ScratchBytes {
+class ScratchByteArray {
     out: Array<byte>
 
     constructor() {
@@ -13,5 +13,5 @@ class ScratchBytes {
     }
 }
 
-var scratch = ScratchBytes()
+var scratch = ScratchByteArray()
 print(scratch.resetThenWrite())

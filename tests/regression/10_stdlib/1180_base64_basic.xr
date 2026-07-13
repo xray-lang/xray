@@ -190,7 +190,7 @@ fn test_decode_to_bytes_basic() {
 }
 
 @test
-fn test_bytes_roundtrip() {
+fn test_byte_array_roundtrip() {
     var original = Array<byte>(5)
     original[0] = 0
     original[1] = 127

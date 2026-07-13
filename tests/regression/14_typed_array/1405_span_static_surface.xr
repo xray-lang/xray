@@ -47,7 +47,7 @@ fn test_byte_slice_alias() {
 }
 
 @test
-fn test_string_bytes_view() {
+fn test_string_byte_slice_view() {
     var text = "ABCD"
     var bytes: Slice<byte> = text.bytes()
     assert_eq(len(bytes), 4)

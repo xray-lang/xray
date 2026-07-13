@@ -10,7 +10,7 @@
  */
 
 @test
-fn test_bytes_copy_survives_source_grow() {
+fn test_byte_array_copy_survives_source_grow() {
     var b = Array<byte>(4)
     b[0] = 1
     b[1] = 2

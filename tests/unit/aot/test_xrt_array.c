@@ -405,7 +405,7 @@ static void test_indexof_typed_fast_path_shared_rules(void) {
     free_test_array(flags);
 }
 
-static void test_bytes_raw_helpers_share_core_rules(void) {
+static void test_byte_array_raw_helpers_share_core_rules(void) {
     reset_alloc_counts();
     XrValue value = xrt_array_new_typed(0, XR_ELEM_U8);
     xrt_array_t *a = (xrt_array_t *) value.ptr;
@@ -529,7 +529,7 @@ int main(void) {
     test_slice_resize_reserve_are_noops();
     test_resize_reserve_type_errors_are_structured();
     test_indexof_typed_fast_path_shared_rules();
-    test_bytes_raw_helpers_share_core_rules();
+    test_byte_array_raw_helpers_share_core_rules();
     test_stack_closure_borrows_cell_upval();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;

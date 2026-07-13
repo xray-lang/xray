@@ -1,6 +1,6 @@
 min_ratio=0.90
 # Array<byte> indexed fill and scan must stay on raw byte storage.
-hot_function=^bytes_u8_index_fill_sum_run_[0-9]+$
+hot_function=^byte_array_u8_index_fill_sum_[0-9a-f]+_run_[0-9]+$
 hot_function_count=1
 hot_region=typed_array_raw_access
 hot_region_count=2

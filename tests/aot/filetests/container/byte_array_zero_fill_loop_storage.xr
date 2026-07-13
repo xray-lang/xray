@@ -1,4 +1,4 @@
-fn makeBytes(n: int) -> Array<byte> {
+fn makeByteArray(n: int) -> Array<byte> {
     var out = Array<byte>(0)
     var i = 0
     while (i < n) {
@@ -8,6 +8,6 @@ fn makeBytes(n: int) -> Array<byte> {
     return out
 }
 
-var data = makeBytes(16)
+var data = makeByteArray(16)
 print(len(data))
 print(data[7])
