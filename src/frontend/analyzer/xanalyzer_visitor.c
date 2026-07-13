@@ -1603,7 +1603,7 @@ static bool xa_eq_method_valid(XaSymbol *method, const char *self_name) {
         !xa_method_return_is(method, XR_KIND_BOOL)) {
         return false;
     }
-    XrType *param = type->function.param_types ? type->function.param_types[0] : NULL;
+    XrType *param = xr_type_function_param_type(type, 0);
     return xa_type_name_matches(param, self_name);
 }
 
@@ -1730,8 +1730,8 @@ XR_FUNC void xa_validate_hashable_key_type(XaInferContext *ctx, XrType *type,
             break;
         case XR_KIND_FUNCTION:
             for (int i = 0; i < type->function.param_count; i++)
-                xa_validate_hashable_key_type(ctx, type->function.param_types[i], generic_links,
-                                              context, loc);
+                xa_validate_hashable_key_type(ctx, xr_type_function_param_type(type, i),
+                                              generic_links, context, loc);
             xa_validate_hashable_key_type(ctx, type->function.return_type, generic_links, context,
                                           loc);
             break;
@@ -1906,9 +1906,9 @@ XrType *resolve_class_to_type_param(XrVMRuntime *X, XrType *type, const char **t
         int pc = type->function.param_count;
         XrType **np = pc > 0 ? xr_malloc(sizeof(XrType *) * pc) : NULL;
         for (int i = 0; i < pc; i++) {
-            np[i] =
-                resolve_class_to_type_param(X, type->function.param_types[i], tp_names, tp_count);
-            if (np[i] != type->function.param_types[i])
+            XrType *param_type = xr_type_function_param_type(type, i);
+            np[i] = resolve_class_to_type_param(X, param_type, tp_names, tp_count);
+            if (np[i] != param_type)
                 changed = true;
         }
         XrType *ret =
@@ -2125,9 +2125,9 @@ XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_type, const
         int ac = arg_type->function.param_count;
         int min = pc < ac ? pc : ac;
         for (int i = 0; i < min; i++) {
-            XrType *r =
-                xa_infer_type_param_from_arg(param_type->function.param_types[i],
-                                             arg_type->function.param_types[i], tp_name, depth + 1);
+            XrType *r = xa_infer_type_param_from_arg(xr_type_function_param_type(param_type, i),
+                                                     xr_type_function_param_type(arg_type, i),
+                                                     tp_name, depth + 1);
             if (r)
                 return r;
         }
@@ -2184,14 +2184,13 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
         actual_count = type_param_count;
         inferred = true;
 
-        XrType **param_types = callee_type->function.param_types;
         int param_count = callee_type->function.param_count;
 
         for (int i = 0; i < type_param_count; i++) {
             actual_types[i] = NULL;
             const char *tp_name = param_names[i];
             for (int j = 0; j < param_count && j < arg_count; j++) {
-                XrType *pt = param_types ? param_types[j] : NULL;
+                XrType *pt = xr_type_function_param_type(callee_type, j);
                 XrType *at = effective_arg_types ? effective_arg_types[j] : NULL;
                 if (!at && j < call->arg_count) {
                     // Use cached type if available (avoid re-evaluating lambdas
@@ -2798,19 +2797,8 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
     if (method_type)
         method_type->function.min_params = md->required_count;
     if (method_type && md->param_passing_modes) {
-        bool has_modes = false;
-        for (int i = 0; i < md->param_count && !has_modes; i++) {
-            if (md->param_passing_modes[i] != XR_PARAM_VALUE)
-                has_modes = true;
-        }
-        if (has_modes) {
-            XrParamMode *modes = xr_calloc(md->param_count, sizeof(XrParamMode));
-            if (modes) {
-                for (int i = 0; i < md->param_count; i++)
-                    modes[i] = md->param_passing_modes[i];
-                method_type->function.param_passing_modes = modes;
-            }
-        }
+        for (int i = 0; i < md->param_count; i++)
+            xr_type_function_set_param_mode(method_type, i, md->param_passing_modes[i]);
     }
 
     XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);

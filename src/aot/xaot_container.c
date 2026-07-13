@@ -138,9 +138,8 @@ static bool type_contains_unresolved_type_param_depth(const XrType *type, uint8_
                    type_contains_unresolved_type_param_depth(type->map.value_type, depth + 1);
         case XR_KIND_FUNCTION:
             for (int i = 0; i < type->function.param_count; i++) {
-                if (type_contains_unresolved_type_param_depth(
-                        type->function.param_types ? type->function.param_types[i] : NULL,
-                        depth + 1))
+                if (type_contains_unresolved_type_param_depth(xr_type_function_param_type(type, i),
+                                                              depth + 1))
                     return true;
             }
             return type_contains_unresolved_type_param_depth(type->function.return_type, depth + 1);

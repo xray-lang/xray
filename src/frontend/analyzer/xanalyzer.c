@@ -990,13 +990,13 @@ bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type, XrType **ar
             param_slot = rest_param_index;
         if (param_slot < 0 || param_slot >= expected)
             continue;
-        if (!xa_typecheck_assignable(func_type->function.param_types[param_slot], arg_types[i])) {
+        XrType *param_type = xr_type_function_param_type(func_type, param_slot);
+        if (!xa_typecheck_assignable(param_type, arg_types[i])) {
             ok = false;
             char message[256];
             snprintf(message, sizeof(message),
                      "Argument %d: Type '%s' is not assignable to parameter type '%s'", i + 1,
-                     xr_type_to_string(arg_types[i]),
-                     xr_type_to_string(func_type->function.param_types[param_slot]));
+                     xr_type_to_string(arg_types[i]), xr_type_to_string(param_type));
             xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                        message, loc);
         }

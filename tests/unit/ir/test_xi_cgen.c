@@ -90,10 +90,9 @@ TEST(aot_type_fingerprint_includes_param_modes) {
     XrType *ref_fn = xr_type_new_function(g_iso, param_types, 1, ret, false);
     TEST_REQUIRE(value_fn && in_fn && ref_fn, "function types created");
 
-    XrParamMode in_modes[] = {XR_PARAM_IN};
-    XrParamMode ref_modes[] = {XR_PARAM_REF};
-    in_fn->function.param_passing_modes = in_modes;
-    ref_fn->function.param_passing_modes = ref_modes;
+    TEST_REQUIRE(xr_type_function_set_param_mode(in_fn, 0, XR_PARAM_IN), "in param mode assigned");
+    TEST_REQUIRE(xr_type_function_set_param_mode(ref_fn, 0, XR_PARAM_REF),
+                 "ref param mode assigned");
 
     uint64_t value_hash = xaot_type_fingerprint(value_fn);
     uint64_t in_hash = xaot_type_fingerprint(in_fn);

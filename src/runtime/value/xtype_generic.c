@@ -141,9 +141,9 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
             return type;
 
         for (int i = 0; i < pc; i++) {
-            new_params[i] = xr_type_substitute(X, type->function.param_types[i], param_names,
-                                               actual_types, count);
-            if (new_params[i] != type->function.param_types[i])
+            XrType *param_type = xr_type_function_param_type(type, i);
+            new_params[i] = xr_type_substitute(X, param_type, param_names, actual_types, count);
+            if (new_params[i] != param_type)
                 changed = true;
         }
 
@@ -157,14 +157,9 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
                 xr_type_new_function(X, new_params, pc, ret, type->function.is_variadic);
             if (result) {
                 result->function.min_params = type->function.min_params;
-                if (type->function.param_passing_modes && pc > 0) {
-                    result->function.param_passing_modes = xr_calloc(pc, sizeof(XrParamMode));
-                    if (result->function.param_passing_modes) {
-                        memcpy(result->function.param_passing_modes,
-                               type->function.param_passing_modes,
-                               sizeof(XrParamMode) * (size_t) pc);
-                    }
-                }
+                for (int i = 0; i < pc; i++)
+                    xr_type_function_set_param_mode(result, i,
+                                                    xr_type_function_param_mode(type, i));
                 if (type->function.type_param_count > 0 && type->function.type_param_names) {
                     xr_type_set_function_type_params(X, result, type->function.type_param_names,
                                                      type->function.type_param_constraints,

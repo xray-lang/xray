@@ -279,9 +279,9 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
      * resolver so XiValue->type carries a real runtime type. */
     for (int i = 0; i < m->param_count; i++) {
         struct XrType *pt = ml.type_any;
-        if (method_sig && method_sig->function.param_types &&
-            i < method_sig->function.param_count && method_sig->function.param_types[i]) {
-            pt = method_sig->function.param_types[i];
+        struct XrType *sig_param = xr_type_function_param_type(method_sig, i);
+        if (sig_param) {
+            pt = sig_param;
         } else if (m->param_types && m->param_types[i]) {
             struct XrType *resolved = xr_tref_resolve_in_analyzer(l->analyzer, m->param_types[i]);
             if (resolved)

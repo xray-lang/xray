@@ -122,8 +122,7 @@ bool xr_ffi_sig_set_param_callback(XrFFISig *sig, uint8_t index, const struct Xr
         return false;
 
     for (uint8_t i = 0; i < nparams; i++) {
-        const struct XrType *pt =
-            fn_type->function.param_types ? fn_type->function.param_types[i] : NULL;
+        const struct XrType *pt = xr_type_function_param_type(fn_type, i);
         params[i] = xr_ffi_type_from_xrtype(pt, false);
     }
     uint8_t ret = xr_ffi_type_from_xrtype(fn_type->function.return_type, true);

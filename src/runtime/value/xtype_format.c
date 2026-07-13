@@ -330,9 +330,8 @@ const char *xr_type_to_string(XrType *type) {
                 ptr += n;
                 remaining -= n;
             }
-            const char *param_str = type->function.param_types[i]
-                                        ? xr_type_to_string(type->function.param_types[i])
-                                        : "unknown";
+            XrType *param_type = xr_type_function_param_type(type, i);
+            const char *param_str = param_type ? xr_type_to_string(param_type) : "unknown";
             n = snprintf(ptr, remaining, "%s", param_str);
             ptr += n;
             remaining -= n;

@@ -106,7 +106,6 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
         return;
 
     int ctor_pc = ctor_type->function.param_count;
-    XrType **ctor_params = ctor_type->function.param_types;
     int check_count = ctor_pc < call->arg_count ? ctor_pc : call->arg_count;
     int class_tp_count = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
     const char **param_names = NULL;
@@ -131,7 +130,7 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
         AstNode *arg = call->arguments ? call->arguments[i] : NULL;
         if (!arg)
             continue;
-        XrType *expected = ctor_params ? ctor_params[i] : NULL;
+        XrType *expected = xr_type_function_param_type(ctor_type, i);
         XrType *resolved = expected;
         if (expected && param_names && type_args && type_arg_count == class_tp_count) {
             resolved = xr_type_substitute(ctx->analyzer->isolate, expected, param_names, type_args,
@@ -233,9 +232,7 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                         }
                         for (int pi = 0;
                              pi < ctor_type->function.param_count && pi < call->arg_count; pi++) {
-                            XrType *pt = ctor_type->function.param_types
-                                             ? ctor_type->function.param_types[pi]
-                                             : NULL;
+                            XrType *pt = xr_type_function_param_type(ctor_type, pi);
                             XrType *arg_type = call->arguments[pi]
                                                    ? xa_visit_infer_expr(ctx, call->arguments[pi])
                                                    : NULL;
@@ -382,9 +379,8 @@ static bool xa_c_callback_signature_matches(XrType *callback_type, XrType *arg_t
     if (!xr_type_equals(callback_type->function.return_type, arg_type->function.return_type))
         return false;
     for (int i = 0; i < callback_type->function.param_count; i++) {
-        XrType *want =
-            callback_type->function.param_types ? callback_type->function.param_types[i] : NULL;
-        XrType *got = arg_type->function.param_types ? arg_type->function.param_types[i] : NULL;
+        XrType *want = xr_type_function_param_type(callback_type, i);
+        XrType *got = xr_type_function_param_type(arg_type, i);
         if (!xr_type_equals(want, got))
             return false;
     }
@@ -2063,9 +2059,9 @@ static void xa_check_freestanding_math_call(XaInferContext *ctx, AstNode *node, 
 
 static XrParamMode xa_call_param_mode(XrType *callee_type, int slot) {
     if (!callee_type || !XR_TYPE_IS_FUNCTION(callee_type) || slot < 0 ||
-        slot >= callee_type->function.param_count || !callee_type->function.param_passing_modes)
+        slot >= callee_type->function.param_count)
         return XR_PARAM_VALUE;
-    return callee_type->function.param_passing_modes[slot];
+    return xr_type_function_param_mode(callee_type, slot);
 }
 
 static const char *xa_call_param_mode_label(XrParamMode mode) {
@@ -3812,8 +3808,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
 
     // Check argument types with generic inference for callbacks
-    XrType **param_types = callee_type->function.param_types;
-
     // Save and set callback context for generic inference
     XrType *saved_elem_type = ctx->callback_element_type;
     XrType *saved_index_type = ctx->callback_index_type;
@@ -3878,7 +3872,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                                    arg_node, arg_type, slot);
                 if (param_slot < 0 || param_slot >= param_count)
                     continue;
-                XrType *param_type = param_types ? param_types[param_slot] : NULL;
+                XrType *param_type = xr_type_function_param_type(callee_type, param_slot);
                 if (!param_type || XR_TYPE_IS_UNKNOWN(param_type))
                     continue;
                 if (xa_type_is_c_callback(param_type)) {
@@ -3920,7 +3914,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             continue;
         }
 
-        XrType *param_type = param_types ? param_types[param_slot] : NULL;
+        XrType *param_type = xr_type_function_param_type(callee_type, param_slot);
         XrType *saved_expected = ctx->expected_type;
         bool saved_copy_view = ctx->allow_view_expr_for_copy;
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
