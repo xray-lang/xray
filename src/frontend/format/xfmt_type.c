@@ -110,6 +110,17 @@ void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *tref) {
     }
 }
 
+void xfmt_emit_param_annotation(XrFmtContext *ctx, XrParamMode mode, XrTypeRef *tref) {
+    if (!tref)
+        return;
+    xfmt_write_str(ctx, ": ");
+    if (mode != XR_PARAM_VALUE && xr_param_mode_is_valid(mode)) {
+        xfmt_write_str(ctx, xr_param_mode_label(mode));
+        xfmt_write_char(ctx, ' ');
+    }
+    xfmt_emit_type(ctx, tref);
+}
+
 // Format generic type parameters <T, U: A & B & ...>
 void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int count) {
     if (count <= 0)

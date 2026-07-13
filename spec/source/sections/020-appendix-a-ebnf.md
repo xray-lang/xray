@@ -248,10 +248,12 @@ ObjectBinding ::= Identifier (':' Identifier)?
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 FnBody ::= Block | ';'?                         // 空函数体仅允许 @extern
 ParamList ::= Param (',' Param)* ','?
-Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
+Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
+ParamType ::= ParamMode? Type
+ParamMode ::= 'in' | 'ref' | 'out'
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const'
+Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // 公开可见性是默认语义；final 只作为 class 前缀
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
@@ -555,10 +557,12 @@ ObjectBinding ::= Identifier (':' Identifier)?
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 FnBody ::= Block | ';'?                         // empty body is only allowed for @extern
 ParamList ::= Param (',' Param)* ','?
-Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
+Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
+ParamType ::= ParamMode? Type
+ParamMode ::= 'in' | 'ref' | 'out'
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const'
+Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // public visibility is the default; final is only a class prefix
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'

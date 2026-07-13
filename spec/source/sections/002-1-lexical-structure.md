@@ -135,7 +135,8 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `to` | `select` 的发送分支 (`value to ch`) |
 | `default` | 保留，当前未启用 |
 | `cancelled` | `cancelled()` 协程取消检查（实际上是 builtin 函数）|
-| `ref` | 函数参数修饰符 (`fn f(p: ref T)`) |
+| `ref` | 参数模式与调用授权 (`fn f(p: ref T)` / `f(ref p)`) |
+| `out` | 输出参数模式与调用授权 (`fn f(p: out T)` / `f(out p)`) |
 | `move` | 所有权转移 (`move x`) |
 | `linked` | `linked go` / `linked scope` 修饰符 |
 | `supervisor` | `supervisor scope` 修饰符 |
@@ -523,7 +524,8 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `to` | `select` send arm (`value to ch`) |
 | `default` | reserved, currently disabled |
 | `cancelled` | `cancelled()` cancellation check (actually a builtin function) |
-| `ref` | function parameter modifier (`fn f(p: ref T)`) |
+| `ref` | parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`) |
+| `out` | output parameter mode and call-site authorization (`fn f(p: out T)` / `f(out p)`) |
 | `move` | ownership transfer (`move x`) |
 | `linked` | `linked go` / `linked scope` modifier |
 | `supervisor` | `supervisor scope` modifier |
