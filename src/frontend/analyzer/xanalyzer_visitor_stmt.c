@@ -437,7 +437,6 @@ static XaSymbol *xa_lifecycle_lint_function_param_symbol(XaInferContext *ctx, As
 
 static bool xa_block_node_statements(AstNode *node, AstNode ***out_statements, int *out_count);
 static XaScope *xa_find_enclosing_function_scope(XaInferContext *ctx);
-static bool xa_statement_can_fall_through(AstNode *node);
 
 typedef struct XaThreadHandleLintAlias {
     XaSymbol *sym;
@@ -8340,6 +8339,8 @@ struct XaOutParamDaState {
     bool before_assigned;
     bool then_assigned;
     bool else_assigned;
+    bool path_merge_has_fallthrough;
+    bool path_merge_assigned;
 };
 
 XR_FUNC XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out_count) {
@@ -8374,6 +8375,8 @@ XR_FUNC XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out
         states[count].before_assigned = links->is_definitely_assigned;
         states[count].then_assigned = links->is_definitely_assigned;
         states[count].else_assigned = links->is_definitely_assigned;
+        states[count].path_merge_has_fallthrough = false;
+        states[count].path_merge_assigned = true;
         count++;
     }
     xr_free(symbols);
@@ -8390,6 +8393,31 @@ XR_FUNC void xa_out_param_da_restore_before(XaOutParamDaState *states, int count
     for (int i = 0; states && i < count; i++) {
         if (states[i].links)
             states[i].links->is_definitely_assigned = states[i].before_assigned;
+    }
+}
+
+XR_FUNC void xa_out_param_da_begin_path_merge(XaOutParamDaState *states, int count) {
+    for (int i = 0; states && i < count; i++) {
+        states[i].path_merge_has_fallthrough = false;
+        states[i].path_merge_assigned = true;
+    }
+}
+
+XR_FUNC void xa_out_param_da_record_path(XaOutParamDaState *states, int count, bool falls_through) {
+    if (!falls_through)
+        return;
+    for (int i = 0; states && i < count; i++) {
+        states[i].path_merge_has_fallthrough = true;
+        states[i].path_merge_assigned =
+            states[i].path_merge_assigned &&
+            (states[i].links ? states[i].links->is_definitely_assigned : states[i].before_assigned);
+    }
+}
+
+XR_FUNC void xa_out_param_da_apply_path_merge(XaOutParamDaState *states, int count) {
+    for (int i = 0; states && i < count; i++) {
+        if (states[i].links && states[i].path_merge_has_fallthrough)
+            states[i].links->is_definitely_assigned = states[i].path_merge_assigned;
     }
 }
 
@@ -8601,7 +8629,7 @@ static XaScope *xa_find_enclosing_function_scope(XaInferContext *ctx) {
     return scope;
 }
 
-static bool xa_statement_can_fall_through(AstNode *node) {
+XR_FUNC bool xa_statement_can_fall_through(AstNode *node) {
     if (!node)
         return true;
 

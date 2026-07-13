@@ -5406,12 +5406,22 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         }
         case AST_TRY_CATCH: {
             TryCatchNode *tc = &node->as.try_catch;
+            int out_da_count = 0;
+            XaOutParamDaState *out_da = xa_out_param_da_capture(ctx, &out_da_count);
+            xa_out_param_da_begin_path_merge(out_da, out_da_count);
+
             if (tc->try_body)
                 xa_visit_infer_stmt(ctx, tc->try_body);
+            xa_out_param_da_record_path(out_da, out_da_count,
+                                        xa_statement_can_fall_through(tc->try_body));
+
             for (int ci = 0; ci < tc->catch_count; ci++) {
                 XrCatchClause *cc = tc->catch_clauses[ci];
-                if (!cc || !cc->body)
+                xa_out_param_da_restore_before(out_da, out_da_count);
+                if (!cc || !cc->body) {
+                    xa_out_param_da_record_path(out_da, out_da_count, true);
                     continue;
+                }
                 xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, cc->body);
                 if (cc->var_name) {
                     XaSymbol *err_sym = xa_symbol_new(cc->var_name, XA_SYM_VARIABLE);
@@ -5426,7 +5436,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 }
                 xa_visit_infer_stmt(ctx, cc->body);
                 xa_analyzer_exit_scope(ctx->analyzer);
+                xa_out_param_da_record_path(out_da, out_da_count,
+                                            xa_statement_can_fall_through(cc->body));
             }
+            xa_out_param_da_apply_path_merge(out_da, out_da_count);
+            xa_out_param_da_free(out_da);
             break;
         }
         case AST_THROW_STMT:
