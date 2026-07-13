@@ -2133,6 +2133,9 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
                             gp->constraints[j]
                                 ? xr_tref_resolve_in_analyzer(ctx->analyzer, gp->constraints[j])
                                 : NULL;
+                        xa_reject_error_type_success_type(ctx->analyzer, resolved[j],
+                                                          "generic constraint", gp->name,
+                                                          node->line, node->column);
                     }
                     constraint_lists[i] = resolved;
                     constraint_counts[i] = cn;
@@ -3019,6 +3022,9 @@ skip_interfaces:
                             gp->constraints[j]
                                 ? xr_tref_resolve_in_analyzer(ctx->analyzer, gp->constraints[j])
                                 : NULL;
+                        xa_reject_error_type_success_type(ctx->analyzer, resolved[j],
+                                                          "generic constraint", gp->name,
+                                                          node->line, node->column);
                     }
                     constraint_lists[i] = resolved;
                     constraint_counts[i] = cn;

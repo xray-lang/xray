@@ -745,6 +745,106 @@ TEST(compile_type_ref_function_modes) {
     ASSERT(XR_TYPE_IS_INT(fn->function.return_type));
 }
 
+static bool analyzer_diag_contains(XaAnalyzer *analyzer, const char *needle) {
+    int count = 0;
+    XaDiagnostic *diag = xa_analyzer_get_diagnostics(analyzer, &count);
+    for (; diag; diag = diag->next) {
+        if (diag->message && strstr(diag->message, needle))
+            return true;
+    }
+    return false;
+}
+
+TEST(analyzer_rejects_error_type_container_success_types) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    XrArena arena;
+    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
+    XrCompilerSessionScope scope;
+    ASSERT(xr_compiler_session_push_arena(g_session, &arena, "container_error_type_success.xr",
+                                          &scope));
+
+    XrTypeRef *err = xr_tref_error(g_session);
+    XrTypeRef *array_args[] = {err};
+    XrType *array_type =
+        xr_tref_resolve_in_analyzer(a, xr_tref_generic(g_session, "Array", array_args, 1));
+    ASSERT(array_type != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(array_type));
+
+    XrTypeRef *map_args[] = {xr_tref_string(g_session), err};
+    XrType *map_type =
+        xr_tref_resolve_in_analyzer(a, xr_tref_generic(g_session, "Map", map_args, 2));
+    ASSERT(map_type != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(map_type));
+
+    XrType *fixed_type = xr_tref_resolve_in_analyzer(a, xr_tref_fixed_array(g_session, err, 4));
+    ASSERT(fixed_type != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(fixed_type));
+
+    ASSERT(analyzer_diag_contains(a, "container element type 'Array'"));
+    ASSERT(analyzer_diag_contains(a, "container value type 'Map'"));
+    ASSERT(analyzer_diag_contains(a, "container element type 'fixed array'"));
+
+    xr_compiler_session_pop_arena(&scope);
+    xr_arena_destroy(&arena);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    XaSymbol *box = xa_symbol_new("Box", XA_SYM_CLASS);
+    ASSERT(box != NULL);
+    box->links.type = xr_type_new_class(a->isolate, "Box");
+    box->links.class_info = xa_class_info_new("Box");
+    xa_scope_add_symbol(a->global_scope, box);
+
+    XrArena arena;
+    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
+    XrCompilerSessionScope scope;
+    ASSERT(xr_compiler_session_push_arena(g_session, &arena, "box_error_type_arg.xr", &scope));
+    XrTypeRef *err = xr_tref_error(g_session);
+    XrTypeRef *box_args[] = {err};
+    XrType *box_type =
+        xr_tref_resolve_in_analyzer(a, xr_tref_generic(g_session, "Box", box_args, 1));
+    ASSERT(box_type != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(box_type));
+    ASSERT(analyzer_diag_contains(a, "generic type argument 'Box'"));
+    xr_compiler_session_pop_arena(&scope);
+    xr_arena_destroy(&arena);
+
+    xa_analyzer_free(a);
+    setup_pool();
+
+    AstNode *program = xr_parse(g_session, "fn id<T: Iterable<int>>(x: T) -> T { return x }\n");
+    ASSERT(program != NULL);
+    ASSERT(program->type == AST_PROGRAM);
+    ASSERT(program->as.program.count == 1);
+    AstNode *fn = program->as.program.statements[0];
+    ASSERT(fn != NULL);
+    ASSERT(fn->type == AST_FUNCTION_DECL);
+    ASSERT(fn->as.function_decl.type_param_count == 1);
+    XrGenericParam *param = fn->as.function_decl.type_params[0];
+    ASSERT(param != NULL);
+    ASSERT(param->constraint_count == 1);
+    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
+    ASSERT(xr_compiler_session_push_arena(g_session, &arena, "constraint_error_type_success.xr",
+                                          &scope));
+    param->constraints[0] = xr_tref_error(g_session);
+
+    a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    xa_analyzer_analyze(a, "generic_constraint_error_type.xr", program);
+    ASSERT(analyzer_diag_contains(a, "generic constraint 'T'"));
+
+    xr_compiler_session_pop_arena(&scope);
+    xr_arena_destroy(&arena);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(export_symbols_invalidate_table_on_nested_error_type) {
     const char *source = "export fn bad() -> int { return 1 }\n"
                          "export fn good() -> int { return 1 }\n";
@@ -1007,6 +1107,8 @@ int main(void) {
     RUN_TEST(compile_type_containers);
     RUN_TEST(compile_type_function);
     RUN_TEST(compile_type_ref_function_modes);
+    RUN_TEST(analyzer_rejects_error_type_container_success_types);
+    RUN_TEST(analyzer_rejects_error_type_generic_argument_and_constraint);
     RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);
     RUN_TEST(compile_type_class);
     RUN_TEST(compile_type_optional);

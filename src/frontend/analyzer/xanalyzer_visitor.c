@@ -2074,6 +2074,8 @@ XR_FUNC void xa_set_function_type_params_from_ast(XaInferContext *ctx, XrType *f
                             : NULL;
                     constraint_lists[i][j] = resolve_class_to_type_param(
                         ctx->analyzer->isolate, constraint_lists[i][j], names, count);
+                    xa_reject_error_type_success_type(ctx->analyzer, constraint_lists[i][j],
+                                                      "generic constraint", gp->name, 0, 0);
                 }
             } else {
                 constraint_counts[i] = 0;
@@ -2261,10 +2263,11 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
             xr_free(param_names);
             return return_type;
         }
-        for (int i = 0; i < call->type_arg_count; i++)
+        for (int i = 0; i < call->type_arg_count; i++) {
             actual_types[i] = call->type_args[i]
                                   ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[i])
                                   : xr_type_new_unknown(NULL);
+        }
         actual_count = call->type_arg_count;
         inferred = true; /* mark for free */
     } else {
@@ -2297,6 +2300,19 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
                 }
             }
         }
+    }
+
+    bool poisoned_type_arg = false;
+    for (int i = 0; i < actual_count; i++) {
+        if (xa_reject_error_type_success_type(ctx->analyzer, actual_types[i],
+                                              "generic type argument", "function", 0, 0))
+            poisoned_type_arg = true;
+    }
+    if (poisoned_type_arg) {
+        xr_free(param_names);
+        if (inferred && actual_types)
+            xr_free(actual_types);
+        return xr_type_new_error(NULL);
     }
 
     if (actual_count > 0) {

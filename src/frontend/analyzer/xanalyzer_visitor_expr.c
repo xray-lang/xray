@@ -701,6 +701,10 @@ static XrType *xa_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *objec
         return NULL;
     }
     XrType *pointee = xr_tref_resolve_in_analyzer(ctx->analyzer, ne->type_args[0]);
+    if (xa_reject_error_type_success_type(ctx->analyzer, pointee, "generic type argument",
+                                          ne->class_name, object ? object->line : 0,
+                                          object ? object->column : 0))
+        return xr_type_new_error(NULL);
     if (!pointee)
         pointee = xr_type_new_unknown(ctx->analyzer->isolate);
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
@@ -2967,6 +2971,14 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         for (int i = 0; i < tac; i++)
             ta[i] = ne->type_args[i] ? xr_tref_resolve_in_analyzer(ctx->analyzer, ne->type_args[i])
                                      : xr_type_new_unknown(NULL);
+        bool poisoned_type_arg = false;
+        for (int i = 0; i < tac; i++) {
+            if (xa_reject_error_type_success_type(ctx->analyzer, ta[i], "generic type argument", cn,
+                                                  node ? node->line : 0, node ? node->column : 0))
+                poisoned_type_arg = true;
+        }
+        if (poisoned_type_arg)
+            return xr_type_new_error(NULL);
 
         if (strcmp(cn, "Map") == 0 || strcmp(cn, "WeakMap") == 0) {
             XrType *kt = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
@@ -3128,6 +3140,19 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
             resolved_targs[i] = ne->type_args[i]
                                     ? xr_tref_resolve_in_analyzer(ctx->analyzer, ne->type_args[i])
                                     : xr_type_new_unknown(NULL);
+        bool poisoned_type_arg = false;
+        for (int i = 0; i < ne->type_arg_count; i++) {
+            if (xa_reject_error_type_success_type(ctx->analyzer, resolved_targs[i],
+                                                  "generic type argument", ne->class_name,
+                                                  node ? node->line : 0, node ? node->column : 0)) {
+                poisoned_type_arg = true;
+            }
+        }
+        if (poisoned_type_arg) {
+            if (resolved_targs != resolved_targs_buf)
+                xr_free(resolved_targs);
+            return xr_type_new_error(NULL);
+        }
         xa_check_span_generic_class_type_args(ctx, node, ne->class_name, resolved_targs,
                                               ne->type_arg_count);
 
@@ -3234,6 +3259,20 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
 
                     // If all type parameters were inferred, create generic instance
                     if (all_inferred) {
+                        bool poisoned_type_arg = false;
+                        for (int i = 0; i < type_param_count; i++) {
+                            if (xa_reject_error_type_success_type(
+                                    ctx->analyzer, inferred_args[i], "generic type argument",
+                                    ne->class_name, node ? node->line : 0,
+                                    node ? node->column : 0)) {
+                                poisoned_type_arg = true;
+                            }
+                        }
+                        if (poisoned_type_arg) {
+                            xr_free(param_names);
+                            xr_free(inferred_args);
+                            return xr_type_new_error(NULL);
+                        }
                         xa_check_span_generic_class_type_args(ctx, node, ne->class_name,
                                                               inferred_args, type_param_count);
                         XrType *result = xr_type_new_generic_instance(
@@ -3306,6 +3345,19 @@ XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
                 resolved_targs[i] =
                     sl->type_args[i] ? xr_tref_resolve_in_analyzer(ctx->analyzer, sl->type_args[i])
                                      : xr_type_new_unknown(NULL);
+            }
+            bool poisoned_type_arg = false;
+            for (int i = 0; i < sl->type_arg_count; i++) {
+                if (xa_reject_error_type_success_type(
+                        ctx->analyzer, resolved_targs[i], "generic type argument", struct_name,
+                        node ? node->line : 0, node ? node->column : 0)) {
+                    poisoned_type_arg = true;
+                }
+            }
+            if (poisoned_type_arg) {
+                if (resolved_targs != resolved_targs_buf)
+                    xr_free(resolved_targs);
+                return xr_type_new_error(NULL);
             }
             xa_check_span_generic_class_type_args(ctx, node, struct_name, resolved_targs,
                                                   sl->type_arg_count);

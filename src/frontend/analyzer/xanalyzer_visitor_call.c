@@ -76,6 +76,10 @@ static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *
         return NULL;
     }
     XrType *pointee = xr_tref_resolve_in_analyzer(ctx->analyzer, ne->type_args[0]);
+    if (xa_reject_error_type_success_type(ctx->analyzer, pointee, "generic type argument",
+                                          ne->class_name, object ? object->line : 0,
+                                          object ? object->column : 0))
+        return xr_type_new_error(NULL);
     if (!pointee)
         pointee = xr_type_new_unknown(ctx->analyzer->isolate);
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
@@ -227,6 +231,20 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                                 ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[i])
                                 : xr_type_new_unknown(NULL);
                     }
+                    bool poisoned_type_arg = false;
+                    for (int i = 0; i < call->type_arg_count; i++) {
+                        if (xa_reject_error_type_success_type(
+                                ctx->analyzer, resolved[i], "generic type argument",
+                                class_name ? class_name : "class", node ? node->line : 0,
+                                node ? node->column : 0)) {
+                            poisoned_type_arg = true;
+                        }
+                    }
+                    if (poisoned_type_arg) {
+                        if (resolved != resolved_buf)
+                            xr_free(resolved);
+                        return xr_type_new_error(NULL);
+                    }
                     xa_check_span_generic_class_type_args(ctx, node, class_name, resolved,
                                                           call->type_arg_count);
                     xa_check_class_constructor_args(ctx, node, call, class_name, class_links,
@@ -279,6 +297,20 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                         }
                     }
                     if (all_inferred) {
+                        bool poisoned_type_arg = false;
+                        for (int i = 0; i < type_param_count; i++) {
+                            if (xa_reject_error_type_success_type(
+                                    ctx->analyzer, inferred[i], "generic type argument",
+                                    class_name ? class_name : "class", node ? node->line : 0,
+                                    node ? node->column : 0)) {
+                                poisoned_type_arg = true;
+                            }
+                        }
+                        if (poisoned_type_arg) {
+                            if (inferred != inferred_buf)
+                                xr_free(inferred);
+                            return xr_type_new_error(NULL);
+                        }
                         xa_check_span_generic_class_type_args(ctx, node, class_name, inferred,
                                                               type_param_count);
                         xa_check_class_constructor_args(ctx, node, call, class_name, class_links,
@@ -1665,6 +1697,9 @@ static XrType *xa_byte_slice_typed_type_arg(XaInferContext *ctx, AstNode *node, 
         return xr_type_new_unknown(NULL);
     }
     XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+    if (xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument", label,
+                                          node ? node->line : 0, node ? node->column : 0))
+        return xr_type_new_error(NULL);
     bool supported = allow_signed ? xa_type_is_supported_byte_slice_typed_scalar(target)
                                   : xa_type_is_supported_raw_load_le_result(target);
     if (!supported) {
@@ -1697,6 +1732,10 @@ static XrType *xa_byte_slice_reinterpret_return_type(XaInferContext *ctx, AstNod
         return xr_type_new_unknown(NULL);
     }
     XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+    if (xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument",
+                                          "Slice<byte>.reinterpret<T>()", node ? node->line : 0,
+                                          node ? node->column : 0))
+        return xr_type_new_error(NULL);
     if (!xa_type_is_pod_span_elem(target)) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
@@ -1994,6 +2033,9 @@ static XrType *xa_mem_layout_return_type(XaInferContext *ctx, AstNode *node, Cal
     }
 
     XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+    if (xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument", member,
+                                          node ? node->line : 0, node ? node->column : 0))
+        return xr_type_new_error(NULL);
     uint32_t size = 0;
     uint32_t align = 0;
     if (!xr_type_has_static_layout(target, &size, &align)) {
@@ -3624,6 +3666,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             XrType *type_arg = call->type_args[i]
                                    ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[i])
                                    : NULL;
+            if (xa_reject_error_type_success_type(ctx->analyzer, type_arg, "generic type argument",
+                                                  "function", node ? node->line : 0,
+                                                  node ? node->column : 0)) {
+                continue;
+            }
 
             int constraint_count = 0;
             XrType **constraints =
@@ -3710,6 +3757,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             XrType *target_type =
                 call->type_args[0] ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0])
                                    : NULL;
+            if (xa_reject_error_type_success_type(ctx->analyzer, target_type,
+                                                  "generic type argument", "Json.decode<T>()",
+                                                  node ? node->line : 0, node ? node->column : 0))
+                return xr_type_new_error(NULL);
 
             // Resolve type alias to its underlying object type
             if (target_type && target_type->kind == XR_KIND_CLASS &&

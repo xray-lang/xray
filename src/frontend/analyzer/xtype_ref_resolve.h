@@ -46,6 +46,13 @@ XR_FUNC struct XrType *xr_tref_resolve(struct XrVMRuntime *X, const struct XrTyp
 XR_FUNC struct XrType *xr_tref_resolve_in_analyzer(struct XaAnalyzer *analyzer,
                                                    const struct XrTypeRef *tref);
 
+/* Report and reject compiler recovery ErrorType when a syntactic type has
+ * crossed into a successful source-level type slot such as a generic argument,
+ * container element, or constraint. Returns true when a diagnostic was emitted. */
+XR_FUNC bool xa_reject_error_type_success_type(struct XaAnalyzer *analyzer,
+                                               const struct XrType *type, const char *role,
+                                               const char *owner, int line, int column);
+
 /* Evaluate the integer subset allowed in compile-time constant contexts:
  * integer literals, const integer identifiers, grouping, unary +/-/~, and
  * arithmetic/bitwise binary operators. */
