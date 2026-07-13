@@ -44,7 +44,7 @@ fn test_literal_block_strip() {
     var text = string(obj["text"])
     assert(len(text) > 0)
     // Strip mode: no trailing newline
-    assert(text[len(text) - 1] != "\n")
+    assert(text.slice(len(text) - 1, len(text)) != "\n")
 }
 
 @test
@@ -74,7 +74,7 @@ fn test_folded_block_strip() {
     var obj = yaml.parse(data)
     var text = string(obj["text"])
     assert(len(text) > 0)
-    assert(text[len(text) - 1] != "\n")
+    assert(text.slice(len(text) - 1, len(text)) != "\n")
 }
 
 // ===== Multi-document =====

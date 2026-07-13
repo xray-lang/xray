@@ -83,11 +83,6 @@ struct Parser {
     int error_count;  // Number of errors collected
     int max_errors;   // Max errors before stopping (0 = unlimited)
 
-    // Allow bare container types (Array, Map, Set, Channel) without generic params.
-    // Set temporarily by 'is'/'as' parsers where runtime type checks don't need
-    // element type info.
-    bool allow_bare_container;
-
     // True while parsing a @native class body: methods have no body.
     bool parsing_native_class;
 

@@ -876,8 +876,58 @@ static void xa_report_fixed_array_length_diag(XaAnalyzer *analyzer, const AstNod
 /* Map a known named type to its runtime XrType*. Unknown user type names are
  * deliberately excluded here; analyzer-aware callers must prove those through
  * symbols or active generic parameters before accepting them. */
+static int builtin_interface_type_arity(const char *name) {
+    if (!name)
+        return -1;
+    if (strcmp(name, "Iterable") == 0 || strcmp(name, "Iterator") == 0 ||
+        strcmp(name, "Callable") == 0)
+        return 1;
+    if (strcmp(name, "Indexable") == 0)
+        return 2;
+    if (strcmp(name, "Comparable") == 0 || strcmp(name, "Hashable") == 0 ||
+        strcmp(name, "Stringable") == 0 || strcmp(name, "Equatable") == 0 ||
+        strcmp(name, "Lengthable") == 0 || strcmp(name, "Closeable") == 0)
+        return 0;
+    return -1;
+}
+
+static int known_type_head_arity(XrVMRuntime *X, const char *name) {
+    if (!name)
+        return -1;
+    if (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SPAN) == 0 ||
+        strcmp(name, "Set") == 0 || strcmp(name, "Channel") == 0 || strcmp(name, "Task") == 0 ||
+        strcmp(name, "RawPtr") == 0 || strcmp(name, "RawMut") == 0 || strcmp(name, "CFn") == 0)
+        return 1;
+    if (strcmp(name, "Map") == 0)
+        return 2;
+
+    int iface_arity = builtin_interface_type_arity(name);
+    if (iface_arity >= 0)
+        return iface_arity;
+
+    const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
+    const XrPreludeTypeEntry *entry =
+        symbols ? xr_prelude_lookup_type(symbols, name, strlen(name)) : NULL;
+    if (!entry)
+        return -1;
+    switch ((XrPreludeKind) entry->kind) {
+        case XR_PRELUDE_KIND_GENERIC_1:
+            return 1;
+        case XR_PRELUDE_KIND_GENERIC_2:
+            return 2;
+        case XR_PRELUDE_KIND_SIMPLE:
+        case XR_PRELUDE_KIND_SINGLETON:
+            return 0;
+    }
+    return -1;
+}
+
 static XrType *resolve_known_named(XrVMRuntime *X, const char *name) {
     XR_DCHECK(name != NULL, "resolve_named: NULL name");
+
+    int arity = known_type_head_arity(X, name);
+    if (arity > 0)
+        return xr_type_new_error(NULL);
 
     /* Built-in interfaces (Comparable, Hashable, Stringable, Equatable, ...).
      * These must be resolved as XR_KIND_INTERFACE so generic-constraint checks
@@ -888,7 +938,7 @@ static XrType *resolve_known_named(XrVMRuntime *X, const char *name) {
         return xr_type_new_interface(X, name);
 
     if (strcmp(name, TYPE_NAME_SPAN) == 0)
-        return xr_type_new_span(X, xr_type_new_unknown(NULL));
+        return xr_type_new_error(NULL);
     /* Prelude lookup (Array, Map, Set, Channel, Json, ...) */
     const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
     if (symbols) {
@@ -903,24 +953,14 @@ static XrType *resolve_known_named(XrVMRuntime *X, const char *name) {
                     return xr_type_new_named_instance(X, entry->name);
                 case XR_PRELUDE_KIND_GENERIC_1:
                 case XR_PRELUDE_KIND_GENERIC_2:
-                    /* Bare name without type args — use unknown placeholders */
-                    if (strcmp(entry->name, "Array") == 0)
-                        return xr_type_new_array(X, xr_type_new_unknown(NULL));
-                    if (strcmp(entry->name, "Set") == 0)
-                        return xr_type_new_set(X, xr_type_new_unknown(NULL));
-                    if (strcmp(entry->name, "Channel") == 0)
-                        return xr_type_new_channel(X, xr_type_new_unknown(NULL));
-                    if (strcmp(entry->name, "Map") == 0)
-                        return xr_type_new_map(X, xr_type_new_unknown(NULL),
-                                               xr_type_new_unknown(NULL));
-                    return xr_type_new_named_instance(X, entry->name);
+                    return xr_type_new_error(NULL);
             }
         }
     }
 
     /* Well-known names not in prelude */
     if (strcmp(name, "Task") == 0)
-        return xr_type_new_task(X, xr_type_new_unknown(NULL));
+        return xr_type_new_error(NULL);
     if (strcmp(name, "PanicInfo") == 0)
         return xr_type_new_named_instance(X, "PanicInfo");
     if (strcmp(name, TYPE_NAME_BUFFER) == 0)
@@ -955,29 +995,35 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
 
     /* Dispatch to known container constructors */
     XrType *result = NULL;
-    if (strcmp(name, "Array") == 0 && nargs >= 1) {
+    int expected_arity = known_type_head_arity(X, name);
+    if (expected_arity >= 0 && nargs != expected_arity) {
+        result = xr_type_new_error(NULL);
+    } else if (strcmp(name, "Array") == 0 && nargs == 1) {
         result = xr_type_new_array(X, args[0]);
-    } else if (strcmp(name, TYPE_NAME_SPAN) == 0 && nargs >= 1) {
+    } else if (strcmp(name, TYPE_NAME_SPAN) == 0 && nargs == 1) {
         result = xr_type_new_span(X, args[0]);
     } else if (false && nargs >= 1) {
         result = xr_type_new_view(X, args[0]);
-    } else if (strcmp(name, "Set") == 0 && nargs >= 1) {
+    } else if (strcmp(name, "Set") == 0 && nargs == 1) {
         result = xr_type_new_set(X, args[0]);
-    } else if (strcmp(name, "Channel") == 0 && nargs >= 1) {
+    } else if (strcmp(name, "Channel") == 0 && nargs == 1) {
         result = xr_type_new_channel(X, args[0]);
-    } else if (strcmp(name, "Map") == 0 && nargs >= 2) {
+    } else if (strcmp(name, "Map") == 0 && nargs == 2) {
         result = xr_type_new_map(X, args[0], args[1]);
-    } else if (strcmp(name, "Task") == 0 && nargs >= 1) {
+    } else if (strcmp(name, "Task") == 0 && nargs == 1) {
         result = xr_type_new_task(X, args[0]);
-    } else if (strcmp(name, "RawPtr") == 0 && nargs >= 1) {
+    } else if (strcmp(name, "RawPtr") == 0 && nargs == 1) {
         result = xr_type_new_pointer(X, args[0], false);  // const raw pointer
-    } else if (strcmp(name, "RawMut") == 0 && nargs >= 1) {
+    } else if (strcmp(name, "RawMut") == 0 && nargs == 1) {
         result = xr_type_new_pointer(X, args[0], true);  // mutable raw pointer
-    } else if (strcmp(name, "CFn") == 0 && nargs == 1 && args[0] &&
-               args[0]->kind == XR_KIND_FUNCTION) {
-        result = xr_type_copy(X, args[0]);
-        if (result)
-            result->function.is_c_abi = true;
+    } else if (strcmp(name, "CFn") == 0 && nargs == 1) {
+        if (args[0] && args[0]->kind == XR_KIND_FUNCTION) {
+            result = xr_type_copy(X, args[0]);
+            if (result)
+                result->function.is_c_abi = true;
+        } else {
+            result = xr_type_new_error(NULL);
+        }
     } else if (xa_is_builtin_interface_name(name)) {
         /* Built-in interface with type args: e.g. Iterable<int>. Create a fresh
          * generic interface type via the current isolate. */
@@ -1277,6 +1323,31 @@ static XrType *report_type_alias_error(XaAnalyzer *analyzer, const char *name,
     return xr_type_new_unknown(NULL);
 }
 
+static XrType *report_generic_arity_error(XaAnalyzer *analyzer, const char *name, int expected,
+                                          int got) {
+    if (analyzer && name && expected >= 0) {
+        XrLocation loc = {.file = analyzer->current_file, .line = 0, .column = 0};
+        char msg[192];
+        snprintf(msg, sizeof(msg), "generic type '%s' expects %d type argument%s, got %d", name,
+                 expected, expected == 1 ? "" : "s", got);
+        xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE, msg,
+                                   &loc);
+    }
+    return xr_type_new_error(NULL);
+}
+
+static XrType *report_generic_type_argument_error(XaAnalyzer *analyzer, const char *name,
+                                                  const char *message) {
+    if (analyzer && name && message) {
+        XrLocation loc = {.file = analyzer->current_file, .line = 0, .column = 0};
+        char msg[192];
+        snprintf(msg, sizeof(msg), "generic type '%s': %s", name, message);
+        xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE, msg,
+                                   &loc);
+    }
+    return xr_type_new_error(NULL);
+}
+
 static XrType *resolve_type_alias_symbol_in_analyzer(XaAnalyzer *analyzer, XaSymbol *sym,
                                                      XrTypeRef **type_args, int type_arg_count) {
     if (!analyzer || !sym || sym->kind != XA_SYM_TYPE_ALIAS)
@@ -1339,14 +1410,9 @@ static XrType *resolve_type_alias_symbol_in_analyzer(XaAnalyzer *analyzer, XaSym
 static bool is_known_generic_head(XrVMRuntime *X, const char *name) {
     if (!name)
         return false;
-    if (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SPAN) == 0 ||
-        strcmp(name, "Set") == 0 || strcmp(name, "Channel") == 0 || strcmp(name, "Map") == 0 ||
-        strcmp(name, "Task") == 0 || strcmp(name, "RawPtr") == 0 || strcmp(name, "RawMut") == 0 ||
-        strcmp(name, "CFn") == 0 || xa_is_builtin_interface_name(name)) {
+    if (known_type_head_arity(X, name) >= 0)
         return true;
-    }
-    const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
-    return symbols && xr_prelude_lookup_type(symbols, name, strlen(name)) != NULL;
+    return false;
 }
 
 static bool generic_head_is_container_like(const char *name) {
@@ -1383,6 +1449,12 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
 
     XrVMRuntime *X = analyzer->isolate;
     const char *name = tref->name;
+    int expected_arity = known_type_head_arity(X, name);
+    if (expected_arity >= 0 && nargs != expected_arity) {
+        if (args != stack_args)
+            xr_free(args);
+        return report_generic_arity_error(analyzer, name, expected_arity, nargs);
+    }
     if (reject_error_type_args(analyzer, args, nargs, name)) {
         if (args != stack_args)
             xr_free(args);
@@ -1390,27 +1462,31 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
     }
 
     XrType *result = NULL;
-    if (strcmp(name, "Array") == 0 && nargs >= 1) {
+    if (strcmp(name, "Array") == 0 && nargs == 1) {
         result = xr_type_new_array(X, args[0]);
-    } else if (strcmp(name, TYPE_NAME_SPAN) == 0 && nargs >= 1) {
+    } else if (strcmp(name, TYPE_NAME_SPAN) == 0 && nargs == 1) {
         result = xr_type_new_span(X, args[0]);
-    } else if (strcmp(name, "Set") == 0 && nargs >= 1) {
+    } else if (strcmp(name, "Set") == 0 && nargs == 1) {
         result = xr_type_new_set(X, args[0]);
-    } else if (strcmp(name, "Channel") == 0 && nargs >= 1) {
+    } else if (strcmp(name, "Channel") == 0 && nargs == 1) {
         result = xr_type_new_channel(X, args[0]);
-    } else if (strcmp(name, "Map") == 0 && nargs >= 2) {
+    } else if (strcmp(name, "Map") == 0 && nargs == 2) {
         result = xr_type_new_map(X, args[0], args[1]);
-    } else if (strcmp(name, "Task") == 0 && nargs >= 1) {
+    } else if (strcmp(name, "Task") == 0 && nargs == 1) {
         result = xr_type_new_task(X, args[0]);
-    } else if (strcmp(name, "RawPtr") == 0 && nargs >= 1) {
+    } else if (strcmp(name, "RawPtr") == 0 && nargs == 1) {
         result = xr_type_new_pointer(X, args[0], false);
-    } else if (strcmp(name, "RawMut") == 0 && nargs >= 1) {
+    } else if (strcmp(name, "RawMut") == 0 && nargs == 1) {
         result = xr_type_new_pointer(X, args[0], true);
-    } else if (strcmp(name, "CFn") == 0 && nargs == 1 && args[0] &&
-               args[0]->kind == XR_KIND_FUNCTION) {
-        result = xr_type_copy(X, args[0]);
-        if (result)
-            result->function.is_c_abi = true;
+    } else if (strcmp(name, "CFn") == 0 && nargs == 1) {
+        if (args[0] && args[0]->kind == XR_KIND_FUNCTION) {
+            result = xr_type_copy(X, args[0]);
+            if (result)
+                result->function.is_c_abi = true;
+        } else {
+            result = report_generic_type_argument_error(analyzer, name,
+                                                        "requires a function type argument");
+        }
     } else if (xa_is_builtin_interface_name(name)) {
         result = xr_type_new_generic_interface(X, name, args, nargs);
     } else {
@@ -1438,6 +1514,9 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         int type_param_index = active_type_param_index(analyzer, tref->name);
         if (type_param_index >= 0)
             return xr_type_new_type_param(analyzer->isolate, tref->name, type_param_index);
+        int expected_arity = known_type_head_arity(analyzer->isolate, tref->name);
+        if (expected_arity > 0)
+            return report_generic_arity_error(analyzer, tref->name, expected_arity, 0);
         XaSymbol *sym = resolve_type_symbol(analyzer, tref->name);
         if (sym && sym->kind == XA_SYM_TYPE_ALIAS)
             return resolve_type_alias_symbol_in_analyzer(analyzer, sym, NULL, 0);
@@ -1462,6 +1541,10 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
             report_undefined_public_type(analyzer, tref->name);
             return xr_type_new_unknown(NULL);
         }
+        int expected_arity = known_type_head_arity(analyzer->isolate, tref->name);
+        if (expected_arity >= 0 && tref->nchildren != expected_arity)
+            return report_generic_arity_error(analyzer, tref->name, expected_arity,
+                                              tref->nchildren);
         XaSymbol *sym = resolve_type_symbol(analyzer, tref->name);
         if (sym && sym->kind == XA_SYM_TYPE_ALIAS)
             return resolve_type_alias_symbol_in_analyzer(analyzer, sym, tref->children,

@@ -803,6 +803,54 @@ TEST(analyzer_empty_map_uses_unsolved_infer_var) {
     setup_pool();
 }
 
+TEST(analyzer_rejects_builtin_generic_arity) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    XrArena arena;
+    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
+    XrCompilerSessionScope scope;
+    ASSERT(xr_compiler_session_push_arena(g_session, &arena, "builtin_generic_arity.xr", &scope));
+
+    XrType *bare_array = xr_tref_resolve_in_analyzer(a, xr_tref_named(g_session, "Array"));
+    ASSERT(bare_array != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(bare_array));
+
+    XrTypeRef *map_args[] = {xr_tref_string(g_session)};
+    XrType *short_map =
+        xr_tref_resolve_in_analyzer(a, xr_tref_generic(g_session, "Map", map_args, 1));
+    ASSERT(short_map != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(short_map));
+
+    XrTypeRef *array_args[] = {xr_tref_int(g_session), xr_tref_string(g_session)};
+    XrType *wide_array =
+        xr_tref_resolve_in_analyzer(a, xr_tref_generic(g_session, "Array", array_args, 2));
+    ASSERT(wide_array != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(wide_array));
+
+    XrType *bare_task = xr_tref_resolve_in_analyzer(a, xr_tref_named(g_session, "Task"));
+    ASSERT(bare_task != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(bare_task));
+
+    XrType *bare_iterable = xr_tref_resolve_in_analyzer(a, xr_tref_named(g_session, "Iterable"));
+    ASSERT(bare_iterable != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(bare_iterable));
+
+    XrType *hashable = xr_tref_resolve_in_analyzer(a, xr_tref_named(g_session, "Hashable"));
+    ASSERT(hashable != NULL);
+    ASSERT(hashable->kind == XR_KIND_INTERFACE);
+
+    ASSERT(analyzer_diag_contains(a, "generic type 'Array' expects 1 type argument, got 0"));
+    ASSERT(analyzer_diag_contains(a, "generic type 'Map' expects 2 type arguments, got 1"));
+    ASSERT(analyzer_diag_contains(a, "generic type 'Array' expects 1 type argument, got 2"));
+    ASSERT(analyzer_diag_contains(a, "generic type 'Task' expects 1 type argument, got 0"));
+    ASSERT(analyzer_diag_contains(a, "generic type 'Iterable' expects 1 type argument, got 0"));
+
+    xr_compiler_session_pop_arena(&scope);
+    xr_arena_destroy(&arena);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_rejects_error_type_container_success_types) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -1158,6 +1206,7 @@ int main(void) {
     RUN_TEST(analyzer_empty_array_uses_unsolved_infer_var);
     RUN_TEST(analyzer_empty_set_uses_unsolved_infer_var);
     RUN_TEST(analyzer_empty_map_uses_unsolved_infer_var);
+    RUN_TEST(analyzer_rejects_builtin_generic_arity);
     RUN_TEST(analyzer_rejects_error_type_container_success_types);
     RUN_TEST(analyzer_rejects_error_type_generic_argument_and_constraint);
     RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);

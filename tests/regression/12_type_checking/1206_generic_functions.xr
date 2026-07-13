@@ -92,7 +92,7 @@ fn test_array_first() {
     }
     assert_eq(first([1, 2, 3]), 1)
     assert_eq(first(["a", "b"]), "a")
-    assert_eq(first([]), null)
+    assert_eq(first(Array<int>()), null)
 }
 
 @test
@@ -105,7 +105,7 @@ fn test_array_last() {
     }
     assert_eq(last([1, 2, 3]), 3)
     assert_eq(last(["x", "y", "z"]), "z")
-    assert_eq(last([]), null)
+    assert_eq(last(Array<int>()), null)
 }
 
 @test
@@ -173,7 +173,7 @@ fn test_wrap_in_array() {
 @test
 fn test_repeat_value() {
     fn repeat<T>(x: T, n: int) -> Array<T> {
-        var result: Array<T> = []
+        var result = Array<T>()
         for (var i = 0; i < n; i++) {
             result.push(x)
         }
@@ -207,7 +207,7 @@ fn test_generic_apply() {
 @test
 fn test_generic_transform() {
     fn transform<T>(arr: Array<T>, f: (T) -> T) -> Array<T> {
-        var result: Array<T> = []
+        var result = Array<T>()
         for (item in arr) {
             result.push(f(item))
         }
@@ -303,7 +303,7 @@ fn test_generic_with_map() {
 @test
 fn test_generic_merge_arrays() {
     fn merge<T>(a: Array<T>, b: Array<T>) -> Array<T> {
-        var result: Array<T> = []
+        var result = Array<T>()
         for (item in a) {
             result.push(item)
         }

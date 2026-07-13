@@ -35,7 +35,7 @@ fn test_is_null() {
 @test
 fn test_is_array() {
     var x: Array<int> = [1, 2, 3]
-    assert_eq(x is Array, true)
+    assert_eq(x is Array<int>, true)
     assert_eq(x is int, false)
 }
 

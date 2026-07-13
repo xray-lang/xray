@@ -7,7 +7,7 @@ fn delayed_value() -> int {
     return 7
 }
 
-fn await_and_report(id: int, task: Task, ready: Channel<int>, out: Channel<int>) {
+fn await_and_report(id: int, task: Task<int>, ready: Channel<int>, out: Channel<int>) {
     ready.send(id)
     var value = await task
     out.send(id * 100 + value)
