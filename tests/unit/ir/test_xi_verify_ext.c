@@ -27,6 +27,7 @@ static XrType stub_u64 = {
     .kind = XR_KIND_INT, .id = 6, .frozen = true, .native_width = XR_NATIVE_U64};
 static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 9, .frozen = true};
 static XrType stub_null = {.kind = XR_KIND_NULL, .id = 10, .frozen = true};
+static XrType stub_error = {.kind = XR_KIND_ERROR, .id = 12, .frozen = true};
 static XrType stub_array_i8 = {
     .kind = XR_KIND_ARRAY, .id = 7, .frozen = true, .container = {.element_type = &stub_i8}};
 static XrType stub_array_u64 = {
@@ -419,6 +420,60 @@ TEST(comparison_must_produce_bool_fails) {
     eq->args[0] = a;
     eq->args[1] = b;
     xi_block_set_return(entry, eq);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(error_return_type_fails) {
+    XiFunc *f = xi_func_new("error_return_type", &stub_error);
+    ASSERT(f != NULL);
+    XiBlock *entry = xi_block_new(f);
+    ASSERT(entry != NULL);
+    entry->sealed = true;
+    xi_block_set_return(entry, xi_const_int(f, entry, 1, &stub_int));
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(error_value_type_fails) {
+    XiFunc *f = make_func("error_value_type");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *v = xi_value_new(f, entry, XI_CONST, &stub_error, 0);
+    xi_block_set_return(entry, v);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(error_phi_type_fails) {
+    XiFunc *f = make_func("error_phi_type");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+    XiBlock *left = xi_block_new(f);
+    XiBlock *right = xi_block_new(f);
+    XiBlock *merge = xi_block_new(f);
+    ASSERT(left != NULL);
+    ASSERT(right != NULL);
+    ASSERT(merge != NULL);
+
+    XiValue *cond = xi_const_bool(f, entry, true, &stub_bool);
+    xi_block_set_if(entry, cond, left, right);
+    xi_block_add_pred(merge, left);
+    xi_block_add_pred(merge, right);
+    left->succs[0] = merge;
+    right->succs[0] = merge;
+
+    XiValue *left_v = xi_const_int(f, left, 1, &stub_int);
+    XiValue *right_v = xi_const_int(f, right, 2, &stub_int);
+    XiPhi *phi = xi_phi_new(f, merge, &stub_error, 2);
+    ASSERT(phi != NULL);
+    phi->value.args[0] = left_v;
+    phi->value.args[1] = right_v;
+    xi_block_set_return(merge, &phi->value);
 
     ASSERT(verify_fail(f));
     xi_func_free(f);
@@ -1221,6 +1276,9 @@ int main(void) {
     run_if_with_unit_control_fails();
     run_obsolete_multi_return_ops_fail();
     run_comparison_must_produce_bool_fails();
+    run_error_return_type_fails();
+    run_error_value_type_fails();
+    run_error_phi_type_fails();
     run_call_method_missing_aux_fails();
     run_call_method_zero_args_fails();
     run_call_method_direct_missing_aux_fails();

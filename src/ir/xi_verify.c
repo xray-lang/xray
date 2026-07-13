@@ -62,6 +62,10 @@ static void verify_func(VerifyCtx *ctx, const XiFunc *f) {
         verr(ctx, "function has NULL name");
         return;
     }
+    if (f->return_type && XR_TYPE_IS_ERROR(f->return_type)) {
+        verr(ctx, "func '%s': return type is compiler-only ErrorType", f->name);
+        return;
+    }
     if (f->nblocks == 0) {
         verr(ctx, "func '%s': no blocks", f->name);
         return;
@@ -138,6 +142,14 @@ static void verify_block(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk) {
     }
 }
 
+static bool verify_type_reject_error(VerifyCtx *ctx, const XiFunc *f, const char *owner,
+                                     uint32_t owner_id, const XrType *type) {
+    if (!type || !XR_TYPE_IS_ERROR(type))
+        return false;
+    verr(ctx, "func '%s': %s v%u uses compiler-only ErrorType", f->name, owner, owner_id);
+    return true;
+}
+
 /* Check 4: value-level invariants */
 static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, const XiValue *v) {
     if (ctx->failed)
@@ -149,6 +161,8 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
         verr(ctx, "func '%s': value v%u in b%u has NULL type", f->name, v->id, blk->id);
         return;
     }
+    if (verify_type_reject_error(ctx, f, "value", v->id, v->type))
+        return;
 
     /* Op must be in valid range */
     if (v->op >= XI_OP_COUNT) {
@@ -192,6 +206,8 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
                  blk->id, a, v->args[a]->id);
             return;
         }
+        if (verify_type_reject_error(ctx, f, "value arg", v->args[a]->id, v->args[a]->type))
+            return;
     }
 }
 
@@ -213,6 +229,8 @@ static void verify_phi(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, cons
         verr(ctx, "func '%s': phi v%u in b%u has NULL type", f->name, phi->value.id, blk->id);
         return;
     }
+    if (verify_type_reject_error(ctx, f, "phi", phi->value.id, phi->value.type))
+        return;
 
     /* Phi arg count must match predecessor count */
     if (phi->value.nargs != blk->npreds) {
@@ -228,6 +246,9 @@ static void verify_phi(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, cons
                  a);
             return;
         }
+        if (verify_type_reject_error(ctx, f, "phi arg", phi->value.args[a]->id,
+                                     phi->value.args[a]->type))
+            return;
     }
 }
 
