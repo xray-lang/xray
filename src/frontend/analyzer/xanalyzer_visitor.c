@@ -4614,6 +4614,16 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                 ctx->expected_type->container.element_type) {
                 elem = ctx->expected_type->container.element_type;
             }
+            if (node->as.set_literal.count == 0 && !elem) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                XaInferVar *var = xa_infer_var_new(ctx, "empty set element", &loc);
+                result = xa_infer_var_report_unsolved(
+                    ctx, var,
+                    "cannot infer element type for empty set literal; add an explicit Set<T> "
+                    "annotation or contextual type");
+                break;
+            }
             /* Visit ALL elements to resolve symbol_ids; infer elem type from first. */
             XrType *saved_expected = ctx->expected_type;
             for (int si = 0; si < node->as.set_literal.count; si++) {

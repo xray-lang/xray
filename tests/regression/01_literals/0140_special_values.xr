@@ -98,7 +98,7 @@ fn test_empty_map() {
 
 @test
 fn test_empty_set() {
-    var s = #[]
+    var s: Set<int> = #[]
     assert_eq(len(s), 0)
 }
 
