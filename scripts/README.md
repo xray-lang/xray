@@ -15,6 +15,7 @@
 | `scripts/check_parallel_surface_convergence.py` | 193：旧 `parallel for/range/reduce/collect/local/final` 语法与旧 AST/parser/spec/demo/API-doc 表面不得回流 | `--root <repo>` | 任一旧表面残留=1 | < 2s |
 | `scripts/check_parallel_backend_abi_convergence.py` | 193：parallel backend ABI/descriptor 命名收敛，旧 AOT-private/global-pool 名称不得回流 | `--root <repo>` | ABI 缺失或旧名残留=1 | < 2s |
 | `scripts/check_bytes_type_residue.py` | 204：`Bytes/ByteSpan/ByteView` 删除 residue 分类 inventory，区分 public 表面与 internal legacy 命名 | `--root <repo>`；可选 `--json`、`--fail-on-public` | 默认只输出 inventory=0；`--fail-on-public` 命中 public 残余=1 | < 2s |
+| `scripts/check_param_mode_convergence.py` | 206：`value/in/ref/out` 参数契约、调用授权、`move/copy` 来源动作与旧 `XR_PARAM_*`/并行数组 residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 
 ## 详细说明
 
@@ -61,6 +62,16 @@ CTest 的 `parallel_backend_abi_convergence`。
 `OP_BYTES_*`、`xr_array_bytes_*`、`emit_bytes_*` 与 `cg_bytes_*` 名称应保持为 0；若后续
 backend 切片重新引入这些 internal legacy 命名，inventory 会把它们列为回流证据。
 
+### `check_param_mode_convergence.py`
+
+扫描 `src/`、`stdlib/`、`tests/`、`spec/`、`demos/`、`tools/` 与 active language spec，
+把 206 参数模式收敛前的事实分成 `CANON_DECL_MODE_SPELLING`、`PREFIX_DECL_MODE_SPELLING`、
+`CALL_SITE_REF_OUT_MARKER`、`MOVE_AS_PARAM_MODE_RESIDUE`、`STALE_MODIFIER_EBNF`、
+`XR_PARAM_MACRO_RESIDUE`、`PASSING_MODE_FIELD_OR_ARRAY`、`FUNCTION_TYPE_MODE_CONSUMER`、
+`BACKEND_ABI_MODE_CONSUMER`、`BORROW_ESCAPE_SUSPEND_CONSUMER` 和
+`ACTIVE_PUBLIC_SURFACE_PARAM_MODE_HIT`。默认模式只打印 inventory 并返回 0，便于 P0 固定
+基线；后续 206 P1/P2/P3 可按类别逐步增加 fail gate。
+
 ## 与 nightly.yml 的关系
 
 `nightly.yml` 的 `mem-stress` job 调用 `scripts/run_mem_stress.sh`，`windows-msvc-release` job 调用 `scripts/repro_win11_coro_burn.sh`：
@@ -87,3 +98,4 @@ backend 切片重新引入这些 internal legacy 命名，inventory 会把它们
 | 2026-07-12 | 增加 parallel surface convergence 检查，接 193 旧专用语法删除门禁 | Codex |
 | 2026-07-12 | 增加 parallel backend ABI convergence 检查，接 193 VM/AOT backend 命名收敛门禁 | Codex |
 | 2026-07-13 | 增加 Bytes type residue inventory，接 204 P0/P7 public 表面与 internal legacy 命名分类 | Codex |
+| 2026-07-13 | 增加 parameter mode convergence inventory，接 206 P0 参数契约与调用授权收敛基线 | Codex |
