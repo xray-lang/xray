@@ -195,8 +195,10 @@ struct XaSymbol {
     XaScope *scope;    // Containing scope
     XaSymbol *parent;  // Parent symbol (for methods/fields)
 
-    // For type aliases: direct type storage (avoids analyzer dependency)
+    // For type aliases: declaration-backed TypeRef plus optional resolved cache.
+    struct AstNode *type_alias_node;
     void *alias_type;  // XrType* for type aliases
+    bool alias_resolving;
 
     // Inline type information (replaces separate XaSymbolLinks + intmap lookup)
     XaSymbolLinks links;

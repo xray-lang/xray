@@ -189,6 +189,7 @@ typedef struct SuperCallNode {
 
 typedef struct TypeAliasNode {
     char *name;
+    uint32_t symbol_id; /* Analyzer-assigned unique ID */
     XrGenericParam **type_params;
     int type_param_count;
     char **field_names;

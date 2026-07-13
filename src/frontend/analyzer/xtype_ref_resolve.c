@@ -16,6 +16,7 @@
 #include "xconsteval.h"
 #include "xanalyzer.h"
 #include "xanalyzer_builtin_interfaces.h"
+#include "xanalyzer_mono.h"
 #include "xanalyzer_visitor.h"
 #include "xanalyzer_visitor_internal.h"
 #include "xanalyzer_symbol.h"
@@ -1124,7 +1125,7 @@ static XaSymbol *resolve_type_symbol(XaAnalyzer *analyzer, const char *name) {
     XaSymbol *sym = xa_scope_lookup(start, name);
     if (!sym)
         return NULL;
-    if (sym->kind == XA_SYM_CLASS || sym->kind == XA_SYM_ENUM)
+    if (sym->kind == XA_SYM_CLASS || sym->kind == XA_SYM_ENUM || sym->kind == XA_SYM_TYPE_ALIAS)
         return sym;
     if (sym->kind == XA_SYM_IMPORT) {
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
@@ -1222,6 +1223,77 @@ static int active_type_param_index(XaAnalyzer *analyzer, const char *name) {
     return -1;
 }
 
+static XrType *report_type_alias_error(XaAnalyzer *analyzer, const char *name,
+                                       const char *message) {
+    if (analyzer && name && message) {
+        XrLocation loc = {.file = analyzer->current_file, .line = 0, .column = 0};
+        char msg[192];
+        snprintf(msg, sizeof(msg), "type alias '%s': %s", name, message);
+        xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE, msg,
+                                   &loc);
+    }
+    return xr_type_new_unknown(NULL);
+}
+
+static XrType *resolve_type_alias_symbol_in_analyzer(XaAnalyzer *analyzer, XaSymbol *sym,
+                                                     XrTypeRef **type_args, int type_arg_count) {
+    if (!analyzer || !sym || sym->kind != XA_SYM_TYPE_ALIAS)
+        return NULL;
+
+    AstNode *node = sym->type_alias_node;
+    TypeAliasNode *alias = (node && node->type == AST_TYPE_ALIAS) ? &node->as.type_alias : NULL;
+    if (!alias || !alias->resolved_type) {
+        if (sym->alias_type)
+            return (XrType *) sym->alias_type;
+        return report_type_alias_error(analyzer, sym->name, "definition is unavailable");
+    }
+
+    int expected = alias->type_param_count;
+    if (expected != type_arg_count) {
+        char detail[96];
+        snprintf(detail, sizeof(detail), "expects %d type argument%s, got %d", expected,
+                 expected == 1 ? "" : "s", type_arg_count);
+        return report_type_alias_error(analyzer, sym->name, detail);
+    }
+
+    if (sym->alias_resolving)
+        return report_type_alias_error(analyzer, sym->name, "circular definition");
+
+    XrMonoTypeMap stack_map[8];
+    XrMonoTypeMap *map = NULL;
+    if (expected > 0) {
+        map = expected <= 8 ? stack_map
+                            : (XrMonoTypeMap *) xr_calloc((size_t) expected, sizeof(*map));
+        if (!map)
+            return xr_type_new_unknown(NULL);
+        for (int i = 0; i < expected; i++) {
+            map[i].param_name = alias->type_params[i] ? alias->type_params[i]->name : NULL;
+            map[i].concrete_type = type_args ? type_args[i] : NULL;
+        }
+    }
+
+    sym->alias_resolving = true;
+    XrTypeRef *expanded =
+        map ? xr_mono_type_substitute(alias->resolved_type, map, expected) : alias->resolved_type;
+    XrType *resolved = xr_tref_resolve_in_analyzer(analyzer, expanded);
+    sym->alias_resolving = false;
+
+    if (map && map != stack_map)
+        xr_free(map);
+
+    if (!resolved)
+        resolved = xr_type_new_unknown(NULL);
+    if (expected == 0) {
+        sym->alias_type = resolved;
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+        if (links) {
+            links->type = resolved;
+            links->declared_type = resolved;
+        }
+    }
+    return resolved;
+}
+
 static bool is_known_generic_head(XrVMRuntime *X, const char *name) {
     if (!name)
         return false;
@@ -1299,6 +1371,9 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         int type_param_index = active_type_param_index(analyzer, tref->name);
         if (type_param_index >= 0)
             return xr_type_new_type_param(analyzer->isolate, tref->name, type_param_index);
+        XaSymbol *sym = resolve_type_symbol(analyzer, tref->name);
+        if (sym && sym->kind == XA_SYM_TYPE_ALIAS)
+            return resolve_type_alias_symbol_in_analyzer(analyzer, sym, NULL, 0);
         XrType *cls = resolve_type_ref_symbol_type(analyzer, tref->name);
         if (cls)
             return cls;
@@ -1321,6 +1396,9 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
             return xr_type_new_unknown(NULL);
         }
         XaSymbol *sym = resolve_type_symbol(analyzer, tref->name);
+        if (sym && sym->kind == XA_SYM_TYPE_ALIAS)
+            return resolve_type_alias_symbol_in_analyzer(analyzer, sym, tref->children,
+                                                         tref->nchildren);
         XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
         XrType *head = links ? links->type : NULL;
         if (head && (head->kind == XR_KIND_INTERFACE || head->kind == XR_KIND_CLASS ||
