@@ -1,0 +1,9 @@
+fn bad(x: out int) {
+    try {
+        x = 1
+    } catch panic (e) {
+    }
+}
+
+var y = 0
+bad(out y)

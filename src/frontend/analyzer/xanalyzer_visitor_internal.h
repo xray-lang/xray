@@ -77,7 +77,11 @@ XR_FUNC void xa_check_out_params_assigned_at_function_exit(XaInferContext *ctx,
 typedef struct XaOutParamDaState XaOutParamDaState;
 XR_FUNC XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out_count);
 XR_FUNC void xa_out_param_da_restore_before(XaOutParamDaState *states, int count);
+XR_FUNC void xa_out_param_da_begin_path_merge(XaOutParamDaState *states, int count);
+XR_FUNC void xa_out_param_da_record_path(XaOutParamDaState *states, int count, bool falls_through);
+XR_FUNC void xa_out_param_da_apply_path_merge(XaOutParamDaState *states, int count);
 XR_FUNC void xa_out_param_da_free(XaOutParamDaState *states);
+XR_FUNC bool xa_statement_can_fall_through(AstNode *node);
 XR_FUNC bool xa_type_is_concurrency_handle(const XrType *type);
 XR_FUNC const char *xa_concurrency_handle_label(const XrType *type);
 XR_FUNC bool xa_expr_is_sys_thread_spawn_call(AstNode *expr);
