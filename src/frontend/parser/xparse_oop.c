@@ -938,17 +938,13 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                 default_values = _new_defaults;
             }
 
-            if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
-                xr_parser_consume(parser, TK_NAME, "expected parameter name after ...");
-                parameters[param_count] = token_to_string(parser, &parser->previous);
-                param_passing_modes[param_count] = XR_PARAM_VALUE;
-                param_types[param_count] = NULL;
+            if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+                XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_REST);
+                parameters[param_count] = param->name;
+                param_passing_modes[param_count] = param->passing_mode;
+                param_types[param_count] = param->type;
                 default_values[param_count] = NULL;
                 is_variadic = true;
-
-                xr_parse_optional_param_type_annotation(
-                    parser, false, &param_passing_modes[param_count], &param_types[param_count]);
-
                 param_count++;
                 if (xr_parser_check(parser, TK_COMMA)) {
                     xr_parser_error(parser, "rest parameter must be last");
@@ -958,12 +954,10 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
             }
 
             // Parse parameter name
-            xr_parser_consume(parser, TK_NAME, "expected parameter name");
-            parameters[param_count] = token_to_string(parser, &parser->previous);
-            param_passing_modes[param_count] = XR_PARAM_VALUE;
-
-            xr_parse_optional_param_type_annotation(parser, true, &param_passing_modes[param_count],
-                                                    &param_types[param_count]);
+            XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
+            parameters[param_count] = param->name;
+            param_passing_modes[param_count] = param->passing_mode;
+            param_types[param_count] = param->type;
 
             if (xr_parser_match(parser, TK_ASSIGN)) {
                 default_values[param_count] = xr_parse_expression(parser);
@@ -1421,6 +1415,7 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
 
     char **parameters = NULL;
     XrTypeRef **param_types = NULL;
+    XrParamMode *param_passing_modes = NULL;
     int param_count = 0;
 
     // Parse parameters: most operators need 1, []= needs 2, unary operators need 0
@@ -1442,17 +1437,14 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
                                                (size_t) expected_params);
         param_types = (XrTypeRef **) ast_alloc_array(parser->compiler_session, sizeof(XrTypeRef *),
                                                      (size_t) expected_params);
+        param_passing_modes = (XrParamMode *) ast_alloc_array(
+            parser->compiler_session, sizeof(XrParamMode), (size_t) expected_params);
 
         // Parse first parameter
-        xr_parser_consume(parser, TK_NAME, "expected parameter name");
-        parameters[0] = token_to_string(parser, &parser->previous);
-
-        // Parse parameter type (optional) - use full type annotation parser
-        if (xr_parser_match(parser, TK_COLON)) {
-            param_types[0] = xr_parse_type_annotation(parser);
-        } else {
-            param_types[0] = NULL;
-        }
+        XrParamNode *first_param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
+        parameters[0] = first_param->name;
+        param_types[0] = first_param->type;
+        param_passing_modes[0] = first_param->passing_mode;
 
         param_count = 1;
 
@@ -1463,16 +1455,10 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
                 goto fail;
             }
 
-            // Parse second parameter
-            xr_parser_consume(parser, TK_NAME, "expected parameter name");
-            parameters[1] = token_to_string(parser, &parser->previous);
-
-            // Parse second parameter type (optional) - use full type annotation parser
-            if (xr_parser_match(parser, TK_COLON)) {
-                param_types[1] = xr_parse_type_annotation(parser);
-            } else {
-                param_types[1] = NULL;
-            }
+            XrParamNode *second_param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
+            parameters[1] = second_param->name;
+            param_types[1] = second_param->type;
+            param_passing_modes[1] = second_param->passing_mode;
 
             param_count = 2;
         }
@@ -1530,6 +1516,7 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     // Set operator flags
     method->as.method_decl.is_operator = true;     // mark as operator method
     method->as.method_decl.op_type = op_type_val;  // set specific operator type
+    method->as.method_decl.param_passing_modes = param_passing_modes;
 
     return method;
 
@@ -1576,22 +1563,20 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name, Xr
 
         char **parameters = NULL;
         XrTypeRef **param_types = NULL;
+        XrParamMode *param_passing_modes = NULL;
         int param_count = 0;
 
         if (!xr_parser_check(parser, TK_RPAREN)) {
             // Has parameters = setter
             parameters = (char **) ast_alloc(parser->compiler_session, sizeof(char *));
             param_types = (XrTypeRef **) ast_alloc(parser->compiler_session, sizeof(XrTypeRef *));
+            param_passing_modes =
+                (XrParamMode *) ast_alloc(parser->compiler_session, sizeof(XrParamMode));
 
-            xr_parser_consume(parser, TK_NAME, "expected parameter name");
-            parameters[0] = token_to_string(parser, &parser->previous);
-
-            // Parse parameter type (optional)
-            if (xr_parser_match(parser, TK_COLON)) {
-                param_types[0] = xr_parse_type_annotation(parser);
-            } else {
-                param_types[0] = field_type;  // use property type as default param type
-            }
+            XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
+            parameters[0] = param->name;
+            param_types[0] = param->type ? param->type : field_type;
+            param_passing_modes[0] = param->passing_mode;
 
             param_count = 1;
 
@@ -1630,6 +1615,7 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name, Xr
         AstNode *method_node = xr_ast_method_decl(
             parser->compiler_session, method_name, parameters, param_types, param_count,
             return_type, body, false, is_static, is_private, is_getter, !is_getter, line);
+        method_node->as.method_decl.param_passing_modes = param_passing_modes;
 
         method_node->column = 1;  // property accessors are synthetic — column
                                   //   mirrors the declaration line (safe 1)
@@ -1836,7 +1822,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         xr_parser_match(parser, TK_SEMICOLON);
         return xr_ast_interface_method(parser->compiler_session,
                                        ast_strdup(parser->compiler_session, "__operator_len"), NULL,
-                                       NULL, 0, return_type, member_line);
+                                       NULL, NULL, 0, return_type, member_line);
     }
 
     // Optional `const` modifier — only valid for property signatures.
@@ -1865,19 +1851,14 @@ AstNode *xr_parse_interface_member(Parser *parser) {
 
     char **parameters = NULL;
     XrTypeRef **param_types = NULL;
+    XrParamMode *param_passing_modes = NULL;
     int param_count = 0;
     int param_capacity = 0;
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
-            // Parameter name
-            xr_parser_consume(parser, TK_NAME, "expected parameter name");
-            char *param_name = token_to_string(parser, &parser->previous);
-
-            // Parameter type (required in interface method signatures)
-            xr_parser_consume(parser, TK_COLON, "expected ':'");
-
-            XrTypeRef *param_type = xr_parse_type_annotation(parser);
+            XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE |
+                                                                XR_PARSE_PARAMETER_REQUIRE_TYPE);
 
             // Add to parameters array (arena grow - old buffers released by arena)
             if (param_count >= param_capacity) {
@@ -1898,9 +1879,18 @@ AstNode *xr_parse_interface_member(Parser *parser) {
                            sizeof(XrTypeRef *) * (size_t) old_capacity);
                 }
                 param_types = _new_param_types;
+
+                XrParamMode *_new_modes = (XrParamMode *) ast_alloc_array(
+                    parser->compiler_session, sizeof(XrParamMode), (size_t) param_capacity);
+                if (old_capacity > 0 && param_passing_modes) {
+                    memcpy(_new_modes, param_passing_modes,
+                           sizeof(XrParamMode) * (size_t) old_capacity);
+                }
+                param_passing_modes = _new_modes;
             }
-            parameters[param_count] = param_name;
-            param_types[param_count] = param_type;
+            parameters[param_count] = param->name;
+            param_types[param_count] = param->type;
+            param_passing_modes[param_count] = param->passing_mode;
             param_count++;
 
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
@@ -1923,9 +1913,9 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     xr_parser_match(parser, TK_SEMICOLON);
 
     // Create interface method signature node. xr_ast_interface_method
-    // takes ownership of member_name, parameters[] and param_types[].
+    // takes ownership of member_name, parameters[], param_types[] and modes[].
     return xr_ast_interface_method(parser->compiler_session, member_name, parameters, param_types,
-                                   param_count, return_type, member_line);
+                                   param_passing_modes, param_count, return_type, member_line);
 }
 
 /* ========== Enum Declaration Parsing ========== */

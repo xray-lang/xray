@@ -94,6 +94,7 @@ typedef struct InterfaceMethodNode {
     char *name;
     char **parameters;
     XrTypeRef **param_types;
+    XrParamMode *param_passing_modes;
     int param_count;
     XrTypeRef *return_type;
 } InterfaceMethodNode;

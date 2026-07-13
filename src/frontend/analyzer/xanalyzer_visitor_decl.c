@@ -2744,6 +2744,10 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
                                : xr_type_new_unit(NULL);
         mlinks->type = xr_type_new_function(ctx->analyzer->isolate, param_types, im->param_count,
                                             ret_type, false);
+        if (mlinks->type && im->param_passing_modes) {
+            for (int j = 0; j < im->param_count; j++)
+                xr_type_function_set_param_mode(mlinks->type, j, im->param_passing_modes[j]);
+        }
         if (param_types)
             xr_free(param_types);
         xa_class_info_add_method(info, msym);

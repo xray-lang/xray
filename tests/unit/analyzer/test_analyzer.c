@@ -14,6 +14,10 @@
 #include "xanalyzer_flow.h"
 #include "xanalyzer_infer.h"
 #include "xanalyzer_visitor.h"
+#include "xast_nodes.h"
+#include "xparse.h"
+#include "xtype_ref.h"
+#include "xtype_ref_resolve.h"
 #include "xtype_pool.h"
 #include "xray_vm.h"
 #include "toolchain/xcompiler_session.h"
@@ -659,6 +663,29 @@ TEST(compile_type_function) {
     ASSERT(XR_TYPE_IS_BOOL(fn->function.return_type));
 }
 
+TEST(compile_type_ref_function_modes) {
+    AstNode *program = xr_parse(g_session, "type Handler = (in int, ref string, out bool) -> int");
+    ASSERT(program != NULL);
+    ASSERT(program->type == AST_PROGRAM);
+    ASSERT(program->as.program.count == 1);
+    AstNode *alias = program->as.program.statements[0];
+    ASSERT(alias != NULL);
+    ASSERT(alias->type == AST_TYPE_ALIAS);
+    XrTypeRef *tref = alias->as.type_alias.resolved_type;
+    ASSERT(tref != NULL);
+
+    XrType *fn = xr_tref_resolve_in_analyzer(g_analyzer, tref);
+    ASSERT(XR_TYPE_IS_FUNCTION(fn));
+    ASSERT(fn->function.param_count == 3);
+    ASSERT(XR_TYPE_IS_INT(xr_type_function_param_type(fn, 0)));
+    ASSERT(XR_TYPE_IS_STRING(xr_type_function_param_type(fn, 1)));
+    ASSERT(XR_TYPE_IS_BOOL(xr_type_function_param_type(fn, 2)));
+    ASSERT(xr_type_function_param_mode(fn, 0) == XR_PARAM_IN);
+    ASSERT(xr_type_function_param_mode(fn, 1) == XR_PARAM_REF);
+    ASSERT(xr_type_function_param_mode(fn, 2) == XR_PARAM_OUT);
+    ASSERT(XR_TYPE_IS_INT(fn->function.return_type));
+}
+
 TEST(compile_type_class) {
     // Class type using new API
     XrType *cls = xr_type_new_class(g_isolate, "MyClass");
@@ -871,6 +898,7 @@ int main(void) {
     RUN_TEST(compile_type_primitives);
     RUN_TEST(compile_type_containers);
     RUN_TEST(compile_type_function);
+    RUN_TEST(compile_type_ref_function_modes);
     RUN_TEST(compile_type_class);
     RUN_TEST(compile_type_optional);
     RUN_TEST(type_substitute_preserves_nullable_type_param);

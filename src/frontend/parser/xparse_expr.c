@@ -740,32 +740,18 @@ AstNode *xr_parse_grouping(Parser *parser) {
     if (is_arrow_head && xr_parser_check(parser, TK_NAME)) {
         // Collect params as XrParamNode. The array lives in the parse
         // arena because it is shallow-copied into the function_expr node.
-        XrParamNode **params =
-            (XrParamNode **) ast_alloc_array(parser->compiler_session, sizeof(XrParamNode *), 10);
+        XrParamNode **params = NULL;
         int param_count = 0;
-        char name_buf[256];
+        int param_capacity = 0;
 
-        // First param
-        Token first_name = parser->current;
-        xr_parser_advance(parser);
-        snprintf(name_buf, sizeof(name_buf), "%.*s", first_name.length, first_name.start);
-        params[param_count] = xr_param_node_new(parser->compiler_session, name_buf, first_name.line,
-                                                first_name.column);
-        xr_parse_optional_param_type_annotation(parser, true, &params[param_count]->passing_mode,
-                                                &params[param_count]->type);
-        param_count++;
+        XrParamNode *first_param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
+        XR_PARSE_PUSH(parser, params, param_count, param_capacity, first_param);
 
         while (xr_parser_match(parser, TK_COMMA)) {
             if (xr_parser_check(parser, TK_RPAREN))
                 break;
-            xr_parser_consume(parser, TK_NAME, "expected parameter name");
-            Token param = parser->previous;
-            snprintf(name_buf, sizeof(name_buf), "%.*s", param.length, param.start);
-            params[param_count] =
-                xr_param_node_new(parser->compiler_session, name_buf, param.line, param.column);
-            xr_parse_optional_param_type_annotation(
-                parser, true, &params[param_count]->passing_mode, &params[param_count]->type);
-            param_count++;
+            XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
+            XR_PARSE_PUSH(parser, params, param_count, param_capacity, param);
         }
 
         if (!xr_parser_match(parser, TK_RPAREN)) {
@@ -926,17 +912,7 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
-            xr_parser_consume(parser, TK_NAME, "expected parameter name");
-            Token param_token = parser->previous;
-
-            char param_name[256];
-            snprintf(param_name, sizeof(param_name), "%.*s", param_token.length, param_token.start);
-
-            XrParamNode *param = xr_param_node_new(parser->compiler_session, param_name,
-                                                   param_token.line, param_token.column);
-
-            xr_parse_optional_param_type_annotation(parser, true, &param->passing_mode,
-                                                    &param->type);
+            XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
 
             XR_PARSE_PUSH(parser, params, param_count, param_capacity, param);
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));

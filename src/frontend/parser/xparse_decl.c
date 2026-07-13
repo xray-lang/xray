@@ -702,20 +702,8 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
             }
 
             // Check rest param: ...args
-            if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
-                xr_parser_consume(parser, TK_NAME, "expected parameter name after ...");
-                Token rest_token = parser->previous;
-
-                char temp_name[64];
-                snprintf(temp_name, sizeof(temp_name), "%.*s", rest_token.length, rest_token.start);
-
-                XrParamNode *rest_param = xr_param_node_new(parser->compiler_session, temp_name,
-                                                            rest_token.line, rest_token.column);
-                rest_param->is_rest = true;
-
-                /* Optional element type annotation: ...args: int */
-                xr_parse_optional_param_type_annotation(parser, false, &rest_param->passing_mode,
-                                                        &rest_param->type);
+            if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+                XrParamNode *rest_param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_REST);
                 params[param_count++] = rest_param;
 
                 if (xr_parser_check(parser, TK_COMMA)) {
@@ -753,19 +741,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 required_count++;
             } else {
                 // Regular parameter name
-                xr_parser_consume(parser, TK_NAME,
-                                  "expected parameter name or destructure pattern");
-                Token param_token = parser->previous;
-
-                char param_name[256];
-                snprintf(param_name, sizeof(param_name), "%.*s", param_token.length,
-                         param_token.start);
-
-                XrParamNode *param = xr_param_node_new(parser->compiler_session, param_name,
-                                                       param_token.line, param_token.column);
-
-                xr_parse_optional_param_type_annotation(parser, true, &param->passing_mode,
-                                                        &param->type);
+                XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
 
                 // Parse optional default value
                 if (xr_parser_match(parser, TK_ASSIGN)) {

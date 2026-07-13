@@ -218,7 +218,8 @@ XR_FUNC AstNode *xr_ast_interface_decl(XrCompilerSession *session, const char *n
 // Create interface method signature node
 XR_FUNC AstNode *xr_ast_interface_method(XrCompilerSession *session, const char *name,
                                          char **parameters, XrTypeRef **param_types,
-                                         int param_count, XrTypeRef *return_type, int line);
+                                         XrParamMode *param_passing_modes, int param_count,
+                                         XrTypeRef *return_type, int line);
 
 // Create interface property signature node (e.g. `length: int`)
 XR_FUNC AstNode *xr_ast_interface_property(XrCompilerSession *session, const char *name,
