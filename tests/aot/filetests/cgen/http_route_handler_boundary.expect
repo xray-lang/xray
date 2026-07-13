@@ -1,0 +1,7 @@
+contains=xaot-plan v0
+contains=name=http.route
+regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ span=[0-9]+ kind=encode action=encode_field_table
+c_regex=void http_[0-9a-f]+_route_exp\(xrt_closure_t \*_cl, void \* p0, void \* p1, XrValue p2\)
+c_contains=xrt_typename(
+c_contains=xrt_map_set_class_name(_inst, "_RouteHandler")
+c_contains=xrt_json_get_name_owned

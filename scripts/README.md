@@ -16,6 +16,7 @@
 | `scripts/check_parallel_backend_abi_convergence.py` | 193：parallel backend ABI/descriptor 命名收敛，旧 AOT-private/global-pool 名称不得回流 | `--root <repo>` | ABI 缺失或旧名残留=1 | < 2s |
 | `scripts/check_bytes_type_residue.py` | 204：`Bytes/ByteSpan/ByteView` 删除 residue 分类 inventory，区分 public 表面与 internal legacy 命名 | `--root <repo>`；可选 `--json`、`--fail-on-public` | 默认只输出 inventory=0；`--fail-on-public` 命中 public 残余=1 | < 2s |
 | `scripts/check_source_unknown_convergence.py` | 202：source `unknown` 删除与 typed erasure 边界收敛前的 source/runtime/analyzer/IR/AOT/Task residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
+| `scripts/check_source_unknown_aot_baseline.py` | 202：Task、ThreadLocal、Json encode 与 HTTP handler 的 AOT baseline fixture/expect 覆盖检查 | `--root <repo>`；可选 `--json` | baseline fixture 或关键断言缺失=1 | < 1s |
 | `scripts/check_error_effect_convergence.py` | 205：unchecked error-effect graph 收敛前的 `XrErrorSet`、`function.error_set`、`MAY_THROW`、pending-error、LSP 与 `.xrd` 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 | `scripts/check_param_mode_convergence.py` | 206：`value/in/ref/out` 参数契约、调用授权、`move/copy` 来源动作与旧 `XR_PARAM_*`/并行数组 residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 
@@ -77,6 +78,13 @@ backend 切片重新引入这些 internal legacy 命名，inventory 会把它们
 `STDLIB_DYNAMIC_UNKNOWN_API` 和 `PUBLIC_SPEC_UNKNOWN_RESIDUE`。默认模式只打印 inventory
 并返回 0，便于 P0 固定 source `unknown`、runtime unknown singleton、type_any / dynamic slot
 fallback、TaskResult/TaskOutcome erased payload 与 active spec residue；后续 202 P1-P7 可按类别逐步增加 fail gate。
+
+### `check_source_unknown_aot_baseline.py`
+
+检查 202 P0 要求的四类 AOT baseline 是否都有当前 filetest 和关键 expect 断言：Task、ThreadLocal、
+Json encode 与 HTTP handler。该脚本只证明 baseline 覆盖存在，不宣称这些边界已完成最终 typed
+contract；ThreadLocal 与 HTTP handler 当前仍作为后续替换目标被固定在 baseline 中。该脚本接入 CTest
+的 `source_unknown_aot_baseline`。
 
 ### `check_error_effect_convergence.py`
 

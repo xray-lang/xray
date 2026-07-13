@@ -1,0 +1,7 @@
+contains=xaot-plan v0
+c_contains=xrt_sys_thread_local_id()
+c_contains=xrt_map_new_typed(0, XR_ELEM_I64, XR_ELEM_BOOL)
+c_contains=xrt_map_new(0)
+c_contains=xrt_map_set_class_name(_inst, "ThreadLocal")
+c_regex=XrValue sys_[0-9a-f]+_ThreadLocal_get_m\(xrt_closure_t \*_cl, XrValue p0\)
+c_regex=void sys_[0-9a-f]+_ThreadLocal_set_m\(xrt_closure_t \*_cl, XrValue p0, XrValue p1\)
