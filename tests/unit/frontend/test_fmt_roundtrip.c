@@ -362,28 +362,28 @@ TEST(object_destructure_rename_roundtrip) {
 
 TEST(parameter_modes_roundtrip) {
     setup();
-    const char *src = "fn param_modes(a: in int, b: ref int, c: out int) { }\n"
-                      "var f = fn(a: in int, b: ref int, c: out int) -> int { return a }\n"
+    const char *src = "fn param_modes(a: int, b: in int, c: ref int, d: out int) { }\n"
+                      "var f = fn(a: int, b: in int, c: ref int, d: out int) -> int { return a }\n"
                       "class ParamModeBox {\n"
-                      "    touch(a: in int, b: ref int, c: out int) { }\n"
+                      "    touch(a: int, b: in int, c: ref int, d: out int) { }\n"
                       "}\n"
                       "interface ParamModeIface {\n"
-                      "    touch(a: in int, b: ref int, c: out int) -> int\n"
+                      "    touch(a: int, b: in int, c: ref int, d: out int) -> int\n"
                       "}\n"
                       "type ComplexHandler = (in Array<int>, ref Slice<uint8>?, "
                       "out [uint8; 16], (int, string), in (ref int) -> bool,) -> Array<string>\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
-    ASSERT_TRUE(contains(fmt1, "fn param_modes(a: in int, b: ref int, c: out int)"));
-    ASSERT_TRUE(contains(fmt1, "fn(a: in int, b: ref int, c: out int) -> int"));
-    ASSERT_TRUE(contains(fmt1, "touch(a: in int, b: ref int, c: out int)"));
+    ASSERT_TRUE(contains(fmt1, "fn param_modes(a: int, b: in int, c: ref int, d: out int)"));
+    ASSERT_TRUE(contains(fmt1, "fn(a: int, b: in int, c: ref int, d: out int) -> int"));
+    ASSERT_TRUE(contains(fmt1, "touch(a: int, b: in int, c: ref int, d: out int)"));
     ASSERT_TRUE(contains(fmt1, "type ComplexHandler = (in Array<int>, ref Slice<uint8>?, "
                                "out [uint8; 16], (int, string), in (ref int) -> bool) -> "
                                "Array<string>"));
     ASSERT_FALSE(contains(fmt1, "bool,) -> Array<string>"));
     ASSERT_FALSE(contains(fmt1, "in a:"));
-    ASSERT_FALSE(contains(fmt1, "ref b:"));
-    ASSERT_FALSE(contains(fmt1, "out c:"));
+    ASSERT_FALSE(contains(fmt1, "ref c:"));
+    ASSERT_FALSE(contains(fmt1, "out d:"));
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
