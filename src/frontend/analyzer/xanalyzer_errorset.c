@@ -265,6 +265,8 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node);
 static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node);
 static void es_walk_block(ErrorSetCtx *ctx, AstNode *node);
 static FunctionValueTarget resolve_call_target_depth(ErrorSetCtx *ctx, AstNode *callee, int depth);
+static bool function_value_target_add(FunctionValueTarget *target, XaSymbol *sym,
+                                      AstNode *function_expr);
 
 /* ========== Helpers ========== */
 
@@ -430,6 +432,153 @@ static bool method_selection_has_open_virtual_dispatch(const XaSelection *sel) {
     if (slot)
         return !slot->is_final;
     return info->has_subclass;
+}
+
+static bool class_info_is_or_extends(const XrClassInfo *candidate, const XrClassInfo *base) {
+    if (!candidate || !base)
+        return false;
+    for (const XrClassInfo *cur = candidate; cur; cur = cur->base) {
+        if (cur == base)
+            return true;
+    }
+    return false;
+}
+
+static bool class_info_implements_interface(const XrClassInfo *info, const XrType *interface_type) {
+    if (!info || !interface_type || interface_type->kind != XR_KIND_INTERFACE)
+        return false;
+    const char *target_name = interface_type->instance.class_name;
+    if (!target_name)
+        return false;
+
+    int target_args = interface_type->instance.type_arg_count;
+    for (const XrClassInfo *cur = info; cur; cur = cur->base) {
+        for (int i = 0; i < cur->interface_count; i++) {
+            XrType *iface = cur->interface_types ? cur->interface_types[i] : NULL;
+            if (!iface || !iface->instance.class_name)
+                continue;
+            if (strcmp(iface->instance.class_name, target_name) != 0)
+                continue;
+            if (target_args == 0)
+                return true;
+            if (iface->instance.type_arg_count != target_args)
+                continue;
+            bool args_match = true;
+            for (int j = 0; j < target_args; j++) {
+                XrType *target_arg = interface_type->instance.type_args[j];
+                XrType *candidate_arg = iface->instance.type_args[j];
+                if (!target_arg || !candidate_arg)
+                    continue;
+                if (XR_TYPE_IS_UNKNOWN(target_arg) || XR_TYPE_IS_UNKNOWN(candidate_arg))
+                    continue;
+                if (target_arg->kind == XR_KIND_TYPE_PARAM ||
+                    candidate_arg->kind == XR_KIND_TYPE_PARAM)
+                    continue;
+                if (!xr_type_assignable(target_arg, candidate_arg)) {
+                    args_match = false;
+                    break;
+                }
+            }
+            if (args_match)
+                return true;
+        }
+    }
+    return false;
+}
+
+static XaSymbol *method_target_for_dispatch_class(const XaSelection *sel, XrClassInfo *class_info) {
+    if (!sel || !sel->target_symbol || !sel->target_symbol->name || !class_info)
+        return NULL;
+
+    if (sel->receiver_type && XR_TYPE_IS_INSTANCE(sel->receiver_type)) {
+        XrClassInfo *receiver_info = sel->receiver_type->instance.class_ref;
+        const XaMethodSlot *receiver_slot =
+            find_method_slot_for_symbol(receiver_info, sel->target_symbol);
+        if (receiver_slot && receiver_slot->vtable_index >= 0 && class_info->vtable &&
+            receiver_slot->vtable_index < class_info->vtable_size) {
+            XaSymbol *slot_symbol = class_info->vtable[receiver_slot->vtable_index].symbol;
+            if (slot_symbol && slot_symbol->name &&
+                strcmp(slot_symbol->name, sel->target_symbol->name) == 0)
+                return slot_symbol;
+        }
+    }
+
+    return xa_class_info_lookup_instance_member(class_info, sel->target_symbol->name);
+}
+
+typedef struct OpenDispatchTargetCollector {
+    ErrorSetCtx *ctx;
+    const XaSelection *selection;
+    FunctionValueTarget target;
+    bool exact;
+} OpenDispatchTargetCollector;
+
+static void collect_open_dispatch_candidate(OpenDispatchTargetCollector *collector,
+                                            XaSymbol *class_sym) {
+    if (!collector || !collector->ctx || !collector->selection || !class_sym ||
+        class_sym->kind != XA_SYM_CLASS || !collector->exact)
+        return;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(collector->ctx->analyzer, class_sym);
+    XrClassInfo *class_info = links ? links->class_info : NULL;
+    XrType *class_type = links ? links->type : NULL;
+    if (!class_info || (class_type && class_type->kind == XR_KIND_INTERFACE))
+        return;
+
+    XrType *receiver_type = collector->selection->receiver_type;
+    bool matches = false;
+    if (receiver_type && receiver_type->kind == XR_KIND_INTERFACE) {
+        matches = class_info_implements_interface(class_info, receiver_type);
+    } else if (receiver_type && XR_TYPE_IS_INSTANCE(receiver_type)) {
+        matches = class_info_is_or_extends(class_info, receiver_type->instance.class_ref);
+    }
+    if (!matches)
+        return;
+
+    XaSymbol *method = method_target_for_dispatch_class(collector->selection, class_info);
+    if (!method || method->kind != XA_SYM_METHOD)
+        return;
+    if (!function_value_target_add(&collector->target, method, NULL))
+        collector->exact = false;
+}
+
+static void collect_open_dispatch_targets_from_scope(OpenDispatchTargetCollector *collector,
+                                                     XaScope *scope) {
+    if (!collector || !scope || !collector->exact)
+        return;
+
+    int count = 0;
+    XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
+    for (int i = 0; i < count && collector->exact; i++)
+        collect_open_dispatch_candidate(collector, symbols[i]);
+    if (symbols)
+        xr_free(symbols);
+
+    for (int i = 0; i < scope->child_count && collector->exact; i++)
+        collect_open_dispatch_targets_from_scope(collector,
+                                                 scope->children ? scope->children[i] : NULL);
+}
+
+static FunctionValueTarget
+resolve_open_virtual_dispatch_targets(ErrorSetCtx *ctx, const XaSelection *sel, bool *exact_out) {
+    if (exact_out)
+        *exact_out = false;
+    if (!ctx || !ctx->analyzer || !ctx->analyzer->global_scope ||
+        !method_selection_has_open_virtual_dispatch(sel))
+        return function_value_target_none();
+
+    OpenDispatchTargetCollector collector = {
+        .ctx = ctx,
+        .selection = sel,
+        .target = function_value_target_none(),
+        .exact = true,
+    };
+    collect_open_dispatch_targets_from_scope(&collector, ctx->analyzer->global_scope);
+    if (!collector.exact || !function_value_target_is_exact(collector.target))
+        return function_value_target_none();
+    if (exact_out)
+        *exact_out = true;
+    return collector.target;
 }
 
 static bool function_value_target_equal(FunctionValueTarget a, FunctionValueTarget b) {
@@ -1861,13 +2010,20 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
 
             const XaSelection *callee_selection =
                 xa_analyzer_get_selection(ctx->analyzer, callee_source);
-            if (method_selection_has_open_virtual_dispatch(callee_selection)) {
+            bool open_dispatch = method_selection_has_open_virtual_dispatch(callee_selection);
+            bool exact_open_dispatch = false;
+            FunctionValueTarget call_target =
+                open_dispatch ? resolve_open_virtual_dispatch_targets(ctx, callee_selection,
+                                                                      &exact_open_dispatch)
+                              : function_value_target_none();
+            if (open_dispatch && !exact_open_dispatch) {
                 xa_effect_summary_mark_incomplete(ctx->current_summary,
                                                   XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH);
             }
 
             /* Union callee's effect summary into current function's summary */
-            FunctionValueTarget call_target = resolve_call_target(ctx, node->as.call_expr.callee);
+            if (!function_value_target_is_exact(call_target))
+                call_target = resolve_call_target(ctx, node->as.call_expr.callee);
             if (function_value_target_is_exact(call_target)) {
                 for (int i = 0; i < call_target.target_count; i++) {
                     AstNode *function_expr = call_target.target_function_exprs[i];
