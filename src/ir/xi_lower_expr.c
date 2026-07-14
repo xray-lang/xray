@@ -2973,8 +2973,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
         if (arg && arg->type &&
             (arg->type->kind == XR_KIND_FIXED_ARRAY || arg->type->kind == XR_KIND_SPAN ||
-             arg->type->kind == XR_KIND_RUNE ||
-             (arg->type->kind == XR_KIND_INT && arg->type->native_width == XR_NATIVE_U8))) {
+             arg->type->kind == XR_KIND_RUNE || xr_type_is_exact_u8(arg->type))) {
             return xi_const_str(l->func, l->cur_block, xr_type_to_string(arg->type),
                                 l->type_string);
         }

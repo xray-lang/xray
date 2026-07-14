@@ -9,6 +9,7 @@
  */
 
 typedef struct CgArrayElemInfo {
+    const XrType *type;
     const char *elem_name;
     const char *ctype;
     XrRep rep;
@@ -2566,7 +2567,7 @@ static bool cg_array_elem_info_from_container_plan(const XaotContainerElemPlan *
                                                    CgArrayElemInfo *out) {
     if (!plan || !plan->elem_name || !plan->c_type || !out)
         return false;
-    *out = (CgArrayElemInfo) {plan->elem_name, plan->c_type, plan->storage_rep};
+    *out = (CgArrayElemInfo) {plan->type, plan->elem_name, plan->c_type, plan->storage_rep};
     return true;
 }
 
@@ -4443,14 +4444,13 @@ static bool emit_typed_array_reserve_expr(XiCgenCtx *ctx, FILE *out, const XiFun
 }
 
 static bool cg_array_elem_info_is_u8(const CgArrayElemInfo *info) {
-    return info && info->elem_name && strcmp(info->elem_name, "XR_ELEM_U8") == 0;
+    return info && xr_type_is_exact_u8(info->type);
 }
 
 static bool cg_array_elem_info_is_memset_byte_pattern(const CgArrayElemInfo *info) {
     return info && info->elem_name &&
            (strcmp(info->elem_name, "XR_ELEM_BOOL") == 0 ||
-            strcmp(info->elem_name, "XR_ELEM_I8") == 0 ||
-            strcmp(info->elem_name, "XR_ELEM_U8") == 0);
+            strcmp(info->elem_name, "XR_ELEM_I8") == 0 || cg_array_elem_info_is_u8(info));
 }
 
 static void emit_byte_array_result_suffix(FILE *out, bool boxed) {

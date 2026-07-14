@@ -15,6 +15,7 @@
 | `scripts/check_parallel_surface_convergence.py` | 193：旧 `parallel for/range/reduce/collect/local/final` 语法与旧 AST/parser/spec/demo/API-doc 表面不得回流 | `--root <repo>` | 任一旧表面残留=1 | < 2s |
 | `scripts/check_parallel_backend_abi_convergence.py` | 193：parallel backend ABI/descriptor 命名收敛，旧 AOT-private/global-pool 名称不得回流 | `--root <repo>` | ABI 缺失或旧名残留=1 | < 2s |
 | `scripts/check_bytes_type_residue.py` | 204：`Bytes/ByteSpan/ByteView` 删除 residue 分类 inventory，区分 public 表面与 internal legacy 命名 | `--root <repo>`；可选 `--json`、`--fail-on-public`、`--fail-on-internal-legacy` | 默认只输出 inventory=0；CTest `bytes_type_residue` 阻止 public 与 internal legacy 残余回流 | < 2s |
+| `scripts/check_byte_width_predicates.py` | 204：高层 analyzer/IR/AOT 不得重新用 `native_width == XR_NATIVE_U8` 或 `elem_name == "XR_ELEM_U8"` 选择 byte 语义 | `--root <repo>`；可选 `--json` | 未登记的直接 U8 width/string predicate=1；CTest `byte_width_predicate_audit` 固定共享 helper 边界 | < 2s |
 | `scripts/run_byte_uint8_canonical_audit.sh` | 204：`byte`/`uint8` 规范化为同一 U8 identity 的 final audit，串联语言正例、LSP canonical docs 与 global evidence/cache type-key | env: `XRAY_BIN`, `XRAY_TEST_LSP_DOCUMENT`, `XRAY_TEST_XGLOBAL_SUMMARY` | 任一子门禁失败=1；CTest `byte_uint8_canonical_audit` 固定可复跑组合证据 | < 120s |
 | `scripts/run_byte_receiver_effect_audit.sh` | 204：`Array<byte>` / `Slice<byte>` receiver effect 与 203 local/owned/const/shared provenance 对齐 audit | env: `XRAY_BIN` | 任一正例或负例漂移=1；CTest `byte_receiver_effect_audit` 固定可复跑组合证据 | < 120s |
 | `scripts/check_source_unknown_convergence.py` | 202：source `unknown` 删除与 typed erasure 边界收敛前的 source/runtime/analyzer/IR/AOT/Task residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
@@ -67,6 +68,15 @@ CTest 的 `parallel_backend_abi_convergence`。
 `bytes_type_residue` 同时打开这两个模式，阻止 public surface 与 internal helper 命名回流。
 历史 `XI_BYTES_*`、`OP_BYTES_*`、`xr_array_bytes_*`、`xrt_bytes_*`、`emit_builtin_bytes_*`、
 `emit_bytes_*` 与 `cg_bytes_*` 名称应保持为 0。
+
+### `check_byte_width_predicates.py`
+
+扫描 `src/frontend/analyzer`、`src/ir` 与 `src/aot` 中最容易让 204 语义回流的直接 U8 判断：
+`native_width == XR_NATIVE_U8`、`xg_synthetic_width_type_key(...U8)` 和
+`elem_name`/`strcmp` 对 `"XR_ELEM_U8"` 的字符串 predicate。receiver/method selection 必须消费
+`xr_type_is_exact_u8`、`xr_type_is_u8_array`、`xr_type_is_u8_slice`、`xr_type_is_u8_contiguous`
+等共享 helper 或 receiver registry；脚本只允许数值宽度 lattice、bulk memset byte-pattern type-key
+和 class-field schema verifier 这类低层验证/编码点继续直写 U8。
 
 ### `run_byte_uint8_canonical_audit.sh`
 
@@ -158,6 +168,7 @@ contract；ThreadLocal 与 HTTP handler 当前仍作为后续替换目标被固�
 | 2026-07-12 | 增加 parallel backend ABI convergence 检查，接 193 VM/AOT backend 命名收敛门禁 | Codex |
 | 2026-07-13 | 增加 Bytes type residue inventory，接 204 P0/P7 public 表面与 internal legacy 命名分类 | Codex |
 | 2026-07-14 | `bytes_type_residue` 增加 internal legacy fail gate，阻止 `xrt_bytes_*` / `emit_builtin_bytes_*` 回流 | Codex |
+| 2026-07-14 | 增加 byte width predicate audit，固定 204 共享 U8 helper 与低层验证/编码边界 | Codex |
 | 2026-07-13 | 增加 parameter mode convergence inventory，接 206 P0 参数契约与调用授权收敛基线 | Codex |
 | 2026-07-14 | 增加 unchecked error-effect convergence inventory，接 205 P0 旧 error-set / MAY_THROW / tooling metadata 分类 | Codex |
 | 2026-07-14 | 增加 source unknown convergence inventory，接 202 P0 source unknown 与 typed erasure 边界分类 | Codex |
