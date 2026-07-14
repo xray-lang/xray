@@ -1,5 +1,5 @@
 regex=span-access [0-9]+ func=roundtrip value=v[0-9]+ kind=span_as_bytes evidence=recv_agg\+pod\+len_rel drop=type\+pod\+helper
 regex=span-access [0-9]+ func=roundtrip value=v[0-9]+ kind=reinterpret evidence=recv_agg\+byte_slice\+pod\+len_rel\+no_overflow drop=type\+pod\+overflow\+helper
-c_not_contains=Slice<byte>.reinterpret<T>() byte length overflow
-c_not_contains=Slice<byte>.reinterpret<T>() length is not divisible by target size
+c_not_contains=XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_OVERFLOW_MSG
+c_not_contains=XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG
 c_not_contains=xrt_span_reinterpret_checked_raw(

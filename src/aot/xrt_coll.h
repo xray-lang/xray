@@ -704,19 +704,18 @@ static inline xr_span_t xrt_span_reinterpret_checked_raw(xr_span_t span, uint8_t
                                                          uint8_t elem_size, uint8_t elem_tid) {
     if (elem_type == XR_ELEM_ANY || elem_type >= XR_ELEM_COUNT || elem_size == 0)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "Slice<byte>.reinterpret<T>() requires POD target type");
+                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_REQUIRES_POD_MSG);
     if (XR_ELEM_SIZES[elem_type] != elem_size)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "Slice<byte>.reinterpret<T>() target metadata mismatch");
+                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_METADATA_MISMATCH_MSG);
     if (span.elem_type != XR_ELEM_U8 || span.elem_size != 1)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "Slice<byte>.reinterpret<T>() expects Slice<byte> receiver");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_RECEIVER_MSG);
     if (span.length < 0)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "Slice<byte>.reinterpret<T>() byte length overflow");
+                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_OVERFLOW_MSG);
     if (span.length % (int64_t) elem_size != 0)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                        "Slice<byte>.reinterpret<T>() length is not divisible by target size");
+                        XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG);
     xr_span_t out = span;
     out.length = span.length / (int64_t) elem_size;
     out.elem_type = elem_type;
