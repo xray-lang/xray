@@ -256,7 +256,7 @@ static XrTypeId xr_type_to_builtin(XrType *type) {
 // Fallback: infer type by scanning source text (used when analyzer unavailable)
 static XlspBuiltinType infer_type_from_source(const char *content, const char *var_name) {
     if (!content || !var_name)
-        return XLSP_TYPE_UNKNOWN;
+        return XLSP_TYPE_UNRESOLVED;
 
     size_t var_len = strlen(var_name);
     const char *p = content;
@@ -305,14 +305,14 @@ static XlspBuiltinType infer_type_from_source(const char *content, const char *v
         }
         p++;
     }
-    return XLSP_TYPE_UNKNOWN;
+    return XLSP_TYPE_UNRESOLVED;
 }
 
 // Infer variable type: prioritize XaAnalyzer, fallback to source scanning
 XlspBuiltinType xlsp_infer_variable_type(XrLspServer *server, XrLspDocument *doc,
                                          const char *var_name) {
     if (!doc || !var_name)
-        return XLSP_TYPE_UNKNOWN;
+        return XLSP_TYPE_UNRESOLVED;
 
     // Use XaAnalyzer if available (preferred: accurate type from AST)
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
@@ -321,7 +321,7 @@ XlspBuiltinType xlsp_infer_variable_type(XrLspServer *server, XrLspDocument *doc
         if (sym) {
             XrType *type = xa_analyzer_get_type(analyzer, sym);
             XlspBuiltinType bt = xr_type_to_builtin(type);
-            if (bt != XLSP_TYPE_UNKNOWN)
+            if (bt != XLSP_TYPE_UNRESOLVED)
                 return bt;
         }
     }
@@ -369,7 +369,7 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
                                                 : "_";
                         const char *ptype = (links->param_types && links->param_types[p])
                                                 ? xr_type_to_string(links->param_types[p])
-                                                : "unknown";
+                                                : "<error>";
                         sig_len += snprintf(sig_buf + sig_len, sizeof(sig_buf) - sig_len, "%s: %s",
                                             pname, ptype);
                     }
@@ -377,7 +377,7 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
 
                 const char *ret_type = (links && links->return_type)
                                            ? xr_type_to_string(links->return_type)
-                                           : (type ? xr_type_to_string(type) : "unknown");
+                                           : (type ? xr_type_to_string(type) : "<error>");
                 snprintf(sig_buf + sig_len, sizeof(sig_buf) - sig_len, "): %s", ret_type);
 
                 strncpy(detail_buf, sig_buf, sizeof(detail_buf) - 1);
@@ -398,7 +398,7 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             } else if (sym->kind == XA_SYM_TYPE_ALIAS) {
                 kind = 25;  // LSP TypeParameter kind
                 XrType *alias_type = (XrType *) sym->alias_type;
-                const char *alias_str = alias_type ? xr_type_to_string(alias_type) : "unknown";
+                const char *alias_str = alias_type ? xr_type_to_string(alias_type) : "<error>";
                 snprintf(detail_buf, sizeof(detail_buf), "type %s = %s", sym->name, alias_str);
                 detail = detail_buf;
             } else if (sym->kind == XA_SYM_ENUM) {
@@ -407,7 +407,7 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
                 detail = detail_buf;
             } else {
                 kind = 6;
-                const char *type_str = type ? xr_type_to_string(type) : "unknown";
+                const char *type_str = type ? xr_type_to_string(type) : "<error>";
                 const char *kw =
                     sym->is_shared ? "shared"
                                    : (sym->is_owned ? "owned" : (sym->is_const ? "const" : "var"));
@@ -685,7 +685,7 @@ static XrJsonValue *complete_builtin_constructor_rhs(const char *after) {
         return xlsp_builtin_get_completions_for_type(type);
 
     XlspBuiltinType bt = xlsp_builtin_type_from_name(name);
-    return bt != XLSP_TYPE_UNKNOWN ? xlsp_builtin_get_completions(bt) : NULL;
+    return bt != XLSP_TYPE_UNRESOLVED ? xlsp_builtin_get_completions(bt) : NULL;
 }
 
 // Step 1 of instance-member completion: scan for `var`/`const`/`shared`
@@ -778,7 +778,7 @@ static void scan_binding_assignment(XrLspDocument *doc, const char *prefix,
 static void append_static_field(XrJsonValue *items, XaAnalyzer *analyzer, XaSymbol *f,
                                 const char *prefix) {
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, f);
-    const char *type_str = (links && links->type) ? xr_type_to_string(links->type) : "unknown";
+    const char *type_str = (links && links->type) ? xr_type_to_string(links->type) : "<error>";
     char detail_buf[512];
     snprintf(detail_buf, sizeof(detail_buf), "static %s.%s: %s", prefix, f->name, type_str);
     XrJsonValue *item = make_completion_item(f->name, 5, detail_buf);
@@ -800,13 +800,13 @@ static void append_static_method(XrJsonValue *items, XaAnalyzer *analyzer, XaSym
                 (links->param_names && links->param_names[p]) ? links->param_names[p] : "_";
             const char *ptype = (links->param_types && links->param_types[p])
                                     ? xr_type_to_string(links->param_types[p])
-                                    : "unknown";
+                                    : "<error>";
             sig_len += snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, "%s: %s", pname,
                                 ptype);
         }
     }
     const char *ret_type =
-        (links && links->return_type) ? xr_type_to_string(links->return_type) : "unknown";
+        (links && links->return_type) ? xr_type_to_string(links->return_type) : "<error>";
     snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, "): %s", ret_type);
     XrJsonValue *item = make_completion_item(m->name, 2, detail_buf);
     xjson_object_set(item, "sortText", xjson_new_string("1"));
@@ -843,7 +843,7 @@ static XrJsonValue *complete_static_members(XaAnalyzer *analyzer, const char *pr
 static void append_instance_field(XrJsonValue *items, XaAnalyzer *analyzer, XaSymbol *f,
                                   const char *class_name) {
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, f);
-    const char *type_str = (links && links->type) ? xr_type_to_string(links->type) : "unknown";
+    const char *type_str = (links && links->type) ? xr_type_to_string(links->type) : "<error>";
     char detail_buf[512];
     snprintf(detail_buf, sizeof(detail_buf), "%s.%s: %s", class_name, f->name, type_str);
     XrJsonValue *item = make_completion_item(f->name, 5, detail_buf);
@@ -865,13 +865,13 @@ static void append_instance_method(XrJsonValue *items, XaAnalyzer *analyzer, XaS
                 (links->param_names && links->param_names[p]) ? links->param_names[p] : "_";
             const char *ptype = (links->param_types && links->param_types[p])
                                     ? xr_type_to_string(links->param_types[p])
-                                    : "unknown";
+                                    : "<error>";
             sig_len += snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, "%s: %s", pname,
                                 ptype);
         }
     }
     const char *ret_type =
-        (links && links->return_type) ? xr_type_to_string(links->return_type) : "unknown";
+        (links && links->return_type) ? xr_type_to_string(links->return_type) : "<error>";
     snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, "): %s", ret_type);
     XrJsonValue *item = make_completion_item(m->name, 2, detail_buf);
     xjson_object_set(item, "sortText", xjson_new_string("1"));
@@ -937,16 +937,16 @@ static XrJsonValue *complete_instance_members_from_analyzer(XaAnalyzer *analyzer
                         (links->param_names && links->param_names[p]) ? links->param_names[p] : "_";
                     const char *pt = (links->param_types && links->param_types[p])
                                          ? xr_type_to_string(links->param_types[p])
-                                         : "unknown";
+                                         : "<error>";
                     sl += snprintf(detail_buf + sl, sizeof(detail_buf) - sl, "%s: %s", pn, pt);
                 }
             }
             const char *rt =
-                (links && links->return_type) ? xr_type_to_string(links->return_type) : "unknown";
+                (links && links->return_type) ? xr_type_to_string(links->return_type) : "<error>";
             snprintf(detail_buf + sl, sizeof(detail_buf) - sl, "): %s", rt);
             xjson_array_push(items, make_completion_item(m->name, 2, detail_buf));
         } else {
-            const char *ts = (links && links->type) ? xr_type_to_string(links->type) : "unknown";
+            const char *ts = (links && links->type) ? xr_type_to_string(links->type) : "<error>";
             snprintf(detail_buf, sizeof(detail_buf), "%s.%s: %s", cls_name, m->name, ts);
             xjson_array_push(items, make_completion_item(m->name, 5, detail_buf));
         }
@@ -988,7 +988,7 @@ static XlspBuiltinType type_to_builtin_bucket(XrType *type) {
         return XLSP_TYPE_PANIC_INFO;
     if (xr_type_is_named_class(type, "Task"))
         return XLSP_TYPE_COROUTINE;
-    return XLSP_TYPE_UNKNOWN;
+    return XLSP_TYPE_UNRESOLVED;
 }
 
 // XaAnalyzer-driven completion: covers for-in iteration variables, typed
@@ -1019,7 +1019,7 @@ static XrJsonValue *complete_from_analyzer_type(XaAnalyzer *analyzer, const char
         xjson_free(typed_items);
 
     XlspBuiltinType bt = type_to_builtin_bucket(type);
-    if (bt != XLSP_TYPE_UNKNOWN)
+    if (bt != XLSP_TYPE_UNRESOLVED)
         return xlsp_builtin_get_completions_for_type(type);
     return NULL;
 }
@@ -1091,7 +1091,7 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
         return r;
 
     XlspBuiltinType builtin_type = xlsp_builtin_type_from_name(prefix);
-    if (builtin_type != XLSP_TYPE_UNKNOWN)
+    if (builtin_type != XLSP_TYPE_UNRESOLVED)
         return xlsp_builtin_get_completions(builtin_type);
 
     if ((r = complete_runtime_module(prefix)))

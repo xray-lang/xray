@@ -24,6 +24,7 @@
 // ============================================================================
 
 static XrType *create_type_for_builtin(XlspBuiltinType type) {
+    XrType *placeholder = xr_type_new_error(NULL);
     switch (type) {
         case XLSP_TYPE_INT:
             return xr_type_new_int(NULL);
@@ -34,15 +35,15 @@ static XrType *create_type_for_builtin(XlspBuiltinType type) {
         case XLSP_TYPE_BOOL:
             return xr_type_new_bool(NULL);
         case XLSP_TYPE_ARRAY:
-            return xr_type_new_array(NULL, xr_type_new_unknown(NULL));
+            return xr_type_new_array(NULL, placeholder);
         case XLSP_TYPE_MAP:
-            return xr_type_new_map(NULL, xr_type_new_unknown(NULL), xr_type_new_unknown(NULL));
+            return xr_type_new_map(NULL, placeholder, placeholder);
         case XLSP_TYPE_SET:
-            return xr_type_new_set(NULL, xr_type_new_unknown(NULL));
+            return xr_type_new_set(NULL, placeholder);
         case XLSP_TYPE_JSON:
             return xr_type_new_json(NULL);
         case XLSP_TYPE_CHANNEL:
-            return xr_type_new_channel(NULL, xr_type_new_unknown(NULL));
+            return xr_type_new_channel(NULL, placeholder);
         case XLSP_TYPE_REGEX:
             return xr_type_new_regex(NULL);
         case XLSP_TYPE_BIGINT:
@@ -107,7 +108,7 @@ static const XlspReceiverMethodSpec *xlsp_find_receiver_method(XrType *type,
 
 static void xlsp_type_label(XrType *type, char *buf, size_t buf_size) {
     const char *s = type ? xr_type_to_string(type) : NULL;
-    snprintf(buf, buf_size, "%s", s ? s : "unknown");
+    snprintf(buf, buf_size, "%s", s ? s : "<error>");
 }
 
 static void xlsp_receiver_label(XrType *type, const XlspReceiverMethodSpec *spec, char *buf,
@@ -382,7 +383,7 @@ static void xlsp_append_native_completions(XrJsonValue *items, XrType *type) {
 
 XlspBuiltinType xlsp_builtin_type_from_name(const char *name) {
     if (!name)
-        return XLSP_TYPE_UNKNOWN;
+        return XLSP_TYPE_UNRESOLVED;
     if (strcmp(name, TYPE_NAME_STRING) == 0)
         return XLSP_TYPE_STRING;
     if (strcmp(name, TYPE_NAME_ARRAY) == 0)
@@ -411,7 +412,7 @@ XlspBuiltinType xlsp_builtin_type_from_name(const char *name) {
         return XLSP_TYPE_PANIC_INFO;
     if (strcmp(name, TYPE_NAME_COROUTINE) == 0)
         return XLSP_TYPE_COROUTINE;
-    return XLSP_TYPE_UNKNOWN;
+    return XLSP_TYPE_UNRESOLVED;
 }
 
 // ============================================================================
@@ -494,7 +495,7 @@ const char *xlsp_builtin_get_hover_for_type(XrType *type, const char *method_nam
 
 XlspBuiltinType xlsp_infer_literal_type(const char *text) {
     if (!text || !*text)
-        return XLSP_TYPE_UNKNOWN;
+        return XLSP_TYPE_UNRESOLVED;
 
     // String literal: "..." or '...'
     if (text[0] == '"' || text[0] == '\'') {
@@ -544,5 +545,5 @@ XlspBuiltinType xlsp_infer_literal_type(const char *text) {
     if (strncmp(text, TYPE_NAME_REGEX, 5) == 0)
         return XLSP_TYPE_REGEX;
 
-    return XLSP_TYPE_UNKNOWN;
+    return XLSP_TYPE_UNRESOLVED;
 }
