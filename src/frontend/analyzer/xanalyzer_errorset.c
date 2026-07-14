@@ -112,6 +112,22 @@ typedef struct ErrorSetCtx {
     bool changed;                    /* Fixpoint: did anything change this iteration? */
 } ErrorSetCtx;
 
+static bool es_summary_add_enum_selection(ErrorSetCtx *ctx, const XaSelection *sel) {
+    if (!ctx || !sel || sel->kind != XA_SEL_ENUM_MEMBER)
+        return false;
+    XrType *enum_type = sel->result_type;
+    if ((!enum_type || !XR_TYPE_IS_ENUM(enum_type)) && sel->target_symbol)
+        enum_type = sel->target_symbol->links.type;
+    if (!enum_type || !XR_TYPE_IS_ENUM(enum_type))
+        return false;
+    if (sel->field_index >= 0)
+        es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary, enum_type,
+                                 (uint32_t) sel->field_index);
+    else
+        es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary, enum_type);
+    return true;
+}
+
 /* ========== Forward Declarations ========== */
 
 static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node);
@@ -1177,6 +1193,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             if (!expr)
                 break;
 
+            es_walk_expr(ctx, expr);
             if (is_current_caught_ref(ctx, expr)) {
                 xa_effect_summary_add_summary(ctx->analyzer->effect_db, ctx->current_summary,
                                               ctx->current_caught);
@@ -1184,23 +1201,12 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             }
 
             const XaSelection *throw_sel = xa_analyzer_get_selection(ctx->analyzer, expr);
-            if (throw_sel && throw_sel->kind == XA_SEL_ENUM_MEMBER) {
-                XrType *enum_type = throw_sel->result_type;
-                if (!enum_type && throw_sel->target_symbol)
-                    enum_type = throw_sel->target_symbol->links.type;
-                bool handled_selection = false;
-                if (enum_type && throw_sel->field_index >= 0) {
-                    es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary,
-                                             enum_type, (uint32_t) throw_sel->field_index);
-                    handled_selection = true;
-                } else if (enum_type) {
-                    es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary,
-                                            enum_type);
-                    handled_selection = true;
-                }
-                if (handled_selection)
-                    break;
-            }
+            if (es_summary_add_enum_selection(ctx, throw_sel))
+                break;
+            if (expr->type == AST_CALL_EXPR &&
+                es_summary_add_enum_selection(
+                    ctx, xa_analyzer_get_selection(ctx->analyzer, expr->as.call_expr.callee)))
+                break;
 
             /*
              * Handle `throw EnumName.CaseName` — add the specific case.
