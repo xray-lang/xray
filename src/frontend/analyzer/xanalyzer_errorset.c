@@ -59,7 +59,16 @@ static void es_summary_add_enum_case(XaEffectDatabase *db, XaEffectSummary *summ
 typedef struct FunctionValueTarget {
     XaSymbol *symbol;
     AstNode *function_expr;
+    XaSymbol *target_symbols[8];
+    AstNode *target_function_exprs[8];
+    int target_count;
 } FunctionValueTarget;
+
+typedef struct FunctionValueAliasState {
+    uint32_t ids[128];
+    FunctionValueTarget targets[128];
+    int count;
+} FunctionValueAliasState;
 
 typedef struct ErrorSetCtx {
     XaAnalyzer *analyzer;
@@ -180,26 +189,70 @@ static FunctionValueTarget function_value_target_none(void) {
     FunctionValueTarget target;
     target.symbol = NULL;
     target.function_expr = NULL;
+    memset(target.target_symbols, 0, sizeof(target.target_symbols));
+    memset(target.target_function_exprs, 0, sizeof(target.target_function_exprs));
+    target.target_count = 0;
     return target;
 }
 
 static FunctionValueTarget function_value_target_symbol(XaSymbol *sym) {
     FunctionValueTarget target = function_value_target_none();
     target.symbol = sym;
+    if (sym && (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD)) {
+        target.target_symbols[0] = sym;
+        target.target_count = 1;
+    }
     return target;
 }
 
 static FunctionValueTarget function_value_target_expr(AstNode *function_expr) {
     FunctionValueTarget target = function_value_target_none();
     target.function_expr = function_expr;
+    if (function_expr) {
+        target.target_function_exprs[0] = function_expr;
+        target.target_count = 1;
+    }
     return target;
 }
 
 static bool function_value_target_is_exact(FunctionValueTarget target) {
-    if (target.function_expr)
-        return true;
-    return target.symbol &&
-           (target.symbol->kind == XA_SYM_FUNCTION || target.symbol->kind == XA_SYM_METHOD);
+    return target.target_count > 0;
+}
+
+static bool function_value_target_add(FunctionValueTarget *target, XaSymbol *sym,
+                                      AstNode *function_expr) {
+    if (!target || (!sym && !function_expr))
+        return false;
+    for (int i = 0; i < target->target_count; i++) {
+        if (target->target_symbols[i] == sym && target->target_function_exprs[i] == function_expr)
+            return true;
+    }
+    if (target->target_count >= 8)
+        return false;
+    int slot = target->target_count++;
+    target->target_symbols[slot] = sym;
+    target->target_function_exprs[slot] = function_expr;
+    if (slot == 0) {
+        target->symbol = sym;
+        target->function_expr = function_expr;
+    }
+    return true;
+}
+
+static FunctionValueTarget function_value_target_merge(FunctionValueTarget a,
+                                                       FunctionValueTarget b) {
+    FunctionValueTarget merged = function_value_target_none();
+    if (!function_value_target_is_exact(a) || !function_value_target_is_exact(b))
+        return merged;
+    for (int i = 0; i < a.target_count; i++) {
+        if (!function_value_target_add(&merged, a.target_symbols[i], a.target_function_exprs[i]))
+            return function_value_target_none();
+    }
+    for (int i = 0; i < b.target_count; i++) {
+        if (!function_value_target_add(&merged, b.target_symbols[i], b.target_function_exprs[i]))
+            return function_value_target_none();
+    }
+    return merged;
 }
 
 static XaSymbol *lookup_symbol_by_id(ErrorSetCtx *ctx, uint32_t symbol_id) {
@@ -275,6 +328,80 @@ static void invalidate_function_value_alias_target(ErrorSetCtx *ctx, uint32_t sy
     for (int i = 0; i < ctx->function_value_alias_count; i++) {
         if (ctx->function_value_alias_ids[i] == symbol_id)
             ctx->function_value_alias_targets[i] = function_value_target_none();
+    }
+}
+
+static void capture_function_value_alias_state(ErrorSetCtx *ctx, FunctionValueAliasState *state) {
+    if (!ctx || !state)
+        return;
+    state->count = ctx->function_value_alias_count;
+    for (int i = 0; i < state->count; i++) {
+        state->ids[i] = ctx->function_value_alias_ids[i];
+        state->targets[i] = ctx->function_value_alias_targets[i];
+    }
+}
+
+static void restore_function_value_alias_state(ErrorSetCtx *ctx,
+                                               const FunctionValueAliasState *state) {
+    if (!ctx || !state)
+        return;
+    ctx->function_value_alias_count = state->count;
+    for (int i = 0; i < state->count; i++) {
+        ctx->function_value_alias_ids[i] = state->ids[i];
+        ctx->function_value_alias_targets[i] = state->targets[i];
+    }
+}
+
+static FunctionValueTarget state_lookup_function_value_target(const FunctionValueAliasState *state,
+                                                              uint32_t symbol_id) {
+    if (!state || symbol_id == 0)
+        return function_value_target_none();
+    for (int i = state->count - 1; i >= 0; i--) {
+        if (state->ids[i] == symbol_id)
+            return state->targets[i];
+    }
+    return function_value_target_none();
+}
+
+static void merge_function_value_if_states(ErrorSetCtx *ctx, const FunctionValueAliasState *base,
+                                           const FunctionValueAliasState *then_state,
+                                           const FunctionValueAliasState *else_state) {
+    if (!ctx || !base || !then_state || !else_state)
+        return;
+    restore_function_value_alias_state(ctx, base);
+
+    uint32_t ids[128];
+    int count = 0;
+    const FunctionValueAliasState *states[3] = {base, then_state, else_state};
+    for (int s = 0; s < 3; s++) {
+        for (int i = 0; i < states[s]->count; i++) {
+            uint32_t id = states[s]->ids[i];
+            if (id == 0)
+                continue;
+            bool seen = false;
+            for (int j = 0; j < count; j++) {
+                if (ids[j] == id) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen && count < 128)
+                ids[count++] = id;
+        }
+    }
+
+    for (int i = 0; i < count; i++) {
+        FunctionValueTarget merged =
+            function_value_target_merge(state_lookup_function_value_target(then_state, ids[i]),
+                                        state_lookup_function_value_target(else_state, ids[i]));
+        invalidate_function_value_alias_target(ctx, ids[i]);
+        if (!function_value_target_is_exact(merged))
+            continue;
+        XaSymbol *sym = lookup_symbol_by_id(ctx, ids[i]);
+        if (!sym || sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->is_rebindable ||
+            !symbol_has_function_type(sym))
+            continue;
+        set_function_value_alias_target(ctx, sym, merged);
     }
 }
 
@@ -484,21 +611,29 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
 
             /* Union callee's effect summary into current function's summary */
             FunctionValueTarget call_target = resolve_call_target(ctx, node->as.call_expr.callee);
-            XaSymbol *callee_sym = call_target.symbol;
-            if (call_target.function_expr) {
-                es_walk_function_expr_body(ctx, call_target.function_expr);
+            if (function_value_target_is_exact(call_target)) {
+                for (int i = 0; i < call_target.target_count; i++) {
+                    AstNode *function_expr = call_target.target_function_exprs[i];
+                    XaSymbol *callee_sym = call_target.target_symbols[i];
+                    if (function_expr) {
+                        es_walk_function_expr_body(ctx, function_expr);
+                        continue;
+                    }
+                    if (callee_sym &&
+                        (callee_sym->kind == XA_SYM_FUNCTION ||
+                         callee_sym->kind == XA_SYM_METHOD) &&
+                        callee_sym->links.effect_id != XA_EFFECT_NONE) {
+                        const XaEffectSummary *callee_summary =
+                            xa_effect_db_get(ctx->analyzer->effect_db, callee_sym->links.effect_id);
+                        if (callee_summary)
+                            xa_effect_summary_add_summary(ctx->analyzer->effect_db,
+                                                          ctx->current_summary, callee_summary);
+                    }
+                }
                 break;
             }
-            if (callee_sym &&
-                (callee_sym->kind == XA_SYM_FUNCTION || callee_sym->kind == XA_SYM_METHOD) &&
-                callee_sym->links.effect_id != XA_EFFECT_NONE) {
-                const XaEffectSummary *callee_summary =
-                    xa_effect_db_get(ctx->analyzer->effect_db, callee_sym->links.effect_id);
-                if (callee_summary)
-                    xa_effect_summary_add_summary(ctx->analyzer->effect_db, ctx->current_summary,
-                                                  callee_summary);
-            } else if (is_dynamic_function_call_target(ctx->analyzer, node->as.call_expr.callee,
-                                                       callee_sym)) {
+            if (is_dynamic_function_call_target(ctx->analyzer, node->as.call_expr.callee,
+                                                call_target.symbol)) {
                 xa_effect_summary_mark_incomplete(ctx->current_summary,
                                                   XA_UNKNOWN_DYNAMIC_CALL_TARGET);
             }
@@ -796,10 +931,28 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
 
         case AST_IF_STMT:
             es_walk_expr(ctx, node->as.if_stmt.condition);
-            ctx->function_value_control_depth++;
-            es_walk_block(ctx, node->as.if_stmt.then_branch);
-            es_walk_block(ctx, node->as.if_stmt.else_branch);
-            ctx->function_value_control_depth--;
+            if (ctx->function_value_control_depth != 0) {
+                ctx->function_value_control_depth++;
+                es_walk_block(ctx, node->as.if_stmt.then_branch);
+                es_walk_block(ctx, node->as.if_stmt.else_branch);
+                ctx->function_value_control_depth--;
+            } else {
+                FunctionValueAliasState base_state;
+                FunctionValueAliasState then_state;
+                FunctionValueAliasState else_state;
+                capture_function_value_alias_state(ctx, &base_state);
+
+                restore_function_value_alias_state(ctx, &base_state);
+                es_walk_block(ctx, node->as.if_stmt.then_branch);
+                capture_function_value_alias_state(ctx, &then_state);
+
+                restore_function_value_alias_state(ctx, &base_state);
+                if (node->as.if_stmt.else_branch)
+                    es_walk_block(ctx, node->as.if_stmt.else_branch);
+                capture_function_value_alias_state(ctx, &else_state);
+
+                merge_function_value_if_states(ctx, &base_state, &then_state, &else_state);
+            }
             break;
 
         case AST_WHILE_STMT:
