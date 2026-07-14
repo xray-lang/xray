@@ -39,6 +39,25 @@ static char *token_to_string(Parser *parser, Token *token) {
     return str;
 }
 
+static void attach_leading_trivia_to_member(AstNode *member, XrTrivia *leading_trivia) {
+    if (!leading_trivia)
+        return;
+    if (member && !member->leading_comments) {
+        member->leading_comments = leading_trivia;
+    } else {
+        xr_trivia_free_chain(leading_trivia);
+    }
+}
+
+static void attach_trailing_trivia_to_member(Parser *parser, AstNode *member) {
+    if (!member || !parser->previous.trailing_trivia)
+        return;
+    if (!member->trailing_comments) {
+        member->trailing_comments = parser->previous.trailing_trivia;
+        parser->previous.trailing_trivia = NULL;
+    }
+}
+
 static uint32_t xr_parse_struct_align_clause(Parser *parser) {
     if (!xr_parser_match_name(parser, "align"))
         return 0;
@@ -285,9 +304,15 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
 
         // Determine if this is a method or field
         bool is_method = false;
+        XrTrivia *leading_trivia = parser->current.leading_trivia;
+        parser->current.leading_trivia = NULL;
         AstNode *member = xr_parse_field_declaration(parser, &is_method);
-        if (!member)
+        if (!member) {
+            attach_leading_trivia_to_member(NULL, leading_trivia);
             continue;
+        }
+        attach_leading_trivia_to_member(member, leading_trivia);
+        attach_trailing_trivia_to_member(parser, member);
 
         if (is_method) {
             XR_PARSE_PUSH(parser, methods, method_count, method_capacity, member);
@@ -1779,14 +1804,19 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
             continue;
         }
 
+        XrTrivia *leading_trivia = parser->current.leading_trivia;
+        parser->current.leading_trivia = NULL;
         AstNode *member = xr_parse_interface_member(parser);
         if (!member) {
+            attach_leading_trivia_to_member(NULL, leading_trivia);
             // Skip to next member or end of interface
             if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
                 xr_parser_advance(parser);
             }
             continue;
         }
+        attach_leading_trivia_to_member(member, leading_trivia);
+        attach_trailing_trivia_to_member(parser, member);
 
         if (member->type == AST_INTERFACE_PROPERTY) {
             XR_PARSE_PUSH(parser, properties, property_count, property_capacity, member);

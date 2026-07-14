@@ -276,6 +276,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         AstNode *field = cls->fields[i];
         FieldDeclNode *f = &field->as.field_decl;
 
+        if (field->leading_comments)
+            xfmt_write_leading_comments(ctx, field->leading_comments);
         xfmt_write_indent(ctx);
         if (f->is_private)
             xfmt_write_str(ctx, "private ");
@@ -305,6 +307,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_expression(ctx, f->initializer);
         }
         xfmt_write_newline(ctx);
+        if (field->trailing_comments)
+            xfmt_write_trailing_comment(ctx, field->trailing_comments);
     }
 
     if (!is_union && cls->field_count > 0 && cls->method_count > 0) {
@@ -316,6 +320,9 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     for (int i = 0; !is_union && i < cls->method_count; i++) {
         AstNode *method = cls->methods[i];
         MethodDeclNode *m = &method->as.method_decl;
+
+        if (method->leading_comments)
+            xfmt_write_leading_comments(ctx, method->leading_comments);
 
         // Property accessor: emit getter/setter pair in fn() block syntax
         if (m->is_getter || m->is_setter) {
@@ -429,6 +436,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_indent(ctx);
             xfmt_write_char(ctx, '}');
             xfmt_write_newline(ctx);
+            if (method->trailing_comments)
+                xfmt_write_trailing_comment(ctx, method->trailing_comments);
 
             // Skip the paired method index
             if (pair_idx > i) {
@@ -490,6 +499,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_block(ctx, m->body);
             xfmt_write_newline(ctx);
         }
+        if (method->trailing_comments)
+            xfmt_write_trailing_comment(ctx, method->trailing_comments);
 
         if (i < cls->method_count - 1) {
             xfmt_write_newline(ctx);
@@ -545,6 +556,8 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
     for (int i = 0; i < iface->property_count; i++) {
         AstNode *prop = iface->properties[i];
         InterfacePropertyNode *p = &prop->as.interface_property;
+        if (prop->leading_comments)
+            xfmt_write_leading_comments(ctx, prop->leading_comments);
         xfmt_write_indent(ctx);
         if (p->is_readonly)
             xfmt_write_str(ctx, "const ");
@@ -562,12 +575,16 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_type(ctx, p->prop_type);
         }
         xfmt_write_newline(ctx);
+        if (prop->trailing_comments)
+            xfmt_write_trailing_comment(ctx, prop->trailing_comments);
     }
 
     for (int i = 0; i < iface->method_count; i++) {
         AstNode *method = iface->methods[i];
         InterfaceMethodNode *m = &method->as.interface_method;
 
+        if (method->leading_comments)
+            xfmt_write_leading_comments(ctx, method->leading_comments);
         xfmt_write_indent(ctx);
         xfmt_write_str(ctx, m->name);
         xfmt_write_char(ctx, '(');
@@ -587,6 +604,8 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_type(ctx, m->return_type);
         }
         xfmt_write_newline(ctx);
+        if (method->trailing_comments)
+            xfmt_write_trailing_comment(ctx, method->trailing_comments);
     }
 
     ctx->indent_level--;

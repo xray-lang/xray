@@ -141,6 +141,17 @@ static void fmt_unary(XrFmtContext *ctx, AstNode *node) {
     xfmt_emit_expression(ctx, node->as.unary.operand);
 }
 
+static void fmt_call_argument(XrFmtContext *ctx, AstNode *argument, XrCallArgAccess *accesses,
+                              int index) {
+    XrCallArgAccess access = accesses ? accesses[index] : XR_CALL_ARG_VALUE;
+    if (access == XR_CALL_ARG_REF) {
+        xfmt_write_str(ctx, "ref ");
+    } else if (access == XR_CALL_ARG_OUT) {
+        xfmt_write_str(ctx, "out ");
+    }
+    xfmt_emit_expression(ctx, argument);
+}
+
 static void fmt_call(XrFmtContext *ctx, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
     xfmt_emit_expression(ctx, call->callee);
@@ -156,7 +167,7 @@ static void fmt_call(XrFmtContext *ctx, AstNode *node) {
     for (int i = 0; i < call->arg_count; i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
-        xfmt_emit_expression(ctx, call->arguments[i]);
+        fmt_call_argument(ctx, call->arguments[i], call->arg_accesses, i);
     }
     xfmt_write_char(ctx, ')');
 
@@ -174,7 +185,7 @@ static void fmt_call(XrFmtContext *ctx, AstNode *node) {
     ctx->indent_level++;
     for (int i = 0; i < call->arg_count; i++) {
         xfmt_write_indent(ctx);
-        xfmt_emit_expression(ctx, call->arguments[i]);
+        fmt_call_argument(ctx, call->arguments[i], call->arg_accesses, i);
         if (ctx->config->multiline_trailing_comma || i < call->arg_count - 1)
             xfmt_write_char(ctx, ',');
         xfmt_write_newline(ctx);
@@ -203,7 +214,7 @@ static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
     for (int i = 0; i < new_expr->arg_count; i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
-        xfmt_emit_expression(ctx, new_expr->arguments[i]);
+        fmt_call_argument(ctx, new_expr->arguments[i], new_expr->arg_accesses, i);
     }
     xfmt_write_char(ctx, ')');
 
@@ -216,7 +227,7 @@ static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
     ctx->indent_level++;
     for (int i = 0; i < new_expr->arg_count; i++) {
         xfmt_write_indent(ctx);
-        xfmt_emit_expression(ctx, new_expr->arguments[i]);
+        fmt_call_argument(ctx, new_expr->arguments[i], new_expr->arg_accesses, i);
         if (ctx->config->multiline_trailing_comma || i < new_expr->arg_count - 1)
             xfmt_write_char(ctx, ',');
         xfmt_write_newline(ctx);
@@ -437,7 +448,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             for (int i = 0; i < sc->arg_count; i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
-                xfmt_emit_expression(ctx, sc->arguments[i]);
+                fmt_call_argument(ctx, sc->arguments[i], sc->arg_accesses, i);
             }
             xfmt_write_char(ctx, ')');
             if (sc_wrap && !xfmt_fits_on_line(ctx, &sc_snap)) {
@@ -447,7 +458,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 ctx->indent_level++;
                 for (int i = 0; i < sc->arg_count; i++) {
                     xfmt_write_indent(ctx);
-                    xfmt_emit_expression(ctx, sc->arguments[i]);
+                    fmt_call_argument(ctx, sc->arguments[i], sc->arg_accesses, i);
                     if (ctx->config->multiline_trailing_comma || i < sc->arg_count - 1)
                         xfmt_write_char(ctx, ',');
                     xfmt_write_newline(ctx);
