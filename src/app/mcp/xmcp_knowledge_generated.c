@@ -924,7 +924,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "FormData.appendFile",
-        .signature = "(name: string, path: string): bool",
+        .signature = "(name: string, path: Path): bool",
         .summary = "",
     },
     {
@@ -1487,87 +1487,87 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "appendFile",
-        .signature = "(path: string, data: string): bool",
+        .signature = "(path: Path, data: string): bool",
         .summary = "Append string to file",
     },
     {
         .name = "chdir",
-        .signature = "(path: string): bool",
+        .signature = "(path: Path): bool",
         .summary = "Change working directory",
     },
     {
         .name = "chmod",
-        .signature = "(path: string, mode: int): bool",
+        .signature = "(path: Path, mode: int): bool",
         .summary = "Change file permissions",
     },
     {
         .name = "copyFile",
-        .signature = "(src: string, dst: string): bool",
+        .signature = "(src: Path, dst: Path): bool",
         .summary = "Copy a file",
     },
     {
         .name = "cwd",
-        .signature = "(): string",
+        .signature = "(): Path",
         .summary = "Get current working directory",
     },
     {
         .name = "exists",
-        .signature = "(path: string): bool",
+        .signature = "(path: Path): bool",
         .summary = "Check if path exists",
     },
     {
         .name = "fileSize",
-        .signature = "(path: string): int",
+        .signature = "(path: Path): int",
         .summary = "Get file size in bytes",
     },
     {
         .name = "isDir",
-        .signature = "(path: string): bool",
+        .signature = "(path: Path): bool",
         .summary = "Check if path is a directory",
     },
     {
         .name = "isFile",
-        .signature = "(path: string): bool",
+        .signature = "(path: Path): bool",
         .summary = "Check if path is a file",
     },
     {
         .name = "isSymlink",
-        .signature = "(path: string): bool",
+        .signature = "(path: Path): bool",
         .summary = "Check if path is a symlink",
     },
     {
         .name = "mkdir",
-        .signature = "(path: string): bool",
+        .signature = "(path: Path): bool",
         .summary = "Create directory",
     },
     {
         .name = "mkdirp",
-        .signature = "(path: string): bool",
+        .signature = "(path: Path): bool",
         .summary = "Create directory recursively",
     },
     {
         .name = "readDir",
-        .signature = "(path: string): Array<string>",
+        .signature = "(path: Path): Array<Path>",
         .summary = "List directory entries",
     },
     {
         .name = "readDirRecursive",
-        .signature = "(path: string): Array<string>",
+        .signature = "(path: Path): Array<Path>",
         .summary = "List directory entries recursively",
     },
     {
         .name = "readFile",
-        .signature = "(path: string): string?",
+        .signature = "(path: Path): string?",
         .summary = "Read entire file as string",
     },
     {
         .name = "readFileBytes",
-        .signature = "(path: string): Array<byte>?",
+        .signature = "(path: Path): Array<byte>?",
         .summary = "Read entire file as byte array",
     },
     {
         .name = "readLines",
-        .signature = "(path: string): Array<string>",
+        .signature = "(path: Path): Array<string>",
         .summary = "Read file as lines",
     },
     {
@@ -1577,62 +1577,62 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "readlink",
-        .signature = "(path: string): string?",
+        .signature = "(path: Path): Path?",
         .summary = "Read symlink target",
     },
     {
         .name = "realpath",
-        .signature = "(path: string): string?",
+        .signature = "(path: Path): Path?",
         .summary = "Resolve to absolute path",
     },
     {
         .name = "remove",
-        .signature = "(path: string): bool",
+        .signature = "(path: Path): bool",
         .summary = "Remove a file",
     },
     {
         .name = "removeAll",
-        .signature = "(path: string): bool",
+        .signature = "(path: Path): bool",
         .summary = "Remove directory recursively",
     },
     {
         .name = "rename",
-        .signature = "(old: string, new: string): bool",
+        .signature = "(old: Path, new: Path): bool",
         .summary = "Rename a file",
     },
     {
         .name = "stat",
-        .signature = "(path: string): FileStat?",
+        .signature = "(path: Path): FileStat?",
         .summary = "Get file stat info",
     },
     {
         .name = "symlink",
-        .signature = "(target: string, link: string): bool",
+        .signature = "(target: Path, link: Path): bool",
         .summary = "Create symbolic link",
     },
     {
         .name = "tempDir",
-        .signature = "(): string?",
+        .signature = "(): Path?",
         .summary = "Create temporary directory",
     },
     {
         .name = "tempFile",
-        .signature = "(): string?",
+        .signature = "(): Path?",
         .summary = "Create temporary file",
     },
     {
         .name = "touch",
-        .signature = "(path: string): bool",
+        .signature = "(path: Path): bool",
         .summary = "Create or update file timestamp",
     },
     {
         .name = "writeFile",
-        .signature = "(path: string, data: string): bool",
+        .signature = "(path: Path, data: string): bool",
         .summary = "Write string to file",
     },
     {
         .name = "writeFileBytes",
-        .signature = "(path: string, data: Array<byte>): bool",
+        .signature = "(path: Path, data: Array<byte>): bool",
         .summary = "Write byte array to file",
     },
 };
@@ -1798,7 +1798,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.output",
-        .signature = ": string",
+        .signature = ": Path?",
         .summary = "",
     },
     {
@@ -1878,7 +1878,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "setOutput",
-        .signature = "(path: string): ()",
+        .signature = "(path: Path): ()",
         .summary = "",
     },
     {
@@ -2470,7 +2470,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "chdir",
-        .signature = "(path: string): bool",
+        .signature = "(path: Path): bool",
         .summary = "Change working directory",
     },
     {
@@ -2675,6 +2675,26 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     {
+        .name = "Path",
+        .signature = "Path",
+        .summary = "",
+    },
+    {
+        .name = "Path.constructor",
+        .signature = "(raw: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "Path.raw",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "Path.toString",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
         .name = "PathInfo",
         .signature = "PathInfo",
         .summary = "",
@@ -2686,12 +2706,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     },
     {
         .name = "PathInfo.constructor",
-        .signature = "(root: string, dir: string, base: string, name: string, ext: string): ()",
+        .signature = "(root: string, dir: Path, base: string, name: string, ext: string): ()",
         .summary = "",
     },
     {
         .name = "PathInfo.dir",
-        .signature = ": string",
+        .signature = ": Path",
         .summary = "",
     },
     {
@@ -2711,7 +2731,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     },
     {
         .name = "basename",
-        .signature = "(p: string): string",
+        .signature = "(p: Path): string",
         .summary = "",
     },
     {
@@ -2721,47 +2741,57 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     },
     {
         .name = "dirname",
-        .signature = "(p: string): string",
+        .signature = "(p: Path): Path",
         .summary = "",
     },
     {
         .name = "extname",
-        .signature = "(p: string): string",
+        .signature = "(p: Path): string",
         .summary = "",
     },
     {
         .name = "format",
-        .signature = "(info: PathInfo): string",
+        .signature = "(info: PathInfo): Path",
+        .summary = "",
+    },
+    {
+        .name = "from",
+        .signature = "(raw: string): Path",
         .summary = "",
     },
     {
         .name = "isAbsolute",
-        .signature = "(p: string): bool",
+        .signature = "(p: Path): bool",
         .summary = "",
     },
     {
         .name = "join",
-        .signature = "(...parts: string): string",
+        .signature = "(...parts: Path): Path",
+        .summary = "",
+    },
+    {
+        .name = "joinAll",
+        .signature = "(parts: Array<Path>): Path",
         .summary = "",
     },
     {
         .name = "normalize",
-        .signature = "(p: string): string",
+        .signature = "(p: Path): Path",
         .summary = "",
     },
     {
         .name = "parse",
-        .signature = "(p: string): PathInfo",
+        .signature = "(p: Path): PathInfo",
         .summary = "",
     },
     {
         .name = "relative",
-        .signature = "(fromRaw: string, toRaw: string): string",
+        .signature = "(fromPath: Path, toPath: Path): Path",
         .summary = "",
     },
     {
         .name = "resolve",
-        .signature = "(...parts: string): string",
+        .signature = "(...parts: Path): Path",
         .summary = "",
     },
     {
@@ -3086,7 +3116,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Dylib.open",
-        .signature = "(path: string): Dylib?",
+        .signature = "(path: Path): Dylib?",
         .summary = "",
     },
     {
@@ -3755,7 +3785,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "parseFile",
-        .signature = "(path: string): TomlValue",
+        .signature = "(path: Path): TomlValue",
         .summary = "",
     },
     {
@@ -3785,7 +3815,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "writeFile",
-        .signature = "(path: string, value: TomlValue): bool",
+        .signature = "(path: Path, value: TomlValue): bool",
         .summary = "",
     },
 };
@@ -4274,7 +4304,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     },
     {
         .name = "parseFile",
-        .signature = "(path: string, options: Json = null): Json",
+        .signature = "(path: Path, options: Json = null): Json",
         .summary = "",
     },
     {
@@ -4289,7 +4319,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     },
     {
         .name = "writeFile",
-        .signature = "(path: string, node: Json, options: Json = null): bool",
+        .signature = "(path: Path, node: Json, options: Json = null): bool",
         .summary = "",
     },
 };
@@ -4307,7 +4337,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "parseFile",
-        .signature = "(path: string): Json",
+        .signature = "(path: Path): Json",
         .summary = "",
     },
     {
@@ -4322,7 +4352,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "writeFile",
-        .signature = "(path: string, value: Json): bool",
+        .signature = "(path: Path, value: Json): bool",
         .summary = "",
     },
 };
@@ -5059,6 +5089,23 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "var (q, r) = divmod(17, 5)\n"
             "var result = divmod(10, 3)        // result has type (int, int)\n"
+            "```\n"
+            "\n"
+            "### Parameter modes\n"
+            "- Declaration spelling is `name: T`, `name: in T`, `name: ref T`, or `name: out T`\n"
+            "- Calls to `ref` / `out` parameters must write `ref place` / `out place`; `in` calls use plain arguments\n"
+            "- `move` and `copy` are source actions, not parameter modes\n"
+            "```xray\n"
+            "fn length_sq(v: in Vec2) -> float {\n"
+            "    // v is a read-only reference (no copy, not writable)\n"
+            "    return v.x * v.x + v.y * v.y\n"
+            "}\n"
+            "\n"
+            "fn translate(v: ref Vec2, dx: float, dy: float) -> () {\n"
+            "    // v is a mutable reference (changes are visible to the caller)\n"
+            "    v.x += dx\n"
+            "    v.y += dy\n"
+            "}\n"
             "```\n"
             "\n"
             "### Rest parameters\n"
@@ -6046,7 +6093,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CookieJar.maxCookies` | `: int` |  |\n"
             "| `FormData` | `FormData` |  |\n"
             "| `FormData.append` | `(name: string, value: string): bool` |  |\n"
-            "| `FormData.appendFile` | `(name: string, path: string): bool` |  |\n"
+            "| `FormData.appendFile` | `(name: string, path: Path): bool` |  |\n"
             "| `FormData.boundary` | `: string` |  |\n"
             "| `FormData.build` | `(): MultipartBody` |  |\n"
             "| `FormData.constructor` | `(maxTotalSize: int, maxFileSize: int): ()` |  |\n"
@@ -6176,36 +6223,36 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.FileStat.mtime` | `const int` | Handle field |\n"
             "| `io.FileStat.size` | `const int` | Handle field |\n"
             "| `io.FileStat.uid` | `const int` | Handle field |\n"
-            "| `io.appendFile` | `(path: string, data: string): bool` | Append string to file |\n"
-            "| `io.chdir` | `(path: string): bool` | Change working directory |\n"
-            "| `io.chmod` | `(path: string, mode: int): bool` | Change file permissions |\n"
-            "| `io.copyFile` | `(src: string, dst: string): bool` | Copy a file |\n"
-            "| `io.cwd` | `(): string` | Get current working directory |\n"
-            "| `io.exists` | `(path: string): bool` | Check if path exists |\n"
-            "| `io.fileSize` | `(path: string): int` | Get file size in bytes |\n"
-            "| `io.isDir` | `(path: string): bool` | Check if path is a directory |\n"
-            "| `io.isFile` | `(path: string): bool` | Check if path is a file |\n"
-            "| `io.isSymlink` | `(path: string): bool` | Check if path is a symlink |\n"
-            "| `io.mkdir` | `(path: string): bool` | Create directory |\n"
-            "| `io.mkdirp` | `(path: string): bool` | Create directory recursively |\n"
-            "| `io.readDir` | `(path: string): Array<string>` | List directory entries |\n"
-            "| `io.readDirRecursive` | `(path: string): Array<string>` | List directory entries recursively |\n"
-            "| `io.readFile` | `(path: string): string?` | Read entire file as string |\n"
-            "| `io.readFileBytes` | `(path: string): Array<byte>?` | Read entire file as byte array |\n"
-            "| `io.readLines` | `(path: string): Array<string>` | Read file as lines |\n"
+            "| `io.appendFile` | `(path: Path, data: string): bool` | Append string to file |\n"
+            "| `io.chdir` | `(path: Path): bool` | Change working directory |\n"
+            "| `io.chmod` | `(path: Path, mode: int): bool` | Change file permissions |\n"
+            "| `io.copyFile` | `(src: Path, dst: Path): bool` | Copy a file |\n"
+            "| `io.cwd` | `(): Path` | Get current working directory |\n"
+            "| `io.exists` | `(path: Path): bool` | Check if path exists |\n"
+            "| `io.fileSize` | `(path: Path): int` | Get file size in bytes |\n"
+            "| `io.isDir` | `(path: Path): bool` | Check if path is a directory |\n"
+            "| `io.isFile` | `(path: Path): bool` | Check if path is a file |\n"
+            "| `io.isSymlink` | `(path: Path): bool` | Check if path is a symlink |\n"
+            "| `io.mkdir` | `(path: Path): bool` | Create directory |\n"
+            "| `io.mkdirp` | `(path: Path): bool` | Create directory recursively |\n"
+            "| `io.readDir` | `(path: Path): Array<Path>` | List directory entries |\n"
+            "| `io.readDirRecursive` | `(path: Path): Array<Path>` | List directory entries recursively |\n"
+            "| `io.readFile` | `(path: Path): string?` | Read entire file as string |\n"
+            "| `io.readFileBytes` | `(path: Path): Array<byte>?` | Read entire file as byte array |\n"
+            "| `io.readLines` | `(path: Path): Array<string>` | Read file as lines |\n"
             "| `io.readStdin` | `(): string?` | Read all data from standard input |\n"
-            "| `io.readlink` | `(path: string): string?` | Read symlink target |\n"
-            "| `io.realpath` | `(path: string): string?` | Resolve to absolute path |\n"
-            "| `io.remove` | `(path: string): bool` | Remove a file |\n"
-            "| `io.removeAll` | `(path: string): bool` | Remove directory recursively |\n"
-            "| `io.rename` | `(old: string, new: string): bool` | Rename a file |\n"
-            "| `io.stat` | `(path: string): FileStat?` | Get file stat info |\n"
-            "| `io.symlink` | `(target: string, link: string): bool` | Create symbolic link |\n"
-            "| `io.tempDir` | `(): string?` | Create temporary directory |\n"
-            "| `io.tempFile` | `(): string?` | Create temporary file |\n"
-            "| `io.touch` | `(path: string): bool` | Create or update file timestamp |\n"
-            "| `io.writeFile` | `(path: string, data: string): bool` | Write string to file |\n"
-            "| `io.writeFileBytes` | `(path: string, data: Array<byte>): bool` | Write byte array to file |\n"
+            "| `io.readlink` | `(path: Path): Path?` | Read symlink target |\n"
+            "| `io.realpath` | `(path: Path): Path?` | Resolve to absolute path |\n"
+            "| `io.remove` | `(path: Path): bool` | Remove a file |\n"
+            "| `io.removeAll` | `(path: Path): bool` | Remove directory recursively |\n"
+            "| `io.rename` | `(old: Path, new: Path): bool` | Rename a file |\n"
+            "| `io.stat` | `(path: Path): FileStat?` | Get file stat info |\n"
+            "| `io.symlink` | `(target: Path, link: Path): bool` | Create symbolic link |\n"
+            "| `io.tempDir` | `(): Path?` | Create temporary directory |\n"
+            "| `io.tempFile` | `(): Path?` | Create temporary file |\n"
+            "| `io.touch` | `(path: Path): bool` | Create or update file timestamp |\n"
+            "| `io.writeFile` | `(path: Path, data: string): bool` | Write string to file |\n"
+            "| `io.writeFileBytes` | `(path: Path, data: Array<byte>): bool` | Write byte array to file |\n"
             "",
         .symbols = _symbols_io,
         .symbol_count = (int)(sizeof(_symbols_io) / sizeof(_symbols_io[0])),
@@ -6282,7 +6329,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Logger.info` | `(...args: Json): ()` |  |\n"
             "| `Logger.jsonContext` | `: string` |  |\n"
             "| `Logger.level` | `: int` |  |\n"
-            "| `Logger.output` | `: string` |  |\n"
+            "| `Logger.output` | `: Path?` |  |\n"
             "| `Logger.source` | `: bool` |  |\n"
             "| `Logger.textContext` | `: string` |  |\n"
             "| `Logger.warn` | `(...args: Json): ()` |  |\n"
@@ -6298,7 +6345,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `log.isEnabled` | `(level: int): bool` |  |\n"
             "| `log.setFormat` | `(format: string): ()` |  |\n"
             "| `log.setLevel` | `(level: Json): ()` |  |\n"
-            "| `log.setOutput` | `(path: string): ()` |  |\n"
+            "| `log.setOutput` | `(path: Path): ()` |  |\n"
             "| `log.warn` | `(...args: Json): ()` |  |\n"
             "",
         .symbols = _symbols_log,
@@ -6519,7 +6566,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `os.ExecResult.stderr` | `const string` | Handle field |\n"
             "| `os.ExecResult.stdout` | `const string` | Handle field |\n"
             "| `os.arch` | `: string` | Current CPU architecture name |\n"
-            "| `os.chdir` | `(path: string): bool` | Change working directory |\n"
+            "| `os.chdir` | `(path: Path): bool` | Change working directory |\n"
             "| `os.clock` | `(): float` | Get process CPU time in seconds |\n"
             "| `os.cpuCount` | `(): int` | Get number of CPU cores |\n"
             "| `os.environ` | `(): Map<string, string>` | Get all environment variables |\n"
@@ -6617,24 +6664,30 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `Path` | `Path` |  |\n"
+            "| `Path.constructor` | `(raw: string): ()` |  |\n"
+            "| `Path.raw` | `: string` |  |\n"
+            "| `Path.toString` | `(): string` |  |\n"
             "| `PathInfo` | `PathInfo` |  |\n"
             "| `PathInfo.base` | `: string` |  |\n"
-            "| `PathInfo.constructor` | `(root: string, dir: string, base: string, name: string, ext: string): ()` |  |\n"
-            "| `PathInfo.dir` | `: string` |  |\n"
+            "| `PathInfo.constructor` | `(root: string, dir: Path, base: string, name: string, ext: string): ()` |  |\n"
+            "| `PathInfo.dir` | `: Path` |  |\n"
             "| `PathInfo.ext` | `: string` |  |\n"
             "| `PathInfo.name` | `: string` |  |\n"
             "| `PathInfo.root` | `: string` |  |\n"
-            "| `path.basename` | `(p: string): string` |  |\n"
+            "| `path.basename` | `(p: Path): string` |  |\n"
             "| `path.delimiter` | `: string` |  |\n"
-            "| `path.dirname` | `(p: string): string` |  |\n"
-            "| `path.extname` | `(p: string): string` |  |\n"
-            "| `path.format` | `(info: PathInfo): string` |  |\n"
-            "| `path.isAbsolute` | `(p: string): bool` |  |\n"
-            "| `path.join` | `(...parts: string): string` |  |\n"
-            "| `path.normalize` | `(p: string): string` |  |\n"
-            "| `path.parse` | `(p: string): PathInfo` |  |\n"
-            "| `path.relative` | `(fromRaw: string, toRaw: string): string` |  |\n"
-            "| `path.resolve` | `(...parts: string): string` |  |\n"
+            "| `path.dirname` | `(p: Path): Path` |  |\n"
+            "| `path.extname` | `(p: Path): string` |  |\n"
+            "| `path.format` | `(info: PathInfo): Path` |  |\n"
+            "| `path.from` | `(raw: string): Path` |  |\n"
+            "| `path.isAbsolute` | `(p: Path): bool` |  |\n"
+            "| `path.join` | `(...parts: Path): Path` |  |\n"
+            "| `path.joinAll` | `(parts: Array<Path>): Path` |  |\n"
+            "| `path.normalize` | `(p: Path): Path` |  |\n"
+            "| `path.parse` | `(p: Path): PathInfo` |  |\n"
+            "| `path.relative` | `(fromPath: Path, toPath: Path): Path` |  |\n"
+            "| `path.resolve` | `(...parts: Path): Path` |  |\n"
             "| `path.sep` | `: string` |  |\n"
             "",
         .symbols = _symbols_path,
@@ -6790,7 +6843,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Dylib.close` | `(): bool` |  |\n"
             "| `Dylib.constructor` | `(handle: int): ()` |  |\n"
             "| `Dylib.lastError` | `(): string` |  |\n"
-            "| `Dylib.open` | `(path: string): Dylib?` |  |\n"
+            "| `Dylib.open` | `(path: Path): Dylib?` |  |\n"
             "| `Dylib.symbol` | `(name: string): RawPtr<byte>?` |  |\n"
             "| `sys.OsBarrier` | `(parties: int): OsBarrier` | Create a reusable OS-domain barrier |\n"
             "| `sys.OsCondvar` | `(): OsCondvar` | Create an OS-domain condition variable |\n"
@@ -6983,13 +7036,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `toml.newArray` | `(): TomlArray` |  |\n"
             "| `toml.newTable` | `(): TomlTable` |  |\n"
             "| `toml.parse` | `(data: string): TomlValue` |  |\n"
-            "| `toml.parseFile` | `(path: string): TomlValue` |  |\n"
+            "| `toml.parseFile` | `(path: Path): TomlValue` |  |\n"
             "| `toml.parseReport` | `(data: string): TomlParseReport` |  |\n"
             "| `toml.stringValue` | `(value: string): TomlValue` |  |\n"
             "| `toml.stringify` | `(value: TomlValue): string` |  |\n"
             "| `toml.tableSet` | `(table: TomlTable, key: string, value: TomlValue): ()` |  |\n"
             "| `toml.tableValue` | `(value: TomlTable): TomlValue` |  |\n"
-            "| `toml.writeFile` | `(path: string, value: TomlValue): bool` |  |\n"
+            "| `toml.writeFile` | `(path: Path, value: TomlValue): bool` |  |\n"
             "",
         .symbols = _symbols_toml,
         .symbol_count = (int)(sizeof(_symbols_toml) / sizeof(_symbols_toml[0])),
@@ -7139,10 +7192,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `xml.element` | `(tag: string, attrsValue: Json = null): Json` |  |\n"
             "| `xml.parse` | `(data: string, options: Json = null): Json` |  |\n"
             "| `xml.parseDetailed` | `(data: string, options: Json = null): Json` |  |\n"
-            "| `xml.parseFile` | `(path: string, options: Json = null): Json` |  |\n"
+            "| `xml.parseFile` | `(path: Path, options: Json = null): Json` |  |\n"
             "| `xml.stringify` | `(node: Json, options: Json = null): string` |  |\n"
             "| `xml.text` | `(content: string): Json` |  |\n"
-            "| `xml.writeFile` | `(path: string, node: Json, options: Json = null): bool` |  |\n"
+            "| `xml.writeFile` | `(path: Path, node: Json, options: Json = null): bool` |  |\n"
             "",
         .symbols = _symbols_xml,
         .symbol_count = (int)(sizeof(_symbols_xml) / sizeof(_symbols_xml[0])),
@@ -7163,10 +7216,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `yaml.parse` | `(data: string, options: Json = null): Json` |  |\n"
             "| `yaml.parseAll` | `(data: string): Array<Json>` |  |\n"
-            "| `yaml.parseFile` | `(path: string): Json` |  |\n"
+            "| `yaml.parseFile` | `(path: Path): Json` |  |\n"
             "| `yaml.parseStrict` | `(data: string): Json` |  |\n"
             "| `yaml.stringify` | `(value: Json, options: Json = null): string` |  |\n"
-            "| `yaml.writeFile` | `(path: string, value: Json): bool` |  |\n"
+            "| `yaml.writeFile` | `(path: Path, value: Json): bool` |  |\n"
             "",
         .symbols = _symbols_yaml,
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),

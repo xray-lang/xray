@@ -160,7 +160,7 @@ var result = divmod(10, 3)        // result 类型 (int, int)
 
 参数模式写在冒号之后、类型之前：`name: in T`、`name: ref T`、`name: out T`。旧的前缀写法 `ref name: T` 已删除。
 
-```xray
+```xray @id=decl-fn-param-modes
 fn length_sq(v: in Vec2) -> float {
     // v 是只读引用（不拷贝，不可修改）
     return v.x * v.x + v.y * v.y
@@ -1010,7 +1010,7 @@ var result = divmod(10, 3)        // result has type (int, int)
 
 Parameter modes are written after the colon and before the type: `name: in T`, `name: ref T`, `name: out T`. The old prefix spelling `ref name: T` has been removed.
 
-```xray
+```xray @id=decl-fn-param-modes
 fn length_sq(v: in Vec2) -> float {
     // v is a read-only reference (no copy, not writable)
     return v.x * v.x + v.y * v.y
