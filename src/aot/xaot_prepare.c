@@ -1939,7 +1939,7 @@ static bool prepare_span_elem_plan_for_value(const XaotBundle *bundle, const XiV
 }
 
 static bool prepare_span_elem_is_byte(const XaotContainerElemPlan *elem) {
-    return elem && elem->elem_name && strcmp(elem->elem_name, "XR_ELEM_U8") == 0;
+    return elem && xr_type_is_exact_u8(elem->type);
 }
 
 static bool prepare_span_elem_is_pod(const XaotContainerElemPlan *elem) {
