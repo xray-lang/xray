@@ -2534,6 +2534,11 @@ static bool xa_call_arg_is_mutable_place(XaInferContext *ctx, AstNode *arg_node,
             *reason = "readonly storage";
         return false;
     }
+    if (root && (root->is_shared || xa_symbol_has_shared_provenance(root))) {
+        if (reason)
+            *reason = "shared storage";
+        return false;
+    }
     return true;
 }
 

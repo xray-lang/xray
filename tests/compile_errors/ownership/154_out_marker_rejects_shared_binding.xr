@@ -1,0 +1,6 @@
+fn reset(data: out Array<int>) {
+    data = Array<int>(0)
+}
+
+shared values = copy(Array<int>(1, 0))
+reset(out values)

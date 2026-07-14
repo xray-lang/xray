@@ -1,0 +1,6 @@
+fn bump(value: ref int) {
+    value = value + 1
+}
+
+const value = 1
+bump(ref value)
