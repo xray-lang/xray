@@ -1578,6 +1578,10 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         // Parameters: contravariant over the prefix that source declares.
         // Simplified: allow if types match or either side is unknown/type_param.
         for (int i = 0; i < source->function.param_count; i++) {
+            if (xr_type_function_param_mode(target, i) != xr_type_function_param_mode(source, i)) {
+                return false;
+            }
+
             XrType *t_param = xr_type_function_param_type(target, i);
             XrType *s_param = xr_type_function_param_type(source, i);
 

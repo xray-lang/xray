@@ -2722,6 +2722,19 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
     info->base = NULL;  // interfaces never carry an inheritance chain here
     info->base_name = NULL;
 
+    if (iface->type_param_count > 0 && iface->type_params) {
+        const char **type_param_names =
+            xr_malloc(sizeof(const char *) * (size_t) iface->type_param_count);
+        if (type_param_names) {
+            for (int i = 0; i < iface->type_param_count; i++) {
+                type_param_names[i] = iface->type_params[i] ? iface->type_params[i]->name : NULL;
+            }
+            xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL,
+                                            iface->type_param_count);
+            xr_free(type_param_names);
+        }
+    }
+
     // Materialise method and property signatures as XaSymbols. Names matter
     // for conformance; types are best-effort (resolved from XrTypeRef) so the
     // later signature audit can still inspect them when needed.
@@ -2775,6 +2788,51 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
                                      : xr_type_new_unknown(NULL);
         xa_class_info_add_field(info, psym);
     }
+}
+
+static bool xa_interface_signature_has_recovery_type(const XrType *type) {
+    if (!type)
+        return true;
+    if (XR_TYPE_IS_UNKNOWN_OR_ERROR(type))
+        return true;
+    if (XR_TYPE_IS_FUNCTION(type)) {
+        if (xa_interface_signature_has_recovery_type(type->function.return_type))
+            return true;
+        for (int i = 0; i < type->function.param_count; i++) {
+            if (xa_interface_signature_has_recovery_type(xr_type_function_param_type(type, i)))
+                return true;
+        }
+    }
+    return false;
+}
+
+static XrType *xa_interface_required_signature(XaInferContext *ctx, XaSymbolLinks *iface_links,
+                                               XrType *iface_type, XrType *signature) {
+    if (!ctx || !ctx->analyzer || !signature || !iface_links || !iface_type)
+        return signature;
+
+    int type_param_count = xa_symbol_links_get_type_param_count(iface_links);
+    if (type_param_count <= 0 || iface_type->instance.type_arg_count != type_param_count ||
+        !iface_type->instance.type_args) {
+        return signature;
+    }
+
+    const char *stack_names[8];
+    const char **type_param_names =
+        type_param_count <= 8 ? stack_names
+                              : xr_malloc(sizeof(const char *) * (size_t) type_param_count);
+    if (!type_param_names)
+        return signature;
+
+    for (int i = 0; i < type_param_count; i++) {
+        type_param_names[i] = xa_symbol_links_get_type_param_name(iface_links, i);
+    }
+
+    XrType *result = xr_type_substitute(ctx->analyzer->isolate, signature, type_param_names,
+                                        iface_type->instance.type_args, type_param_count);
+    if (type_param_names != stack_names)
+        xr_free((void *) type_param_names);
+    return result ? result : signature;
 }
 
 // Verify that `cls_info` provides every method/property required by every
@@ -2853,6 +2911,26 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
                          "Class '%s' does not implement method '%s' required by interface '%s'",
                          cls_info->name ? cls_info->name : "?", required->name, iface_name);
                 XrLocation loc = {.file = ctx->file_path, .line = cls_node->line};
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
+                continue;
+            }
+
+            XaSymbolLinks *required_links = xa_analyzer_get_links(ctx->analyzer, required);
+            XaSymbolLinks *found_links = xa_analyzer_get_links(ctx->analyzer, found);
+            XrType *required_sig = xa_interface_required_signature(
+                ctx, iface_links, iface_type, required_links ? required_links->type : NULL);
+            XrType *found_sig = found_links ? found_links->type : NULL;
+            if (!xa_interface_signature_has_recovery_type(required_sig) &&
+                !xa_interface_signature_has_recovery_type(found_sig) &&
+                !xr_type_equals(required_sig, found_sig)) {
+                char msg[512];
+                snprintf(msg, sizeof(msg),
+                         "Class '%s' method '%s' does not match signature required by interface "
+                         "'%s': expected '%s', found '%s'",
+                         cls_info->name ? cls_info->name : "?", required->name, iface_name,
+                         xr_type_to_string(required_sig), xr_type_to_string(found_sig));
+                XrLocation loc = {.file = ctx->file_path, .line = found->location.line};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
             }

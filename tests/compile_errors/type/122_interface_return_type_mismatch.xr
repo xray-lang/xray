@@ -1,0 +1,9 @@
+interface Reader {
+    read() -> int
+}
+
+class BadReader implements Reader {
+    read() -> string {
+        return "bad"
+    }
+}

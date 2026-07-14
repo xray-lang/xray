@@ -1,0 +1,1 @@
+Class 'BadReader' method 'read' does not match signature required by interface 'Reader': expected 'fn(): int', found 'fn(): string'
