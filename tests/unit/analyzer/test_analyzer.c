@@ -242,6 +242,12 @@ TEST(type_to_string) {
     t_cfn->function.is_c_abi = true;
     XrType *byte_fn_params[] = {t_u8};
     XrType *t_byte_fn = xr_type_new_function(g_isolate, byte_fn_params, 1, t_u8, false);
+    XrType *mode_fn_params[] = {t_int, xr_type_new_string(NULL), xr_type_new_bool(NULL)};
+    XrType *t_mode_fn =
+        xr_type_new_function(g_isolate, mode_fn_params, 3, xr_type_new_unit(NULL), false);
+    ASSERT(xr_type_function_set_param_mode(t_mode_fn, 0, XR_PARAM_IN));
+    ASSERT(xr_type_function_set_param_mode(t_mode_fn, 1, XR_PARAM_REF));
+    ASSERT(xr_type_function_set_param_mode(t_mode_fn, 2, XR_PARAM_OUT));
 
     ASSERT(strcmp(xr_type_to_string(t_int), "int") == 0);
     ASSERT(strcmp(xr_type_to_string(t_u8), "byte") == 0);
@@ -251,6 +257,7 @@ TEST(type_to_string) {
     ASSERT(strcmp(xr_type_to_string(t_byte_slice), "Slice<byte>") == 0);
     ASSERT(strcmp(xr_type_to_string(t_cfn), "CFn<fn(int32): int32>") == 0);
     ASSERT(strcmp(xr_type_to_string(t_byte_fn), "fn(byte): byte") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_mode_fn), "fn(in int, ref string, out bool): ()") == 0);
 }
 
 TEST(type_narrowing) {
