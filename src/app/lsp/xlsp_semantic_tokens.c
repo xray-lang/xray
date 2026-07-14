@@ -102,9 +102,124 @@ static int compare_tokens(const void *a, const void *b) {
 // Context for semantic token collection
 typedef struct {
     XlspSemanticTokensResult *result;
+    XrLspDocument *doc;
     XaAnalyzer *analyzer;
     XaScope *current_scope;
 } SemanticTokenContext;
+
+static bool is_ident_char(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+}
+
+static const char *doc_line_span(XrLspDocument *doc, int line, int *out_len) {
+    if (out_len)
+        *out_len = 0;
+    if (!doc || !doc->content || line < 0 || line >= doc->line_count || !doc->line_offsets)
+        return NULL;
+
+    uint32_t start = doc->line_offsets[line];
+    uint32_t end = (line + 1 < doc->line_count) ? doc->line_offsets[line + 1] : doc->length;
+    if (end > doc->length || start > end)
+        return NULL;
+    while (end > start && (doc->content[end - 1] == '\n' || doc->content[end - 1] == '\r'))
+        end--;
+    if (out_len)
+        *out_len = (int) (end - start);
+    return doc->content + start;
+}
+
+static int find_param_mode_col(SemanticTokenContext *ctx, XrParamNode *param) {
+    if (!ctx || !param || !param->name || param->passing_mode == XR_PARAM_VALUE ||
+        !xr_param_mode_is_valid(param->passing_mode))
+        return -1;
+
+    int line = param->line > 0 ? param->line - 1 : -1;
+    int line_len = 0;
+    const char *line_text = doc_line_span(ctx->doc, line, &line_len);
+    int col = param->column > 0 ? param->column - 1 : -1;
+    if (!line_text || col < 0 || col >= line_len)
+        return -1;
+
+    int pos = col + (int) strlen(param->name);
+    while (pos < line_len && line_text[pos] != ':' && line_text[pos] != ',' &&
+           line_text[pos] != ')')
+        pos++;
+    if (pos >= line_len || line_text[pos] != ':')
+        return -1;
+    pos++;
+    while (pos < line_len && (line_text[pos] == ' ' || line_text[pos] == '\t'))
+        pos++;
+
+    const char *label = xr_param_mode_label(param->passing_mode);
+    int label_len = (int) strlen(label);
+    if (pos + label_len > line_len || strncmp(line_text + pos, label, (size_t) label_len) != 0)
+        return -1;
+    if (pos + label_len < line_len && is_ident_char(line_text[pos + label_len]))
+        return -1;
+    if (pos > 0 && is_ident_char(line_text[pos - 1]))
+        return -1;
+    return pos;
+}
+
+static void add_param_mode_token(SemanticTokenContext *ctx, XrParamNode *param, int fallback_line) {
+    if (!ctx || !param || param->passing_mode == XR_PARAM_VALUE ||
+        !xr_param_mode_is_valid(param->passing_mode))
+        return;
+
+    int line = param->line > 0 ? param->line - 1 : fallback_line;
+    int col = find_param_mode_col(ctx, param);
+    if (line < 0 || col < 0)
+        return;
+
+    const char *label = xr_param_mode_label(param->passing_mode);
+    result_add(ctx->result, line, col, strlen(label), XLSP_TOKEN_MODIFIER, 0);
+}
+
+static XrCallArgAccess call_arg_access(const CallExprNode *call, int index) {
+    if (!call || index < 0 || index >= call->arg_count || !call->arg_accesses)
+        return XR_CALL_ARG_VALUE;
+    XrCallArgAccess access = call->arg_accesses[index];
+    return xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+}
+
+static int find_call_access_marker_col(SemanticTokenContext *ctx, AstNode *arg,
+                                       XrCallArgAccess access) {
+    if (!ctx || !arg || access == XR_CALL_ARG_VALUE || !xr_call_arg_access_is_valid(access))
+        return -1;
+
+    int line = arg->line > 0 ? arg->line - 1 : -1;
+    int line_len = 0;
+    const char *line_text = doc_line_span(ctx->doc, line, &line_len);
+    int arg_col = arg->column > 0 ? arg->column - 1 : -1;
+    if (!line_text || arg_col <= 0 || arg_col > line_len)
+        return -1;
+
+    int end = arg_col;
+    while (end > 0 && (line_text[end - 1] == ' ' || line_text[end - 1] == '\t'))
+        end--;
+
+    const char *label = xr_call_arg_access_label(access);
+    int label_len = (int) strlen(label);
+    int start = end - label_len;
+    if (start < 0 || strncmp(line_text + start, label, (size_t) label_len) != 0)
+        return -1;
+    if (start > 0 && is_ident_char(line_text[start - 1]))
+        return -1;
+    if (end < line_len && is_ident_char(line_text[end]))
+        return -1;
+    return start;
+}
+
+static void add_call_access_marker_token(SemanticTokenContext *ctx, AstNode *arg,
+                                         XrCallArgAccess access) {
+    int col = find_call_access_marker_col(ctx, arg, access);
+    if (col < 0)
+        return;
+
+    int line = arg->line > 0 ? arg->line - 1 : 0;
+    const char *label = xr_call_arg_access_label(access);
+    result_add(ctx->result, line, col, strlen(label), XLSP_TOKEN_MODIFIER, 0);
+}
 
 // Determine token type for a variable reference based on analyzer info
 static XlspSemanticTokenType get_var_token_type(SemanticTokenContext *ctx, const char *name,
@@ -239,6 +354,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                     continue;
                 int param_col = p->column > 0 ? p->column - 1 : 0;
                 int param_line = p->line > 0 ? p->line - 1 : node->line - 1;
+                add_param_mode_token(ctx, p, node->line - 1);
                 result_add(result, param_line, param_col, strlen(p->name), XLSP_TOKEN_PARAMETER,
                            XLSP_MOD_DECLARATION);
             }
@@ -264,6 +380,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                     continue;
                 int param_col = p->column > 0 ? p->column - 1 : 0;
                 int param_line = p->line > 0 ? p->line - 1 : node->line - 1;
+                add_param_mode_token(ctx, p, node->line - 1);
                 result_add(result, param_line, param_col, strlen(p->name), XLSP_TOKEN_PARAMETER,
                            XLSP_MOD_DECLARATION);
             }
@@ -320,6 +437,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                             continue;
                         int param_col = p->column > 0 ? p->column - 1 : 0;
                         int param_line = p->line > 0 ? p->line - 1 : method->line - 1;
+                        add_param_mode_token(ctx, p, method->line - 1);
                         result_add(result, param_line, param_col, strlen(p->name),
                                    XLSP_TOKEN_PARAMETER, XLSP_MOD_DECLARATION);
                     }
@@ -456,6 +574,8 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
 
             // Arguments
             for (int i = 0; i < node->as.call_expr.arg_count; i++) {
+                add_call_access_marker_token(ctx, node->as.call_expr.arguments[i],
+                                             call_arg_access(&node->as.call_expr, i));
                 collect_tokens_ast(ctx, node->as.call_expr.arguments[i]);
             }
             break;
@@ -628,6 +748,10 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                 result_add(result, node->line - 1, col, strlen(name), XLSP_TOKEN_CLASS, 0);
             }
             for (int i = 0; i < node->as.new_expr.arg_count; i++) {
+                XrCallArgAccess access = node->as.new_expr.arg_accesses
+                                             ? node->as.new_expr.arg_accesses[i]
+                                             : XR_CALL_ARG_VALUE;
+                add_call_access_marker_token(ctx, node->as.new_expr.arguments[i], access);
                 collect_tokens_ast(ctx, node->as.new_expr.arguments[i]);
             }
             break;
@@ -663,6 +787,7 @@ XlspSemanticTokensResult *xlsp_analyze_semantic_tokens(XrLspDocument *doc) {
     // Use AST if available
     if (doc->ast) {
         SemanticTokenContext ctx = {.result = result,
+                                    .doc = doc,
                                     .analyzer =
                                         doc->server ? doc->server->workspace_analyzer : NULL,
                                     .current_scope = NULL};
