@@ -83,6 +83,10 @@ TYPE_LIKE_WORDS = {
 MOVE_PARAM_RE = re.compile(
     rf"{PARAM_BOUNDARY}\s*(?:move\s+{IDENT}\s*:|{IDENT}\s*:\s*move\b)"
 )
+POSTFIX_DECL_MODE_RE = re.compile(
+    rf"{PARAM_BOUNDARY}\s*{IDENT}\s*:\s*(?:{IDENT}(?:<[^,)]*>)?|\[[^\]]+\]|\([^)]*\))\s+{MODE_WORDS}\b"
+)
+COMBINED_DECL_MODE_RE = re.compile(rf"{PARAM_BOUNDARY}\s*{IDENT}\s*:\s*{MODE_WORDS}\s+(?:{MODE_WORDS}|move)\b")
 STALE_EBNF_RE = re.compile(r"\b(?:Param\s*::=.*Modifier|Modifier\s*::=.*(?:'in'|'ref'|\bin\b|\bref\b))")
 XR_PARAM_RE = re.compile(r"\bXR_PARAM_(?:VALUE|IN|REF|OUT)\b")
 PASSING_MODE_RE = re.compile(r"\b(?:param_passing_modes|passing_mode)\b")
@@ -97,10 +101,15 @@ REMOVED_SYNTAX_NEGATIVE_FIXTURES = {
     "tests/compile_errors/syntax/028_param_mode_prefix_removed.xr",
     "tests/compile_errors/syntax/029_param_move_mode_removed.xr",
     "tests/compile_errors/syntax/030_param_move_prefix_removed.xr",
+    "tests/compile_errors/syntax/031_param_mode_postfix_removed.xr",
+    "tests/compile_errors/syntax/032_param_mode_combined_removed.xr",
+    "tests/compile_errors/syntax/033_param_move_combined_removed.xr",
 }
 CATEGORIES = (
     "MOVE_AS_PARAM_MODE_RESIDUE",
     "PREFIX_DECL_MODE_SPELLING",
+    "POSTFIX_DECL_MODE_SPELLING",
+    "COMBINED_DECL_MODE_SPELLING",
     "REMOVED_SYNTAX_NEGATIVE_FIXTURE",
     "CANON_DECL_MODE_SPELLING",
     "CALL_SITE_REF_OUT_MARKER",
@@ -191,8 +200,26 @@ def classify_line(rel_path: str, line: str) -> list[str]:
             if removed_syntax_fixture
             else "PREFIX_DECL_MODE_SPELLING"
         )
-    if CANON_DECL_MODE_RE.search(line):
-        categories.append("CANON_DECL_MODE_SPELLING")
+    combined_mode = COMBINED_DECL_MODE_RE.search(line)
+    if combined_mode:
+        categories.append(
+            "REMOVED_SYNTAX_NEGATIVE_FIXTURE"
+            if removed_syntax_fixture
+            else "COMBINED_DECL_MODE_SPELLING"
+        )
+    postfix_mode = POSTFIX_DECL_MODE_RE.search(line) and not combined_mode
+    if postfix_mode:
+        categories.append(
+            "REMOVED_SYNTAX_NEGATIVE_FIXTURE"
+            if removed_syntax_fixture
+            else "POSTFIX_DECL_MODE_SPELLING"
+        )
+    if CANON_DECL_MODE_RE.search(line) and not combined_mode:
+        categories.append(
+            "REMOVED_SYNTAX_NEGATIVE_FIXTURE"
+            if removed_syntax_fixture
+            else "CANON_DECL_MODE_SPELLING"
+        )
     if has_call_site_marker(line):
         categories.append("CALL_SITE_REF_OUT_MARKER")
     if STALE_EBNF_RE.search(line):

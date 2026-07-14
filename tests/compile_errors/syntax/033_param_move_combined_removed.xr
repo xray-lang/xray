@@ -1,0 +1,3 @@
+fn bad(x: ref move int) -> int {
+    return x
+}
