@@ -176,11 +176,13 @@ contract；ThreadLocal 与 HTTP handler 当前仍作为后续替换目标被固�
 
 扫描 `src/`、`stdlib/`、`tests/`、`spec/`、`docs/`、`demos/`、`tools/`、`scripts/`
 与 active language spec，把 191 string/byte/rune 表面残余分成
-`PUBLIC_STRING_INDEX_EXAMPLE`、`PUBLIC_BACKEND_STRING_INDEX_DIAGNOSTIC`、
-`BACKEND_STRING_INDEX_SUPPORT`、`ALLOWED_REMOVED_STRING_INDEX_NEGATIVE_TEST` 和
+`PUBLIC_SPAN_VIEW_DIAGNOSTIC`、`PUBLIC_STRING_INDEX_EXAMPLE`、
+`PUBLIC_BACKEND_STRING_INDEX_DIAGNOSTIC`、`BACKEND_STRING_INDEX_SUPPORT`、
+`ALLOWED_REMOVED_STRING_INDEX_NEGATIVE_TEST` 和
 `CANONICAL_STRING_INDEX_REJECTION_TEXT`。CTest `string_surface_residue` 同时启用
-public 与 backend legacy fail gate，确保 `str[i] -> rune` 不再出现在公开规范、MCP
-知识库或 VM/AOT fallback 中；显式替代路径是 `s.runes().nth(i)` 与 `s.bytes()[i]`。
+public 与 backend legacy fail gate，确保 public “Span view” 诊断、`str[i] -> rune`
+示例不再出现在公开规范、MCP 知识库或 VM/AOT fallback 中；显式替代路径是
+`Slice<T>`、`s.runes().nth(i)` 与 `s.bytes()[i]`。
 
 ## 与 nightly.yml 的关系
 

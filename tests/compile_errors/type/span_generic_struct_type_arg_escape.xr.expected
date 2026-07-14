@@ -1,1 +1,1 @@
-cannot use Span view as generic class/struct type argument for 'Slot'
+cannot use Slice view as generic class/struct type argument for 'Slot'

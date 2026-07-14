@@ -1,4 +1,4 @@
-Span view has no member 'load'; use len(view) or indexed access
-Span view has no member 'store'
-Span view has no member 'commonPrefix'
-Span view has no member 'repeatFrom'
+Slice view has no member 'load'; use len(view) or indexed access
+Slice view has no member 'store'
+Slice view has no member 'commonPrefix'
+Slice view has no member 'repeatFrom'

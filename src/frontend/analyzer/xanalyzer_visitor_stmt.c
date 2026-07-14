@@ -6670,12 +6670,12 @@ XR_FUNC void xa_check_active_span_borrow_owner_path_mutation(XaInferContext *ctx
         XrLocation loc = {
             .file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
         char msg[256];
-        snprintf(
-            msg, sizeof(msg),
-            "cannot mutate owner '%s' while Span view '%s' is active; end the view scope before %s",
-            owner_sym->name ? owner_sym->name : "?",
-            b->view_symbol && b->view_symbol->name ? b->view_symbol->name : "?",
-            operation ? operation : "mutating the owner");
+        snprintf(msg, sizeof(msg),
+                 "cannot mutate owner '%s' while Slice view '%s' is active; end the view scope "
+                 "before %s",
+                 owner_sym->name ? owner_sym->name : "?",
+                 b->view_symbol && b->view_symbol->name ? b->view_symbol->name : "?",
+                 operation ? operation : "mutating the owner");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                                    msg, &loc);
         return;
@@ -6700,7 +6700,7 @@ XR_FUNC void xa_check_span_value_escape(XaInferContext *ctx, AstNode *loc_node, 
     snprintf(msg, sizeof(msg),
              "cannot %s; Slice is a borrowed view, keep it local or copy the owner data into an "
              "Array",
-             escape_context ? escape_context : "var Span view escape");
+             escape_context ? escape_context : "var Slice view escape");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
 }
@@ -6717,10 +6717,10 @@ XR_FUNC void xa_check_span_generic_class_type_args(XaInferContext *ctx, AstNode 
         char context[160];
         if (class_name && class_name[0]) {
             snprintf(context, sizeof(context),
-                     "use Span view as generic class/struct type argument for '%s'", class_name);
+                     "use Slice view as generic class/struct type argument for '%s'", class_name);
         } else {
             snprintf(context, sizeof(context),
-                     "use Span view as generic class/struct type argument");
+                     "use Slice view as generic class/struct type argument");
         }
         xa_check_span_value_escape(ctx, loc_node, type_args[i], context);
         return;
@@ -6734,10 +6734,11 @@ XR_FUNC void xa_check_span_borrow_source_stable(XaInferContext *ctx, AstNode *lo
 
     XrLocation loc = {.file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
     char msg[256];
-    snprintf(msg, sizeof(msg),
-             "cannot create Span view from temporary owner in %s; bind the owner to a local before "
-             "borrowing it",
-             operation ? operation : "borrow expression");
+    snprintf(
+        msg, sizeof(msg),
+        "cannot create Slice view from temporary owner in %s; bind the owner to a local before "
+        "borrowing it",
+        operation ? operation : "borrow expression");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
 }
@@ -6783,7 +6784,8 @@ static void xa_check_span_return_escape(XaInferContext *ctx, AstNode *return_nod
         .file = ctx->file_path, .line = return_node->line, .column = return_node->column};
     xa_analyzer_add_diagnostic(
         ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-        "cannot return Span view; return the owner container or copy the view into an Array", &loc);
+        "cannot return Slice view; return the owner container or copy the view into an Array",
+        &loc);
 }
 
 static bool xa_call_is_copy_builtin(AstNode *node) {
@@ -8163,8 +8165,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     if (var->initializer && xa_is_module_level_scope(ctx->analyzer) &&
         xa_type_contains_span_view(var_type)) {
         const char *context = node->type == AST_SHARED_DECL
-                                  ? "store Span view in shared binding"
-                                  : "store Span view in module-level binding";
+                                  ? "store Slice view in shared binding"
+                                  : "store Slice view in module-level binding";
         xa_check_span_value_escape(ctx, var->initializer, var_type, context);
     }
 

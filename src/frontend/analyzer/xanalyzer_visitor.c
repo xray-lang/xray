@@ -4655,7 +4655,7 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                     ctx->expected_type = elem;
                     XrType *et = xa_visit_infer_expr(ctx, node->as.set_literal.elements[si]);
                     xa_check_span_value_escape(ctx, node->as.set_literal.elements[si], et,
-                                               "store Span view in set literal");
+                                               "store Slice view in set literal");
                     if (!elem && si == 0)
                         elem = et;
                 }
@@ -5145,7 +5145,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType *value_type = xa_visit_infer_expr(ctx, ms->value);
             ctx->expected_type = saved_expected;
             xa_assign_check_type(ctx, node, member_type, value_type, ms->member, "member");
-            xa_check_span_value_escape(ctx, node, value_type, "store Span view into a member");
+            xa_check_span_value_escape(ctx, node, value_type, "store Slice view into a member");
             if (xa_type_needs_borrow_escape_guard(value_type)) {
                 XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, ms->value);
                 if (borrowed_root) {
@@ -5995,7 +5995,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 ctx->expected_type = saved_expected;
             }
             xa_check_span_value_escape(ctx, node, value_type,
-                                       "store Span view into an index target");
+                                       "store Slice view into an index target");
             if (xa_type_needs_borrow_escape_guard(value_type)) {
                 XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, is->value);
                 if (borrowed_root) {
