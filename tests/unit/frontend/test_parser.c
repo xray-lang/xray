@@ -382,6 +382,38 @@ TEST(parser_function_type_param_modes) {
     xr_tref_to_string_buf(tref, buf, sizeof(buf));
     ASSERT_STR_EQ(buf, "(in int, ref string, out bool) -> int");
 
+    AstNode *complex_alias =
+        parse_first("type ComplexHandler = (in Array<int>, ref Slice<uint8>?, "
+                    "out [uint8; 16], (int, string), in (ref int) -> bool,) -> Array<string>");
+    XrTypeRef *complex = complex_alias->as.type_alias.resolved_type;
+    ASSERT_NOT_NULL(complex);
+    ASSERT_EQ_INT(complex->kind, XR_TREF_FUNCTION);
+    ASSERT_EQ_INT(complex->nchildren, 6);
+    ASSERT_NOT_NULL(complex->function_param_modes);
+    ASSERT_EQ_INT(complex->function_param_modes[0], XR_PARAM_IN);
+    ASSERT_EQ_INT(complex->function_param_modes[1], XR_PARAM_REF);
+    ASSERT_EQ_INT(complex->function_param_modes[2], XR_PARAM_OUT);
+    ASSERT_EQ_INT(complex->function_param_modes[3], XR_PARAM_VALUE);
+    ASSERT_EQ_INT(complex->function_param_modes[4], XR_PARAM_IN);
+    ASSERT_EQ_INT(complex->children[0]->kind, XR_TREF_GENERIC);
+    ASSERT_STR_EQ(complex->children[0]->name, "Array");
+    ASSERT_EQ_INT(complex->children[1]->kind, XR_TREF_OPTIONAL);
+    ASSERT_EQ_INT(complex->children[1]->children[0]->kind, XR_TREF_GENERIC);
+    ASSERT_STR_EQ(complex->children[1]->children[0]->name, "Slice");
+    ASSERT_EQ_INT(complex->children[2]->kind, XR_TREF_FIXED_ARRAY);
+    ASSERT_EQ_INT(complex->children[2]->fixed_length, 16);
+    ASSERT_EQ_INT(complex->children[3]->kind, XR_TREF_TUPLE);
+    ASSERT_EQ_INT(complex->children[3]->nchildren, 2);
+    ASSERT_EQ_INT(complex->children[4]->kind, XR_TREF_FUNCTION);
+    ASSERT_NOT_NULL(complex->children[4]->function_param_modes);
+    ASSERT_EQ_INT(complex->children[4]->function_param_modes[0], XR_PARAM_REF);
+    ASSERT_EQ_INT(complex->children[5]->kind, XR_TREF_GENERIC);
+    ASSERT_STR_EQ(complex->children[5]->name, "Array");
+    char complex_buf[512];
+    xr_tref_to_string_buf(complex, complex_buf, sizeof(complex_buf));
+    ASSERT_STR_EQ(complex_buf, "(in Array<int>, ref Slice<uint8>?, out [uint8; 16], (int, string), "
+                               "in (ref int) -> bool) -> Array<string>");
+
     teardown();
 }
 

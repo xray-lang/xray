@@ -644,7 +644,16 @@ void xfmt_emit_type_alias(XrFmtContext *ctx, AstNode *node) {
 
     xfmt_write_str(ctx, "type ");
     xfmt_write_str(ctx, ta->name);
-    xfmt_write_str(ctx, " = { ");
+    xfmt_emit_generic_params(ctx, ta->type_params, ta->type_param_count);
+    xfmt_write_str(ctx, " = ");
+
+    if (ta->resolved_type) {
+        xfmt_emit_type(ctx, ta->resolved_type);
+        xfmt_write_newline(ctx);
+        return;
+    }
+
+    xfmt_write_str(ctx, "{ ");
 
     for (int i = 0; i < ta->field_count; i++) {
         if (i > 0)
