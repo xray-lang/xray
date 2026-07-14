@@ -867,14 +867,25 @@ TEST(analyzer_error_effect_propagates_const_function_value_aliases) {
     setup_pool();
 }
 
-TEST(analyzer_error_effect_marks_dynamic_function_values_incomplete) {
+TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
     const char *source = "enum DynamicErr { Boom }\n"
                          "fn failDynamic() { throw DynamicErr.Boom }\n"
-                         "fn viaVarAlias() {\n"
+                         "fn noThrowDynamic() { }\n"
+                         "fn viaStableVarAlias() {\n"
                          "  var f = failDynamic\n"
+                         "  f()\n"
+                         "}\n"
+                         "fn viaStableVarAliasChain() {\n"
+                         "  var f = failDynamic\n"
+                         "  var g = f\n"
+                         "  g()\n"
+                         "}\n"
+                         "fn viaReboundVarAlias() {\n"
+                         "  var f = failDynamic\n"
+                         "  f = noThrowDynamic\n"
                          "  f()\n"
                          "}\n"
                          "fn viaConstAliasStillExact() {\n"
@@ -885,14 +896,24 @@ TEST(analyzer_error_effect_marks_dynamic_function_values_incomplete) {
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_dynamic_function_value.xr", program);
 
-    const XaEffectSummary *var_alias = analyzer_function_effect_summary(a, "viaVarAlias");
+    const XaEffectSummary *stable_var = analyzer_function_effect_summary(a, "viaStableVarAlias");
+    const XaEffectSummary *stable_chain =
+        analyzer_function_effect_summary(a, "viaStableVarAliasChain");
+    const XaEffectSummary *rebound_var = analyzer_function_effect_summary(a, "viaReboundVarAlias");
     const XaEffectSummary *const_alias =
         analyzer_function_effect_summary(a, "viaConstAliasStillExact");
-    ASSERT(var_alias != NULL);
+    ASSERT(stable_var != NULL);
+    ASSERT(stable_chain != NULL);
+    ASSERT(rebound_var != NULL);
     ASSERT(const_alias != NULL);
 
-    ASSERT(var_alias->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((var_alias->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(effect_summary_has_enum_named(a, stable_var, "DynamicErr"));
+    ASSERT((stable_var->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, stable_chain, "DynamicErr"));
+    ASSERT((stable_chain->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(rebound_var->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((rebound_var->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(!effect_summary_has_enum_named(a, rebound_var, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, const_alias, "DynamicErr"));
     ASSERT((const_alias->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 
@@ -1402,7 +1423,7 @@ int main(void) {
     RUN_TEST(analyzer_scope_management);
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_error_effect_propagates_const_function_value_aliases);
-    RUN_TEST(analyzer_error_effect_marks_dynamic_function_values_incomplete);
+    RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
 
     printf("\nFlow analysis tests:\n");
