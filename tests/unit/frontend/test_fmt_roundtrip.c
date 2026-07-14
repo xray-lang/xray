@@ -369,12 +369,18 @@ TEST(parameter_modes_roundtrip) {
                       "}\n"
                       "interface ParamModeIface {\n"
                       "    touch(a: in int, b: ref int, c: out int) -> int\n"
-                      "}\n";
+                      "}\n"
+                      "type ComplexHandler = (in Array<int>, ref Slice<uint8>?, "
+                      "out [uint8; 16], (int, string), in (ref int) -> bool,) -> Array<string>\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1, "fn param_modes(a: in int, b: ref int, c: out int)"));
     ASSERT_TRUE(contains(fmt1, "fn(a: in int, b: ref int, c: out int) -> int"));
     ASSERT_TRUE(contains(fmt1, "touch(a: in int, b: ref int, c: out int)"));
+    ASSERT_TRUE(contains(fmt1, "type ComplexHandler = (in Array<int>, ref Slice<uint8>?, "
+                               "out [uint8; 16], (int, string), in (ref int) -> bool) -> "
+                               "Array<string>"));
+    ASSERT_FALSE(contains(fmt1, "bool,) -> Array<string>"));
     ASSERT_FALSE(contains(fmt1, "in a:"));
     ASSERT_FALSE(contains(fmt1, "ref b:"));
     ASSERT_FALSE(contains(fmt1, "out c:"));

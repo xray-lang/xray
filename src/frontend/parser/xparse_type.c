@@ -696,8 +696,9 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         int count = 0;
         bool saw_param_mode = false;
         while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
-            if (count > 0)
-                xr_parser_match(parser, TK_COMMA);
+            if (count > 0 && xr_parser_match(parser, TK_COMMA) &&
+                xr_parser_check(parser, TK_RPAREN))
+                break;
             if (count == cap) {
                 int new_cap = cap * 2;
                 XrTypeRef **resized =
