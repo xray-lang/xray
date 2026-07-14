@@ -324,7 +324,7 @@ TEST(completion_u8_array_registry_methods) {
     ASSERT(doc_text != NULL);
     ASSERT(strstr(doc_text, "Array<byte> byte bulk methods") != NULL);
     ASSERT(strstr(doc_text, "Availability: heap-capable profiles") != NULL);
-    ASSERT(strstr(doc_text, "Lowering: xi.byte.array.copy.from") != NULL);
+    ASSERT(strstr(doc_text, "Lowering: xi.byte.array.append.from") != NULL);
 
     xjson_free(items);
     xlsp_server_free(server);
@@ -418,7 +418,7 @@ TEST(hover_u8_array_registry_method) {
     ASSERT(strstr(value, "Slice<byte>") != NULL);
     ASSERT(strstr(value, "Array<byte> byte bulk methods") != NULL);
     ASSERT(strstr(value, "Availability: heap-capable profiles") != NULL);
-    ASSERT(strstr(value, "Lowering: xi.byte.array.copy.from") != NULL);
+    ASSERT(strstr(value, "Lowering: xi.byte.array.append.from") != NULL);
 
     xjson_free(hover);
     xlsp_server_free(server);

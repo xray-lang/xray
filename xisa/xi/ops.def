@@ -727,15 +727,26 @@
   :observable (in-place-copy)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.byte.array.repeat.from
+(define-xi-op xi.byte.array.append.from
   :class memory-write
-  :arity 4
+  :arity 2
   :tbaa-group array
   :result-ownership borrowed
   :own-use borrow
   :effects (side-effect may-throw memory-read memory-write)
-  :requires (bytes bounds overlap-repeat)
-  :observable (lz-match-copy)
+  :requires (bytes bounds append-grow alias-safe)
+  :observable (sequence-append)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.byte.array.repeat.from
+  :class memory-write
+  :arity 3
+  :tbaa-group array
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (side-effect may-throw memory-read memory-write)
+  :requires (bytes bounds append-grow overlap-repeat)
+  :observable (sequence-repeat)
   :targets (vm-bytecode aot-c aot-verify))
 
 ; Unsafe container data-pointer borrow. Returns the current element-storage

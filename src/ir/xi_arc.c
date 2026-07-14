@@ -534,6 +534,7 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
         case XI_BYTE_SLICE_REPEAT:
         case XI_BYTE_ARRAY_COPY_WITHIN:
         case XI_BYTE_ARRAY_COPY_FROM:
+        case XI_BYTE_ARRAY_APPEND_FROM:
         case XI_BYTE_ARRAY_REPEAT_FROM:
         case XI_COPY:
         case XI_CONVERT:

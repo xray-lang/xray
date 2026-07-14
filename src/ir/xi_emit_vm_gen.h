@@ -162,6 +162,7 @@
     X(SPAN_REINTERPRET, xi_emit_span_reinterpret) \
     X(BYTE_ARRAY_COPY_WITHIN, xi_emit_byte_array_copy_within) \
     X(BYTE_ARRAY_COPY_FROM, xi_emit_byte_array_copy_from) \
+    X(BYTE_ARRAY_APPEND_FROM, xi_emit_byte_array_append_from) \
     X(BYTE_ARRAY_REPEAT_FROM, xi_emit_byte_array_repeat_from) \
     X(ARRAY_DATA_PTR, xi_emit_array_data_ptr) \
     X(PTR_LOAD, xi_emit_ptr_load) \

@@ -214,7 +214,8 @@
       "R[A] = borrowed Slice<byte> of string R[B], C=slot")                                        \
     _(BYTE_ARRAY_COPY_WITHIN, FMT_A, KOP_A_INOUT, "R[A].copyWithin(R[A+1], R[A+2], R[A+3])")       \
     _(BYTE_ARRAY_COPY_FROM, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1], R[A+2], R[A+3], R[A+4])")   \
-    _(BYTE_ARRAY_REPEAT_FROM, FMT_A, KOP_A_INOUT, "R[A].repeatFrom(R[A+1], R[A+2], R[A+3])")       \
+    _(BYTE_ARRAY_APPEND_FROM, FMT_A, KOP_A_INOUT, "R[A].appendFrom(R[A+1])")                       \
+    _(BYTE_ARRAY_REPEAT_FROM, FMT_A, KOP_A_INOUT, "R[A].repeatFrom(R[A+1], R[A+2])")               \
     _(ARRAY_INIT, FMT_AB_IMM, KOP_AB_BASE_LIT, "R[A][1..B] = R[A+1..A+B]")                         \
     _(MAP_GET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B]:Map[R[C]]")                                      \
     _(MAP_GETK, FMT_ABC, KOP_ABC_BIN_K, "R[A] = R[B]:Map[K[C]]")                                   \

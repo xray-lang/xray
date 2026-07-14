@@ -2042,6 +2042,7 @@ static bool xicgen_op_arg_keeps_span_noescape(XiCgenCtx *ctx, const XiFunc *curr
         case XI_BYTE_SLICE_COMPARE:
         case XI_BYTE_SLICE_COMMON_PREFIX:
             return arg_index == 0 || arg_index == 1;
+        case XI_BYTE_ARRAY_APPEND_FROM:
         case XI_BYTE_ARRAY_COPY_FROM:
             return arg_index == 1;
         case XI_CALL: {
@@ -9155,21 +9156,40 @@ static void xicgen_byte_array_copy_from(XiCgenCtx *ctx, FILE *out, const XiFunc 
     xicgen_byte_array_box_result(out, boxed);
 }
 
+static void xicgen_byte_array_append_from(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                          const XiValue *v, const char *prefix) {
+    if (emit_byte_array_append_from_expr(ctx, out, f, prefix, v))
+        return;
+
+    bool boxed = cg_rep(v) == XR_REP_TAGGED;
+    if (!boxed)
+        fprintf(out, "((xrt_array_t *)(");
+    fprintf(out, "xrt_byte_array_append_from_value(");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ")");
+    if (!boxed)
+        fprintf(out, ").ptr)");
+}
+
 static void xicgen_byte_array_repeat_from(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                           const XiValue *v, const char *prefix) {
+    if (emit_byte_array_repeat_from_expr(ctx, out, f, prefix, v))
+        return;
+
     bool boxed = cg_rep(v) == XR_REP_TAGGED;
-    if (boxed)
-        fprintf(out, "xr_mkptr(");
-    fprintf(out, "xrt_byte_array_repeat_from_raw(");
-    xicgen_byte_array_ptr_arg(ctx, out, f, v, prefix, 0);
+    if (!boxed)
+        fprintf(out, "((xrt_array_t *)(");
+    fprintf(out, "xrt_byte_array_repeat_from_tail_value(");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
-    xicgen_byte_array_i64_arg(out, v, 1);
+    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ", ");
-    xicgen_byte_array_i64_arg(out, v, 2);
-    fprintf(out, ", ");
-    xicgen_byte_array_i64_arg(out, v, 3);
+    emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
     fprintf(out, ")");
-    xicgen_byte_array_box_result(out, boxed);
+    if (!boxed)
+        fprintf(out, ").ptr)");
 }
 
 /* FFI raw-pointer access: pick the exact C scalar type for a pointee width.
