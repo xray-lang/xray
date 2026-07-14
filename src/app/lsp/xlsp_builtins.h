@@ -22,7 +22,7 @@
 // LSP uses unified XrTypeId directly
 typedef XrTypeId XlspBuiltinType;
 
-#define XLSP_TYPE_UNKNOWN XR_TID_NULL
+#define XLSP_TYPE_UNRESOLVED XR_TID_NULL
 #define XLSP_TYPE_INT XR_TID_INT
 #define XLSP_TYPE_FLOAT XR_TID_FLOAT
 #define XLSP_TYPE_STRING XR_TID_STRING

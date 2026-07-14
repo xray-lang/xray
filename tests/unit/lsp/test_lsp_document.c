@@ -13,6 +13,7 @@
 #include <string.h>
 #include "../../../src/app/lsp/xlsp_server.h"
 #include "../../../src/app/lsp/xlsp_analysis.h"
+#include "../../../src/app/lsp/xlsp_builtins.h"
 #include "../../../src/app/lsp/xlsp_code_action.h"
 #include "../../../src/app/lsp/xlsp_completion.h"
 #include "../../../src/base/xjson.h"
@@ -450,6 +451,29 @@ TEST(signature_help_u8_array_registry_method) {
     xlsp_server_free(server);
 }
 
+TEST(builtin_generic_array_uses_error_placeholder) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    XrLspDocument *doc =
+        xlsp_document_open(server, "file:///generic_array_completion.xr", "Array.\n", 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {0, 6};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    XrJsonValue *push = json_array_find_label(items, "push");
+    ASSERT(push != NULL);
+    const char *detail = xjson_get_string(push, "detail");
+    ASSERT(detail != NULL);
+    ASSERT(strstr(detail, "unknown") == NULL);
+    ASSERT(strstr(detail, "<error>") != NULL);
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
 // ============================================================================
 // Code Action Quick-Fix Tests (concurrency diagnostics)
 // ============================================================================
@@ -591,6 +615,7 @@ int main(int argc, char **argv) {
     RUN_TEST(completion_u8_slice_registry_methods);
     RUN_TEST(hover_u8_array_registry_method);
     RUN_TEST(signature_help_u8_array_registry_method);
+    RUN_TEST(builtin_generic_array_uses_error_placeholder);
 
     printf("\nCode action concurrency quick-fix tests:\n");
     RUN_TEST(code_action_go_capture_to_shared);

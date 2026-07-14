@@ -204,7 +204,7 @@ XrJsonValue *xlsp_handle_td_completion_resolve(XrLspServer *server, XrJsonValue 
                                                 : "_";
                         const char *ptype = (links->param_types && links->param_types[i])
                                                 ? xr_type_to_string(links->param_types[i])
-                                                : "unknown";
+                                                : "<error>";
                         len +=
                             snprintf(doc_str + len, sizeof(doc_str) - len, "%s: %s", pname, ptype);
                     }
@@ -218,7 +218,7 @@ XrJsonValue *xlsp_handle_td_completion_resolve(XrLspServer *server, XrJsonValue 
                 resolved = true;
             } else {
                 XrType *type = xa_analyzer_get_type(analyzer, sym);
-                const char *type_str = type ? xr_type_to_string(type) : "unknown";
+                const char *type_str = type ? xr_type_to_string(type) : "<error>";
                 const char *kw =
                     sym->is_shared ? "shared"
                                    : (sym->is_owned ? "owned" : (sym->is_const ? "const" : "var"));

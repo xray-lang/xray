@@ -603,7 +603,7 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
             sym = xa_analyzer_lookup(analyzer, word);
         if (sym) {
             XrType *type = xa_analyzer_get_type(analyzer, sym);
-            const char *type_str = type ? xr_type_to_string(type) : "unknown";
+            const char *type_str = type ? xr_type_to_string(type) : "<error>";
 
             if (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD) {
                 snprintf(hover_buf, sizeof(hover_buf), "```xray\nfn %s(...): %s\n```\n\n%s",
@@ -614,7 +614,7 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
                          "```xray\nclass %s\n```\n\n(class definition)", sym->name);
             } else if (sym->kind == XA_SYM_TYPE_ALIAS) {
                 XrType *alias_type = (XrType *) sym->alias_type;
-                const char *alias_str = alias_type ? xr_type_to_string(alias_type) : "unknown";
+                const char *alias_str = alias_type ? xr_type_to_string(alias_type) : "<error>";
                 snprintf(hover_buf, sizeof(hover_buf), "```xray\ntype %s = %s\n```\n\n(type alias)",
                          sym->name, alias_str);
             } else if (sym->kind == XA_SYM_ENUM) {
@@ -675,7 +675,7 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
             // Try builtin type methods (e.g., Array.push, String.split)
             if (!description) {
                 XlspBuiltinType bt = xlsp_builtin_type_from_name(mod_name);
-                if (bt != XLSP_TYPE_UNKNOWN) {
+                if (bt != XLSP_TYPE_UNRESOLVED) {
                     const char *builtin_hover =
                         xlsp_builtin_get_hover(bt, word, hover_buf, sizeof(hover_buf));
                     if (builtin_hover) {
@@ -698,7 +698,7 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
                     description = var_hover;
                 } else {
                     XlspBuiltinType var_type = xlsp_infer_variable_type(server, doc, mod_name);
-                    if (var_type != XLSP_TYPE_UNKNOWN) {
+                    if (var_type != XLSP_TYPE_UNRESOLVED) {
                         const char *bucket_hover =
                             xlsp_builtin_get_hover(var_type, word, hover_buf, sizeof(hover_buf));
                         if (bucket_hover)
@@ -1410,7 +1410,7 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
                     (links->param_names && links->param_names[p]) ? links->param_names[p] : "_";
                 const char *ptype = (links->param_types && links->param_types[p])
                                         ? xr_type_to_string(links->param_types[p])
-                                        : "unknown";
+                                        : "<error>";
                 sig_len += snprintf(sig_label + sig_len, sizeof(sig_label) - sig_len, "%s: %s",
                                     pname, ptype);
 
@@ -1425,7 +1425,7 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
         }
 
         const char *ret_type =
-            (links && links->return_type) ? xr_type_to_string(links->return_type) : "unknown";
+            (links && links->return_type) ? xr_type_to_string(links->return_type) : "<error>";
         snprintf(sig_label + sig_len, sizeof(sig_label) - sig_len, "): %s", ret_type);
 
         xjson_object_set(sig_info, "label", xjson_new_string(sig_label));
