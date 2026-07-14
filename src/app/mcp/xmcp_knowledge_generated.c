@@ -730,18 +730,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
         .summary = "",
     },
     {
-        .name = "utf8ByteLength",
-        .signature = "(data: string): int",
-        .summary = "",
-    },
-    {
-        .name = "utf8Count",
-        .signature = "(data: string): int",
-        .summary = "",
-    },
-    {
         .name = "utf8Valid",
-        .signature = "(data: string): bool",
+        .signature = "(data: Slice<byte>): bool",
         .summary = "",
     },
 };
@@ -5974,9 +5964,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `encoding.hexValid` | `(hex: string): bool` |  |\n"
             "| `encoding.utf16Decode` | `(data: Array<byte>, endian: int = 0, stripBom: bool = true): string?` |  |\n"
             "| `encoding.utf16Encode` | `(data: string, endian: int = 0): Array<byte>` |  |\n"
-            "| `encoding.utf8ByteLength` | `(data: string): int` |  |\n"
-            "| `encoding.utf8Count` | `(data: string): int` |  |\n"
-            "| `encoding.utf8Valid` | `(data: string): bool` |  |\n"
+            "| `encoding.utf8Valid` | `(data: Slice<byte>): bool` |  |\n"
             "",
         .symbols = _symbols_encoding,
         .symbol_count = (int)(sizeof(_symbols_encoding) / sizeof(_symbols_encoding[0])),

@@ -21,6 +21,11 @@ fn hexDecodeFails(hex: string) -> bool {
     }
 }
 
+fn utf8ValidText(data: string) -> bool {
+    var view: Slice<byte> = data.bytes()
+    return encoding.utf8Valid(view)
+}
+
 print(hexEncodeText("Hello"))
 print(hexEncodeText("\t"))
 var bytes = encoding.hexDecode("48656c6c6f")
@@ -42,14 +47,15 @@ print(encoding.hexValid("abc"))
 print(encoding.hexValid("gg"))
 print(encoding.hexValid(""))
 
-print(encoding.utf8Valid("Hello"))
-print(encoding.utf8Valid("你好"))
-print(encoding.utf8Valid(""))
-
-print(encoding.utf8Count("Hello"))
-print(encoding.utf8Count("你好"))
-print(encoding.utf8ByteLength("Hello"))
-print(encoding.utf8ByteLength("你好"))
+print(utf8ValidText("Hello"))
+print(utf8ValidText("你好"))
+print(utf8ValidText(""))
+var invalidUtf8 = Array<byte>(4)
+invalidUtf8[0] = 0xF4
+invalidUtf8[1] = 0x90
+invalidUtf8[2] = 0x80
+invalidUtf8[3] = 0x80
+print(encoding.utf8Valid(invalidUtf8[:]))
 print(encoding.LE)
 print(encoding.BE)
 
