@@ -17,6 +17,7 @@
 #include "xtype_ref.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
+#include "../../runtime/xerror_codes.h"
 #include "../../runtime/xisolate_api.h"
 #include "xtype_scope.h"
 #include "../xdiag_fmt.h"
@@ -925,6 +926,21 @@ static bool xr_parse_call_argument_access_marker_starts(Parser *parser,
     return marker;
 }
 
+static bool xr_parse_call_argument_in_marker_removed_starts(Parser *parser) {
+    if (!parser || !xr_parser_check(parser, TK_IN))
+        return false;
+
+    Scanner saved_scan = parser->scanner;
+    Token saved_cur = parser->current;
+    Token saved_prev = parser->previous;
+    xr_parser_advance(parser);
+    bool marker = xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_THIS);
+    parser->scanner = saved_scan;
+    parser->current = saved_cur;
+    parser->previous = saved_prev;
+    return marker;
+}
+
 AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out_access) {
     if (out_access)
         *out_access = XR_CALL_ARG_VALUE;
@@ -938,6 +954,16 @@ AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out
         if (!place)
             return NULL;
         return place;
+    }
+    if (xr_parse_call_argument_in_marker_removed_starts(parser)) {
+        Token in_token = parser->current;
+        xr_parser_advance(parser);
+        xr_parser_emit_removed_syntax(
+            parser, &in_token, XR_ERR_SYN_CALL_IN_MARKER_REMOVED,
+            "call-site `in` marker was removed",
+            "Pass the argument directly, for example `f(value)`; `in` is a declaration-side "
+            "parameter mode only.");
+        return xr_parse_expression(parser);
     }
     if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
         AstNode *inner = xr_parse_expression(parser);

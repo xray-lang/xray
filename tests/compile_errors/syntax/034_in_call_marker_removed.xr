@@ -1,0 +1,6 @@
+fn read(value: in int) -> int {
+    return value
+}
+
+var value = 1
+print(read(in value))
