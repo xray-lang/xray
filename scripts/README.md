@@ -180,11 +180,14 @@ contract；ThreadLocal 与 HTTP handler 当前仍作为后续替换目标被固�
 `PUBLIC_STRING_INDEX_EXAMPLE`、`PUBLIC_BACKEND_STRING_INDEX_DIAGNOSTIC`、
 `BACKEND_STRING_INDEX_SUPPORT`、`ALLOWED_REMOVED_STRING_INDEX_NEGATIVE_TEST`、
 `ALLOWED_REMOVED_LEGACY_STRING_MEMBER_NEGATIVE_TEST` 和
-`CANONICAL_STRING_INDEX_REJECTION_TEXT`。CTest `string_surface_residue` 同时启用
-public 与 backend legacy fail gate，确保 public “Span view” 诊断、`str[i] -> rune`
-示例和 `charAt/fromBytes/runesLossy/byteLength` 旧成员名不再出现在公开规范、MCP
-知识库、tooling 或 VM/AOT fallback 中；显式替代路径是 `Slice<T>`、
-`s.runes().nth(i)` 与 `s.bytes()[i]`。
+`CANONICAL_STRING_INDEX_REJECTION_TEXT`，并以非失败分类
+`PATH_STRING_OWNER_SURFACE` 跟踪仍以 `string` 暴露 OS/file path 的 public API。
+CTest `string_surface_residue` 同时启用 public 与 backend legacy fail gate，确保
+public “Span view” 诊断、`str[i] -> rune` 示例和
+`charAt/fromBytes/runesLossy/byteLength` 旧成员名不再出现在公开规范、MCP 知识库、
+tooling 或 VM/AOT fallback 中；显式替代路径是 `Slice<T>`、`s.runes().nth(i)`
+与 `s.bytes()[i]`。`PATH_STRING_OWNER_SURFACE` 只作为 191 Path owner 未闭环的
+基线统计，直到 OS-native `Path` owner 迁移完成后再升级为 fail gate。
 
 ## 与 nightly.yml 的关系
 
