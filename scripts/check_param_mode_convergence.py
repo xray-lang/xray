@@ -58,6 +58,7 @@ CANON_DECL_MODE_RE = re.compile(
 CALL_MARKER_RE = re.compile(
     rf"[(,]\s*(?P<mode>ref|out)\s+(?!{MODE_STOPWORDS})(?P<ident>{IDENT})(?:\b|[.[])"
 )
+CALL_IN_MARKER_REMOVED_RE = re.compile(rf"[(,]\s*in\s+(?!{MODE_STOPWORDS})(?:{IDENT}|this)(?:\b|[.[])")
 FUNCTION_TYPE_PARAM_MODE_RE = re.compile(r"\([^)]*\b(?:in|ref|out)\s+[^)]*\)\s*->")
 TYPE_LIKE_WORDS = {
     "int",
@@ -104,6 +105,9 @@ REMOVED_SYNTAX_NEGATIVE_FIXTURES = {
     "tests/compile_errors/syntax/031_param_mode_postfix_removed.xr",
     "tests/compile_errors/syntax/032_param_mode_combined_removed.xr",
     "tests/compile_errors/syntax/033_param_move_combined_removed.xr",
+}
+CALL_IN_MARKER_REMOVED_FIXTURES = {
+    "tests/compile_errors/syntax/034_in_call_marker_removed.xr",
 }
 CATEGORIES = (
     "MOVE_AS_PARAM_MODE_RESIDUE",
@@ -188,6 +192,7 @@ def classify_line(rel_path: str, line: str) -> list[str]:
         return categories
 
     removed_syntax_fixture = rel_path in REMOVED_SYNTAX_NEGATIVE_FIXTURES
+    call_in_removed_fixture = rel_path in CALL_IN_MARKER_REMOVED_FIXTURES
     if MOVE_PARAM_RE.search(line):
         categories.append(
             "REMOVED_SYNTAX_NEGATIVE_FIXTURE"
@@ -222,6 +227,8 @@ def classify_line(rel_path: str, line: str) -> list[str]:
         )
     if has_call_site_marker(line):
         categories.append("CALL_SITE_REF_OUT_MARKER")
+    if call_in_removed_fixture and CALL_IN_MARKER_REMOVED_RE.search(line):
+        categories.append("REMOVED_SYNTAX_NEGATIVE_FIXTURE")
     if STALE_EBNF_RE.search(line):
         categories.append("STALE_MODIFIER_EBNF")
     if XR_PARAM_RE.search(line):
