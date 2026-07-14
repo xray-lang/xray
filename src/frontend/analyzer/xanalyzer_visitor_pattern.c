@@ -173,7 +173,7 @@ static void collect_matched_enum_members(AstNode *pattern, const char ***names, 
 // Top-level `name => ...` and any AST_VARIABLE buried inside a tuple
 // pattern both count; everything else (literals, ranges, wildcards,
 // alternations) is binding-free.
-static bool pattern_has_binding(AstNode *pattern) {
+XR_FUNC bool xa_pattern_has_binding(AstNode *pattern) {
     if (!pattern)
         return false;
     if (pattern->type == AST_PATTERN_LITERAL) {
@@ -183,21 +183,21 @@ static bool pattern_has_binding(AstNode *pattern) {
     if (pattern->type == AST_PATTERN_TUPLE) {
         PatternTupleNode *tp = &pattern->as.pattern_tuple;
         for (int i = 0; i < tp->count; i++) {
-            if (pattern_has_binding(tp->patterns[i]))
+            if (xa_pattern_has_binding(tp->patterns[i]))
                 return true;
         }
     }
     if (pattern->type == AST_PATTERN_ADT) {
         PatternAdtNode *ap = &pattern->as.pattern_adt;
         for (int i = 0; i < ap->count; i++) {
-            if (pattern_has_binding(ap->patterns[i]))
+            if (xa_pattern_has_binding(ap->patterns[i]))
                 return true;
         }
     }
     if (pattern->type == AST_PATTERN_OBJECT) {
         PatternObjectNode *op = &pattern->as.pattern_object;
         for (int i = 0; i < op->count; i++) {
-            if (pattern_has_binding(op->patterns[i]))
+            if (xa_pattern_has_binding(op->patterns[i]))
                 return true;
         }
     }
@@ -206,7 +206,7 @@ static bool pattern_has_binding(AstNode *pattern) {
         if (ap->rest_name)
             return true;
         for (int i = 0; i < ap->count; i++) {
-            if (pattern_has_binding(ap->patterns[i]))
+            if (xa_pattern_has_binding(ap->patterns[i]))
                 return true;
         }
     }
@@ -302,7 +302,8 @@ static void xa_check_array_pattern_elements(XaInferContext *ctx, AstNode *patter
 // current scope. `slot_type` is the static type of the value flowing
 // into this position; for tuple sub-slots it's drawn from the tuple's
 // declared element types when the scrutinee is a known tuple type.
-static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrType *slot_type) {
+XR_FUNC void xa_register_pattern_bindings(XaInferContext *ctx, AstNode *pattern,
+                                          XrType *slot_type) {
     if (!ctx || !pattern)
         return;
 
@@ -331,7 +332,7 @@ static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrT
             XrType *elem_type = NULL;
             if (slot_type && XR_TYPE_IS_TUPLE(slot_type))
                 elem_type = xr_type_tuple_get(slot_type, i);
-            register_pattern_bindings(ctx, sub, elem_type);
+            xa_register_pattern_bindings(ctx, sub, elem_type);
         }
     }
 
@@ -346,7 +347,7 @@ static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrT
                 continue;
             XrType *payload_type =
                 xa_analyzer_resolve_adt_payload_type(ctx->analyzer, slot_type, ap->variant, i);
-            register_pattern_bindings(ctx, sub, payload_type);
+            xa_register_pattern_bindings(ctx, sub, payload_type);
         }
     }
 
@@ -374,7 +375,7 @@ static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrT
                     }
                 }
             }
-            register_pattern_bindings(ctx, sub, field_type);
+            xa_register_pattern_bindings(ctx, sub, field_type);
         }
     }
 
@@ -387,7 +388,7 @@ static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrT
             elem_type = slot_type->container.element_type;
         for (int i = 0; i < ap->count; i++) {
             if (ap->patterns[i])
-                register_pattern_bindings(ctx, ap->patterns[i], elem_type);
+                xa_register_pattern_bindings(ctx, ap->patterns[i], elem_type);
         }
         if (ap->rest_name) {
             XaSymbol *rest_sym = xa_symbol_new(ap->rest_name, XA_SYM_VARIABLE);
@@ -458,10 +459,10 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
         // fresh scoped symbols typed from the matching subject slot.
         xa_check_array_pattern_elements(ctx, arm_node->pattern);
 
-        bool has_binding = pattern_has_binding(arm_node->pattern);
+        bool has_binding = xa_pattern_has_binding(arm_node->pattern);
         if (has_binding) {
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, arm);
-            register_pattern_bindings(ctx, arm_node->pattern, subject_type);
+            xa_register_pattern_bindings(ctx, arm_node->pattern, subject_type);
         }
 
         // Infer guard if present

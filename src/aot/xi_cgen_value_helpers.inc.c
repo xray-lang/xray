@@ -581,6 +581,18 @@ static bool enum_payload_type_predicate_supported(XiCgenCtx *ctx, const XrType *
     }
 }
 
+static uint32_t cg_enum_layout_id_for_type(XiCgenCtx *ctx, const XrType *type) {
+    if (!type || type->kind != XR_KIND_ENUM)
+        return 0;
+    const XaotEnumPlan *plan =
+        ctx && ctx->aot_bundle ? xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, type) : NULL;
+    if (plan && plan->layout_id != 0)
+        return plan->layout_id;
+    if (type->enum_type.layout && type->enum_type.layout->layout_id != 0)
+        return type->enum_type.layout->layout_id;
+    return type->enum_type.layout_id;
+}
+
 static bool emit_enum_payload_type_predicate_nonnull(XiCgenCtx *ctx, FILE *out, const XrType *type,
                                                      const char *value_expr) {
     if (!out || !type || !value_expr)
@@ -617,11 +629,12 @@ static bool emit_enum_payload_type_predicate_nonnull(XiCgenCtx *ctx, FILE *out, 
             return true;
         case XR_KIND_ENUM:
             fprintf(out, "((%s).tag == XR_TAG_ENUM", value_expr);
-            if (type->enum_type.layout_id != 0) {
+            uint32_t layout_id = cg_enum_layout_id_for_type(ctx, type);
+            if (layout_id != 0) {
                 fprintf(out,
                         " && (xrt_enum_value_layout_id(%s) == 0 || "
                         "xrt_enum_value_layout_id(%s) == %u)",
-                        value_expr, value_expr, type->enum_type.layout_id);
+                        value_expr, value_expr, layout_id);
             }
             fprintf(out, ")");
             return true;

@@ -1992,6 +1992,7 @@ XrCatchClause *xr_ast_catch_clause(XrCompilerSession *session, const char *var_n
     c->var_line = var_line;
     c->var_column = var_column;
     c->type = type;
+    c->pattern = NULL;
     c->body = body;
     c->symbol_id = 0;
     c->is_panic = false;

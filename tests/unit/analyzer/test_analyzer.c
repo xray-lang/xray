@@ -1507,11 +1507,32 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     const char *source =
         "enum CatchErr { Boom, Other }\n"
         "enum OtherErr { Boom }\n"
+        "enum PayloadErr { Boom, Other, Payload(int) }\n"
         "fn fail() { throw CatchErr.Boom }\n"
         "fn failOther() { throw OtherErr.Boom }\n"
+        "fn failPayloadBoom() { throw PayloadErr.Boom }\n"
+        "fn failPayloadOther() { throw PayloadErr.Other }\n"
+        "fn failPayloadCase() { throw PayloadErr.Payload(1) }\n"
+        "fn failPayloadAny(e: PayloadErr) { throw e }\n"
         "fn handled() { try { fail() } catch (e: CatchErr) { } }\n"
         "fn leaks() { try { fail() } catch (e: OtherErr) { } }\n"
         "fn catchesAll() { try { fail() } catch (e) { } }\n"
+        "fn bareEnumPatternHandlesAll() { try { failPayloadBoom() } catch PayloadErr { } }\n"
+        "fn variantPatternHandlesOnlyBoom() { "
+        "  try { failPayloadBoom() } catch PayloadErr.Boom { } "
+        "}\n"
+        "fn variantPatternLeaksOther() { "
+        "  try { failPayloadOther() } catch PayloadErr.Boom { } "
+        "}\n"
+        "fn payloadPatternHandlesPayload() { "
+        "  try { failPayloadCase() } catch PayloadErr.Payload(code) { } "
+        "}\n"
+        "fn variantPatternLeavesRest(e: PayloadErr) { "
+        "  try { failPayloadAny(e) } catch PayloadErr.Boom { } "
+        "}\n"
+        "fn variantPatternBodyThrows() { "
+        "  try { failPayloadBoom() } catch PayloadErr.Boom { throw OtherErr.Boom } "
+        "}\n"
         "fn catchBodyThrows() { "
         "  try { fail() } catch (e: CatchErr) { throw OtherErr.Boom } "
         "}\n"
@@ -1634,6 +1655,18 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     const XaEffectSummary *catches_all = analyzer_function_effect_summary(a, "catchesAll");
     const XaEffectSummary *catch_body_throws =
         analyzer_function_effect_summary(a, "catchBodyThrows");
+    const XaEffectSummary *bare_enum_pattern_handles_all =
+        analyzer_function_effect_summary(a, "bareEnumPatternHandlesAll");
+    const XaEffectSummary *variant_pattern_handles_only_boom =
+        analyzer_function_effect_summary(a, "variantPatternHandlesOnlyBoom");
+    const XaEffectSummary *variant_pattern_leaks_other =
+        analyzer_function_effect_summary(a, "variantPatternLeaksOther");
+    const XaEffectSummary *payload_pattern_handles_payload =
+        analyzer_function_effect_summary(a, "payloadPatternHandlesPayload");
+    const XaEffectSummary *variant_pattern_leaves_rest =
+        analyzer_function_effect_summary(a, "variantPatternLeavesRest");
+    const XaEffectSummary *variant_pattern_body_throws =
+        analyzer_function_effect_summary(a, "variantPatternBodyThrows");
     const XaEffectSummary *catch_all_rethrows =
         analyzer_function_effect_summary(a, "catchAllRethrows");
     const XaEffectSummary *typed_rethrows = analyzer_function_effect_summary(a, "typedRethrows");
@@ -1682,6 +1715,12 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(leaks != NULL);
     ASSERT(catches_all != NULL);
     ASSERT(catch_body_throws != NULL);
+    ASSERT(bare_enum_pattern_handles_all != NULL);
+    ASSERT(variant_pattern_handles_only_boom != NULL);
+    ASSERT(variant_pattern_leaks_other != NULL);
+    ASSERT(payload_pattern_handles_payload != NULL);
+    ASSERT(variant_pattern_leaves_rest != NULL);
+    ASSERT(variant_pattern_body_throws != NULL);
     ASSERT(catch_all_rethrows != NULL);
     ASSERT(typed_rethrows != NULL);
     ASSERT(catch_var_reassigned_rethrows != NULL);
@@ -1709,6 +1748,25 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(handled->escaping.count == 0);
     ASSERT(effect_summary_has_enum_named(a, leaks, "CatchErr"));
     ASSERT(catches_all->escaping.count == 0);
+    ASSERT(bare_enum_pattern_handles_all->escaping.count == 0);
+    ASSERT(variant_pattern_handles_only_boom->escaping.count == 0);
+    ASSERT(payload_pattern_handles_payload->escaping.count == 0);
+    const XaErrorTypeSet *variant_leak_set =
+        effect_summary_enum_set_named(a, variant_pattern_leaks_other, "PayloadErr");
+    ASSERT(variant_leak_set != NULL);
+    ASSERT(!variant_leak_set->all_variants);
+    ASSERT(!xa_bitset_test(&variant_leak_set->variants, 0));
+    ASSERT(xa_bitset_test(&variant_leak_set->variants, 1));
+    ASSERT(!xa_bitset_test(&variant_leak_set->variants, 2));
+    const XaErrorTypeSet *variant_rest_set =
+        effect_summary_enum_set_named(a, variant_pattern_leaves_rest, "PayloadErr");
+    ASSERT(variant_rest_set != NULL);
+    ASSERT(!variant_rest_set->all_variants);
+    ASSERT(!xa_bitset_test(&variant_rest_set->variants, 0));
+    ASSERT(xa_bitset_test(&variant_rest_set->variants, 1));
+    ASSERT(xa_bitset_test(&variant_rest_set->variants, 2));
+    ASSERT(!effect_summary_has_enum_named(a, variant_pattern_body_throws, "PayloadErr"));
+    ASSERT(effect_summary_has_enum_named(a, variant_pattern_body_throws, "OtherErr"));
     ASSERT(!effect_summary_has_enum_named(a, catch_body_throws, "CatchErr"));
     ASSERT(effect_summary_has_enum_named(a, catch_body_throws, "OtherErr"));
     ASSERT(effect_summary_has_enum_named(a, catch_all_rethrows, "CatchErr"));

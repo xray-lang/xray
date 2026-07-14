@@ -2064,6 +2064,33 @@ AstNode *xr_parse_declaration(Parser *parser) {
 
 // ========== Exception handling parse functions ==========
 
+static const char *catch_pattern_enum_head_name(AstNode *pattern) {
+    if (!pattern)
+        return NULL;
+    if (pattern->type == AST_PATTERN_ADT) {
+        AstNode *variant = pattern->as.pattern_adt.variant;
+        if (!variant)
+            return NULL;
+        if (variant->type == AST_ENUM_ACCESS)
+            return variant->as.enum_access.enum_name;
+        if (variant->type == AST_MEMBER_ACCESS && variant->as.member_access.object &&
+            variant->as.member_access.object->type == AST_VARIABLE)
+            return variant->as.member_access.object->as.variable.name;
+        return NULL;
+    }
+    if (pattern->type != AST_PATTERN_LITERAL || !pattern->as.pattern_literal.value)
+        return NULL;
+    AstNode *value = pattern->as.pattern_literal.value;
+    if (value->type == AST_VARIABLE)
+        return value->as.variable.name;
+    if (value->type == AST_ENUM_ACCESS)
+        return value->as.enum_access.enum_name;
+    if (value->type == AST_MEMBER_ACCESS && value->as.member_access.object &&
+        value->as.member_access.object->type == AST_VARIABLE)
+        return value->as.member_access.object->as.variable.name;
+    return NULL;
+}
+
 /*
  * Parse try-catch statement.
  * Supports multiple typed catch clauses and an optional panic boundary:
@@ -2071,6 +2098,8 @@ AstNode *xr_parse_declaration(Parser *parser) {
  *   catch (e: NetErr)    { ... }
  *   catch (e: DiskErr)   { ... }
  *   catch (e)            { ... }   // catch-all
+ *   catch NetErr.NotFound(path) { ... } // variant/payload pattern
+ *   catch NetErr          { ... }   // typed enum catch without binding
  *   catch panic (p)      { ... }   // recoverable-fault boundary
  * There is no `finally`; use `defer` for cleanup (runs on all exits).
  */
@@ -2102,29 +2131,50 @@ AstNode *xr_parse_try_statement(Parser *parser) {
             xr_parser_advance(parser);  // consume 'panic'
         }
 
-        xr_parser_consume(parser, TK_LPAREN, "expected '(' after catch");
+        char *var_name = NULL;
+        int var_line = parser->current.line;
+        int var_column = parser->current.column;
+        XrTypeRef *type_ann = NULL;
+        AstNode *pattern = NULL;
 
-        if (parser->current.type != TK_NAME) {
-            xr_parser_error_expected_name(parser, "expected catch variable name");
+        if (is_panic && !xr_parser_check(parser, TK_LPAREN)) {
+            xr_parser_consume(parser, TK_LPAREN, "expected '(' after catch panic");
             return NULL;
         }
 
-        // Save variable name and position
-        char *var_name =
-            (char *) ast_alloc(parser->compiler_session, (size_t) parser->current.length + 1);
-        memcpy(var_name, parser->current.start, parser->current.length);
-        var_name[parser->current.length] = '\0';
-        int var_line = parser->current.line;
-        int var_column = parser->current.column;
-        xr_parser_advance(parser);  // consume variable name
+        if (xr_parser_match(parser, TK_LPAREN)) {
+            if (parser->current.type != TK_NAME) {
+                xr_parser_error_expected_name(parser, "expected catch variable name");
+                return NULL;
+            }
 
-        // Optional enum error filter annotation: catch (e: NetErr)
-        XrTypeRef *type_ann = NULL;
-        if (xr_parser_match(parser, TK_COLON)) {
-            type_ann = xr_parse_type_annotation(parser);
+            // Save variable name and position
+            var_name =
+                (char *) ast_alloc(parser->compiler_session, (size_t) parser->current.length + 1);
+            memcpy(var_name, parser->current.start, parser->current.length);
+            var_name[parser->current.length] = '\0';
+            var_line = parser->current.line;
+            var_column = parser->current.column;
+            xr_parser_advance(parser);  // consume variable name
+
+            // Optional enum error filter annotation: catch (e: NetErr)
+            if (xr_parser_match(parser, TK_COLON)) {
+                type_ann = xr_parse_type_annotation(parser);
+            }
+
+            xr_parser_consume(parser, TK_RPAREN, "expected ')' after catch variable");
+        } else {
+            pattern = xr_parse_match_pattern(parser);
+            if (!pattern) {
+                xr_parser_error(parser, "expected catch pattern");
+                return NULL;
+            }
+            var_line = pattern->line;
+            var_column = pattern->column;
+            const char *head = catch_pattern_enum_head_name(pattern);
+            if (head)
+                type_ann = xr_tref_named(parser->compiler_session, head);
         }
-
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' after catch variable");
 
         // Parse catch body
         xr_parser_consume(parser, TK_LBRACE, "expected '{' after catch");
@@ -2132,6 +2182,7 @@ AstNode *xr_parse_try_statement(Parser *parser) {
 
         XrCatchClause *clause = xr_ast_catch_clause(parser->compiler_session, var_name, var_line,
                                                     var_column, type_ann, body);
+        clause->pattern = pattern;
         clause->is_panic = is_panic;
         XR_PARSE_PUSH(parser, clauses, catch_count, catch_cap, clause);
     }

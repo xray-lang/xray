@@ -7204,6 +7204,20 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
             }
             break;
         }
+        case XR_KIND_ENUM:
+            fprintf(out, "(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ".tag == XR_TAG_ENUM");
+            uint32_t layout_id = cg_enum_layout_id_for_type(ctx, target);
+            if (layout_id != 0) {
+                fprintf(out, " && (xrt_enum_value_layout_id(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ") == 0 || xrt_enum_value_layout_id(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ") == %u)", (unsigned) layout_id);
+            }
+            fprintf(out, ")");
+            break;
         default: {
             uint8_t tag = xr_type_to_xr_tag(target);
             if (tag != 0xFF) {

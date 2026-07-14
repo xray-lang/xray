@@ -24,7 +24,6 @@
  * - Wildcard pattern: _
  * - Tuple pattern: (a, b) / (0, _) / ((x, y), z)
  */
-static AstNode *parse_pattern(Parser *parser);
 static AstNode *parse_pattern_single(Parser *parser);
 static AstNode *expr_to_pattern(Parser *parser, AstNode *expr);
 
@@ -358,7 +357,7 @@ static AstNode *parse_pattern_single(Parser *parser) {
  * in further atoms separated by `,` into an alternation pattern up
  * to the `->`. This is the only place where a top-level comma starts
  * an alternation; tuple sub-elements use parse_pattern_single. */
-static AstNode *parse_pattern(Parser *parser) {
+XR_FUNC AstNode *xr_parse_match_pattern(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_pattern: NULL parser");
     int line = parser->current.line;
 
@@ -411,7 +410,7 @@ static AstNode *parse_match_arm(Parser *parser) {
     int line = parser->current.line;
 
     // Parse pattern
-    AstNode *pattern = parse_pattern(parser);
+    AstNode *pattern = xr_parse_match_pattern(parser);
     if (!pattern) {
         return NULL;
     }

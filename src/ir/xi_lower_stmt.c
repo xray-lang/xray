@@ -26,6 +26,7 @@
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
+#include "../frontend/parser/xtype_ref.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -2373,10 +2374,52 @@ static XrType *xi_lower_catch_clause_type(XiLower *l, XrCatchClause *cc) {
     return xi_lower_type_or_any(l, type, "catch clause type", cc->var_line);
 }
 
-static XrType *xi_lower_error_catch_result_type(XiLower *l, XrCatchClause **errc, int errn) {
-    if (!l || !errc || errn != 1 || !errc[0] || !errc[0]->type)
-        return l ? l->type_any : NULL;
-    return xi_lower_catch_clause_type(l, errc[0]);
+static bool lower_catch_pattern_is_wildcard(AstNode *pattern) {
+    return pattern && pattern->type == AST_PATTERN_WILDCARD;
+}
+
+static bool lower_catch_pattern_is_bare_type(const XrCatchClause *cc) {
+    if (!cc || !cc->pattern || !cc->type || cc->type->kind != XR_TREF_NAMED || !cc->type->name)
+        return false;
+    AstNode *pattern = cc->pattern;
+    if (pattern->type != AST_PATTERN_LITERAL || !pattern->as.pattern_literal.value)
+        return false;
+    AstNode *value = pattern->as.pattern_literal.value;
+    return value->type == AST_VARIABLE && value->as.variable.name &&
+           strcmp(value->as.variable.name, cc->type->name) == 0;
+}
+
+static bool lower_catch_clause_has_pattern_test(const XrCatchClause *cc) {
+    return cc && cc->pattern && !lower_catch_pattern_is_wildcard(cc->pattern) &&
+           !lower_catch_pattern_is_bare_type(cc);
+}
+
+static XiValue *lower_catch_narrow_value(XiLower *l, XiValue *catch_op, XrCatchClause *cc,
+                                         XrType *catch_type) {
+    if (!l || !catch_op || !catch_type || !cc || !cc->type)
+        return catch_op;
+    if (catch_op->type && xr_type_equals(catch_op->type, catch_type))
+        return catch_op;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, catch_type, 1);
+    if (!v)
+        return catch_op;
+    v->args[0] = catch_op;
+    v->aux_int = ((int64_t) (uint32_t) -1 << 1);
+    v->aux = (void *) arena_strdup(l->func, cc->type->name ? cc->type->name : "unknown");
+    v->line = (uint32_t) (cc->var_line > 0 ? cc->var_line : 0);
+    return v;
+}
+
+static void lower_catch_bind_clause(XiLower *l, XrCatchClause *cc, XiValue *value) {
+    if (!l || !cc || !value)
+        return;
+    if (cc->var_name) {
+        int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name,
+                                         value->type ? value->type : l->type_any);
+        xi_lower_braun_write(l, var_id, l->cur_block, value);
+    }
+    if (lower_catch_clause_has_pattern_test(cc))
+        lower_pattern_bindings(l, value, cc->pattern);
 }
 
 /* Lower the error catch block: XI_ERR_CATCH binds the pending error,
@@ -2384,80 +2427,59 @@ static XrType *xi_lower_error_catch_result_type(XiLower *l, XrCatchClause **errc
  * flow is the value-return error channel — no handler stack. */
 static void lower_error_catch_clauses(XiLower *l, XrCatchClause **errc, int errn, AstNode *node,
                                       XiBlock *normal_target) {
-    XrType *catch_type = xi_lower_error_catch_result_type(l, errc, errn);
-    XiValue *catch_op =
-        xi_value_new(l->func, l->cur_block, XI_ERR_CATCH, catch_type ? catch_type : l->type_any, 0);
+    XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_ERR_CATCH, l->type_any, 0);
     if (catch_op) {
         catch_op->flags |= XI_FLAG_SIDE_EFFECT;
         catch_op->line = (errn > 0 && errc[0]->var_line > 0) ? (uint32_t) errc[0]->var_line
                                                              : (uint32_t) node->line;
     }
 
-    if (errn == 1) {
-        XrCatchClause *cc = errc[0];
-        if (cc->var_name && catch_op) {
-            int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name,
-                                             catch_op->type ? catch_op->type : l->type_any);
-            xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
-        }
-        xi_lower_stmt(l, cc->body);
-        return;
-    }
-
-    /* Multi-catch: if-else chain with is-T checks. */
     for (int ci = 0; ci < errn; ci++) {
         XrCatchClause *cc = errc[ci];
-        bool is_last = (ci == errn - 1);
-        bool has_type = (cc->type != NULL);
+        if (!cc || !l->cur_block)
+            break;
+        bool has_type = cc->type != NULL;
+        bool has_pattern_test = lower_catch_clause_has_pattern_test(cc);
+        XiBlock *next_blk = NULL;
 
-        if (has_type && !is_last) {
+        if (has_type) {
             XiValue *is_val = xi_lower_is_test(l, catch_op, cc->type, cc->var_line);
-            XiBlock *match_blk = xi_block_new(l->func);
-            XiBlock *next_blk = xi_block_new(l->func);
-
-            xi_block_set_if(l->cur_block, is_val, match_blk, next_blk);
-
-            xi_lower_braun_seal(l, match_blk);
-            l->cur_block = match_blk;
-            if (cc->var_name && catch_op) {
-                int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
-                xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
-            }
-            xi_lower_stmt(l, cc->body);
-            if (l->cur_block)
-                xi_block_set_jump(l->cur_block, normal_target);
-
-            xi_lower_braun_seal(l, next_blk);
-            l->cur_block = next_blk;
-        } else if (has_type) {
-            XiValue *is_val = xi_lower_is_test(l, catch_op, cc->type, cc->var_line);
-            XiBlock *match_blk = xi_block_new(l->func);
-            XiBlock *reprop_blk = xi_block_new(l->func);
-
-            xi_block_set_if(l->cur_block, is_val, match_blk, reprop_blk);
-
-            xi_lower_braun_seal(l, match_blk);
-            l->cur_block = match_blk;
-            if (cc->var_name && catch_op) {
-                int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
-                xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
-            }
-            xi_lower_stmt(l, cc->body);
-            if (l->cur_block)
-                xi_block_set_jump(l->cur_block, normal_target);
-
-            /* Unmatched: re-propagate to enclosing scope. */
-            xi_lower_braun_seal(l, reprop_blk);
-            l->cur_block = reprop_blk;
-            xi_lower_reprop_error(l, catch_op, node);
-        } else {
-            if (cc->var_name && catch_op) {
-                int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
-                xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
-            }
-            xi_lower_stmt(l, cc->body);
+            XiBlock *type_blk = xi_block_new(l->func);
+            next_blk = xi_block_new(l->func);
+            xi_block_set_if(l->cur_block, is_val, type_blk, next_blk);
+            xi_lower_braun_seal(l, type_blk);
+            l->cur_block = type_blk;
         }
+
+        XrType *catch_type = has_type ? xi_lower_catch_clause_type(l, cc) : NULL;
+        XiValue *match_value =
+            has_type ? lower_catch_narrow_value(l, catch_op, cc, catch_type) : catch_op;
+
+        if (has_pattern_test) {
+            XiValue *pattern_test = xi_lower_pattern_test(l, match_value, cc->pattern);
+            XiBlock *body_blk = xi_block_new(l->func);
+            if (!next_blk)
+                next_blk = xi_block_new(l->func);
+            xi_block_set_if(l->cur_block, pattern_test, body_blk, next_blk);
+            xi_lower_braun_seal(l, body_blk);
+            l->cur_block = body_blk;
+        }
+
+        lower_catch_bind_clause(l, cc, match_value);
+        xi_lower_stmt(l, cc->body);
+        if (l->cur_block)
+            xi_block_set_jump(l->cur_block, normal_target);
+
+        if (!next_blk) {
+            l->cur_block = NULL;
+            break;
+        }
+        xi_lower_braun_seal(l, next_blk);
+        l->cur_block = next_blk;
     }
+
+    if (l->cur_block)
+        xi_lower_reprop_error(l, catch_op, node);
 }
 
 /* try-catch (with optional finally).  error and panic are two strictly

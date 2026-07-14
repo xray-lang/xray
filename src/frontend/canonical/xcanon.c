@@ -607,8 +607,10 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             canon_node(ctx, node->as.try_catch.try_body);
             for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
                 XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
-                if (cc)
+                if (cc) {
+                    canon_node(ctx, cc->pattern);
                     canon_node(ctx, cc->body);
+                }
             }
             break;
 
