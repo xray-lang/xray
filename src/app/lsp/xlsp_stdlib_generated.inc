@@ -10,15 +10,16 @@
 
 // base64 module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
-    {"encode", XLSP_SYM_FUNCTION, "fn(data: string): string", "standard alphabet with padding, over the string's UTF-8 bytes.", NULL, 0},
-    {"decode", XLSP_SYM_FUNCTION, "fn(data: string): string?", "standard/URL-safe input to a UTF-8 string; null on invalid input.", NULL, 0},
-    {"encodeUrl", XLSP_SYM_FUNCTION, "fn(data: string): string", "URL-safe alphabet, no padding.", NULL, 0},
-    {"decodeUrl", XLSP_SYM_FUNCTION, "fn(data: string): string?", "the decoder already accepts both alphabets.", NULL, 0},
-    {"encodeBytes", XLSP_SYM_FUNCTION, "fn(data: Array<byte>): string", "standard alphabet with padding, over raw bytes.", NULL, 0},
-    {"decodeToBytes", XLSP_SYM_FUNCTION, "fn(data: string): Array<byte>?", "decode to raw bytes; null on invalid input.", NULL, 0},
-    {"isValid", XLSP_SYM_FUNCTION, "fn(data: string): bool", "whether the input is structurally valid base64.", NULL, 0},
+    {"encode", XLSP_SYM_FUNCTION, "fn(data: Slice<byte>, options?: Base64EncodeOptions?): string", "", NULL, 0},
+    {"decode", XLSP_SYM_FUNCTION, "fn(text: string, options?: Base64DecodeOptions?): Array<byte>", "", NULL, 0},
+    {"isValid", XLSP_SYM_FUNCTION, "fn(text: string, options?: Base64DecodeOptions?): bool", "", NULL, 0},
+    {"Base64Alphabet", XLSP_SYM_CLASS, "type Base64Alphabet", "Enum type", NULL, 0},
+    {"Base64PaddingPolicy", XLSP_SYM_CLASS, "type Base64PaddingPolicy", "Enum type", NULL, 0},
+    {"Base64Error", XLSP_SYM_CLASS, "type Base64Error", "Enum type", NULL, 0},
+    {"Base64EncodeOptions", XLSP_SYM_CLASS, "type Base64EncodeOptions", "Class type", NULL, 0},
+    {"Base64DecodeOptions", XLSP_SYM_CLASS, "type Base64DecodeOptions", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT 7
+#define GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT 8
 
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {

@@ -11,6 +11,7 @@ import crypto
 import base64
 
 const _GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+const _B64_STD = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 const _OP_TEXT = 1
 const _OP_BINARY = 2
 const _OP_CLOSE = 8
@@ -142,20 +143,51 @@ fn _hexNibble(c: rune) -> int {
     return -1
 }
 
-fn _hexBytes(hex: string) -> Array<byte>? {
-    if (len(hex) % 2 != 0) { return null }
+fn _hexBytes(hex: string) -> Array<byte> {
+    if (len(hex) % 2 != 0) { return Array<byte>(0) }
     var out = Array<byte>(len(hex) / 2)
     var oi = 0
     var i = 0
     while (i + 1 < len(hex)) {
         var hi = _hexNibble(hex.runes().nth(i))
         var lo = _hexNibble(hex.runes().nth(i + 1))
-        if (hi < 0 || lo < 0) { return null }
+        if (hi < 0 || lo < 0) { return Array<byte>(0) }
         out[oi] = ((hi << 4) | lo) & 255
         oi = oi + 1
         i = i + 2
     }
     return out
+}
+
+fn _base64Encode(data: Array<byte>) -> string {
+    var n = len(data)
+    var out = StringBuilder()
+    var i = 0
+    while (i + 3 <= n) {
+        var b0 = data[i]
+        var b1 = data[i + 1]
+        var b2 = data[i + 2]
+        out.append(_B64_STD.runes().nth(b0 >> 2))
+        out.append(_B64_STD.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
+        out.append(_B64_STD.runes().nth(((b1 & 15) << 2) | (b2 >> 6)))
+        out.append(_B64_STD.runes().nth(b2 & 63))
+        i = i + 3
+    }
+    var rem = n - i
+    if (rem == 1) {
+        var b0 = data[i]
+        out.append(_B64_STD.runes().nth(b0 >> 2))
+        out.append(_B64_STD.runes().nth((b0 & 3) << 4))
+        out.append("==")
+    } else if (rem == 2) {
+        var b0 = data[i]
+        var b1 = data[i + 1]
+        out.append(_B64_STD.runes().nth(b0 >> 2))
+        out.append(_B64_STD.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
+        out.append(_B64_STD.runes().nth((b1 & 15) << 2))
+        out.append("=")
+    }
+    return out.toString()
 }
 
 fn _isDigit(c: rune) -> bool {
@@ -248,9 +280,7 @@ fn _bytesToString(data: Array<byte>, start: int, end: int) -> string {
 }
 
 fn _randomBytes(n: int) -> Array<byte> {
-    var b = _hexBytes(crypto.randomBytes(n))
-    if (b == null) { return Array<byte>(0) }
-    return b!
+    return _hexBytes(crypto.randomBytes(n))
 }
 
 fn _header(headers: string, name: string) -> string? {
@@ -335,8 +365,9 @@ fn _originAllowed(origin: string?, allowedOrigins: Array<string>?) -> bool {
 }
 
 fn _validSecKey(secKey: string) -> bool {
-    var raw = base64.decodeToBytes(secKey)
-    return raw != null && len(raw!) == 16
+    if (!base64.isValid(secKey, null)) { return false }
+    var raw = base64.decode(secKey, null)
+    return len(raw) == 16
 }
 
 fn _hasCrLf(s: string) -> bool {
@@ -355,13 +386,14 @@ fn _hostHeader(url: WsUrl) -> string {
 }
 
 fn acceptKey(secKey: string) -> string {
-    var digest = _hexBytes(crypto.sha1(secKey + _GUID))
-    if (digest == null) { return "" }
-    return base64.encodeBytes(digest!)
+    var digestBytes = _hexBytes(crypto.sha1(secKey + _GUID))
+    if (len(digestBytes) != 20) { return "" }
+    return _base64Encode(digestBytes)
 }
 
 fn randomKey() -> string {
-    return base64.encodeBytes(_randomBytes(16))
+    var bytes = _randomBytes(16)
+    return _base64Encode(bytes)
 }
 
 fn _pickSubprotocol(headers: string, serverProtocols: Array<string>) -> string? {

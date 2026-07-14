@@ -8,7 +8,7 @@
  * base64.c - Base64 native helpers + pure-Xray module loader
  *
  * KEY CONCEPT:
- *   The base64 module's user-facing functions (encode/decode/encodeUrl/...) are
+ *   The base64 module's user-facing functions (encode/decode/isValid + options)
  *   pure Xray, defined in stdlib/base64/base64.xr. This file keeps only the
  *   small standard Base64 helpers used by WS native handshake code, plus the
  *   loader that registers the pure-Xray module so `import base64` resolves as

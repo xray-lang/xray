@@ -4,7 +4,8 @@ import { isValid as isValidBase64 } from "base64"
 
 @no_alloc
 fn xray_no_alloc_pure_stdlib_call_reject(data: string) -> string {
-    return base64.encode(data)
+    var view: Slice<byte> = data.bytes()
+    return base64.encode(view)
 }
 
 @no_alloc
