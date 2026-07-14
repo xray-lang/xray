@@ -116,16 +116,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
     {"hexEncode", XLSP_SYM_FUNCTION, "fn(data: Slice<byte>): string", "", NULL, 0},
     {"hexDecode", XLSP_SYM_FUNCTION, "fn(hex: string): Array<byte>", "", NULL, 0},
     {"hexValid", XLSP_SYM_FUNCTION, "fn(hex: string): bool", "", NULL, 0},
-    {"utf8Valid", XLSP_SYM_FUNCTION, "fn(data: string): bool", "", NULL, 0},
-    {"utf8Count", XLSP_SYM_FUNCTION, "fn(data: string): int", "", NULL, 0},
-    {"utf8ByteLength", XLSP_SYM_FUNCTION, "fn(data: string): int", "", NULL, 0},
+    {"utf8Valid", XLSP_SYM_FUNCTION, "fn(data: Slice<byte>): bool", "", NULL, 0},
     {"utf16Encode", XLSP_SYM_FUNCTION, "fn(data: string, endian?: int): Array<byte>", "", NULL, 0},
     {"utf16Decode", XLSP_SYM_FUNCTION, "fn(data: Array<byte>, endian?: int, stripBom?: bool): string?", "", NULL, 0},
     {"LE", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"BE", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"HexError", XLSP_SYM_CLASS, "type HexError", "Enum type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT 11
+#define GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT 9
 
 // http module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {

@@ -22,6 +22,11 @@ fn hexDecodeFails(hex: string) -> bool {
     }
 }
 
+fn utf8ValidText(data: string) -> bool {
+    var view: Slice<byte> = data.bytes()
+    return encoding.utf8Valid(view)
+}
+
 // ===== Hex encode =====
 
 @test
@@ -88,23 +93,32 @@ fn test_hex_valid() {
 
 @test
 fn test_utf8_valid() {
-    assert_eq(encoding.utf8Valid("Hello"), true)
-    assert_eq(encoding.utf8Valid("你好"), true)
-    assert_eq(encoding.utf8Valid(""), true)
+    assert_eq(utf8ValidText("Hello"), true)
+    assert_eq(utf8ValidText("你好"), true)
+    assert_eq(utf8ValidText(""), true)
 }
 
 @test
-fn test_utf8_count() {
-    assert_eq(encoding.utf8Count("Hello"), 5)
-    assert_eq(encoding.utf8Count("你好"), 2)
-    assert_eq(encoding.utf8Count(""), 0)
-}
+fn test_utf8_invalid_bytes() {
+    var cont = Array<byte>(1)
+    cont[0] = 0x80
+    assert_eq(encoding.utf8Valid(cont[:]), false)
 
-@test
-fn test_utf8_byte_length() {
-    assert_eq(encoding.utf8ByteLength("Hello"), 5)
-    assert_eq(encoding.utf8ByteLength("你好"), 6)  // 3 bytes per CJK rune
-    assert_eq(encoding.utf8ByteLength(""), 0)
+    var overlong = Array<byte>(2)
+    overlong[0] = 0xC0
+    overlong[1] = 0x80
+    assert_eq(encoding.utf8Valid(overlong[:]), false)
+
+    var truncated = Array<byte>(2)
+    truncated[0] = 0xE2
+    truncated[1] = 0x82
+    assert_eq(encoding.utf8Valid(truncated[:]), false)
+
+    var surrogate = Array<byte>(3)
+    surrogate[0] = 0xED
+    surrogate[1] = 0xA0
+    surrogate[2] = 0x80
+    assert_eq(encoding.utf8Valid(surrogate[:]), false)
 }
 
 // ===== UTF-16 =====
