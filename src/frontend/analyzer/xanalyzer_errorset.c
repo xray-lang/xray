@@ -171,6 +171,17 @@ static XaSymbol *resolve_call_target(XaAnalyzer *analyzer, AstNode *callee) {
     return resolve_function_alias_target(analyzer, sym, 0);
 }
 
+static bool is_dynamic_function_call_target(XaAnalyzer *analyzer, AstNode *callee,
+                                            XaSymbol *resolved_sym) {
+    if (!analyzer || !callee)
+        return false;
+    if (resolved_sym &&
+        (resolved_sym->kind == XA_SYM_FUNCTION || resolved_sym->kind == XA_SYM_METHOD))
+        return false;
+    XrType *callee_type = xa_analyzer_get_node_type(analyzer, callee);
+    return callee_type && XR_TYPE_IS_FUNCTION(callee_type);
+}
+
 static bool is_current_caught_ref(ErrorSetCtx *ctx, AstNode *expr) {
     expr = identity_source(expr);
     if (!ctx || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name ||
@@ -250,12 +261,18 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
 
             /* Union callee's effect summary into current function's summary */
             XaSymbol *callee_sym = resolve_call_target(ctx->analyzer, node->as.call_expr.callee);
-            if (callee_sym && callee_sym->links.effect_id != XA_EFFECT_NONE) {
+            if (callee_sym &&
+                (callee_sym->kind == XA_SYM_FUNCTION || callee_sym->kind == XA_SYM_METHOD) &&
+                callee_sym->links.effect_id != XA_EFFECT_NONE) {
                 const XaEffectSummary *callee_summary =
                     xa_effect_db_get(ctx->analyzer->effect_db, callee_sym->links.effect_id);
                 if (callee_summary)
                     xa_effect_summary_add_summary(ctx->analyzer->effect_db, ctx->current_summary,
                                                   callee_summary);
+            } else if (is_dynamic_function_call_target(ctx->analyzer, node->as.call_expr.callee,
+                                                       callee_sym)) {
+                xa_effect_summary_mark_incomplete(ctx->current_summary,
+                                                  XA_UNKNOWN_DYNAMIC_CALL_TARGET);
             }
             break;
         }
