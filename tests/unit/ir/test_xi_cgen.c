@@ -2324,7 +2324,7 @@ TEST(cgen_typed_array_zero_fill_range_uses_memset) {
     xi_func_free(ir);
 }
 
-TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
+TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
     const char *src = "fn run() -> int {\n"
                       "    var src = Array<byte>(16)\n"
                       "    src[0] = 1\n"
@@ -2383,9 +2383,9 @@ TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
            "fast path");
     assert(count_between(fn_body, fn_end, "xr_array_core_copy_or_move_bytes(") > 0 &&
            "Slice<byte>.copyFrom must lower to the direct overlap-safe copy helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_append_from_span_raw(") == 0 &&
+    assert(count_between(fn_body, fn_end, "xrt_byte_array_append_from_span_raw(") == 0 &&
            "Array<byte>.appendFrom hot path must not call the large raw helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_repeat_from_tail_raw(") > 0 &&
+    assert(count_between(fn_body, fn_end, "xrt_byte_array_repeat_from_tail_raw(") > 0 &&
            "Array<byte>.repeatFrom must lower to the raw tail repeat helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_copy(") > 0 &&
            "Slice<byte>.repeatFrom must lower to direct repeat-copy");
@@ -2399,11 +2399,11 @@ TEST(cgen_bytes_safe_span_methods_use_raw_memory_helpers) {
            "Slice<byte>.commonPrefix over slices should inline slice range planning");
     assert(count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") > 0 &&
            "Array<byte>.reserve must lower to the raw AOT helper");
-    assert(count_between(fn_body, fn_end, "xrt_bytes_load_u16_le_value(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_bytes_load_u32_le_value(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_bytes_load_u64_le_value(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_bytes_append_from_value(") == 0 &&
-           count_between(fn_body, fn_end, "xrt_bytes_repeat_from_value(") == 0 &&
+    assert(count_between(fn_body, fn_end, "xrt_byte_array_load_u16_le_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_byte_array_load_u32_le_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_byte_array_load_u64_le_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_byte_array_append_from_value(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_byte_array_repeat_from_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_byte_slice_copy_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_byte_slice_common_prefix_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_array_reserve_value(") == 0 &&
@@ -2764,7 +2764,7 @@ TEST(cgen_span_slice_elides_dead_err_check) {
     xi_func_free(ir);
 }
 
-TEST(cgen_bytes_append_from_slice_elides_dead_err_check) {
+TEST(cgen_byte_array_append_from_slice_elides_dead_err_check) {
     const char *src =
         "fn appendRange(out: Array<byte>, src: in Slice<byte>, start: int, n: int) {\n"
         "    out.appendFrom(src[start:start + n])\n"
@@ -2795,7 +2795,7 @@ TEST(cgen_bytes_append_from_slice_elides_dead_err_check) {
 
     assert(count_between(fn, fn_end, "xrt_span_from_span_slice(") > 0 &&
            "appendRange must keep the Slice<byte> slice in native span storage");
-    assert(count_between(fn, fn_end, "xrt_bytes_append_from_span_slow_raw(") > 0 &&
+    assert(count_between(fn, fn_end, "xrt_byte_array_append_from_span_slow_raw(") > 0 &&
            "appendRange must lower appendFrom(Slice<byte>) to the byte append fast path");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
            "appendFrom(Slice<byte> slice) must not keep dead ERR_CHECKs after proven native paths");
@@ -2806,7 +2806,7 @@ TEST(cgen_bytes_append_from_slice_elides_dead_err_check) {
     xi_func_free(ir);
 }
 
-TEST(cgen_bytes_repeat_from_tail_elides_dead_err_check) {
+TEST(cgen_byte_array_repeat_from_tail_elides_dead_err_check) {
     const char *src = "fn extend(out: Array<byte>) {\n"
                       "    out.repeatFrom(2, 4)\n"
                       "}\n"
@@ -2834,7 +2834,7 @@ TEST(cgen_bytes_repeat_from_tail_elides_dead_err_check) {
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "extend function body should be bounded");
 
-    assert(count_between(fn, fn_end, "xrt_bytes_repeat_from_tail_raw(") > 0 &&
+    assert(count_between(fn, fn_end, "xrt_byte_array_repeat_from_tail_raw(") > 0 &&
            "Array<byte>.repeatFrom must lower to the raw tail repeat helper");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
            "Array<byte>.repeatFrom native helper must not keep a dead ERR_CHECK");
@@ -2899,9 +2899,9 @@ TEST(cgen_rawptr_load_le_uses_pointer_helper) {
     assert(count_between(fn, fn_end, "XR_FROM_INT(") == 0 &&
            count_between(fn, fn_end, "XR_TO_INT(") == 0 &&
            "RawPtr.loadLE hot path must not box or unbox pointer values");
-    assert(count_between(fn, fn_end, "xrt_bytes_load_u16_le_") == 0 &&
-           count_between(fn, fn_end, "xrt_bytes_load_u32_le_") == 0 &&
-           count_between(fn, fn_end, "xrt_bytes_load_u64_le_") == 0 &&
+    assert(count_between(fn, fn_end, "xrt_byte_array_load_u16_le_") == 0 &&
+           count_between(fn, fn_end, "xrt_byte_array_load_u32_le_") == 0 &&
+           count_between(fn, fn_end, "xrt_byte_array_load_u64_le_") == 0 &&
            "RawPtr loadLE must not route back through Array<byte>/Slice<byte> helpers");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
            "RawPtr.loadLE hot path must not keep a dead ERR_CHECK");
@@ -8133,7 +8133,7 @@ int main(void) {
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();
     run_cgen_string_copy_bytes_preserves_byte_storage_fast_path();
     run_cgen_typed_array_zero_fill_range_uses_memset();
-    run_cgen_bytes_safe_span_methods_use_raw_memory_helpers();
+    run_cgen_byte_slice_safe_methods_use_raw_memory_helpers();
     run_cgen_borrowed_bytes_param_reserve_skips_arc();
     run_cgen_direct_call_converts_bytes_to_byte_slice_arg();
     run_cgen_boxed_adapter_converts_byte_slice_arg();
@@ -8141,8 +8141,8 @@ int main(void) {
     run_cgen_rawptr_parallel_for_each_capture_keeps_owner_alive();
     run_cgen_span_index_get_elides_dead_err_check();
     run_cgen_span_slice_elides_dead_err_check();
-    run_cgen_bytes_append_from_slice_elides_dead_err_check();
-    run_cgen_bytes_repeat_from_tail_elides_dead_err_check();
+    run_cgen_byte_array_append_from_slice_elides_dead_err_check();
+    run_cgen_byte_array_repeat_from_tail_elides_dead_err_check();
     run_cgen_rawptr_load_le_uses_pointer_helper();
     run_cgen_rawmut_store_le_uses_pointer_helper();
     run_cgen_stack_borrow_slice_allows_local_rawptr_read_chain();

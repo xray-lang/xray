@@ -173,53 +173,6 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         fprintf(out, ")");
         return true;
     }
-    if (strcmp(name, "bytes_load_u16_le") == 0 || strcmp(name, "bytes_load_u32_le") == 0 ||
-        strcmp(name, "bytes_load_u64_le") == 0) {
-        bool want_i64 = cg_rep(v) == XR_REP_I64;
-        if (want_i64)
-            fprintf(out, "XR_TO_INT(");
-        const char *helper = "xrt_bytes_load_u64_le";
-        if (strcmp(name, "bytes_load_u16_le") == 0)
-            helper = "xrt_bytes_load_u16_le";
-        else if (strcmp(name, "bytes_load_u32_le") == 0)
-            helper = "xrt_bytes_load_u32_le";
-        fprintf(out, "%s(", helper);
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ")");
-        if (want_i64)
-            fprintf(out, ")");
-        return true;
-    }
-    if (strcmp(name, "bytes_copy_within") == 0 || strcmp(name, "bytes_repeat_from") == 0) {
-        fprintf(out, "%s(",
-                strcmp(name, "bytes_copy_within") == 0 ? "xrt_bytes_copy_within_value"
-                                                       : "xrt_bytes_repeat_from_value");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[3], XR_REP_TAGGED);
-        fprintf(out, ")");
-        return true;
-    }
-    if (strcmp(name, "bytes_copy_from") == 0) {
-        fprintf(out, "xrt_bytes_copy_from_value(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[3], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[4], XR_REP_TAGGED);
-        fprintf(out, ")");
-        return true;
-    }
     (void) ctx;
     return false;
 }

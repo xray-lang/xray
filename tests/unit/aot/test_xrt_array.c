@@ -435,9 +435,9 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     for (int64_t i = 1; i <= 8; i++)
         xrt_array_push(value, XR_FROM_INT(i));
 
-    ASSERT_EQ_INT(xrt_bytes_load_u16_le_raw(a, 0), 513, "u16 load is little-endian");
-    ASSERT_EQ_INT(xrt_bytes_load_u32_le_raw(a, 0), 67305985, "u32 load is little-endian");
-    ASSERT_EQ_INT((int64_t) xrt_bytes_load_u64_le_raw(a, 0), 578437695752307201LL,
+    ASSERT_EQ_INT(xrt_byte_array_load_u16_le_raw(a, 0), 513, "u16 load is little-endian");
+    ASSERT_EQ_INT(xrt_byte_array_load_u32_le_raw(a, 0), 67305985, "u32 load is little-endian");
+    ASSERT_EQ_INT((int64_t) xrt_byte_array_load_u64_le_raw(a, 0), 578437695752307201LL,
                   "u64 load is little-endian");
     const uint8_t *raw = (const uint8_t *) a->data;
     ASSERT_EQ_INT(xrt_ptr_load_u16_le_unchecked_raw(raw + 1), 770,
@@ -446,7 +446,7 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
                   "raw pointer u32 load is little-endian");
     ASSERT_EQ_INT((int64_t) xrt_ptr_load_u64_le_unchecked_raw(raw), 578437695752307201LL,
                   "raw pointer u64 load is little-endian");
-    xrt_bytes_copy_within_raw(a, 2, 0, 4);
+    xrt_byte_array_copy_within_raw(a, 2, 0, 4);
     ASSERT_EQ_INT(((uint8_t *) a->data)[2], 1, "copyWithin writes first overlap byte");
     ASSERT_EQ_INT(((uint8_t *) a->data)[3], 2, "copyWithin writes second overlap byte");
     ASSERT_EQ_INT(((uint8_t *) a->data)[5], 4, "copyWithin writes last selected byte");
@@ -455,25 +455,25 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     xrt_array_t *dst = (xrt_array_t *) dst_value.ptr;
     for (int64_t i = 0; i < 6; i++)
         xrt_array_push(dst_value, XR_FROM_INT(0));
-    xrt_bytes_copy_from_raw(dst, a, 1, 2, 3);
+    xrt_byte_array_copy_from_raw(dst, a, 1, 2, 3);
     ASSERT_EQ_INT(((uint8_t *) dst->data)[2], 2, "copyFrom writes first source byte");
     ASSERT_EQ_INT(((uint8_t *) dst->data)[3], 1, "copyFrom preserves shared source state");
     ASSERT_EQ_INT(((uint8_t *) dst->data)[4], 2, "copyFrom writes count bytes");
 
-    EXPECT_XRT_ERROR_THROW(xrt_bytes_copy_within_checked_raw(a, 7, 0, 2),
+    EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_within_checked_raw(a, 7, 0, 2),
                            XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG,
                            "Array<byte> copy-within checked helper throws on range");
     XrValue int_arr_value = xrt_array_new_typed_exact(0, XR_ELEM_I64);
     xrt_array_t *int_arr = (xrt_array_t *) int_arr_value.ptr;
-    EXPECT_XRT_ERROR_THROW(xrt_bytes_copy_from_checked_raw(dst, int_arr, 0, 0, 1),
+    EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_from_checked_raw(dst, int_arr, 0, 0, 1),
                            XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG,
                            "Array<byte> copy range checked helper throws on typed operand");
-    EXPECT_XRT_ERROR_THROW(
-        xrt_bytes_copy_from_value(dst_value, value, XR_NULL_VAL, XR_FROM_INT(0), XR_FROM_INT(1)),
-        XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG,
-        "Array<byte> copy range value helper rejects non-integer offset");
-    EXPECT_XRT_ERROR_THROW(xrt_bytes_copy_from_value(dst_value, value, XR_FROM_INT(100),
-                                                     XR_FROM_INT(0), XR_FROM_INT(1)),
+    EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_from_value(dst_value, value, XR_NULL_VAL,
+                                                          XR_FROM_INT(0), XR_FROM_INT(1)),
+                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG,
+                           "Array<byte> copy range value helper rejects non-integer offset");
+    EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_from_value(dst_value, value, XR_FROM_INT(100),
+                                                          XR_FROM_INT(0), XR_FROM_INT(1)),
                            XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG,
                            "Array<byte> copy range value helper throws on range");
 
@@ -482,7 +482,7 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     uint8_t seed[] = {65, 66, 67, 0, 0, 0, 0, 0, 0};
     for (int64_t i = 0; i < 9; i++)
         xrt_array_push(rep_value, XR_FROM_INT(seed[i]));
-    xrt_bytes_repeat_from_raw(rep, 3, 3, 6);
+    xrt_byte_array_repeat_from_raw(rep, 3, 3, 6);
     ASSERT_EQ_INT(((uint8_t *) rep->data)[3], 65, "repeatFrom writes first repeat byte");
     ASSERT_EQ_INT(((uint8_t *) rep->data)[4], 66, "repeatFrom writes second repeat byte");
     ASSERT_EQ_INT(((uint8_t *) rep->data)[5], 67, "repeatFrom writes third repeat byte");
@@ -493,13 +493,13 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     xrt_array_push(safe_append_value, XR_FROM_INT(65));
     xrt_array_push(safe_append_value, XR_FROM_INT(66));
     xr_span_t safe_src = xrt_span_from_array_slice(safe_append_value, 0, 2);
-    xrt_bytes_append_from_span_raw(safe_append, safe_src);
+    xrt_byte_array_append_from_span_raw(safe_append, safe_src);
     ASSERT_EQ_INT(safe_append->length, 4, "appendFrom grows and commits length");
     ASSERT_EQ_INT(((uint8_t *) safe_append->data)[2], 65,
                   "appendFrom keeps aliased source valid across grow");
     ASSERT_EQ_INT(((uint8_t *) safe_append->data)[3], 66,
                   "appendFrom copies aliased source after grow");
-    xrt_bytes_repeat_from_tail_raw(safe_append, 2, 4);
+    xrt_byte_array_repeat_from_tail_raw(safe_append, 2, 4);
     ASSERT_EQ_INT(safe_append->length, 8, "repeatFrom grows and commits repeated tail");
     ASSERT_EQ_INT(((uint8_t *) safe_append->data)[6], 65,
                   "repeatFrom repeats first source byte at tail");

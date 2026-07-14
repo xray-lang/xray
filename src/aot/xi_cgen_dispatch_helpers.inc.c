@@ -5135,11 +5135,11 @@ static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *cu
 
     if (xicgen_atomic_call_is_i64_direct_nothrow(v))
         return true;
-    if (cg_array_call_is_direct_bytes_mutator_trusted_nothrow(ctx, current, v))
+    if (cg_array_call_is_direct_byte_array_mutator_trusted_nothrow(ctx, current, v))
         return true;
-    if (cg_array_call_is_bytes_append_trusted_nothrow(ctx, current, v))
+    if (cg_array_call_is_byte_array_append_trusted_nothrow(ctx, current, v))
         return true;
-    if (cg_array_call_is_bytes_repeat_trusted_nothrow(ctx, current, v))
+    if (cg_array_call_is_byte_array_repeat_trusted_nothrow(ctx, current, v))
         return true;
     if (cg_array_call_is_typed_fill_trusted_nothrow(ctx, current, v))
         return true;
@@ -5174,7 +5174,7 @@ static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current
         return true;
     if (cg_array_index_get_trusted_nothrow(ctx, current, v))
         return true;
-    if (cg_array_bytes_load_trusted_nothrow(ctx, current, v))
+    if (cg_byte_slice_load_trusted_nothrow(ctx, current, v))
         return true;
     if (cg_span_common_prefix_trusted_nothrow(ctx, v))
         return true;
@@ -9123,7 +9123,7 @@ static void xicgen_byte_array_copy_within(XiCgenCtx *ctx, FILE *out, const XiFun
     bool boxed = cg_rep(v) == XR_REP_TAGGED;
     if (!boxed)
         fprintf(out, "((xrt_array_t *)(");
-    fprintf(out, "xrt_bytes_copy_within_value(");
+    fprintf(out, "xrt_byte_array_copy_within_value(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
@@ -9141,7 +9141,7 @@ static void xicgen_byte_array_copy_from(XiCgenCtx *ctx, FILE *out, const XiFunc 
     bool boxed = cg_rep(v) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
-    fprintf(out, "xrt_bytes_copy_from_checked_raw(");
+    fprintf(out, "xrt_byte_array_copy_from_checked_raw(");
     xicgen_byte_array_ptr_arg(ctx, out, f, v, prefix, 0);
     fprintf(out, ", ");
     xicgen_byte_array_ptr_arg(ctx, out, f, v, prefix, 1);
@@ -9160,7 +9160,7 @@ static void xicgen_byte_array_repeat_from(XiCgenCtx *ctx, FILE *out, const XiFun
     bool boxed = cg_rep(v) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
-    fprintf(out, "xrt_bytes_repeat_from_raw(");
+    fprintf(out, "xrt_byte_array_repeat_from_raw(");
     xicgen_byte_array_ptr_arg(ctx, out, f, v, prefix, 0);
     fprintf(out, ", ");
     xicgen_byte_array_i64_arg(out, v, 1);
@@ -10395,9 +10395,9 @@ static const XiValue *xicgen_find_par_for_unsupported_call_value(XiCgenCtx *ctx,
 
     if (xicgen_atomic_call_is_i64_direct_nothrow(call))
         return NULL;
-    if (cg_array_call_is_direct_bytes_mutator_trusted_nothrow(ctx, current, call))
+    if (cg_array_call_is_direct_byte_array_mutator_trusted_nothrow(ctx, current, call))
         return NULL;
-    if (cg_array_call_is_bytes_append_trusted_nothrow(ctx, current, call))
+    if (cg_array_call_is_byte_array_append_trusted_nothrow(ctx, current, call))
         return NULL;
     if (cg_array_call_is_typed_fill_trusted_nothrow(ctx, current, call))
         return NULL;
@@ -10463,7 +10463,7 @@ static const XiValue *xicgen_find_par_for_unsupported_body_value_depth(XiCgenCtx
                 continue;
             if (cg_div_mod_is_trusted_nothrow(body, value))
                 continue;
-            if (cg_array_bytes_load_trusted_nothrow(ctx, body, value))
+            if (cg_byte_slice_load_trusted_nothrow(ctx, body, value))
                 continue;
             if (cg_array_builtin_call_is_trusted_nothrow(ctx, body, value))
                 continue;
@@ -10471,13 +10471,13 @@ static const XiValue *xicgen_find_par_for_unsupported_body_value_depth(XiCgenCtx
                 continue;
             if (xicgen_err_check_after_proven_nothrow(ctx, body, value))
                 continue;
-            if (cg_array_err_check_after_bytes_load_trusted(ctx, body, value))
+            if (cg_array_err_check_after_byte_slice_load_trusted(ctx, body, value))
                 continue;
             if (cg_array_err_check_after_index_get_trusted(ctx, body, value))
                 continue;
-            if (cg_array_err_check_after_direct_bytes_mutator_trusted(ctx, body, value))
+            if (cg_array_err_check_after_direct_byte_array_mutator_trusted(ctx, body, value))
                 continue;
-            if (cg_array_err_check_after_bytes_append_trusted(ctx, body, value))
+            if (cg_array_err_check_after_byte_array_append_trusted(ctx, body, value))
                 continue;
             if (cg_array_err_check_after_typed_fill_trusted(ctx, body, value))
                 continue;
