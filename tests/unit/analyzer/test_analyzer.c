@@ -2572,6 +2572,31 @@ TEST(type_substitute_preserves_nullable_type_param) {
     ASSERT(subst->function.return_type->is_nullable);
 }
 
+TEST(type_substitute_preserves_function_param_modes) {
+    XrType *params[] = {xr_type_new_type_param(g_isolate, "T", 0),
+                        xr_type_new_type_param(g_isolate, "U", 1),
+                        xr_type_new_type_param(g_isolate, "V", 2)};
+    XrType *fn = xr_type_new_function(g_isolate, params, 3, xr_type_new_unit(NULL), false);
+    ASSERT(fn != NULL);
+    ASSERT(xr_type_function_set_param_mode(fn, 0, XR_PARAM_IN));
+    ASSERT(xr_type_function_set_param_mode(fn, 1, XR_PARAM_REF));
+    ASSERT(xr_type_function_set_param_mode(fn, 2, XR_PARAM_OUT));
+
+    const char *names[] = {"T", "U", "V"};
+    XrType *actuals[] = {xr_type_new_int(NULL), xr_type_new_string(NULL), xr_type_new_bool(NULL)};
+    XrType *subst = xr_type_substitute(g_isolate, fn, names, actuals, 3);
+
+    ASSERT(subst != NULL);
+    ASSERT(subst != fn);
+    ASSERT(XR_TYPE_IS_FUNCTION(subst));
+    ASSERT(XR_TYPE_IS_INT(xr_type_function_param_type(subst, 0)));
+    ASSERT(XR_TYPE_IS_STRING(xr_type_function_param_type(subst, 1)));
+    ASSERT(XR_TYPE_IS_BOOL(xr_type_function_param_type(subst, 2)));
+    ASSERT(xr_type_function_param_mode(subst, 0) == XR_PARAM_IN);
+    ASSERT(xr_type_function_param_mode(subst, 1) == XR_PARAM_REF);
+    ASSERT(xr_type_function_param_mode(subst, 2) == XR_PARAM_OUT);
+}
+
 // ============================================================================
 // Edge case tests
 // ============================================================================
@@ -2774,6 +2799,7 @@ int main(void) {
     RUN_TEST(compile_type_class);
     RUN_TEST(compile_type_optional);
     RUN_TEST(type_substitute_preserves_nullable_type_param);
+    RUN_TEST(type_substitute_preserves_function_param_modes);
 
     printf("\nEdge case tests:\n");
     RUN_TEST(type_null_handling);

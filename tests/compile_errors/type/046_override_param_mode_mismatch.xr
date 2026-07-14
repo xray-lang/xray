@@ -1,0 +1,9 @@
+class Base {
+    write(value: int) {
+    }
+}
+
+class Child extends Base {
+    write(value: ref int) {
+    }
+}

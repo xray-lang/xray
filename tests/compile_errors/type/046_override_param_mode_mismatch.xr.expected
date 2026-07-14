@@ -1,0 +1,2 @@
+method 'Child.write' conflicts with inherited method 'write'
+Xray does not support method overload or method hiding
