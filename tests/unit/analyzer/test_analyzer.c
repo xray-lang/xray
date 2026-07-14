@@ -1465,7 +1465,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    const char *source = "enum CatchErr { Boom }\n"
+    const char *source = "enum CatchErr { Boom, Other }\n"
                          "enum OtherErr { Boom }\n"
                          "fn fail() { throw CatchErr.Boom }\n"
                          "fn handled() { try { fail() } catch (e: CatchErr) { } }\n"
@@ -1476,6 +1476,11 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
                          "}\n"
                          "fn catchAllRethrows() { try { fail() } catch (e) { throw e } }\n"
                          "fn typedRethrows() { try { fail() } catch (e: CatchErr) { throw e } }\n"
+                         "fn catchVarReassignedRethrows() { "
+                         "  try { fail() } catch (e: CatchErr) { "
+                         "    e = CatchErr.Other; throw e "
+                         "  } "
+                         "}\n"
                          "fn wrongTypedRethrow() { "
                          "  try { fail() } catch (e: OtherErr) { throw e } "
                          "}\n"
@@ -1504,6 +1509,8 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     const XaEffectSummary *catch_all_rethrows =
         analyzer_function_effect_summary(a, "catchAllRethrows");
     const XaEffectSummary *typed_rethrows = analyzer_function_effect_summary(a, "typedRethrows");
+    const XaEffectSummary *catch_var_reassigned_rethrows =
+        analyzer_function_effect_summary(a, "catchVarReassignedRethrows");
     const XaEffectSummary *wrong_typed_rethrow =
         analyzer_function_effect_summary(a, "wrongTypedRethrow");
     const XaEffectSummary *catch_all_alias_rethrows =
@@ -1521,6 +1528,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(catch_body_throws != NULL);
     ASSERT(catch_all_rethrows != NULL);
     ASSERT(typed_rethrows != NULL);
+    ASSERT(catch_var_reassigned_rethrows != NULL);
     ASSERT(wrong_typed_rethrow != NULL);
     ASSERT(catch_all_alias_rethrows != NULL);
     ASSERT(catch_all_var_alias_rethrows != NULL);
@@ -1535,6 +1543,10 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(effect_summary_has_enum_named(a, catch_body_throws, "OtherErr"));
     ASSERT(effect_summary_has_enum_named(a, catch_all_rethrows, "CatchErr"));
     ASSERT(effect_summary_has_enum_named(a, typed_rethrows, "CatchErr"));
+    const XaErrorTypeSet *reassigned_catch_set =
+        effect_summary_enum_set_named(a, catch_var_reassigned_rethrows, "CatchErr");
+    ASSERT(reassigned_catch_set != NULL);
+    ASSERT(reassigned_catch_set->all_variants);
     ASSERT(effect_summary_has_enum_named(a, wrong_typed_rethrow, "CatchErr"));
     ASSERT(!effect_summary_has_enum_named(a, wrong_typed_rethrow, "OtherErr"));
     ASSERT(effect_summary_has_enum_named(a, catch_all_alias_rethrows, "CatchErr"));
