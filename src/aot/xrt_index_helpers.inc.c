@@ -176,30 +176,6 @@ static inline int xrt_utf8_decode_scalar(const unsigned char *p, const unsigned 
     return 1;
 }
 
-static inline XrValue xrt_string_index_get(XrValue obj, int64_t target) {
-    if (!XR_IS_STR(obj) || target < 0)
-        return XR_NULL_VAL;
-    const char *s = xr_str_data(obj);
-    size_t slen = (size_t) xr_str_len(obj);
-    const unsigned char *p = (const unsigned char *) s;
-    const unsigned char *end = p + slen;
-    for (int64_t char_index = 0; p < end; char_index++) {
-        uint32_t cp = 0;
-        int size = 0;
-        int valid = xrt_utf8_decode_scalar(p, end, &cp, &size);
-        if (!valid) {
-            size = xrt_utf8_char_size(*p);
-            if (p + size > end)
-                size = 1;
-        }
-        if (char_index == target) {
-            return valid ? XR_FROM_RUNE(cp) : XR_NULL_VAL;
-        }
-        p += size;
-    }
-    return XR_NULL_VAL;
-}
-
 static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
     if (XR_IS_ARRAY_REF(obj) && key.tag == XR_TAG_I64) {
         int64_t idx = key.i;
@@ -222,8 +198,6 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         if (ev && key.i > 0 && (uint32_t) key.i <= ev->payload_count)
             return ev->payloads[key.i - 1];
         xrt_index_oob(key.i, ev ? (int64_t) ev->payload_count + 1 : 1);
-    } else if (XR_IS_STR(obj) && key.tag == XR_TAG_I64) {
-        return xrt_string_index_get(obj, key.i);
     } else if (obj.tag == XR_TAG_RANGE && key.tag == XR_TAG_I64) {
         bool ok = false;
         int64_t value = xrt_range_index_ptr((const xrt_range_t *) obj.ptr, key.i, &ok);
@@ -239,7 +213,8 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
             return xrt_json_get_name_owned(obj, xr_str_data(key));
         xrt_type_no_index("Json object only supports string keys");
     }
-    xrt_type_no_index("only Array, Map, Json, String, typed array support indexing");
+    xrt_type_no_index(
+        "only Array, Map, Json, Set, Range, typed array, and operator[] support indexing");
 }
 
 static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {

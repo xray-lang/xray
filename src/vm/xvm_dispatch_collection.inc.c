@@ -643,16 +643,6 @@ vmcase(OP_ARRAY_GETC) {
         }
         vmbreak;
     }
-    // String indexing support
-    if (XR_IS_STRING(obj_val)) {
-        XrString *str = XR_TO_STRING(obj_val);
-        uint32_t cp = 0;
-        R(a) = (c >= 0 && xr_utf8_rune_at(str->data, str->length, (size_t) c, &cp, NULL) &&
-                xr_unicode_is_scalar(cp))
-                   ? xr_rune(cp)
-                   : xr_null();
-        vmbreak;
-    }
     // Array indexing (includes slices — capacity==0 && source!=NULL)
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
@@ -700,7 +690,8 @@ vmcase(OP_ARRAY_GETC) {
             }
         }
     }
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "only Array, String support constant indexing");
+    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX,
+                     "only Array, Range, and operator[] support constant indexing");
 }
 
 vmcase(OP_ARRAY_SET) {
@@ -2131,17 +2122,6 @@ vmcase(OP_INDEX_GET) {
         }
         vmbreak;
     }
-    // Fast path: String (Unicode character index)
-    if (XR_IS_STRING(obj_val) && XR_IS_INT(key_val)) {
-        XrString *str = XR_TO_STRING(obj_val);
-        int64_t idx = XR_TO_INT(key_val);
-        uint32_t cp = 0;
-        R(a) = (idx >= 0 && xr_utf8_rune_at(str->data, str->length, (size_t) idx, &cp, NULL) &&
-                xr_unicode_is_scalar(cp))
-                   ? xr_rune(cp)
-                   : xr_null();
-        vmbreak;
-    }
     // Fast path: Array (includes slices — capacity==0 && source!=NULL)
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
@@ -2228,8 +2208,9 @@ vmcase(OP_INDEX_GET) {
             }
         }
     }
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX,
-                     "only Array, Map, Json, String, typed array support indexing");
+    VM_RUNTIME_ERROR(
+        XR_ERR_TYPE_NO_INDEX,
+        "only Array, Map, Json, Set, Range, typed array, and operator[] support indexing");
 }
 
 vmcase(OP_INDEX_SET) {

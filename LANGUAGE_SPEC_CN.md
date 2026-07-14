@@ -1452,7 +1452,8 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-str[i]                  // 返回 rune
+var bytes: Slice<byte> = text.bytes()
+bytes[i]                // 显式 byte 视图索引
 ```
 
 - `Array` 索引：`int`，越界抛 `E0430`。

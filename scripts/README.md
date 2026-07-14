@@ -172,6 +172,16 @@ contract；ThreadLocal 与 HTTP handler 当前仍作为后续替换目标被固�
 `ACTIVE_PUBLIC_SURFACE_PARAM_MODE_HIT`。默认模式只打印 inventory 并返回 0，便于 P0 固定
 基线；后续 206 P1/P2/P3 可按类别逐步增加 fail gate。
 
+### `check_string_surface_residue.py`
+
+扫描 `src/`、`stdlib/`、`tests/`、`spec/`、`docs/`、`demos/`、`tools/`、`scripts/`
+与 active language spec，把 191 string/byte/rune 表面残余分成
+`PUBLIC_STRING_INDEX_EXAMPLE`、`PUBLIC_BACKEND_STRING_INDEX_DIAGNOSTIC`、
+`BACKEND_STRING_INDEX_SUPPORT`、`ALLOWED_REMOVED_STRING_INDEX_NEGATIVE_TEST` 和
+`CANONICAL_STRING_INDEX_REJECTION_TEXT`。CTest `string_surface_residue` 同时启用
+public 与 backend legacy fail gate，确保 `str[i] -> rune` 不再出现在公开规范、MCP
+知识库或 VM/AOT fallback 中；显式替代路径是 `s.runes().nth(i)` 与 `s.bytes()[i]`。
+
 ## 与 nightly.yml 的关系
 
 `nightly.yml` 的 `mem-stress` job 调用 `scripts/run_mem_stress.sh`，`windows-msvc-release` job 调用 `scripts/repro_win11_coro_burn.sh`：
@@ -206,3 +216,4 @@ contract；ThreadLocal 与 HTTP handler 当前仍作为后续替换目标被固�
 | 2026-07-13 | 增加 parameter mode convergence inventory，接 206 P0 参数契约与调用授权收敛基线 | Codex |
 | 2026-07-14 | 增加 unchecked error-effect convergence inventory，接 205 P0 旧 error-set / MAY_THROW / tooling metadata 分类 | Codex |
 | 2026-07-14 | 增加 source unknown convergence inventory，接 202 P0 source unknown 与 typed erasure 边界分类 | Codex |
+| 2026-07-15 | 增加 string surface residue 检查，接 191 string indexing 删除与公开知识库同步门禁 | Codex |
