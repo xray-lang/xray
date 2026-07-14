@@ -1603,6 +1603,21 @@ if(BUILD_TESTS)
         )
     endif()
 
+    if(NOT WIN32)
+        add_test(
+            NAME byte_receiver_effect_audit
+            COMMAND ${CMAKE_COMMAND} -E env
+                    XRAY_BIN=$<TARGET_FILE:xray>
+                    bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_byte_receiver_effect_audit.sh
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(byte_receiver_effect_audit PROPERTIES
+            LABELS "frontend;types;ownership"
+            PROCESSORS 1
+            TIMEOUT 120
+        )
+    endif()
+
     add_test(
         NAME parallel_surface_convergence
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_parallel_surface_convergence.py
