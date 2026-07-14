@@ -3749,12 +3749,25 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType **param_types = NULL;
+    XrParamMode *param_modes = NULL;
     if (fn->param_count > 0) {
         param_types = xr_malloc(sizeof(XrType *) * fn->param_count);
-        if (!param_types)
+        param_modes = xr_malloc(sizeof(XrParamMode) * fn->param_count);
+        if (!param_types || !param_modes) {
+            xr_free(param_types);
+            xr_free(param_modes);
+            if (type_param_names && type_param_names != type_param_buf)
+                xr_free((void *) type_param_names);
             return xr_type_new_unknown(NULL);
+        }
         for (int i = 0; i < fn->param_count; i++) {
             XrParamNode *p = fn->params[i];
+            XrParamMode mode = p ? p->passing_mode : XR_PARAM_VALUE;
+            if (p && !p->type && mode == XR_PARAM_VALUE && expected_fn &&
+                i < expected_fn->function.param_count) {
+                mode = xr_type_function_param_mode(expected_fn, i);
+            }
+            param_modes[i] = mode;
             // Check for explicit type annotation first
             if (p && p->type) {
                 param_types[i] = xr_tref_resolve_in_analyzer(ctx->analyzer, p->type);
@@ -3890,8 +3903,8 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
                 p->symbol_id = param_sym->id;
                 XaSymbolLinks *pl = xa_analyzer_get_links(ctx->analyzer, param_sym);
                 pl->type = param_types ? param_types[i] : xr_type_new_unknown(NULL);
-                param_sym->passing_mode = p->passing_mode;
-                pl->is_definitely_assigned = p->passing_mode != XR_PARAM_OUT;
+                param_sym->passing_mode = param_modes ? param_modes[i] : p->passing_mode;
+                pl->is_definitely_assigned = param_sym->passing_mode != XR_PARAM_OUT;
             }
         }
 
@@ -4010,13 +4023,16 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         result->function.min_params = fn->required_count;
         for (int i = 0; i < fn->param_count; i++) {
             if (fn->params[i])
-                xr_type_function_set_param_mode(result, i, fn->params[i]->passing_mode);
+                xr_type_function_set_param_mode(
+                    result, i, param_modes ? param_modes[i] : fn->params[i]->passing_mode);
         }
     }
     xa_set_function_type_params_from_ast(ctx, result, fn->type_params, fn->type_param_count);
 
     if (param_types)
         xr_free(param_types);
+    if (param_modes)
+        xr_free(param_modes);
     if (type_param_names && type_param_names != type_param_buf)
         xr_free((void *) type_param_names);
     return result;
