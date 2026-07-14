@@ -7785,8 +7785,6 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         if (class_row)
             bc->capability_bits |= XG_CAP_OBJECTS;
         bc->capability_bits |= body_capabilities_for_builtin_constructor(callee_name);
-        if (callee_name && strcmp(callee_name, "typename") == 0)
-            bc->metadata_use_bits |= XG_METADATA_TYPENAME;
         if (target && (target->decl_flags & XG_DECL_EXTERN)) {
             bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
             bc->escape_bits |= XG_BODY_ESCAPE_EXTERN;

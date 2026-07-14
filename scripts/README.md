@@ -16,6 +16,7 @@
 | `scripts/check_binary_stdlib_kat_baseline.py` | 200：base64/compress/crypto KAT、AOT link-command 与现有 stdlib bench 入口覆盖检查 | `--root <repo>`；可选 `--json` | 关键 fixture 或 anchor 缺失=1 | < 1s |
 | `scripts/check_parallel_surface_convergence.py` | 193：旧 `parallel for/range/reduce/collect/local/final` 语法与旧 AST/parser/spec/demo/API-doc 表面不得回流 | `--root <repo>` | 任一旧表面残留=1 | < 2s |
 | `scripts/check_parallel_backend_abi_convergence.py` | 193：parallel backend ABI/descriptor 命名收敛，旧 AOT-private/global-pool 名称不得回流 | `--root <repo>` | ABI 缺失或旧名残留=1 | < 2s |
+| `scripts/check_query_surface_residue.py` | 192：`len` / container membership / `typeOf` / `typeName` 查询表面 residue 分类 inventory，区分 public alias 与内部 lowering/runtime 名 | `--root <repo>`；可选 `--json`、`--fail-on-public` | 默认输出 inventory；CTest `query_surface_residue` 阻止 public query alias 回流 | < 2s |
 | `scripts/check_bytes_type_residue.py` | 204：`Bytes/ByteSpan/ByteView` 删除 residue 分类 inventory，区分 public 表面与 internal legacy 命名 | `--root <repo>`；可选 `--json`、`--fail-on-public`、`--fail-on-internal-legacy` | 默认只输出 inventory=0；CTest `bytes_type_residue` 阻止 public 与 internal legacy 残余回流 | < 2s |
 | `scripts/check_byte_width_predicates.py` | 204：高层 analyzer/IR/AOT 不得重新用 `native_width == XR_NATIVE_U8` 或 `elem_name == "XR_ELEM_U8"` 选择 byte 语义 | `--root <repo>`；可选 `--json` | 未登记的直接 U8 width/string predicate=1；CTest `byte_width_predicate_audit` 固定共享 helper 边界 | < 2s |
 | `scripts/run_byte_uint8_canonical_audit.sh` | 204：`byte`/`uint8` 规范化为同一 U8 identity 的 final audit，串联语言正例、LSP canonical docs 与 global evidence/cache type-key | env: `XRAY_BIN`, `XRAY_TEST_LSP_DOCUMENT`, `XRAY_TEST_XGLOBAL_SUMMARY` | 任一子门禁失败=1；CTest `byte_uint8_canonical_audit` 固定可复跑组合证据 | < 120s |
@@ -75,6 +76,17 @@ stdlib benchmark入口。该脚本只固定现有 KAT/AOT/bench 入口覆盖，�
 `parallel_pool` 命名一律失败；同时要求 VM 仍通过 `OP_PAR_FOR/MAP/REDUCE` dispatch，AOT
 header/runtime/cgen fixtures 仍使用 `xr_parallel_*` 与 `XrParallel*` descriptor ABI。该脚本接入
 CTest 的 `parallel_backend_abi_convergence`。
+
+### `check_query_surface_residue.py`
+
+扫描 `src/`、`stdlib/`、`tests/`、`spec/`、`demos`、`tools`、`scripts/` 与顶层 spec，把 192 查询表面残留分为
+`PUBLIC_TYPE_QUERY_ALIAS`、`PUBLIC_TYPE_QUERY_ALIAS_SUPPORT`、
+`PUBLIC_CONTAINER_QUERY_ALIAS`、`PUBLIC_CONTAINER_QUERY_ALIAS_SUPPORT`、
+允许保留的 removed-surface 负例、LSP 反向断言、内部 `OP_TYPEOF` / `XI_TYPENAME` / `xrt_typename`
+lowering/runtime 名，以及领域对象或 C layout 中合法出现的 `length/size` 文本。默认模式只打印 inventory；
+`--json` 输出机器可读结果；`--fail-on-public` 在 public alias/support 类目非空时返回 1。CTest
+`query_surface_residue` 打开 `--fail-on-public`，阻止 `typeof/typename/Reflect.typeOf` 与旧容器查询 alias
+重新进入公开语言、REPL、LSP、API inventory 或 native public surface。
 
 ### `check_bytes_type_residue.py`
 

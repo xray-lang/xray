@@ -105,7 +105,7 @@ XR_FUNC void xr_repl_print_vars(XrVMRuntime *isolate);
 
 /*
  * Show the runtime type name of `expr`.  Synthesises and runs
- * `print(typeof(<expr>))` through the normal incremental compile
+ * `print(typeName(<expr>))` through the normal incremental compile
  * pipeline so the expression sees the same scope as bare user input.
  *
  * `expr` is evaluated; for a side-effect-free static-only variant,

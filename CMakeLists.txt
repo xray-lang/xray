@@ -1611,6 +1611,19 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME query_surface_residue
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_query_surface_residue.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --fail-on-public
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(query_surface_residue PROPERTIES
+        LABELS "frontend;syntax;metadata"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME byte_width_predicate_audit
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_byte_width_predicates.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
