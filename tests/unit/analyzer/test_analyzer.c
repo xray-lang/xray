@@ -755,6 +755,72 @@ static bool analyzer_diag_contains(XaAnalyzer *analyzer, const char *needle) {
     return false;
 }
 
+static const XaEffectSummary *analyzer_function_effect_summary(XaAnalyzer *analyzer,
+                                                               const char *name) {
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, name);
+    if (!sym)
+        sym = xa_analyzer_lookup_in_scope(analyzer, name, analyzer->global_scope);
+    if (!sym)
+        sym = xa_analyzer_lookup_deep(analyzer, name);
+    if (!sym || sym->links.effect_id == XA_EFFECT_NONE)
+        return NULL;
+    return xa_effect_db_get(analyzer->effect_db, sym->links.effect_id);
+}
+
+static bool effect_summary_has_enum_named(XaAnalyzer *analyzer, const XaEffectSummary *summary,
+                                          const char *name) {
+    if (!analyzer || !summary || !name)
+        return false;
+    for (uint32_t i = 0; i < summary->escaping.count; i++) {
+        XrType *type =
+            xa_effect_db_error_type_handle(analyzer->effect_db, summary->escaping.types[i].type_id);
+        if (type && XR_TYPE_IS_ENUM(type) && type->enum_type.enum_name &&
+            strcmp(type->enum_type.enum_name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
+TEST(analyzer_error_effect_subtracts_typed_catches) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum CatchErr { Boom }\n"
+                         "enum OtherErr { Boom }\n"
+                         "fn fail() { throw CatchErr.Boom }\n"
+                         "fn handled() { try { fail() } catch (e: CatchErr) { } }\n"
+                         "fn leaks() { try { fail() } catch (e: OtherErr) { } }\n"
+                         "fn catchesAll() { try { fail() } catch (e) { } }\n"
+                         "fn catchBodyThrows() { "
+                         "  try { fail() } catch (e: CatchErr) { throw OtherErr.Boom } "
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_catch_subtraction.xr", program);
+
+    const XaEffectSummary *fail = analyzer_function_effect_summary(a, "fail");
+    const XaEffectSummary *handled = analyzer_function_effect_summary(a, "handled");
+    const XaEffectSummary *leaks = analyzer_function_effect_summary(a, "leaks");
+    const XaEffectSummary *catches_all = analyzer_function_effect_summary(a, "catchesAll");
+    const XaEffectSummary *catch_body_throws =
+        analyzer_function_effect_summary(a, "catchBodyThrows");
+    ASSERT(fail != NULL);
+    ASSERT(handled != NULL);
+    ASSERT(leaks != NULL);
+    ASSERT(catches_all != NULL);
+    ASSERT(catch_body_throws != NULL);
+
+    ASSERT(effect_summary_has_enum_named(a, fail, "CatchErr"));
+    ASSERT(handled->escaping.count == 0);
+    ASSERT(effect_summary_has_enum_named(a, leaks, "CatchErr"));
+    ASSERT(catches_all->escaping.count == 0);
+    ASSERT(!effect_summary_has_enum_named(a, catch_body_throws, "CatchErr"));
+    ASSERT(effect_summary_has_enum_named(a, catch_body_throws, "OtherErr"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_empty_array_uses_unsolved_infer_var) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -1176,6 +1242,7 @@ int main(void) {
     RUN_TEST(analyzer_diagnostics);
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
+    RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
 
     printf("\nFlow analysis tests:\n");
     RUN_TEST(flow_builder_create);

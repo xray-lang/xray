@@ -390,6 +390,38 @@ bool xa_effect_summary_add_summary(XaEffectDatabase *db, XaEffectSummary *summar
     return ok;
 }
 
+void xa_effect_summary_clear_escaping(XaEffectSummary *summary) {
+    if (!summary)
+        return;
+    for (uint32_t i = 0; i < summary->escaping.count; i++)
+        bitset_free(&summary->escaping.types[i].variants);
+    xr_free(summary->escaping.types);
+    summary->escaping.types = NULL;
+    summary->escaping.count = 0;
+    summary->escaping.capacity = 0;
+    summary->fingerprint = 0;
+}
+
+bool xa_effect_summary_subtract_type(XaEffectSummary *summary, XaErrorTypeId type_id) {
+    if (!summary || type_id == XA_ERROR_TYPE_NONE)
+        return false;
+    for (uint32_t i = 0; i < summary->escaping.count; i++) {
+        if (summary->escaping.types[i].type_id != type_id)
+            continue;
+        bitset_free(&summary->escaping.types[i].variants);
+        if (i + 1u < summary->escaping.count) {
+            memmove(&summary->escaping.types[i], &summary->escaping.types[i + 1u],
+                    (size_t) (summary->escaping.count - i - 1u) * sizeof(XaErrorTypeSet));
+        }
+        summary->escaping.count--;
+        if (summary->escaping.count < summary->escaping.capacity)
+            memset(&summary->escaping.types[summary->escaping.count], 0, sizeof(XaErrorTypeSet));
+        summary->fingerprint = 0;
+        return true;
+    }
+    return false;
+}
+
 void xa_effect_summary_mark_incomplete(XaEffectSummary *summary, XaUnknownReason reason) {
     if (!summary || reason == XA_UNKNOWN_NONE)
         return;
