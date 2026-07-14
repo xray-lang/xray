@@ -888,6 +888,21 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
                          "  f = noThrowDynamic\n"
                          "  f()\n"
                          "}\n"
+                         "fn viaReboundVarAliasToThrowing() {\n"
+                         "  var f = noThrowDynamic\n"
+                         "  f = failDynamic\n"
+                         "  f()\n"
+                         "}\n"
+                         "fn viaUnknownReboundVarAlias(cb: () -> ()) {\n"
+                         "  var f = failDynamic\n"
+                         "  f = cb\n"
+                         "  f()\n"
+                         "}\n"
+                         "fn viaConditionalReboundVarAlias(flag: bool) {\n"
+                         "  var f = noThrowDynamic\n"
+                         "  if (flag) { f = failDynamic }\n"
+                         "  f()\n"
+                         "}\n"
                          "fn viaConstAliasStillExact() {\n"
                          "  const f = failDynamic\n"
                          "  f()\n"
@@ -900,20 +915,36 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     const XaEffectSummary *stable_chain =
         analyzer_function_effect_summary(a, "viaStableVarAliasChain");
     const XaEffectSummary *rebound_var = analyzer_function_effect_summary(a, "viaReboundVarAlias");
+    const XaEffectSummary *rebound_to_throwing =
+        analyzer_function_effect_summary(a, "viaReboundVarAliasToThrowing");
+    const XaEffectSummary *unknown_rebound =
+        analyzer_function_effect_summary(a, "viaUnknownReboundVarAlias");
+    const XaEffectSummary *conditional_rebound =
+        analyzer_function_effect_summary(a, "viaConditionalReboundVarAlias");
     const XaEffectSummary *const_alias =
         analyzer_function_effect_summary(a, "viaConstAliasStillExact");
     ASSERT(stable_var != NULL);
     ASSERT(stable_chain != NULL);
     ASSERT(rebound_var != NULL);
+    ASSERT(rebound_to_throwing != NULL);
+    ASSERT(unknown_rebound != NULL);
+    ASSERT(conditional_rebound != NULL);
     ASSERT(const_alias != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, stable_var, "DynamicErr"));
     ASSERT((stable_var->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, stable_chain, "DynamicErr"));
     ASSERT((stable_chain->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT(rebound_var->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((rebound_var->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(rebound_var->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((rebound_var->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(!effect_summary_has_enum_named(a, rebound_var, "DynamicErr"));
+    ASSERT(effect_summary_has_enum_named(a, rebound_to_throwing, "DynamicErr"));
+    ASSERT((rebound_to_throwing->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(unknown_rebound->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((unknown_rebound->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(!effect_summary_has_enum_named(a, unknown_rebound, "DynamicErr"));
+    ASSERT(conditional_rebound->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((conditional_rebound->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(effect_summary_has_enum_named(a, const_alias, "DynamicErr"));
     ASSERT((const_alias->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 
@@ -955,6 +986,21 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
                          "  var f = fn() { throw LambdaErr.Boom }\n"
                          "  f = fn() { }\n"
                          "  f()\n"
+                         "}\n"
+                         "fn viaReboundStoredLambdaToThrowing() {\n"
+                         "  var f = fn() { }\n"
+                         "  f = fn() { throw LambdaErr.Boom }\n"
+                         "  f()\n"
+                         "}\n"
+                         "fn viaUnknownReboundStoredLambda(cb: () -> ()) {\n"
+                         "  var f = fn() { throw LambdaErr.Boom }\n"
+                         "  f = cb\n"
+                         "  f()\n"
+                         "}\n"
+                         "fn viaConditionalReboundStoredLambda(flag: bool) {\n"
+                         "  var f = fn() { }\n"
+                         "  if (flag) { f = fn() { throw LambdaErr.Boom } }\n"
+                         "  f()\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -973,6 +1019,12 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
     const XaEffectSummary *stable_chain =
         analyzer_function_effect_summary(a, "viaStableStoredLambdaChain");
     const XaEffectSummary *rebound = analyzer_function_effect_summary(a, "viaReboundStoredLambda");
+    const XaEffectSummary *rebound_to_throwing =
+        analyzer_function_effect_summary(a, "viaReboundStoredLambdaToThrowing");
+    const XaEffectSummary *unknown_rebound =
+        analyzer_function_effect_summary(a, "viaUnknownReboundStoredLambda");
+    const XaEffectSummary *conditional_rebound =
+        analyzer_function_effect_summary(a, "viaConditionalReboundStoredLambda");
     ASSERT(immediate_throw != NULL);
     ASSERT(immediate_call != NULL);
     ASSERT(const_stored != NULL);
@@ -980,6 +1032,9 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
     ASSERT(stable_stored != NULL);
     ASSERT(stable_chain != NULL);
     ASSERT(rebound != NULL);
+    ASSERT(rebound_to_throwing != NULL);
+    ASSERT(unknown_rebound != NULL);
+    ASSERT(conditional_rebound != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, immediate_throw, "LambdaErr"));
     ASSERT((immediate_throw->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
@@ -993,9 +1048,16 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
     ASSERT((stable_stored->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, stable_chain, "LambdaErr"));
     ASSERT((stable_chain->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT(rebound->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((rebound->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(rebound->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((rebound->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(!effect_summary_has_enum_named(a, rebound, "LambdaErr"));
+    ASSERT(effect_summary_has_enum_named(a, rebound_to_throwing, "LambdaErr"));
+    ASSERT((rebound_to_throwing->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(unknown_rebound->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((unknown_rebound->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(!effect_summary_has_enum_named(a, unknown_rebound, "LambdaErr"));
+    ASSERT(conditional_rebound->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((conditional_rebound->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
 
     xa_analyzer_free(a);
     setup_pool();
