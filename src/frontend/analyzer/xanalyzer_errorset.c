@@ -83,20 +83,43 @@ static void es_walk_block(ErrorSetCtx *ctx, AstNode *node);
 static XaSymbol *resolve_func_symbol(XaAnalyzer *analyzer, AstNode *node) {
     if (!node)
         return NULL;
+    if (node->type == AST_METHOD_DECL) {
+        XaScope *scope = xa_scope_find_by_node(analyzer->global_scope, node);
+        if (scope && scope->function_symbol &&
+            (scope->function_symbol->kind == XA_SYM_FUNCTION ||
+             scope->function_symbol->kind == XA_SYM_METHOD))
+            return scope->function_symbol;
+        return NULL;
+    }
     if (node->type == AST_FUNCTION_DECL) {
         FunctionDeclNode *fn = &node->as.function_decl;
         XaScope *scope = xa_scope_find_by_node(analyzer->global_scope, node);
-        if (scope && scope->function_symbol && scope->function_symbol->kind == XA_SYM_FUNCTION)
+        if (scope && scope->function_symbol &&
+            (scope->function_symbol->kind == XA_SYM_FUNCTION ||
+             scope->function_symbol->kind == XA_SYM_METHOD))
             return scope->function_symbol;
         if (fn->symbol_id != 0) {
             XaSymbol *sym = xa_scope_lookup_by_id(analyzer->global_scope, fn->symbol_id);
-            if (sym && sym->kind == XA_SYM_FUNCTION)
+            if (sym && (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD))
                 return sym;
         }
         const char *name = fn->name;
-        if (name)
-            return xa_scope_lookup(analyzer->global_scope, name);
+        if (name) {
+            XaSymbol *sym = xa_scope_lookup(analyzer->global_scope, name);
+            if (sym && (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD))
+                return sym;
+        }
     }
+    return NULL;
+}
+
+static AstNode *function_like_body(AstNode *node) {
+    if (!node)
+        return NULL;
+    if (node->type == AST_FUNCTION_DECL)
+        return node->as.function_decl.body;
+    if (node->type == AST_METHOD_DECL)
+        return node->as.method_decl.body;
     return NULL;
 }
 
@@ -237,6 +260,16 @@ static void maybe_record_stable_function_value_var(ErrorSetCtx *ctx, AstNode *no
  * function-value aliases are exact; dynamic function values remain incomplete
  * work for the wider P2/HOF pass. */
 static XaSymbol *resolve_call_target(ErrorSetCtx *ctx, AstNode *callee) {
+    AstNode *source = identity_source(callee);
+    const XaSelection *sel = xa_analyzer_get_selection(ctx->analyzer, source);
+    if (sel && sel->target_symbol &&
+        (sel->kind == XA_SEL_METHOD || sel->kind == XA_SEL_STATIC_MEMBER ||
+         sel->kind == XA_SEL_MODULE_EXPORT)) {
+        XaSymbol *selected = sel->target_symbol;
+        if (selected->kind == XA_SYM_FUNCTION || selected->kind == XA_SYM_METHOD)
+            return selected;
+    }
+
     XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, callee);
     XaSymbol *target = resolve_function_alias_target(ctx->analyzer, sym, 0);
     if (target && (target->kind == XA_SYM_FUNCTION || target->kind == XA_SYM_METHOD))
@@ -708,7 +741,7 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
     if (!func_node || !func_sym)
         return;
 
-    AstNode *body = func_node->as.function_decl.body;
+    AstNode *body = function_like_body(func_node);
     if (!body)
         return;
 
@@ -745,7 +778,7 @@ static void collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **o
     if (!node)
         return;
 
-    if (node->type == AST_FUNCTION_DECL) {
+    if (node->type == AST_FUNCTION_DECL || node->type == AST_METHOD_DECL) {
         XaSymbol *sym = resolve_func_symbol(analyzer, node);
         if (sym) {
             if (*count >= *cap) {
