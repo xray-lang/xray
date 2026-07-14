@@ -50,6 +50,15 @@ static int find_symbol(const XrReplSymbolTable *t, const char *name) {
     return -1;
 }
 
+static void read_tmp_output(FILE *out, char *buf, size_t cap) {
+    ASSERT_NOT_NULL(out);
+    ASSERT_TRUE(cap > 0);
+    fflush(out);
+    rewind(out);
+    size_t n = fread(buf, 1, cap - 1, out);
+    buf[n] = '\0';
+}
+
 /* ========== Globals Dict API (Phase 1 of REPL × top-level globals migration) ==========
  *
  * The dict is the per-isolate name-keyed top-level binding store.
@@ -702,16 +711,22 @@ TEST(repl_print_type_null_and_empty_safe) {
 
 TEST(repl_print_type_simple_expression) {
     /* Driving .type through the API end-to-end exercises:
-     * synthesize source → xr_repl_compile → xr_execute.  We just
-     * verify it does not crash; stdout content is checked in manual
-     * REPL session tests. */
+     * synthesize source → xr_repl_compile → xr_execute.  Capturing
+     * stdout here also prevents the helper from regressing to the
+     * removed `typename(...)` spelling, which compiles to no output. */
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
+    FILE *out = tmpfile();
+    ASSERT_NOT_NULL(out);
+    xray_vm_set_stdout(iso, out);
     xr_repl_print_type(iso, "1 + 2");
 
+    char buf[64];
+    read_tmp_output(out, buf, sizeof(buf));
+    ASSERT_NOT_NULL(strstr(buf, "int"));
+    fclose(out);
     xray_vm_delete(iso);
-    ASSERT_TRUE(1);
 }
 
 /* ========== Main ========== */

@@ -504,13 +504,16 @@ class StaticChecker:
         ))
 
     # ================================================================
-    # 12.1 P2: typeof naming consistency
+    # 12.1 P2: runtime typeName display consistency
     # ================================================================
-    def check_typeof_naming(self):
+    def check_type_name_display_naming(self):
         """Primitive types lowercase, object types PascalCase."""
         content = self.read_file(XTYPE_NAMES_H)
         if not content:
-            self.add_result(CheckResult("12.1", "typeof naming", "P2", False, "xtype_names.h not found"))
+            self.add_result(
+                CheckResult("12.1", "typeName display naming", "P2", False,
+                            "xtype_names.h not found")
+            )
             return
 
         # Primitive types should be lowercase
@@ -552,7 +555,7 @@ class StaticChecker:
 
         passed = len(issues) == 0
         self.add_result(CheckResult(
-            "12.1", "typeof naming consistency", "P2", passed,
+            "12.1", "typeName display naming consistency", "P2", passed,
             "All type names follow convention" if passed else f"Found {len(issues)} naming issues",
             issues
         ))
@@ -1206,7 +1209,7 @@ class StaticChecker:
                 self.check_nan_equality,
             ],
             'naming': [
-                self.check_typeof_naming,
+                self.check_type_name_display_naming,
                 self.check_naming_convention,
             ],
             'comment': [

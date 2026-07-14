@@ -9158,7 +9158,7 @@ TEST(global_evidence_producer_marks_metadata_reachability) {
                          "    value: int\n"
                          "}\n"
                          "fn userTypeName(x: int) -> string {\n"
-                         "    return typename(x)\n"
+                         "    return typeName(x)\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);

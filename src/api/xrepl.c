@@ -589,7 +589,7 @@ void xr_repl_print_type(XrVMRuntime *isolate, const char *expr) {
         return;
     }
 
-    /* Wrap the user expression in `print(typename(...))` and route
+    /* Wrap the user expression in `print(typeName(...))` and route
      * through the normal incremental pipeline.  The added trailing
      * newline lets users include comments on the same line. */
     size_t expr_len = strlen(expr);
@@ -597,7 +597,7 @@ void xr_repl_print_type(XrVMRuntime *isolate, const char *expr) {
     char *src = (char *) xr_malloc(src_size);
     if (!src)
         return;
-    snprintf(src, src_size, "print(typename(%s))\n", expr);
+    snprintf(src, src_size, "print(typeName(%s))\n", expr);
 
     XrCompilerSession *session = repl_compiler_session_for_isolate(isolate);
     XrProto *proto = xr_repl_compile(session, isolate, src);
