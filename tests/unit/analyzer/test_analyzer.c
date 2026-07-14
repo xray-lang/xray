@@ -23,8 +23,11 @@
 #include "xarena.h"
 #include "xray_vm.h"
 #include "module/xmodule_graph.h"
+#include "module/xmodule_resolver.h"
 #include "toolchain/xcompiler_session.h"
 #include "../test_win_compat.h"
+
+#include <stdint.h>
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -1506,6 +1509,99 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
     setup_pool();
 }
 
+TEST(analyzer_error_effect_propagates_module_export_calls) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *module_name = "effect_export_module";
+    const char *lib_source = "enum ImportedErr { Selective, Namespace }\n"
+                             "export fn failSelective() { throw ImportedErr.Selective }\n"
+                             "export fn failNamespace() { throw ImportedErr.Namespace }\n"
+                             "export { ImportedErr }\n";
+    const char *entry_source = "import { failSelective } from effect_export_module\n"
+                               "import effect_export_module as effects\n"
+                               "fn viaSelective() { failSelective() }\n"
+                               "fn viaNamespace() { effects.failNamespace() }\n";
+
+    AstNode *lib_program = xr_parse(g_session, lib_source);
+    AstNode *entry_program = xr_parse(g_session, entry_source);
+    ASSERT(lib_program != NULL);
+    ASSERT(entry_program != NULL);
+
+    XrHashMap *native_loaders = xr_hashmap_new();
+    ASSERT(native_loaders != NULL);
+    ASSERT(xr_hashmap_set(native_loaders, module_name, (void *) (intptr_t) 1));
+    XrModuleResolverConfig cfg = {.native_loaders = native_loaders};
+    XrModuleResolver *resolver = xr_module_resolver_new(&cfg);
+    ASSERT(resolver != NULL);
+
+    XrModuleSpec specs[2] = {{.canonical = (char *) module_name,
+                              .source_path = "effect_export_module.xr",
+                              .ast = lib_program,
+                              .status = XR_MODSPEC_RESOLVED,
+                              .topo_index = 0},
+                             {.canonical = "entry_effect_module.xr",
+                              .source_path = "entry_effect_module.xr",
+                              .ast = entry_program,
+                              .status = XR_MODSPEC_RESOLVED,
+                              .topo_index = 1}};
+    int topo_order[2] = {0, 1};
+    XrHashMap *id_index = xr_hashmap_new();
+    ASSERT(id_index != NULL);
+    ASSERT(xr_hashmap_set(id_index, specs[0].canonical, (void *) (intptr_t) 1));
+    ASSERT(xr_hashmap_set(id_index, specs[1].canonical, (void *) (intptr_t) 2));
+    XrModuleGraph graph = {.specs = specs,
+                           .spec_count = 2,
+                           .id_index = id_index,
+                           .topo_order = topo_order,
+                           .topo_count = 2,
+                           .resolver = resolver,
+                           .entry_index = 1};
+
+    xa_analyzer_set_graph(a, &graph);
+    xa_analyzer_analyze(a, specs[0].source_path, lib_program);
+    ASSERT(!analyzer_diag_contains(a, "error"));
+
+    XrHashMap *exports = NULL;
+    ASSERT(xa_analyzer_collect_export_symbols_checked(a, (XrAstNode *) lib_program, &exports));
+    ASSERT(exports != NULL);
+    specs[0].export_symbols = exports;
+    xa_analyzer_clear_diagnostics(a);
+
+    xa_analyzer_analyze(a, specs[1].source_path, entry_program);
+    ASSERT(!analyzer_diag_contains(a, "error"));
+
+    const XaEffectSummary *selective = analyzer_function_effect_summary(a, "viaSelective");
+    const XaEffectSummary *ns = analyzer_function_effect_summary(a, "viaNamespace");
+    ASSERT(selective != NULL);
+    ASSERT(ns != NULL);
+
+    ASSERT(selective->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(ns->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((selective->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((ns->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+
+    const XaErrorTypeSet *selective_set =
+        effect_summary_enum_set_named(a, selective, "ImportedErr");
+    const XaErrorTypeSet *namespace_set = effect_summary_enum_set_named(a, ns, "ImportedErr");
+    ASSERT(selective_set != NULL);
+    ASSERT(namespace_set != NULL);
+    ASSERT(!selective_set->all_variants);
+    ASSERT(!namespace_set->all_variants);
+    ASSERT(xa_bitset_test(&selective_set->variants, 0));
+    ASSERT(!xa_bitset_test(&selective_set->variants, 1));
+    ASSERT(!xa_bitset_test(&namespace_set->variants, 0));
+    ASSERT(xa_bitset_test(&namespace_set->variants, 1));
+
+    xr_hashmap_free(exports);
+    specs[0].export_symbols = NULL;
+    xr_hashmap_free(id_index);
+    xr_module_resolver_free(resolver);
+    xr_hashmap_free(native_loaders);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_subtracts_typed_catches) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -2424,6 +2520,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
     RUN_TEST(analyzer_error_effect_propagates_immediate_function_expr_calls);
     RUN_TEST(analyzer_error_effect_propagates_direct_method_calls);
+    RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
 
     printf("\nFlow analysis tests:\n");

@@ -1527,7 +1527,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
                     XrType *member_type = member_links ? member_links->type : NULL;
                     if (member_type) {
-                        record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
+                        record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, member_sym, -1,
                                          member_type, false);
                         return member_type;
                     }
@@ -1537,7 +1537,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                             xr_type_new_class(ctx->analyzer->isolate, member_sym->name);
                         if (class_type)
                             class_type->instance.class_ref = member_links->class_info;
-                        record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
+                        record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, member_sym, -1,
                                          class_type, false);
                         return class_type ? class_type : xr_type_new_unknown(NULL);
                     }
