@@ -871,79 +871,101 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    const char *source = "enum DynamicErr { Boom }\n"
-                         "enum OtherDynamicErr { Boom }\n"
-                         "fn failDynamic() { throw DynamicErr.Boom }\n"
-                         "fn failOtherDynamic() { throw OtherDynamicErr.Boom }\n"
-                         "fn noThrowDynamic() { }\n"
-                         "fn viaStableVarAlias() {\n"
-                         "  var f = failDynamic\n"
-                         "  f()\n"
-                         "}\n"
-                         "fn viaStableVarAliasChain() {\n"
-                         "  var f = failDynamic\n"
-                         "  var g = f\n"
-                         "  g()\n"
-                         "}\n"
-                         "fn viaReboundVarAlias() {\n"
-                         "  var f = failDynamic\n"
-                         "  f = noThrowDynamic\n"
-                         "  f()\n"
-                         "}\n"
-                         "fn viaReboundVarAliasToThrowing() {\n"
-                         "  var f = noThrowDynamic\n"
-                         "  f = failDynamic\n"
-                         "  f()\n"
-                         "}\n"
-                         "fn viaUnknownReboundVarAlias(cb: () -> ()) {\n"
-                         "  var f = failDynamic\n"
-                         "  f = cb\n"
-                         "  f()\n"
-                         "}\n"
-                         "fn viaConditionalReboundVarAlias(flag: bool) {\n"
-                         "  var f = noThrowDynamic\n"
-                         "  if (flag) { f = failDynamic }\n"
-                         "  f()\n"
-                         "}\n"
-                         "fn viaIfElseTargetUnion(flag: bool) {\n"
-                         "  var f = noThrowDynamic\n"
-                         "  if (flag) { f = failDynamic } else { f = failOtherDynamic }\n"
-                         "  f()\n"
-                         "}\n"
-                         "fn viaConditionalUnknownVarAlias(flag: bool, cb: () -> ()) {\n"
-                         "  var f = failDynamic\n"
-                         "  if (flag) { f = cb }\n"
-                         "  f()\n"
-                         "}\n"
-                         "fn viaWhileTargetUnion(flag: bool) {\n"
-                         "  var f = noThrowDynamic\n"
-                         "  while (flag) { f = failDynamic }\n"
-                         "  f()\n"
-                         "}\n"
-                         "fn viaForTargetUnion(flag: bool) {\n"
-                         "  var f = noThrowDynamic\n"
-                         "  for (; flag; ) { f = failDynamic }\n"
-                         "  f()\n"
-                         "}\n"
-                         "fn viaForIncrementTargetUnion(flag: bool) {\n"
-                         "  var f = noThrowDynamic\n"
-                         "  for (; flag; f = failOtherDynamic) { f = failDynamic }\n"
-                         "  f()\n"
-                         "}\n"
-                         "fn viaForInTargetUnion() {\n"
-                         "  var f = noThrowDynamic\n"
-                         "  for (i in 0..3) { f = failDynamic }\n"
-                         "  f()\n"
-                         "}\n"
-                         "fn viaLoopUnknownVarAlias(flag: bool, cb: () -> ()) {\n"
-                         "  var f = failDynamic\n"
-                         "  while (flag) { f = cb }\n"
-                         "  f()\n"
-                         "}\n"
-                         "fn viaConstAliasStillExact() {\n"
-                         "  const f = failDynamic\n"
-                         "  f()\n"
-                         "}\n";
+    const char *source =
+        "enum DynamicErr { Boom }\n"
+        "enum OtherDynamicErr { Boom }\n"
+        "fn failDynamic() { throw DynamicErr.Boom }\n"
+        "fn failOtherDynamic() { throw OtherDynamicErr.Boom }\n"
+        "fn noThrowDynamic() { }\n"
+        "fn maybeDynamic(flag: bool) { if (flag) { throw DynamicErr.Boom } }\n"
+        "fn viaStableVarAlias() {\n"
+        "  var f = failDynamic\n"
+        "  f()\n"
+        "}\n"
+        "fn viaStableVarAliasChain() {\n"
+        "  var f = failDynamic\n"
+        "  var g = f\n"
+        "  g()\n"
+        "}\n"
+        "fn viaReboundVarAlias() {\n"
+        "  var f = failDynamic\n"
+        "  f = noThrowDynamic\n"
+        "  f()\n"
+        "}\n"
+        "fn viaReboundVarAliasToThrowing() {\n"
+        "  var f = noThrowDynamic\n"
+        "  f = failDynamic\n"
+        "  f()\n"
+        "}\n"
+        "fn viaUnknownReboundVarAlias(cb: () -> ()) {\n"
+        "  var f = failDynamic\n"
+        "  f = cb\n"
+        "  f()\n"
+        "}\n"
+        "fn viaConditionalReboundVarAlias(flag: bool) {\n"
+        "  var f = noThrowDynamic\n"
+        "  if (flag) { f = failDynamic }\n"
+        "  f()\n"
+        "}\n"
+        "fn viaIfElseTargetUnion(flag: bool) {\n"
+        "  var f = noThrowDynamic\n"
+        "  if (flag) { f = failDynamic } else { f = failOtherDynamic }\n"
+        "  f()\n"
+        "}\n"
+        "fn viaConditionalUnknownVarAlias(flag: bool, cb: () -> ()) {\n"
+        "  var f = failDynamic\n"
+        "  if (flag) { f = cb }\n"
+        "  f()\n"
+        "}\n"
+        "fn viaWhileTargetUnion(flag: bool) {\n"
+        "  var f = noThrowDynamic\n"
+        "  while (flag) { f = failDynamic }\n"
+        "  f()\n"
+        "}\n"
+        "fn viaForTargetUnion(flag: bool) {\n"
+        "  var f = noThrowDynamic\n"
+        "  for (; flag; ) { f = failDynamic }\n"
+        "  f()\n"
+        "}\n"
+        "fn viaForIncrementTargetUnion(flag: bool) {\n"
+        "  var f = noThrowDynamic\n"
+        "  for (; flag; f = failOtherDynamic) { f = failDynamic }\n"
+        "  f()\n"
+        "}\n"
+        "fn viaForInTargetUnion() {\n"
+        "  var f = noThrowDynamic\n"
+        "  for (i in 0..3) { f = failDynamic }\n"
+        "  f()\n"
+        "}\n"
+        "fn viaLoopUnknownVarAlias(flag: bool, cb: () -> ()) {\n"
+        "  var f = failDynamic\n"
+        "  while (flag) { f = cb }\n"
+        "  f()\n"
+        "}\n"
+        "fn viaTryCatchTargetUnion(flag: bool) {\n"
+        "  var f = noThrowDynamic\n"
+        "  try { f = failDynamic; maybeDynamic(flag) } "
+        "catch (e: DynamicErr) { f = failOtherDynamic }\n"
+        "  f()\n"
+        "}\n"
+        "fn viaTryCatchBaseTargetUnion(flag: bool) {\n"
+        "  var f = noThrowDynamic\n"
+        "  try { maybeDynamic(flag) } catch (e: DynamicErr) { f = failDynamic }\n"
+        "  f()\n"
+        "}\n"
+        "fn viaTryCatchUnknownVarAlias(flag: bool, cb: () -> ()) {\n"
+        "  var f = failDynamic\n"
+        "  try { maybeDynamic(flag) } catch (e: DynamicErr) { f = cb }\n"
+        "  f()\n"
+        "}\n"
+        "fn viaTryMutatedAliasReadInCatch(flag: bool) {\n"
+        "  var f = noThrowDynamic\n"
+        "  try { f = failDynamic; maybeDynamic(flag) } catch (e: DynamicErr) { f() }\n"
+        "}\n"
+        "fn viaConstAliasStillExact() {\n"
+        "  const f = failDynamic\n"
+        "  f()\n"
+        "}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_dynamic_function_value.xr", program);
@@ -970,6 +992,14 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         analyzer_function_effect_summary(a, "viaForInTargetUnion");
     const XaEffectSummary *loop_unknown =
         analyzer_function_effect_summary(a, "viaLoopUnknownVarAlias");
+    const XaEffectSummary *try_catch_union =
+        analyzer_function_effect_summary(a, "viaTryCatchTargetUnion");
+    const XaEffectSummary *try_catch_base_union =
+        analyzer_function_effect_summary(a, "viaTryCatchBaseTargetUnion");
+    const XaEffectSummary *try_catch_unknown =
+        analyzer_function_effect_summary(a, "viaTryCatchUnknownVarAlias");
+    const XaEffectSummary *try_mutated_catch_read =
+        analyzer_function_effect_summary(a, "viaTryMutatedAliasReadInCatch");
     const XaEffectSummary *const_alias =
         analyzer_function_effect_summary(a, "viaConstAliasStillExact");
     ASSERT(stable_var != NULL);
@@ -985,6 +1015,10 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT(for_increment_union != NULL);
     ASSERT(for_in_union != NULL);
     ASSERT(loop_unknown != NULL);
+    ASSERT(try_catch_union != NULL);
+    ASSERT(try_catch_base_union != NULL);
+    ASSERT(try_catch_unknown != NULL);
+    ASSERT(try_mutated_catch_read != NULL);
     ASSERT(const_alias != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, stable_var, "DynamicErr"));
@@ -1023,6 +1057,17 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT(effect_summary_has_enum_named(a, for_in_union, "DynamicErr"));
     ASSERT(loop_unknown->completeness == XA_EFFECT_INCOMPLETE);
     ASSERT((loop_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(try_catch_union->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((try_catch_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, try_catch_union, "DynamicErr"));
+    ASSERT(effect_summary_has_enum_named(a, try_catch_union, "OtherDynamicErr"));
+    ASSERT(try_catch_base_union->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((try_catch_base_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, try_catch_base_union, "DynamicErr"));
+    ASSERT(try_catch_unknown->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((try_catch_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(try_mutated_catch_read->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((try_mutated_catch_read->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(effect_summary_has_enum_named(a, const_alias, "DynamicErr"));
     ASSERT((const_alias->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 

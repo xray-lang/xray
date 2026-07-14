@@ -82,6 +82,9 @@ typedef struct ErrorSetCtx {
     FunctionValueTarget function_value_alias_targets[128];
     int function_value_alias_count;
     int function_value_control_depth;
+    uint32_t function_value_mutation_ids[128];
+    int function_value_mutation_count;
+    int function_value_mutation_depth;
     XaEffectSummary *current_caught; /* Effect subset caught by current catch clause */
     XaSymbol *current_func;          /* Current function symbol */
     bool changed;                    /* Fixpoint: did anything change this iteration? */
@@ -363,19 +366,21 @@ static FunctionValueTarget state_lookup_function_value_target(const FunctionValu
     return function_value_target_none();
 }
 
-static void merge_function_value_if_states(ErrorSetCtx *ctx, const FunctionValueAliasState *base,
-                                           const FunctionValueAliasState *then_state,
-                                           const FunctionValueAliasState *else_state) {
-    if (!ctx || !base || !then_state || !else_state)
+static void merge_function_value_path_states(ErrorSetCtx *ctx, const FunctionValueAliasState *base,
+                                             const FunctionValueAliasState **path_states,
+                                             int path_count) {
+    if (!ctx || !base || !path_states || path_count <= 0)
         return;
     restore_function_value_alias_state(ctx, base);
 
     uint32_t ids[128];
     int count = 0;
-    const FunctionValueAliasState *states[3] = {base, then_state, else_state};
-    for (int s = 0; s < 3; s++) {
-        for (int i = 0; i < states[s]->count; i++) {
-            uint32_t id = states[s]->ids[i];
+    for (int s = -1; s < path_count; s++) {
+        const FunctionValueAliasState *state = s < 0 ? base : path_states[s];
+        if (!state)
+            continue;
+        for (int i = 0; i < state->count; i++) {
+            uint32_t id = state->ids[i];
             if (id == 0)
                 continue;
             bool seen = false;
@@ -391,9 +396,11 @@ static void merge_function_value_if_states(ErrorSetCtx *ctx, const FunctionValue
     }
 
     for (int i = 0; i < count; i++) {
-        FunctionValueTarget merged =
-            function_value_target_merge(state_lookup_function_value_target(then_state, ids[i]),
-                                        state_lookup_function_value_target(else_state, ids[i]));
+        FunctionValueTarget merged = state_lookup_function_value_target(path_states[0], ids[i]);
+        for (int p = 1; p < path_count && function_value_target_is_exact(merged); p++) {
+            merged = function_value_target_merge(
+                merged, state_lookup_function_value_target(path_states[p], ids[i]));
+        }
         invalidate_function_value_alias_target(ctx, ids[i]);
         if (!function_value_target_is_exact(merged))
             continue;
@@ -405,9 +412,40 @@ static void merge_function_value_if_states(ErrorSetCtx *ctx, const FunctionValue
     }
 }
 
+static void merge_function_value_if_states(ErrorSetCtx *ctx, const FunctionValueAliasState *base,
+                                           const FunctionValueAliasState *then_state,
+                                           const FunctionValueAliasState *else_state) {
+    const FunctionValueAliasState *paths[2] = {then_state, else_state};
+    merge_function_value_path_states(ctx, base, paths, 2);
+}
+
 static void merge_function_value_loop_state(ErrorSetCtx *ctx, const FunctionValueAliasState *base,
                                             const FunctionValueAliasState *iteration_state) {
-    merge_function_value_if_states(ctx, base, base, iteration_state);
+    const FunctionValueAliasState *paths[2] = {base, iteration_state};
+    merge_function_value_path_states(ctx, base, paths, 2);
+}
+
+static void track_function_value_alias_mutation(ErrorSetCtx *ctx, XaSymbol *sym) {
+    if (!ctx || ctx->function_value_mutation_depth <= 0 || !sym || sym->id == 0 ||
+        sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->is_rebindable ||
+        !symbol_has_function_type(sym))
+        return;
+    for (int i = 0; i < ctx->function_value_mutation_count; i++) {
+        if (ctx->function_value_mutation_ids[i] == sym->id)
+            return;
+    }
+    if (ctx->function_value_mutation_count >= 128)
+        return;
+    ctx->function_value_mutation_ids[ctx->function_value_mutation_count++] = sym->id;
+}
+
+static void restore_function_value_alias_state_for_catch_entry(ErrorSetCtx *ctx,
+                                                               const FunctionValueAliasState *base,
+                                                               const uint32_t *try_mutation_ids,
+                                                               int try_mutation_count) {
+    restore_function_value_alias_state(ctx, base);
+    for (int i = 0; i < try_mutation_count; i++)
+        invalidate_function_value_alias_target(ctx, try_mutation_ids[i]);
 }
 
 static FunctionValueTarget resolve_function_value_expr_target(ErrorSetCtx *ctx, AstNode *expr,
@@ -460,6 +498,7 @@ static void record_function_value_assignment(ErrorSetCtx *ctx, AssignmentNode *a
     uint32_t symbol_id = sym ? sym->id : assign->symbol_id;
     if (symbol_id == 0)
         return;
+    track_function_value_alias_mutation(ctx, sym);
     FunctionValueTarget target = function_value_target_none();
     if (ctx->function_value_control_depth == 0)
         target = resolve_function_value_expr_target(ctx, assign->value, 0);
@@ -835,10 +874,50 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             XaEffectSummary try_summary;
             xa_effect_summary_init(&try_summary);
             XaEffectSummary *outer_summary = ctx->current_summary;
+            bool exact_function_values = ctx->function_value_control_depth == 0;
+            FunctionValueAliasState base_state;
+            FunctionValueAliasState try_state;
+            FunctionValueAliasState *catch_states = NULL;
+            uint32_t try_mutation_ids[128];
+            int try_mutation_count = 0;
+
             ctx->current_summary = &try_summary;
-            ctx->function_value_control_depth++;
-            es_walk_block(ctx, tc->try_body);
-            ctx->function_value_control_depth--;
+            if (exact_function_values) {
+                int mutation_start = ctx->function_value_mutation_count;
+                int mutation_depth_before = ctx->function_value_mutation_depth;
+
+                capture_function_value_alias_state(ctx, &base_state);
+                restore_function_value_alias_state(ctx, &base_state);
+                ctx->function_value_mutation_depth++;
+                es_walk_block(ctx, tc->try_body);
+                ctx->function_value_mutation_depth--;
+                capture_function_value_alias_state(ctx, &try_state);
+
+                for (int i = mutation_start; i < ctx->function_value_mutation_count; i++) {
+                    uint32_t id = ctx->function_value_mutation_ids[i];
+                    if (id == 0)
+                        continue;
+                    bool seen = false;
+                    for (int j = 0; j < try_mutation_count; j++) {
+                        if (try_mutation_ids[j] == id) {
+                            seen = true;
+                            break;
+                        }
+                    }
+                    if (!seen && try_mutation_count < 128)
+                        try_mutation_ids[try_mutation_count++] = id;
+                }
+                if (mutation_depth_before == 0)
+                    ctx->function_value_mutation_count = mutation_start;
+
+                if (tc->catch_count > 0)
+                    catch_states = (FunctionValueAliasState *) xr_calloc(
+                        (size_t) tc->catch_count, sizeof(FunctionValueAliasState));
+            } else {
+                ctx->function_value_control_depth++;
+                es_walk_block(ctx, tc->try_body);
+                ctx->function_value_control_depth--;
+            }
             ctx->current_summary = outer_summary;
 
             if (tc->catch_count > 0) {
@@ -883,13 +962,24 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                         ctx->current_catch_symbol_id = cc->symbol_id;
                         ctx->current_catch_alias_count = 0;
                         ctx->current_caught = caught_summaries ? &caught_summaries[i] : NULL;
-                        ctx->function_value_control_depth++;
+                        if (exact_function_values)
+                            restore_function_value_alias_state_for_catch_entry(
+                                ctx, &base_state, try_mutation_ids, try_mutation_count);
+                        else
+                            ctx->function_value_control_depth++;
                         es_walk_block(ctx, cc->body);
-                        ctx->function_value_control_depth--;
+                        if (exact_function_values && catch_states)
+                            capture_function_value_alias_state(ctx, &catch_states[i]);
+                        if (!exact_function_values)
+                            ctx->function_value_control_depth--;
                         ctx->current_catch_var = saved_catch_var;
                         ctx->current_catch_symbol_id = saved_catch_symbol_id;
                         ctx->current_catch_alias_count = saved_catch_alias_count;
                         ctx->current_caught = saved_caught;
+                    } else if (exact_function_values && catch_states) {
+                        restore_function_value_alias_state_for_catch_entry(
+                            ctx, &base_state, try_mutation_ids, try_mutation_count);
+                        capture_function_value_alias_state(ctx, &catch_states[i]);
                     }
                 }
                 if (caught_summaries) {
@@ -901,6 +991,20 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 xa_effect_summary_add_summary(ctx->analyzer->effect_db, outer_summary,
                                               &try_summary);
             }
+            if (exact_function_values) {
+                if (tc->catch_count > 0 && catch_states) {
+                    const FunctionValueAliasState *paths[129];
+                    int path_count = 0;
+                    paths[path_count++] = &try_state;
+                    for (int i = 0; i < tc->catch_count && path_count < 129; i++)
+                        paths[path_count++] = &catch_states[i];
+                    merge_function_value_path_states(ctx, &base_state, paths, path_count);
+                } else {
+                    restore_function_value_alias_state(ctx, &try_state);
+                }
+            }
+            if (catch_states)
+                xr_free(catch_states);
             xa_effect_summary_clear(&try_summary);
             break;
         }
