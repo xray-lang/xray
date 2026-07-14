@@ -1,0 +1,4 @@
+fn valueFn(x: int) {
+}
+
+var f: (ref int) -> () = valueFn

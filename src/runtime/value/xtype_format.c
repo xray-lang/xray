@@ -333,6 +333,12 @@ const char *xr_type_to_string(XrType *type) {
                 remaining -= n;
             }
             XrType *param_type = xr_type_function_param_type(type, i);
+            XrParamMode mode = xr_type_function_param_mode(type, i);
+            if (mode != XR_PARAM_VALUE) {
+                n = snprintf(ptr, remaining, "%s ", xr_param_mode_label(mode));
+                ptr += n;
+                remaining -= n;
+            }
             const char *param_str = param_type ? xr_type_to_string(param_type) : "<error>";
             n = snprintf(ptr, remaining, "%s", param_str);
             ptr += n;
