@@ -781,6 +781,52 @@ static bool effect_summary_has_enum_named(XaAnalyzer *analyzer, const XaEffectSu
     return false;
 }
 
+static const XaErrorTypeSet *effect_summary_enum_set_named(XaAnalyzer *analyzer,
+                                                           const XaEffectSummary *summary,
+                                                           const char *name) {
+    if (!analyzer || !summary || !name)
+        return NULL;
+    for (uint32_t i = 0; i < summary->escaping.count; i++) {
+        XrType *type =
+            xa_effect_db_error_type_handle(analyzer->effect_db, summary->escaping.types[i].type_id);
+        if (type && XR_TYPE_IS_ENUM(type) && type->enum_type.enum_name &&
+            strcmp(type->enum_type.enum_name, name) == 0)
+            return &summary->escaping.types[i];
+    }
+    return NULL;
+}
+
+TEST(analyzer_error_effect_records_direct_throw_variant) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum DirectErr { First, Second, Third }\n"
+                         "fn throwsSecond() { throw DirectErr.Second }\n"
+                         "fn throwsVariable(e: DirectErr) { throw e }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_direct_throw_variant.xr", program);
+
+    const XaEffectSummary *specific = analyzer_function_effect_summary(a, "throwsSecond");
+    const XaEffectSummary *all = analyzer_function_effect_summary(a, "throwsVariable");
+    ASSERT(specific != NULL);
+    ASSERT(all != NULL);
+
+    const XaErrorTypeSet *specific_set = effect_summary_enum_set_named(a, specific, "DirectErr");
+    ASSERT(specific_set != NULL);
+    ASSERT(!specific_set->all_variants);
+    ASSERT(!xa_bitset_test(&specific_set->variants, 0));
+    ASSERT(xa_bitset_test(&specific_set->variants, 1));
+    ASSERT(!xa_bitset_test(&specific_set->variants, 2));
+
+    const XaErrorTypeSet *all_set = effect_summary_enum_set_named(a, all, "DirectErr");
+    ASSERT(all_set != NULL);
+    ASSERT(all_set->all_variants);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_subtracts_typed_catches) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -1259,6 +1305,7 @@ int main(void) {
     RUN_TEST(analyzer_diagnostics);
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
+    RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
 
     printf("\nFlow analysis tests:\n");
