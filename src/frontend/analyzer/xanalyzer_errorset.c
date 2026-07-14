@@ -76,6 +76,7 @@ typedef struct ErrorSetCtx {
 
 static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node);
 static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node);
+static void es_walk_block(ErrorSetCtx *ctx, AstNode *node);
 
 /* ========== Helpers ========== */
 
@@ -255,6 +256,23 @@ static bool is_dynamic_function_call_target(XaAnalyzer *analyzer, AstNode *calle
     return callee_type && XR_TYPE_IS_FUNCTION(callee_type);
 }
 
+static bool es_walk_immediate_function_expr_call(ErrorSetCtx *ctx, AstNode *callee) {
+    AstNode *source = identity_source(callee);
+    if (!ctx || !source || source->type != AST_FUNCTION_EXPR)
+        return false;
+    FunctionDeclNode *fn = &source->as.function_expr;
+    if (!fn->body)
+        return true;
+
+    XaScope *saved_scope = ctx->analyzer->current_scope;
+    XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, source);
+    if (fn_scope)
+        ctx->analyzer->current_scope = fn_scope;
+    es_walk_block(ctx, fn->body);
+    ctx->analyzer->current_scope = saved_scope;
+    return true;
+}
+
 static bool is_current_caught_ref(ErrorSetCtx *ctx, AstNode *expr) {
     expr = identity_source(expr);
     if (!ctx || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name ||
@@ -331,6 +349,9 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
                 es_walk_expr(ctx, node->as.call_expr.arguments[i]);
             }
             es_walk_expr(ctx, node->as.call_expr.callee);
+
+            if (es_walk_immediate_function_expr_call(ctx, node->as.call_expr.callee))
+                break;
 
             /* Union callee's effect summary into current function's summary */
             XaSymbol *callee_sym = resolve_call_target(ctx, node->as.call_expr.callee);
