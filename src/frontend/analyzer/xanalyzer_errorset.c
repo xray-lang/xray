@@ -24,6 +24,7 @@
 #include "xanalyzer_errorset.h"
 #include "xanalyzer_visitor.h"
 #include "xa_effect_db.h"
+#include "xa_selection.h"
 #include "xtype_ref_resolve.h"
 #include "../../runtime/value/xtype.h"
 #include "../../base/xmalloc.h"
@@ -115,6 +116,17 @@ static int find_enum_case_index(XaSymbol *enum_sym, const char *case_name) {
         return -1;
     XaSymbolLinks *links = &enum_sym->links;
     return xa_enum_info_find_variant(links->enum_info, case_name);
+}
+
+static XaSymbol *lookup_enum_symbol(XaAnalyzer *analyzer, const char *enum_name) {
+    if (!analyzer || !enum_name)
+        return NULL;
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, enum_name);
+    if (!sym || sym->kind != XA_SYM_ENUM)
+        sym = xa_analyzer_lookup_in_scope(analyzer, enum_name, analyzer->global_scope);
+    if (!sym || sym->kind != XA_SYM_ENUM)
+        sym = xa_analyzer_lookup_deep(analyzer, enum_name);
+    return (sym && sym->kind == XA_SYM_ENUM) ? sym : NULL;
 }
 
 /* ========== Expression Walking ========== */
@@ -259,6 +271,25 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 break;
             }
 
+            const XaSelection *throw_sel = xa_analyzer_get_selection(ctx->analyzer, expr);
+            if (throw_sel && throw_sel->kind == XA_SEL_ENUM_MEMBER) {
+                XrType *enum_type = throw_sel->result_type;
+                if (!enum_type && throw_sel->target_symbol)
+                    enum_type = throw_sel->target_symbol->links.type;
+                bool handled_selection = false;
+                if (enum_type && throw_sel->field_index >= 0) {
+                    es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary,
+                                             enum_type, (uint32_t) throw_sel->field_index);
+                    handled_selection = true;
+                } else if (enum_type) {
+                    es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary,
+                                            enum_type);
+                    handled_selection = true;
+                }
+                if (handled_selection)
+                    break;
+            }
+
             /*
              * Handle `throw EnumName.CaseName` — add the specific case.
              * Handle `throw variable` where variable has enum type — add all cases.
@@ -266,18 +297,28 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             if (expr->type == AST_ENUM_ACCESS) {
                 const char *enum_name = expr->as.enum_access.enum_name;
                 const char *member_name = expr->as.enum_access.member_name;
-                if (enum_name) {
-                    XaSymbol *enum_sym = xa_scope_lookup(ctx->analyzer->global_scope, enum_name);
-                    if (enum_sym && enum_sym->kind == XA_SYM_ENUM) {
-                        XrType *enum_type = enum_sym->links.type;
-                        int case_idx = find_enum_case_index(enum_sym, member_name);
-                        if (enum_type && case_idx >= 0) {
-                            es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary,
-                                                     enum_type, (uint32_t) case_idx);
-                        } else if (enum_type) {
-                            es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary,
-                                                    enum_type);
-                        }
+                const XaSelection *sel = xa_analyzer_get_selection(ctx->analyzer, expr);
+                XaSymbol *enum_sym = NULL;
+                XrType *enum_type = NULL;
+                int case_idx = -1;
+                if (sel && sel->kind == XA_SEL_ENUM_MEMBER) {
+                    enum_sym = sel->target_symbol;
+                    enum_type = sel->result_type;
+                    case_idx = sel->field_index;
+                }
+                if (!enum_sym && enum_name)
+                    enum_sym = lookup_enum_symbol(ctx->analyzer, enum_name);
+                if (enum_sym && enum_sym->kind == XA_SYM_ENUM) {
+                    if (!enum_type)
+                        enum_type = enum_sym->links.type;
+                    if (case_idx < 0)
+                        case_idx = find_enum_case_index(enum_sym, member_name);
+                    if (enum_type && case_idx >= 0) {
+                        es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary,
+                                                 enum_type, (uint32_t) case_idx);
+                    } else if (enum_type) {
+                        es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary,
+                                                enum_type);
                     }
                 }
             } else {
