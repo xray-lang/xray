@@ -9,8 +9,10 @@
  *
  * After Pass 2 (type inference) has resolved all types, this pass
  * walks the AST to infer which enum error types each function may
- * throw.  The result is stored in XaSymbolLinks.error_set and
- * propagated to XrType.function.error_set.
+ * throw.  The result is interned in XaAnalyzer.effect_db and stored
+ * as XaSymbolLinks.effect_id.  The temporary XaSymbolLinks.error_set
+ * bridge remains only for collectors that have not yet switched to
+ * XaEffectId.
  *
  * Algorithm:
  *   1. Collect all function symbols in topological order.
@@ -445,16 +447,6 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
     ctx->current_set = func_sym->links.error_set;
     es_walk_block(ctx, body);
     func_sym->links.effect_id = es_intern_effect_summary(ctx->analyzer, func_sym->links.error_set);
-
-    /* Propagate to function XrType */
-    XrType *ftype = func_sym->links.type;
-    if (ftype && ftype->kind == XR_KIND_FUNCTION) {
-        if (xr_error_set_is_empty(func_sym->links.error_set)) {
-            ftype->function.error_set = NULL;
-        } else {
-            ftype->function.error_set = func_sym->links.error_set;
-        }
-    }
 
     ctx->current_func = NULL;
     ctx->current_set = NULL;

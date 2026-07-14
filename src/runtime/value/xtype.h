@@ -26,8 +26,6 @@
 #include "../../base/xdefs.h"
 #include "../../shared/xr_param_mode.h"
 
-typedef struct XrErrorSet XrErrorSet;
-
 /* ========== XrRep - Machine Representation ========== */
 /*
  * Derived from XrType via xr_type_rep().
@@ -171,7 +169,6 @@ struct XrType {
             XrType ***type_param_constraints;
             int *type_param_constraint_counts;
             int type_param_count;
-            XrErrorSet *error_set;  // NULL = infallible; non-NULL = may throw these errors
         } function;
 
         // For literal types
@@ -637,11 +634,6 @@ XR_FUNC XrType *xr_type_new_function(XrVMRuntime *X, XrType **param_types, int p
 XR_FUNC void xr_type_set_function_type_params(XrVMRuntime *X, XrType *type, const char **names,
                                               XrType ***constraint_lists,
                                               const int *constraint_counts, int count);
-
-// API: Function error set (value-return error system)
-XR_FUNC void xr_type_set_error_set(XrType *func_type, XrErrorSet *error_set);
-XR_FUNC XrErrorSet *xr_type_get_error_set(const XrType *func_type);
-XR_FUNC bool xr_type_is_fallible(const XrType *func_type);
 
 // API: Tuple type (for multi-value return)
 XR_FUNC XrType *xr_type_new_tuple(XrVMRuntime *X, XrType **element_types, int count);
