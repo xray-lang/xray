@@ -77,6 +77,11 @@ typedef struct FunctionReturnTargetEntry {
     bool unknown;
 } FunctionReturnTargetEntry;
 
+typedef struct FunctionExprCaptureEntry {
+    AstNode *function_expr;
+    FunctionValueAliasState state;
+} FunctionExprCaptureEntry;
+
 typedef struct ErrorSetCtx {
     XaAnalyzer *analyzer;
     XaEffectSummary *current_summary; /* Effect summary being built for current function */
@@ -95,6 +100,9 @@ typedef struct ErrorSetCtx {
     FunctionReturnTargetEntry *function_return_targets;
     int function_return_target_count;
     int function_return_target_capacity;
+    FunctionExprCaptureEntry *function_expr_captures;
+    int function_expr_capture_count;
+    int function_expr_capture_capacity;
     FunctionValueTarget current_return_target;
     bool current_return_target_seen;
     bool current_return_target_unknown;
@@ -489,6 +497,17 @@ static void restore_function_value_alias_state(ErrorSetCtx *ctx,
     }
 }
 
+static bool function_value_alias_state_equal(const FunctionValueAliasState *a,
+                                             const FunctionValueAliasState *b) {
+    if (!a || !b || a->count != b->count)
+        return false;
+    for (int i = 0; i < a->count; i++) {
+        if (a->ids[i] != b->ids[i] || !function_value_target_equal(a->targets[i], b->targets[i]))
+            return false;
+    }
+    return true;
+}
+
 static FunctionValueTarget state_lookup_function_value_target(const FunctionValueAliasState *state,
                                                               uint32_t symbol_id) {
     if (!state || symbol_id == 0)
@@ -498,6 +517,72 @@ static FunctionValueTarget state_lookup_function_value_target(const FunctionValu
             return state->targets[i];
     }
     return function_value_target_none();
+}
+
+static bool function_value_alias_id_present(ErrorSetCtx *ctx, uint32_t symbol_id) {
+    if (!ctx || symbol_id == 0)
+        return false;
+    for (int i = ctx->function_value_alias_count - 1; i >= 0; i--) {
+        if (ctx->function_value_alias_ids[i] == symbol_id)
+            return true;
+    }
+    return false;
+}
+
+static FunctionExprCaptureEntry *lookup_function_expr_capture_entry(ErrorSetCtx *ctx,
+                                                                    AstNode *function_expr) {
+    if (!ctx || !function_expr)
+        return NULL;
+    for (int i = 0; i < ctx->function_expr_capture_count; i++) {
+        if (ctx->function_expr_captures[i].function_expr == function_expr)
+            return &ctx->function_expr_captures[i];
+    }
+    return NULL;
+}
+
+static void record_function_expr_capture(ErrorSetCtx *ctx, AstNode *function_expr) {
+    if (!ctx || !function_expr || function_expr->type != AST_FUNCTION_EXPR)
+        return;
+    FunctionValueAliasState state;
+    capture_function_value_alias_state(ctx, &state);
+
+    FunctionExprCaptureEntry *entry = lookup_function_expr_capture_entry(ctx, function_expr);
+    if (!entry) {
+        if (ctx->function_expr_capture_count >= ctx->function_expr_capture_capacity) {
+            int new_cap = ctx->function_expr_capture_capacity == 0
+                              ? 32
+                              : ctx->function_expr_capture_capacity * 2;
+            XR_REALLOC_OR_ABORT(ctx->function_expr_captures,
+                                (size_t) new_cap * sizeof(FunctionExprCaptureEntry),
+                                "function expr capture grow");
+            ctx->function_expr_capture_capacity = new_cap;
+        }
+        entry = &ctx->function_expr_captures[ctx->function_expr_capture_count++];
+        memset(entry, 0, sizeof(*entry));
+        entry->function_expr = function_expr;
+        ctx->changed = true;
+    } else if (!function_value_alias_state_equal(&entry->state, &state)) {
+        ctx->changed = true;
+    }
+    entry->state = state;
+}
+
+static void apply_function_expr_capture(ErrorSetCtx *ctx, AstNode *function_expr) {
+    FunctionExprCaptureEntry *entry = lookup_function_expr_capture_entry(ctx, function_expr);
+    if (!ctx || !entry)
+        return;
+    for (int i = 0; i < entry->state.count; i++) {
+        uint32_t id = entry->state.ids[i];
+        if (id == 0 || function_value_alias_id_present(ctx, id))
+            continue;
+        FunctionValueTarget target = entry->state.targets[i];
+        if (!function_value_target_is_exact(target))
+            continue;
+        XaSymbol *sym = lookup_symbol_by_id(ctx, id);
+        if (!sym || !symbol_has_function_type(sym))
+            continue;
+        set_function_value_alias_target(ctx, sym, target);
+    }
 }
 
 static void merge_function_value_path_states(ErrorSetCtx *ctx, const FunctionValueAliasState *base,
@@ -618,8 +703,10 @@ static FunctionValueTarget resolve_function_value_expr_target(ErrorSetCtx *ctx, 
     expr = identity_source(expr);
     if (!expr)
         return function_value_target_none();
-    if (expr->type == AST_FUNCTION_EXPR)
+    if (expr->type == AST_FUNCTION_EXPR) {
+        record_function_expr_capture(ctx, expr);
         return function_value_target_expr(expr);
+    }
     if (expr->type == AST_CALL_EXPR) {
         FunctionValueTarget returned =
             resolve_returned_function_value_call_target(ctx, expr, depth + 1);
@@ -735,11 +822,15 @@ static bool es_walk_function_expr_body(ErrorSetCtx *ctx, AstNode *function_expr)
     FunctionValueTarget saved_return_target = ctx->current_return_target;
     bool saved_return_seen = ctx->current_return_target_seen;
     bool saved_return_unknown = ctx->current_return_target_unknown;
+    FunctionValueAliasState saved_alias_state;
+    capture_function_value_alias_state(ctx, &saved_alias_state);
+    apply_function_expr_capture(ctx, function_expr);
     ctx->current_func = NULL;
     ctx->current_return_target = function_value_target_none();
     ctx->current_return_target_seen = false;
     ctx->current_return_target_unknown = false;
     es_walk_block(ctx, fn->body);
+    restore_function_value_alias_state(ctx, &saved_alias_state);
     ctx->current_return_target = saved_return_target;
     ctx->current_return_target_seen = saved_return_seen;
     ctx->current_return_target_unknown = saved_return_unknown;
@@ -1463,4 +1554,5 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
 cleanup:
     xr_free(funcs);
     xr_free(ctx.function_return_targets);
+    xr_free(ctx.function_expr_captures);
 }
