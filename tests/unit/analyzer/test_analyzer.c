@@ -878,6 +878,17 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "fn failOtherDynamic() { throw OtherDynamicErr.Boom }\n"
         "fn noThrowDynamic() { }\n"
         "fn maybeDynamic(flag: bool) { if (flag) { throw DynamicErr.Boom } }\n"
+        "fn chooseDynamic(flag: bool) -> () -> () {\n"
+        "  if (flag) { return failDynamic }\n"
+        "  return failOtherDynamic\n"
+        "}\n"
+        "fn chooseNoThrowOrThrow(flag: bool) -> () -> () {\n"
+        "  if (flag) { return failDynamic }\n"
+        "  return noThrowDynamic\n"
+        "}\n"
+        "fn chooseUnknownDynamic(cb: () -> ()) -> () -> () {\n"
+        "  return cb\n"
+        "}\n"
         "fn viaStableVarAlias() {\n"
         "  var f = failDynamic\n"
         "  f()\n"
@@ -962,6 +973,21 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "  var f = noThrowDynamic\n"
         "  try { f = failDynamic; maybeDynamic(flag) } catch (e: DynamicErr) { f() }\n"
         "}\n"
+        "fn viaReturnedFunctionValue(flag: bool) {\n"
+        "  var f = chooseDynamic(flag)\n"
+        "  f()\n"
+        "}\n"
+        "fn viaReturnedFunctionValueDirect(flag: bool) {\n"
+        "  chooseDynamic(flag)()\n"
+        "}\n"
+        "fn viaReturnedFunctionValueBase(flag: bool) {\n"
+        "  var f = chooseNoThrowOrThrow(flag)\n"
+        "  f()\n"
+        "}\n"
+        "fn viaReturnedFunctionValueUnknown(cb: () -> ()) {\n"
+        "  var f = chooseUnknownDynamic(cb)\n"
+        "  f()\n"
+        "}\n"
         "fn viaConstAliasStillExact() {\n"
         "  const f = failDynamic\n"
         "  f()\n"
@@ -1000,6 +1026,14 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         analyzer_function_effect_summary(a, "viaTryCatchUnknownVarAlias");
     const XaEffectSummary *try_mutated_catch_read =
         analyzer_function_effect_summary(a, "viaTryMutatedAliasReadInCatch");
+    const XaEffectSummary *returned_function_value =
+        analyzer_function_effect_summary(a, "viaReturnedFunctionValue");
+    const XaEffectSummary *returned_function_value_direct =
+        analyzer_function_effect_summary(a, "viaReturnedFunctionValueDirect");
+    const XaEffectSummary *returned_function_value_base =
+        analyzer_function_effect_summary(a, "viaReturnedFunctionValueBase");
+    const XaEffectSummary *returned_function_value_unknown =
+        analyzer_function_effect_summary(a, "viaReturnedFunctionValueUnknown");
     const XaEffectSummary *const_alias =
         analyzer_function_effect_summary(a, "viaConstAliasStillExact");
     ASSERT(stable_var != NULL);
@@ -1019,6 +1053,10 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT(try_catch_base_union != NULL);
     ASSERT(try_catch_unknown != NULL);
     ASSERT(try_mutated_catch_read != NULL);
+    ASSERT(returned_function_value != NULL);
+    ASSERT(returned_function_value_direct != NULL);
+    ASSERT(returned_function_value_base != NULL);
+    ASSERT(returned_function_value_unknown != NULL);
     ASSERT(const_alias != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, stable_var, "DynamicErr"));
@@ -1068,6 +1106,21 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT((try_catch_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(try_mutated_catch_read->completeness == XA_EFFECT_INCOMPLETE);
     ASSERT((try_mutated_catch_read->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(returned_function_value->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((returned_function_value->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, returned_function_value, "DynamicErr"));
+    ASSERT(effect_summary_has_enum_named(a, returned_function_value, "OtherDynamicErr"));
+    ASSERT(returned_function_value_direct->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((returned_function_value_direct->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, returned_function_value_direct, "DynamicErr"));
+    ASSERT(effect_summary_has_enum_named(a, returned_function_value_direct, "OtherDynamicErr"));
+    ASSERT(returned_function_value_base->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((returned_function_value_base->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, returned_function_value_base, "DynamicErr"));
+    ASSERT(!effect_summary_has_enum_named(a, returned_function_value_base, "OtherDynamicErr"));
+    ASSERT(returned_function_value_unknown->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((returned_function_value_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) !=
+           0);
     ASSERT(effect_summary_has_enum_named(a, const_alias, "DynamicErr"));
     ASSERT((const_alias->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 
