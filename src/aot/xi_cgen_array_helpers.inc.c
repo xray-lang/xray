@@ -4563,16 +4563,16 @@ static bool emit_byte_array_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
         fprintf(out,
                 "; if (XR_UNLIKELY(!_a || _a->elem_type != XR_ELEM_U8)) "
                 "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
-                "XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG); if (XR_UNLIKELY("
+                "XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG); if (XR_UNLIKELY("
                 "_a->data_storage == XR_ARRAY_DATA_BORROWED || _distance <= 0 || _count < 0 || "
                 "_distance > _a->length || _count > INT64_MAX - _a->length)) "
                 "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                "XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG); int64_t _dst = _a->length; "
+                "XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG); int64_t _dst = _a->length; "
                 "int64_t _new_length = _dst + _count; if (_new_length > _a->capacity) "
                 "xrt_array_reserve_trusted_raw(_a, _new_length); if (XR_UNLIKELY("
                 "_new_length > _a->capacity || (_new_length > 0 && !_a->data))) "
                 "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                "XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG); "
+                "XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG); "
                 "xr_array_core_bytes_repeat_copy(_a->data, _dst, _distance, _count); "
                 "_a->length = _new_length; _a; })");
     } else {

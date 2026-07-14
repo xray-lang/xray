@@ -36,53 +36,54 @@ TEST(error_core_defines_arithmetic_messages) {
 }
 
 TEST(error_core_defines_bytes_messages) {
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_CONSTRUCTOR_EXPECTS_MSG,
                   "Array<byte>(length, fill) expects integers");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_CONSTRUCTOR_FILL_EXPECTS_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_CONSTRUCTOR_FILL_EXPECTS_MSG,
                   "Array<byte>(length, fill): both args must be integers");
     ASSERT_STR_EQ(XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG, "slice bounds must be integers");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U16_EXPECTS_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_EXPECTS_MSG,
                   "Slice<byte>.load<uint16>(offset) expects Slice<byte> and integer");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U16_RECEIVER_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_RECEIVER_MSG,
                   "Slice<byte>.load<uint16>() receiver must be Slice<byte>");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U16_OOB_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_OOB_MSG,
                   "Slice<byte>.load<uint16>() offset out of bounds");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_EXPECTS_MSG,
                   "Slice<byte>.load<uint32>(offset) expects Slice<byte> and integer");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_RECEIVER_MSG,
                   "Slice<byte>.load<uint32>() receiver must be Slice<byte>");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U32_OOB_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_OOB_MSG,
                   "Slice<byte>.load<uint32>() offset out of bounds");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U64_EXPECTS_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_EXPECTS_MSG,
                   "Slice<byte>.load<uint64>(offset) expects Slice<byte> and integer");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U64_RECEIVER_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_RECEIVER_MSG,
                   "Slice<byte>.load<uint64>() receiver must be Slice<byte>");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U64_OOB_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_OOB_MSG,
                   "Slice<byte>.load<uint64>() offset out of bounds");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG,
                   "cannot write through readonly Slice<byte>");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_EXPECTS_MSG,
                   "Array<byte> copy-within expects integer offsets and count");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_WITHIN_RECEIVER_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG,
                   "Array<byte> copy-within receiver must be Array<byte>");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_OOB_MSG,
                   "Array<byte> copy-within range out of bounds");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_EXPECTS_MSG,
                   "Array<byte> copy range expects Array<byte> operands and integer ranges");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OPERANDS_MSG,
                   "Array<byte> copy range operands must be Array<byte>");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG, "Array<byte> copy range out of bounds");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_APPEND_FROM_EXPECTS_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OOB_MSG,
+                  "Array<byte> copy range out of bounds");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_EXPECTS_MSG,
                   "Array<byte>.appendFrom(src) expects Slice<byte>");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_APPEND_FROM_OPERANDS_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OPERANDS_MSG,
                   "Array<byte>.appendFrom receiver/source must use byte storage");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_APPEND_FROM_OOB_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OOB_MSG,
                   "Array<byte>.appendFrom range/grow failed");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_EXPECTS_MSG,
                   "Array<byte>.repeatFrom(distance, count) expects integers");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG,
                   "Array<byte>.repeatFrom receiver must be Array<byte>");
-    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG,
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG,
                   "Array<byte>.repeatFrom range/grow failed");
 }
 

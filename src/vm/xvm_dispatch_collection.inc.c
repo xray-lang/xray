@@ -1381,7 +1381,7 @@ vmcase(OP_SPAN_REINTERPRET) {
 vmcase(OP_BYTE_ARRAY_APPEND_FROM) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_APPEND_FROM_OPERANDS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OPERANDS_MSG);
     }
     XrArray *dst = XR_TO_ARRAY(R(a));
     void *src_data = NULL;
@@ -1394,16 +1394,16 @@ vmcase(OP_BYTE_ARRAY_APPEND_FROM) {
     void *src_guard = NULL;
     VM_SPAN_VIEW(R(a + 1), src_data, src_length, src_elem_type, src_elem_size, src_elem_tid,
                  src_contains_refs, src_reserved, src_guard,
-                 XR_ERROR_CORE_BYTES_APPEND_FROM_EXPECTS_MSG);
+                 XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_EXPECTS_MSG);
     (void) src_elem_size;
     (void) src_elem_tid;
     (void) src_contains_refs;
     (void) src_reserved;
     if (dst->elem_type != XR_ELEM_U8 || src_elem_type != XR_ELEM_U8) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_APPEND_FROM_OPERANDS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OPERANDS_MSG);
     }
     if (!xr_byte_array_append_from_span(dst, src_data, src_length, src_guard)) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_APPEND_FROM_OOB_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OOB_MSG);
     }
     vmbreak;
 }
@@ -1795,14 +1795,14 @@ vmcase(OP_BYTE_ARRAY_COPY_WITHIN) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_EXPECTS_MSG);
     }
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_WITHIN_RECEIVER_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG);
     if (!xr_byte_array_copy_within(arr, (int32_t) XR_TO_INT(R(a + 1)),
                                    (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_OOB_MSG);
     }
     vmbreak;
 }
@@ -1811,15 +1811,15 @@ vmcase(OP_BYTE_ARRAY_COPY_FROM) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_ARRAY(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3)) || !XR_IS_INT(R(a + 4))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_EXPECTS_MSG);
     }
     XrArray *dst = XR_TO_ARRAY(R(a));
     XrArray *src = XR_TO_ARRAY(R(a + 1));
     if (dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OPERANDS_MSG);
     if (!xr_byte_array_copy_from(dst, src, (int32_t) XR_TO_INT(R(a + 2)),
                                  (int32_t) XR_TO_INT(R(a + 3)), (int32_t) XR_TO_INT(R(a + 4)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OOB_MSG);
     }
     vmbreak;
 }
@@ -1827,13 +1827,13 @@ vmcase(OP_BYTE_ARRAY_COPY_FROM) {
 vmcase(OP_BYTE_ARRAY_REPEAT_FROM) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_EXPECTS_MSG);
     }
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG);
     if (!xr_byte_array_repeat_from_tail(arr, XR_TO_INT(R(a + 1)), XR_TO_INT(R(a + 2)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG);
     }
     vmbreak;
 }

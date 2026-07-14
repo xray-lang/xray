@@ -36,7 +36,8 @@ INTERNAL_LEGACY_RE = re.compile(
     r"\b(?:XI_BYTES_[A-Z0-9_]+|OP_BYTES_[A-Z0-9_]+|xr_array_bytes_[A-Za-z0-9_]+|"
     r"xrt_array_bytes|xrt_bytes_[A-Za-z0-9_]+|bytes_typed_[A-Za-z0-9_]+|"
     r"lower_bytes_[A-Za-z0-9_]+|emit_builtin_bytes_[A-Za-z0-9_]+|"
-    r"emit_bytes_[A-Za-z0-9_]+|cg_bytes_[A-Za-z0-9_]+)\b"
+    r"emit_bytes_[A-Za-z0-9_]+|cg_bytes_[A-Za-z0-9_]+|"
+    r"XR_ERROR_CORE_BYTES_[A-Z0-9_]+)\b"
 )
 
 SCAN_DIRS = ("src", "stdlib", "tests", "spec", "demos", "tools", "scripts")
