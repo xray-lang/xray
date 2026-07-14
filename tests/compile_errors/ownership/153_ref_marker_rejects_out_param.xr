@@ -1,0 +1,6 @@
+fn fill(x: out int) {
+    x = 1
+}
+
+var value = 0
+fill(ref value)
