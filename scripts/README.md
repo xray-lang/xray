@@ -67,7 +67,7 @@ CTest 的 `parallel_backend_abi_convergence`。
 非空时返回 1；`--fail-on-internal-legacy` 在 internal legacy 命名非空时返回 1。CTest
 `bytes_type_residue` 同时打开这两个模式，阻止 public surface 与 internal helper 命名回流。
 历史 `XI_BYTES_*`、`OP_BYTES_*`、`xr_array_bytes_*`、`xrt_bytes_*`、`emit_builtin_bytes_*`、
-`emit_bytes_*` 与 `cg_bytes_*` 名称应保持为 0。
+`emit_bytes_*`、`cg_bytes_*` 与 `XR_ERROR_CORE_BYTES_*` 名称应保持为 0。
 
 ### `check_byte_width_predicates.py`
 
@@ -168,6 +168,7 @@ contract；ThreadLocal 与 HTTP handler 当前仍作为后续替换目标被固�
 | 2026-07-12 | 增加 parallel backend ABI convergence 检查，接 193 VM/AOT backend 命名收敛门禁 | Codex |
 | 2026-07-13 | 增加 Bytes type residue inventory，接 204 P0/P7 public 表面与 internal legacy 命名分类 | Codex |
 | 2026-07-14 | `bytes_type_residue` 增加 internal legacy fail gate，阻止 `xrt_bytes_*` / `emit_builtin_bytes_*` 回流 | Codex |
+| 2026-07-14 | `bytes_type_residue` 增加 `XR_ERROR_CORE_BYTES_*` fail gate，阻止旧 Bytes error macro 回流 | Codex |
 | 2026-07-14 | 增加 byte width predicate audit，固定 204 共享 U8 helper 与低层验证/编码边界 | Codex |
 | 2026-07-13 | 增加 parameter mode convergence inventory，接 206 P0 参数契约与调用授权收敛基线 | Codex |
 | 2026-07-14 | 增加 unchecked error-effect convergence inventory，接 205 P0 旧 error-set / MAY_THROW / tooling metadata 分类 | Codex |

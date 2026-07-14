@@ -93,7 +93,7 @@ vmcase(OP_ARRAY_COPY_NEW) {
     int c_field = GETARG_C(i);
     XrValue src_value = R(b);
     if (!XR_IS_ARRAY(src_value)) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_CONSTRUCTOR_EXPECTS_MSG);
     }
     XrArray *src_arr = XR_TO_ARRAY(src_value);
     int64_t len = src_arr ? src_arr->length : 0;

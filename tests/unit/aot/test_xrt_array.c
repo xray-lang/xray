@@ -461,20 +461,20 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     ASSERT_EQ_INT(((uint8_t *) dst->data)[4], 2, "copyFrom writes count bytes");
 
     EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_within_checked_raw(a, 7, 0, 2),
-                           XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG,
+                           XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_OOB_MSG,
                            "Array<byte> copy-within checked helper throws on range");
     XrValue int_arr_value = xrt_array_new_typed_exact(0, XR_ELEM_I64);
     xrt_array_t *int_arr = (xrt_array_t *) int_arr_value.ptr;
     EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_from_checked_raw(dst, int_arr, 0, 0, 1),
-                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG,
+                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OPERANDS_MSG,
                            "Array<byte> copy range checked helper throws on typed operand");
     EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_from_value(dst_value, value, XR_NULL_VAL,
                                                           XR_FROM_INT(0), XR_FROM_INT(1)),
-                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG,
+                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_EXPECTS_MSG,
                            "Array<byte> copy range value helper rejects non-integer offset");
     EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_from_value(dst_value, value, XR_FROM_INT(100),
                                                           XR_FROM_INT(0), XR_FROM_INT(1)),
-                           XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG,
+                           XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OOB_MSG,
                            "Array<byte> copy range value helper throws on range");
 
     XrValue rep_value = xrt_array_new_typed(0, XR_ELEM_U8);
@@ -545,26 +545,26 @@ static void test_byte_runtime_u8_guards_are_defensive(void) {
     xrt_array_t *ints = (xrt_array_t *) int_value.ptr;
 
     EXPECT_XRT_ERROR_THROW(xrt_byte_array_load_u32_le(int_value, XR_FROM_INT(0)),
-                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG,
+                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_RECEIVER_MSG,
                            "AOT defensive byte load rejects non-U8 receiver");
     EXPECT_XRT_ERROR_THROW(
         xrt_byte_array_copy_within_value(int_value, XR_FROM_INT(0), XR_FROM_INT(0), XR_FROM_INT(1)),
-        XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_WITHIN_RECEIVER_MSG,
+        XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG,
         "AOT defensive byte copy-within rejects non-U8 receiver");
     EXPECT_XRT_ERROR_THROW(xrt_byte_array_copy_from_value(int_value, bytes_value, XR_FROM_INT(0),
                                                           XR_FROM_INT(0), XR_FROM_INT(1)),
-                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG,
+                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OPERANDS_MSG,
                            "AOT defensive byte copy-from rejects non-U8 destination");
     EXPECT_XRT_ERROR_THROW(xrt_byte_array_append_from_value(int_value, bytes_value),
-                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_APPEND_FROM_OPERANDS_MSG,
+                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OPERANDS_MSG,
                            "AOT defensive appendFrom rejects non-U8 receiver");
     EXPECT_XRT_ERROR_THROW(
         xrt_byte_array_repeat_from_tail_value(int_value, XR_FROM_INT(1), XR_FROM_INT(1)),
-        XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG,
+        XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG,
         "AOT defensive repeatFrom rejects non-U8 receiver");
     EXPECT_XRT_ERROR_THROW(xrt_byte_array_repeat_from_value(XR_FROM_INT(0), XR_FROM_INT(0),
                                                             XR_FROM_INT(1), XR_FROM_INT(1)),
-                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG,
+                           XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG,
                            "AOT defensive repeat op rejects non-array receiver");
 
     ASSERT_EQ_INT(bytes->elem_type, XR_ELEM_U8, "valid byte storage remains U8");

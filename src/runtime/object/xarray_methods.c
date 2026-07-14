@@ -246,19 +246,19 @@ static XrValue m_append_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
     int64_t src_length = 0;
     if (argc != 1 || !byte_slice_arg(args[0], &src_data, &src_length, &src_guard)) {
         XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
-                                         XR_ERROR_CORE_BYTES_APPEND_FROM_EXPECTS_MSG);
+                                         XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_EXPECTS_MSG);
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }
     if (!dst || dst->elem_type != XR_ELEM_U8) {
         XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
-                                         XR_ERROR_CORE_BYTES_APPEND_FROM_OPERANDS_MSG);
+                                         XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OPERANDS_MSG);
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }
     if (!xr_byte_array_append_from_span(dst, src_data, src_length, src_guard)) {
         XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
-                                         XR_ERROR_CORE_BYTES_APPEND_FROM_OOB_MSG);
+                                         XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_OOB_MSG);
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }
@@ -269,19 +269,19 @@ static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
     XrArray *arr = array_self(self);
     if (argc != 2 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1])) {
         XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
-                                         XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG);
+                                         XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_EXPECTS_MSG);
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }
     if (!arr || arr->elem_type != XR_ELEM_U8) {
         XrValue exc = xr_panic_info_newf(iso, XR_ERR_TYPE_MISMATCH, "%s",
-                                         XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG);
+                                         XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_RECEIVER_MSG);
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }
     if (!xr_byte_array_repeat_from_tail(arr, XR_TO_INT(args[0]), XR_TO_INT(args[1]))) {
         XrValue exc = xr_panic_info_newf(iso, XR_ERR_INDEX_OUT_OF_BOUNDS, "%s",
-                                         XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG);
+                                         XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG);
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }
