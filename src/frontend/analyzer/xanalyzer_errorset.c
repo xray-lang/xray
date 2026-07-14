@@ -405,6 +405,11 @@ static void merge_function_value_if_states(ErrorSetCtx *ctx, const FunctionValue
     }
 }
 
+static void merge_function_value_loop_state(ErrorSetCtx *ctx, const FunctionValueAliasState *base,
+                                            const FunctionValueAliasState *iteration_state) {
+    merge_function_value_if_states(ctx, base, base, iteration_state);
+}
+
 static FunctionValueTarget resolve_function_value_expr_target(ErrorSetCtx *ctx, AstNode *expr,
                                                               int depth) {
     if (!ctx || depth >= 32)
@@ -957,25 +962,62 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
 
         case AST_WHILE_STMT:
             es_walk_expr(ctx, node->as.while_stmt.condition);
-            ctx->function_value_control_depth++;
-            es_walk_block(ctx, node->as.while_stmt.body);
-            ctx->function_value_control_depth--;
+            if (ctx->function_value_control_depth != 0) {
+                ctx->function_value_control_depth++;
+                es_walk_block(ctx, node->as.while_stmt.body);
+                ctx->function_value_control_depth--;
+            } else {
+                FunctionValueAliasState base_state;
+                FunctionValueAliasState iteration_state;
+                capture_function_value_alias_state(ctx, &base_state);
+
+                restore_function_value_alias_state(ctx, &base_state);
+                es_walk_block(ctx, node->as.while_stmt.body);
+                capture_function_value_alias_state(ctx, &iteration_state);
+
+                merge_function_value_loop_state(ctx, &base_state, &iteration_state);
+            }
             break;
 
         case AST_FOR_STMT:
             es_walk_stmt(ctx, node->as.for_stmt.initializer);
             es_walk_expr(ctx, node->as.for_stmt.condition);
-            ctx->function_value_control_depth++;
-            es_walk_expr(ctx, node->as.for_stmt.increment);
-            es_walk_block(ctx, node->as.for_stmt.body);
-            ctx->function_value_control_depth--;
+            if (ctx->function_value_control_depth != 0) {
+                ctx->function_value_control_depth++;
+                es_walk_block(ctx, node->as.for_stmt.body);
+                es_walk_expr(ctx, node->as.for_stmt.increment);
+                ctx->function_value_control_depth--;
+            } else {
+                FunctionValueAliasState base_state;
+                FunctionValueAliasState iteration_state;
+                capture_function_value_alias_state(ctx, &base_state);
+
+                restore_function_value_alias_state(ctx, &base_state);
+                es_walk_block(ctx, node->as.for_stmt.body);
+                es_walk_expr(ctx, node->as.for_stmt.increment);
+                capture_function_value_alias_state(ctx, &iteration_state);
+
+                merge_function_value_loop_state(ctx, &base_state, &iteration_state);
+            }
             break;
 
         case AST_FOR_IN_STMT:
             es_walk_expr(ctx, node->as.for_in_stmt.collection);
-            ctx->function_value_control_depth++;
-            es_walk_block(ctx, node->as.for_in_stmt.body);
-            ctx->function_value_control_depth--;
+            if (ctx->function_value_control_depth != 0) {
+                ctx->function_value_control_depth++;
+                es_walk_block(ctx, node->as.for_in_stmt.body);
+                ctx->function_value_control_depth--;
+            } else {
+                FunctionValueAliasState base_state;
+                FunctionValueAliasState iteration_state;
+                capture_function_value_alias_state(ctx, &base_state);
+
+                restore_function_value_alias_state(ctx, &base_state);
+                es_walk_block(ctx, node->as.for_in_stmt.body);
+                capture_function_value_alias_state(ctx, &iteration_state);
+
+                merge_function_value_loop_state(ctx, &base_state, &iteration_state);
+            }
             break;
 
         case AST_BLOCK:
