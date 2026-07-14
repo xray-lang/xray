@@ -1,0 +1,6 @@
+fn bump(x: ref int) {
+    x = x + 1
+}
+
+var value = 1
+bump(out value)
