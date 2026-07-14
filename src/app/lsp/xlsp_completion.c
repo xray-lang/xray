@@ -367,11 +367,12 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
                         const char *pname = (links->param_names && links->param_names[p])
                                                 ? links->param_names[p]
                                                 : "_";
-                        const char *ptype = (links->param_types && links->param_types[p])
-                                                ? xr_type_to_string(links->param_types[p])
-                                                : "<error>";
-                        sig_len += snprintf(sig_buf + sig_len, sizeof(sig_buf) - sig_len, "%s: %s",
-                                            pname, ptype);
+                        XrType *ptype_obj = (links->param_types && links->param_types[p])
+                                                ? links->param_types[p]
+                                                : NULL;
+                        sig_len = xlsp_append_param_display(
+                            sig_buf, sizeof(sig_buf), sig_len, pname, ptype_obj,
+                            xlsp_function_param_mode(links->type, p));
                     }
                 }
 
@@ -798,11 +799,11 @@ static void append_static_method(XrJsonValue *items, XaAnalyzer *analyzer, XaSym
                 sig_len += snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, ", ");
             const char *pname =
                 (links->param_names && links->param_names[p]) ? links->param_names[p] : "_";
-            const char *ptype = (links->param_types && links->param_types[p])
-                                    ? xr_type_to_string(links->param_types[p])
-                                    : "<error>";
-            sig_len += snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, "%s: %s", pname,
-                                ptype);
+            XrType *ptype_obj =
+                (links->param_types && links->param_types[p]) ? links->param_types[p] : NULL;
+            sig_len =
+                xlsp_append_param_display(detail_buf, sizeof(detail_buf), sig_len, pname, ptype_obj,
+                                          xlsp_function_param_mode(links->type, p));
         }
     }
     const char *ret_type =
@@ -863,11 +864,11 @@ static void append_instance_method(XrJsonValue *items, XaAnalyzer *analyzer, XaS
                 sig_len += snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, ", ");
             const char *pname =
                 (links->param_names && links->param_names[p]) ? links->param_names[p] : "_";
-            const char *ptype = (links->param_types && links->param_types[p])
-                                    ? xr_type_to_string(links->param_types[p])
-                                    : "<error>";
-            sig_len += snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, "%s: %s", pname,
-                                ptype);
+            XrType *ptype_obj =
+                (links->param_types && links->param_types[p]) ? links->param_types[p] : NULL;
+            sig_len =
+                xlsp_append_param_display(detail_buf, sizeof(detail_buf), sig_len, pname, ptype_obj,
+                                          xlsp_function_param_mode(links->type, p));
         }
     }
     const char *ret_type =
@@ -935,10 +936,12 @@ static XrJsonValue *complete_instance_members_from_analyzer(XaAnalyzer *analyzer
                         sl += snprintf(detail_buf + sl, sizeof(detail_buf) - sl, ", ");
                     const char *pn =
                         (links->param_names && links->param_names[p]) ? links->param_names[p] : "_";
-                    const char *pt = (links->param_types && links->param_types[p])
-                                         ? xr_type_to_string(links->param_types[p])
-                                         : "<error>";
-                    sl += snprintf(detail_buf + sl, sizeof(detail_buf) - sl, "%s: %s", pn, pt);
+                    XrType *ptype_obj = (links->param_types && links->param_types[p])
+                                            ? links->param_types[p]
+                                            : NULL;
+                    sl =
+                        xlsp_append_param_display(detail_buf, sizeof(detail_buf), sl, pn, ptype_obj,
+                                                  xlsp_function_param_mode(links->type, p));
                 }
             }
             const char *rt =

@@ -14,6 +14,10 @@
 #ifndef XLSP_UTILS_H
 #define XLSP_UTILS_H
 
+#include "../../runtime/value/xtype.h"
+#include "../../shared/xr_param_mode.h"
+#include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
 // Maximum path length for LSP operations
@@ -26,6 +30,30 @@ static inline const char *xlsp_uri_to_path(const char *uri) {
     if (strncmp(uri, "file://", 7) == 0)
         return uri + 7;
     return uri;
+}
+
+static inline XrParamMode xlsp_function_param_mode(XrType *function_type, int index) {
+    if (!function_type || function_type->kind != XR_KIND_FUNCTION)
+        return XR_PARAM_VALUE;
+    return xr_type_function_param_mode(function_type, index);
+}
+
+static inline int xlsp_append_param_display(char *buf, size_t cap, int len, const char *name,
+                                            XrType *type, XrParamMode mode) {
+    if (!buf || cap == 0)
+        return len;
+    if (len < 0)
+        len = 0;
+    if ((size_t) len >= cap)
+        return len;
+
+    const char *pname = name ? name : "_";
+    const char *ptype = type ? xr_type_to_string(type) : "<error>";
+    if (mode != XR_PARAM_VALUE && xr_param_mode_is_valid(mode)) {
+        return len + snprintf(buf + len, cap - (size_t) len, "%s: %s %s", pname,
+                              xr_param_mode_label(mode), ptype);
+    }
+    return len + snprintf(buf + len, cap - (size_t) len, "%s: %s", pname, ptype);
 }
 
 #endif  // XLSP_UTILS_H

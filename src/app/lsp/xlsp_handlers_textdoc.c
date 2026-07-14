@@ -202,11 +202,12 @@ XrJsonValue *xlsp_handle_td_completion_resolve(XrLspServer *server, XrJsonValue 
                         const char *pname = (links->param_names && links->param_names[i])
                                                 ? links->param_names[i]
                                                 : "_";
-                        const char *ptype = (links->param_types && links->param_types[i])
-                                                ? xr_type_to_string(links->param_types[i])
-                                                : "<error>";
-                        len +=
-                            snprintf(doc_str + len, sizeof(doc_str) - len, "%s: %s", pname, ptype);
+                        XrType *ptype_obj = (links->param_types && links->param_types[i])
+                                                ? links->param_types[i]
+                                                : NULL;
+                        len = xlsp_append_param_display(doc_str, sizeof(doc_str), len, pname,
+                                                        ptype_obj,
+                                                        xlsp_function_param_mode(links->type, i));
                     }
                 }
                 const char *ret =
