@@ -933,8 +933,27 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
                          "fn viaImmediateLambdaCall() {\n"
                          "  (fn() { failLambda() })()\n"
                          "}\n"
-                         "fn viaStoredLambda() {\n"
+                         "fn viaConstStoredLambda() {\n"
+                         "  const f = fn() { throw LambdaErr.Boom }\n"
+                         "  f()\n"
+                         "}\n"
+                         "fn viaConstStoredLambdaChain() {\n"
+                         "  const f = fn() { throw LambdaErr.Boom }\n"
+                         "  const g = (f)\n"
+                         "  g()\n"
+                         "}\n"
+                         "fn viaStableStoredLambda() {\n"
                          "  var f = fn() { throw LambdaErr.Boom }\n"
+                         "  f()\n"
+                         "}\n"
+                         "fn viaStableStoredLambdaChain() {\n"
+                         "  var f = fn() { throw LambdaErr.Boom }\n"
+                         "  var g = f\n"
+                         "  g()\n"
+                         "}\n"
+                         "fn viaReboundStoredLambda() {\n"
+                         "  var f = fn() { throw LambdaErr.Boom }\n"
+                         "  f = fn() { }\n"
                          "  f()\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
@@ -945,18 +964,38 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
         analyzer_function_effect_summary(a, "viaImmediateLambdaThrow");
     const XaEffectSummary *immediate_call =
         analyzer_function_effect_summary(a, "viaImmediateLambdaCall");
-    const XaEffectSummary *stored = analyzer_function_effect_summary(a, "viaStoredLambda");
+    const XaEffectSummary *const_stored =
+        analyzer_function_effect_summary(a, "viaConstStoredLambda");
+    const XaEffectSummary *const_chain =
+        analyzer_function_effect_summary(a, "viaConstStoredLambdaChain");
+    const XaEffectSummary *stable_stored =
+        analyzer_function_effect_summary(a, "viaStableStoredLambda");
+    const XaEffectSummary *stable_chain =
+        analyzer_function_effect_summary(a, "viaStableStoredLambdaChain");
+    const XaEffectSummary *rebound = analyzer_function_effect_summary(a, "viaReboundStoredLambda");
     ASSERT(immediate_throw != NULL);
     ASSERT(immediate_call != NULL);
-    ASSERT(stored != NULL);
+    ASSERT(const_stored != NULL);
+    ASSERT(const_chain != NULL);
+    ASSERT(stable_stored != NULL);
+    ASSERT(stable_chain != NULL);
+    ASSERT(rebound != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, immediate_throw, "LambdaErr"));
     ASSERT((immediate_throw->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, immediate_call, "LambdaErr"));
     ASSERT((immediate_call->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT(stored->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((stored->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
-    ASSERT(!effect_summary_has_enum_named(a, stored, "LambdaErr"));
+    ASSERT(effect_summary_has_enum_named(a, const_stored, "LambdaErr"));
+    ASSERT((const_stored->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, const_chain, "LambdaErr"));
+    ASSERT((const_chain->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, stable_stored, "LambdaErr"));
+    ASSERT((stable_stored->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, stable_chain, "LambdaErr"));
+    ASSERT((stable_chain->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(rebound->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((rebound->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(!effect_summary_has_enum_named(a, rebound, "LambdaErr"));
 
     xa_analyzer_free(a);
     setup_pool();

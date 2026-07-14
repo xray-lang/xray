@@ -56,6 +56,11 @@ static void es_summary_add_enum_case(XaEffectDatabase *db, XaEffectSummary *summ
 
 /* ========== Internal Context ========== */
 
+typedef struct FunctionValueTarget {
+    XaSymbol *symbol;
+    AstNode *function_expr;
+} FunctionValueTarget;
+
 typedef struct ErrorSetCtx {
     XaAnalyzer *analyzer;
     XaEffectSummary *current_summary; /* Effect summary being built for current function */
@@ -65,7 +70,7 @@ typedef struct ErrorSetCtx {
     const char *current_catch_alias_names[64];
     int current_catch_alias_count;
     uint32_t function_value_alias_ids[128];
-    XaSymbol *function_value_alias_targets[128];
+    FunctionValueTarget function_value_alias_targets[128];
     int function_value_alias_count;
     XaEffectSummary *current_caught; /* Effect subset caught by current catch clause */
     XaSymbol *current_func;          /* Current function symbol */
@@ -170,6 +175,32 @@ static bool symbol_has_function_type(XaSymbol *sym) {
     return type && XR_TYPE_IS_FUNCTION(type);
 }
 
+static FunctionValueTarget function_value_target_none(void) {
+    FunctionValueTarget target;
+    target.symbol = NULL;
+    target.function_expr = NULL;
+    return target;
+}
+
+static FunctionValueTarget function_value_target_symbol(XaSymbol *sym) {
+    FunctionValueTarget target = function_value_target_none();
+    target.symbol = sym;
+    return target;
+}
+
+static FunctionValueTarget function_value_target_expr(AstNode *function_expr) {
+    FunctionValueTarget target = function_value_target_none();
+    target.function_expr = function_expr;
+    return target;
+}
+
+static bool function_value_target_is_exact(FunctionValueTarget target) {
+    if (target.function_expr)
+        return true;
+    return target.symbol &&
+           (target.symbol->kind == XA_SYM_FUNCTION || target.symbol->kind == XA_SYM_METHOD);
+}
+
 static XaSymbol *resolve_function_alias_target(XaAnalyzer *analyzer, XaSymbol *sym, int depth) {
     if (!analyzer || !sym)
         return NULL;
@@ -190,17 +221,18 @@ static XaSymbol *resolve_function_alias_target(XaAnalyzer *analyzer, XaSymbol *s
     return resolve_function_alias_target(analyzer, source_sym, depth + 1);
 }
 
-static XaSymbol *lookup_function_value_alias_target(ErrorSetCtx *ctx, XaSymbol *sym) {
+static FunctionValueTarget lookup_function_value_alias_target(ErrorSetCtx *ctx, XaSymbol *sym) {
     if (!ctx || !sym || sym->id == 0)
-        return NULL;
+        return function_value_target_none();
     for (int i = ctx->function_value_alias_count - 1; i >= 0; i--) {
         if (ctx->function_value_alias_ids[i] == sym->id)
             return ctx->function_value_alias_targets[i];
     }
-    return NULL;
+    return function_value_target_none();
 }
 
-static void set_function_value_alias_target(ErrorSetCtx *ctx, XaSymbol *sym, XaSymbol *target) {
+static void set_function_value_alias_target(ErrorSetCtx *ctx, XaSymbol *sym,
+                                            FunctionValueTarget target) {
     if (!ctx || !sym || sym->id == 0)
         return;
     for (int i = 0; i < ctx->function_value_alias_count; i++) {
@@ -221,24 +253,36 @@ static void invalidate_function_value_alias_target(ErrorSetCtx *ctx, uint32_t sy
         return;
     for (int i = 0; i < ctx->function_value_alias_count; i++) {
         if (ctx->function_value_alias_ids[i] == symbol_id)
-            ctx->function_value_alias_targets[i] = NULL;
+            ctx->function_value_alias_targets[i] = function_value_target_none();
     }
 }
 
-static XaSymbol *resolve_function_value_expr_target(ErrorSetCtx *ctx, AstNode *expr, int depth) {
+static FunctionValueTarget resolve_function_value_expr_target(ErrorSetCtx *ctx, AstNode *expr,
+                                                              int depth) {
     if (!ctx || depth >= 32)
-        return NULL;
+        return function_value_target_none();
     expr = identity_source(expr);
-    if (!expr || expr->type != AST_VARIABLE)
-        return NULL;
+    if (!expr)
+        return function_value_target_none();
+    if (expr->type == AST_FUNCTION_EXPR)
+        return function_value_target_expr(expr);
+    if (expr->type != AST_VARIABLE)
+        return function_value_target_none();
     XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, expr);
     XaSymbol *target = resolve_function_alias_target(ctx->analyzer, sym, 0);
     if (target && (target->kind == XA_SYM_FUNCTION || target->kind == XA_SYM_METHOD))
-        return target;
-    target = lookup_function_value_alias_target(ctx, sym);
-    if (target && (target->kind == XA_SYM_FUNCTION || target->kind == XA_SYM_METHOD))
-        return target;
-    return NULL;
+        return function_value_target_symbol(target);
+    if (sym && sym->is_const && !sym->is_rebindable && symbol_has_function_type(sym) &&
+        sym->links.const_initializer) {
+        FunctionValueTarget const_target =
+            resolve_function_value_expr_target(ctx, sym->links.const_initializer, depth + 1);
+        if (function_value_target_is_exact(const_target))
+            return const_target;
+    }
+    FunctionValueTarget alias_target = lookup_function_value_alias_target(ctx, sym);
+    if (function_value_target_is_exact(alias_target))
+        return alias_target;
+    return function_value_target_none();
 }
 
 static void maybe_record_stable_function_value_var(ErrorSetCtx *ctx, AstNode *node) {
@@ -251,15 +295,14 @@ static void maybe_record_stable_function_value_var(ErrorSetCtx *ctx, AstNode *no
     if (!sym || sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->is_rebindable ||
         !symbol_has_function_type(sym) || sym->links.assign_count != 1)
         return;
-    XaSymbol *target = resolve_function_value_expr_target(ctx, decl->initializer, 0);
-    if (target)
+    FunctionValueTarget target = resolve_function_value_expr_target(ctx, decl->initializer, 0);
+    if (function_value_target_is_exact(target))
         set_function_value_alias_target(ctx, sym, target);
 }
 
-/* Resolve a call target to its function symbol.  Direct calls and const
- * function-value aliases are exact; dynamic function values remain incomplete
- * work for the wider P2/HOF pass. */
-static XaSymbol *resolve_call_target(ErrorSetCtx *ctx, AstNode *callee) {
+/* Resolve a call target exactly when possible.  Unknown function values keep
+ * their variable symbol so the dynamic-call guard can mark the summary incomplete. */
+static FunctionValueTarget resolve_call_target(ErrorSetCtx *ctx, AstNode *callee) {
     AstNode *source = identity_source(callee);
     const XaSelection *sel = xa_analyzer_get_selection(ctx->analyzer, source);
     if (sel && sel->target_symbol &&
@@ -267,15 +310,14 @@ static XaSymbol *resolve_call_target(ErrorSetCtx *ctx, AstNode *callee) {
          sel->kind == XA_SEL_MODULE_EXPORT)) {
         XaSymbol *selected = sel->target_symbol;
         if (selected->kind == XA_SYM_FUNCTION || selected->kind == XA_SYM_METHOD)
-            return selected;
+            return function_value_target_symbol(selected);
     }
 
     XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, callee);
-    XaSymbol *target = resolve_function_alias_target(ctx->analyzer, sym, 0);
-    if (target && (target->kind == XA_SYM_FUNCTION || target->kind == XA_SYM_METHOD))
+    FunctionValueTarget target = resolve_function_value_expr_target(ctx, callee, 0);
+    if (function_value_target_is_exact(target))
         return target;
-    target = lookup_function_value_alias_target(ctx, sym);
-    return target ? target : sym;
+    return function_value_target_symbol(sym);
 }
 
 static bool is_dynamic_function_call_target(XaAnalyzer *analyzer, AstNode *callee,
@@ -289,21 +331,27 @@ static bool is_dynamic_function_call_target(XaAnalyzer *analyzer, AstNode *calle
     return callee_type && XR_TYPE_IS_FUNCTION(callee_type);
 }
 
-static bool es_walk_immediate_function_expr_call(ErrorSetCtx *ctx, AstNode *callee) {
-    AstNode *source = identity_source(callee);
-    if (!ctx || !source || source->type != AST_FUNCTION_EXPR)
+static bool es_walk_function_expr_body(ErrorSetCtx *ctx, AstNode *function_expr) {
+    if (!ctx || !function_expr || function_expr->type != AST_FUNCTION_EXPR)
         return false;
-    FunctionDeclNode *fn = &source->as.function_expr;
+    FunctionDeclNode *fn = &function_expr->as.function_expr;
     if (!fn->body)
         return true;
 
     XaScope *saved_scope = ctx->analyzer->current_scope;
-    XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, source);
+    XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, function_expr);
     if (fn_scope)
         ctx->analyzer->current_scope = fn_scope;
     es_walk_block(ctx, fn->body);
     ctx->analyzer->current_scope = saved_scope;
     return true;
+}
+
+static bool es_walk_immediate_function_expr_call(ErrorSetCtx *ctx, AstNode *callee) {
+    AstNode *source = identity_source(callee);
+    if (!source || source->type != AST_FUNCTION_EXPR)
+        return false;
+    return es_walk_function_expr_body(ctx, source);
 }
 
 static bool is_current_caught_ref(ErrorSetCtx *ctx, AstNode *expr) {
@@ -393,7 +441,12 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
                 break;
 
             /* Union callee's effect summary into current function's summary */
-            XaSymbol *callee_sym = resolve_call_target(ctx, node->as.call_expr.callee);
+            FunctionValueTarget call_target = resolve_call_target(ctx, node->as.call_expr.callee);
+            XaSymbol *callee_sym = call_target.symbol;
+            if (call_target.function_expr) {
+                es_walk_function_expr_body(ctx, call_target.function_expr);
+                break;
+            }
             if (callee_sym &&
                 (callee_sym->kind == XA_SYM_FUNCTION || callee_sym->kind == XA_SYM_METHOD) &&
                 callee_sym->links.effect_id != XA_EFFECT_NONE) {
