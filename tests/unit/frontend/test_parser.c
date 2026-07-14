@@ -288,42 +288,57 @@ TEST(parser_function_decl) {
     teardown();
 }
 
+static void assert_ast_param_modes(XrParamNode **params, int actual_count,
+                                   const XrParamMode *expected, int expected_count) {
+    ASSERT_EQ_INT(actual_count, expected_count);
+    for (int i = 0; i < expected_count; i++)
+        ASSERT_EQ_INT(params[i]->passing_mode, expected[i]);
+}
+
+static void assert_param_modes(const XrParamMode *actual, int actual_count,
+                               const XrParamMode *expected, int expected_count) {
+    ASSERT_EQ_INT(actual_count, expected_count);
+    for (int i = 0; i < expected_count; i++)
+        ASSERT_EQ_INT(actual[i], expected[i]);
+}
+
 TEST(parser_parameter_modes_share_annotation_parser) {
     setup();
 
-    AstNode *decl = parse_first("fn touch(a: in int, b: ref int) {\n}");
-    ASSERT_EQ_INT(decl->type, AST_FUNCTION_DECL);
-    ASSERT_EQ_INT(decl->as.function_decl.param_count, 2);
-    ASSERT_EQ_INT(decl->as.function_decl.params[0]->passing_mode, XR_PARAM_IN);
-    ASSERT_EQ_INT(decl->as.function_decl.params[1]->passing_mode, XR_PARAM_REF);
+    const XrParamMode modes[] = {XR_PARAM_VALUE, XR_PARAM_IN, XR_PARAM_REF, XR_PARAM_OUT};
+    const int mode_count = (int) (sizeof(modes) / sizeof(modes[0]));
 
-    AstNode *stmt = parse_first("var f = fn(a: in int, b: ref int) {\n  return a\n}");
+    AstNode *decl = parse_first("fn touch(a: int, b: in int, c: ref int, d: out int) {\n}");
+    ASSERT_EQ_INT(decl->type, AST_FUNCTION_DECL);
+    assert_ast_param_modes(decl->as.function_decl.params, decl->as.function_decl.param_count, modes,
+                           mode_count);
+
+    AstNode *stmt =
+        parse_first("var f = fn(a: int, b: in int, c: ref int, d: out int) {\n  return a\n}");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
-    ASSERT_EQ_INT(init->as.function_expr.param_count, 2);
-    ASSERT_EQ_INT(init->as.function_expr.params[0]->passing_mode, XR_PARAM_IN);
-    ASSERT_EQ_INT(init->as.function_expr.params[1]->passing_mode, XR_PARAM_REF);
+    assert_ast_param_modes(init->as.function_expr.params, init->as.function_expr.param_count, modes,
+                           mode_count);
 
-    AstNode *arrow_stmt = parse_first("var g = (a: in int, b: ref int) -> a");
+    AstNode *arrow_stmt = parse_first("var g = (a: int, b: in int, c: ref int, d: out int) -> a");
     AstNode *arrow = arrow_stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(arrow->type, AST_FUNCTION_EXPR);
-    ASSERT_EQ_INT(arrow->as.function_expr.param_count, 2);
-    ASSERT_EQ_INT(arrow->as.function_expr.params[0]->passing_mode, XR_PARAM_IN);
-    ASSERT_EQ_INT(arrow->as.function_expr.params[1]->passing_mode, XR_PARAM_REF);
+    assert_ast_param_modes(arrow->as.function_expr.params, arrow->as.function_expr.param_count,
+                           modes, mode_count);
 
-    AstNode *method_stmt = parse_first("class Box {\n  touch(a: in int, b: ref int) {}\n}");
+    AstNode *method_stmt =
+        parse_first("class Box {\n  touch(a: int, b: in int, c: ref int, d: out int) {}\n}");
     AstNode *method = method_stmt->as.class_decl.methods[0];
     ASSERT_EQ_INT(method->type, AST_METHOD_DECL);
-    ASSERT_EQ_INT(method->as.method_decl.param_count, 2);
-    ASSERT_EQ_INT(method->as.method_decl.param_passing_modes[0], XR_PARAM_IN);
-    ASSERT_EQ_INT(method->as.method_decl.param_passing_modes[1], XR_PARAM_REF);
+    assert_param_modes(method->as.method_decl.param_passing_modes,
+                       method->as.method_decl.param_count, modes, mode_count);
 
-    AstNode *iface = parse_first("interface Sink {\n  write(a: in int, b: ref int) -> ()\n}");
+    AstNode *iface = parse_first(
+        "interface Sink {\n  write(a: int, b: in int, c: ref int, d: out int) -> ()\n}");
     AstNode *iface_method = iface->as.interface_decl.methods[0];
     ASSERT_EQ_INT(iface_method->type, AST_INTERFACE_METHOD);
-    ASSERT_EQ_INT(iface_method->as.interface_method.param_count, 2);
-    ASSERT_EQ_INT(iface_method->as.interface_method.param_passing_modes[0], XR_PARAM_IN);
-    ASSERT_EQ_INT(iface_method->as.interface_method.param_passing_modes[1], XR_PARAM_REF);
+    assert_param_modes(iface_method->as.interface_method.param_passing_modes,
+                       iface_method->as.interface_method.param_count, modes, mode_count);
 
     teardown();
 }
