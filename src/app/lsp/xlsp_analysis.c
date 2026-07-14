@@ -84,8 +84,8 @@ static const XlspDocEntry keyword_docs[] = {
 static const XlspDocEntry builtin_docs[] = {
     {"print", "```xray\nprint(value, ...)\n```\n\nPrints values to stdout."},
     {"typeOf", "```xray\ntypeOf(value): Type\n```\n\nReturns the stable TypeId for a value."},
-    {"typeName",
-     "```xray\ntypeName(value): string\n```\n\nReturns the debug/display type name of a value."},
+    {"typeName", "```xray\ntypeName(value): string\ntypeName<T>(): string\n```\n\nReturns the "
+                 "debug/display type name of a value or static type."},
     {"assert", "```xray\nassert(condition, message?)\n```\n\nAsserts that condition is true."},
     {"assert_true", "```xray\nassert_true(value)\n```\n\nAsserts that value is truthy."},
     {"assert_false", "```xray\nassert_false(value)\n```\n\nAsserts that value is falsy."},
@@ -1208,8 +1208,9 @@ static const FunctionSignature builtin_signatures[] = {
     {"print", "print(value, ...)", "Prints values to stdout", print_params, print_param_docs, 2},
     {"typeOf", "typeOf(value): Type", "Returns stable TypeId for value", type_query_params,
      type_query_param_docs, 1},
-    {"typeName", "typeName(value): string", "Returns debug/display type name of value",
-     type_query_params, type_query_param_docs, 1},
+    {"typeName", "typeName(value): string | typeName<T>(): string",
+     "Returns debug/display type name of a value or static type", type_query_params,
+     type_query_param_docs, 1},
     {"assert", "assert(condition, message?)", "Asserts condition is true", assert_params,
      assert_param_docs, 2},
     {"assert_true", "assert_true(value)", "Asserts value is truthy", assert_one_params,

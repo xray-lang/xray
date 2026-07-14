@@ -2968,6 +2968,14 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         v->line = (uint32_t) line;
         return v;
     }
+    /* typeName<T>() → compile-time type display name string. */
+    if (strcmp(fname, "typeName") == 0 && call->type_arg_count == 1 && call->arg_count == 0 &&
+        call->type_args && call->type_args[0]) {
+        XrType *target = l->analyzer ? xr_tref_resolve_in_analyzer(l->analyzer, call->type_args[0])
+                                     : xr_tref_resolve(l->isolate, call->type_args[0]);
+        return xi_const_str(l->func, l->cur_block, target ? xr_type_to_string(target) : "unknown",
+                            l->type_string);
+    }
     /* typeName(x) → cold/debug type display name string. */
     if (strcmp(fname, "typeName") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
