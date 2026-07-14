@@ -22,6 +22,7 @@
 #include "../../base/xhashmap.h"
 #include "../../base/xstorage.h"
 #include "../../module/xmodule_graph.h"
+#include "../../runtime/value/xerror_set.h"
 #include "../../runtime/value/xstruct_layout.h"
 #include "../../runtime/value/xtype_internal.h"
 #include "../../shared/xr_derive_flags.h"
@@ -6339,15 +6340,6 @@ static void xa_error_set_union_call_errors(XaAnalyzer *analyzer, XrErrorSet *out
         return;
     int before_count = out->count;
     if (callee->type == AST_VARIABLE && callee->as.variable.name) {
-        XaSymbol *sym =
-            callee->as.variable.symbol_id
-                ? xa_scope_lookup_by_id(analyzer->global_scope, callee->as.variable.symbol_id)
-                : NULL;
-        if (!sym)
-            sym = xa_scope_lookup(analyzer->global_scope, callee->as.variable.name);
-        XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
-        if (links && links->error_set)
-            xr_error_set_union(analyzer->type_pool, out, links->error_set);
         if (out->count == before_count && xa_payload_error_scan_root &&
             xa_payload_error_scan_depth < 8) {
             AstNode *fn =

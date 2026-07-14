@@ -177,6 +177,42 @@ TEST(incomplete_empty_is_not_nothrow) {
     xa_effect_db_free(db);
 }
 
+TEST(summary_merge_preserves_variants_and_incomplete_reason) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId first_type = xa_effect_db_register_error_type(db, 0x404u);
+    XaErrorTypeId second_type = xa_effect_db_register_error_type(db, 0x505u);
+    ASSERT(first_type != XA_ERROR_TYPE_NONE);
+    ASSERT(second_type != XA_ERROR_TYPE_NONE);
+    ASSERT(xa_effect_db_register_error_variant(db, first_type, 0x11u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, second_type, 0x22u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, second_type, 0x33u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary dest;
+    XaEffectSummary src;
+    xa_effect_summary_init(&dest);
+    xa_effect_summary_init(&src);
+    ASSERT(xa_effect_summary_add_all_variants(db, &dest, first_type));
+    ASSERT(xa_effect_summary_add_variant(db, &src, second_type, 1));
+    xa_effect_summary_mark_incomplete(&src, XA_UNKNOWN_UNRESOLVED_CALLEE);
+
+    ASSERT(xa_effect_summary_add_summary(db, &dest, &src));
+    XaEffectId id = xa_effect_db_intern(db, &dest);
+    ASSERT(id != XA_EFFECT_NONE);
+    const XaEffectSummary *stored = xa_effect_db_get(db, id);
+    ASSERT(stored != NULL);
+    ASSERT(stored->escaping.count == 2);
+    ASSERT(stored->escaping.types[0].all_variants);
+    ASSERT(!stored->escaping.types[1].all_variants);
+    ASSERT(xa_bitset_test(&stored->escaping.types[1].variants, 1));
+    ASSERT(stored->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((stored->unknown_reasons & XA_UNKNOWN_UNRESOLVED_CALLEE) != 0);
+
+    xa_effect_summary_clear(&dest);
+    xa_effect_summary_clear(&src);
+    xa_effect_db_free(db);
+}
+
 int main(void) {
     printf("Running effect database tests...\n");
     RUN_TEST(empty_complete_is_real_summary);
@@ -184,6 +220,7 @@ int main(void) {
     RUN_TEST(interning_ignores_variant_insertion_order);
     RUN_TEST(stable_variant_keys_survive_session_variant_order);
     RUN_TEST(incomplete_empty_is_not_nothrow);
+    RUN_TEST(summary_merge_preserves_variants_and_incomplete_reason);
 
     printf("\n%d tests passed, %d failed\n", tests_passed, tests_failed);
     return tests_failed ? 1 : 0;

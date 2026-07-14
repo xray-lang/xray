@@ -10,9 +10,7 @@
  * After Pass 2 (type inference) has resolved all types, this pass
  * walks the AST to infer which enum error types each function may
  * throw.  The result is interned in XaAnalyzer.effect_db and stored
- * as XaSymbolLinks.effect_id.  The temporary XaSymbolLinks.error_set
- * bridge remains only for collectors that have not yet switched to
- * XaEffectId.
+ * as XaSymbolLinks.effect_id.
  *
  * Algorithm:
  *   1. Collect all function symbols in topological order.
@@ -27,9 +25,7 @@
 #include "xanalyzer_visitor.h"
 #include "xa_effect_db.h"
 #include "../../base/xhash.h"
-#include "../../runtime/value/xerror_set.h"
 #include "../../runtime/value/xtype.h"
-#include "../../runtime/value/xtype_pool.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
 #include <stdio.h>
@@ -66,60 +62,37 @@ static XaErrorTypeId es_register_error_enum(XaEffectDatabase *db, XrType *enum_t
     return type_id;
 }
 
-static void es_summary_add_error_entry(XaEffectDatabase *db, XaEffectSummary *summary,
-                                       const XrErrorEntry *entry) {
-    if (!db || !summary || !entry || !entry->enum_type)
+static void es_summary_add_enum_all(XaEffectDatabase *db, XaEffectSummary *summary,
+                                    XrType *enum_type) {
+    if (!db || !summary || !enum_type)
         return;
-    XaErrorTypeId type_id = es_register_error_enum(db, entry->enum_type);
+    XaErrorTypeId type_id = es_register_error_enum(db, enum_type);
     if (type_id == XA_ERROR_TYPE_NONE)
         return;
-    if (entry->case_mask == 0) {
-        xa_effect_summary_add_all_variants(db, summary, type_id);
-        return;
-    }
-    const char *enum_name = entry->enum_type->enum_type.enum_name;
-    const XrEnumLayout *layout = entry->enum_type->enum_type.layout;
-    for (uint32_t i = 0; i < 64u; i++) {
-        if ((entry->case_mask & (UINT64_C(1) << i)) == 0)
-            continue;
-        XaErrorVariantId variant_id = XA_ERROR_VARIANT_INVALID;
-        if (layout && i < layout->variant_count) {
-            const char *variant_name = layout->variants[i].name;
-            variant_id = xa_effect_db_register_error_variant(
-                db, type_id, es_stable_key_text3("variant", enum_name, variant_name));
-        } else {
-            char fallback[64];
-            snprintf(fallback, sizeof(fallback), "#%u", i);
-            variant_id = xa_effect_db_register_error_variant(
-                db, type_id, es_stable_key_text3("variant-index", enum_name, fallback));
-        }
-        if (variant_id != XA_ERROR_VARIANT_INVALID)
-            xa_effect_summary_add_variant(db, summary, type_id, variant_id);
-    }
+    xa_effect_summary_add_all_variants(db, summary, type_id);
 }
 
-static XaEffectId es_intern_effect_summary(XaAnalyzer *analyzer, const XrErrorSet *set) {
-    if (!analyzer || !analyzer->effect_db)
-        return XA_EFFECT_NONE;
-    XaEffectSummary summary;
-    xa_effect_summary_init(&summary);
-    if (set) {
-        for (int i = 0; i < set->count; i++)
-            es_summary_add_error_entry(analyzer->effect_db, &summary, &set->entries[i]);
-    }
-    XaEffectId id = xa_effect_db_intern(analyzer->effect_db, &summary);
-    xa_effect_summary_clear(&summary);
-    return id;
+static void es_summary_add_enum_case(XaEffectDatabase *db, XaEffectSummary *summary,
+                                     XrType *enum_type, uint32_t case_index) {
+    if (!db || !summary || !enum_type)
+        return;
+    XaErrorTypeId type_id = es_register_error_enum(db, enum_type);
+    if (type_id == XA_ERROR_TYPE_NONE)
+        return;
+    XaErrorVariantId variant_id = case_index;
+    const XrEnumLayout *layout = enum_type->enum_type.layout;
+    if (layout && case_index >= layout->variant_count)
+        return;
+    xa_effect_summary_add_variant(db, summary, type_id, variant_id);
 }
 
 /* ========== Internal Context ========== */
 
 typedef struct ErrorSetCtx {
     XaAnalyzer *analyzer;
-    XrTypePool *pool;
-    XrErrorSet *current_set; /* Error set being built for current function */
-    XaSymbol *current_func;  /* Current function symbol */
-    bool changed;            /* Fixpoint: did anything change this iteration? */
+    XaEffectSummary current_summary; /* Effect summary being built for current function */
+    XaSymbol *current_func;          /* Current function symbol */
+    bool changed;                    /* Fixpoint: did anything change this iteration? */
 } ErrorSetCtx;
 
 /* ========== Forward Declarations ========== */
@@ -183,14 +156,14 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
             }
             es_walk_expr(ctx, node->as.call_expr.callee);
 
-            /* Union callee's error set into current function's error set */
+            /* Union callee's effect summary into current function's summary */
             XaSymbol *callee_sym = resolve_call_target(ctx->analyzer, node->as.call_expr.callee);
-            if (callee_sym && callee_sym->links.error_set) {
-                XrErrorSet *old_snapshot = ctx->current_set;
-                int old_count = old_snapshot ? old_snapshot->count : 0;
-                xr_error_set_union(ctx->pool, ctx->current_set, callee_sym->links.error_set);
-                if (ctx->current_set->count != old_count)
-                    ctx->changed = true;
+            if (callee_sym && callee_sym->links.effect_id != XA_EFFECT_NONE) {
+                const XaEffectSummary *callee_summary =
+                    xa_effect_db_get(ctx->analyzer->effect_db, callee_sym->links.effect_id);
+                if (callee_summary)
+                    xa_effect_summary_add_summary(ctx->analyzer->effect_db, &ctx->current_summary,
+                                                  callee_summary);
             }
             break;
         }
@@ -316,15 +289,12 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                         XrType *enum_type = enum_sym->links.type;
                         int case_idx = find_enum_case_index(enum_sym, member_name);
                         if (enum_type && case_idx >= 0) {
-                            int old_count = ctx->current_set->count;
-                            xr_error_set_add_case(ctx->pool, ctx->current_set, enum_type, case_idx);
-                            if (ctx->current_set->count != old_count)
-                                ctx->changed = true;
+                            es_summary_add_enum_case(ctx->analyzer->effect_db,
+                                                     &ctx->current_summary, enum_type,
+                                                     (uint32_t) case_idx);
                         } else if (enum_type) {
-                            int old_count = ctx->current_set->count;
-                            xr_error_set_add_all(ctx->pool, ctx->current_set, enum_type);
-                            if (ctx->current_set->count != old_count)
-                                ctx->changed = true;
+                            es_summary_add_enum_all(ctx->analyzer->effect_db, &ctx->current_summary,
+                                                    enum_type);
                         }
                     }
                 }
@@ -332,10 +302,8 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 /* Generic throw: infer type from the expression's analyzed type */
                 XrType *thrown_type = xa_analyzer_get_node_type(ctx->analyzer, expr);
                 if (thrown_type && XR_TYPE_IS_ENUM(thrown_type)) {
-                    int old_count = ctx->current_set->count;
-                    xr_error_set_add_all(ctx->pool, ctx->current_set, thrown_type);
-                    if (ctx->current_set->count != old_count)
-                        ctx->changed = true;
+                    es_summary_add_enum_all(ctx->analyzer->effect_db, &ctx->current_summary,
+                                            thrown_type);
                 }
             }
             break;
@@ -440,16 +408,16 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
 
     ctx->current_func = func_sym;
 
-    /* Create or reuse existing error set */
-    if (!func_sym->links.error_set)
-        func_sym->links.error_set = xr_error_set_new(ctx->pool);
-
-    ctx->current_set = func_sym->links.error_set;
+    xa_effect_summary_init(&ctx->current_summary);
     es_walk_block(ctx, body);
-    func_sym->links.effect_id = es_intern_effect_summary(ctx->analyzer, func_sym->links.error_set);
+    XaEffectId previous_id = func_sym->links.effect_id;
+    func_sym->links.effect_id =
+        xa_effect_db_intern(ctx->analyzer->effect_db, &ctx->current_summary);
+    if (func_sym->links.effect_id != previous_id)
+        ctx->changed = true;
+    xa_effect_summary_clear(&ctx->current_summary);
 
     ctx->current_func = NULL;
-    ctx->current_set = NULL;
 }
 
 /* ========== Top-Level Collector ========== */
@@ -502,7 +470,6 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
     ErrorSetCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.analyzer = analyzer;
-    ctx.pool = analyzer->type_pool;
 
     /* Phase 1: Collect all function declarations */
     FuncEntry *funcs = NULL;
