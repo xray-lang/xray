@@ -1408,6 +1408,9 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
                          "class InterfaceThrower implements EffectRunner {\n"
                          "  failEffect() { throw OtherMethodErr.Boom }\n"
                          "}\n"
+                         "class OtherInterfaceThrower implements EffectRunner {\n"
+                         "  failEffect() { throw MethodErr.Boom }\n"
+                         "}\n"
                          "fn viaInstanceMethod() {\n"
                          "  var t = Thrower()\n"
                          "  t.fail()\n"
@@ -1490,11 +1493,14 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
     ASSERT(method_hof_unknown->completeness == XA_EFFECT_INCOMPLETE);
     ASSERT((method_hof_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(!effect_summary_has_enum_named(a, method_hof_unknown, "MethodErr"));
-    ASSERT(open_base->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((open_base->unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) != 0);
+    ASSERT(open_base->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((open_base->unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) == 0);
     ASSERT(effect_summary_has_enum_named(a, open_base, "MethodErr"));
-    ASSERT(interface_method->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((interface_method->unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) != 0);
+    ASSERT(effect_summary_has_enum_named(a, open_base, "OtherMethodErr"));
+    ASSERT(interface_method->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((interface_method->unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) == 0);
+    ASSERT(effect_summary_has_enum_named(a, interface_method, "MethodErr"));
+    ASSERT(effect_summary_has_enum_named(a, interface_method, "OtherMethodErr"));
 
     xa_analyzer_free(a);
     setup_pool();
