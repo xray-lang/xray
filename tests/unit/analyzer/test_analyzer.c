@@ -915,6 +915,31 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
                          "  if (flag) { f = cb }\n"
                          "  f()\n"
                          "}\n"
+                         "fn viaWhileTargetUnion(flag: bool) {\n"
+                         "  var f = noThrowDynamic\n"
+                         "  while (flag) { f = failDynamic }\n"
+                         "  f()\n"
+                         "}\n"
+                         "fn viaForTargetUnion(flag: bool) {\n"
+                         "  var f = noThrowDynamic\n"
+                         "  for (; flag; ) { f = failDynamic }\n"
+                         "  f()\n"
+                         "}\n"
+                         "fn viaForIncrementTargetUnion(flag: bool) {\n"
+                         "  var f = noThrowDynamic\n"
+                         "  for (; flag; f = failOtherDynamic) { f = failDynamic }\n"
+                         "  f()\n"
+                         "}\n"
+                         "fn viaForInTargetUnion() {\n"
+                         "  var f = noThrowDynamic\n"
+                         "  for (i in 0..3) { f = failDynamic }\n"
+                         "  f()\n"
+                         "}\n"
+                         "fn viaLoopUnknownVarAlias(flag: bool, cb: () -> ()) {\n"
+                         "  var f = failDynamic\n"
+                         "  while (flag) { f = cb }\n"
+                         "  f()\n"
+                         "}\n"
                          "fn viaConstAliasStillExact() {\n"
                          "  const f = failDynamic\n"
                          "  f()\n"
@@ -937,6 +962,14 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         analyzer_function_effect_summary(a, "viaIfElseTargetUnion");
     const XaEffectSummary *conditional_unknown =
         analyzer_function_effect_summary(a, "viaConditionalUnknownVarAlias");
+    const XaEffectSummary *while_union = analyzer_function_effect_summary(a, "viaWhileTargetUnion");
+    const XaEffectSummary *for_union = analyzer_function_effect_summary(a, "viaForTargetUnion");
+    const XaEffectSummary *for_increment_union =
+        analyzer_function_effect_summary(a, "viaForIncrementTargetUnion");
+    const XaEffectSummary *for_in_union =
+        analyzer_function_effect_summary(a, "viaForInTargetUnion");
+    const XaEffectSummary *loop_unknown =
+        analyzer_function_effect_summary(a, "viaLoopUnknownVarAlias");
     const XaEffectSummary *const_alias =
         analyzer_function_effect_summary(a, "viaConstAliasStillExact");
     ASSERT(stable_var != NULL);
@@ -947,6 +980,11 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT(conditional_rebound != NULL);
     ASSERT(if_else_union != NULL);
     ASSERT(conditional_unknown != NULL);
+    ASSERT(while_union != NULL);
+    ASSERT(for_union != NULL);
+    ASSERT(for_increment_union != NULL);
+    ASSERT(for_in_union != NULL);
+    ASSERT(loop_unknown != NULL);
     ASSERT(const_alias != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, stable_var, "DynamicErr"));
@@ -970,6 +1008,21 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT(effect_summary_has_enum_named(a, if_else_union, "OtherDynamicErr"));
     ASSERT(conditional_unknown->completeness == XA_EFFECT_INCOMPLETE);
     ASSERT((conditional_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(while_union->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((while_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, while_union, "DynamicErr"));
+    ASSERT(for_union->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((for_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, for_union, "DynamicErr"));
+    ASSERT(for_increment_union->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((for_increment_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(!effect_summary_has_enum_named(a, for_increment_union, "DynamicErr"));
+    ASSERT(effect_summary_has_enum_named(a, for_increment_union, "OtherDynamicErr"));
+    ASSERT(for_in_union->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((for_in_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, for_in_union, "DynamicErr"));
+    ASSERT(loop_unknown->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((loop_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(effect_summary_has_enum_named(a, const_alias, "DynamicErr"));
     ASSERT((const_alias->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 
