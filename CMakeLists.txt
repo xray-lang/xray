@@ -1771,6 +1771,22 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    add_test(
+        NAME byte_array_aot_c90_hotpath
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_BIN=$<TARGET_FILE:xray>
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_aot_c90_benchmarks.sh
+                --quick
+                --gate
+                --bench byte_array_u8_index_fill_sum,byte_array_slice_bulk_hotpath
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(byte_array_aot_c90_hotpath PROPERTIES
+        LABELS "aot;benchmark;types"
+        PROCESSORS 2
+        TIMEOUT 120
+    )
+
     # Zero-cost feature inventory: every tracked family must either have a
     # current plan/filetest pattern or an explicit gap row.
     add_test(
