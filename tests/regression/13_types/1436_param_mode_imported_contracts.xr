@@ -1,0 +1,40 @@
+import {
+    bumpRef,
+    bumpRefValue,
+    fillOut,
+    fillOutValue,
+} from "../../fixtures/param_mode_import_lib"
+import "../../fixtures/param_mode_import_lib" as param_mode
+
+@test
+fn test_selective_import_ref_out_contracts() {
+    var value = 1
+    assert_eq(bumpRef(ref value), 2)
+
+    var slot = 0
+    assert_eq(fillOut(out slot), 9)
+}
+
+@test
+fn test_namespace_import_ref_out_contracts() {
+    var value = 3
+    assert_eq(param_mode.bumpRef(ref value), 4)
+
+    var slot = 0
+    assert_eq(param_mode.fillOut(out slot), 9)
+}
+
+@test
+fn test_exported_const_function_value_ref_out_contracts() {
+    var value = 5
+    assert_eq(bumpRefValue(ref value), 6)
+
+    var slot = 0
+    assert_eq(param_mode.fillOutValue(out slot), 11)
+
+    const bump = bumpRefValue
+    assert_eq(bump(ref value), 6)
+
+    const fill = fillOutValue
+    assert_eq(fill(out slot), 11)
+}
