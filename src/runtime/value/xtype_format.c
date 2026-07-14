@@ -28,11 +28,11 @@ const char *xr_type_to_string(XrType *type) {
 #define TYPE_STR_BUF_SIZE 256
 
     if (!type)
-        return TYPE_NAME_UNKNOWN;
+        return "<error>";
 
     // Simple types: return static constants (no allocation)
     if (XR_TYPE_IS_UNKNOWN(type))
-        return TYPE_NAME_UNKNOWN;
+        return "<error>";
     if (XR_TYPE_IS_ERROR(type))
         return "<error>";
     if (XR_TYPE_IS_NEVER(type))
@@ -105,35 +105,35 @@ const char *xr_type_to_string(XrType *type) {
             snprintf(buf, TYPE_STR_BUF_SIZE, "%s?", xr_type_to_string(base));
             return xr_pool_strdup(pool, buf);
         }
-        return "unknown?";
+        return "<error>?";
     }
 
     if (XR_TYPE_IS_ARRAY(type)) {
         const char *elem = type->container.element_type
                                ? xr_type_to_string(type->container.element_type)
-                               : "unknown";
+                               : "<error>";
         snprintf(buf, TYPE_STR_BUF_SIZE, "Array<%s>", elem);
         return xr_pool_strdup(pool, buf);
     }
 
     if (XR_TYPE_IS_SPAN(type)) {
         XrType *elem_type = type->container.element_type;
-        const char *elem = elem_type ? xr_type_to_string(elem_type) : "unknown";
+        const char *elem = elem_type ? xr_type_to_string(elem_type) : "<error>";
         snprintf(buf, TYPE_STR_BUF_SIZE, "%s<%s>", TYPE_NAME_SPAN, elem);
         return xr_pool_strdup(pool, buf);
     }
 
     if (XR_TYPE_IS_VIEW(type)) {
         XrType *elem_type = type->container.element_type;
-        const char *elem = elem_type ? xr_type_to_string(elem_type) : "unknown";
+        const char *elem = elem_type ? xr_type_to_string(elem_type) : "<error>";
         snprintf(buf, TYPE_STR_BUF_SIZE, "%s<%s>", TYPE_NAME_VIEW, elem);
         return xr_pool_strdup(pool, buf);
     }
 
     if (XR_TYPE_IS_MAP(type)) {
-        const char *key = type->map.key_type ? xr_type_to_string(type->map.key_type) : "unknown";
+        const char *key = type->map.key_type ? xr_type_to_string(type->map.key_type) : "<error>";
         const char *val =
-            type->map.value_type ? xr_type_to_string(type->map.value_type) : "unknown";
+            type->map.value_type ? xr_type_to_string(type->map.value_type) : "<error>";
         snprintf(buf, TYPE_STR_BUF_SIZE, "Map<%s, %s>", key, val);
         return xr_pool_strdup(pool, buf);
     }
@@ -141,7 +141,7 @@ const char *xr_type_to_string(XrType *type) {
     if (type->kind == XR_KIND_SET) {
         const char *elem = type->container.element_type
                                ? xr_type_to_string(type->container.element_type)
-                               : "unknown";
+                               : "<error>";
         snprintf(buf, TYPE_STR_BUF_SIZE, "Set<%s>", elem);
         return xr_pool_strdup(pool, buf);
     }
@@ -149,7 +149,7 @@ const char *xr_type_to_string(XrType *type) {
     if (type->kind == XR_KIND_CHANNEL) {
         const char *elem = type->container.element_type
                                ? xr_type_to_string(type->container.element_type)
-                               : "unknown";
+                               : "<error>";
         snprintf(buf, TYPE_STR_BUF_SIZE, "Channel<%s>", elem);
         return xr_pool_strdup(pool, buf);
     }
@@ -157,7 +157,7 @@ const char *xr_type_to_string(XrType *type) {
     if (type->kind == XR_KIND_POINTER) {
         const char *elem = type->container.element_type
                                ? xr_type_to_string(type->container.element_type)
-                               : "unknown";
+                               : "<error>";
         snprintf(buf, TYPE_STR_BUF_SIZE, "%s<%s>", type->ptr_is_mut ? "RawMut" : "RawPtr", elem);
         return xr_pool_strdup(pool, buf);
     }
@@ -165,7 +165,7 @@ const char *xr_type_to_string(XrType *type) {
     if (type->kind == XR_KIND_FIXED_ARRAY) {
         const char *elem = type->fixed_array.element_type
                                ? xr_type_to_string(type->fixed_array.element_type)
-                               : "unknown";
+                               : "<error>";
         snprintf(buf, TYPE_STR_BUF_SIZE, "[%s; %d]", elem, type->fixed_array.length);
         return xr_pool_strdup(pool, buf);
     }
@@ -257,7 +257,7 @@ const char *xr_type_to_string(XrType *type) {
                 }
                 const char *arg_str = type->instance.type_args[i]
                                           ? xr_type_to_string(type->instance.type_args[i])
-                                          : "unknown";
+                                          : "<error>";
                 n = snprintf(ptr, remaining, "%s", arg_str);
                 ptr += n;
                 remaining -= n;
@@ -311,7 +311,7 @@ const char *xr_type_to_string(XrType *type) {
                         }
                         n = snprintf(ptr, remaining, "%s",
                                      constraints[j] ? xr_type_to_string(constraints[j])
-                                                    : "unknown");
+                                                    : "<error>");
                         ptr += n;
                         remaining -= n;
                     }
@@ -333,7 +333,7 @@ const char *xr_type_to_string(XrType *type) {
                 remaining -= n;
             }
             XrType *param_type = xr_type_function_param_type(type, i);
-            const char *param_str = param_type ? xr_type_to_string(param_type) : "unknown";
+            const char *param_str = param_type ? xr_type_to_string(param_type) : "<error>";
             n = snprintf(ptr, remaining, "%s", param_str);
             ptr += n;
             remaining -= n;
@@ -361,7 +361,7 @@ const char *xr_type_to_string(XrType *type) {
             }
             const char *elem_str = type->tuple.element_types[i]
                                        ? xr_type_to_string(type->tuple.element_types[i])
-                                       : "unknown";
+                                       : "<error>";
             n = snprintf(ptr, remaining, "%s", elem_str);
             ptr += n;
             remaining -= n;
@@ -377,7 +377,7 @@ const char *xr_type_to_string(XrType *type) {
         return xr_pool_strdup(pool, buf);
     }
 
-    return "unknown";
+    return "<error>";
 }
 
 bool xr_type_is_inherently_immutable(XrType *type) {

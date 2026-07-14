@@ -106,7 +106,7 @@ void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *tref) {
     if (n > 0) {
         xfmt_write_str(ctx, buf);
     } else {
-        xfmt_write_str(ctx, "unknown");
+        xfmt_write_str(ctx, "<error>");
     }
 }
 

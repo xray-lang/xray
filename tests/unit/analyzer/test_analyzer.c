@@ -163,6 +163,7 @@ TEST(type_error_recovery) {
     ASSERT(strcmp(xr_type_to_string(t_error), "<error>") == 0);
     ASSERT(xr_type_equals(t_error, xr_type_new_error(NULL)));
     ASSERT(!xr_type_equals(t_error, xr_type_new_unknown(NULL)));
+    ASSERT(strcmp(xr_type_to_string(xr_type_new_unknown(NULL)), "<error>") == 0);
 
     XrTypeRef error_ref = {.kind = XR_TREF_ERROR};
     XrType *resolved = xr_tref_resolve(g_isolate, &error_ref);
@@ -2577,7 +2578,7 @@ TEST(type_substitute_preserves_nullable_type_param) {
 
 TEST(type_null_handling) {
     // Operations on NULL should not crash
-    ASSERT(xr_type_to_string(NULL) != NULL);
+    ASSERT(strcmp(xr_type_to_string(NULL), "<error>") == 0);
     ASSERT(xr_type_assignable(NULL, NULL) == false);
 }
 
