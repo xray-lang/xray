@@ -1,0 +1,27 @@
+class Counter {
+    value: int
+
+    constructor(v) {
+        this.value = v
+    }
+
+    bump() {
+        this.value = this.value + 1
+    }
+
+    current() -> int {
+        return this.value
+    }
+}
+
+@test
+fn test_receiver_mutation_does_not_need_ref_marker() {
+    var counter = Counter(1)
+    counter.bump()
+    assert_eq(counter.current(), 2)
+
+    var values: Array<int> = [1, 2]
+    values.push(3)
+    assert_eq(len(values), 3)
+    assert_eq(values[2], 3)
+}
