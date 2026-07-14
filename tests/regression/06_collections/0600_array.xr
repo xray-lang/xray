@@ -162,7 +162,7 @@ fn test_indexOf() {
 }
 
 @test
-fn test_includes() {
+fn test_contains() {
     var arr = [1, 2, 3]
     assert_eq(arr.contains(2), true)
     assert_eq(arr.contains(5), false)

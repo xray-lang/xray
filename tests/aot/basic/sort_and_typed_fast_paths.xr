@@ -62,7 +62,7 @@ var filled: Array<int> = [1, 2, 3, 4, 5]
 filled.fill(7)
 print(filled.join(","))         // 7,7,7,7,7
 
-// --- typed indexOf / includes fast paths ---
+// --- typed indexOf / contains fast paths ---
 var nums: Array<int> = [10, 20, 30, 40, 50]
 print(nums.indexOf(30))         // 2
 print(nums.indexOf(99))         // -1

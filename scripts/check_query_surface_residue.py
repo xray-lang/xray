@@ -98,6 +98,12 @@ CONTAINER_BUILDER_ALIAS_RE = re.compile(
     r'xr_class_builder_add_(?:static_)?(?:method|property)\s*\([^)]*'
     r'"(?:length|size|isEmpty|includes|include|has)"'
 )
+CONTAINER_ALIAS_TEST_TEXT_RE = re.compile(
+    r"\btest_[A-Za-z0-9_]*includes[A-Za-z0-9_]*\b|"
+    r"\b(?:Array|Range|Set|Slice|string)\.includes\b|"
+    r"\bindexOf\s*/\s*includes\b|"
+    r"\bincludes\s*(?:[,，]|——|与)"
+)
 TOOLING_JS_INCLUDES_RE = re.compile(r"\.includes\s*\(")
 
 PUBLIC_BLOCKING_CATEGORIES = {
@@ -105,6 +111,7 @@ PUBLIC_BLOCKING_CATEGORIES = {
     "PUBLIC_TYPE_QUERY_ALIAS_SUPPORT",
     "PUBLIC_CONTAINER_QUERY_ALIAS",
     "PUBLIC_CONTAINER_QUERY_ALIAS_SUPPORT",
+    "PUBLIC_CONTAINER_QUERY_ALIAS_TEST_TEXT",
 }
 
 CATEGORIES = (
@@ -116,6 +123,7 @@ CATEGORIES = (
     "HISTORICAL_TYPE_QUERY_TEXT",
     "PUBLIC_CONTAINER_QUERY_ALIAS",
     "PUBLIC_CONTAINER_QUERY_ALIAS_SUPPORT",
+    "PUBLIC_CONTAINER_QUERY_ALIAS_TEST_TEXT",
     "TOOLING_INTERNAL_JS_INCLUDES",
     "DOMAIN_OR_LAYOUT_LENGTH_SIZE_TEXT",
 )
@@ -166,6 +174,15 @@ def is_public_container_surface_file(rel_path: Path) -> bool:
     return any(path_str.startswith(prefix) for prefix in PUBLIC_CONTAINER_SURFACE_PREFIXES)
 
 
+def is_public_container_alias_test_file(rel_path: Path) -> bool:
+    path_str = rel_path.as_posix()
+    return (
+        path_str.startswith("tests/regression/")
+        or path_str.startswith("tests/aot/basic/")
+        or path_str.startswith("tests/aot/filetests/")
+    )
+
+
 def classify_type_query(root: Path, path: Path, lineno: int, line: str) -> list[Hit]:
     rel_path = rel(root, path)
     rel_str = rel_path.as_posix()
@@ -205,6 +222,10 @@ def classify_container_query(root: Path, path: Path, lineno: int, line: str) -> 
 
     if rel_path == Path("scripts/gen_api_inventory.py") and TOOLING_JS_INCLUDES_RE.search(line):
         hits.append(Hit("TOOLING_INTERNAL_JS_INCLUDES", rel_str, lineno, stripped))
+        return hits
+
+    if is_public_container_alias_test_file(rel_path) and CONTAINER_ALIAS_TEST_TEXT_RE.search(line):
+        hits.append(Hit("PUBLIC_CONTAINER_QUERY_ALIAS_TEST_TEXT", rel_str, lineno, stripped))
         return hits
 
     public_surface = is_public_container_surface_file(rel_path)

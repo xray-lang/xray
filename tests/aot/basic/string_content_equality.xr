@@ -1,6 +1,6 @@
 // AOT regression: string equality must compare by content, not pointer.
 // Runtime-allocated strings (concat results) and literals must be
-// interchangeable in ==, Array.indexOf/includes, Map keys and Set members,
+// interchangeable in ==, Array.indexOf/contains, Map keys and Set members,
 // matching VM xr_value_eq semantics.
 
 fn glue(a: string, b: string) -> string {
@@ -14,7 +14,7 @@ print("bob" == needle)                   // true
 print(needle == glue("bo", "b"))         // true
 print(needle == "bo")                    // false
 
-// --- Array<string>.indexOf / includes with runtime-allocated needle ---
+// --- Array<string>.indexOf / contains with runtime-allocated needle ---
 var names: Array<string> = ["alice", "bob", "carol"]
 print(names.indexOf(needle))             // 1
 print(names.contains(needle))            // true

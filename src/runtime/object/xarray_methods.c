@@ -197,7 +197,7 @@ static XrValue m_sort(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
 
 /* === Query === */
 
-static XrValue m_includes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_contains(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return xr_bool(false);
@@ -490,7 +490,7 @@ void xr_array_register_native_type(XrVMRuntime *isolate) {
         {"resize", m_resize, 2},
         {"sort", m_sort, 0},
         /* Query */
-        {"contains", m_includes, 1},
+        {"contains", m_contains, 1},
         {"indexOf", m_index_of, 1},
         {"appendFrom", m_append_from, 1},
         {"repeatFrom", m_repeat_from, 2},

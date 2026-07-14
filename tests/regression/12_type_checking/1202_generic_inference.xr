@@ -154,7 +154,7 @@ fn test_array_indexOf() {
 }
 
 @test
-fn test_array_includes() {
+fn test_array_contains() {
     var arr = [1, 2, 3]
     assert(arr.contains(2))
     assert(!arr.contains(5))
