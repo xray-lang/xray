@@ -72,6 +72,7 @@ typedef struct ErrorSetCtx {
     uint32_t function_value_alias_ids[128];
     FunctionValueTarget function_value_alias_targets[128];
     int function_value_alias_count;
+    int function_value_control_depth;
     XaEffectSummary *current_caught; /* Effect subset caught by current catch clause */
     XaSymbol *current_func;          /* Current function symbol */
     bool changed;                    /* Fixpoint: did anything change this iteration? */
@@ -201,6 +202,26 @@ static bool function_value_target_is_exact(FunctionValueTarget target) {
            (target.symbol->kind == XA_SYM_FUNCTION || target.symbol->kind == XA_SYM_METHOD);
 }
 
+static XaSymbol *lookup_symbol_by_id(ErrorSetCtx *ctx, uint32_t symbol_id) {
+    if (!ctx || !ctx->analyzer || symbol_id == 0)
+        return NULL;
+    return xa_scope_lookup_by_id(ctx->analyzer->global_scope, symbol_id);
+}
+
+static XaSymbol *lookup_assignment_symbol(ErrorSetCtx *ctx, AssignmentNode *assign) {
+    if (!ctx || !ctx->analyzer || !assign)
+        return NULL;
+    XaSymbol *sym = lookup_symbol_by_id(ctx, assign->symbol_id);
+    if (sym || !assign->name)
+        return sym;
+    sym = xa_analyzer_lookup(ctx->analyzer, assign->name);
+    if (!sym)
+        sym = xa_analyzer_lookup_in_scope(ctx->analyzer, assign->name, ctx->analyzer->global_scope);
+    if (!sym)
+        sym = xa_analyzer_lookup_deep(ctx->analyzer, assign->name);
+    return sym;
+}
+
 static XaSymbol *resolve_function_alias_target(XaAnalyzer *analyzer, XaSymbol *sym, int depth) {
     if (!analyzer || !sym)
         return NULL;
@@ -285,19 +306,40 @@ static FunctionValueTarget resolve_function_value_expr_target(ErrorSetCtx *ctx, 
     return function_value_target_none();
 }
 
-static void maybe_record_stable_function_value_var(ErrorSetCtx *ctx, AstNode *node) {
+static void maybe_record_function_value_var_initializer(ErrorSetCtx *ctx, AstNode *node) {
     if (!ctx || !node || node->type != AST_VAR_DECL)
         return;
     VarDeclNode *decl = &node->as.var_decl;
     if (!decl->initializer || decl->symbol_id == 0)
         return;
-    XaSymbol *sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, decl->symbol_id);
+    XaSymbol *sym = lookup_symbol_by_id(ctx, decl->symbol_id);
     if (!sym || sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->is_rebindable ||
-        !symbol_has_function_type(sym) || sym->links.assign_count != 1)
+        !symbol_has_function_type(sym))
         return;
     FunctionValueTarget target = resolve_function_value_expr_target(ctx, decl->initializer, 0);
     if (function_value_target_is_exact(target))
         set_function_value_alias_target(ctx, sym, target);
+}
+
+static void record_function_value_assignment(ErrorSetCtx *ctx, AssignmentNode *assign) {
+    if (!ctx || !assign)
+        return;
+    XaSymbol *sym = lookup_assignment_symbol(ctx, assign);
+    uint32_t symbol_id = sym ? sym->id : assign->symbol_id;
+    if (symbol_id == 0)
+        return;
+    FunctionValueTarget target = function_value_target_none();
+    if (ctx->function_value_control_depth == 0)
+        target = resolve_function_value_expr_target(ctx, assign->value, 0);
+
+    invalidate_function_value_alias_target(ctx, symbol_id);
+
+    if (ctx->function_value_control_depth != 0 || !function_value_target_is_exact(target))
+        return;
+    if (!sym || sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->is_rebindable ||
+        !symbol_has_function_type(sym))
+        return;
+    set_function_value_alias_target(ctx, sym, target);
 }
 
 /* Resolve a call target exactly when possible.  Unknown function values keep
@@ -539,6 +581,11 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
             /* Lambda: don't propagate its errors to the enclosing function. */
             break;
 
+        case AST_ASSIGNMENT:
+            es_walk_expr(ctx, node->as.assignment.value);
+            record_function_value_assignment(ctx, &node->as.assignment);
+            break;
+
         case AST_GROUPING:
             es_walk_expr(ctx, node->as.grouping);
             break;
@@ -649,7 +696,9 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             xa_effect_summary_init(&try_summary);
             XaEffectSummary *outer_summary = ctx->current_summary;
             ctx->current_summary = &try_summary;
+            ctx->function_value_control_depth++;
             es_walk_block(ctx, tc->try_body);
+            ctx->function_value_control_depth--;
             ctx->current_summary = outer_summary;
 
             if (tc->catch_count > 0) {
@@ -694,7 +743,9 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                         ctx->current_catch_symbol_id = cc->symbol_id;
                         ctx->current_catch_alias_count = 0;
                         ctx->current_caught = caught_summaries ? &caught_summaries[i] : NULL;
+                        ctx->function_value_control_depth++;
                         es_walk_block(ctx, cc->body);
+                        ctx->function_value_control_depth--;
                         ctx->current_catch_var = saved_catch_var;
                         ctx->current_catch_symbol_id = saved_catch_symbol_id;
                         ctx->current_catch_alias_count = saved_catch_alias_count;
@@ -720,7 +771,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
 
         case AST_VAR_DECL:
             maybe_record_catch_alias(ctx, node);
-            maybe_record_stable_function_value_var(ctx, node);
+            maybe_record_function_value_var_initializer(ctx, node);
             es_walk_expr(ctx, node->as.var_decl.initializer);
             break;
 
@@ -734,8 +785,8 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             break;
 
         case AST_ASSIGNMENT:
-            invalidate_function_value_alias_target(ctx, node->as.assignment.symbol_id);
             es_walk_expr(ctx, node->as.assignment.value);
+            record_function_value_assignment(ctx, &node->as.assignment);
             break;
 
         case AST_RETURN_STMT:
@@ -745,25 +796,33 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
 
         case AST_IF_STMT:
             es_walk_expr(ctx, node->as.if_stmt.condition);
+            ctx->function_value_control_depth++;
             es_walk_block(ctx, node->as.if_stmt.then_branch);
             es_walk_block(ctx, node->as.if_stmt.else_branch);
+            ctx->function_value_control_depth--;
             break;
 
         case AST_WHILE_STMT:
             es_walk_expr(ctx, node->as.while_stmt.condition);
+            ctx->function_value_control_depth++;
             es_walk_block(ctx, node->as.while_stmt.body);
+            ctx->function_value_control_depth--;
             break;
 
         case AST_FOR_STMT:
             es_walk_stmt(ctx, node->as.for_stmt.initializer);
             es_walk_expr(ctx, node->as.for_stmt.condition);
+            ctx->function_value_control_depth++;
             es_walk_expr(ctx, node->as.for_stmt.increment);
             es_walk_block(ctx, node->as.for_stmt.body);
+            ctx->function_value_control_depth--;
             break;
 
         case AST_FOR_IN_STMT:
             es_walk_expr(ctx, node->as.for_in_stmt.collection);
+            ctx->function_value_control_depth++;
             es_walk_block(ctx, node->as.for_in_stmt.body);
+            ctx->function_value_control_depth--;
             break;
 
         case AST_BLOCK:
