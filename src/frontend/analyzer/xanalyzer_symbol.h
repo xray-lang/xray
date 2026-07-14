@@ -24,7 +24,6 @@
 #include "xa_effect_db.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xenum_layout.h"
-#include "../../runtime/value/xerror_set.h"
 #include "../../runtime/class/xclass_info.h"
 #include "../../base/xdefs.h"
 #include "../../base/xhashmap.h"
@@ -135,8 +134,7 @@ struct XaSymbolLinks {
     bool is_extern;    // @extern foreign function (FFI): calls require unsafe { }
     bool is_c_export;  // @c_export AOT C ABI wrapper
     const char *c_export_symbol;
-    XaEffectId effect_id;   // Canonical analyzer-owned effect summary id (0 = not inferred yet)
-    XrErrorSet *error_set;  // Inferred error set (NULL = infallible)
+    XaEffectId effect_id;  // Canonical analyzer-owned effect summary id (0 = not inferred yet)
 
     // Call-site inferred parameter types (for unannotated params)
     // Populated by xa_visit_call when callee has unannotated parameters.

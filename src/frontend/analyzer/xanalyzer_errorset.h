@@ -10,9 +10,8 @@
  * KEY CONCEPT:
  *   After Pass 2 (type inference), this pass walks the AST again to
  *   infer which enum error types each function may produce.
- *   Results are stored in the analyzer-owned effect database.  The temporary
- *   XaSymbolLinks.error_set bridge is kept only until all legacy collectors
- *   consume XaEffectId directly.
+ *   Results are stored in the analyzer-owned effect database and referenced
+ *   from function symbols by XaEffectId.
  *
  * WHY THIS DESIGN:
  *   - Purely static, no runtime changes needed
