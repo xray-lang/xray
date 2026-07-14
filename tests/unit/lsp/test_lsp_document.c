@@ -16,6 +16,7 @@
 #include "../../../src/app/lsp/xlsp_builtins.h"
 #include "../../../src/app/lsp/xlsp_code_action.h"
 #include "../../../src/app/lsp/xlsp_completion.h"
+#include "../../../src/app/lsp/xlsp_inlay_hints.h"
 #include "../../../src/app/lsp/xlsp_semantic_tokens.h"
 #include "../../../src/base/xjson.h"
 #include "../test_win_compat.h"
@@ -66,6 +67,23 @@ static XrJsonValue *json_array_find_label(XrJsonValue *items, const char *label)
         const char *candidate = xjson_get_string(item, "label");
         if (candidate && strcmp(candidate, label) == 0)
             return item;
+    }
+    return NULL;
+}
+
+static XrJsonValue *json_array_find_label_tooltip(XrJsonValue *items, const char *label,
+                                                  const char *tooltip) {
+    if (!items || !label || !tooltip)
+        return NULL;
+    int n = xjson_array_len(items);
+    for (int i = 0; i < n; i++) {
+        XrJsonValue *item = xjson_array_get(items, i);
+        const char *candidate = xjson_get_string(item, "label");
+        const char *candidate_tooltip = xjson_get_string(item, "tooltip");
+        if (candidate && candidate_tooltip && strcmp(candidate, label) == 0 &&
+            strcmp(candidate_tooltip, tooltip) == 0) {
+            return item;
+        }
     }
     return NULL;
 }
@@ -692,6 +710,38 @@ TEST(param_mode_semantic_tokens_mark_modes_and_call_access) {
     xlsp_server_free(server);
 }
 
+TEST(param_mode_inlay_hints_describe_modes) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "fn adjust(view: in int, slot: ref int, filled: out int) -> int {\n"
+                          "    filled = view\n"
+                          "    slot = slot + filled\n"
+                          "    return slot\n"
+                          "}\n"
+                          "\n"
+                          "fn main() {\n"
+                          "    var value = 1\n"
+                          "    var target = 2\n"
+                          "    var result: int\n"
+                          "    adjust(value, ref target, out result)\n"
+                          "}\n";
+
+    XrLspDocument *doc = xlsp_document_open(server, "file:///param_mode_inlay.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspRange range = {{0, 0}, {20, 0}};
+    XrJsonValue *hints = xlsp_analyze_inlay_hints(server, doc, range);
+    ASSERT(hints != NULL);
+    ASSERT(json_array_find_label_tooltip(hints, "view:", "parameter mode: in") != NULL);
+    ASSERT(json_array_find_label_tooltip(hints, "slot:", "parameter mode: ref") != NULL);
+    ASSERT(json_array_find_label_tooltip(hints, "filled:", "parameter mode: out") != NULL);
+
+    xjson_free(hints);
+    xlsp_server_free(server);
+}
+
 // ============================================================================
 // Code Action Quick-Fix Tests (concurrency diagnostics)
 // ============================================================================
@@ -837,6 +887,7 @@ int main(int argc, char **argv) {
     RUN_TEST(global_type_query_builtins_use_canonical_names);
     RUN_TEST(param_mode_user_function_lsp_display);
     RUN_TEST(param_mode_semantic_tokens_mark_modes_and_call_access);
+    RUN_TEST(param_mode_inlay_hints_describe_modes);
 
     printf("\nCode action concurrency quick-fix tests:\n");
     RUN_TEST(code_action_go_capture_to_shared);

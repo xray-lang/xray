@@ -9,6 +9,7 @@
  */
 
 #include "xlsp_inlay_hints.h"
+#include "xlsp_utils.h"
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../frontend/analyzer/xanalyzer.h"
 #include <stdlib.h>
@@ -16,7 +17,8 @@
 #include "../../base/xmalloc.h"
 
 // Create inlay hint JSON
-static XrJsonValue *make_hint(int line, int character, const char *label, XlspInlayHintKind kind) {
+static XrJsonValue *make_hint(int line, int character, const char *label, XlspInlayHintKind kind,
+                              const char *tooltip) {
     XrJsonValue *hint = xjson_new_object();
 
     // Position
@@ -27,6 +29,10 @@ static XrJsonValue *make_hint(int line, int character, const char *label, XlspIn
 
     // Label
     xjson_object_set(hint, "label", xjson_new_string(label));
+
+    if (tooltip && tooltip[0]) {
+        xjson_object_set(hint, "tooltip", xjson_new_string(tooltip));
+    }
 
     // Kind
     xjson_object_set(hint, "kind", xjson_new_number(kind));
@@ -39,6 +45,13 @@ static XrJsonValue *make_hint(int line, int character, const char *label, XlspIn
     }
 
     return hint;
+}
+
+static const char *param_mode_tooltip(XrParamMode mode, char *buf, size_t cap) {
+    if (!buf || cap == 0 || mode == XR_PARAM_VALUE || !xr_param_mode_is_valid(mode))
+        return NULL;
+    snprintf(buf, cap, "parameter mode: %s", xr_param_mode_label(mode));
+    return buf;
 }
 
 // Check if line is in range
@@ -123,7 +136,7 @@ static void collect_hints(XrJsonValue *hints, AstNode *node, AstNode *root, XrLs
                     // Position after variable name, using AST column info
                     // node->column points to the start of var name (1-indexed)
                     int char_pos = (node->column > 0 ? node->column - 1 : 0) + strlen(name);
-                    xjson_array_push(hints, make_hint(line, char_pos, label, XLSP_HINT_TYPE));
+                    xjson_array_push(hints, make_hint(line, char_pos, label, XLSP_HINT_TYPE, NULL));
                 }
             }
             collect_hints(hints, node->as.var_decl.initializer, root, range, analyzer, show_types,
@@ -140,22 +153,13 @@ static void collect_hints(XrJsonValue *hints, AstNode *node, AstNode *root, XrLs
                     // First try to find function in current AST (most up-to-date)
                     AstNode *fn_decl = find_function_in_ast(root, fn_name);
                     const char **param_names = NULL;
-                    const char **temp_names = NULL;
+                    FunctionDeclNode *current_fn = NULL;
+                    XrType *param_contract = NULL;
                     int param_count = 0;
 
                     if (fn_decl) {
-                        // Use params from current AST - extract names to temp array
-                        FunctionDeclNode *fn = &fn_decl->as.function_decl;
-                        param_count = fn->param_count;
-                        if (param_count > 0) {
-                            temp_names = xr_malloc(sizeof(const char *) * param_count);
-                            if (!temp_names)
-                                break;
-                            for (int j = 0; j < param_count; j++) {
-                                temp_names[j] = fn->params[j] ? fn->params[j]->name : NULL;
-                            }
-                            param_names = temp_names;
-                        }
+                        current_fn = &fn_decl->as.function_decl;
+                        param_count = current_fn->param_count;
                     } else if (analyzer) {
                         // Fall back to workspace analyzer for imported functions
                         XaSymbol *sym =
@@ -165,17 +169,27 @@ static void collect_hints(XrJsonValue *hints, AstNode *node, AstNode *root, XrLs
                             if (links && links->param_names) {
                                 param_names = links->param_names;
                                 param_count = links->param_count;
+                                param_contract = links->type;
                             }
                         }
                     }
 
-                    if (param_names && param_count > 0) {
+                    if ((current_fn || param_names) && param_count > 0) {
                         // Show parameter name hints
                         int hint_count = node->as.call_expr.arg_count < param_count
                                              ? node->as.call_expr.arg_count
                                              : param_count;
                         for (int i = 0; i < hint_count; i++) {
-                            const char *param_name = param_names[i];
+                            const char *param_name = NULL;
+                            XrParamMode mode = XR_PARAM_VALUE;
+                            if (current_fn) {
+                                XrParamNode *param = current_fn->params[i];
+                                param_name = param ? param->name : NULL;
+                                mode = param ? param->passing_mode : XR_PARAM_VALUE;
+                            } else {
+                                param_name = param_names[i];
+                                mode = xlsp_function_param_mode(param_contract, i);
+                            }
                             AstNode *arg = node->as.call_expr.arguments[i];
                             if (param_name && arg) {
                                 // Skip if argument is already named (same as param)
@@ -188,13 +202,15 @@ static void collect_hints(XrJsonValue *hints, AstNode *node, AstNode *root, XrLs
                                 snprintf(label, sizeof(label), "%s:", param_name);
                                 int arg_line = arg->line - 1;
                                 int arg_col = arg->column > 0 ? arg->column - 1 : 0;
-                                xjson_array_push(hints, make_hint(arg_line, arg_col, label,
-                                                                  XLSP_HINT_PARAMETER));
+                                char tooltip[64];
+                                const char *tooltip_text =
+                                    param_mode_tooltip(mode, tooltip, sizeof(tooltip));
+                                xjson_array_push(hints,
+                                                 make_hint(arg_line, arg_col, label,
+                                                           XLSP_HINT_PARAMETER, tooltip_text));
                             }
                         }
                     }
-                    if (temp_names)
-                        xr_free((void *) temp_names);
                 }
             }
             collect_hints(hints, node->as.call_expr.callee, root, range, analyzer, show_types,
