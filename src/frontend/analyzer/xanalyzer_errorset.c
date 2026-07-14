@@ -70,6 +70,13 @@ typedef struct FunctionValueAliasState {
     int count;
 } FunctionValueAliasState;
 
+typedef struct CatchAliasState {
+    bool binding_is_caught;
+    uint32_t alias_ids[64];
+    const char *alias_names[64];
+    int alias_count;
+} CatchAliasState;
+
 typedef struct FunctionReturnTargetEntry {
     uint32_t function_id;
     FunctionValueTarget target;
@@ -1017,6 +1024,70 @@ static int current_catch_alias_index(ErrorSetCtx *ctx, uint32_t symbol_id, const
     return -1;
 }
 
+static void capture_catch_alias_state(ErrorSetCtx *ctx, CatchAliasState *state) {
+    if (!ctx || !state)
+        return;
+    state->binding_is_caught = ctx->current_catch_binding_is_caught;
+    state->alias_count = ctx->current_catch_alias_count;
+    if (state->alias_count > 64)
+        state->alias_count = 64;
+    for (int i = 0; i < state->alias_count; i++) {
+        state->alias_ids[i] = ctx->current_catch_alias_ids[i];
+        state->alias_names[i] = ctx->current_catch_alias_names[i];
+    }
+}
+
+static void restore_catch_alias_state(ErrorSetCtx *ctx, const CatchAliasState *state) {
+    if (!ctx || !state)
+        return;
+    ctx->current_catch_binding_is_caught = state->binding_is_caught;
+    ctx->current_catch_alias_count = state->alias_count;
+    if (ctx->current_catch_alias_count > 64)
+        ctx->current_catch_alias_count = 64;
+    for (int i = 0; i < ctx->current_catch_alias_count; i++) {
+        ctx->current_catch_alias_ids[i] = state->alias_ids[i];
+        ctx->current_catch_alias_names[i] = state->alias_names[i];
+    }
+}
+
+static bool catch_alias_state_has(const CatchAliasState *state, uint32_t symbol_id,
+                                  const char *name) {
+    if (!state)
+        return false;
+    for (int i = 0; i < state->alias_count; i++) {
+        if (catch_symbol_matches(symbol_id, name, state->alias_ids[i], state->alias_names[i]))
+            return true;
+    }
+    return false;
+}
+
+static void merge_catch_alias_if_states(ErrorSetCtx *ctx, const CatchAliasState *then_state,
+                                        const CatchAliasState *else_state) {
+    if (!ctx || !then_state || !else_state)
+        return;
+    ctx->current_catch_binding_is_caught =
+        then_state->binding_is_caught && else_state->binding_is_caught;
+
+    uint32_t merged_ids[64];
+    const char *merged_names[64];
+    int merged_count = 0;
+    for (int i = 0; i < then_state->alias_count && merged_count < 64; i++) {
+        uint32_t id = then_state->alias_ids[i];
+        const char *name = then_state->alias_names[i];
+        if (!catch_alias_state_has(else_state, id, name))
+            continue;
+        merged_ids[merged_count] = id;
+        merged_names[merged_count] = name;
+        merged_count++;
+    }
+
+    ctx->current_catch_alias_count = merged_count;
+    for (int i = 0; i < merged_count; i++) {
+        ctx->current_catch_alias_ids[i] = merged_ids[i];
+        ctx->current_catch_alias_names[i] = merged_names[i];
+    }
+}
+
 static void remove_current_catch_alias(ErrorSetCtx *ctx, int index) {
     if (!ctx || index < 0 || index >= ctx->current_catch_alias_count)
         return;
@@ -1553,11 +1624,27 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
 
         case AST_IF_STMT:
             es_walk_expr(ctx, node->as.if_stmt.condition);
-            ctx->current_catch_alias_control_depth++;
+            bool merge_catch_aliases =
+                ctx->current_caught && ctx->current_catch_alias_control_depth == 0;
+            CatchAliasState catch_base_state;
+            CatchAliasState catch_then_state;
+            CatchAliasState catch_else_state;
+            if (merge_catch_aliases)
+                capture_catch_alias_state(ctx, &catch_base_state);
+            else
+                ctx->current_catch_alias_control_depth++;
             if (ctx->function_value_control_depth != 0) {
                 ctx->function_value_control_depth++;
+                if (merge_catch_aliases)
+                    restore_catch_alias_state(ctx, &catch_base_state);
                 es_walk_block(ctx, node->as.if_stmt.then_branch);
+                if (merge_catch_aliases)
+                    capture_catch_alias_state(ctx, &catch_then_state);
+                if (merge_catch_aliases)
+                    restore_catch_alias_state(ctx, &catch_base_state);
                 es_walk_block(ctx, node->as.if_stmt.else_branch);
+                if (merge_catch_aliases)
+                    capture_catch_alias_state(ctx, &catch_else_state);
                 ctx->function_value_control_depth--;
             } else {
                 FunctionValueAliasState base_state;
@@ -1566,17 +1653,28 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 capture_function_value_alias_state(ctx, &base_state);
 
                 restore_function_value_alias_state(ctx, &base_state);
+                if (merge_catch_aliases)
+                    restore_catch_alias_state(ctx, &catch_base_state);
                 es_walk_block(ctx, node->as.if_stmt.then_branch);
+                if (merge_catch_aliases)
+                    capture_catch_alias_state(ctx, &catch_then_state);
                 capture_function_value_alias_state(ctx, &then_state);
 
                 restore_function_value_alias_state(ctx, &base_state);
+                if (merge_catch_aliases)
+                    restore_catch_alias_state(ctx, &catch_base_state);
                 if (node->as.if_stmt.else_branch)
                     es_walk_block(ctx, node->as.if_stmt.else_branch);
+                if (merge_catch_aliases)
+                    capture_catch_alias_state(ctx, &catch_else_state);
                 capture_function_value_alias_state(ctx, &else_state);
 
                 merge_function_value_if_states(ctx, &base_state, &then_state, &else_state);
             }
-            ctx->current_catch_alias_control_depth--;
+            if (merge_catch_aliases)
+                merge_catch_alias_if_states(ctx, &catch_then_state, &catch_else_state);
+            else
+                ctx->current_catch_alias_control_depth--;
             break;
 
         case AST_WHILE_STMT:
