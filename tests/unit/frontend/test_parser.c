@@ -328,6 +328,42 @@ TEST(parser_parameter_modes_share_annotation_parser) {
     teardown();
 }
 
+TEST(parser_oop_parameter_modes_share_annotation_parser) {
+    setup();
+
+    AstNode *ctor_class = parse_first("class Box {\n"
+                                      "  constructor(value: ref int) {}\n"
+                                      "}");
+    AstNode *ctor = ctor_class->as.class_decl.methods[0];
+    ASSERT_EQ_INT(ctor->type, AST_METHOD_DECL);
+    ASSERT(ctor->as.method_decl.is_constructor);
+    ASSERT_EQ_INT(ctor->as.method_decl.param_count, 1);
+    ASSERT_EQ_INT(ctor->as.method_decl.param_passing_modes[0], XR_PARAM_REF);
+
+    AstNode *operator_class = parse_first("class Matrix {\n"
+                                          "  operator[]=(index: in int, value: out int) {}\n"
+                                          "}");
+    AstNode *op = operator_class->as.class_decl.methods[0];
+    ASSERT_EQ_INT(op->type, AST_METHOD_DECL);
+    ASSERT(op->as.method_decl.is_operator);
+    ASSERT_EQ_INT(op->as.method_decl.param_count, 2);
+    ASSERT_EQ_INT(op->as.method_decl.param_passing_modes[0], XR_PARAM_IN);
+    ASSERT_EQ_INT(op->as.method_decl.param_passing_modes[1], XR_PARAM_OUT);
+
+    AstNode *setter_class = parse_first("class Meter {\n"
+                                        "  value: int {\n"
+                                        "    fn(v: ref int) {}\n"
+                                        "  }\n"
+                                        "}");
+    AstNode *setter = setter_class->as.class_decl.methods[0];
+    ASSERT_EQ_INT(setter->type, AST_METHOD_DECL);
+    ASSERT(setter->as.method_decl.is_setter);
+    ASSERT_EQ_INT(setter->as.method_decl.param_count, 1);
+    ASSERT_EQ_INT(setter->as.method_decl.param_passing_modes[0], XR_PARAM_REF);
+
+    teardown();
+}
+
 TEST(parser_function_type_param_modes) {
     setup();
 
@@ -798,6 +834,7 @@ int main(void) {
     // Functions
     RUN_TEST(parser_function_decl);
     RUN_TEST(parser_parameter_modes_share_annotation_parser);
+    RUN_TEST(parser_oop_parameter_modes_share_annotation_parser);
     RUN_TEST(parser_function_type_param_modes);
     RUN_TEST(parser_function_no_params);
     RUN_TEST(parser_return_stmt);
