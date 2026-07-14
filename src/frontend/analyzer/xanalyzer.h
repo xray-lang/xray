@@ -138,6 +138,10 @@ struct XaAnalyzer {
     // Consumed by lowerer/backend before falling back to textual rediscovery.
     void *parallel_call_plan_table;  // XaParallelCallPlanTable* (forward declared)
 
+    // Canonical analyzer-owned typed-error effect database. Function symbols
+    // hold only non-owning XaEffectId values into this session-local store.
+    XaEffectDatabase *effect_db;
+
     // Type inference/recovery telemetry. Unknown tracks legacy unresolved inference;
     // ErrorType tracks compiler recovery poison that must not reach executable IR.
     int unresolved_inference_count;

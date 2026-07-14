@@ -898,6 +898,7 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     dst->is_extern = src->is_extern;
     dst->is_c_export = src->is_c_export;
     dst->c_export_symbol = src->c_export_symbol ? xr_strdup(src->c_export_symbol) : NULL;
+    dst->effect_id = src->effect_id;
     dst->error_set = src->error_set;
 
     if (src->type_param_count > 0) {

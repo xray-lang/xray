@@ -23,12 +23,92 @@
 
 #include "xanalyzer_errorset.h"
 #include "xanalyzer_visitor.h"
+#include "xa_effect_db.h"
+#include "../../base/xhash.h"
 #include "../../runtime/value/xerror_set.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_pool.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
 #include <stdio.h>
+
+static uint64_t es_stable_key_text2(const char *prefix, const char *name) {
+    char buf[512];
+    snprintf(buf, sizeof(buf), "%s:%s", prefix ? prefix : "", name ? name : "<anonymous>");
+    uint64_t key = xr_hash_bytes64(buf, strlen(buf));
+    return key ? key : 1u;
+}
+
+static uint64_t es_stable_key_text3(const char *prefix, const char *type_name,
+                                    const char *variant_name) {
+    char buf[768];
+    snprintf(buf, sizeof(buf), "%s:%s.%s", prefix ? prefix : "", type_name ? type_name : "?",
+             variant_name ? variant_name : "?");
+    uint64_t key = xr_hash_bytes64(buf, strlen(buf));
+    return key ? key : 1u;
+}
+
+static XaErrorTypeId es_register_error_enum(XaEffectDatabase *db, XrType *enum_type) {
+    if (!db || !enum_type || !XR_TYPE_IS_ENUM(enum_type))
+        return XA_ERROR_TYPE_NONE;
+    const char *name = enum_type->enum_type.enum_name;
+    XaErrorTypeId type_id = xa_effect_db_register_error_type(db, es_stable_key_text2("enum", name));
+    const XrEnumLayout *layout = enum_type->enum_type.layout;
+    if (type_id != XA_ERROR_TYPE_NONE && layout) {
+        for (uint32_t i = 0; i < layout->variant_count; i++) {
+            const char *variant_name = layout->variants[i].name;
+            xa_effect_db_register_error_variant(db, type_id,
+                                                es_stable_key_text3("variant", name, variant_name));
+        }
+    }
+    return type_id;
+}
+
+static void es_summary_add_error_entry(XaEffectDatabase *db, XaEffectSummary *summary,
+                                       const XrErrorEntry *entry) {
+    if (!db || !summary || !entry || !entry->enum_type)
+        return;
+    XaErrorTypeId type_id = es_register_error_enum(db, entry->enum_type);
+    if (type_id == XA_ERROR_TYPE_NONE)
+        return;
+    if (entry->case_mask == 0) {
+        xa_effect_summary_add_all_variants(db, summary, type_id);
+        return;
+    }
+    const char *enum_name = entry->enum_type->enum_type.enum_name;
+    const XrEnumLayout *layout = entry->enum_type->enum_type.layout;
+    for (uint32_t i = 0; i < 64u; i++) {
+        if ((entry->case_mask & (UINT64_C(1) << i)) == 0)
+            continue;
+        XaErrorVariantId variant_id = XA_ERROR_VARIANT_INVALID;
+        if (layout && i < layout->variant_count) {
+            const char *variant_name = layout->variants[i].name;
+            variant_id = xa_effect_db_register_error_variant(
+                db, type_id, es_stable_key_text3("variant", enum_name, variant_name));
+        } else {
+            char fallback[64];
+            snprintf(fallback, sizeof(fallback), "#%u", i);
+            variant_id = xa_effect_db_register_error_variant(
+                db, type_id, es_stable_key_text3("variant-index", enum_name, fallback));
+        }
+        if (variant_id != XA_ERROR_VARIANT_INVALID)
+            xa_effect_summary_add_variant(db, summary, type_id, variant_id);
+    }
+}
+
+static XaEffectId es_intern_effect_summary(XaAnalyzer *analyzer, const XrErrorSet *set) {
+    if (!analyzer || !analyzer->effect_db)
+        return XA_EFFECT_NONE;
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    if (set) {
+        for (int i = 0; i < set->count; i++)
+            es_summary_add_error_entry(analyzer->effect_db, &summary, &set->entries[i]);
+    }
+    XaEffectId id = xa_effect_db_intern(analyzer->effect_db, &summary);
+    xa_effect_summary_clear(&summary);
+    return id;
+}
 
 /* ========== Internal Context ========== */
 
@@ -364,6 +444,7 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
 
     ctx->current_set = func_sym->links.error_set;
     es_walk_block(ctx, body);
+    func_sym->links.effect_id = es_intern_effect_summary(ctx->analyzer, func_sym->links.error_set);
 
     /* Propagate to function XrType */
     XrType *ftype = func_sym->links.type;
