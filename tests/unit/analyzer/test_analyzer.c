@@ -921,6 +921,47 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     setup_pool();
 }
 
+TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum LambdaErr { Boom }\n"
+                         "fn failLambda() { throw LambdaErr.Boom }\n"
+                         "fn viaImmediateLambdaThrow() {\n"
+                         "  (fn() { throw LambdaErr.Boom })()\n"
+                         "}\n"
+                         "fn viaImmediateLambdaCall() {\n"
+                         "  (fn() { failLambda() })()\n"
+                         "}\n"
+                         "fn viaStoredLambda() {\n"
+                         "  var f = fn() { throw LambdaErr.Boom }\n"
+                         "  f()\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_immediate_function_expr.xr", program);
+
+    const XaEffectSummary *immediate_throw =
+        analyzer_function_effect_summary(a, "viaImmediateLambdaThrow");
+    const XaEffectSummary *immediate_call =
+        analyzer_function_effect_summary(a, "viaImmediateLambdaCall");
+    const XaEffectSummary *stored = analyzer_function_effect_summary(a, "viaStoredLambda");
+    ASSERT(immediate_throw != NULL);
+    ASSERT(immediate_call != NULL);
+    ASSERT(stored != NULL);
+
+    ASSERT(effect_summary_has_enum_named(a, immediate_throw, "LambdaErr"));
+    ASSERT((immediate_throw->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, immediate_call, "LambdaErr"));
+    ASSERT((immediate_call->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(stored->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((stored->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(!effect_summary_has_enum_named(a, stored, "LambdaErr"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_subtracts_typed_catches) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -1424,6 +1465,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_error_effect_propagates_const_function_value_aliases);
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
+    RUN_TEST(analyzer_error_effect_propagates_immediate_function_expr_calls);
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
 
     printf("\nFlow analysis tests:\n");
