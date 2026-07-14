@@ -541,6 +541,69 @@ TEST(global_type_query_builtins_use_canonical_names) {
     xlsp_server_free(server);
 }
 
+TEST(param_mode_user_function_lsp_display) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "fn adjust(view: in int, slot: ref int, filled: out int) -> int {\n"
+                          "    filled = view\n"
+                          "    slot = slot + filled\n"
+                          "    return slot\n"
+                          "}\n"
+                          "\n"
+                          "fn main() {\n"
+                          "    var value = 1\n"
+                          "    var slot = 2\n"
+                          "    var filled: int\n"
+                          "    adjust(value, ref slot, out filled)\n"
+                          "    adj\n"
+                          "}\n";
+    const char *expected = "fn adjust(view: in int, slot: ref int, filled: out int): int";
+
+    XrLspDocument *doc = xlsp_document_open(server, "file:///param_mode_lsp.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition completion_pos = {11, 7};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, completion_pos);
+    ASSERT(items != NULL);
+    XrJsonValue *adjust_item = json_array_find_label(items, "adjust");
+    ASSERT(adjust_item != NULL);
+    const char *detail = xjson_get_string(adjust_item, "detail");
+    ASSERT(detail != NULL);
+    ASSERT_STR_EQ(detail, expected);
+    xjson_free(items);
+
+    XrLspPosition hover_pos = {10, 6};
+    XrJsonValue *hover = xlsp_analyze_hover(server, doc, hover_pos);
+    ASSERT(hover != NULL);
+    const char *hover_text = hover_markdown_value(hover);
+    ASSERT(hover_text != NULL);
+    ASSERT(strstr(hover_text, expected) != NULL);
+    xjson_free(hover);
+
+    XrLspPosition sig_pos = {10, 12};
+    XrJsonValue *help = xlsp_analyze_signature_help(doc, sig_pos);
+    ASSERT(help != NULL);
+    XrJsonValue *signatures = xjson_get_array(help, "signatures");
+    ASSERT(signatures != NULL);
+    XrJsonValue *sig0 = xjson_array_get(signatures, 0);
+    ASSERT(sig0 != NULL);
+    const char *label = xjson_get_string(sig0, "label");
+    ASSERT(label != NULL);
+    ASSERT_STR_EQ(label, expected);
+
+    XrJsonValue *params = xjson_get_array(sig0, "parameters");
+    ASSERT(params != NULL);
+    ASSERT(xjson_array_len(params) == 3);
+    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 0), "label"), "view: in int");
+    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 1), "label"), "slot: ref int");
+    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 2), "label"), "filled: out int");
+
+    xjson_free(help);
+    xlsp_server_free(server);
+}
+
 // ============================================================================
 // Code Action Quick-Fix Tests (concurrency diagnostics)
 // ============================================================================
@@ -684,6 +747,7 @@ int main(int argc, char **argv) {
     RUN_TEST(signature_help_u8_array_registry_method);
     RUN_TEST(builtin_generic_array_uses_error_placeholder);
     RUN_TEST(global_type_query_builtins_use_canonical_names);
+    RUN_TEST(param_mode_user_function_lsp_display);
 
     printf("\nCode action concurrency quick-fix tests:\n");
     RUN_TEST(code_action_go_capture_to_shared);

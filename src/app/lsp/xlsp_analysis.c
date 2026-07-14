@@ -606,8 +606,27 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
             const char *type_str = type ? xr_type_to_string(type) : "<error>";
 
             if (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD) {
-                snprintf(hover_buf, sizeof(hover_buf), "```xray\nfn %s(...): %s\n```\n\n%s",
-                         sym->name, type_str,
+                XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+                int len = snprintf(hover_buf, sizeof(hover_buf), "```xray\nfn %s(", sym->name);
+                if (links && links->param_count > 0) {
+                    for (int p = 0; p < links->param_count; p++) {
+                        if (p > 0)
+                            len += snprintf(hover_buf + len, sizeof(hover_buf) - len, ", ");
+                        const char *pname = (links->param_names && links->param_names[p])
+                                                ? links->param_names[p]
+                                                : "_";
+                        XrType *ptype = (links->param_types && links->param_types[p])
+                                            ? links->param_types[p]
+                                            : NULL;
+                        len = xlsp_append_param_display(hover_buf, sizeof(hover_buf), len, pname,
+                                                        ptype,
+                                                        xlsp_function_param_mode(links->type, p));
+                    }
+                }
+                const char *ret_type = (links && links->return_type)
+                                           ? xr_type_to_string(links->return_type)
+                                           : type_str;
+                snprintf(hover_buf + len, sizeof(hover_buf) - len, "): %s\n```\n\n%s", ret_type,
                          sym->is_exported ? "(exported function)" : "(function)");
             } else if (sym->kind == XA_SYM_CLASS) {
                 snprintf(hover_buf, sizeof(hover_buf),
@@ -1386,7 +1405,7 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
         xr_free(func_name);
     } else {
         // Try user-defined function from analyzer
-        XaSymbol *sym = analyzer ? xa_scope_lookup(analyzer->global_scope, func_name) : NULL;
+        XaSymbol *sym = analyzer ? xa_analyzer_lookup(analyzer, func_name) : NULL;
         xr_free(func_name);
 
         if (!sym || (sym->kind != XA_SYM_FUNCTION && sym->kind != XA_SYM_METHOD)) {
@@ -1409,16 +1428,17 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
                     sig_len += snprintf(sig_label + sig_len, sizeof(sig_label) - sig_len, ", ");
                 const char *pname =
                     (links->param_names && links->param_names[p]) ? links->param_names[p] : "_";
-                const char *ptype = (links->param_types && links->param_types[p])
-                                        ? xr_type_to_string(links->param_types[p])
-                                        : "<error>";
-                sig_len += snprintf(sig_label + sig_len, sizeof(sig_label) - sig_len, "%s: %s",
-                                    pname, ptype);
+                XrType *ptype_obj =
+                    (links->param_types && links->param_types[p]) ? links->param_types[p] : NULL;
+                XrParamMode mode = xlsp_function_param_mode(links->type, p);
+                sig_len = xlsp_append_param_display(sig_label, sizeof(sig_label), sig_len, pname,
+                                                    ptype_obj, mode);
 
                 // Add parameter info
                 XrJsonValue *param = xjson_new_object();
                 char param_label[128];
-                snprintf(param_label, sizeof(param_label), "%s: %s", pname, ptype);
+                xlsp_append_param_display(param_label, sizeof(param_label), 0, pname, ptype_obj,
+                                          mode);
                 xjson_object_set(param, "label", xjson_new_string(param_label));
                 xjson_array_push(params, param);
             }
