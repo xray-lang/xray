@@ -1,0 +1,9 @@
+fn sum_twice(left: in int, right: in int) -> int {
+    return left + right
+}
+
+@test
+fn test_in_in_same_root_alias_allowed() {
+    var value = 21
+    assert_eq(sum_twice(value, value), 42)
+}
