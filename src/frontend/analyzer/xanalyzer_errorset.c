@@ -91,6 +91,7 @@ typedef struct ErrorSetCtx {
     uint32_t current_catch_alias_ids[64];
     const char *current_catch_alias_names[64];
     int current_catch_alias_count;
+    int current_catch_alias_control_depth;
     uint32_t function_value_alias_ids[128];
     FunctionValueTarget function_value_alias_targets[128];
     int function_value_alias_count;
@@ -989,6 +990,13 @@ static bool is_current_caught_ref(ErrorSetCtx *ctx, AstNode *expr) {
     return false;
 }
 
+static bool catch_symbol_matches(uint32_t lhs_id, const char *lhs_name, uint32_t rhs_id,
+                                 const char *rhs_name) {
+    if (lhs_id != 0 && rhs_id != 0)
+        return lhs_id == rhs_id;
+    return lhs_name && rhs_name && strcmp(lhs_name, rhs_name) == 0;
+}
+
 static bool current_catch_target_matches(ErrorSetCtx *ctx, uint32_t symbol_id, const char *name) {
     if (!ctx)
         return false;
@@ -1002,11 +1010,8 @@ static int current_catch_alias_index(ErrorSetCtx *ctx, uint32_t symbol_id, const
     if (!ctx)
         return -1;
     for (int i = 0; i < ctx->current_catch_alias_count; i++) {
-        if (symbol_id != 0 && ctx->current_catch_alias_ids[i] != 0 &&
-            symbol_id == ctx->current_catch_alias_ids[i])
-            return i;
-        const char *alias_name = ctx->current_catch_alias_names[i];
-        if (name && alias_name && strcmp(name, alias_name) == 0)
+        if (catch_symbol_matches(symbol_id, name, ctx->current_catch_alias_ids[i],
+                                 ctx->current_catch_alias_names[i]))
             return i;
     }
     return -1;
@@ -1030,6 +1035,41 @@ static void add_current_catch_alias(ErrorSetCtx *ctx, uint32_t symbol_id, const 
     int slot = ctx->current_catch_alias_count++;
     ctx->current_catch_alias_ids[slot] = symbol_id;
     ctx->current_catch_alias_names[slot] = name;
+}
+
+static bool catch_alias_declared_in_block(ErrorSetCtx *ctx, uint32_t symbol_id, AstNode *block) {
+    if (!ctx || !block || block->type != AST_BLOCK || symbol_id == 0)
+        return true;
+    XaScope *block_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, block);
+    XaSymbol *sym = lookup_symbol_by_id(ctx, symbol_id);
+    return !block_scope || !sym || sym->scope == block_scope;
+}
+
+static void finish_catch_alias_block(ErrorSetCtx *ctx, AstNode *block, int saved_count) {
+    if (!ctx)
+        return;
+    if (!ctx->current_caught || ctx->current_catch_alias_control_depth != 0) {
+        ctx->current_catch_alias_count = saved_count;
+        return;
+    }
+
+    uint32_t final_ids[64];
+    const char *final_names[64];
+    int final_count = 0;
+    for (int i = 0; i < ctx->current_catch_alias_count && final_count < 64; i++) {
+        uint32_t id = ctx->current_catch_alias_ids[i];
+        const char *name = ctx->current_catch_alias_names[i];
+        if (catch_alias_declared_in_block(ctx, id, block))
+            continue;
+        final_ids[final_count] = id;
+        final_names[final_count] = name;
+        final_count++;
+    }
+    ctx->current_catch_alias_count = final_count;
+    for (int i = 0; i < final_count; i++) {
+        ctx->current_catch_alias_ids[i] = final_ids[i];
+        ctx->current_catch_alias_names[i] = final_names[i];
+    }
 }
 
 static void maybe_record_catch_alias(ErrorSetCtx *ctx, AstNode *node) {
@@ -1248,7 +1288,7 @@ static void es_walk_block(ErrorSetCtx *ctx, AstNode *node) {
         int saved_function_value_alias_count = ctx->function_value_alias_count;
         for (int i = 0; i < node->as.block.count; i++)
             es_walk_stmt(ctx, node->as.block.statements[i]);
-        ctx->current_catch_alias_count = saved_catch_alias_count;
+        finish_catch_alias_block(ctx, node, saved_catch_alias_count);
         ctx->function_value_alias_count = saved_function_value_alias_count;
     } else {
         es_walk_stmt(ctx, node);
@@ -1513,6 +1553,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
 
         case AST_IF_STMT:
             es_walk_expr(ctx, node->as.if_stmt.condition);
+            ctx->current_catch_alias_control_depth++;
             if (ctx->function_value_control_depth != 0) {
                 ctx->function_value_control_depth++;
                 es_walk_block(ctx, node->as.if_stmt.then_branch);
@@ -1535,10 +1576,12 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
 
                 merge_function_value_if_states(ctx, &base_state, &then_state, &else_state);
             }
+            ctx->current_catch_alias_control_depth--;
             break;
 
         case AST_WHILE_STMT:
             es_walk_expr(ctx, node->as.while_stmt.condition);
+            ctx->current_catch_alias_control_depth++;
             if (ctx->function_value_control_depth != 0) {
                 ctx->function_value_control_depth++;
                 es_walk_block(ctx, node->as.while_stmt.body);
@@ -1554,11 +1597,13 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
 
                 merge_function_value_loop_state(ctx, &base_state, &iteration_state);
             }
+            ctx->current_catch_alias_control_depth--;
             break;
 
         case AST_FOR_STMT:
             es_walk_stmt(ctx, node->as.for_stmt.initializer);
             es_walk_expr(ctx, node->as.for_stmt.condition);
+            ctx->current_catch_alias_control_depth++;
             if (ctx->function_value_control_depth != 0) {
                 ctx->function_value_control_depth++;
                 es_walk_block(ctx, node->as.for_stmt.body);
@@ -1576,10 +1621,12 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
 
                 merge_function_value_loop_state(ctx, &base_state, &iteration_state);
             }
+            ctx->current_catch_alias_control_depth--;
             break;
 
         case AST_FOR_IN_STMT:
             es_walk_expr(ctx, node->as.for_in_stmt.collection);
+            ctx->current_catch_alias_control_depth++;
             if (ctx->function_value_control_depth != 0) {
                 ctx->function_value_control_depth++;
                 es_walk_block(ctx, node->as.for_in_stmt.body);
@@ -1595,6 +1642,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
 
                 merge_function_value_loop_state(ctx, &base_state, &iteration_state);
             }
+            ctx->current_catch_alias_control_depth--;
             break;
 
         case AST_BLOCK:

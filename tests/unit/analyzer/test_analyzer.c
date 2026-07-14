@@ -1486,6 +1486,29 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
                          "    var alias: CatchErr = CatchErr.Other; alias = e; throw alias "
                          "  } "
                          "}\n"
+                         "fn catchNestedBlockAssignmentAliasRethrows() { "
+                         "  try { fail() } catch (e: CatchErr) { "
+                         "    var alias: CatchErr = CatchErr.Other; { alias = e }; throw alias "
+                         "  } "
+                         "}\n"
+                         "fn catchNestedBlockAliasInvalidates() { "
+                         "  try { fail() } catch (e: CatchErr) { "
+                         "    var alias: CatchErr = CatchErr.Other; alias = e; "
+                         "    { alias = CatchErr.Other }; throw alias "
+                         "  } "
+                         "}\n"
+                         "fn catchNestedBlockLocalAliasDoesNotLeak() { "
+                         "  try { fail() } catch (e: CatchErr) { "
+                         "    var alias: CatchErr = CatchErr.Other; { const alias = e }; "
+                         "    throw alias "
+                         "  } "
+                         "}\n"
+                         "fn catchIfAliasDoesNotLeak(flag: bool) { "
+                         "  try { fail() } catch (e: CatchErr) { "
+                         "    var alias: CatchErr = CatchErr.Other; "
+                         "    if (flag) { alias = e }; throw alias "
+                         "  } "
+                         "}\n"
                          "fn wrongTypedRethrow() { "
                          "  try { fail() } catch (e: OtherErr) { throw e } "
                          "}\n"
@@ -1518,6 +1541,14 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         analyzer_function_effect_summary(a, "catchVarReassignedRethrows");
     const XaEffectSummary *catch_assignment_alias_rethrows =
         analyzer_function_effect_summary(a, "catchAssignmentAliasRethrows");
+    const XaEffectSummary *catch_nested_assignment_alias_rethrows =
+        analyzer_function_effect_summary(a, "catchNestedBlockAssignmentAliasRethrows");
+    const XaEffectSummary *catch_nested_alias_invalidates =
+        analyzer_function_effect_summary(a, "catchNestedBlockAliasInvalidates");
+    const XaEffectSummary *catch_nested_local_alias_does_not_leak =
+        analyzer_function_effect_summary(a, "catchNestedBlockLocalAliasDoesNotLeak");
+    const XaEffectSummary *catch_if_alias_does_not_leak =
+        analyzer_function_effect_summary(a, "catchIfAliasDoesNotLeak");
     const XaEffectSummary *wrong_typed_rethrow =
         analyzer_function_effect_summary(a, "wrongTypedRethrow");
     const XaEffectSummary *catch_all_alias_rethrows =
@@ -1537,6 +1568,10 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(typed_rethrows != NULL);
     ASSERT(catch_var_reassigned_rethrows != NULL);
     ASSERT(catch_assignment_alias_rethrows != NULL);
+    ASSERT(catch_nested_assignment_alias_rethrows != NULL);
+    ASSERT(catch_nested_alias_invalidates != NULL);
+    ASSERT(catch_nested_local_alias_does_not_leak != NULL);
+    ASSERT(catch_if_alias_does_not_leak != NULL);
     ASSERT(wrong_typed_rethrow != NULL);
     ASSERT(catch_all_alias_rethrows != NULL);
     ASSERT(catch_all_var_alias_rethrows != NULL);
@@ -1561,6 +1596,24 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(!assigned_alias_set->all_variants);
     ASSERT(xa_bitset_test(&assigned_alias_set->variants, 0));
     ASSERT(!xa_bitset_test(&assigned_alias_set->variants, 1));
+    const XaErrorTypeSet *nested_assigned_alias_set =
+        effect_summary_enum_set_named(a, catch_nested_assignment_alias_rethrows, "CatchErr");
+    ASSERT(nested_assigned_alias_set != NULL);
+    ASSERT(!nested_assigned_alias_set->all_variants);
+    ASSERT(xa_bitset_test(&nested_assigned_alias_set->variants, 0));
+    ASSERT(!xa_bitset_test(&nested_assigned_alias_set->variants, 1));
+    const XaErrorTypeSet *nested_invalidated_alias_set =
+        effect_summary_enum_set_named(a, catch_nested_alias_invalidates, "CatchErr");
+    ASSERT(nested_invalidated_alias_set != NULL);
+    ASSERT(nested_invalidated_alias_set->all_variants);
+    const XaErrorTypeSet *nested_local_alias_set =
+        effect_summary_enum_set_named(a, catch_nested_local_alias_does_not_leak, "CatchErr");
+    ASSERT(nested_local_alias_set != NULL);
+    ASSERT(nested_local_alias_set->all_variants);
+    const XaErrorTypeSet *if_alias_set =
+        effect_summary_enum_set_named(a, catch_if_alias_does_not_leak, "CatchErr");
+    ASSERT(if_alias_set != NULL);
+    ASSERT(if_alias_set->all_variants);
     ASSERT(effect_summary_has_enum_named(a, wrong_typed_rethrow, "CatchErr"));
     ASSERT(!effect_summary_has_enum_named(a, wrong_typed_rethrow, "OtherErr"));
     ASSERT(effect_summary_has_enum_named(a, catch_all_alias_rethrows, "CatchErr"));
