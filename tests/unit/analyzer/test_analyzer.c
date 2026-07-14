@@ -1465,65 +1465,79 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    const char *source = "enum CatchErr { Boom, Other }\n"
-                         "enum OtherErr { Boom }\n"
-                         "fn fail() { throw CatchErr.Boom }\n"
-                         "fn handled() { try { fail() } catch (e: CatchErr) { } }\n"
-                         "fn leaks() { try { fail() } catch (e: OtherErr) { } }\n"
-                         "fn catchesAll() { try { fail() } catch (e) { } }\n"
-                         "fn catchBodyThrows() { "
-                         "  try { fail() } catch (e: CatchErr) { throw OtherErr.Boom } "
-                         "}\n"
-                         "fn catchAllRethrows() { try { fail() } catch (e) { throw e } }\n"
-                         "fn typedRethrows() { try { fail() } catch (e: CatchErr) { throw e } }\n"
-                         "fn catchVarReassignedRethrows() { "
-                         "  try { fail() } catch (e: CatchErr) { "
-                         "    e = CatchErr.Other; throw e "
-                         "  } "
-                         "}\n"
-                         "fn catchAssignmentAliasRethrows() { "
-                         "  try { fail() } catch (e: CatchErr) { "
-                         "    var alias: CatchErr = CatchErr.Other; alias = e; throw alias "
-                         "  } "
-                         "}\n"
-                         "fn catchNestedBlockAssignmentAliasRethrows() { "
-                         "  try { fail() } catch (e: CatchErr) { "
-                         "    var alias: CatchErr = CatchErr.Other; { alias = e }; throw alias "
-                         "  } "
-                         "}\n"
-                         "fn catchNestedBlockAliasInvalidates() { "
-                         "  try { fail() } catch (e: CatchErr) { "
-                         "    var alias: CatchErr = CatchErr.Other; alias = e; "
-                         "    { alias = CatchErr.Other }; throw alias "
-                         "  } "
-                         "}\n"
-                         "fn catchNestedBlockLocalAliasDoesNotLeak() { "
-                         "  try { fail() } catch (e: CatchErr) { "
-                         "    var alias: CatchErr = CatchErr.Other; { const alias = e }; "
-                         "    throw alias "
-                         "  } "
-                         "}\n"
-                         "fn catchIfAliasDoesNotLeak(flag: bool) { "
-                         "  try { fail() } catch (e: CatchErr) { "
-                         "    var alias: CatchErr = CatchErr.Other; "
-                         "    if (flag) { alias = e }; throw alias "
-                         "  } "
-                         "}\n"
-                         "fn wrongTypedRethrow() { "
-                         "  try { fail() } catch (e: OtherErr) { throw e } "
-                         "}\n"
-                         "fn catchAllAliasRethrows() { "
-                         "  try { fail() } catch (e) { const alias = e; throw alias } "
-                         "}\n"
-                         "fn catchAllVarAliasRethrows() { "
-                         "  try { fail() } catch (e) { var alias = e; throw alias } "
-                         "}\n"
-                         "fn typedAliasRethrows() { "
-                         "  try { fail() } catch (e: CatchErr) { const alias = (e); throw alias } "
-                         "}\n"
-                         "fn wrongTypedAliasRethrow() { "
-                         "  try { fail() } catch (e: OtherErr) { const alias = e; throw alias } "
-                         "}\n";
+    const char *source =
+        "enum CatchErr { Boom, Other }\n"
+        "enum OtherErr { Boom }\n"
+        "fn fail() { throw CatchErr.Boom }\n"
+        "fn handled() { try { fail() } catch (e: CatchErr) { } }\n"
+        "fn leaks() { try { fail() } catch (e: OtherErr) { } }\n"
+        "fn catchesAll() { try { fail() } catch (e) { } }\n"
+        "fn catchBodyThrows() { "
+        "  try { fail() } catch (e: CatchErr) { throw OtherErr.Boom } "
+        "}\n"
+        "fn catchAllRethrows() { try { fail() } catch (e) { throw e } }\n"
+        "fn typedRethrows() { try { fail() } catch (e: CatchErr) { throw e } }\n"
+        "fn catchVarReassignedRethrows() { "
+        "  try { fail() } catch (e: CatchErr) { "
+        "    e = CatchErr.Other; throw e "
+        "  } "
+        "}\n"
+        "fn catchAssignmentAliasRethrows() { "
+        "  try { fail() } catch (e: CatchErr) { "
+        "    var alias: CatchErr = CatchErr.Other; alias = e; throw alias "
+        "  } "
+        "}\n"
+        "fn catchNestedBlockAssignmentAliasRethrows() { "
+        "  try { fail() } catch (e: CatchErr) { "
+        "    var alias: CatchErr = CatchErr.Other; { alias = e }; throw alias "
+        "  } "
+        "}\n"
+        "fn catchNestedBlockAliasInvalidates() { "
+        "  try { fail() } catch (e: CatchErr) { "
+        "    var alias: CatchErr = CatchErr.Other; alias = e; "
+        "    { alias = CatchErr.Other }; throw alias "
+        "  } "
+        "}\n"
+        "fn catchNestedBlockLocalAliasDoesNotLeak() { "
+        "  try { fail() } catch (e: CatchErr) { "
+        "    var alias: CatchErr = CatchErr.Other; { const alias = e }; "
+        "    throw alias "
+        "  } "
+        "}\n"
+        "fn catchIfAliasDoesNotLeak(flag: bool) { "
+        "  try { fail() } catch (e: CatchErr) { "
+        "    var alias: CatchErr = CatchErr.Other; "
+        "    if (flag) { alias = e }; throw alias "
+        "  } "
+        "}\n"
+        "fn catchIfElseAliasRethrows(flag: bool) { "
+        "  try { fail() } catch (e: CatchErr) { "
+        "    var alias: CatchErr = CatchErr.Other; "
+        "    if (flag) { alias = e } else { alias = e }; throw alias "
+        "  } "
+        "}\n"
+        "fn catchIfElseAliasInvalidates(flag: bool) { "
+        "  try { fail() } catch (e: CatchErr) { "
+        "    var alias: CatchErr = CatchErr.Other; alias = e; "
+        "    if (flag) { alias = CatchErr.Other } else { alias = CatchErr.Other }; "
+        "    throw alias "
+        "  } "
+        "}\n"
+        "fn wrongTypedRethrow() { "
+        "  try { fail() } catch (e: OtherErr) { throw e } "
+        "}\n"
+        "fn catchAllAliasRethrows() { "
+        "  try { fail() } catch (e) { const alias = e; throw alias } "
+        "}\n"
+        "fn catchAllVarAliasRethrows() { "
+        "  try { fail() } catch (e) { var alias = e; throw alias } "
+        "}\n"
+        "fn typedAliasRethrows() { "
+        "  try { fail() } catch (e: CatchErr) { const alias = (e); throw alias } "
+        "}\n"
+        "fn wrongTypedAliasRethrow() { "
+        "  try { fail() } catch (e: OtherErr) { const alias = e; throw alias } "
+        "}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_catch_subtraction.xr", program);
@@ -1549,6 +1563,10 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         analyzer_function_effect_summary(a, "catchNestedBlockLocalAliasDoesNotLeak");
     const XaEffectSummary *catch_if_alias_does_not_leak =
         analyzer_function_effect_summary(a, "catchIfAliasDoesNotLeak");
+    const XaEffectSummary *catch_if_else_alias_rethrows =
+        analyzer_function_effect_summary(a, "catchIfElseAliasRethrows");
+    const XaEffectSummary *catch_if_else_alias_invalidates =
+        analyzer_function_effect_summary(a, "catchIfElseAliasInvalidates");
     const XaEffectSummary *wrong_typed_rethrow =
         analyzer_function_effect_summary(a, "wrongTypedRethrow");
     const XaEffectSummary *catch_all_alias_rethrows =
@@ -1572,6 +1590,8 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(catch_nested_alias_invalidates != NULL);
     ASSERT(catch_nested_local_alias_does_not_leak != NULL);
     ASSERT(catch_if_alias_does_not_leak != NULL);
+    ASSERT(catch_if_else_alias_rethrows != NULL);
+    ASSERT(catch_if_else_alias_invalidates != NULL);
     ASSERT(wrong_typed_rethrow != NULL);
     ASSERT(catch_all_alias_rethrows != NULL);
     ASSERT(catch_all_var_alias_rethrows != NULL);
@@ -1614,6 +1634,16 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         effect_summary_enum_set_named(a, catch_if_alias_does_not_leak, "CatchErr");
     ASSERT(if_alias_set != NULL);
     ASSERT(if_alias_set->all_variants);
+    const XaErrorTypeSet *if_else_alias_set =
+        effect_summary_enum_set_named(a, catch_if_else_alias_rethrows, "CatchErr");
+    ASSERT(if_else_alias_set != NULL);
+    ASSERT(!if_else_alias_set->all_variants);
+    ASSERT(xa_bitset_test(&if_else_alias_set->variants, 0));
+    ASSERT(!xa_bitset_test(&if_else_alias_set->variants, 1));
+    const XaErrorTypeSet *if_else_invalidated_alias_set =
+        effect_summary_enum_set_named(a, catch_if_else_alias_invalidates, "CatchErr");
+    ASSERT(if_else_invalidated_alias_set != NULL);
+    ASSERT(if_else_invalidated_alias_set->all_variants);
     ASSERT(effect_summary_has_enum_named(a, wrong_typed_rethrow, "CatchErr"));
     ASSERT(!effect_summary_has_enum_named(a, wrong_typed_rethrow, "OtherErr"));
     ASSERT(effect_summary_has_enum_named(a, catch_all_alias_rethrows, "CatchErr"));
