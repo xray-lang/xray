@@ -1840,6 +1840,38 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
     }
 
+    if (obj_type->kind == XR_KIND_INTERFACE && obj_type->instance.class_name) {
+        XaSymbol *iface_sym = xa_analyzer_lookup_deep(ctx->analyzer, obj_type->instance.class_name);
+        XaSymbolLinks *iface_links =
+            iface_sym ? xa_analyzer_get_links(ctx->analyzer, iface_sym) : NULL;
+        XrClassInfo *iface_info = iface_links ? iface_links->class_info : NULL;
+        if (iface_info) {
+            XaSymbol *member = xa_class_info_lookup_instance_member(iface_info, ma->name);
+            if (member) {
+                XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member);
+                if (member_links && member_links->type) {
+                    XrType *member_type = member_links->type;
+                    int type_param_count =
+                        iface_links ? xa_symbol_links_get_type_param_count(iface_links) : 0;
+                    if (type_param_count > 0 && obj_type->instance.type_arg_count > 0) {
+                        const char **param_names =
+                            xr_malloc(sizeof(const char *) * type_param_count);
+                        for (int i = 0; i < type_param_count; i++)
+                            param_names[i] = xa_symbol_links_get_type_param_name(iface_links, i);
+                        member_type = xr_type_substitute(ctx->analyzer->isolate, member_type,
+                                                         param_names, obj_type->instance.type_args,
+                                                         obj_type->instance.type_arg_count);
+                        xr_free(param_names);
+                    }
+                    XaSelectionKind sk =
+                        (member->kind == XA_SYM_METHOD) ? XA_SEL_METHOD : XA_SEL_FIELD;
+                    record_selection(ctx, node, sk, obj_type, member, -1, member_type, false);
+                    return member_type;
+                }
+            }
+        }
+    }
+
     SymbolId prop_sym = xr_builtin_symbol_from_name(ma->name);
     bool declares_legacy_named_member = false;
     if (obj_type->kind == XR_KIND_INSTANCE && obj_type->instance.class_ref) {
