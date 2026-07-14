@@ -246,12 +246,20 @@ TEST(summary_subtract_type_and_clear_escaping_preserve_incomplete) {
     ASSERT(summary.escaping.types[0].type_id == second_type);
     ASSERT(!xa_effect_summary_is_nothrow(&summary));
 
+    XaEffectSummary copied;
+    xa_effect_summary_init(&copied);
+    ASSERT(xa_effect_summary_add_type_from_summary(db, &copied, &summary, second_type));
+    ASSERT(copied.escaping.count == 1);
+    ASSERT(copied.escaping.types[0].type_id == second_type);
+    ASSERT(copied.escaping.types[0].all_variants);
+
     xa_effect_summary_clear_escaping(&summary);
     ASSERT(summary.escaping.count == 0);
     ASSERT(summary.completeness == XA_EFFECT_INCOMPLETE);
     ASSERT((summary.unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(!xa_effect_summary_is_nothrow(&summary));
 
+    xa_effect_summary_clear(&copied);
     xa_effect_summary_clear(&summary);
     xa_effect_db_free(db);
 }

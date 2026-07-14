@@ -793,6 +793,11 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
                          "fn catchesAll() { try { fail() } catch (e) { } }\n"
                          "fn catchBodyThrows() { "
                          "  try { fail() } catch (e: CatchErr) { throw OtherErr.Boom } "
+                         "}\n"
+                         "fn catchAllRethrows() { try { fail() } catch (e) { throw e } }\n"
+                         "fn typedRethrows() { try { fail() } catch (e: CatchErr) { throw e } }\n"
+                         "fn wrongTypedRethrow() { "
+                         "  try { fail() } catch (e: OtherErr) { throw e } "
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -804,11 +809,19 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     const XaEffectSummary *catches_all = analyzer_function_effect_summary(a, "catchesAll");
     const XaEffectSummary *catch_body_throws =
         analyzer_function_effect_summary(a, "catchBodyThrows");
+    const XaEffectSummary *catch_all_rethrows =
+        analyzer_function_effect_summary(a, "catchAllRethrows");
+    const XaEffectSummary *typed_rethrows = analyzer_function_effect_summary(a, "typedRethrows");
+    const XaEffectSummary *wrong_typed_rethrow =
+        analyzer_function_effect_summary(a, "wrongTypedRethrow");
     ASSERT(fail != NULL);
     ASSERT(handled != NULL);
     ASSERT(leaks != NULL);
     ASSERT(catches_all != NULL);
     ASSERT(catch_body_throws != NULL);
+    ASSERT(catch_all_rethrows != NULL);
+    ASSERT(typed_rethrows != NULL);
+    ASSERT(wrong_typed_rethrow != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, fail, "CatchErr"));
     ASSERT(handled->escaping.count == 0);
@@ -816,6 +829,10 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(catches_all->escaping.count == 0);
     ASSERT(!effect_summary_has_enum_named(a, catch_body_throws, "CatchErr"));
     ASSERT(effect_summary_has_enum_named(a, catch_body_throws, "OtherErr"));
+    ASSERT(effect_summary_has_enum_named(a, catch_all_rethrows, "CatchErr"));
+    ASSERT(effect_summary_has_enum_named(a, typed_rethrows, "CatchErr"));
+    ASSERT(effect_summary_has_enum_named(a, wrong_typed_rethrow, "CatchErr"));
+    ASSERT(!effect_summary_has_enum_named(a, wrong_typed_rethrow, "OtherErr"));
 
     xa_analyzer_free(a);
     setup_pool();

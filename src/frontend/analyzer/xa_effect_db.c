@@ -390,6 +390,31 @@ bool xa_effect_summary_add_summary(XaEffectDatabase *db, XaEffectSummary *summar
     return ok;
 }
 
+bool xa_effect_summary_add_type_from_summary(XaEffectDatabase *db, XaEffectSummary *summary,
+                                             const XaEffectSummary *src, XaErrorTypeId type_id) {
+    if (!db || !summary || !src || type_id == XA_ERROR_TYPE_NONE)
+        return false;
+    for (uint32_t i = 0; i < src->escaping.count; i++) {
+        const XaErrorTypeSet *type_set = &src->escaping.types[i];
+        if (type_set->type_id != type_id)
+            continue;
+        if (type_set->all_variants)
+            return xa_effect_summary_add_all_variants(db, summary, type_id);
+        bool ok = true;
+        for (uint32_t word = 0; word < type_set->variants.word_count; word++) {
+            uint64_t bits = type_set->variants.words[word];
+            while (bits) {
+                uint32_t bit = (uint32_t) __builtin_ctzll(bits);
+                XaErrorVariantId variant_id = word * 64u + bit;
+                ok = xa_effect_summary_add_variant(db, summary, type_id, variant_id) && ok;
+                bits &= bits - 1u;
+            }
+        }
+        return ok;
+    }
+    return true;
+}
+
 void xa_effect_summary_clear_escaping(XaEffectSummary *summary) {
     if (!summary)
         return;
