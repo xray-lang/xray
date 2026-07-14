@@ -1,1 +1,1 @@
-cannot mutate owner 'box' while Span view 'view' is active
+cannot mutate owner 'box' while Slice view 'view' is active

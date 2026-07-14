@@ -1,4 +1,4 @@
 status=fail
-contains=cannot return Span view; return the owner container or copy the view into an Array
+contains=cannot return Slice view; return the owner container or copy the view into an Array
 not_contains=@no_alloc function 'xray_no_alloc_span_slice_ok' allocates
 not_contains=CRASH

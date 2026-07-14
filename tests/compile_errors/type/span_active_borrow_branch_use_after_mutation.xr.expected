@@ -1,1 +1,1 @@
-cannot mutate owner 'bytes' while Span view 'view' is active
+cannot mutate owner 'bytes' while Slice view 'view' is active

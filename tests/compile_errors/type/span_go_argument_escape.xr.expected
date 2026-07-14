@@ -1,1 +1,1 @@
-cannot send Span view across go argument
+cannot send Slice view across go argument

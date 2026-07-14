@@ -1,4 +1,4 @@
-cannot return Span view
-cannot store Span view in module-level binding
-cannot mutate owner 'bytes' while Span view 'bv' is active
-cannot mutate owner 'values' while Span view 'iv' is active
+cannot return Slice view
+cannot store Slice view in module-level binding
+cannot mutate owner 'bytes' while Slice view 'bv' is active
+cannot mutate owner 'values' while Slice view 'iv' is active

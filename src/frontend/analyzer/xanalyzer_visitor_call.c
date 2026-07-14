@@ -552,7 +552,7 @@ static void xa_check_payload_enum_variant_call(XaInferContext *ctx, AstNode *nod
         ctx->expected_type = saved_expected;
         if (xa_type_contains_span_view(arg_type)) {
             char context[160];
-            snprintf(context, sizeof(context), "store Span view in enum payload '%s.%s'",
+            snprintf(context, sizeof(context), "store Slice view in enum payload '%s.%s'",
                      enum_name ? enum_name : "?", variant_name ? variant_name : "?");
             xa_check_span_value_escape(ctx, arg, arg_type, context);
         }
@@ -2662,7 +2662,7 @@ static void xa_check_borrowed_mutator_arg_escape(XaInferContext *ctx, AstNode *c
         return;
     if (xa_type_contains_span_view(arg_type)) {
         char context[160];
-        snprintf(context, sizeof(context), "pass Span view to mutating method '%s'",
+        snprintf(context, sizeof(context), "pass Slice view to mutating method '%s'",
                  method_name ? method_name : "?");
         xa_check_span_value_escape(ctx, arg_node, arg_type, context);
         return;
@@ -3311,7 +3311,7 @@ static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *c
         return;
     if (xa_type_contains_span_view(arg_type)) {
         char context[160];
-        snprintf(context, sizeof(context), "pass Span view to escaping parameter %d of '%s'",
+        snprintf(context, sizeof(context), "pass Slice view to escaping parameter %d of '%s'",
                  slot + 1, callee_name ? callee_name : "callee");
         xa_check_span_value_escape(ctx, arg_node ? arg_node : call_node, arg_type, context);
         return;

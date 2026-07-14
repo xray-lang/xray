@@ -54,6 +54,7 @@ ALLOWED_REMOVED_INDEX_FILES = {
 }
 PUBLIC_DOC_PREFIXES = ("spec/", "docs/")
 PUBLIC_BLOCKING_CATEGORIES = {
+    "PUBLIC_SPAN_VIEW_DIAGNOSTIC",
     "PUBLIC_STRING_INDEX_EXAMPLE",
     "PUBLIC_BACKEND_STRING_INDEX_DIAGNOSTIC",
 }
@@ -61,6 +62,7 @@ BACKEND_BLOCKING_CATEGORIES = {
     "BACKEND_STRING_INDEX_SUPPORT",
 }
 CATEGORIES = (
+    "PUBLIC_SPAN_VIEW_DIAGNOSTIC",
     "PUBLIC_STRING_INDEX_EXAMPLE",
     "PUBLIC_BACKEND_STRING_INDEX_DIAGNOSTIC",
     "BACKEND_STRING_INDEX_SUPPORT",
@@ -68,6 +70,7 @@ CATEGORIES = (
     "CANONICAL_STRING_INDEX_REJECTION_TEXT",
 )
 
+PUBLIC_SPAN_VIEW_DIAGNOSTIC_RE = re.compile(r"\bSpan view\b")
 STALE_INDEX_EXAMPLE_RE = re.compile(
     r"\b(?:str|s|string|text)\s*\[[^\]]+\].*(?:returns?\s+rune|返回\s*rune|//\s*[\"'][^\"']+[\"'])",
     re.IGNORECASE,
@@ -135,6 +138,15 @@ def is_public_doc(rel_path: Path) -> bool:
     return rel_str in EXTRA_FILES or any(rel_str.startswith(prefix) for prefix in PUBLIC_DOC_PREFIXES)
 
 
+def is_public_diagnostic_surface(rel_path: Path) -> bool:
+    rel_str = rel_path.as_posix()
+    return (
+        rel_str.startswith("src/frontend/")
+        or rel_str.startswith("tests/compile_errors/")
+        or rel_str.startswith("tests/aot/filetests/")
+    )
+
+
 def classify_line(root: Path, path: Path, lineno: int, line: str) -> list[Hit]:
     rel_path = rel(root, path)
     rel_str = rel_path.as_posix()
@@ -149,6 +161,9 @@ def classify_line(root: Path, path: Path, lineno: int, line: str) -> list[Hit]:
     if STALE_INDEX_EXAMPLE_RE.search(line) and is_public_doc(rel_path):
         hits.append(Hit("PUBLIC_STRING_INDEX_EXAMPLE", rel_str, lineno, stripped))
         return hits
+
+    if PUBLIC_SPAN_VIEW_DIAGNOSTIC_RE.search(line) and is_public_diagnostic_surface(rel_path):
+        hits.append(Hit("PUBLIC_SPAN_VIEW_DIAGNOSTIC", rel_str, lineno, stripped))
 
     if BACKEND_PUBLIC_DIAGNOSTIC_RE.search(line):
         hits.append(Hit("PUBLIC_BACKEND_STRING_INDEX_DIAGNOSTIC", rel_str, lineno, stripped))
