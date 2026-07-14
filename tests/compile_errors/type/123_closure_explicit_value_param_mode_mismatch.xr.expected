@@ -1,0 +1,1 @@
+Type 'fn(int): ()' is not assignable to type 'fn(ref int): ()'
