@@ -99,6 +99,8 @@ XR_FUNC bool xa_effect_summary_add_all_variants(XaEffectDatabase *db, XaEffectSu
                                                 XaErrorTypeId type_id);
 XR_FUNC bool xa_effect_summary_add_summary(XaEffectDatabase *db, XaEffectSummary *summary,
                                            const XaEffectSummary *src);
+XR_FUNC void xa_effect_summary_clear_escaping(XaEffectSummary *summary);
+XR_FUNC bool xa_effect_summary_subtract_type(XaEffectSummary *summary, XaErrorTypeId type_id);
 XR_FUNC void xa_effect_summary_mark_incomplete(XaEffectSummary *summary, XaUnknownReason reason);
 XR_FUNC bool xa_effect_summary_is_nothrow(const XaEffectSummary *summary);
 XR_FUNC uint64_t xa_effect_summary_fingerprint(const XaEffectDatabase *db,

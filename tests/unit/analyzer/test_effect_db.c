@@ -225,6 +225,37 @@ TEST(error_type_handle_is_bound_by_stable_key) {
     xa_effect_db_free(db);
 }
 
+TEST(summary_subtract_type_and_clear_escaping_preserve_incomplete) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId first_type = xa_effect_db_register_error_type(db, 0x707u, NULL);
+    XaErrorTypeId second_type = xa_effect_db_register_error_type(db, 0x808u, NULL);
+    ASSERT(first_type != XA_ERROR_TYPE_NONE);
+    ASSERT(second_type != XA_ERROR_TYPE_NONE);
+    ASSERT(xa_effect_db_register_error_variant(db, first_type, 0x71u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, second_type, 0x81u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    ASSERT(xa_effect_summary_add_variant(db, &summary, first_type, 0));
+    ASSERT(xa_effect_summary_add_all_variants(db, &summary, second_type));
+    xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+
+    ASSERT(xa_effect_summary_subtract_type(&summary, first_type));
+    ASSERT(summary.escaping.count == 1);
+    ASSERT(summary.escaping.types[0].type_id == second_type);
+    ASSERT(!xa_effect_summary_is_nothrow(&summary));
+
+    xa_effect_summary_clear_escaping(&summary);
+    ASSERT(summary.escaping.count == 0);
+    ASSERT(summary.completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((summary.unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(!xa_effect_summary_is_nothrow(&summary));
+
+    xa_effect_summary_clear(&summary);
+    xa_effect_db_free(db);
+}
+
 int main(void) {
     printf("Running effect database tests...\n");
     RUN_TEST(empty_complete_is_real_summary);
@@ -234,6 +265,7 @@ int main(void) {
     RUN_TEST(incomplete_empty_is_not_nothrow);
     RUN_TEST(summary_merge_preserves_variants_and_incomplete_reason);
     RUN_TEST(error_type_handle_is_bound_by_stable_key);
+    RUN_TEST(summary_subtract_type_and_clear_escaping_preserve_incomplete);
 
     printf("\n%d tests passed, %d failed\n", tests_passed, tests_failed);
     return tests_failed ? 1 : 0;

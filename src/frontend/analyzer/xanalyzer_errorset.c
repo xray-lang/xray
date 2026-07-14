@@ -24,6 +24,7 @@
 #include "xanalyzer_errorset.h"
 #include "xanalyzer_visitor.h"
 #include "xa_effect_db.h"
+#include "xtype_ref_resolve.h"
 #include "../../runtime/value/xtype.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
@@ -56,9 +57,9 @@ static void es_summary_add_enum_case(XaEffectDatabase *db, XaEffectSummary *summ
 
 typedef struct ErrorSetCtx {
     XaAnalyzer *analyzer;
-    XaEffectSummary current_summary; /* Effect summary being built for current function */
-    XaSymbol *current_func;          /* Current function symbol */
-    bool changed;                    /* Fixpoint: did anything change this iteration? */
+    XaEffectSummary *current_summary; /* Effect summary being built for current function */
+    XaSymbol *current_func;           /* Current function symbol */
+    bool changed;                     /* Fixpoint: did anything change this iteration? */
 } ErrorSetCtx;
 
 /* ========== Forward Declarations ========== */
@@ -91,10 +92,16 @@ static XaSymbol *resolve_func_symbol(XaAnalyzer *analyzer, AstNode *node) {
 /* Resolve a call target to its function symbol.
  * Handles direct calls (foo()) and simple member calls. */
 static XaSymbol *resolve_call_target(XaAnalyzer *analyzer, AstNode *callee) {
-    if (!callee)
+    if (!analyzer || !callee)
         return NULL;
     if (callee->type == AST_VARIABLE) {
-        return xa_scope_lookup(analyzer->global_scope, callee->as.variable.name);
+        XaSymbol *sym = xa_analyzer_lookup(analyzer, callee->as.variable.name);
+        if (!sym)
+            sym = xa_analyzer_lookup_in_scope(analyzer, callee->as.variable.name,
+                                              analyzer->global_scope);
+        if (!sym)
+            sym = xa_analyzer_lookup_deep(analyzer, callee->as.variable.name);
+        return sym;
     }
     return NULL;
 }
@@ -128,7 +135,7 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
                 const XaEffectSummary *callee_summary =
                     xa_effect_db_get(ctx->analyzer->effect_db, callee_sym->links.effect_id);
                 if (callee_summary)
-                    xa_effect_summary_add_summary(ctx->analyzer->effect_db, &ctx->current_summary,
+                    xa_effect_summary_add_summary(ctx->analyzer->effect_db, ctx->current_summary,
                                                   callee_summary);
             }
             break;
@@ -255,11 +262,10 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                         XrType *enum_type = enum_sym->links.type;
                         int case_idx = find_enum_case_index(enum_sym, member_name);
                         if (enum_type && case_idx >= 0) {
-                            es_summary_add_enum_case(ctx->analyzer->effect_db,
-                                                     &ctx->current_summary, enum_type,
-                                                     (uint32_t) case_idx);
+                            es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary,
+                                                     enum_type, (uint32_t) case_idx);
                         } else if (enum_type) {
-                            es_summary_add_enum_all(ctx->analyzer->effect_db, &ctx->current_summary,
+                            es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary,
                                                     enum_type);
                         }
                     }
@@ -268,7 +274,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 /* Generic throw: infer type from the expression's analyzed type */
                 XrType *thrown_type = xa_analyzer_get_node_type(ctx->analyzer, expr);
                 if (thrown_type && XR_TYPE_IS_ENUM(thrown_type)) {
-                    es_summary_add_enum_all(ctx->analyzer->effect_db, &ctx->current_summary,
+                    es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary,
                                             thrown_type);
                 }
             }
@@ -278,19 +284,42 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
         case AST_TRY_CATCH: {
             TryCatchNode *tc = &node->as.try_catch;
 
-            /* Walk try body — errors from here are candidates for catch */
+            XaEffectSummary try_summary;
+            xa_effect_summary_init(&try_summary);
+            XaEffectSummary *outer_summary = ctx->current_summary;
+            ctx->current_summary = &try_summary;
             es_walk_block(ctx, tc->try_body);
+            ctx->current_summary = outer_summary;
 
-            /* Catch-all removes all errors; typed/pattern catch support must
-             * filter only matching error variants. */
             if (tc->catch_count > 0) {
+                for (int i = 0; i < tc->catch_count; i++) {
+                    XrCatchClause *cc = tc->catch_clauses[i];
+                    if (!cc || cc->is_panic)
+                        continue;
+                    if (!cc->type) {
+                        xa_effect_summary_clear_escaping(&try_summary);
+                        continue;
+                    }
+                    XrType *catch_type = xr_tref_resolve_in_analyzer(ctx->analyzer, cc->type);
+                    if (catch_type && XR_TYPE_IS_ENUM(catch_type)) {
+                        XaErrorTypeId type_id =
+                            xa_effect_db_register_error_enum(ctx->analyzer->effect_db, catch_type);
+                        xa_effect_summary_subtract_type(&try_summary, type_id);
+                    }
+                }
+                xa_effect_summary_add_summary(ctx->analyzer->effect_db, outer_summary,
+                                              &try_summary);
                 for (int i = 0; i < tc->catch_count; i++) {
                     XrCatchClause *cc = tc->catch_clauses[i];
                     if (cc && cc->body) {
                         es_walk_block(ctx, cc->body);
                     }
                 }
+            } else {
+                xa_effect_summary_add_summary(ctx->analyzer->effect_db, outer_summary,
+                                              &try_summary);
             }
+            xa_effect_summary_clear(&try_summary);
             break;
         }
 
@@ -374,15 +403,17 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
 
     ctx->current_func = func_sym;
 
-    xa_effect_summary_init(&ctx->current_summary);
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    ctx->current_summary = &summary;
     es_walk_block(ctx, body);
     XaEffectId previous_id = func_sym->links.effect_id;
-    func_sym->links.effect_id =
-        xa_effect_db_intern(ctx->analyzer->effect_db, &ctx->current_summary);
+    func_sym->links.effect_id = xa_effect_db_intern(ctx->analyzer->effect_db, &summary);
     if (func_sym->links.effect_id != previous_id)
         ctx->changed = true;
-    xa_effect_summary_clear(&ctx->current_summary);
+    xa_effect_summary_clear(&summary);
 
+    ctx->current_summary = NULL;
     ctx->current_func = NULL;
 }
 
