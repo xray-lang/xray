@@ -16,6 +16,7 @@
 #include "../../../src/app/lsp/xlsp_builtins.h"
 #include "../../../src/app/lsp/xlsp_code_action.h"
 #include "../../../src/app/lsp/xlsp_completion.h"
+#include "../../../src/app/lsp/xlsp_semantic_tokens.h"
 #include "../../../src/base/xjson.h"
 #include "../test_win_compat.h"
 
@@ -72,6 +73,52 @@ static XrJsonValue *json_array_find_label(XrJsonValue *items, const char *label)
 static const char *hover_markdown_value(XrJsonValue *hover) {
     XrJsonValue *contents = xjson_get_object(hover, "contents");
     return contents ? xjson_get_string(contents, "value") : NULL;
+}
+
+static bool content_position_of_nth(const char *content, const char *needle, int occurrence,
+                                    int *out_line, int *out_col) {
+    if (!content || !needle || occurrence <= 0)
+        return false;
+
+    const char *p = content;
+    for (int seen = 0; seen < occurrence; seen++) {
+        p = strstr(p, needle);
+        if (!p)
+            return false;
+        if (seen + 1 < occurrence)
+            p += strlen(needle);
+    }
+
+    int line = 0;
+    int col = 0;
+    for (const char *scan = content; scan < p; scan++) {
+        if (*scan == '\n') {
+            line++;
+            col = 0;
+        } else {
+            col++;
+        }
+    }
+    if (out_line)
+        *out_line = line;
+    if (out_col)
+        *out_col = col;
+    return true;
+}
+
+static bool semantic_token_exists(XlspSemanticTokensResult *tokens, int line, int col,
+                                  const char *text, XlspSemanticTokenType type) {
+    if (!tokens || !text)
+        return false;
+    int len = (int) strlen(text);
+    for (int i = 0; i < tokens->count; i++) {
+        XlspSemanticToken *token = &tokens->tokens[i];
+        if (token->line == line && token->start_char == col && token->length == len &&
+            token->type == type) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // ============================================================================
@@ -604,6 +651,47 @@ TEST(param_mode_user_function_lsp_display) {
     xlsp_server_free(server);
 }
 
+TEST(param_mode_semantic_tokens_mark_modes_and_call_access) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "fn adjust(view: in int, slot: ref int, filled: out int) -> int {\n"
+                          "    filled = view\n"
+                          "    slot = slot + filled\n"
+                          "    return slot\n"
+                          "}\n"
+                          "\n"
+                          "fn main() {\n"
+                          "    var value = 1\n"
+                          "    var slot = 2\n"
+                          "    var filled: int\n"
+                          "    adjust(value, ref slot, out filled)\n"
+                          "}\n";
+
+    XrLspDocument *doc = xlsp_document_open(server, "file:///param_mode_tokens.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XlspSemanticTokensResult *tokens = xlsp_analyze_semantic_tokens(doc);
+    ASSERT(tokens != NULL);
+
+    int line = -1;
+    int col = -1;
+    ASSERT(content_position_of_nth(content, "in", 1, &line, &col));
+    ASSERT(semantic_token_exists(tokens, line, col, "in", XLSP_TOKEN_MODIFIER));
+    ASSERT(content_position_of_nth(content, "ref", 1, &line, &col));
+    ASSERT(semantic_token_exists(tokens, line, col, "ref", XLSP_TOKEN_MODIFIER));
+    ASSERT(content_position_of_nth(content, "out", 1, &line, &col));
+    ASSERT(semantic_token_exists(tokens, line, col, "out", XLSP_TOKEN_MODIFIER));
+    ASSERT(content_position_of_nth(content, "ref", 2, &line, &col));
+    ASSERT(semantic_token_exists(tokens, line, col, "ref", XLSP_TOKEN_MODIFIER));
+    ASSERT(content_position_of_nth(content, "out", 2, &line, &col));
+    ASSERT(semantic_token_exists(tokens, line, col, "out", XLSP_TOKEN_MODIFIER));
+
+    xlsp_semantic_tokens_free(tokens);
+    xlsp_server_free(server);
+}
+
 // ============================================================================
 // Code Action Quick-Fix Tests (concurrency diagnostics)
 // ============================================================================
@@ -748,6 +836,7 @@ int main(int argc, char **argv) {
     RUN_TEST(builtin_generic_array_uses_error_placeholder);
     RUN_TEST(global_type_query_builtins_use_canonical_names);
     RUN_TEST(param_mode_user_function_lsp_display);
+    RUN_TEST(param_mode_semantic_tokens_mark_modes_and_call_access);
 
     printf("\nCode action concurrency quick-fix tests:\n");
     RUN_TEST(code_action_go_capture_to_shared);
