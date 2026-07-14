@@ -1,19 +1,38 @@
 // Pure-Xray encoding module: VM/AOT parity across hex, UTF-8 metrics, and
 // UTF-16 encode/decode (endianness, CJK surrogate-free BMP, empty input).
 import encoding
+import { HexError } from encoding
 
-print(encoding.hexEncode("Hello"))
-print(encoding.hexDecodeString("48656c6c6f"))
+fn hexEncodeText(data: string) -> string {
+    var view: Slice<byte> = data.bytes()
+    return encoding.hexEncode(view)
+}
+
+fn hexDecodeText(hex: string) -> string {
+    var bytes = encoding.hexDecode(hex)
+    return string.fromUtf8(bytes[:])!
+}
+
+fn hexDecodeFails(hex: string) -> bool {
+    try {
+        var bytes = encoding.hexDecode(hex)
+        return len(bytes) < 0
+    } catch (e: HexError) {
+        return true
+    }
+}
+
+print(hexEncodeText("Hello"))
+print(hexDecodeText("48656c6c6f"))
 print(encoding.hexValid("48656c6c6f"))
 print(encoding.hexValid("gg"))
 print(encoding.hexValid("abc"))
-print(encoding.hexDecode("gg") == null)
+print(hexDecodeFails("gg"))
 
 var hb = encoding.hexDecode("48656c6c6f")
-print(hb != null)
-print(len(hb!))
-print(hb![0])
-print(hb![4])
+print(len(hb))
+print(hb[0])
+print(hb[4])
 
 print(encoding.utf8ByteLength("Hello"))
 print(encoding.utf8ByteLength("你好"))

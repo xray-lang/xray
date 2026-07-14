@@ -1,6 +1,6 @@
 // encoding — hex + UTF-8 + UTF-16 conversions, pure Xray.
 //
-// hex works on the string's UTF-8 bytes; UTF-16 encode/decode walk Unicode
+// hex works on explicit byte slices; UTF-16 encode/decode walk Unicode
 // code points and surrogate pairs with explicit endianness and BOM handling.
 // All algorithms are byte-indexed with bit ops, matching the RFC/Unicode rules.
 
@@ -9,22 +9,23 @@ const BE = 1
 
 const HEX = "0123456789abcdef"
 
-fn utf8String(bytes: Array<byte>) -> string? {
-    return string.fromUtf8(bytes[:])
-}
-
 // ---- hex ----
 
+enum HexError {
+    OddLength(length: int),
+    InvalidDigit(byteOffset: int, value: byte)
+}
+
 // Map a hex character's byte value to its nibble, or -1 if not a hex digit.
-fn hexVal(c: int) -> int {
+fn _hexVal(c: int) -> int {
     if (c >= 48 && c <= 57) { return c - 48 }    // 0-9
     if (c >= 97 && c <= 102) { return c - 87 }   // a-f
     if (c >= 65 && c <= 70) { return c - 55 }    // A-F
     return -1
 }
 
-fn hexEncode(data: string) -> string {
-    var src = data.copyBytes()
+fn hexEncode(data: Slice<byte>) -> string {
+    var src = data
     var out = StringBuilder()
     for (var i = 0; i < len(src); i++) {
         var b = src[i]
@@ -34,17 +35,18 @@ fn hexEncode(data: string) -> string {
     return out.toString()
 }
 
-fn hexDecode(hex: string) -> Array<byte>? {
-    var src = hex.copyBytes()
+fn hexDecode(hex: string) -> Array<byte> {
+    var src: Slice<byte> = hex.bytes()
     var n = len(src)
-    if (n % 2 != 0) { return null }
+    if (n % 2 != 0) { throw HexError.OddLength(n) }
     var out = Array<byte>(n / 2)
     var oi = 0
     var i = 0
     while (i < n) {
-        var hi = hexVal(src[i])
-        var lo = hexVal(src[i + 1])
-        if (hi < 0 || lo < 0) { return null }
+        var hi = _hexVal(src[i])
+        if (hi < 0) { throw HexError.InvalidDigit(i, src[i]) }
+        var lo = _hexVal(src[i + 1])
+        if (lo < 0) { throw HexError.InvalidDigit(i + 1, src[i + 1]) }
         out[oi] = (hi << 4) | lo
         oi = oi + 1
         i = i + 2
@@ -52,20 +54,13 @@ fn hexDecode(hex: string) -> Array<byte>? {
     return out
 }
 
-fn hexDecodeString(hex: string) -> string? {
-    var b = hexDecode(hex)
-    if (b == null) { return null }
-    return utf8String(b!)
-}
-
 fn hexValid(hex: string) -> bool {
-    var src = hex.copyBytes()
-    var n = len(src)
-    if (n % 2 != 0) { return false }
-    for (var i = 0; i < n; i++) {
-        if (hexVal(src[i]) < 0) { return false }
+    try {
+        var decoded = hexDecode(hex)
+        return len(decoded) >= 0
+    } catch (e: HexError) {
+        return false
     }
-    return true
 }
 
 // ---- UTF-8 ----
@@ -230,7 +225,8 @@ fn utf16Decode(data: Array<byte>, endian: int = 0, stripBom: bool = true) -> str
 
 export {
     LE, BE,
-    hexEncode, hexDecode, hexDecodeString, hexValid,
+    HexError,
+    hexEncode, hexDecode, hexValid,
     utf8Valid, utf8Count, utf8ByteLength,
     utf16Encode, utf16Decode
 }

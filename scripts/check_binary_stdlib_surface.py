@@ -53,8 +53,6 @@ BINARY_STRING_SYMBOLS = {
     ("crypto", "sha256"),
     ("crypto", "sha512"),
     ("crypto", "timingSafeEqual"),
-    ("encoding", "hexDecodeString"),
-    ("encoding", "hexEncode"),
     ("encoding", "utf8ByteLength"),
     ("encoding", "utf8Count"),
     ("encoding", "utf8Valid"),
@@ -91,7 +89,6 @@ LEGACY_ALIAS_SYMBOLS = {
     ("base64", "decodeUrl"),
     ("base64", "encodeBytes"),
     ("base64", "encodeUrl"),
-    ("encoding", "hexDecodeString"),
     ("io", "writeFileBytes"),
     ("net", "writeBytes"),
 }
@@ -105,10 +102,7 @@ NULL_SENTINEL_SYMBOLS = {
     ("compress", "zlibDecompress"),
     ("crypto", "decrypt"),
     ("crypto", "hmac"),
-    ("encoding", "hexDecode"),
-    ("encoding", "hexDecodeString"),
     ("encoding", "utf16Decode"),
-    ("encoding", "utf8String"),
     ("io", "readFileBytes"),
     ("net", "read"),
     ("net", "recvFrom"),
@@ -133,7 +127,6 @@ BOOL_RETURN_RE = re.compile(r"\):\s*bool\b|->\s*bool\b")
 OLD_API_CALL_RE = re.compile(
     r"\b(?:"
     r"base64\.(?:decodeToBytes|decodeUrl|encodeBytes|encodeUrl)|"
-    r"encoding\.hexDecodeString|"
     r"crypto\.(?:decrypt|encrypt|hmac|md5|randomBytes|sha1|sha256|sha512|timingSafeEqual)|"
     r"compress\.(?:adler32|crc32|deflate|gunzip|gzip|inflate|isGzip|isZlib|zlibCompress|zlibDecompress)|"
     r"net\.(?:read|recvFrom|sendTo|write|writeBytes)|"
