@@ -92,21 +92,79 @@ static XaSymbol *resolve_func_symbol(XaAnalyzer *analyzer, AstNode *node) {
     return NULL;
 }
 
-/* Resolve a call target to its function symbol.
- * Handles direct calls (foo()) and simple member calls. */
-static XaSymbol *resolve_call_target(XaAnalyzer *analyzer, AstNode *callee) {
-    if (!analyzer || !callee)
-        return NULL;
-    if (callee->type == AST_VARIABLE) {
-        XaSymbol *sym = xa_analyzer_lookup(analyzer, callee->as.variable.name);
-        if (!sym)
-            sym = xa_analyzer_lookup_in_scope(analyzer, callee->as.variable.name,
-                                              analyzer->global_scope);
-        if (!sym)
-            sym = xa_analyzer_lookup_deep(analyzer, callee->as.variable.name);
-        return sym;
+static AstNode *identity_source(AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            case AST_AS_EXPR:
+                expr = expr->as.as_expr.expr;
+                break;
+            default:
+                return expr;
+        }
     }
     return NULL;
+}
+
+static XaSymbol *lookup_variable_symbol(XaAnalyzer *analyzer, AstNode *node) {
+    node = identity_source(node);
+    if (!analyzer || !node || node->type != AST_VARIABLE || !node->as.variable.name)
+        return NULL;
+
+    if (node->as.variable.symbol_id != 0) {
+        XaSymbol *sym = xa_scope_lookup_by_id(analyzer->global_scope, node->as.variable.symbol_id);
+        if (sym)
+            return sym;
+    }
+
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, node->as.variable.name);
+    if (!sym)
+        sym = xa_analyzer_lookup_in_scope(analyzer, node->as.variable.name, analyzer->global_scope);
+    if (!sym)
+        sym = xa_analyzer_lookup_deep(analyzer, node->as.variable.name);
+    return sym;
+}
+
+static bool symbol_has_function_type(XaSymbol *sym) {
+    if (!sym)
+        return false;
+    if (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD)
+        return true;
+    XrType *type = sym->links.type;
+    return type && XR_TYPE_IS_FUNCTION(type);
+}
+
+static XaSymbol *resolve_function_alias_target(XaAnalyzer *analyzer, XaSymbol *sym, int depth) {
+    if (!analyzer || !sym)
+        return NULL;
+    if (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD)
+        return sym;
+    if (depth >= 32 || !sym->is_const || sym->is_rebindable || !sym->links.const_initializer)
+        return sym;
+    if (!symbol_has_function_type(sym))
+        return sym;
+
+    AstNode *source = identity_source(sym->links.const_initializer);
+    if (!source || source->type != AST_VARIABLE)
+        return sym;
+
+    XaSymbol *source_sym = lookup_variable_symbol(analyzer, source);
+    if (!source_sym || source_sym == sym)
+        return sym;
+    return resolve_function_alias_target(analyzer, source_sym, depth + 1);
+}
+
+/* Resolve a call target to its function symbol.  Direct calls and const
+ * function-value aliases are exact; dynamic function values remain incomplete
+ * work for the wider P2/HOF pass. */
+static XaSymbol *resolve_call_target(XaAnalyzer *analyzer, AstNode *callee) {
+    XaSymbol *sym = lookup_variable_symbol(analyzer, callee);
+    return resolve_function_alias_target(analyzer, sym, 0);
 }
 
 /* Try to find the case index of an enum member.
@@ -477,6 +535,10 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
         return;
 
     ctx->current_func = func_sym;
+    XaScope *saved_scope = ctx->analyzer->current_scope;
+    XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, func_node);
+    if (fn_scope)
+        ctx->analyzer->current_scope = fn_scope;
 
     XaEffectSummary summary;
     xa_effect_summary_init(&summary);
@@ -489,6 +551,7 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
     xa_effect_summary_clear(&summary);
 
     ctx->current_summary = NULL;
+    ctx->analyzer->current_scope = saved_scope;
     ctx->current_func = NULL;
 }
 
