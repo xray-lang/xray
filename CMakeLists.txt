@@ -1820,7 +1820,7 @@ if(BUILD_TESTS)
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_BIN=$<TARGET_FILE:xray>
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_aot_c90_benchmarks.sh
-                --quick
+                --samples 3
                 --gate
                 --bench byte_array_u8_index_fill_sum,byte_array_slice_bulk_hotpath
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
