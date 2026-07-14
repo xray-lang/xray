@@ -75,6 +75,7 @@ CATEGORIES = (
     "ALLOWED_REMOVED_STRING_INDEX_NEGATIVE_TEST",
     "ALLOWED_REMOVED_LEGACY_STRING_MEMBER_NEGATIVE_TEST",
     "CANONICAL_STRING_INDEX_REJECTION_TEXT",
+    "PATH_STRING_OWNER_SURFACE",
 )
 
 LEGACY_STRING_MEMBER_RE = re.compile(r"\b(?:charAt|fromBytes|runesLossy|byteLength)\b")
@@ -97,6 +98,17 @@ CANONICAL_REJECTION_RE = re.compile(
     r"`string` 整数索引：编译错误|"
     r"Strings do not support integer indexing"
 )
+PATH_STRING_DEF_SIGNATURE_RE = re.compile(
+    r'signature:\s*"\((?:path: string|src: string, dst: string|old: string, new: string|'
+    r'target: string, link: string)'
+)
+PATH_MODULE_STRING_FUNCTION_RE = re.compile(
+    r"^fn\s+(?:isAbsolute|joinAll|join|dirname|basename|extname|normalize|relative|"
+    r"resolve|parse)\b.*(?:\bp: string\b|\bparts: Array<string>\b|\bparts: string\b|"
+    r"\bfromRaw: string\b|\btoRaw: string\b)"
+)
+PATH_FILE_API_RE = re.compile(r"^fn\s+(?:parseFile|writeFile|setOutput)\b.*\bpath: string\b")
+PATH_DYLIB_OPEN_RE = re.compile(r"static\s+open\(path: string\)")
 
 
 @dataclass(frozen=True)
@@ -155,6 +167,24 @@ def is_public_diagnostic_surface(rel_path: Path) -> bool:
     )
 
 
+def is_path_string_owner_surface(rel_path: Path, stripped: str) -> bool:
+    rel_str = rel_path.as_posix()
+    if rel_str == "stdlib/defs/core.def":
+        return PATH_STRING_DEF_SIGNATURE_RE.search(stripped) is not None
+    if rel_str == "stdlib/path/path.xr":
+        return PATH_MODULE_STRING_FUNCTION_RE.search(stripped) is not None
+    if rel_str in {
+        "stdlib/log/log.xr",
+        "stdlib/yaml/yaml.xr",
+        "stdlib/toml/toml.xr",
+        "stdlib/xml/xml.xr",
+    }:
+        return PATH_FILE_API_RE.search(stripped) is not None
+    if rel_str == "stdlib/sys/sys.xr":
+        return PATH_DYLIB_OPEN_RE.search(stripped) is not None
+    return False
+
+
 def classify_line(root: Path, path: Path, lineno: int, line: str) -> list[Hit]:
     rel_path = rel(root, path)
     rel_str = rel_path.as_posix()
@@ -190,6 +220,9 @@ def classify_line(root: Path, path: Path, lineno: int, line: str) -> list[Hit]:
 
     if CANONICAL_REJECTION_RE.search(line):
         hits.append(Hit("CANONICAL_STRING_INDEX_REJECTION_TEXT", rel_str, lineno, stripped))
+
+    if is_path_string_owner_surface(rel_path, stripped):
+        hits.append(Hit("PATH_STRING_OWNER_SURFACE", rel_str, lineno, stripped))
 
     return hits
 
