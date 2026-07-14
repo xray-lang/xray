@@ -1,0 +1,3 @@
+fn bad(x: int ref) -> int {
+    return x
+}
