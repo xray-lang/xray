@@ -1,1 +1,1 @@
-only Array, Map, Json, String, typed array support indexing
+only Array, Map, Json, Set, Range, typed array, and operator[] support indexing

@@ -23,7 +23,7 @@ const MULTIBOOT = comptime MultibootHeader{
 fn kernel_entry() -> int32 {
     const vga = 0xb8000
     var cell = mem.fromAddress(vga)
-    mem.volatileStore(cell, 'X' as int, 1)
+    mem.volatileStore(cell, int('X'.toUInt32()), 1)
     mem.volatileStore(mem.fromAddress(vga + 1), 0x0f, 1)
     return MULTIBOOT.magic as int32
 }

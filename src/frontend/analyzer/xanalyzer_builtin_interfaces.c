@@ -208,7 +208,6 @@ static XaInterfaceMethod stringable_methods[] = {
  *
  * Built-in types that implement Indexable:
  *   - Array<T>   : index by int, returns T        (get/set)
- *   - string     : index by int, returns string   (get only, immutable)
  *   - Map<K,V>   : index by K, returns V          (get/set)
  *   - Array<uint8>: index by int, returns int      (get/set)
  *
@@ -216,9 +215,6 @@ static XaInterfaceMethod stringable_methods[] = {
  *   var arr = [1, 2, 3]
  *   var x = arr[0]     // calls get(0)
  *   arr[1] = 10        // calls set(1, 10)
- *
- *   var str = "hello"
- *   var c = str[0]     // "h"
  *
  *   var map = {"a" => 1}
  *   var v = map["a"]   // calls get("a")
