@@ -858,13 +858,13 @@ fn stringify(value: Json, options: Json = null) -> string {
     return _emitValue(encoded, 0, indent)
 }
 
-fn parseFile(path: string) -> Json {
+fn parseFile(path: Path) -> Json {
     var content = io.readFile(path)
     if (content == null) { return null }
     return parse(content!)
 }
 
-fn writeFile(path: string, value: Json) -> bool {
+fn writeFile(path: Path, value: Json) -> bool {
     return io.writeFile(path, stringify(value))
 }
 

@@ -1,8 +1,9 @@
 // anchor: io-touch-shared-core
 import io
+import path
 
-var root = io.tempDir() ?? ""
-var file = root + "/touch.txt"
+var root = io.tempDir()!
+var file = path.join(root, path.from("touch.txt"))
 
 print(io.touch(file))
 print(io.exists(file))

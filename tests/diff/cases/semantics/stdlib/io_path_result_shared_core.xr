@@ -1,34 +1,35 @@
 import io
+import path
 
-var root = io.tempDir() ?? ""
-print(len(root) > 0)
+var root = io.tempDir()!
+print(len(root.toString()) > 0)
 
-var dir = root + "/paths"
+var dir = path.join(root, path.from("paths"))
 print(io.mkdirp(dir))
 
-var file = dir + "/target.txt"
+var file = path.join(dir, path.from("target.txt"))
 print(io.writeFile(file, "target"))
 
-var missing = dir + "/missing.txt"
+var missing = path.join(dir, path.from("missing.txt"))
 print(io.realpath(missing) == null)
 print(io.readlink(missing) == null)
 
-var resolvedDir = io.realpath(dir) ?? ""
-var resolvedFile = io.realpath(file) ?? ""
-print(len(resolvedDir) > 0)
-print(len(resolvedFile) > 0)
+var resolvedDir = io.realpath(dir)!
+var resolvedFile = io.realpath(file)!
+print(len(resolvedDir.toString()) > 0)
+print(len(resolvedFile.toString()) > 0)
 
 var oldCwd = io.cwd()
 print(io.chdir(dir))
-print((io.realpath(".") ?? "") == resolvedDir)
+print(io.realpath(path.from("."))!.toString() == resolvedDir.toString())
 print(io.chdir(oldCwd))
 
-var link = root + "/target-link.txt"
+var link = path.join(root, path.from("target-link.txt"))
 var linkOk = io.symlink(file, link)
 if (linkOk) {
-    var target = io.readlink(link) ?? ""
-    print(len(target) > 0)
-    print((io.realpath(target) ?? "") == resolvedFile)
+    var target = io.readlink(link)!
+    print(len(target.toString()) > 0)
+    print(io.realpath(target)!.toString() == resolvedFile.toString())
 } else {
     print(true)
     print(true)

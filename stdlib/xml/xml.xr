@@ -798,7 +798,7 @@ fn parseDetailed(data: string, options: Json = null) -> Json {
     }
 }
 
-fn parseFile(path: string, options: Json = null) -> Json {
+fn parseFile(path: Path, options: Json = null) -> Json {
     var content = io.readFile(path)
     if (content == null) {
         var empty: Json = {}
@@ -820,7 +820,7 @@ fn stringify(node: Json, options: Json = null) -> string {
     return out.toString()
 }
 
-fn writeFile(path: string, node: Json, options: Json = null) -> bool {
+fn writeFile(path: Path, node: Json, options: Json = null) -> bool {
     return io.writeFile(path, stringify(node, options))
 }
 

@@ -279,7 +279,7 @@ class Dylib {
         return ok
     }
 
-    static open(path: string) -> Dylib? {
+    static open(path: Path) -> Dylib? {
         var handle = __dylibOpen(path)
         if (handle == 0) { return null }
         return Dylib(handle)

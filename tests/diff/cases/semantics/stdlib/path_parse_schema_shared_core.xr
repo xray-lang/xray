@@ -1,17 +1,17 @@
 // path.parse field schema is shared by VM and AOT.
 import path
 
-var parsed = path.parse("/home/user/file.txt")
+var parsed = path.parse(path.from("/home/user/file.txt"))
 print(parsed.root)
-print(parsed.dir)
+print(parsed.dir.toString())
 print(parsed.base)
 print(parsed.name)
 print(parsed.ext)
-print(path.format(parsed))
+print(path.format(parsed).toString())
 
-var nested = path.parse("logs/archive.tar.gz")
+var nested = path.parse(path.from("logs/archive.tar.gz"))
 print(nested.root == "")
-print(nested.dir)
+print(nested.dir.toString())
 print(nested.base)
 print(nested.name)
 print(nested.ext)

@@ -1,13 +1,14 @@
 import io
+import path
 
-var root = io.tempDir() ?? ""
-print(len(root) > 0)
+var root = io.tempDir()!
+print(len(root.toString()) > 0)
 
-var dir = root + "/a/b"
+var dir = path.join(root, path.from("a/b"))
 print(io.mkdirp(dir))
 print(io.isDir(dir))
 
-var file = dir + "/sample.txt"
+var file = path.join(dir, path.from("sample.txt"))
 print(io.writeFile(file, "hello"))
 print(io.exists(file))
 print(io.isFile(file))
@@ -21,7 +22,7 @@ print(len(lines))
 print(lines[0])
 print(lines[1])
 
-var bytesFile = dir + "/bytes.bin"
+var bytesFile = path.join(dir, path.from("bytes.bin"))
 var bytes = Array<byte>(3)
 bytes[0] = 65
 bytes[1] = 0
@@ -40,10 +41,10 @@ if (readBytes != null) {
     print(0)
 }
 
-var copied = root + "/copy.txt"
+var copied = path.join(root, path.from("copy.txt"))
 print(io.copyFile(file, copied))
 print(io.readFile(copied) == "hello\nworld")
-var moved = root + "/moved.txt"
+var moved = path.join(root, path.from("moved.txt"))
 print(io.rename(copied, moved))
 print(!io.exists(copied))
 print(io.exists(moved))
@@ -61,7 +62,7 @@ print(stat!.isFile)
 print(!stat!.isDir)
 print(!stat!.isSymlink)
 
-var touched = root + "/touched.txt"
+var touched = path.join(root, path.from("touched.txt"))
 print(io.touch(touched))
 print(io.chmod(file, 420))
 
@@ -70,15 +71,15 @@ print(len(entries) >= 2)
 var recursive = io.readDirRecursive(root)
 print(len(recursive) >= 4)
 
-var resolvedDir = io.realpath(dir) ?? ""
+var resolvedDir = io.realpath(dir)!
 var oldCwd = io.cwd()
-print(len(oldCwd) > 0)
-print(len(resolvedDir) > 0)
+print(len(oldCwd.toString()) > 0)
+print(len(resolvedDir.toString()) > 0)
 print(io.chdir(dir))
-print(io.cwd() == resolvedDir)
+print(io.cwd().toString() == resolvedDir.toString())
 print(io.chdir(oldCwd))
 
-var link = root + "/sample-link.txt"
+var link = path.join(root, path.from("sample-link.txt"))
 var linkOk = io.symlink(file, link)
 if (linkOk) {
     print(io.isSymlink(link))
@@ -88,8 +89,8 @@ if (linkOk) {
     print(true)
 }
 
-var tmpFile = io.tempFile() ?? ""
-print(len(tmpFile) > 0)
+var tmpFile = io.tempFile()!
+print(len(tmpFile.toString()) > 0)
 print(io.exists(tmpFile))
 print(io.remove(tmpFile))
 

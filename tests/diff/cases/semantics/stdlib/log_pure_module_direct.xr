@@ -1,8 +1,9 @@
 import io
 import log
+import path
 
-var path = "/tmp/xray_log_pure_module_direct.txt"
-io.writeFile(path, "")
+var logPath = path.from("/tmp/xray_log_pure_module_direct.txt")
+io.writeFile(logPath, "")
 
 print(log.DEBUG)
 print(log.INFO)
@@ -10,7 +11,7 @@ print(log.WARN)
 print(log.ERROR)
 print(log.FATAL)
 
-log.setOutput(path)
+log.setOutput(logPath)
 log.setLevel(log.DEBUG)
 log.info("server started", "port", 8080, "host", "localhost")
 
@@ -27,11 +28,11 @@ log.debug("queued", "ok", true)
 log.flush()
 log.enableAsync(false)
 
-var content = io.readFile(path) ?? ""
+var content = io.readFile(logPath) ?? ""
 print(content.indexOf("INFO server started") >= 0)
 print(content.indexOf("module=http") >= 0)
 print(content.indexOf("\"level\":\"ERROR\"") >= 0)
 print(content.indexOf("\"route\":\"/api\"") >= 0)
 print(content.indexOf("DEBUG queued") >= 0)
 
-io.remove(path)
+io.remove(logPath)

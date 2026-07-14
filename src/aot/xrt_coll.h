@@ -2159,6 +2159,41 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
     xr_swiss_indices_put(m->ctrl, m->indices, m->indices_size, hash, eidx);
 }
 
+static inline XrValue xrt_path_from_slice(const char *data, size_t len) {
+    XrValue raw = xrt_str_alloc(len);
+    if (len > 0 && data)
+        memcpy(xr_str_buf(raw), data, len);
+    XrValue path = xrt_map_set_class_name(xrt_map_new(1), "Path");
+    xrt_map_set((xrt_map_t *) path.ptr, xr_box_str("raw"), raw);
+    return path;
+}
+
+static inline XrValue xrt_path_from_cstr(const char *s) {
+    return s ? xrt_path_from_slice(s, strlen(s)) : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_path_raw_value(XrValue path) {
+    if (xrt_map_backed_class_exact(path, "Path"))
+        return xrt_map_get((xrt_map_t *) path.ptr, xr_box_str("raw"));
+    if (path.tag == XR_TAG_PTR && path.heap_type == XR_TINSTANCE && path.ptr) {
+        XrObjHeader *hdr = XRT_ARC_HDR(path.ptr);
+        const char *name = xrt_type_display_name(hdr->type);
+        if (name && strcmp(name, "Path") == 0)
+            return ((XrValue *) path.ptr)[0];
+    }
+    return XR_NULL_VAL;
+}
+
+static inline const char *xrt_path_data(XrValue path) {
+    XrValue raw = xrt_path_raw_value(path);
+    return XR_IS_STR(raw) ? xr_str_data(raw) : NULL;
+}
+
+static inline int64_t xrt_path_len(XrValue path) {
+    XrValue raw = xrt_path_raw_value(path);
+    return XR_IS_STR(raw) ? xr_str_len(raw) : 0;
+}
+
 static inline void xrt_map_set_prehashed(xrt_map_t *m, XrValue key, XrValue val, uint32_t hash) {
     if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m)) {
         xrt_map_set(m, key, val);

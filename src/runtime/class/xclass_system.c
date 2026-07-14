@@ -15,6 +15,7 @@
 #include "../../base/xlog.h"
 #include "xclass.h"
 #include "xclass_builder.h" /* Process class still uses builder */
+#include "xinstance.h"
 #include "../../base/xchecks.h"
 #include "../xisolate_internal.h"
 #include "../xisolate_api.h"
@@ -24,6 +25,7 @@
 #include "xenum.h"
 #include "../value/xtype_names.h"
 #include "../object/xpanic_info.h"
+#include "../object/xstring.h"
 
 /* Forward declarations: register functions live in *_methods.c files.
  * We call them here to unify core->xxxClass with native_type_classes[]. */
@@ -44,6 +46,19 @@ extern void xr_semaphore_register_native_type(XrVMRuntime *);
 extern void xr_event_count_register_native_type(XrVMRuntime *);
 #include <stdio.h>
 #include <string.h>
+
+static XrValue m_path_to_string(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
+    (void) X;
+    (void) args;
+    (void) argc;
+    if (!XR_IS_INSTANCE(self))
+        return xr_null();
+    XrInstance *inst = XR_TO_INSTANCE(self);
+    if (!inst || xr_class_instance_field_count(inst->klass) < 1)
+        return xr_null();
+    XrValue raw = inst->fields[0];
+    return XR_IS_STRING(raw) ? raw : xr_null();
+}
 
 void xr_core_init(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "xr_core_init: NULL isolate");
@@ -123,6 +138,20 @@ void xr_core_init(XrVMRuntime *X) {
     // need a valid core->panicInfoClass before any user code runs;
     // bootstrap errors (OOM, type mismatch on early init) must succeed.
     xr_register_panic_info_class(X);
+
+    // Path is a nominal owner for filesystem paths. Pure stdlib/path supplies
+    // user construction and algorithms; native stdlib functions use this core
+    // class for Path values they create themselves.
+    {
+        XrClassBuilder *builder = xr_class_builder_new(X, "Path", X->core->objectClass);
+        XR_CHECK(builder != NULL, "register_path_class: builder alloc failed");
+        xr_class_builder_add_field(builder, "raw", 0);
+        xr_class_builder_add_method(builder, "toString", m_path_to_string, 0, 0);
+        XrClass *cls = xr_class_builder_finalize(builder);
+        XR_CHECK(cls != NULL, "register_path_class: finalize failed");
+        cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_FINAL;
+        X->core->pathClass = cls;
+    }
 
     // All classes above were created through xr_class_new / a builder,
     // and xr_class_builder_finalize already registers every finished

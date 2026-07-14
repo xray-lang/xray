@@ -1,35 +1,36 @@
 // 1191_io_edge.xr - IO module edge case tests
 
 import io
+import path
 
 // ===== Non-existent file =====
 
 @test
 fn test_read_nonexistent() {
-    var content = io.readFile("/tmp/xray_nonexistent_file_12345.txt")
+    var content = io.readFile(path.from("/tmp/xray_nonexistent_file_12345.txt"))
     assert_eq(content, null)
 }
 
 @test
 fn test_exists_nonexistent() {
-    assert_eq(io.exists("/tmp/xray_nonexistent_path_12345"), false)
+    assert_eq(io.exists(path.from("/tmp/xray_nonexistent_path_12345")), false)
 }
 
 @test
 fn test_is_file_nonexistent() {
-    assert_eq(io.isFile("/tmp/xray_nonexistent_12345"), false)
+    assert_eq(io.isFile(path.from("/tmp/xray_nonexistent_12345")), false)
 }
 
 @test
 fn test_is_dir_nonexistent() {
-    assert_eq(io.isDir("/tmp/xray_nonexistent_12345"), false)
+    assert_eq(io.isDir(path.from("/tmp/xray_nonexistent_12345")), false)
 }
 
 // ===== Empty file =====
 
 @test
 fn test_write_empty() {
-    var tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile()!
     io.writeFile(tmp, "")
     assert_eq(io.fileSize(tmp), 0)
     var content = io.readFile(tmp) ?? ""
@@ -41,7 +42,7 @@ fn test_write_empty() {
 
 @test
 fn test_overwrite_file() {
-    var tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile()!
     io.writeFile(tmp, "first content")
     io.writeFile(tmp, "second")
     assert_eq(io.readFile(tmp) ?? "", "second")
@@ -53,7 +54,7 @@ fn test_overwrite_file() {
 
 @test
 fn test_large_write_read() {
-    var tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile()!
     var data = ""
     for (var i = 0; i < 100; i++) {
         data = data + "line " + string(i) + "\n"
@@ -68,11 +69,11 @@ fn test_large_write_read() {
 
 @test
 fn test_read_dir_recursive() {
-    var tmpDir = io.tempDir() ?? ""
-    io.mkdirp(tmpDir + "/a/b")
-    io.writeFile(tmpDir + "/file1.txt", "1")
-    io.writeFile(tmpDir + "/a/file2.txt", "2")
-    io.writeFile(tmpDir + "/a/b/file3.txt", "3")
+    var tmpDir = io.tempDir()!
+    io.mkdirp(path.join(tmpDir, path.from("a/b")))
+    io.writeFile(path.join(tmpDir, path.from("file1.txt")), "1")
+    io.writeFile(path.join(tmpDir, path.from("a/file2.txt")), "2")
+    io.writeFile(path.join(tmpDir, path.from("a/b/file3.txt")), "3")
     var all = io.readDirRecursive(tmpDir)
     assert(len(all) >= 3)
     io.removeAll(tmpDir)
@@ -82,11 +83,11 @@ fn test_read_dir_recursive() {
 
 @test
 fn test_mkdirp_existing_and_trailing_slashes() {
-    var tmpDir = io.tempDir() ?? ""
-    var nested = tmpDir + "/a/b"
+    var tmpDir = io.tempDir()!
+    var nested = path.join(tmpDir, path.from("a/b"))
     assert_eq(io.mkdirp(nested), true)
     assert_eq(io.mkdirp(nested), true)
-    assert_eq(io.mkdirp(nested + "///"), true)
+    assert_eq(io.mkdirp(path.from(nested.toString() + "///")), true)
     assert_eq(io.isDir(nested), true)
     io.removeAll(tmpDir)
 }
@@ -96,14 +97,14 @@ fn test_mkdirp_existing_and_trailing_slashes() {
 @test
 fn test_remove_nonexistent() {
     // Should not crash
-    io.remove("/tmp/xray_nonexistent_file_12345.txt")
+    io.remove(path.from("/tmp/xray_nonexistent_file_12345.txt"))
 }
 
 // ===== readLines empty file =====
 
 @test
 fn test_read_lines_empty() {
-    var tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile()!
     io.writeFile(tmp, "")
     var lines = io.readLines(tmp)
     assert_eq(len(lines), 0)
@@ -114,7 +115,7 @@ fn test_read_lines_empty() {
 
 @test
 fn test_read_lines_single() {
-    var tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile()!
     io.writeFile(tmp, "single line")
     var lines = io.readLines(tmp)
     assert_eq(len(lines), 1)
@@ -126,7 +127,7 @@ fn test_read_lines_single() {
 
 @test
 fn test_read_lines_trailing_newline() {
-    var tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile()!
     io.writeFile(tmp, "alpha\n")
     var lines = io.readLines(tmp)
     assert_eq(len(lines), 1)
@@ -138,7 +139,7 @@ fn test_read_lines_trailing_newline() {
 
 @test
 fn test_read_lines_middle_empty_and_crlf() {
-    var tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile()!
     io.writeFile(tmp, "a\r\n\r\nb\r\n")
     var lines = io.readLines(tmp)
     assert_eq(len(lines), 3)

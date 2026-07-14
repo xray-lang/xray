@@ -1,7 +1,7 @@
 import io
 
 @no_alloc
-fn xray_no_alloc_io_cwd_reject() -> string {
+fn xray_no_alloc_io_cwd_reject() -> Path {
     return io.cwd()
 }
 

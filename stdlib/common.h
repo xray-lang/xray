@@ -44,7 +44,11 @@
 #include <string.h>
 
 #include "../src/runtime/value/xvalue.h"
+#include "../src/runtime/class/xclass.h"
+#include "../src/runtime/class/xclass_system.h"
+#include "../src/runtime/class/xinstance.h"
 #include "../src/runtime/object/xstring.h"
+#include "../src/runtime/xisolate_api.h"
 #include "../src/module/xmodule.h"
 #include "../src/module/xbuiltin_decl.h"
 #include "../src/runtime/xexec_frame.h"  // XrCFunction full definition, XR_CFUNC_SLOW
@@ -72,6 +76,28 @@ static inline const char *xrs_string_arg(XrValue v, size_t *out_len) {
     return s->data;
 }
 
+/* ========== Path Owner Bridge ========== */
+
+static inline const char *xrs_path_arg(XrValue v, size_t *out_len) {
+    if (out_len)
+        *out_len = 0;
+    if (!XR_IS_INSTANCE(v))
+        return NULL;
+    XrInstance *inst = XR_TO_INSTANCE(v);
+    if (!inst || !inst->klass || strcmp(xr_class_display_name(inst->klass), "Path") != 0)
+        return NULL;
+    if (xr_class_instance_field_count(inst->klass) < 1 || !inst->klass->fields ||
+        !inst->klass->fields[0].name || strcmp(inst->klass->fields[0].name, "raw") != 0)
+        return NULL;
+    XrValue raw = inst->fields[0];
+    if (!XR_IS_STRING(raw))
+        return NULL;
+    XrString *s = XR_TO_STRING(raw);
+    if (out_len)
+        *out_len = s->length;
+    return s->data;
+}
+
 /* ========== Interned String Value Constructors ========== */
 
 /*
@@ -93,6 +119,25 @@ static inline XrValue xrs_string_value_c(XrVMRuntime *X, const char *s) {
     if (!s)
         return xr_null();
     return xrs_string_value_n(X, s, strlen(s));
+}
+
+static inline XrValue xrs_path_value_n(XrVMRuntime *X, const char *s, size_t len) {
+    if (!X || !s)
+        return xr_null();
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    if (!core || !core->pathClass)
+        return xr_null();
+    XrInstance *inst = xr_instance_new(X, core->pathClass);
+    if (!inst)
+        return xr_null();
+    inst->fields[0] = xrs_string_value_n(X, s, len);
+    return xr_value_from_instance(inst);
+}
+
+static inline XrValue xrs_path_value_c(XrVMRuntime *X, const char *s) {
+    if (!s)
+        return xr_null();
+    return xrs_path_value_n(X, s, strlen(s));
 }
 
 /* ========== Module Export Helper ========== */

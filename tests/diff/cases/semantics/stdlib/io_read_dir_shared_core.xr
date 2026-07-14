@@ -1,26 +1,49 @@
 import io
+import path
 
-var root = io.tempDir() ?? ""
-print(len(root) > 0)
+var root = io.tempDir()!
+print(len(root.toString()) > 0)
 
-var nested = root + "/a/b"
+var nested = path.join(root, path.from("a/b"))
 print(io.mkdirp(nested))
-print(io.writeFile(root + "/top.txt", "top"))
-print(io.writeFile(nested + "/deep.txt", "deep"))
+print(io.writeFile(path.join(root, path.from("top.txt")), "top"))
+print(io.writeFile(path.join(nested, path.from("deep.txt")), "deep"))
 
-var entries = io.readDir(root) ?? []
-print(entries.contains("top.txt"))
-print(entries.contains("a"))
-print(!entries.contains("."))
-print(!entries.contains(".."))
+var entries = io.readDir(root)
+var hasTop = false
+var hasA = false
+var hasDot = false
+var hasDotDot = false
+for (var i = 0; i < len(entries); i++) {
+    var raw = entries[i].toString()
+    if (raw == "top.txt") { hasTop = true }
+    if (raw == "a") { hasA = true }
+    if (raw == ".") { hasDot = true }
+    if (raw == "..") { hasDotDot = true }
+}
+print(hasTop)
+print(hasA)
+print(!hasDot)
+print(!hasDotDot)
 
-var recursive = io.readDirRecursive(root) ?? []
-print(recursive.contains("top.txt"))
-print(recursive.contains("a"))
-print(recursive.contains("a/b"))
-print(recursive.contains("a/b/deep.txt"))
+var recursive = io.readDirRecursive(root)
+var hasRecursiveTop = false
+var hasRecursiveA = false
+var hasRecursiveAB = false
+var hasRecursiveDeep = false
+for (var i = 0; i < len(recursive); i++) {
+    var raw = recursive[i].toString()
+    if (raw == "top.txt") { hasRecursiveTop = true }
+    if (raw == "a") { hasRecursiveA = true }
+    if (raw == "a/b") { hasRecursiveAB = true }
+    if (raw == "a/b/deep.txt") { hasRecursiveDeep = true }
+}
+print(hasRecursiveTop)
+print(hasRecursiveA)
+print(hasRecursiveAB)
+print(hasRecursiveDeep)
 
-var missing = io.readDirRecursive(root + "/missing") ?? []
+var missing = io.readDirRecursive(path.join(root, path.from("missing")))
 print(len(missing))
 
 print(io.removeAll(root))
