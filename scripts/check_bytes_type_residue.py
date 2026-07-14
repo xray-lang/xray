@@ -38,7 +38,7 @@ INTERNAL_LEGACY_RE = re.compile(
     r"emit_bytes_[A-Za-z0-9_]+|cg_bytes_[A-Za-z0-9_]+)\b"
 )
 
-SCAN_DIRS = ("src", "stdlib", "tests", "spec", "demos", "tools")
+SCAN_DIRS = ("src", "stdlib", "tests", "spec", "demos", "tools", "scripts")
 TEXT_SUFFIXES = (
     ".c",
     ".h",
@@ -72,6 +72,10 @@ ALLOWED_REMOVED_TYPE_FILES = {
 ALLOWED_REMOVED_NAMESPACE_FILES = {
     Path("tests/compile_errors/type/bytes_public_namespace_removed.xr"),
     Path("tests/compile_errors/type/bytes_public_namespace_removed.xr.expected"),
+}
+SKIP_REMOVED_TYPE_SCAN_FILES = {
+    Path("scripts/check_bytes_type_residue.py"),
+    Path("scripts/README.md"),
 }
 PUBLIC_BLOCKING_CATEGORIES = {
     "PUBLIC_TYPE_BYTES",
@@ -109,6 +113,8 @@ def iter_text_files(root: Path):
             if any(part in SKIP_DIR_NAMES for part in path.parts):
                 continue
             if path.is_file() and any(str(path).endswith(suffix) for suffix in TEXT_SUFFIXES):
+                if rel(root, path) in SKIP_REMOVED_TYPE_SCAN_FILES:
+                    continue
                 yield path
 
 
