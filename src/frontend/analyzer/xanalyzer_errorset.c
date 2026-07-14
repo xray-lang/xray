@@ -26,6 +26,7 @@
 #include "xa_effect_db.h"
 #include "xa_selection.h"
 #include "xtype_ref_resolve.h"
+#include "../../runtime/class/xclass_info.h"
 #include "../../runtime/value/xtype.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
@@ -268,6 +269,46 @@ static FunctionValueTarget function_value_target_expr(AstNode *function_expr) {
 
 static bool function_value_target_is_exact(FunctionValueTarget target) {
     return target.target_count > 0;
+}
+
+static const XaMethodSlot *find_method_slot_for_symbol(const XrClassInfo *info,
+                                                       const XaSymbol *method) {
+    if (!info || !method || !info->vtable)
+        return NULL;
+    for (int i = 0; i < info->vtable_size; i++) {
+        const XaMethodSlot *slot = &info->vtable[i];
+        if (slot->symbol == method)
+            return slot;
+    }
+    if (!method->name)
+        return NULL;
+    for (int i = 0; i < info->vtable_size; i++) {
+        const XaMethodSlot *slot = &info->vtable[i];
+        if (slot->symbol && slot->symbol->name && strcmp(slot->symbol->name, method->name) == 0)
+            return slot;
+    }
+    return NULL;
+}
+
+static bool method_selection_has_open_virtual_dispatch(const XaSelection *sel) {
+    if (!sel || sel->kind != XA_SEL_METHOD || !sel->target_symbol)
+        return false;
+    XrType *receiver_type = sel->receiver_type;
+    if (!receiver_type)
+        return false;
+    if (receiver_type->kind == XR_KIND_INTERFACE)
+        return true;
+    if (!XR_TYPE_IS_INSTANCE(receiver_type))
+        return false;
+
+    XrClassInfo *info = receiver_type->instance.class_ref;
+    if (!info || info->explicit_final || sel->target_symbol->is_static)
+        return false;
+
+    const XaMethodSlot *slot = find_method_slot_for_symbol(info, sel->target_symbol);
+    if (slot)
+        return !slot->is_final;
+    return info->has_subclass;
 }
 
 static bool function_value_target_equal(FunctionValueTarget a, FunctionValueTarget b) {
@@ -1237,6 +1278,14 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
 
             if (es_walk_immediate_function_expr_call(ctx, node->as.call_expr.callee))
                 break;
+
+            AstNode *callee_source = identity_source(node->as.call_expr.callee);
+            const XaSelection *callee_selection =
+                xa_analyzer_get_selection(ctx->analyzer, callee_source);
+            if (method_selection_has_open_virtual_dispatch(callee_selection)) {
+                xa_effect_summary_mark_incomplete(ctx->current_summary,
+                                                  XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH);
+            }
 
             /* Union callee's effect summary into current function's summary */
             FunctionValueTarget call_target = resolve_call_target(ctx, node->as.call_expr.callee);

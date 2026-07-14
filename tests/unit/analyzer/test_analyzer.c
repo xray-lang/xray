@@ -1381,6 +1381,9 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
                          "enum OtherMethodErr { Boom }\n"
                          "fn failMethodCallback() { throw MethodErr.Boom }\n"
                          "fn failOtherMethodCallback() { throw OtherMethodErr.Boom }\n"
+                         "interface EffectRunner {\n"
+                         "  failEffect()\n"
+                         "}\n"
                          "class Thrower {\n"
                          "  constructor() { }\n"
                          "  fail() { throw MethodErr.Boom }\n"
@@ -1392,6 +1395,18 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
                          "    if (flag) { cb = b }\n"
                          "    cb()\n"
                          "  }\n"
+                         "}\n"
+                         "final class FinalThrower {\n"
+                         "  failFinal() { throw MethodErr.Boom }\n"
+                         "}\n"
+                         "class BaseThrower {\n"
+                         "  failVirtual() { throw MethodErr.Boom }\n"
+                         "}\n"
+                         "class ChildThrower extends BaseThrower {\n"
+                         "  failVirtual() { throw OtherMethodErr.Boom }\n"
+                         "}\n"
+                         "class InterfaceThrower implements EffectRunner {\n"
+                         "  failEffect() { throw OtherMethodErr.Boom }\n"
                          "}\n"
                          "fn viaInstanceMethod() {\n"
                          "  var t = Thrower()\n"
@@ -1415,6 +1430,15 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
                          "}\n"
                          "fn viaMethodHigherOrderUnknown(cb: () -> ()) {\n"
                          "  Thrower().invoke(cb)\n"
+                         "}\n"
+                         "fn viaFinalMethod() {\n"
+                         "  FinalThrower().failFinal()\n"
+                         "}\n"
+                         "fn viaOpenBaseMethod(b: BaseThrower) {\n"
+                         "  b.failVirtual()\n"
+                         "}\n"
+                         "fn viaInterfaceMethod(r: EffectRunner) {\n"
+                         "  r.failEffect()\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -1430,6 +1454,10 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
         analyzer_function_effect_summary(a, "viaMethodHigherOrderUnion");
     const XaEffectSummary *method_hof_unknown =
         analyzer_function_effect_summary(a, "viaMethodHigherOrderUnknown");
+    const XaEffectSummary *final_method = analyzer_function_effect_summary(a, "viaFinalMethod");
+    const XaEffectSummary *open_base = analyzer_function_effect_summary(a, "viaOpenBaseMethod");
+    const XaEffectSummary *interface_method =
+        analyzer_function_effect_summary(a, "viaInterfaceMethod");
     ASSERT(instance != NULL);
     ASSERT(temporary != NULL);
     ASSERT(static_method != NULL);
@@ -1437,10 +1465,16 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
     ASSERT(static_method_hof != NULL);
     ASSERT(method_hof_union != NULL);
     ASSERT(method_hof_unknown != NULL);
+    ASSERT(final_method != NULL);
+    ASSERT(open_base != NULL);
+    ASSERT(interface_method != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, instance, "MethodErr"));
     ASSERT(effect_summary_has_enum_named(a, temporary, "MethodErr"));
     ASSERT(effect_summary_has_enum_named(a, static_method, "MethodErr"));
+    ASSERT(effect_summary_has_enum_named(a, final_method, "MethodErr"));
+    ASSERT(final_method->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((final_method->unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) == 0);
     ASSERT(method_hof->completeness == XA_EFFECT_COMPLETE);
     ASSERT((method_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, method_hof, "MethodErr"));
@@ -1456,6 +1490,11 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
     ASSERT(method_hof_unknown->completeness == XA_EFFECT_INCOMPLETE);
     ASSERT((method_hof_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(!effect_summary_has_enum_named(a, method_hof_unknown, "MethodErr"));
+    ASSERT(open_base->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((open_base->unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) != 0);
+    ASSERT(effect_summary_has_enum_named(a, open_base, "MethodErr"));
+    ASSERT(interface_method->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((interface_method->unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) != 0);
 
     xa_analyzer_free(a);
     setup_pool();
