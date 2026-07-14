@@ -12,6 +12,7 @@
 | `scripts/repro_win11_coro_burn.sh` | Win11 协程 4 用例 burn-in（1115/1109/1127/1128） | `[N]`；env: `XRAY_BIN` | 全过=0；任一失败=1；参数错=2 | N × 4 × ~5s |
 | `scripts/check_temp_workarounds.sh` | `DEFENSIVE-TEMP[NNN]` 标签 ↔ `tests/known_temp_workarounds.md` 双向对账 | 无 | 任一不一致=非0 | < 10s |
 | `scripts/check_stdlib_surface_uniqueness.py` | 151 R3：不同 public stdlib surface 不得绑定同一 VM/AOT helper | `--root <repo>`；可选 `--list-known` | 新重复=1；仅命中已登记债务=0 | < 1s |
+| `scripts/check_binary_stdlib_surface.py` | 200：binary stdlib 的 string-binary 签名、旧别名、null sentinel、Array-owner 输入与消费者分类 inventory | `--root <repo>`；可选 `--json`、`--fail-on-public-residue` | 默认只输出 inventory=0，为 P0 固定基线；最终 public residue 可切换为失败 | < 2s |
 | `scripts/check_parallel_surface_convergence.py` | 193：旧 `parallel for/range/reduce/collect/local/final` 语法与旧 AST/parser/spec/demo/API-doc 表面不得回流 | `--root <repo>` | 任一旧表面残留=1 | < 2s |
 | `scripts/check_parallel_backend_abi_convergence.py` | 193：parallel backend ABI/descriptor 命名收敛，旧 AOT-private/global-pool 名称不得回流 | `--root <repo>` | ABI 缺失或旧名残留=1 | < 2s |
 | `scripts/check_bytes_type_residue.py` | 204：`Bytes/ByteSpan/ByteView` 删除 residue 分类 inventory，区分 public 表面与 internal legacy 命名 | `--root <repo>`；可选 `--json`、`--fail-on-public`、`--fail-on-internal-legacy` | 默认只输出 inventory=0；CTest `bytes_type_residue` 阻止 public 与 internal legacy 残余回流 | < 2s |
@@ -44,6 +45,16 @@ May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 c
 ### `check_stdlib_surface_uniqueness.py`
 
 扫描 `stdlib/defs/*.def` 的 public module functions 与 native class methods，按 VM/AOT helper 分组。不同 public symbol 复用同一 helper 会失败；同一 symbol 的 overload 合法，`visibility: "internal"` helper 不进入用户表面检查。当前仅允许脚本内精确登记的历史债务，避免 147/151 后续落地时重新出现平行 API。
+
+### `check_binary_stdlib_surface.py`
+
+扫描 `stdlib/defs/*.def` 与 pure-Xray stdlib exports 的 source-derived public API，再扫描 `stdlib/`、`tests/`、`spec/`、`demos/`、active docs knowledge 与 generated metadata，把 200 binary stdlib 收敛前的事实分成
+`PUBLIC_BINARY_STRING_SIGNATURE`、`PUBLIC_FIXED_DIGEST_AS_STRING`、`PUBLIC_ARBITRARY_STRING_CREATOR`、
+`PUBLIC_STRING_BINARY_UNION`、`PUBLIC_NULL_SENTINEL`、`PUBLIC_LEGACY_BINARY_ALIAS`、
+`PUBLIC_ARRAY_OWNER_INPUT`、`PUBLIC_DOMAIN_BOOL_SENTINEL`、`CONSUMER_OLD_BINARY_API_CALL`、
+`NATIVE_ARBITRARY_STRING_CREATOR` 和 `GENERATED_METADATA_STALE_BINARY_SURFACE`。默认模式只打印
+inventory 并返回 0，便于 P0 固定当前 string-binary public surface、consumer、native creator 与
+generated docs baseline；后续 200 P2-P6 可按类别逐步增加 fail gate。
 
 ### `check_parallel_surface_convergence.py`
 
@@ -170,6 +181,7 @@ contract；ThreadLocal 与 HTTP handler 当前仍作为后续替换目标被固�
 | 2026-07-14 | `bytes_type_residue` 增加 internal legacy fail gate，阻止 `xrt_bytes_*` / `emit_builtin_bytes_*` 回流 | Codex |
 | 2026-07-14 | `bytes_type_residue` 增加 `XR_ERROR_CORE_BYTES_*` fail gate，阻止旧 Bytes error macro 回流 | Codex |
 | 2026-07-14 | 增加 byte width predicate audit，固定 204 共享 U8 helper 与低层验证/编码边界 | Codex |
+| 2026-07-14 | 增加 binary stdlib surface inventory，接 200 P0 string-binary public surface 与 consumer 基线 | Codex |
 | 2026-07-13 | 增加 parameter mode convergence inventory，接 206 P0 参数契约与调用授权收敛基线 | Codex |
 | 2026-07-14 | 增加 unchecked error-effect convergence inventory，接 205 P0 旧 error-set / MAY_THROW / tooling metadata 分类 | Codex |
 | 2026-07-14 | 增加 source unknown convergence inventory，接 202 P0 source unknown 与 typed erasure 边界分类 | Codex |

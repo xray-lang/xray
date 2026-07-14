@@ -1573,6 +1573,18 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME binary_stdlib_surface_inventory
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_binary_stdlib_surface.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(binary_stdlib_surface_inventory PROPERTIES
+        LABELS "stdlib;binary;metadata"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME bytes_type_residue
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_bytes_type_residue.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
