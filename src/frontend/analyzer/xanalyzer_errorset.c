@@ -847,29 +847,61 @@ static bool es_walk_immediate_function_expr_call(ErrorSetCtx *ctx, AstNode *call
     return es_walk_function_expr_body(ctx, source);
 }
 
+static int function_like_param_count(AstNode *node) {
+    if (!node)
+        return 0;
+    if (node->type == AST_FUNCTION_DECL)
+        return node->as.function_decl.param_count;
+    if (node->type == AST_METHOD_DECL)
+        return node->as.method_decl.param_count;
+    return 0;
+}
+
+static XaSymbol *function_like_param_symbol(ErrorSetCtx *ctx, AstNode *node, XaScope *fn_scope,
+                                            int index) {
+    if (!ctx || !node || index < 0)
+        return NULL;
+    if (node->type == AST_FUNCTION_DECL) {
+        FunctionDeclNode *fn = &node->as.function_decl;
+        if (!fn->params || index >= fn->param_count || !fn->params[index] ||
+            fn->params[index]->symbol_id == 0)
+            return NULL;
+        return lookup_symbol_by_id(ctx, fn->params[index]->symbol_id);
+    }
+    if (node->type == AST_METHOD_DECL) {
+        MethodDeclNode *md = &node->as.method_decl;
+        const char *name =
+            (md->parameters && index < md->param_count) ? md->parameters[index] : NULL;
+        return name && fn_scope ? xa_scope_lookup_local(fn_scope, name) : NULL;
+    }
+    return NULL;
+}
+
 static bool es_walk_callsite_function_decl_body(ErrorSetCtx *ctx, XaSymbol *callee_sym,
                                                 const CallExprNode *call) {
-    if (!ctx || !callee_sym || !call || callee_sym->kind != XA_SYM_FUNCTION ||
+    if (!ctx || !callee_sym || !call ||
+        (callee_sym->kind != XA_SYM_FUNCTION && callee_sym->kind != XA_SYM_METHOD) ||
         ctx->callsite_inline_depth >= 8)
         return false;
     AstNode *fn_node = callee_sym->links.function_decl_node;
-    if (!fn_node || fn_node->type != AST_FUNCTION_DECL)
+    if (!fn_node || (fn_node->type != AST_FUNCTION_DECL && fn_node->type != AST_METHOD_DECL))
         return false;
-    FunctionDeclNode *fn = &fn_node->as.function_decl;
-    if (!fn->body || fn->param_count <= 0 || call->arg_count <= 0)
+    AstNode *body = function_like_body(fn_node);
+    int param_count = function_like_param_count(fn_node);
+    if (!body || param_count <= 0 || call->arg_count <= 0)
         return false;
+    XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, fn_node);
 
     FunctionValueAliasState saved_alias_state;
     capture_function_value_alias_state(ctx, &saved_alias_state);
 
     int bound_count = 0;
-    int n = fn->param_count < call->arg_count ? fn->param_count : call->arg_count;
+    int n = param_count < call->arg_count ? param_count : call->arg_count;
     for (int i = 0; i < n; i++) {
-        XrParamNode *param = fn->params ? fn->params[i] : NULL;
         AstNode *arg = call->arguments ? call->arguments[i] : NULL;
-        if (!param || !arg || param->symbol_id == 0)
+        if (!arg)
             continue;
-        XaSymbol *param_sym = lookup_symbol_by_id(ctx, param->symbol_id);
+        XaSymbol *param_sym = function_like_param_symbol(ctx, fn_node, fn_scope, i);
         if (!param_sym || !symbol_has_function_type(param_sym))
             continue;
         FunctionValueTarget arg_target = resolve_function_value_expr_target(ctx, arg, 0);
@@ -885,7 +917,6 @@ static bool es_walk_callsite_function_decl_body(ErrorSetCtx *ctx, XaSymbol *call
     }
 
     XaScope *saved_scope = ctx->analyzer->current_scope;
-    XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, fn_node);
     if (fn_scope)
         ctx->analyzer->current_scope = fn_scope;
     XaSymbol *saved_func = ctx->current_func;
@@ -898,7 +929,7 @@ static bool es_walk_callsite_function_decl_body(ErrorSetCtx *ctx, XaSymbol *call
     ctx->current_return_target_seen = false;
     ctx->current_return_target_unknown = false;
     ctx->callsite_inline_depth++;
-    es_walk_block(ctx, fn->body);
+    es_walk_block(ctx, body);
     ctx->callsite_inline_depth--;
 
     restore_function_value_alias_state(ctx, &saved_alias_state);
