@@ -575,6 +575,81 @@ TEST(parser_call_expr) {
     teardown();
 }
 
+TEST(parser_call_arg_access_markers_only_in_direct_argument_slot) {
+    setup();
+
+    AstNode *stmt = parse_first("foo("
+                                "ref x, "
+                                "out y, "
+                                "ref this.value, "
+                                "out this.value)");
+    AstNode *call = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(call->type, AST_CALL_EXPR);
+    ASSERT_EQ_INT(call->as.call_expr.arg_count, 4);
+    ASSERT_NOT_NULL(call->as.call_expr.arg_accesses);
+    ASSERT_EQ_INT(call->as.call_expr.arg_accesses[0], XR_CALL_ARG_REF);
+    ASSERT_EQ_INT(call->as.call_expr.arg_accesses[1], XR_CALL_ARG_OUT);
+    ASSERT_EQ_INT(call->as.call_expr.arg_accesses[2], XR_CALL_ARG_REF);
+    ASSERT_EQ_INT(call->as.call_expr.arg_accesses[3], XR_CALL_ARG_OUT);
+    ASSERT_EQ_INT(call->as.call_expr.arguments[0]->type, AST_VARIABLE);
+    ASSERT_STR_EQ(call->as.call_expr.arguments[0]->as.variable.name, "x");
+    ASSERT_EQ_INT(call->as.call_expr.arguments[1]->type, AST_VARIABLE);
+    ASSERT_STR_EQ(call->as.call_expr.arguments[1]->as.variable.name, "y");
+    ASSERT_EQ_INT(call->as.call_expr.arguments[2]->type, AST_MEMBER_ACCESS);
+    ASSERT_EQ_INT(call->as.call_expr.arguments[3]->type, AST_MEMBER_ACCESS);
+
+    AstNode *plain_stmt = parse_first("foo(out, out + 1, ref + 1, ref.value, out.value)");
+    AstNode *plain = plain_stmt->as.expr_stmt;
+    ASSERT_EQ_INT(plain->type, AST_CALL_EXPR);
+    ASSERT_EQ_INT(plain->as.call_expr.arg_count, 5);
+    for (int i = 0; i < plain->as.call_expr.arg_count; i++)
+        ASSERT_EQ_INT(plain->as.call_expr.arg_accesses[i], XR_CALL_ARG_VALUE);
+    ASSERT_EQ_INT(plain->as.call_expr.arguments[0]->type, AST_VARIABLE);
+    ASSERT_STR_EQ(plain->as.call_expr.arguments[0]->as.variable.name, "out");
+    ASSERT_EQ_INT(plain->as.call_expr.arguments[1]->type, AST_BINARY_ADD);
+    ASSERT_EQ_INT(plain->as.call_expr.arguments[2]->type, AST_BINARY_ADD);
+    ASSERT_EQ_INT(plain->as.call_expr.arguments[3]->type, AST_MEMBER_ACCESS);
+    ASSERT_EQ_INT(plain->as.call_expr.arguments[4]->type, AST_MEMBER_ACCESS);
+
+    AstNode *generic_stmt = parse_first("foo<int>("
+                                        "ref x, "
+                                        "out y)");
+    AstNode *generic = generic_stmt->as.expr_stmt;
+    ASSERT_EQ_INT(generic->type, AST_CALL_EXPR);
+    ASSERT_EQ_INT(generic->as.call_expr.type_arg_count, 1);
+    ASSERT_EQ_INT(generic->as.call_expr.arg_accesses[0], XR_CALL_ARG_REF);
+    ASSERT_EQ_INT(generic->as.call_expr.arg_accesses[1], XR_CALL_ARG_OUT);
+
+    AstNode *new_stmt = parse_first("Array<int>("
+                                    "out y)");
+    AstNode *new_expr = new_stmt->as.expr_stmt;
+    ASSERT_EQ_INT(new_expr->type, AST_NEW_EXPR);
+    ASSERT_EQ_INT(new_expr->as.new_expr.arg_count, 1);
+    ASSERT_EQ_INT(new_expr->as.new_expr.arg_accesses[0], XR_CALL_ARG_OUT);
+
+    AstNode *class_stmt = parse_first("class Child extends Base {\n"
+                                      "  constructor(value: "
+                                      "ref int, result: "
+                                      "out int) {\n"
+                                      "    super("
+                                      "ref value, "
+                                      "out result)\n"
+                                      "  }\n"
+                                      "}");
+    AstNode *ctor = class_stmt->as.class_decl.methods[0];
+    ASSERT_EQ_INT(ctor->type, AST_METHOD_DECL);
+    ASSERT_NOT_NULL(ctor->as.method_decl.body);
+    AstNode *super_stmt = ctor->as.method_decl.body->as.block.statements[0];
+    ASSERT_EQ_INT(super_stmt->type, AST_EXPR_STMT);
+    AstNode *super_call = super_stmt->as.expr_stmt;
+    ASSERT_EQ_INT(super_call->type, AST_SUPER_CALL);
+    ASSERT_EQ_INT(super_call->as.super_call.arg_count, 2);
+    ASSERT_EQ_INT(super_call->as.super_call.arg_accesses[0], XR_CALL_ARG_REF);
+    ASSERT_EQ_INT(super_call->as.super_call.arg_accesses[1], XR_CALL_ARG_OUT);
+
+    teardown();
+}
+
 TEST(parser_member_access) {
     setup();
     AstNode *stmt = parse_first("obj.field");
@@ -897,6 +972,7 @@ int main(void) {
 
     // Calls
     RUN_TEST(parser_call_expr);
+    RUN_TEST(parser_call_arg_access_markers_only_in_direct_argument_slot);
     RUN_TEST(parser_member_access);
     RUN_TEST(parser_member_generic_call_uintsize_type_arg);
     RUN_TEST(parser_member_generic_call_uintsize_after_binary_op);
