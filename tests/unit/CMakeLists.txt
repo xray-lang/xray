@@ -101,6 +101,7 @@ add_test(NAME test_frontend_architecture
 # ============================================================================
 
 add_xray_unit_test(test_analyzer analyzer/test_analyzer.c)
+add_xray_unit_test(test_effect_db analyzer/test_effect_db.c)
 add_xray_unit_test(test_mono analyzer/test_mono.c)
 add_xray_unit_test(test_interface_conformance analyzer/test_interface_conformance.c)
 add_xray_unit_test(test_xglobal_summary analysis/test_xglobal_summary.c)

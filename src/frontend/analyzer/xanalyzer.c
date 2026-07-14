@@ -16,6 +16,7 @@
 #include "xanalyzer_incremental.h"
 #include "xanalyzer_builtin_interfaces.h"
 #include "xa_node_table.h"
+#include "xa_effect_db.h"
 #include "xa_parallel_call_plan.h"
 #include "xa_selection.h"
 #include "../../runtime/value/xtype_internal.h"
@@ -370,6 +371,9 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     // AST call -> resolved stdlib parallel intrinsic identity.
     analyzer->parallel_call_plan_table = xa_parallel_call_plan_table_new();
 
+    // Canonical typed-error effect summaries.
+    analyzer->effect_db = xa_effect_db_new();
+
     return analyzer;
 }
 
@@ -409,6 +413,11 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
         xa_parallel_call_plan_table_free(
             (XaParallelCallPlanTable *) analyzer->parallel_call_plan_table);
         analyzer->parallel_call_plan_table = NULL;
+    }
+
+    if (analyzer->effect_db) {
+        xa_effect_db_free(analyzer->effect_db);
+        analyzer->effect_db = NULL;
     }
 
     // Detach active pool owners before freeing the analyzer-owned pool.
