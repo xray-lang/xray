@@ -4,7 +4,7 @@
 #include <string.h>
 
 #define BULK_N 4096
-#define BULK_ROUNDS 800
+#define BULK_ROUNDS 8000
 
 static int64_t common_prefix(const uint8_t *a, const uint8_t *b, int64_t n) {
     int64_t i = 0;

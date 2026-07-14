@@ -1,8 +1,9 @@
 fn run(n: int, rounds: int) -> int {
     var bytes = Array<byte>(n)
+    var limit = len(bytes)
 
     var i = 0
-    while (i < len(bytes)) {
+    while (i < limit) {
         bytes[i] = i * 3 + 1
         i = i + 1
     }
@@ -11,7 +12,7 @@ fn run(n: int, rounds: int) -> int {
     var sum = 0
     while (r < rounds) {
         var j = 0
-        while (j < len(bytes)) {
+        while (j < limit) {
             sum = sum + bytes[j]
             j = j + 1
         }
@@ -20,4 +21,4 @@ fn run(n: int, rounds: int) -> int {
     return sum
 }
 
-print(run(256, 20000))
+print(run(256, 200000))

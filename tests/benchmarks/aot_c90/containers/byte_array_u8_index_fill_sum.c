@@ -1,11 +1,14 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define BYTES_U8_INDEX_FILL_SUM_N 256
-#define BYTES_U8_INDEX_FILL_SUM_ROUNDS 20000
+#define BYTES_U8_INDEX_FILL_SUM_ROUNDS 200000
 
 static int64_t run(int64_t n, int64_t rounds) {
-    uint8_t bytes[BYTES_U8_INDEX_FILL_SUM_N];
+    uint8_t *bytes = (uint8_t *) malloc((size_t) n);
+    if (!bytes)
+        return -1;
 
     int64_t i = 0;
     while (i < n) {
@@ -23,7 +26,9 @@ static int64_t run(int64_t n, int64_t rounds) {
         }
         r = r + 1;
     }
-    return (int64_t) sum;
+    int64_t result = (int64_t) sum;
+    free(bytes);
+    return result;
 }
 
 int main(void) {

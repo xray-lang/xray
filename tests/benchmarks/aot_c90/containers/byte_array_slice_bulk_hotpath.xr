@@ -33,4 +33,4 @@ fn run(n: int, rounds: int) -> int {
     return total + int(copy[0]) + int(copy[n]) + len(out)
 }
 
-print(run(4096, 800))
+print(run(4096, 8000))
