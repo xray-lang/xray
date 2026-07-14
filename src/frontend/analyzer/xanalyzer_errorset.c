@@ -1066,8 +1066,12 @@ static void record_catch_alias_assignment(ErrorSetCtx *ctx, AssignmentNode *assi
     }
 
     int alias_index = current_catch_alias_index(ctx, symbol_id, name);
-    if (alias_index < 0)
+    if (alias_index < 0) {
+        if (rhs_is_caught && sym && sym->kind == XA_SYM_VARIABLE && !sym->is_const &&
+            sym->is_rebindable)
+            add_current_catch_alias(ctx, symbol_id, name);
         return;
+    }
     remove_current_catch_alias(ctx, alias_index);
     if (rhs_is_caught)
         add_current_catch_alias(ctx, symbol_id, name);
