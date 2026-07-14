@@ -889,6 +889,16 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "fn chooseUnknownDynamic(cb: () -> ()) -> () -> () {\n"
         "  return cb\n"
         "}\n"
+        "fn makeCapturedFunctionValue(flag: bool) -> () -> () {\n"
+        "  var f = noThrowDynamic\n"
+        "  if (flag) { f = failDynamic } else { f = failOtherDynamic }\n"
+        "  return fn() { f() }\n"
+        "}\n"
+        "fn makeCapturedUnknownFunctionValue(cb: () -> ()) -> () -> () {\n"
+        "  var f = failDynamic\n"
+        "  f = cb\n"
+        "  return fn() { f() }\n"
+        "}\n"
         "fn viaStableVarAlias() {\n"
         "  var f = failDynamic\n"
         "  f()\n"
@@ -988,6 +998,23 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "  var f = chooseUnknownDynamic(cb)\n"
         "  f()\n"
         "}\n"
+        "fn viaCapturedFunctionValue(flag: bool) {\n"
+        "  var run = makeCapturedFunctionValue(flag)\n"
+        "  run()\n"
+        "}\n"
+        "fn viaCapturedFunctionValueDirect(flag: bool) {\n"
+        "  makeCapturedFunctionValue(flag)()\n"
+        "}\n"
+        "fn viaCapturedFunctionValueUnknown(cb: () -> ()) {\n"
+        "  var run = makeCapturedUnknownFunctionValue(cb)\n"
+        "  run()\n"
+        "}\n"
+        "fn viaCapturedFunctionValueCurrentRebound() {\n"
+        "  var f = failDynamic\n"
+        "  var run = fn() { f() }\n"
+        "  f = noThrowDynamic\n"
+        "  run()\n"
+        "}\n"
         "fn viaConstAliasStillExact() {\n"
         "  const f = failDynamic\n"
         "  f()\n"
@@ -1034,6 +1061,14 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         analyzer_function_effect_summary(a, "viaReturnedFunctionValueBase");
     const XaEffectSummary *returned_function_value_unknown =
         analyzer_function_effect_summary(a, "viaReturnedFunctionValueUnknown");
+    const XaEffectSummary *captured_function_value =
+        analyzer_function_effect_summary(a, "viaCapturedFunctionValue");
+    const XaEffectSummary *captured_function_value_direct =
+        analyzer_function_effect_summary(a, "viaCapturedFunctionValueDirect");
+    const XaEffectSummary *captured_function_value_unknown =
+        analyzer_function_effect_summary(a, "viaCapturedFunctionValueUnknown");
+    const XaEffectSummary *captured_function_value_current_rebound =
+        analyzer_function_effect_summary(a, "viaCapturedFunctionValueCurrentRebound");
     const XaEffectSummary *const_alias =
         analyzer_function_effect_summary(a, "viaConstAliasStillExact");
     ASSERT(stable_var != NULL);
@@ -1057,6 +1092,10 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT(returned_function_value_direct != NULL);
     ASSERT(returned_function_value_base != NULL);
     ASSERT(returned_function_value_unknown != NULL);
+    ASSERT(captured_function_value != NULL);
+    ASSERT(captured_function_value_direct != NULL);
+    ASSERT(captured_function_value_unknown != NULL);
+    ASSERT(captured_function_value_current_rebound != NULL);
     ASSERT(const_alias != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, stable_var, "DynamicErr"));
@@ -1121,6 +1160,25 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT(returned_function_value_unknown->completeness == XA_EFFECT_INCOMPLETE);
     ASSERT((returned_function_value_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) !=
            0);
+    ASSERT(captured_function_value->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((captured_function_value->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, captured_function_value, "DynamicErr"));
+    ASSERT(effect_summary_has_enum_named(a, captured_function_value, "OtherDynamicErr"));
+    ASSERT(captured_function_value_direct->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((captured_function_value_direct->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, captured_function_value_direct, "DynamicErr"));
+    ASSERT(effect_summary_has_enum_named(a, captured_function_value_direct, "OtherDynamicErr"));
+    ASSERT(captured_function_value_unknown->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((captured_function_value_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) !=
+           0);
+    ASSERT(!effect_summary_has_enum_named(a, captured_function_value_unknown, "DynamicErr"));
+    ASSERT(captured_function_value_current_rebound->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((captured_function_value_current_rebound->unknown_reasons &
+            XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(
+        !effect_summary_has_enum_named(a, captured_function_value_current_rebound, "DynamicErr"));
+    ASSERT(!effect_summary_has_enum_named(a, captured_function_value_current_rebound,
+                                          "OtherDynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, const_alias, "DynamicErr"));
     ASSERT((const_alias->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 
