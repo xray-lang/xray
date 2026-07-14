@@ -706,17 +706,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
     },
     {
         .name = "hexDecode",
-        .signature = "(hex: string): Array<byte>?",
-        .summary = "",
-    },
-    {
-        .name = "hexDecodeString",
-        .signature = "(hex: string): string?",
+        .signature = "(hex: string): Array<byte>",
         .summary = "",
     },
     {
         .name = "hexEncode",
-        .signature = "(data: string): string",
+        .signature = "(data: Slice<byte>): string",
         .summary = "",
     },
     {
@@ -5974,9 +5969,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `encoding.BE` | `: int` |  |\n"
             "| `encoding.LE` | `: int` |  |\n"
-            "| `encoding.hexDecode` | `(hex: string): Array<byte>?` |  |\n"
-            "| `encoding.hexDecodeString` | `(hex: string): string?` |  |\n"
-            "| `encoding.hexEncode` | `(data: string): string` |  |\n"
+            "| `encoding.hexDecode` | `(hex: string): Array<byte>` |  |\n"
+            "| `encoding.hexEncode` | `(data: Slice<byte>): string` |  |\n"
             "| `encoding.hexValid` | `(hex: string): bool` |  |\n"
             "| `encoding.utf16Decode` | `(data: Array<byte>, endian: int = 0, stripBom: bool = true): string?` |  |\n"
             "| `encoding.utf16Encode` | `(data: string, endian: int = 0): Array<byte>` |  |\n"

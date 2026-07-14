@@ -65,6 +65,17 @@ BASELINES = (
         ),
     ),
     Baseline(
+        category="ENCODING_HEX_KAT",
+        path="tests/regression/10_stdlib/1300_encoding.xr",
+        contains=(
+            'assert_eq(hexEncodeText("Hello"), "48656c6c6f")',
+            'assert_eq(hexDecodeText("48656c6c6f"), "Hello")',
+            'assert_eq(hexDecodeFails("gg"), true)',
+            'assert_eq(hexDecodeFails("abc"), true)',
+            "encoding.hexDecode(\"48656c6c6f\")",
+        ),
+    ),
+    Baseline(
         category="COMPRESS_CHECKSUM_KAT",
         path="tests/regression/10_stdlib/1301_compress.xr",
         contains=(
@@ -129,6 +140,16 @@ BASELINES = (
             '"stdlib_symbols": ["base64.Base64Alphabet", "base64.Base64DecodeOptions", "base64.Base64EncodeOptions", "base64.Base64Error", "base64.Base64PaddingPolicy", "base64.encode", "base64.decode", "base64.isValid"]',
             'not_contains="runtime_objects": ["xray_core"]',
             "c_not_contains=xrt_base64_",
+        ),
+    ),
+    Baseline(
+        category="AOT_ENCODING_LINK_BASELINE",
+        path="tests/aot/filetests/link/core_encoding.expect",
+        contains=(
+            '"stdlib_symbols": ["encoding.HexError", "encoding.LE", "encoding.BE", "encoding.hexEncode", "encoding.hexDecode", "encoding.hexValid", "encoding.utf8Valid", "encoding.utf8Count", "encoding.utf8ByteLength", "encoding.utf16Encode", "encoding.utf16Decode"]',
+            'not_contains="runtime_objects": ["xray_core"]',
+            'not_contains="stdlib_objects": ["encoding"]',
+            "c_not_contains=xrt_encoding_",
         ),
     ),
     Baseline(

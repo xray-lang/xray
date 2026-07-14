@@ -1,56 +1,76 @@
 // 1300_encoding.xr - Encoding module tests
 
 import encoding
+import { HexError } from encoding
+
+fn hexEncodeText(data: string) -> string {
+    var view: Slice<byte> = data.bytes()
+    return encoding.hexEncode(view)
+}
+
+fn hexDecodeText(hex: string) -> string {
+    var bytes = encoding.hexDecode(hex)
+    return string.fromUtf8(bytes[:])!
+}
+
+fn hexDecodeFails(hex: string) -> bool {
+    try {
+        var bytes = encoding.hexDecode(hex)
+        return len(bytes) < 0
+    } catch (e: HexError) {
+        return true
+    }
+}
 
 // ===== Hex encode =====
 
 @test
 fn test_hex_encode() {
-    assert_eq(encoding.hexEncode("Hello"), "48656c6c6f")
+    assert_eq(hexEncodeText("Hello"), "48656c6c6f")
 }
 
 @test
 fn test_hex_encode_empty() {
-    assert_eq(encoding.hexEncode(""), "")
+    assert_eq(hexEncodeText(""), "")
 }
 
 @test
 fn test_hex_encode_special() {
     // Tab = 0x09, newline = 0x0a
-    assert_eq(encoding.hexEncode("\t"), "09")
-    assert_eq(encoding.hexEncode("\n"), "0a")
+    assert_eq(hexEncodeText("\t"), "09")
+    assert_eq(hexEncodeText("\n"), "0a")
 }
 
 // ===== Hex decode (returns Array<byte>) =====
 
 @test
 fn test_hex_decode_bytes() {
-    var bytes = encoding.hexDecode("48656c6c6f")!
+    var bytes = encoding.hexDecode("48656c6c6f")
     assert_eq(len(bytes), 5)
     assert_eq(bytes[0], 0x48)  // 'H'
     assert_eq(bytes[4], 0x6f)  // 'o'
 }
 
 @test
-fn test_hex_decode_string() {
-    assert_eq(encoding.hexDecodeString("48656c6c6f"), "Hello")
+fn test_hex_decode_text_composition() {
+    assert_eq(hexDecodeText("48656c6c6f"), "Hello")
 }
 
 @test
 fn test_hex_decode_invalid() {
-    assert_eq(encoding.hexDecode("gg"), null)
-    assert_eq(encoding.hexDecode("abc"), null)  // odd length
+    assert_eq(hexDecodeFails("gg"), true)
+    assert_eq(hexDecodeFails("abc"), true)  // odd length
 }
 
 @test
 fn test_hex_decode_empty() {
-    var bytes = encoding.hexDecode("")!
+    var bytes = encoding.hexDecode("")
     assert_eq(len(bytes), 0)
 }
 
 @test
 fn test_hex_decode_uppercase() {
-    assert_eq(encoding.hexDecodeString("48656C6C6F"), "Hello")
+    assert_eq(hexDecodeText("48656C6C6F"), "Hello")
 }
 
 // ===== Hex valid =====
