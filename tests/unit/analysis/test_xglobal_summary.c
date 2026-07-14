@@ -52,6 +52,34 @@ static void teardown_parser_session(void) {
     }
 }
 
+static bool build_global_evidence_from_source(const char *source, XgGlobalEvidence *out) {
+    if (!source || !out)
+        return false;
+    memset(out, 0, sizeof(*out));
+    AstNode *ast = xr_parse(g_session, source);
+    if (!ast)
+        return false;
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    if (!xg_global_evidence_build_from_module_graph(out, &graph, XG_BUILD_NATIVE_RELEASE, 0)) {
+        xg_global_evidence_free(out);
+        memset(out, 0, sizeof(*out));
+        return false;
+    }
+    return true;
+}
+
 static uint32_t evidence_body_count_with_capability(const XgGlobalEvidence *ev, uint32_t cap) {
     uint32_t count = 0;
     if (!ev)
@@ -141,6 +169,90 @@ static bool evidence_has_link_dep(const XgGlobalEvidence *ev, uint8_t kind, cons
             return true;
     }
     return false;
+}
+
+static const XgDeclSummary *evidence_find_decl_by_name_kind(const XgGlobalEvidence *ev,
+                                                            const char *name, uint8_t kind) {
+    uint32_t name_id;
+    if (!ev || !name)
+        return NULL;
+    name_id = xg_name_id(name);
+    for (uint32_t i = 0; i < ev->ndecls; i++) {
+        if (ev->decls[i].kind == kind && ev->decls[i].name_id == name_id)
+            return &ev->decls[i];
+    }
+    return NULL;
+}
+
+static const XgMethodSummary *evidence_find_method_by_name(const XgGlobalEvidence *ev,
+                                                           const char *name) {
+    uint32_t name_id;
+    if (!ev || !name)
+        return NULL;
+    name_id = xg_name_id(name);
+    for (uint32_t i = 0; i < ev->nmethods; i++) {
+        if (ev->methods[i].name_id == name_id)
+            return &ev->methods[i];
+    }
+    return NULL;
+}
+
+static const XgInterfaceMethodSummary *
+evidence_find_interface_method_by_name(const XgGlobalEvidence *ev, const char *name) {
+    uint32_t name_id;
+    if (!ev || !name)
+        return NULL;
+    name_id = xg_name_id(name);
+    for (uint32_t i = 0; i < ev->ninterface_methods; i++) {
+        if (ev->interface_methods[i].name_id == name_id)
+            return &ev->interface_methods[i];
+    }
+    return NULL;
+}
+
+static bool function_signature_key_from_source(const char *source, uint32_t *out_key) {
+    XgGlobalEvidence ev;
+    const XgDeclSummary *decl;
+    if (!out_key || !build_global_evidence_from_source(source, &ev))
+        return false;
+    decl = evidence_find_decl_by_name_kind(&ev, "gate", XG_DECL_FUNC);
+    if (!decl || decl->signature_key == 0) {
+        xg_global_evidence_free(&ev);
+        return false;
+    }
+    *out_key = decl->signature_key;
+    xg_global_evidence_free(&ev);
+    return true;
+}
+
+static bool method_signature_key_from_source(const char *source, uint32_t *out_key) {
+    XgGlobalEvidence ev;
+    const XgMethodSummary *method;
+    if (!out_key || !build_global_evidence_from_source(source, &ev))
+        return false;
+    method = evidence_find_method_by_name(&ev, "touch");
+    if (!method || method->signature_key == 0) {
+        xg_global_evidence_free(&ev);
+        return false;
+    }
+    *out_key = method->signature_key;
+    xg_global_evidence_free(&ev);
+    return true;
+}
+
+static bool interface_method_signature_key_from_source(const char *source, uint32_t *out_key) {
+    XgGlobalEvidence ev;
+    const XgInterfaceMethodSummary *method;
+    if (!out_key || !build_global_evidence_from_source(source, &ev))
+        return false;
+    method = evidence_find_interface_method_by_name(&ev, "touch");
+    if (!method || method->signature_key == 0) {
+        xg_global_evidence_free(&ev);
+        return false;
+    }
+    *out_key = method->signature_key;
+    xg_global_evidence_free(&ev);
+    return true;
 }
 
 static void assert_body_callsite_ordinals(const XgGlobalEvidence *ev) {
@@ -803,6 +915,99 @@ TEST(global_evidence_cache_payload_preserves_source_node_identity) {
     xg_global_evidence_free(&materialized);
     xr_free(payload);
     xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_param_modes_participate_in_signature_keys) {
+    const char *function_sources[] = {
+        "fn gate(value: int) -> int { return value }\n",
+        "fn gate(value: in int) -> int { return value }\n",
+        "fn gate(value: ref int) -> int { return value }\n",
+        "fn gate(value: out int) -> int {\n"
+        "    value = 1\n"
+        "    return value\n"
+        "}\n",
+    };
+    const char *method_sources[] = {
+        "class Box {\n"
+        "    touch(value: int) -> int { return value }\n"
+        "}\n",
+        "class Box {\n"
+        "    touch(value: in int) -> int { return value }\n"
+        "}\n",
+        "class Box {\n"
+        "    touch(value: ref int) -> int { return value }\n"
+        "}\n",
+        "class Box {\n"
+        "    touch(value: out int) -> int {\n"
+        "        value = 1\n"
+        "        return value\n"
+        "    }\n"
+        "}\n",
+    };
+    const char *interface_sources[] = {
+        "interface Sink {\n"
+        "    touch(value: int) -> int\n"
+        "}\n",
+        "interface Sink {\n"
+        "    touch(value: in int) -> int\n"
+        "}\n",
+        "interface Sink {\n"
+        "    touch(value: ref int) -> int\n"
+        "}\n",
+        "interface Sink {\n"
+        "    touch(value: out int) -> int\n"
+        "}\n",
+    };
+    uint32_t function_keys[4] = {0};
+    uint32_t method_keys[4] = {0};
+    uint32_t interface_keys[4] = {0};
+    XgGlobalEvidence ref_ev;
+    XgGlobalEvidence materialized = {0};
+    const XgDeclSummary *ref_decl;
+    const XgDeclSummary *materialized_decl;
+    XgEvidenceCacheKey expected_key;
+    XgEvidenceCacheKey materialized_key;
+    char *payload;
+    char needle[64];
+
+    setup_parser_session();
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_TRUE(function_signature_key_from_source(function_sources[i], &function_keys[i]));
+        ASSERT_TRUE(method_signature_key_from_source(method_sources[i], &method_keys[i]));
+        ASSERT_TRUE(
+            interface_method_signature_key_from_source(interface_sources[i], &interface_keys[i]));
+    }
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_NE(function_keys[i], 0);
+        ASSERT_NE(method_keys[i], 0);
+        ASSERT_NE(interface_keys[i], 0);
+        for (size_t j = i + 1; j < 4; j++) {
+            ASSERT_NE(function_keys[i], function_keys[j]);
+            ASSERT_NE(method_keys[i], method_keys[j]);
+            ASSERT_NE(interface_keys[i], interface_keys[j]);
+        }
+    }
+
+    ASSERT_TRUE(build_global_evidence_from_source(function_sources[2], &ref_ev));
+    ref_decl = evidence_find_decl_by_name_kind(&ref_ev, "gate", XG_DECL_FUNC);
+    ASSERT_NOT_NULL(ref_decl);
+    ASSERT_EQ_UINT(ref_decl->signature_key, function_keys[2]);
+    expected_key = xg_global_evidence_cache_key(&ref_ev, XG_EVIDENCE_CACHE_DECLARATIONS);
+    payload = xg_global_evidence_cache_payload_dump(&ref_ev, XG_EVIDENCE_CACHE_DECLARATIONS);
+    ASSERT_NOT_NULL(payload);
+    snprintf(needle, sizeof(needle), "sig=%u", ref_decl->signature_key);
+    ASSERT_NOT_NULL(strstr(payload, needle));
+    ASSERT_TRUE(xg_evidence_cache_payload_materialize(payload, &materialized));
+    materialized_decl = evidence_find_decl_by_name_kind(&materialized, "gate", XG_DECL_FUNC);
+    ASSERT_NOT_NULL(materialized_decl);
+    ASSERT_EQ_UINT(materialized_decl->signature_key, ref_decl->signature_key);
+    materialized_key = xg_global_evidence_cache_key(&materialized, XG_EVIDENCE_CACHE_DECLARATIONS);
+    ASSERT_TRUE(xg_evidence_cache_key_matches(&materialized_key, &expected_key));
+
+    xg_global_evidence_free(&materialized);
+    xr_free(payload);
+    xg_global_evidence_free(&ref_ev);
+    teardown_parser_session();
 }
 
 TEST(global_evidence_dump_lists_core_rows) {
@@ -16265,6 +16470,7 @@ RUN_TEST(global_evidence_hash_is_content_stable);
 RUN_TEST(global_evidence_records_interface_object_use_rows);
 RUN_TEST(global_evidence_cache_keys_are_phase_specific);
 RUN_TEST(global_evidence_cache_payload_preserves_source_node_identity);
+RUN_TEST(global_evidence_param_modes_participate_in_signature_keys);
 RUN_TEST(global_evidence_dump_lists_core_rows);
 RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_rows);
 RUN_TEST(global_evidence_verifier_rejects_stale_generic_inst_specialized_class);
