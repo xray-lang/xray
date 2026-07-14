@@ -1327,7 +1327,8 @@ vmcase(OP_SPAN_REINTERPRET) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     if (!XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1)) || !XR_IS_INT(R(c + 2)) || !XR_IS_INT(R(c + 3))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.reinterpret<T>() missing metadata");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_MISSING_METADATA_MSG);
     }
     uint8_t target_elem_type = (uint8_t) XR_TO_INT(R(c + 1));
     uint8_t target_elem_size = (uint8_t) XR_TO_INT(R(c + 2));
@@ -1335,11 +1336,11 @@ vmcase(OP_SPAN_REINTERPRET) {
     if (target_elem_type == XR_ELEM_ANY || target_elem_type >= XR_ELEM_COUNT ||
         target_elem_size == 0) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Slice<byte>.reinterpret<T>() requires POD target type");
+                         XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_REQUIRES_POD_MSG);
     }
     if (XR_ELEM_SIZES[target_elem_type] != target_elem_size) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Slice<byte>.reinterpret<T>() target metadata mismatch");
+                         XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_METADATA_MISMATCH_MSG);
     }
     void *data = NULL;
     int64_t length = 0;
@@ -1350,20 +1351,19 @@ vmcase(OP_SPAN_REINTERPRET) {
     uint32_t reserved = 0;
     void *guard = NULL;
     VM_SPAN_VIEW(R(b), data, length, elem_type, elem_size, elem_tid, contains_refs, reserved, guard,
-                 "Slice<byte>.reinterpret<T>() expects Slice<byte>");
+                 XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_EXPECTS_MSG);
     (void) elem_tid;
     (void) contains_refs;
     if (elem_type != XR_ELEM_U8 || elem_size != 1) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Slice<byte>.reinterpret<T>() expects Slice<byte> receiver");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_RECEIVER_MSG);
     }
     if (length < 0) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                         "Slice<byte>.reinterpret<T>() byte length overflow");
+                         XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_OVERFLOW_MSG);
     }
     if (length % (int64_t) target_elem_size != 0) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                         "Slice<byte>.reinterpret<T>() length is not divisible by target size");
+                         XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG);
     }
     XrSpanView *span = VM_SPAN_SLOT(R(c));
     span->data = data;

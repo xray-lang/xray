@@ -129,6 +129,20 @@ TEST(error_core_defines_bytes_messages) {
                   "Slice<byte>.repeatFrom(dstOffset, distance, count) range out of bounds");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_ARG_EXPECTS_MSG,
                   "Slice<byte> argument expects Array<byte> or Slice<byte>");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_MISSING_METADATA_MSG,
+                  "Slice<byte>.reinterpret<T>() missing metadata");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_REQUIRES_POD_MSG,
+                  "Slice<byte>.reinterpret<T>() requires POD target type");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_METADATA_MISMATCH_MSG,
+                  "Slice<byte>.reinterpret<T>() target metadata mismatch");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_EXPECTS_MSG,
+                  "Slice<byte>.reinterpret<T>() expects Slice<byte>");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_RECEIVER_MSG,
+                  "Slice<byte>.reinterpret<T>() expects Slice<byte> receiver");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_OVERFLOW_MSG,
+                  "Slice<byte>.reinterpret<T>() byte length overflow");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG,
+                  "Slice<byte>.reinterpret<T>() length is not divisible by target size");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_EXPECTS_MSG,
                   "Array<byte> copy-within expects integer offsets and count");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG,

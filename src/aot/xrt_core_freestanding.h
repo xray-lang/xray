@@ -45,13 +45,10 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_bits_core.h"
+#include "../shared/xr_error_messages.h"
 #include "../shared/xr_int_arith.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
 #include "../shared/xr_sync_core.h"
 #include "xrt_method_symbols.h"
-
-#ifndef XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG
-#define XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG "slice bounds must be integers"
-#endif
 
 #ifndef XR_FUNC
 #define XR_FUNC extern

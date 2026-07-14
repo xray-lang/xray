@@ -9090,13 +9090,13 @@ static void xicgen_span_reinterpret(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
         if (!overflow_check_dropped) {
             fprintf(out, "if (XR_UNLIKELY(_s.length < 0)) "
                          "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                         "\"Slice<byte>.reinterpret<T>() byte length overflow\"); ");
+                         "XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_OVERFLOW_MSG); ");
         }
         if (!length_rel_proven) {
             fprintf(out,
                     "if (XR_UNLIKELY(_s.length %% (int64_t)%u != 0)) "
                     "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                    "\"Slice<byte>.reinterpret<T>() length is not divisible by target size\"); ",
+                    "XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG); ",
                     (unsigned) elem_size);
         }
         fprintf(out,

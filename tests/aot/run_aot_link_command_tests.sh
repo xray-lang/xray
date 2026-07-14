@@ -1392,7 +1392,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "xrt_span_reinterpret_checked_raw" \
             "freestanding-profile/fixed-array: generated C avoids hosted checked Slice<byte>.reinterpret"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "Slice<byte>.reinterpret<T>() length is not divisible by target size" \
+            "XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG" \
             "freestanding-profile/fixed-array: generated C proves Slice<byte>.reinterpret length relation"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "__memcpy_chk" \
             "freestanding-profile/fixed-array: generated C avoids checked memcpy builtin"
