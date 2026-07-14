@@ -64,6 +64,9 @@ typedef struct ErrorSetCtx {
     uint32_t current_catch_alias_ids[64];
     const char *current_catch_alias_names[64];
     int current_catch_alias_count;
+    uint32_t function_value_alias_ids[128];
+    XaSymbol *function_value_alias_targets[128];
+    int function_value_alias_count;
     XaEffectSummary *current_caught; /* Effect subset caught by current catch clause */
     XaSymbol *current_func;          /* Current function symbol */
     bool changed;                    /* Fixpoint: did anything change this iteration? */
@@ -163,12 +166,82 @@ static XaSymbol *resolve_function_alias_target(XaAnalyzer *analyzer, XaSymbol *s
     return resolve_function_alias_target(analyzer, source_sym, depth + 1);
 }
 
+static XaSymbol *lookup_function_value_alias_target(ErrorSetCtx *ctx, XaSymbol *sym) {
+    if (!ctx || !sym || sym->id == 0)
+        return NULL;
+    for (int i = ctx->function_value_alias_count - 1; i >= 0; i--) {
+        if (ctx->function_value_alias_ids[i] == sym->id)
+            return ctx->function_value_alias_targets[i];
+    }
+    return NULL;
+}
+
+static void set_function_value_alias_target(ErrorSetCtx *ctx, XaSymbol *sym, XaSymbol *target) {
+    if (!ctx || !sym || sym->id == 0)
+        return;
+    for (int i = 0; i < ctx->function_value_alias_count; i++) {
+        if (ctx->function_value_alias_ids[i] == sym->id) {
+            ctx->function_value_alias_targets[i] = target;
+            return;
+        }
+    }
+    if (ctx->function_value_alias_count >= 128)
+        return;
+    int slot = ctx->function_value_alias_count++;
+    ctx->function_value_alias_ids[slot] = sym->id;
+    ctx->function_value_alias_targets[slot] = target;
+}
+
+static void invalidate_function_value_alias_target(ErrorSetCtx *ctx, uint32_t symbol_id) {
+    if (!ctx || symbol_id == 0)
+        return;
+    for (int i = 0; i < ctx->function_value_alias_count; i++) {
+        if (ctx->function_value_alias_ids[i] == symbol_id)
+            ctx->function_value_alias_targets[i] = NULL;
+    }
+}
+
+static XaSymbol *resolve_function_value_expr_target(ErrorSetCtx *ctx, AstNode *expr, int depth) {
+    if (!ctx || depth >= 32)
+        return NULL;
+    expr = identity_source(expr);
+    if (!expr || expr->type != AST_VARIABLE)
+        return NULL;
+    XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, expr);
+    XaSymbol *target = resolve_function_alias_target(ctx->analyzer, sym, 0);
+    if (target && (target->kind == XA_SYM_FUNCTION || target->kind == XA_SYM_METHOD))
+        return target;
+    target = lookup_function_value_alias_target(ctx, sym);
+    if (target && (target->kind == XA_SYM_FUNCTION || target->kind == XA_SYM_METHOD))
+        return target;
+    return NULL;
+}
+
+static void maybe_record_stable_function_value_var(ErrorSetCtx *ctx, AstNode *node) {
+    if (!ctx || !node || node->type != AST_VAR_DECL)
+        return;
+    VarDeclNode *decl = &node->as.var_decl;
+    if (!decl->initializer || decl->symbol_id == 0)
+        return;
+    XaSymbol *sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, decl->symbol_id);
+    if (!sym || sym->kind != XA_SYM_VARIABLE || sym->is_const || !sym->is_rebindable ||
+        !symbol_has_function_type(sym) || sym->links.assign_count != 1)
+        return;
+    XaSymbol *target = resolve_function_value_expr_target(ctx, decl->initializer, 0);
+    if (target)
+        set_function_value_alias_target(ctx, sym, target);
+}
+
 /* Resolve a call target to its function symbol.  Direct calls and const
  * function-value aliases are exact; dynamic function values remain incomplete
  * work for the wider P2/HOF pass. */
-static XaSymbol *resolve_call_target(XaAnalyzer *analyzer, AstNode *callee) {
-    XaSymbol *sym = lookup_variable_symbol(analyzer, callee);
-    return resolve_function_alias_target(analyzer, sym, 0);
+static XaSymbol *resolve_call_target(ErrorSetCtx *ctx, AstNode *callee) {
+    XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, callee);
+    XaSymbol *target = resolve_function_alias_target(ctx->analyzer, sym, 0);
+    if (target && (target->kind == XA_SYM_FUNCTION || target->kind == XA_SYM_METHOD))
+        return target;
+    target = lookup_function_value_alias_target(ctx, sym);
+    return target ? target : sym;
 }
 
 static bool is_dynamic_function_call_target(XaAnalyzer *analyzer, AstNode *callee,
@@ -260,7 +333,7 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
             es_walk_expr(ctx, node->as.call_expr.callee);
 
             /* Union callee's effect summary into current function's summary */
-            XaSymbol *callee_sym = resolve_call_target(ctx->analyzer, node->as.call_expr.callee);
+            XaSymbol *callee_sym = resolve_call_target(ctx, node->as.call_expr.callee);
             if (callee_sym &&
                 (callee_sym->kind == XA_SYM_FUNCTION || callee_sym->kind == XA_SYM_METHOD) &&
                 callee_sym->links.effect_id != XA_EFFECT_NONE) {
@@ -369,9 +442,11 @@ static void es_walk_block(ErrorSetCtx *ctx, AstNode *node) {
         return;
     if (node->type == AST_BLOCK) {
         int saved_catch_alias_count = ctx->current_catch_alias_count;
+        int saved_function_value_alias_count = ctx->function_value_alias_count;
         for (int i = 0; i < node->as.block.count; i++)
             es_walk_stmt(ctx, node->as.block.statements[i]);
         ctx->current_catch_alias_count = saved_catch_alias_count;
+        ctx->function_value_alias_count = saved_function_value_alias_count;
     } else {
         es_walk_stmt(ctx, node);
     }
@@ -531,6 +606,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             break;
 
         case AST_VAR_DECL:
+            maybe_record_stable_function_value_var(ctx, node);
             es_walk_expr(ctx, node->as.var_decl.initializer);
             break;
 
@@ -544,6 +620,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             break;
 
         case AST_ASSIGNMENT:
+            invalidate_function_value_alias_target(ctx, node->as.assignment.symbol_id);
             es_walk_expr(ctx, node->as.assignment.value);
             break;
 
