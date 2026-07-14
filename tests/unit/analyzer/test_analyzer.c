@@ -1523,6 +1523,24 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "    throw alias "
         "  } "
         "}\n"
+        "fn catchWhileAliasDoesNotLeak(flag: bool) { "
+        "  try { fail() } catch (e: CatchErr) { "
+        "    var alias: CatchErr = CatchErr.Other; "
+        "    while (flag) { alias = e }; throw alias "
+        "  } "
+        "}\n"
+        "fn catchWhileAliasPreserves(flag: bool) { "
+        "  try { fail() } catch (e: CatchErr) { "
+        "    var alias: CatchErr = CatchErr.Other; alias = e; "
+        "    while (flag) { alias = e }; throw alias "
+        "  } "
+        "}\n"
+        "fn catchWhileAliasInvalidates(flag: bool) { "
+        "  try { fail() } catch (e: CatchErr) { "
+        "    var alias: CatchErr = CatchErr.Other; alias = e; "
+        "    while (flag) { alias = CatchErr.Other }; throw alias "
+        "  } "
+        "}\n"
         "fn wrongTypedRethrow() { "
         "  try { fail() } catch (e: OtherErr) { throw e } "
         "}\n"
@@ -1567,6 +1585,12 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         analyzer_function_effect_summary(a, "catchIfElseAliasRethrows");
     const XaEffectSummary *catch_if_else_alias_invalidates =
         analyzer_function_effect_summary(a, "catchIfElseAliasInvalidates");
+    const XaEffectSummary *catch_while_alias_does_not_leak =
+        analyzer_function_effect_summary(a, "catchWhileAliasDoesNotLeak");
+    const XaEffectSummary *catch_while_alias_preserves =
+        analyzer_function_effect_summary(a, "catchWhileAliasPreserves");
+    const XaEffectSummary *catch_while_alias_invalidates =
+        analyzer_function_effect_summary(a, "catchWhileAliasInvalidates");
     const XaEffectSummary *wrong_typed_rethrow =
         analyzer_function_effect_summary(a, "wrongTypedRethrow");
     const XaEffectSummary *catch_all_alias_rethrows =
@@ -1592,6 +1616,9 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(catch_if_alias_does_not_leak != NULL);
     ASSERT(catch_if_else_alias_rethrows != NULL);
     ASSERT(catch_if_else_alias_invalidates != NULL);
+    ASSERT(catch_while_alias_does_not_leak != NULL);
+    ASSERT(catch_while_alias_preserves != NULL);
+    ASSERT(catch_while_alias_invalidates != NULL);
     ASSERT(wrong_typed_rethrow != NULL);
     ASSERT(catch_all_alias_rethrows != NULL);
     ASSERT(catch_all_var_alias_rethrows != NULL);
@@ -1644,6 +1671,20 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         effect_summary_enum_set_named(a, catch_if_else_alias_invalidates, "CatchErr");
     ASSERT(if_else_invalidated_alias_set != NULL);
     ASSERT(if_else_invalidated_alias_set->all_variants);
+    const XaErrorTypeSet *while_leak_alias_set =
+        effect_summary_enum_set_named(a, catch_while_alias_does_not_leak, "CatchErr");
+    ASSERT(while_leak_alias_set != NULL);
+    ASSERT(while_leak_alias_set->all_variants);
+    const XaErrorTypeSet *while_preserved_alias_set =
+        effect_summary_enum_set_named(a, catch_while_alias_preserves, "CatchErr");
+    ASSERT(while_preserved_alias_set != NULL);
+    ASSERT(!while_preserved_alias_set->all_variants);
+    ASSERT(xa_bitset_test(&while_preserved_alias_set->variants, 0));
+    ASSERT(!xa_bitset_test(&while_preserved_alias_set->variants, 1));
+    const XaErrorTypeSet *while_invalidated_alias_set =
+        effect_summary_enum_set_named(a, catch_while_alias_invalidates, "CatchErr");
+    ASSERT(while_invalidated_alias_set != NULL);
+    ASSERT(while_invalidated_alias_set->all_variants);
     ASSERT(effect_summary_has_enum_named(a, wrong_typed_rethrow, "CatchErr"));
     ASSERT(!effect_summary_has_enum_named(a, wrong_typed_rethrow, "OtherErr"));
     ASSERT(effect_summary_has_enum_named(a, catch_all_alias_rethrows, "CatchErr"));
