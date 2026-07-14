@@ -54,6 +54,28 @@ static const char *g_builtin_receiver_method_names[] = {
 #undef XB_RECEIVER_METHOD
 };
 
+static const XaBuiltinReceiverMethodSpec *find_receiver_method(XaBuiltinReceiverKind receiver,
+                                                               const char *source_name) {
+    for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
+        const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
+        if (spec->receiver == receiver && strcmp(spec->source_name, source_name) == 0)
+            return spec;
+    }
+    return NULL;
+}
+
+static bool receiver_has_method(XaBuiltinReceiverKind receiver, const char *source_name) {
+    return find_receiver_method(receiver, source_name) != NULL;
+}
+
+static bool registry_has_source_name(const char *source_name) {
+    for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
+        if (strcmp(xa_builtin_receiver_methods[i].source_name, source_name) == 0)
+            return true;
+    }
+    return false;
+}
+
 static int g_passed = 0;
 static int g_failed = 0;
 
@@ -277,6 +299,55 @@ static void test_builtin_receiver_registry_metadata(void) {
                 "commonPrefix must be available in all profiles");
 }
 
+static void test_builtin_receiver_method_placement(void) {
+    const char *u8_array_methods[] = {"appendFrom", "repeatFrom", NULL};
+    for (int i = 0; u8_array_methods[i]; i++) {
+        char msg[160];
+        snprintf(msg, sizeof(msg), "Array<byte> registry must contain %s", u8_array_methods[i]);
+        ASSERT_TRUE(receiver_has_method(XA_BUILTIN_RECEIVER_U8_ARRAY, u8_array_methods[i]), msg);
+    }
+
+    const char *array_forbidden_range_methods[] = {
+        "load", "store", "copyFrom", "compare", "commonPrefix", "reinterpret", NULL};
+    for (int i = 0; array_forbidden_range_methods[i]; i++) {
+        char msg[192];
+        snprintf(msg, sizeof(msg), "Array<byte> registry must not own range method %s",
+                 array_forbidden_range_methods[i]);
+        ASSERT_TRUE(
+            !receiver_has_method(XA_BUILTIN_RECEIVER_U8_ARRAY, array_forbidden_range_methods[i]),
+            msg);
+    }
+
+    const char *u8_slice_methods[] = {"load",       "store",       "fill",
+                                      "copyFrom",   "compare",     "commonPrefix",
+                                      "repeatFrom", "reinterpret", NULL};
+    for (int i = 0; u8_slice_methods[i]; i++) {
+        char msg[160];
+        snprintf(msg, sizeof(msg), "Slice<byte> registry must contain %s", u8_slice_methods[i]);
+        ASSERT_TRUE(receiver_has_method(XA_BUILTIN_RECEIVER_U8_SLICE, u8_slice_methods[i]), msg);
+    }
+
+    const char *slice_forbidden_grow_methods[] = {"appendFrom", "push", "reserve", "resize", NULL};
+    for (int i = 0; slice_forbidden_grow_methods[i]; i++) {
+        char msg[192];
+        snprintf(msg, sizeof(msg), "Slice<byte> registry must not own grow method %s",
+                 slice_forbidden_grow_methods[i]);
+        ASSERT_TRUE(
+            !receiver_has_method(XA_BUILTIN_RECEIVER_U8_SLICE, slice_forbidden_grow_methods[i]),
+            msg);
+    }
+
+    const char *domain_methods[] = {"fromUtf8", "fromUtf8Lossy", "base64",  "hex",
+                                    "compress", "decompress",    "hash",    "md5",
+                                    "sha256",   "encrypt",       "decrypt", NULL};
+    for (int i = 0; domain_methods[i]; i++) {
+        char msg[192];
+        snprintf(msg, sizeof(msg), "domain algorithm %s must stay out of receiver registry",
+                 domain_methods[i]);
+        ASSERT_TRUE(!registry_has_source_name(domain_methods[i]), msg);
+    }
+}
+
 int main(void) {
     printf("--- xi_intrinsic.def ---\n");
     test_enum_values();
@@ -295,6 +366,7 @@ int main(void) {
     test_builtin_receiver_registry_method_symbols();
     test_builtin_receiver_registry_method_ids();
     test_builtin_receiver_registry_metadata();
+    test_builtin_receiver_method_placement();
 
     printf("\n=== test_xi_intrinsic: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;
