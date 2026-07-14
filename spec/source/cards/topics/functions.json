@@ -30,6 +30,13 @@
       ]
     },
     {
+      "heading": "Parameter modes",
+      "markdown": "- Declaration spelling is `name: T`, `name: in T`, `name: ref T`, or `name: out T`\n- Calls to `ref` / `out` parameters must write `ref place` / `out place`; `in` calls use plain arguments\n- `move` and `copy` are source actions, not parameter modes",
+      "fences": [
+        "decl-fn-param-modes"
+      ]
+    },
+    {
       "heading": "Rest parameters",
       "fences": [
         "decl-fn-rest"
