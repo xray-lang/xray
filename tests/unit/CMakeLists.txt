@@ -292,6 +292,14 @@ add_xray_unit_test(test_regex regex/test_regex.c)
 # ============================================================================
 
 add_xray_unit_test(test_api_defense api/test_api_defense.c)
+add_test(
+    NAME test_api_inventory_param_modes
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_api_inventory_param_modes.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(test_api_inventory_param_modes PROPERTIES
+    LABELS "api;metadata;tooling"
+)
 
 # test_repl needs the isolate-profile factory (xr_isolate_profile_*)
 # in addition to xray_core, so build it like test_cli_spec with an
