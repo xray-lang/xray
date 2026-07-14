@@ -899,6 +899,14 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "  f = cb\n"
         "  return fn() { f() }\n"
         "}\n"
+        "fn invokeCallback(cb: () -> ()) {\n"
+        "  cb()\n"
+        "}\n"
+        "fn chooseCallback(flag: bool, a: () -> (), b: () -> ()) {\n"
+        "  var cb = a\n"
+        "  if (flag) { cb = b }\n"
+        "  cb()\n"
+        "}\n"
         "fn viaStableVarAlias() {\n"
         "  var f = failDynamic\n"
         "  f()\n"
@@ -1015,6 +1023,18 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "  f = noThrowDynamic\n"
         "  run()\n"
         "}\n"
+        "fn viaHigherOrderCallback() {\n"
+        "  invokeCallback(failDynamic)\n"
+        "}\n"
+        "fn viaHigherOrderFunctionExpr() {\n"
+        "  invokeCallback(fn() { throw OtherDynamicErr.Boom })\n"
+        "}\n"
+        "fn viaHigherOrderUnion(flag: bool) {\n"
+        "  chooseCallback(flag, failDynamic, failOtherDynamic)\n"
+        "}\n"
+        "fn viaHigherOrderUnknown(cb: () -> ()) {\n"
+        "  invokeCallback(cb)\n"
+        "}\n"
         "fn viaConstAliasStillExact() {\n"
         "  const f = failDynamic\n"
         "  f()\n"
@@ -1069,6 +1089,14 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         analyzer_function_effect_summary(a, "viaCapturedFunctionValueUnknown");
     const XaEffectSummary *captured_function_value_current_rebound =
         analyzer_function_effect_summary(a, "viaCapturedFunctionValueCurrentRebound");
+    const XaEffectSummary *higher_order_callback =
+        analyzer_function_effect_summary(a, "viaHigherOrderCallback");
+    const XaEffectSummary *higher_order_function_expr =
+        analyzer_function_effect_summary(a, "viaHigherOrderFunctionExpr");
+    const XaEffectSummary *higher_order_union =
+        analyzer_function_effect_summary(a, "viaHigherOrderUnion");
+    const XaEffectSummary *higher_order_unknown =
+        analyzer_function_effect_summary(a, "viaHigherOrderUnknown");
     const XaEffectSummary *const_alias =
         analyzer_function_effect_summary(a, "viaConstAliasStillExact");
     ASSERT(stable_var != NULL);
@@ -1096,6 +1124,10 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT(captured_function_value_direct != NULL);
     ASSERT(captured_function_value_unknown != NULL);
     ASSERT(captured_function_value_current_rebound != NULL);
+    ASSERT(higher_order_callback != NULL);
+    ASSERT(higher_order_function_expr != NULL);
+    ASSERT(higher_order_union != NULL);
+    ASSERT(higher_order_unknown != NULL);
     ASSERT(const_alias != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, stable_var, "DynamicErr"));
@@ -1179,6 +1211,21 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         !effect_summary_has_enum_named(a, captured_function_value_current_rebound, "DynamicErr"));
     ASSERT(!effect_summary_has_enum_named(a, captured_function_value_current_rebound,
                                           "OtherDynamicErr"));
+    ASSERT(higher_order_callback->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((higher_order_callback->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, higher_order_callback, "DynamicErr"));
+    ASSERT(!effect_summary_has_enum_named(a, higher_order_callback, "OtherDynamicErr"));
+    ASSERT(higher_order_function_expr->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((higher_order_function_expr->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(!effect_summary_has_enum_named(a, higher_order_function_expr, "DynamicErr"));
+    ASSERT(effect_summary_has_enum_named(a, higher_order_function_expr, "OtherDynamicErr"));
+    ASSERT(higher_order_union->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((higher_order_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, higher_order_union, "DynamicErr"));
+    ASSERT(effect_summary_has_enum_named(a, higher_order_union, "OtherDynamicErr"));
+    ASSERT(higher_order_unknown->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((higher_order_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(!effect_summary_has_enum_named(a, higher_order_unknown, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, const_alias, "DynamicErr"));
     ASSERT((const_alias->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 
