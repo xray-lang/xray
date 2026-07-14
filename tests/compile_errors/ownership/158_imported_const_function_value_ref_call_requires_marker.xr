@@ -1,0 +1,8 @@
+import { bumpRefValue } from "../../fixtures/param_mode_import_lib"
+
+fn main() {
+    var value = 1
+    bumpRefValue(value)
+}
+
+main()
