@@ -1508,6 +1508,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "enum CatchErr { Boom, Other }\n"
         "enum OtherErr { Boom }\n"
         "enum PayloadErr { Boom, Other, Payload(int) }\n"
+        "struct CatchBox { value: CatchErr }\n"
         "fn fail() { throw CatchErr.Boom }\n"
         "fn failOther() { throw OtherErr.Boom }\n"
         "fn failPayloadBoom() { throw PayloadErr.Boom }\n"
@@ -1663,6 +1664,43 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "  var run = makeCatchAliasClosureInvalidated()\n"
         "  run()\n"
         "}\n"
+        "fn catchArrayAliasRethrows() {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    const box = [e]\n"
+        "    throw box[0]\n"
+        "  }\n"
+        "}\n"
+        "fn catchArrayAliasInvalidates() {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    var box = [e]\n"
+        "    box[0] = CatchErr.Other\n"
+        "    throw box[0]\n"
+        "  }\n"
+        "}\n"
+        "fn catchStructFieldAliasRethrows() {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    const box = CatchBox{value: e}\n"
+        "    throw box.value\n"
+        "  }\n"
+        "}\n"
+        "fn catchStructFieldAliasInvalidates() {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    var box = CatchBox{value: e}\n"
+        "    box.value = CatchErr.Other\n"
+        "    throw box.value\n"
+        "  }\n"
+        "}\n"
+        "fn makeCatchArrayClosure() -> () -> () {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    const box = [e]\n"
+        "    return fn() { throw box[0] }\n"
+        "  }\n"
+        "  return fn() { }\n"
+        "}\n"
+        "fn catchClosureArrayRethrows() {\n"
+        "  var run = makeCatchArrayClosure()\n"
+        "  run()\n"
+        "}\n"
         "fn wrongTypedRethrow() { "
         "  try { fail() } catch (e: OtherErr) { throw e } "
         "}\n"
@@ -1739,6 +1777,16 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         analyzer_function_effect_summary(a, "catchClosureAliasRethrows");
     const XaEffectSummary *catch_closure_alias_invalidates =
         analyzer_function_effect_summary(a, "catchClosureAliasInvalidates");
+    const XaEffectSummary *catch_array_alias_rethrows =
+        analyzer_function_effect_summary(a, "catchArrayAliasRethrows");
+    const XaEffectSummary *catch_array_alias_invalidates =
+        analyzer_function_effect_summary(a, "catchArrayAliasInvalidates");
+    const XaEffectSummary *catch_struct_field_alias_rethrows =
+        analyzer_function_effect_summary(a, "catchStructFieldAliasRethrows");
+    const XaEffectSummary *catch_struct_field_alias_invalidates =
+        analyzer_function_effect_summary(a, "catchStructFieldAliasInvalidates");
+    const XaEffectSummary *catch_closure_array_rethrows =
+        analyzer_function_effect_summary(a, "catchClosureArrayRethrows");
     const XaEffectSummary *wrong_typed_rethrow =
         analyzer_function_effect_summary(a, "wrongTypedRethrow");
     const XaEffectSummary *catch_all_alias_rethrows =
@@ -1780,6 +1828,11 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(catch_closure_binding_rethrows != NULL);
     ASSERT(catch_closure_alias_rethrows != NULL);
     ASSERT(catch_closure_alias_invalidates != NULL);
+    ASSERT(catch_array_alias_rethrows != NULL);
+    ASSERT(catch_array_alias_invalidates != NULL);
+    ASSERT(catch_struct_field_alias_rethrows != NULL);
+    ASSERT(catch_struct_field_alias_invalidates != NULL);
+    ASSERT(catch_closure_array_rethrows != NULL);
     ASSERT(wrong_typed_rethrow != NULL);
     ASSERT(catch_all_alias_rethrows != NULL);
     ASSERT(catch_all_var_alias_rethrows != NULL);
@@ -1901,6 +1954,32 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         effect_summary_enum_set_named(a, catch_closure_alias_invalidates, "CatchErr");
     ASSERT(closure_invalidated_set != NULL);
     ASSERT(closure_invalidated_set->all_variants);
+    const XaErrorTypeSet *array_alias_set =
+        effect_summary_enum_set_named(a, catch_array_alias_rethrows, "CatchErr");
+    ASSERT(array_alias_set != NULL);
+    ASSERT(!array_alias_set->all_variants);
+    ASSERT(xa_bitset_test(&array_alias_set->variants, 0));
+    ASSERT(!xa_bitset_test(&array_alias_set->variants, 1));
+    const XaErrorTypeSet *array_invalidated_set =
+        effect_summary_enum_set_named(a, catch_array_alias_invalidates, "CatchErr");
+    ASSERT(array_invalidated_set != NULL);
+    ASSERT(array_invalidated_set->all_variants);
+    const XaErrorTypeSet *struct_field_set =
+        effect_summary_enum_set_named(a, catch_struct_field_alias_rethrows, "CatchErr");
+    ASSERT(struct_field_set != NULL);
+    ASSERT(!struct_field_set->all_variants);
+    ASSERT(xa_bitset_test(&struct_field_set->variants, 0));
+    ASSERT(!xa_bitset_test(&struct_field_set->variants, 1));
+    const XaErrorTypeSet *struct_field_invalidated_set =
+        effect_summary_enum_set_named(a, catch_struct_field_alias_invalidates, "CatchErr");
+    ASSERT(struct_field_invalidated_set != NULL);
+    ASSERT(struct_field_invalidated_set->all_variants);
+    const XaErrorTypeSet *closure_array_set =
+        effect_summary_enum_set_named(a, catch_closure_array_rethrows, "CatchErr");
+    ASSERT(closure_array_set != NULL);
+    ASSERT(!closure_array_set->all_variants);
+    ASSERT(xa_bitset_test(&closure_array_set->variants, 0));
+    ASSERT(!xa_bitset_test(&closure_array_set->variants, 1));
     ASSERT(effect_summary_has_enum_named(a, wrong_typed_rethrow, "CatchErr"));
     ASSERT(!effect_summary_has_enum_named(a, wrong_typed_rethrow, "OtherErr"));
     ASSERT(effect_summary_has_enum_named(a, catch_all_alias_rethrows, "CatchErr"));
