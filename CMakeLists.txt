@@ -1573,6 +1573,19 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME bytes_type_residue
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_bytes_type_residue.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --fail-on-public
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(bytes_type_residue PROPERTIES
+        LABELS "frontend;types;metadata"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME parallel_surface_convergence
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_parallel_surface_convergence.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
