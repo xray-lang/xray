@@ -30,6 +30,9 @@ static inline char *xr_cstr_core_copy_arg(const char *data, int64_t len, char *s
         return NULL;
 
     size_t n = (size_t) n64;
+    if (n > 0 && memchr(data, '\0', n))
+        return NULL;
+
     char *out = stack;
     if (n + 1 > stack_cap) {
         if (!alloc_fn)

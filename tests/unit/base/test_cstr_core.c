@@ -97,6 +97,18 @@ TEST(cstr_core_copy_arg_rejects_invalid_inputs_and_resets_owned) {
     ASSERT_NULL(owned);
 }
 
+TEST(cstr_core_copy_arg_rejects_interior_nul_without_allocating) {
+    CStrAllocFake fake = {0};
+    char stack[2];
+    char *owned = (char *) 0x1;
+    const char data[] = {'a', '\0', 'b'};
+
+    ASSERT_NULL(
+        xr_cstr_core_copy_arg(data, 3, stack, sizeof(stack), cstr_core_fake_alloc, &fake, &owned));
+    ASSERT_NULL(owned);
+    ASSERT_EQ_UINT(fake.alloc_count, 0);
+}
+
 TEST(cstr_core_copy_arg_rejects_heap_requirement_without_allocator) {
     char stack[2];
     char *owned = (char *) 0x1;
@@ -140,6 +152,7 @@ RUN_TEST(cstr_core_copy_arg_uses_stack_when_it_fits);
 RUN_TEST(cstr_core_copy_arg_uses_heap_when_stack_is_too_small);
 RUN_TEST(cstr_core_copy_arg_allows_exact_stack_capacity_for_nul);
 RUN_TEST(cstr_core_copy_arg_rejects_invalid_inputs_and_resets_owned);
+RUN_TEST(cstr_core_copy_arg_rejects_interior_nul_without_allocating);
 RUN_TEST(cstr_core_copy_arg_rejects_heap_requirement_without_allocator);
 RUN_TEST(cstr_core_copy_arg_rejects_allocator_failure);
 RUN_TEST(cstr_core_copy_arg_rejects_size_t_overflow);
