@@ -178,7 +178,6 @@ def split_top_level_commas(text):
 
 def normalize_type(type_str):
     t = (type_str or "").strip()
-    t = re.sub(r'\bBytes\b', 'Array<uint8>', t)
     return t
 
 

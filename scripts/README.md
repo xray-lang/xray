@@ -56,7 +56,7 @@ CTest 的 `parallel_backend_abi_convergence`。
 
 ### `check_bytes_type_residue.py`
 
-扫描 `src/`、`stdlib/`、`tests/`、`spec/`、`demos/`、`tools/`，把 204 旧 public binary 类型残余分为
+扫描 `src/`、`stdlib/`、`tests/`、`spec/`、`demos/`、`tools/`、`scripts/`，把 204 旧 public binary 类型残余分为
 `PUBLIC_TYPE_BYTES*`、`PUBLIC_SIGNATURE_BYTES`、`PUBLIC_DIAGNOSTIC_BYTES`、
 `PRELUDE_OR_RESOLVER_ALIAS`、`CONSTRUCTOR_OPCODE_BYTES`、`METHOD_RECEIVER_BYTES`、
 `INTERNAL_LEGACY_BYTES_NAMING` 和允许保留的 compile-error 负例。默认模式只打印 inventory
