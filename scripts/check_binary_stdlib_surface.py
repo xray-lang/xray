@@ -34,10 +34,6 @@ CATEGORIES = (
 )
 
 BINARY_STRING_SYMBOLS = {
-    ("base64", "decode"),
-    ("base64", "decodeUrl"),
-    ("base64", "encode"),
-    ("base64", "encodeUrl"),
     ("compress", "adler32"),
     ("compress", "crc32"),
     ("compress", "deflate"),
@@ -101,9 +97,6 @@ LEGACY_ALIAS_SYMBOLS = {
 }
 
 NULL_SENTINEL_SYMBOLS = {
-    ("base64", "decode"),
-    ("base64", "decodeToBytes"),
-    ("base64", "decodeUrl"),
     ("compress", "deflate"),
     ("compress", "gunzip"),
     ("compress", "gzip"),

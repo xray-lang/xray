@@ -1,23 +1,67 @@
 import base64
+import {
+    Base64Alphabet,
+    Base64DecodeOptions,
+    Base64EncodeOptions,
+    Base64Error,
+    Base64PaddingPolicy
+} from base64
 
-print(base64.encode("Hello"))
-print(base64.decode("SGVsbG8="))
-print(base64.encodeUrl("AB"))
-print(base64.decodeUrl("QUI"))
-print(base64.decode("A"))
+fn encodeText(data: string, options: Base64EncodeOptions? = null) -> string {
+    var view: Slice<byte> = data.bytes()
+    return base64.encode(view, options)
+}
+
+fn decodeText(data: string, options: Base64DecodeOptions? = null) -> string {
+    var decoded = base64.decode(data, options)
+    return string.fromUtf8(decoded[:])!
+}
+
+fn decodeFails(data: string, options: Base64DecodeOptions? = null) -> bool {
+    try {
+        var decoded = base64.decode(data, options)
+        return len(decoded) < 0
+    } catch (e: Base64Error) {
+        return true
+    }
+}
+
+fn urlEncodeOptions() -> Base64EncodeOptions {
+    var options = Base64EncodeOptions()
+    options.alphabet = Base64Alphabet.UrlSafe
+    options.padding = false
+    return options
+}
+
+fn urlDecodeOptions() -> Base64DecodeOptions {
+    var options = Base64DecodeOptions()
+    options.alphabet = Base64Alphabet.UrlSafe
+    options.padding = Base64PaddingPolicy.Forbidden
+    return options
+}
+
+fn optionalDecodeOptions() -> Base64DecodeOptions {
+    var options = Base64DecodeOptions()
+    options.padding = Base64PaddingPolicy.Optional
+    return options
+}
+
+print(encodeText("Hello"))
+print(decodeText("SGVsbG8="))
+print(encodeText("AB", urlEncodeOptions()))
+print(decodeText("QUI", urlDecodeOptions()))
+print(decodeFails("A"))
 print(base64.isValid("SGVsbG8="))
 
 var bytes = Array<byte>(3)
 bytes[0] = 72
 bytes[1] = 101
 bytes[2] = 108
-print(base64.encodeBytes(bytes))
+print(base64.encode(bytes[:]))
 
-var decoded = base64.decodeToBytes("SGVs")
-if (decoded != null) {
-    print(len(decoded))
-    print(decoded[0])
-    print(decoded[1])
-    print(decoded[2])
-}
-print(base64.decodeToBytes("!!!") == null)
+var decoded = base64.decode("SGVs", optionalDecodeOptions())
+print(len(decoded))
+print(decoded[0])
+print(decoded[1])
+print(decoded[2])
+print(decodeFails("!!!"))

@@ -112,38 +112,58 @@ static const XmcpGeneratedStdlibSymbol _symbols_CoroPool[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
     {
+        .name = "Base64DecodeOptions",
+        .signature = "Base64DecodeOptions",
+        .summary = "",
+    },
+    {
+        .name = "Base64DecodeOptions.alphabet",
+        .signature = ": Base64Alphabet",
+        .summary = "",
+    },
+    {
+        .name = "Base64DecodeOptions.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "Base64DecodeOptions.padding",
+        .signature = ": Base64PaddingPolicy",
+        .summary = "",
+    },
+    {
+        .name = "Base64EncodeOptions",
+        .signature = "Base64EncodeOptions",
+        .summary = "",
+    },
+    {
+        .name = "Base64EncodeOptions.alphabet",
+        .signature = ": Base64Alphabet",
+        .summary = "",
+    },
+    {
+        .name = "Base64EncodeOptions.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "Base64EncodeOptions.padding",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
         .name = "decode",
-        .signature = "(data: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "decodeToBytes",
-        .signature = "(data: string): Array<byte>?",
-        .summary = "",
-    },
-    {
-        .name = "decodeUrl",
-        .signature = "(data: string): string?",
+        .signature = "(text: string, options: Base64DecodeOptions? = null): Array<byte>",
         .summary = "",
     },
     {
         .name = "encode",
-        .signature = "(data: string): string",
-        .summary = "",
-    },
-    {
-        .name = "encodeBytes",
-        .signature = "(data: Array<byte>): string",
-        .summary = "",
-    },
-    {
-        .name = "encodeUrl",
-        .signature = "(data: string): string",
+        .signature = "(data: Slice<byte>, options: Base64EncodeOptions? = null): string",
         .summary = "",
     },
     {
         .name = "isValid",
-        .signature = "(data: string): bool",
+        .signature = "(text: string, options: Base64DecodeOptions? = null): bool",
         .summary = "",
     },
 };
@@ -5731,13 +5751,17 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `base64.decode` | `(data: string): string?` |  |\n"
-            "| `base64.decodeToBytes` | `(data: string): Array<byte>?` |  |\n"
-            "| `base64.decodeUrl` | `(data: string): string?` |  |\n"
-            "| `base64.encode` | `(data: string): string` |  |\n"
-            "| `base64.encodeBytes` | `(data: Array<byte>): string` |  |\n"
-            "| `base64.encodeUrl` | `(data: string): string` |  |\n"
-            "| `base64.isValid` | `(data: string): bool` |  |\n"
+            "| `Base64DecodeOptions` | `Base64DecodeOptions` |  |\n"
+            "| `Base64DecodeOptions.alphabet` | `: Base64Alphabet` |  |\n"
+            "| `Base64DecodeOptions.constructor` | `(): ()` |  |\n"
+            "| `Base64DecodeOptions.padding` | `: Base64PaddingPolicy` |  |\n"
+            "| `Base64EncodeOptions` | `Base64EncodeOptions` |  |\n"
+            "| `Base64EncodeOptions.alphabet` | `: Base64Alphabet` |  |\n"
+            "| `Base64EncodeOptions.constructor` | `(): ()` |  |\n"
+            "| `Base64EncodeOptions.padding` | `: bool` |  |\n"
+            "| `base64.decode` | `(text: string, options: Base64DecodeOptions? = null): Array<byte>` |  |\n"
+            "| `base64.encode` | `(data: Slice<byte>, options: Base64EncodeOptions? = null): string` |  |\n"
+            "| `base64.isValid` | `(text: string, options: Base64DecodeOptions? = null): bool` |  |\n"
             "",
         .symbols = _symbols_base64,
         .symbol_count = (int)(sizeof(_symbols_base64) / sizeof(_symbols_base64[0])),

@@ -1,34 +1,79 @@
-// Pure-Xray base64 module: VM/AOT parity across encode/decode, URL-safe,
-// bytes, validation, empty input, and UTF-8 round-trips.
+// Pure-Xray base64 module: VM/AOT parity across Slice<byte> encode, Array<byte>
+// decode, explicit URL-safe options, validation, empty input, and UTF-8 round-trips.
 import base64
+import {
+    Base64Alphabet,
+    Base64DecodeOptions,
+    Base64EncodeOptions,
+    Base64Error,
+    Base64PaddingPolicy
+} from base64
 
-print(base64.encode("Hello, World!"))
-print(base64.decode("SGVsbG8sIFdvcmxkIQ=="))
-print(base64.encode("A"))
-print(base64.encode("AB"))
-print(base64.encode("ABC"))
-print(base64.encode(""))
-print(base64.decode("") == "")
-print(base64.encode("你好世界"))
-print(base64.decode(base64.encode("你好世界")))
-print(base64.encodeUrl("subjects?_d"))
-print(base64.decodeUrl(base64.encodeUrl("test +/= data")))
+fn encodeText(data: string, options: Base64EncodeOptions? = null) -> string {
+    var view: Slice<byte> = data.bytes()
+    return base64.encode(view, options)
+}
+
+fn decodeText(data: string, options: Base64DecodeOptions? = null) -> string {
+    var decoded = base64.decode(data, options)
+    return string.fromUtf8(decoded[:])!
+}
+
+fn decodeFails(data: string, options: Base64DecodeOptions? = null) -> bool {
+    try {
+        var decoded = base64.decode(data, options)
+        return len(decoded) < 0
+    } catch (e: Base64Error) {
+        return true
+    }
+}
+
+fn urlEncodeOptions() -> Base64EncodeOptions {
+    var options = Base64EncodeOptions()
+    options.alphabet = Base64Alphabet.UrlSafe
+    options.padding = false
+    return options
+}
+
+fn urlDecodeOptions() -> Base64DecodeOptions {
+    var options = Base64DecodeOptions()
+    options.alphabet = Base64Alphabet.UrlSafe
+    options.padding = Base64PaddingPolicy.Forbidden
+    return options
+}
+
+fn optionalDecodeOptions() -> Base64DecodeOptions {
+    var options = Base64DecodeOptions()
+    options.padding = Base64PaddingPolicy.Optional
+    return options
+}
+
+print(encodeText("Hello, World!"))
+print(decodeText("SGVsbG8sIFdvcmxkIQ=="))
+print(encodeText("A"))
+print(encodeText("AB"))
+print(encodeText("ABC"))
+print(encodeText(""))
+print(decodeText("") == "")
+print(encodeText("你好世界"))
+print(decodeText(encodeText("你好世界")))
+print(encodeText("subjects?_d", urlEncodeOptions()))
+print(decodeText(encodeText("test +/= data", urlEncodeOptions()), urlDecodeOptions()))
 print(base64.isValid("QUJD"))
 print(base64.isValid("QQ=="))
 print(base64.isValid("A"))
 print(base64.isValid("Q==="))
-print(base64.decode("!!!invalid") == null)
-print(base64.decode("A") == null)
+print(decodeFails("!!!!"))
+print(decodeFails("A"))
 
-var bs = base64.decodeToBytes("SGVs")
-print(bs != null)
-print(len(bs!))
-print(bs![0])
-print(bs![1])
-print(bs![2])
+var bs = base64.decode("SGVs", optionalDecodeOptions())
+print(len(bs))
+print(bs[0])
+print(bs[1])
+print(bs[2])
 
 var raw = Array<byte>(3)
 raw[0] = 72
 raw[1] = 101
 raw[2] = 108
-print(base64.encodeBytes(raw))
+print(base64.encode(raw[:]))

@@ -42,8 +42,9 @@ BASELINES = (
             'assert_eq(result, "QUI=")',
             'assert_eq(result, "QUJD")',
             'assert_eq(base64.isValid("A"), false)',
-            "base64.encodeBytes(bytes)",
-            'base64.decodeToBytes("SGVs")',
+            "base64.encode(bytes[:])",
+            'base64.decode("SGVs", optionalDecodeOptions())',
+            'assert(decodeFails("!!!!"))',
         ),
     ),
     Baseline(
@@ -51,7 +52,7 @@ BASELINES = (
         path="tests/stdlib/contracts/base64/contract.toml",
         contains=(
             'id = "rfc4648-roundtrip"',
-            'id = "invalid-input-null"',
+            'id = "typed-error-invalid-input"',
             'diff_cases_manifest = "tests/stdlib/contracts/base64/diff_cases.txt"',
         ),
     ),
@@ -125,7 +126,7 @@ BASELINES = (
         category="AOT_BASE64_LINK_BASELINE",
         path="tests/aot/filetests/link/core_base64.expect",
         contains=(
-            '"stdlib_symbols": ["base64.encode", "base64.decode", "base64.encodeUrl", "base64.decodeUrl", "base64.isValid", "base64.encodeBytes", "base64.decodeToBytes"]',
+            '"stdlib_symbols": ["base64.Base64Alphabet", "base64.Base64DecodeOptions", "base64.Base64EncodeOptions", "base64.Base64Error", "base64.Base64PaddingPolicy", "base64.encode", "base64.decode", "base64.isValid"]',
             'not_contains="runtime_objects": ["xray_core"]',
             "c_not_contains=xrt_base64_",
         ),
