@@ -52,6 +52,7 @@ static void xa_check_call_arg_access_authorization(XaInferContext *ctx, AstNode 
                                                    const CallExprNode *call, AstNode *arg_node,
                                                    int arg_index, int slot, XrParamMode param_mode);
 static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index);
+static bool xa_class_name_matches_mono_base(const char *class_name, const char *base);
 
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
     if (!name)
@@ -1369,7 +1370,7 @@ static bool xa_path_is_sys_stdlib_module(const char *file) {
 }
 
 static bool xa_class_info_is_sys_threadlocal(XaInferContext *ctx, XrClassInfo *info) {
-    if (!info || !info->name || strcmp(info->name, "ThreadLocal") != 0)
+    if (!info || !xa_class_name_matches_mono_base(info->name, "ThreadLocal"))
         return false;
     if (xa_path_is_sys_stdlib_module(info->location.file))
         return true;
@@ -1407,7 +1408,7 @@ static bool xa_symbol_is_sys_threadlocal_class(XaInferContext *ctx, XaSymbol *sy
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     const char *member_name =
         links && links->import_member_name ? links->import_member_name : (name ? name : sym->name);
-    if (!member_name || strcmp(member_name, "ThreadLocal") != 0)
+    if (!xa_class_name_matches_mono_base(member_name, "ThreadLocal"))
         return false;
     if (links && links->module_name && strcmp(links->module_name, "sys") == 0)
         return true;
@@ -1431,7 +1432,7 @@ static bool xa_type_is_sys_threadlocal(XaInferContext *ctx, XrType *type) {
     if (!type || (type->kind != XR_KIND_CLASS && !XR_TYPE_IS_INSTANCE(type)))
         return false;
     const char *class_name = xr_type_get_class_name(type);
-    if (!class_name || strcmp(class_name, "ThreadLocal") != 0)
+    if (!xa_class_name_matches_mono_base(class_name, "ThreadLocal"))
         return false;
     if (type->instance.class_ref) {
         if (xa_class_info_is_sys_threadlocal(ctx, type->instance.class_ref))
@@ -1456,7 +1457,7 @@ static bool xa_call_is_sys_threadlocal_constructor(XaInferContext *ctx, CallExpr
     AstNode *callee = call->callee;
     if (callee && callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *ma = &callee->as.member_access;
-        if (ma->name && strcmp(ma->name, "ThreadLocal") == 0 && ma->object &&
+        if (xa_class_name_matches_mono_base(ma->name, "ThreadLocal") && ma->object &&
             ma->object->type == AST_VARIABLE &&
             xa_module_alias_is(ctx, ma->object->as.variable.name, "sys")) {
             return true;

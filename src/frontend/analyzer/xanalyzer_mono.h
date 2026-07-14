@@ -100,9 +100,10 @@ XR_FUNC const char *xa_mono_collector_add(XaMonoCollector *c, const char *generi
 XR_FUNC void xa_mono_pass(AstNode *root, XrVMRuntime *isolate);
 
 // AOT/module-graph variant: the current module may instantiate generic value
-// structs imported from dependency modules. External roots contribute only
-// generic struct declarations as templates; cloned specializations are injected
-// into |root| so lowering has a concrete local value-struct layout.
+// structs imported from dependency modules, and may rewrite imported generic
+// class/function namespace calls to specializations injected by their defining
+// modules. Value-struct clones remain local to the using module so lowering has
+// a concrete local layout.
 XR_FUNC void xa_mono_pass_with_external_structs(AstNode *root, AstNode **external_roots,
                                                 int external_root_count, XrVMRuntime *isolate);
 

@@ -1063,6 +1063,9 @@ typedef struct {
     AstNode *node;  // AST_FUNCTION_DECL or AST_CLASS_DECL
     XrGenericParam **type_params;
     int type_param_count;
+    bool is_external;
+    bool inject_clone;
+    bool rewrite_member_access;
 } XaGenericDecl;
 
 typedef struct {
@@ -1077,8 +1080,9 @@ static void registry_init(XaGenericRegistry *r) {
     r->capacity = 0;
 }
 
-static void registry_add(XaGenericRegistry *r, const char *name, AstNode *node, XrGenericParam **tp,
-                         int tp_count) {
+static void registry_add_ex(XaGenericRegistry *r, const char *name, AstNode *node,
+                            XrGenericParam **tp, int tp_count, bool is_external, bool inject_clone,
+                            bool rewrite_member_access) {
     if (r->count >= r->capacity) {
         int new_cap = r->capacity ? r->capacity * 2 : 8;
         XaGenericDecl *_new_r_decls =
@@ -1093,6 +1097,20 @@ static void registry_add(XaGenericRegistry *r, const char *name, AstNode *node, 
     d->node = node;
     d->type_params = tp;
     d->type_param_count = tp_count;
+    d->is_external = is_external;
+    d->inject_clone = inject_clone;
+    d->rewrite_member_access = rewrite_member_access;
+}
+
+static void registry_add_local(XaGenericRegistry *r, const char *name, AstNode *node,
+                               XrGenericParam **tp, int tp_count) {
+    registry_add_ex(r, name, node, tp, tp_count, false, true, false);
+}
+
+static void registry_add_external(XaGenericRegistry *r, const char *name, AstNode *node,
+                                  XrGenericParam **tp, int tp_count, bool inject_clone,
+                                  bool rewrite_member_access) {
+    registry_add_ex(r, name, node, tp, tp_count, true, inject_clone, rewrite_member_access);
 }
 
 static XaGenericDecl *registry_find(XaGenericRegistry *r, const char *name) {
@@ -1103,10 +1121,26 @@ static XaGenericDecl *registry_find(XaGenericRegistry *r, const char *name) {
     return NULL;
 }
 
-// External modules contribute only generic value-struct templates. The clone is
-// injected into the module that uses the struct literal, so AOT gets a concrete
-// local layout without changing generic class/function import behavior.
-static void collect_external_generic_struct_decls(AstNode *root, XaGenericRegistry *registry) {
+static const char *mono_decl_name(AstNode *decl) {
+    if (!decl)
+        return NULL;
+    switch (decl->type) {
+        case AST_FUNCTION_DECL:
+            return decl->as.function_decl.name;
+        case AST_CLASS_DECL:
+            return decl->as.class_decl.name;
+        case AST_STRUCT_DECL:
+            return decl->as.struct_decl.name;
+        default:
+            return NULL;
+    }
+}
+
+// External modules contribute generic value-struct templates to the using
+// module, and generic class/function names for namespace-call rewriting. Class
+// and function bodies are injected only into their defining module by scanning
+// cross-module instantiation roots with that module's local registry.
+static void collect_external_generic_decls(AstNode *root, XaGenericRegistry *registry) {
     if (!root || root->type != AST_PROGRAM)
         return;
 
@@ -1115,24 +1149,132 @@ static void collect_external_generic_struct_decls(AstNode *root, XaGenericRegist
         AstNode *stmt = prog->statements[i];
         if (!stmt)
             continue;
+        if (stmt->type == AST_FUNCTION_DECL && stmt->as.function_decl.type_param_count > 0) {
+            if (!registry_find(registry, stmt->as.function_decl.name)) {
+                registry_add_external(registry, stmt->as.function_decl.name, stmt,
+                                      stmt->as.function_decl.type_params,
+                                      stmt->as.function_decl.type_param_count, false, true);
+            }
+            continue;
+        }
+        if (stmt->type == AST_CLASS_DECL && stmt->as.class_decl.type_param_count > 0) {
+            if (!registry_find(registry, stmt->as.class_decl.name)) {
+                registry_add_external(registry, stmt->as.class_decl.name, stmt,
+                                      stmt->as.class_decl.type_params,
+                                      stmt->as.class_decl.type_param_count, false, true);
+            }
+            continue;
+        }
         if (stmt->type == AST_STRUCT_DECL && stmt->as.struct_decl.type_param_count > 0) {
             if (!registry_find(registry, stmt->as.struct_decl.name)) {
-                registry_add(registry, stmt->as.struct_decl.name, stmt,
-                             stmt->as.struct_decl.type_params,
-                             stmt->as.struct_decl.type_param_count);
+                registry_add_external(registry, stmt->as.struct_decl.name, stmt,
+                                      stmt->as.struct_decl.type_params,
+                                      stmt->as.struct_decl.type_param_count, true, false);
             }
             continue;
         }
         if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration) {
             AstNode *decl = stmt->as.export_stmt.declaration;
+            if (decl->type == AST_FUNCTION_DECL && decl->as.function_decl.type_param_count > 0 &&
+                !registry_find(registry, decl->as.function_decl.name)) {
+                registry_add_external(registry, decl->as.function_decl.name, decl,
+                                      decl->as.function_decl.type_params,
+                                      decl->as.function_decl.type_param_count, false, true);
+            }
+            if (decl->type == AST_CLASS_DECL && decl->as.class_decl.type_param_count > 0 &&
+                !registry_find(registry, decl->as.class_decl.name)) {
+                registry_add_external(registry, decl->as.class_decl.name, decl,
+                                      decl->as.class_decl.type_params,
+                                      decl->as.class_decl.type_param_count, false, true);
+            }
             if (decl->type == AST_STRUCT_DECL && decl->as.struct_decl.type_param_count > 0 &&
                 !registry_find(registry, decl->as.struct_decl.name)) {
-                registry_add(registry, decl->as.struct_decl.name, decl,
-                             decl->as.struct_decl.type_params,
-                             decl->as.struct_decl.type_param_count);
+                registry_add_external(registry, decl->as.struct_decl.name, decl,
+                                      decl->as.struct_decl.type_params,
+                                      decl->as.struct_decl.type_param_count, true, false);
             }
         }
     }
+}
+
+typedef struct {
+    const char **names;
+    int count;
+    int capacity;
+} XaMonoImportAliases;
+
+static void mono_import_aliases_init(XaMonoImportAliases *aliases) {
+    if (!aliases)
+        return;
+    aliases->names = NULL;
+    aliases->count = 0;
+    aliases->capacity = 0;
+}
+
+static void mono_import_aliases_free(XaMonoImportAliases *aliases) {
+    if (!aliases)
+        return;
+    xr_free(aliases->names);
+    aliases->names = NULL;
+    aliases->count = 0;
+    aliases->capacity = 0;
+}
+
+static bool mono_import_aliases_contains(const XaMonoImportAliases *aliases, const char *name) {
+    if (!aliases || !name)
+        return false;
+    for (int i = 0; i < aliases->count; i++) {
+        if (aliases->names[i] && strcmp(aliases->names[i], name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void mono_import_aliases_add(XaMonoImportAliases *aliases, const char *name) {
+    if (!aliases || !name || mono_import_aliases_contains(aliases, name))
+        return;
+    if (aliases->count >= aliases->capacity) {
+        int new_cap = aliases->capacity ? aliases->capacity * 2 : 4;
+        const char **new_names =
+            (const char **) xr_realloc(aliases->names, (size_t) new_cap * sizeof(const char *));
+        if (!new_names)
+            return;
+        aliases->names = new_names;
+        aliases->capacity = new_cap;
+    }
+    aliases->names[aliases->count++] = name;
+}
+
+static void collect_import_aliases(AstNode *root, XaMonoImportAliases *aliases) {
+    if (!root || root->type != AST_PROGRAM || !aliases)
+        return;
+    ProgramNode *prog = &root->as.program;
+    for (int i = 0; i < prog->count; i++) {
+        AstNode *stmt = prog->statements[i];
+        if (!stmt || stmt->type != AST_IMPORT_STMT)
+            continue;
+        ImportStmtNode *import = &stmt->as.import_stmt;
+        if (import->member_count != 0)
+            continue;
+        mono_import_aliases_add(aliases, import->alias ? import->alias : import->module_name);
+    }
+}
+
+static bool mono_call_is_import_member_generic(const CallExprNode *call,
+                                               const XaMonoImportAliases *aliases,
+                                               const char **out_member_name) {
+    if (out_member_name)
+        *out_member_name = NULL;
+    if (!call || call->type_arg_count <= 0 || !call->callee ||
+        call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    AstNode *object = call->callee->as.member_access.object;
+    if (!object || object->type != AST_VARIABLE ||
+        !mono_import_aliases_contains(aliases, object->as.variable.name))
+        return false;
+    if (out_member_name)
+        *out_member_name = call->callee->as.member_access.name;
+    return call->callee->as.member_access.name != NULL;
 }
 
 // Phase 1: Collect generic function/class declarations from top-level program
@@ -1148,39 +1290,40 @@ static void collect_generic_decls(AstNode *root, XaGenericRegistry *registry) {
                 continue;
 
             if (stmt->type == AST_FUNCTION_DECL && stmt->as.function_decl.type_param_count > 0) {
-                registry_add(registry, stmt->as.function_decl.name, stmt,
-                             stmt->as.function_decl.type_params,
-                             stmt->as.function_decl.type_param_count);
+                registry_add_local(registry, stmt->as.function_decl.name, stmt,
+                                   stmt->as.function_decl.type_params,
+                                   stmt->as.function_decl.type_param_count);
             }
             // Generic class: class Box<T> { ... }
             if (stmt->type == AST_CLASS_DECL && stmt->as.class_decl.type_param_count > 0) {
-                registry_add(registry, stmt->as.class_decl.name, stmt,
-                             stmt->as.class_decl.type_params, stmt->as.class_decl.type_param_count);
+                registry_add_local(registry, stmt->as.class_decl.name, stmt,
+                                   stmt->as.class_decl.type_params,
+                                   stmt->as.class_decl.type_param_count);
             }
             // Generic struct: struct Pair<T, U> { ... }
             if (stmt->type == AST_STRUCT_DECL && stmt->as.struct_decl.type_param_count > 0) {
-                registry_add(registry, stmt->as.struct_decl.name, stmt,
-                             stmt->as.struct_decl.type_params,
-                             stmt->as.struct_decl.type_param_count);
+                registry_add_local(registry, stmt->as.struct_decl.name, stmt,
+                                   stmt->as.struct_decl.type_params,
+                                   stmt->as.struct_decl.type_param_count);
             }
             // Export wrapping: export fn/class ...
             if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration) {
                 AstNode *decl = stmt->as.export_stmt.declaration;
                 if (decl->type == AST_FUNCTION_DECL &&
                     decl->as.function_decl.type_param_count > 0) {
-                    registry_add(registry, decl->as.function_decl.name, decl,
-                                 decl->as.function_decl.type_params,
-                                 decl->as.function_decl.type_param_count);
+                    registry_add_local(registry, decl->as.function_decl.name, decl,
+                                       decl->as.function_decl.type_params,
+                                       decl->as.function_decl.type_param_count);
                 }
                 if (decl->type == AST_CLASS_DECL && decl->as.class_decl.type_param_count > 0) {
-                    registry_add(registry, decl->as.class_decl.name, decl,
-                                 decl->as.class_decl.type_params,
-                                 decl->as.class_decl.type_param_count);
+                    registry_add_local(registry, decl->as.class_decl.name, decl,
+                                       decl->as.class_decl.type_params,
+                                       decl->as.class_decl.type_param_count);
                 }
                 if (decl->type == AST_STRUCT_DECL && decl->as.struct_decl.type_param_count > 0) {
-                    registry_add(registry, decl->as.struct_decl.name, decl,
-                                 decl->as.struct_decl.type_params,
-                                 decl->as.struct_decl.type_param_count);
+                    registry_add_local(registry, decl->as.struct_decl.name, decl,
+                                       decl->as.struct_decl.type_params,
+                                       decl->as.struct_decl.type_param_count);
                 }
             }
         }
@@ -1189,7 +1332,9 @@ static void collect_generic_decls(AstNode *root, XaGenericRegistry *registry) {
 
 // Phase 2: Walk AST to find generic call sites (CallExpr with type_args)
 static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *registry,
-                                        XaMonoCollector *collector) {
+                                        XaMonoCollector *collector,
+                                        const XaMonoImportAliases *import_aliases,
+                                        bool local_only) {
     if (!node)
         return;
 
@@ -1199,17 +1344,30 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         if (call->type_arg_count > 0 && call->callee && call->callee->type == AST_VARIABLE) {
             const char *fn_name = call->callee->as.variable.name;
             XaGenericDecl *decl = registry_find(registry, fn_name);
-            if (decl && decl->type_param_count == call->type_arg_count) {
+            if (decl && (!local_only || !decl->is_external) &&
+                decl->type_param_count == call->type_arg_count) {
                 bool is_cls =
                     (decl->node->type == AST_CLASS_DECL || decl->node->type == AST_STRUCT_DECL);
                 xa_mono_collector_add(collector, fn_name, call->type_args, call->type_arg_count,
                                       is_cls);
             }
         }
+        const char *member_name = NULL;
+        if (mono_call_is_import_member_generic(call, import_aliases, &member_name)) {
+            XaGenericDecl *decl = registry_find(registry, member_name);
+            if (decl && (!local_only || !decl->is_external) &&
+                decl->type_param_count == call->type_arg_count) {
+                bool is_cls =
+                    (decl->node->type == AST_CLASS_DECL || decl->node->type == AST_STRUCT_DECL);
+                xa_mono_collector_add(collector, member_name, call->type_args, call->type_arg_count,
+                                      is_cls);
+            }
+        }
         // Recurse into callee and arguments
-        collect_instantiation_sites(call->callee, registry, collector);
+        collect_instantiation_sites(call->callee, registry, collector, import_aliases, local_only);
         for (int i = 0; i < call->arg_count; i++)
-            collect_instantiation_sites(call->arguments[i], registry, collector);
+            collect_instantiation_sites(call->arguments[i], registry, collector, import_aliases,
+                                        local_only);
         return;
     }
 
@@ -1220,11 +1378,16 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             (strcmp(ne->class_name, "RawPtr") == 0 || strcmp(ne->class_name, "RawMut") == 0))
             return;
         if (ne->type_arg_count > 0) {
-            xa_mono_collector_add(collector, ne->class_name, ne->type_args, ne->type_arg_count,
-                                  true);
+            XaGenericDecl *decl = registry_find(registry, ne->class_name);
+            if (decl && (!local_only || !decl->is_external) &&
+                decl->type_param_count == ne->type_arg_count) {
+                xa_mono_collector_add(collector, ne->class_name, ne->type_args, ne->type_arg_count,
+                                      true);
+            }
         }
         for (int i = 0; i < ne->arg_count; i++)
-            collect_instantiation_sites(ne->arguments[i], registry, collector);
+            collect_instantiation_sites(ne->arguments[i], registry, collector, import_aliases,
+                                        local_only);
         return;
     }
 
@@ -1233,13 +1396,15 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         StructLiteralNode *sl = &node->as.struct_literal;
         if (sl->type_arg_count > 0 && sl->struct_name) {
             XaGenericDecl *decl = registry_find(registry, sl->struct_name);
-            if (decl && decl->type_param_count == sl->type_arg_count) {
+            if (decl && (!local_only || !decl->is_external) &&
+                decl->type_param_count == sl->type_arg_count) {
                 xa_mono_collector_add(collector, sl->struct_name, sl->type_args, sl->type_arg_count,
                                       true);
             }
         }
         for (int i = 0; i < sl->field_count; i++)
-            collect_instantiation_sites(sl->field_values[i], registry, collector);
+            collect_instantiation_sites(sl->field_values[i], registry, collector, import_aliases,
+                                        local_only);
         return;
     }
 
@@ -1247,11 +1412,13 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
     switch (node->type) {
         case AST_PROGRAM:
             for (int i = 0; i < node->as.program.count; i++)
-                collect_instantiation_sites(node->as.program.statements[i], registry, collector);
+                collect_instantiation_sites(node->as.program.statements[i], registry, collector,
+                                            import_aliases, local_only);
             break;
         case AST_BLOCK:
             for (int i = 0; i < node->as.block.count; i++)
-                collect_instantiation_sites(node->as.block.statements[i], registry, collector);
+                collect_instantiation_sites(node->as.block.statements[i], registry, collector,
+                                            import_aliases, local_only);
             break;
         case AST_BINARY_ADD:
         case AST_BINARY_SUB:
@@ -1272,152 +1439,205 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT:
         case AST_NULLISH_COALESCE:
-            collect_instantiation_sites(node->as.binary.left, registry, collector);
-            collect_instantiation_sites(node->as.binary.right, registry, collector);
+            collect_instantiation_sites(node->as.binary.left, registry, collector, import_aliases,
+                                        local_only);
+            collect_instantiation_sites(node->as.binary.right, registry, collector, import_aliases,
+                                        local_only);
             break;
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
         case AST_FORCE_UNWRAP:
-            collect_instantiation_sites(node->as.unary.operand, registry, collector);
+            collect_instantiation_sites(node->as.unary.operand, registry, collector, import_aliases,
+                                        local_only);
             break;
         case AST_EXPR_STMT:
-            collect_instantiation_sites(node->as.expr_stmt, registry, collector);
+            collect_instantiation_sites(node->as.expr_stmt, registry, collector, import_aliases,
+                                        local_only);
             break;
         case AST_GROUPING:
-            collect_instantiation_sites(node->as.grouping, registry, collector);
+            collect_instantiation_sites(node->as.grouping, registry, collector, import_aliases,
+                                        local_only);
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
         case AST_OWNED_DECL:
-            collect_instantiation_sites(node->as.var_decl.initializer, registry, collector);
+            collect_instantiation_sites(node->as.var_decl.initializer, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_ASSIGNMENT:
-            collect_instantiation_sites(node->as.assignment.value, registry, collector);
+            collect_instantiation_sites(node->as.assignment.value, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_COMPOUND_ASSIGNMENT:
-            collect_instantiation_sites(node->as.compound_assignment.value, registry, collector);
-            collect_instantiation_sites(node->as.compound_assignment.object, registry, collector);
+            collect_instantiation_sites(node->as.compound_assignment.value, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.compound_assignment.object, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_IF_STMT:
-            collect_instantiation_sites(node->as.if_stmt.condition, registry, collector);
-            collect_instantiation_sites(node->as.if_stmt.then_branch, registry, collector);
-            collect_instantiation_sites(node->as.if_stmt.else_branch, registry, collector);
+            collect_instantiation_sites(node->as.if_stmt.condition, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.if_stmt.then_branch, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.if_stmt.else_branch, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_WHILE_STMT:
-            collect_instantiation_sites(node->as.while_stmt.condition, registry, collector);
-            collect_instantiation_sites(node->as.while_stmt.body, registry, collector);
+            collect_instantiation_sites(node->as.while_stmt.condition, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.while_stmt.body, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_FOR_STMT:
-            collect_instantiation_sites(node->as.for_stmt.initializer, registry, collector);
-            collect_instantiation_sites(node->as.for_stmt.condition, registry, collector);
-            collect_instantiation_sites(node->as.for_stmt.increment, registry, collector);
-            collect_instantiation_sites(node->as.for_stmt.body, registry, collector);
+            collect_instantiation_sites(node->as.for_stmt.initializer, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.for_stmt.condition, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.for_stmt.increment, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.for_stmt.body, registry, collector, import_aliases,
+                                        local_only);
             break;
         case AST_FOR_IN_STMT:
-            collect_instantiation_sites(node->as.for_in_stmt.collection, registry, collector);
-            collect_instantiation_sites(node->as.for_in_stmt.body, registry, collector);
+            collect_instantiation_sites(node->as.for_in_stmt.collection, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.for_in_stmt.body, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++)
-                collect_instantiation_sites(node->as.return_stmt.values[i], registry, collector);
+                collect_instantiation_sites(node->as.return_stmt.values[i], registry, collector,
+                                            import_aliases, local_only);
             break;
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
-            collect_instantiation_sites(node->as.function_decl.body, registry, collector);
+            collect_instantiation_sites(node->as.function_decl.body, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_PRINT_STMT:
             for (int i = 0; i < node->as.print_stmt.expr_count; i++)
-                collect_instantiation_sites(node->as.print_stmt.exprs[i], registry, collector);
+                collect_instantiation_sites(node->as.print_stmt.exprs[i], registry, collector,
+                                            import_aliases, local_only);
             break;
         case AST_ARRAY_LITERAL:
             if (node->as.array_literal.is_repeat) {
                 collect_instantiation_sites(node->as.array_literal.repeat_value, registry,
-                                            collector);
+                                            collector, import_aliases, local_only);
                 collect_instantiation_sites(node->as.array_literal.repeat_count, registry,
-                                            collector);
+                                            collector, import_aliases, local_only);
             } else {
                 for (int i = 0; i < node->as.array_literal.count; i++)
                     collect_instantiation_sites(node->as.array_literal.elements[i], registry,
-                                                collector);
+                                                collector, import_aliases, local_only);
             }
             break;
         case AST_INDEX_GET:
-            collect_instantiation_sites(node->as.index_get.array, registry, collector);
-            collect_instantiation_sites(node->as.index_get.index, registry, collector);
+            collect_instantiation_sites(node->as.index_get.array, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.index_get.index, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_INDEX_SET:
-            collect_instantiation_sites(node->as.index_set.array, registry, collector);
-            collect_instantiation_sites(node->as.index_set.index, registry, collector);
-            collect_instantiation_sites(node->as.index_set.value, registry, collector);
+            collect_instantiation_sites(node->as.index_set.array, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.index_set.index, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.index_set.value, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_MEMBER_ACCESS:
-            collect_instantiation_sites(node->as.member_access.object, registry, collector);
+            collect_instantiation_sites(node->as.member_access.object, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_MEMBER_SET:
-            collect_instantiation_sites(node->as.member_set.object, registry, collector);
-            collect_instantiation_sites(node->as.member_set.value, registry, collector);
+            collect_instantiation_sites(node->as.member_set.object, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.member_set.value, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_TERNARY:
-            collect_instantiation_sites(node->as.ternary.condition, registry, collector);
-            collect_instantiation_sites(node->as.ternary.true_expr, registry, collector);
-            collect_instantiation_sites(node->as.ternary.false_expr, registry, collector);
+            collect_instantiation_sites(node->as.ternary.condition, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.ternary.true_expr, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.ternary.false_expr, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_TEMPLATE_STRING:
             for (int i = 0; i < node->as.template_str.part_count; i++)
-                collect_instantiation_sites(node->as.template_str.parts[i], registry, collector);
+                collect_instantiation_sites(node->as.template_str.parts[i], registry, collector,
+                                            import_aliases, local_only);
             break;
         case AST_TRY_CATCH:
-            collect_instantiation_sites(node->as.try_catch.try_body, registry, collector);
+            collect_instantiation_sites(node->as.try_catch.try_body, registry, collector,
+                                        import_aliases, local_only);
             for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
                 XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
                 if (cc)
-                    collect_instantiation_sites(cc->body, registry, collector);
+                    collect_instantiation_sites(cc->body, registry, collector, import_aliases,
+                                                local_only);
             }
             break;
         case AST_THROW_STMT:
-            collect_instantiation_sites(node->as.throw_stmt.expression, registry, collector);
+            collect_instantiation_sites(node->as.throw_stmt.expression, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_EXPORT_STMT:
-            collect_instantiation_sites(node->as.export_stmt.declaration, registry, collector);
+            collect_instantiation_sites(node->as.export_stmt.declaration, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_MATCH_EXPR:
-            collect_instantiation_sites(node->as.match_expr.expr, registry, collector);
+            collect_instantiation_sites(node->as.match_expr.expr, registry, collector,
+                                        import_aliases, local_only);
             for (int i = 0; i < node->as.match_expr.arm_count; i++)
-                collect_instantiation_sites(node->as.match_expr.arms[i], registry, collector);
+                collect_instantiation_sites(node->as.match_expr.arms[i], registry, collector,
+                                            import_aliases, local_only);
             break;
         case AST_MATCH_ARM:
-            collect_instantiation_sites(node->as.match_arm.guard, registry, collector);
-            collect_instantiation_sites(node->as.match_arm.body, registry, collector);
+            collect_instantiation_sites(node->as.match_arm.guard, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.match_arm.body, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_IS_EXPR:
-            collect_instantiation_sites(node->as.is_expr.expr, registry, collector);
+            collect_instantiation_sites(node->as.is_expr.expr, registry, collector, import_aliases,
+                                        local_only);
             break;
         case AST_AS_EXPR:
-            collect_instantiation_sites(node->as.as_expr.expr, registry, collector);
+            collect_instantiation_sites(node->as.as_expr.expr, registry, collector, import_aliases,
+                                        local_only);
             break;
         case AST_COMPTIME_EXPR:
-            collect_instantiation_sites(node->as.comptime_expr.expr, registry, collector);
+            collect_instantiation_sites(node->as.comptime_expr.expr, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_GO_EXPR:
-            collect_instantiation_sites(node->as.go_expr.expr, registry, collector);
+            collect_instantiation_sites(node->as.go_expr.expr, registry, collector, import_aliases,
+                                        local_only);
             break;
         case AST_AWAIT_EXPR:
-            collect_instantiation_sites(node->as.await_expr.expr, registry, collector);
-            collect_instantiation_sites(node->as.await_expr.into, registry, collector);
+            collect_instantiation_sites(node->as.await_expr.expr, registry, collector,
+                                        import_aliases, local_only);
+            collect_instantiation_sites(node->as.await_expr.into, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_UNSAFE_EXPR:
-            collect_instantiation_sites(node->as.unsafe_expr.operand, registry, collector);
+            collect_instantiation_sites(node->as.unsafe_expr.operand, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_SCOPE_BLOCK:
-            collect_instantiation_sites(node->as.scope_block.body, registry, collector);
+            collect_instantiation_sites(node->as.scope_block.body, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_DEFER_STMT:
-            collect_instantiation_sites(node->as.defer_stmt.expr, registry, collector);
+            collect_instantiation_sites(node->as.defer_stmt.expr, registry, collector,
+                                        import_aliases, local_only);
             break;
         case AST_YIELD_STMT:
-            collect_instantiation_sites(node->as.yield_stmt.value, registry, collector);
+            collect_instantiation_sites(node->as.yield_stmt.value, registry, collector,
+                                        import_aliases, local_only);
             break;
         default:
             break;
@@ -1426,7 +1646,8 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
 
 // Phase 3: Rewrite call sites — replace callee name with mangled name
 static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
-                               XaMonoCollector *collector) {
+                               XaMonoCollector *collector,
+                               const XaMonoImportAliases *import_aliases) {
     if (!node)
         return;
 
@@ -1449,10 +1670,23 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                 }
             }
         }
+        const char *member_name = NULL;
+        if (mono_call_is_import_member_generic(call, import_aliases, &member_name)) {
+            XaGenericDecl *decl = registry_find(registry, member_name);
+            if (decl && decl->rewrite_member_access) {
+                const char *mangled = xa_mono_collector_lookup(
+                    collector, member_name, call->type_args, call->type_arg_count);
+                if (mangled) {
+                    call->callee->as.member_access.name = xr_strdup(mangled);
+                    call->type_args = NULL;
+                    call->type_arg_count = 0;
+                }
+            }
+        }
         // Recurse
-        rewrite_call_sites(call->callee, registry, collector);
+        rewrite_call_sites(call->callee, registry, collector, import_aliases);
         for (int i = 0; i < call->arg_count; i++)
-            rewrite_call_sites(call->arguments[i], registry, collector);
+            rewrite_call_sites(call->arguments[i], registry, collector, import_aliases);
         return;
     }
 
@@ -1475,7 +1709,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             }
         }
         for (int i = 0; i < ne->arg_count; i++)
-            rewrite_call_sites(ne->arguments[i], registry, collector);
+            rewrite_call_sites(ne->arguments[i], registry, collector, import_aliases);
         return;
     }
 
@@ -1496,7 +1730,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             }
         }
         for (int i = 0; i < sl->field_count; i++)
-            rewrite_call_sites(sl->field_values[i], registry, collector);
+            rewrite_call_sites(sl->field_values[i], registry, collector, import_aliases);
         return;
     }
 
@@ -1504,11 +1738,13 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
     switch (node->type) {
         case AST_PROGRAM:
             for (int i = 0; i < node->as.program.count; i++)
-                rewrite_call_sites(node->as.program.statements[i], registry, collector);
+                rewrite_call_sites(node->as.program.statements[i], registry, collector,
+                                   import_aliases);
             break;
         case AST_BLOCK:
             for (int i = 0; i < node->as.block.count; i++)
-                rewrite_call_sites(node->as.block.statements[i], registry, collector);
+                rewrite_call_sites(node->as.block.statements[i], registry, collector,
+                                   import_aliases);
             break;
         case AST_BINARY_ADD:
         case AST_BINARY_SUB:
@@ -1529,108 +1765,184 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT:
         case AST_NULLISH_COALESCE:
-            rewrite_call_sites(node->as.binary.left, registry, collector);
-            rewrite_call_sites(node->as.binary.right, registry, collector);
+            rewrite_call_sites(node->as.binary.left, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.binary.right, registry, collector, import_aliases);
             break;
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
         case AST_FORCE_UNWRAP:
-            rewrite_call_sites(node->as.unary.operand, registry, collector);
+            rewrite_call_sites(node->as.unary.operand, registry, collector, import_aliases);
             break;
         case AST_EXPR_STMT:
-            rewrite_call_sites(node->as.expr_stmt, registry, collector);
+            rewrite_call_sites(node->as.expr_stmt, registry, collector, import_aliases);
             break;
         case AST_GROUPING:
-            rewrite_call_sites(node->as.grouping, registry, collector);
+            rewrite_call_sites(node->as.grouping, registry, collector, import_aliases);
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
         case AST_OWNED_DECL:
-            rewrite_call_sites(node->as.var_decl.initializer, registry, collector);
+            rewrite_call_sites(node->as.var_decl.initializer, registry, collector, import_aliases);
             break;
         case AST_ASSIGNMENT:
-            rewrite_call_sites(node->as.assignment.value, registry, collector);
+            rewrite_call_sites(node->as.assignment.value, registry, collector, import_aliases);
             break;
         case AST_IF_STMT:
-            rewrite_call_sites(node->as.if_stmt.condition, registry, collector);
-            rewrite_call_sites(node->as.if_stmt.then_branch, registry, collector);
-            rewrite_call_sites(node->as.if_stmt.else_branch, registry, collector);
+            rewrite_call_sites(node->as.if_stmt.condition, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.if_stmt.then_branch, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.if_stmt.else_branch, registry, collector, import_aliases);
             break;
         case AST_WHILE_STMT:
-            rewrite_call_sites(node->as.while_stmt.condition, registry, collector);
-            rewrite_call_sites(node->as.while_stmt.body, registry, collector);
+            rewrite_call_sites(node->as.while_stmt.condition, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.while_stmt.body, registry, collector, import_aliases);
             break;
         case AST_FOR_STMT:
-            rewrite_call_sites(node->as.for_stmt.initializer, registry, collector);
-            rewrite_call_sites(node->as.for_stmt.condition, registry, collector);
-            rewrite_call_sites(node->as.for_stmt.increment, registry, collector);
-            rewrite_call_sites(node->as.for_stmt.body, registry, collector);
+            rewrite_call_sites(node->as.for_stmt.initializer, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.for_stmt.condition, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.for_stmt.increment, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.for_stmt.body, registry, collector, import_aliases);
             break;
         case AST_FOR_IN_STMT:
-            rewrite_call_sites(node->as.for_in_stmt.collection, registry, collector);
-            rewrite_call_sites(node->as.for_in_stmt.body, registry, collector);
+            rewrite_call_sites(node->as.for_in_stmt.collection, registry, collector,
+                               import_aliases);
+            rewrite_call_sites(node->as.for_in_stmt.body, registry, collector, import_aliases);
             break;
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++)
-                rewrite_call_sites(node->as.return_stmt.values[i], registry, collector);
+                rewrite_call_sites(node->as.return_stmt.values[i], registry, collector,
+                                   import_aliases);
             break;
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
-            rewrite_call_sites(node->as.function_decl.body, registry, collector);
+            rewrite_call_sites(node->as.function_decl.body, registry, collector, import_aliases);
             break;
         case AST_PRINT_STMT:
             for (int i = 0; i < node->as.print_stmt.expr_count; i++)
-                rewrite_call_sites(node->as.print_stmt.exprs[i], registry, collector);
+                rewrite_call_sites(node->as.print_stmt.exprs[i], registry, collector,
+                                   import_aliases);
             break;
         case AST_TRY_CATCH:
-            rewrite_call_sites(node->as.try_catch.try_body, registry, collector);
+            rewrite_call_sites(node->as.try_catch.try_body, registry, collector, import_aliases);
             for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
                 XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
                 if (cc)
-                    rewrite_call_sites(cc->body, registry, collector);
+                    rewrite_call_sites(cc->body, registry, collector, import_aliases);
             }
             break;
         case AST_THROW_STMT:
-            rewrite_call_sites(node->as.throw_stmt.expression, registry, collector);
+            rewrite_call_sites(node->as.throw_stmt.expression, registry, collector, import_aliases);
             break;
         case AST_EXPORT_STMT:
-            rewrite_call_sites(node->as.export_stmt.declaration, registry, collector);
+            rewrite_call_sites(node->as.export_stmt.declaration, registry, collector,
+                               import_aliases);
             break;
         case AST_MATCH_EXPR:
-            rewrite_call_sites(node->as.match_expr.expr, registry, collector);
+            rewrite_call_sites(node->as.match_expr.expr, registry, collector, import_aliases);
             for (int i = 0; i < node->as.match_expr.arm_count; i++)
-                rewrite_call_sites(node->as.match_expr.arms[i], registry, collector);
+                rewrite_call_sites(node->as.match_expr.arms[i], registry, collector,
+                                   import_aliases);
             break;
         case AST_MATCH_ARM:
-            rewrite_call_sites(node->as.match_arm.guard, registry, collector);
-            rewrite_call_sites(node->as.match_arm.body, registry, collector);
+            rewrite_call_sites(node->as.match_arm.guard, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.match_arm.body, registry, collector, import_aliases);
             break;
         case AST_GO_EXPR:
-            rewrite_call_sites(node->as.go_expr.expr, registry, collector);
+            rewrite_call_sites(node->as.go_expr.expr, registry, collector, import_aliases);
             break;
         case AST_AWAIT_EXPR:
-            rewrite_call_sites(node->as.await_expr.expr, registry, collector);
-            rewrite_call_sites(node->as.await_expr.into, registry, collector);
+            rewrite_call_sites(node->as.await_expr.expr, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.await_expr.into, registry, collector, import_aliases);
             break;
         case AST_UNSAFE_EXPR:
-            rewrite_call_sites(node->as.unsafe_expr.operand, registry, collector);
+            rewrite_call_sites(node->as.unsafe_expr.operand, registry, collector, import_aliases);
             break;
         case AST_COMPTIME_EXPR:
-            rewrite_call_sites(node->as.comptime_expr.expr, registry, collector);
+            rewrite_call_sites(node->as.comptime_expr.expr, registry, collector, import_aliases);
             break;
         case AST_SCOPE_BLOCK:
-            rewrite_call_sites(node->as.scope_block.body, registry, collector);
+            rewrite_call_sites(node->as.scope_block.body, registry, collector, import_aliases);
             break;
         case AST_DEFER_STMT:
-            rewrite_call_sites(node->as.defer_stmt.expr, registry, collector);
+            rewrite_call_sites(node->as.defer_stmt.expr, registry, collector, import_aliases);
             break;
         case AST_YIELD_STMT:
-            rewrite_call_sites(node->as.yield_stmt.value, registry, collector);
+            rewrite_call_sites(node->as.yield_stmt.value, registry, collector, import_aliases);
             break;
         default:
             break;
+    }
+}
+
+static bool mono_export_stmt_exports_name(ExportStmtNode *exp, AstNode *origin_decl,
+                                          const char *origin_name) {
+    if (!exp || !origin_name)
+        return false;
+    if (exp->declaration == origin_decl)
+        return true;
+    if (exp->export_name && strcmp(exp->export_name, origin_name) == 0)
+        return true;
+    if (exp->declaration) {
+        const char *decl_name = mono_decl_name(exp->declaration);
+        if (decl_name && strcmp(decl_name, origin_name) == 0)
+            return true;
+    }
+    for (int i = 0; i < exp->export_count; i++) {
+        const char *name = exp->export_names ? exp->export_names[i] : NULL;
+        if (name && strcmp(name, origin_name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool mono_export_stmt_has_name(ExportStmtNode *exp, const char *name) {
+    if (!exp || !name)
+        return false;
+    if (exp->export_name && strcmp(exp->export_name, name) == 0)
+        return true;
+    if (exp->declaration) {
+        const char *decl_name = mono_decl_name(exp->declaration);
+        if (decl_name && strcmp(decl_name, name) == 0)
+            return true;
+    }
+    for (int i = 0; i < exp->export_count; i++) {
+        const char *export_name = exp->export_names ? exp->export_names[i] : NULL;
+        if (export_name && strcmp(export_name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void mono_append_export_name(ExportStmtNode *exp, const char *name) {
+    if (!exp || !name || mono_export_stmt_has_name(exp, name))
+        return;
+    int new_count = exp->export_count + 1;
+    char **new_names = (char **) xr_malloc((size_t) new_count * sizeof(char *));
+    if (!new_names)
+        return;
+    for (int i = 0; i < exp->export_count; i++)
+        new_names[i] = exp->export_names ? exp->export_names[i] : NULL;
+    new_names[exp->export_count] = xr_strdup(name);
+    exp->export_names = new_names;
+    exp->export_count = new_count;
+}
+
+static void export_mono_clone_if_origin_exported(AstNode *root, AstNode *origin_decl,
+                                                 const char *origin_name,
+                                                 const char *mangled_name) {
+    if (!root || root->type != AST_PROGRAM || !origin_name || !mangled_name)
+        return;
+    ProgramNode *prog = &root->as.program;
+    for (int i = 0; i < prog->count; i++) {
+        AstNode *stmt = prog->statements[i];
+        if (!stmt || stmt->type != AST_EXPORT_STMT)
+            continue;
+        ExportStmtNode *exp = &stmt->as.export_stmt;
+        if (mono_export_stmt_exports_name(exp, origin_decl, origin_name)) {
+            mono_append_export_name(exp, mangled_name);
+            return;
+        }
     }
 }
 
@@ -1652,6 +1964,8 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         XaMonoInstance *inst = &collector->instances[i];
         XaGenericDecl *decl = registry_find(registry, inst->generic_name);
         if (!decl || !decl->node)
+            continue;
+        if (!decl->inject_clone)
             continue;
 
         // Build type map from generic params → concrete types
@@ -1766,6 +2080,8 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         }
         prog->statements[insert_pos] = cloned;
         prog->count++;
+        export_mono_clone_if_origin_exported(root, decl->node, inst->generic_name,
+                                             inst->mangled_name);
     }
 }
 
@@ -1782,17 +2098,39 @@ static void xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int e
     XaMonoCollector collector;
     xa_mono_collector_init(&collector);
 
-    // Phase 1: Collect generic declarations
+    XaMonoImportAliases root_imports;
+    mono_import_aliases_init(&root_imports);
+    collect_import_aliases(root, &root_imports);
+
+    // Phase 1: collect local generic declarations and external templates/names.
     collect_generic_decls(root, &registry);
     for (int i = 0; external_roots && i < external_root_count; i++) {
         if (external_roots[i] && external_roots[i] != root)
-            collect_external_generic_struct_decls(external_roots[i], &registry);
+            collect_external_generic_decls(external_roots[i], &registry);
     }
     if (registry.count == 0)
         goto cleanup;
 
-    // Phase 2: Collect instantiation sites
-    collect_instantiation_sites(root, &registry, &collector);
+    // Phase 2: collect this module's own instantiations. External generic
+    // class/function declarations are rewrite-only in the using module; their
+    // clones are injected by their defining module when it scans cross-module
+    // roots below.
+    collect_instantiation_sites(root, &registry, &collector, &root_imports, false);
+
+    // Phase 2b: collect external modules' uses of declarations defined in
+    // this root, so e.g. sys owns the ThreadLocal<int> clone while an importer
+    // later rewrites sys.ThreadLocal<int> to sys.ThreadLocal$i64.
+    for (int i = 0; external_roots && i < external_root_count; i++) {
+        AstNode *external = external_roots[i];
+        if (!external || external == root)
+            continue;
+        XaMonoImportAliases external_imports;
+        mono_import_aliases_init(&external_imports);
+        collect_import_aliases(external, &external_imports);
+        collect_instantiation_sites(external, &registry, &collector, &external_imports, true);
+        mono_import_aliases_free(&external_imports);
+    }
+
     if (collector.count == 0)
         goto cleanup;
 
@@ -1800,7 +2138,7 @@ static void xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int e
     inject_mono_decls(root, &registry, &collector, isolate);
 
     // Phase 4: Rewrite call sites to use mangled names
-    rewrite_call_sites(root, &registry, &collector);
+    rewrite_call_sites(root, &registry, &collector, &root_imports);
 
     // Debug: print mono stats if XRAY_MONO_DEBUG is set
 #if XR_DEBUG
@@ -1811,6 +2149,7 @@ static void xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int e
 #endif
 
 cleanup:
+    mono_import_aliases_free(&root_imports);
     xa_mono_collector_free(&collector);
     xr_free(registry.decls);
 }

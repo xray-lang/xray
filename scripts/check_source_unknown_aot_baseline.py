@@ -49,10 +49,13 @@ BASELINES = (
         source_contains=("sys.ThreadLocal<int>", "local.set(20)", "local.get()"),
         expect_contains=(
             "xrt_sys_thread_local_id()",
+            "xrt_map_new_typed(0, XR_ELEM_I64, XR_ELEM_I64)",
             "xrt_map_new_typed(0, XR_ELEM_I64, XR_ELEM_BOOL)",
-            'xrt_map_set_class_name(_inst, "ThreadLocal")',
-            r"c_regex=XrValue sys_[0-9a-f]+_ThreadLocal_get_m",
-            r"c_regex=void sys_[0-9a-f]+_ThreadLocal_set_m",
+            'xrt_map_set_class_name(_inst, "ThreadLocal$i64")',
+            r"c_regex=int64_t sys_[0-9a-f]+_ThreadLocal_i64_get_m",
+            r"c_regex=void sys_[0-9a-f]+_ThreadLocal_i64_set_m",
+            "xrt_map_has_i64_typed",
+            "xrt_map_set_i64_i64_typed",
         ),
     ),
     Baseline(
