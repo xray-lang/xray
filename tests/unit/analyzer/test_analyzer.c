@@ -884,6 +884,15 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
                          "fn typedRethrows() { try { fail() } catch (e: CatchErr) { throw e } }\n"
                          "fn wrongTypedRethrow() { "
                          "  try { fail() } catch (e: OtherErr) { throw e } "
+                         "}\n"
+                         "fn catchAllAliasRethrows() { "
+                         "  try { fail() } catch (e) { const alias = e; throw alias } "
+                         "}\n"
+                         "fn typedAliasRethrows() { "
+                         "  try { fail() } catch (e: CatchErr) { const alias = (e); throw alias } "
+                         "}\n"
+                         "fn wrongTypedAliasRethrow() { "
+                         "  try { fail() } catch (e: OtherErr) { const alias = e; throw alias } "
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -900,6 +909,12 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     const XaEffectSummary *typed_rethrows = analyzer_function_effect_summary(a, "typedRethrows");
     const XaEffectSummary *wrong_typed_rethrow =
         analyzer_function_effect_summary(a, "wrongTypedRethrow");
+    const XaEffectSummary *catch_all_alias_rethrows =
+        analyzer_function_effect_summary(a, "catchAllAliasRethrows");
+    const XaEffectSummary *typed_alias_rethrows =
+        analyzer_function_effect_summary(a, "typedAliasRethrows");
+    const XaEffectSummary *wrong_typed_alias_rethrow =
+        analyzer_function_effect_summary(a, "wrongTypedAliasRethrow");
     ASSERT(fail != NULL);
     ASSERT(handled != NULL);
     ASSERT(leaks != NULL);
@@ -908,6 +923,9 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(catch_all_rethrows != NULL);
     ASSERT(typed_rethrows != NULL);
     ASSERT(wrong_typed_rethrow != NULL);
+    ASSERT(catch_all_alias_rethrows != NULL);
+    ASSERT(typed_alias_rethrows != NULL);
+    ASSERT(wrong_typed_alias_rethrow != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, fail, "CatchErr"));
     ASSERT(handled->escaping.count == 0);
@@ -919,6 +937,10 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(effect_summary_has_enum_named(a, typed_rethrows, "CatchErr"));
     ASSERT(effect_summary_has_enum_named(a, wrong_typed_rethrow, "CatchErr"));
     ASSERT(!effect_summary_has_enum_named(a, wrong_typed_rethrow, "OtherErr"));
+    ASSERT(effect_summary_has_enum_named(a, catch_all_alias_rethrows, "CatchErr"));
+    ASSERT(effect_summary_has_enum_named(a, typed_alias_rethrows, "CatchErr"));
+    ASSERT(effect_summary_has_enum_named(a, wrong_typed_alias_rethrow, "CatchErr"));
+    ASSERT(!effect_summary_has_enum_named(a, wrong_typed_alias_rethrow, "OtherErr"));
 
     xa_analyzer_free(a);
     setup_pool();

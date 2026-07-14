@@ -60,9 +60,13 @@ typedef struct ErrorSetCtx {
     XaAnalyzer *analyzer;
     XaEffectSummary *current_summary; /* Effect summary being built for current function */
     const char *current_catch_var;    /* Catch variable currently in scope, if any */
-    XaEffectSummary *current_caught;  /* Effect subset caught by current catch clause */
-    XaSymbol *current_func;           /* Current function symbol */
-    bool changed;                     /* Fixpoint: did anything change this iteration? */
+    uint32_t current_catch_symbol_id; /* Symbol id for current_catch_var */
+    uint32_t current_catch_alias_ids[64];
+    const char *current_catch_alias_names[64];
+    int current_catch_alias_count;
+    XaEffectSummary *current_caught; /* Effect subset caught by current catch clause */
+    XaSymbol *current_func;          /* Current function symbol */
+    bool changed;                    /* Fixpoint: did anything change this iteration? */
 } ErrorSetCtx;
 
 /* ========== Forward Declarations ========== */
@@ -165,6 +169,49 @@ static XaSymbol *resolve_function_alias_target(XaAnalyzer *analyzer, XaSymbol *s
 static XaSymbol *resolve_call_target(XaAnalyzer *analyzer, AstNode *callee) {
     XaSymbol *sym = lookup_variable_symbol(analyzer, callee);
     return resolve_function_alias_target(analyzer, sym, 0);
+}
+
+static bool is_current_caught_ref(ErrorSetCtx *ctx, AstNode *expr) {
+    expr = identity_source(expr);
+    if (!ctx || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name ||
+        !ctx->current_caught)
+        return false;
+
+    uint32_t symbol_id = expr->as.variable.symbol_id;
+    if (symbol_id != 0) {
+        if (ctx->current_catch_symbol_id != 0 && symbol_id == ctx->current_catch_symbol_id)
+            return true;
+        for (int i = 0; i < ctx->current_catch_alias_count; i++) {
+            if (ctx->current_catch_alias_ids[i] != 0 &&
+                symbol_id == ctx->current_catch_alias_ids[i])
+                return true;
+        }
+        return ctx->current_catch_var &&
+               strcmp(expr->as.variable.name, ctx->current_catch_var) == 0;
+    }
+
+    if (ctx->current_catch_var && strcmp(expr->as.variable.name, ctx->current_catch_var) == 0)
+        return true;
+    for (int i = 0; i < ctx->current_catch_alias_count; i++) {
+        const char *name = ctx->current_catch_alias_names[i];
+        if (name && strcmp(expr->as.variable.name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void maybe_record_catch_alias(ErrorSetCtx *ctx, AstNode *node) {
+    if (!ctx || !node || !ctx->current_caught || node->type != AST_CONST_DECL)
+        return;
+    VarDeclNode *decl = &node->as.var_decl;
+    if (!decl->name || !decl->initializer || decl->symbol_id == 0 ||
+        ctx->current_catch_alias_count >= 64)
+        return;
+    if (!is_current_caught_ref(ctx, decl->initializer))
+        return;
+    int slot = ctx->current_catch_alias_count++;
+    ctx->current_catch_alias_ids[slot] = decl->symbol_id;
+    ctx->current_catch_alias_names[slot] = decl->name;
 }
 
 /* Try to find the case index of an enum member.
@@ -304,8 +351,10 @@ static void es_walk_block(ErrorSetCtx *ctx, AstNode *node) {
     if (!node)
         return;
     if (node->type == AST_BLOCK) {
+        int saved_catch_alias_count = ctx->current_catch_alias_count;
         for (int i = 0; i < node->as.block.count; i++)
             es_walk_stmt(ctx, node->as.block.statements[i]);
+        ctx->current_catch_alias_count = saved_catch_alias_count;
     } else {
         es_walk_stmt(ctx, node);
     }
@@ -321,9 +370,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             if (!expr)
                 break;
 
-            if (expr->type == AST_VARIABLE && ctx->current_catch_var && ctx->current_caught &&
-                expr->as.variable.name &&
-                strcmp(expr->as.variable.name, ctx->current_catch_var) == 0) {
+            if (is_current_caught_ref(ctx, expr)) {
                 xa_effect_summary_add_summary(ctx->analyzer->effect_db, ctx->current_summary,
                                               ctx->current_caught);
                 break;
@@ -435,11 +482,17 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                     XrCatchClause *cc = tc->catch_clauses[i];
                     if (cc && cc->body) {
                         const char *saved_catch_var = ctx->current_catch_var;
+                        uint32_t saved_catch_symbol_id = ctx->current_catch_symbol_id;
+                        int saved_catch_alias_count = ctx->current_catch_alias_count;
                         XaEffectSummary *saved_caught = ctx->current_caught;
                         ctx->current_catch_var = cc->var_name;
+                        ctx->current_catch_symbol_id = cc->symbol_id;
+                        ctx->current_catch_alias_count = 0;
                         ctx->current_caught = caught_summaries ? &caught_summaries[i] : NULL;
                         es_walk_block(ctx, cc->body);
                         ctx->current_catch_var = saved_catch_var;
+                        ctx->current_catch_symbol_id = saved_catch_symbol_id;
+                        ctx->current_catch_alias_count = saved_catch_alias_count;
                         ctx->current_caught = saved_caught;
                     }
                 }
@@ -465,6 +518,9 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             break;
 
         case AST_CONST_DECL:
+            maybe_record_catch_alias(ctx, node);
+            es_walk_expr(ctx, node->as.var_decl.initializer);
+            break;
         case AST_SHARED_DECL:
         case AST_OWNED_DECL:
             es_walk_expr(ctx, node->as.var_decl.initializer);
