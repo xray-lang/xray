@@ -415,7 +415,7 @@ TEST(string_slice_bounds) {
     teardown();
 }
 
-TEST(string_char_at) {
+TEST(string_rune_at) {
     setup();
     XrString *s = xr_string_intern(X, "hello", 5, xr_string_hash("hello", 5));
     XrString *c = xr_string_rune_at(X, s, 0);
@@ -425,6 +425,18 @@ TEST(string_char_at) {
     c = xr_string_rune_at(X, s, 4);
     ASSERT_NOT_NULL(c);
     ASSERT_STR_EQ(c->data, "o");
+
+    const char *text = "A你🌍";
+    XrString *u = xr_string_intern(X, text, strlen(text), xr_string_hash(text, strlen(text)));
+    c = xr_string_rune_at(X, u, 1);
+    ASSERT_NOT_NULL(c);
+    ASSERT_STR_EQ(c->data, "你");
+
+    c = xr_string_rune_at(X, u, -1);
+    ASSERT_NOT_NULL(c);
+    ASSERT_STR_EQ(c->data, "🌍");
+
+    ASSERT_NULL(xr_string_rune_at(X, u, 3));
     teardown();
 }
 
@@ -648,7 +660,7 @@ static void run_all_tests(void) {
     RUN_TEST(string_substring_middle);
     RUN_TEST(string_substring_bounds);
     RUN_TEST(string_slice_bounds);
-    RUN_TEST(string_char_at);
+    RUN_TEST(string_rune_at);
     RUN_TEST(string_unicode_rune_at);
 
     RUN_TEST_SUITE("String Split");

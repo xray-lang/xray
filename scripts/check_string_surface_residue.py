@@ -52,8 +52,13 @@ ALLOWED_REMOVED_INDEX_FILES = {
     Path("tests/compile_errors/type/string_negative_slice_operator_removed.xr"),
     Path("tests/compile_errors/type/string_negative_slice_operator_removed.xr.expected"),
 }
+ALLOWED_REMOVED_LEGACY_MEMBER_FILES = {
+    Path("tests/compile_errors/type/string_legacy_member_removed.xr"),
+    Path("tests/compile_errors/type/string_legacy_member_removed.xr.expected"),
+}
 PUBLIC_DOC_PREFIXES = ("spec/", "docs/")
 PUBLIC_BLOCKING_CATEGORIES = {
+    "PUBLIC_LEGACY_STRING_MEMBER_NAME",
     "PUBLIC_SPAN_VIEW_DIAGNOSTIC",
     "PUBLIC_STRING_INDEX_EXAMPLE",
     "PUBLIC_BACKEND_STRING_INDEX_DIAGNOSTIC",
@@ -62,14 +67,17 @@ BACKEND_BLOCKING_CATEGORIES = {
     "BACKEND_STRING_INDEX_SUPPORT",
 }
 CATEGORIES = (
+    "PUBLIC_LEGACY_STRING_MEMBER_NAME",
     "PUBLIC_SPAN_VIEW_DIAGNOSTIC",
     "PUBLIC_STRING_INDEX_EXAMPLE",
     "PUBLIC_BACKEND_STRING_INDEX_DIAGNOSTIC",
     "BACKEND_STRING_INDEX_SUPPORT",
     "ALLOWED_REMOVED_STRING_INDEX_NEGATIVE_TEST",
+    "ALLOWED_REMOVED_LEGACY_STRING_MEMBER_NEGATIVE_TEST",
     "CANONICAL_STRING_INDEX_REJECTION_TEXT",
 )
 
+LEGACY_STRING_MEMBER_RE = re.compile(r"\b(?:charAt|fromBytes|runesLossy|byteLength)\b")
 PUBLIC_SPAN_VIEW_DIAGNOSTIC_RE = re.compile(r"\bSpan view\b")
 STALE_INDEX_EXAMPLE_RE = re.compile(
     r"\b(?:str|s|string|text)\s*\[[^\]]+\].*(?:returns?\s+rune|返回\s*rune|//\s*[\"'][^\"']+[\"'])",
@@ -157,6 +165,15 @@ def classify_line(root: Path, path: Path, lineno: int, line: str) -> list[Hit]:
         if rel_path.suffix == ".expected" or "value[" in line or "str[" in line:
             hits.append(Hit("ALLOWED_REMOVED_STRING_INDEX_NEGATIVE_TEST", rel_str, lineno, stripped))
             return hits
+
+    if rel_path in ALLOWED_REMOVED_LEGACY_MEMBER_FILES and LEGACY_STRING_MEMBER_RE.search(line):
+        hits.append(
+            Hit("ALLOWED_REMOVED_LEGACY_STRING_MEMBER_NEGATIVE_TEST", rel_str, lineno, stripped)
+        )
+        return hits
+
+    if LEGACY_STRING_MEMBER_RE.search(line):
+        hits.append(Hit("PUBLIC_LEGACY_STRING_MEMBER_NAME", rel_str, lineno, stripped))
 
     if STALE_INDEX_EXAMPLE_RE.search(line) and is_public_doc(rel_path):
         hits.append(Hit("PUBLIC_STRING_INDEX_EXAMPLE", rel_str, lineno, stripped))

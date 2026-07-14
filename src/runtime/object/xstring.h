@@ -245,7 +245,7 @@ XR_FUNC size_t xr_string_rune_length(XrString *str);
 
 XR_FUNC int32_t xr_string_rune_code_at(XrString *str, size_t index);
 XR_FUNC XrString *xr_string_rune_at_unicode(XrVMRuntime *iso, XrString *str, size_t index);
-XR_FUNC XrString *xr_string_substring_by_char(XrVMRuntime *iso, XrString *str, size_t start,
+XR_FUNC XrString *xr_string_substring_by_rune(XrVMRuntime *iso, XrString *str, size_t start,
                                               size_t end);
 XR_FUNC XrString *xr_string_from_codepoint(XrVMRuntime *iso, uint32_t codepoint);
 
