@@ -6962,7 +6962,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         emit_value_generated_line_reset(ctx, out, v);
         return;
     }
-    if (v && v->uses == 0 && cg_array_call_is_direct_bytes_mutator_trusted_nothrow(ctx, f, v)) {
+    if (v && v->uses == 0 &&
+        cg_array_call_is_direct_byte_array_mutator_trusted_nothrow(ctx, f, v)) {
         fprintf(out, "    ");
         emit_value_rhs(ctx, out, f, v, prefix);
         fprintf(out, ";\n");

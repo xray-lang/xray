@@ -743,7 +743,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         if (sym == XRT_SYM_RESERVE)
             return xrt_array_reserve_value(recv, arg0);
         if (sym == XRT_SYM_APPEND_FROM)
-            return xrt_bytes_append_from_value(recv, arg0);
+            return xrt_byte_array_append_from_value(recv, arg0);
         if (sym == XRT_SYM_RESIZE)
             xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_RESIZE_REQUIRES_FILL_MSG);
         if (sym == XRT_SYM_UNSHIFT) {
@@ -1003,7 +1003,7 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_RESIZE)
         return xrt_array_resize_value(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REPEATFROM)
-        return xrt_bytes_repeat_from_tail_value(recv, arg0, arg1);
+        return xrt_byte_array_repeat_from_tail_value(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         return xrt_array_fill_value(recv, arg0, arg1, XR_FROM_INT(a->length));

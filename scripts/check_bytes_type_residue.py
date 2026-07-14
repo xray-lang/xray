@@ -2,10 +2,10 @@
 """Inventory task-204 Bytes/ByteSpan/ByteView removal residue.
 
 By default this is an inventory tool and exits successfully. Use
-`--fail-on-public` once the public-surface categories are expected to be zero.
-Internal legacy helper names are reported separately so task 204 can keep a
-per-slice residue baseline. Historical `XI_BYTES_*`, `OP_BYTES_*`, runtime
-`xr_array_bytes_*`, and CGen `emit_bytes_*` / `cg_bytes_*` names should now be
+`--fail-on-public` once the public-surface categories are expected to be zero,
+and `--fail-on-internal-legacy` once legacy internal helper names are expected
+to stay gone. Historical `XI_BYTES_*`, `OP_BYTES_*`, runtime `xr_array_bytes_*`
+/ `xrt_bytes_*`, and CGen `emit_bytes_*` / `cg_bytes_*` names should now be
 absent.
 """
 
@@ -34,7 +34,8 @@ PRELUDE_RE = re.compile(r"\bXR_PRELUDE_TYPE\(\"(?:Bytes|ByteSpan|ByteView)\"")
 CONSTRUCTOR_RE = re.compile(r"\b(?:OP_BYTES_NEW|XI_BYTES_NEW)\b")
 INTERNAL_LEGACY_RE = re.compile(
     r"\b(?:XI_BYTES_[A-Z0-9_]+|OP_BYTES_[A-Z0-9_]+|xr_array_bytes_[A-Za-z0-9_]+|"
-    r"xrt_array_bytes|bytes_typed_[A-Za-z0-9_]+|lower_bytes_[A-Za-z0-9_]+|"
+    r"xrt_array_bytes|xrt_bytes_[A-Za-z0-9_]+|bytes_typed_[A-Za-z0-9_]+|"
+    r"lower_bytes_[A-Za-z0-9_]+|emit_builtin_bytes_[A-Za-z0-9_]+|"
     r"emit_bytes_[A-Za-z0-9_]+|cg_bytes_[A-Za-z0-9_]+)\b"
 )
 
@@ -202,6 +203,11 @@ def main() -> int:
         action="store_true",
         help="fail if public-surface residue categories are non-empty",
     )
+    parser.add_argument(
+        "--fail-on-internal-legacy",
+        action="store_true",
+        help="fail if internal legacy Bytes helper naming categories are non-empty",
+    )
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
@@ -229,6 +235,12 @@ def main() -> int:
             for category, hits in blocking.items():
                 print(f"  {category}: {len(hits)}", file=sys.stderr)
             return 1
+
+    if args.fail_on_internal_legacy and inventory.get("INTERNAL_LEGACY_BYTES_NAMING"):
+        hits = inventory["INTERNAL_LEGACY_BYTES_NAMING"]
+        print("task-204 internal Bytes helper naming gate failed:", file=sys.stderr)
+        print(f"  INTERNAL_LEGACY_BYTES_NAMING: {len(hits)}", file=sys.stderr)
+        return 1
 
     return 0
 

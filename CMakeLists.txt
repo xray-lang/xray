@@ -1577,6 +1577,7 @@ if(BUILD_TESTS)
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_bytes_type_residue.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
                 --fail-on-public
+                --fail-on-internal-legacy
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(bytes_type_residue PROPERTIES

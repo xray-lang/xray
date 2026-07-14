@@ -4490,7 +4490,7 @@ static bool emit_byte_array_append_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
     if (boxed)
         fprintf(out, "xr_mkptr(");
     if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
-        fprintf(out, "xrt_bytes_append_from_span_slow_raw(");
+        fprintf(out, "xrt_byte_array_append_from_span_slow_raw(");
         emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
         fprintf(out, ", ");
         emit_span_ref_expr(out, call->args[1]);
@@ -4521,8 +4521,8 @@ static bool emit_byte_array_append_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
     else
         fprintf(out, "xr_array_core_copy_nonoverlap_bytes(_dp, _src.data, _src.length);");
     fprintf(out, " } _dst->length = _new_length; } else { _res = "
-                 "xrt_bytes_append_from_span_slow_raw(_dst, _src); } } else { _res = "
-                 "xrt_bytes_append_from_span_slow_raw(_dst, _src); } _res; })");
+                 "xrt_byte_array_append_from_span_slow_raw(_dst, _src); } } else { _res = "
+                 "xrt_byte_array_append_from_span_slow_raw(_dst, _src); } _res; })");
     emit_byte_array_result_suffix(out, boxed);
     return true;
 }
@@ -4577,7 +4577,7 @@ static bool emit_byte_array_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
                 "xr_array_core_bytes_repeat_copy(_a->data, _dst, _distance, _count); "
                 "_a->length = _new_length; _a; })");
     } else {
-        fprintf(out, "xrt_bytes_repeat_from_tail_raw(");
+        fprintf(out, "xrt_byte_array_repeat_from_tail_raw(");
         emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
         fprintf(out, ", ");
         emit_value_as_rep(out, call->args[1], XR_REP_I64);
@@ -4589,8 +4589,9 @@ static bool emit_byte_array_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
     return true;
 }
 
-static bool cg_array_call_is_direct_bytes_mutator_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
-                                                                  const XiValue *call) {
+static bool cg_array_call_is_direct_byte_array_mutator_trusted_nothrow(XiCgenCtx *ctx,
+                                                                       const XiFunc *f,
+                                                                       const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT))
         return false;
@@ -4613,8 +4614,8 @@ static bool cg_array_call_is_direct_bytes_mutator_trusted_nothrow(XiCgenCtx *ctx
     return false;
 }
 
-static bool cg_array_call_is_bytes_append_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
-                                                          const XiValue *call) {
+static bool cg_array_call_is_byte_array_append_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
+                                                               const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT))
         return false;
@@ -4628,8 +4629,8 @@ static bool cg_array_call_is_bytes_append_trusted_nothrow(XiCgenCtx *ctx, const 
            cg_span_value_u8_info(ctx, v->args[1], NULL);
 }
 
-static bool cg_array_call_is_bytes_repeat_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
-                                                          const XiValue *call) {
+static bool cg_array_call_is_byte_array_repeat_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
+                                                               const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT))
         return false;
@@ -4644,8 +4645,8 @@ static bool cg_array_call_is_bytes_repeat_trusted_nothrow(XiCgenCtx *ctx, const 
            cg_byte_array_unchecked_int_arg(v->args[2]);
 }
 
-static bool cg_array_bytes_load_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
-                                                const XiValue *value) {
+static bool cg_byte_slice_load_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
+                                               const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
     if (!v || v->nargs != 3)
         return false;
@@ -4673,12 +4674,12 @@ static bool cg_array_bytes_load_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
            cg_span_value_u8_info(ctx, v->args[0], NULL);
 }
 
-static bool cg_array_err_check_after_bytes_load_trusted(XiCgenCtx *ctx, const XiFunc *f,
-                                                        const XiValue *check) {
+static bool cg_array_err_check_after_byte_slice_load_trusted(XiCgenCtx *ctx, const XiFunc *f,
+                                                             const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
-    return cg_array_bytes_load_trusted_nothrow(ctx, f,
-                                               cg_class_native_prev_error_source_value(check));
+    return cg_byte_slice_load_trusted_nothrow(ctx, f,
+                                              cg_class_native_prev_error_source_value(check));
 }
 
 static bool cg_array_index_get_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
@@ -4713,16 +4714,17 @@ static bool cg_span_common_prefix_trusted_nothrow(XiCgenCtx *ctx, const XiValue 
     return cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX, XAOT_SPAN_DROP_HELPER);
 }
 
-static bool cg_array_err_check_after_direct_bytes_mutator_trusted(XiCgenCtx *ctx, const XiFunc *f,
-                                                                  const XiValue *check) {
+static bool cg_array_err_check_after_direct_byte_array_mutator_trusted(XiCgenCtx *ctx,
+                                                                       const XiFunc *f,
+                                                                       const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
-    return cg_array_call_is_direct_bytes_mutator_trusted_nothrow(
+    return cg_array_call_is_direct_byte_array_mutator_trusted_nothrow(
         ctx, f, cg_class_native_prev_error_source_value(check));
 }
 
-static bool cg_array_err_check_after_bytes_append_trusted(XiCgenCtx *ctx, const XiFunc *f,
-                                                          const XiValue *check) {
+static bool cg_array_err_check_after_byte_array_append_trusted(XiCgenCtx *ctx, const XiFunc *f,
+                                                               const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
     const XiBlock *block = check->block;
@@ -4740,8 +4742,8 @@ static bool cg_array_err_check_after_bytes_append_trusted(XiCgenCtx *ctx, const 
         }
         if (!seen_check)
             continue;
-        if (cg_array_call_is_bytes_append_trusted_nothrow(ctx, f, cur) ||
-            cg_array_call_is_bytes_repeat_trusted_nothrow(ctx, f, cur))
+        if (cg_array_call_is_byte_array_append_trusted_nothrow(ctx, f, cur) ||
+            cg_array_call_is_byte_array_repeat_trusted_nothrow(ctx, f, cur))
             return true;
         if (cur->op == XI_RETAIN || cur->op == XI_RELEASE)
             continue;
