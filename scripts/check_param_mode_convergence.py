@@ -72,9 +72,15 @@ ESCAPE_SUSPEND_RE = re.compile(
 )
 
 ACTIVE_SPEC_PREFIXES = ("LANGUAGE_SPEC", "spec/", "demos/", "stdlib/")
+REMOVED_SYNTAX_NEGATIVE_FIXTURES = {
+    "tests/compile_errors/syntax/028_param_mode_prefix_removed.xr",
+    "tests/compile_errors/syntax/029_param_move_mode_removed.xr",
+    "tests/compile_errors/syntax/030_param_move_prefix_removed.xr",
+}
 CATEGORIES = (
     "MOVE_AS_PARAM_MODE_RESIDUE",
     "PREFIX_DECL_MODE_SPELLING",
+    "REMOVED_SYNTAX_NEGATIVE_FIXTURE",
     "CANON_DECL_MODE_SPELLING",
     "CALL_SITE_REF_OUT_MARKER",
     "STALE_MODIFIER_EBNF",
@@ -130,10 +136,19 @@ def classify_line(rel_path: str, line: str) -> list[str]:
     if not line.strip():
         return categories
 
+    removed_syntax_fixture = rel_path in REMOVED_SYNTAX_NEGATIVE_FIXTURES
     if MOVE_PARAM_RE.search(line):
-        categories.append("MOVE_AS_PARAM_MODE_RESIDUE")
+        categories.append(
+            "REMOVED_SYNTAX_NEGATIVE_FIXTURE"
+            if removed_syntax_fixture
+            else "MOVE_AS_PARAM_MODE_RESIDUE"
+        )
     if DECL_MODE_RE.search(line):
-        categories.append("PREFIX_DECL_MODE_SPELLING")
+        categories.append(
+            "REMOVED_SYNTAX_NEGATIVE_FIXTURE"
+            if removed_syntax_fixture
+            else "PREFIX_DECL_MODE_SPELLING"
+        )
     if CANON_DECL_MODE_RE.search(line):
         categories.append("CANON_DECL_MODE_SPELLING")
     if CALL_MARKER_RE.search(line) and not FUNCTION_TYPE_PARAM_MODE_RE.search(line):
