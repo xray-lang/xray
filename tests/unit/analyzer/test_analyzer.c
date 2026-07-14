@@ -800,16 +800,25 @@ TEST(analyzer_error_effect_records_direct_throw_variant) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    const char *source = "enum DirectErr { First, Second, Third }\n"
+    const char *source = "enum DirectErr { First, Second, Payload(code: int), Third }\n"
+                         "enum PayloadArgErr { Boom }\n"
                          "fn throwsSecond() { throw DirectErr.Second }\n"
+                         "fn throwsPayload() { throw DirectErr.Payload(1) }\n"
+                         "fn payloadCode() -> int { throw PayloadArgErr.Boom\n"
+                         "  return 1 }\n"
+                         "fn throwsPayloadArg() { throw DirectErr.Payload(payloadCode()) }\n"
                          "fn throwsVariable(e: DirectErr) { throw e }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_direct_throw_variant.xr", program);
 
     const XaEffectSummary *specific = analyzer_function_effect_summary(a, "throwsSecond");
+    const XaEffectSummary *payload = analyzer_function_effect_summary(a, "throwsPayload");
+    const XaEffectSummary *payload_arg = analyzer_function_effect_summary(a, "throwsPayloadArg");
     const XaEffectSummary *all = analyzer_function_effect_summary(a, "throwsVariable");
     ASSERT(specific != NULL);
+    ASSERT(payload != NULL);
+    ASSERT(payload_arg != NULL);
     ASSERT(all != NULL);
 
     const XaErrorTypeSet *specific_set = effect_summary_enum_set_named(a, specific, "DirectErr");
@@ -818,6 +827,25 @@ TEST(analyzer_error_effect_records_direct_throw_variant) {
     ASSERT(!xa_bitset_test(&specific_set->variants, 0));
     ASSERT(xa_bitset_test(&specific_set->variants, 1));
     ASSERT(!xa_bitset_test(&specific_set->variants, 2));
+    ASSERT(!xa_bitset_test(&specific_set->variants, 3));
+
+    const XaErrorTypeSet *payload_set = effect_summary_enum_set_named(a, payload, "DirectErr");
+    ASSERT(payload_set != NULL);
+    ASSERT(!payload_set->all_variants);
+    ASSERT(!xa_bitset_test(&payload_set->variants, 0));
+    ASSERT(!xa_bitset_test(&payload_set->variants, 1));
+    ASSERT(xa_bitset_test(&payload_set->variants, 2));
+    ASSERT(!xa_bitset_test(&payload_set->variants, 3));
+
+    const XaErrorTypeSet *payload_arg_set =
+        effect_summary_enum_set_named(a, payload_arg, "DirectErr");
+    ASSERT(payload_arg_set != NULL);
+    ASSERT(!payload_arg_set->all_variants);
+    ASSERT(!xa_bitset_test(&payload_arg_set->variants, 0));
+    ASSERT(!xa_bitset_test(&payload_arg_set->variants, 1));
+    ASSERT(xa_bitset_test(&payload_arg_set->variants, 2));
+    ASSERT(!xa_bitset_test(&payload_arg_set->variants, 3));
+    ASSERT(effect_summary_has_enum_named(a, payload_arg, "PayloadArgErr"));
 
     const XaErrorTypeSet *all_set = effect_summary_enum_set_named(a, all, "DirectErr");
     ASSERT(all_set != NULL);
