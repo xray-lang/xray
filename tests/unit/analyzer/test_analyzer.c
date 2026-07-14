@@ -1630,6 +1630,39 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "    catch (other: OtherErr) { }; throw alias "
         "  } "
         "}\n"
+        "fn makeCatchBindingClosure() -> () -> () {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    return fn() { throw e }\n"
+        "  }\n"
+        "  return fn() { }\n"
+        "}\n"
+        "fn catchClosureBindingRethrows() {\n"
+        "  var run = makeCatchBindingClosure()\n"
+        "  run()\n"
+        "}\n"
+        "fn makeCatchAliasClosure() -> () -> () {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    const alias = e\n"
+        "    return fn() { throw alias }\n"
+        "  }\n"
+        "  return fn() { }\n"
+        "}\n"
+        "fn catchClosureAliasRethrows() {\n"
+        "  var run = makeCatchAliasClosure()\n"
+        "  run()\n"
+        "}\n"
+        "fn makeCatchAliasClosureInvalidated() -> () -> () {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    var alias = e\n"
+        "    alias = CatchErr.Other\n"
+        "    return fn() { throw alias }\n"
+        "  }\n"
+        "  return fn() { }\n"
+        "}\n"
+        "fn catchClosureAliasInvalidates() {\n"
+        "  var run = makeCatchAliasClosureInvalidated()\n"
+        "  run()\n"
+        "}\n"
         "fn wrongTypedRethrow() { "
         "  try { fail() } catch (e: OtherErr) { throw e } "
         "}\n"
@@ -1700,6 +1733,12 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         analyzer_function_effect_summary(a, "catchTryAliasDoesNotLeak");
     const XaEffectSummary *catch_try_alias_invalidates =
         analyzer_function_effect_summary(a, "catchTryAliasInvalidates");
+    const XaEffectSummary *catch_closure_binding_rethrows =
+        analyzer_function_effect_summary(a, "catchClosureBindingRethrows");
+    const XaEffectSummary *catch_closure_alias_rethrows =
+        analyzer_function_effect_summary(a, "catchClosureAliasRethrows");
+    const XaEffectSummary *catch_closure_alias_invalidates =
+        analyzer_function_effect_summary(a, "catchClosureAliasInvalidates");
     const XaEffectSummary *wrong_typed_rethrow =
         analyzer_function_effect_summary(a, "wrongTypedRethrow");
     const XaEffectSummary *catch_all_alias_rethrows =
@@ -1738,6 +1777,9 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(catch_try_inner_alias_does_not_clobber_outer != NULL);
     ASSERT(catch_try_alias_does_not_leak != NULL);
     ASSERT(catch_try_alias_invalidates != NULL);
+    ASSERT(catch_closure_binding_rethrows != NULL);
+    ASSERT(catch_closure_alias_rethrows != NULL);
+    ASSERT(catch_closure_alias_invalidates != NULL);
     ASSERT(wrong_typed_rethrow != NULL);
     ASSERT(catch_all_alias_rethrows != NULL);
     ASSERT(catch_all_var_alias_rethrows != NULL);
@@ -1843,6 +1885,22 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         effect_summary_enum_set_named(a, catch_try_alias_invalidates, "CatchErr");
     ASSERT(try_invalidated_alias_set != NULL);
     ASSERT(try_invalidated_alias_set->all_variants);
+    const XaErrorTypeSet *closure_binding_set =
+        effect_summary_enum_set_named(a, catch_closure_binding_rethrows, "CatchErr");
+    ASSERT(closure_binding_set != NULL);
+    ASSERT(!closure_binding_set->all_variants);
+    ASSERT(xa_bitset_test(&closure_binding_set->variants, 0));
+    ASSERT(!xa_bitset_test(&closure_binding_set->variants, 1));
+    const XaErrorTypeSet *closure_alias_set =
+        effect_summary_enum_set_named(a, catch_closure_alias_rethrows, "CatchErr");
+    ASSERT(closure_alias_set != NULL);
+    ASSERT(!closure_alias_set->all_variants);
+    ASSERT(xa_bitset_test(&closure_alias_set->variants, 0));
+    ASSERT(!xa_bitset_test(&closure_alias_set->variants, 1));
+    const XaErrorTypeSet *closure_invalidated_set =
+        effect_summary_enum_set_named(a, catch_closure_alias_invalidates, "CatchErr");
+    ASSERT(closure_invalidated_set != NULL);
+    ASSERT(closure_invalidated_set->all_variants);
     ASSERT(effect_summary_has_enum_named(a, wrong_typed_rethrow, "CatchErr"));
     ASSERT(!effect_summary_has_enum_named(a, wrong_typed_rethrow, "OtherErr"));
     ASSERT(effect_summary_has_enum_named(a, catch_all_alias_rethrows, "CatchErr"));

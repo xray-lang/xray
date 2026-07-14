@@ -166,6 +166,14 @@ typedef struct CatchAliasState {
     int alias_count;
 } CatchAliasState;
 
+typedef struct CatchCaptureState {
+    bool has_caught;
+    const char *catch_var;
+    uint32_t catch_symbol_id;
+    CatchAliasState alias_state;
+    XaEffectSummary caught_summary;
+} CatchCaptureState;
+
 typedef struct FunctionReturnTargetEntry {
     uint32_t function_id;
     FunctionValueTarget target;
@@ -176,6 +184,7 @@ typedef struct FunctionReturnTargetEntry {
 typedef struct FunctionExprCaptureEntry {
     AstNode *function_expr;
     FunctionValueAliasState state;
+    CatchCaptureState catch_state;
 } FunctionExprCaptureEntry;
 
 struct ErrorSetCtx {
@@ -209,6 +218,9 @@ struct ErrorSetCtx {
     XaSymbol *current_func;          /* Current function symbol */
     bool changed;                    /* Fixpoint: did anything change this iteration? */
 };
+
+static void capture_catch_alias_state(ErrorSetCtx *ctx, CatchAliasState *state);
+static void restore_catch_alias_state(ErrorSetCtx *ctx, const CatchAliasState *state);
 
 static bool es_summary_add_enum_selection(ErrorSetCtx *ctx, const XaSelection *sel) {
     if (!ctx || !sel || sel->kind != XA_SEL_ENUM_MEMBER)
@@ -695,11 +707,100 @@ static FunctionExprCaptureEntry *lookup_function_expr_capture_entry(ErrorSetCtx 
     return NULL;
 }
 
+static bool names_equal(const char *a, const char *b) {
+    if (a == b)
+        return true;
+    if (!a || !b)
+        return false;
+    return strcmp(a, b) == 0;
+}
+
+static bool bitset_equal(const XaBitSet *a, const XaBitSet *b) {
+    if (!a || !b || a->word_count != b->word_count)
+        return false;
+    for (uint32_t i = 0; i < a->word_count; i++) {
+        uint64_t lhs = a->words ? a->words[i] : 0;
+        uint64_t rhs = b->words ? b->words[i] : 0;
+        if (lhs != rhs)
+            return false;
+    }
+    return true;
+}
+
+static bool effect_summary_equal(const XaEffectSummary *a, const XaEffectSummary *b) {
+    if (!a || !b || a->completeness != b->completeness ||
+        a->unknown_reasons != b->unknown_reasons || a->escaping.count != b->escaping.count ||
+        a->root_count != b->root_count)
+        return false;
+    for (uint32_t i = 0; i < a->escaping.count; i++) {
+        const XaErrorTypeSet *lhs = &a->escaping.types[i];
+        const XaErrorTypeSet *rhs = &b->escaping.types[i];
+        if (lhs->type_id != rhs->type_id || lhs->stable_type_key != rhs->stable_type_key ||
+            lhs->all_variants != rhs->all_variants || !bitset_equal(&lhs->variants, &rhs->variants))
+            return false;
+    }
+    for (uint32_t i = 0; i < a->root_count; i++) {
+        if (a->roots[i] != b->roots[i])
+            return false;
+    }
+    return true;
+}
+
+static bool catch_alias_state_equal(const CatchAliasState *a, const CatchAliasState *b) {
+    if (!a || !b || a->binding_is_caught != b->binding_is_caught ||
+        a->alias_count != b->alias_count)
+        return false;
+    for (int i = 0; i < a->alias_count; i++) {
+        if (a->alias_ids[i] != b->alias_ids[i] ||
+            !names_equal(a->alias_names[i], b->alias_names[i]))
+            return false;
+    }
+    return true;
+}
+
+static void catch_capture_state_init(CatchCaptureState *state) {
+    if (!state)
+        return;
+    memset(state, 0, sizeof(*state));
+    xa_effect_summary_init(&state->caught_summary);
+}
+
+static void catch_capture_state_clear(CatchCaptureState *state) {
+    if (!state)
+        return;
+    xa_effect_summary_clear(&state->caught_summary);
+    memset(state, 0, sizeof(*state));
+}
+
+static void capture_current_catch_capture_state(ErrorSetCtx *ctx, CatchCaptureState *state) {
+    catch_capture_state_init(state);
+    if (!ctx || !state || !ctx->current_caught)
+        return;
+    state->has_caught = true;
+    state->catch_var = ctx->current_catch_var;
+    state->catch_symbol_id = ctx->current_catch_symbol_id;
+    capture_catch_alias_state(ctx, &state->alias_state);
+    xa_effect_summary_add_summary(ctx->analyzer->effect_db, &state->caught_summary,
+                                  ctx->current_caught);
+}
+
+static bool catch_capture_state_equal(const CatchCaptureState *a, const CatchCaptureState *b) {
+    if (!a || !b || a->has_caught != b->has_caught)
+        return false;
+    if (!a->has_caught)
+        return true;
+    return a->catch_symbol_id == b->catch_symbol_id && names_equal(a->catch_var, b->catch_var) &&
+           catch_alias_state_equal(&a->alias_state, &b->alias_state) &&
+           effect_summary_equal(&a->caught_summary, &b->caught_summary);
+}
+
 static void record_function_expr_capture(ErrorSetCtx *ctx, AstNode *function_expr) {
     if (!ctx || !function_expr || function_expr->type != AST_FUNCTION_EXPR)
         return;
     FunctionValueAliasState state;
     capture_function_value_alias_state(ctx, &state);
+    CatchCaptureState catch_state;
+    capture_current_catch_capture_state(ctx, &catch_state);
 
     FunctionExprCaptureEntry *entry = lookup_function_expr_capture_entry(ctx, function_expr);
     if (!entry) {
@@ -716,10 +817,13 @@ static void record_function_expr_capture(ErrorSetCtx *ctx, AstNode *function_exp
         memset(entry, 0, sizeof(*entry));
         entry->function_expr = function_expr;
         ctx->changed = true;
-    } else if (!function_value_alias_state_equal(&entry->state, &state)) {
+    } else if (!function_value_alias_state_equal(&entry->state, &state) ||
+               !catch_capture_state_equal(&entry->catch_state, &catch_state)) {
         ctx->changed = true;
     }
     entry->state = state;
+    catch_capture_state_clear(&entry->catch_state);
+    entry->catch_state = catch_state;
 }
 
 static void apply_function_expr_capture(ErrorSetCtx *ctx, AstNode *function_expr) {
@@ -738,6 +842,29 @@ static void apply_function_expr_capture(ErrorSetCtx *ctx, AstNode *function_expr
             continue;
         set_function_value_alias_target(ctx, sym, target);
     }
+}
+
+static bool apply_function_expr_catch_capture(ErrorSetCtx *ctx, AstNode *function_expr) {
+    FunctionExprCaptureEntry *entry = lookup_function_expr_capture_entry(ctx, function_expr);
+    if (!ctx || !entry || !entry->catch_state.has_caught)
+        return false;
+    ctx->current_catch_var = entry->catch_state.catch_var;
+    ctx->current_catch_symbol_id = entry->catch_state.catch_symbol_id;
+    restore_catch_alias_state(ctx, &entry->catch_state.alias_state);
+    ctx->current_caught = &entry->catch_state.caught_summary;
+    ctx->current_catch_alias_control_depth = 0;
+    return true;
+}
+
+static void clear_function_expr_captures(ErrorSetCtx *ctx) {
+    if (!ctx)
+        return;
+    for (int i = 0; i < ctx->function_expr_capture_count; i++)
+        catch_capture_state_clear(&ctx->function_expr_captures[i].catch_state);
+    xr_free(ctx->function_expr_captures);
+    ctx->function_expr_captures = NULL;
+    ctx->function_expr_capture_count = 0;
+    ctx->function_expr_capture_capacity = 0;
 }
 
 static void merge_function_value_path_states(ErrorSetCtx *ctx, const FunctionValueAliasState *base,
@@ -980,11 +1107,23 @@ static bool es_walk_function_expr_body(ErrorSetCtx *ctx, AstNode *function_expr)
     FunctionValueAliasState saved_alias_state;
     capture_function_value_alias_state(ctx, &saved_alias_state);
     apply_function_expr_capture(ctx, function_expr);
+    const char *saved_catch_var = ctx->current_catch_var;
+    uint32_t saved_catch_symbol_id = ctx->current_catch_symbol_id;
+    CatchAliasState saved_catch_alias_state;
+    capture_catch_alias_state(ctx, &saved_catch_alias_state);
+    XaEffectSummary *saved_caught = ctx->current_caught;
+    int saved_catch_alias_control_depth = ctx->current_catch_alias_control_depth;
+    apply_function_expr_catch_capture(ctx, function_expr);
     ctx->current_func = NULL;
     ctx->current_return_target = function_value_target_none();
     ctx->current_return_target_seen = false;
     ctx->current_return_target_unknown = false;
     es_walk_block(ctx, fn->body);
+    ctx->current_catch_var = saved_catch_var;
+    ctx->current_catch_symbol_id = saved_catch_symbol_id;
+    restore_catch_alias_state(ctx, &saved_catch_alias_state);
+    ctx->current_caught = saved_caught;
+    ctx->current_catch_alias_control_depth = saved_catch_alias_control_depth;
     restore_function_value_alias_state(ctx, &saved_alias_state);
     ctx->current_return_target = saved_return_target;
     ctx->current_return_target_seen = saved_return_seen;
@@ -2149,5 +2288,5 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
 cleanup:
     xr_free(funcs);
     xr_free(ctx.function_return_targets);
-    xr_free(ctx.function_expr_captures);
+    clear_function_expr_captures(&ctx);
 }
