@@ -70,6 +70,13 @@ typedef struct FunctionValueAliasState {
     int count;
 } FunctionValueAliasState;
 
+typedef struct FunctionReturnTargetEntry {
+    uint32_t function_id;
+    FunctionValueTarget target;
+    bool seen;
+    bool unknown;
+} FunctionReturnTargetEntry;
+
 typedef struct ErrorSetCtx {
     XaAnalyzer *analyzer;
     XaEffectSummary *current_summary; /* Effect summary being built for current function */
@@ -85,6 +92,12 @@ typedef struct ErrorSetCtx {
     uint32_t function_value_mutation_ids[128];
     int function_value_mutation_count;
     int function_value_mutation_depth;
+    FunctionReturnTargetEntry *function_return_targets;
+    int function_return_target_count;
+    int function_return_target_capacity;
+    FunctionValueTarget current_return_target;
+    bool current_return_target_seen;
+    bool current_return_target_unknown;
     XaEffectSummary *current_caught; /* Effect subset caught by current catch clause */
     XaSymbol *current_func;          /* Current function symbol */
     bool changed;                    /* Fixpoint: did anything change this iteration? */
@@ -95,6 +108,7 @@ typedef struct ErrorSetCtx {
 static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node);
 static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node);
 static void es_walk_block(ErrorSetCtx *ctx, AstNode *node);
+static FunctionValueTarget resolve_call_target_depth(ErrorSetCtx *ctx, AstNode *callee, int depth);
 
 /* ========== Helpers ========== */
 
@@ -222,6 +236,24 @@ static bool function_value_target_is_exact(FunctionValueTarget target) {
     return target.target_count > 0;
 }
 
+static bool function_value_target_equal(FunctionValueTarget a, FunctionValueTarget b) {
+    if (a.target_count != b.target_count)
+        return false;
+    for (int i = 0; i < a.target_count; i++) {
+        bool found = false;
+        for (int j = 0; j < b.target_count; j++) {
+            if (a.target_symbols[i] == b.target_symbols[j] &&
+                a.target_function_exprs[i] == b.target_function_exprs[j]) {
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            return false;
+    }
+    return true;
+}
+
 static bool function_value_target_add(FunctionValueTarget *target, XaSymbol *sym,
                                       AstNode *function_expr) {
     if (!target || (!sym && !function_expr))
@@ -256,6 +288,108 @@ static FunctionValueTarget function_value_target_merge(FunctionValueTarget a,
             return function_value_target_none();
     }
     return merged;
+}
+
+static bool expr_has_function_type(ErrorSetCtx *ctx, AstNode *expr) {
+    if (!ctx || !ctx->analyzer || !expr)
+        return false;
+    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, expr);
+    return type && XR_TYPE_IS_FUNCTION(type);
+}
+
+static bool current_function_returns_function(ErrorSetCtx *ctx) {
+    if (!ctx || !ctx->current_func)
+        return false;
+    XaSymbolLinks *links = &ctx->current_func->links;
+    XrType *return_type = links->return_type;
+    if (!return_type && links->type && XR_TYPE_IS_FUNCTION(links->type))
+        return_type = links->type->function.return_type;
+    return return_type && XR_TYPE_IS_FUNCTION(return_type);
+}
+
+static void record_current_function_return_target(ErrorSetCtx *ctx, FunctionValueTarget target,
+                                                  bool unknown) {
+    if (!ctx || !ctx->current_func)
+        return;
+    ctx->current_return_target_seen = true;
+    if (unknown || !function_value_target_is_exact(target)) {
+        ctx->current_return_target = function_value_target_none();
+        ctx->current_return_target_unknown = true;
+        return;
+    }
+    if (!function_value_target_is_exact(ctx->current_return_target)) {
+        ctx->current_return_target = target;
+        return;
+    }
+    FunctionValueTarget merged = function_value_target_merge(ctx->current_return_target, target);
+    if (!function_value_target_is_exact(merged)) {
+        ctx->current_return_target = function_value_target_none();
+        ctx->current_return_target_unknown = true;
+        return;
+    }
+    ctx->current_return_target = merged;
+}
+
+static FunctionReturnTargetEntry *lookup_function_return_target_entry(ErrorSetCtx *ctx,
+                                                                      XaSymbol *sym) {
+    if (!ctx || !sym || sym->id == 0)
+        return NULL;
+    for (int i = 0; i < ctx->function_return_target_count; i++) {
+        if (ctx->function_return_targets[i].function_id == sym->id)
+            return &ctx->function_return_targets[i];
+    }
+    return NULL;
+}
+
+static FunctionValueTarget lookup_function_return_target(ErrorSetCtx *ctx, XaSymbol *sym,
+                                                         bool *seen, bool *unknown) {
+    if (seen)
+        *seen = false;
+    if (unknown)
+        *unknown = false;
+    FunctionReturnTargetEntry *entry = lookup_function_return_target_entry(ctx, sym);
+    if (!entry)
+        return function_value_target_none();
+    if (seen)
+        *seen = entry->seen;
+    if (unknown)
+        *unknown = entry->unknown;
+    return entry->target;
+}
+
+static void store_function_return_target(ErrorSetCtx *ctx, XaSymbol *sym) {
+    if (!ctx || !sym || sym->id == 0)
+        return;
+    bool seen = ctx->current_return_target_seen;
+    bool unknown = ctx->current_return_target_unknown;
+    FunctionValueTarget target =
+        unknown ? function_value_target_none() : ctx->current_return_target;
+    if (!seen && !unknown)
+        return;
+
+    FunctionReturnTargetEntry *entry = lookup_function_return_target_entry(ctx, sym);
+    if (!entry) {
+        if (ctx->function_return_target_count >= ctx->function_return_target_capacity) {
+            int new_cap = ctx->function_return_target_capacity == 0
+                              ? 32
+                              : ctx->function_return_target_capacity * 2;
+            XR_REALLOC_OR_ABORT(ctx->function_return_targets,
+                                (size_t) new_cap * sizeof(FunctionReturnTargetEntry),
+                                "function return target grow");
+            ctx->function_return_target_capacity = new_cap;
+        }
+        entry = &ctx->function_return_targets[ctx->function_return_target_count++];
+        memset(entry, 0, sizeof(*entry));
+        entry->function_id = sym->id;
+        ctx->changed = true;
+    } else if (entry->seen != seen || entry->unknown != unknown ||
+               !function_value_target_equal(entry->target, target)) {
+        ctx->changed = true;
+    }
+
+    entry->seen = seen;
+    entry->unknown = unknown;
+    entry->target = target;
 }
 
 static XaSymbol *lookup_symbol_by_id(ErrorSetCtx *ctx, uint32_t symbol_id) {
@@ -448,6 +582,35 @@ static void restore_function_value_alias_state_for_catch_entry(ErrorSetCtx *ctx,
         invalidate_function_value_alias_target(ctx, try_mutation_ids[i]);
 }
 
+static FunctionValueTarget
+resolve_returned_function_value_call_target(ErrorSetCtx *ctx, AstNode *call_expr, int depth) {
+    if (!ctx || !call_expr || call_expr->type != AST_CALL_EXPR || depth >= 32)
+        return function_value_target_none();
+    FunctionValueTarget callee_target =
+        resolve_call_target_depth(ctx, call_expr->as.call_expr.callee, depth + 1);
+    if (!function_value_target_is_exact(callee_target))
+        return function_value_target_none();
+
+    FunctionValueTarget returned = function_value_target_none();
+    for (int i = 0; i < callee_target.target_count; i++) {
+        XaSymbol *callee_sym = callee_target.target_symbols[i];
+        if (!callee_sym)
+            return function_value_target_none();
+        bool seen = false;
+        bool unknown = false;
+        FunctionValueTarget target =
+            lookup_function_return_target(ctx, callee_sym, &seen, &unknown);
+        if (!seen || unknown || !function_value_target_is_exact(target))
+            return function_value_target_none();
+        returned = function_value_target_is_exact(returned)
+                       ? function_value_target_merge(returned, target)
+                       : target;
+        if (!function_value_target_is_exact(returned))
+            return function_value_target_none();
+    }
+    return returned;
+}
+
 static FunctionValueTarget resolve_function_value_expr_target(ErrorSetCtx *ctx, AstNode *expr,
                                                               int depth) {
     if (!ctx || depth >= 32)
@@ -457,6 +620,13 @@ static FunctionValueTarget resolve_function_value_expr_target(ErrorSetCtx *ctx, 
         return function_value_target_none();
     if (expr->type == AST_FUNCTION_EXPR)
         return function_value_target_expr(expr);
+    if (expr->type == AST_CALL_EXPR) {
+        FunctionValueTarget returned =
+            resolve_returned_function_value_call_target(ctx, expr, depth + 1);
+        if (function_value_target_is_exact(returned))
+            return returned;
+        return function_value_target_none();
+    }
     if (expr->type != AST_VARIABLE)
         return function_value_target_none();
     XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, expr);
@@ -515,7 +685,9 @@ static void record_function_value_assignment(ErrorSetCtx *ctx, AssignmentNode *a
 
 /* Resolve a call target exactly when possible.  Unknown function values keep
  * their variable symbol so the dynamic-call guard can mark the summary incomplete. */
-static FunctionValueTarget resolve_call_target(ErrorSetCtx *ctx, AstNode *callee) {
+static FunctionValueTarget resolve_call_target_depth(ErrorSetCtx *ctx, AstNode *callee, int depth) {
+    if (!ctx || depth >= 32)
+        return function_value_target_none();
     AstNode *source = identity_source(callee);
     const XaSelection *sel = xa_analyzer_get_selection(ctx->analyzer, source);
     if (sel && sel->target_symbol &&
@@ -527,10 +699,14 @@ static FunctionValueTarget resolve_call_target(ErrorSetCtx *ctx, AstNode *callee
     }
 
     XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, callee);
-    FunctionValueTarget target = resolve_function_value_expr_target(ctx, callee, 0);
+    FunctionValueTarget target = resolve_function_value_expr_target(ctx, callee, depth + 1);
     if (function_value_target_is_exact(target))
         return target;
     return function_value_target_symbol(sym);
+}
+
+static FunctionValueTarget resolve_call_target(ErrorSetCtx *ctx, AstNode *callee) {
+    return resolve_call_target_depth(ctx, callee, 0);
 }
 
 static bool is_dynamic_function_call_target(XaAnalyzer *analyzer, AstNode *callee,
@@ -555,7 +731,19 @@ static bool es_walk_function_expr_body(ErrorSetCtx *ctx, AstNode *function_expr)
     XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, function_expr);
     if (fn_scope)
         ctx->analyzer->current_scope = fn_scope;
+    XaSymbol *saved_func = ctx->current_func;
+    FunctionValueTarget saved_return_target = ctx->current_return_target;
+    bool saved_return_seen = ctx->current_return_target_seen;
+    bool saved_return_unknown = ctx->current_return_target_unknown;
+    ctx->current_func = NULL;
+    ctx->current_return_target = function_value_target_none();
+    ctx->current_return_target_seen = false;
+    ctx->current_return_target_unknown = false;
     es_walk_block(ctx, fn->body);
+    ctx->current_return_target = saved_return_target;
+    ctx->current_return_target_seen = saved_return_seen;
+    ctx->current_return_target_unknown = saved_return_unknown;
+    ctx->current_func = saved_func;
     ctx->analyzer->current_scope = saved_scope;
     return true;
 }
@@ -1036,6 +1224,21 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++)
                 es_walk_expr(ctx, node->as.return_stmt.values[i]);
+            if (ctx->current_func) {
+                if (node->as.return_stmt.value_count == 1) {
+                    AstNode *value = node->as.return_stmt.values[0];
+                    FunctionValueTarget target = resolve_function_value_expr_target(ctx, value, 0);
+                    if (function_value_target_is_exact(target)) {
+                        record_current_function_return_target(ctx, target, false);
+                    } else if (expr_has_function_type(ctx, value) ||
+                               current_function_returns_function(ctx)) {
+                        record_current_function_return_target(ctx, function_value_target_none(),
+                                                              true);
+                    }
+                } else if (current_function_returns_function(ctx)) {
+                    record_current_function_return_target(ctx, function_value_target_none(), true);
+                }
+            }
             break;
 
         case AST_IF_STMT:
@@ -1165,14 +1368,21 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
     XaEffectSummary summary;
     xa_effect_summary_init(&summary);
     ctx->current_summary = &summary;
+    ctx->current_return_target = function_value_target_none();
+    ctx->current_return_target_seen = false;
+    ctx->current_return_target_unknown = false;
     es_walk_block(ctx, body);
     XaEffectId previous_id = func_sym->links.effect_id;
     func_sym->links.effect_id = xa_effect_db_intern(ctx->analyzer->effect_db, &summary);
     if (func_sym->links.effect_id != previous_id)
         ctx->changed = true;
+    store_function_return_target(ctx, func_sym);
     xa_effect_summary_clear(&summary);
 
     ctx->current_summary = NULL;
+    ctx->current_return_target = function_value_target_none();
+    ctx->current_return_target_seen = false;
+    ctx->current_return_target_unknown = false;
     ctx->analyzer->current_scope = saved_scope;
     ctx->current_func = NULL;
 }
@@ -1252,4 +1462,5 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
 
 cleanup:
     xr_free(funcs);
+    xr_free(ctx.function_return_targets);
 }
