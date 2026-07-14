@@ -303,12 +303,18 @@ static bool is_current_caught_ref(ErrorSetCtx *ctx, AstNode *expr) {
 }
 
 static void maybe_record_catch_alias(ErrorSetCtx *ctx, AstNode *node) {
-    if (!ctx || !node || !ctx->current_caught || node->type != AST_CONST_DECL)
+    if (!ctx || !node || !ctx->current_caught ||
+        (node->type != AST_CONST_DECL && node->type != AST_VAR_DECL))
         return;
     VarDeclNode *decl = &node->as.var_decl;
     if (!decl->name || !decl->initializer || decl->symbol_id == 0 ||
         ctx->current_catch_alias_count >= 64)
         return;
+    if (node->type == AST_VAR_DECL) {
+        XaSymbol *sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, decl->symbol_id);
+        if (!sym || sym->kind != XA_SYM_VARIABLE || sym->links.assign_count != 1)
+            return;
+    }
     if (!is_current_caught_ref(ctx, decl->initializer))
         return;
     int slot = ctx->current_catch_alias_count++;
@@ -627,6 +633,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             break;
 
         case AST_VAR_DECL:
+            maybe_record_catch_alias(ctx, node);
             maybe_record_stable_function_value_var(ctx, node);
             es_walk_expr(ctx, node->as.var_decl.initializer);
             break;
