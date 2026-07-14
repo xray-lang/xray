@@ -879,15 +879,23 @@ static uint32_t hash_generic_inst_name_type_key(const char *name, const char **t
     return hash_folded32(h);
 }
 
-static uint32_t hash_method_signature_parts(XrTypeRef **param_types, int param_count,
-                                            XrTypeRef *return_type, bool is_static,
+static XrParamMode signature_param_mode(const XrParamMode *param_modes, int index) {
+    if (!param_modes)
+        return XR_PARAM_VALUE;
+    return xr_param_mode_is_valid(param_modes[index]) ? param_modes[index] : XR_PARAM_VALUE;
+}
+
+static uint32_t hash_method_signature_parts(XrTypeRef **param_types, const XrParamMode *param_modes,
+                                            int param_count, XrTypeRef *return_type, bool is_static,
                                             bool is_constructor) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     h = fold_u64(h, (uint64_t) param_count);
     h = fold_u64(h, is_static ? 1 : 0);
     h = fold_u64(h, is_constructor ? 1 : 0);
-    for (int i = 0; i < param_count; i++)
+    for (int i = 0; i < param_count; i++) {
+        h = fold_u64(h, signature_param_mode(param_modes, i));
         h = hash_tref(h, param_types ? param_types[i] : NULL);
+    }
     h = hash_tref(h, return_type);
     return (uint32_t) (h ^ (h >> 32));
 }
@@ -895,15 +903,15 @@ static uint32_t hash_method_signature_parts(XrTypeRef **param_types, int param_c
 static uint32_t hash_method_signature(const MethodDeclNode *m) {
     if (!m)
         return 0;
-    return hash_method_signature_parts(m->param_types, m->param_count, m->return_type, m->is_static,
-                                       m->is_constructor);
+    return hash_method_signature_parts(m->param_types, m->param_passing_modes, m->param_count,
+                                       m->return_type, m->is_static, m->is_constructor);
 }
 
 static uint32_t hash_interface_method_signature(const InterfaceMethodNode *m) {
     if (!m)
         return 0;
-    return hash_method_signature_parts(m->param_types, m->param_count, m->return_type, false,
-                                       false);
+    return hash_method_signature_parts(m->param_types, m->param_passing_modes, m->param_count,
+                                       m->return_type, false, false);
 }
 
 static uint32_t hash_function_signature(const FunctionDeclNode *f) {
@@ -913,6 +921,8 @@ static uint32_t hash_function_signature(const FunctionDeclNode *f) {
     h = fold_u64(h, (uint64_t) f->param_count);
     for (int i = 0; i < f->param_count; i++) {
         XrParamNode *p = f->params ? f->params[i] : NULL;
+        XrParamMode mode = p ? p->passing_mode : XR_PARAM_VALUE;
+        h = fold_u64(h, xr_param_mode_is_valid(mode) ? mode : XR_PARAM_VALUE);
         if (p && p->name)
             h = fold_bytes(h, p->name, strlen(p->name));
         h = hash_tref(h, p ? p->type : NULL);
