@@ -847,8 +847,7 @@ def generate_header(type_results, module_results):
         lines.append("static const XaBuiltinModule g_gen_builtin_modules[] = {")
         for mod_name, mod_data in sorted(module_results.items()):
             # A module emits a function table when it has methods OR typed
-            # constants — the latter alone (e.g. an "endian" module that
-            # only exports LE/BE) is enough to need a non-NULL slot.
+            # constants; constants alone are enough to need a non-NULL slot.
             has_function_slot = bool(mod_data.get('methods') or mod_data.get('constants'))
             func_ref = f"g_gen_{mod_name}_functions" if has_function_slot else "NULL"
             func_count = f"GEN_{mod_name.upper()}_FUNCTION_COUNT" if has_function_slot else "0"

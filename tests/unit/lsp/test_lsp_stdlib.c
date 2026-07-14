@@ -46,21 +46,25 @@ TEST(generated_modules_use_real_stdlib_names) {
 }
 
 TEST(generated_constants_preserve_kind_and_signature) {
-    const XlspModuleInfo *encoding = xlsp_stdlib_find_module("encoding");
-    ASSERT(encoding != NULL);
-
-    const XlspSymbolInfo *le = xlsp_stdlib_find_symbol(encoding, "LE");
-    ASSERT(le != NULL);
-    ASSERT(le->kind == XLSP_SYM_CONSTANT);
-    ASSERT_STR_EQ(le->signature, "int");
-    ASSERT(le->param_count == 0);
-
     const XlspModuleInfo *path = xlsp_stdlib_find_module("path");
     ASSERT(path != NULL);
     const XlspSymbolInfo *sep = xlsp_stdlib_find_symbol(path, "sep");
     ASSERT(sep != NULL);
     ASSERT(sep->kind == XLSP_SYM_CONSTANT);
     ASSERT_STR_EQ(sep->signature, "string");
+}
+
+TEST(generated_encoding_types_track_pure_module_exports) {
+    const XlspModuleInfo *encoding = xlsp_stdlib_find_module("encoding");
+    ASSERT(encoding != NULL);
+
+    const XlspSymbolInfo *options = xlsp_stdlib_find_symbol(encoding, "Utf16EncodeOptions");
+    ASSERT(options != NULL);
+    ASSERT(options->kind == XLSP_SYM_CLASS);
+    ASSERT_STR_EQ(options->signature, "type Utf16EncodeOptions");
+
+    ASSERT(xlsp_stdlib_find_symbol(encoding, "LE") == NULL);
+    ASSERT(xlsp_stdlib_find_symbol(encoding, "BE") == NULL);
 }
 
 TEST(generated_methods_use_def_overlay) {
@@ -91,6 +95,7 @@ int main(void) {
     printf("test_lsp_stdlib:\n");
     RUN_TEST(generated_modules_use_real_stdlib_names);
     RUN_TEST(generated_constants_preserve_kind_and_signature);
+    RUN_TEST(generated_encoding_types_track_pure_module_exports);
     RUN_TEST(generated_methods_use_def_overlay);
     RUN_TEST(generated_handle_types_surface_as_classes);
 

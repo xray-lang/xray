@@ -1,6 +1,5 @@
 import encoding
-import { HexError } from encoding
-import { LE as directLE, BE as directBE } from "encoding"
+import { HexError, Utf16DecodeOptions, Utf16EncodeOptions, Utf16Error } from encoding
 
 fn hexEncodeText(data: string) -> string {
     var view: Slice<byte> = data.bytes()
@@ -26,6 +25,28 @@ fn utf8ValidText(data: string) -> bool {
     return encoding.utf8Valid(view)
 }
 
+fn utf16EncodeOptions(order: Endian) -> Utf16EncodeOptions {
+    var options = Utf16EncodeOptions()
+    options.order = order
+    return options
+}
+
+fn utf16Options(order: Endian, consumeBom: bool = true) -> Utf16DecodeOptions {
+    var options = Utf16DecodeOptions()
+    options.order = order
+    options.consumeBom = consumeBom
+    return options
+}
+
+fn utf16DecodeFails(data: Slice<byte>) -> bool {
+    try {
+        var decoded = encoding.utf16Decode(data)
+        return len(decoded) < 0
+    } catch (e: Utf16Error) {
+        return true
+    }
+}
+
 print(hexEncodeText("Hello"))
 var decoded = encoding.hexDecode("48656c6c6f")
 print(len(decoded))
@@ -42,10 +63,8 @@ print(utf8ValidText("hello"))
 var invalidUtf8 = Array<byte>(1)
 invalidUtf8[0] = 0x80
 print(encoding.utf8Valid(invalidUtf8[:]))
-print(encoding.LE)
-print(encoding.BE)
-print(directLE)
-print(directBE)
+print(Endian.LE == Endian.LE)
+print(Endian.BE == Endian.BE)
 
 var u16le = encoding.utf16Encode("AB")
 print(len(u16le))
@@ -53,19 +72,20 @@ print(u16le[0])
 print(u16le[1])
 print(u16le[2])
 print(u16le[3])
-print(encoding.utf16Decode(u16le))
+print(encoding.utf16Decode(u16le[:]))
 
-var u16be = encoding.utf16Encode("AB", encoding.BE)
+var u16be = encoding.utf16Encode("AB", utf16EncodeOptions(Endian.BE))
 print(u16be[0])
 print(u16be[1])
-print(encoding.utf16Decode(u16be, encoding.BE))
-print(encoding.utf16Decode(u16be, encoding.BE, false))
+print(encoding.utf16Decode(u16be[:], utf16Options(Endian.BE)))
+print(encoding.utf16Decode(u16be[:], utf16Options(Endian.BE, false)))
 
 var bom = Array<byte>(4)
 bom[0] = 254
 bom[1] = 255
 bom[2] = 0
 bom[3] = 65
-print(encoding.utf16Decode(bom))
-print(encoding.utf16Decode(bom, encoding.BE, false) == "A")
-print(encoding.utf16Decode(Array<byte>(1)) == null)
+print(encoding.utf16Decode(bom[:]))
+print(encoding.utf16Decode(bom[:], utf16Options(Endian.BE, false)) == "A")
+var odd = Array<byte>(1)
+print(utf16DecodeFails(odd[:]))

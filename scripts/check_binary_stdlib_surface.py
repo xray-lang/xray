@@ -102,7 +102,6 @@ NULL_SENTINEL_SYMBOLS = {
     ("compress", "zlibDecompress"),
     ("crypto", "decrypt"),
     ("crypto", "hmac"),
-    ("encoding", "utf16Decode"),
     ("io", "readFileBytes"),
     ("net", "read"),
     ("net", "recvFrom"),

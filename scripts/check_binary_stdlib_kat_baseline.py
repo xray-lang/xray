@@ -87,6 +87,19 @@ BASELINES = (
         ),
     ),
     Baseline(
+        category="ENCODING_UTF16_TYPED_ERROR_KAT",
+        path="tests/regression/10_stdlib/1300_encoding.xr",
+        contains=(
+            "Utf16EncodeOptions",
+            "Utf16DecodeOptions",
+            "Utf16Error",
+            "utf16DecodeFails(low[:])",
+            "utf16DecodeFails(missing[:])",
+            "utf16DecodeFails(invalid[:])",
+            "consumeBom",
+        ),
+    ),
+    Baseline(
         category="COMPRESS_CHECKSUM_KAT",
         path="tests/regression/10_stdlib/1301_compress.xr",
         contains=(
@@ -157,7 +170,7 @@ BASELINES = (
         category="AOT_ENCODING_LINK_BASELINE",
         path="tests/aot/filetests/link/core_encoding.expect",
         contains=(
-            '"stdlib_symbols": ["encoding.HexError", "encoding.LE", "encoding.BE", "encoding.hexEncode", "encoding.hexDecode", "encoding.utf8Valid", "encoding.hexValid", "encoding.utf16Encode", "encoding.utf16Decode"]',
+            '"stdlib_symbols": ["encoding.HexError", "encoding.Utf16DecodeOptions", "encoding.Utf16EncodeOptions", "encoding.Utf16Error", "encoding.hexEncode", "encoding.hexDecode", "encoding.utf8Valid", "encoding.utf16Decode", "encoding.hexValid", "encoding.utf16Encode"]',
             'not_contains="runtime_objects": ["xray_core"]',
             'not_contains="stdlib_objects": ["encoding"]',
             "c_not_contains=xrt_encoding_",

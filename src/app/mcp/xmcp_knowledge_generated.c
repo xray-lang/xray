@@ -695,13 +695,38 @@ static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
     {
-        .name = "BE",
-        .signature = ": int",
+        .name = "Utf16DecodeOptions",
+        .signature = "Utf16DecodeOptions",
         .summary = "",
     },
     {
-        .name = "LE",
-        .signature = ": int",
+        .name = "Utf16DecodeOptions.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "Utf16DecodeOptions.consumeBom",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "Utf16DecodeOptions.order",
+        .signature = ": Endian",
+        .summary = "",
+    },
+    {
+        .name = "Utf16EncodeOptions",
+        .signature = "Utf16EncodeOptions",
+        .summary = "",
+    },
+    {
+        .name = "Utf16EncodeOptions.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "Utf16EncodeOptions.order",
+        .signature = ": Endian",
         .summary = "",
     },
     {
@@ -721,12 +746,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
     },
     {
         .name = "utf16Decode",
-        .signature = "(data: Array<byte>, endian: int = 0, stripBom: bool = true): string?",
+        .signature = "(data: Slice<byte>, options: Utf16DecodeOptions? = null): string",
         .summary = "",
     },
     {
         .name = "utf16Encode",
-        .signature = "(data: string, endian: int = 0): Array<byte>",
+        .signature = "(data: string, options: Utf16EncodeOptions? = null): Array<byte>",
         .summary = "",
     },
     {
@@ -5957,13 +5982,18 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `encoding.BE` | `: int` |  |\n"
-            "| `encoding.LE` | `: int` |  |\n"
+            "| `Utf16DecodeOptions` | `Utf16DecodeOptions` |  |\n"
+            "| `Utf16DecodeOptions.constructor` | `(): ()` |  |\n"
+            "| `Utf16DecodeOptions.consumeBom` | `: bool` |  |\n"
+            "| `Utf16DecodeOptions.order` | `: Endian` |  |\n"
+            "| `Utf16EncodeOptions` | `Utf16EncodeOptions` |  |\n"
+            "| `Utf16EncodeOptions.constructor` | `(): ()` |  |\n"
+            "| `Utf16EncodeOptions.order` | `: Endian` |  |\n"
             "| `encoding.hexDecode` | `(hex: string): Array<byte>` |  |\n"
             "| `encoding.hexEncode` | `(data: Slice<byte>): string` |  |\n"
             "| `encoding.hexValid` | `(hex: string): bool` |  |\n"
-            "| `encoding.utf16Decode` | `(data: Array<byte>, endian: int = 0, stripBom: bool = true): string?` |  |\n"
-            "| `encoding.utf16Encode` | `(data: string, endian: int = 0): Array<byte>` |  |\n"
+            "| `encoding.utf16Decode` | `(data: Slice<byte>, options: Utf16DecodeOptions? = null): string` |  |\n"
+            "| `encoding.utf16Encode` | `(data: string, options: Utf16EncodeOptions? = null): Array<byte>` |  |\n"
             "| `encoding.utf8Valid` | `(data: Slice<byte>): bool` |  |\n"
             "",
         .symbols = _symbols_encoding,
