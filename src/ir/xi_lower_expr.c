@@ -7187,6 +7187,9 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
     if (!val)
         return NULL;
 
+    XrType *target_type =
+        (tref && l && l->analyzer) ? xr_tref_resolve_in_analyzer(l->analyzer, tref) : NULL;
+
     /* Resolve the target type to a runtime value so the VM can use it
      * directly from a register:
      *   - Primitive types → XI_CONST with XrTypeId
@@ -7289,7 +7292,7 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
     v->args[0] = val;
     if (type_val)
         v->args[1] = type_val;
-    v->aux = (void *) tref;
+    v->aux = (void *) target_type;
     v->line = (uint32_t) line;
     return v;
 }

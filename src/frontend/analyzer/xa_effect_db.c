@@ -88,6 +88,27 @@ static bool bitset_set(XaBitSet *set, uint32_t bit) {
     return true;
 }
 
+static bool bitset_clear_bit(XaBitSet *set, uint32_t bit) {
+    if (!set)
+        return false;
+    uint32_t word_index = bit / 64u;
+    uint32_t bit_index = bit % 64u;
+    if (word_index >= set->word_count)
+        return false;
+    set->words[word_index] &= ~(UINT64_C(1) << bit_index);
+    return true;
+}
+
+static bool bitset_has_any(const XaBitSet *set) {
+    if (!set)
+        return false;
+    for (uint32_t i = 0; i < set->word_count; i++) {
+        if (set->words[i] != 0)
+            return true;
+    }
+    return false;
+}
+
 bool xa_bitset_test(const XaBitSet *set, uint32_t bit) {
     if (!set)
         return false;
@@ -415,6 +436,23 @@ bool xa_effect_summary_add_type_from_summary(XaEffectDatabase *db, XaEffectSumma
     return true;
 }
 
+bool xa_effect_summary_add_variant_from_summary(XaEffectDatabase *db, XaEffectSummary *summary,
+                                                const XaEffectSummary *src, XaErrorTypeId type_id,
+                                                XaErrorVariantId variant_id) {
+    if (!db || !summary || !src || type_id == XA_ERROR_TYPE_NONE ||
+        variant_id == XA_ERROR_VARIANT_INVALID)
+        return false;
+    for (uint32_t i = 0; i < src->escaping.count; i++) {
+        const XaErrorTypeSet *type_set = &src->escaping.types[i];
+        if (type_set->type_id != type_id)
+            continue;
+        if (type_set->all_variants || xa_bitset_test(&type_set->variants, variant_id))
+            return xa_effect_summary_add_variant(db, summary, type_id, variant_id);
+        return true;
+    }
+    return true;
+}
+
 void xa_effect_summary_clear_escaping(XaEffectSummary *summary) {
     if (!summary)
         return;
@@ -445,6 +483,44 @@ bool xa_effect_summary_subtract_type(XaEffectSummary *summary, XaErrorTypeId typ
         return true;
     }
     return false;
+}
+
+bool xa_effect_summary_subtract_variant(XaEffectDatabase *db, XaEffectSummary *summary,
+                                        XaErrorTypeId type_id, XaErrorVariantId variant_id) {
+    if (!db || !summary || type_id == XA_ERROR_TYPE_NONE || variant_id == XA_ERROR_VARIANT_INVALID)
+        return false;
+    XaErrorTypeInfo *info = db_type_info_mut(db, type_id);
+    if (!info || variant_id >= info->variant_count)
+        return false;
+    for (uint32_t i = 0; i < summary->escaping.count; i++) {
+        XaErrorTypeSet *set = &summary->escaping.types[i];
+        if (set->type_id != type_id)
+            continue;
+        if (set->all_variants) {
+            set->all_variants = false;
+            bitset_free(&set->variants);
+            for (uint32_t vid = 0; vid < info->variant_count; vid++) {
+                if (vid != variant_id && !bitset_set(&set->variants, vid))
+                    return false;
+            }
+        } else {
+            bitset_clear_bit(&set->variants, variant_id);
+        }
+        if (!bitset_has_any(&set->variants)) {
+            bitset_free(&set->variants);
+            if (i + 1u < summary->escaping.count) {
+                memmove(&summary->escaping.types[i], &summary->escaping.types[i + 1u],
+                        (size_t) (summary->escaping.count - i - 1u) * sizeof(XaErrorTypeSet));
+            }
+            summary->escaping.count--;
+            if (summary->escaping.count < summary->escaping.capacity)
+                memset(&summary->escaping.types[summary->escaping.count], 0,
+                       sizeof(XaErrorTypeSet));
+        }
+        summary->fingerprint = 0;
+        return true;
+    }
+    return true;
 }
 
 void xa_effect_summary_mark_incomplete(XaEffectSummary *summary, XaUnknownReason reason) {

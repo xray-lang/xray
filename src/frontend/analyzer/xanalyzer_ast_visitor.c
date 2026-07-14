@@ -285,8 +285,10 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             visit_node(node->as.try_catch.try_body, v);
             for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
                 XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
-                if (cc)
+                if (cc) {
+                    visit_node(cc->pattern, v);
                     visit_node(cc->body, v);
+                }
             }
             break;
 

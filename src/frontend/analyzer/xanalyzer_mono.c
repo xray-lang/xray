@@ -640,8 +640,10 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                     dc->var_line = sc->var_line;
                     dc->var_column = sc->var_column;
                     dc->type = sub_tref(sc->type, map, mc);
+                    dc->pattern = xr_ast_clone_ctx(sc->pattern, map, mc, clone_ctx);
                     dc->body = xr_ast_clone_ctx(sc->body, map, mc, clone_ctx);
                     dc->symbol_id = 0;
+                    dc->is_panic = sc->is_panic;
                     dst_tc->catch_clauses[ci] = dc;
                 }
             }

@@ -55,6 +55,94 @@ static void es_summary_add_enum_case(XaEffectDatabase *db, XaEffectSummary *summ
     xa_effect_summary_add_variant(db, summary, type_id, variant_id);
 }
 
+typedef struct ErrorSetCtx ErrorSetCtx;
+
+typedef struct CatchEffectPattern {
+    bool catch_all;
+    bool has_enum;
+    bool has_variant;
+    XrType *enum_type;
+    XaErrorTypeId type_id;
+    XaErrorVariantId variant_id;
+} CatchEffectPattern;
+
+static const char *catch_pattern_variant_name(AstNode *pattern) {
+    if (!pattern)
+        return NULL;
+    if (pattern->type == AST_PATTERN_ADT) {
+        AstNode *variant = pattern->as.pattern_adt.variant;
+        if (!variant)
+            return NULL;
+        if (variant->type == AST_ENUM_ACCESS)
+            return variant->as.enum_access.member_name;
+        if (variant->type == AST_MEMBER_ACCESS)
+            return variant->as.member_access.name;
+        return NULL;
+    }
+    if (pattern->type != AST_PATTERN_LITERAL || !pattern->as.pattern_literal.value)
+        return NULL;
+    AstNode *value = pattern->as.pattern_literal.value;
+    if (value->type == AST_ENUM_ACCESS)
+        return value->as.enum_access.member_name;
+    if (value->type == AST_MEMBER_ACCESS)
+        return value->as.member_access.name;
+    return NULL;
+}
+
+static bool catch_pattern_is_wildcard(AstNode *pattern) {
+    return pattern && pattern->type == AST_PATTERN_WILDCARD;
+}
+
+static int enum_variant_index_for_name(XaAnalyzer *analyzer, XrType *enum_type,
+                                       const char *variant_name) {
+    if (!analyzer || !enum_type || !variant_name || !XR_TYPE_IS_ENUM(enum_type))
+        return -1;
+    const XrEnumLayout *layout = enum_type->enum_type.layout;
+    if (layout) {
+        for (uint32_t i = 0; i < layout->variant_count; i++) {
+            if (layout->variants[i].name && strcmp(layout->variants[i].name, variant_name) == 0)
+                return (int) i;
+        }
+    }
+    const char *enum_name = enum_type->enum_type.enum_name;
+    if (!enum_name)
+        return -1;
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, enum_name);
+    if (!sym || sym->kind != XA_SYM_ENUM)
+        sym = xa_analyzer_lookup_in_scope(analyzer, enum_name, analyzer->global_scope);
+    if (!sym || sym->kind != XA_SYM_ENUM)
+        sym = xa_analyzer_lookup_deep(analyzer, enum_name);
+    XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
+    return links && links->enum_info ? xa_enum_info_find_variant(links->enum_info, variant_name)
+                                     : -1;
+}
+
+static CatchEffectPattern catch_effect_pattern(XaAnalyzer *analyzer, XrCatchClause *cc) {
+    CatchEffectPattern result = {0};
+    if (!analyzer || !cc || cc->is_panic)
+        return result;
+    if (!cc->type) {
+        if (!cc->pattern || catch_pattern_is_wildcard(cc->pattern))
+            result.catch_all = true;
+        return result;
+    }
+    XrType *catch_type = xr_tref_resolve_in_analyzer(analyzer, cc->type);
+    if (!catch_type || !XR_TYPE_IS_ENUM(catch_type))
+        return result;
+    result.enum_type = catch_type;
+    result.type_id = xa_effect_db_register_error_enum(analyzer->effect_db, catch_type);
+    result.has_enum = result.type_id != XA_ERROR_TYPE_NONE;
+    const char *variant_name = catch_pattern_variant_name(cc->pattern);
+    if (variant_name) {
+        int index = enum_variant_index_for_name(analyzer, catch_type, variant_name);
+        if (index >= 0) {
+            result.has_variant = true;
+            result.variant_id = (XaErrorVariantId) index;
+        }
+    }
+    return result;
+}
+
 /* ========== Internal Context ========== */
 
 typedef struct FunctionValueTarget {
@@ -90,7 +178,7 @@ typedef struct FunctionExprCaptureEntry {
     FunctionValueAliasState state;
 } FunctionExprCaptureEntry;
 
-typedef struct ErrorSetCtx {
+struct ErrorSetCtx {
     XaAnalyzer *analyzer;
     XaEffectSummary *current_summary; /* Effect summary being built for current function */
     const char *current_catch_var;    /* Catch variable currently in scope, if any */
@@ -120,7 +208,7 @@ typedef struct ErrorSetCtx {
     XaEffectSummary *current_caught; /* Effect subset caught by current catch clause */
     XaSymbol *current_func;          /* Current function symbol */
     bool changed;                    /* Fixpoint: did anything change this iteration? */
-} ErrorSetCtx;
+};
 
 static bool es_summary_add_enum_selection(ErrorSetCtx *ctx, const XaSelection *sel) {
     if (!ctx || !sel || sel->kind != XA_SEL_ENUM_MEMBER)
@@ -1580,22 +1668,28 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                     XrCatchClause *cc = tc->catch_clauses[i];
                     if (!cc || cc->is_panic)
                         continue;
-                    if (!cc->type) {
+                    CatchEffectPattern cep = catch_effect_pattern(ctx->analyzer, cc);
+                    if (cep.catch_all) {
                         if (caught_summaries)
                             xa_effect_summary_add_summary(ctx->analyzer->effect_db,
                                                           &caught_summaries[i], &try_summary);
                         xa_effect_summary_clear_escaping(&try_summary);
                         continue;
                     }
-                    XrType *catch_type = xr_tref_resolve_in_analyzer(ctx->analyzer, cc->type);
-                    if (catch_type && XR_TYPE_IS_ENUM(catch_type)) {
-                        XaErrorTypeId type_id =
-                            xa_effect_db_register_error_enum(ctx->analyzer->effect_db, catch_type);
+                    if (cep.has_enum) {
                         if (caught_summaries)
-                            xa_effect_summary_add_type_from_summary(ctx->analyzer->effect_db,
-                                                                    &caught_summaries[i],
-                                                                    &try_summary, type_id);
-                        xa_effect_summary_subtract_type(&try_summary, type_id);
+                            (cep.has_variant ? xa_effect_summary_add_variant_from_summary(
+                                                   ctx->analyzer->effect_db, &caught_summaries[i],
+                                                   &try_summary, cep.type_id, cep.variant_id)
+                                             : xa_effect_summary_add_type_from_summary(
+                                                   ctx->analyzer->effect_db, &caught_summaries[i],
+                                                   &try_summary, cep.type_id));
+                        if (cep.has_variant)
+                            xa_effect_summary_subtract_variant(ctx->analyzer->effect_db,
+                                                               &try_summary, cep.type_id,
+                                                               cep.variant_id);
+                        else
+                            xa_effect_summary_subtract_type(&try_summary, cep.type_id);
                     }
                 }
                 xa_effect_summary_add_summary(ctx->analyzer->effect_db, outer_summary,

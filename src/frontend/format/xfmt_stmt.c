@@ -130,7 +130,10 @@ static void fmt_try_catch(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_str(ctx, " catch");
         if (cc->is_panic)
             xfmt_write_str(ctx, " panic");
-        if (cc->var_name) {
+        if (cc->pattern) {
+            xfmt_write_space(ctx);
+            xfmt_emit_expression(ctx, cc->pattern);
+        } else if (cc->var_name) {
             xfmt_write_str(ctx, " (");
             xfmt_write_str(ctx, cc->var_name);
             if (cc->type) {

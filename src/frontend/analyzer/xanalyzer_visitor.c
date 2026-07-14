@@ -18,6 +18,7 @@
 #include "xanalyzer_errorset.h"
 #include "xconsteval.h"
 #include "xtype_ref_resolve.h"
+#include "../parser/xtype_ref.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
 #include "../../base/xstorage.h"
@@ -1568,6 +1569,25 @@ static XrType *xa_resolve_catch_binding_type(XaInferContext *ctx, XrCatchClause 
     if (report_diagnostics)
         xa_report_non_enum_catch_type(ctx, cc, type);
     return type ? type : xr_type_new_unknown(ctx->analyzer ? ctx->analyzer->isolate : NULL);
+}
+
+static bool xa_catch_pattern_is_bare_type(const XrCatchClause *cc) {
+    if (!cc || !cc->pattern || !cc->type || cc->type->kind != XR_TREF_NAMED || !cc->type->name)
+        return false;
+    AstNode *pattern = cc->pattern;
+    if (pattern->type != AST_PATTERN_LITERAL || !pattern->as.pattern_literal.value)
+        return false;
+    AstNode *value = pattern->as.pattern_literal.value;
+    return value->type == AST_VARIABLE && value->as.variable.name &&
+           strcmp(value->as.variable.name, cc->type->name) == 0;
+}
+
+static void xa_register_catch_pattern_bindings(XaInferContext *ctx, XrCatchClause *cc,
+                                               XrType *catch_type) {
+    if (!ctx || !cc || !cc->pattern || xa_catch_pattern_is_bare_type(cc) ||
+        !xa_pattern_has_binding(cc->pattern))
+        return;
+    xa_register_pattern_bindings(ctx, cc->pattern, catch_type);
 }
 
 static bool xa_is_hashable_interface_type(XrType *type) {
@@ -3295,6 +3315,10 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                         err_links->type = xa_resolve_catch_binding_type(ctx, cc, false);
                         err_links->is_definitely_assigned = true;
                     }
+                }
+                if (cc->pattern) {
+                    XrType *catch_type = xa_resolve_catch_binding_type(ctx, cc, false);
+                    xa_register_catch_pattern_bindings(ctx, cc, catch_type);
                 }
                 xa_visit_collect(ctx, cc->body);
                 xa_analyzer_exit_scope(ctx->analyzer);
@@ -5540,6 +5564,10 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         err_links->type = xa_resolve_catch_binding_type(ctx, cc, true);
                         err_links->is_definitely_assigned = true;
                     }
+                }
+                if (cc->pattern) {
+                    XrType *catch_type = xa_resolve_catch_binding_type(ctx, cc, true);
+                    xa_register_catch_pattern_bindings(ctx, cc, catch_type);
                 }
                 xa_visit_infer_stmt(ctx, cc->body);
                 xa_analyzer_exit_scope(ctx->analyzer);

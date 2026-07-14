@@ -1,0 +1,48 @@
+// anchor: pattern-catch
+enum PayloadErr {
+    Boom,
+    Other,
+    Payload(code: int)
+}
+
+fn fail(kind: int) {
+    if (kind == 0) {
+        throw PayloadErr.Boom
+    }
+    if (kind == 1) {
+        throw PayloadErr.Other
+    }
+    if (kind == 2) {
+        throw PayloadErr.Payload(7)
+    }
+}
+
+fn classify(kind: int) -> string {
+    var tag = "ok"
+    try {
+        fail(kind)
+    } catch PayloadErr.Boom {
+        tag = "boom"
+    } catch PayloadErr.Payload(code) {
+        tag = "payload:${code}"
+    } catch PayloadErr.Other {
+        tag = "other"
+    }
+    return tag
+}
+
+fn classify_all(kind: int) -> string {
+    var tag = "ok"
+    try {
+        fail(kind)
+    } catch PayloadErr {
+        tag = "any"
+    }
+    return tag
+}
+
+print(classify(0))
+print(classify(1))
+print(classify(2))
+print(classify(3))
+print(classify_all(1))

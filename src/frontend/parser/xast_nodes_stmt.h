@@ -90,12 +90,14 @@ typedef struct ContinueStmtNode {
 
 /* ========== Exception Handling ========== */
 
-// A single catch clause: catch (e), catch (e: NetErr), or catch panic (p)
+// A single catch clause: catch (e), catch (e: NetErr), catch NetErr.Case(x),
+// catch NetErr, or catch panic (p)
 typedef struct XrCatchClause {
     char *var_name;
-    int var_line;     // Line of catch variable (1-indexed)
-    int var_column;   // Column of catch variable (1-indexed)
-    XrTypeRef *type;  // Type filter annotation (NULL = catch-all)
+    int var_line;      // Line of catch variable (1-indexed)
+    int var_column;    // Column of catch variable (1-indexed)
+    XrTypeRef *type;   // Type filter annotation (NULL = catch-all)
+    AstNode *pattern;  // Pattern filter for final pattern-catch syntax
     AstNode *body;
     uint32_t symbol_id;  // Analyzer-assigned unique ID; 0 = unresolved
     bool is_panic;       // true = catch panic (p) clause for panic channel handling
