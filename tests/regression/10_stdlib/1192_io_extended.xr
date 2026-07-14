@@ -2,10 +2,11 @@
 
 import io
 import os
+import path
 
 @test
 fn test_basic_file_ops() {
-    var tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile()!
     assert(io.exists(tmp))
     io.writeFile(tmp, "hello\nworld\ntest")
     assert_eq(io.readFile(tmp) ?? "", "hello\nworld\ntest")
@@ -17,7 +18,7 @@ fn test_basic_file_ops() {
 
 @test
 fn test_file_info() {
-    var tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile()!
     io.writeFile(tmp, "test content")
     var st = io.stat(tmp)
     assert(st != null)
@@ -30,12 +31,12 @@ fn test_file_info() {
 
 @test
 fn test_directory_ops() {
-    var tmpDir = io.tempDir() ?? ""
+    var tmpDir = io.tempDir()!
     assert(io.isDir(tmpDir))
-    var nested = tmpDir + "/a/b/c"
+    var nested = path.join(tmpDir, path.from("a/b/c"))
     io.mkdirp(nested)
     assert(io.isDir(nested))
-    io.writeFile(tmpDir + "/file1.txt", "file1")
+    io.writeFile(path.join(tmpDir, path.from("file1.txt")), "file1")
     var entries = io.readDir(tmpDir)
     assert(len(entries) >= 1)
     var allFiles = io.readDirRecursive(tmpDir)
@@ -46,13 +47,13 @@ fn test_directory_ops() {
 
 @test
 fn test_copy_and_move() {
-    var src = io.tempFile() ?? ""
+    var src = io.tempFile()!
     io.writeFile(src, "copy test")
-    var dst = src + ".copy"
+    var dst = path.from(src.toString() + ".copy")
     io.copyFile(src, dst)
     assert(io.exists(dst))
     assert_eq(io.readFile(dst) ?? "", "copy test")
-    var moved = src + ".moved"
+    var moved = path.from(src.toString() + ".moved")
     io.rename(dst, moved)
     assert(!io.exists(dst))
     assert(io.exists(moved))
@@ -62,7 +63,7 @@ fn test_copy_and_move() {
 
 @test
 fn test_touch_and_chmod() {
-    var tmp = io.tempFile() ?? ""
+    var tmp = io.tempFile()!
     io.remove(tmp)
     io.touch(tmp)
     assert(io.exists(tmp))
@@ -78,18 +79,18 @@ fn test_touch_and_chmod() {
 
 @test
 fn test_realpath() {
-    var cwd = io.cwd() ?? ""
-    var resolved = io.realpath(".") ?? ""
-    assert_eq(resolved, cwd)
+    var cwd = io.cwd()
+    var resolved = io.realpath(path.from("."))!
+    assert_eq(resolved.toString(), cwd.toString())
 }
 
 @test
 fn test_chdir() {
-    var original = io.cwd() ?? ""
-    var tmpDir = io.tempDir() ?? ""
-    var tmpDirReal = io.realpath(tmpDir) ?? ""
+    var original = io.cwd()
+    var tmpDir = io.tempDir()!
+    var tmpDirReal = io.realpath(tmpDir)!
     io.chdir(tmpDir)
-    assert_eq(io.cwd() ?? "", tmpDirReal)
+    assert_eq(io.cwd().toString(), tmpDirReal.toString())
     io.chdir(original)
     io.removeAll(tmpDir)
 }

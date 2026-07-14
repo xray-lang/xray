@@ -1,10 +1,11 @@
 import io
 import os
+import path
 
-var root = io.tempDir() ?? ""
-print(len(root) > 0)
+var root = io.tempDir()!
+print(len(root.toString()) > 0)
 
-var file = root + "/mode.txt"
+var file = path.join(root, path.from("mode.txt"))
 print(io.writeFile(file, "mode"))
 
 print(io.chmod(file, 420))

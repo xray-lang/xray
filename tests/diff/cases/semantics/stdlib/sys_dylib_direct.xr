@@ -3,23 +3,24 @@
 // separate FFI concern.
 import mem
 import os
+import path
 import sys
 import { Dylib } from sys
 
-var path = ""
+var libPath = ""
 var symName = "printf"
 if (os.platform == "darwin") {
-    path = "/usr/lib/libSystem.B.dylib"
+    libPath = "/usr/lib/libSystem.B.dylib"
 } else if (os.platform == "linux") {
-    path = "libc.so.6"
+    libPath = "libc.so.6"
 } else if (os.platform == "windows") {
-    path = "kernel32.dll"
+    libPath = "kernel32.dll"
     symName = "GetCurrentProcessId"
 }
 
 var lib: Dylib? = null
-if (len(path) > 0) {
-    lib = sys.Dylib.open(path)
+if (len(libPath) > 0) {
+    lib = sys.Dylib.open(path.from(libPath))
 }
 print(lib != null)
 if (lib != null) {
@@ -39,6 +40,6 @@ if (lib != null) {
     print(lib!.symbol(symName) == null)
 }
 
-var missingLib = sys.Dylib.open("__xray_missing_library_for_dylib_test__")
+var missingLib = sys.Dylib.open(path.from("__xray_missing_library_for_dylib_test__"))
 print(missingLib == null)
 print(len(sys.Dylib.lastError()) > 0)

@@ -339,7 +339,7 @@ static inline XrValue xrt_io_cwd(void) {
     char buf[XR_PATH_LIMIT_MAX_PATH];
     if (!xrt_io_platform_getcwd(buf, sizeof(buf)))
         return XR_NULL_VAL;
-    return xrt_str_from_cstr(buf);
+    return xrt_path_from_cstr(buf);
 }
 
 static inline XrValue xrt_io_chdir(const char *path_data, int64_t path_len) {
@@ -533,7 +533,7 @@ static inline XrValue xrt_io_realpath(const char *path_data, int64_t path_len) {
     XRT_FREE(owned);
     XrIoCorePathView view;
     return ok && xr_io_core_path_result_cstr_view(resolved, &view)
-               ? xrt_io_str_slice(view.data, view.len)
+               ? xrt_path_from_slice(view.data, view.len)
                : XR_NULL_VAL;
 }
 
@@ -699,7 +699,7 @@ static inline XrValue xrt_io_readlink(const char *path_data, int64_t path_len) {
             if (len > 0 && len < sizeof(buf)) {
                 XrIoCorePathView view;
                 if (xr_io_core_path_result_view(buf, (size_t) len, &view))
-                    result = xrt_io_str_slice(view.data, view.len);
+                    result = xrt_path_from_slice(view.data, view.len);
             }
         }
 #else
@@ -707,7 +707,7 @@ static inline XrValue xrt_io_readlink(const char *path_data, int64_t path_len) {
         if (len >= 0) {
             XrIoCorePathView view;
             if (xr_io_core_path_result_view(buf, (size_t) len, &view))
-                result = xrt_io_str_slice(view.data, view.len);
+                result = xrt_path_from_slice(view.data, view.len);
         }
 #endif
     }
@@ -739,7 +739,7 @@ static inline XrValue xrt_io_temp_file(void) {
         return XR_NULL_VAL;
     close(fd);
 #endif
-    return xrt_str_from_cstr(tpl);
+    return xrt_path_from_cstr(tpl);
 }
 
 static inline XrValue xrt_io_temp_dir(void) {
@@ -762,7 +762,7 @@ static inline XrValue xrt_io_temp_dir(void) {
     if (!mkdtemp(tpl))
         return XR_NULL_VAL;
 #endif
-    return xrt_str_from_cstr(tpl);
+    return xrt_path_from_cstr(tpl);
 }
 
 typedef struct XrtIoReadDirEmitCtx {
@@ -771,7 +771,7 @@ typedef struct XrtIoReadDirEmitCtx {
 
 static inline bool xrt_io_read_dir_emit(void *ctx, const char *path) {
     XrtIoReadDirEmitCtx *emit = (XrtIoReadDirEmitCtx *) ctx;
-    xrt_array_push(emit->arr, xrt_str_from_cstr(path));
+    xrt_array_push(emit->arr, xrt_path_from_cstr(path));
     return true;
 }
 

@@ -36,6 +36,7 @@ typedef struct CgAotStdlibMethod {
     const char *shim;   /* xr_aot_<module>_<method> runtime symbol */
     /* One character per argument describing how it is passed to the shim:
      *   's' = string, lowered to specialized (const char *data, int64_t len)
+     *   'p' = Path owner, lowered to specialized (const char *data, int64_t len)
      *   'v' = tagged XrValue passed as-is
      *   '*' = variadic strings, lowered to (argc, data[], len[]) */
     const char *arg_spec;
@@ -192,6 +193,12 @@ static void cg_emit_aot_stdlib_args(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
             fprintf(out, "xr_str_data(");
             emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
             fprintf(out, "), xr_str_len(");
+            emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
+            fprintf(out, ")");
+        } else if (spec == 'p') {
+            fprintf(out, "xrt_path_data(");
+            emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
+            fprintf(out, "), xrt_path_len(");
             emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
             fprintf(out, ")");
         } else {

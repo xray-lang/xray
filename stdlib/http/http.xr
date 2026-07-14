@@ -10,6 +10,7 @@ import { encode, decodeForm, parse as parseUrl, resolve as resolveUrl } from url
 import crypto
 import io
 import net
+import "path" as pathutil
 import time
 
 const COOKIE_MAX_INPUT_LEN = 8192
@@ -440,15 +441,6 @@ fn _limitExceeded(limit: int, current: int, added: int) -> bool {
 
 fn _boundary() -> string {
     return "----XrayFormBoundary" + crypto.randomBytes(16)
-}
-
-fn _basename(path: string) -> string {
-    var start = 0
-    for (var i = 0; i < len(path); i++) {
-        var c = path.runes().nth(i)
-        if (c == "/" || c == "\\") { start = i + 1 }
-    }
-    return path.slice(start)
 }
 
 fn _guessMimeType(filename: string) -> string {
@@ -1028,7 +1020,7 @@ class FormData {
         return true
     }
 
-    appendFile(name: string, path: string) -> bool {
+    appendFile(name: string, path: Path) -> bool {
         var data = io.readFile(path)
         if (data == null) { return false }
 
@@ -1038,7 +1030,7 @@ class FormData {
         if (_limitExceeded(this.maxFileSize, 0, size)) { return false }
         if (_limitExceeded(this.maxTotalSize, this.totalSize, size)) { return false }
 
-        var filename = _basename(path)
+        var filename = pathutil.basename(path)
         if (len(filename) == 0) { filename = "file" }
         this.fields.push(_FormField("file", name, content, filename, _guessMimeType(filename)))
         this.totalSize = this.totalSize + size

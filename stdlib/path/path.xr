@@ -18,17 +18,29 @@ import os
 const sep = "/"
 const delimiter = ":"
 
+class Path {
+    raw: string
+
+    constructor(raw: string) {
+        this.raw = raw
+    }
+
+    toString() -> string {
+        return this.raw
+    }
+}
+
 // PathInfo — the structured result of `parse`: a typed class so
 // `.root`/`.dir`/`.base`/`.name`/`.ext` are checked fields rather than dynamic
 // map lookups.
 class PathInfo {
     root: string
-    dir: string
+    dir: Path
     base: string
     name: string
     ext: string
 
-    constructor(root: string, dir: string, base: string, name: string, ext: string) {
+    constructor(root: string, dir: Path, base: string, name: string, ext: string) {
         this.root = root
         this.dir = dir
         this.base = base
@@ -42,7 +54,7 @@ fn _isSep(c: string) -> bool {
 }
 
 // isAbsolute — POSIX: a leading '/'.
-fn isAbsolute(p: string) -> bool {
+fn _isAbsoluteRaw(p: string) -> bool {
     if (len(p) == 0) { return false }
     return _isSep(p.slice(0, (0) + 1))
 }
@@ -52,12 +64,12 @@ fn isAbsolute(p: string) -> bool {
 // separator on a joined segment is dropped so joins never double up. `resolve`
 // builds its segment list dynamically and calls this directly; `join` is the
 // ergonomic variadic wrapper.
-fn joinAll(parts: Array<string>) -> string {
+fn _joinAllRaw(parts: Array<string>) -> string {
     var n = len(parts)
     var start = 0
     for (var i = 0; i < n; i++) {
         var p = parts[i]
-        if (len(p) > 0 && isAbsolute(p)) { start = i }
+        if (len(p) > 0 && _isAbsoluteRaw(p)) { start = i }
     }
 
     var out = ""
@@ -78,13 +90,13 @@ fn joinAll(parts: Array<string>) -> string {
     return out
 }
 
-// join — variadic ergonomic form, e.g. join("a", "b", "c").
-fn join(...parts: string) -> string {
-    return joinAll(parts)
+// join — variadic raw helper used by the public `Path` owner API.
+fn _joinRaw(...parts: string) -> string {
+    return _joinAllRaw(parts)
 }
 
 // dirname — the directory portion, or "." / "/" for the degenerate cases.
-fn dirname(p: string) -> string {
+fn _dirnameRaw(p: string) -> string {
     if (len(p) == 0) { return "." }
     var end = len(p)
     while (end > 0 && _isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
@@ -98,7 +110,7 @@ fn dirname(p: string) -> string {
 }
 
 // basename — the final path component, trailing separators stripped.
-fn basename(p: string) -> string {
+fn _basenameRaw(p: string) -> string {
     if (len(p) == 0) { return "" }
     var end = len(p)
     while (end > 0 && _isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
@@ -110,7 +122,7 @@ fn basename(p: string) -> string {
 
 // extname — the extension including the leading dot, or "" when there is none.
 // A leading dot on the basename (dotfile) is not an extension.
-fn extname(p: string) -> string {
+fn _extnameRaw(p: string) -> string {
     if (len(p) == 0) { return "" }
     var end = len(p)
     while (end > 0 && _isSep(p.slice(end - 1, (end - 1) + 1))) { end = end - 1 }
@@ -132,7 +144,7 @@ fn extname(p: string) -> string {
 }
 
 // normalize — collapse '.'/'..' and redundant separators.
-fn normalize(p: string) -> string {
+fn _normalizeRaw(p: string) -> string {
     if (len(p) == 0) { return "." }
     var isAbs = _isSep(p.slice(0, (0) + 1))
 
@@ -162,9 +174,9 @@ fn normalize(p: string) -> string {
 }
 
 // relative — the path from `fromRaw` to `toRaw`, both normalized first.
-fn relative(fromRaw: string, toRaw: string) -> string {
-    var fromP = normalize(fromRaw)
-    var toP = normalize(toRaw)
+fn _relativeRaw(fromRaw: string, toRaw: string) -> string {
+    var fromP = _normalizeRaw(fromRaw)
+    var toP = _normalizeRaw(toRaw)
     var fromLen = len(fromP)
     var toLen = len(toP)
 
@@ -214,10 +226,10 @@ fn relative(fromRaw: string, toRaw: string) -> string {
 
 // resolve — join the inputs into an absolute, normalized path. When no input
 // is absolute, the current working directory anchors the result.
-fn resolve(...parts: string) -> string {
+fn _resolveRawArray(parts: Array<string>) -> string {
     var hasAbs = false
     for (var i = 0; i < len(parts); i++) {
-        if (len(parts[i]) > 0 && isAbsolute(parts[i])) { hasAbs = true }
+        if (len(parts[i]) > 0 && _isAbsoluteRaw(parts[i])) { hasAbs = true }
     }
 
     var all: Array<string> = []
@@ -228,27 +240,27 @@ fn resolve(...parts: string) -> string {
         all.push(parts[i])
     }
 
-    return normalize(joinAll(all))
+    return _normalizeRaw(_joinAllRaw(all))
 }
 
 // parse — split a path into its structured components.
-fn parse(p: string) -> PathInfo {
-    var dir = dirname(p)
-    var base = basename(p)
-    var ext = extname(base)
+fn _parseRaw(p: string) -> PathInfo {
+    var dir = _dirnameRaw(p)
+    var base = _basenameRaw(p)
+    var ext = _extnameRaw(base)
     var name = base
     if (len(ext) > 0) {
         name = base.slice(0, len(base) - len(ext))
     }
     var root = ""
     if (len(p) > 0 && _isSep(p.slice(0, (0) + 1))) { root = "/" }
-    return PathInfo(root, dir, base, name, ext)
+    return PathInfo(root, Path(dir), base, name, ext)
 }
 
 // format — rebuild a path from PathInfo. `base` wins over `name`+`ext`; a
 // single separator joins a non-empty `dir` to the basename.
-fn format(info: PathInfo) -> string {
-    var dir = info.dir
+fn _formatRaw(info: PathInfo) -> string {
+    var dir = info.dir.toString()
     var base = info.base
     if (len(base) == 0 && len(info.name) > 0) {
         base = info.name + info.ext
@@ -262,4 +274,64 @@ fn format(info: PathInfo) -> string {
     return out + base
 }
 
-export { sep, delimiter, PathInfo, isAbsolute, join, dirname, basename, extname, normalize, relative, resolve, parse, format }
+fn from(raw: string) -> Path {
+    return Path(raw)
+}
+
+fn _pathRaw(p: Path) -> string {
+    return p.toString()
+}
+
+fn _pathRawArray(parts: Array<Path>) -> Array<string> {
+    var out: Array<string> = []
+    for (var i = 0; i < len(parts); i++) {
+        out.push(_pathRaw(parts[i]))
+    }
+    return out
+}
+
+fn isAbsolute(p: Path) -> bool {
+    return _isAbsoluteRaw(_pathRaw(p))
+}
+
+fn joinAll(parts: Array<Path>) -> Path {
+    return Path(_joinAllRaw(_pathRawArray(parts)))
+}
+
+fn join(...parts: Path) -> Path {
+    return joinAll(parts)
+}
+
+fn dirname(p: Path) -> Path {
+    return Path(_dirnameRaw(_pathRaw(p)))
+}
+
+fn basename(p: Path) -> string {
+    return _basenameRaw(_pathRaw(p))
+}
+
+fn extname(p: Path) -> string {
+    return _extnameRaw(_pathRaw(p))
+}
+
+fn normalize(p: Path) -> Path {
+    return Path(_normalizeRaw(_pathRaw(p)))
+}
+
+fn relative(fromPath: Path, toPath: Path) -> Path {
+    return Path(_relativeRaw(_pathRaw(fromPath), _pathRaw(toPath)))
+}
+
+fn resolve(...parts: Path) -> Path {
+    return Path(_resolveRawArray(_pathRawArray(parts)))
+}
+
+fn parse(p: Path) -> PathInfo {
+    return _parseRaw(_pathRaw(p))
+}
+
+fn format(info: PathInfo) -> Path {
+    return Path(_formatRaw(info))
+}
+
+export { sep, delimiter, Path, PathInfo, from, isAbsolute, joinAll, join, dirname, basename, extname, normalize, relative, resolve, parse, format }

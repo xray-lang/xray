@@ -63,6 +63,7 @@ typedef struct XrayCoreClasses {
 
     // Exception (populated when stdlib/types/exception.xr is loaded)
     XrClass *panicInfoClass;
+    XrClass *pathClass;
 
     // Native-body migrated types
     XrClass *rangeClass;

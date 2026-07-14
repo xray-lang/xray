@@ -18,7 +18,7 @@ const _QUEUE_LIMIT = 256
 
 var _level = INFO
 var _format = "text"
-var _output = "stderr"
+var _output: Path? = null
 var _source = false
 var _async = false
 var _asyncQueue: Array<string> = []
@@ -153,11 +153,11 @@ fn _formatLine(logger: Logger, level: int, args: Array<Json>) -> string {
     return out.toString()
 }
 
-fn _writeRaw(output: string, line: string) {
-    if (output == "stdout" || output == "stderr" || len(output) == 0) {
+fn _writeRaw(output: Path?, line: string) {
+    if (output == null) {
         print(line)
     } else {
-        io.appendFile(output, line + "\n")
+        io.appendFile(output!, line + "\n")
     }
 }
 
@@ -223,7 +223,7 @@ fn _makeChild(parent: Logger, fields: Array<Json>) -> Logger {
 class Logger {
     level: int
     format: string
-    output: string
+    output: Path?
     source: bool
     asyncMode: bool
     jsonContext: string
@@ -232,7 +232,7 @@ class Logger {
     constructor(
         level: int = INFO,
         format: string = "text",
-        output: string = "stderr",
+        output: Path? = null,
         source: bool = false,
         asyncMode: bool = false,
         jsonContext: string = "",
@@ -309,7 +309,7 @@ fn setFormat(format: string) {
     }
 }
 
-fn setOutput(path: string) {
+fn setOutput(path: Path) {
     flush()
     _output = path
 }

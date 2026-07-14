@@ -303,7 +303,7 @@ static XrCFuncResult io_readFile(XrVMRuntime *X, XrValue *args, int argc, XrValu
     *result = xr_null();
     if (argc < 1)
         return XR_CFUNC_DONE;
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path || path[0] == '\0')
         return XR_CFUNC_DONE;
 
@@ -342,7 +342,7 @@ static XrCFuncResult io_readFileBytes(XrVMRuntime *X, XrValue *args, int argc, X
     *result = xr_null();
     if (argc < 1)
         return XR_CFUNC_DONE;
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return XR_CFUNC_DONE;
 
@@ -390,7 +390,7 @@ static XrCFuncResult io_writeFileBytes(XrVMRuntime *X, XrValue *args, int argc, 
     *result = xr_bool(false);
     if (argc < 2)
         return XR_CFUNC_DONE;
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return XR_CFUNC_DONE;
     if (!xr_value_is_array(args[1]))
@@ -428,7 +428,7 @@ static XrCFuncResult io_writeFile(XrVMRuntime *X, XrValue *args, int argc, XrVal
     *result = xr_bool(false);
     if (argc < 2)
         return XR_CFUNC_DONE;
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path || !XR_IS_STRING(args[1]))
         return XR_CFUNC_DONE;
     XrString *str = XR_TO_STRING(args[1]);
@@ -460,7 +460,7 @@ static XrValue io_appendFile(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2)
         return xr_bool(false);
 
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path || !XR_IS_STRING(args[1]))
         return xr_bool(false);
 
@@ -481,7 +481,7 @@ static XrValue io_exists(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
 
@@ -493,7 +493,7 @@ static XrValue io_isFile(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
 
@@ -505,7 +505,7 @@ static XrValue io_isDir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
 
@@ -517,7 +517,7 @@ static XrValue io_fileSize(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_int(-1);
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_int(-1);
 
@@ -534,7 +534,7 @@ static XrValue io_remove(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
 
@@ -547,8 +547,8 @@ static XrValue io_rename(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2)
         return xr_bool(false);
 
-    const char *old_path = xrs_string_arg(args[0], NULL);
-    const char *new_path = xrs_string_arg(args[1], NULL);
+    const char *old_path = xrs_path_arg(args[0], NULL);
+    const char *new_path = xrs_path_arg(args[1], NULL);
     if (!old_path || !new_path)
         return xr_bool(false);
 
@@ -560,7 +560,7 @@ static XrValue io_mkdir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
 
@@ -613,7 +613,7 @@ typedef struct IoReadDirEmitCtx {
 
 static bool io_read_dir_emit(void *ctx, const char *path) {
     IoReadDirEmitCtx *emit = (IoReadDirEmitCtx *) ctx;
-    xr_array_push(emit->arr, xrs_string_value_c(emit->X, path));
+    xr_array_push(emit->arr, xrs_path_value_c(emit->X, path));
     return true;
 }
 
@@ -626,7 +626,7 @@ static void io_release_array(XrArray *arr) {
 static XrValue io_readDir(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_null();
 
@@ -652,7 +652,7 @@ static XrValue io_cwd(XrVMRuntime *X, XrValue *args, int argc) {
     if (xr_fs_getcwd(buf, sizeof(buf)) == NULL) {
         return xr_null();
     }
-    return xrs_string_value_c(X, buf);
+    return xrs_path_value_c(X, buf);
 }
 
 /* ========== Extended Functions ========== */
@@ -662,7 +662,7 @@ static XrValue io_chdir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
 
@@ -675,8 +675,8 @@ static XrValue io_copyFile(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2)
         return xr_bool(false);
 
-    const char *src = xrs_string_arg(args[0], NULL);
-    const char *dst = xrs_string_arg(args[1], NULL);
+    const char *src = xrs_path_arg(args[0], NULL);
+    const char *dst = xrs_path_arg(args[1], NULL);
     if (!src || !dst)
         return xr_bool(false);
 
@@ -787,7 +787,7 @@ static bool io_read_lines_push(void *ctx, const char *data, size_t len) {
 static XrValue io_readLines(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_null();
 
@@ -817,7 +817,7 @@ static XrValue io_isSymlink(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
 
@@ -856,7 +856,7 @@ static XrClass *io_get_stat_class(XrVMRuntime *X) {
 static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_null();
 
@@ -925,7 +925,7 @@ static XrValue io_mkdirp(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     // Catch truncation before we copy into a XR_PATH_MAX buffer.
     if (path && strnlen(path, XR_PATH_MAX) >= XR_PATH_MAX)
         return xr_bool(false);
@@ -990,7 +990,7 @@ static XrValue io_removeAll(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
 
@@ -1016,7 +1016,7 @@ static XrValue io_chmod(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 2)
         return xr_bool(false);
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
     if (!XR_IS_INT(args[1]))
@@ -1037,7 +1037,7 @@ static XrValue io_touch(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
     return xr_bool(xr_io_core_touch(path, io_touch_update, io_touch_create, NULL));
@@ -1048,8 +1048,8 @@ static XrValue io_symlink(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 2)
         return xr_bool(false);
-    const char *target = xrs_string_arg(args[0], NULL);
-    const char *path = xrs_string_arg(args[1], NULL);
+    const char *target = xrs_path_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[1], NULL);
     if (!target || !path)
         return xr_bool(false);
 
@@ -1069,7 +1069,7 @@ static XrValue io_symlink(XrVMRuntime *X, XrValue *args, int argc) {
 static XrValue io_readlink(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_null();
 
@@ -1086,7 +1086,7 @@ static XrValue io_readlink(XrVMRuntime *X, XrValue *args, int argc) {
     XrIoCorePathView view;
     if (!xr_io_core_path_result_view(buf, (size_t) len, &view))
         return xr_null();
-    return xrs_string_value_n(X, view.data, view.len);
+    return xrs_path_value_n(X, view.data, view.len);
 #else
     ssize_t len = readlink(path, buf, sizeof(buf) - 1);
     if (len < 0)
@@ -1094,7 +1094,7 @@ static XrValue io_readlink(XrVMRuntime *X, XrValue *args, int argc) {
     XrIoCorePathView view;
     if (!xr_io_core_path_result_view(buf, (size_t) len, &view))
         return xr_null();
-    return xrs_string_value_n(X, view.data, view.len);
+    return xrs_path_value_n(X, view.data, view.len);
 #endif
 }
 
@@ -1102,7 +1102,7 @@ static XrValue io_readlink(XrVMRuntime *X, XrValue *args, int argc) {
 static XrValue io_realpath(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_null();
 
@@ -1112,7 +1112,7 @@ static XrValue io_realpath(XrVMRuntime *X, XrValue *args, int argc) {
     XrIoCorePathView view;
     if (!xr_io_core_path_result_cstr_view(resolved, &view))
         return xr_null();
-    return xrs_string_value_n(X, view.data, view.len);
+    return xrs_path_value_n(X, view.data, view.len);
 }
 
 // Adapter for xr_os_core_tmpdir(); fallback ordering lives in shared core.
@@ -1144,7 +1144,7 @@ static XrValue io_tempFile(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     close(fd);
 #endif
-    return xrs_string_value_c(X, tpl);
+    return xrs_path_value_c(X, tpl);
 }
 
 // tempDir() - Create temporary directory, return path
@@ -1172,7 +1172,7 @@ static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
     if (mkdtemp(tpl) == NULL)
         return xr_null();
 #endif
-    return xrs_string_value_c(X, tpl);
+    return xrs_path_value_c(X, tpl);
 }
 
 // readDirRecursive helper struct
@@ -1180,7 +1180,7 @@ static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
 static XrValue io_readDirRecursive(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_null();
 

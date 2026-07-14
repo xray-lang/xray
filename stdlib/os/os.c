@@ -226,7 +226,7 @@ static XrValue os_chdir(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_bool(false);
 
-    const char *path = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
 

@@ -3,6 +3,7 @@
 import http
 import { formData } from http
 import io
+import path
 
 var form = formData()
 print(form.boundary.startsWith("----XrayFormBoundary"))
@@ -14,10 +15,10 @@ print(built.body.contains("\r\n\r\nXray\r\n"))
 print(built.body.endsWith("--\r\n"))
 
 var dir = io.tempDir()!
-var path = dir + "/upload.txt"
-print(io.writeFile(path, "file-data"))
+var uploadPath = path.join(dir, path.from("upload.txt"))
+print(io.writeFile(uploadPath, "file-data"))
 var fileForm = http.formData()
-print(fileForm.appendFile("upload", path))
+print(fileForm.appendFile("upload", uploadPath))
 var fileBuilt = fileForm.build()
 print(fileBuilt.body.contains("name=\"upload\"; filename=\"upload.txt\""))
 print(fileBuilt.body.contains("Content-Type: text/plain\r\n\r\n"))
@@ -30,7 +31,7 @@ var unlimited = formData(0, 0)
 print(unlimited.append("field", "abcd"))
 print(unlimited.totalSize)
 
-var bigPath = dir + "/big.bin"
+var bigPath = path.join(dir, path.from("big.bin"))
 print(io.writeFile(bigPath, "abcd"))
 var fileLimited = formData(0, 3)
 print(fileLimited.appendFile("file", bigPath))

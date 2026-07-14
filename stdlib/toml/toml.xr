@@ -1013,7 +1013,7 @@ fn stringify(value: TomlValue) -> string {
     return _valueText(value)
 }
 
-fn parseFile(path: string) -> TomlValue {
+fn parseFile(path: Path) -> TomlValue {
     var content = io.readFile(path)
     if (content == null) {
         var empty = TomlTable()
@@ -1022,7 +1022,7 @@ fn parseFile(path: string) -> TomlValue {
     return parse(content!)
 }
 
-fn writeFile(path: string, value: TomlValue) -> bool {
+fn writeFile(path: Path, value: TomlValue) -> bool {
     return io.writeFile(path, stringify(value))
 }
 

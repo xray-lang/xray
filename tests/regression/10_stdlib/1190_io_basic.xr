@@ -1,6 +1,7 @@
 // 1190_io_basic.xr - IO module basic tests
 
 import io
+import path
 
 // ===== Temp file + read/write =====
 
@@ -83,7 +84,7 @@ fn test_mkdir_and_isdir() {
 @test
 fn test_mkdirp() {
     var tmpDir = io.tempDir()!
-    var nested = tmpDir + "/a/b/c"
+    var nested = path.join(tmpDir, path.from("a/b/c"))
     io.mkdirp(nested)
     assert_eq(io.isDir(nested), true)
     io.removeAll(tmpDir)
@@ -92,8 +93,8 @@ fn test_mkdirp() {
 @test
 fn test_read_dir() {
     var tmpDir = io.tempDir()!
-    io.writeFile(tmpDir + "/file1.txt", "f1")
-    io.writeFile(tmpDir + "/file2.txt", "f2")
+    io.writeFile(path.join(tmpDir, path.from("file1.txt")), "f1")
+    io.writeFile(path.join(tmpDir, path.from("file2.txt")), "f2")
     var entries = io.readDir(tmpDir)
     assert(len(entries) >= 2)
     io.removeAll(tmpDir)
@@ -105,7 +106,7 @@ fn test_read_dir() {
 fn test_copy_file() {
     var src = io.tempFile()!
     io.writeFile(src, "copy test")
-    var dst = src + ".copy"
+    var dst = path.from(src.toString() + ".copy")
     io.copyFile(src, dst)
     assert_eq(io.exists(dst), true)
     assert_eq(io.readFile(dst), "copy test")
@@ -117,7 +118,7 @@ fn test_copy_file() {
 fn test_rename() {
     var src = io.tempFile()!
     io.writeFile(src, "rename test")
-    var dst = src + ".renamed"
+    var dst = path.from(src.toString() + ".renamed")
     io.rename(src, dst)
     assert_eq(io.exists(src), false)
     assert_eq(io.exists(dst), true)
@@ -142,14 +143,14 @@ fn test_touch() {
 @test
 fn test_cwd() {
     var cwd = io.cwd()
-    assert(len(cwd) > 0)
+    assert(len(cwd.toString()) > 0)
 }
 
 @test
 fn test_realpath() {
     var cwd = io.cwd()
-    var resolved = io.realpath(".")
-    assert_eq(resolved, cwd)
+    var resolved = io.realpath(path.from("."))!
+    assert_eq(resolved.toString(), cwd.toString())
 }
 
 // ===== removeAll =====
@@ -157,8 +158,8 @@ fn test_realpath() {
 @test
 fn test_remove_all() {
     var tmpDir = io.tempDir()!
-    io.mkdirp(tmpDir + "/sub/dir")
-    io.writeFile(tmpDir + "/sub/file.txt", "data")
+    io.mkdirp(path.join(tmpDir, path.from("sub/dir")))
+    io.writeFile(path.join(tmpDir, path.from("sub/file.txt")), "data")
     io.removeAll(tmpDir)
     assert_eq(io.exists(tmpDir), false)
 }

@@ -3,6 +3,7 @@
 import http
 import { formData } from http
 import io
+import path
 
 @test
 fn test_formdata_text_build() {
@@ -19,11 +20,11 @@ fn test_formdata_text_build() {
 @test
 fn test_formdata_file_build() {
     var dir = io.tempDir()!
-    var path = dir + "/upload.txt"
-    assert(io.writeFile(path, "file-data"))
+    var uploadPath = path.join(dir, path.from("upload.txt"))
+    assert(io.writeFile(uploadPath, "file-data"))
 
     var form = http.formData()
-    assert(form.appendFile("upload", path))
+    assert(form.appendFile("upload", uploadPath))
 
     var built = form.build()
     assert(built.body.contains("name=\"upload\"; filename=\"upload.txt\""))
@@ -45,11 +46,11 @@ fn test_formdata_limits() {
 @test
 fn test_formdata_file_limit() {
     var dir = io.tempDir()!
-    var path = dir + "/big.bin"
-    assert(io.writeFile(path, "abcd"))
+    var bigPath = path.join(dir, path.from("big.bin"))
+    assert(io.writeFile(bigPath, "abcd"))
 
     var limited = formData(0, 3)
-    assert(!limited.appendFile("file", path))
+    assert(!limited.appendFile("file", bigPath))
     assert_eq(limited.totalSize, 0)
 }
 

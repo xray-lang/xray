@@ -629,7 +629,7 @@ static XrValue sys_thread_local_alive(XrVMRuntime *isolate, XrValue *args, int a
 
 static XrValue sys_dylib_open(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
-    const char *path = (argc >= 1) ? xrs_string_arg(args[0], NULL) : NULL;
+    const char *path = (argc >= 1) ? xrs_path_arg(args[0], NULL) : NULL;
     if (!path || path[0] == '\0')
         return xr_int(0);
     XrDylib *lib = xr_dylib_open(path);

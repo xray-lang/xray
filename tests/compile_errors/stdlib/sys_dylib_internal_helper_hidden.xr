@@ -1,3 +1,4 @@
+import path
 import sys
 
-print(sys.__dylibOpen("libc.so.6"))
+print(sys.__dylibOpen(path.from("libc.so.6")))
