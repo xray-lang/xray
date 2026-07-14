@@ -827,6 +827,46 @@ TEST(analyzer_error_effect_records_direct_throw_variant) {
     setup_pool();
 }
 
+TEST(analyzer_error_effect_propagates_const_function_value_aliases) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum AliasErr { Boom }\n"
+                         "fn failAlias() { throw AliasErr.Boom }\n"
+                         "fn noThrowAlias() { }\n"
+                         "fn viaConstAlias() {\n"
+                         "  const f = failAlias\n"
+                         "  f()\n"
+                         "}\n"
+                         "fn viaConstAliasChain() {\n"
+                         "  const f = failAlias\n"
+                         "  const g = (f)\n"
+                         "  g()\n"
+                         "}\n"
+                         "fn sameLocalNameDoesNotLeak() {\n"
+                         "  const f = noThrowAlias\n"
+                         "  f()\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_const_function_alias.xr", program);
+
+    const XaEffectSummary *direct = analyzer_function_effect_summary(a, "viaConstAlias");
+    const XaEffectSummary *chain = analyzer_function_effect_summary(a, "viaConstAliasChain");
+    const XaEffectSummary *same_name =
+        analyzer_function_effect_summary(a, "sameLocalNameDoesNotLeak");
+    ASSERT(direct != NULL);
+    ASSERT(chain != NULL);
+    ASSERT(same_name != NULL);
+
+    ASSERT(effect_summary_has_enum_named(a, direct, "AliasErr"));
+    ASSERT(effect_summary_has_enum_named(a, chain, "AliasErr"));
+    ASSERT(!effect_summary_has_enum_named(a, same_name, "AliasErr"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_subtracts_typed_catches) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -1306,6 +1346,7 @@ int main(void) {
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
+    RUN_TEST(analyzer_error_effect_propagates_const_function_value_aliases);
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
 
     printf("\nFlow analysis tests:\n");
