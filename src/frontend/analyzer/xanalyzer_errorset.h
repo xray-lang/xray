@@ -10,8 +10,9 @@
  * KEY CONCEPT:
  *   After Pass 2 (type inference), this pass walks the AST again to
  *   infer which enum error types each function may produce.
- *   Results are stored in XaSymbolLinks.error_set and
- *   XrType.function.error_set.
+ *   Results are stored in the analyzer-owned effect database.  The temporary
+ *   XaSymbolLinks.error_set bridge is kept only until all legacy collectors
+ *   consume XaEffectId directly.
  *
  * WHY THIS DESIGN:
  *   - Purely static, no runtime changes needed
@@ -28,7 +29,7 @@
 
 /* Run error set inference on the analyzed AST.
  * Must be called after xa_analyze_ast() / xa_visit_infer().
- * Populates XaSymbolLinks.error_set for every function symbol. */
+ * Populates XaSymbolLinks.effect_id for every function symbol. */
 XR_FUNC void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast);
 
 #endif /* XANALYZER_ERRORSET_H */

@@ -6338,9 +6338,6 @@ static void xa_error_set_union_call_errors(XaAnalyzer *analyzer, XrErrorSet *out
     if (!analyzer || !out || !callee)
         return;
     int before_count = out->count;
-    XrType *callee_type = xa_analyzer_get_node_type(analyzer, callee);
-    if (callee_type && XR_TYPE_IS_FUNCTION(callee_type) && callee_type->function.error_set)
-        xr_error_set_union(analyzer->type_pool, out, callee_type->function.error_set);
     if (callee->type == AST_VARIABLE && callee->as.variable.name) {
         XaSymbol *sym =
             callee->as.variable.symbol_id
