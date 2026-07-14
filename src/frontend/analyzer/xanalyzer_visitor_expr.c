@@ -3645,6 +3645,10 @@ static bool xa_cast_types_have_builtin_conversion(XrType *source, XrType *target
     if (!source_base || !target_base)
         return true;
 
+    if (source_base->kind == XR_KIND_POINTER && target_base->kind == XR_KIND_POINTER) {
+        return source_base->ptr_is_mut || !target_base->ptr_is_mut;
+    }
+
     if (XR_TYPE_IS_NUMERIC(source_base)) {
         return XR_TYPE_IS_NUMERIC(target_base) || XR_TYPE_IS_STRING(target_base) ||
                XR_TYPE_IS_BOOL(target_base);
