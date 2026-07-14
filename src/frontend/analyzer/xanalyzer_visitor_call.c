@@ -3642,6 +3642,33 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (mem_layout_member)
         return xa_mem_layout_return_type(ctx, node, call, mem_layout_member);
 
+    if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
+        strcmp(call->callee->as.variable.name, "typeName") == 0 && call->type_arg_count > 0) {
+        if (call->type_arg_count != 1) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            char msg[160];
+            snprintf(msg, sizeof(msg),
+                     "Generic function 'typeName' expects 1 type argument(s), but got %d",
+                     call->type_arg_count);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
+        }
+        if (call->arg_count != 0) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            char msg[128];
+            snprintf(msg, sizeof(msg), "Expected 0 argument(s), but got %d", call->arg_count);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_WRONG_ARG_COUNT, msg, &loc);
+        }
+        if (call->type_arg_count == 1 && call->type_args && call->type_args[0]) {
+            XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+            (void) xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument",
+                                                     "typeName<T>()", node ? node->line : 0,
+                                                     node ? node->column : 0);
+        }
+        return xr_type_new_string(ctx->analyzer->isolate);
+    }
+
     // Check generic type argument count and constraints
     if (call->type_arg_count > 0 && fn_links) {
         int expected_count = xa_symbol_links_get_type_param_count(fn_links);

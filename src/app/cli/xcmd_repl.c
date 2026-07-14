@@ -305,6 +305,7 @@ static void print_help_types(ReplState *state) {
     printf("  string(123)    // \"123\"\n");
     printf("  typeOf(x)      // Type.int\n");
     printf("  typeName(x)    // \"int\"\n");
+    printf("  typeName<T>()  // static type display name\n");
     printf("\n");
 }
 

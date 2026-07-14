@@ -507,6 +507,7 @@ TEST(global_type_query_builtins_use_canonical_names) {
     const char *type_name_hover_text = hover_markdown_value(type_name_hover);
     ASSERT(type_name_hover_text != NULL);
     ASSERT(strstr(type_name_hover_text, "typeName(value): string") != NULL);
+    ASSERT(strstr(type_name_hover_text, "typeName<T>(): string") != NULL);
     ASSERT(strstr(type_name_hover_text, "typename") == NULL);
     xjson_free(type_name_hover);
 
@@ -533,6 +534,7 @@ TEST(global_type_query_builtins_use_canonical_names) {
     const char *type_name_label = xjson_get_string(type_name_sig0, "label");
     ASSERT(type_name_label != NULL);
     ASSERT(strstr(type_name_label, "typeName(value): string") != NULL);
+    ASSERT(strstr(type_name_label, "typeName<T>(): string") != NULL);
     ASSERT(strstr(type_name_label, "typename") == NULL);
     xjson_free(type_name_sig);
 

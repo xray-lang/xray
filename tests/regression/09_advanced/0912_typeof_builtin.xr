@@ -102,3 +102,10 @@ fn test_typeof_in_expression() {
     var result = typeName(s) + ":" + s
     assert_eq(result, "string:hello")
 }
+
+@test
+fn test_type_name_static_type_argument() {
+    assert_eq(typeName<int>(), "int")
+    assert_eq(typeName<string>(), "string")
+    assert_eq(typeName<Array<int>>(), "Array<int>")
+}
