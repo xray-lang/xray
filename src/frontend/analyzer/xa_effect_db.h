@@ -19,6 +19,7 @@ typedef uint32_t XaEffectId;
 typedef uint32_t XaErrorTypeId;
 typedef uint32_t XaErrorVariantId;
 typedef uint32_t XaEffectEdgeId;
+typedef struct XrType XrType;
 
 #define XA_EFFECT_NONE ((XaEffectId) 0u)
 #define XA_EFFECT_ID_NONE XA_EFFECT_NONE
@@ -79,11 +80,14 @@ XR_FUNC void xa_effect_db_free(XaEffectDatabase *db);
 XR_FUNC void xa_effect_db_clear(XaEffectDatabase *db);
 
 XR_FUNC XaErrorTypeId xa_effect_db_register_error_type(XaEffectDatabase *db,
-                                                       uint64_t stable_type_key);
+                                                       uint64_t stable_type_key,
+                                                       XrType *type_handle);
+XR_FUNC XaErrorTypeId xa_effect_db_register_error_enum(XaEffectDatabase *db, XrType *enum_type);
 XR_FUNC XaErrorVariantId xa_effect_db_register_error_variant(XaEffectDatabase *db,
                                                              XaErrorTypeId type_id,
                                                              uint64_t stable_variant_key);
 XR_FUNC uint64_t xa_effect_db_error_type_key(const XaEffectDatabase *db, XaErrorTypeId type_id);
+XR_FUNC XrType *xa_effect_db_error_type_handle(const XaEffectDatabase *db, XaErrorTypeId type_id);
 XR_FUNC uint64_t xa_effect_db_error_variant_key(const XaEffectDatabase *db, XaErrorTypeId type_id,
                                                 XaErrorVariantId variant_id);
 

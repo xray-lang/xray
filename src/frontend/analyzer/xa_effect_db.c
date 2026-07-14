@@ -9,8 +9,11 @@
  */
 
 #include "xa_effect_db.h"
+#include "../../base/xhash.h"
 #include "../../base/xmalloc.h"
+#include "../../runtime/value/xtype.h"
 #include "../../shared/xr_hash_core.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -21,6 +24,7 @@ typedef struct XaErrorVariantInfo {
 typedef struct XaErrorTypeInfo {
     XaErrorTypeId id;
     uint64_t stable_key;
+    XrType *type_handle;
     XaErrorVariantInfo *variants;
     uint32_t variant_count;
     uint32_t variant_capacity;
@@ -171,12 +175,32 @@ void xa_effect_db_free(XaEffectDatabase *db) {
     xr_free(db);
 }
 
-XaErrorTypeId xa_effect_db_register_error_type(XaEffectDatabase *db, uint64_t stable_type_key) {
+static uint64_t stable_key_text2(const char *prefix, const char *name) {
+    char buf[512];
+    snprintf(buf, sizeof(buf), "%s:%s", prefix ? prefix : "", name ? name : "<anonymous>");
+    uint64_t key = xr_hash_bytes64(buf, strlen(buf));
+    return key ? key : 1u;
+}
+
+static uint64_t stable_key_text3(const char *prefix, const char *type_name,
+                                 const char *variant_name) {
+    char buf[768];
+    snprintf(buf, sizeof(buf), "%s:%s.%s", prefix ? prefix : "", type_name ? type_name : "?",
+             variant_name ? variant_name : "?");
+    uint64_t key = xr_hash_bytes64(buf, strlen(buf));
+    return key ? key : 1u;
+}
+
+XaErrorTypeId xa_effect_db_register_error_type(XaEffectDatabase *db, uint64_t stable_type_key,
+                                               XrType *type_handle) {
     if (!db || stable_type_key == 0)
         return XA_ERROR_TYPE_NONE;
     for (uint32_t i = 0; i < db->error_type_count; i++) {
-        if (db->error_types[i].stable_key == stable_type_key)
+        if (db->error_types[i].stable_key == stable_type_key) {
+            if (type_handle && !db->error_types[i].type_handle)
+                db->error_types[i].type_handle = type_handle;
             return db->error_types[i].id;
+        }
     }
     if (!grow_array((void **) &db->error_types, &db->error_type_capacity, sizeof(XaErrorTypeInfo),
                     db->error_type_count + 1u))
@@ -185,8 +209,26 @@ XaErrorTypeId xa_effect_db_register_error_type(XaEffectDatabase *db, uint64_t st
     memset(info, 0, sizeof(*info));
     info->id = db->error_type_count + 1u;
     info->stable_key = stable_type_key;
+    info->type_handle = type_handle;
     db->error_type_count++;
     return info->id;
+}
+
+XaErrorTypeId xa_effect_db_register_error_enum(XaEffectDatabase *db, XrType *enum_type) {
+    if (!db || !enum_type || !XR_TYPE_IS_ENUM(enum_type))
+        return XA_ERROR_TYPE_NONE;
+    const char *name = enum_type->enum_type.enum_name;
+    XaErrorTypeId type_id =
+        xa_effect_db_register_error_type(db, stable_key_text2("enum", name), enum_type);
+    const XrEnumLayout *layout = enum_type->enum_type.layout;
+    if (type_id != XA_ERROR_TYPE_NONE && layout) {
+        for (uint32_t i = 0; i < layout->variant_count; i++) {
+            const char *variant_name = layout->variants[i].name;
+            xa_effect_db_register_error_variant(db, type_id,
+                                                stable_key_text3("variant", name, variant_name));
+        }
+    }
+    return type_id;
 }
 
 XaErrorVariantId xa_effect_db_register_error_variant(XaEffectDatabase *db, XaErrorTypeId type_id,
@@ -209,6 +251,11 @@ XaErrorVariantId xa_effect_db_register_error_variant(XaEffectDatabase *db, XaErr
 uint64_t xa_effect_db_error_type_key(const XaEffectDatabase *db, XaErrorTypeId type_id) {
     const XaErrorTypeInfo *info = db_type_info(db, type_id);
     return info ? info->stable_key : 0;
+}
+
+XrType *xa_effect_db_error_type_handle(const XaEffectDatabase *db, XaErrorTypeId type_id) {
+    const XaErrorTypeInfo *info = db_type_info(db, type_id);
+    return info ? info->type_handle : NULL;
 }
 
 uint64_t xa_effect_db_error_variant_key(const XaEffectDatabase *db, XaErrorTypeId type_id,

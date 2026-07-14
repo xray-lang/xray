@@ -22,7 +22,6 @@
 #include "../../base/xhashmap.h"
 #include "../../base/xstorage.h"
 #include "../../module/xmodule_graph.h"
-#include "../../runtime/value/xerror_set.h"
 #include "../../runtime/value/xstruct_layout.h"
 #include "../../runtime/value/xtype_internal.h"
 #include "../../shared/xr_derive_flags.h"
@@ -6303,8 +6302,10 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
     }
 }
 
-static void xa_collect_error_sources_expr(XaAnalyzer *analyzer, AstNode *node, XrErrorSet *out);
-static void xa_collect_error_sources_stmt(XaAnalyzer *analyzer, AstNode *node, XrErrorSet *out);
+static void xa_collect_error_sources_expr(XaAnalyzer *analyzer, AstNode *node,
+                                          XaEffectSummary *out);
+static void xa_collect_error_sources_stmt(XaAnalyzer *analyzer, AstNode *node,
+                                          XaEffectSummary *out);
 
 static XR_THREAD_LOCAL AstNode *xa_payload_error_scan_root = NULL;
 static XR_THREAD_LOCAL int xa_payload_error_scan_depth = 0;
@@ -6327,21 +6328,46 @@ static AstNode *xa_find_function_decl_by_name(AstNode *node, const char *name) {
     return NULL;
 }
 
-static void xa_error_set_add_node_enum_type(XaAnalyzer *analyzer, XrErrorSet *out, AstNode *node) {
+static void xa_payload_effect_add_node_enum_type(XaAnalyzer *analyzer, XaEffectSummary *out,
+                                                 AstNode *node) {
     if (!analyzer || !out || !node)
         return;
     XrType *type = xa_analyzer_get_node_type(analyzer, node);
-    if (xa_is_enum_error_type(type))
-        xr_error_set_add_all(analyzer->type_pool, out, type);
+    if (xa_is_enum_error_type(type)) {
+        XaErrorTypeId type_id = xa_effect_db_register_error_enum(analyzer->effect_db, type);
+        if (type_id != XA_ERROR_TYPE_NONE)
+            xa_effect_summary_add_all_variants(analyzer->effect_db, out, type_id);
+    }
 }
 
-static void xa_error_set_union_call_errors(XaAnalyzer *analyzer, XrErrorSet *out, AstNode *callee) {
+static XaSymbol *xa_payload_effect_resolve_call_target(XaAnalyzer *analyzer, AstNode *callee) {
+    if (!analyzer || !callee || callee->type != AST_VARIABLE || !callee->as.variable.name)
+        return NULL;
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, callee->as.variable.name);
+    if (!sym)
+        sym =
+            xa_analyzer_lookup_in_scope(analyzer, callee->as.variable.name, analyzer->global_scope);
+    if (!sym)
+        sym = xa_analyzer_lookup_deep(analyzer, callee->as.variable.name);
+    return sym;
+}
+
+static void xa_payload_effect_union_call_errors(XaAnalyzer *analyzer, XaEffectSummary *out,
+                                                AstNode *callee) {
     if (!analyzer || !out || !callee)
         return;
-    int before_count = out->count;
+    bool used_effect_summary = false;
+    XaSymbol *callee_sym = xa_payload_effect_resolve_call_target(analyzer, callee);
+    if (callee_sym && callee_sym->links.effect_id != XA_EFFECT_NONE) {
+        const XaEffectSummary *callee_summary =
+            xa_effect_db_get(analyzer->effect_db, callee_sym->links.effect_id);
+        if (callee_summary) {
+            xa_effect_summary_add_summary(analyzer->effect_db, out, callee_summary);
+            used_effect_summary = true;
+        }
+    }
     if (callee->type == AST_VARIABLE && callee->as.variable.name) {
-        if (out->count == before_count && xa_payload_error_scan_root &&
-            xa_payload_error_scan_depth < 8) {
+        if (!used_effect_summary && xa_payload_error_scan_root && xa_payload_error_scan_depth < 8) {
             AstNode *fn =
                 xa_find_function_decl_by_name(xa_payload_error_scan_root, callee->as.variable.name);
             if (fn && fn->as.function_decl.body) {
@@ -6354,12 +6380,13 @@ static void xa_error_set_union_call_errors(XaAnalyzer *analyzer, XrErrorSet *out
 }
 
 static void xa_collect_error_sources_expr_list(XaAnalyzer *analyzer, AstNode **nodes, int count,
-                                               XrErrorSet *out) {
+                                               XaEffectSummary *out) {
     for (int i = 0; i < count; i++)
         xa_collect_error_sources_expr(analyzer, nodes ? nodes[i] : NULL, out);
 }
 
-static void xa_collect_error_sources_expr(XaAnalyzer *analyzer, AstNode *node, XrErrorSet *out) {
+static void xa_collect_error_sources_expr(XaAnalyzer *analyzer, AstNode *node,
+                                          XaEffectSummary *out) {
     if (!analyzer || !node || !out)
         return;
 
@@ -6368,7 +6395,7 @@ static void xa_collect_error_sources_expr(XaAnalyzer *analyzer, AstNode *node, X
             xa_collect_error_sources_expr(analyzer, node->as.call_expr.callee, out);
             xa_collect_error_sources_expr_list(analyzer, node->as.call_expr.arguments,
                                                node->as.call_expr.arg_count, out);
-            xa_error_set_union_call_errors(analyzer, out, node->as.call_expr.callee);
+            xa_payload_effect_union_call_errors(analyzer, out, node->as.call_expr.callee);
             break;
         case AST_BINARY_ADD:
         case AST_BINARY_SUB:
@@ -6512,7 +6539,8 @@ static void xa_collect_error_sources_expr(XaAnalyzer *analyzer, AstNode *node, X
     }
 }
 
-static void xa_collect_error_sources_stmt(XaAnalyzer *analyzer, AstNode *node, XrErrorSet *out) {
+static void xa_collect_error_sources_stmt(XaAnalyzer *analyzer, AstNode *node,
+                                          XaEffectSummary *out) {
     if (!analyzer || !node || !out)
         return;
 
@@ -6553,7 +6581,7 @@ static void xa_collect_error_sources_stmt(XaAnalyzer *analyzer, AstNode *node, X
             break;
         case AST_THROW_STMT:
             xa_collect_error_sources_expr(analyzer, node->as.throw_stmt.expression, out);
-            xa_error_set_add_node_enum_type(analyzer, out, node->as.throw_stmt.expression);
+            xa_payload_effect_add_node_enum_type(analyzer, out, node->as.throw_stmt.expression);
             break;
         case AST_IF_STMT:
             xa_collect_error_sources_expr(analyzer, node->as.if_stmt.condition, out);
@@ -6587,19 +6615,25 @@ static void xa_collect_error_sources_stmt(XaAnalyzer *analyzer, AstNode *node, X
     }
 }
 
-static XrType *xa_error_set_payload_enum_type(XaAnalyzer *analyzer, const XrErrorSet *set,
-                                              bool *has_unsupported_mix) {
+static XrType *xa_effect_summary_payload_enum_type(XaAnalyzer *analyzer,
+                                                   const XaEffectSummary *summary,
+                                                   bool *has_unsupported_mix) {
     XrType *payload_type = NULL;
     int payload_count = 0;
     bool other_error = false;
 
     if (has_unsupported_mix)
         *has_unsupported_mix = false;
-    if (!analyzer || !set)
+    if (!analyzer || !summary)
         return NULL;
 
-    for (int i = 0; i < set->count; i++) {
-        XrType *type = set->entries[i].enum_type;
+    for (uint32_t i = 0; i < summary->escaping.count; i++) {
+        XrType *type =
+            xa_effect_db_error_type_handle(analyzer->effect_db, summary->escaping.types[i].type_id);
+        if (!type) {
+            other_error = true;
+            continue;
+        }
         if (xa_enum_error_type_has_payload(analyzer, type)) {
             payload_count++;
             if (!payload_type)
@@ -6655,13 +6689,12 @@ static void xa_validate_freestanding_payload_error_catches_node(XaAnalyzer *anal
 
     if (node->type == AST_TRY_CATCH) {
         TryCatchNode *tc = &node->as.try_catch;
-        XrErrorSet *errors = xr_error_set_new(analyzer->type_pool);
+        XaEffectSummary errors;
+        xa_effect_summary_init(&errors);
         bool mixed_errors = false;
         XrType *payload_type = NULL;
-        if (errors) {
-            xa_collect_error_sources_stmt(analyzer, tc->try_body, errors);
-            payload_type = xa_error_set_payload_enum_type(analyzer, errors, &mixed_errors);
-        }
+        xa_collect_error_sources_stmt(analyzer, tc->try_body, &errors);
+        payload_type = xa_effect_summary_payload_enum_type(analyzer, &errors, &mixed_errors);
         if (payload_type) {
             XrCatchClause *only = xa_single_error_catch_clause(tc);
             XrType *catch_type =
@@ -6670,6 +6703,7 @@ static void xa_validate_freestanding_payload_error_catches_node(XaAnalyzer *anal
                 xa_report_freestanding_payload_catch_boundary(
                     analyzer, only ? only : tc->catch_clauses[0], payload_type, mixed_errors);
         }
+        xa_effect_summary_clear(&errors);
 
         xa_validate_freestanding_payload_error_catches_node(analyzer, tc->try_body);
         for (int i = 0; i < tc->catch_count; i++) {
