@@ -1586,6 +1586,23 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    if(XR_BUILD_LSP AND NOT WIN32)
+        add_test(
+            NAME byte_uint8_canonical_audit
+            COMMAND ${CMAKE_COMMAND} -E env
+                    XRAY_BIN=$<TARGET_FILE:xray>
+                    XRAY_TEST_LSP_DOCUMENT=$<TARGET_FILE:test_lsp_document>
+                    XRAY_TEST_XGLOBAL_SUMMARY=$<TARGET_FILE:test_xglobal_summary>
+                    bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_byte_uint8_canonical_audit.sh
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(byte_uint8_canonical_audit PROPERTIES
+            LABELS "frontend;types;lsp;analysis"
+            PROCESSORS 1
+            TIMEOUT 120
+        )
+    endif()
+
     add_test(
         NAME parallel_surface_convergence
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_parallel_surface_convergence.py
