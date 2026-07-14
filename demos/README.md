@@ -65,6 +65,7 @@ Xray's core differentiator. **If it compiles, it's concurrency-safe.**
 |------|--------|
 | [generics.xr](07-advanced/generics.xr) | generic classes, nullable types, optional chaining |
 | [testing.xr](07-advanced/testing.xr) | @test, assertions, skip, timeout |
+| [borrow_span_examples.xr](07-advanced/borrow_span_examples.xr) | value/in/ref parameters, copy/move, Slice, managed Buffer |
 
 Run tests with: `xray test demos/07-advanced/testing.xr`
 

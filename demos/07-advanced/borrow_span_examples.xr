@@ -1,14 +1,17 @@
-// Demo: Borrowing, Slice, and Raw Pointers
-// Short examples for in/ref, Slice views, and the unsafe raw-pointer boundary.
+// Demo: Parameter Modes, Borrowing, Slice, and Ownership Actions
+// Short examples for value/in/ref, copy/move, Slice views, and managed Buffer.
 //
 // Run: xray demos/07-advanced/borrow_span_examples.xr
 
 import mem
 
-// === 1. in: readonly borrowed parameter ===
+// === 1. value: ordinary parameter ===
+fn plusOne(value: int) -> int {
+    return value + 1
+}
+
+// === 2. in: readonly borrowed parameter ===
 fn sumBorrowed(data: in Array<int>) -> int {
-    // data is borrowed for this call only.
-    // It is not copied, and ownership stays with the caller.
     var total = 0
     for (x in data) {
         total = total + x
@@ -16,23 +19,17 @@ fn sumBorrowed(data: in Array<int>) -> int {
     return total
 }
 
-// === 2. ref: mutable borrowed parameter ===
+// === 3. ref: mutable borrowed parameter ===
 fn fillZero(buf: ref Array<byte>) {
-    // buf is an exclusive mutable borrow.
-    // Mutations are visible to the caller, but the borrow cannot escape.
     for (i in 0..len(buf)) {
         buf[i] = 0
     }
 }
 
-// === 3. borrowed values cannot escape ===
+// === 4. borrowed values cannot escape ===
 fn copyForStorage(data: in Array<int>) -> Array<int> {
-    // This would be a compile error:
-    //
-    //     return data
-    //
-    // data is only borrowed. If a function needs to return or store it,
-    // return an owned value instead.
+    // Returning `data` directly would be a compile error because `data` is
+    // borrowed for this call only. Return an owned snapshot instead.
     return copy(data)
 }
 
@@ -45,42 +42,13 @@ class Holder {
 }
 
 fn storeCopy(data: in Array<int>, holder: ref Holder) {
-    // This would be a compile error:
-    //
-    //     holder.items = data
-    //
-    // A borrowed parameter cannot be stored into an object field.
-    // Store an owned value instead.
+    // Storing `data` directly would let a borrowed value escape. Store an
+    // owned snapshot instead.
     holder.items = copy(data)
 }
 
-// === 4. return a Slice view, not a borrowed reference ===
-fn middleSpan() -> Slice<int> {
-    var xs = [10, 20, 30, 40]
-
-    // xs[1:3] creates a bounded view over the array storage.
-    // Slice is a first-class view value, so it can be returned safely.
-    var view: Slice<int> = xs[1:3]
-    return view
-}
-
-// === 5. iterate and mutate a Slice ===
-fn scaleSpan(view: Slice<int>, factor: int) {
-    // for-in reads values from the view.
-    for (x in view) {
-        print("before: ${x}")
-    }
-
-    // To mutate a view, use indexed writes.
-    for (i in 0..len(view)) {
-        view[i] = view[i] * factor
-    }
-}
-
-// === 6. move: transfer ownership ===
+// === 5. move: transfer ownership ===
 fn takeBytes(data: Array<byte>) -> int {
-    // data is now owned by this function.
-    // The caller cannot use the moved variable afterward.
     return len(data)
 }
 
@@ -89,34 +57,38 @@ fn moveExample() {
     payload[0] = 1
     payload[1] = 2
 
-    // move transfers ownership without copying.
+    // `move` transfers ownership without copying. The old name is no longer
+    // usable after this call.
     var count = takeBytes(move payload)
     print("moved bytes length: ${count}")
-
-    // This would be a compile error:
-    //
-    //     print(len(payload))
-    //
-    // payload has been moved, so the old name is no longer usable.
 }
 
-// === 7. unsafe raw-pointer boundary ===
-fn rawPointerExample() {
-    // Raw pointers are for low-level code. They can be stored and passed around,
-    // but reading or writing through them must be inside unsafe.
-    var p = mem.alloc(4)
+// === 6. Slice and Buffer stay local to their owner ===
+fn sliceExample() {
+    var values = [2, 3, 4, 5]
+    var view: Slice<int> = values[1:4]
 
-    unsafe {
-        p[0] = 42
-        p[1] = 7
-        print("raw[0]: ${p[0]}")
-        print("raw[1]: ${p[1]}")
+    for (i in 0..len(view)) {
+        view[i] = view[i] * 10
     }
 
-    mem.free(p)
+    print("scaled view: ${view[0]}, ${view[1]}, ${view[2]}")
+    print("owner after view write: ${values[1]}, ${values[2]}, ${values[3]}")
+}
+
+fn bufferExample() {
+    var buffer = mem.allocZeroed(4)
+    var view: Slice<byte> = buffer.asSpan()
+    view[0] = 7
+    view[1] = 9
+
+    print("buffer view: ${view[0]}, ${view[1]}, len ${len(buffer)}")
 }
 
 // === Run the examples ===
+var value = 10
+print("value param: ${plusOne(value)}, original: ${value}")
+
 var nums = [1, 2, 3, 4]
 print("sumBorrowed: ${sumBorrowed(nums)}")
 print("nums still usable: ${len(nums)}")
@@ -124,23 +96,16 @@ print("nums still usable: ${len(nums)}")
 var bytes = Array<byte>(4)
 bytes[0] = 9
 bytes[1] = 8
-fillZero(bytes)
+fillZero(ref bytes)
 print("bytes after fillZero: ${bytes[0]}, ${bytes[1]}")
 
 var copied = copyForStorage(nums)
 print("copied length: ${len(copied)}")
 
 var holder = Holder()
-storeCopy(nums, holder)
+storeCopy(nums, ref holder)
 print("holder length: ${len(holder.items)}")
 
-var mid = middleSpan()
-print("middleSpan: ${mid[0]}, ${mid[1]}")
-
-var values = [2, 3, 4, 5]
-var view: Slice<int> = values[1:4]
-scaleSpan(view, 10)
-print("scaled view: ${view[0]}, ${view[1]}, ${view[2]}")
-
 moveExample()
-rawPointerExample()
+sliceExample()
+bufferExample()
