@@ -1087,6 +1087,20 @@ static void merge_catch_alias_intersection_states(ErrorSetCtx *ctx, const CatchA
     }
 }
 
+static void merge_catch_alias_path_states(ErrorSetCtx *ctx, const CatchAliasState **path_states,
+                                          int path_count) {
+    if (!ctx || !path_states || path_count <= 0 || !path_states[0])
+        return;
+    restore_catch_alias_state(ctx, path_states[0]);
+    for (int i = 1; i < path_count; i++) {
+        if (!path_states[i])
+            continue;
+        CatchAliasState current;
+        capture_catch_alias_state(ctx, &current);
+        merge_catch_alias_intersection_states(ctx, &current, path_states[i]);
+    }
+}
+
 static void remove_current_catch_alias(ErrorSetCtx *ctx, int index) {
     if (!ctx || index < 0 || index >= ctx->current_catch_alias_count)
         return;
@@ -1444,17 +1458,29 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             FunctionValueAliasState *catch_states = NULL;
             uint32_t try_mutation_ids[128];
             int try_mutation_count = 0;
+            bool exact_catch_aliases =
+                ctx->current_caught && ctx->current_catch_alias_control_depth == 0;
+            CatchAliasState catch_alias_base_state;
+            CatchAliasState catch_alias_try_state;
+            CatchAliasState *catch_alias_catch_states = NULL;
+            bool *catch_alias_catch_reachable = NULL;
 
             ctx->current_summary = &try_summary;
+            if (exact_catch_aliases)
+                capture_catch_alias_state(ctx, &catch_alias_base_state);
             if (exact_function_values) {
                 int mutation_start = ctx->function_value_mutation_count;
                 int mutation_depth_before = ctx->function_value_mutation_depth;
 
                 capture_function_value_alias_state(ctx, &base_state);
                 restore_function_value_alias_state(ctx, &base_state);
+                if (exact_catch_aliases)
+                    restore_catch_alias_state(ctx, &catch_alias_base_state);
                 ctx->function_value_mutation_depth++;
                 es_walk_block(ctx, tc->try_body);
                 ctx->function_value_mutation_depth--;
+                if (exact_catch_aliases)
+                    capture_catch_alias_state(ctx, &catch_alias_try_state);
                 capture_function_value_alias_state(ctx, &try_state);
 
                 for (int i = mutation_start; i < ctx->function_value_mutation_count; i++) {
@@ -1479,12 +1505,22 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                         (size_t) tc->catch_count, sizeof(FunctionValueAliasState));
             } else {
                 ctx->function_value_control_depth++;
+                if (exact_catch_aliases)
+                    restore_catch_alias_state(ctx, &catch_alias_base_state);
                 es_walk_block(ctx, tc->try_body);
+                if (exact_catch_aliases)
+                    capture_catch_alias_state(ctx, &catch_alias_try_state);
                 ctx->function_value_control_depth--;
             }
             ctx->current_summary = outer_summary;
 
             if (tc->catch_count > 0) {
+                if (exact_catch_aliases) {
+                    catch_alias_catch_states = (CatchAliasState *) xr_calloc(
+                        (size_t) tc->catch_count, sizeof(CatchAliasState));
+                    catch_alias_catch_reachable =
+                        (bool *) xr_calloc((size_t) tc->catch_count, sizeof(bool));
+                }
                 XaEffectSummary *caught_summaries = (XaEffectSummary *) xr_calloc(
                     (size_t) tc->catch_count, sizeof(XaEffectSummary));
                 if (caught_summaries) {
@@ -1515,13 +1551,21 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 }
                 xa_effect_summary_add_summary(ctx->analyzer->effect_db, outer_summary,
                                               &try_summary);
+                if (exact_catch_aliases && caught_summaries && catch_alias_catch_reachable) {
+                    for (int i = 0; i < tc->catch_count; i++) {
+                        catch_alias_catch_reachable[i] =
+                            !xa_effect_summary_is_nothrow(&caught_summaries[i]);
+                    }
+                }
                 for (int i = 0; i < tc->catch_count; i++) {
                     XrCatchClause *cc = tc->catch_clauses[i];
                     if (cc && cc->body) {
+                        if (exact_catch_aliases)
+                            restore_catch_alias_state(ctx, &catch_alias_base_state);
                         const char *saved_catch_var = ctx->current_catch_var;
                         uint32_t saved_catch_symbol_id = ctx->current_catch_symbol_id;
-                        bool saved_catch_binding_is_caught = ctx->current_catch_binding_is_caught;
-                        int saved_catch_alias_count = ctx->current_catch_alias_count;
+                        CatchAliasState saved_catch_alias_state;
+                        capture_catch_alias_state(ctx, &saved_catch_alias_state);
                         XaEffectSummary *saved_caught = ctx->current_caught;
                         ctx->current_catch_var = cc->var_name;
                         ctx->current_catch_symbol_id = cc->symbol_id;
@@ -1540,13 +1584,21 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                             ctx->function_value_control_depth--;
                         ctx->current_catch_var = saved_catch_var;
                         ctx->current_catch_symbol_id = saved_catch_symbol_id;
-                        ctx->current_catch_binding_is_caught = saved_catch_binding_is_caught;
-                        ctx->current_catch_alias_count = saved_catch_alias_count;
+                        restore_catch_alias_state(ctx, &saved_catch_alias_state);
                         ctx->current_caught = saved_caught;
+                        if (exact_catch_aliases && catch_alias_catch_states)
+                            capture_catch_alias_state(ctx, &catch_alias_catch_states[i]);
                     } else if (exact_function_values && catch_states) {
                         restore_function_value_alias_state_for_catch_entry(
                             ctx, &base_state, try_mutation_ids, try_mutation_count);
                         capture_function_value_alias_state(ctx, &catch_states[i]);
+                        if (exact_catch_aliases && catch_alias_catch_states) {
+                            restore_catch_alias_state(ctx, &catch_alias_base_state);
+                            capture_catch_alias_state(ctx, &catch_alias_catch_states[i]);
+                        }
+                    } else if (exact_catch_aliases && catch_alias_catch_states) {
+                        restore_catch_alias_state(ctx, &catch_alias_base_state);
+                        capture_catch_alias_state(ctx, &catch_alias_catch_states[i]);
                     }
                 }
                 if (caught_summaries) {
@@ -1570,8 +1622,27 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                     restore_function_value_alias_state(ctx, &try_state);
                 }
             }
+            if (exact_catch_aliases) {
+                if (tc->catch_count > 0 && catch_alias_catch_states) {
+                    const CatchAliasState *paths[129];
+                    int path_count = 0;
+                    paths[path_count++] = &catch_alias_try_state;
+                    for (int i = 0; i < tc->catch_count && path_count < 129; i++) {
+                        if (catch_alias_catch_reachable && !catch_alias_catch_reachable[i])
+                            continue;
+                        paths[path_count++] = &catch_alias_catch_states[i];
+                    }
+                    merge_catch_alias_path_states(ctx, paths, path_count);
+                } else {
+                    restore_catch_alias_state(ctx, &catch_alias_try_state);
+                }
+            }
             if (catch_states)
                 xr_free(catch_states);
+            if (catch_alias_catch_states)
+                xr_free(catch_alias_catch_states);
+            if (catch_alias_catch_reachable)
+                xr_free(catch_alias_catch_reachable);
             xa_effect_summary_clear(&try_summary);
             break;
         }
