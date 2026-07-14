@@ -1350,10 +1350,20 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
     ASSERT(a != NULL);
 
     const char *source = "enum MethodErr { Boom }\n"
+                         "enum OtherMethodErr { Boom }\n"
+                         "fn failMethodCallback() { throw MethodErr.Boom }\n"
+                         "fn failOtherMethodCallback() { throw OtherMethodErr.Boom }\n"
                          "class Thrower {\n"
                          "  constructor() { }\n"
                          "  fail() { throw MethodErr.Boom }\n"
                          "  static failStatic() { throw MethodErr.Boom }\n"
+                         "  invoke(cb: () -> ()) { cb() }\n"
+                         "  static invokeStatic(cb: () -> ()) { cb() }\n"
+                         "  choose(flag: bool, a: () -> (), b: () -> ()) {\n"
+                         "    var cb = a\n"
+                         "    if (flag) { cb = b }\n"
+                         "    cb()\n"
+                         "  }\n"
                          "}\n"
                          "fn viaInstanceMethod() {\n"
                          "  var t = Thrower()\n"
@@ -1364,6 +1374,19 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
                          "}\n"
                          "fn viaStaticMethod() {\n"
                          "  Thrower.failStatic()\n"
+                         "}\n"
+                         "fn viaMethodHigherOrder() {\n"
+                         "  var t = Thrower()\n"
+                         "  t.invoke(failMethodCallback)\n"
+                         "}\n"
+                         "fn viaStaticMethodHigherOrder() {\n"
+                         "  Thrower.invokeStatic(fn() { throw OtherMethodErr.Boom })\n"
+                         "}\n"
+                         "fn viaMethodHigherOrderUnion(flag: bool) {\n"
+                         "  Thrower().choose(flag, failMethodCallback, failOtherMethodCallback)\n"
+                         "}\n"
+                         "fn viaMethodHigherOrderUnknown(cb: () -> ()) {\n"
+                         "  Thrower().invoke(cb)\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -1372,13 +1395,39 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
     const XaEffectSummary *instance = analyzer_function_effect_summary(a, "viaInstanceMethod");
     const XaEffectSummary *temporary = analyzer_function_effect_summary(a, "viaTemporaryMethod");
     const XaEffectSummary *static_method = analyzer_function_effect_summary(a, "viaStaticMethod");
+    const XaEffectSummary *method_hof = analyzer_function_effect_summary(a, "viaMethodHigherOrder");
+    const XaEffectSummary *static_method_hof =
+        analyzer_function_effect_summary(a, "viaStaticMethodHigherOrder");
+    const XaEffectSummary *method_hof_union =
+        analyzer_function_effect_summary(a, "viaMethodHigherOrderUnion");
+    const XaEffectSummary *method_hof_unknown =
+        analyzer_function_effect_summary(a, "viaMethodHigherOrderUnknown");
     ASSERT(instance != NULL);
     ASSERT(temporary != NULL);
     ASSERT(static_method != NULL);
+    ASSERT(method_hof != NULL);
+    ASSERT(static_method_hof != NULL);
+    ASSERT(method_hof_union != NULL);
+    ASSERT(method_hof_unknown != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, instance, "MethodErr"));
     ASSERT(effect_summary_has_enum_named(a, temporary, "MethodErr"));
     ASSERT(effect_summary_has_enum_named(a, static_method, "MethodErr"));
+    ASSERT(method_hof->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((method_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, method_hof, "MethodErr"));
+    ASSERT(!effect_summary_has_enum_named(a, method_hof, "OtherMethodErr"));
+    ASSERT(static_method_hof->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((static_method_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(!effect_summary_has_enum_named(a, static_method_hof, "MethodErr"));
+    ASSERT(effect_summary_has_enum_named(a, static_method_hof, "OtherMethodErr"));
+    ASSERT(method_hof_union->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((method_hof_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, method_hof_union, "MethodErr"));
+    ASSERT(effect_summary_has_enum_named(a, method_hof_union, "OtherMethodErr"));
+    ASSERT(method_hof_unknown->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((method_hof_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(!effect_summary_has_enum_named(a, method_hof_unknown, "MethodErr"));
 
     xa_analyzer_free(a);
     setup_pool();

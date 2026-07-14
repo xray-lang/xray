@@ -3490,6 +3490,7 @@ skip_layout:
 
             method_links->type = method_type;
             method_links->file_path = ctx->file_path;
+            method_links->function_decl_node = method;
 
             // Store parameter info for LSP
             xa_symbol_links_set_function_sig(method_links, param_types, param_names,
