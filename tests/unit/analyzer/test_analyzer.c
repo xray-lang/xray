@@ -624,6 +624,15 @@ TEST(type_function_copy_preserves_metadata) {
     ASSERT(!xr_type_equals(fn, normal));
     ASSERT(!xr_type_assignable(fn, normal));
     ASSERT(!xr_type_assignable(normal, fn));
+
+    XrType *mode_only =
+        xr_type_new_function(g_isolate, param_types, 2, xr_type_new_bool(NULL), false);
+    ASSERT(mode_only != NULL);
+    ASSERT(xr_type_function_set_param_mode(mode_only, 0, XR_PARAM_IN));
+    ASSERT(xr_type_function_set_param_mode(mode_only, 1, XR_PARAM_REF));
+    ASSERT(!xr_type_equals(mode_only, normal));
+    ASSERT(!xr_type_assignable(mode_only, normal));
+    ASSERT(!xr_type_assignable(normal, mode_only));
 }
 
 // ============================================================================

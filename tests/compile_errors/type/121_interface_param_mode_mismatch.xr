@@ -1,0 +1,8 @@
+interface Writer {
+    write(value: ref int)
+}
+
+class BadWriter implements Writer {
+    write(value: int) {
+    }
+}
