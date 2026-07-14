@@ -300,6 +300,14 @@ add_test(
 set_tests_properties(test_api_inventory_param_modes PROPERTIES
     LABELS "api;metadata;tooling"
 )
+add_test(
+    NAME test_api_inventory_diff
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_api_inventory_diff.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(test_api_inventory_diff PROPERTIES
+    LABELS "api;metadata;tooling"
+)
 
 # test_repl needs the isolate-profile factory (xr_isolate_profile_*)
 # in addition to xray_core, so build it like test_cli_spec with an

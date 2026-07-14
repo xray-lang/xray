@@ -27,6 +27,7 @@ ITEM_SORT_KEY = lambda item: (
     item.get("name", ""),
     item.get("kind", ""),
 )
+API_ID_FIELDS = ("category", "namespace", "name", "kind")
 
 
 GLOBAL_SIGNATURES = {
@@ -953,6 +954,157 @@ def dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(seen.values(), key=ITEM_SORT_KEY)
 
 
+def api_identity(entry: dict[str, Any]) -> tuple[str, str, str, str]:
+    return tuple(str(entry.get(field, "")) for field in API_ID_FIELDS)
+
+
+def api_identity_label(entry: dict[str, Any]) -> str:
+    namespace = str(entry.get("namespace", ""))
+    name = str(entry.get("name", ""))
+    kind = str(entry.get("kind", ""))
+    category = str(entry.get("category", ""))
+    qualified = str(entry.get("qualified") or (f"{namespace}.{name}" if namespace else name))
+    return f"{category}:{kind}:{qualified}"
+
+
+def api_diff_change(
+    *,
+    change: str,
+    severity: str,
+    entry: dict[str, Any],
+    old_signature: str = "",
+    new_signature: str = "",
+    reason: str,
+) -> dict[str, Any]:
+    return {
+        "change": change,
+        "severity": severity,
+        "category": entry.get("category", ""),
+        "namespace": entry.get("namespace", ""),
+        "name": entry.get("name", ""),
+        "qualified": entry.get("qualified") or (
+            f"{entry.get('namespace', '')}.{entry.get('name', '')}"
+            if entry.get("namespace")
+            else entry.get("name", "")
+        ),
+        "kind": entry.get("kind", ""),
+        "old_signature": old_signature,
+        "new_signature": new_signature,
+        "reason": reason,
+    }
+
+
+def group_api_items(inventory: dict[str, Any]) -> dict[tuple[str, str, str, str], list[dict[str, Any]]]:
+    grouped: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+    for entry in inventory.get("items", []):
+        grouped.setdefault(api_identity(entry), []).append(entry)
+    for entries in grouped.values():
+        entries.sort(key=lambda entry: str(entry.get("signature", "")))
+    return grouped
+
+
+def compare_api_inventories(
+    old_inventory: dict[str, Any], new_inventory: dict[str, Any]
+) -> dict[str, Any]:
+    old_items = group_api_items(old_inventory)
+    new_items = group_api_items(new_inventory)
+    changes: list[dict[str, Any]] = []
+
+    for key in sorted(set(old_items) | set(new_items)):
+        old_group = old_items.get(key, [])
+        new_group = new_items.get(key, [])
+        if not old_group:
+            for entry in new_group:
+                changes.append(
+                    api_diff_change(
+                        change="added",
+                        severity="additive",
+                        entry=entry,
+                        new_signature=str(entry.get("signature", "")),
+                        reason="API symbol added",
+                    )
+                )
+            continue
+        if not new_group:
+            for entry in old_group:
+                changes.append(
+                    api_diff_change(
+                        change="removed",
+                        severity="breaking",
+                        entry=entry,
+                        old_signature=str(entry.get("signature", "")),
+                        reason="API symbol removed",
+                    )
+                )
+            continue
+
+        if len(old_group) == 1 and len(new_group) == 1:
+            old_entry = old_group[0]
+            new_entry = new_group[0]
+            old_signature = str(old_entry.get("signature", ""))
+            new_signature = str(new_entry.get("signature", ""))
+            if old_signature != new_signature:
+                changes.append(
+                    api_diff_change(
+                        change="signature_changed",
+                        severity="breaking",
+                        entry=new_entry,
+                        old_signature=old_signature,
+                        new_signature=new_signature,
+                        reason="API signature changed",
+                    )
+                )
+            continue
+
+        old_by_signature = {str(entry.get("signature", "")): entry for entry in old_group}
+        new_by_signature = {str(entry.get("signature", "")): entry for entry in new_group}
+        for signature in sorted(set(old_by_signature) - set(new_by_signature)):
+            entry = old_by_signature[signature]
+            changes.append(
+                api_diff_change(
+                    change="overload_removed",
+                    severity="breaking",
+                    entry=entry,
+                    old_signature=signature,
+                    reason=f"API overload removed from {api_identity_label(entry)}",
+                )
+            )
+        for signature in sorted(set(new_by_signature) - set(old_by_signature)):
+            entry = new_by_signature[signature]
+            changes.append(
+                api_diff_change(
+                    change="overload_added",
+                    severity="additive",
+                    entry=entry,
+                    new_signature=signature,
+                    reason=f"API overload added to {api_identity_label(entry)}",
+                )
+            )
+
+    breaking = sum(1 for change in changes if change["severity"] == "breaking")
+    additive = sum(1 for change in changes if change["severity"] == "additive")
+    return {
+        "schema": 1,
+        "counts": {
+            "changes": len(changes),
+            "breaking": breaking,
+            "additive": additive,
+        },
+        "changes": sorted(
+            changes,
+            key=lambda change: (
+                change.get("severity", ""),
+                change.get("category", ""),
+                change.get("namespace", ""),
+                change.get("name", ""),
+                change.get("kind", ""),
+                change.get("old_signature", ""),
+                change.get("new_signature", ""),
+            ),
+        ),
+    }
+
+
 def build_inventory(root: Path, xray: Path | None, builtin_dump: Path | None) -> dict[str, Any]:
     builtin_data = load_builtin_dump(root, xray, builtin_dump)
     items: list[dict[str, Any]] = []
@@ -1366,6 +1518,9 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--builtin-dump", type=Path, default=None, help="JSON from `xray builtin-dump`")
     parser.add_argument("--json", type=Path, default=None, help="write inventory JSON")
     parser.add_argument("--html", type=Path, default=None, help="write interactive HTML inventory")
+    parser.add_argument("--compare-json", type=Path, default=None, help="baseline inventory JSON to diff")
+    parser.add_argument("--diff-json", type=Path, default=None, help="write API diff JSON report")
+    parser.add_argument("--fail-on-breaking", action="store_true", help="return nonzero on breaking API diff")
     parser.add_argument("--check-docs", action="store_true", help="fail if source API modules lack docs")
     args = parser.parse_args(argv)
 
@@ -1379,6 +1534,16 @@ def main(argv: list[str]) -> int:
         args.html.parent.mkdir(parents=True, exist_ok=True)
         args.html.write_text(render_html(inventory), encoding="utf-8")
 
+    diff_report: dict[str, Any] | None = None
+    if args.compare_json:
+        old_inventory = json.loads(args.compare_json.read_text(encoding="utf-8"))
+        diff_report = compare_api_inventories(old_inventory, inventory)
+        if args.diff_json:
+            args.diff_json.parent.mkdir(parents=True, exist_ok=True)
+            args.diff_json.write_text(
+                json.dumps(diff_report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
+
     errors: list[str] = []
     if args.check_docs:
         errors.extend(check_docs(root, inventory))
@@ -1386,7 +1551,19 @@ def main(argv: list[str]) -> int:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    if not args.json and not args.html:
+    if diff_report is not None and args.fail_on_breaking and diff_report["counts"]["breaking"]:
+        for change in diff_report["changes"]:
+            if change["severity"] != "breaking":
+                continue
+            print(
+                f"{change['change']}: {change['qualified']} "
+                f"{change['old_signature']!r} -> {change['new_signature']!r}",
+                file=sys.stderr,
+            )
+        return 1
+    if diff_report is not None and not args.diff_json and not args.json and not args.html:
+        print(json.dumps(diff_report, indent=2, ensure_ascii=False))
+    elif diff_report is None and not args.json and not args.html:
         print(json.dumps(inventory, indent=2, ensure_ascii=False))
     return 0
 
