@@ -3,8 +3,10 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 
 // Only include analyzer headers (avoid GC type conflicts)
 #include "xtype.h"
@@ -20,6 +22,7 @@
 #include "xtype_ref_resolve.h"
 #include "xtype_pool.h"
 #include "xhashmap.h"
+#include "xmalloc.h"
 #include "xarena.h"
 #include "xray_vm.h"
 #include "module/xmodule_graph.h"
@@ -799,6 +802,15 @@ static const XaErrorTypeSet *effect_summary_enum_set_named(XaAnalyzer *analyzer,
     return NULL;
 }
 
+static bool write_text_file(const char *path, const char *content) {
+    FILE *f = fopen(path, "w");
+    if (!f)
+        return false;
+    if (content)
+        fputs(content, f);
+    return fclose(f) == 0;
+}
+
 TEST(analyzer_error_effect_records_direct_throw_variant) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -1513,91 +1525,293 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    const char *module_name = "effect_export_module";
     const char *lib_source = "enum ImportedErr { Selective, Namespace }\n"
                              "export fn failSelective() { throw ImportedErr.Selective }\n"
                              "export fn failNamespace() { throw ImportedErr.Namespace }\n"
+                             "export fn applyImported(cb: () -> ()) { cb() }\n"
                              "export { ImportedErr }\n";
-    const char *entry_source = "import { failSelective } from effect_export_module\n"
-                               "import effect_export_module as effects\n"
+    const char *reexport_source =
+        "export { failSelective as failReexported, failNamespace, applyImported as "
+        "applyReexported } from "
+        "\"./effect_export_module\"\n";
+    const char *star_source = "export * from \"./effect_export_module\"\n";
+    const char *entry_source = "import { failSelective, applyImported } from "
+                               "\"./effect_export_module\"\n"
+                               "import \"./effect_export_module\" as effects\n"
+                               "import { failReexported, applyReexported } from "
+                               "\"./effect_reexport_module\"\n"
+                               "import \"./effect_reexport_module\" as facade\n"
+                               "import { failNamespace as failStarNamespace, applyImported as "
+                               "applyStar } from "
+                               "\"./effect_star_module\"\n"
+                               "import \"./effect_star_module\" as star\n"
                                "fn viaSelective() { failSelective() }\n"
-                               "fn viaNamespace() { effects.failNamespace() }\n";
+                               "fn viaNamespace() { effects.failNamespace() }\n"
+                               "fn viaReexportedSelective() { failReexported() }\n"
+                               "fn viaReexportedNamespace() { facade.failNamespace() }\n"
+                               "fn viaStarSelective() { star.failSelective() }\n"
+                               "fn viaStarNamespace() { failStarNamespace() }\n"
+                               "fn viaImportedHigherOrder() { applyImported(failSelective) }\n"
+                               "fn viaNamespaceHigherOrder() { "
+                               "effects.applyImported(failSelective) }\n"
+                               "fn viaReexportedHigherOrder() { "
+                               "applyReexported(failReexported) }\n"
+                               "fn viaReexportedNamespaceHigherOrder() { "
+                               "facade.applyReexported(failReexported) }\n"
+                               "fn viaStarHigherOrder() { applyStar(failStarNamespace) }\n";
+
+    char tmpdir[] = "/tmp/xray_effect_reexport_XXXXXX";
+    ASSERT(mkdtemp(tmpdir) != NULL);
+    char lib_path[512];
+    char reexport_path[512];
+    char star_path[512];
+    char entry_path[512];
+    snprintf(lib_path, sizeof(lib_path), "%s/effect_export_module.xr", tmpdir);
+    snprintf(reexport_path, sizeof(reexport_path), "%s/effect_reexport_module.xr", tmpdir);
+    snprintf(star_path, sizeof(star_path), "%s/effect_star_module.xr", tmpdir);
+    snprintf(entry_path, sizeof(entry_path), "%s/entry_effect_module.xr", tmpdir);
+    ASSERT(write_text_file(lib_path, lib_source));
+    ASSERT(write_text_file(reexport_path, reexport_source));
+    ASSERT(write_text_file(star_path, star_source));
+    ASSERT(write_text_file(entry_path, entry_source));
 
     AstNode *lib_program = xr_parse(g_session, lib_source);
+    AstNode *reexport_program = xr_parse(g_session, reexport_source);
+    AstNode *star_program = xr_parse(g_session, star_source);
     AstNode *entry_program = xr_parse(g_session, entry_source);
     ASSERT(lib_program != NULL);
+    ASSERT(reexport_program != NULL);
+    ASSERT(star_program != NULL);
     ASSERT(entry_program != NULL);
 
-    XrHashMap *native_loaders = xr_hashmap_new();
-    ASSERT(native_loaders != NULL);
-    ASSERT(xr_hashmap_set(native_loaders, module_name, (void *) (intptr_t) 1));
-    XrModuleResolverConfig cfg = {.native_loaders = native_loaders};
+    XrModuleResolverConfig cfg = {0};
     XrModuleResolver *resolver = xr_module_resolver_new(&cfg);
     ASSERT(resolver != NULL);
+    XrModuleId lib_id;
+    XrModuleId reexport_id;
+    XrModuleId star_id;
+    char *resolve_err = NULL;
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_export_module", false, entry_path,
+                                      &lib_id, &resolve_err) == 0);
+    xr_free(resolve_err);
+    resolve_err = NULL;
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_reexport_module", false, entry_path,
+                                      &reexport_id, &resolve_err) == 0);
+    xr_free(resolve_err);
+    resolve_err = NULL;
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_star_module", false, entry_path, &star_id,
+                                      &resolve_err) == 0);
+    xr_free(resolve_err);
+    char *entry_canonical = realpath(entry_path, NULL);
+    ASSERT(entry_canonical != NULL);
 
-    XrModuleSpec specs[2] = {{.canonical = (char *) module_name,
-                              .source_path = "effect_export_module.xr",
+    XrModuleSpec specs[4] = {{.canonical = lib_id.canonical,
+                              .source_path = lib_id.source_path,
                               .ast = lib_program,
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 0},
-                             {.canonical = "entry_effect_module.xr",
-                              .source_path = "entry_effect_module.xr",
+                             {.canonical = reexport_id.canonical,
+                              .source_path = reexport_id.source_path,
+                              .ast = reexport_program,
+                              .status = XR_MODSPEC_RESOLVED,
+                              .topo_index = 1},
+                             {.canonical = star_id.canonical,
+                              .source_path = star_id.source_path,
+                              .ast = star_program,
+                              .status = XR_MODSPEC_RESOLVED,
+                              .topo_index = 2},
+                             {.canonical = entry_canonical,
+                              .source_path = entry_canonical,
                               .ast = entry_program,
                               .status = XR_MODSPEC_RESOLVED,
-                              .topo_index = 1}};
-    int topo_order[2] = {0, 1};
+                              .topo_index = 3}};
+    int topo_order[4] = {0, 1, 2, 3};
     XrHashMap *id_index = xr_hashmap_new();
     ASSERT(id_index != NULL);
     ASSERT(xr_hashmap_set(id_index, specs[0].canonical, (void *) (intptr_t) 1));
     ASSERT(xr_hashmap_set(id_index, specs[1].canonical, (void *) (intptr_t) 2));
+    ASSERT(xr_hashmap_set(id_index, specs[2].canonical, (void *) (intptr_t) 3));
+    ASSERT(xr_hashmap_set(id_index, specs[3].canonical, (void *) (intptr_t) 4));
     XrModuleGraph graph = {.specs = specs,
-                           .spec_count = 2,
+                           .spec_count = 4,
                            .id_index = id_index,
                            .topo_order = topo_order,
-                           .topo_count = 2,
+                           .topo_count = 4,
                            .resolver = resolver,
-                           .entry_index = 1};
+                           .entry_index = 3};
 
     xa_analyzer_set_graph(a, &graph);
     xa_analyzer_analyze(a, specs[0].source_path, lib_program);
     ASSERT(!analyzer_diag_contains(a, "error"));
 
-    XrHashMap *exports = NULL;
-    ASSERT(xa_analyzer_collect_export_symbols_checked(a, (XrAstNode *) lib_program, &exports));
-    ASSERT(exports != NULL);
-    specs[0].export_symbols = exports;
+    XrHashMap *lib_exports = NULL;
+    ASSERT(xa_analyzer_collect_export_symbols_checked(a, (XrAstNode *) lib_program, &lib_exports));
+    ASSERT(lib_exports != NULL);
+    specs[0].export_symbols = lib_exports;
     xa_analyzer_clear_diagnostics(a);
 
-    xa_analyzer_analyze(a, specs[1].source_path, entry_program);
+    xa_analyzer_analyze(a, specs[1].source_path, reexport_program);
+    ASSERT(!analyzer_diag_contains(a, "error"));
+
+    XrHashMap *reexport_exports = NULL;
+    ASSERT(xa_analyzer_collect_export_symbols_checked(a, (XrAstNode *) reexport_program,
+                                                      &reexport_exports));
+    ASSERT(reexport_exports != NULL);
+    specs[1].export_symbols = reexport_exports;
+    xa_analyzer_clear_diagnostics(a);
+
+    xa_analyzer_analyze(a, specs[2].source_path, star_program);
+    ASSERT(!analyzer_diag_contains(a, "error"));
+
+    XrHashMap *star_exports = NULL;
+    ASSERT(
+        xa_analyzer_collect_export_symbols_checked(a, (XrAstNode *) star_program, &star_exports));
+    ASSERT(star_exports != NULL);
+    specs[2].export_symbols = star_exports;
+    xa_analyzer_clear_diagnostics(a);
+
+    xa_analyzer_analyze(a, specs[3].source_path, entry_program);
     ASSERT(!analyzer_diag_contains(a, "error"));
 
     const XaEffectSummary *selective = analyzer_function_effect_summary(a, "viaSelective");
     const XaEffectSummary *ns = analyzer_function_effect_summary(a, "viaNamespace");
+    const XaEffectSummary *reexported =
+        analyzer_function_effect_summary(a, "viaReexportedSelective");
+    const XaEffectSummary *reexported_ns =
+        analyzer_function_effect_summary(a, "viaReexportedNamespace");
+    const XaEffectSummary *star_selective = analyzer_function_effect_summary(a, "viaStarSelective");
+    const XaEffectSummary *star_ns = analyzer_function_effect_summary(a, "viaStarNamespace");
+    const XaEffectSummary *imported_hof =
+        analyzer_function_effect_summary(a, "viaImportedHigherOrder");
+    const XaEffectSummary *namespace_hof =
+        analyzer_function_effect_summary(a, "viaNamespaceHigherOrder");
+    const XaEffectSummary *reexported_hof =
+        analyzer_function_effect_summary(a, "viaReexportedHigherOrder");
+    const XaEffectSummary *reexported_namespace_hof =
+        analyzer_function_effect_summary(a, "viaReexportedNamespaceHigherOrder");
+    const XaEffectSummary *star_hof = analyzer_function_effect_summary(a, "viaStarHigherOrder");
     ASSERT(selective != NULL);
     ASSERT(ns != NULL);
+    ASSERT(reexported != NULL);
+    ASSERT(reexported_ns != NULL);
+    ASSERT(star_selective != NULL);
+    ASSERT(star_ns != NULL);
+    ASSERT(imported_hof != NULL);
+    ASSERT(namespace_hof != NULL);
+    ASSERT(reexported_hof != NULL);
+    ASSERT(reexported_namespace_hof != NULL);
+    ASSERT(star_hof != NULL);
 
     ASSERT(selective->completeness == XA_EFFECT_COMPLETE);
     ASSERT(ns->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(reexported->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(reexported_ns->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(star_selective->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(star_ns->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(imported_hof->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(namespace_hof->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(reexported_hof->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(reexported_namespace_hof->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(star_hof->completeness == XA_EFFECT_COMPLETE);
     ASSERT((selective->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
     ASSERT((ns->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((reexported->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((reexported_ns->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((star_selective->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((star_ns->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((imported_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((namespace_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((reexported_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((reexported_namespace_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((star_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((imported_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((namespace_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((reexported_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((reexported_namespace_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((star_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 
     const XaErrorTypeSet *selective_set =
         effect_summary_enum_set_named(a, selective, "ImportedErr");
     const XaErrorTypeSet *namespace_set = effect_summary_enum_set_named(a, ns, "ImportedErr");
+    const XaErrorTypeSet *reexported_set =
+        effect_summary_enum_set_named(a, reexported, "ImportedErr");
+    const XaErrorTypeSet *reexported_namespace_set =
+        effect_summary_enum_set_named(a, reexported_ns, "ImportedErr");
+    const XaErrorTypeSet *star_selective_set =
+        effect_summary_enum_set_named(a, star_selective, "ImportedErr");
+    const XaErrorTypeSet *star_namespace_set =
+        effect_summary_enum_set_named(a, star_ns, "ImportedErr");
+    const XaErrorTypeSet *imported_hof_set =
+        effect_summary_enum_set_named(a, imported_hof, "ImportedErr");
+    const XaErrorTypeSet *namespace_hof_set =
+        effect_summary_enum_set_named(a, namespace_hof, "ImportedErr");
+    const XaErrorTypeSet *reexported_hof_set =
+        effect_summary_enum_set_named(a, reexported_hof, "ImportedErr");
+    const XaErrorTypeSet *reexported_namespace_hof_set =
+        effect_summary_enum_set_named(a, reexported_namespace_hof, "ImportedErr");
+    const XaErrorTypeSet *star_hof_set = effect_summary_enum_set_named(a, star_hof, "ImportedErr");
     ASSERT(selective_set != NULL);
     ASSERT(namespace_set != NULL);
+    ASSERT(reexported_set != NULL);
+    ASSERT(reexported_namespace_set != NULL);
+    ASSERT(star_selective_set != NULL);
+    ASSERT(star_namespace_set != NULL);
+    ASSERT(imported_hof_set != NULL);
+    ASSERT(namespace_hof_set != NULL);
+    ASSERT(reexported_hof_set != NULL);
+    ASSERT(reexported_namespace_hof_set != NULL);
+    ASSERT(star_hof_set != NULL);
     ASSERT(!selective_set->all_variants);
     ASSERT(!namespace_set->all_variants);
+    ASSERT(!reexported_set->all_variants);
+    ASSERT(!reexported_namespace_set->all_variants);
+    ASSERT(!star_selective_set->all_variants);
+    ASSERT(!star_namespace_set->all_variants);
+    ASSERT(!imported_hof_set->all_variants);
+    ASSERT(!namespace_hof_set->all_variants);
+    ASSERT(!reexported_hof_set->all_variants);
+    ASSERT(!reexported_namespace_hof_set->all_variants);
+    ASSERT(!star_hof_set->all_variants);
     ASSERT(xa_bitset_test(&selective_set->variants, 0));
     ASSERT(!xa_bitset_test(&selective_set->variants, 1));
     ASSERT(!xa_bitset_test(&namespace_set->variants, 0));
     ASSERT(xa_bitset_test(&namespace_set->variants, 1));
+    ASSERT(xa_bitset_test(&reexported_set->variants, 0));
+    ASSERT(!xa_bitset_test(&reexported_set->variants, 1));
+    ASSERT(!xa_bitset_test(&reexported_namespace_set->variants, 0));
+    ASSERT(xa_bitset_test(&reexported_namespace_set->variants, 1));
+    ASSERT(xa_bitset_test(&star_selective_set->variants, 0));
+    ASSERT(!xa_bitset_test(&star_selective_set->variants, 1));
+    ASSERT(!xa_bitset_test(&star_namespace_set->variants, 0));
+    ASSERT(xa_bitset_test(&star_namespace_set->variants, 1));
+    ASSERT(xa_bitset_test(&imported_hof_set->variants, 0));
+    ASSERT(!xa_bitset_test(&imported_hof_set->variants, 1));
+    ASSERT(xa_bitset_test(&namespace_hof_set->variants, 0));
+    ASSERT(!xa_bitset_test(&namespace_hof_set->variants, 1));
+    ASSERT(xa_bitset_test(&reexported_hof_set->variants, 0));
+    ASSERT(!xa_bitset_test(&reexported_hof_set->variants, 1));
+    ASSERT(xa_bitset_test(&reexported_namespace_hof_set->variants, 0));
+    ASSERT(!xa_bitset_test(&reexported_namespace_hof_set->variants, 1));
+    ASSERT(!xa_bitset_test(&star_hof_set->variants, 0));
+    ASSERT(xa_bitset_test(&star_hof_set->variants, 1));
 
-    xr_hashmap_free(exports);
+    xr_hashmap_free(lib_exports);
     specs[0].export_symbols = NULL;
+    xr_hashmap_free(reexport_exports);
+    specs[1].export_symbols = NULL;
+    xr_hashmap_free(star_exports);
+    specs[2].export_symbols = NULL;
     xr_hashmap_free(id_index);
     xr_module_resolver_free(resolver);
-    xr_hashmap_free(native_loaders);
+    xr_module_id_cleanup(&lib_id);
+    xr_module_id_cleanup(&reexport_id);
+    xr_module_id_cleanup(&star_id);
+    free(entry_canonical);
+    unlink(lib_path);
+    unlink(reexport_path);
+    unlink(star_path);
+    unlink(entry_path);
+    rmdir(tmpdir);
     xa_analyzer_free(a);
     setup_pool();
 }
