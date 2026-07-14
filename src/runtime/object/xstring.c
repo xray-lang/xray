@@ -428,24 +428,24 @@ int xr_string_compare(XrString *a, XrString *b) {
 
 /* ========== String Basic Methods ========== */
 
-// charAt - get character at position (supports negative index)
+// runeAt - get scalar at rune position (supports negative index)
 XrString *xr_string_rune_at(XrVMRuntime *iso, XrString *str, xr_Integer index) {
-    XR_DCHECK(iso != NULL, "string_char_at: NULL isolate");
-    if (str == NULL || str->length == 0)
+    XR_DCHECK(iso != NULL, "string_rune_at: NULL isolate");
+    if (str == NULL || str->rune_length == 0)
         return NULL;
 
     // Handle negative index
+    xr_Integer count = (xr_Integer) str->rune_length;
     if (index < 0) {
-        index = (xr_Integer) str->length + index;
+        index = count + index;
     }
 
     // Bounds check
-    if (index < 0 || (size_t) index >= str->length) {
+    if (index < 0 || index >= count) {
         return NULL;
     }
 
-    // Create single character string
-    return xr_string_new(iso, &str->data[index], 1);
+    return xr_string_rune_at_unicode(iso, str, (size_t) index);
 }
 
 // substring - extract substring
@@ -477,7 +477,7 @@ XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_
     xr_Integer count = (xr_Integer) xr_string_rune_length(str);
     if (start < 0 || end < start || end > count)
         return NULL;
-    return xr_string_substring_by_char(iso, str, (size_t) start, (size_t) end);
+    return xr_string_substring_by_rune(iso, str, (size_t) start, (size_t) end);
 }
 
 static bool string_byte_boundary(XrString *str, xr_Integer offset) {
@@ -1123,7 +1123,7 @@ size_t xr_string_rune_length(XrString *str) {
     return str->rune_length;
 }
 
-// charCodeAt - get Unicode codepoint at char index
+// runeCodeAt - get Unicode scalar value at rune index
 int32_t xr_string_rune_code_at(XrString *str, size_t index) {
     if (!str)
         return -1;
@@ -1135,7 +1135,7 @@ int32_t xr_string_rune_code_at(XrString *str, size_t index) {
     return -1;  // Index out of bounds
 }
 
-// charAtUnicode - get char by Unicode char index
+// runeAtUnicode - get scalar by rune index
 XrString *xr_string_rune_at_unicode(XrVMRuntime *iso, XrString *str, size_t index) {
     if (!iso || !str)
         return NULL;
@@ -1146,20 +1146,20 @@ XrString *xr_string_rune_at_unicode(XrVMRuntime *iso, XrString *str, size_t inde
         return NULL;  // Index out of bounds
     }
 
-    // Get byte length of this char
-    int char_size = xr_utf8_rune_size((uint8_t) str->data[pos]);
-    if (pos + char_size > str->length) {
-        return NULL;  // Incomplete char
+    // Get byte length of this scalar.
+    int rune_size = xr_utf8_rune_size((uint8_t) str->data[pos]);
+    if (pos + rune_size > str->length) {
+        return NULL;  // Incomplete scalar
     }
 
-    // Create single char string
-    return xr_string_new(iso, str->data + pos, (size_t) char_size);
+    // Create single-rune string.
+    return xr_string_new(iso, str->data + pos, (size_t) rune_size);
 }
 
 /*
-** substringByChar - substring by char index
+** substringByRune - substring by rune index
 */
-XrString *xr_string_substring_by_char(XrVMRuntime *iso, XrString *str, size_t start, size_t end) {
+XrString *xr_string_substring_by_rune(XrVMRuntime *iso, XrString *str, size_t start, size_t end) {
     if (!iso || !str)
         return NULL;
     if (start > end)

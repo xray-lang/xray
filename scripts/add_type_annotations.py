@@ -122,7 +122,7 @@ def infer_param_type(param_name, fn_name, fn_body_lines):
         return 'Array<any>'
     
     # If string methods called on it
-    if re.search(rf'\b{re.escape(clean)}\.(toUpperCase|toLowerCase|trim|split|contains|startsWith|endsWith|replace|charAt|repeat)\b', body_text):
+    if re.search(rf'\b{re.escape(clean)}\.(toUpperCase|toLowerCase|trim|split|contains|startsWith|endsWith|replace|repeat)\b', body_text):
         return 'string'
     
     # Default to any
