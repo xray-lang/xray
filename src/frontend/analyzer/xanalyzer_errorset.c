@@ -24,49 +24,15 @@
 #include "xanalyzer_errorset.h"
 #include "xanalyzer_visitor.h"
 #include "xa_effect_db.h"
-#include "../../base/xhash.h"
 #include "../../runtime/value/xtype.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
-#include <stdio.h>
-
-static uint64_t es_stable_key_text2(const char *prefix, const char *name) {
-    char buf[512];
-    snprintf(buf, sizeof(buf), "%s:%s", prefix ? prefix : "", name ? name : "<anonymous>");
-    uint64_t key = xr_hash_bytes64(buf, strlen(buf));
-    return key ? key : 1u;
-}
-
-static uint64_t es_stable_key_text3(const char *prefix, const char *type_name,
-                                    const char *variant_name) {
-    char buf[768];
-    snprintf(buf, sizeof(buf), "%s:%s.%s", prefix ? prefix : "", type_name ? type_name : "?",
-             variant_name ? variant_name : "?");
-    uint64_t key = xr_hash_bytes64(buf, strlen(buf));
-    return key ? key : 1u;
-}
-
-static XaErrorTypeId es_register_error_enum(XaEffectDatabase *db, XrType *enum_type) {
-    if (!db || !enum_type || !XR_TYPE_IS_ENUM(enum_type))
-        return XA_ERROR_TYPE_NONE;
-    const char *name = enum_type->enum_type.enum_name;
-    XaErrorTypeId type_id = xa_effect_db_register_error_type(db, es_stable_key_text2("enum", name));
-    const XrEnumLayout *layout = enum_type->enum_type.layout;
-    if (type_id != XA_ERROR_TYPE_NONE && layout) {
-        for (uint32_t i = 0; i < layout->variant_count; i++) {
-            const char *variant_name = layout->variants[i].name;
-            xa_effect_db_register_error_variant(db, type_id,
-                                                es_stable_key_text3("variant", name, variant_name));
-        }
-    }
-    return type_id;
-}
 
 static void es_summary_add_enum_all(XaEffectDatabase *db, XaEffectSummary *summary,
                                     XrType *enum_type) {
     if (!db || !summary || !enum_type)
         return;
-    XaErrorTypeId type_id = es_register_error_enum(db, enum_type);
+    XaErrorTypeId type_id = xa_effect_db_register_error_enum(db, enum_type);
     if (type_id == XA_ERROR_TYPE_NONE)
         return;
     xa_effect_summary_add_all_variants(db, summary, type_id);
@@ -76,7 +42,7 @@ static void es_summary_add_enum_case(XaEffectDatabase *db, XaEffectSummary *summ
                                      XrType *enum_type, uint32_t case_index) {
     if (!db || !summary || !enum_type)
         return;
-    XaErrorTypeId type_id = es_register_error_enum(db, enum_type);
+    XaErrorTypeId type_id = xa_effect_db_register_error_enum(db, enum_type);
     if (type_id == XA_ERROR_TYPE_NONE)
         return;
     XaErrorVariantId variant_id = case_index;

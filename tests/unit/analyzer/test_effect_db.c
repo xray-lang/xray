@@ -55,7 +55,7 @@ TEST(empty_complete_is_real_summary) {
 TEST(dynamic_bitset_accepts_variant_above_64) {
     XaEffectDatabase *db = xa_effect_db_new();
     ASSERT(db != NULL);
-    XaErrorTypeId type_id = xa_effect_db_register_error_type(db, 0x101u);
+    XaErrorTypeId type_id = xa_effect_db_register_error_type(db, 0x101u, NULL);
     ASSERT(type_id != XA_ERROR_TYPE_NONE);
     for (uint32_t i = 0; i <= 72; i++) {
         XaErrorVariantId v = xa_effect_db_register_error_variant(db, type_id, 0x1000u + i);
@@ -82,7 +82,7 @@ TEST(dynamic_bitset_accepts_variant_above_64) {
 TEST(interning_ignores_variant_insertion_order) {
     XaEffectDatabase *db = xa_effect_db_new();
     ASSERT(db != NULL);
-    XaErrorTypeId type_id = xa_effect_db_register_error_type(db, 0x202u);
+    XaErrorTypeId type_id = xa_effect_db_register_error_type(db, 0x202u, NULL);
     ASSERT(type_id != XA_ERROR_TYPE_NONE);
     XaErrorVariantId a = xa_effect_db_register_error_variant(db, type_id, 0xaaaau);
     XaErrorVariantId b = xa_effect_db_register_error_variant(db, type_id, 0xbbbbu);
@@ -115,13 +115,13 @@ TEST(stable_variant_keys_survive_session_variant_order) {
     ASSERT(db1 != NULL);
     ASSERT(db2 != NULL);
 
-    XaErrorTypeId t1 = xa_effect_db_register_error_type(db1, 0x303u);
+    XaErrorTypeId t1 = xa_effect_db_register_error_type(db1, 0x303u, NULL);
     XaErrorVariantId b1 = xa_effect_db_register_error_variant(db1, t1, 0x20u);
     XaErrorVariantId a1 = xa_effect_db_register_error_variant(db1, t1, 0x10u);
     ASSERT(a1 != XA_ERROR_VARIANT_INVALID);
     ASSERT(b1 != XA_ERROR_VARIANT_INVALID);
 
-    XaErrorTypeId t2 = xa_effect_db_register_error_type(db2, 0x303u);
+    XaErrorTypeId t2 = xa_effect_db_register_error_type(db2, 0x303u, NULL);
     XaErrorVariantId a2 = xa_effect_db_register_error_variant(db2, t2, 0x10u);
     XaErrorVariantId b2 = xa_effect_db_register_error_variant(db2, t2, 0x20u);
     ASSERT(a2 != XA_ERROR_VARIANT_INVALID);
@@ -180,8 +180,8 @@ TEST(incomplete_empty_is_not_nothrow) {
 TEST(summary_merge_preserves_variants_and_incomplete_reason) {
     XaEffectDatabase *db = xa_effect_db_new();
     ASSERT(db != NULL);
-    XaErrorTypeId first_type = xa_effect_db_register_error_type(db, 0x404u);
-    XaErrorTypeId second_type = xa_effect_db_register_error_type(db, 0x505u);
+    XaErrorTypeId first_type = xa_effect_db_register_error_type(db, 0x404u, NULL);
+    XaErrorTypeId second_type = xa_effect_db_register_error_type(db, 0x505u, NULL);
     ASSERT(first_type != XA_ERROR_TYPE_NONE);
     ASSERT(second_type != XA_ERROR_TYPE_NONE);
     ASSERT(xa_effect_db_register_error_variant(db, first_type, 0x11u) != XA_ERROR_VARIANT_INVALID);
@@ -213,6 +213,18 @@ TEST(summary_merge_preserves_variants_and_incomplete_reason) {
     xa_effect_db_free(db);
 }
 
+TEST(error_type_handle_is_bound_by_stable_key) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XrType *fake_type = (XrType *) &tests_passed;
+    XaErrorTypeId first = xa_effect_db_register_error_type(db, 0x606u, NULL);
+    XaErrorTypeId second = xa_effect_db_register_error_type(db, 0x606u, fake_type);
+    ASSERT(first != XA_ERROR_TYPE_NONE);
+    ASSERT(first == second);
+    ASSERT(xa_effect_db_error_type_handle(db, first) == fake_type);
+    xa_effect_db_free(db);
+}
+
 int main(void) {
     printf("Running effect database tests...\n");
     RUN_TEST(empty_complete_is_real_summary);
@@ -221,6 +233,7 @@ int main(void) {
     RUN_TEST(stable_variant_keys_survive_session_variant_order);
     RUN_TEST(incomplete_empty_is_not_nothrow);
     RUN_TEST(summary_merge_preserves_variants_and_incomplete_reason);
+    RUN_TEST(error_type_handle_is_bound_by_stable_key);
 
     printf("\n%d tests passed, %d failed\n", tests_passed, tests_failed);
     return tests_failed ? 1 : 0;
