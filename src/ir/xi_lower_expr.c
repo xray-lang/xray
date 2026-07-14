@@ -4653,6 +4653,38 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return v;
         }
 
+        if (xi_lower_receiver_method_call_matches(
+                recv->type, ma->name, n, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM)) {
+            XiValue *v =
+                xi_value_new(l->func, l->cur_block, XI_BYTE_ARRAY_APPEND_FROM, result_type, 2);
+            if (!v)
+                return NULL;
+            v->args[0] = recv;
+            v->args[1] = arg_vals[0];
+            v->line = (uint32_t) node->line;
+            xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
+            return v;
+        }
+
+        if (xi_lower_receiver_method_call_matches(
+                recv->type, ma->name, n, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM)) {
+            for (int i = 0; i < n; i++) {
+                if (arg_vals[i] && arg_vals[i]->type &&
+                    xr_is_json_coercion(l->type_int, arg_vals[i]->type))
+                    arg_vals[i] = xi_lower_checktype_for_type(l, node, arg_vals[i], l->type_int);
+            }
+            XiValue *v =
+                xi_value_new(l->func, l->cur_block, XI_BYTE_ARRAY_REPEAT_FROM, result_type, 3);
+            if (!v)
+                return NULL;
+            v->args[0] = recv;
+            v->args[1] = arg_vals[0];
+            v->args[2] = arg_vals[1];
+            v->line = (uint32_t) node->line;
+            xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
+            return v;
+        }
+
         if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
             strcmp(ma->name, "get") == 0 && n == 1) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, result_type, 2);

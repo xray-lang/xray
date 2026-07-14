@@ -3412,6 +3412,7 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
         case XI_BYTE_SLICE_COMPARE:
         case XI_BYTE_SLICE_COMMON_PREFIX:
             return arg_index == 0 || arg_index == 1;
+        case XI_BYTE_ARRAY_APPEND_FROM:
         case XI_BYTE_ARRAY_COPY_FROM:
             return arg_index == 0 || arg_index == 1;
         case XI_LEN:
@@ -4485,8 +4486,7 @@ static bool emit_byte_array_append_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
         return true;
     }
 
-    bool value_used = call->uses != 0;
-    bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
+    bool boxed = cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
     if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
@@ -4550,8 +4550,7 @@ static bool emit_byte_array_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
         return true;
     }
 
-    bool value_used = call->uses != 0;
-    bool boxed = value_used && cg_rep(call) == XR_REP_TAGGED;
+    bool boxed = cg_rep(call) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "xr_mkptr(");
     if (bulk && bulk->action == XAOT_BULK_TYPED_LOOP) {
@@ -4617,10 +4616,18 @@ static bool cg_array_call_is_direct_byte_array_mutator_trusted_nothrow(XiCgenCtx
 static bool cg_array_call_is_byte_array_append_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
                                                                const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
-    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT))
+    if (!v)
         return false;
 
     CgArrayElemInfo dst_info;
+    if (v->op == XI_BYTE_ARRAY_APPEND_FROM) {
+        return v->nargs == 2 &&
+               cg_array_value_u8_unchecked_info(ctx, f, v->args[0], &dst_info,
+                                                CG_ARRAY_STORAGE_MUTABLE) &&
+               cg_span_value_u8_info(ctx, v->args[1], NULL);
+    }
+    if (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT)
+        return false;
     return cg_call_method_matches_receiver_registry_id(
                v, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM) &&
            v->nargs == 2 &&
@@ -4632,10 +4639,19 @@ static bool cg_array_call_is_byte_array_append_trusted_nothrow(XiCgenCtx *ctx, c
 static bool cg_array_call_is_byte_array_repeat_trusted_nothrow(XiCgenCtx *ctx, const XiFunc *f,
                                                                const XiValue *call) {
     const XiValue *v = cg_unwrap_identity_value(call);
-    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT))
+    if (!v)
         return false;
 
     CgArrayElemInfo dst_info;
+    if (v->op == XI_BYTE_ARRAY_REPEAT_FROM) {
+        return v->nargs == 3 &&
+               cg_array_value_u8_unchecked_info(ctx, f, v->args[0], &dst_info,
+                                                CG_ARRAY_STORAGE_MUTABLE) &&
+               cg_byte_array_unchecked_int_arg(v->args[1]) &&
+               cg_byte_array_unchecked_int_arg(v->args[2]);
+    }
+    if (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT)
+        return false;
     return cg_call_method_matches_receiver_registry_id(
                v, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM) &&
            v->nargs == 3 &&

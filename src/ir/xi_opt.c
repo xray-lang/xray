@@ -2602,6 +2602,12 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
         case XI_BYTE_ARRAY_REPEAT_FROM:
             *out = arg_idx == 0 ? XR_REP_TAGGED : XR_REP_I64;
             return true;
+        case XI_BYTE_ARRAY_APPEND_FROM:
+            *out = arg_idx == 0 ? XR_REP_TAGGED
+                   : arg_idx == 1 && user->nargs > arg_idx && user->args[arg_idx]
+                       ? sr_type_native_boundary_rep(user->args[arg_idx]->type)
+                       : XR_REP_TAGGED;
+            return true;
         case XI_BYTE_ARRAY_COPY_FROM:
             *out = arg_idx <= 1 ? XR_REP_TAGGED : XR_REP_I64;
             return true;

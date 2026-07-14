@@ -308,10 +308,12 @@ typedef enum {
     XI_SPAN_COMPARE,     /* args[0]=Span<T> left, args[1]=Span<T> right; result int */
     XI_SPAN_REINTERPRET, /* args[0]=Slice<byte>; result Span<T>; aux packs elem metadata */
     XI_BYTE_ARRAY_COPY_WITHIN,
-    XI_BYTE_ARRAY_COPY_FROM,
-    XI_BYTE_ARRAY_REPEAT_FROM,
-    XI_ARRAY_DATA_PTR, /* args[0]=Array<T>/Span<T>; result RawPtr<T>/RawMut<T> address */
-    XI_STATIC_ADDR,    /* aux_int=shared slot; result RawPtr<T>/RawMut<T> to static data */
+    XI_BYTE_ARRAY_COPY_FROM,   /* args[0]=dst, args[1]=src, args[2]=src_off,
+                                * args[3]=dst_off, args[4]=count */
+    XI_BYTE_ARRAY_APPEND_FROM, /* args[0]=dst Array<byte>, args[1]=src Slice<byte>; result dst */
+    XI_BYTE_ARRAY_REPEAT_FROM, /* args[0]=dst Array<byte>, args[1]=distance, args[2]=count */
+    XI_ARRAY_DATA_PTR,         /* args[0]=Array<T>/Span<T>; result RawPtr<T>/RawMut<T> address */
+    XI_STATIC_ADDR,            /* aux_int=shared slot; result RawPtr<T>/RawMut<T> to static data */
 
     /* FFI raw-pointer memory access. The address is an address-width int
      * (RawPtr<T>/RawMut<T> value). aux_int carries an XrFFIType width code in

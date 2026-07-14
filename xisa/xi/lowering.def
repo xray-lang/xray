@@ -893,6 +893,12 @@
   :vm-bytecode (driver xi_emit_byte_array_copy_from)
   :aot-c (driver xicgen_byte_array_copy_from))
 
+(lower xi.byte.array.append.from
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_byte_array_append_from)
+  :aot-c (driver xicgen_byte_array_append_from))
+
 (lower xi.byte.array.repeat.from
   :match ()
   :required-targets (vm-bytecode aot-c)

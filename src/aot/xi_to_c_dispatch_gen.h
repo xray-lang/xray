@@ -128,6 +128,7 @@
     X(SPAN_REINTERPRET, "xi.span.reinterpret", xicgen_span_reinterpret) \
     X(BYTE_ARRAY_COPY_WITHIN, "xi.byte.array.copy.within", xicgen_byte_array_copy_within) \
     X(BYTE_ARRAY_COPY_FROM, "xi.byte.array.copy.from", xicgen_byte_array_copy_from) \
+    X(BYTE_ARRAY_APPEND_FROM, "xi.byte.array.append.from", xicgen_byte_array_append_from) \
     X(BYTE_ARRAY_REPEAT_FROM, "xi.byte.array.repeat.from", xicgen_byte_array_repeat_from) \
     X(ARRAY_DATA_PTR, "xi.array.data.ptr", xicgen_array_data_ptr) \
     X(STATIC_ADDR, "xi.static.addr", xicgen_static_addr) \

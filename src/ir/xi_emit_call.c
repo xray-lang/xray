@@ -612,8 +612,12 @@ XR_FUNC void xi_emit_byte_array_copy_from(EmitCtx *ctx, XiValue *v, XiEmitReg ds
     emit_builtin_contiguous_window_op(ctx, v, dst, OP_BYTE_ARRAY_COPY_FROM, 5);
 }
 
+XR_FUNC void xi_emit_byte_array_append_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    emit_builtin_contiguous_window_op(ctx, v, dst, OP_BYTE_ARRAY_APPEND_FROM, 2);
+}
+
 XR_FUNC void xi_emit_byte_array_repeat_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_builtin_contiguous_window_op(ctx, v, dst, OP_BYTE_ARRAY_REPEAT_FROM, 4);
+    emit_builtin_contiguous_window_op(ctx, v, dst, OP_BYTE_ARRAY_REPEAT_FROM, 3);
 }
 
 static void emit_builtin_array_filled_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {

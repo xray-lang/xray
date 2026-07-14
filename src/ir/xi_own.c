@@ -189,6 +189,10 @@ static bool own_call_method_matches_receiver_registry_id(const XiValue *user,
 }
 
 static bool low_level_byte_method_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) {
+    if (user && user->op == XI_BYTE_ARRAY_APPEND_FROM) {
+        return arg_idx == 1 && user->nargs > 1 &&
+               type_is_u8_contiguous_view(user->args[1] ? user->args[1]->type : NULL);
+    }
     if (!own_call_method_matches_receiver_registry_id(
             user, XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM))
         return false;

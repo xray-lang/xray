@@ -1491,6 +1491,7 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
         case XI_BYTE_SLICE_COMPARE:
         case XI_BYTE_SLICE_COMMON_PREFIX:
             return arg_index == 0 || arg_index == 1;
+        case XI_BYTE_ARRAY_APPEND_FROM:
         case XI_BYTE_ARRAY_COPY_FROM:
             return arg_index == 0 || arg_index == 1;
         case XI_LEN:
