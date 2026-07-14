@@ -1,0 +1,6 @@
+fn read_and_bump(snapshot: in int, target: ref int) {
+    target = snapshot + 1
+}
+
+var value = 1
+read_and_bump(value, ref value)
