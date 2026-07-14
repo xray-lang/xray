@@ -1061,20 +1061,19 @@ static bool catch_alias_state_has(const CatchAliasState *state, uint32_t symbol_
     return false;
 }
 
-static void merge_catch_alias_if_states(ErrorSetCtx *ctx, const CatchAliasState *then_state,
-                                        const CatchAliasState *else_state) {
-    if (!ctx || !then_state || !else_state)
+static void merge_catch_alias_intersection_states(ErrorSetCtx *ctx, const CatchAliasState *left,
+                                                  const CatchAliasState *right) {
+    if (!ctx || !left || !right)
         return;
-    ctx->current_catch_binding_is_caught =
-        then_state->binding_is_caught && else_state->binding_is_caught;
+    ctx->current_catch_binding_is_caught = left->binding_is_caught && right->binding_is_caught;
 
     uint32_t merged_ids[64];
     const char *merged_names[64];
     int merged_count = 0;
-    for (int i = 0; i < then_state->alias_count && merged_count < 64; i++) {
-        uint32_t id = then_state->alias_ids[i];
-        const char *name = then_state->alias_names[i];
-        if (!catch_alias_state_has(else_state, id, name))
+    for (int i = 0; i < left->alias_count && merged_count < 64; i++) {
+        uint32_t id = left->alias_ids[i];
+        const char *name = left->alias_names[i];
+        if (!catch_alias_state_has(right, id, name))
             continue;
         merged_ids[merged_count] = id;
         merged_names[merged_count] = name;
@@ -1672,17 +1671,28 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 merge_function_value_if_states(ctx, &base_state, &then_state, &else_state);
             }
             if (merge_catch_aliases)
-                merge_catch_alias_if_states(ctx, &catch_then_state, &catch_else_state);
+                merge_catch_alias_intersection_states(ctx, &catch_then_state, &catch_else_state);
             else
                 ctx->current_catch_alias_control_depth--;
             break;
 
         case AST_WHILE_STMT:
             es_walk_expr(ctx, node->as.while_stmt.condition);
-            ctx->current_catch_alias_control_depth++;
+            bool merge_while_catch_aliases =
+                ctx->current_caught && ctx->current_catch_alias_control_depth == 0;
+            CatchAliasState while_catch_base_state;
+            CatchAliasState while_catch_iteration_state;
+            if (merge_while_catch_aliases)
+                capture_catch_alias_state(ctx, &while_catch_base_state);
+            else
+                ctx->current_catch_alias_control_depth++;
             if (ctx->function_value_control_depth != 0) {
                 ctx->function_value_control_depth++;
+                if (merge_while_catch_aliases)
+                    restore_catch_alias_state(ctx, &while_catch_base_state);
                 es_walk_block(ctx, node->as.while_stmt.body);
+                if (merge_while_catch_aliases)
+                    capture_catch_alias_state(ctx, &while_catch_iteration_state);
                 ctx->function_value_control_depth--;
             } else {
                 FunctionValueAliasState base_state;
@@ -1690,22 +1700,41 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 capture_function_value_alias_state(ctx, &base_state);
 
                 restore_function_value_alias_state(ctx, &base_state);
+                if (merge_while_catch_aliases)
+                    restore_catch_alias_state(ctx, &while_catch_base_state);
                 es_walk_block(ctx, node->as.while_stmt.body);
+                if (merge_while_catch_aliases)
+                    capture_catch_alias_state(ctx, &while_catch_iteration_state);
                 capture_function_value_alias_state(ctx, &iteration_state);
 
                 merge_function_value_loop_state(ctx, &base_state, &iteration_state);
             }
-            ctx->current_catch_alias_control_depth--;
+            if (merge_while_catch_aliases)
+                merge_catch_alias_intersection_states(ctx, &while_catch_base_state,
+                                                      &while_catch_iteration_state);
+            else
+                ctx->current_catch_alias_control_depth--;
             break;
 
         case AST_FOR_STMT:
             es_walk_stmt(ctx, node->as.for_stmt.initializer);
             es_walk_expr(ctx, node->as.for_stmt.condition);
-            ctx->current_catch_alias_control_depth++;
+            bool merge_for_catch_aliases =
+                ctx->current_caught && ctx->current_catch_alias_control_depth == 0;
+            CatchAliasState for_catch_base_state;
+            CatchAliasState for_catch_iteration_state;
+            if (merge_for_catch_aliases)
+                capture_catch_alias_state(ctx, &for_catch_base_state);
+            else
+                ctx->current_catch_alias_control_depth++;
             if (ctx->function_value_control_depth != 0) {
                 ctx->function_value_control_depth++;
+                if (merge_for_catch_aliases)
+                    restore_catch_alias_state(ctx, &for_catch_base_state);
                 es_walk_block(ctx, node->as.for_stmt.body);
                 es_walk_expr(ctx, node->as.for_stmt.increment);
+                if (merge_for_catch_aliases)
+                    capture_catch_alias_state(ctx, &for_catch_iteration_state);
                 ctx->function_value_control_depth--;
             } else {
                 FunctionValueAliasState base_state;
@@ -1713,21 +1742,40 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 capture_function_value_alias_state(ctx, &base_state);
 
                 restore_function_value_alias_state(ctx, &base_state);
+                if (merge_for_catch_aliases)
+                    restore_catch_alias_state(ctx, &for_catch_base_state);
                 es_walk_block(ctx, node->as.for_stmt.body);
                 es_walk_expr(ctx, node->as.for_stmt.increment);
+                if (merge_for_catch_aliases)
+                    capture_catch_alias_state(ctx, &for_catch_iteration_state);
                 capture_function_value_alias_state(ctx, &iteration_state);
 
                 merge_function_value_loop_state(ctx, &base_state, &iteration_state);
             }
-            ctx->current_catch_alias_control_depth--;
+            if (merge_for_catch_aliases)
+                merge_catch_alias_intersection_states(ctx, &for_catch_base_state,
+                                                      &for_catch_iteration_state);
+            else
+                ctx->current_catch_alias_control_depth--;
             break;
 
         case AST_FOR_IN_STMT:
             es_walk_expr(ctx, node->as.for_in_stmt.collection);
-            ctx->current_catch_alias_control_depth++;
+            bool merge_for_in_catch_aliases =
+                ctx->current_caught && ctx->current_catch_alias_control_depth == 0;
+            CatchAliasState for_in_catch_base_state;
+            CatchAliasState for_in_catch_iteration_state;
+            if (merge_for_in_catch_aliases)
+                capture_catch_alias_state(ctx, &for_in_catch_base_state);
+            else
+                ctx->current_catch_alias_control_depth++;
             if (ctx->function_value_control_depth != 0) {
                 ctx->function_value_control_depth++;
+                if (merge_for_in_catch_aliases)
+                    restore_catch_alias_state(ctx, &for_in_catch_base_state);
                 es_walk_block(ctx, node->as.for_in_stmt.body);
+                if (merge_for_in_catch_aliases)
+                    capture_catch_alias_state(ctx, &for_in_catch_iteration_state);
                 ctx->function_value_control_depth--;
             } else {
                 FunctionValueAliasState base_state;
@@ -1735,12 +1783,20 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 capture_function_value_alias_state(ctx, &base_state);
 
                 restore_function_value_alias_state(ctx, &base_state);
+                if (merge_for_in_catch_aliases)
+                    restore_catch_alias_state(ctx, &for_in_catch_base_state);
                 es_walk_block(ctx, node->as.for_in_stmt.body);
+                if (merge_for_in_catch_aliases)
+                    capture_catch_alias_state(ctx, &for_in_catch_iteration_state);
                 capture_function_value_alias_state(ctx, &iteration_state);
 
                 merge_function_value_loop_state(ctx, &base_state, &iteration_state);
             }
-            ctx->current_catch_alias_control_depth--;
+            if (merge_for_in_catch_aliases)
+                merge_catch_alias_intersection_states(ctx, &for_in_catch_base_state,
+                                                      &for_in_catch_iteration_state);
+            else
+                ctx->current_catch_alias_control_depth--;
             break;
 
         case AST_BLOCK:
