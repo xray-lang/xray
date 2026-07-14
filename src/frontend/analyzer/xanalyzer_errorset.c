@@ -58,6 +58,8 @@ static void es_summary_add_enum_case(XaEffectDatabase *db, XaEffectSummary *summ
 typedef struct ErrorSetCtx {
     XaAnalyzer *analyzer;
     XaEffectSummary *current_summary; /* Effect summary being built for current function */
+    const char *current_catch_var;    /* Catch variable currently in scope, if any */
+    XaEffectSummary *current_caught;  /* Effect subset caught by current catch clause */
     XaSymbol *current_func;           /* Current function symbol */
     bool changed;                     /* Fixpoint: did anything change this iteration? */
 } ErrorSetCtx;
@@ -249,6 +251,14 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             if (!expr)
                 break;
 
+            if (expr->type == AST_VARIABLE && ctx->current_catch_var && ctx->current_caught &&
+                expr->as.variable.name &&
+                strcmp(expr->as.variable.name, ctx->current_catch_var) == 0) {
+                xa_effect_summary_add_summary(ctx->analyzer->effect_db, ctx->current_summary,
+                                              ctx->current_caught);
+                break;
+            }
+
             /*
              * Handle `throw EnumName.CaseName` — add the specific case.
              * Handle `throw variable` where variable has enum type — add all cases.
@@ -292,11 +302,20 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             ctx->current_summary = outer_summary;
 
             if (tc->catch_count > 0) {
+                XaEffectSummary *caught_summaries = (XaEffectSummary *) xr_calloc(
+                    (size_t) tc->catch_count, sizeof(XaEffectSummary));
+                if (caught_summaries) {
+                    for (int i = 0; i < tc->catch_count; i++)
+                        xa_effect_summary_init(&caught_summaries[i]);
+                }
                 for (int i = 0; i < tc->catch_count; i++) {
                     XrCatchClause *cc = tc->catch_clauses[i];
                     if (!cc || cc->is_panic)
                         continue;
                     if (!cc->type) {
+                        if (caught_summaries)
+                            xa_effect_summary_add_summary(ctx->analyzer->effect_db,
+                                                          &caught_summaries[i], &try_summary);
                         xa_effect_summary_clear_escaping(&try_summary);
                         continue;
                     }
@@ -304,6 +323,10 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                     if (catch_type && XR_TYPE_IS_ENUM(catch_type)) {
                         XaErrorTypeId type_id =
                             xa_effect_db_register_error_enum(ctx->analyzer->effect_db, catch_type);
+                        if (caught_summaries)
+                            xa_effect_summary_add_type_from_summary(ctx->analyzer->effect_db,
+                                                                    &caught_summaries[i],
+                                                                    &try_summary, type_id);
                         xa_effect_summary_subtract_type(&try_summary, type_id);
                     }
                 }
@@ -312,8 +335,19 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 for (int i = 0; i < tc->catch_count; i++) {
                     XrCatchClause *cc = tc->catch_clauses[i];
                     if (cc && cc->body) {
+                        const char *saved_catch_var = ctx->current_catch_var;
+                        XaEffectSummary *saved_caught = ctx->current_caught;
+                        ctx->current_catch_var = cc->var_name;
+                        ctx->current_caught = caught_summaries ? &caught_summaries[i] : NULL;
                         es_walk_block(ctx, cc->body);
+                        ctx->current_catch_var = saved_catch_var;
+                        ctx->current_caught = saved_caught;
                     }
+                }
+                if (caught_summaries) {
+                    for (int i = 0; i < tc->catch_count; i++)
+                        xa_effect_summary_clear(&caught_summaries[i]);
+                    xr_free(caught_summaries);
                 }
             } else {
                 xa_effect_summary_add_summary(ctx->analyzer->effect_db, outer_summary,
