@@ -103,6 +103,7 @@ typedef struct ErrorSetCtx {
     FunctionExprCaptureEntry *function_expr_captures;
     int function_expr_capture_count;
     int function_expr_capture_capacity;
+    int callsite_inline_depth;
     FunctionValueTarget current_return_target;
     bool current_return_target_seen;
     bool current_return_target_unknown;
@@ -846,6 +847,69 @@ static bool es_walk_immediate_function_expr_call(ErrorSetCtx *ctx, AstNode *call
     return es_walk_function_expr_body(ctx, source);
 }
 
+static bool es_walk_callsite_function_decl_body(ErrorSetCtx *ctx, XaSymbol *callee_sym,
+                                                const CallExprNode *call) {
+    if (!ctx || !callee_sym || !call || callee_sym->kind != XA_SYM_FUNCTION ||
+        ctx->callsite_inline_depth >= 8)
+        return false;
+    AstNode *fn_node = callee_sym->links.function_decl_node;
+    if (!fn_node || fn_node->type != AST_FUNCTION_DECL)
+        return false;
+    FunctionDeclNode *fn = &fn_node->as.function_decl;
+    if (!fn->body || fn->param_count <= 0 || call->arg_count <= 0)
+        return false;
+
+    FunctionValueAliasState saved_alias_state;
+    capture_function_value_alias_state(ctx, &saved_alias_state);
+
+    int bound_count = 0;
+    int n = fn->param_count < call->arg_count ? fn->param_count : call->arg_count;
+    for (int i = 0; i < n; i++) {
+        XrParamNode *param = fn->params ? fn->params[i] : NULL;
+        AstNode *arg = call->arguments ? call->arguments[i] : NULL;
+        if (!param || !arg || param->symbol_id == 0)
+            continue;
+        XaSymbol *param_sym = lookup_symbol_by_id(ctx, param->symbol_id);
+        if (!param_sym || !symbol_has_function_type(param_sym))
+            continue;
+        FunctionValueTarget arg_target = resolve_function_value_expr_target(ctx, arg, 0);
+        if (!function_value_target_is_exact(arg_target))
+            continue;
+        set_function_value_alias_target(ctx, param_sym, arg_target);
+        bound_count++;
+    }
+
+    if (bound_count == 0) {
+        restore_function_value_alias_state(ctx, &saved_alias_state);
+        return false;
+    }
+
+    XaScope *saved_scope = ctx->analyzer->current_scope;
+    XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, fn_node);
+    if (fn_scope)
+        ctx->analyzer->current_scope = fn_scope;
+    XaSymbol *saved_func = ctx->current_func;
+    FunctionValueTarget saved_return_target = ctx->current_return_target;
+    bool saved_return_seen = ctx->current_return_target_seen;
+    bool saved_return_unknown = ctx->current_return_target_unknown;
+
+    ctx->current_func = NULL;
+    ctx->current_return_target = function_value_target_none();
+    ctx->current_return_target_seen = false;
+    ctx->current_return_target_unknown = false;
+    ctx->callsite_inline_depth++;
+    es_walk_block(ctx, fn->body);
+    ctx->callsite_inline_depth--;
+
+    restore_function_value_alias_state(ctx, &saved_alias_state);
+    ctx->current_return_target = saved_return_target;
+    ctx->current_return_target_seen = saved_return_seen;
+    ctx->current_return_target_unknown = saved_return_unknown;
+    ctx->current_func = saved_func;
+    ctx->analyzer->current_scope = saved_scope;
+    return true;
+}
+
 static bool is_current_caught_ref(ErrorSetCtx *ctx, AstNode *expr) {
     expr = identity_source(expr);
     if (!ctx || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name ||
@@ -942,6 +1006,8 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
                         es_walk_function_expr_body(ctx, function_expr);
                         continue;
                     }
+                    if (es_walk_callsite_function_decl_body(ctx, callee_sym, &node->as.call_expr))
+                        continue;
                     if (callee_sym &&
                         (callee_sym->kind == XA_SYM_FUNCTION ||
                          callee_sym->kind == XA_SYM_METHOD) &&
