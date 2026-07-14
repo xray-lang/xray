@@ -1455,7 +1455,7 @@ vmcase(OP_ARRAY_RESIZE) {
             XrEnumAggregateValue *_endian_enum = xr_value_to_enum_aggregate(_endian_value);        \
             (out_endian) = (int64_t) _endian_enum->member_index;                                   \
         } else {                                                                                   \
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte> load/store expects Endian");       \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_ENDIAN_EXPECTS_MSG);   \
         }                                                                                          \
         if ((out_endian) < XR_ENDIAN_NATIVE || (out_endian) > XR_ENDIAN_BE) {                      \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid Endian value");                        \
@@ -1488,14 +1488,14 @@ vmcase(OP_ARRAY_RESIZE) {
         }                                                                                          \
     } while (0)
 
-#define VM_BYTE_SLICE_LOAD_CASE(opcode, load_fn, width_name)                                       \
+#define VM_BYTE_SLICE_LOAD_CASE(opcode, load_fn, receiver_msg, oob_msg)                            \
     vmcase(opcode) {                                                                               \
         int a = GETARG_A(i);                                                                       \
         XrValue _recv = R(a + 1);                                                                  \
         XrValue _offset = R(a + 2);                                                                \
         if (!XR_IS_INT(_offset)) {                                                                 \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "Slice<byte>.load<T>() expects integer offset");                      \
+                             XR_ERROR_CORE_BYTE_SLICE_LOAD_OFFSET_EXPECTS_MSG);                    \
         }                                                                                          \
         int64_t _endian = XR_ENDIAN_NATIVE;                                                        \
         VM_PARSE_ENDIAN_ARG(R(a + 3), _endian);                                                    \
@@ -1503,21 +1503,19 @@ vmcase(OP_ARRAY_RESIZE) {
         int64_t _length = 0;                                                                       \
         bool _readonly = false;                                                                    \
         uint8_t _elem_type = XR_ELEM_ANY;                                                          \
-        VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type,                           \
-                           "Slice<byte>.load<" width_name ">() expects Slice<byte>");              \
+        VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type, receiver_msg);            \
         (void) _readonly;                                                                          \
         bool _ok = false;                                                                          \
         uint64_t _value =                                                                          \
             (uint64_t) load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok);     \
         if (!_ok) {                                                                                \
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,                                           \
-                             "Slice<byte>.load<" width_name ">() offset out of bounds");           \
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, oob_msg);                                 \
         }                                                                                          \
         R(a) = xr_int((xr_Integer) _value);                                                        \
         vmbreak;                                                                                   \
     }
 
-#define VM_BYTE_SLICE_STORE_CASE(opcode, store_fn, value_type, width_name)                         \
+#define VM_BYTE_SLICE_STORE_CASE(opcode, store_fn, value_type, receiver_msg, oob_msg)              \
     vmcase(opcode) {                                                                               \
         int a = GETARG_A(i);                                                                       \
         XrValue _recv = R(a + 1);                                                                  \
@@ -1525,7 +1523,7 @@ vmcase(OP_ARRAY_RESIZE) {
         XrValue _value = R(a + 3);                                                                 \
         if (!XR_IS_INT(_offset) || !XR_IS_INT(_value)) {                                           \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "Slice<byte>.store<T>() expects integer offset and value");           \
+                             XR_ERROR_CORE_BYTE_SLICE_STORE_VALUE_EXPECTS_MSG);                    \
         }                                                                                          \
         int64_t _endian = XR_ENDIAN_NATIVE;                                                        \
         VM_PARSE_ENDIAN_ARG(R(a + 4), _endian);                                                    \
@@ -1533,29 +1531,27 @@ vmcase(OP_ARRAY_RESIZE) {
         int64_t _length = 0;                                                                       \
         bool _readonly = false;                                                                    \
         uint8_t _elem_type = XR_ELEM_ANY;                                                          \
-        VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type,                           \
-                           "Slice<byte>.store<" width_name ">() expects Slice<byte>");             \
+        VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type, receiver_msg);            \
         if (_readonly) {                                                                           \
             VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);      \
         }                                                                                          \
         bool _ok = store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                        \
                             (value_type) XR_TO_INT(_value), _endian);                              \
         if (!_ok) {                                                                                \
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,                                           \
-                             "Slice<byte>.store<" width_name ">() offset out of bounds");          \
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, oob_msg);                                 \
         }                                                                                          \
         R(a) = xr_null();                                                                          \
         vmbreak;                                                                                   \
     }
 
-#define VM_BYTE_SLICE_LOAD_FLOAT_CASE(opcode, load_fn, width_name)                                 \
+#define VM_BYTE_SLICE_LOAD_FLOAT_CASE(opcode, load_fn, receiver_msg, oob_msg)                      \
     vmcase(opcode) {                                                                               \
         int a = GETARG_A(i);                                                                       \
         XrValue _recv = R(a + 1);                                                                  \
         XrValue _offset = R(a + 2);                                                                \
         if (!XR_IS_INT(_offset)) {                                                                 \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "Slice<byte>.load<T>() expects integer offset");                      \
+                             XR_ERROR_CORE_BYTE_SLICE_LOAD_OFFSET_EXPECTS_MSG);                    \
         }                                                                                          \
         int64_t _endian = XR_ENDIAN_NATIVE;                                                        \
         VM_PARSE_ENDIAN_ARG(R(a + 3), _endian);                                                    \
@@ -1563,21 +1559,19 @@ vmcase(OP_ARRAY_RESIZE) {
         int64_t _length = 0;                                                                       \
         bool _readonly = false;                                                                    \
         uint8_t _elem_type = XR_ELEM_ANY;                                                          \
-        VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type,                           \
-                           "Slice<byte>.load<" width_name ">() expects Slice<byte>");              \
+        VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type, receiver_msg);            \
         (void) _readonly;                                                                          \
         bool _ok = false;                                                                          \
         double _value =                                                                            \
             (double) load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok);       \
         if (!_ok) {                                                                                \
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,                                           \
-                             "Slice<byte>.load<" width_name ">() offset out of bounds");           \
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, oob_msg);                                 \
         }                                                                                          \
         R(a) = xr_float(_value);                                                                   \
         vmbreak;                                                                                   \
     }
 
-#define VM_BYTE_SLICE_STORE_FLOAT_CASE(opcode, store_fn, value_type, width_name)                   \
+#define VM_BYTE_SLICE_STORE_FLOAT_CASE(opcode, store_fn, value_type, receiver_msg, oob_msg)        \
     vmcase(opcode) {                                                                               \
         int a = GETARG_A(i);                                                                       \
         XrValue _recv = R(a + 1);                                                                  \
@@ -1585,7 +1579,7 @@ vmcase(OP_ARRAY_RESIZE) {
         XrValue _value = R(a + 3);                                                                 \
         if (!XR_IS_INT(_offset) || !XR_IS_FLOAT(_value)) {                                         \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,                                                 \
-                             "Slice<byte>.store<T>() expects integer offset and float value");     \
+                             XR_ERROR_CORE_BYTE_SLICE_STORE_FLOAT_VALUE_EXPECTS_MSG);              \
         }                                                                                          \
         int64_t _endian = XR_ENDIAN_NATIVE;                                                        \
         VM_PARSE_ENDIAN_ARG(R(a + 4), _endian);                                                    \
@@ -1593,33 +1587,49 @@ vmcase(OP_ARRAY_RESIZE) {
         int64_t _length = 0;                                                                       \
         bool _readonly = false;                                                                    \
         uint8_t _elem_type = XR_ELEM_ANY;                                                          \
-        VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type,                           \
-                           "Slice<byte>.store<" width_name ">() expects Slice<byte>");             \
+        VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type, receiver_msg);            \
         if (_readonly) {                                                                           \
             VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);      \
         }                                                                                          \
         bool _ok = store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                        \
                             (value_type) XR_TO_FLOAT(_value), _endian);                            \
         if (!_ok) {                                                                                \
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,                                           \
-                             "Slice<byte>.store<" width_name ">() offset out of bounds");          \
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, oob_msg);                                 \
         }                                                                                          \
         R(a) = xr_null();                                                                          \
         vmbreak;                                                                                   \
     }
 
-VM_BYTE_SLICE_LOAD_CASE(OP_BYTE_SLICE_LOAD_U16, xr_array_core_bytes_load_u16, "uint16")
-VM_BYTE_SLICE_LOAD_CASE(OP_BYTE_SLICE_LOAD_U32, xr_array_core_bytes_load_u32, "uint32")
-VM_BYTE_SLICE_LOAD_CASE(OP_BYTE_SLICE_LOAD_U64, xr_array_core_bytes_load_u64, "uint64")
-VM_BYTE_SLICE_LOAD_FLOAT_CASE(OP_BYTE_SLICE_LOAD_F32, xr_array_core_bytes_load_f32, "float32")
-VM_BYTE_SLICE_LOAD_FLOAT_CASE(OP_BYTE_SLICE_LOAD_F64, xr_array_core_bytes_load_f64, "float64")
-VM_BYTE_SLICE_STORE_CASE(OP_BYTE_SLICE_STORE_U16, xr_array_core_bytes_store_u16, uint16_t, "uint16")
-VM_BYTE_SLICE_STORE_CASE(OP_BYTE_SLICE_STORE_U32, xr_array_core_bytes_store_u32, uint32_t, "uint32")
-VM_BYTE_SLICE_STORE_CASE(OP_BYTE_SLICE_STORE_U64, xr_array_core_bytes_store_u64, uint64_t, "uint64")
+VM_BYTE_SLICE_LOAD_CASE(OP_BYTE_SLICE_LOAD_U16, xr_array_core_bytes_load_u16,
+                        XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_RECEIVER_MSG,
+                        XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_OOB_MSG)
+VM_BYTE_SLICE_LOAD_CASE(OP_BYTE_SLICE_LOAD_U32, xr_array_core_bytes_load_u32,
+                        XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_RECEIVER_MSG,
+                        XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_OOB_MSG)
+VM_BYTE_SLICE_LOAD_CASE(OP_BYTE_SLICE_LOAD_U64, xr_array_core_bytes_load_u64,
+                        XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_RECEIVER_MSG,
+                        XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_OOB_MSG)
+VM_BYTE_SLICE_LOAD_FLOAT_CASE(OP_BYTE_SLICE_LOAD_F32, xr_array_core_bytes_load_f32,
+                              XR_ERROR_CORE_BYTE_SLICE_LOAD_F32_RECEIVER_MSG,
+                              XR_ERROR_CORE_BYTE_SLICE_LOAD_F32_OOB_MSG)
+VM_BYTE_SLICE_LOAD_FLOAT_CASE(OP_BYTE_SLICE_LOAD_F64, xr_array_core_bytes_load_f64,
+                              XR_ERROR_CORE_BYTE_SLICE_LOAD_F64_RECEIVER_MSG,
+                              XR_ERROR_CORE_BYTE_SLICE_LOAD_F64_OOB_MSG)
+VM_BYTE_SLICE_STORE_CASE(OP_BYTE_SLICE_STORE_U16, xr_array_core_bytes_store_u16, uint16_t,
+                         XR_ERROR_CORE_BYTE_SLICE_STORE_U16_RECEIVER_MSG,
+                         XR_ERROR_CORE_BYTE_SLICE_STORE_U16_OOB_MSG)
+VM_BYTE_SLICE_STORE_CASE(OP_BYTE_SLICE_STORE_U32, xr_array_core_bytes_store_u32, uint32_t,
+                         XR_ERROR_CORE_BYTE_SLICE_STORE_U32_RECEIVER_MSG,
+                         XR_ERROR_CORE_BYTE_SLICE_STORE_U32_OOB_MSG)
+VM_BYTE_SLICE_STORE_CASE(OP_BYTE_SLICE_STORE_U64, xr_array_core_bytes_store_u64, uint64_t,
+                         XR_ERROR_CORE_BYTE_SLICE_STORE_U64_RECEIVER_MSG,
+                         XR_ERROR_CORE_BYTE_SLICE_STORE_U64_OOB_MSG)
 VM_BYTE_SLICE_STORE_FLOAT_CASE(OP_BYTE_SLICE_STORE_F32, xr_array_core_bytes_store_f32, float,
-                               "float32")
+                               XR_ERROR_CORE_BYTE_SLICE_STORE_F32_RECEIVER_MSG,
+                               XR_ERROR_CORE_BYTE_SLICE_STORE_F32_OOB_MSG)
 VM_BYTE_SLICE_STORE_FLOAT_CASE(OP_BYTE_SLICE_STORE_F64, xr_array_core_bytes_store_f64, double,
-                               "float64")
+                               XR_ERROR_CORE_BYTE_SLICE_STORE_F64_RECEIVER_MSG,
+                               XR_ERROR_CORE_BYTE_SLICE_STORE_F64_OOB_MSG)
 
 #undef VM_BYTE_SLICE_STORE_FLOAT_CASE
 #undef VM_BYTE_SLICE_LOAD_FLOAT_CASE
@@ -1634,17 +1644,16 @@ vmcase(OP_BYTE_SLICE_FILL) {
     bool dst_readonly = false;
     uint8_t dst_elem_type = XR_ELEM_ANY;
     VM_BYTE_SLICE_VIEW(R(a), dst_data, dst_length, dst_readonly, dst_elem_type,
-                       "Slice<byte>.fill(value) expects Slice<byte>");
+                       XR_ERROR_CORE_BYTE_SLICE_FILL_RECEIVER_MSG);
     (void) dst_elem_type;
     if (dst_readonly) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     }
     if (!XR_IS_INT(R(a + 1))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Slice<byte>.fill(value) expects integer byte value");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_FILL_VALUE_EXPECTS_MSG);
     }
     if (!xr_array_core_bytes_fill_value(dst_data, dst_length, R(a + 1))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice<byte>.fill(value) range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_FILL_OOB_MSG);
     }
     vmbreak;
 }
@@ -1660,17 +1669,16 @@ vmcase(OP_BYTE_SLICE_COPY) {
     uint8_t dst_elem_type = XR_ELEM_ANY;
     uint8_t src_elem_type = XR_ELEM_ANY;
     VM_BYTE_SLICE_VIEW(R(a), dst_data, dst_length, dst_readonly, dst_elem_type,
-                       "Slice<byte>.copyFrom(src) receiver must be Slice<byte>");
+                       XR_ERROR_CORE_BYTE_SLICE_COPY_RECEIVER_MSG);
     VM_BYTE_SLICE_VIEW(R(a + 1), src_data, src_length, src_readonly, src_elem_type,
-                       "Slice<byte>.copyFrom(src) source must be Slice<byte>");
+                       XR_ERROR_CORE_BYTE_SLICE_COPY_SOURCE_MSG);
     (void) src_readonly;
     if (dst_readonly) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     }
     if (!xr_array_core_bytes_copy_from(dst_data, dst_length, dst_elem_type, src_data, src_length,
                                        src_elem_type, 0, 0, src_length, false)) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                         "Slice<byte>.copyFrom(src) range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG);
     }
     vmbreak;
 }
@@ -1686,9 +1694,9 @@ vmcase(OP_BYTE_SLICE_COMPARE) {
     uint8_t left_elem_type = XR_ELEM_ANY;
     uint8_t right_elem_type = XR_ELEM_ANY;
     VM_BYTE_SLICE_VIEW(R(a), left_data, left_length, left_readonly, left_elem_type,
-                       "Slice<byte>.compare(other) receiver must be Slice<byte>");
+                       XR_ERROR_CORE_BYTE_SLICE_COMPARE_RECEIVER_MSG);
     VM_BYTE_SLICE_VIEW(R(a + 1), right_data, right_length, right_readonly, right_elem_type,
-                       "Slice<byte>.compare(other) operand must be Slice<byte>");
+                       XR_ERROR_CORE_BYTE_SLICE_COMPARE_OPERAND_MSG);
     (void) left_readonly;
     (void) right_readonly;
     (void) left_elem_type;
@@ -1697,7 +1705,7 @@ vmcase(OP_BYTE_SLICE_COMPARE) {
     int cmp = 0;
     if (n > 0) {
         if (!left_data || !right_data) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.compare(other) span has no data");
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMPARE_NO_DATA_MSG);
         }
         cmp = memcmp(left_data, right_data, (size_t) n);
     }
@@ -1724,16 +1732,16 @@ vmcase(OP_BYTE_SLICE_COMMON_PREFIX) {
     uint8_t left_elem_type = XR_ELEM_ANY;
     uint8_t right_elem_type = XR_ELEM_ANY;
     VM_BYTE_SLICE_VIEW(R(a), left_data, left_length, left_readonly, left_elem_type,
-                       "Slice<byte>.commonPrefix(other) receiver must be Slice<byte>");
+                       XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_RECEIVER_MSG);
     VM_BYTE_SLICE_VIEW(R(a + 1), right_data, right_length, right_readonly, right_elem_type,
-                       "Slice<byte>.commonPrefix(other) operand must be Slice<byte>");
+                       XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_OPERAND_MSG);
     (void) left_readonly;
     (void) right_readonly;
     bool ok = false;
     int64_t prefix = xr_array_core_bytes_common_prefix(
         left_data, left_length, left_elem_type, right_data, right_length, right_elem_type, &ok);
     if (!ok) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice<byte>.commonPrefix(other) span has no data");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_NO_DATA_MSG);
     }
     R(a) = xr_int(prefix);
     vmbreak;
@@ -1746,18 +1754,16 @@ vmcase(OP_BYTE_SLICE_REPEAT) {
     bool readonly = false;
     uint8_t elem_type = XR_ELEM_ANY;
     VM_BYTE_SLICE_VIEW(R(a), data, length, readonly, elem_type,
-                       "Slice<byte>.repeatFrom(dstOffset, distance, count) expects Slice<byte>");
+                       XR_ERROR_CORE_BYTE_SLICE_REPEAT_RECEIVER_MSG);
     if (readonly) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     }
     if (!XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) || !XR_IS_INT(R(a + 3))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Slice<byte>.repeatFrom(dstOffset, distance, count) expects integers");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REPEAT_INTS_EXPECTS_MSG);
     }
     if (!xr_array_core_bytes_repeat_from(data, length, elem_type, XR_TO_INT(R(a + 1)),
                                          XR_TO_INT(R(a + 2)), XR_TO_INT(R(a + 3)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                         "Slice<byte>.repeatFrom(dstOffset, distance, count) range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_REPEAT_OOB_MSG);
     }
     vmbreak;
 }

@@ -34,6 +34,9 @@
     "Array.resize(length, fill) requires fill value"
 #define XR_ERROR_CORE_ARRAY_RESIZE_FAILED_MSG "Array.resize failed"
 #define XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG "cannot push to array slice"
+#define XR_ERROR_CORE_BYTE_SLICE_ENDIAN_EXPECTS_MSG "Slice<byte> load/store expects Endian"
+#define XR_ERROR_CORE_BYTE_SLICE_LOAD_OFFSET_EXPECTS_MSG                                           \
+    "Slice<byte>.load<T>() expects integer offset"
 #define XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_EXPECTS_MSG                                              \
     "Slice<byte>.load<uint16>(offset) expects Slice<byte> and integer"
 #define XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_RECEIVER_MSG                                             \
@@ -49,7 +52,65 @@
 #define XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_RECEIVER_MSG                                             \
     "Slice<byte>.load<uint64>() receiver must be Slice<byte>"
 #define XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_OOB_MSG "Slice<byte>.load<uint64>() offset out of bounds"
+#define XR_ERROR_CORE_BYTE_SLICE_LOAD_F32_RECEIVER_MSG                                             \
+    "Slice<byte>.load<float32>() receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_LOAD_F32_OOB_MSG "Slice<byte>.load<float32>() offset out of bounds"
+#define XR_ERROR_CORE_BYTE_SLICE_LOAD_F64_RECEIVER_MSG                                             \
+    "Slice<byte>.load<float64>() receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_LOAD_F64_OOB_MSG "Slice<byte>.load<float64>() offset out of bounds"
+#define XR_ERROR_CORE_BYTE_SLICE_STORE_VALUE_EXPECTS_MSG                                           \
+    "Slice<byte>.store<T>() expects integer offset and value"
+#define XR_ERROR_CORE_BYTE_SLICE_STORE_FLOAT_VALUE_EXPECTS_MSG                                     \
+    "Slice<byte>.store<T>() expects integer offset and float value"
+#define XR_ERROR_CORE_BYTE_SLICE_STORE_U16_RECEIVER_MSG                                            \
+    "Slice<byte>.store<uint16>() receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_STORE_U16_OOB_MSG                                                 \
+    "Slice<byte>.store<uint16>() offset out of bounds"
+#define XR_ERROR_CORE_BYTE_SLICE_STORE_U32_RECEIVER_MSG                                            \
+    "Slice<byte>.store<uint32>() receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_STORE_U32_OOB_MSG                                                 \
+    "Slice<byte>.store<uint32>() offset out of bounds"
+#define XR_ERROR_CORE_BYTE_SLICE_STORE_U64_RECEIVER_MSG                                            \
+    "Slice<byte>.store<uint64>() receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_STORE_U64_OOB_MSG                                                 \
+    "Slice<byte>.store<uint64>() offset out of bounds"
+#define XR_ERROR_CORE_BYTE_SLICE_STORE_F32_RECEIVER_MSG                                            \
+    "Slice<byte>.store<float32>() receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_STORE_F32_OOB_MSG                                                 \
+    "Slice<byte>.store<float32>() offset out of bounds"
+#define XR_ERROR_CORE_BYTE_SLICE_STORE_F64_RECEIVER_MSG                                            \
+    "Slice<byte>.store<float64>() receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_STORE_F64_OOB_MSG                                                 \
+    "Slice<byte>.store<float64>() offset out of bounds"
 #define XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG "cannot write through readonly Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_FILL_RECEIVER_MSG "Slice<byte>.fill(value) expects Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_FILL_VALUE_EXPECTS_MSG                                            \
+    "Slice<byte>.fill(value) expects integer byte value"
+#define XR_ERROR_CORE_BYTE_SLICE_FILL_OOB_MSG "Slice<byte>.fill(value) range out of bounds"
+#define XR_ERROR_CORE_BYTE_SLICE_COPY_RECEIVER_MSG                                                 \
+    "Slice<byte>.copyFrom(src) receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_COPY_SOURCE_MSG                                                   \
+    "Slice<byte>.copyFrom(src) source must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG "Slice<byte>.copyFrom(src) range out of bounds"
+#define XR_ERROR_CORE_BYTE_SLICE_COMPARE_RECEIVER_MSG                                              \
+    "Slice<byte>.compare(other) receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_COMPARE_OPERAND_MSG                                               \
+    "Slice<byte>.compare(other) operand must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_COMPARE_NO_DATA_MSG "Slice<byte>.compare(other) span has no data"
+#define XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_RECEIVER_MSG                                        \
+    "Slice<byte>.commonPrefix(other) receiver must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_OPERAND_MSG                                         \
+    "Slice<byte>.commonPrefix(other) operand must be Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_NO_DATA_MSG                                         \
+    "Slice<byte>.commonPrefix(other) span has no data"
+#define XR_ERROR_CORE_BYTE_SLICE_REPEAT_RECEIVER_MSG                                               \
+    "Slice<byte>.repeatFrom(dstOffset, distance, count) expects Slice<byte>"
+#define XR_ERROR_CORE_BYTE_SLICE_REPEAT_INTS_EXPECTS_MSG                                           \
+    "Slice<byte>.repeatFrom(dstOffset, distance, count) expects integers"
+#define XR_ERROR_CORE_BYTE_SLICE_REPEAT_OOB_MSG                                                    \
+    "Slice<byte>.repeatFrom(dstOffset, distance, count) range out of bounds"
+#define XR_ERROR_CORE_BYTE_SLICE_ARG_EXPECTS_MSG                                                   \
+    "Slice<byte> argument expects Array<byte> or Slice<byte>"
 #define XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_EXPECTS_MSG                                           \
     "Array<byte> copy-within expects integer offsets and count"
 #define XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG                                          \
