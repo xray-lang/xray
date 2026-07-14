@@ -15,6 +15,7 @@
 | `scripts/check_parallel_surface_convergence.py` | 193：旧 `parallel for/range/reduce/collect/local/final` 语法与旧 AST/parser/spec/demo/API-doc 表面不得回流 | `--root <repo>` | 任一旧表面残留=1 | < 2s |
 | `scripts/check_parallel_backend_abi_convergence.py` | 193：parallel backend ABI/descriptor 命名收敛，旧 AOT-private/global-pool 名称不得回流 | `--root <repo>` | ABI 缺失或旧名残留=1 | < 2s |
 | `scripts/check_bytes_type_residue.py` | 204：`Bytes/ByteSpan/ByteView` 删除 residue 分类 inventory，区分 public 表面与 internal legacy 命名 | `--root <repo>`；可选 `--json`、`--fail-on-public`、`--fail-on-internal-legacy` | 默认只输出 inventory=0；CTest `bytes_type_residue` 阻止 public 与 internal legacy 残余回流 | < 2s |
+| `scripts/run_byte_uint8_canonical_audit.sh` | 204：`byte`/`uint8` 规范化为同一 U8 identity 的 final audit，串联语言正例、LSP canonical docs 与 global evidence/cache type-key | env: `XRAY_BIN`, `XRAY_TEST_LSP_DOCUMENT`, `XRAY_TEST_XGLOBAL_SUMMARY` | 任一子门禁失败=1；CTest `byte_uint8_canonical_audit` 固定可复跑组合证据 | < 120s |
 | `scripts/check_source_unknown_convergence.py` | 202：source `unknown` 删除与 typed erasure 边界收敛前的 source/runtime/analyzer/IR/AOT/Task residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 | `scripts/check_source_unknown_aot_baseline.py` | 202：Task、ThreadLocal、Json encode 与 HTTP handler 的 AOT baseline fixture/expect 覆盖检查 | `--root <repo>`；可选 `--json` | baseline fixture 或关键断言缺失=1 | < 1s |
 | `scripts/check_error_effect_convergence.py` | 205：unchecked error-effect graph 收敛前的旧 error-set API、`MAY_THROW`、pending-error、LSP 与 `.xrd` 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
@@ -65,6 +66,16 @@ CTest 的 `parallel_backend_abi_convergence`。
 `bytes_type_residue` 同时打开这两个模式，阻止 public surface 与 internal helper 命名回流。
 历史 `XI_BYTES_*`、`OP_BYTES_*`、`xr_array_bytes_*`、`xrt_bytes_*`、`emit_builtin_bytes_*`、
 `emit_bytes_*` 与 `cg_bytes_*` 名称应保持为 0。
+
+### `run_byte_uint8_canonical_audit.sh`
+
+串联 204 完成定义中 `byte` / `uint8` canonical U8 identity 的三类证据：
+
+- `1409_byte_uint8_canonical_identity.xr` 固定 scalar、`Array<T>`、`Slice<T>`、函数参数和 U8 条件方法互通。
+- `test_lsp_document` 固定 `Array<uint8>` 源码拼写的 completion/hover docs canonicalize 到 `Array<byte>` / `Slice<byte>`。
+- `test_xglobal_summary` 固定 global evidence 和 cache materialization 里的 `Array<byte>` / `Array<uint8>`、`Slice<byte>` / `Slice<uint8>` type key 同一。
+
+CTest `byte_uint8_canonical_audit` 只在 LSP 单测可用的平台启用，避免 final audit 退回到手工命令列表。
 
 ### `check_source_unknown_convergence.py`
 
