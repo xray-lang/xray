@@ -867,7 +867,9 @@ static inline XrValue xrt_byte_array_repeat_from_value(XrValue arr_value, XrValu
                                                        XrValue distance_value,
                                                        XrValue count_value) {
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
-        return arr_value;
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG);
+    if (!XR_IS_INT(dst_value) || !XR_IS_INT(distance_value) || !XR_IS_INT(count_value))
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG);
     int64_t dst = xr_value_to_int64_coerce(dst_value);
     int64_t distance = xr_value_to_int64_coerce(distance_value);
     int64_t count = xr_value_to_int64_coerce(count_value);
