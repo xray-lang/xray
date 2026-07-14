@@ -35,7 +35,7 @@ const char *xr_keywords[] = {
     "Regex", NULL};
 
 // Builtin functions
-const char *xr_builtins[] = {"print",        "dump",      "typeof",    "assert", "assert_true",
-                             "assert_false", "assert_eq", "assert_ne", "int",    "float",
-                             "string",       "bool",      "copy",      "chr",    "Coro",
-                             "CoroPool",     NULL};
+const char *xr_builtins[] = {"print",       "dump",         "typeOf",    "typeName",  "assert",
+                             "assert_true", "assert_false", "assert_eq", "assert_ne", "int",
+                             "float",       "string",       "bool",      "copy",      "chr",
+                             "Coro",        "CoroPool",     NULL};

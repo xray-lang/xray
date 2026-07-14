@@ -474,6 +474,71 @@ TEST(builtin_generic_array_uses_error_placeholder) {
     xlsp_server_free(server);
 }
 
+TEST(global_type_query_builtins_use_canonical_names) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "typeOf(1)\n"
+                          "typeName(1)\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///type_query.xr", content, 1);
+    ASSERT(doc != NULL);
+
+    XrLspPosition completion_pos = {0, 0};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, completion_pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "typeOf"));
+    ASSERT(json_array_contains_label(items, "typeName"));
+    ASSERT(!json_array_contains_label(items, "typeof"));
+    ASSERT(!json_array_contains_label(items, "typename"));
+    xjson_free(items);
+
+    XrLspPosition type_of_hover_pos = {0, 1};
+    XrJsonValue *type_of_hover = xlsp_analyze_hover(server, doc, type_of_hover_pos);
+    ASSERT(type_of_hover != NULL);
+    const char *type_of_hover_text = hover_markdown_value(type_of_hover);
+    ASSERT(type_of_hover_text != NULL);
+    ASSERT(strstr(type_of_hover_text, "typeOf(value): Type") != NULL);
+    ASSERT(strstr(type_of_hover_text, "typeof") == NULL);
+    xjson_free(type_of_hover);
+
+    XrLspPosition type_name_hover_pos = {1, 1};
+    XrJsonValue *type_name_hover = xlsp_analyze_hover(server, doc, type_name_hover_pos);
+    ASSERT(type_name_hover != NULL);
+    const char *type_name_hover_text = hover_markdown_value(type_name_hover);
+    ASSERT(type_name_hover_text != NULL);
+    ASSERT(strstr(type_name_hover_text, "typeName(value): string") != NULL);
+    ASSERT(strstr(type_name_hover_text, "typename") == NULL);
+    xjson_free(type_name_hover);
+
+    XrLspPosition type_of_sig_pos = {0, 7};
+    XrJsonValue *type_of_sig = xlsp_analyze_signature_help(doc, type_of_sig_pos);
+    ASSERT(type_of_sig != NULL);
+    XrJsonValue *type_of_signatures = xjson_get_array(type_of_sig, "signatures");
+    ASSERT(type_of_signatures != NULL);
+    XrJsonValue *type_of_sig0 = xjson_array_get(type_of_signatures, 0);
+    ASSERT(type_of_sig0 != NULL);
+    const char *type_of_label = xjson_get_string(type_of_sig0, "label");
+    ASSERT(type_of_label != NULL);
+    ASSERT(strstr(type_of_label, "typeOf(value): Type") != NULL);
+    ASSERT(strstr(type_of_label, "typeof") == NULL);
+    xjson_free(type_of_sig);
+
+    XrLspPosition type_name_sig_pos = {1, 9};
+    XrJsonValue *type_name_sig = xlsp_analyze_signature_help(doc, type_name_sig_pos);
+    ASSERT(type_name_sig != NULL);
+    XrJsonValue *type_name_signatures = xjson_get_array(type_name_sig, "signatures");
+    ASSERT(type_name_signatures != NULL);
+    XrJsonValue *type_name_sig0 = xjson_array_get(type_name_signatures, 0);
+    ASSERT(type_name_sig0 != NULL);
+    const char *type_name_label = xjson_get_string(type_name_sig0, "label");
+    ASSERT(type_name_label != NULL);
+    ASSERT(strstr(type_name_label, "typeName(value): string") != NULL);
+    ASSERT(strstr(type_name_label, "typename") == NULL);
+    xjson_free(type_name_sig);
+
+    xlsp_server_free(server);
+}
+
 // ============================================================================
 // Code Action Quick-Fix Tests (concurrency diagnostics)
 // ============================================================================
@@ -616,6 +681,7 @@ int main(int argc, char **argv) {
     RUN_TEST(hover_u8_array_registry_method);
     RUN_TEST(signature_help_u8_array_registry_method);
     RUN_TEST(builtin_generic_array_uses_error_placeholder);
+    RUN_TEST(global_type_query_builtins_use_canonical_names);
 
     printf("\nCode action concurrency quick-fix tests:\n");
     RUN_TEST(code_action_go_capture_to_shared);
