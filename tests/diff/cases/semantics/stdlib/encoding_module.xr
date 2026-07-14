@@ -1,7 +1,7 @@
 // Pure-Xray encoding module: VM/AOT parity across hex, UTF-8 validation, and
 // UTF-16 encode/decode (endianness, CJK surrogate-free BMP, empty input).
 import encoding
-import { HexError } from encoding
+import { HexError, Utf16DecodeOptions, Utf16EncodeOptions, Utf16Error } from encoding
 
 fn hexEncodeText(data: string) -> string {
     var view: Slice<byte> = data.bytes()
@@ -27,6 +27,28 @@ fn utf8ValidText(data: string) -> bool {
     return encoding.utf8Valid(view)
 }
 
+fn utf16EncodeOptions(order: Endian) -> Utf16EncodeOptions {
+    var options = Utf16EncodeOptions()
+    options.order = order
+    return options
+}
+
+fn utf16Options(order: Endian, consumeBom: bool = true) -> Utf16DecodeOptions {
+    var options = Utf16DecodeOptions()
+    options.order = order
+    options.consumeBom = consumeBom
+    return options
+}
+
+fn utf16DecodeFails(data: Slice<byte>) -> bool {
+    try {
+        var decoded = encoding.utf16Decode(data)
+        return len(decoded) < 0
+    } catch (e: Utf16Error) {
+        return true
+    }
+}
+
 print(hexEncodeText("Hello"))
 print(hexDecodeText("48656c6c6f"))
 print(encoding.hexValid("48656c6c6f"))
@@ -44,19 +66,23 @@ var invalidUtf8 = Array<byte>(2)
 invalidUtf8[0] = 0xC0
 invalidUtf8[1] = 0x80
 print(encoding.utf8Valid(invalidUtf8[:]))
-print(encoding.LE)
-print(encoding.BE)
+print(Endian.LE == Endian.LE)
+print(Endian.BE == Endian.BE)
 
 var u = encoding.utf16Encode("AB")
 print(len(u))
 print(u[0])
 print(u[1])
-print(encoding.utf16Decode(u))
+print(encoding.utf16Decode(u[:]))
 
-var ub = encoding.utf16Encode("AB", encoding.BE)
+var ub = encoding.utf16Encode("AB", utf16EncodeOptions(Endian.BE))
 print(ub[0])
 print(ub[1])
-print(encoding.utf16Decode(ub, encoding.BE))
+print(encoding.utf16Decode(ub[:], utf16Options(Endian.BE)))
 
-print(encoding.utf16Decode(encoding.utf16Encode("你好世界")))
-print(encoding.utf16Decode(encoding.utf16Encode("")))
+var cjk = encoding.utf16Encode("你好世界")
+var empty = encoding.utf16Encode("")
+print(encoding.utf16Decode(cjk[:]))
+print(encoding.utf16Decode(empty[:]))
+var odd = Array<byte>(1)
+print(utf16DecodeFails(odd[:]))

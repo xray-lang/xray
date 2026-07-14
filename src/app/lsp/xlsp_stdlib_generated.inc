@@ -117,13 +117,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
     {"hexDecode", XLSP_SYM_FUNCTION, "fn(hex: string): Array<byte>", "", NULL, 0},
     {"hexValid", XLSP_SYM_FUNCTION, "fn(hex: string): bool", "", NULL, 0},
     {"utf8Valid", XLSP_SYM_FUNCTION, "fn(data: Slice<byte>): bool", "", NULL, 0},
-    {"utf16Encode", XLSP_SYM_FUNCTION, "fn(data: string, endian?: int): Array<byte>", "", NULL, 0},
-    {"utf16Decode", XLSP_SYM_FUNCTION, "fn(data: Array<byte>, endian?: int, stripBom?: bool): string?", "", NULL, 0},
-    {"LE", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
-    {"BE", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
+    {"utf16Encode", XLSP_SYM_FUNCTION, "fn(data: string, options?: Utf16EncodeOptions?): Array<byte>", "", NULL, 0},
+    {"utf16Decode", XLSP_SYM_FUNCTION, "fn(data: Slice<byte>, options?: Utf16DecodeOptions?): string", "", NULL, 0},
     {"HexError", XLSP_SYM_CLASS, "type HexError", "Enum type", NULL, 0},
+    {"Utf16Error", XLSP_SYM_CLASS, "type Utf16Error", "Enum type", NULL, 0},
+    {"Utf16EncodeOptions", XLSP_SYM_CLASS, "type Utf16EncodeOptions", "Class type", NULL, 0},
+    {"Utf16DecodeOptions", XLSP_SYM_CLASS, "type Utf16DecodeOptions", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT 9
+#define GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT 10
 
 // http module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {

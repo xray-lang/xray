@@ -1,7 +1,7 @@
 // 1300_encoding.xr - Encoding module tests
 
 import encoding
-import { HexError } from encoding
+import { HexError, Utf16DecodeOptions, Utf16EncodeOptions, Utf16Error } from encoding
 
 fn hexEncodeText(data: string) -> string {
     var view: Slice<byte> = data.bytes()
@@ -25,6 +25,28 @@ fn hexDecodeFails(hex: string) -> bool {
 fn utf8ValidText(data: string) -> bool {
     var view: Slice<byte> = data.bytes()
     return encoding.utf8Valid(view)
+}
+
+fn utf16EncodeOptions(order: Endian) -> Utf16EncodeOptions {
+    var options = Utf16EncodeOptions()
+    options.order = order
+    return options
+}
+
+fn utf16Options(order: Endian, consumeBom: bool = true) -> Utf16DecodeOptions {
+    var options = Utf16DecodeOptions()
+    options.order = order
+    options.consumeBom = consumeBom
+    return options
+}
+
+fn utf16DecodeFails(data: Slice<byte>) -> bool {
+    try {
+        var decoded = encoding.utf16Decode(data)
+        return len(decoded) < 0
+    } catch (e: Utf16Error) {
+        return true
+    }
 }
 
 // ===== Hex encode =====
@@ -130,18 +152,18 @@ fn test_utf16_encode_decode_le() {
     // LE: 'A' = 0x0041 -> [0x41, 0x00]
     assert_eq(u16[0], 0x41)
     assert_eq(u16[1], 0x00)
-    var decoded = encoding.utf16Decode(u16)
+    var decoded = encoding.utf16Decode(u16[:])
     assert_eq(decoded, "AB")
 }
 
 @test
 fn test_utf16_encode_decode_be() {
-    var u16 = encoding.utf16Encode("AB", encoding.BE)
+    var u16 = encoding.utf16Encode("AB", utf16EncodeOptions(Endian.BE))
     assert_eq(len(u16), 4)
     // BE: 'A' = 0x0041 -> [0x00, 0x41]
     assert_eq(u16[0], 0x00)
     assert_eq(u16[1], 0x41)
-    var decoded = encoding.utf16Decode(u16, encoding.BE)
+    var decoded = encoding.utf16Decode(u16[:], utf16Options(Endian.BE))
     assert_eq(decoded, "AB")
 }
 
@@ -149,7 +171,7 @@ fn test_utf16_encode_decode_be() {
 fn test_utf16_cjk() {
     var u16 = encoding.utf16Encode("你好")
     assert_eq(len(u16), 4)  // 2 BMP chars x 2 bytes
-    var decoded = encoding.utf16Decode(u16)
+    var decoded = encoding.utf16Decode(u16[:])
     assert_eq(decoded, "你好")
 }
 
@@ -157,17 +179,46 @@ fn test_utf16_cjk() {
 fn test_utf16_empty() {
     var u16 = encoding.utf16Encode("")
     assert_eq(len(u16), 0)
-    var decoded = encoding.utf16Decode(u16)
+    var decoded = encoding.utf16Decode(u16[:])
     assert_eq(decoded, "")
 }
 
 @test
 fn test_utf16_odd_length_invalid() {
-    assert_eq(encoding.utf16Decode(Array<byte>(1)), null)
+    var bytes = Array<byte>(1)
+    assert_eq(utf16DecodeFails(bytes[:]), true)
 }
 
 @test
-fn test_endian_constants() {
-    assert_eq(encoding.LE, 0)
-    assert_eq(encoding.BE, 1)
+fn test_utf16_surrogate_errors() {
+    var low = Array<byte>(2)
+    low[0] = 0x00
+    low[1] = 0xDC
+    assert_eq(utf16DecodeFails(low[:]), true)
+
+    var missing = Array<byte>(2)
+    missing[0] = 0x00
+    missing[1] = 0xD8
+    assert_eq(utf16DecodeFails(missing[:]), true)
+
+    var invalid = Array<byte>(4)
+    invalid[0] = 0x00
+    invalid[1] = 0xD8
+    invalid[2] = 0x41
+    invalid[3] = 0x00
+    assert_eq(utf16DecodeFails(invalid[:]), true)
+}
+
+@test
+fn test_utf16_bom_options() {
+    var bom = Array<byte>(4)
+    bom[0] = 0xFE
+    bom[1] = 0xFF
+    bom[2] = 0
+    bom[3] = 65
+    assert_eq(encoding.utf16Decode(bom[:]), "A")
+    var kept = encoding.utf16Decode(bom[:], utf16Options(Endian.BE, false))
+    assert_eq(len(kept), 2)
+    assert_eq(kept.runes().nth(0), '\u{FEFF}')
+    assert_eq(kept.runes().nth(1), 'A')
 }
