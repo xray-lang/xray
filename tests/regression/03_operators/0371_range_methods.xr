@@ -39,48 +39,48 @@ fn test_range_length_matches_iteration() {
     assert_eq(count, (0..7).count())
 }
 
-// ===== includes —— 半开区间 [start, end) =====
+// ===== contains —— 半开区间 [start, end) =====
 
 @test
-fn test_includes_start() {
+fn test_contains_start() {
     // start 端点包含
     assert_eq((1..10).contains(1), true)
 }
 
 @test
-fn test_includes_end_exclusive() {
+fn test_contains_end_exclusive() {
     // end 端点不包含 (核心修复点)
     assert_eq((1..10).contains(10), false)
 }
 
 @test
-fn test_includes_last_iterated() {
+fn test_contains_last_iterated() {
     // 最后被迭代的值 (end - 1) 必须包含
     assert_eq((1..10).contains(9), true)
 }
 
 @test
-fn test_includes_below_start() {
+fn test_contains_below_start() {
     assert_eq((1..10).contains(0), false)
 }
 
 @test
-fn test_includes_above_end() {
+fn test_contains_above_end() {
     assert_eq((1..10).contains(100), false)
 }
 
 @test
-fn test_includes_empty_range() {
+fn test_contains_empty_range() {
     var r = 5..5
     assert_eq(r.contains(5), false)
     assert_eq(r.contains(4), false)
 }
 
-// ===== includes 与 for-in 必须语义一致 =====
+// ===== contains 与 for-in 必须语义一致 =====
 
 @test
-fn test_includes_matches_iteration() {
-    // 对 [0, 5) 内的每个候选值，includes(x) 必须 ⇔ x 在 for-in 中出现
+fn test_contains_matches_iteration() {
+    // 对 [0, 5) 内的每个候选值，contains(x) 必须 ⇔ x 在 for-in 中出现
     var i = -2
     while (i < 8) {
         var by_for = false

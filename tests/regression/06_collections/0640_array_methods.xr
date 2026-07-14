@@ -122,7 +122,7 @@ fn test_find_index_not_found() {
 }
 
 @test
-fn test_index_of_and_includes() {
+fn test_index_of_and_contains() {
     var arr = [10, 20, 30]
     assert_eq(arr.indexOf(20), 1)
     assert_eq(arr.indexOf(99), -1)

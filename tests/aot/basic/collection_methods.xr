@@ -25,7 +25,7 @@ print("ab".repeat(3))    // ababab
 print("hello".indexOf("ll"))  // 2
 print("hello".indexOf("zz"))  // -1
 
-// includes, startsWith, endsWith
+// contains, startsWith, endsWith
 print("hello".contains("ell"))     // true
 print("hello".startsWith("he"))    // true
 print("hello".endsWith("lo"))      // true
@@ -41,7 +41,7 @@ var arr = [10, 20, 30, 40, 50]
 print(arr.indexOf(30))    // 2
 print(arr.indexOf(99))    // -1
 
-// includes
+// contains
 print(arr.contains(20))   // true
 print(arr.contains(99))   // false
 

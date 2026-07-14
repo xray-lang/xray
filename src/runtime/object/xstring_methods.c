@@ -94,7 +94,7 @@ static XrValue m_last_index_of(XrVMRuntime *iso, XrValue self, XrValue *args, in
     return xr_int(xr_string_last_index_of(iso, str, substr));
 }
 
-static XrValue m_includes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_contains(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_bool(0);
     XrString *str = str_self(self);
@@ -357,7 +357,7 @@ void xr_string_register_native_type(XrVMRuntime *isolate) {
         /* Search */
         {"indexOf", m_index_of, 0},
         {"lastIndexOf", m_last_index_of, 1},
-        {"contains", m_includes, 1},
+        {"contains", m_contains, 1},
         {"startsWith", m_starts_with, 1},
         {"endsWith", m_ends_with, 1},
         /* Case / whitespace */
