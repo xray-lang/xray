@@ -983,6 +983,9 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
                          "fn catchAllAliasRethrows() { "
                          "  try { fail() } catch (e) { const alias = e; throw alias } "
                          "}\n"
+                         "fn catchAllVarAliasRethrows() { "
+                         "  try { fail() } catch (e) { var alias = e; throw alias } "
+                         "}\n"
                          "fn typedAliasRethrows() { "
                          "  try { fail() } catch (e: CatchErr) { const alias = (e); throw alias } "
                          "}\n"
@@ -1006,6 +1009,8 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         analyzer_function_effect_summary(a, "wrongTypedRethrow");
     const XaEffectSummary *catch_all_alias_rethrows =
         analyzer_function_effect_summary(a, "catchAllAliasRethrows");
+    const XaEffectSummary *catch_all_var_alias_rethrows =
+        analyzer_function_effect_summary(a, "catchAllVarAliasRethrows");
     const XaEffectSummary *typed_alias_rethrows =
         analyzer_function_effect_summary(a, "typedAliasRethrows");
     const XaEffectSummary *wrong_typed_alias_rethrow =
@@ -1019,6 +1024,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(typed_rethrows != NULL);
     ASSERT(wrong_typed_rethrow != NULL);
     ASSERT(catch_all_alias_rethrows != NULL);
+    ASSERT(catch_all_var_alias_rethrows != NULL);
     ASSERT(typed_alias_rethrows != NULL);
     ASSERT(wrong_typed_alias_rethrow != NULL);
 
@@ -1033,6 +1039,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(effect_summary_has_enum_named(a, wrong_typed_rethrow, "CatchErr"));
     ASSERT(!effect_summary_has_enum_named(a, wrong_typed_rethrow, "OtherErr"));
     ASSERT(effect_summary_has_enum_named(a, catch_all_alias_rethrows, "CatchErr"));
+    ASSERT(effect_summary_has_enum_named(a, catch_all_var_alias_rethrows, "CatchErr"));
     ASSERT(effect_summary_has_enum_named(a, typed_alias_rethrows, "CatchErr"));
     ASSERT(effect_summary_has_enum_named(a, wrong_typed_alias_rethrow, "CatchErr"));
     ASSERT(!effect_summary_has_enum_named(a, wrong_typed_alias_rethrow, "OtherErr"));
