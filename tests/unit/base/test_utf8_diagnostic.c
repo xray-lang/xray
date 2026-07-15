@@ -10,6 +10,7 @@
 
 #include "../test_framework.h"
 #include "base/xutf8.h"
+#include <string.h>
 
 static void assert_scan(const uint8_t *data, size_t len, XrUtf8ErrorKind error, size_t offset,
                         size_t invalid_length, size_t rune_count) {
@@ -88,6 +89,31 @@ TEST(utf8_maximal_subpart_unicode_tables) {
                  sizeof(truncated_steps) / sizeof(truncated_steps[0]));
 }
 
+static void assert_lossy(const uint8_t *data, size_t len, const char *expected,
+                         size_t expected_runes) {
+    XrUtf8LossyPlan plan = xr_utf8_core_lossy_plan(data, len);
+    ASSERT_FALSE(plan.overflow);
+    ASSERT_EQ_UINT(plan.output_length, strlen(expected));
+    ASSERT_EQ_UINT(plan.rune_count, expected_runes);
+
+    char out[64];
+    ASSERT_TRUE(plan.output_length < sizeof(out));
+    size_t written = xr_utf8_core_lossy_write(out, data, len);
+    ASSERT_EQ_UINT(written, plan.output_length);
+    out[written] = '\0';
+    ASSERT(strcmp(out, expected) == 0);
+}
+
+TEST(utf8_lossy_plan_and_write) {
+    static const uint8_t valid[] = {'A', 0xC3, 0xA9, 0xE4, 0xB8, 0xAD};
+    static const uint8_t mixed[] = {'A', 0xFF, 'B'};
+    static const uint8_t truncated[] = {0xE1, 0x80, 0xE2, 0xF0, 0x91, 0x92, 0xF1, 0xBF, 'A'};
+
+    assert_lossy(valid, sizeof(valid), "Aé中", 3);
+    assert_lossy(mixed, sizeof(mixed), "A�B", 3);
+    assert_lossy(truncated, sizeof(truncated), "����A", 5);
+}
+
 TEST(utf8_validate_uses_diagnostic_core) {
     static const char valid[] = "A\xC3\xA9\xF0\x9F\x98\x80";
     static const char invalid[] = "\xED\xA0\x80";
@@ -100,6 +126,7 @@ static void run_all_tests(void) {
     RUN_TEST(utf8_diagnostic_error_payloads);
     RUN_TEST(utf8_diagnostic_truncated_prefixes);
     RUN_TEST(utf8_maximal_subpart_unicode_tables);
+    RUN_TEST(utf8_lossy_plan_and_write);
     RUN_TEST(utf8_validate_uses_diagnostic_core);
 }
 

@@ -593,27 +593,15 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         if (sym == XRT_SYM_FROM_UTF8)
             return XR_NULL_VAL;
 
-        if (len > SIZE_MAX / 3)
+        XrUtf8LossyPlan plan = xr_utf8_core_lossy_plan(data, len);
+        if (plan.overflow || plan.rune_count > (size_t) INT64_MAX ||
+            plan.output_length > (size_t) INT64_MAX)
             return XR_NULL_VAL;
-        XrValue out = xrt_str_alloc(len * 3);
-        size_t src = 0, dst = 0;
-        int64_t rune_count = 0;
-        while (src < len) {
-            XrUtf8Step step = xr_utf8_core_decode_step(data + src, len - src);
-            if (step.error != XR_UTF8_OK) {
-                static const char replacement[] = {(char) 0xEF, (char) 0xBF, (char) 0xBD};
-                memcpy(xr_str_buf(out) + dst, replacement, sizeof(replacement));
-                dst += sizeof(replacement);
-            } else {
-                memcpy(xr_str_buf(out) + dst, data + src, step.consumed);
-                dst += step.consumed;
-            }
-            src += step.consumed;
-            rune_count++;
-        }
+        XrValue out = xrt_str_alloc(plan.output_length);
+        size_t dst = xr_utf8_core_lossy_write(xr_str_buf(out), data, len);
         xr_str_buf(out)[dst] = 0;
         xr_str_hdr(out)->len = (int64_t) dst;
-        xr_str_hdr(out)->rune_len = rune_count;
+        xr_str_hdr(out)->rune_len = (int64_t) plan.rune_count;
         return out;
     }
     if (sym == XRT_SYM_CONTAINS && XR_IS_STR(arg0)) {
