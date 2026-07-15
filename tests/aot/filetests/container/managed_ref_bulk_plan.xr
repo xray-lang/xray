@@ -1,0 +1,13 @@
+fn fill_refs(values: Array<string>, value: string) -> int {
+    values.fill(value)
+    return len(values[0]) + len(values[2])
+}
+
+fn make_text(seed: string) -> string {
+    return seed + "-managed"
+}
+
+var values = [make_text("old-a"), make_text("old-b"), make_text("old-c")]
+var value = make_text("new")
+print(fill_refs(values, value))
+print(values[1])

@@ -113,6 +113,7 @@ sequence_access_plan|covered|sequence-access-plan|tests/aot/filetests/link|Seque
 sequence_capacity_plan|covered|capacity-plan|tests/aot/filetests/link|Array<byte>/StringBuilder capacity operations lower into verified capacity plans.
 sequence_capacity_reserve_once|covered|capacity-plan .*action=reserve_once|tests/aot/filetests/link|Array push capacity evidence fixes the reserve-once action in plan output.
 sequence_bulk_plan|covered|bulk-plan|tests/aot/filetests/link|Bulk copy/fill evidence lowers into verified bulk operation plans.
+sequence_bulk_managed_ref_typed_loop|covered|xrt_retain\(_fill\)|tests/aot/filetests/container|Managed-reference Array.fill consumes write-barrier evidence through a direct retain/store/release loop instead of memcpy, memset, or the generic helper.
 sequence_encoding_plan|covered|encoding-plan|tests/aot/filetests/link|String/byte-array encoding evidence lowers into verified encoding plans.
 sequence_encoding_validate_once|covered|encoding-plan .*action=validate_once|tests/aot/filetests/link|byte-array-to-string encoding evidence fixes the validate-once action in plan output.
 stringbuilder_literal_append_exact_reserve|covered|xrt_strbuf_reserve_extra_exact|tests/aot/filetests/cgen|Consecutive proven literal appends reserve their combined byte length once.
