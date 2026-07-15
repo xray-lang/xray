@@ -307,27 +307,14 @@ size_t xr_utf8_byte_to_utf16_offset(const char *str, size_t len, size_t byte_off
  * Validation
  * ======================================================================== */
 
+XrUtf8ScanResult xr_utf8_scan_strict(const uint8_t *data, size_t len) {
+    return xr_utf8_core_scan_strict(data, len);
+}
+
+XrUtf8Step xr_utf8_decode_step(const uint8_t *data, size_t len) {
+    return xr_utf8_core_decode_step(data, len);
+}
+
 bool xr_utf8_validate(const char *str, size_t len) {
-    if (!str)
-        return len == 0;
-
-    size_t pos = 0;
-
-    while (pos < len) {
-        uint32_t cp;
-        int size = xr_utf8_decode(str + pos, len - pos, &cp);
-
-        // If decode returns INVALID, there's an error
-        if (cp == XR_UNICODE_INVALID && size == 1) {
-            uint8_t b = (uint8_t) str[pos];
-            // If continuation byte or invalid first byte, validation fails
-            if (xr_utf8_is_continuation(b) || (b & 0xC0) == 0xC0) {
-                return false;
-            }
-        }
-
-        pos += size;
-    }
-
-    return true;
+    return xr_utf8_scan_strict((const uint8_t *) str, len).error == XR_UTF8_OK;
 }
