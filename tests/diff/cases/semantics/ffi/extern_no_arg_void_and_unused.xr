@@ -1,0 +1,14 @@
+// FFI: no-arg extern prototypes must lower as C `fn(void)`, void-return extern
+// calls must share the same descriptor in VM/AOT, and unused extern dylibs must
+// not pollute the AOT link manifest.
+extern "C" {
+    fn srand(seed: uint32) -> ()
+    fn rand() -> int32
+}
+
+extern "C" dylib("xrayffi_unused_task190") {
+    fn xrayffi_unused_float(x: float64) -> float64
+}
+
+unsafe { srand(7) }
+print(unsafe { rand() })
