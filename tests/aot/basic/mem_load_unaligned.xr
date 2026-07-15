@@ -25,5 +25,4 @@ unsafe {
     bytes.push(8)
 }
 
-var view: Slice<byte> = bytes[:]
-print(readRaw(view))
+print(readRaw(bytes[:]))
