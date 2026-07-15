@@ -2633,6 +2633,41 @@ TEST(analyzer_non_callable_failure_uses_error_recovery) {
     setup_pool();
 }
 
+TEST(analyzer_container_recovery_rejects_poisoned_success_types) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    AstNode *program = xr_parse(g_session, "var xs = [missingElement]\n"
+                                           "xs.missing()\n"
+                                           "var raw = Array()\n"
+                                           "raw.missing()\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "container_error_recovery.xr", program);
+
+    ASSERT(analyzer_diag_contains(a, "Undeclared variable 'missingElement'"));
+    ASSERT(analyzer_diag_contains(a, "generic constructor 'Array' expects 1 type argument"));
+    ASSERT(!analyzer_diag_contains(a, "Array has no member 'missing'"));
+    ASSERT(!analyzer_diag_contains(a, "Value is not callable"));
+    ASSERT(a->unresolved_inference_count == 0);
+    ASSERT(a->recovery_poison_type_count >= 2);
+
+    xa_analyzer_free(a);
+    setup_pool();
+
+    a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    program = xr_parse(g_session, "var typed = Array<int>()\nvar value: int = typed[0]\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "typed_container_constructor.xr", program);
+    int count = 0;
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count == 0);
+    ASSERT(a->unresolved_inference_count == 0);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -2992,6 +3027,7 @@ int main(void) {
     RUN_TEST(analyzer_member_error_recovery_suppresses_call_cascade);
     RUN_TEST(analyzer_operator_and_index_failures_use_error_recovery);
     RUN_TEST(analyzer_non_callable_failure_uses_error_recovery);
+    RUN_TEST(analyzer_container_recovery_rejects_poisoned_success_types);
     RUN_TEST(analyzer_rejects_error_type_generic_argument_and_constraint);
     RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);
     RUN_TEST(compile_type_class);

@@ -219,6 +219,7 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                          class_name ? class_name : "class", type_param_count, call->type_arg_count);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
+                return xr_type_new_error(ctx->analyzer->isolate);
             } else {
                 XrType *resolved_buf[8] = {0};
                 XrType **resolved =
@@ -230,7 +231,7 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                         resolved[i] =
                             call->type_args[i]
                                 ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[i])
-                                : xr_type_new_unknown(NULL);
+                                : xr_type_new_error(NULL);
                     }
                     bool poisoned_type_arg = false;
                     for (int i = 0; i < call->type_arg_count; i++) {
@@ -331,6 +332,15 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                 }
             }
         }
+
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        XaInferVar *var = xa_infer_var_new(ctx, "generic constructor type arguments", &loc);
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "cannot infer type arguments for generic constructor '%s'; add explicit %s<T> "
+                 "type arguments",
+                 class_name ? class_name : "class", class_name ? class_name : "constructor");
+        return xa_infer_var_report_unsolved(ctx, var, msg);
     }
 
     xa_check_class_constructor_args(ctx, node, call, class_name, class_links, class_info, NULL, 0);

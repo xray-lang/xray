@@ -2442,7 +2442,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
 
 XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
 
     TupleLiteralNode *tup = &node->as.tuple_literal;
     /* `()` is the unit literal — the unique value of the unit type
@@ -2478,9 +2478,10 @@ XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
     XrType **elem_types = (XrType **) xr_malloc(sizeof(XrType *) * (size_t) cap);
     if (!elem_types) {
         ctx->expected_type = saved_expected;
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
     int slot = 0;
+    bool poisoned = false;
 
     for (int i = 0; i < tup->count; i++) {
         AstNode *child = tup->elements[i];
@@ -2490,6 +2491,10 @@ XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
         if (child->type == AST_SPREAD_EXPR) {
             ctx->expected_type = NULL;
             XrType *src = xa_visit_infer_expr(ctx, child->as.spread_expr.expr);
+            if (src && XR_TYPE_IS_ERROR(src)) {
+                poisoned = true;
+                continue;
+            }
             if (!src || !XR_TYPE_IS_TUPLE(src)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = child->line, .column = child->column};
@@ -2499,6 +2504,7 @@ XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
                          src ? xr_type_to_string(src) : "<unknown>");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                poisoned = true;
                 continue;
             }
             xa_check_span_value_escape(ctx, child, src, "spread Slice view into tuple literal");
@@ -2510,7 +2516,7 @@ XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
                 if (!resized) {
                     xr_free(elem_types);
                     ctx->expected_type = saved_expected;
-                    return xr_type_new_unknown(NULL);
+                    return xr_type_new_error(ctx->analyzer->isolate);
                 }
                 elem_types = resized;
                 cap = new_cap;
@@ -2528,16 +2534,23 @@ XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
             if (!resized) {
                 xr_free(elem_types);
                 ctx->expected_type = saved_expected;
-                return xr_type_new_unknown(NULL);
+                return xr_type_new_error(ctx->analyzer->isolate);
             }
             elem_types = resized;
             cap = new_cap;
         }
         XrType *elem = xa_visit_infer_expr(ctx, child);
         xa_check_span_value_escape(ctx, child, elem, "store Slice view in tuple literal");
+        if (elem && XR_TYPE_IS_ERROR(elem))
+            poisoned = true;
         elem_types[slot++] = elem;
     }
     ctx->expected_type = saved_expected;
+
+    if (poisoned) {
+        xr_free(elem_types);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
 
     if (slot == 0) {
         xr_free(elem_types);
@@ -2550,17 +2563,22 @@ XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
 
 XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
-        return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
+        return xr_type_new_error(NULL);
 
     ArrayLiteralNode *arr = &node->as.array_literal;
     if (arr->is_fixed_bytes_literal) {
         XrType *byte_type = xr_type_new_int_width(ctx->analyzer->isolate, XR_NATIVE_U8);
         XrType *saved_expected = ctx->expected_type;
+        bool poisoned = false;
         for (int i = 0; i < arr->count; i++) {
             ctx->expected_type = byte_type;
-            xa_visit_infer_expr(ctx, arr->elements[i]);
+            XrType *elem = xa_visit_infer_expr(ctx, arr->elements[i]);
+            if (elem && XR_TYPE_IS_ERROR(elem))
+                poisoned = true;
         }
         ctx->expected_type = saved_expected;
+        if (poisoned)
+            return xr_type_new_error(ctx->analyzer->isolate);
         return xr_type_new_fixed_array(ctx->analyzer->isolate, byte_type, arr->count);
     }
     if (arr->is_repeat) {
@@ -2603,6 +2621,9 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
         xa_check_span_value_escape(ctx, arr->repeat_value, elem_type,
                                    "repeat Slice view in array literal");
         XrType *count_type = xa_visit_infer_expr(ctx, arr->repeat_count);
+        if ((elem_type && XR_TYPE_IS_ERROR(elem_type)) ||
+            (count_type && XR_TYPE_IS_ERROR(count_type)))
+            return xr_type_new_error(ctx->analyzer->isolate);
         if (count_type && !XR_TYPE_IS_UNKNOWN(count_type) && !XR_TYPE_IS_INT(count_type)) {
             XrLocation loc = {.file = ctx->file_path,
                               .line = arr->repeat_count->line,
@@ -2627,7 +2648,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
         if (ctx->expected_type && ctx->expected_type->kind == XR_KIND_FIXED_ARRAY)
             return ctx->expected_type;
         if (!elem_type || XR_TYPE_IS_UNKNOWN(elem_type) || repeat_count <= 0)
-            return xr_type_new_unknown(ctx->analyzer->isolate);
+            return repeat_count <= 0 ? xr_type_new_error(ctx->analyzer->isolate)
+                                     : xr_type_new_unknown(ctx->analyzer->isolate);
         return xr_type_new_fixed_array(ctx->analyzer->isolate, elem_type, repeat_count);
     }
 
@@ -2635,6 +2657,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
         ctx->expected_type->fixed_array.element_type) {
         XrType *fixed = ctx->expected_type;
         XrType *elem_expected = fixed->fixed_array.element_type;
+        bool poisoned = false;
         if (arr->count != fixed->fixed_array.length) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[192];
@@ -2661,6 +2684,10 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             XrType *elem_type = xa_visit_infer_expr(ctx, child);
             xa_check_span_value_escape(ctx, child, elem_type,
                                        "store Slice view in fixed array literal");
+            if (elem_type && XR_TYPE_IS_ERROR(elem_type)) {
+                poisoned = true;
+                continue;
+            }
             if (elem_type && !XR_TYPE_IS_UNKNOWN(elem_type) &&
                 !xa_typecheck_assignable(elem_expected, elem_type)) {
                 XrLocation loc = {
@@ -2673,6 +2700,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             }
         }
         ctx->expected_type = saved_expected;
+        if (poisoned)
+            return xr_type_new_error(ctx->analyzer->isolate);
         return fixed;
     }
 
@@ -2684,6 +2713,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
     if (ctx->expected_type && XR_TYPE_IS_JSON(ctx->expected_type)) {
         XrType *saved_expected = ctx->expected_type;
         XrType *json_type = xr_type_new_json(ctx->analyzer->isolate);
+        bool poisoned = false;
         for (int i = 0; i < arr->count; i++) {
             AstNode *child = arr->elements[i];
             if (!child)
@@ -2702,6 +2732,10 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             XrType *elem_type = xa_visit_infer_expr(ctx, child);
             xa_check_span_value_escape(ctx, child, elem_type,
                                        "store Slice view in Json array literal");
+            if (elem_type && XR_TYPE_IS_ERROR(elem_type)) {
+                poisoned = true;
+                continue;
+            }
             if (elem_type && !xr_type_is_json_field_compatible(elem_type)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = child->line, .column = child->column};
@@ -2715,6 +2749,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             }
         }
         ctx->expected_type = saved_expected;
+        if (poisoned)
+            return xr_type_new_error(ctx->analyzer->isolate);
         return json_type;
     }
 
@@ -2754,6 +2790,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
 
     bool use_target_elem_type = (target_elem_type != NULL);
     XrType *elem_type = NULL;
+    bool poisoned = false;
 
     for (int i = 0; i < arr->count; i++) {
         AstNode *child = arr->elements[i];
@@ -2762,8 +2799,12 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             // Spread source must be an array; splice its element type in.
             ctx->expected_type = expected_array;
             XrType *src = xa_visit_infer_expr(ctx, child->as.spread_expr.expr);
-            if (src && (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_VIEW(src) || XR_TYPE_IS_SPAN(src)) &&
-                src->container.element_type) {
+            if (src && XR_TYPE_IS_ERROR(src)) {
+                contributed = src;
+                poisoned = true;
+            } else if (src &&
+                       (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_VIEW(src) || XR_TYPE_IS_SPAN(src)) &&
+                       src->container.element_type) {
                 contributed = src->container.element_type;
                 xa_check_span_value_escape(ctx, child, src, "spread Slice view into array literal");
             } else {
@@ -2777,13 +2818,19 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
-                contributed = xr_type_new_unknown(NULL);
+                contributed = src && XR_TYPE_IS_UNKNOWN(src)
+                                  ? xr_type_new_unknown(NULL)
+                                  : xr_type_new_error(ctx->analyzer->isolate);
+                if (XR_TYPE_IS_ERROR(contributed))
+                    poisoned = true;
             }
         } else {
             ctx->expected_type = target_elem_type;
             contributed = xa_visit_infer_expr(ctx, child);
             xa_check_span_value_escape(ctx, child, contributed,
                                        "store Slice view in array literal");
+            if (contributed && XR_TYPE_IS_ERROR(contributed))
+                poisoned = true;
         }
 
         if (use_target_elem_type && contributed && !XR_TYPE_IS_UNKNOWN(contributed) &&
@@ -2798,6 +2845,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
     }
 
     ctx->expected_type = saved_expected;
+    if (poisoned)
+        return xr_type_new_error(ctx->analyzer->isolate);
     if (use_target_elem_type) {
         return xr_type_new_array(ctx->analyzer->isolate, target_elem_type);
     }
@@ -2807,8 +2856,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
 
 XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
-        return xr_type_new_map(ctx->analyzer->isolate, xr_type_new_unknown(NULL),
-                               xr_type_new_unknown(NULL));
+        return xr_type_new_error(NULL);
 
     xa_freestanding_report_unavailable(ctx, node, "Map literal",
                                        "dynamic containers require hosted allocation");
@@ -2866,6 +2914,8 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
     }
 
     ctx->expected_type = saved_expected;
+    if ((key_type && XR_TYPE_IS_ERROR(key_type)) || (val_type && XR_TYPE_IS_ERROR(val_type)))
+        return xr_type_new_error(ctx->analyzer->isolate);
     XrType *result = xr_type_new_map(ctx->analyzer->isolate, key_type, val_type);
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     xa_validate_hashable_key_type(ctx, result, NULL, "map literal", &loc);
@@ -3054,7 +3104,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
 
 XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
 
     xa_freestanding_report_unavailable(ctx, node, "class construction",
                                        "use structs or explicit raw-memory APIs in this profile");
@@ -3068,19 +3118,36 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
     }
 
     /* Builtin heap types: return the correct container/channel type
-     * directly, bypassing class-symbol lookup. Supports explicit
-     * type arguments: new Map<string, int>(), new Channel<int>(). */
+     * directly, bypassing class-symbol lookup. Container construction
+     * requires explicit type arguments: Map<string, int>(), Channel<int>(). */
     if (ne->class_name && !ne->module_name) {
         XrVMRuntime *X = ctx->analyzer->isolate;
         const char *cn = ne->class_name;
         XrType *bt = NULL;
+
+        int required_type_args = -1;
+        if (strcmp(cn, "Map") == 0 || strcmp(cn, "WeakMap") == 0)
+            required_type_args = 2;
+        else if (strcmp(cn, "Array") == 0 || strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0 ||
+                 strcmp(cn, "Channel") == 0)
+            required_type_args = 1;
+        if (required_type_args >= 0 && ne->type_arg_count != required_type_args) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            char msg[192];
+            snprintf(msg, sizeof(msg),
+                     "generic constructor '%s' expects %d type argument%s, got %d", cn,
+                     required_type_args, required_type_args == 1 ? "" : "s", ne->type_arg_count);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
+            return xr_type_new_error(X);
+        }
 
         /* Resolve explicit type arguments if present */
         XrType *ta[8] = {0};
         int tac = ne->type_arg_count > 8 ? 8 : ne->type_arg_count;
         for (int i = 0; i < tac; i++)
             ta[i] = ne->type_args[i] ? xr_tref_resolve_in_analyzer(ctx->analyzer, ne->type_args[i])
-                                     : xr_type_new_unknown(NULL);
+                                     : xr_type_new_error(NULL);
         bool poisoned_type_arg = false;
         for (int i = 0; i < tac; i++) {
             if (xa_reject_error_type_success_type(ctx->analyzer, ta[i], "generic type argument", cn,
@@ -3091,27 +3158,22 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
             return xr_type_new_error(NULL);
 
         if (strcmp(cn, "Map") == 0 || strcmp(cn, "WeakMap") == 0) {
-            XrType *kt = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
-            XrType *vt = tac >= 2 ? ta[1] : xr_type_new_unknown(X);
-            bt = xr_type_new_map(X, kt, vt);
+            bt = xr_type_new_map(X, ta[0], ta[1]);
             if (strcmp(cn, "WeakMap") == 0)
                 bt->is_weak = true;
         } else if (strcmp(cn, "Array") == 0) {
-            XrType *et = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
-            bt = xr_type_new_array(X, et);
+            bt = xr_type_new_array(X, ta[0]);
         } else if (strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0) {
-            XrType *et = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
             bt = xr_type_new(X, XR_KIND_SET);
             if (bt) {
-                bt->container.element_type = et;
+                bt->container.element_type = ta[0];
                 if (strcmp(cn, "WeakSet") == 0)
                     bt->is_weak = true;
             }
         } else if (strcmp(cn, "Channel") == 0) {
-            XrType *et = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
             bt = xr_type_new(X, XR_KIND_CHANNEL);
             if (bt)
-                bt->container.element_type = et;
+                bt->container.element_type = ta[0];
         } else if (strcmp(cn, "StringBuilder") == 0) {
             bt = xr_type_new_named_instance(X, "StringBuilder");
         } else if (strcmp(cn, "Atomic") == 0) {
