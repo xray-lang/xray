@@ -177,6 +177,8 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "ptr", mem_ptr);
     XRS_EXPORT(module, isolate, "mutPtr", mem_mut_ptr);
     XRS_EXPORT(module, isolate, "addr", mem_addr);
+    XRS_EXPORT(module, isolate, "load", mem_load_intrinsic);
+    XRS_EXPORT(module, isolate, "store", mem_store_intrinsic);
     XRS_EXPORT(module, isolate, "copy", mem_copy);
     XRS_EXPORT(module, isolate, "move", mem_move);
     XRS_EXPORT(module, isolate, "set", mem_set);

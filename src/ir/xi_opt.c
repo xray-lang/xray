@@ -2654,7 +2654,15 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
                        : XR_REP_TAGGED;
             return true;
         case XI_PTR_LOAD:
-            *out = arg_idx == 0 ? XR_REP_RAWPTR : XR_REP_TAGGED;
+            if (arg_idx == 0) {
+                *out = XR_REP_RAWPTR;
+                return true;
+            }
+            if (arg_idx == 1 && user->nargs >= 2 && user->args[1]) {
+                *out = sr_type_native_boundary_rep(user->args[1]->type);
+                return true;
+            }
+            *out = XR_REP_TAGGED;
             return true;
         case XI_PTR_STORE:
             if (arg_idx == 0) {
@@ -2663,6 +2671,12 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             }
             if (arg_idx == 1 && user->nargs >= 2 && user->args[1]) {
                 *out = sr_type_native_boundary_rep(user->args[1]->type);
+                return true;
+            }
+            if (arg_idx == 2) {
+                *out = user->nargs >= 3 && user->args[2]
+                           ? sr_type_native_boundary_rep(user->args[2]->type)
+                           : XR_REP_TAGGED;
                 return true;
             }
             *out = XR_REP_TAGGED;

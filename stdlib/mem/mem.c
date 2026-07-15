@@ -372,6 +372,23 @@ static XrValue mem_addr(XrVMRuntime *isolate, XrValue *args, int argc) {
     return xr_int((int64_t) (intptr_t) mem_rawptr_arg(args[0]));
 }
 
+/* Direct mem.load/store<T> calls are compiler intrinsics: the selected T and
+ * endian are encoded on XI_PTR_LOAD/STORE before bytecode or C emission. These
+ * exports keep the module metadata complete but are never valid dynamic calls. */
+static XrValue mem_load_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    return xr_null();
+}
+
+static XrValue mem_store_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    return xr_null();
+}
+
 /*
  * Volatile load/store (MMIO). The VM is an interpreter — every read re-fetches
  * from memory and nothing is reordered/elided, so "volatile" is satisfied by a

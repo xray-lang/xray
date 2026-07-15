@@ -1,1 +1,1 @@
-cannot store through a const `Ptr<T>` (use `MutPtr<T>`)
+Ptr has no member 'storeLE'

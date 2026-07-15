@@ -1,0 +1,4 @@
+import mem
+
+var p = mem.ptr<byte>(0)
+var value = mem.load<uint32>(p)

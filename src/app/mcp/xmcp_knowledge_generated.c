@@ -2223,6 +2223,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)",
     },
     {
+        .name = "load",
+        .signature = "(ptr: Ptr<byte>, offset?: int, endian?: Endian): int",
+        .summary = "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset",
+    },
+    {
         .name = "move",
         .signature = "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()",
         .summary = "Copy n bytes from src to dst (may overlap; memmove)",
@@ -2276,6 +2281,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "sizeOf",
         .signature = "(): int",
         .summary = "Compile-time size in bytes of a statically laid out type T",
+    },
+    {
+        .name = "store",
+        .signature = "(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()",
+        .summary = "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset",
     },
     {
         .name = "volatileLoad",
@@ -6454,6 +6464,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.compare` | `(a: Ptr<byte>, b: Ptr<byte>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
             "| `mem.copy` | `(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
             "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
+            "| `mem.load` | `(ptr: Ptr<byte>, offset?: int, endian?: Endian): int` | Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset |\n"
             "| `mem.move` | `(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
             "| `mem.mutPtr` | `(addr: int): MutPtr<byte>` | Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.nontemporalStore` | `(ptr: MutPtr<byte>, v: int, size: int): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
@@ -6465,6 +6476,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.ptr` | `(addr: int): Ptr<byte>` | Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.set` | `(dst: MutPtr<byte>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
             "| `mem.sizeOf` | `(): int` | Compile-time size in bytes of a statically laid out type T |\n"
+            "| `mem.store` | `(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()` | Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset |\n"
             "| `mem.volatileLoad` | `(ptr: Ptr<byte>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "| `mem.volatileStore` | `(ptr: MutPtr<byte>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "",

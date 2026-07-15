@@ -59,6 +59,8 @@ FREESTANDING_HEADER_ONLY_SYMBOLS = {
     "mem.ptr",
     "mem.mutPtr",
     "mem.addr",
+    "mem.load",
+    "mem.store",
     "mem.copy",
     "mem.move",
     "mem.set",

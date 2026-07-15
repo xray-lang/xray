@@ -93,10 +93,6 @@ static bool xa_type_is_pod_span_elem(XrType *type) {
     }
 }
 
-static bool xa_type_is_raw_u8_ptr(XrType *type) {
-    return xr_type_is_u8_pointer(type);
-}
-
 static XrType *xa_freestanding_reject_owned_static_member(XaInferContext *ctx, AstNode *object,
                                                           const char *name, AstNode *node) {
     if (!ctx || !object || object->type != AST_VARIABLE || !name ||
@@ -625,45 +621,6 @@ static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, con
         }
         XrType *params[2] = {xr_type_new_pointer(X, pointee, false), xr_type_new_int(X)};
         return xr_type_new_function(X, params, 2, xr_type_new_unit(X), false);
-    }
-    if (strcmp(name, "loadLE") == 0 && xa_type_is_raw_u8_ptr(receiver)) {
-        if (ctx->unsafe_depth == 0 && node) {
-            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_NOT_CALLABLE,
-                                       "Ptr.loadLE() must be inside an unsafe block", &loc);
-        }
-        XrType *params[1] = {xr_type_new_int(X)};
-        XrType *ret = xr_type_new_type_param(X, "T", 0);
-        XrType *fn = xr_type_new_function(X, params, 1, ret, false);
-        if (fn) {
-            const char *names[1] = {"T"};
-            xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
-        }
-        return fn;
-    }
-    if (strcmp(name, "storeLE") == 0 && xa_type_is_raw_u8_ptr(receiver)) {
-        if (node) {
-            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            if (ctx->unsafe_depth == 0) {
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_NOT_CALLABLE,
-                                           "MutPtr.storeLE() must be inside an unsafe block", &loc);
-            }
-            if (!receiver->ptr_is_mut) {
-                xa_analyzer_add_diagnostic(
-                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
-                    "cannot store through a const `Ptr<T>` (use `MutPtr<T>`)", &loc);
-            }
-        }
-        XrType *value = xr_type_new_type_param(X, "T", 0);
-        XrType *params[2] = {xr_type_new_int(X), value};
-        XrType *fn = xr_type_new_function(X, params, 2, xr_type_new_unit(X), false);
-        if (fn) {
-            const char *names[1] = {"T"};
-            xr_type_set_function_type_params(X, fn, names, NULL, NULL, 1);
-        }
-        return fn;
     }
     if (strcmp(name, "offset") == 0)
         return xa_function_type1(ctx, xr_type_new_int(X), receiver);

@@ -1,1 +1,1 @@
-MutPtr.storeLE<T>() expects exactly one type argument
+MutPtr has no member 'storeLE'

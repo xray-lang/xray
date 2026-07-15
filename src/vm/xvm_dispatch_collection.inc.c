@@ -1626,7 +1626,6 @@ VM_BYTE_SLICE_STORE_FLOAT_CASE(OP_BYTE_SLICE_STORE_F64, xr_array_core_bytes_stor
 #undef VM_BYTE_SLICE_LOAD_FLOAT_CASE
 #undef VM_BYTE_SLICE_STORE_CASE
 #undef VM_BYTE_SLICE_LOAD_CASE
-#undef VM_PARSE_ENDIAN_ARG
 
 vmcase(OP_BYTE_SLICE_FILL) {
     int a = GETARG_A(i);
@@ -1792,23 +1791,34 @@ vmcase(OP_PLACE_STORE) {
     vmbreak;
 }
 
-/* FFI raw-pointer access. B (load) / A (store) holds an address-width int;
- * C is the XrFFIType width of the pointee. No bounds/null check (unsafe). */
+/* FFI raw-pointer access. A is a contiguous register window holding
+ * result/address/endian for load and address/value/endian for store. B carries
+ * the XrFFIType/flags byte. No bounds/null check (unsafe). */
 vmcase(OP_PTR_LOAD) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-    int c = GETARG_C(i);
-    R(a) = xr_ffi_ptr_load((uintptr_t) (intptr_t) XR_TO_INT(R(b)), (uint8_t) c);
+    int64_t endian = XR_ENDIAN_NATIVE;
+    VM_PARSE_ENDIAN_ARG(R(a + 2), endian);
+    if (xr_ffi_ptr_aux_type((uint8_t) b) == XR_FFI_T_PTR && endian != XR_ENDIAN_NATIVE) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "pointer memory load requires Endian.Native");
+    }
+    R(a) = xr_ffi_ptr_load((uintptr_t) (intptr_t) XR_TO_INT(R(a + 1)), (uint8_t) b, endian);
     vmbreak;
 }
 
 vmcase(OP_PTR_STORE) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-    int c = GETARG_C(i);
-    xr_ffi_ptr_store((uintptr_t) (intptr_t) XR_TO_INT(R(a)), (uint8_t) c, R(b));
+    int64_t endian = XR_ENDIAN_NATIVE;
+    VM_PARSE_ENDIAN_ARG(R(a + 2), endian);
+    if (xr_ffi_ptr_aux_type((uint8_t) b) == XR_FFI_T_PTR && endian != XR_ENDIAN_NATIVE) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "pointer memory store requires Endian.Native");
+    }
+    xr_ffi_ptr_store((uintptr_t) (intptr_t) XR_TO_INT(R(a)), (uint8_t) b, R(a + 1), endian);
     vmbreak;
 }
+
+#undef VM_PARSE_ENDIAN_ARG
 
 vmcase(OP_PTR_COPY_NONOVERLAP) {
     int a = GETARG_A(i);

@@ -9916,8 +9916,6 @@ static void xicgen_byte_array_repeat_from(XiCgenCtx *ctx, FILE *out, const XiFun
         fprintf(out, ").ptr)");
 }
 
-/* FFI raw-pointer access: pick the exact C scalar type for a pointee width.
- * XI_PTR_LOAD/STORE carry the XrFFIType code in aux_int. */
 static const char *cg_ffi_pointee_c_type(uint8_t code) {
     code = xr_ffi_ptr_aux_type(code);
     switch ((XrFFIType) code) {
@@ -9961,32 +9959,34 @@ static bool cg_ffi_code_is_ptr(uint8_t code) {
     return (XrFFIType) code == XR_FFI_T_PTR;
 }
 
-static const char *cg_ffi_ptr_le_load_helper(uint8_t code) {
+static uint8_t cg_ffi_code_width(uint8_t code) {
     code = xr_ffi_ptr_aux_type(code);
     switch ((XrFFIType) code) {
+        case XR_FFI_T_BOOL:
+        case XR_FFI_T_I8:
+        case XR_FFI_T_U8:
+            return 1;
+        case XR_FFI_T_I16:
         case XR_FFI_T_U16:
-            return "xrt_ptr_load_u16_le_unchecked_raw";
+            return 2;
+        case XR_FFI_T_I32:
         case XR_FFI_T_U32:
-            return "xrt_ptr_load_u32_le_unchecked_raw";
+        case XR_FFI_T_F32:
+            return 4;
+        case XR_FFI_T_I64:
         case XR_FFI_T_U64:
-            return "xrt_ptr_load_u64_le_unchecked_raw";
+        case XR_FFI_T_F64:
+            return 8;
         default:
-            return NULL;
+            return (uint8_t) sizeof(void *);
     }
 }
 
-static const char *cg_ffi_ptr_le_store_helper(uint8_t code) {
+static bool cg_ffi_code_is_signed(uint8_t code) {
     code = xr_ffi_ptr_aux_type(code);
-    switch ((XrFFIType) code) {
-        case XR_FFI_T_U16:
-            return "xrt_ptr_store_u16_le_unchecked_raw";
-        case XR_FFI_T_U32:
-            return "xrt_ptr_store_u32_le_unchecked_raw";
-        case XR_FFI_T_U64:
-            return "xrt_ptr_store_u64_le_unchecked_raw";
-        default:
-            return NULL;
-    }
+    return (XrFFIType) code == XR_FFI_T_I8 || (XrFFIType) code == XR_FFI_T_I16 ||
+           (XrFFIType) code == XR_FFI_T_I32 || (XrFFIType) code == XR_FFI_T_I64 ||
+           (XrFFIType) code == XR_FFI_T_SSIZE;
 }
 
 /* Unsafe Array<T>/Span<T> data pointer borrow. VM/tagged values keep the address
@@ -10293,37 +10293,55 @@ static void xicgen_ptr_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
                             const char *prefix) {
     (void) f;
     (void) prefix;
-    uint8_t aux = (uint8_t) (v->aux_int & 0xff);
-    uint8_t code = xr_ffi_ptr_aux_type(aux);
-    if ((aux & XR_FFI_PTR_AUX_LITTLE_ENDIAN) != 0) {
-        const char *helper = cg_ffi_ptr_le_load_helper(code);
-        if (!helper) {
-            emit_codegen_abort_expr(out);
-            return;
-        }
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "%s(", helper);
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
+    if (!v || v->nargs != 2 || !v->args[0] || !v->args[1]) {
+        emit_codegen_abort_expr(out);
         return;
     }
-    const char *cty = cg_ffi_pointee_c_type(code);
+    uint8_t aux = (uint8_t) (v->aux_int & 0xff);
+    uint8_t code = xr_ffi_ptr_aux_type(aux);
+    int64_t endian = XR_ENDIAN_NATIVE;
+    bool native_endian =
+        xicgen_value_is_const_endian(v->args[1], &endian) && endian == XR_ENDIAN_NATIVE;
     XrRep from_rep = cg_ffi_code_is_float(code)
                          ? XR_REP_F64
                          : (cg_ffi_code_is_ptr(code) ? XR_REP_RAWPTR : XR_REP_I64);
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, from_rep, cg_value_plan_storage_rep(ctx, v));
-    if (cg_ffi_code_is_float(code))
-        fprintf(out, "(double)");
-    else if (cg_ffi_code_is_ptr(code))
-        fprintf(out, "(void *)");
-    else
-        fprintf(out, "(int64_t)");
-    fprintf(out, "(*(%s *)(", cty);
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
-    fprintf(out, "))");
+    if ((aux & XR_FFI_PTR_AUX_UNALIGNED) == 0 && native_endian) {
+        const char *cty = cg_ffi_pointee_c_type(code);
+        if (cg_ffi_code_is_float(code))
+            fprintf(out, "(double)");
+        else if (cg_ffi_code_is_ptr(code))
+            fprintf(out, "(void *)");
+        else
+            fprintf(out, "(int64_t)");
+        fprintf(out, "(*(%s *)(", cty);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, "))");
+    } else if (cg_ffi_code_is_float(code)) {
+        fprintf(out, "xrt_ptr_load_float_unchecked_raw(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, ", UINT8_C(%u), ", (unsigned) cg_ffi_code_width(code));
+        xicgen_emit_endian_arg_i64(ctx, out, v->args[1]);
+        fprintf(out, ")");
+    } else if (cg_ffi_code_is_ptr(code)) {
+        if (!native_endian) {
+            cg_ctx_set_error(ctx);
+            emit_codegen_abort_expr(out);
+            emit_conversion_suffix(out, conv_suffix);
+            return;
+        }
+        fprintf(out, "xrt_ptr_load_pointer_unchecked_raw(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, ")");
+    } else {
+        fprintf(out, "xrt_ptr_load_int_unchecked_raw(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, ", UINT8_C(%u), UINT8_C(%u), ", (unsigned) cg_ffi_code_width(code),
+                cg_ffi_code_is_signed(code) ? 1u : 0u);
+        xicgen_emit_endian_arg_i64(ctx, out, v->args[1]);
+        fprintf(out, ")");
+    }
     emit_conversion_suffix(out, conv_suffix);
 }
 
@@ -10332,36 +10350,59 @@ static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
                              const char *prefix) {
     (void) f;
     (void) prefix;
+    if (!v || v->nargs != 3 || !v->args[0] || !v->args[1] || !v->args[2]) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     uint8_t aux = (uint8_t) (v->aux_int & 0xff);
     uint8_t code = xr_ffi_ptr_aux_type(aux);
-    if ((aux & XR_FFI_PTR_AUX_LITTLE_ENDIAN) != 0) {
-        const char *helper = cg_ffi_ptr_le_store_helper(code);
-        if (!helper) {
+    int64_t endian = XR_ENDIAN_NATIVE;
+    bool native_endian =
+        xicgen_value_is_const_endian(v->args[2], &endian) && endian == XR_ENDIAN_NATIVE;
+    if ((aux & XR_FFI_PTR_AUX_UNALIGNED) == 0 && native_endian) {
+        const char *cty = cg_ffi_pointee_c_type(code);
+        fprintf(out, "(*(%s *)(", cty);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, ")) = ");
+        if (cg_ffi_code_is_float(code)) {
+            fprintf(out, "(%s)(", cty);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_F64);
+            fprintf(out, ")");
+        } else if (cg_ffi_code_is_ptr(code)) {
+            fprintf(out, "(void *)(");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_RAWPTR);
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "(%s)(", cty);
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ")");
+        }
+    } else if (cg_ffi_code_is_float(code)) {
+        fprintf(out, "xrt_ptr_store_float_unchecked_raw(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_F64);
+        fprintf(out, ", UINT8_C(%u), ", (unsigned) cg_ffi_code_width(code));
+        xicgen_emit_endian_arg_i64(ctx, out, v->args[2]);
+        fprintf(out, ")");
+    } else if (cg_ffi_code_is_ptr(code)) {
+        if (!native_endian) {
+            cg_ctx_set_error(ctx);
             emit_codegen_abort_expr(out);
             return;
         }
-        fprintf(out, "%s(", helper);
+        fprintf(out, "xrt_ptr_store_pointer_unchecked_raw(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
         fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ")");
-        return;
-    }
-    const char *cty = cg_ffi_pointee_c_type(code);
-    fprintf(out, "(*(%s *)(", cty);
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
-    fprintf(out, ")) = ");
-    if (cg_ffi_code_is_float(code)) {
-        fprintf(out, "(%s)(", cty);
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_F64);
-        fprintf(out, ")");
-    } else if (cg_ffi_code_is_ptr(code)) {
-        fprintf(out, "(void *)(");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_RAWPTR);
         fprintf(out, ")");
     } else {
-        fprintf(out, "(%s)(", cty);
+        fprintf(out, "xrt_ptr_store_int_unchecked_raw(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ", UINT8_C(%u), ", (unsigned) cg_ffi_code_width(code));
+        xicgen_emit_endian_arg_i64(ctx, out, v->args[2]);
         fprintf(out, ")");
     }
 }

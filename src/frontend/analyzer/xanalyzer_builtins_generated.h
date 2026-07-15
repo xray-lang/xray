@@ -246,6 +246,8 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"ptr", "(addr: int): Ptr<byte>", "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", true, false, false, false, false},
     {"mutPtr", "(addr: int): MutPtr<byte>", "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", true, false, false, false, false},
     {"addr", "(ptr: Ptr<byte>): int", "Numeric address of any Ptr<T> or MutPtr<T>", true, false, false, false, false},
+    {"load", "(ptr: Ptr<byte>, offset?: int, endian?: Endian): int", "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset", true, false, false, false, false},
+    {"store", "(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()", "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset", true, false, false, false, false},
     {"copy", "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false, false, false, false},
     {"move", "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false, false, false, false},
     {"set", "(dst: MutPtr<byte>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", true, false, false, false, false},
@@ -258,7 +260,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"PROT_WRITE", ": int", "Writable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false},
     {"PROT_EXEC", ": int", "Executable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false},
 };
-#define GEN_MEM_FUNCTION_COUNT 28
+#define GEN_MEM_FUNCTION_COUNT 30
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {
