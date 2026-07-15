@@ -74,6 +74,30 @@ NATIVE_ERROR_RE = re.compile(
 )
 TASK_ERROR_RE = re.compile(r"\b(?:TaskOutcome|TaskResult|Failed\(unknown\)|Task<[^>]*,\s*[^>]*>)\b")
 
+XR_ERROR_SET_NEEDLES = ("XrErrorSet", "xr_error_set_")
+FUNCTION_ERROR_SET_NEEDLES = ("function.error_set", "xr_type_", "XrType.function.error_set")
+SYMBOL_LINK_ERROR_SET_NEEDLES = ("XaSymbolLinks.error_set", "links.error_set")
+MAY_THROW_NEEDLE = "MAY_THROW"
+ERROR_CHANNEL_NEEDLES = ("pending_error", "XI_ERR_CHECK", "XI_ERR_CATCH", "XI_THROW", "XI_CATCH", "throw", "catch")
+LSP_TOOLING_NEEDLES = (
+    "hover",
+    "inlay",
+    "CodeLens",
+    "codeLens",
+    "codeAction",
+    "code_action",
+    "xlsp_analyze_hover",
+    "xlsp_analyze_inlay_hints",
+    "xlsp_handle_td_code_lens",
+    "xlsp_handle_code_action",
+    "hoverProvider",
+    "inlayHintProvider",
+    "codeLensProvider",
+    "codeActionProvider",
+)
+XRD_NEEDLES = ("xrd", "XRD", ".xrd", "--xrd", "generate_xrd", "xanalyzer_xrd")
+TASK_ERROR_NEEDLES = ("TaskOutcome", "TaskResult", "Failed(unknown)", "Task<")
+
 CATEGORIES = (
     "XR_ERROR_SET_RUNTIME_OR_API",
     "FUNCTION_TYPE_ERROR_SET_FIELD",
@@ -129,29 +153,42 @@ def classify_line(rel_path: str, line: str) -> list[str]:
     if not line.strip():
         return categories
 
-    if XR_ERROR_SET_RE.search(line):
+    if any(needle in line for needle in XR_ERROR_SET_NEEDLES) and XR_ERROR_SET_RE.search(line):
         categories.append("XR_ERROR_SET_RUNTIME_OR_API")
-    if FUNCTION_ERROR_SET_RE.search(line):
+    if any(needle in line for needle in FUNCTION_ERROR_SET_NEEDLES) and FUNCTION_ERROR_SET_RE.search(line):
         categories.append("FUNCTION_TYPE_ERROR_SET_FIELD")
-    if SYMBOL_LINK_ERROR_SET_RE.search(line):
+    if any(needle in line for needle in SYMBOL_LINK_ERROR_SET_NEEDLES) and SYMBOL_LINK_ERROR_SET_RE.search(line):
         categories.append("SYMBOL_LINK_ERROR_SET_FIELD")
-    if XI_MAY_THROW_RE.search(line):
+    if MAY_THROW_NEEDLE in line and XI_MAY_THROW_RE.search(line):
         categories.append("XI_MAY_THROW_FLAG_OR_EFFECT")
-    if SUMMARY_MAY_THROW_RE.search(line):
+    if MAY_THROW_NEEDLE in line and SUMMARY_MAY_THROW_RE.search(line):
         categories.append("GLOBAL_SUMMARY_MAY_THROW_EFFECT")
-    if rel_path.startswith("src/aot/") and MAY_THROW_RE.search(line):
+    if rel_path.startswith("src/aot/") and MAY_THROW_NEEDLE in line and MAY_THROW_RE.search(line):
         categories.append("AOT_MAY_THROW_CONSUMER")
-    if rel_path.startswith("src/ir/") and ERROR_CHANNEL_RE.search(line):
+    if rel_path.startswith("src/ir/") and any(needle in line for needle in ERROR_CHANNEL_NEEDLES) and ERROR_CHANNEL_RE.search(line):
         categories.append("IR_ERROR_CHANNEL_CONSUMER")
     if rel_path.startswith("src/vm/") and ("pending_error" in line or "throw" in line or "catch" in line):
         categories.append("VM_RUNTIME_PENDING_ERROR_CHANNEL")
-    if (rel_path.startswith("src/app/lsp/") or rel_path.startswith("tests/unit/lsp/")) and LSP_TOOLING_RE.search(line):
+    if (
+        (rel_path.startswith("src/app/lsp/") or rel_path.startswith("tests/unit/lsp/"))
+        and any(needle in line for needle in LSP_TOOLING_NEEDLES)
+        and LSP_TOOLING_RE.search(line)
+    ):
         categories.append("LSP_ERROR_TOOLING_ENTRY")
-    if XRD_RE.search(line) or rel_path.endswith(".xrd") or "xanalyzer_xrd" in rel_path:
+    if (
+        rel_path.endswith(".xrd")
+        or "xanalyzer_xrd" in rel_path
+        or (any(needle in line for needle in XRD_NEEDLES) and XRD_RE.search(line))
+    ):
         categories.append("XRD_METADATA_GENERATOR_OR_LOADER")
-    if NATIVE_ERROR_RE.search(line):
+    lower_line = line.lower()
+    if (
+        "@errors" in line
+        or ("bodyless" in lower_line and "error" in lower_line)
+        or ("native" in lower_line and ("effect" in lower_line or "error_set" in lower_line))
+    ) and NATIVE_ERROR_RE.search(line):
         categories.append("NATIVE_ERROR_CONTRACT_SURFACE")
-    if TASK_ERROR_RE.search(line):
+    if any(needle in line for needle in TASK_ERROR_NEEDLES) and TASK_ERROR_RE.search(line):
         categories.append("TASK_TYPED_ERROR_RESIDUE")
     return categories
 
