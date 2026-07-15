@@ -436,6 +436,28 @@ static XaotAbiSlot borrowed_place_slot(const XrType *type, XaotAbiSlot value_slo
     return slot;
 }
 
+static XaotAbiSlot place_value_slot_for_type(const XaotBundle *bundle, const XiFunc *func,
+                                             const XrType *type, const XiValue *value) {
+    /* Native class pointers and by-value struct aggregates are valid value
+     * ABIs, but a ref/out place must match the addressable caller slot.  Their
+     * stable call-bound storage is the tagged XrValue slot; scalar, pointer,
+     * fixed-array and span places remain native below. */
+    if (type && !type->is_nullable) {
+        switch (type->kind) {
+            case XR_KIND_INT:
+            case XR_KIND_FLOAT:
+            case XR_KIND_BOOL:
+            case XR_KIND_RUNE:
+            case XR_KIND_POINTER:
+            case XR_KIND_SPAN:
+                return native_value_slot_for_type(bundle, func, type, value, false);
+            default:
+                break;
+        }
+    }
+    return tagged_slot(type);
+}
+
 static XaotAbiSlot native_slot_for_type(const XaotBundle *bundle, const XiFunc *func,
                                         const XrType *type, const XiValue *value, bool is_return) {
     if (param_uses_place_abi(func, value, is_return, NULL)) {
@@ -443,8 +465,7 @@ static XaotAbiSlot native_slot_for_type(const XaotBundle *bundle, const XiFunc *
         if (fixed_array_place_param_can_use_ptr_abi(func, value, type, is_return,
                                                     &fixed_array_elem_ctype))
             return fixed_array_place_param_slot(type, fixed_array_elem_ctype);
-        return borrowed_place_slot(
-            type, native_value_slot_for_type(bundle, func, type, value, is_return));
+        return borrowed_place_slot(type, place_value_slot_for_type(bundle, func, type, value));
     }
     return native_value_slot_for_type(bundle, func, type, value, is_return);
 }

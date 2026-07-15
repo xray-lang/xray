@@ -807,7 +807,7 @@
   :arity 2
   :result-kind void
   :result-ownership none
-  :own-use borrow
+  :own-use stored-value
   :effects (side-effect memory-write)
   :requires (call-bound-place)
   :observable ()
