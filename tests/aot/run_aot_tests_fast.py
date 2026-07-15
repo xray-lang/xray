@@ -30,6 +30,7 @@ NEGATIVE_RE = re.compile(
     r"exceptions inside AOT coroutine are unsupported|"
     r"unsupported Xi op ERR_|"
     r"semantic analysis failed|"
+    r"derived Clone .* no consumable verified plan|"
     r": error: "
 )
 
