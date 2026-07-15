@@ -7,8 +7,8 @@ struct XrayMemHeader {
 
 @c_export("xray_mem_addr_roundtrip")
 fn xray_mem_addr_roundtrip(addr: int) -> int {
-    var p = mem.fromAddress(addr)
-    return mem.addressOf(p)
+    var p = mem.mutPtr<byte>(addr)
+    return mem.addr(p)
 }
 
 @c_export("xray_mem_layout_constants")
@@ -21,15 +21,15 @@ fn xray_mem_layout_constants() -> int {
 
 @c_export("xray_mem_typed_from_address")
 fn xray_mem_typed_from_address(addr: int) -> int {
-    var p = mem.fromAddress(addr) as MutPtr<uint32>
-    return mem.addressOf(p)
+    var p = mem.mutPtr<uint32>(addr)
+    return mem.addr(p)
 }
 
 @c_export("xray_mem_typed_addr_null")
 fn xray_mem_typed_addr_null() -> int {
     var p = Ptr<uint32>.null()
     var q = MutPtr<uint64>.null()
-    return mem.addressOf(p) + mem.addressOf(q)
+    return mem.addr(p) + mem.addr(q)
 }
 
 @c_export("xray_mem_bits")
@@ -44,8 +44,8 @@ fn xray_mem_bits(x: int, n: int) -> int {
 
 @c_export("xray_mem_bulk")
 fn xray_mem_bulk(dst: int, src: int, n: int) -> int {
-    var d = mem.fromAddress(dst)
-    var s = mem.fromAddress(src)
+    var d = mem.mutPtr<byte>(dst)
+    var s = mem.mutPtr<byte>(src)
     mem.copy(d, s, n)
     mem.move(d, s, n)
     mem.set(d, 0, n)
@@ -54,7 +54,7 @@ fn xray_mem_bulk(dst: int, src: int, n: int) -> int {
 
 @c_export("xray_mem_mmio_shape")
 fn xray_mem_mmio_shape(addr: int) -> int {
-    var p = mem.fromAddress(addr)
+    var p = mem.mutPtr<byte>(addr)
     mem.prefetch(p, 1)
     mem.cacheFlush(p, 64)
     mem.cacheInvalidate(p, 64)

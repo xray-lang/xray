@@ -8858,6 +8858,10 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         fprintf(out, "xrt_to_rune(");
         emit_boxed_value_ref(out, v->args[0]);
         fprintf(out, ")");
+    } else if (v->type->kind == XR_KIND_POINTER) {
+        const char *suffix = emit_conversion_prefix(out, v->type, src_rep, dst_rep);
+        emit_vref(out, v->args[0]);
+        emit_conversion_suffix(out, suffix);
     } else {
         emit_vref(out, v->args[0]);
     }

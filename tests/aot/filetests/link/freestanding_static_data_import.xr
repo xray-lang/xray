@@ -50,23 +50,23 @@ fn imported_static_strings(i: int) -> int {
 
 @c_export("xray_imported_static_addr")
 fn imported_static_addr() -> int {
-    return mem.addressOf(Ptr<int>.of(MAGIC)) +
-        mem.addressOf(Ptr<[int; 4]>.of(TABLE)) +
-        mem.addressOf(Ptr<[byte; 4]>.of(BYTES)) +
-        mem.addressOf(Ptr<[[byte; 4]; 2]>.of(MATRIX)) +
-        mem.addressOf(Ptr<[[[int; 2]; 2]; 2]>.of(CUBE)) +
-        mem.addressOf(Ptr<string>.of(LABEL)) +
-        mem.addressOf(Ptr<[[[string; 2]; 2]; 2]>.of(LABEL_CUBE)) +
-        mem.addressOf(Ptr<[(string, int); 2]>.of(LABELED_ROWS)) +
-        mem.addressOf(Ptr<[byte; 2]>.of(ADDR_ONLY_BYTES)) +
-        mem.addressOf(Ptr<int?>.of(MAYBE_NONE)) +
-        mem.addressOf(Ptr<(int, int)>.of(PLAIN_PAIR)) +
-        mem.addressOf(Ptr<[byte; 2]>.of(PLAIN_BYTES)) +
-        mem.addressOf(Ptr<[[byte; 2]; 2]>.of(PLAIN_MATRIX)) +
-        mem.addressOf(Ptr<[[[int; 2]; 2]; 2]>.of(PLAIN_CUBE)) +
-        mem.addressOf(Ptr<string>.of(PLAIN_LABEL)) +
-        mem.addressOf(Ptr<(string, int)>.of(PLAIN_LABELED)) +
-        mem.addressOf(Ptr<[string; 2]>.of(PLAIN_LABELS)) +
-        mem.addressOf(Ptr<[[string; 2]; 2]>.of(PLAIN_LABEL_MATRIX)) +
-        mem.addressOf(Ptr<[[[string; 2]; 2]; 2]>.of(PLAIN_LABEL_CUBE))
+    return mem.addr(Ptr<int>.of(MAGIC)) +
+        mem.addr(Ptr<[int; 4]>.of(TABLE)) +
+        mem.addr(Ptr<[byte; 4]>.of(BYTES)) +
+        mem.addr(Ptr<[[byte; 4]; 2]>.of(MATRIX)) +
+        mem.addr(Ptr<[[[int; 2]; 2]; 2]>.of(CUBE)) +
+        mem.addr(Ptr<string>.of(LABEL)) +
+        mem.addr(Ptr<[[[string; 2]; 2]; 2]>.of(LABEL_CUBE)) +
+        mem.addr(Ptr<[(string, int); 2]>.of(LABELED_ROWS)) +
+        mem.addr(Ptr<[byte; 2]>.of(ADDR_ONLY_BYTES)) +
+        mem.addr(Ptr<int?>.of(MAYBE_NONE)) +
+        mem.addr(Ptr<(int, int)>.of(PLAIN_PAIR)) +
+        mem.addr(Ptr<[byte; 2]>.of(PLAIN_BYTES)) +
+        mem.addr(Ptr<[[byte; 2]; 2]>.of(PLAIN_MATRIX)) +
+        mem.addr(Ptr<[[[int; 2]; 2]; 2]>.of(PLAIN_CUBE)) +
+        mem.addr(Ptr<string>.of(PLAIN_LABEL)) +
+        mem.addr(Ptr<(string, int)>.of(PLAIN_LABELED)) +
+        mem.addr(Ptr<[string; 2]>.of(PLAIN_LABELS)) +
+        mem.addr(Ptr<[[string; 2]; 2]>.of(PLAIN_LABEL_MATRIX)) +
+        mem.addr(Ptr<[[[string; 2]; 2]; 2]>.of(PLAIN_LABEL_CUBE))
 }

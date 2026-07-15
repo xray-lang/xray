@@ -4,5 +4,5 @@ const MAGIC: int = 7
 
 @c_export("xray_rawmut_of_static_reject")
 fn rawmutOfStaticReject() -> int {
-    return mem.addressOf(MutPtr<int>.of(MAGIC))
+    return mem.addr(MutPtr<int>.of(MAGIC))
 }

@@ -76,10 +76,10 @@ const MPS2_LEDS = 0x40028000
 @used
 @c_export("xray_kernel_entry")
 fn kernel_entry() -> int32 {
-    mem.volatileStore(mem.fromAddress(MPS2_LEDS), 0x5a, 4)
-    mem.volatileStore(mem.fromAddress(UART0_DATA), 'M' as int, 4)
-    mem.volatileStore(mem.fromAddress(UART0_DATA), '4' as int, 4)
-    mem.volatileStore(mem.fromAddress(UART0_DATA), 10, 4)
+    mem.volatileStore(mem.mutPtr<byte>(MPS2_LEDS), 0x5a, 4)
+    mem.volatileStore(mem.mutPtr<byte>(UART0_DATA), 'M' as int, 4)
+    mem.volatileStore(mem.mutPtr<byte>(UART0_DATA), '4' as int, 4)
+    mem.volatileStore(mem.mutPtr<byte>(UART0_DATA), 10, 4)
     while (true) {
     }
     return 0

@@ -2,5 +2,5 @@ import mem
 
 @c_export("xray_rawptr_of_parameter_reject")
 fn rawptrOfParameterReject(value: int) -> int {
-    return mem.addressOf(Ptr<int>.of(value))
+    return mem.addr(Ptr<int>.of(value))
 }

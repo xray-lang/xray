@@ -300,8 +300,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"pageAlloc", XLSP_SYM_FUNCTION, "fn(bytes: int, prot?: int): MutPtr<byte>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", NULL, 0},
     {"pageProtect", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<byte>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", NULL, 0},
     {"pageFree", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<byte>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", NULL, 0},
-    {"fromAddress", XLSP_SYM_FUNCTION, "fn(addr: int): MutPtr<byte>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", NULL, 0},
-    {"addressOf", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>): int", "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", NULL, 0},
+    {"ptr", XLSP_SYM_FUNCTION, "fn(addr: int): Ptr<byte>", "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", NULL, 0},
+    {"mutPtr", XLSP_SYM_FUNCTION, "fn(addr: int): MutPtr<byte>", "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", NULL, 0},
+    {"addr", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>): int", "Numeric address of any Ptr<T> or MutPtr<T>", NULL, 0},
     {"copy", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", NULL, 0},
     {"move", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", NULL, 0},
     {"set", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<byte>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", NULL, 0},
@@ -313,7 +314,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"PROT_WRITE", XLSP_SYM_CONSTANT, "int", "Writable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_EXEC", XLSP_SYM_CONSTANT, "int", "Executable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 27
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 28
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {

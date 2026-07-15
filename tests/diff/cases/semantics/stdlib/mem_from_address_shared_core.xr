@@ -1,4 +1,4 @@
-// mem.fromAddress / mem.addressOf (task 147 §7.2, MMIO address bridge).
+// mem.mutPtr / mem.addr (task 147 §7.2, MMIO address bridge).
 // Addresses are non-deterministic, so assertions only observe data behind
 // pointers, null-ness, alignment remainders, and address equality — never a
 // raw address value. VM represents raw pointers as address ints (identity
@@ -6,9 +6,9 @@
 import mem
 
 // Null round-trip: address 0 is the null pointer.
-var z = mem.fromAddress(0)
+var z = mem.ptr<byte>(0)
 print(z.isNull())
-print(mem.addressOf(z))
+print(mem.addr(z))
 
 // Data round-trip: rebuild a pointer from its numeric address and observe
 // the same bytes through both the original and the rebuilt pointer.
@@ -16,51 +16,50 @@ var b = mem.alloc(16)
 var p = unsafe { b.ptr() }
 unsafe { p[0] = 42 }
 unsafe { p[15] = 99 }
-var addr = mem.addressOf(p)
-var q = mem.fromAddress(addr)
+var addr = mem.addr(p)
+var q = mem.ptr<byte>(addr)
 print(q.isNull())
 unsafe { print(q[0]) }
 unsafe { print(q[15]) }
 
-// Manual pointer arithmetic through the address domain: fromAddress(addr + i)
+// Manual pointer arithmetic through the address domain: mutPtr(addr + i)
 // must see byte i of the original buffer.
-var q15 = mem.fromAddress(addr + 15)
+var q15 = mem.ptr<byte>(addr + 15)
 unsafe { print(q15[0]) }
 
-// addressOf is stable: same pointer, same address.
-print(mem.addressOf(q) == addr)
+// addr is stable: same pointer, same address.
+print(mem.addr(q) == addr)
 
-// Typed C/MMIO pointers are explicit address-domain casts. fromAddress keeps a
-// byte-pointer default; the cast documents the pointee view.
-var q32 = mem.fromAddress(addr) as MutPtr<uint32>
+// Typed C/MMIO pointers carry their pointee type directly.
+var q32 = mem.mutPtr<uint32>(addr)
 unsafe { q32[0] = 0x01020304 as uint32 }
 var p_ro: Ptr<byte> = p
 unsafe { print(int(p_ro.loadLE<uint32>(0))) }
 
 // The address-domain view is not limited to integer pointees. C APIs often pass
 // pointer slots and float buffers as raw bytes before rebuilding the typed view.
-var qptr = mem.fromAddress(addr) as MutPtr<Ptr<byte>>
-var qf32 = mem.fromAddress(addr) as MutPtr<float32>
-var qf64 = mem.fromAddress(addr) as MutPtr<float64>
-print(mem.addressOf(qptr) == addr)
-print(mem.addressOf(qf32) == addr)
-print(mem.addressOf(qf64) == addr)
+var qptr = mem.ptr<Ptr<byte>>(addr)
+var qf32 = mem.ptr<float32>(addr)
+var qf64 = mem.ptr<float64>(addr)
+print(mem.addr(qptr) == addr)
+print(mem.addr(qf32) == addr)
+print(mem.addr(qf64) == addr)
 
-// addressOf is pointee-type agnostic: C pointer comparisons/differences often
+// addr is pointee-type agnostic: C pointer comparisons/differences often
 // start from typed pointers, not only byte pointers.
 var typed_null = Ptr<uint32>.null()
 var typed_mut_null = MutPtr<uint64>.null()
-print(mem.addressOf(typed_null))
-print(mem.addressOf(typed_mut_null))
+print(mem.addr(typed_null))
+print(mem.addr(typed_mut_null))
 
 // Alignment observation: an allocAligned(_, 64) buffer's address is 64-aligned.
 var ab = mem.allocAligned(128, 64)
 var a = unsafe { ab.ptr() }
-print(mem.addressOf(a) % 64)
+print(mem.addr(a) % 64)
 
 // MMIO access pattern: volatile store/load through an address-constructed
-// pointer (the real driver-code shape fromAddress exists for).
-var reg = mem.fromAddress(mem.addressOf(a) + 8)
+// pointer (the real driver-code shape mutPtr exists for).
+var reg = mem.mutPtr<byte>(mem.addr(a) + 8)
 mem.volatileStore(reg, 305419896, 4)
 print(mem.volatileLoad(reg, 4))
 

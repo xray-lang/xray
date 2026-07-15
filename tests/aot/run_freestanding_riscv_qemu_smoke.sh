@@ -75,9 +75,9 @@ const UART0 = 0x10000000
 @used
 @c_export("xray_kernel_entry")
 fn kernel_entry() -> int32 {
-    mem.volatileStore(mem.fromAddress(UART0), 'R' as int, 1)
-    mem.volatileStore(mem.fromAddress(UART0), 'V' as int, 1)
-    mem.volatileStore(mem.fromAddress(UART0), 10, 1)
+    mem.volatileStore(mem.mutPtr<byte>(UART0), 'R' as int, 1)
+    mem.volatileStore(mem.mutPtr<byte>(UART0), 'V' as int, 1)
+    mem.volatileStore(mem.mutPtr<byte>(UART0), 10, 1)
     while (true) {
     }
     return 0

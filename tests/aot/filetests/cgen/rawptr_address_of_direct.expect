@@ -1,3 +1,3 @@
 c_contains=(int64_t)(uintptr_t)
-c_not_contains=xrt_mem_address_of
+c_not_contains=xrt_mem_addr
 c_not_contains=xrt_to_int

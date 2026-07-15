@@ -1,6 +1,6 @@
-// Expected: compile error - mem.addressOf accepts only raw pointer values.
+// Expected: compile error - mem.addr accepts only raw pointer values.
 import mem
 
 fn bad() -> int {
-    return mem.addressOf(123)
+    return mem.addr(123)
 }

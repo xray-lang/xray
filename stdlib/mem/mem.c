@@ -15,7 +15,7 @@
  *   The module also carries raw-memory capabilities: memory fence, cache
  *   performance hints (prefetch/flush/invalidate/non-temporal store),
  *   anonymous pages (mmap/VirtualAlloc), the numeric address bridge
- *   (fromAddress/addressOf), bulk byte operations (copy/move/set/compare)
+ *   (ptr/mutPtr/addr), bulk byte operations (copy/move/set/compare)
  *   and volatile sized load/store for MMIO.
  *
  *   Moved out per the 151 surface convergence:
@@ -348,20 +348,24 @@ static XrValue mem_page_free(XrVMRuntime *isolate, XrValue *args, int argc) {
 }
 
 /*
- * Address <-> pointer bridge (mem.fromAddress / mem.addressOf). In the VM a
+ * Address <-> pointer bridge (mem.ptr / mem.mutPtr / mem.addr). In the VM a
  * raw pointer already IS an address-width int (mem_rawptr_arg / OP_PTR_LOAD),
  * so both directions are identity re-tags here; the AOT helpers cast between
- * int64 and the native .ptr slot. fromAddress enables MMIO / physical-address
+ * int64 and the native .ptr slot. ptr/mutPtr enable MMIO / physical-address
  * access (147 §7.2): constructing the pointer is safe, dereferencing it stays
  * unsafe-gated as usual.
  */
-static XrValue mem_from_address(XrVMRuntime *isolate, XrValue *args, int argc) {
+static XrValue mem_ptr(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     int64_t addr = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
     return xr_int(addr);
 }
 
-static XrValue mem_address_of(XrVMRuntime *isolate, XrValue *args, int argc) {
+static XrValue mem_mut_ptr(XrVMRuntime *isolate, XrValue *args, int argc) {
+    return mem_ptr(isolate, args, argc);
+}
+
+static XrValue mem_addr(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     if (argc < 1)
         return xr_int(0);

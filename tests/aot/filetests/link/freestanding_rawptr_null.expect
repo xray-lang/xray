@@ -6,6 +6,6 @@ contains="system_libs": []
 contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
 c_contains=#include "xrt_core_freestanding.h"
 c_contains=uint8_t xray_rawptr_null_is_null
-c_not_contains=xrt_mem_from_address
+c_not_contains=xrt_mem_mut_ptr
 not_contains=xray_rt_coro
 not_contains=xray_core

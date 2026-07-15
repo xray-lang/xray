@@ -14,7 +14,7 @@ c_contains=static const struct
 c_contains=.f0 =
 c_contains=.f1 =
 c_contains=.f2 =
-c_contains=xrt_mem_from_address
+c_not_contains=xrt_mem_mut_ptr
 c_contains=xrt_mem_volatile_store
 c_not_contains=xrt_shared[
 c_not_contains=static XrValue xrt_shared

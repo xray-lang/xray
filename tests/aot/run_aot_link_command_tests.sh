@@ -2099,7 +2099,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/top-var-scalar-attrs: writes scalar directly"
         expect_log_not_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" "xrt_shared[0]" \
             "freestanding-profile/top-var-scalar-attrs: avoids shared-slot storage"
-        expect_log_not_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" "xrt_mem_address_of" \
+        expect_log_not_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" "xrt_mem_addr" \
             "freestanding-profile/top-var-scalar-attrs: avoids hosted address helper"
         expect_log_not_contains "$FREESTANDING_TOP_VAR_SCALAR_ATTRS_C" "#include \"xrt.h\"" \
             "freestanding-profile/top-var-scalar-attrs: avoids hosted umbrella"
@@ -2217,7 +2217,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/rawmut-top-var-field-addr: keeps storage non-const"
         expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" "xrt_shared[0] =" \
             "freestanding-profile/rawmut-top-var-field-addr: avoids shared-slot storage"
-        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" "xrt_mem_address_of" \
+        expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" "xrt_mem_addr" \
             "freestanding-profile/rawmut-top-var-field-addr: avoids hosted address helper"
         expect_log_not_contains "$FREESTANDING_RAWMUT_TOP_VAR_FIELD_C" "xrt_arc_alloc" \
             "freestanding-profile/rawmut-top-var-field-addr: avoids hosted aggregate allocation"
@@ -2275,7 +2275,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/rawmut-scalar-var-addr: avoids shared slot for fourth scalar"
         expect_log_not_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" "xrt_shared[4]" \
             "freestanding-profile/rawmut-scalar-var-addr: avoids shared slot for default scalar"
-        expect_log_not_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" "xrt_mem_address_of" \
+        expect_log_not_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" "xrt_mem_addr" \
             "freestanding-profile/rawmut-scalar-var-addr: avoids hosted address helper"
         expect_log_not_contains "$FREESTANDING_RAWMUT_SCALAR_VAR_C" "#include \"xrt.h\"" \
             "freestanding-profile/rawmut-scalar-var-addr: avoids hosted umbrella"
@@ -2468,7 +2468,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_PLAIN_CONST_ADDR_C" \
             "&_xctstr_freestanding_rawptr_of_plain_const_addr_" \
             "freestanding-profile/plain-const-addr: takes string static address directly"
-        expect_log_not_contains "$FREESTANDING_PLAIN_CONST_ADDR_C" "xrt_mem_address_of" \
+        expect_log_not_contains "$FREESTANDING_PLAIN_CONST_ADDR_C" "xrt_mem_addr" \
             "freestanding-profile/plain-const-addr: avoids hosted address helper"
         expect_log_not_contains "$FREESTANDING_PLAIN_CONST_ADDR_C" "#include \"xrt.h\"" \
             "freestanding-profile/plain-const-addr: avoids hosted umbrella"

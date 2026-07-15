@@ -86,28 +86,28 @@ static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *
     return xr_type_new_pointer(ctx->analyzer->isolate, pointee, is_mut);
 }
 
-static bool xa_call_is_mem_address_of(CallExprNode *call, XaSymbolLinks *fn_links) {
+static bool xa_call_is_mem_addr(CallExprNode *call, XaSymbolLinks *fn_links) {
     if (fn_links && fn_links->module_name && strcmp(fn_links->module_name, "mem") == 0) {
-        if (fn_links->import_member_name && strcmp(fn_links->import_member_name, "addressOf") == 0)
+        if (fn_links->import_member_name && strcmp(fn_links->import_member_name, "addr") == 0)
             return true;
     }
     if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return false;
     MemberAccessNode *ma = &call->callee->as.member_access;
-    if (!ma->name || strcmp(ma->name, "addressOf") != 0 || !ma->object ||
+    if (!ma->name || strcmp(ma->name, "addr") != 0 || !ma->object ||
         ma->object->type != AST_VARIABLE)
         return false;
     return ma->object->as.variable.name && strcmp(ma->object->as.variable.name, "mem") == 0;
 }
 
-static void xa_check_mem_address_of_arg(XaInferContext *ctx, AstNode *arg_node, XrType *arg_type) {
+static void xa_check_mem_addr_arg(XaInferContext *ctx, AstNode *arg_node, XrType *arg_type) {
     if (!ctx || !ctx->analyzer || !arg_node)
         return;
     if (arg_type && XR_TYPE_IS_POINTER(arg_type))
         return;
     XrLocation loc = {.file = ctx->file_path, .line = arg_node->line, .column = arg_node->column};
     char msg[192];
-    snprintf(msg, sizeof(msg), "mem.addressOf expects Ptr<T> or MutPtr<T>, got '%s'",
+    snprintf(msg, sizeof(msg), "mem.addr expects Ptr<T> or MutPtr<T>, got '%s'",
              arg_type ? xr_type_to_string(arg_type) : "unknown");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                &loc);
@@ -2007,6 +2007,53 @@ static bool xa_mem_layout_member_name(const char *name) {
                     strcmp(name, "offsetOf") == 0);
 }
 
+static const char *xa_mem_pointer_constructor_member(XaInferContext *ctx, CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    if (!ma->name || (strcmp(ma->name, "ptr") != 0 && strcmp(ma->name, "mutPtr") != 0) ||
+        !xa_call_object_is_module(ctx, ma->object, "mem"))
+        return NULL;
+    return ma->name;
+}
+
+static XrType *xa_mem_pointer_constructor_return_type(XaInferContext *ctx, AstNode *node,
+                                                      CallExprNode *call, const char *member) {
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "mem.%s<T>() expects exactly one type argument", member);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   msg, &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+    if (call->arg_count != 1 || !call->arguments || !call->arguments[0]) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "mem.%s<T>() expects exactly one address argument", member);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   msg, &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+
+    XrType *addr_type = xa_visit_infer_expr(ctx, call->arguments[0]);
+    if (!addr_type || !XR_TYPE_IS_INT(addr_type)) {
+        char msg[192];
+        snprintf(msg, sizeof(msg), "mem.%s<T>() expects an integer address, got '%s'", member,
+                 addr_type ? xr_type_to_string(addr_type) : "unknown");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+
+    XrType *pointee = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+    if (xa_reject_error_type_success_type(ctx->analyzer, pointee, "generic type argument", member,
+                                          node ? node->line : 0, node ? node->column : 0))
+        return xr_type_new_error(NULL);
+    if (!pointee)
+        pointee = xr_type_new_unknown(ctx->analyzer->isolate);
+    return xr_type_new_pointer(ctx->analyzer->isolate, pointee, strcmp(member, "mutPtr") == 0);
+}
+
 static const char *xa_mem_layout_call_member(XaInferContext *ctx, CallExprNode *call) {
     if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return NULL;
@@ -3656,6 +3703,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     const char *mem_layout_member = xa_mem_layout_call_member(ctx, call);
     if (mem_layout_member)
         return xa_mem_layout_return_type(ctx, node, call, mem_layout_member);
+    const char *mem_pointer_member = xa_mem_pointer_constructor_member(ctx, call);
+    if (mem_pointer_member)
+        return xa_mem_pointer_constructor_return_type(ctx, node, call, mem_pointer_member);
 
     if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
         strcmp(call->callee->as.variable.name, "typeName") == 0 && call->type_arg_count > 0) {
@@ -4268,7 +4318,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     int fixed_param_count = rest_param_index >= 0 ? rest_param_index : param_count;
     if (!fn_links && call->callee && call->callee->type == AST_MEMBER_ACCESS)
         fn_links = xa_static_method_fn_links(ctx, call->callee);
-    bool is_mem_address_of = xa_call_is_mem_address_of(call, fn_links);
+    bool is_mem_addr = xa_call_is_mem_addr(call, fn_links);
 
     // Caller-side default argument filling (C1): for a direct call to a named
     // function with default parameters, complete omitted trailing arguments by
@@ -4533,8 +4583,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
         }
 
-        if (is_mem_address_of && slot == 0) {
-            xa_check_mem_address_of_arg(ctx, arg_node, arg_type);
+        if (is_mem_addr && slot == 0) {
+            xa_check_mem_addr_arg(ctx, arg_node, arg_type);
             slot++;
             continue;
         }

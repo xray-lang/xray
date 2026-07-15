@@ -10,11 +10,11 @@ fn regAddress(base: int, offset: int) -> int {
 }
 
 fn regRead(base: int, offset: int) -> int {
-    return mem.volatileLoad(mem.fromAddress(regAddress(base, offset)), 4)
+    return mem.volatileLoad(mem.mutPtr<byte>(regAddress(base, offset)), 4)
 }
 
 fn regWrite(base: int, offset: int, value: int) {
-    mem.volatileStore(mem.fromAddress(regAddress(base, offset)), value, 4)
+    mem.volatileStore(mem.mutPtr<byte>(regAddress(base, offset)), value, 4)
 }
 
 fn regSetBits(base: int, offset: int, mask: int) -> int {

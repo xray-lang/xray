@@ -2809,11 +2809,11 @@ module mem {
     layer: "core"
   }
 
-  fn fromAddress {
-    signature: "(addr: int): MutPtr<byte>"
-    doc: "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe"
-    vm: "mem_from_address"
-    aot: "xrt_mem_from_address"
+  fn ptr {
+    signature: "(addr: int): Ptr<byte>"
+    doc: "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe"
+    vm: "mem_ptr"
+    aot: "xrt_mem_ptr"
     argc: 1
     arg_spec: "v"
     aot_direct: true
@@ -2821,11 +2821,23 @@ module mem {
     layer: "core"
   }
 
-  fn addressOf {
+  fn mutPtr {
+    signature: "(addr: int): MutPtr<byte>"
+    doc: "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe"
+    vm: "mem_mut_ptr"
+    aot: "xrt_mem_mut_ptr"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn addr {
     signature: "(ptr: Ptr<byte>): int"
-    doc: "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)"
-    vm: "mem_address_of"
-    aot: "xrt_mem_address_of"
+    doc: "Numeric address of any Ptr<T> or MutPtr<T>"
+    vm: "mem_addr"
+    aot: "xrt_mem_addr"
     argc: 1
     arg_spec: "v"
     aot_direct: true
