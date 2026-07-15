@@ -42,6 +42,7 @@ add_xray_unit_test(test_obj_header mem/test_obj_header.c)
 # object/ — Runtime objects (string, array, utf8)
 # ============================================================================
 
+add_xray_unit_test(test_utf8_diagnostic base/test_utf8_diagnostic.c)
 add_xray_unit_test(test_utf8 object/test_utf8.c)
 
 add_xray_unit_test(test_xarray object/test_xarray.c)

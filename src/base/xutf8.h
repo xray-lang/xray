@@ -26,6 +26,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "xdefs.h"
+#include "../shared/xr_utf8_core.h"
 
 #define XR_UNICODE_MAX 0x10FFFF
 #define XR_UNICODE_INVALID 0xFFFD
@@ -111,7 +112,13 @@ XR_FUNC size_t xr_utf8_byte_to_utf16_offset(const char *str, size_t len, size_t 
 
 /* ========== Validation ========== */
 
-// Validate UTF-8 string
+// Diagnose the first malformed UTF-8 subsequence and count valid runes.
+XR_FUNC XrUtf8ScanResult xr_utf8_scan_strict(const uint8_t *data, size_t len);
+
+// Decode one scalar or one Unicode maximal subpart for lossy conversion.
+XR_FUNC XrUtf8Step xr_utf8_decode_step(const uint8_t *data, size_t len);
+
+// Validate UTF-8 string through the shared strict diagnostic core.
 XR_FUNC bool xr_utf8_validate(const char *str, size_t len);
 
 // Check if byte is UTF-8 continuation byte (10xxxxxx)
