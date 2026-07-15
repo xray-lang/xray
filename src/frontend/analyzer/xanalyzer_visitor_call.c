@@ -4033,8 +4033,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     // A diagnosed callee failure is recovery poison, not an unresolved callable.
     // Arguments were still visited above so their independent diagnostics survive.
-    if (XR_TYPE_IS_ERROR(callee_type))
+    if (XR_TYPE_IS_ERROR(callee_type)) {
+        // ref/out authorization is independent of callee type recovery: an
+        // unresolved callee cannot provide the parameter contract required by
+        // either access marker.
+        xa_report_arg_accesses_require_known_contract(ctx, node, call);
         return callee_type;
+    }
 
     if (payload_variant) {
         xa_check_payload_enum_variant_call(ctx, node, call, payload_variant, payload_enum_name,
