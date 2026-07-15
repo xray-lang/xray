@@ -6490,6 +6490,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                          xr_type_to_string(val_type), xr_type_to_string(elem));
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &yloc);
+            } else if (ys->value && val_type) {
+                xa_check_span_value_escape(ctx, ys->value, val_type,
+                                           "yield Slice view from generator");
             }
             break;
         }
