@@ -4249,10 +4249,44 @@ static bool verify_eq_hash_fields_match(const XgGlobalEvidence *ev, const XgDeri
     return true;
 }
 
+static bool verify_eq_hash_hash_eq_row_consumable(const XgHashEqSummary *hash_eq) {
+    if (!hash_eq)
+        return false;
+    switch ((XgHashEqKind) hash_eq->kind) {
+        case XG_HASH_EQ_BUILTIN:
+        case XG_HASH_EQ_ENUM_ORDINAL:
+        case XG_HASH_EQ_DERIVE:
+        case XG_HASH_EQ_USER_METHOD:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool verify_eq_hash_fields_have_hash_eq(const XgGlobalEvidence *ev,
+                                               const XgDeriveSummary *eq,
+                                               const XgDeriveSummary *hash) {
+    if (!verify_eq_hash_fields_match(ev, eq, hash))
+        return false;
+    if (!eq || eq->field_count == 0)
+        return true;
+    for (uint32_t i = 0; i < eq->field_count; i++) {
+        const XgDerivedFieldSummary *field = &ev->derived_fields[eq->field_start - 1 + i];
+        if (field->type_key == 0 || field->type_key == eq->type_key)
+            return false;
+        if (!verify_eq_hash_hash_eq_row_consumable(
+                xg_global_evidence_find_hash_eq(ev, field->type_key)))
+            return false;
+    }
+    return true;
+}
+
 static uint8_t verify_eq_hash_action_for(const XgGlobalEvidence *ev, const XgDeriveSummary *eq,
                                          const XgDeriveSummary *hash) {
     if (!eq || !hash || eq->type_key != hash->type_key ||
         !verify_eq_hash_fields_match(ev, eq, hash))
+        return XAOT_DERIVED_EQ_HASH_REJECT_UNHASHABLE;
+    if (!verify_eq_hash_fields_have_hash_eq(ev, eq, hash))
         return XAOT_DERIVED_EQ_HASH_REJECT_UNHASHABLE;
     if (eq->method_count != 0 && hash->method_count != 0)
         return XAOT_DERIVED_EQ_HASH_DIRECT_GENERATED_CALL;
@@ -4269,6 +4303,8 @@ static uint8_t verify_eq_hash_reason_for(const XgGlobalEvidence *ev, const XgDer
         return XAOT_EQ_HASH_UNPROVEN_TYPE_MISMATCH;
     if (!verify_eq_hash_fields_match(ev, eq, hash))
         return XAOT_EQ_HASH_UNPROVEN_FIELD_MISMATCH;
+    if (!verify_eq_hash_fields_have_hash_eq(ev, eq, hash))
+        return XAOT_EQ_HASH_UNPROVEN_UNHASHABLE_FIELD;
     return XAOT_EQ_HASH_UNPROVEN_NONE;
 }
 
@@ -4283,6 +4319,8 @@ static uint32_t verify_eq_hash_evidence_for(const XgGlobalEvidence *ev, const Xg
         evidence |= XAOT_EQ_HASH_EV_SAME_TYPE;
     if (verify_eq_hash_fields_match(ev, eq, hash))
         evidence |= XAOT_EQ_HASH_EV_SAME_FIELDS;
+    if (verify_eq_hash_fields_have_hash_eq(ev, eq, hash))
+        evidence |= XAOT_EQ_HASH_EV_FIELD_HASH_EQ;
     if (eq && eq->method_count != 0)
         evidence |= XAOT_EQ_HASH_EV_EQ_BODY;
     if (hash && hash->method_count != 0)

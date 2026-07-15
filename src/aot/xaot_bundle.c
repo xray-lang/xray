@@ -1929,10 +1929,44 @@ static bool derived_eq_hash_pair_fields_match(const XgGlobalEvidence *evidence,
     return true;
 }
 
+static bool derived_eq_hash_hash_eq_row_consumable(const XgHashEqSummary *hash_eq) {
+    if (!hash_eq)
+        return false;
+    switch ((XgHashEqKind) hash_eq->kind) {
+        case XG_HASH_EQ_BUILTIN:
+        case XG_HASH_EQ_ENUM_ORDINAL:
+        case XG_HASH_EQ_DERIVE:
+        case XG_HASH_EQ_USER_METHOD:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool derived_eq_hash_fields_have_hash_eq(const XgGlobalEvidence *evidence,
+                                                const XgDeriveSummary *eq,
+                                                const XgDeriveSummary *hash) {
+    if (!derived_eq_hash_pair_fields_match(evidence, eq, hash))
+        return false;
+    if (!eq || eq->field_count == 0)
+        return true;
+    for (uint32_t i = 0; i < eq->field_count; i++) {
+        const XgDerivedFieldSummary *field = &evidence->derived_fields[eq->field_start - 1 + i];
+        if (field->type_key == 0 || field->type_key == eq->type_key)
+            return false;
+        if (!derived_eq_hash_hash_eq_row_consumable(
+                xg_global_evidence_find_hash_eq(evidence, field->type_key)))
+            return false;
+    }
+    return true;
+}
+
 static uint8_t derived_eq_hash_action_for(const XgGlobalEvidence *evidence,
                                           const XgDeriveSummary *eq, const XgDeriveSummary *hash) {
     if (!eq || !hash || eq->type_key != hash->type_key ||
         !derived_eq_hash_pair_fields_match(evidence, eq, hash))
+        return XAOT_DERIVED_EQ_HASH_REJECT_UNHASHABLE;
+    if (!derived_eq_hash_fields_have_hash_eq(evidence, eq, hash))
         return XAOT_DERIVED_EQ_HASH_REJECT_UNHASHABLE;
     if (eq->method_count != 0 && hash->method_count != 0)
         return XAOT_DERIVED_EQ_HASH_DIRECT_GENERATED_CALL;
@@ -1949,6 +1983,8 @@ static uint8_t derived_eq_hash_reason_for(const XgGlobalEvidence *evidence,
         return XAOT_EQ_HASH_UNPROVEN_TYPE_MISMATCH;
     if (!derived_eq_hash_pair_fields_match(evidence, eq, hash))
         return XAOT_EQ_HASH_UNPROVEN_FIELD_MISMATCH;
+    if (!derived_eq_hash_fields_have_hash_eq(evidence, eq, hash))
+        return XAOT_EQ_HASH_UNPROVEN_UNHASHABLE_FIELD;
     return XAOT_EQ_HASH_UNPROVEN_NONE;
 }
 
@@ -1964,6 +2000,8 @@ static uint32_t derived_eq_hash_evidence_for(const XgGlobalEvidence *evidence,
         bits |= XAOT_EQ_HASH_EV_SAME_TYPE;
     if (derived_eq_hash_pair_fields_match(evidence, eq, hash))
         bits |= XAOT_EQ_HASH_EV_SAME_FIELDS;
+    if (derived_eq_hash_fields_have_hash_eq(evidence, eq, hash))
+        bits |= XAOT_EQ_HASH_EV_FIELD_HASH_EQ;
     if (eq && eq->method_count != 0)
         bits |= XAOT_EQ_HASH_EV_EQ_BODY;
     if (hash && hash->method_count != 0)
@@ -5913,6 +5951,8 @@ static const char *derived_eq_hash_unproven_reason_name(uint8_t reason) {
             return "type_mismatch";
         case XAOT_EQ_HASH_UNPROVEN_FIELD_MISMATCH:
             return "field_mismatch";
+        case XAOT_EQ_HASH_UNPROVEN_UNHASHABLE_FIELD:
+            return "unhashable_field";
         default:
             return "unknown";
     }
