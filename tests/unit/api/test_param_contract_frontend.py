@@ -32,6 +32,7 @@ NEGATIVE_CASES = (
     "tests/compile_errors/ownership/159_generic_method_ref_contract_retained.xr",
     "tests/compile_errors/ownership/160_in_rest_param_mode_rejected.xr",
     "tests/compile_errors/ownership/161_in_destructure_param_mode_rejected.xr",
+    "tests/compile_errors/ownership/162_out_param_try_call_may_throw_before_assignment.xr",
     "tests/compile_errors/ffi/040_extern_in_param_mode_rejected.xr",
     "tests/compile_errors/ffi/041_extern_ref_param_mode_rejected.xr",
     "tests/compile_errors/ffi/042_extern_out_param_mode_rejected.xr",
@@ -45,6 +46,7 @@ POSITIVE_CASES = (
     "tests/regression/13_types/1433_param_mode_move_source_action.xr",
     "tests/regression/13_types/1435_param_mode_place_kind_authorization.xr",
     "tests/regression/13_types/1437_generic_method_param_contract.xr",
+    "tests/regression/13_types/1438_out_param_try_call_catch_assign.xr",
 )
 
 

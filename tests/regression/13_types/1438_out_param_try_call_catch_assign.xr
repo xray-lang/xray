@@ -1,0 +1,23 @@
+enum InitErr {
+    Fail
+}
+
+fn fill(value: out int) {
+    value = 42
+}
+
+@test
+fn test_out_call_in_try_with_catch_assignment() {
+    var result = 0
+
+    fn initialize(value: out int) {
+        try {
+            fill(out value)
+        } catch (e) {
+            value = -1
+        }
+    }
+
+    initialize(out result)
+    assert_eq(result, 42)
+}
