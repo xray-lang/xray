@@ -1,0 +1,15 @@
+struct OutDirectFieldBitsetPair {
+    left: int
+    right: int
+}
+
+fn initialize(pair: out OutDirectFieldBitsetPair) {
+    pair.left = 23
+    pair.right = 29
+}
+
+@test
+fn test_out_param_direct_field_bitset_whole_init() {
+    var value = OutDirectFieldBitsetPair{left: 0, right: 0}
+    initialize(out value)
+}
