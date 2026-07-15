@@ -1,1 +1,1 @@
-RawPtr.of general lvalue address-taking is not enabled
+Ptr.of general lvalue address-taking is not enabled

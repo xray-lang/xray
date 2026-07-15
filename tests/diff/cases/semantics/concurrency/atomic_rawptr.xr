@@ -1,17 +1,17 @@
-// Atomic<RawPtr<T>> / Atomic<RawMut<T>> (task 147 §6.1): the generic Atomic
+// Atomic<Ptr<T>> / Atomic<MutPtr<T>> (task 147 §6.1): the generic Atomic
 // primitive erases T to a tagged value, so pointer payloads flow through
 // load/store/swap/compareExchange with no per-type code. VM and AOT must agree.
 // Pointer bit-values are non-deterministic, so every assertion observes the
 // DATA behind the pointer (deterministic) or the CAS success flag.
-@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
-@extern("C") fn free(p: RawMut<byte>)
+@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
+@extern("C") fn free(p: MutPtr<byte>)
 
 var p1 = unsafe { malloc(4) }
 var p2 = unsafe { malloc(4) }
 unsafe { p1[0] = 11 }
 unsafe { p2[0] = 22 }
 
-shared a = Atomic<RawMut<byte>>(p1)
+shared a = Atomic<MutPtr<byte>>(p1)
 
 // load: read data behind the stored pointer
 unsafe { print(a.load()[0]) }        // 11

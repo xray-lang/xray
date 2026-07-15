@@ -234,11 +234,11 @@ static void xlsp_component_label(XrType *receiver, const XlspReceiverMethodSpec 
             break;
         case XA_BUILTIN_TYPE_PTR_OF_RECEIVER_ELEM:
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
-            snprintf(buf, buf_size, "RawPtr<%s>", elem);
+            snprintf(buf, buf_size, "Ptr<%s>", elem);
             break;
         case XA_BUILTIN_TYPE_MUT_PTR_OF_RECEIVER_ELEM:
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
-            snprintf(buf, buf_size, "RawMut<%s>", elem);
+            snprintf(buf, buf_size, "MutPtr<%s>", elem);
             break;
     }
 }

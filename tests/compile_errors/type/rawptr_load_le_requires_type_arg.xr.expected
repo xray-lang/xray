@@ -1,1 +1,1 @@
-RawPtr.loadLE<T>() expects exactly one type argument
+Ptr.loadLE<T>() expects exactly one type argument

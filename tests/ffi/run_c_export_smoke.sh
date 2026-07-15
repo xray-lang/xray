@@ -155,14 +155,14 @@ fn mix_f64(a: float64, b: float64) -> float64 {
 }
 
 @c_export("xr_read_i32_ptr")
-fn read_i32_ptr(p: RawPtr<int32>) -> int32 {
+fn read_i32_ptr(p: Ptr<int32>) -> int32 {
     unsafe {
         return p[0]
     }
 }
 
 @c_export("xr_write_i32_ptr")
-fn write_i32_ptr(p: RawMut<int32>, v: int32) -> int32 {
+fn write_i32_ptr(p: MutPtr<int32>, v: int32) -> int32 {
     unsafe {
         p[0] = v
         return p[0]
@@ -346,9 +346,9 @@ if [ -f "$GEN_C" ]; then
     expect_file_contains "$GEN_C" "double xr_mix_f64(double p0, double p1);" \
         "declares float64 export"
     expect_file_contains "$GEN_C" "int32_t xr_read_i32_ptr(const void * p0);" \
-        "declares RawPtr export"
+        "declares Ptr export"
     expect_file_contains "$GEN_C" "int32_t xr_write_i32_ptr(void * p0, int32_t p1);" \
-        "declares RawMut export"
+        "declares MutPtr export"
     if [ -n "$PAIR_TYPE" ]; then
         expect_file_contains "$GEN_C" "int32_t xr_pair_sum($PAIR_TYPE p0);" \
             "declares fixed-layout struct parameter export"
@@ -402,9 +402,9 @@ if [ -f "$GEN_H" ]; then
     expect_file_contains "$GEN_H" "double xr_mix_f64(double p0, double p1);" \
         "header declares float64 export"
     expect_file_contains "$GEN_H" "int32_t xr_read_i32_ptr(const void * p0);" \
-        "header declares RawPtr export"
+        "header declares Ptr export"
     expect_file_contains "$GEN_H" "int32_t xr_write_i32_ptr(void * p0, int32_t p1);" \
-        "header declares RawMut export"
+        "header declares MutPtr export"
     if [ -n "$PAIR_TYPE" ]; then
         expect_file_contains "$GEN_H" "int32_t xr_pair_sum($PAIR_TYPE p0);" \
             "header declares fixed-layout struct parameter export"

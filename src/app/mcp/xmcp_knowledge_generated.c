@@ -2169,7 +2169,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "addressOf",
-        .signature = "(ptr: RawPtr<byte>): int",
+        .signature = "(ptr: Ptr<byte>): int",
         .summary = "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)",
     },
     {
@@ -2194,12 +2194,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "cacheFlush",
-        .signature = "(ptr: RawPtr<byte>, n: int): ()",
+        .signature = "(ptr: Ptr<byte>, n: int): ()",
         .summary = "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available",
     },
     {
         .name = "cacheInvalidate",
-        .signature = "(ptr: RawPtr<byte>, n: int): ()",
+        .signature = "(ptr: Ptr<byte>, n: int): ()",
         .summary = "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available",
     },
     {
@@ -2209,12 +2209,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "compare",
-        .signature = "(a: RawPtr<byte>, b: RawPtr<byte>, n: int): int",
+        .signature = "(a: Ptr<byte>, b: Ptr<byte>, n: int): int",
         .summary = "Compare n bytes at a and b (memcmp: <0, 0, >0)",
     },
     {
         .name = "copy",
-        .signature = "(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()",
+        .signature = "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()",
         .summary = "Copy n bytes from src to dst (non-overlapping; memcpy)",
     },
     {
@@ -2224,17 +2224,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "fromAddress",
-        .signature = "(addr: int): RawMut<byte>",
+        .signature = "(addr: int): MutPtr<byte>",
         .summary = "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe",
     },
     {
         .name = "move",
-        .signature = "(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()",
+        .signature = "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()",
         .summary = "Copy n bytes from src to dst (may overlap; memmove)",
     },
     {
         .name = "nontemporalStore",
-        .signature = "(ptr: RawMut<byte>, v: int, size: int): ()",
+        .signature = "(ptr: MutPtr<byte>, v: int, size: int): ()",
         .summary = "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available",
     },
     {
@@ -2244,27 +2244,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "pageAlloc",
-        .signature = "(bytes: int, prot?: int): RawMut<byte>",
+        .signature = "(bytes: int, prot?: int): MutPtr<byte>",
         .summary = "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree",
     },
     {
         .name = "pageFree",
-        .signature = "(ptr: RawMut<byte>, bytes: int): bool",
+        .signature = "(ptr: MutPtr<byte>, bytes: int): bool",
         .summary = "Release anonymous pages from mem.pageAlloc; returns false on OS failure",
     },
     {
         .name = "pageProtect",
-        .signature = "(ptr: RawMut<byte>, bytes: int, prot: int): bool",
+        .signature = "(ptr: MutPtr<byte>, bytes: int, prot: int): bool",
         .summary = "Change anonymous page protection bits; returns false on OS failure",
     },
     {
         .name = "prefetch",
-        .signature = "(ptr: RawPtr<byte>, rw: int): ()",
+        .signature = "(ptr: Ptr<byte>, rw: int): ()",
         .summary = "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch",
     },
     {
         .name = "set",
-        .signature = "(dst: RawMut<byte>, byte: int, n: int): ()",
+        .signature = "(dst: MutPtr<byte>, byte: int, n: int): ()",
         .summary = "Fill n bytes at dst with byte (memset)",
     },
     {
@@ -2274,12 +2274,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "volatileLoad",
-        .signature = "(ptr: RawPtr<byte>, size: int): int",
+        .signature = "(ptr: Ptr<byte>, size: int): int",
         .summary = "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)",
     },
     {
         .name = "volatileStore",
-        .signature = "(ptr: RawMut<byte>, v: int, size: int): ()",
+        .signature = "(ptr: MutPtr<byte>, v: int, size: int): ()",
         .summary = "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)",
     },
 };
@@ -3121,7 +3121,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Dylib.symbol",
-        .signature = "(name: string): RawPtr<byte>?",
+        .signature = "(name: string): Ptr<byte>?",
         .summary = "",
     },
     {
@@ -6438,29 +6438,29 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.PROT_NONE` | `: int` | No access protection for mem.pageAlloc/pageProtect |\n"
             "| `mem.PROT_READ` | `: int` | Readable page protection bit for mem.pageAlloc/pageProtect |\n"
             "| `mem.PROT_WRITE` | `: int` | Writable page protection bit for mem.pageAlloc/pageProtect |\n"
-            "| `mem.addressOf` | `(ptr: RawPtr<byte>): int` | Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress) |\n"
+            "| `mem.addressOf` | `(ptr: Ptr<byte>): int` | Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress) |\n"
             "| `mem.alignOf` | `(): int` | Compile-time alignment in bytes of a statically laid out type T |\n"
             "| `mem.alloc` | `(n: int): Buffer` | Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped |\n"
             "| `mem.allocAligned` | `(n: int, align: int): Buffer` | Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*)) |\n"
             "| `mem.allocZeroed` | `(n: int): Buffer` | Allocate n zero-initialized bytes as a managed Buffer |\n"
-            "| `mem.cacheFlush` | `(ptr: RawPtr<byte>, n: int): ()` | Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
-            "| `mem.cacheInvalidate` | `(ptr: RawPtr<byte>, n: int): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
+            "| `mem.cacheFlush` | `(ptr: Ptr<byte>, n: int): ()` | Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
+            "| `mem.cacheInvalidate` | `(ptr: Ptr<byte>, n: int): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
             "| `mem.cacheLineSize` | `(): int` | CPU cache line size in bytes |\n"
-            "| `mem.compare` | `(a: RawPtr<byte>, b: RawPtr<byte>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
-            "| `mem.copy` | `(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
+            "| `mem.compare` | `(a: Ptr<byte>, b: Ptr<byte>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
+            "| `mem.copy` | `(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
             "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
-            "| `mem.fromAddress` | `(addr: int): RawMut<byte>` | Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe |\n"
-            "| `mem.move` | `(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
-            "| `mem.nontemporalStore` | `(ptr: RawMut<byte>, v: int, size: int): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
+            "| `mem.fromAddress` | `(addr: int): MutPtr<byte>` | Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe |\n"
+            "| `mem.move` | `(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
+            "| `mem.nontemporalStore` | `(ptr: MutPtr<byte>, v: int, size: int): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
             "| `mem.offsetOf` | `(field: string): int` | Compile-time byte offset of a field in a fixed-layout struct T |\n"
-            "| `mem.pageAlloc` | `(bytes: int, prot?: int): RawMut<byte>` | Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
-            "| `mem.pageFree` | `(ptr: RawMut<byte>, bytes: int): bool` | Release anonymous pages from mem.pageAlloc; returns false on OS failure |\n"
-            "| `mem.pageProtect` | `(ptr: RawMut<byte>, bytes: int, prot: int): bool` | Change anonymous page protection bits; returns false on OS failure |\n"
-            "| `mem.prefetch` | `(ptr: RawPtr<byte>, rw: int): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
-            "| `mem.set` | `(dst: RawMut<byte>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
+            "| `mem.pageAlloc` | `(bytes: int, prot?: int): MutPtr<byte>` | Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
+            "| `mem.pageFree` | `(ptr: MutPtr<byte>, bytes: int): bool` | Release anonymous pages from mem.pageAlloc; returns false on OS failure |\n"
+            "| `mem.pageProtect` | `(ptr: MutPtr<byte>, bytes: int, prot: int): bool` | Change anonymous page protection bits; returns false on OS failure |\n"
+            "| `mem.prefetch` | `(ptr: Ptr<byte>, rw: int): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
+            "| `mem.set` | `(dst: MutPtr<byte>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
             "| `mem.sizeOf` | `(): int` | Compile-time size in bytes of a statically laid out type T |\n"
-            "| `mem.volatileLoad` | `(ptr: RawPtr<byte>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
-            "| `mem.volatileStore` | `(ptr: RawMut<byte>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
+            "| `mem.volatileLoad` | `(ptr: Ptr<byte>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
+            "| `mem.volatileStore` | `(ptr: MutPtr<byte>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "",
         .symbols = _symbols_mem,
         .symbol_count = (int)(sizeof(_symbols_mem) / sizeof(_symbols_mem[0])),
@@ -6844,7 +6844,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Dylib.constructor` | `(handle: int): ()` |  |\n"
             "| `Dylib.lastError` | `(): string` |  |\n"
             "| `Dylib.open` | `(path: Path): Dylib?` |  |\n"
-            "| `Dylib.symbol` | `(name: string): RawPtr<byte>?` |  |\n"
+            "| `Dylib.symbol` | `(name: string): Ptr<byte>?` |  |\n"
             "| `sys.OsBarrier` | `(parties: int): OsBarrier` | Create a reusable OS-domain barrier |\n"
             "| `sys.OsCondvar` | `(): OsCondvar` | Create an OS-domain condition variable |\n"
             "| `sys.OsMutex` | `(): OsMutex` | Create an OS-domain mutex |\n"

@@ -529,7 +529,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
 | Function | `fn(T1, T2) -> R` |
-| FFI / C ABI | `RawPtr<T>`, `RawMut<T>`, `CFn<(T) -> R>`, `uintsize`, `intsize` |
+| FFI / C ABI | `Ptr<T>`, `MutPtr<T>`, `CFn<(T) -> R>`, `uintsize`, `intsize` |
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
@@ -640,15 +640,15 @@ Xray's C FFI uses explicit boundary types so ordinary xray objects are not impli
 |--|--|--|
 | `uintsize` | `size_t` | `uint64` on the currently supported targets |
 | `intsize` | `ptrdiff_t` / platform signed width | `int64` on the currently supported targets |
-| `RawPtr<T>` | `const void *` boundary value | read-only raw pointer; `T` gives the xray-side dereference/index width |
-| `RawMut<T>` | `void *` boundary value | mutable raw pointer; assignable where `RawPtr<T>` is expected |
+| `Ptr<T>` | `const void *` boundary value | read-only raw pointer; `T` gives the xray-side dereference/index width |
+| `MutPtr<T>` | `void *` boundary value | mutable raw pointer; assignable where `Ptr<T>` is expected |
 | `CFn<(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `@extern` function |
 
 Raw pointer values may be stored, passed, compared, and offset with `offset(i)` using element-width scaling in safe code; actually reading or writing foreign memory must be inside `unsafe { }`:
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
-@extern("C") fn free(p: RawMut<byte>)
+@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
+@extern("C") fn free(p: MutPtr<byte>)
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -658,7 +658,7 @@ unsafe {
 }
 ```
 
-`RawPtr<T>` is read-only; writes require `RawMut<T>`. `unsafe` does not bypass that type rule. Raw pointer access performs no null or bounds checks, so the caller must guarantee address validity, lifetime, alignment, and aliasing correctness.
+`Ptr<T>` is read-only; writes require `MutPtr<T>`. `unsafe` does not bypass that type rule. Raw pointer access performs no null or bounds checks, so the caller must guarantee address validity, lifetime, alignment, and aliasing correctness.
 
 `CFn<(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and `@extern` functions themselves cannot be used as `CFn` callback arguments.
 
@@ -1095,21 +1095,21 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 #### `unsafe { }`
 
-`unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `@extern` functions, reads/writes through `RawPtr<T>` / `RawMut<T>` foreign memory, and `deref()` calls that dereference raw pointers.
+`unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `@extern` functions, reads/writes through `Ptr<T>` / `MutPtr<T>` foreign memory, and `deref()` calls that dereference raw pointers.
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
-@extern("C") fn free(p: RawMut<byte>)
+@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
+@extern("C") fn free(p: MutPtr<byte>)
 
 var p = unsafe { malloc(1) }      // the final expression is the block result
 unsafe {
-    p[0] = 7                      // RawMut writes must be inside unsafe
+    p[0] = 7                      // MutPtr writes must be inside unsafe
     print(p.deref())              // dereference must be inside unsafe
     free(p)                       // @extern calls must be inside unsafe
 }
 ```
 
-`unsafe` does not change the expression's result type; in a multi-statement block, the trailing expression statement yields the block value, otherwise the result is `()`. `unsafe` also does not disable ordinary type checking: `RawPtr<T>` is still read-only, and writes require `RawMut<T>`; null pointers, bounds, lifetimes, and alignment remain the caller's responsibility.
+`unsafe` does not change the expression's result type; in a multi-statement block, the trailing expression statement yields the block value, otherwise the result is `()`. `unsafe` also does not disable ordinary type checking: `Ptr<T>` is still read-only, and writes require `MutPtr<T>`; null pointers, bounds, lifetimes, and alignment remain the caller's responsibility.
 
 #### `comptime expr`
 
@@ -2152,8 +2152,8 @@ greet()                   // must be called explicitly
 `@extern("C")` declares an external C ABI function. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
-@extern("C") fn free(p: RawMut<byte>)
+@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
+@extern("C") fn free(p: MutPtr<byte>)
 @extern("C") @dylib("m") fn cos(x: float64) -> float64
 
 var p = unsafe { malloc(4) }
@@ -2168,20 +2168,20 @@ Rules:
 - `@extern("C")` currently denotes the default C ABI; omitting the string is also treated as C ABI.
 - `@dylib("name")` selects the dynamic library that provides the symbol; without it, resolution uses the default process/system lookup path.
 - An `@extern` function may only declare its signature and cannot have a `{ }` body; every non-`@extern` function must have a block body.
-- Boundary types that are aligned across the VM/AOT backends include `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `RawPtr<T>`, `RawMut<T>`, and `()` returns.
+- Boundary types that are aligned across the VM/AOT backends include `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
 - C callback parameters must use `CFn<(A, B) -> R>`, not the ordinary xray function type `(A, B) -> R`.
 - A current `CFn` argument must be a module-level, noncapturing xray function with an exact signature match; anonymous functions, capturing closures, and `@extern` functions themselves are rejected.
 
 ```xray
 @extern("C") fn bsearch(
-    key: RawPtr<byte>,
-    base: RawPtr<byte>,
+    key: Ptr<byte>,
+    base: Ptr<byte>,
     count: uintsize,
     size: uintsize,
-    cmp: CFn<(RawPtr<byte>, RawPtr<byte>) -> int32>
-) -> RawPtr<byte>
+    cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>
+) -> Ptr<byte>
 
-fn zeroCmp(a: RawPtr<byte>, b: RawPtr<byte>) -> int32 {
+fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
     return 0
 }
 
@@ -2206,8 +2206,8 @@ Rules:
 - A `@c_export` function must have an xray function body and cannot also be an `@extern` function.
 - The string argument must be a non-empty C identifier; that string is the exported C symbol name.
 - Each `@c_export` symbol name must be unique within one AOT bundle; duplicate symbols are compile errors.
-- Currently supported export boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `RawPtr<T>`, `RawMut<T>`, and `()` returns.
-- Managed xray values such as `string`, class instances, Array/Map/Set, ordinary closures, and by-value aggregates are not exported directly today. To share struct memory with C, pass an address through `RawPtr<T>` / `RawMut<T>`.
+- Currently supported export boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
+- Managed xray values such as `string`, class instances, Array/Map/Set, ordinary closures, and by-value aggregates are not exported directly today. To share struct memory with C, pass an address through `Ptr<T>` / `MutPtr<T>`.
 - `@c_export` defines the function ABI wrapper; `xray build --native --c-header FILE` can emit a C prototype header for those wrappers, and `xray build --native --shared --c-header FILE` can emit a native shared library with a matching header.
 - `--shared` currently supports only scalar / raw pointer exports that do not require Xray runtime initialization; runtime-backed features, managed ownership, aggregate by-value, and initialization/shutdown policy remain future FFI work.
 
@@ -5377,7 +5377,7 @@ UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
 PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
-FFIPointerType ::= ('RawPtr' | 'RawMut') '<' Type '>'
+FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
 FunctionType ::= '(' TypeList? ')' '->' Type

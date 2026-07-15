@@ -1,4 +1,4 @@
 args=--profile freestanding
 status=fail
-contains=RawMut.of classified this expression as module static (readonly storage)
+contains=MutPtr.of classified this expression as module static (readonly storage)
 not_contains=CRASH

@@ -37,7 +37,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
 | Function | `fn(T1, T2) -> R` |
-| FFI / C ABI | `RawPtr<T>`、`RawMut<T>`、`CFn<(T) -> R>`、`uintsize`、`intsize` |
+| FFI / C ABI | `Ptr<T>`、`MutPtr<T>`、`CFn<(T) -> R>`、`uintsize`、`intsize` |
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
 | Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
@@ -148,15 +148,15 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 |--|--|--|
 | `uintsize` | `size_t` | 当前支持目标上为 `uint64` |
 | `intsize` | `ptrdiff_t` / 平台有符号宽度 | 当前支持目标上为 `int64` |
-| `RawPtr<T>` | `const void *` 边界值 | 只读裸指针；`T` 用于 xray 端解引用/索引宽度 |
-| `RawMut<T>` | `void *` 边界值 | 可写裸指针；可传给需要 `RawPtr<T>` 的位置 |
+| `Ptr<T>` | `const void *` 边界值 | 只读裸指针；`T` 用于 xray 端解引用/索引宽度 |
+| `MutPtr<T>` | `void *` 边界值 | 可写裸指针；可传给需要 `Ptr<T>` 的位置 |
 | `CFn<(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `@extern` 函数 |
 
 裸指针值可以安全地保存、传递、比较和用 `offset(i)` 做按元素宽度缩放的指针偏移；真正读写外部内存必须写在 `unsafe { }` 内：
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
-@extern("C") fn free(p: RawMut<byte>)
+@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
+@extern("C") fn free(p: MutPtr<byte>)
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -166,7 +166,7 @@ unsafe {
 }
 ```
 
-`RawPtr<T>` 只能读取，写入必须使用 `RawMut<T>`；`unsafe` 不会绕过这个类型规则。裸指针访问不做空指针或边界检查，调用方必须保证地址、生命周期、对齐和别名规则正确。
+`Ptr<T>` 只能读取，写入必须使用 `MutPtr<T>`；`unsafe` 不会绕过这个类型规则。裸指针访问不做空指针或边界检查，调用方必须保证地址、生命周期、对齐和别名规则正确。
 
 `CFn<(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 `@extern` 函数本身不能作为 `CFn` 回调实参。
 
@@ -577,7 +577,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
 | Function | `fn(T1, T2) -> R` |
-| FFI / C ABI | `RawPtr<T>`, `RawMut<T>`, `CFn<(T) -> R>`, `uintsize`, `intsize` |
+| FFI / C ABI | `Ptr<T>`, `MutPtr<T>`, `CFn<(T) -> R>`, `uintsize`, `intsize` |
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
@@ -688,15 +688,15 @@ Xray's C FFI uses explicit boundary types so ordinary xray objects are not impli
 |--|--|--|
 | `uintsize` | `size_t` | `uint64` on the currently supported targets |
 | `intsize` | `ptrdiff_t` / platform signed width | `int64` on the currently supported targets |
-| `RawPtr<T>` | `const void *` boundary value | read-only raw pointer; `T` gives the xray-side dereference/index width |
-| `RawMut<T>` | `void *` boundary value | mutable raw pointer; assignable where `RawPtr<T>` is expected |
+| `Ptr<T>` | `const void *` boundary value | read-only raw pointer; `T` gives the xray-side dereference/index width |
+| `MutPtr<T>` | `void *` boundary value | mutable raw pointer; assignable where `Ptr<T>` is expected |
 | `CFn<(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `@extern` function |
 
 Raw pointer values may be stored, passed, compared, and offset with `offset(i)` using element-width scaling in safe code; actually reading or writing foreign memory must be inside `unsafe { }`:
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
-@extern("C") fn free(p: RawMut<byte>)
+@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
+@extern("C") fn free(p: MutPtr<byte>)
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -706,7 +706,7 @@ unsafe {
 }
 ```
 
-`RawPtr<T>` is read-only; writes require `RawMut<T>`. `unsafe` does not bypass that type rule. Raw pointer access performs no null or bounds checks, so the caller must guarantee address validity, lifetime, alignment, and aliasing correctness.
+`Ptr<T>` is read-only; writes require `MutPtr<T>`. `unsafe` does not bypass that type rule. Raw pointer access performs no null or bounds checks, so the caller must guarantee address validity, lifetime, alignment, and aliasing correctness.
 
 `CFn<(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and `@extern` functions themselves cannot be used as `CFn` callback arguments.
 

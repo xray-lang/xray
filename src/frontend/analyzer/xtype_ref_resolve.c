@@ -896,7 +896,7 @@ static int known_type_head_arity(XrVMRuntime *X, const char *name) {
         return -1;
     if (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SPAN) == 0 ||
         strcmp(name, "Set") == 0 || strcmp(name, "Channel") == 0 || strcmp(name, "Task") == 0 ||
-        strcmp(name, "RawPtr") == 0 || strcmp(name, "RawMut") == 0 || strcmp(name, "CFn") == 0)
+        strcmp(name, "Ptr") == 0 || strcmp(name, "MutPtr") == 0 || strcmp(name, "CFn") == 0)
         return 1;
     if (strcmp(name, "Map") == 0)
         return 2;
@@ -1012,9 +1012,9 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
         result = xr_type_new_map(X, args[0], args[1]);
     } else if (strcmp(name, "Task") == 0 && nargs == 1) {
         result = xr_type_new_task(X, args[0]);
-    } else if (strcmp(name, "RawPtr") == 0 && nargs == 1) {
+    } else if (strcmp(name, "Ptr") == 0 && nargs == 1) {
         result = xr_type_new_pointer(X, args[0], false);  // const raw pointer
-    } else if (strcmp(name, "RawMut") == 0 && nargs == 1) {
+    } else if (strcmp(name, "MutPtr") == 0 && nargs == 1) {
         result = xr_type_new_pointer(X, args[0], true);  // mutable raw pointer
     } else if (strcmp(name, "CFn") == 0 && nargs == 1) {
         if (args[0] && args[0]->kind == XR_KIND_FUNCTION) {
@@ -1474,9 +1474,9 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
         result = xr_type_new_map(X, args[0], args[1]);
     } else if (strcmp(name, "Task") == 0 && nargs == 1) {
         result = xr_type_new_task(X, args[0]);
-    } else if (strcmp(name, "RawPtr") == 0 && nargs == 1) {
+    } else if (strcmp(name, "Ptr") == 0 && nargs == 1) {
         result = xr_type_new_pointer(X, args[0], false);
-    } else if (strcmp(name, "RawMut") == 0 && nargs == 1) {
+    } else if (strcmp(name, "MutPtr") == 0 && nargs == 1) {
         result = xr_type_new_pointer(X, args[0], true);
     } else if (strcmp(name, "CFn") == 0 && nargs == 1) {
         if (args[0] && args[0]->kind == XR_KIND_FUNCTION) {

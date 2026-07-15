@@ -1,1 +1,1 @@
-RawMut.storeLE<T>() expects exactly one type argument
+MutPtr.storeLE<T>() expects exactly one type argument

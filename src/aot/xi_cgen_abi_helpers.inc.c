@@ -276,7 +276,7 @@ static const char *cg_func_return_abi_c_type(XiCgenCtx *ctx, const XiFunc *f) {
     return plan && plan->abi.ret.c_type ? plan->abi.ret.c_type : "XrValue";
 }
 
-/* FFI: a raw pointer (RawPtr<T>/RawMut<T>) is stored as a native pointer in AOT
+/* FFI: a raw pointer (Ptr<T>/MutPtr<T>) is stored as a native pointer in AOT
  * code, while tagged/VM boundaries encode it as an address-width integer.
  * Returns the boundary C type ("void *" / "const void *") when `t` is a pointer, else NULL.
  * Pointee precision is unnecessary at the call boundary: deref/index sites cast

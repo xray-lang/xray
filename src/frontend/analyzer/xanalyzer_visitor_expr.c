@@ -586,10 +586,10 @@ static XrType *xa_array_data_ptr_method_type(XaInferContext *ctx, XrType *receiv
     return xr_type_new_function(X, NULL, 0, ret, false);
 }
 
-// FFI raw pointer (RawPtr<T>/RawMut<T>) instance methods. Returns the method's
+// FFI raw pointer (Ptr<T>/MutPtr<T>) instance methods. Returns the method's
 // function type, or NULL if `name` is not a pointer method.
 //   p.deref()    -> T          (read *p; unsafe — requires `unsafe { }`)
-//   p.offset(i)  -> RawPtr<T>  (p + i, scaled by sizeof(T); safe pointer math)
+//   p.offset(i)  -> Ptr<T>  (p + i, scaled by sizeof(T); safe pointer math)
 //   p.isNull()   -> bool       (p == null; safe)
 static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, const char *name,
                                       AstNode *node) {
@@ -620,7 +620,7 @@ static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, con
             if (!receiver->ptr_is_mut) {
                 xa_analyzer_add_diagnostic(
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
-                    "cannot copy into a const `RawPtr<T>` (use `RawMut<T>`)", &loc);
+                    "cannot copy into a const `Ptr<T>` (use `MutPtr<T>`)", &loc);
             }
         }
         XrType *params[2] = {xr_type_new_pointer(X, pointee, false), xr_type_new_int(X)};
@@ -631,7 +631,7 @@ static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, con
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_NOT_CALLABLE,
-                                       "RawPtr.loadLE() must be inside an unsafe block", &loc);
+                                       "Ptr.loadLE() must be inside an unsafe block", &loc);
         }
         XrType *params[1] = {xr_type_new_int(X)};
         XrType *ret = xr_type_new_type_param(X, "T", 0);
@@ -648,12 +648,12 @@ static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, con
             if (ctx->unsafe_depth == 0) {
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_NOT_CALLABLE,
-                                           "RawMut.storeLE() must be inside an unsafe block", &loc);
+                                           "MutPtr.storeLE() must be inside an unsafe block", &loc);
             }
             if (!receiver->ptr_is_mut) {
                 xa_analyzer_add_diagnostic(
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
-                    "cannot store through a const `RawPtr<T>` (use `RawMut<T>`)", &loc);
+                    "cannot store through a const `Ptr<T>` (use `MutPtr<T>`)", &loc);
             }
         }
         XrType *value = xr_type_new_type_param(X, "T", 0);
@@ -693,9 +693,9 @@ static XrType *xa_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *objec
         !ne->type_args[0])
         return NULL;
     bool is_mut = false;
-    if (strcmp(ne->class_name, "RawPtr") == 0) {
+    if (strcmp(ne->class_name, "Ptr") == 0) {
         is_mut = false;
-    } else if (strcmp(ne->class_name, "RawMut") == 0) {
+    } else if (strcmp(ne->class_name, "MutPtr") == 0) {
         is_mut = true;
     } else {
         return NULL;
@@ -727,9 +727,9 @@ static XrType *xa_raw_pointer_static_method_type(XaInferContext *ctx, AstNode *n
             xa_analyzer_add_diagnostic(
                 ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                 ptr_type->ptr_is_mut
-                    ? "RawMut.of general lvalue address-taking is not enabled; the current "
+                    ? "MutPtr.of general lvalue address-taking is not enabled; the current "
                       "surface only exposes verified freestanding static data"
-                    : "RawPtr.of general lvalue address-taking is not enabled; the current "
+                    : "Ptr.of general lvalue address-taking is not enabled; the current "
                       "surface only exposes verified freestanding static const data",
                 &loc);
             return xr_type_new_error(ctx->analyzer->isolate);
@@ -1988,8 +1988,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (XR_TYPE_IS_POINTER(obj_type)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[160];
-        snprintf(msg, sizeof(msg), "%s has no member '%s'",
-                 obj_type->ptr_is_mut ? "RawMut" : "RawPtr", ma->name ? ma->name : "");
+        snprintf(msg, sizeof(msg), "%s has no member '%s'", obj_type->ptr_is_mut ? "MutPtr" : "Ptr",
+                 ma->name ? ma->name : "");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
         return xr_type_new_error(ctx->analyzer->isolate);

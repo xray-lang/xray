@@ -1243,7 +1243,7 @@ module sys {
   }
 
   fn __dylibSymbol {
-    signature: "(handle: int, name: string): RawPtr<byte>?"
+    signature: "(handle: int, name: string): Ptr<byte>?"
     doc: "Resolve a dynamic-library symbol to a raw address, or null on failure"
     vm: "sys_dylib_symbol"
     aot: "xrt_sys_dylib_symbol"
@@ -2593,7 +2593,7 @@ module mem {
   }
 
   fn prefetch {
-    signature: "(ptr: RawPtr<byte>, rw: int): ()"
+    signature: "(ptr: Ptr<byte>, rw: int): ()"
     doc: "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch"
     vm: "mem_prefetch"
     aot: "xrt_mem_prefetch"
@@ -2605,7 +2605,7 @@ module mem {
   }
 
   fn cacheFlush {
-    signature: "(ptr: RawPtr<byte>, n: int): ()"
+    signature: "(ptr: Ptr<byte>, n: int): ()"
     doc: "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available"
     vm: "mem_cache_flush"
     aot: "xrt_mem_cache_flush"
@@ -2617,7 +2617,7 @@ module mem {
   }
 
   fn cacheInvalidate {
-    signature: "(ptr: RawPtr<byte>, n: int): ()"
+    signature: "(ptr: Ptr<byte>, n: int): ()"
     doc: "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available"
     vm: "mem_cache_invalidate"
     aot: "xrt_mem_cache_invalidate"
@@ -2629,7 +2629,7 @@ module mem {
   }
 
   fn nontemporalStore {
-    signature: "(ptr: RawMut<byte>, v: int, size: int): ()"
+    signature: "(ptr: MutPtr<byte>, v: int, size: int): ()"
     doc: "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available"
     vm: "mem_nontemporal_store"
     aot: "xrt_mem_nontemporal_store"
@@ -2762,7 +2762,7 @@ module mem {
   }
 
   fn pageAlloc {
-    signature: "(bytes: int, prot?: int): RawMut<byte>"
+    signature: "(bytes: int, prot?: int): MutPtr<byte>"
     doc: "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree"
     vm: "mem_page_alloc"
     aot: "xrt_mem_page_alloc_default"
@@ -2774,7 +2774,7 @@ module mem {
   }
 
   fn pageAlloc {
-    signature: "(bytes: int, prot?: int): RawMut<byte>"
+    signature: "(bytes: int, prot?: int): MutPtr<byte>"
     doc: "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree"
     vm: "mem_page_alloc"
     aot: "xrt_mem_page_alloc"
@@ -2786,7 +2786,7 @@ module mem {
   }
 
   fn pageProtect {
-    signature: "(ptr: RawMut<byte>, bytes: int, prot: int): bool"
+    signature: "(ptr: MutPtr<byte>, bytes: int, prot: int): bool"
     doc: "Change anonymous page protection bits; returns false on OS failure"
     vm: "mem_page_protect"
     aot: "xrt_mem_page_protect"
@@ -2798,7 +2798,7 @@ module mem {
   }
 
   fn pageFree {
-    signature: "(ptr: RawMut<byte>, bytes: int): bool"
+    signature: "(ptr: MutPtr<byte>, bytes: int): bool"
     doc: "Release anonymous pages from mem.pageAlloc; returns false on OS failure"
     vm: "mem_page_free"
     aot: "xrt_mem_page_free"
@@ -2810,7 +2810,7 @@ module mem {
   }
 
   fn fromAddress {
-    signature: "(addr: int): RawMut<byte>"
+    signature: "(addr: int): MutPtr<byte>"
     doc: "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe"
     vm: "mem_from_address"
     aot: "xrt_mem_from_address"
@@ -2822,7 +2822,7 @@ module mem {
   }
 
   fn addressOf {
-    signature: "(ptr: RawPtr<byte>): int"
+    signature: "(ptr: Ptr<byte>): int"
     doc: "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)"
     vm: "mem_address_of"
     aot: "xrt_mem_address_of"
@@ -2834,7 +2834,7 @@ module mem {
   }
 
   fn copy {
-    signature: "(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()"
+    signature: "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()"
     doc: "Copy n bytes from src to dst (non-overlapping; memcpy)"
     vm: "mem_copy"
     aot: "xrt_mem_copy"
@@ -2846,7 +2846,7 @@ module mem {
   }
 
   fn move {
-    signature: "(dst: RawMut<byte>, src: RawPtr<byte>, n: int): ()"
+    signature: "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()"
     doc: "Copy n bytes from src to dst (may overlap; memmove)"
     vm: "mem_move"
     aot: "xrt_mem_move"
@@ -2858,7 +2858,7 @@ module mem {
   }
 
   fn set {
-    signature: "(dst: RawMut<byte>, byte: int, n: int): ()"
+    signature: "(dst: MutPtr<byte>, byte: int, n: int): ()"
     doc: "Fill n bytes at dst with byte (memset)"
     vm: "mem_set"
     aot: "xrt_mem_set"
@@ -2870,7 +2870,7 @@ module mem {
   }
 
   fn compare {
-    signature: "(a: RawPtr<byte>, b: RawPtr<byte>, n: int): int"
+    signature: "(a: Ptr<byte>, b: Ptr<byte>, n: int): int"
     doc: "Compare n bytes at a and b (memcmp: <0, 0, >0)"
     vm: "mem_compare"
     aot: "xrt_mem_compare"
@@ -2882,7 +2882,7 @@ module mem {
   }
 
   fn volatileLoad {
-    signature: "(ptr: RawPtr<byte>, size: int): int"
+    signature: "(ptr: Ptr<byte>, size: int): int"
     doc: "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)"
     vm: "mem_volatile_load"
     aot: "xrt_mem_volatile_load"
@@ -2894,7 +2894,7 @@ module mem {
   }
 
   fn volatileStore {
-    signature: "(ptr: RawMut<byte>, v: int, size: int): ()"
+    signature: "(ptr: MutPtr<byte>, v: int, size: int): ()"
     doc: "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)"
     vm: "mem_volatile_store"
     aot: "xrt_mem_volatile_store"
@@ -2912,7 +2912,7 @@ module mem {
   }
 
   type_method Buffer.ptr {
-    signature: "(): RawMut<byte>"
+    signature: "(): MutPtr<byte>"
     receiver: "Buffer"
     doc: "Return the underlying raw pointer; requires unsafe at the call site"
   }

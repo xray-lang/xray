@@ -10,5 +10,5 @@ var STATE = CounterState{value: 1, limit: 10}
 @c_export("xray_rawmut_top_var_field_addr")
 fn rawmutTopVarFieldAddr() -> int {
     STATE.limit = STATE.limit + 1
-    return mem.addressOf(RawMut<int>.of(STATE.limit)) + STATE.limit
+    return mem.addressOf(MutPtr<int>.of(STATE.limit)) + STATE.limit
 }

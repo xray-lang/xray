@@ -75,7 +75,7 @@ typedef enum XrTypeKind {
     XR_KIND_TUPLE,
     XR_KIND_UNION,        // Union type: int | string (compile-time only)
     XR_KIND_FIXED_ARRAY,  // Fixed-length array: [T; N] (compile-time length)
-    XR_KIND_POINTER,      // FFI raw pointer: RawPtr<T> (const) / RawMut<T> (mut). Address-
+    XR_KIND_POINTER,      // FFI raw pointer: Ptr<T> (const) / MutPtr<T> (mut). Address-
                           // width integer at the value level, invisible to the GC.
     XR_KIND_RUNE,         // Unicode scalar value. Immediate value (tag XR_TAG_RUNE), not
                           // a uint32; appended last to keep existing kind values stable.
@@ -222,7 +222,7 @@ struct XrType {
     bool is_literal;          // Literal type: kind + literal union holds value
     bool is_weak;             // Weak variant: WeakMap (kind==MAP) / WeakSet (kind==SET)
     bool is_cycle_candidate;  // Class type graph forms a cycle (RC cycle collector)
-    bool ptr_is_mut;          // POINTER only: RawMut<T> (true) vs RawPtr<T> (false, const)
+    bool ptr_is_mut;          // POINTER only: MutPtr<T> (true) vs Ptr<T> (false, const)
 
     // Native width for int/float types (XrSlotType value)
     // 0 = default (int=int64, float=float64), nonzero = specific width
@@ -433,7 +433,7 @@ XR_FUNC XrType *xr_type_new_int_width(XrVMRuntime *X, int width);    // XrNative
 XR_FUNC XrType *xr_type_new_float_width(XrVMRuntime *X, int width);  // XrNativeType value
 
 // API: FFI raw pointer type. element_type = pointee (T), is_mut selects
-// RawMut<T> (true) vs RawPtr<T> (false, const). Address-width int at the value
+// MutPtr<T> (true) vs Ptr<T> (false, const). Address-width int at the value
 // level; the GC never scans it.
 XR_FUNC XrType *xr_type_new_pointer(XrVMRuntime *X, XrType *element_type, bool is_mut);
 

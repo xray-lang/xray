@@ -456,7 +456,7 @@ static bool arc_raw_pointer_borrow_flows_to_user(const XiValue *member, const Xi
         return false;
     switch (user->op) {
         case XI_ADD:
-            /* RawPtr<T>.offset / p[i] address arithmetic keeps carrying the same
+            /* Ptr<T>.offset / p[i] address arithmetic keeps carrying the same
              * borrowed owner lifetime. The result type gate prevents ordinary
              * integer arithmetic from joining the borrow closure. */
             return arc_type_is_raw_pointer(user->type) && user->nargs >= 1 &&
@@ -966,7 +966,7 @@ static XiBlock *arc_split_edge(XiFunc *f, XiBlock *pred, XiBlock *succ) {
 }
 
 /* Collect `target` plus the transitive closure of borrowed projections
- * (GETFIELD and friends, RawPtr/RawMut data-pointer borrows, and Span value
+ * (GETFIELD and friends, Ptr/MutPtr data-pointer borrows, and Span value
  * views). A borrow reads through the owner without holding a reference, so the
  * owner must outlive the projection's last use — otherwise the release would
  * free storage a live borrow still points into. Returns a heap array (caller

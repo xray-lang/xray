@@ -1,10 +1,10 @@
-// RawPtr<T>.null() / RawMut<T>.null() are typed raw-pointer constants.
+// Ptr<T>.null() / MutPtr<T>.null() are typed raw-pointer constants.
 // The VM stores raw pointers as address ints; AOT stores them as native pointers.
 import mem
 
-var p = RawPtr<byte>.null()
-var q = RawMut<byte>.null()
-var r: RawPtr<byte> = q
+var p = Ptr<byte>.null()
+var q = MutPtr<byte>.null()
+var r: Ptr<byte> = q
 
 print(p.isNull())
 print(q.isNull())

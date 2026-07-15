@@ -6079,7 +6079,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 break;
             }
             // FFI raw pointer store p[i] = v: writes *(p + i). Unsafe (no bounds/
-            // null check), and only a mutable RawMut<T> may be written through.
+            // null check), and only a mutable MutPtr<T> may be written through.
             if (array_type && XR_TYPE_IS_POINTER(array_type)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
@@ -6091,7 +6091,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 if (!array_type->ptr_is_mut) {
                     xa_analyzer_add_diagnostic(
                         ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
-                        "cannot store through a const `RawPtr<T>` (use `RawMut<T>`)", &loc);
+                        "cannot store through a const `Ptr<T>` (use `MutPtr<T>`)", &loc);
                 }
                 if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type)) {
                     char msg[160];

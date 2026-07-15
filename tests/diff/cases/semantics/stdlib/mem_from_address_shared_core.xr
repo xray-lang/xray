@@ -32,24 +32,24 @@ print(mem.addressOf(q) == addr)
 
 // Typed C/MMIO pointers are explicit address-domain casts. fromAddress keeps a
 // byte-pointer default; the cast documents the pointee view.
-var q32 = mem.fromAddress(addr) as RawMut<uint32>
+var q32 = mem.fromAddress(addr) as MutPtr<uint32>
 unsafe { q32[0] = 0x01020304 as uint32 }
-var p_ro: RawPtr<byte> = p
+var p_ro: Ptr<byte> = p
 unsafe { print(int(p_ro.loadLE<uint32>(0))) }
 
 // The address-domain view is not limited to integer pointees. C APIs often pass
 // pointer slots and float buffers as raw bytes before rebuilding the typed view.
-var qptr = mem.fromAddress(addr) as RawMut<RawPtr<byte>>
-var qf32 = mem.fromAddress(addr) as RawMut<float32>
-var qf64 = mem.fromAddress(addr) as RawMut<float64>
+var qptr = mem.fromAddress(addr) as MutPtr<Ptr<byte>>
+var qf32 = mem.fromAddress(addr) as MutPtr<float32>
+var qf64 = mem.fromAddress(addr) as MutPtr<float64>
 print(mem.addressOf(qptr) == addr)
 print(mem.addressOf(qf32) == addr)
 print(mem.addressOf(qf64) == addr)
 
 // addressOf is pointee-type agnostic: C pointer comparisons/differences often
 // start from typed pointers, not only byte pointers.
-var typed_null = RawPtr<uint32>.null()
-var typed_mut_null = RawMut<uint64>.null()
+var typed_null = Ptr<uint32>.null()
+var typed_mut_null = MutPtr<uint64>.null()
 print(mem.addressOf(typed_null))
 print(mem.addressOf(typed_mut_null))
 

@@ -1965,7 +1965,7 @@ static struct XrType *xi_lower_struct_field_type(XiLower *l, struct XrType *fall
 }
 
 /* Byte size of a raw pointer's pointee, for scaling p[i] / p.offset(i). C
- * pointer arithmetic on RawPtr<T> advances by sizeof(T), matching `T*`. */
+ * pointer arithmetic on Ptr<T> advances by sizeof(T), matching `T*`. */
 static int64_t xi_pointer_pointee_size(struct XrType *ptr_type) {
     if (!ptr_type || !XR_TYPE_IS_POINTER(ptr_type))
         return 1;
@@ -4347,9 +4347,9 @@ static XrType *xi_raw_pointer_type_namespace(XiLower *l, AstNode *object) {
         !ne->type_args[0])
         return NULL;
     bool is_mut = false;
-    if (strcmp(ne->class_name, "RawPtr") == 0) {
+    if (strcmp(ne->class_name, "Ptr") == 0) {
         is_mut = false;
-    } else if (strcmp(ne->class_name, "RawMut") == 0) {
+    } else if (strcmp(ne->class_name, "MutPtr") == 0) {
         is_mut = true;
     } else {
         return NULL;

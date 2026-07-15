@@ -21,14 +21,14 @@ fn xray_mem_layout_constants() -> int {
 
 @c_export("xray_mem_typed_from_address")
 fn xray_mem_typed_from_address(addr: int) -> int {
-    var p = mem.fromAddress(addr) as RawMut<uint32>
+    var p = mem.fromAddress(addr) as MutPtr<uint32>
     return mem.addressOf(p)
 }
 
 @c_export("xray_mem_typed_addr_null")
 fn xray_mem_typed_addr_null() -> int {
-    var p = RawPtr<uint32>.null()
-    var q = RawMut<uint64>.null()
+    var p = Ptr<uint32>.null()
+    var q = MutPtr<uint64>.null()
     return mem.addressOf(p) + mem.addressOf(q)
 }
 
