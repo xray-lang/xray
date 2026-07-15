@@ -548,12 +548,6 @@ static inline XrValue xrt_str_from_core_slice(XrStringCoreSlice slice) {
     return sv;
 }
 
-static inline bool xrt_str_byte_boundary(const char *s, int64_t slen, int64_t offset) {
-    if (!s || offset < 0 || offset > slen)
-        return false;
-    return offset == 0 || offset == slen || (((unsigned char) s[offset] & 0xC0u) != 0x80u);
-}
-
 typedef struct XrtStringSplitCtx {
     XrValue array;
 } XrtStringSplitCtx;
@@ -947,16 +941,17 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         int64_t slen = xr_str_len(recv);
         int64_t start = (arg0.tag == XR_TAG_I64) ? arg0.i : 0;
         int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : slen;
-        if (start < 0 || end < start || end > slen || !xrt_str_byte_boundary(s, slen, start) ||
-            !xrt_str_byte_boundary(s, slen, end)) {
+        XrStringCoreByteRange range =
+            xr_string_core_utf8_byte_range(s, slen > 0 ? (size_t) slen : 0, start, end);
+        if (range.error != XR_STRING_CORE_BYTE_RANGE_OK) {
             xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
                             "string.sliceBytes byte range out of bounds or not on UTF-8 scalar "
                             "boundaries");
         }
-        XrValue out = xrt_str_alloc((size_t) (end - start));
-        if (end > start)
-            memcpy(xr_str_buf(out), s + start, (size_t) (end - start));
-        xr_str_buf(out)[end - start] = 0;
+        XrValue out = xrt_str_alloc(range.slice.len);
+        if (range.slice.len > 0)
+            memcpy(xr_str_buf(out), range.slice.data, range.slice.len);
+        xr_str_buf(out)[range.slice.len] = 0;
         return out;
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_REPLACEALL && XR_IS_STR(arg0) && XR_IS_STR(arg1)) {

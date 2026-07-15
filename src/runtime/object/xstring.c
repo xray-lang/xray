@@ -496,21 +496,14 @@ XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_
     return xr_string_substring_by_rune(iso, str, (size_t) start, (size_t) end);
 }
 
-static bool string_byte_boundary(XrString *str, xr_Integer offset) {
-    if (!str || offset < 0 || (uint64_t) offset > (uint64_t) str->length)
-        return false;
-    return offset == 0 || (uint32_t) offset == str->length ||
-           (((unsigned char) str->data[offset] & 0xC0u) != 0x80u);
-}
-
 XrString *xr_string_slice_bytes(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_Integer end) {
     if (!iso || !str)
         return NULL;
-    if (start < 0 || end < start || (uint64_t) end > (uint64_t) str->length)
+    XrStringCoreByteRange range =
+        xr_string_core_utf8_byte_range(str->data, str->length, start, end);
+    if (range.error != XR_STRING_CORE_BYTE_RANGE_OK)
         return NULL;
-    if (!string_byte_boundary(str, start) || !string_byte_boundary(str, end))
-        return NULL;
-    return xr_string_new(iso, str->data + start, (size_t) (end - start));
+    return xr_string_new(iso, range.slice.data, range.slice.len);
 }
 
 // indexOf - find substring position

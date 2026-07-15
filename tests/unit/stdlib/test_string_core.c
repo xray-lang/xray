@@ -436,6 +436,44 @@ TEST(string_core_byte_slice_and_codepoint) {
     ASSERT_FALSE(xr_string_core_codepoint_at("A", 1, 9, &cp));
 }
 
+TEST(string_core_utf8_byte_range_contract) {
+    const char *s = "Aé中";
+
+    XrStringCoreByteRange ascii = xr_string_core_utf8_byte_range(s, strlen(s), 0, 1);
+    ASSERT_EQ_INT(ascii.error, XR_STRING_CORE_BYTE_RANGE_OK);
+    assert_slice_bytes_eq(ascii.slice, "A", 1);
+
+    XrStringCoreByteRange latin = xr_string_core_utf8_byte_range(s, strlen(s), 1, 3);
+    ASSERT_EQ_INT(latin.error, XR_STRING_CORE_BYTE_RANGE_OK);
+    assert_slice_bytes_eq(latin.slice, "é", strlen("é"));
+
+    XrStringCoreByteRange cjk = xr_string_core_utf8_byte_range(s, strlen(s), 3, 6);
+    ASSERT_EQ_INT(cjk.error, XR_STRING_CORE_BYTE_RANGE_OK);
+    assert_slice_bytes_eq(cjk.slice, "中", strlen("中"));
+
+    XrStringCoreByteRange empty = xr_string_core_utf8_byte_range(s, strlen(s), 6, 6);
+    ASSERT_EQ_INT(empty.error, XR_STRING_CORE_BYTE_RANGE_OK);
+    ASSERT_EQ_UINT(empty.slice.len, 0);
+
+    XrStringCoreByteRange negative = xr_string_core_utf8_byte_range(s, strlen(s), -1, 1);
+    ASSERT_EQ_INT(negative.error, XR_STRING_CORE_BYTE_RANGE_OUT_OF_BOUNDS);
+    ASSERT_EQ_INT(negative.byte_length, 6);
+
+    XrStringCoreByteRange reversed = xr_string_core_utf8_byte_range(s, strlen(s), 3, 1);
+    ASSERT_EQ_INT(reversed.error, XR_STRING_CORE_BYTE_RANGE_OUT_OF_BOUNDS);
+
+    XrStringCoreByteRange too_long = xr_string_core_utf8_byte_range(s, strlen(s), 0, 7);
+    ASSERT_EQ_INT(too_long.error, XR_STRING_CORE_BYTE_RANGE_OUT_OF_BOUNDS);
+
+    XrStringCoreByteRange start_mid_scalar = xr_string_core_utf8_byte_range(s, strlen(s), 2, 3);
+    ASSERT_EQ_INT(start_mid_scalar.error, XR_STRING_CORE_BYTE_RANGE_NOT_SCALAR_BOUNDARY);
+    ASSERT_EQ_INT(start_mid_scalar.boundary_offset, 2);
+
+    XrStringCoreByteRange end_mid_scalar = xr_string_core_utf8_byte_range(s, strlen(s), 1, 2);
+    ASSERT_EQ_INT(end_mid_scalar.error, XR_STRING_CORE_BYTE_RANGE_NOT_SCALAR_BOUNDARY);
+    ASSERT_EQ_INT(end_mid_scalar.boundary_offset, 2);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("String Core");
@@ -464,5 +502,6 @@ RUN_TEST(string_core_substring_bounds);
 RUN_TEST(string_core_slice_bounds);
 RUN_TEST(string_core_utf8_char_slice);
 RUN_TEST(string_core_byte_slice_and_codepoint);
+RUN_TEST(string_core_utf8_byte_range_contract);
 
 TEST_MAIN_END()
