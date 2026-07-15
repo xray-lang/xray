@@ -1,0 +1,24 @@
+fn has<K: Hashable>(items: Set<K>, key: K) -> bool {
+    return items.contains(key)
+}
+
+fn run(n: int) -> int {
+    var values: Set<int> = #[]
+    var seed = 0
+    while (seed < 64) {
+        values.add(seed)
+        seed = seed + 1
+    }
+
+    var i = 0
+    var sum = 0
+    while (i < n) {
+        if (has<int>(values, i % 64)) {
+            sum = sum + 1
+        }
+        i = i + 1
+    }
+    return sum
+}
+
+print(run(30000))

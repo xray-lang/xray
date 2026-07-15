@@ -1,0 +1,8 @@
+regex=generic-body-plan [0-9]+ .*action=clone .*evidence=row\+inst\+types\+origin_body\+specialized_body\+root reason=none
+regex=generic-storage-plan [0-9]+ .*kind=set action=typed_inline .*container_plan=[1-9][0-9]* evidence=row\+inst\+specialized_type\+container_plan reason=none
+regex=key-access-plan [0-9]+ .*container=set op=has .*action=specialized_hash_lookup .*evidence=0x11 reason=none
+contains=function 2 name=has$i64
+c_contains=xrt_set_new_typed(0, XR_ELEM_I64)
+c_contains=xrt_set_add_i64(
+c_contains=xrt_set_has_i64(
+c_not_contains=xrt_method_
