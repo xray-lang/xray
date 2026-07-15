@@ -1047,6 +1047,10 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_enum(X, "TaskOutcome");
     } else if (base_len == 10 && strncmp(s, "TaskStatus", 10) == 0) {
         type = xr_type_new_enum(X, "TaskStatus");
+    } else if (base_len == 9 && strncmp(s, "Utf8Error", 9) == 0) {
+        type = xr_type_new_enum(X, "Utf8Error");
+    } else if (base_len == 16 && strncmp(s, "StringSliceError", 16) == 0) {
+        type = xr_type_new_enum(X, "StringSliceError");
     } else if (base_len == 5 && strncmp(s, "Regex", 5) == 0) {
         type = xr_type_new_instance(X, NULL);
         type->instance.class_name = "Regex";

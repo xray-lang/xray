@@ -6,7 +6,13 @@ fn test_utf8_conversion_surface() {
 
     assert_eq(string.fromUtf8(ascii[:]), "hi")
     assert_eq(string.fromUtf8(unicode[:]), "hé")
-    assert_eq(string.fromUtf8(invalid[:]), null)
+    var caught_invalid_utf8 = false
+    try {
+        string.fromUtf8(invalid[:])
+    } catch (e: Utf8Error) {
+        caught_invalid_utf8 = true
+    }
+    assert_eq(caught_invalid_utf8, true)
 
     var mixed: Array<byte> = [65, 255, 66]
     assert_eq(string.fromUtf8Lossy(mixed[:]), "A�B")
@@ -35,7 +41,7 @@ fn test_utf8_conversion_surface() {
     var caught_mid_scalar = false
     try {
         s.sliceBytes(2, 3)
-    } catch panic (p) {
+    } catch (e: StringSliceError) {
         caught_mid_scalar = true
     }
     assert_eq(caught_mid_scalar, true)
@@ -43,7 +49,7 @@ fn test_utf8_conversion_surface() {
     var caught_oob = false
     try {
         s.sliceBytes(0, 7)
-    } catch panic (p) {
+    } catch (e: StringSliceError) {
         caught_oob = true
     }
     assert_eq(caught_oob, true)

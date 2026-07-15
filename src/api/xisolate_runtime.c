@@ -51,7 +51,7 @@ static XrEnumType *runtime_register_prelude_enum(XrVMRuntime *isolate, const cha
     return type;
 }
 
-static void isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
+void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
     if (!isolate)
         return;
 
@@ -62,6 +62,8 @@ static void isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
     char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout", "Pending"};
     char *task_outcome_members[] = {"Success", "Failed", "Cancelled"};
     char *task_status_members[] = {"Pending", "Running", "Success", "Failed", "Cancelled"};
+    char *utf8_error_members[] = {"InvalidUtf8"};
+    char *string_slice_error_members[] = {"InvalidByteRange"};
     const int recv_payloads[] = {1, 0, 0, 0};
     const int task_result_payloads[] = {1, 1, 0, 0, 0};
     const int task_outcome_payloads[] = {1, 1, 0};
@@ -79,6 +81,10 @@ static void isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
         isolate, "TaskOutcome", task_outcome_members, 3, task_outcome_payloads);
     XrEnumType *task_status =
         runtime_register_prelude_enum(isolate, "TaskStatus", task_status_members, 5, NULL);
+    XrEnumType *utf8_error =
+        runtime_register_prelude_enum(isolate, "Utf8Error", utf8_error_members, 1, NULL);
+    XrEnumType *string_slice_error = runtime_register_prelude_enum(
+        isolate, "StringSliceError", string_slice_error_members, 1, NULL);
 
     if (ordering)
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_ORDERING, XR_FROM_PTR(ordering));
@@ -94,6 +100,11 @@ static void isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_TASK_OUTCOME, XR_FROM_PTR(task_outcome));
     if (task_status)
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_TASK_STATUS, XR_FROM_PTR(task_status));
+    if (utf8_error)
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_UTF8_ERROR, XR_FROM_PTR(utf8_error));
+    if (string_slice_error)
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_STRING_SLICE_ERROR,
+                             XR_FROM_PTR(string_slice_error));
 }
 
 static void isolate_register_vm_builtins(XrVMRuntime *isolate) {
@@ -134,7 +145,7 @@ static void isolate_register_vm_builtins(XrVMRuntime *isolate) {
         isolate_bind_builtin(
             isolate, XR_GLOBAL_VAR_EVENTCOUNT,
             xr_value_from_class(isolate->core_rt->native_type_classes[XR_TEVENTCOUNT]));
-    isolate_register_runtime_prelude_enums(isolate);
+    xr_isolate_register_runtime_prelude_enums(isolate);
     if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
         isolate->vm.builtin_count = XR_USER_GLOBALS_START;
 }

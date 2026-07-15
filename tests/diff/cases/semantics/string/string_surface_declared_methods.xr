@@ -44,7 +44,13 @@ print(string.fromUtf8(bin[:]))
 var accented: Array<byte> = [104, 195, 169]
 print(string.fromUtf8(accented[:]))
 var invalid: Array<byte> = [255]
-print(string.fromUtf8(invalid[:]))
+var caught_invalid_utf8 = false
+try {
+    string.fromUtf8(invalid[:])
+} catch (e: Utf8Error) {
+    caught_invalid_utf8 = true
+}
+print(caught_invalid_utf8)
 print(string.fromUtf8Lossy(invalid[:]))
 print(bin.toString())
 
@@ -61,7 +67,7 @@ print(sample.sliceBytes(3, 6))
 var caught_mid_scalar = false
 try {
     sample.sliceBytes(2, 3)
-} catch panic (p) {
+} catch (e: StringSliceError) {
     caught_mid_scalar = true
 }
 print(caught_mid_scalar)
