@@ -347,7 +347,7 @@ XR_FUNC int add_const_char(EmitCtx *ctx, uint32_t cp) {
 XR_FUNC int add_const_string_n(EmitCtx *ctx, const char *str, size_t len) {
     XrValue xv;
     if (ctx->isolate && (str || len == 0)) {
-        XrString *xs = xr_compile_time_intern(ctx->isolate, str ? str : "", len);
+        XrString *xs = xr_string_intern_permanent(ctx->isolate, str ? str : "", len);
         if (!xs) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return -1;
@@ -845,7 +845,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
         return XI_EMIT_ERR_INTERNAL;
     }
     if (isolate && f->name && f->name[0])
-        ctx.proto->name = xr_compile_time_intern(isolate, f->name, strlen(f->name));
+        ctx.proto->name = xr_string_intern_permanent(isolate, f->name, strlen(f->name));
     if (f->source_file && f->source_file[0])
         ctx.proto->source_file = xr_strdup(f->source_file);
 

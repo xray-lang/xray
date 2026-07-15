@@ -79,12 +79,12 @@ TEST(globals_dict_initialized_with_isolate) {
 
 TEST(globals_dict_set_get_round_trip) {
     /* Set a binding under a name; get returns the same XrValue.
-     * Uses xr_compile_time_intern so the key is a real interned
+     * Uses xr_string_intern_permanent so the key is a real interned
      * XrString, mirroring the runtime contract for OP_SETGLOBAL. */
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrString *name = xr_compile_time_intern(iso, "answer", 6);
+    XrString *name = xr_string_intern_permanent(iso, "answer", 6);
     ASSERT_NOT_NULL(name);
     XrValue v;
     v.tag = 0;
@@ -106,7 +106,7 @@ TEST(globals_dict_overwrite_keeps_count) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrString *name = xr_compile_time_intern(iso, "x", 1);
+    XrString *name = xr_string_intern_permanent(iso, "x", 1);
     XrValue a = {.i = 1, .tag = 0};
     XrValue b = {.i = 2, .tag = 0};
     xr_global_dict_set(iso->vm.globals, name, a);
@@ -123,7 +123,7 @@ TEST(globals_dict_missing_key_returns_null) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrString *name = xr_compile_time_intern(iso, "ghost", 5);
+    XrString *name = xr_string_intern_permanent(iso, "ghost", 5);
     ASSERT_FALSE(xr_global_dict_has(iso->vm.globals, name));
     XrValue out = xr_global_dict_get(iso->vm.globals, name);
     ASSERT_TRUE(XR_IS_NULL(out));
@@ -142,7 +142,7 @@ TEST(sync_root_elides_coroutine_with_ordinary_allocation) {
     ASSERT_EQ_INT(xr_execute(iso, proto), 0);
     ASSERT_NULL(iso->main_coro);
 
-    XrString *name = xr_compile_time_intern(iso, "n", 1);
+    XrString *name = xr_string_intern_permanent(iso, "n", 1);
     ASSERT_NOT_NULL(name);
     XrValue value = xr_global_dict_get(iso->vm.globals, name);
     ASSERT_TRUE(XR_IS_INT(value));
