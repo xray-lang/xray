@@ -6,6 +6,7 @@
 
 static int g_passed;
 static int g_failed;
+static int g_free_count;
 
 static void *test_malloc(size_t size) {
     return malloc(size);
@@ -20,6 +21,8 @@ static void *test_realloc(void *ptr, size_t size) {
 }
 
 static void test_free(void *ptr) {
+    if (ptr)
+        g_free_count++;
     free(ptr);
 }
 
@@ -121,9 +124,26 @@ static void test_static_set_storage_uses_prehashed_lookup(void) {
     xrt_coll_release(value);
 }
 
+static void test_tagged_set_clear_releases_owned_values(void) {
+    XrValue set_value = xrt_set_new(0);
+    xrt_set_t *set = (xrt_set_t *) set_value.ptr;
+    XrValue item = xr_box_str("owned-by-set");
+    int before_clear;
+
+    ASSERT_TRUE(xrt_set_add(set, item) == 1, "tagged Set accepts owned string value");
+    before_clear = g_free_count;
+    xrt_set_clear(set);
+
+    ASSERT_TRUE(g_free_count > before_clear, "tagged Set.clear releases owned values");
+    ASSERT_EQ_INT(set->count, 0, "tagged Set.clear resets count");
+    ASSERT_EQ_INT(set->nentries, 0, "tagged Set.clear resets entry cursor");
+    xrt_set_destroy(set);
+}
+
 int main(void) {
     test_static_map_storage_uses_prehashed_lookup();
     test_static_set_storage_uses_prehashed_lookup();
+    test_tagged_set_clear_releases_owned_values();
     printf("test_xrt_static_map_set: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }
