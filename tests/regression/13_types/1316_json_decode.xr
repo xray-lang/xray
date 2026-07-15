@@ -115,6 +115,34 @@ fn test_decode_array_json_field_rejects_non_array() {
     assert_eq(bag, null)
 }
 
+type MixedProfile = { name: string, tags: Array<Json>, address: Address, active: bool }
+
+@test
+fn test_decode_mixed_nested_record_and_array_json_fields() {
+    var json = Json.parse("{\"name\": \"Dana\", \"tags\": [\"ops\", 3, null], \"address\": {\"city\": \"Hangzhou\", \"zip\": 310000}, \"active\": true}")
+    var profile = Json.decode<MixedProfile>(json)
+    assert(profile != null)
+    assert_eq(profile!.name, "Dana")
+    assert_eq(len(profile!.tags), 3)
+    assert_eq(profile!.address.city, "Hangzhou")
+    assert_eq(profile!.address.zip, 310000)
+    assert_eq(profile!.active, true)
+}
+
+@test
+fn test_decode_mixed_rejects_nested_record_wrong_field() {
+    var json = Json.parse("{\"name\": \"Dana\", \"tags\": [\"ops\"], \"address\": {\"city\": \"Hangzhou\", \"zip\": \"bad\"}, \"active\": true}")
+    var profile = Json.decode<MixedProfile>(json)
+    assert_eq(profile, null)
+}
+
+@test
+fn test_decode_mixed_rejects_array_json_wrong_kind() {
+    var json = Json.parse("{\"name\": \"Dana\", \"tags\": {\"0\": \"ops\"}, \"address\": {\"city\": \"Hangzhou\", \"zip\": 310000}, \"active\": true}")
+    var profile = Json.decode<MixedProfile>(json)
+    assert_eq(profile, null)
+}
+
 @test
 fn test_decode_null_input() {
     var n = Json.parse("null")

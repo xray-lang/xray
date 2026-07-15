@@ -199,12 +199,63 @@ static void test_decode_validates_array_json_field(void) {
     destroy_object(source);
 }
 
+static void test_decode_mixed_nested_record_and_array_json_fields(void) {
+    static const char *nested_names[] = {"city", "zip"};
+    static const char *source_names[] = {"name", "tags", "address", "active"};
+    static const XrJsonDecodeFieldSpec nested_fields[] = {
+        {"city", XR_JSON_VALUE_STRING, NULL, 0},
+        {"zip", XR_JSON_VALUE_INT, NULL, 0},
+    };
+    static const XrJsonDecodeFieldSpec fields[] = {
+        {"name", XR_JSON_VALUE_STRING, NULL, 0},
+        {"tags", XR_JSON_VALUE_ARRAY, NULL, 0},
+        {"address", XR_JSON_VALUE_RECORD, nested_fields, 2},
+        {"active", XR_JSON_VALUE_BOOL, NULL, 0},
+    };
+
+    XrValue source = xrt_json_new_named(4, source_names);
+    XrValue tags = xrt_array_with_capacity(3);
+    xrt_array_push(tags, xr_box_str("ops"));
+    xrt_array_push(tags, XR_FROM_INT(3));
+    xrt_array_push(tags, XR_NULL_VAL);
+    XrValue address = xrt_json_new_named(2, nested_names);
+    xrt_json_set_field(address, 0, xr_box_str("Hangzhou"));
+    xrt_json_set_field(address, 1, XR_FROM_INT(310000));
+    xrt_json_set_field(source, 0, xr_box_str("Dana"));
+    xrt_json_set_field(source, 1, tags);
+    xrt_json_set_field(source, 2, address);
+    xrt_json_set_field(source, 3, XR_TRUE_VAL);
+
+    XrValue decoded = xrt_json_decode_record(source, 4, fields);
+    ASSERT_TRUE(!XR_IS_NULL(decoded), "mixed typed Json should decode");
+    XrValue decoded_active = xrt_json_get_field(decoded, 3);
+    ASSERT_TRUE(XR_IS_BOOL(decoded_active) && XR_TO_BOOL(decoded_active),
+                "bool field should be copied after nested Record and Array<Json>");
+    XrValue decoded_address = xrt_json_get_field(decoded, 2);
+    ASSERT_TRUE(!XR_IS_NULL(decoded_address), "nested address should be materialized");
+    ASSERT_TRUE(XR_TO_INT(xrt_json_get_field(decoded_address, 1)) == 310000,
+                "nested int field should survive mixed decode");
+    destroy_object(decoded_address);
+    destroy_object(decoded);
+
+    xrt_json_set_field(address, 1, xr_box_str("bad"));
+    ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_record(source, 4, fields)),
+                "mixed decode should reject wrong nested primitive");
+    xrt_json_set_field(address, 1, XR_FROM_INT(310000));
+    xrt_json_set_field(source, 1, xr_box_str("not-array"));
+    ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_record(source, 4, fields)),
+                "mixed decode should reject non-array Array<Json> field");
+    destroy_object(address);
+    destroy_object(source);
+}
+
 int main(void) {
     test_decode_validates_each_primitive_field();
     test_decode_distinguishes_nullable_and_missing();
     test_decode_json_field_accepts_null();
     test_decode_nested_record_field();
     test_decode_validates_array_json_field();
+    test_decode_mixed_nested_record_and_array_json_fields();
     printf("test_xrt_json_decode: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }
