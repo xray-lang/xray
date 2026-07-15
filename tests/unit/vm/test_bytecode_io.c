@@ -312,6 +312,49 @@ TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates) {
     xray_vm_delete(writer);
 }
 
+TEST(bytecode_roundtrips_typed_record_decode_shape) {
+    XrVMRuntime *writer = new_test_isolate();
+    ASSERT_NOT_NULL(writer);
+    XrVMRuntime *reader = new_test_isolate();
+    ASSERT_NOT_NULL(reader);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    const char *names[] = {"name", "age"};
+    const uint8_t kinds[] = {XR_JSON_VALUE_STRING, XR_JSON_VALUE_INT};
+    XrClass *shape = xr_class_build_record_chain(writer, names, kinds, 2, true);
+    ASSERT_NOT_NULL(shape);
+
+    int kidx = xr_valuearray_add(&proto->constants, xr_int((int64_t) (intptr_t) shape));
+    ASSERT_EQ_INT(kidx, 0);
+    proto->code.count = 0;
+    proto->lineinfo.count = 0;
+    proto->maxstacksize = 2;
+    xr_vm_proto_write(proto, CREATE_ABC(OP_JSON_DECODE, 0, 1, kidx), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(reader, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    XrClass *roundtrip_shape = (XrClass *) (intptr_t) XR_TO_INT(PROTO_CONSTANT(roundtrip, 0));
+    ASSERT_NOT_NULL(roundtrip_shape);
+    ASSERT_EQ_UINT(roundtrip_shape->builtin_kind, XR_BK_RECORD);
+    ASSERT_TRUE((roundtrip_shape->flags & XR_CLASS_DYNAMIC_SEALED) != 0);
+    ASSERT_EQ_UINT(roundtrip_shape->fields[0].json_value_kind, XR_JSON_VALUE_STRING);
+    ASSERT_EQ_UINT(roundtrip_shape->fields[1].json_value_kind, XR_JSON_VALUE_INT);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(reader);
+    xray_vm_delete(writer);
+}
+
 TEST(bytecode_roundtrips_class_descriptor_constants) {
     XrVMRuntime *writer = new_test_isolate();
     ASSERT_NOT_NULL(writer);
@@ -320,7 +363,6 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
 
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
-
     XrClassDescriptor *desc = xr_calloc(1, sizeof(XrClassDescriptor));
     ASSERT_NOT_NULL(desc);
     desc->class_name = "BytecodeClass";
@@ -675,6 +717,7 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_reader_assigns_unique_proto_ids);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);
+    RUN_TEST(bytecode_roundtrips_typed_record_decode_shape);
     RUN_TEST(bytecode_roundtrips_class_descriptor_constants);
     RUN_TEST(bytecode_roundtrips_enum_type_constants);
     RUN_TEST(bytecode_roundtrips_u16_upvalue_index);

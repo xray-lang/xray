@@ -22,6 +22,39 @@
 
 #include "xtype_internal.h"
 
+uint8_t xr_type_json_value_kind(const XrType *type) {
+    uint8_t kind;
+    if (!type)
+        return XR_JSON_VALUE_ANY;
+    switch (type->kind) {
+        case XR_KIND_NULL:
+            kind = XR_JSON_VALUE_NULL;
+            break;
+        case XR_KIND_BOOL:
+            kind = XR_JSON_VALUE_BOOL;
+            break;
+        case XR_KIND_INT:
+            kind = XR_JSON_VALUE_INT;
+            break;
+        case XR_KIND_FLOAT:
+            kind = XR_JSON_VALUE_FLOAT;
+            break;
+        case XR_KIND_STRING:
+            kind = XR_JSON_VALUE_STRING;
+            break;
+        case XR_KIND_JSON:
+            kind = XR_JSON_VALUE_JSON;
+            break;
+        default:
+            return XR_JSON_VALUE_ANY;
+    }
+    return kind | (type->is_nullable ? XR_JSON_VALUE_NULLABLE : 0u);
+}
+
+bool xr_type_is_json_decode_field_supported(const XrType *type) {
+    return xr_json_value_kind_base(xr_type_json_value_kind(type)) != XR_JSON_VALUE_ANY;
+}
+
 // ========== Process-level static singletons (early init) ==========
 // Basic types are immutable and globally shared. No allocation needed.
 static xr_once_t g_types_once = XR_ONCE_INITIALIZER;

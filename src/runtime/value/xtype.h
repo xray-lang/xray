@@ -25,6 +25,7 @@
 #include "xenum_layout.h"
 #include "../../base/xdefs.h"
 #include "../../shared/xr_param_mode.h"
+#include "../../shared/xr_json_type.h"
 
 /* ========== XrRep - Machine Representation ========== */
 /*
@@ -881,5 +882,10 @@ XR_FUNC bool xr_type_is_iterator(XrType *type, XrType **out_element_type);
 // Check if type satisfies Iterable<T> (built-in or has iterator() -> Iterator<T>)
 // out_element_type receives the element type
 XR_FUNC bool xr_type_is_iterable(XrType *type, XrType **out_element_type);
+
+/* Json.decode first-stage field contract. ANY means the type is unsupported,
+ * not that validation may be skipped. */
+XR_FUNC uint8_t xr_type_json_value_kind(const XrType *type);
+XR_FUNC bool xr_type_is_json_decode_field_supported(const XrType *type);
 
 #endif  // XTYPE_H

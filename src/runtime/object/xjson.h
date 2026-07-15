@@ -114,6 +114,30 @@ static inline bool xr_value_has_object_shape(XrValue v) {
            (inst->klass->builtin_kind == XR_BK_JSON || inst->klass->builtin_kind == XR_BK_RECORD);
 }
 
+static inline bool xr_json_value_matches_kind(XrValue value, uint8_t encoded_kind) {
+    if (XR_IS_NULL(value))
+        return xr_json_value_kind_base(encoded_kind) == XR_JSON_VALUE_NULL ||
+               xr_json_value_kind_base(encoded_kind) == XR_JSON_VALUE_JSON ||
+               xr_json_value_kind_is_nullable(encoded_kind);
+    switch ((XrJsonValueKind) xr_json_value_kind_base(encoded_kind)) {
+        case XR_JSON_VALUE_BOOL:
+            return XR_IS_BOOL(value);
+        case XR_JSON_VALUE_INT:
+            return XR_IS_INT(value);
+        case XR_JSON_VALUE_FLOAT:
+            return XR_IS_FLOAT(value);
+        case XR_JSON_VALUE_STRING:
+            return XR_IS_STRING(value);
+        case XR_JSON_VALUE_JSON:
+            return XR_IS_BOOL(value) || XR_IS_INT(value) || XR_IS_FLOAT(value) ||
+                   XR_IS_STRING(value) || XR_IS_ARRAY(value) || xr_value_is_json(value);
+        case XR_JSON_VALUE_NULL:
+        case XR_JSON_VALUE_ANY:
+        default:
+            return false;
+    }
+}
+
 static inline XrJson *xr_value_to_json(XrValue v) {
     return (XrJson *) XR_TO_PTR(v);
 }

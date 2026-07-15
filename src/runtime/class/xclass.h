@@ -24,6 +24,7 @@
 #include "../../base/xhash.h"
 #include "../../base/xhashmap.h"
 #include "../../shared/xr_derive_flags.h"
+#include "../../shared/xr_json_type.h"
 #include "../mem/xobj_header.h"
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -78,7 +79,8 @@ typedef struct XrFieldDescriptor {
     int symbol;
     uint16_t offset;  // Byte offset in instance
     uint16_t flags;
-    int16_t static_slot;  // Pre-computed static slot index (-1 if not static)
+    int16_t static_slot;      // Pre-computed static slot index (-1 if not static)
+    uint8_t json_value_kind;  // XrJsonValueKind plus XR_JSON_VALUE_NULLABLE
 } XrFieldDescriptor;
 
 // Field flags
@@ -98,6 +100,7 @@ typedef struct XrFieldDescriptor {
 // class `to`". Transitions form a singly-linked list per class.
 typedef struct XrClassTransition {
     int symbol;                      // Field symbol that triggers this transition
+    uint8_t json_value_kind;         // Typed Record identity; ANY for dynamic Json fields
     struct XrClass *target;          // Resulting child class after adding the field
     struct XrClassTransition *next;  // Next transition in the linked list
 } XrClassTransition;

@@ -3827,6 +3827,26 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 return xr_type_new_error(ctx->analyzer->isolate);
             }
 
+            for (int i = 0; i < target_type->object.field_count; i++) {
+                XrType *field_type =
+                    target_type->object.field_types ? target_type->object.field_types[i] : NULL;
+                if (xr_type_is_json_decode_field_supported(field_type))
+                    continue;
+                const char *field_name =
+                    target_type->object.field_names ? target_type->object.field_names[i] : "?";
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "Json.decode<T>() field '%s' has unsupported type '%s'; supported field "
+                         "types are null, bool, int, float, string, Json, and nullable variants",
+                         field_name ? field_name : "?",
+                         field_type ? xr_type_to_string(field_type) : "unknown");
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+                return xr_type_new_unknown(NULL);
+            }
+
             // Validate: exactly 1 argument
             if (call->arg_count != 1) {
                 XrLocation loc = {
