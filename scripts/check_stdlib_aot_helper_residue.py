@@ -10,19 +10,7 @@ from pathlib import Path
 
 from stdlib_manifest import load_manifest
 
-STATIC_FORBIDDEN_TOKENS = (
-    (re.compile(r"\bXR_TAG_DATETIME\b"), "DateTime light-object tag"),
-    (re.compile(r"\bxrt_datetime_"), "DateTime AOT helper prefix"),
-    (re.compile(r"\bxrt_path_"), "path AOT helper prefix"),
-    (re.compile(r"\bxrt_url_"), "url AOT helper prefix"),
-    (re.compile(r"\bxrt_base64_"), "base64 AOT helper prefix"),
-    (re.compile(r"\bxrt_encoding_"), "encoding AOT helper prefix"),
-    (re.compile(r"\bxrt_csv_"), "csv AOT helper prefix"),
-    (re.compile(r"\bxrt_toml_"), "toml AOT helper prefix"),
-    (re.compile(r"\bxrt_xml_"), "xml AOT helper prefix"),
-    (re.compile(r"\bxrt_yaml_"), "yaml AOT helper prefix"),
-    (re.compile(r"\bxrt_log_"), "log AOT helper prefix"),
-)
+STATIC_FORBIDDEN_TOKENS = ((re.compile(r"\bXR_TAG_DATETIME\b"), "DateTime light-object tag"),)
 
 
 def check_resurrected_files(root: Path, migrated_modules: tuple[str, ...]) -> list[str]:
@@ -34,9 +22,18 @@ def check_resurrected_files(root: Path, migrated_modules: tuple[str, ...]) -> li
     return errors
 
 
-def check_forbidden_tokens(root: Path, migrated_modules: tuple[str, ...]) -> list[str]:
+def check_forbidden_tokens(
+    root: Path,
+    migrated_modules: tuple[str, ...],
+    allowed_helpers: dict[str, set[str]],
+) -> list[str]:
     aot_dir = root / "src" / "aot"
     errors: list[str] = []
+    seen_allowed: set[str] = set()
+    module_patterns = {
+        module: re.compile(rf"\b(xrt_{re.escape(module)}_[A-Za-z0-9_]*)\b")
+        for module in migrated_modules
+    }
     for path in sorted(aot_dir.rglob("*")):
         if not path.is_file() or path.suffix not in {".c", ".h"}:
             continue
@@ -45,14 +42,24 @@ def check_forbidden_tokens(root: Path, migrated_modules: tuple[str, ...]) -> lis
         except UnicodeDecodeError:
             continue
         for lineno, line in enumerate(lines, 1):
-            tokens = list(STATIC_FORBIDDEN_TOKENS)
-            tokens.extend(
-                (re.compile(rf"\bxrt_{re.escape(module)}_"), f"{module} AOT helper prefix")
-                for module in migrated_modules
-            )
-            for pattern, label in tokens:
+            for pattern, label in STATIC_FORBIDDEN_TOKENS:
                 if pattern.search(line):
                     errors.append(f"{path.relative_to(root)}:{lineno}: {label} is forbidden")
+            for module, pattern in module_patterns.items():
+                unexpected: set[str] = set()
+                for match in pattern.finditer(line):
+                    symbol = match.group(1)
+                    if symbol in allowed_helpers.get(module, set()):
+                        seen_allowed.add(symbol)
+                    else:
+                        unexpected.add(symbol)
+                for symbol in sorted(unexpected):
+                    errors.append(
+                        f"{path.relative_to(root)}:{lineno}: {module} AOT helper {symbol} is forbidden"
+                    )
+    declared_allowed = set().union(*allowed_helpers.values()) if allowed_helpers else set()
+    for symbol in sorted(declared_allowed - seen_allowed):
+        errors.append(f"stdlib boundary declares stale AOT runtime adapter: {symbol}")
     return errors
 
 
@@ -62,9 +69,15 @@ def main() -> int:
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
-    migrated_modules = load_manifest(root).aot_helper_forbidden_modules
+    manifest = load_manifest(root)
+    migrated_modules = manifest.aot_helper_forbidden_modules
+    allowed_helpers = {
+        name: set(str(symbol) for symbol in module.get("aot_runtime_adapters", ()))
+        for name, module in manifest.by_name.items()
+        if module.get("aot_runtime_adapters")
+    }
     errors = check_resurrected_files(root, migrated_modules) + check_forbidden_tokens(
-        root, migrated_modules
+        root, migrated_modules, allowed_helpers
     )
     if errors:
         print("stdlib AOT helper residue gate failed:", file=sys.stderr)

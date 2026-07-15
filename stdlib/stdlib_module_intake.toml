@@ -1,0 +1,59 @@
+# Task 196 / roadmap 201 S0 execution manifest.
+#
+# This file owns only branch intake and generated-artifact coordination. Public
+# stdlib semantic ownership remains in stdlib_boundary.toml.
+schema = 1
+baseline_ref = "agent/201-177-183-replay"
+
+[s0]
+contract_exempt_modules = []
+owned_patterns = [
+  "CMakeLists.txt",
+  "stdlib/stdlib_boundary.toml",
+  "stdlib/stdlib_module_intake.toml",
+  "scripts/check_stdlib_boundary.py",
+  "scripts/check_stdlib_aot_helper_residue.py",
+  "scripts/check_stdlib_module_merge.py",
+  "scripts/gen_api_inventory.py",
+  "scripts/gen_language_docs.py",
+  "scripts/gen_stdlib_types.py",
+  "scripts/report_stdlib_self_hosting.py",
+  "scripts/stdlib_manifest.py",
+  "scripts/stdlib_migration.py",
+  "tests/benchmarks/stdlib/manifest.toml",
+  "tests/benchmarks/stdlib/run.py",
+  "tests/unit/stdlib/test_stdlib_boundary_manifest.py",
+  "tests/unit/stdlib/test_stdlib_module_merge_gate.py",
+  "tools/stdlibgen/**",
+]
+generated_patterns = [
+  "LANGUAGE_SPEC.md",
+  "LANGUAGE_SPEC_CN.md",
+  "docs/knowledge/**",
+  "src/aot/xaot_stdlib_generated.inc.c",
+  "src/aot/xstdlib_aot_methods_generated.inc.c",
+  "src/app/lsp/xlsp_stdlib_generated.inc",
+  "src/app/mcp/xmcp_knowledge_generated.c",
+  "src/frontend/analyzer/xanalyzer_builtins_generated.h",
+  "src/stdlib/xstdlib_class_bindings_generated.inc.c",
+  "src/stdlib/xstdlib_defs_generated.h",
+  "src/stdlib/xstdlib_vm_bindings_generated.inc.c",
+]
+
+[[lane]]
+slot = "S1"
+task = 198
+branch = "agent/roadmap-198-native-errors"
+scope = "native and bodyless typed enum error adapters shared by stdlib modules"
+
+[[lane]]
+slot = "S2"
+task = 199
+branch = "agent/roadmap-199-grapheme"
+scope = "Unicode grapheme data, generator, cursor and text-module contracts"
+
+[[lane]]
+slot = "S3"
+task = 200
+branch = "agent/roadmap-200-binary"
+scope = "base64, encoding, compress, crypto and io/net binary module slices"

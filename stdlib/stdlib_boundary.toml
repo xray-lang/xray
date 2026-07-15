@@ -164,6 +164,13 @@ loader = "stdlib/path/path.c"
 public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
+# Exact runtime representation adapters used by native IO/AOT direct calls.
+# They do not implement path algorithms or public path-module semantics.
+aot_runtime_adapters = [
+  "xrt_path_data", "xrt_path_from_cstr", "xrt_path_from_slice", "xrt_path_len",
+  "xrt_path_raw_value",
+]
+aot_runtime_adapter_reason = "Bridge the typed Path owner representation at native IO and AOT call boundaries"
 perf_suite = "stdlib/path"
 
 [[module]]

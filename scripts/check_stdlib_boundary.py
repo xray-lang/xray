@@ -109,6 +109,21 @@ def check_semantic_owners(root: Path) -> list[str]:
         for pattern in private_sources:
             if not list(root.glob(str(pattern))):
                 errors.append(f"module {name}: private native source pattern matches nothing: {pattern}")
+        runtime_adapters = module.get("aot_runtime_adapters", ())
+        if runtime_adapters and not module.get("aot_runtime_adapter_reason"):
+            errors.append(f"module {name}: AOT runtime adapters require a reason")
+        if runtime_adapters and not module.get("aot_helper_forbidden"):
+            errors.append(
+                f"module {name}: AOT runtime adapters are only valid with module helper residue forbidden"
+            )
+        expected_prefix = f"xrt_{name}_"
+        for symbol in runtime_adapters:
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(symbol)):
+                errors.append(f"module {name}: invalid AOT runtime adapter symbol {symbol!r}")
+            elif not str(symbol).startswith(expected_prefix):
+                errors.append(
+                    f"module {name}: AOT runtime adapter {symbol!r} must use {expected_prefix!r}"
+                )
     return errors
 
 
