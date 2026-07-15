@@ -143,6 +143,39 @@ static char *duplicate_effect_ref(const char *start, size_t len) {
     return result;
 }
 
+static bool xrd_ident_boundary(char c) {
+    return !(isalnum((unsigned char) c) || c == '_');
+}
+
+static bool xrd_signature_contains_token(const char *signature, const char *token) {
+    if (!signature || !token || !token[0])
+        return false;
+    size_t token_len = strlen(token);
+    for (const char *p = signature; (p = strstr(p, token)) != NULL; p += token_len) {
+        char before = (p == signature) ? '\0' : p[-1];
+        char after = p[token_len];
+        if ((p == signature || xrd_ident_boundary(before)) &&
+            (after == '\0' || xrd_ident_boundary(after)))
+            return true;
+    }
+    return false;
+}
+
+static bool xrd_validate_signature_types(const char *signature) {
+    static const char *const removed_byte_aliases[] = {"Bytes", "ByteSpan", "ByteView"};
+    if (!signature)
+        return true;
+    for (size_t i = 0; i < sizeof(removed_byte_aliases) / sizeof(removed_byte_aliases[0]); i++) {
+        if (xrd_signature_contains_token(signature, removed_byte_aliases[i])) {
+            xrd_set_error("XRD descriptor uses removed byte alias '%s'; use Array<byte> or "
+                          "Slice<byte> explicitly",
+                          removed_byte_aliases[i]);
+            return false;
+        }
+    }
+    return true;
+}
+
 bool xa_effect_contract_parse_suffix(char *signature, XaEffectContract *contract) {
     memset(contract, 0, sizeof(*contract));
     char *at = strchr(signature, '@');
@@ -427,6 +460,11 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                     free_xrd_module(xrd);
                     return NULL;
                 }
+                if (!xrd_validate_signature_types(sig)) {
+                    xa_effect_contract_clear(&effect_contract);
+                    free_xrd_module(xrd);
+                    return NULL;
+                }
 
                 // Find handle by name
                 int handle_idx = -1;
@@ -492,6 +530,11 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
             p = read_to_eol(p, sig, sizeof(sig));
             XaEffectContract effect_contract;
             if (!xa_effect_contract_parse_suffix(sig, &effect_contract)) {
+                free_xrd_module(xrd);
+                return NULL;
+            }
+            if (!xrd_validate_signature_types(sig)) {
+                xa_effect_contract_clear(&effect_contract);
                 free_xrd_module(xrd);
                 return NULL;
             }
