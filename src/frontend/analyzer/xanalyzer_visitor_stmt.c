@@ -5821,7 +5821,8 @@ XR_FUNC bool xa_type_contains_span_view(XrType *type) {
                 return true;
         }
     }
-    if ((type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+    if ((type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE ||
+         type->kind == XR_KIND_INTERFACE) &&
         type->instance.type_args) {
         for (int i = 0; i < type->instance.type_arg_count; i++) {
             if (xa_type_contains_span_view(type->instance.type_args[i]))
