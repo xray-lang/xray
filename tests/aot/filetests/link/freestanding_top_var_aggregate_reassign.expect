@@ -1,6 +1,6 @@
 args=--profile freestanding
 c_contains=xray_top_var_aggregate_reassign
-c_contains=static struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _xctstruct_freestanding_top_var_aggregate_reassign_
+c_contains=static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_reassign_
 c_contains=_xctstruct_freestanding_top_var_aggregate_reassign_
 c_contains=memcpy(&_xctstruct_freestanding_top_var_aggregate_reassign_
 c_contains=&_st

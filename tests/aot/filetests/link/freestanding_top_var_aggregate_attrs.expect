@@ -1,9 +1,9 @@
 args=--profile freestanding
 c_contains=xray_top_var_aggregate_attrs
-c_contains=static struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _xctstruct_freestanding_top_var_aggregate_attrs_
+c_contains=static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_attrs_
 c_contains=XRT_ATTR_SECTION("__DATA,.xr_state") XRT_ATTR_USED
-c_contains=.f0 =
-c_not_contains=const struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _xctstruct_freestanding_top_var_aggregate_attrs_
+c_contains=.value =
+c_not_contains=const struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_attrs_
 c_not_contains=xrt_shared[0] =
 c_not_contains=xrt_arc_alloc
 c_not_contains=xr_aggregate_ref
