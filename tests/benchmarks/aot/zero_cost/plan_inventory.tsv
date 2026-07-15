@@ -115,6 +115,10 @@ sequence_capacity_reserve_once|covered|capacity-plan .*action=reserve_once|tests
 sequence_bulk_plan|covered|bulk-plan|tests/aot/filetests/link|Bulk copy/fill evidence lowers into verified bulk operation plans.
 sequence_encoding_plan|covered|encoding-plan|tests/aot/filetests/link|String/byte-array encoding evidence lowers into verified encoding plans.
 sequence_encoding_validate_once|covered|encoding-plan .*action=validate_once|tests/aot/filetests/link|byte-array-to-string encoding evidence fixes the validate-once action in plan output.
+stringbuilder_literal_append_exact_reserve|covered|xrt_strbuf_reserve_extra_exact|tests/aot/filetests/cgen|Consecutive proven literal appends reserve their combined byte length once.
+stringbuilder_literal_append_no_grow|covered|xrt_strbuf_append_string_no_grow|tests/aot/filetests/cgen|Literal append calls consume reserved capacity without per-append grow checks.
+stringbuilder_finish_direct|covered|xrt_strbuf_finish|tests/aot/filetests/cgen|Verified builder-finish plans lower to the direct final string allocation helper.
+stringbuilder_clear_direct|covered|xrt_strbuf_clear|tests/aot/filetests/cgen|Verified clear plans use direct builder state reset and terminate append aggregation.
 summary_payload_cache|covered|cache_payload_materializes|tests/unit/analysis|Declaration, semantic graph, body summary, and global payloads materialize back into validated summary rows.
 summary_payload_global_materialization|covered|cache_payload_materializes_global_evidence|tests/unit/analysis|Global evidence payload materializes every row family and rechecks the global content key.
 summary_payload_request_key|covered|xg-cache-request v1|tests/unit/analysis|Payload v2 separates producer-precomputable request identity from content-key row validation.
