@@ -15,6 +15,7 @@
 #include "xi.h"
 #include "xi_effect.h"
 #include "xi_lower_expr_helpers.h"
+#include "../analysis/xglobal_summary.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
 #include "../runtime/value/xstruct_layout.h"
@@ -2680,7 +2681,8 @@ static void lower_yield_stmt(XiLower *l, AstNode *node) {
  * is known, otherwise string-key INDEX_GET fallback.
  * Identifier patterns: bind directly.
  */
-static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValue *src) {
+static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValue *src,
+                                   uint32_t source_span_id) {
     if (!pat || !src || !l->cur_block)
         return;
 
@@ -2697,7 +2699,7 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
                     val->args[0] = src;
                     val->args[1] = idx;
                 }
-                lower_destructure_bind(l, elem, val);
+                lower_destructure_bind(l, elem, val, source_span_id);
             }
             break;
         }
@@ -2716,7 +2718,7 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
                     val->args[0] = src;
                     val->aux_int = i;
                 }
-                lower_destructure_bind(l, elem, val);
+                lower_destructure_bind(l, elem, val, source_span_id);
             }
             break;
         }
@@ -2737,6 +2739,10 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
                     if (val) {
                         val->args[0] = src;
                         val->aux_int = fidx;
+                        val->line = source_span_id;
+                        xi_lower_bind_record_access_id(l, val, fname, source_span_id,
+                                                       (uint16_t) fidx,
+                                                       XG_RECORD_ACCESS_DESTRUCTURE);
                     }
                 } else {
                     XiValue *key = xi_const_str(l->func, l->cur_block, fname, l->type_string);
@@ -2746,7 +2752,7 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
                         val->args[1] = key;
                     }
                 }
-                lower_destructure_bind(l, sub, val);
+                lower_destructure_bind(l, sub, val, source_span_id);
             }
             break;
         }
@@ -2809,7 +2815,7 @@ static void lower_destructure_decl(XiLower *l, AstNode *node) {
     XiValue *init = xi_lower_expr(l, dd->initializer);
     if (!init || !dd->pattern)
         return;
-    lower_destructure_bind(l, dd->pattern, init);
+    lower_destructure_bind(l, dd->pattern, init, (uint32_t) node->line);
 }
 
 /* Destructure assignment: [a, b] = [b, a] or (a, b) = (b, a) */
@@ -2818,7 +2824,7 @@ static void lower_destructure_assign(XiLower *l, AstNode *node) {
     XiValue *rhs = xi_lower_expr(l, da->value);
     if (!rhs || !da->pattern)
         return;
-    lower_destructure_bind(l, da->pattern, rhs);
+    lower_destructure_bind(l, da->pattern, rhs, (uint32_t) node->line);
 }
 
 /* ========== Basic Statement Lowering (from xi_lower_expr.c) ========== */

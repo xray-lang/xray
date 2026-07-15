@@ -1,0 +1,9 @@
+type User = { name: string, age: int }
+
+fn describe(user: User) -> string {
+    var { name: localName, age } = user
+    return localName + ":" + string(age)
+}
+
+var user: User = { name: "Ada", age: 7 }
+print(describe(user))
