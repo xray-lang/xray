@@ -30,6 +30,7 @@
 #include "../shared/xr_error_core.h"
 #include "../shared/xr_float_fmt.h"
 #include "../shared/xr_map_set_abi.h"
+#include "../shared/xr_json_type.h"
 #include "../shared/xr_typed_ops.h"
 #include <errno.h>
 #include <string.h>
@@ -3537,22 +3538,52 @@ static inline int xrt_json_has_name(XrValue obj, const char *name) {
     return xrt_map_find_entry(j->dynamic_fields, key, hash, key_tt) >= 0;
 }
 
+static inline int xrt_json_value_matches_kind(XrValue value, uint8_t encoded_kind) {
+    if (XR_IS_NULL(value))
+        return xr_json_value_kind_base(encoded_kind) == XR_JSON_VALUE_NULL ||
+               xr_json_value_kind_base(encoded_kind) == XR_JSON_VALUE_JSON ||
+               xr_json_value_kind_is_nullable(encoded_kind);
+    switch ((XrJsonValueKind) xr_json_value_kind_base(encoded_kind)) {
+        case XR_JSON_VALUE_BOOL:
+            return XR_IS_BOOL(value);
+        case XR_JSON_VALUE_INT:
+            return XR_IS_INT(value);
+        case XR_JSON_VALUE_FLOAT:
+            return XR_IS_FLOAT(value);
+        case XR_JSON_VALUE_STRING:
+            return XR_IS_STR(value);
+        case XR_JSON_VALUE_JSON:
+            return XR_IS_BOOL(value) || XR_IS_INT(value) || XR_IS_FLOAT(value) ||
+                   XR_IS_STR(value) || XR_IS_ARRAY(value) ||
+                   (value.tag == XR_TAG_PTR && value.ptr && value.heap_type == 0);
+        case XR_JSON_VALUE_NULL:
+        case XR_JSON_VALUE_ANY:
+        default:
+            return 0;
+    }
+}
+
 static inline XrValue xrt_json_decode_record(XrValue data, int64_t field_count,
-                                             const char *const *field_names) {
-    if (field_count <= 0 || !field_names)
+                                             const char *const *field_names,
+                                             const uint8_t *json_value_kinds) {
+    if (field_count <= 0 || !field_names || !json_value_kinds)
         return XR_NULL_VAL;
     if (data.tag != XR_TAG_PTR || !data.ptr || data.heap_type != 0)
         return XR_NULL_VAL;
     xrt_json_t *src = (xrt_json_t *) data.ptr;
     if (src->object_kind != XRT_OBJECT_JSON)
         return XR_NULL_VAL;
-    XrValue dstv = xrt_record_new_named(field_count, field_names);
     for (int64_t i = 0; i < field_count; i++) {
         const char *name = field_names[i];
         if (!name || !xrt_json_has_name(data, name))
             return XR_NULL_VAL;
-        xrt_json_set_field(dstv, (int) i, xrt_json_get_name(data, name));
+        XrValue field_value = xrt_json_get_name(data, name);
+        if (!xrt_json_value_matches_kind(field_value, json_value_kinds[i]))
+            return XR_NULL_VAL;
     }
+    XrValue dstv = xrt_record_new_named(field_count, field_names);
+    for (int64_t i = 0; i < field_count; i++)
+        xrt_json_set_field(dstv, (int) i, xrt_json_get_name(data, field_names[i]));
     return dstv;
 }
 

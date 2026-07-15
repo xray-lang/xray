@@ -24,6 +24,7 @@
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../module/xmodule.h"
 #include "../base/xfileio.h"
+#include "../base/xmalloc.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 
@@ -511,6 +512,18 @@ XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_NEWSET, dst, b_field, 0));
 }
 
+static uint8_t *xi_json_record_value_kinds(const XrType *type, int field_count) {
+    if (!type || !XR_TYPE_IS_RECORD(type) || field_count <= 0 || !type->object.field_types ||
+        type->object.field_count != field_count)
+        return NULL;
+    uint8_t *kinds = (uint8_t *) xr_malloc((size_t) field_count);
+    if (!kinds)
+        return NULL;
+    for (int i = 0; i < field_count; i++)
+        kinds[i] = xr_type_json_value_kind(type->object.field_types[i]);
+    return kinds;
+}
+
 /* Json object creation: build Shape, store in constant pool, emit OP_NEWJSON */
 XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int field_count = xi_json_field_count(v);
@@ -531,8 +544,9 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int n = field_count > 0 ? field_count : 0;
     bool is_record = v->type && v->type->kind == XR_KIND_RECORD;
     bool sealed = is_record ? v->type->object.is_sealed : false;
-    XrClass *cls = is_record ? xr_class_build_record_chain(ctx->isolate, field_names, n, sealed)
-                             : xr_class_build_json_chain(ctx->isolate, field_names, n, false);
+    XrClass *cls = is_record
+                       ? xr_class_build_record_chain(ctx->isolate, field_names, NULL, n, sealed)
+                       : xr_class_build_json_chain(ctx->isolate, field_names, n, false);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -642,7 +656,13 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
     /* Build sealed Record class chain for typed Json.decode<T>. */
     bool sealed = (v->type && v->type->kind == XR_KIND_RECORD && v->type->object.is_sealed);
-    XrClass *cls = xr_class_build_record_chain(ctx->isolate, field_names, n, sealed);
+    uint8_t *value_kinds = xi_json_record_value_kinds(v->type, n);
+    if (!value_kinds) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XrClass *cls = xr_class_build_record_chain(ctx->isolate, field_names, value_kinds, n, sealed);
+    xr_free(value_kinds);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;

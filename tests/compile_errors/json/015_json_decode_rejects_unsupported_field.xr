@@ -1,0 +1,5 @@
+type Nested = { id: int }
+type Envelope = { nested: Nested }
+
+var data = Json.parse("{\"nested\": {\"id\": 1}}")
+var envelope = Json.decode<Envelope>(data)
