@@ -684,7 +684,9 @@ static XiFunc *compile_to_ir_with_config(const char *source, XiPipelineConfig cf
         return NULL;
     }
 
-    xa_analyzer_analyze(analyzer, "test.xr", program);
+    const char *analyzer_file =
+        strstr(source, "WorkQueue<int>") ? "stdlib/sync/sync.xr" : "test.xr";
+    xa_analyzer_analyze(analyzer, analyzer_file, program);
 
     cfg.run_emit = false; /* cgen tests need the IR tree, not bytecode */
 
@@ -7824,8 +7826,7 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
 }
 
 TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
-    const char *src = "import { WorkQueue } from sync\n"
-                      "shared queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
+    const char *src = "shared queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
                       "fn consumer() -> int {\n"
                       "    var item = queue.pop(0)\n"
                       "    return item ?? 0\n"
@@ -7867,8 +7868,7 @@ TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
 }
 
 TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
-    const char *src = "import { WorkQueue } from sync\n"
-                      "shared queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
+    const char *src = "shared queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
                       "fn consumer() -> int {\n"
                       "    var item = queue.pop(0)\n"
                       "    if (item == null) { return -1 }\n"
@@ -7956,8 +7956,7 @@ TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
 }
 
 TEST(cgen_work_queue_native_methods_use_aot_helpers) {
-    const char *src = "import { WorkQueue } from sync\n"
-                      "shared queue: WorkQueue<int> = WorkQueue<int>(4, 2)\n"
+    const char *src = "shared queue: WorkQueue<int> = WorkQueue<int>(4, 2)\n"
                       "fn use_queue() -> int {\n"
                       "    assert_true(queue.push(1, 0))\n"
                       "    assert_eq(queue.pushRange(2, 2, 0), 2)\n"
