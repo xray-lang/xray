@@ -3002,6 +3002,13 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
                          "    for (item in box) { throw item }\n"
                          "  }\n"
                          "}\n"
+                         "fn setMutatedIteratorFallsBack() {\n"
+                         "  try { failSet() } catch (e: SetErr) {\n"
+                         "    var box: Set<SetErr> = #[e]\n"
+                         "    box.add(SetErr.Other)\n"
+                         "    for (item in box) { throw item }\n"
+                         "  }\n"
+                         "}\n"
                          "fn setOrdinaryIteratorFallsBack() {\n"
                          "  const box: Set<SetErr> = #[SetErr.Boom, SetErr.Other]\n"
                          "  for (item in box) { throw item }\n"
@@ -3014,20 +3021,25 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
         analyzer_function_effect_summary(a, "setSingletonIteratorRethrows");
     const XaEffectSummary *dedup = analyzer_function_effect_summary(a, "setDedupIteratorRethrows");
     const XaEffectSummary *mixed = analyzer_function_effect_summary(a, "setMixedIteratorFallsBack");
+    const XaEffectSummary *mutated =
+        analyzer_function_effect_summary(a, "setMutatedIteratorFallsBack");
     const XaEffectSummary *ordinary =
         analyzer_function_effect_summary(a, "setOrdinaryIteratorFallsBack");
     ASSERT(singleton != NULL);
     ASSERT(dedup != NULL);
     ASSERT(mixed != NULL);
+    ASSERT(mutated != NULL);
     ASSERT(ordinary != NULL);
 
     const XaErrorTypeSet *singleton_set = effect_summary_enum_set_named(a, singleton, "SetErr");
     const XaErrorTypeSet *dedup_set = effect_summary_enum_set_named(a, dedup, "SetErr");
     const XaErrorTypeSet *mixed_set = effect_summary_enum_set_named(a, mixed, "SetErr");
+    const XaErrorTypeSet *mutated_set = effect_summary_enum_set_named(a, mutated, "SetErr");
     const XaErrorTypeSet *ordinary_set = effect_summary_enum_set_named(a, ordinary, "SetErr");
     ASSERT(singleton_set != NULL);
     ASSERT(dedup_set != NULL);
     ASSERT(mixed_set != NULL);
+    ASSERT(mutated_set != NULL);
     ASSERT(ordinary_set != NULL);
     ASSERT(!singleton_set->all_variants);
     ASSERT(xa_bitset_test(&singleton_set->variants, 0));
@@ -3036,6 +3048,7 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(xa_bitset_test(&dedup_set->variants, 0));
     ASSERT(!xa_bitset_test(&dedup_set->variants, 1));
     ASSERT(mixed_set->all_variants);
+    ASSERT(mutated_set->all_variants);
     ASSERT(ordinary_set->all_variants);
 
     xa_analyzer_free(a);
