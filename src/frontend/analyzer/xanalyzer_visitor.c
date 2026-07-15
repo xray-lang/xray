@@ -5976,20 +5976,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // statements in the for-in scope, so Pass 2 must do the same.
             XaLoopScope loop_scope;
             xa_loop_scope_push(ctx, &loop_scope, fi->label, node);
-            if (fi->body) {
-                if (fi->body->type == AST_BLOCK) {
-                    BlockNode *blk = &fi->body->as.block;
-                    for (int si = 0; si < blk->count; si++) {
-                        xa_visit_infer_stmt(ctx, blk->statements[si]);
-                    }
-                } else {
-                    xa_visit_infer_stmt(ctx, fi->body);
-                }
-            }
+            if (fi->body)
+                xa_visit_inline_statement_sequence_with_cursor(ctx, fi->body);
             xa_loop_scope_pop(ctx, &loop_scope);
             xa_out_param_da_restore_before(out_da, out_da_count);
             xa_out_param_da_free(out_da);
 
+            xa_clear_active_span_borrows_in_scope(ctx, ctx->analyzer->current_scope);
             xa_analyzer_exit_scope(ctx->analyzer);
             break;
         }

@@ -1,0 +1,11 @@
+fn main() {
+    var bytes = Array<byte>(0)
+    for (i in 0..1) {
+        bytes.push(1)
+        var view: Slice<byte> = bytes[:]
+        bytes.push(2)
+        print(len(view))
+    }
+}
+
+main()

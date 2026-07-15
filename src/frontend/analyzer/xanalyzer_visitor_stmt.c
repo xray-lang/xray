@@ -6594,7 +6594,7 @@ static bool xa_active_span_borrow_may_be_live_after_mutation(XaInferContext *ctx
                                                              XaActiveSpanBorrow *borrow) {
     if (!ctx || !ctx->analyzer || !borrow || !borrow->view_symbol || !borrow->view_symbol->name)
         return true;
-    if (ctx->loop_depth > 0)
+    if (ctx->loop_depth > 0 && borrow->loop_depth_at_creation < ctx->loop_depth)
         return true;
     const char *name = borrow->view_symbol->name;
     if (ctx->block_cursor_depth > 0) {
@@ -6826,6 +6826,7 @@ XR_FUNC void xa_register_active_span_borrow(XaInferContext *ctx, XaSymbol *view_
         borrow->owner_path = xr_strdup(owner_path);
     borrow->view_symbol = view_sym;
     borrow->view_scope = view_sym->scope;
+    borrow->loop_depth_at_creation = ctx->loop_depth;
     borrow->is_pointer_borrow = is_pointer_borrow;
     borrow->next = ctx->active_span_borrows;
     ctx->active_span_borrows = borrow;
@@ -8801,16 +8802,8 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
     // Analyze body - inline block to match Pass 1 scope structure
     XaLoopScope loop_scope;
     xa_loop_scope_push(ctx, &loop_scope, for_stmt->label, node);
-    if (for_stmt->body) {
-        if (for_stmt->body->type == AST_BLOCK) {
-            BlockNode *blk = &for_stmt->body->as.block;
-            for (int si = 0; si < blk->count; si++) {
-                xa_visit_infer_stmt(ctx, blk->statements[si]);
-            }
-        } else {
-            xa_visit_infer_stmt(ctx, for_stmt->body);
-        }
-    }
+    if (for_stmt->body)
+        xa_visit_inline_statement_sequence_with_cursor(ctx, for_stmt->body);
     xa_loop_scope_pop(ctx, &loop_scope);
 
     // Analyze increment
