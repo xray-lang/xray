@@ -347,6 +347,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->aux_kind = XI_AUX_KIND_NONE;
     v->escape = 0;
     v->mem_group = 0;
+    v->lowering_flags = 0;
     v->type = type;
     v->aux_int = 0;
     v->aux = NULL;
