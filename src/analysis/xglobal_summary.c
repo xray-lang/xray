@@ -56,6 +56,18 @@ XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t native_w
     return type_key_folded32(h);
 }
 
+XR_FUNC uint64_t xg_json_shape_hash_begin(uint32_t field_count) {
+    return type_key_fold_u64(XR_FNV64_OFFSET_BASIS, field_count);
+}
+
+XR_FUNC uint64_t xg_json_shape_hash_add_field(uint64_t hash, uint8_t shape_kind, uint32_t name_id,
+                                              uint32_t type_key) {
+    hash = type_key_fold_u64(hash, name_id);
+    if (shape_kind == XG_JSON_SHAPE_RECORD_BRIDGE)
+        hash = type_key_fold_u64(hash, type_key);
+    return hash;
+}
+
 static bool reserve_array(void **items, uint32_t *cap, uint32_t needed, size_t elem_size) {
     uint32_t new_cap;
     void *new_items;

@@ -3433,12 +3433,15 @@ static bool body_record_literal_has_spread(const ObjectLiteralNode *obj) {
 }
 
 static int body_object_literal_static_field_index(const ObjectLiteralNode *obj, const char *name) {
+    int ordinal = 0;
     if (!obj || !name)
         return -1;
     for (int i = 0; i < obj->count; i++) {
         const char *key = body_object_literal_static_key(obj, i);
         if (key && strcmp(key, name) == 0)
-            return i;
+            return ordinal;
+        if (key)
+            ordinal++;
     }
     return -1;
 }
@@ -3451,16 +3454,31 @@ static const char *body_static_string_key(const AstNode *expr) {
     return expr->as.literal.raw_value.string_val;
 }
 
-static uint64_t body_json_shape_hash(const ObjectLiteralNode *obj) {
-    uint64_t h = XR_FNV64_OFFSET_BASIS;
-    int count = obj ? obj->count : 0;
-    h = fold_u64(h, (uint64_t) count);
-    for (int i = 0; i < count; i++) {
-        const char *key = body_object_literal_static_key(obj, i);
-        uint32_t name_id = key ? hash_name32(key) : 0;
-        h = fold_u64(h, name_id);
+static uint32_t body_json_static_field_count(const ObjectLiteralNode *obj) {
+    uint32_t count = 0;
+    if (!obj)
+        return 0;
+    for (int i = 0; i < obj->count; i++) {
+        if (body_object_literal_static_key(obj, i))
+            count++;
     }
-    return h ? h : 1;
+    return count;
+}
+
+static uint64_t body_json_shape_hash(const ObjectLiteralNode *obj) {
+    uint32_t count = body_json_static_field_count(obj);
+    if (count > UINT16_MAX)
+        count = UINT16_MAX;
+    uint64_t h = xg_json_shape_hash_begin(count);
+    uint32_t ordinal = 0;
+    for (int i = 0; obj && i < obj->count; i++) {
+        const char *key = body_object_literal_static_key(obj, i);
+        if (key && ordinal < count) {
+            h = xg_json_shape_hash_add_field(h, XG_JSON_SHAPE_SHAPED, hash_name32(key), 0);
+            ordinal++;
+        }
+    }
+    return h;
 }
 
 static const ObjectLiteralNode *body_static_json_array_element_literal(const AstNode *node) {
@@ -3562,6 +3580,19 @@ static uint64_t body_type_alias_record_shape_hash(const TypeAliasNode *alias) {
     return h ? h : 1;
 }
 
+static uint64_t body_type_alias_json_shape_hash(const TypeAliasNode *alias) {
+    int count = body_type_alias_record_field_count(alias);
+    uint64_t h = xg_json_shape_hash_begin((uint32_t) (count > 0 ? count : 0));
+    for (int i = 0; i < count; i++) {
+        const char *name = body_type_alias_record_field_name(alias, i);
+        const XrTypeRef *field_type = body_type_alias_record_field_type(alias, i);
+        h = xg_json_shape_hash_add_field(h, XG_JSON_SHAPE_RECORD_BRIDGE,
+                                         name ? hash_name32(name) : 0,
+                                         field_type ? hash_tref32(field_type) : 0);
+    }
+    return h;
+}
+
 static uint32_t body_type_alias_field_name_start(const TypeAliasNode *alias) {
     return (uint32_t) (body_type_alias_record_shape_hash(alias) & UINT32_MAX);
 }
@@ -3604,6 +3635,7 @@ body_find_class_field_in_hierarchy(XgBodyCollect *bc, XgClassId class_id, uint32
 
 static void body_add_json_fields_for_literal(XgBodyCollect *bc, XgJsonShapeId shape_id,
                                              const ObjectLiteralNode *obj) {
+    uint32_t ordinal = 0;
     if (!bc || !bc->evidence || shape_id == XG_NO_ID || !obj)
         return;
     for (int i = 0; i < obj->count; i++) {
@@ -3611,10 +3643,12 @@ static void body_add_json_fields_for_literal(XgBodyCollect *bc, XgJsonShapeId sh
         XgJsonFieldSummary field;
         if (!key)
             continue;
+        if (ordinal >= UINT16_MAX)
+            break;
         memset(&field, 0, sizeof(field));
         field.field_id = (XgJsonFieldId) (bc->evidence->njson_fields + 1);
         field.shape_id = shape_id;
-        field.field_ordinal = (uint16_t) (i < UINT16_MAX ? i : UINT16_MAX);
+        field.field_ordinal = (uint16_t) ordinal++;
         field.name_id = hash_name32(key);
         field.type_key = obj->values ? body_expr_type_key(bc, obj->values[i]) : 0;
         field.flags = XG_JSON_FIELD_STATIC_KEY;
@@ -3668,7 +3702,9 @@ static XgJsonShapeId body_add_json_shape_for_literal(XgBodyCollect *bc,
     row.source_span_id = source_span_id;
     row.type_key = type_key;
     row.field_name_start = (uint32_t) (body_json_shape_hash(obj) & UINT32_MAX);
-    row.field_count = (uint16_t) (obj->count < UINT16_MAX ? obj->count : UINT16_MAX);
+    uint32_t static_field_count = body_json_static_field_count(obj);
+    row.field_count =
+        (uint16_t) (static_field_count < UINT16_MAX ? static_field_count : UINT16_MAX);
     row.shape_kind = has_computed ? XG_JSON_SHAPE_OPEN : XG_JSON_SHAPE_SHAPED;
     row.flags = XG_JSON_SHAPE_MUTABLE;
     if (!has_computed)
@@ -4953,11 +4989,11 @@ static XgJsonShapeId body_add_json_record_bridge_shape_for_type_alias(XgGlobalEv
     row.owner_func_id = XG_NO_ID;
     row.source_span_id = source_span_id;
     row.type_key = type_key;
-    row.field_name_start = body_type_alias_field_name_start(alias);
+    row.field_name_start = (uint32_t) (body_type_alias_json_shape_hash(alias) & UINT32_MAX);
     row.field_count = (uint16_t) (field_count < UINT16_MAX ? field_count : UINT16_MAX);
     row.shape_kind = XG_JSON_SHAPE_RECORD_BRIDGE;
     row.flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_RECORD_BRIDGEABLE;
-    row.shape_hash = body_type_alias_record_shape_hash(alias);
+    row.shape_hash = body_type_alias_json_shape_hash(alias);
     if (!xg_global_evidence_add_json_shape(evidence, &row))
         return XG_NO_ID;
     body_add_json_fields_for_type_alias(evidence, row.json_shape_id, alias);

@@ -9771,7 +9771,19 @@ TEST(global_evidence_records_json_shape_and_access_plans) {
                                 .field_count = 2,
                                 .shape_kind = XG_JSON_SHAPE_SHAPED,
                                 .flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_MUTABLE,
-                                .shape_hash = UINT64_C(0x1234)};
+                                .shape_hash = 0};
+    XgJsonFieldSummary id_field = {.field_id = 1,
+                                   .shape_id = 1,
+                                   .field_ordinal = 0,
+                                   .name_id = 0,
+                                   .type_key = 200,
+                                   .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED};
+    XgJsonFieldSummary name_field = {.field_id = 2,
+                                     .shape_id = 1,
+                                     .field_ordinal = 1,
+                                     .name_id = 0,
+                                     .type_key = 201,
+                                     .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED};
     XgJsonAccessSummary direct = {.json_access_id = 1,
                                   .module_id = 1,
                                   .owner_func_id = 7,
@@ -9793,7 +9805,17 @@ TEST(global_evidence_records_json_shape_and_access_plans) {
                                    .field_ordinal = UINT16_MAX,
                                    .access_kind = XG_JSON_ACCESS_INDEX_GET,
                                    .flags = XG_JSON_ACCESS_COMPUTED_KEY};
+    id_field.name_id = xg_name_id("id");
+    name_field.name_id = xg_name_id("name");
+    shape.shape_hash = xg_json_shape_hash_begin(shape.field_count);
+    shape.shape_hash = xg_json_shape_hash_add_field(shape.shape_hash, shape.shape_kind,
+                                                    id_field.name_id, id_field.type_key);
+    shape.shape_hash = xg_json_shape_hash_add_field(shape.shape_hash, shape.shape_kind,
+                                                    name_field.name_id, name_field.type_key);
+    shape.field_name_start = (uint32_t) shape.shape_hash;
     ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(&ev, &shape));
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(&ev, &id_field));
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(&ev, &name_field));
     ASSERT_NOT_NULL(xg_global_evidence_add_json_access(&ev, &direct));
     ASSERT_NOT_NULL(xg_global_evidence_add_json_access(&ev, &dynamic));
 
@@ -9877,7 +9899,19 @@ TEST(global_evidence_records_json_codec_plans) {
                                 .field_count = 2,
                                 .shape_kind = XG_JSON_SHAPE_SHAPED,
                                 .flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_MUTABLE,
-                                .shape_hash = UINT64_C(0x5678)};
+                                .shape_hash = 0};
+    XgJsonFieldSummary name_field = {.field_id = 1,
+                                     .shape_id = 1,
+                                     .field_ordinal = 0,
+                                     .name_id = 0,
+                                     .type_key = 201,
+                                     .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED};
+    XgJsonFieldSummary age_field = {.field_id = 2,
+                                    .shape_id = 1,
+                                    .field_ordinal = 1,
+                                    .name_id = 0,
+                                    .type_key = 202,
+                                    .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED};
     XgJsonCodecSummary parse = {.codec_id = 1,
                                 .module_id = 1,
                                 .owner_func_id = 7,
@@ -9917,7 +9951,17 @@ TEST(global_evidence_records_json_codec_plans) {
                                     .input_shape_id = 1,
                                     .field_count = 2,
                                     .flags = XG_JSON_CODEC_HAS_INPUT_SHAPE};
+    name_field.name_id = xg_name_id("name");
+    age_field.name_id = xg_name_id("age");
+    shape.shape_hash = xg_json_shape_hash_begin(shape.field_count);
+    shape.shape_hash = xg_json_shape_hash_add_field(shape.shape_hash, shape.shape_kind,
+                                                    name_field.name_id, name_field.type_key);
+    shape.shape_hash = xg_json_shape_hash_add_field(shape.shape_hash, shape.shape_kind,
+                                                    age_field.name_id, age_field.type_key);
+    shape.field_name_start = (uint32_t) shape.shape_hash;
     ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(&ev, &shape));
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(&ev, &name_field));
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(&ev, &age_field));
     ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &parse));
     ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &decode));
     ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &encode));
@@ -10164,6 +10208,93 @@ TEST(global_evidence_verifier_rejects_stale_json_record_field_rows) {
     ASSERT_NOT_NULL(strstr(err, "AOT Record field ordinal is stale"));
     xaot_bundle_free(&record_bundle);
     xg_global_evidence_free(&record_ev);
+}
+
+static void init_json_shape_integrity_fixture(XgGlobalEvidence *ev, XgBuildKey key) {
+    XgJsonShapeSummary shape = {.json_shape_id = 1,
+                                .module_id = 1,
+                                .owner_func_id = 7,
+                                .source_span_id = 100,
+                                .type_key = 200,
+                                .field_count = 2,
+                                .shape_kind = XG_JSON_SHAPE_SHAPED,
+                                .flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_MUTABLE};
+    XgJsonFieldSummary first = {.field_id = 1,
+                                .shape_id = 1,
+                                .field_ordinal = 0,
+                                .name_id = xg_name_id("name"),
+                                .type_key = 201,
+                                .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED};
+    XgJsonFieldSummary second = {.field_id = 2,
+                                 .shape_id = 1,
+                                 .field_ordinal = 1,
+                                 .name_id = xg_name_id("age"),
+                                 .type_key = 202,
+                                 .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED};
+    xg_global_evidence_init(ev, key);
+    shape.shape_hash = xg_json_shape_hash_begin(shape.field_count);
+    shape.shape_hash = xg_json_shape_hash_add_field(shape.shape_hash, shape.shape_kind,
+                                                    first.name_id, first.type_key);
+    shape.shape_hash = xg_json_shape_hash_add_field(shape.shape_hash, shape.shape_kind,
+                                                    second.name_id, second.type_key);
+    shape.field_name_start = (uint32_t) shape.shape_hash;
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(ev, &shape));
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(ev, &first));
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(ev, &second));
+}
+
+static void assert_json_evidence_rejected(XgGlobalEvidence *ev, const char *expected_error) {
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+    char err[256];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, ev, XG_BUILD_NATIVE_RELEASE));
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, expected_error));
+    xaot_bundle_free(&bundle);
+}
+
+TEST(global_evidence_verifier_rederives_json_shape_fields) {
+    XgBuildKey key = {.source_hash = 351,
+                      .compiler_semver_hash = 361,
+                      .profile_hash = 371,
+                      .imported_summary_hash = 381,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+
+    init_json_shape_integrity_fixture(&ev, key);
+    ev.njson_fields--;
+    assert_json_evidence_rejected(&ev, "AOT Json shape field count does not re-derive");
+    xg_global_evidence_free(&ev);
+
+    init_json_shape_integrity_fixture(&ev, key);
+    ev.json_fields[0].field_ordinal = 1;
+    assert_json_evidence_rejected(&ev, "AOT Json shape field ordinals are not contiguous");
+    xg_global_evidence_free(&ev);
+
+    init_json_shape_integrity_fixture(&ev, key);
+    ev.json_fields[1].name_id = ev.json_fields[0].name_id;
+    assert_json_evidence_rejected(&ev, "AOT Json shape field name is duplicated");
+    xg_global_evidence_free(&ev);
+
+    init_json_shape_integrity_fixture(&ev, key);
+    ev.json_shapes[0].shape_hash ^= UINT64_C(0x100);
+    assert_json_evidence_rejected(&ev, "AOT Json shape hash does not re-derive from fields");
+    xg_global_evidence_free(&ev);
 }
 
 TEST(global_evidence_records_record_merge_plans) {
@@ -16657,6 +16788,7 @@ RUN_TEST(global_evidence_records_json_shape_and_access_plans);
 RUN_TEST(global_evidence_records_json_codec_plans);
 RUN_TEST(global_evidence_records_record_shape_and_access_plans);
 RUN_TEST(global_evidence_verifier_rejects_stale_json_record_field_rows);
+RUN_TEST(global_evidence_verifier_rederives_json_shape_fields);
 RUN_TEST(global_evidence_records_record_merge_plans);
 RUN_TEST(global_evidence_records_options_bag_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);

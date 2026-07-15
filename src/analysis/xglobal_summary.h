@@ -1284,6 +1284,9 @@ XR_FUNC uint32_t xg_stable_source_node_id(XgModuleId module_id, uint32_t ast_kin
                                           uint32_t column);
 XR_FUNC uint32_t xg_synthetic_type_key(uint8_t tref_kind);
 XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t native_width);
+XR_FUNC uint64_t xg_json_shape_hash_begin(uint32_t field_count);
+XR_FUNC uint64_t xg_json_shape_hash_add_field(uint64_t hash, uint8_t shape_kind, uint32_t name_id,
+                                              uint32_t type_key);
 XR_FUNC const char *xg_build_profile_name(uint32_t profile);
 XR_FUNC const char *xg_decl_kind_name(uint8_t kind);
 XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
