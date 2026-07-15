@@ -16,6 +16,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include "xr_utf8_core.h"
 
 typedef enum XrStringCoreTrimMode {
     XR_STRING_CORE_TRIM_BOTH = 0,
@@ -266,62 +267,11 @@ static inline int xr_string_core_utf8_rune_size(unsigned char first_byte) {
     return 1;
 }
 
-static inline bool xr_string_core_utf8_is_continuation(unsigned char byte) {
-    return (byte & 0xC0u) == 0x80u;
-}
-
 static inline int xr_string_core_utf8_decode(const char *data, size_t len, uint32_t *out_cp) {
-    if (!data || len == 0) {
-        if (out_cp)
-            *out_cp = 0;
-        return 0;
-    }
-
-    const unsigned char *s = (const unsigned char *) data;
-    uint32_t cp = 0;
-    int size = 0;
-
-    if ((s[0] & 0x80u) == 0) {
-        cp = s[0];
-        size = 1;
-    } else if ((s[0] & 0xE0u) == 0xC0u) {
-        if (len < 2 || !xr_string_core_utf8_is_continuation(s[1]))
-            goto invalid;
-        cp = ((uint32_t) (s[0] & 0x1Fu) << 6) | (uint32_t) (s[1] & 0x3Fu);
-        if (cp < 0x80u)
-            goto invalid;
-        size = 2;
-    } else if ((s[0] & 0xF0u) == 0xE0u) {
-        if (len < 3 || !xr_string_core_utf8_is_continuation(s[1]) ||
-            !xr_string_core_utf8_is_continuation(s[2]))
-            goto invalid;
-        cp = ((uint32_t) (s[0] & 0x0Fu) << 12) | ((uint32_t) (s[1] & 0x3Fu) << 6) |
-             (uint32_t) (s[2] & 0x3Fu);
-        if (cp < 0x800u || (cp >= 0xD800u && cp <= 0xDFFFu))
-            goto invalid;
-        size = 3;
-    } else if ((s[0] & 0xF8u) == 0xF0u) {
-        if (len < 4 || !xr_string_core_utf8_is_continuation(s[1]) ||
-            !xr_string_core_utf8_is_continuation(s[2]) ||
-            !xr_string_core_utf8_is_continuation(s[3]))
-            goto invalid;
-        cp = ((uint32_t) (s[0] & 0x07u) << 18) | ((uint32_t) (s[1] & 0x3Fu) << 12) |
-             ((uint32_t) (s[2] & 0x3Fu) << 6) | (uint32_t) (s[3] & 0x3Fu);
-        if (cp < 0x10000u || cp > XR_STRING_CORE_UNICODE_MAX)
-            goto invalid;
-        size = 4;
-    } else {
-        goto invalid;
-    }
-
+    XrUtf8Step step = xr_utf8_core_decode_step((const uint8_t *) data, data ? len : (size_t) 0);
     if (out_cp)
-        *out_cp = cp;
-    return size;
-
-invalid:
-    if (out_cp)
-        *out_cp = XR_STRING_CORE_UNICODE_INVALID;
-    return 1;
+        *out_cp = data && len > 0 ? step.scalar : 0;
+    return (int) step.consumed;
 }
 
 static inline size_t xr_string_core_utf8_rune_count(const char *data, size_t len) {

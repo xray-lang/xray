@@ -10,6 +10,16 @@ fn test_utf8_conversion_surface() {
 
     var mixed: Array<byte> = [65, 255, 66]
     assert_eq(string.fromUtf8Lossy(mixed[:]), "A�B")
+
+    // Unicode 17 maximal-subpart examples: non-shortest and surrogate
+    // sequences replace each byte, while a still-valid truncated prefix is
+    // replaced once.
+    var nonShortest: Array<byte> = [192, 175, 224, 128, 191, 240, 129, 130, 65]
+    assert_eq(string.fromUtf8Lossy(nonShortest[:]), "��������A")
+    var surrogate: Array<byte> = [237, 160, 128, 65]
+    assert_eq(string.fromUtf8Lossy(surrogate[:]), "���A")
+    var truncated: Array<byte> = [225, 128, 226, 240, 145, 146, 241, 191, 65]
+    assert_eq(string.fromUtf8Lossy(truncated[:]), "����A")
     assert_eq(ascii.toString(), "[104, 105]")
 
     assert_eq(string.fromRune('é'), "é")
