@@ -2,9 +2,9 @@
 // Recursive lazy initialization on the same OS thread is a programmer error,
 // but it must fail deterministically instead of recursing until stack overflow.
 
-import { ThreadLocal } from sys
+import sys
 
-shared local = ThreadLocal<int>(fn() -> int {
+shared local = sys.ThreadLocal<int>(fn() -> int {
     return local.get()
 })
 
@@ -14,5 +14,6 @@ try {
     print("recursive")
 }
 
-local.set(7)
-print(local.get())
+var recovered = sys.ThreadLocal<int>(fn() -> int { return 0 })
+recovered.set(7)
+print(recovered.get())
