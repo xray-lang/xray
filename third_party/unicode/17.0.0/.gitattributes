@@ -1,0 +1,3 @@
+# Unicode conformance inputs are retained byte-for-byte so their recorded
+# upstream SHA-256 values remain meaningful. Ignore upstream whitespace style.
+* -whitespace linguist-vendored=true
