@@ -206,6 +206,7 @@ XR_FUNC void try_free_args(EmitCtx *ctx, const XiValue *v);
 XR_FUNC int add_const_int(EmitCtx *ctx, int64_t val);
 XR_FUNC int add_const_float(EmitCtx *ctx, double val);
 XR_FUNC int add_const_char(EmitCtx *ctx, uint32_t cp);
+XR_FUNC int add_const_string_n(EmitCtx *ctx, const char *str, size_t len);
 XR_FUNC int add_const_string(EmitCtx *ctx, const char *str);
 XR_FUNC int add_symbol(EmitCtx *ctx, const char *name);
 
@@ -272,6 +273,7 @@ XR_FUNC void xi_emit_byte_array_copy_from(EmitCtx *ctx, XiValue *v, XiEmitReg ds
 XR_FUNC void xi_emit_byte_array_append_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_byte_array_repeat_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_array_data_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_static_bytes_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 
 /* ========== Generated FFI raw-pointer lowering drivers ========== */
 XR_FUNC void xi_emit_ptr_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst);

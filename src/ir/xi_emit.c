@@ -344,10 +344,14 @@ XR_FUNC int add_const_char(EmitCtx *ctx, uint32_t cp) {
     return idx;
 }
 
-XR_FUNC int add_const_string(EmitCtx *ctx, const char *str) {
+XR_FUNC int add_const_string_n(EmitCtx *ctx, const char *str, size_t len) {
     XrValue xv;
-    if (ctx->isolate && str) {
-        XrString *xs = xr_compile_time_intern(ctx->isolate, str, strlen(str));
+    if (ctx->isolate && (str || len == 0)) {
+        XrString *xs = xr_compile_time_intern(ctx->isolate, str ? str : "", len);
+        if (!xs) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return -1;
+        }
         xv = xr_string_value(xs);
     } else {
         /* No isolate: raw C string pointers are not valid heap objects,
@@ -361,6 +365,10 @@ XR_FUNC int add_const_string(EmitCtx *ctx, const char *str) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
     }
     return idx;
+}
+
+XR_FUNC int add_const_string(EmitCtx *ctx, const char *str) {
+    return add_const_string_n(ctx, str, str ? strlen(str) : 0);
 }
 
 /* Add a method name to the proto's local symbol table.  Returns the local

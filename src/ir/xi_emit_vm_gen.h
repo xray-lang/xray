@@ -165,6 +165,7 @@
     X(BYTE_ARRAY_APPEND_FROM, xi_emit_byte_array_append_from) \
     X(BYTE_ARRAY_REPEAT_FROM, xi_emit_byte_array_repeat_from) \
     X(ARRAY_DATA_PTR, xi_emit_array_data_ptr) \
+    X(STATIC_BYTES_PTR, xi_emit_static_bytes_ptr) \
     X(LOCAL_ADDR, xi_emit_local_addr) \
     X(PLACE_LOAD, xi_emit_place_load) \
     X(PLACE_STORE, xi_emit_place_store) \

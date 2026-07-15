@@ -10197,6 +10197,37 @@ static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     emit_conversion_suffix(out, conv_suffix);
 }
 
+static void xicgen_static_bytes_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                    const char *prefix) {
+    (void) f;
+    (void) prefix;
+    const XaotAddressPlan *address = xaot_address_plan_find(cg_ctx_aot_bundle(ctx), v);
+    bool static_literal = address && address->provenance.origin == XR_POINTER_ORIGIN_STATIC &&
+                          address->provenance.owner == XR_STORAGE_MODULE &&
+                          address->provenance.mutability == XR_STORAGE_READONLY &&
+                          address->provenance.address_identity == XR_ADDRESS_MODULE_STABLE &&
+                          address->provenance.escape == XR_POINTER_ESCAPE_STABLE;
+    if (!v || v->nargs != 0 || v->aux_int < 0 || !v->aux || !static_literal) {
+        fprintf(stderr, "[xi_cgen] ERROR: static byte pointer has no verified literal plan\n");
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+
+    const uint8_t *bytes = (const uint8_t *) v->aux;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_RAWPTR, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "(void *)((const uint8_t *)(");
+    if (v->aux_int == 0) {
+        fprintf(out, "\"\"");
+    } else {
+        for (int64_t i = 0; i < v->aux_int; i++)
+            fprintf(out, "\"\\x%02x\"", (unsigned) bytes[i]);
+    }
+    fprintf(out, "))");
+    emit_conversion_suffix(out, conv_suffix);
+}
+
 static XaotValueRep xicgen_place_pointee_value_rep(XiCgenCtx *ctx, const XiFunc *f,
                                                    const XiValue *place) {
     XaotValueRep rep;

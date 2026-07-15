@@ -1041,6 +1041,11 @@ vmcase(OP_LEN) {
 vmcase(OP_ARRAY_DATA_PTR) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
+    if (XR_IS_STRING(R(b))) {
+        XrString *str = XR_TO_STRING(R(b));
+        R(a) = xr_int((xr_Integer) (intptr_t) (str ? str->data : NULL));
+        vmbreak;
+    }
     if (XR_IS_ARRAY_REF(R(b))) {
         R(a) = xr_int((xr_Integer) (intptr_t) R(b).ptr);
         vmbreak;
@@ -1052,7 +1057,7 @@ vmcase(OP_ARRAY_DATA_PTR) {
     }
     if (!XR_IS_ARRAY(R(b))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "ptr() expects an array, fixed array, or slice receiver");
+                         "ptr() expects static bytes, an array, fixed array, or slice receiver");
     }
     XrArray *arr = XR_TO_ARRAY(R(b));
     R(a) = xr_int((xr_Integer) (intptr_t) arr->data);
