@@ -452,6 +452,10 @@ static bool arc_raw_pointer_borrow_flows_to_user(const XiValue *member, const Xi
         return false;
     if (user->op == XI_ARRAY_DATA_PTR && user->nargs >= 1 && user->args[0] == member)
         return true;
+    if ((user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) && user->nargs >= 1 &&
+        user->args[0] == member && arc_type_is_raw_pointer(user->type) && user->aux &&
+        strcmp((const char *) user->aux, "borrowPtr") == 0)
+        return true;
     if (!arc_value_is_raw_pointer_carrier(member))
         return false;
     switch (user->op) {

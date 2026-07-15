@@ -131,6 +131,13 @@ static XaotModuleInitPlan derive_module_init(const XaotBundle *bundle, const XiM
     return plan;
 }
 
+static bool value_is_buffer_pointer_borrow(const XiValue *value) {
+    return value && (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) &&
+           value->nargs > 0 && value->args[0] && value->aux &&
+           strcmp((const char *) value->aux, "borrowPtr") == 0 &&
+           xr_type_is_named_class(value->args[0]->type, "Buffer");
+}
+
 static bool add_captures_recursive(XaotBundle *bundle, const XiFunc *func) {
     if (!func)
         return true;
@@ -196,9 +203,11 @@ static bool address_plan_for_value(const XaotBundle *bundle, const XiModule *mod
         out->provenance.escape = XR_POINTER_ESCAPE_STABLE;
         return true;
     }
-    if (value->op == XI_ARRAY_DATA_PTR && value->nargs > 0 && value->args[0]) {
+    if ((value->op == XI_ARRAY_DATA_PTR || value_is_buffer_pointer_borrow(value)) &&
+        value->nargs > 0 && value->args[0]) {
         const XiValue *owner = value->args[0];
-        if (owner->type && owner->type->kind == XR_KIND_FIXED_ARRAY && owner->op == XI_GET_SHARED &&
+        if (value->op == XI_ARRAY_DATA_PTR && owner->type &&
+            owner->type->kind == XR_KIND_FIXED_ARRAY && owner->op == XI_GET_SHARED &&
             owner->aux_int >= 0) {
             const XiModule *storage_module = module;
             uint32_t storage_slot = (uint32_t) owner->aux_int;

@@ -3554,7 +3554,7 @@ static bool xa_call_has_unknown_function_value_escape(CallExprNode *call, XaSymb
     if (!call || !call->callee || !callee_type || !XR_TYPE_IS_FUNCTION(callee_type) || slot < 0)
         return false;
     if (call->callee->type != AST_VARIABLE)
-        return true;
+        return false;
     if (fn_sym && (fn_sym->kind == XA_SYM_FUNCTION || fn_sym->kind == XA_SYM_CLASS))
         return false;
     return !fn_links || !fn_links->param_escapes || slot >= fn_links->param_escape_count;
