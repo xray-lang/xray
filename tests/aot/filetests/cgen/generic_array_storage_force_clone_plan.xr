@@ -1,0 +1,89 @@
+fn touch() {
+}
+
+fn pick<T>(items: Array<T>, index: int) -> T {
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    touch()
+    return items[index]
+}
+
+fn run(n: int) -> int {
+    var values: Array<int> = []
+    var seed = 0
+    while (seed < 64) {
+        values.push((seed % 17) + 1)
+        seed = seed + 1
+    }
+
+    var i = 0
+    var sum = 0
+    while (i < n) {
+        sum = sum + pick<int>(values, i % 64)
+        i = i + 1
+    }
+    return sum
+}
+
+print(run(30000))

@@ -1,0 +1,11 @@
+contains=xaot-plan v0
+regex=generic-body-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* owner=[1-9][0-9]* origin_body=[1-9][0-9]* specialized_body=[1-9][0-9]* root_callsite=[1-9][0-9]* type=[1-9][0-9]* type_args=[1-9][0-9]*\+1 size=[6-9][0-9]+ action=clone evidence=row\+inst\+types\+origin_body\+specialized_body\+root reason=none
+regex=generic-code-size-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* body_use=[1-9][0-9]* origin=[6-9][0-9]+ specialized=[6-9][0-9]+ count=1 threshold=64 action=force_clone evidence=row\+inst\+body_use\+threshold reason=none
+regex=generic-storage-plan [0-9]+ .*kind=array action=typed_inline .*container_plan=[1-9][0-9]* evidence=row\+inst\+specialized_type\+container_plan reason=none
+contains=name=pick$i64
+regex=array-storage [0-9]+ func=pick\$i64 .*elem=XR_ELEM_I64/i64/int64_t
+c_contains=xrt_array_new_typed_ptr(0, XR_ELEM_I64)
+c_contains=((int64_t*)_a->data)[_idx]
+c_regex=int64_t v[0-9]+ = generic_array_storage_force_clone_plan_[0-9a-f]+_pick_i64_[0-9]+\(NULL, v[0-9]+, v[0-9]+\);
+c_not_contains=xrt_index_get(
+c_not_regex=XR_TO_INT\(generic_array_storage_force_clone_plan_[0-9a-f]+_pick_

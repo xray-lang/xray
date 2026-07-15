@@ -10498,6 +10498,60 @@ static uint32_t evidence_body_size_estimate(const XgBodySummary *body) {
     return 1u + body->callsite_count;
 }
 
+static bool evidence_sequence_access_requires_storage_clone(uint8_t access_kind) {
+    switch ((XgSequenceAccessKind) access_kind) {
+        case XG_SEQ_ACCESS_INDEX_GET:
+        case XG_SEQ_ACCESS_INDEX_SET:
+        case XG_SEQ_ACCESS_SLICE:
+        case XG_SEQ_ACCESS_ITER:
+            return true;
+        case XG_SEQ_ACCESS_LENGTH:
+        default:
+            return false;
+    }
+}
+
+static bool evidence_generic_storage_forces_body_clone(const XgGlobalEvidence *evidence,
+                                                       XgFuncId specialized_body_func_id) {
+    if (!evidence || specialized_body_func_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < evidence->ngeneric_storages; i++) {
+        const XgGenericStorageSummary *storage = &evidence->generic_storages[i];
+        uint32_t clone_relevant =
+            storage->flags & (XG_GENERIC_STORAGE_TYPED_INLINE | XG_GENERIC_STORAGE_REF_LANE);
+        if (clone_relevant == 0 || storage->container_plan_id == XG_NO_ID)
+            continue;
+        switch ((XgGenericStorageKind) storage->storage_kind) {
+            case XG_GENERIC_STORAGE_ARRAY: {
+                const XgSequenceAccessSummary *sequence = xg_global_evidence_find_sequence_access(
+                    evidence, (XgSequenceAccessId) storage->container_plan_id);
+                if (sequence && sequence->owner_func_id == specialized_body_func_id &&
+                    sequence->receiver_type_key == storage->specialized_type_key &&
+                    sequence->elem_type_key == storage->elem_type_key &&
+                    evidence_sequence_access_requires_storage_clone(sequence->access_kind))
+                    return true;
+                break;
+            }
+            case XG_GENERIC_STORAGE_MAP:
+            case XG_GENERIC_STORAGE_SET:
+                for (uint32_t j = 0; j < evidence->nkey_accesses; j++) {
+                    const XgKeyAccessSummary *access = &evidence->key_accesses[j];
+                    if (access->owner_func_id == specialized_body_func_id &&
+                        access->receiver_shape_id == storage->container_plan_id &&
+                        access->key_type_key == storage->key_type_key &&
+                        access->value_type_key == storage->value_type_key)
+                        return true;
+                }
+                break;
+            case XG_GENERIC_STORAGE_CLASS:
+            case XG_GENERIC_STORAGE_STRUCT:
+            default:
+                break;
+        }
+    }
+    return false;
+}
+
 static uint64_t evidence_generic_body_use_hash(const XgGenericInstSummary *inst,
                                                const XgCallsiteSummary *call,
                                                const XgBodySummary *origin_body,
@@ -10562,8 +10616,10 @@ static bool evidence_add_generic_function_deepen_rows(XgGlobalEvidence *dst,
     code_size.specialized_body_size_estimate = specialized_size;
     code_size.instantiation_count = 1;
     code_size.threshold = 64;
-    if ((uint64_t) specialized_size * (uint64_t) code_size.instantiation_count <=
-        (uint64_t) code_size.threshold)
+    if (evidence_generic_storage_forces_body_clone(dst, specialized_body->func_id))
+        code_size.flags = XG_GENERIC_CODESIZE_FORCE_CLONE;
+    else if ((uint64_t) specialized_size * (uint64_t) code_size.instantiation_count <=
+             (uint64_t) code_size.threshold)
         code_size.flags = XG_GENERIC_CODESIZE_ALLOW_CLONE;
     return xg_global_evidence_add_generic_code_size(dst, &code_size) != NULL;
 }
