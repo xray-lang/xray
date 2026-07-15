@@ -58,7 +58,7 @@
 static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode *call);
 static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result_type,
                                 const char *module_name, const char *cname, AstNode **arguments,
-                                int arg_count);
+                                XrCallArgAccess *arg_accesses, int arg_count);
 static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
                                                      const char *method);
 static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
@@ -179,6 +179,44 @@ static XrClassInfo *xi_lower_lookup_class_info(XiLower *l, const char *name) {
         return NULL;
     XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
     return links ? links->class_info : NULL;
+}
+
+static struct XrType *xi_lower_class_info_constructor_type(XiLower *l, XrClassInfo *class_info) {
+    if (!l || !l->analyzer || !class_info)
+        return NULL;
+    XaSymbol *ctor =
+        class_info ? xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR) : NULL;
+    XaSymbolLinks *ctor_links = ctor ? xa_analyzer_get_links(l->analyzer, ctor) : NULL;
+    struct XrType *ctor_type = ctor_links ? ctor_links->type : NULL;
+    return ctor_type && ctor_type->kind == XR_KIND_FUNCTION ? ctor_type : NULL;
+}
+
+static struct XrType *xi_lower_class_constructor_type(XiLower *l, XaSymbol *class_sym) {
+    if (!l || !l->analyzer || !class_sym || class_sym->kind != XA_SYM_CLASS)
+        return NULL;
+    XaSymbolLinks *class_links = xa_analyzer_get_links(l->analyzer, class_sym);
+    return xi_lower_class_info_constructor_type(l, class_links ? class_links->class_info : NULL);
+}
+
+static struct XrType *xi_lower_type_constructor_type(XiLower *l, struct XrType *type) {
+    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE))
+        return NULL;
+    XrClassInfo *class_info = type->instance.class_ref;
+    if (!class_info && type->instance.class_name)
+        class_info = xi_lower_lookup_class_info(l, type->instance.class_name);
+    return xi_lower_class_info_constructor_type(l, class_info);
+}
+
+static struct XrType *xi_lower_call_constructor_type(XiLower *l, const CallExprNode *call) {
+    if (!l || !l->analyzer || !call || !call->callee || call->callee->type != AST_VARIABLE)
+        return NULL;
+    VariableNode *callee = &call->callee->as.variable;
+    XaSymbol *class_sym = callee->symbol_id
+                              ? xa_scope_lookup_by_id(l->analyzer->global_scope, callee->symbol_id)
+                              : NULL;
+    if (!class_sym && callee->name)
+        class_sym = xi_lower_lookup_class_symbol(l, callee->name);
+    return xi_lower_class_constructor_type(l, class_sym);
 }
 
 static XiValue *xi_lower_emit_import_ref(XiLower *l, const char *module_name,
@@ -2976,7 +3014,7 @@ static XiValue *lower_ct_struct_value(XiLower *l, AstNode *node, const XrCtValue
             return NULL;
     }
 
-    XiValue *inst = lower_construct(l, node, result_type, NULL, struct_name, NULL, 0);
+    XiValue *inst = lower_construct(l, node, result_type, NULL, struct_name, NULL, NULL, 0);
     if (!inst)
         return NULL;
 
@@ -4098,6 +4136,11 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     if (!callee_val)
         return NULL;
     callee_type = xr_type_non_nullable(l->isolate, callee_type);
+    struct XrType *constructor_type = xi_lower_call_constructor_type(l, call);
+    if (!constructor_type)
+        constructor_type = xi_lower_type_constructor_type(l, callee_type);
+    if (constructor_type)
+        callee_type = constructor_type;
 
     XrParamMode stack_sig_modes[64];
     const XrParamMode *pmodes = NULL;
@@ -5064,7 +5107,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (lower_value_is_whole_module_import(l, recv, "sync") &&
             xi_lower_builtin_class_global_index(ma->name) >= 0) {
             return lower_construct(l, node, xi_lower_node_type(l, node), "sync", ma->name,
-                                   call->arguments, call->arg_count);
+                                   call->arguments, call->arg_accesses, call->arg_count);
         }
 
         if (lower_value_is_whole_module_import(l, recv, "mem") && ma->name) {
@@ -7228,7 +7271,7 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
  * from the node table. */
 static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result_type,
                                 const char *module_name, const char *cname, AstNode **arguments,
-                                int arg_count) {
+                                XrCallArgAccess *arg_accesses, int arg_count) {
     XR_DCHECK(cname != NULL, "construct must have class name");
 
     /* Built-in collection types: emit specialized ops (no constructor call) */
@@ -7397,6 +7440,18 @@ generic_constructor:;
     XaSymbol *class_sym = xi_lower_lookup_class_symbol(l, cname);
     XaSymbolLinks *class_links =
         (class_sym && l->analyzer) ? xa_analyzer_get_links(l->analyzer, class_sym) : NULL;
+    struct XrType *constructor_type = xi_lower_class_constructor_type(l, class_sym);
+    if (!constructor_type)
+        constructor_type = xi_lower_type_constructor_type(l, result_type);
+    XrParamMode stack_constructor_modes[64];
+    const XrParamMode *constructor_modes = NULL;
+    int constructor_pcount = 0;
+    if (constructor_type) {
+        constructor_modes = lower_function_param_modes(
+            l, constructor_type, stack_constructor_modes,
+            (int) (sizeof(stack_constructor_modes) / sizeof(stack_constructor_modes[0])),
+            &constructor_pcount);
+    }
     bool has_user_class_info = class_links && class_links->class_info != NULL;
     bool force_builtin_class =
         ((module_name && strcmp(module_name, "sync") == 0 &&
@@ -7473,6 +7528,18 @@ generic_constructor:;
         }
     }
 
+    CallExprNode call_view = {
+        .arguments = arguments,
+        .arg_accesses = arg_accesses,
+        .arg_count = arg_count,
+    };
+    XiCallWriteback *writebacks = NULL;
+    XiCallPlan *call_plan =
+        lower_build_call_plan(l, &call_view, arg_vals, n, constructor_modes, constructor_pcount,
+                              constructor_type, &writebacks, (int) node->line);
+    if (l->had_error)
+        return NULL;
+
     uint16_t nargs = (uint16_t) (n + 1);
     XiValue *call = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, nargs);
     if (!call)
@@ -7482,15 +7549,20 @@ generic_constructor:;
         call->args[i + 1] = arg_vals[i];
     call->aux = (void *) "constructor";
     call->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+    call->call_plan = call_plan;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;
+    xi_lower_bind_callsite_id(l, call, xi_lower_source_node_id(l, node));
+    xi_lower_insert_err_check(l, node);
+    if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
+        return NULL;
     return call;
 }
 
 static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     NewExprNode *ne = &node->as.new_expr;
     return lower_construct(l, node, xi_lower_node_type(l, node), ne->module_name, ne->class_name,
-                           ne->arguments, ne->arg_count);
+                           ne->arguments, ne->arg_accesses, ne->arg_count);
 }
 
 /* True if the named class is `Exception` or derives from it. Exception is a
@@ -7550,7 +7622,7 @@ static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode
     if (!lower_class_is_exception_kind(l, name) && !generic_class_call)
         return NULL;
     return lower_construct(l, node, xi_lower_node_type(l, node), NULL, name, call->arguments,
-                           call->arg_count);
+                           call->arg_accesses, call->arg_count);
 }
 
 static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
@@ -8390,6 +8462,35 @@ static XiValue *lower_this_expr(XiLower *l, AstNode *node) {
 
 static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     SuperCallNode *sc = &node->as.super_call;
+
+    /* Resolve the receiver and the inherited ParamContract before constructing
+     * the call. The analyzer owns that contract; lowering only consumes it to
+     * materialize the same call-bound places as ordinary calls. */
+    int var_id = xi_lower_var_find(l, 0, "this");
+    if (var_id < 0)
+        var_id = xi_lower_var_create(l, 0, "this", l->type_any);
+    struct XrType *this_type = var_id >= 0 ? l->vars[var_id].type : l->type_any;
+    XiValue *this_val = var_id >= 0 ? xi_lower_braun_read(l, var_id, l->cur_block) : NULL;
+
+    const char *method_name = sc->method_name ? sc->method_name : XR_KEYWORD_CONSTRUCTOR;
+    const char *class_name = xr_type_get_class_name(this_type);
+    XrClassInfo *class_info = class_name ? xi_lower_lookup_class_info(l, class_name) : NULL;
+    XrClassInfo *base_info = class_info ? class_info->base : NULL;
+    XaSymbol *method_sym = base_info ? xa_class_info_lookup_member(base_info, method_name) : NULL;
+    XaSymbolLinks *method_links =
+        (method_sym && l->analyzer) ? xa_analyzer_get_links(l->analyzer, method_sym) : NULL;
+    struct XrType *method_type = method_links ? method_links->type : NULL;
+    if (!method_type || method_type->kind != XR_KIND_FUNCTION)
+        method_type = NULL;
+    XrParamMode stack_method_modes[64];
+    const XrParamMode *method_modes = NULL;
+    int method_pcount = 0;
+    if (method_type) {
+        method_modes = lower_function_param_modes(
+            l, method_type, stack_method_modes,
+            (int) (sizeof(stack_method_modes) / sizeof(stack_method_modes[0])), &method_pcount);
+    }
+
     XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
     XiLowerArgList args;
     xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
@@ -8403,10 +8504,17 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     XiValue **arg_vals = args.items;
     int n = args.count;
 
-    /* 'this' is receiver for super call */
-    struct XrType *this_type = l->type_any;
-    int var_id = xi_lower_var_create(l, 0, "this", this_type);
-    XiValue *this_val = xi_lower_braun_read(l, var_id, l->cur_block);
+    CallExprNode call_view = {
+        .arguments = sc->arguments,
+        .arg_accesses = sc->arg_accesses,
+        .arg_count = sc->arg_count,
+    };
+    XiCallWriteback *writebacks = NULL;
+    XiCallPlan *call_plan =
+        lower_build_call_plan(l, &call_view, arg_vals, n, method_modes, method_pcount, method_type,
+                              &writebacks, (int) node->line);
+    if (l->had_error)
+        return NULL;
 
     struct XrType *result_type = xi_lower_node_type(l, node);
     uint16_t nargs = (uint16_t) (n + 1);
@@ -8416,14 +8524,15 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     call->args[0] = this_val ? this_val : xi_const_null(l->func, l->cur_block, l->type_null);
     for (int i = 0; i < n; i++)
         call->args[i + 1] = arg_vals[i];
-    call->aux = (void *) (sc->method_name ? sc->method_name : "constructor");
-    call->aux_int =
-        ((int64_t) xi_lower_method_symbol(l, sc->method_name ? sc->method_name : "constructor")
-         << 1) |
-        1;
+    call->aux = (void *) method_name;
+    call->aux_int = ((int64_t) xi_lower_method_symbol(l, method_name) << 1) | 1;
+    call->call_plan = call_plan;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;
     xi_lower_bind_callsite_id(l, call, xi_lower_source_node_id(l, node));
+    xi_lower_insert_err_check(l, node);
+    if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
+        return NULL;
     return call;
 }
 

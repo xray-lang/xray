@@ -1,0 +1,56 @@
+class RefCtorBase {
+    value: int = 0
+
+    constructor(value: ref int) {
+        value = value + 1
+        this.value = value
+    }
+}
+
+class RefCtorChild extends RefCtorBase {
+    constructor(value: ref int) {
+        super(ref value)
+    }
+}
+
+class OutMethodBase {
+    fill(value: out int) {
+        value = 42
+    }
+}
+
+class OutMethodChild extends OutMethodBase {
+    forward(value: out int) {
+        super.fill(out value)
+    }
+}
+
+class OutCtorBase {
+    constructor(value: out int) {
+        value = 7
+    }
+}
+
+class OutCtorChild extends OutCtorBase {
+    constructor(value: out int) {
+        super(out value)
+    }
+}
+
+var direct = 1
+var base = RefCtorBase(ref direct)
+print(direct)
+print(base.value)
+
+var forwarded = 10
+var child = RefCtorChild(ref forwarded)
+print(forwarded)
+print(child.value)
+
+var methodOut = 0
+OutMethodChild().forward(out methodOut)
+print(methodOut)
+
+var ctorOut = 0
+OutCtorChild(out ctorOut)
+print(ctorOut)

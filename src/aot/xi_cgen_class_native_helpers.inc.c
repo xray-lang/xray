@@ -4471,7 +4471,7 @@ static bool cg_class_native_can_pass_instance_as(XiCgenCtx *ctx, const XiClassDa
         return true;
     const XiClassData *cur = source;
     for (uint8_t depth = 0; cur && depth < 8; depth++) {
-        if (!cur->super_name || cur->inherited_field_count == 0)
+        if (!cur->super_name)
             return false;
         cur = cg_class_native_data_by_name(ctx, cur->super_name);
         if (cur && cur->class_name && target->class_name &&
@@ -4489,6 +4489,18 @@ static bool emit_class_native_instance_ref_as(XiCgenCtx *ctx, FILE *out, const X
     if (source == target || (source->class_name && target->class_name &&
                              strcmp(source->class_name, target->class_name) == 0)) {
         emit_class_native_instance_base_ref(ctx, out, f, v);
+        return true;
+    }
+    if (source->inherited_field_count == 0) {
+        /* A fieldless base has no physical `base` member in the compact native
+         * child layout. The object pointer is nevertheless a valid receiver for
+         * its fieldless methods, so express that zero-offset relation as a cast. */
+        fprintf(out, "((");
+        emit_class_native_type_name(out, cg_class_native_prefix_for_data(ctx, target, NULL),
+                                    target->class_name);
+        fprintf(out, "*)");
+        emit_class_native_instance_base_ref(ctx, out, f, v);
+        fprintf(out, ")");
         return true;
     }
     fprintf(out, "&((");
