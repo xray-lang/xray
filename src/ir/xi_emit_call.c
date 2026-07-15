@@ -563,16 +563,32 @@ static void emit_builtin_string_byte_slice(EmitCtx *ctx, XiValue *v, XiEmitReg d
     emit_inst(ctx, CREATE_ABC(OP_STRING_BYTES_SPAN, dst, str, slot_reg));
 }
 
-/* FFI raw-pointer load: R[dst] = load(aux, R[addr]), aux in C operand. */
+/* FFI raw-pointer load. The VM consumes a compact contiguous argument window:
+ * R[base] is the result, R[base+1] the address, R[base+2] the Endian value. */
 XR_FUNC void xi_emit_ptr_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    if (v->nargs != 1) {
+    if (v->nargs != 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
     XiEmitReg addr = reg_of(ctx, v->args[0]);
+    XiEmitReg endian = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_PTR_LOAD, dst, addr, (XiEmitReg) (v->aux_int & 0xff)));
+    if (ctx->next_reg + 3 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg = (XiEmitReg) (base + 3);
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    if (addr != base + 1)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (base + 1), addr, 0));
+    if (endian != base + 2)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (base + 2), endian, 0));
+    emit_inst(ctx, CREATE_ABC(OP_PTR_LOAD, base, (XiEmitReg) (v->aux_int & 0xff), (XiEmitReg) 0));
+    if (dst != NO_REG && dst != base)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
 }
 
 XR_FUNC void xi_emit_local_addr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
@@ -610,18 +626,33 @@ XR_FUNC void xi_emit_place_store(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_PLACE_STORE, place, value, 0));
 }
 
-/* FFI raw-pointer store: *(T*)R[addr] = R[val], width code in C operand. */
+/* FFI raw-pointer store: R[base..base+2] = address, value, Endian. */
 XR_FUNC void xi_emit_ptr_store(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
-    if (v->nargs != 2) {
+    if (v->nargs != 3) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
     XiEmitReg addr = reg_of(ctx, v->args[0]);
     XiEmitReg val = reg_of(ctx, v->args[1]);
+    XiEmitReg endian = reg_of(ctx, v->args[2]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_PTR_STORE, addr, val, (XiEmitReg) (v->aux_int & 0xff)));
+    if (ctx->next_reg + 3 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg = (XiEmitReg) (base + 3);
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    if (addr != base)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, base, addr, 0));
+    if (val != base + 1)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (base + 1), val, 0));
+    if (endian != base + 2)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (base + 2), endian, 0));
+    emit_inst(ctx, CREATE_ABC(OP_PTR_STORE, base, (XiEmitReg) (v->aux_int & 0xff), (XiEmitReg) 0));
 }
 
 /* Raw pointer memcpy: memcpy(dst, src, byte_count). */

@@ -219,8 +219,10 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
  *  XI_STORE_FIELD   field name or NULL   symbol id or field index
  *  XI_STATIC_ADDR   —                    shared slot index for freestanding static data
- *  XI_PTR_LOAD      —                    XrFFIType width of pointee | optional ptr-load flags
- *  XI_PTR_STORE     —                    XrFFIType width of pointee
+ *  XI_PTR_LOAD      —                    XrFFIType width of pointee | unaligned flag;
+ *                                         args[1] carries Endian
+ *  XI_PTR_STORE     —                    XrFFIType width of pointee | unaligned flag;
+ *                                         args[2] carries Endian
  *  XI_JSON_NEW      char** field_names   field count
  *  XI_JSON_INIT_F   —                    field index
  *  XI_JSON_GET_F    —                    field index

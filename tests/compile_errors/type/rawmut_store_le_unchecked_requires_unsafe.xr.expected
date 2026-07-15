@@ -1,1 +1,1 @@
-MutPtr.storeLE() must be inside an unsafe block
+MutPtr has no member 'storeLE'

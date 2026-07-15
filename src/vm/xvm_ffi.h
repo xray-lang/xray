@@ -19,6 +19,7 @@
 #include <stdint.h>
 
 #include "../base/xdefs.h"
+#include "../runtime/value/xffi_sig.h"
 #include "../runtime/value/xvalue.h"
 
 struct XrVMRuntime;
@@ -33,8 +34,9 @@ XR_FUNC XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, 
 
 /* FFI raw-pointer scalar load/store backing the VM's OP_PTR_LOAD / OP_PTR_STORE.
  * `ffi_type` is an XrFFIType code plus optional pointer-load flags. Plain typed
- * memory access (no libffi); validity of `addr` is the `unsafe` block's contract. */
-XR_FUNC XrValue xr_ffi_ptr_load(uintptr_t addr, uint8_t ffi_type);
-XR_FUNC void xr_ffi_ptr_store(uintptr_t addr, uint8_t ffi_type, XrValue val);
+ * memory access (no libffi); `endian` is the evaluated Endian argument and
+ * validity of `addr` is the `unsafe` block's contract. */
+XR_FUNC XrValue xr_ffi_ptr_load(uintptr_t addr, uint8_t ffi_type, int64_t endian);
+XR_FUNC void xr_ffi_ptr_store(uintptr_t addr, uint8_t ffi_type, XrValue val, int64_t endian);
 
 #endif  // XVM_FFI_H

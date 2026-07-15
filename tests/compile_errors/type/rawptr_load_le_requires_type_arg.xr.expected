@@ -1,1 +1,1 @@
-Ptr.loadLE<T>() expects exactly one type argument
+Ptr has no member 'loadLE'

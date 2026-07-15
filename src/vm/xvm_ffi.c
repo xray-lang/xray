@@ -16,181 +16,123 @@
 #include "../runtime/xisolate_api.h"
 #include "../vm/xvm_closure.h"
 #include "../os/os_dylib.h"
+#include "../shared/xr_array_core.h"
 
 #include <stddef.h>
 #include <string.h>
 
 #define XR_FFI_MAX_ARGS 32
 
-static uint16_t xr_ffi_ptr_load_u16_le(uintptr_t addr) {
-    uint16_t value;
-    memcpy(&value, (const void *) addr, sizeof(value));
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap16(value);
-#endif
-    return value;
-}
-
-static uint32_t xr_ffi_ptr_load_u32_le(uintptr_t addr) {
-    uint32_t value;
-    memcpy(&value, (const void *) addr, sizeof(value));
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap32(value);
-#endif
-    return value;
-}
-
-static uint64_t xr_ffi_ptr_load_u64_le(uintptr_t addr) {
-    uint64_t value;
-    memcpy(&value, (const void *) addr, sizeof(value));
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap64(value);
-#endif
-    return value;
-}
-
-static void xr_ffi_ptr_store_u16_le(uintptr_t addr, uint16_t value) {
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap16(value);
-#endif
-    memcpy((void *) addr, &value, sizeof(value));
-}
-
-static void xr_ffi_ptr_store_u32_le(uintptr_t addr, uint32_t value) {
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap32(value);
-#endif
-    memcpy((void *) addr, &value, sizeof(value));
-}
-
-static void xr_ffi_ptr_store_u64_le(uintptr_t addr, uint64_t value) {
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap64(value);
-#endif
-    memcpy((void *) addr, &value, sizeof(value));
-}
-
-/* FFI raw-pointer scalar load/store. The pointee width is the XrFFIType code
- * recorded on XI_PTR_LOAD/STORE; these back the VM's OP_PTR_LOAD / OP_PTR_STORE.
- * Independent of libffi (plain typed memory access). No bounds or null check:
- * validity of `addr` is the `unsafe` block's contract. */
-XrValue xr_ffi_ptr_load(uintptr_t addr, uint8_t ffi_type) {
+/* FFI raw-pointer scalar load/store. The pointee width/flags byte is recorded
+ * on XI_PTR_LOAD/STORE while Endian remains a normal evaluated operand. These
+ * back the VM's OP_PTR_LOAD / OP_PTR_STORE and are independent of libffi. No
+ * bounds or null check: validity of `addr` is the `unsafe` block's contract. */
+XrValue xr_ffi_ptr_load(uintptr_t addr, uint8_t ffi_type, int64_t endian) {
     uint8_t code = xr_ffi_ptr_aux_type(ffi_type);
-    if ((ffi_type & XR_FFI_PTR_AUX_LITTLE_ENDIAN) != 0) {
-        switch ((XrFFIType) code) {
-            case XR_FFI_T_U16:
-                return xr_int((xr_Integer) xr_ffi_ptr_load_u16_le(addr));
-            case XR_FFI_T_U32:
-                return xr_int((xr_Integer) xr_ffi_ptr_load_u32_le(addr));
-            case XR_FFI_T_U64:
-                return xr_int((xr_Integer) xr_ffi_ptr_load_u64_le(addr));
-            default:
-                return xr_null();
-        }
-    }
+    const void *ptr = (const void *) addr;
+    bool ok = false;
     switch ((XrFFIType) code) {
-        case XR_FFI_T_I8:
-            return xr_int(*(const int8_t *) addr);
-        case XR_FFI_T_U8:
-            return xr_int(*(const uint8_t *) addr);
+        case XR_FFI_T_I8: {
+            int8_t value = 0;
+            memcpy(&value, ptr, sizeof(value));
+            return xr_int(value);
+        }
+        case XR_FFI_T_U8: {
+            uint8_t value = 0;
+            memcpy(&value, ptr, sizeof(value));
+            return xr_int(value);
+        }
         case XR_FFI_T_I16:
-            return xr_int(*(const int16_t *) addr);
+            return xr_int(
+                (int16_t) xr_array_core_bytes_load_u16(ptr, 2, XR_ELEM_U8, 0, endian, &ok));
         case XR_FFI_T_U16:
-            return xr_int(*(const uint16_t *) addr);
+            return xr_int(xr_array_core_bytes_load_u16(ptr, 2, XR_ELEM_U8, 0, endian, &ok));
         case XR_FFI_T_I32:
-            return xr_int(*(const int32_t *) addr);
+            return xr_int(
+                (int32_t) xr_array_core_bytes_load_u32(ptr, 4, XR_ELEM_U8, 0, endian, &ok));
         case XR_FFI_T_U32:
-            return xr_int(*(const uint32_t *) addr);
+            return xr_int(xr_array_core_bytes_load_u32(ptr, 4, XR_ELEM_U8, 0, endian, &ok));
         case XR_FFI_T_I64:
-            return xr_int(*(const int64_t *) addr);
+            return xr_int(
+                (int64_t) xr_array_core_bytes_load_u64(ptr, 8, XR_ELEM_U8, 0, endian, &ok));
         case XR_FFI_T_U64:
-            return xr_int((xr_Integer) * (const uint64_t *) addr);
+            return xr_int(
+                (xr_Integer) xr_array_core_bytes_load_u64(ptr, 8, XR_ELEM_U8, 0, endian, &ok));
         case XR_FFI_T_SIZE:
-            return xr_int((xr_Integer) * (const size_t *) addr);
         case XR_FFI_T_SSIZE:
-            return xr_int((xr_Integer) * (const ptrdiff_t *) addr);
+            if (sizeof(size_t) == 4)
+                return xr_int(
+                    (xr_Integer) xr_array_core_bytes_load_u32(ptr, 4, XR_ELEM_U8, 0, endian, &ok));
+            return xr_int(
+                (xr_Integer) xr_array_core_bytes_load_u64(ptr, 8, XR_ELEM_U8, 0, endian, &ok));
         case XR_FFI_T_F32:
-            return xr_float((double) *(const float *) addr);
+            return xr_float(
+                (double) xr_array_core_bytes_load_f32(ptr, 4, XR_ELEM_U8, 0, endian, &ok));
         case XR_FFI_T_F64:
-            return xr_float(*(const double *) addr);
-        case XR_FFI_T_BOOL:
-            return xr_bool(*(const uint8_t *) addr != 0);
-        case XR_FFI_T_PTR:
-            return xr_int((xr_Integer) (uintptr_t) *(void *const *) addr);
+            return xr_float(xr_array_core_bytes_load_f64(ptr, 8, XR_ELEM_U8, 0, endian, &ok));
+        case XR_FFI_T_BOOL: {
+            uint8_t value = 0;
+            memcpy(&value, ptr, sizeof(value));
+            return xr_bool(value != 0);
+        }
+        case XR_FFI_T_PTR: {
+            void *value = NULL;
+            memcpy(&value, ptr, sizeof(value));
+            return xr_int((xr_Integer) (uintptr_t) value);
+        }
         case XR_FFI_T_VOID:
         default:
             return xr_null();
     }
 }
 
-void xr_ffi_ptr_store(uintptr_t addr, uint8_t ffi_type, XrValue val) {
+void xr_ffi_ptr_store(uintptr_t addr, uint8_t ffi_type, XrValue val, int64_t endian) {
     uint8_t code = xr_ffi_ptr_aux_type(ffi_type);
     double f = XR_IS_FLOAT(val) ? XR_TO_FLOAT(val) : (double) XR_TO_INT(val);
     xr_Integer iv = XR_IS_FLOAT(val) ? (xr_Integer) XR_TO_FLOAT(val) : XR_TO_INT(val);
-    if ((ffi_type & XR_FFI_PTR_AUX_LITTLE_ENDIAN) != 0) {
-        switch ((XrFFIType) code) {
-            case XR_FFI_T_U16:
-                xr_ffi_ptr_store_u16_le(addr, (uint16_t) iv);
-                return;
-            case XR_FFI_T_U32:
-                xr_ffi_ptr_store_u32_le(addr, (uint32_t) iv);
-                return;
-            case XR_FFI_T_U64:
-                xr_ffi_ptr_store_u64_le(addr, (uint64_t) iv);
-                return;
-            default:
-                return;
-        }
-    }
+    void *ptr = (void *) addr;
     switch ((XrFFIType) code) {
         case XR_FFI_T_I8:
-            *(int8_t *) addr = (int8_t) iv;
+        case XR_FFI_T_U8: {
+            uint8_t value = (uint8_t) iv;
+            memcpy(ptr, &value, sizeof(value));
             break;
-        case XR_FFI_T_U8:
-            *(uint8_t *) addr = (uint8_t) iv;
-            break;
+        }
         case XR_FFI_T_I16:
-            *(int16_t *) addr = (int16_t) iv;
-            break;
         case XR_FFI_T_U16:
-            *(uint16_t *) addr = (uint16_t) iv;
+            (void) xr_array_core_bytes_store_u16(ptr, 2, XR_ELEM_U8, 0, (uint16_t) iv, endian);
             break;
         case XR_FFI_T_I32:
-            *(int32_t *) addr = (int32_t) iv;
-            break;
         case XR_FFI_T_U32:
-            *(uint32_t *) addr = (uint32_t) iv;
+            (void) xr_array_core_bytes_store_u32(ptr, 4, XR_ELEM_U8, 0, (uint32_t) iv, endian);
             break;
         case XR_FFI_T_I64:
-            *(int64_t *) addr = (int64_t) iv;
-            break;
         case XR_FFI_T_U64:
-            *(uint64_t *) addr = (uint64_t) iv;
+            (void) xr_array_core_bytes_store_u64(ptr, 8, XR_ELEM_U8, 0, (uint64_t) iv, endian);
             break;
         case XR_FFI_T_SIZE:
-            *(size_t *) addr = (size_t) iv;
-            break;
         case XR_FFI_T_SSIZE:
-            *(ptrdiff_t *) addr = (ptrdiff_t) iv;
+            if (sizeof(size_t) == 4)
+                (void) xr_array_core_bytes_store_u32(ptr, 4, XR_ELEM_U8, 0, (uint32_t) iv, endian);
+            else
+                (void) xr_array_core_bytes_store_u64(ptr, 8, XR_ELEM_U8, 0, (uint64_t) iv, endian);
             break;
         case XR_FFI_T_F32:
-            *(float *) addr = (float) f;
+            (void) xr_array_core_bytes_store_f32(ptr, 4, XR_ELEM_U8, 0, (float) f, endian);
             break;
         case XR_FFI_T_F64:
-            *(double *) addr = f;
+            (void) xr_array_core_bytes_store_f64(ptr, 8, XR_ELEM_U8, 0, f, endian);
             break;
-        case XR_FFI_T_BOOL:
-            *(uint8_t *) addr = (uint8_t) (iv != 0);
+        case XR_FFI_T_BOOL: {
+            uint8_t value = (uint8_t) (iv != 0);
+            memcpy(ptr, &value, sizeof(value));
             break;
-        case XR_FFI_T_PTR:
-            *(void **) addr = (void *) (uintptr_t) iv;
+        }
+        case XR_FFI_T_PTR: {
+            void *value = (void *) (uintptr_t) iv;
+            memcpy(ptr, &value, sizeof(value));
             break;
+        }
         case XR_FFI_T_VOID:
             break;
     }

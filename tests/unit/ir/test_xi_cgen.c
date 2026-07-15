@@ -2847,15 +2847,16 @@ TEST(cgen_byte_array_repeat_from_tail_elides_dead_err_check) {
     xi_func_free(ir);
 }
 
-TEST(cgen_rawptr_load_le_uses_pointer_helper) {
-    const char *src = "fn read(src: Array<byte>) -> int {\n"
+TEST(cgen_mem_load_uses_pointer_helper) {
+    const char *src = "import mem\n"
+                      "fn read(src: Array<byte>) -> int {\n"
                       "    var view: Slice<byte> = src\n"
                       "    var sum = 0\n"
                       "    unsafe {\n"
                       "        var p = view.ptr()\n"
-                      "        var v16: uint16 = p.loadLE<uint16>(1)\n"
-                      "        var v32: uint32 = p.loadLE<uint32>(0)\n"
-                      "        var v64: uint64 = p.loadLE<uint64>(0)\n"
+                      "        var v16: uint16 = mem.load<uint16>(p, 1, Endian.LE)\n"
+                      "        var v32: uint32 = mem.load<uint32>(p, 0, Endian.LE)\n"
+                      "        var v64: uint64 = mem.load<uint64>(p, 0, Endian.LE)\n"
                       "        sum = int(v16) + int(v32) + int(v64)\n"
                       "    }\n"
                       "    return sum\n"
@@ -2880,7 +2881,7 @@ TEST(cgen_rawptr_load_le_uses_pointer_helper) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Ptr.loadLE should generate");
+    assert(!had_error && "mem.load should generate");
 
     const char *fn = strstr(code, "static int64_t test_read_");
     assert(fn != NULL && "read declaration should exist");
@@ -2889,41 +2890,36 @@ TEST(cgen_rawptr_load_le_uses_pointer_helper) {
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "read function body should be bounded");
 
-    assert(count_between(fn, fn_end, "xrt_ptr_load_u16_le_unchecked_raw(") > 0 &&
-           "Ptr.loadLE<uint16> must lower to the raw pointer helper");
-    assert(count_between(fn, fn_end, "xrt_ptr_load_u32_le_unchecked_raw(") > 0 &&
-           "Ptr.loadLE<uint32> must lower to the raw pointer helper");
-    assert(count_between(fn, fn_end, "xrt_ptr_load_u64_le_unchecked_raw(") > 0 &&
-           "Ptr.loadLE<uint64> must lower to the raw pointer helper");
+    assert(count_between(fn, fn_end, "xrt_ptr_load_int_unchecked_raw(") == 3 &&
+           "mem.load integer widths must lower to the unaligned raw pointer helper");
     assert(count_between(fn, fn_end, "void *") > 0 &&
-           "Ptr.loadLE should keep the data pointer in native C storage");
+           "mem.load should keep the data pointer in native C storage");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
-           "Ptr.loadLE hot path must not round-trip through integer pointer casts");
+           "mem.load hot path must not round-trip through integer pointer casts");
     assert(count_between(fn, fn_end, "XR_FROM_INT(") == 0 &&
            count_between(fn, fn_end, "XR_TO_INT(") == 0 &&
-           "Ptr.loadLE hot path must not box or unbox pointer values");
+           "mem.load hot path must not box or unbox pointer values");
     assert(count_between(fn, fn_end, "xrt_byte_array_load_u16_le_") == 0 &&
            count_between(fn, fn_end, "xrt_byte_array_load_u32_le_") == 0 &&
            count_between(fn, fn_end, "xrt_byte_array_load_u64_le_") == 0 &&
-           "Ptr loadLE must not route back through Array<byte>/Slice<byte> helpers");
+           "mem.load must not route back through Array<byte>/Slice<byte> helpers");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "Ptr.loadLE hot path must not keep a dead ERR_CHECK");
-    assert(!contains(code, "loadLE") &&
-           "Ptr.loadLE method name must not survive as dynamic dispatch");
+           "mem.load hot path must not keep a dead ERR_CHECK");
 
-    printf("  Generated Ptr loadLE fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated mem.load fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
-TEST(cgen_rawmut_store_le_uses_pointer_helper) {
-    const char *src = "fn write(dst: Array<byte>) {\n"
+TEST(cgen_mem_store_uses_pointer_helper) {
+    const char *src = "import mem\n"
+                      "fn write(dst: Array<byte>) {\n"
                       "    var view: Slice<byte> = dst[:]\n"
                       "    unsafe {\n"
                       "        var p = view.mutPtr()\n"
-                      "        p.storeLE<uint16>(1, 0x1234)\n"
-                      "        p.storeLE<uint32>(4, 0x01020304)\n"
-                      "        p.storeLE<uint64>(8, 0x0102030405060708)\n"
+                      "        mem.store<uint16>(p, 1, 0x1234, Endian.LE)\n"
+                      "        mem.store<uint32>(p, 4, 0x01020304, Endian.LE)\n"
+                      "        mem.store<uint64>(p, 8, 0x0102030405060708, Endian.LE)\n"
                       "    }\n"
                       "}\n"
                       "fn run() -> int {\n"
@@ -2939,7 +2935,7 @@ TEST(cgen_rawmut_store_le_uses_pointer_helper) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "MutPtr.storeLE should generate");
+    assert(!had_error && "mem.store should generate");
 
     const char *fn = strstr(code, "static void test_write_");
     assert(fn != NULL && "write declaration should exist");
@@ -2948,24 +2944,18 @@ TEST(cgen_rawmut_store_le_uses_pointer_helper) {
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "write function body should be bounded");
 
-    assert(count_between(fn, fn_end, "xrt_ptr_store_u16_le_unchecked_raw(v") > 0 &&
-           "MutPtr.storeLE<uint16> must pass a native pointer to the raw helper");
-    assert(count_between(fn, fn_end, "xrt_ptr_store_u32_le_unchecked_raw(v") > 0 &&
-           "MutPtr.storeLE<uint32> must pass a native pointer to the raw helper");
-    assert(count_between(fn, fn_end, "xrt_ptr_store_u64_le_unchecked_raw(v") > 0 &&
-           "MutPtr.storeLE<uint64> must pass a native pointer to the raw helper");
+    assert(count_between(fn, fn_end, "xrt_ptr_store_int_unchecked_raw(v") == 3 &&
+           "mem.store integer widths must pass native pointers to the unaligned helper");
     assert(count_between(fn, fn_end, "void *") > 0 &&
-           "MutPtr.storeLE should keep the data pointer in native C storage");
+           "mem.store should keep the data pointer in native C storage");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
-           "MutPtr.storeLE hot path must not round-trip through integer pointer casts");
+           "mem.store hot path must not round-trip through integer pointer casts");
     assert(count_between(fn, fn_end, "xrt_byte_slice_store_") == 0 &&
-           "MutPtr.storeLE must not route back through Slice<byte> helpers");
+           "mem.store must not route back through Slice<byte> helpers");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "MutPtr.storeLE hot path must not keep a dead ERR_CHECK");
-    assert(!contains(code, "storeLE") &&
-           "MutPtr.storeLE method name must not survive as dynamic dispatch");
+           "mem.store hot path must not keep a dead ERR_CHECK");
 
-    printf("  Generated MutPtr storeLE fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated mem.store fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -8247,8 +8237,8 @@ int main(void) {
     run_cgen_span_slice_elides_dead_err_check();
     run_cgen_byte_array_append_from_slice_elides_dead_err_check();
     run_cgen_byte_array_repeat_from_tail_elides_dead_err_check();
-    run_cgen_rawptr_load_le_uses_pointer_helper();
-    run_cgen_rawmut_store_le_uses_pointer_helper();
+    run_cgen_mem_load_uses_pointer_helper();
+    run_cgen_mem_store_uses_pointer_helper();
     run_cgen_stack_borrow_slice_allows_local_rawptr_read_chain();
     run_cgen_stack_borrow_slice_rejects_returned_rawptr();
     run_cgen_typed_array_i16_and_u32_use_raw_storage_fast_path();

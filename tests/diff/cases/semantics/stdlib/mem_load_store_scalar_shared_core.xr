@@ -1,0 +1,48 @@
+// anchor: mem-load-store-scalar-shared-core
+import mem
+
+fn dynamicRoundTrip(p: MutPtr<byte>, offset: int, endian: Endian) -> uint32 {
+    unsafe {
+        mem.store<uint32>(p, offset, 0x10203040, endian)
+        return mem.load<uint32>(p, offset, endian)
+    }
+}
+
+var buffer = mem.allocZeroed(96)
+var p = unsafe { buffer.ptr() }
+
+unsafe {
+    mem.store<int8>(p, 0, -2)
+    mem.store<uint8>(p, 1, 250)
+    mem.store<int16>(p, 2, -1234, Endian.LE)
+    mem.store<uint16>(p, 4, 0x1234, Endian.BE)
+    mem.store<int32>(p, 8, -12345678, Endian.LE)
+    mem.store<uint32>(p, 12, 0x01020304, Endian.BE)
+    mem.store<int64>(p, 16, -5, Endian.LE)
+    mem.store<uint64>(p, 24, 0x0102030405060708, Endian.BE)
+    mem.store<float32>(p, 32, 1.5, Endian.LE)
+    mem.store<float64>(p, 40, -2.25, Endian.BE)
+
+    print(int(mem.load<int8>(p)))
+    print(int(mem.load<uint8>(p, 1)))
+    print(int(mem.load<int16>(p, 2, Endian.LE)))
+    print(int(mem.load<uint16>(p, 4, Endian.BE)))
+    print(int(mem.load<int32>(p, 8, Endian.LE)))
+    print(int(mem.load<uint32>(p, 12, Endian.BE)))
+    print(mem.load<int64>(p, 16, Endian.LE))
+    print(int(mem.load<uint64>(p, 24, Endian.BE)))
+    print(mem.load<float32>(p, 32, Endian.LE))
+    print(mem.load<float64>(p, 40, Endian.BE))
+
+    var q: Ptr<byte> = p
+    mem.store<Ptr<byte>>(p, 56, q)
+    var loaded: Ptr<byte> = mem.load<Ptr<byte>>(p, 56)
+    print(mem.addr(loaded) == mem.addr(q))
+
+    mem.store<MutPtr<byte>>(p, 64, p)
+    var loadedMut: MutPtr<byte> = mem.load<MutPtr<byte>>(p, 64)
+    print(mem.addr(loadedMut) == mem.addr(p))
+}
+
+print(int(dynamicRoundTrip(p, 72, Endian.LE)))
+print(int(dynamicRoundTrip(p, 76, Endian.BE)))

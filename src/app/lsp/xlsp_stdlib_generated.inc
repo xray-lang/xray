@@ -303,6 +303,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"ptr", XLSP_SYM_FUNCTION, "fn(addr: int): Ptr<byte>", "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", NULL, 0},
     {"mutPtr", XLSP_SYM_FUNCTION, "fn(addr: int): MutPtr<byte>", "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", NULL, 0},
     {"addr", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>): int", "Numeric address of any Ptr<T> or MutPtr<T>", NULL, 0},
+    {"load", XLSP_SYM_FUNCTION, "fn(ptr: Ptr<byte>, offset?: int, endian?: Endian): int", "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset", NULL, 0},
+    {"store", XLSP_SYM_FUNCTION, "fn(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()", "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset", NULL, 0},
     {"copy", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", NULL, 0},
     {"move", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", NULL, 0},
     {"set", XLSP_SYM_FUNCTION, "fn(dst: MutPtr<byte>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", NULL, 0},
@@ -314,7 +316,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
     {"PROT_WRITE", XLSP_SYM_CONSTANT, "int", "Writable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
     {"PROT_EXEC", XLSP_SYM_CONSTANT, "int", "Executable page protection bit for mem.pageAlloc/pageProtect", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 28
+#define GEN_XLSP_STDLIB_MEM_SYMBOL_COUNT 30
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {

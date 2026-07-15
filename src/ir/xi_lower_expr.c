@@ -2121,10 +2121,6 @@ static uint8_t xi_pointer_pointee_ffi(struct XrType *ptr_type) {
     return xr_ffi_type_from_xrtype(pointee, false);
 }
 
-static bool xi_pointer_pointee_is_u8(struct XrType *ptr_type) {
-    return xr_type_is_u8_pointer(ptr_type);
-}
-
 /* Build the scaled address `ptr + idx * sizeof(pointee)` as a raw-pointer SSA
  * value. VM/tagged boundaries still encode the address as an integer, but AOT
  * keeps the local as a native pointer. */
@@ -2204,10 +2200,12 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
         XiValue *addr = xi_lower_ptr_scaled_addr(l, node, obj, idx, obj->type, obj->type);
         if (!addr)
             return NULL;
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 1);
+        XiValue *endian = xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 2);
         if (!v)
             return NULL;
         v->args[0] = addr;
+        v->args[1] = endian;
         v->aux_int = (int64_t) xr_ffi_ptr_aux(xi_pointer_pointee_ffi(obj->type), false);
         v->flags |= XI_FLAG_READS_MEM;
         v->line = (uint32_t) node->line;
@@ -2292,12 +2290,14 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
         XiValue *addr = xi_lower_ptr_scaled_addr(l, node, obj, idx, obj->type, obj->type);
         if (!addr)
             return NULL;
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_STORE, l->type_unit, 2);
+        XiValue *endian = xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_STORE, l->type_unit, 3);
         if (!v)
             return NULL;
         v->args[0] = addr;
         v->args[1] = val;
-        v->aux_int = (int64_t) xi_pointer_pointee_ffi(obj->type);
+        v->args[2] = endian;
+        v->aux_int = (int64_t) xr_ffi_ptr_aux(xi_pointer_pointee_ffi(obj->type), false);
         v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         v->line = (uint32_t) node->line;
         return v;
@@ -3781,10 +3781,11 @@ static bool lower_call_store_projection(XiLower *l, XiValue *source, XiValue *up
             }
             break;
         case XI_PTR_LOAD:
-            store = xi_value_new(l->func, l->cur_block, XI_PTR_STORE, l->type_unit, 2);
+            store = xi_value_new(l->func, l->cur_block, XI_PTR_STORE, l->type_unit, 3);
             if (store) {
                 store->args[0] = base->args[0];
                 store->args[1] = updated;
+                store->args[2] = base->args[1];
                 store->aux_int = base->aux_int;
             }
             break;
@@ -4234,6 +4235,83 @@ static XiValue *lower_byte_slice_endian_arg(XiLower *l, AstNode *arg) {
     if (lower_endian_arg_const(arg, &endian))
         return xi_const_int(l->func, l->cur_block, endian, l->type_int);
     return xi_lower_expr(l, arg);
+}
+
+static XiValue *lower_mem_access_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                      const char *member) {
+    if (!l || !node || !call || !member ||
+        (strcmp(member, "load") != 0 && strcmp(member, "store") != 0) ||
+        call->type_arg_count != 1 || !call->type_args || !call->type_args[0] || !call->arguments)
+        return NULL;
+
+    bool is_store = strcmp(member, "store") == 0;
+    if ((!is_store && (call->arg_count < 1 || call->arg_count > 3)) ||
+        (is_store && (call->arg_count < 3 || call->arg_count > 4)))
+        return NULL;
+
+    XrType *target = l->analyzer ? xr_tref_resolve_in_analyzer(l->analyzer, call->type_args[0])
+                                 : xr_tref_resolve(l->isolate, call->type_args[0]);
+    target = xi_lower_type_or_any(l, target, "mem access type argument", node->line);
+    uint8_t code = xr_ffi_type_from_xrtype(target, false);
+    if (code == XR_FFI_T_VOID || code > XR_FFI_T_PTR)
+        return NULL;
+
+    XiValue *ptr = xi_lower_expr(l, call->arguments[0]);
+    if (!ptr || !ptr->type || !xr_type_is_u8_pointer(ptr->type) ||
+        (is_store && !ptr->type->ptr_is_mut))
+        return NULL;
+
+    XiValue *offset = NULL;
+    if (call->arg_count >= 2) {
+        offset = xi_lower_expr(l, call->arguments[1]);
+        offset = lower_byte_slice_int_arg(l, node, offset);
+    } else {
+        offset = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+    }
+    if (!offset)
+        return NULL;
+    XiValue *addr = xi_lower_ptr_scaled_addr(l, node, ptr, offset, ptr->type, ptr->type);
+    if (!addr)
+        return NULL;
+
+    if (!is_store) {
+        XiValue *endian = call->arg_count >= 3
+                              ? lower_byte_slice_endian_arg(l, call->arguments[2])
+                              : xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
+        if (!endian)
+            return NULL;
+        XrType *result_type = xi_lower_node_type(l, node);
+        if (!result_type || xi_lower_type_is_unknown(result_type))
+            result_type = target;
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 2);
+        if (!v)
+            return NULL;
+        v->args[0] = addr;
+        v->args[1] = endian;
+        v->aux_int = (int64_t) xr_ffi_ptr_aux(code, true);
+        v->flags |= XI_FLAG_READS_MEM;
+        v->line = (uint32_t) node->line;
+        return v;
+    }
+
+    XiValue *value = xi_lower_expr(l, call->arguments[2]);
+    if (!value)
+        return NULL;
+    XiValue *endian = call->arg_count >= 4
+                          ? lower_byte_slice_endian_arg(l, call->arguments[3])
+                          : xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
+    if (!endian)
+        return NULL;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_STORE, l->type_unit, 3);
+    if (!v)
+        return NULL;
+    v->args[0] = addr;
+    v->args[1] = value;
+    v->args[2] = endian;
+    v->aux_int = (int64_t) xr_ffi_ptr_aux(code, true);
+    v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    v->line = (uint32_t) node->line;
+    return v;
 }
 
 static uint16_t lower_byte_slice_typed_op_for_target(XrType *target, bool is_load) {
@@ -4830,6 +4908,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *addr = lower_mem_addr_pointer_call(l, node, call, ma->name);
             if (addr)
                 return addr;
+            XiValue *access = lower_mem_access_call(l, node, call, ma->name);
+            if (access)
+                return access;
         }
 
         const XaParallelCallPlan *analyzer_parallel_plan =
@@ -4898,6 +4979,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *addr = lower_mem_addr_pointer_call(l, node, call, ma->name);
             if (addr)
                 return addr;
+            XiValue *access = lower_mem_access_call(l, node, call, ma->name);
+            if (access)
+                return access;
         }
 
         XiValue *chan_send = lower_channel_send_boundary_call(l, node, call, ma->name, recv);
@@ -5083,59 +5167,16 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return v;
         }
 
-        /* FFI raw pointer methods: deref()/offset(i), LE typed load/store, isNull(). */
+        /* FFI raw pointer methods: deref()/offset(i), copy, and isNull(). */
         if (recv->type && XR_TYPE_IS_POINTER(recv->type) && ma->name) {
-            if (strcmp(ma->name, "loadLE") == 0 && n == 1 && xi_pointer_pointee_is_u8(recv->type) &&
-                call->type_arg_count == 1 && call->type_args && call->type_args[0]) {
-                XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
-                target = xi_lower_type_or_any(l, target, "pointer load type argument",
-                                              node ? node->line : 0);
-                uint8_t code = xr_ffi_type_from_xrtype(target, false);
-                if (code == XR_FFI_T_U16 || code == XR_FFI_T_U32 || code == XR_FFI_T_U64) {
-                    XiValue *addr = xi_lower_ptr_scaled_addr(l, node, recv, arg_vals[0], recv->type,
-                                                             recv->type);
-                    if (!addr)
-                        return NULL;
-                    struct XrType *load_type =
-                        xi_lower_type_is_unknown(result_type) ? target : result_type;
-                    XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, load_type, 1);
-                    if (!v)
-                        return NULL;
-                    v->args[0] = addr;
-                    v->aux_int = (int64_t) xr_ffi_ptr_aux(code, true);
-                    v->flags |= XI_FLAG_READS_MEM;
-                    v->line = (uint32_t) node->line;
-                    return v;
-                }
-            }
-            if (strcmp(ma->name, "storeLE") == 0 && n == 2 &&
-                xi_pointer_pointee_is_u8(recv->type) && call->type_arg_count == 1 &&
-                call->type_args && call->type_args[0]) {
-                XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
-                target = xi_lower_type_or_any(l, target, "pointer store type argument",
-                                              node ? node->line : 0);
-                uint8_t code = xr_ffi_type_from_xrtype(target, false);
-                if (code == XR_FFI_T_U16 || code == XR_FFI_T_U32 || code == XR_FFI_T_U64) {
-                    XiValue *addr = xi_lower_ptr_scaled_addr(l, node, recv, arg_vals[0], recv->type,
-                                                             recv->type);
-                    if (!addr)
-                        return NULL;
-                    XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_STORE, l->type_unit, 2);
-                    if (!v)
-                        return NULL;
-                    v->args[0] = addr;
-                    v->args[1] = arg_vals[1];
-                    v->aux_int = (int64_t) xr_ffi_ptr_aux(code, true);
-                    v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
-                    v->line = (uint32_t) node->line;
-                    return v;
-                }
-            }
             if (strcmp(ma->name, "deref") == 0 && n == 0) {
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 1);
+                XiValue *endian =
+                    xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
+                XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 2);
                 if (!v)
                     return NULL;
                 v->args[0] = recv;
+                v->args[1] = endian;
                 v->aux_int = (int64_t) xr_ffi_ptr_aux(xi_pointer_pointee_ffi(recv->type), false);
                 v->flags |= XI_FLAG_READS_MEM;
                 v->line = (uint32_t) node->line;

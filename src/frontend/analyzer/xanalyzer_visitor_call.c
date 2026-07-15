@@ -31,6 +31,7 @@
 #include "../../base/xconstants.h"
 #include "../../base/xfileio.h"
 #include "../../base/xhashmap.h"
+#include "../../shared/xr_array_core.h"
 #include <inttypes.h>
 
 static bool xa_path_is_parallel_stdlib_module(const char *file);
@@ -53,6 +54,7 @@ static void xa_check_call_arg_access_authorization(XaInferContext *ctx, AstNode 
                                                    int arg_index, int slot, XrParamMode param_mode);
 static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index);
 static bool xa_class_name_matches_mono_base(const char *class_name, const char *base);
+static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object, const char *module_name);
 
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
     if (!name)
@@ -1610,10 +1612,6 @@ static bool xa_type_is_byte_slice_view(XrType *type) {
     return xr_type_is_u8_span(type);
 }
 
-static bool xa_type_is_raw_u8_ptr_view(XrType *type) {
-    return xr_type_is_u8_pointer(type);
-}
-
 static bool xa_call_is_byte_slice_typed_load(CallExprNode *call, XrType *receiver_type) {
     if (!call || !receiver_type || !xa_type_is_byte_slice_view(receiver_type) || !call->callee ||
         call->callee->type != AST_MEMBER_ACCESS)
@@ -1636,28 +1634,6 @@ static bool xa_call_is_byte_slice_reinterpret(CallExprNode *call, XrType *receiv
         return false;
     MemberAccessNode *ma = &call->callee->as.member_access;
     return ma->name && strcmp(ma->name, "reinterpret") == 0;
-}
-
-static bool xa_call_is_rawptr_load_le(CallExprNode *call, XrType *receiver_type) {
-    if (!call || !receiver_type || !xa_type_is_raw_u8_ptr_view(receiver_type) || !call->callee ||
-        call->callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    return ma->name && strcmp(ma->name, "loadLE") == 0;
-}
-
-static bool xa_call_is_rawmut_store_le(CallExprNode *call, XrType *receiver_type) {
-    if (!call || !receiver_type || !xa_type_is_raw_u8_ptr_view(receiver_type) || !call->callee ||
-        call->callee->type != AST_MEMBER_ACCESS)
-        return false;
-    MemberAccessNode *ma = &call->callee->as.member_access;
-    return ma->name && strcmp(ma->name, "storeLE") == 0;
-}
-
-static bool xa_type_is_supported_raw_load_le_result(XrType *type) {
-    return type && XR_TYPE_IS_INT(type) &&
-           (type->native_width == XR_NATIVE_U16 || type->native_width == XR_NATIVE_U32 ||
-            type->native_width == XR_NATIVE_U64);
 }
 
 static bool xa_type_is_supported_byte_slice_typed_scalar(XrType *type) {
@@ -1711,13 +1687,11 @@ static XrType *xa_byte_slice_typed_type_arg(XaInferContext *ctx, AstNode *node, 
     if (xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument", label,
                                           node ? node->line : 0, node ? node->column : 0))
         return xr_type_new_error(NULL);
-    bool supported = allow_signed ? xa_type_is_supported_byte_slice_typed_scalar(target)
-                                  : xa_type_is_supported_raw_load_le_result(target);
+    bool supported = allow_signed && xa_type_is_supported_byte_slice_typed_scalar(target);
     if (!supported) {
         char msg[192];
         snprintf(msg, sizeof(msg), "%s currently supports T = %s", label,
-                 allow_signed ? "int16, uint16, int32, uint32, int64, uint64, float32 or float64"
-                              : "uint16, uint32 or uint64");
+                 "int16, uint16, int32, uint32, int64, uint64, float32 or float64");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
         return xr_type_new_error(ctx->analyzer->isolate);
@@ -1728,6 +1702,185 @@ static XrType *xa_byte_slice_typed_type_arg(XaInferContext *ctx, AstNode *node, 
 static XrType *xa_load_le_return_type(XaInferContext *ctx, AstNode *node, CallExprNode *call,
                                       const char *label, bool allow_signed) {
     return xa_byte_slice_typed_type_arg(ctx, node, call, label, allow_signed);
+}
+
+static bool xa_type_is_supported_mem_access(XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    if (XR_TYPE_IS_POINTER(type))
+        return true;
+    if (XR_TYPE_IS_FLOAT(type))
+        return type->native_width == XR_NATIVE_F32 || type->native_width == XR_NATIVE_F64;
+    if (!XR_TYPE_IS_INT(type))
+        return false;
+    switch (type->native_width) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static const char *xa_mem_access_member(XaInferContext *ctx, CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    if (!ma->name || (strcmp(ma->name, "load") != 0 && strcmp(ma->name, "store") != 0) ||
+        !xa_call_object_is_module(ctx, ma->object, "mem"))
+        return NULL;
+    return ma->name;
+}
+
+static bool xa_mem_access_endian_literal(AstNode *arg, int64_t *out_endian) {
+    if (!arg)
+        return false;
+    const char *enum_name = NULL;
+    const char *member_name = NULL;
+    if (arg->type == AST_ENUM_ACCESS) {
+        enum_name = arg->as.enum_access.enum_name;
+        member_name = arg->as.enum_access.member_name;
+    } else if (arg->type == AST_MEMBER_ACCESS && arg->as.member_access.object &&
+               arg->as.member_access.object->type == AST_VARIABLE) {
+        enum_name = arg->as.member_access.object->as.variable.name;
+        member_name = arg->as.member_access.name;
+    }
+    if (!enum_name || strcmp(enum_name, "Endian") != 0 || !member_name)
+        return false;
+    int64_t endian = -1;
+    if (strcmp(member_name, "Native") == 0)
+        endian = XR_ENDIAN_NATIVE;
+    else if (strcmp(member_name, "LE") == 0)
+        endian = XR_ENDIAN_LE;
+    else if (strcmp(member_name, "BE") == 0)
+        endian = XR_ENDIAN_BE;
+    if (endian < 0)
+        return false;
+    if (out_endian)
+        *out_endian = endian;
+    return true;
+}
+
+static bool xa_type_is_endian(XrType *type) {
+    return type && XR_TYPE_IS_ENUM(type) && type->enum_type.enum_name &&
+           strcmp(type->enum_type.enum_name, "Endian") == 0;
+}
+
+static XrType *xa_mem_access_return_type(XaInferContext *ctx, AstNode *node, CallExprNode *call,
+                                         const char *member) {
+    bool is_store = member && strcmp(member, "store") == 0;
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    char label[64];
+    snprintf(label, sizeof(label), "mem.%s<T>()", member ? member : "?");
+
+    if (ctx->unsafe_depth == 0) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "%s must be inside an unsafe block", label);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+    }
+    if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "%s expects exactly one type argument", label);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   msg, &loc);
+        return is_store ? xr_type_new_unit(ctx->analyzer->isolate)
+                        : xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+
+    XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+    if (xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument", label,
+                                          node ? node->line : 0, node ? node->column : 0))
+        return xr_type_new_error(NULL);
+    if (!xa_type_is_supported_mem_access(target)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "%s supports T = int8, uint8, int16, uint16, int32, uint32, int64, uint64, "
+                 "float32, float64, Ptr<U> or MutPtr<U>",
+                 label);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+    }
+
+    int min_args = is_store ? 3 : 1;
+    int max_args = is_store ? 4 : 3;
+    if (call->arg_count < min_args || call->arg_count > max_args) {
+        char msg[160];
+        snprintf(msg, sizeof(msg), "%s expects %s", label,
+                 is_store ? "pointer, byte offset, value and optional endian"
+                          : "pointer and optional byte offset and endian");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   msg, &loc);
+    }
+
+    XrType *ptr_type = NULL;
+    if (call->arg_count > 0 && call->arguments && call->arguments[0])
+        ptr_type = xa_visit_infer_expr(ctx, call->arguments[0]);
+    if (!ptr_type || !xr_type_is_u8_pointer(ptr_type) || (is_store && !ptr_type->ptr_is_mut)) {
+        char msg[224];
+        snprintf(msg, sizeof(msg), "%s expects %s as its first argument, got '%s'", label,
+                 is_store ? "MutPtr<uint8>" : "Ptr<uint8> or MutPtr<uint8>",
+                 ptr_type ? xr_type_to_string(ptr_type) : "unknown");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+
+    int offset_index = is_store ? 1 : (call->arg_count >= 2 ? 1 : -1);
+    if (offset_index >= 0 && offset_index < call->arg_count && call->arguments[offset_index]) {
+        XrType *offset_type = xa_visit_infer_expr(ctx, call->arguments[offset_index]);
+        if (!offset_type || !XR_TYPE_IS_INT(offset_type)) {
+            char msg[192];
+            snprintf(msg, sizeof(msg), "%s expects an integer byte offset, got '%s'", label,
+                     offset_type ? xr_type_to_string(offset_type) : "unknown");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        }
+    }
+
+    if (is_store && call->arg_count >= 3 && call->arguments[2]) {
+        XrType *saved_expected = ctx->expected_type;
+        ctx->expected_type = target;
+        XrType *value_type = xa_visit_infer_expr(ctx, call->arguments[2]);
+        ctx->expected_type = saved_expected;
+        if (target && value_type && !XR_TYPE_IS_UNKNOWN(target) &&
+            !XR_TYPE_IS_UNKNOWN(value_type) && !xa_typecheck_assignable(target, value_type) &&
+            !xr_is_json_coercion(target, value_type)) {
+            char msg[224];
+            snprintf(msg, sizeof(msg), "%s value type '%s' is not assignable to '%s'", label,
+                     xr_type_to_string(value_type), xr_type_to_string(target));
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        }
+    }
+
+    int endian_index = is_store ? 3 : (call->arg_count >= 3 ? 2 : -1);
+    if (endian_index >= 0 && endian_index < call->arg_count && call->arguments[endian_index]) {
+        XrType *endian_type = xa_visit_infer_expr(ctx, call->arguments[endian_index]);
+        int64_t endian = XR_ENDIAN_NATIVE;
+        bool literal = xa_mem_access_endian_literal(call->arguments[endian_index], &endian);
+        if (!xa_type_is_endian(endian_type)) {
+            char msg[192];
+            snprintf(msg, sizeof(msg), "%s endian must have type Endian, got '%s'", label,
+                     endian_type ? xr_type_to_string(endian_type) : "unknown");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        } else if (XR_TYPE_IS_POINTER(target) && (!literal || endian != XR_ENDIAN_NATIVE)) {
+            char msg[160];
+            snprintf(msg, sizeof(msg),
+                     "%s pointer values require the compile-time literal Endian.Native", label);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+        }
+    }
+
+    return is_store ? xr_type_new_unit(ctx->analyzer->isolate) : target;
 }
 
 static XrType *xa_byte_slice_reinterpret_return_type(XaInferContext *ctx, AstNode *node,
@@ -3706,6 +3859,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     const char *mem_pointer_member = xa_mem_pointer_constructor_member(ctx, call);
     if (mem_pointer_member)
         return xa_mem_pointer_constructor_return_type(ctx, node, call, mem_pointer_member);
+    const char *mem_access = xa_mem_access_member(ctx, call);
+    if (mem_access)
+        return xa_mem_access_return_type(ctx, node, call, mem_access);
 
     if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
         strcmp(call->callee->as.variable.name, "typeName") == 0 && call->type_arg_count > 0) {
@@ -4846,14 +5002,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     if (xa_call_is_byte_slice_reinterpret(call, callee_obj_type))
         return_type = xa_byte_slice_reinterpret_return_type(ctx, node, call);
-
-    if (xa_call_is_rawptr_load_le(call, callee_obj_type))
-        return_type = xa_load_le_return_type(ctx, node, call, "Ptr.loadLE<T>()", false);
-
-    if (xa_call_is_rawmut_store_le(call, callee_obj_type)) {
-        (void) xa_byte_slice_typed_type_arg(ctx, node, call, "MutPtr.storeLE<T>()", false);
-        return_type = xr_type_new_unit(ctx->analyzer->isolate);
-    }
 
     // Apply type substitution for generic method calls: obj.method<T>()
     if (callee_obj_type && call->callee->type == AST_MEMBER_ACCESS) {

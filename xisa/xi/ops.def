@@ -819,7 +819,7 @@
 ; alias-based reordering, which is the conservative truth for memory C may mutate.
 (define-xi-op xi.ptr.load
   :class memory-read
-  :arity 1
+  :arity 2
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -827,7 +827,7 @@
 
 (define-xi-op xi.ptr.store
   :class memory-write
-  :arity 2
+  :arity 3
   :result-kind void
   :result-ownership none
   :own-use borrow

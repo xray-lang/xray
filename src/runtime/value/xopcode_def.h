@@ -369,8 +369,8 @@
     _(AGG_COPY, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = memcpy aggregate R[B] into struct_area slot C")  \
     _(FIXED_ARRAY_NEW, FMT_ABC, KOP_ABC_OUT_LIT_K,                                                 \
       "R[A] = fixed array ref in struct_area slot B, metadata K[C]")                               \
-    _(PTR_LOAD, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = *(T*)R[B], C = XrFFIType width of T")            \
-    _(PTR_STORE, FMT_ABC, KOP_ABC_STORE_LIT, "*(T*)R[A] = R[B], C = XrFFIType width of T")         \
+    _(PTR_LOAD, FMT_ABC, KOP_SPECIAL, "R[A] = load(R[A+1], endian=R[A+2]), B = XrFFIType/flags")   \
+    _(PTR_STORE, FMT_ABC, KOP_SPECIAL, "store(R[A], R[A+1], endian=R[A+2]), B = XrFFIType/flags")  \
     _(PTR_COPY_NONOVERLAP, FMT_ABC, KOP_ABC_INPLACE, "memcpy(R[A], R[B], R[C] * elem_size)")       \
     /* Inserted just before NOP: NUM_OPCODES is (OP_NOP + 1), so NOP must stay                     \
      * the last entry. Placing these here keeps every older pre-NOP opcode value stable            \

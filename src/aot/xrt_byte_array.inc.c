@@ -152,6 +152,83 @@ static inline int xrt_byte_array_range_ok(xrt_array_t *a, int64_t offset, int64_
            offset <= a->length - count;
 }
 
+static inline int64_t xrt_ptr_load_int_unchecked_raw(const void *ptr, uint8_t width,
+                                                     uint8_t is_signed, int64_t endian) {
+    bool ok = false;
+    switch (width) {
+        case 1: {
+            uint8_t value = 0;
+            memcpy(&value, ptr, sizeof(value));
+            return is_signed ? (int64_t) (int8_t) value : (int64_t) value;
+        }
+        case 2: {
+            uint16_t value = xr_array_core_bytes_load_u16(ptr, 2, XR_ELEM_U8, 0, endian, &ok);
+            return is_signed ? (int64_t) (int16_t) value : (int64_t) value;
+        }
+        case 4: {
+            uint32_t value = xr_array_core_bytes_load_u32(ptr, 4, XR_ELEM_U8, 0, endian, &ok);
+            return is_signed ? (int64_t) (int32_t) value : (int64_t) value;
+        }
+        case 8:
+            return (int64_t) xr_array_core_bytes_load_u64(ptr, 8, XR_ELEM_U8, 0, endian, &ok);
+        default:
+            return 0;
+    }
+}
+
+static inline double xrt_ptr_load_float_unchecked_raw(const void *ptr, uint8_t width,
+                                                      int64_t endian) {
+    bool ok = false;
+    if (width == 4)
+        return (double) xr_array_core_bytes_load_f32(ptr, 4, XR_ELEM_U8, 0, endian, &ok);
+    if (width == 8)
+        return xr_array_core_bytes_load_f64(ptr, 8, XR_ELEM_U8, 0, endian, &ok);
+    return 0.0;
+}
+
+static inline void *xrt_ptr_load_pointer_unchecked_raw(const void *ptr) {
+    void *value = NULL;
+    memcpy(&value, ptr, sizeof(value));
+    return value;
+}
+
+static inline void xrt_ptr_store_int_unchecked_raw(void *ptr, int64_t raw_value, uint8_t width,
+                                                   int64_t endian) {
+    switch (width) {
+        case 1: {
+            uint8_t value = (uint8_t) raw_value;
+            memcpy(ptr, &value, sizeof(value));
+            break;
+        }
+        case 2:
+            (void) xr_array_core_bytes_store_u16(ptr, 2, XR_ELEM_U8, 0, (uint16_t) raw_value,
+                                                 endian);
+            break;
+        case 4:
+            (void) xr_array_core_bytes_store_u32(ptr, 4, XR_ELEM_U8, 0, (uint32_t) raw_value,
+                                                 endian);
+            break;
+        case 8:
+            (void) xr_array_core_bytes_store_u64(ptr, 8, XR_ELEM_U8, 0, (uint64_t) raw_value,
+                                                 endian);
+            break;
+        default:
+            break;
+    }
+}
+
+static inline void xrt_ptr_store_float_unchecked_raw(void *ptr, double raw_value, uint8_t width,
+                                                     int64_t endian) {
+    if (width == 4)
+        (void) xr_array_core_bytes_store_f32(ptr, 4, XR_ELEM_U8, 0, (float) raw_value, endian);
+    else if (width == 8)
+        (void) xr_array_core_bytes_store_f64(ptr, 8, XR_ELEM_U8, 0, raw_value, endian);
+}
+
+static inline void xrt_ptr_store_pointer_unchecked_raw(void *ptr, const void *raw_value) {
+    memcpy(ptr, &raw_value, sizeof(raw_value));
+}
+
 static inline int64_t xrt_ptr_load_u16_le_unchecked_raw(const void *ptr) {
     uint16_t value;
     memcpy(&value, ptr, sizeof(value));

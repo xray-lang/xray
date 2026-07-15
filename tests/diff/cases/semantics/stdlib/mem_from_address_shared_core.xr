@@ -34,7 +34,7 @@ print(mem.addr(q) == addr)
 var q32 = mem.mutPtr<uint32>(addr)
 unsafe { q32[0] = 0x01020304 as uint32 }
 var p_ro: Ptr<byte> = p
-unsafe { print(int(p_ro.loadLE<uint32>(0))) }
+unsafe { print(int(mem.load<uint32>(p_ro, 0, Endian.LE))) }
 
 // The address-domain view is not limited to integer pointees. C APIs often pass
 // pointer slots and float buffers as raw bytes before rebuilding the typed view.

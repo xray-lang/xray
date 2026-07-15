@@ -2845,6 +2845,28 @@ module mem {
     layer: "core"
   }
 
+  fn load {
+    signature: "(ptr: Ptr<byte>, offset?: int, endian?: Endian): int"
+    doc: "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset"
+    vm: "mem_load_intrinsic"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: false
+    link_object: false
+    layer: "core"
+  }
+
+  fn store {
+    signature: "(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()"
+    doc: "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset"
+    vm: "mem_store_intrinsic"
+    argc: 4
+    arg_spec: "vvvv"
+    aot_direct: false
+    link_object: false
+    layer: "core"
+  }
+
   fn copy {
     signature: "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()"
     doc: "Copy n bytes from src to dst (non-overlapping; memcpy)"
