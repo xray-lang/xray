@@ -101,6 +101,27 @@ ACTIVE_REMOVED_CATEGORIES = {
     "ACTIVE_REMOVED_BUFFER_PTR_UNCHECKED",
 }
 
+LAYOUT_GATE_REQUIRED_FILES = {
+    Path("tests/diff/task190_layout_cases.txt"),
+    Path("tests/diff/cases/semantics/ffi/extern_layout_introspection.xr"),
+    Path("tests/diff/cases/semantics/ffi/mem_view_extern_layout.xr"),
+    Path("tests/diff/cases/semantics/stdlib/mem_layout_introspection.xr"),
+    Path("tests/compile_errors/ffi/020_extern_layout_rejects_managed_field.xr"),
+    Path("tests/compile_errors/ffi/023_extern_layout_rejects_safe_struct_field.xr"),
+    Path("tests/compile_errors/ffi/025_extern_flex_must_be_last.xr"),
+    Path("tests/compile_errors/ffi/026_extern_union_rejects_flex.xr"),
+    Path("tests/compile_errors/ffi/027_safe_struct_rejects_flex.xr"),
+    Path("tests/compile_errors/ffi/028_extern_flex_rejects_managed_element.xr"),
+    Path("tests/compile_errors/ffi/029_extern_flex_requires_prefix.xr"),
+    Path("tests/compile_errors/ffi/035_mem_view_flexible_tail_requires_length.xr"),
+}
+
+LAYOUT_GATE_REQUIRED_MANIFEST_ENTRIES = {
+    "tests/diff/cases/semantics/ffi/extern_layout_introspection.xr",
+    "tests/diff/cases/semantics/ffi/mem_view_extern_layout.xr",
+    "tests/diff/cases/semantics/stdlib/mem_layout_introspection.xr",
+}
+
 
 @dataclass(frozen=True)
 class Hit:
@@ -190,6 +211,25 @@ def build_inventory(root: Path) -> dict[str, list[Hit]]:
     return dict(sorted(by_category.items()))
 
 
+def check_layout_gate(root: Path) -> list[str]:
+    """Validate the task-190 layout/flexible-tail focused fixture set."""
+    missing = [
+        str(path)
+        for path in sorted(LAYOUT_GATE_REQUIRED_FILES)
+        if not (root / path).is_file()
+    ]
+    manifest_path = root / "tests/diff/task190_layout_cases.txt"
+    if manifest_path.is_file():
+        entries = {
+            line.strip()
+            for line in manifest_path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        }
+        for entry in sorted(LAYOUT_GATE_REQUIRED_MANIFEST_ENTRIES - entries):
+            missing.append(f"tests/diff/task190_layout_cases.txt entry: {entry}")
+    return missing
+
+
 def print_text_inventory(inventory: dict[str, list[Hit]], max_per_category: int) -> None:
     print("Task 190 C interop surface inventory")
     for category, hits in inventory.items():
@@ -224,13 +264,23 @@ def main() -> int:
     if args.json:
         print(
             json.dumps(
-                {category: [asdict(hit) for hit in hits] for category, hits in inventory.items()},
+                {
+                    "inventory": {
+                        category: [asdict(hit) for hit in hits]
+                        for category, hits in inventory.items()
+                    },
+                    "layout_gate_missing": check_layout_gate(root),
+                },
                 indent=2,
                 sort_keys=True,
             )
         )
     else:
         print_text_inventory(inventory, args.max_per_category)
+        missing_layout_gate = check_layout_gate(root)
+        print(f"TASK190_LAYOUT_FLEX_GATE: {'FAIL' if missing_layout_gate else 'PASS'}")
+        for missing in missing_layout_gate:
+            print(f"  missing {missing}")
 
     if args.fail_on_active_removed:
         blocking = {
@@ -238,10 +288,16 @@ def main() -> int:
             for category, hits in inventory.items()
             if category in ACTIVE_REMOVED_CATEGORIES and hits
         }
+        missing_layout_gate = check_layout_gate(root)
         if blocking:
             print("task-190 removed C interop surface gate failed:", file=sys.stderr)
             for category, hits in blocking.items():
                 print(f"  {category}: {len(hits)}", file=sys.stderr)
+            return 1
+        if missing_layout_gate:
+            print("task-190 layout/flexible-tail focused gate failed:", file=sys.stderr)
+            for missing in missing_layout_gate:
+                print(f"  missing {missing}", file=sys.stderr)
             return 1
     return 0
 
