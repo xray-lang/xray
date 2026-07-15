@@ -22,6 +22,7 @@
 
 #include "xchannel.h"
 #include "xdeep_copy.h"
+#include "../base/xchecks.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/value/xtransfer_mode.h"
 #include "../runtime/core/xr_runtime_core.h"
@@ -36,8 +37,7 @@ struct XrVMRuntime;
 /* ========== Send-side ownership ========== */
 
 static inline bool xr_chan_value_is_owned_message(XrValue value) {
-    return XR_IS_PTR(value) && XR_VALUE_GCPTR(value) && XR_OBJ_IS_OWNED(XR_VALUE_GCPTR(value)) &&
-           !XR_OBJ_GET_FLAG(XR_VALUE_GCPTR(value), XR_OBJ_TRANSIT);
+    return XR_IS_PTR(value) && XR_VALUE_GCPTR(value) && XR_OBJ_IS_OWNED(XR_VALUE_GCPTR(value));
 }
 
 /* Send CONSUMES the caller's reference (XI_CHAN_SEND classifies its args
@@ -51,17 +51,17 @@ static inline bool xr_chan_value_is_owned_message(XrValue value) {
  *     message root replaces the original; the caller's reference is
  *     released HERE — the single send-side consumption point.
  *
- * Re-entrant: a value that is already a TRANSIT root (a blocked send
- * created by an older path and retried after suspension) passes through
- * unchanged. New channel sends do not create TRANSIT graphs. */
+ * Channel transport never accepts TRANSIT roots. A TRANSIT value reaching this
+ * helper means a caller bypassed the fixed inline/owned/shared transport
+ * contract and must be fixed at the producer, not papered over here. */
 static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue value) {
     if (!XR_IS_PTR(value))
         return value;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return value;
-    if (obj && XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
-        return value; /* already prepared (blocked-send retry path) */
+    XR_CHECK(!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
+             "channel send: TRANSIT payload is not a valid channel transport");
     if (XR_OBJ_IS_SHARED(obj))
         return value; /* shared frozen/sync identity: transfer the caller's reference */
     if (XR_OBJ_IS_OWNED(obj))
@@ -95,8 +95,8 @@ static inline XrValue xr_chan_prepare_send_transfer_core(XrRuntimeCore *core, Xr
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return value;
-    if (XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
-        return value;
+    XR_CHECK(!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
+             "channel send transfer: TRANSIT payload is not a valid channel transport");
     if (XR_OBJ_IS_OWNED(obj))
         return mode == XR_TRANSFER_COPY
                    ? xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED)
@@ -138,10 +138,8 @@ static inline void xr_chan_abandon_send_core(XrRuntimeCore *core, XrValue prepar
     XrObjHeader *obj = XR_VALUE_GCPTR(prepared);
     if (!obj)
         return;
-    if (XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
-        xr_chan_transit_release_core(core, prepared);
-        return;
-    }
+    XR_CHECK(!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
+             "channel abandon: TRANSIT payload reached channel transport");
     if (XR_OBJ_IS_OWNED(obj)) {
         if (xr_obj_drop_is_last(obj))
             xr_owned_destroy_core(core, obj);
@@ -158,26 +156,22 @@ static inline void xr_chan_abandon_send_core(XrRuntimeCore *core, XrValue prepar
 /* ========== Recv-side deep copy ========== */
 
 /* Deliver a channel value to the receiver. Owned message roots move through
- * unchanged; residual TRANSIT graphs are deep-copied into the receiver's
- * coroutine-local heap and then released. Scalars and immutable/shared handles
- * are returned unchanged. */
+ * unchanged. Scalars and immutable/shared handles are returned unchanged.
+ * Channel queues must not contain TRANSIT roots. */
 static inline XrValue xr_chan_copy_recv_core(XrRuntimeCore *core, XrValue value,
                                              struct XrCoroutine *recv_coro) {
     if (!XR_IS_PTR(value))
         return value;
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj)
+        return value;
+    XR_CHECK(!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
+             "channel recv: TRANSIT payload reached channel transport");
     if (xr_chan_value_is_owned_message(value))
         return value;
     if (!xr_value_needs_copy(value))
         return value;
-    /* Zero-copy adopt: if the transit value is a uniquely-owned self-contained
-     * scalar array, steal its buffer into the receiver heap instead of copying;
-     * the helper releases the emptied transit struct on success. */
-    XrValue adopted;
-    if (xr_chan_try_adopt_array_from_transit_core(value, recv_coro, &adopted))
-        return adopted;
-    XrValue copied = xr_deep_copy_to_coro_core(core, value, recv_coro);
-    xr_chan_transit_release_core(core, value);
-    return copied;
+    return xr_deep_copy_to_coro_core(core, value, recv_coro);
 }
 
 static inline XrValue xr_chan_copy_recv(struct XrVMRuntime *isolate, XrValue value,

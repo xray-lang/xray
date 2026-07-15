@@ -95,7 +95,7 @@ typedef struct XrCopyContext {
     struct XrRuntimeCore *core;
     struct XrFixedHeap *dst_fixed_heap;  // fixed heap fallback
     struct XrCoroHeap *dst_heap;         // Region heap (preferred when non-NULL)
-    bool to_transit;                     // channel-transit copy: sysheap + XR_OBJ_TRANSIT
+    bool to_transit;                     // runtime temporary copy: sysheap + XR_OBJ_TRANSIT
     uint8_t dst_storage_mode;            // 0=normal, 1=shared system, 2=owned system
     bool share_existing_shared;          // boundary transfer may retain non-TRANSIT shared objs
     XrSeenEntry **buckets;
@@ -126,8 +126,8 @@ XR_FUNC XrValue xr_deep_copy_to_coro_counted_core(struct XrRuntimeCore *core, Xr
 
 /* ========== Residual Transit Copies ==========
  *
- * New Channel payloads are materialized as owned message roots. TRANSIT remains
- * only for older blocked-send retry values and non-Channel runtime aggregation
+ * Channel/Task payloads are materialized as owned message roots and do not
+ * consume TRANSIT. TRANSIT remains only for non-Channel runtime aggregation
  * paths that still need a coroutine-independent temporary graph. The consumer
  * deep-copies the graph into its private heap and releases the transit
  * reference, freeing the graph through the regular shared-destroy path. */
@@ -135,24 +135,6 @@ XR_FUNC XrValue xr_deep_copy_to_coro_counted_core(struct XrRuntimeCore *core, Xr
 XR_FUNC XrValue xr_deep_copy_to_transit_core(struct XrRuntimeCore *core, XrValue value);
 XR_FUNC XrValue xr_deep_copy_to_transit(struct XrVMRuntime *X, XrValue value);
 XR_FUNC void xr_chan_transit_release_core(struct XrRuntimeCore *core, XrValue value);
-
-/* ========== Legacy transit buffer adopt for self-contained scalar arrays ==========
- *
- * A typed (non-ANY) TRANSIT array's data buffer holds only scalars — no
- * interior pointers into any coroutine heap — so residual TRANSIT consumers can
- * re-home the buffer into the receiver heap instead of memcpy'ing it.
- *
- * Preconditions are re-checked inside the helper; it falls back (returns false)
- * to the normal deep-copy path for anything not provably safe to move (ANY
- * arrays, slices, Region-blob-backed data, aliased/non-unique refs).
- *
- * xr_chan_try_adopt_array_from_transit: recv side. On success *out is a
- *   receiver-heap array that stole the transit buffer, and the emptied transit
- *   struct has been released. */
-XR_FUNC bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine *recv_coro,
-                                                       XrValue *out);
-XR_FUNC bool xr_chan_try_adopt_array_from_transit(struct XrVMRuntime *X, XrValue value,
-                                                  struct XrCoroutine *recv_coro, XrValue *out);
 
 XR_FUNC bool xr_can_relocate(XrValue value);
 XR_FUNC XrValue xr_to_shared(struct XrVMRuntime *X, XrValue value);

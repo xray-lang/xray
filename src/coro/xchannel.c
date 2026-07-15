@@ -1479,7 +1479,7 @@ void xr_channel_close(XrChannel *ch) {
     }
 
     // Collect all waiting senders. Their parked values never reach a
-    // receiver: release the channel-side reference (transit graph or
+    // receiver: release the channel-side reference (owned message root or
     // shared +1) before resuming them with the closed status.
     while ((coro = xr_waitq_dequeue(&ch->sendq)) != NULL) {
         xr_chan_abandon_send_core(channel_core(ch), coro->ext->send_value);
