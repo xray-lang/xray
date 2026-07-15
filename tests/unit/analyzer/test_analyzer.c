@@ -1857,6 +1857,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "enum OtherErr { Boom }\n"
         "enum PayloadErr { Boom, Other, Payload(int) }\n"
         "struct CatchBox { value: CatchErr }\n"
+        "struct CatchPair { kept: CatchErr; changed: CatchErr }\n"
         "fn fail() { throw CatchErr.Boom }\n"
         "fn failOther() { throw OtherErr.Boom }\n"
         "fn failPayloadBoom() { throw PayloadErr.Boom }\n"
@@ -2025,6 +2026,36 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "    throw box[0]\n"
         "  }\n"
         "}\n"
+        "fn catchDynamicIndexRethrows(i: int) {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    var box = [CatchErr.Other, CatchErr.Other]\n"
+        "    box[i] = e\n"
+        "    throw box[i]\n"
+        "  }\n"
+        "}\n"
+        "fn catchDynamicIndexMismatchRethrows(i: int, j: int) {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    var box = [CatchErr.Other, CatchErr.Other]\n"
+        "    box[i] = e\n"
+        "    throw box[j]\n"
+        "  }\n"
+        "}\n"
+        "fn catchReassignedDynamicIndexInvalidates() {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    var i = 0\n"
+        "    var box = [CatchErr.Other, CatchErr.Other]\n"
+        "    box[i] = e\n"
+        "    i = 1\n"
+        "    throw box[i]\n"
+        "  }\n"
+        "}\n"
+        "fn catchArrayOtherSlotMutationPreserves() {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    var box = [e, e]\n"
+        "    box[1] = CatchErr.Other\n"
+        "    throw box[0]\n"
+        "  }\n"
+        "}\n"
         "fn catchStructFieldAliasRethrows() {\n"
         "  try { fail() } catch (e: CatchErr) {\n"
         "    const box = CatchBox{value: e}\n"
@@ -2036,6 +2067,13 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "    var box = CatchBox{value: e}\n"
         "    box.value = CatchErr.Other\n"
         "    throw box.value\n"
+        "  }\n"
+        "}\n"
+        "fn catchStructOtherFieldMutationPreserves() {\n"
+        "  try { fail() } catch (e: CatchErr) {\n"
+        "    var box = CatchPair{kept: e, changed: e}\n"
+        "    box.changed = CatchErr.Other\n"
+        "    throw box.kept\n"
         "  }\n"
         "}\n"
         "fn makeCatchArrayClosure() -> () -> () {\n"
@@ -2129,10 +2167,20 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         analyzer_function_effect_summary(a, "catchArrayAliasRethrows");
     const XaEffectSummary *catch_array_alias_invalidates =
         analyzer_function_effect_summary(a, "catchArrayAliasInvalidates");
+    const XaEffectSummary *catch_dynamic_index_rethrows =
+        analyzer_function_effect_summary(a, "catchDynamicIndexRethrows");
+    const XaEffectSummary *catch_dynamic_index_mismatch_rethrows =
+        analyzer_function_effect_summary(a, "catchDynamicIndexMismatchRethrows");
+    const XaEffectSummary *catch_reassigned_dynamic_index_invalidates =
+        analyzer_function_effect_summary(a, "catchReassignedDynamicIndexInvalidates");
+    const XaEffectSummary *catch_array_other_slot_mutation_preserves =
+        analyzer_function_effect_summary(a, "catchArrayOtherSlotMutationPreserves");
     const XaEffectSummary *catch_struct_field_alias_rethrows =
         analyzer_function_effect_summary(a, "catchStructFieldAliasRethrows");
     const XaEffectSummary *catch_struct_field_alias_invalidates =
         analyzer_function_effect_summary(a, "catchStructFieldAliasInvalidates");
+    const XaEffectSummary *catch_struct_other_field_mutation_preserves =
+        analyzer_function_effect_summary(a, "catchStructOtherFieldMutationPreserves");
     const XaEffectSummary *catch_closure_array_rethrows =
         analyzer_function_effect_summary(a, "catchClosureArrayRethrows");
     const XaEffectSummary *wrong_typed_rethrow =
@@ -2178,8 +2226,13 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     ASSERT(catch_closure_alias_invalidates != NULL);
     ASSERT(catch_array_alias_rethrows != NULL);
     ASSERT(catch_array_alias_invalidates != NULL);
+    ASSERT(catch_dynamic_index_rethrows != NULL);
+    ASSERT(catch_dynamic_index_mismatch_rethrows != NULL);
+    ASSERT(catch_reassigned_dynamic_index_invalidates != NULL);
+    ASSERT(catch_array_other_slot_mutation_preserves != NULL);
     ASSERT(catch_struct_field_alias_rethrows != NULL);
     ASSERT(catch_struct_field_alias_invalidates != NULL);
+    ASSERT(catch_struct_other_field_mutation_preserves != NULL);
     ASSERT(catch_closure_array_rethrows != NULL);
     ASSERT(wrong_typed_rethrow != NULL);
     ASSERT(catch_all_alias_rethrows != NULL);
@@ -2312,6 +2365,26 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         effect_summary_enum_set_named(a, catch_array_alias_invalidates, "CatchErr");
     ASSERT(array_invalidated_set != NULL);
     ASSERT(array_invalidated_set->all_variants);
+    const XaErrorTypeSet *dynamic_index_set =
+        effect_summary_enum_set_named(a, catch_dynamic_index_rethrows, "CatchErr");
+    ASSERT(dynamic_index_set != NULL);
+    ASSERT(!dynamic_index_set->all_variants);
+    ASSERT(xa_bitset_test(&dynamic_index_set->variants, 0));
+    ASSERT(!xa_bitset_test(&dynamic_index_set->variants, 1));
+    const XaErrorTypeSet *dynamic_index_mismatch_set =
+        effect_summary_enum_set_named(a, catch_dynamic_index_mismatch_rethrows, "CatchErr");
+    ASSERT(dynamic_index_mismatch_set != NULL);
+    ASSERT(dynamic_index_mismatch_set->all_variants);
+    const XaErrorTypeSet *reassigned_dynamic_index_set =
+        effect_summary_enum_set_named(a, catch_reassigned_dynamic_index_invalidates, "CatchErr");
+    ASSERT(reassigned_dynamic_index_set != NULL);
+    ASSERT(reassigned_dynamic_index_set->all_variants);
+    const XaErrorTypeSet *other_slot_preserved_set =
+        effect_summary_enum_set_named(a, catch_array_other_slot_mutation_preserves, "CatchErr");
+    ASSERT(other_slot_preserved_set != NULL);
+    ASSERT(!other_slot_preserved_set->all_variants);
+    ASSERT(xa_bitset_test(&other_slot_preserved_set->variants, 0));
+    ASSERT(!xa_bitset_test(&other_slot_preserved_set->variants, 1));
     const XaErrorTypeSet *struct_field_set =
         effect_summary_enum_set_named(a, catch_struct_field_alias_rethrows, "CatchErr");
     ASSERT(struct_field_set != NULL);
@@ -2322,6 +2395,12 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         effect_summary_enum_set_named(a, catch_struct_field_alias_invalidates, "CatchErr");
     ASSERT(struct_field_invalidated_set != NULL);
     ASSERT(struct_field_invalidated_set->all_variants);
+    const XaErrorTypeSet *other_field_preserved_set =
+        effect_summary_enum_set_named(a, catch_struct_other_field_mutation_preserves, "CatchErr");
+    ASSERT(other_field_preserved_set != NULL);
+    ASSERT(!other_field_preserved_set->all_variants);
+    ASSERT(xa_bitset_test(&other_field_preserved_set->variants, 0));
+    ASSERT(!xa_bitset_test(&other_field_preserved_set->variants, 1));
     const XaErrorTypeSet *closure_array_set =
         effect_summary_enum_set_named(a, catch_closure_array_rethrows, "CatchErr");
     ASSERT(closure_array_set != NULL);
