@@ -10,8 +10,13 @@
 
 #include "xvalue_hash.h"
 #include "../../base/xchecks.h"
+#include "../../shared/xr_hash_core.h"
+#include "../class/xclass.h"
+#include "../class/xinstance.h"
 #include "../object/xstring.h"
 #include <math.h>
+
+#define XR_DERIVED_HASH_MAX_DEPTH 64
 
 uint32_t xr_hash_string(XrString *str) {
     XR_DCHECK(str != NULL, "hash_string: NULL string");
@@ -25,7 +30,7 @@ uint32_t xr_hash_string(XrString *str) {
     return str->hash;
 }
 
-uint32_t xr_hash_value(XrValue val) {
+static uint32_t xr_hash_value_depth(XrValue val, uint32_t depth) {
     switch (val.tag) {
         case XR_TAG_NULL:
             return XR_HASH_NULL;
@@ -41,6 +46,25 @@ uint32_t xr_hash_value(XrValue val) {
             if (val.heap_type == XR_TSTRING) {
                 return xr_hash_string(XR_TO_STRING(val));
             }
+            if (val.heap_type == XR_TINSTANCE && val.ptr) {
+                XrInstance *instance = (XrInstance *) val.ptr;
+                XrClass *cls = instance->klass;
+                if (cls && (cls->flags & XR_CLASS_DERIVE_HASH) != 0) {
+                    uint64_t hash = xr_hash_core_mix_u64((uint64_t) (uintptr_t) cls);
+                    if (depth >= XR_DERIVED_HASH_MAX_DEPTH) {
+                        uint32_t capped = (uint32_t) hash;
+                        return capped ? capped : 1u;
+                    }
+                    uint32_t field_count = xr_class_instance_field_count(cls);
+                    for (uint32_t i = 0; i < field_count; i++) {
+                        uint32_t field_hash = xr_hash_value_depth(instance->fields[i], depth + 1u);
+                        hash ^= (uint64_t) field_hash + UINT64_C(0x9e3779b97f4a7c15) + (hash << 6) +
+                                (hash >> 2);
+                    }
+                    uint32_t folded = (uint32_t) (hash ^ (hash >> 32));
+                    return folded ? folded : 1u;
+                }
+            }
             {
                 uintptr_t ptr = (uintptr_t) val.ptr;
                 return (uint32_t) (ptr ^ (ptr >> 16));
@@ -48,6 +72,10 @@ uint32_t xr_hash_value(XrValue val) {
         default:
             return 0;
     }
+}
+
+uint32_t xr_hash_value(XrValue val) {
+    return xr_hash_value_depth(val, 0);
 }
 
 bool xr_value_eq(XrValue a, XrValue b) {
@@ -89,6 +117,12 @@ bool xr_value_eq(XrValue a, XrValue b) {
     }
     // Heap objects: pointer (reference) equality
     if (XR_IS_PTR(a) && XR_IS_PTR(b)) {
+        if (a.heap_type == XR_TINSTANCE && b.heap_type == XR_TINSTANCE && a.ptr && b.ptr) {
+            XrInstance *ia = (XrInstance *) a.ptr;
+            XrInstance *ib = (XrInstance *) b.ptr;
+            if (ia->klass && ia->klass == ib->klass && (ia->klass->flags & XR_CLASS_DERIVE_EQ) != 0)
+                return xr_value_deep_eq(a, b);
+        }
         return XR_TO_PTR(a) == XR_TO_PTR(b);
     }
     return false;

@@ -1,0 +1,28 @@
+@derive(Eq, Hash)
+class Key {
+    id: int
+    name: string
+
+    constructor(id: int, name: string) {
+        this.id = id
+        this.name = name
+    }
+}
+
+fn main() {
+    var values: Map<Key, int> = #{}
+    var keys: Set<Key> = #[]
+    var inserted = Key(7, "alpha")
+    values.set(inserted, 41)
+    keys.add(inserted)
+
+    var equal = Key(7, "alpha")
+    var different = Key(8, "alpha")
+    print(values.containsKey(equal))
+    print(values.get(equal))
+    print(keys.contains(equal))
+    print(values.containsKey(different))
+    print(keys.contains(different))
+}
+
+main()
