@@ -1,0 +1,10 @@
+fn worker() -> int {
+    Coro.yield()
+    return 5
+}
+
+var values: Array<int> = [1, 2, 3, 4]
+var savedLength = len(values)
+var task = go worker()
+print(await task)
+print(savedLength)
