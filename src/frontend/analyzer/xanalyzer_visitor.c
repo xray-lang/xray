@@ -1905,7 +1905,9 @@ static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
         *out_links = NULL;
     if (!ctx || !ctx->analyzer || !type)
         return NULL;
-    if (!XR_TYPE_IS_INSTANCE(type) && !XR_TYPE_IS_CLASS(type))
+    if (XR_TYPE_IS_POINTER(type) && type->ptr_is_c_view)
+        type = type->container.element_type;
+    if (!type || (!XR_TYPE_IS_INSTANCE(type) && !XR_TYPE_IS_CLASS(type)))
         return NULL;
 
     XrClassInfo *info = type->instance.class_ref;
@@ -1927,6 +1929,16 @@ static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
             info = links->class_info;
     }
     return info;
+}
+
+static int member_set_layout_field_index(const XrAggregateLayout *layout, const char *name) {
+    if (!layout || !layout->field_names || !name)
+        return -1;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        if (layout->field_names[i] && strcmp(layout->field_names[i], name) == 0)
+            return (int) i;
+    }
+    return -1;
 }
 
 XR_FUNC XaSymbol *xa_in_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
@@ -4995,6 +5007,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType *ca_obj_type = NULL;
             if (ca->object)
                 ca_obj_type = xa_visit_infer_expr(ctx, ca->object);
+            if (ca_obj_type && XR_TYPE_IS_POINTER(ca_obj_type) && ca_obj_type->ptr_is_c_view &&
+                !ca_obj_type->ptr_is_mut) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
+                    "cannot assign through a const mem.view created from Ptr<T>; use MutPtr<T>",
+                    &loc);
+            }
             // Tuples are immutable: reject compound assignment on tuple fields
             if (ca_obj_type && XR_TYPE_IS_TUPLE(ca_obj_type)) {
                 XrLocation loc = {
@@ -5072,6 +5093,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Infer types for member set expression
             MemberSetNode *ms = &node->as.member_set;
             XrType *obj_type = xa_visit_infer_expr(ctx, ms->object);
+            bool is_c_view = obj_type && XR_TYPE_IS_POINTER(obj_type) && obj_type->ptr_is_c_view;
+            if (is_c_view && !obj_type->ptr_is_mut) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
+                    "cannot assign through a const mem.view created from Ptr<T>; use MutPtr<T>",
+                    &loc);
+            }
             XaSymbol *readonly_root = xa_root_variable_symbol_for_expr(ctx, ms->object);
             bool readonly_object = xr_type_is_const(obj_type);
             if ((readonly_root && (readonly_root->is_readonly_binding ||
@@ -5146,6 +5176,29 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                                                            class_links, fl->type);
                             if (member_type && !XR_TYPE_IS_UNKNOWN(member_type))
                                 ctx->expected_type = member_type;
+                        }
+                    }
+                    if (is_c_view && class_info->struct_layout) {
+                        int field_index =
+                            member_set_layout_field_index(class_info->struct_layout, ms->member);
+                        if (field_index >= 0) {
+                            XrAggregateFieldLayout *layout_field =
+                                &class_info->struct_layout->fields[field_index];
+                            if (layout_field->is_flexible ||
+                                layout_field->native_type == XR_NATIVE_ARRAY ||
+                                layout_field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+                                XrLocation loc = {.file = ctx->file_path,
+                                                  .line = node->line,
+                                                  .column = node->column};
+                                char msg[256];
+                                snprintf(msg, sizeof(msg),
+                                         "C view field '%s.%s' cannot be assigned as a whole; "
+                                         "write through a validated element or nested projection",
+                                         class_info->name ? class_info->name : "?",
+                                         ms->member ? ms->member : "?");
+                                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                           XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+                            }
                         }
                     }
                 }

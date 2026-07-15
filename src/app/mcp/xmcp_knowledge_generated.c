@@ -2288,6 +2288,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset",
     },
     {
+        .name = "view",
+        .signature = "(ptr: Ptr<byte>): Ptr<byte>",
+        .summary = "Unsafe zero-cost typed projection of a raw pointer onto an extern C struct or union T",
+    },
+    {
         .name = "volatileLoad",
         .signature = "(ptr: Ptr<byte>, size: int): int",
         .summary = "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)",
@@ -6477,6 +6482,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.set` | `(dst: MutPtr<byte>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
             "| `mem.sizeOf` | `(): int` | Compile-time size in bytes of a statically laid out type T |\n"
             "| `mem.store` | `(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()` | Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset |\n"
+            "| `mem.view` | `(ptr: Ptr<byte>): Ptr<byte>` | Unsafe zero-cost typed projection of a raw pointer onto an extern C struct or union T |\n"
             "| `mem.volatileLoad` | `(ptr: Ptr<byte>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "| `mem.volatileStore` | `(ptr: MutPtr<byte>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "",

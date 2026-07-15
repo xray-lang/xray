@@ -2690,6 +2690,17 @@ module mem {
     layer: "core"
   }
 
+  fn view {
+    signature: "(ptr: Ptr<byte>): Ptr<byte>"
+    doc: "Unsafe zero-cost typed projection of a raw pointer onto an extern C struct or union T"
+    vm: "mem_view_intrinsic"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: false
+    link_object: false
+    layer: "core"
+  }
+
   const PROT_NONE {
     signature: ": int"
     doc: "No access protection for mem.pageAlloc/pageProtect"

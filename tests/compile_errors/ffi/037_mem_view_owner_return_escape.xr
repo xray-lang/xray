@@ -1,0 +1,14 @@
+import mem
+
+extern "C" {
+    struct Header {
+        value: uint32
+    }
+}
+
+fn leak() -> MutPtr<Header> {
+    var buffer = mem.alloc(mem.sizeOf<Header>())
+    return unsafe { mem.view<Header>(buffer.borrowPtr()) }
+}
+
+print(leak().isNull())

@@ -277,6 +277,18 @@ bool xa_pointer_provenance_for_expr(XaInferContext *ctx, AstNode *expr, XaPointe
         CallExprNode *call = &direct->as.call_expr;
         if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
             MemberAccessNode *member = &call->callee->as.member_access;
+            if (member->name && strcmp(member->name, "view") == 0 && member->object &&
+                member->object->type == AST_VARIABLE && member->object->as.variable.name &&
+                call->arg_count == 1 && call->arguments && call->arguments[0]) {
+                bool is_mem = strcmp(member->object->as.variable.name, "mem") == 0;
+                XaSymbol *module_symbol = address_symbol(ctx, member->object);
+                XaSymbolLinks *module_links =
+                    module_symbol ? xa_analyzer_get_links(ctx->analyzer, module_symbol) : NULL;
+                is_mem = is_mem || (module_links && module_links->module_name &&
+                                    strcmp(module_links->module_name, "mem") == 0);
+                if (is_mem)
+                    return xa_pointer_provenance_for_expr(ctx, call->arguments[0], out);
+            }
             if (member->name && strcmp(member->name, "offset") == 0 && member->object)
                 return xa_pointer_provenance_for_expr(ctx, member->object, out);
             if (member->name && strcmp(member->name, "null") == 0 && member->object &&
@@ -288,6 +300,9 @@ bool xa_pointer_provenance_for_expr(XaInferContext *ctx, AstNode *expr, XaPointe
         pointer_set_foreign(out, pointer_type);
         return true;
     }
+    if (direct->type == AST_MEMBER_ACCESS && pointer_type && XR_TYPE_IS_POINTER(pointer_type) &&
+        pointer_type->ptr_is_c_view && direct->as.member_access.object)
+        return xa_pointer_provenance_for_expr(ctx, direct->as.member_access.object, out);
 
     if (pointer_type && XR_TYPE_IS_POINTER(pointer_type)) {
         pointer_set_foreign(out, pointer_type);

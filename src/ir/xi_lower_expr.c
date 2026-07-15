@@ -1556,6 +1556,24 @@ static XiValue *lower_mem_pointer_constructor_call(XiLower *l, AstNode *node, Ca
     return v;
 }
 
+static XiValue *lower_mem_view_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                    const char *member) {
+    if (!l || !node || !call || !member || strcmp(member, "view") != 0 || call->arg_count != 1 ||
+        call->type_arg_count != 1 || !call->arguments || !call->arguments[0])
+        return NULL;
+    XiValue *ptr = xi_lower_expr(l, call->arguments[0]);
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    if (!ptr || !ptr->type || !XR_TYPE_IS_POINTER(ptr->type) || !result_type ||
+        !XR_TYPE_IS_POINTER(result_type) || !result_type->ptr_is_c_view)
+        return NULL;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CONVERT, result_type, 1);
+    if (!v)
+        return NULL;
+    v->args[0] = ptr;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
 static bool lower_math_constant(XiLower *l, const char *name, XiValue **out) {
     if (!out)
         return false;
@@ -1744,6 +1762,51 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         (!result_type || result_type->kind == XR_KIND_UNKNOWN))
         result_type = sel->result_type;
 
+    XrAggregateLayout *c_view_layout = NULL;
+    if (obj->type && XR_TYPE_IS_POINTER(obj->type) && obj->type->ptr_is_c_view &&
+        obj->type->container.element_type) {
+        XrType *pointee = obj->type->container.element_type;
+        XrClassInfo *info = XR_TYPE_IS_INSTANCE(pointee) ? pointee->instance.class_ref : NULL;
+        if (info && info->is_extern_layout && info->struct_layout &&
+            info->struct_layout->is_extern_layout)
+            c_view_layout = info->struct_layout;
+    }
+    if (c_view_layout) {
+        int field_index = xi_lower_struct_field_index(c_view_layout, ma->name);
+        if (field_index >= 0) {
+            XrAggregateFieldLayout *field = &c_view_layout->fields[field_index];
+            if (field->is_flexible || field->native_type == XR_NATIVE_ARRAY)
+                return NULL;
+            XiValue *offset =
+                xi_const_int(l->func, l->cur_block, (int64_t) field->offset, l->type_int);
+            struct XrType *address_type =
+                field->native_type == XR_NATIVE_NESTED_AGGREGATE ? result_type : obj->type;
+            XiValue *address = xi_value_new(l->func, l->cur_block, XI_ADD, address_type, 2);
+            if (!offset || !address)
+                return NULL;
+            address->args[0] = obj;
+            address->args[1] = offset;
+            address->line = (uint32_t) node->line;
+            if (field->native_type == XR_NATIVE_NESTED_AGGREGATE)
+                return address;
+
+            uint8_t code = xr_ffi_type_from_xrtype(result_type, false);
+            if (code == XR_FFI_T_VOID || code > XR_FFI_T_PTR)
+                return NULL;
+            XiValue *endian = xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 2);
+            if (!endian || !v)
+                return NULL;
+            v->args[0] = address;
+            v->args[1] = endian;
+            v->aux_int =
+                (int64_t) xr_ffi_ptr_aux(code, c_view_layout->kind == XR_AGG_LAYOUT_PACKED_STRUCT);
+            v->flags |= XI_FLAG_READS_MEM;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+    }
+
     /* Struct with compile-time layout → XI_AGG_GET (emitter decides
      * whether to stack-allocate or fall back to OP_GETPROP) */
     XrAggregateLayout *slayout = xi_lower_value_struct_layout(l, obj);
@@ -1844,6 +1907,49 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     obj = lower_member_set_target(obj);
 
     struct XrType *result_type = val->type;
+
+    XrAggregateLayout *c_view_layout = NULL;
+    if (obj->type && XR_TYPE_IS_POINTER(obj->type) && obj->type->ptr_is_c_view &&
+        obj->type->ptr_is_mut && obj->type->container.element_type) {
+        XrType *pointee = obj->type->container.element_type;
+        XrClassInfo *info = XR_TYPE_IS_INSTANCE(pointee) ? pointee->instance.class_ref : NULL;
+        if (info && info->is_extern_layout && info->struct_layout &&
+            info->struct_layout->is_extern_layout)
+            c_view_layout = info->struct_layout;
+    }
+    if (c_view_layout) {
+        int field_index = xi_lower_struct_field_index(c_view_layout, ms->member);
+        if (field_index >= 0) {
+            XrAggregateFieldLayout *field = &c_view_layout->fields[field_index];
+            if (field->is_flexible || field->native_type == XR_NATIVE_ARRAY ||
+                field->native_type == XR_NATIVE_NESTED_AGGREGATE)
+                return NULL;
+            val = xi_lower_narrow_for_native_field(l, node, val, field->native_type);
+            XiValue *offset =
+                xi_const_int(l->func, l->cur_block, (int64_t) field->offset, l->type_int);
+            XiValue *address = xi_value_new(l->func, l->cur_block, XI_ADD, obj->type, 2);
+            if (!offset || !address)
+                return NULL;
+            address->args[0] = obj;
+            address->args[1] = offset;
+            address->line = (uint32_t) node->line;
+            uint8_t code = xr_ffi_type_from_xrtype(val->type, false);
+            if (code == XR_FFI_T_VOID || code > XR_FFI_T_PTR)
+                return NULL;
+            XiValue *endian = xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_STORE, l->type_unit, 3);
+            if (!endian || !v)
+                return NULL;
+            v->args[0] = address;
+            v->args[1] = val;
+            v->args[2] = endian;
+            v->aux_int =
+                (int64_t) xr_ffi_ptr_aux(code, c_view_layout->kind == XR_AGG_LAYOUT_PACKED_STRUCT);
+            v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+    }
 
     /* Struct with compile-time layout → XI_AGG_SET */
     XrAggregateLayout *slayout = xi_lower_value_struct_layout(l, obj);
@@ -4888,6 +4994,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *pointer = lower_mem_pointer_constructor_call(l, node, call, ma->name);
             if (pointer)
                 return pointer;
+            XiValue *view = lower_mem_view_call(l, node, call, ma->name);
+            if (view)
+                return view;
             XiValue *addr = lower_mem_addr_pointer_call(l, node, call, ma->name);
             if (addr)
                 return addr;
@@ -4965,6 +5074,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *pointer = lower_mem_pointer_constructor_call(l, node, call, ma->name);
             if (pointer)
                 return pointer;
+            XiValue *view = lower_mem_view_call(l, node, call, ma->name);
+            if (view)
+                return view;
             XiValue *addr = lower_mem_addr_pointer_call(l, node, call, ma->name);
             if (addr)
                 return addr;

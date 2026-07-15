@@ -1,0 +1,10 @@
+import mem
+
+extern "C" {
+    struct Header {
+        value: uint32
+    }
+}
+
+var view = unsafe { mem.view<Header>(42) }
+print(view.value)
