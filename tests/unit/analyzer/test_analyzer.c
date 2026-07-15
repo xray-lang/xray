@@ -1315,14 +1315,19 @@ TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
 
     const char *source =
         "enum GenericIntErr { Boom }\n"
+        "enum GenericOtherIntErr { Boom }\n"
         "enum GenericStringErr { Boom }\n"
         "fn failGenericInt(x: int) -> int { throw GenericIntErr.Boom }\n"
+        "fn failGenericOtherInt(x: int) -> int { throw GenericOtherIntErr.Boom }\n"
         "fn failGenericString(x: string) -> string { throw GenericStringErr.Boom }\n"
         "fn runGeneric<T>(x: T, cb: (T) -> T) -> T {\n"
         "  return cb(x)\n"
         "}\n"
         "fn viaGenericInt() {\n"
         "  runGeneric<int>(1, failGenericInt)\n"
+        "}\n"
+        "fn viaGenericIntOther() {\n"
+        "  runGeneric<int>(2, failGenericOtherInt)\n"
         "}\n"
         "fn viaGenericString() {\n"
         "  runGeneric<string>(\"x\", failGenericString)\n"
@@ -1337,11 +1342,14 @@ TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
     ASSERT(!analyzer_diag_contains(a, "error"));
 
     const XaEffectSummary *generic_int = analyzer_function_effect_summary(a, "viaGenericInt");
+    const XaEffectSummary *generic_int_other =
+        analyzer_function_effect_summary(a, "viaGenericIntOther");
     const XaEffectSummary *generic_string = analyzer_function_effect_summary(a, "viaGenericString");
     const XaEffectSummary *specialized_int = analyzer_function_effect_summary(a, "runGeneric$i64");
     const XaEffectSummary *specialized_string =
         analyzer_function_effect_summary(a, "runGeneric$str");
     ASSERT(generic_int != NULL);
+    ASSERT(generic_int_other != NULL);
     ASSERT(generic_string != NULL);
     ASSERT(specialized_int != NULL);
     ASSERT(specialized_string != NULL);
@@ -1349,15 +1357,28 @@ TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
     ASSERT(generic_int->completeness == XA_EFFECT_COMPLETE);
     ASSERT((generic_int->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, generic_int, "GenericIntErr"));
+    ASSERT(!effect_summary_has_enum_named(a, generic_int, "GenericOtherIntErr"));
     ASSERT(!effect_summary_has_enum_named(a, generic_int, "GenericStringErr"));
+    ASSERT(generic_int_other->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((generic_int_other->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(!effect_summary_has_enum_named(a, generic_int_other, "GenericIntErr"));
+    ASSERT(effect_summary_has_enum_named(a, generic_int_other, "GenericOtherIntErr"));
+    ASSERT(!effect_summary_has_enum_named(a, generic_int_other, "GenericStringErr"));
     ASSERT(generic_string->completeness == XA_EFFECT_COMPLETE);
     ASSERT((generic_string->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(!effect_summary_has_enum_named(a, generic_string, "GenericIntErr"));
+    ASSERT(!effect_summary_has_enum_named(a, generic_string, "GenericOtherIntErr"));
     ASSERT(effect_summary_has_enum_named(a, generic_string, "GenericStringErr"));
-    ASSERT(specialized_int->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((specialized_int->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
-    ASSERT(specialized_string->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((specialized_string->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(specialized_int->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((specialized_int->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, specialized_int, "GenericIntErr"));
+    ASSERT(effect_summary_has_enum_named(a, specialized_int, "GenericOtherIntErr"));
+    ASSERT(!effect_summary_has_enum_named(a, specialized_int, "GenericStringErr"));
+    ASSERT(specialized_string->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((specialized_string->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(!effect_summary_has_enum_named(a, specialized_string, "GenericIntErr"));
+    ASSERT(!effect_summary_has_enum_named(a, specialized_string, "GenericOtherIntErr"));
+    ASSERT(effect_summary_has_enum_named(a, specialized_string, "GenericStringErr"));
 
     xa_analyzer_free(a);
     setup_pool();
