@@ -5,3 +5,5 @@ tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr
 tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr
 tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr
 tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr
+tests/diff/cases/semantics/stdlib/http_request_message_pure_direct.xr
+tests/diff/cases/semantics/stdlib/http_response_text_pure_direct.xr
