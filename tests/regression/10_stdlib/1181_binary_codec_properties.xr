@@ -1,0 +1,193 @@
+// 1181_binary_codec_properties.xr - task-200 KAT and deterministic property fuzz
+
+import base64
+import encoding
+import {
+    Base64Alphabet,
+    Base64DecodeOptions,
+    Base64EncodeOptions,
+    Base64PaddingPolicy
+} from base64
+import { Utf16DecodeOptions, Utf16EncodeOptions } from encoding
+
+const ALL_BYTES_HEX = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
+
+fn sameBytes(a: Array<byte>, b: Array<byte>) -> bool {
+    if (len(a) != len(b)) { return false }
+    for (var i = 0; i < len(a); i++) {
+        if (a[i] != b[i]) { return false }
+    }
+    return true
+}
+
+fn nextState(state: int) -> int {
+    return (state * 48271) % 2147483647
+}
+
+fn fuzzBytes(length: int, seed: int) -> Array<byte> {
+    var out = Array<byte>(length)
+    var state = seed
+    for (var i = 0; i < length; i++) {
+        state = nextState(state)
+        out[i] = state & 255
+    }
+    return out
+}
+
+fn encodeText(text: string) -> string {
+    return base64.encode(text.bytes())
+}
+
+fn urlEncodeOptions() -> Base64EncodeOptions {
+    var options = Base64EncodeOptions()
+    options.alphabet = Base64Alphabet.UrlSafe
+    options.padding = false
+    return options
+}
+
+fn urlDecodeOptions() -> Base64DecodeOptions {
+    var options = Base64DecodeOptions()
+    options.alphabet = Base64Alphabet.UrlSafe
+    options.padding = Base64PaddingPolicy.Forbidden
+    return options
+}
+
+fn utf16EncodeOptions(order: Endian) -> Utf16EncodeOptions {
+    var options = Utf16EncodeOptions()
+    options.order = order
+    return options
+}
+
+fn utf16DecodeOptions(order: Endian, consumeBom: bool = true) -> Utf16DecodeOptions {
+    var options = Utf16DecodeOptions()
+    options.order = order
+    options.consumeBom = consumeBom
+    return options
+}
+
+@test
+fn test_base64_full_rfc4648_vectors() {
+    assert_eq(encodeText(""), "")
+    assert_eq(encodeText("f"), "Zg==")
+    assert_eq(encodeText("fo"), "Zm8=")
+    assert_eq(encodeText("foo"), "Zm9v")
+    assert_eq(encodeText("foob"), "Zm9vYg==")
+    assert_eq(encodeText("fooba"), "Zm9vYmE=")
+    assert_eq(encodeText("foobar"), "Zm9vYmFy")
+}
+
+@test
+fn test_base64_independent_all_byte_aggregate() {
+    var aggregate = 0
+    for (var value = 0; value < 256; value++) {
+        var one = Array<byte>(1)
+        one[0] = value
+        var encoded = base64.encode(one[:])
+        var encodedBytes: Slice<byte> = encoded.bytes()
+        for (var i = 0; i < len(encodedBytes); i++) {
+            var encodedByte: int = encodedBytes[i]
+            aggregate = ((aggregate * 257) + encodedByte) % 1000000007
+        }
+    }
+    // Python base64.b64encode reference over byte values 0...255.
+    assert_eq(aggregate, 544432900)
+}
+
+@test
+fn test_base64_deterministic_roundtrip_fuzz() {
+    for (var length = 0; length <= 128; length++) {
+        var input = fuzzBytes(length, 97 + length)
+        var standard = base64.decode(base64.encode(input[:]))
+        assert(sameBytes(input, standard))
+
+        var encodedUrl = base64.encode(input[:], urlEncodeOptions())
+        var decodedUrl = base64.decode(encodedUrl, urlDecodeOptions())
+        assert(sameBytes(input, decodedUrl))
+    }
+}
+
+@test
+fn test_hex_full_byte_kat() {
+    var allBytes = Array<byte>(256)
+    for (var i = 0; i < 256; i++) { allBytes[i] = i }
+    assert_eq(encoding.hexEncode(allBytes[:]), ALL_BYTES_HEX)
+    assert(sameBytes(encoding.hexDecode(ALL_BYTES_HEX), allBytes))
+}
+
+@test
+fn test_hex_deterministic_roundtrip_fuzz() {
+    for (var length = 0; length <= 128; length++) {
+        var input = fuzzBytes(length, 193 + length)
+        var decoded = encoding.hexDecode(encoding.hexEncode(input[:]))
+        assert(sameBytes(input, decoded))
+    }
+}
+
+@test
+fn test_utf8_exhaustive_single_and_two_byte_space() {
+    var one = Array<byte>(1)
+    for (var value = 0; value < 256; value++) {
+        one[0] = value
+        assert_eq(encoding.utf8Valid(one[:]), value < 128)
+    }
+
+    var pair = Array<byte>(2)
+    for (var lead = 0xC2; lead <= 0xDF; lead++) {
+        pair[0] = lead
+        for (var trail = 0x80; trail <= 0xBF; trail++) {
+            pair[1] = trail
+            assert(encoding.utf8Valid(pair[:]))
+        }
+    }
+}
+
+@test
+fn test_utf8_scalar_boundaries() {
+    var minimumThree = Array<byte>(3)
+    minimumThree[0] = 0xE0
+    minimumThree[1] = 0xA0
+    minimumThree[2] = 0x80
+    assert(encoding.utf8Valid(minimumThree[:]))
+    minimumThree[1] = 0x9F
+    assert_eq(encoding.utf8Valid(minimumThree[:]), false)
+
+    var surrogate = Array<byte>(3)
+    surrogate[0] = 0xED
+    surrogate[1] = 0xA0
+    surrogate[2] = 0x80
+    assert_eq(encoding.utf8Valid(surrogate[:]), false)
+
+    var maximum = Array<byte>(4)
+    maximum[0] = 0xF4
+    maximum[1] = 0x8F
+    maximum[2] = 0xBF
+    maximum[3] = 0xBF
+    assert(encoding.utf8Valid(maximum[:]))
+    maximum[1] = 0x90
+    assert_eq(encoding.utf8Valid(maximum[:]), false)
+}
+
+@test
+fn test_utf16_supplementary_kat_and_roundtrip() {
+    var text = "A😀𝄞"
+    var le = encoding.utf16Encode(text)
+    assert_eq(len(le), 10)
+    assert_eq(le[0], 0x41)
+    assert_eq(le[1], 0x00)
+    assert_eq(le[2], 0x3D)
+    assert_eq(le[3], 0xD8)
+    assert_eq(le[4], 0x00)
+    assert_eq(le[5], 0xDE)
+    assert_eq(le[6], 0x34)
+    assert_eq(le[7], 0xD8)
+    assert_eq(le[8], 0x1E)
+    assert_eq(le[9], 0xDD)
+    assert_eq(encoding.utf16Decode(le[:]), text)
+
+    var be = encoding.utf16Encode(text, utf16EncodeOptions(Endian.BE))
+    assert_eq(be[0], 0x00)
+    assert_eq(be[1], 0x41)
+    assert_eq(be[2], 0xD8)
+    assert_eq(be[3], 0x3D)
+    assert_eq(encoding.utf16Decode(be[:], utf16DecodeOptions(Endian.BE)), text)
+}

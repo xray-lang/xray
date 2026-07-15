@@ -1,0 +1,3 @@
+tests/diff/cases/semantics/stdlib/encoding_module.xr
+tests/diff/cases/semantics/stdlib/encoding_core_direct.xr
+tests/diff/cases/semantics/stdlib/encoding_property_direct.xr
