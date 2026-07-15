@@ -1,6 +1,6 @@
 schema = 1
 module = "crypto"
-contract_revision = 1
+contract_revision = 2
 legacy_commit = "d5cfcb587219468fde5bf8cda6cb76df875cf25b"
 legacy_oracle = "classification_only"
 legacy_public_surface = [
