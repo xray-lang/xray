@@ -9,7 +9,7 @@
 
 @test
 fn test_weakmap_weakset() {
-    var wm = WeakMap()
+    var wm = WeakMap<Json, Json>()
     var key1 = { name: "alice" }
     var key2 = { name: "bob" }
     wm.set(key1, "value1")
@@ -58,7 +58,7 @@ fn test_weakmap_weakset() {
     // ========== WeakSet tests ==========
 
     // Test 7: create and add/has
-    var ws = WeakSet()
+    var ws = WeakSet<Json>()
     var obj1 = { id: 1 }
     var obj2 = { id: 2 }
     assert_eq(ws.contains(obj1), false)
@@ -75,7 +75,7 @@ fn test_weakmap_weakset() {
     print("PASS: weakset delete")
 
     // Test 9: no duplicates
-    var ws2 = WeakSet()
+    var ws2 = WeakSet<Json>()
     var obj3 = { unique: true }
     ws2.add(obj3)
     ws2.add(obj3)
@@ -83,4 +83,3 @@ fn test_weakmap_weakset() {
     assert_eq(ws2.contains(obj3), true)
     print("PASS: weakset no duplicates")
 }
-
