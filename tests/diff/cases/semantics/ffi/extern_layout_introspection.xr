@@ -1,0 +1,71 @@
+import mem
+
+extern "C" {
+    struct CScalar {
+        tag: uint8
+        count: uint32
+    }
+
+    struct CPointer {
+        next: Ptr<byte>
+    }
+
+    struct CArray {
+        samples: [uint16; 3]
+    }
+
+    struct CHeader {
+        tag: uint8
+        count: uint32
+        next: Ptr<byte>
+        samples: [uint16; 3]
+    }
+
+    union CWord {
+        word: uint32
+        bytes: [uint8; 4]
+    }
+
+    struct CEnvelope {
+        header: CHeader
+        word: CWord
+    }
+}
+
+comptime {
+    compile_assert(mem.sizeOf<CScalar>() == 8)
+    compile_assert(mem.sizeOf<CPointer>() == 8)
+    compile_assert(mem.sizeOf<CArray>() == 6)
+    compile_assert(mem.sizeOf<CHeader>() == 24)
+    compile_assert(mem.alignOf<CHeader>() == 8)
+    compile_assert(mem.offsetOf<CHeader>("tag") == 0)
+    compile_assert(mem.offsetOf<CHeader>("count") == 4)
+    compile_assert(mem.offsetOf<CHeader>("next") == 8)
+    compile_assert(mem.offsetOf<CHeader>("samples") == 16)
+    compile_assert(mem.sizeOf<CWord>() == 4)
+    compile_assert(mem.alignOf<CWord>() == 4)
+    compile_assert(mem.offsetOf<CWord>("word") == 0)
+    compile_assert(mem.offsetOf<CWord>("bytes") == 0)
+    compile_assert(mem.sizeOf<CEnvelope>() == 32)
+    compile_assert(mem.alignOf<CEnvelope>() == 8)
+    compile_assert(mem.offsetOf<CEnvelope>("header") == 0)
+    compile_assert(mem.offsetOf<CEnvelope>("word") == 24)
+}
+
+print(mem.sizeOf<CScalar>())
+print(mem.sizeOf<CPointer>())
+print(mem.sizeOf<CArray>())
+print(mem.sizeOf<CHeader>())
+print(mem.alignOf<CHeader>())
+print(mem.offsetOf<CHeader>("tag"))
+print(mem.offsetOf<CHeader>("count"))
+print(mem.offsetOf<CHeader>("next"))
+print(mem.offsetOf<CHeader>("samples"))
+print(mem.sizeOf<CWord>())
+print(mem.alignOf<CWord>())
+print(mem.offsetOf<CWord>("word"))
+print(mem.offsetOf<CWord>("bytes"))
+print(mem.sizeOf<CEnvelope>())
+print(mem.alignOf<CEnvelope>())
+print(mem.offsetOf<CEnvelope>("header"))
+print(mem.offsetOf<CEnvelope>("word"))

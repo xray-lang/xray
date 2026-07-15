@@ -184,6 +184,7 @@ typedef struct XrValue {
 #define XR_NATIVE_VALUE 17
 #define XR_NATIVE_ISIZE 18
 #define XR_NATIVE_USIZE 19
+#define XR_NATIVE_POINTER 20
 
 #define XR_FROM_INT(x) ((XrValue) {.tag = XR_TAG_I64, .i = (int64_t) (x)})
 #define XR_FROM_FLOAT(x) ((XrValue) {.tag = XR_TAG_F64, .f = (double) (x)})
@@ -689,6 +690,8 @@ static inline size_t xrt_value_native_type_size(uint8_t native_type) {
             return sizeof(ptrdiff_t);
         case XR_NATIVE_USIZE:
             return sizeof(size_t);
+        case XR_NATIVE_POINTER:
+            return sizeof(void *);
         case XR_NATIVE_VALUE:
             return sizeof(XrValue);
         default:

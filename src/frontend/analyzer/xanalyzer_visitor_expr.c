@@ -3258,6 +3258,16 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    if (class_info && class_info->is_extern_layout) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+            "extern layout types cannot be constructed as Xray values; obtain a typed view from "
+            "raw memory instead",
+            &loc);
+        return xr_type_new_error(NULL);
+    }
+
     // Caller-side default argument filling for constructors (C1): complete
     // omitted trailing constructor arguments with session-cloned default
     // expressions so they are evaluated at the construction site rather than
@@ -3535,6 +3545,16 @@ XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
     if (class_sym && class_sym->kind == XA_SYM_CLASS) {
         links = xa_analyzer_get_links(ctx->analyzer, class_sym);
         class_info = links ? links->class_info : NULL;
+    }
+
+    if (class_info && class_info->is_extern_layout) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+            "extern layout types cannot be constructed as Xray values; obtain a typed view from "
+            "raw memory instead",
+            &loc);
+        return xr_type_new_error(NULL);
     }
 
     XrType *resolved_targs_buf[8] = {0};

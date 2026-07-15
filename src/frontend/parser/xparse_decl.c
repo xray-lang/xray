@@ -646,6 +646,7 @@ static void xr_function_append_attribute(Parser *parser, AstNode *node, XrAttrib
  *
  *   extern "C" dylib("m") {
  *       fn cos(x: float64) -> float64
+ *       struct Header { tag: uint8 size: uint32 }
  *   }
  *
  * `link("m")` shares the existing descriptor field with `dylib("m")`:
@@ -697,25 +698,48 @@ static AstNode *xr_parse_extern_block_declaration(Parser *parser) {
         parser->parsing_extern_fn = true;
 
         AstNode *decl = NULL;
+        bool is_extern_layout = false;
         if (xr_parser_check(parser, TK_AT)) {
             decl = xr_parse_attributed_declaration(parser);
         } else if (xr_parser_match(parser, TK_FN)) {
             decl = xr_parse_function_declaration(parser);
+        } else if (xr_parser_match(parser, TK_STRUCT)) {
+            decl = xr_parse_struct_declaration(parser);
+            is_extern_layout = true;
+        } else if (xr_parser_match(parser, TK_UNION)) {
+            decl = xr_parse_union_declaration(parser);
+            is_extern_layout = true;
+        } else if (xr_parser_match(parser, TK_PACKED)) {
+            xr_parser_consume(parser, TK_STRUCT,
+                              "expected 'struct' after 'packed' in extern block");
+            decl = xr_parse_struct_declaration(parser);
+            if (decl && decl->type == AST_STRUCT_DECL)
+                decl->as.struct_decl.is_packed = true;
+            is_extern_layout = true;
         } else {
             xr_parser_error_at_current(
-                parser, "extern blocks currently contain function declarations only");
+                parser, "extern blocks contain fn, struct, union, or packed struct declarations");
         }
         parser->parsing_extern_fn = saved_extern_context;
 
         if (!decl)
             return NULL;
         if (decl->type == AST_FUNCTION_DECL) {
+            if (xr_parser_check(parser, TK_LBRACE)) {
+                xr_parser_error_at_current(
+                    parser, "extern function declarations cannot have a function body");
+                return NULL;
+            }
             xr_function_append_attribute(parser, decl, extern_attr);
             if (library_attr)
                 xr_function_append_attribute(parser, decl, library_attr);
+        } else if (is_extern_layout && decl->type == AST_STRUCT_DECL) {
+            decl->as.struct_decl.is_extern_layout = true;
+        } else if (is_extern_layout && decl->type == AST_UNION_DECL) {
+            decl->as.union_decl.is_extern_layout = true;
         } else {
             xr_parser_error_at_current(
-                parser, "extern blocks currently contain function declarations only");
+                parser, "extern blocks contain fn, struct, union, or packed struct declarations");
             return NULL;
         }
         xr_ast_program_add(parser->compiler_session, group, decl);

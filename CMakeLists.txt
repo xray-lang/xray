@@ -2086,6 +2086,21 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
+    # Native layout oracle: extern structs/unions must agree exactly with the
+    # host C compiler for sizeof, alignof, and offsetof.
+    add_test(
+        NAME ffi_extern_layout_probe
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ffi/run_extern_layout_probe.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(ffi_extern_layout_probe PROPERTIES
+        LABELS "ffi;layout;aot;vm;regression"
+        PROCESSORS 2
+        TIMEOUT 60
+    )
+
     # FFI ASan matrix: ASan builds must exercise raw pointers, CFn callbacks,
     # and headerless repr(C) structs through VM/AOT; normal builds skip.
     add_test(

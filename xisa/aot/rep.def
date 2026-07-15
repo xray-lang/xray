@@ -185,7 +185,7 @@
   :integer no
   :boxed no
   :dynamic-kind pointer
-  :native-type none
+  :native-type XR_NATIVE_POINTER
   :storage-rep XR_REP_RAWPTR)
 
 (define-aot-rep span

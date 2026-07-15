@@ -1,0 +1,7 @@
+extern "C" {
+    struct CHeader {
+        value: uint32
+    }
+}
+
+var header = CHeader()

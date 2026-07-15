@@ -267,6 +267,13 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     ClassDeclNode *cls = is_union    ? &node->as.union_decl
                          : is_struct ? &node->as.struct_decl
                                      : &node->as.class_decl;
+    bool is_extern_layout = (is_struct || is_union) && cls->is_extern_layout;
+    if (is_extern_layout) {
+        xfmt_write_indent(ctx);
+        xfmt_write_str(ctx, "extern \"C\" {");
+        xfmt_write_newline(ctx);
+        ctx->indent_level++;
+    }
     xfmt_emit_attributes(ctx, cls->attributes, cls->attr_count);
     xfmt_write_indent(ctx);
 
@@ -554,6 +561,12 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     xfmt_write_char(ctx, '}');
     xfmt_write_newline(ctx);
+    if (is_extern_layout) {
+        ctx->indent_level--;
+        xfmt_write_indent(ctx);
+        xfmt_write_char(ctx, '}');
+        xfmt_write_newline(ctx);
+    }
 }
 
 void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {

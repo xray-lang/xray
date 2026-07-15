@@ -1,0 +1,5 @@
+extern "C" {
+    struct BadLayout {
+        value: uint32 = 1
+    }
+}
