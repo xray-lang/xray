@@ -229,7 +229,7 @@ static uint32_t test_aot_effect_bits_depth(const XiFunc *func, int depth) {
             if (test_aot_value_may_suspend(value))
                 effects |= XG_BODY_MAY_SUSPEND;
             if ((value->flags & XI_FLAG_MAY_THROW) != 0)
-                effects |= XG_BODY_MAY_THROW;
+                effects |= XG_BODY_MAY_ERROR;
             if ((value->flags & XI_FLAG_WRITES_MEM) != 0)
                 effects |= XG_BODY_MAY_MUTATE;
             if ((value->flags & XI_FLAG_READS_MEM) != 0)

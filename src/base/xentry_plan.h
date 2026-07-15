@@ -39,7 +39,7 @@ typedef enum XrRuntimeCapability {
 } XrRuntimeCapability;
 
 typedef enum XrReachableEffect {
-    XR_EFFECT_MAY_THROW = 1u << 0,
+    XR_EFFECT_MAY_ERROR = 1u << 0,
     XR_EFFECT_MAY_SUSPEND = 1u << 1,
     XR_EFFECT_MAY_ALLOC = 1u << 2,
     XR_EFFECT_MAY_MUTATE = 1u << 3,
@@ -49,6 +49,7 @@ typedef enum XrReachableEffect {
     XR_EFFECT_MAY_SPAWN = 1u << 7,
     XR_EFFECT_ACCESSES_MUTABLE_MODULE = 1u << 8,
     XR_EFFECT_OBSERVES_TASK_ID = 1u << 9,
+    XR_EFFECT_MAY_PANIC = 1u << 10,
 } XrReachableEffect;
 
 typedef enum XrRootRepresentation {

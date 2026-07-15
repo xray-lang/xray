@@ -1131,8 +1131,10 @@ XR_FUNC const char *xg_hash_eq_kind_name(uint8_t kind) {
 
 XR_FUNC const char *xg_body_effect_name(uint32_t effect) {
     switch (effect) {
-        case XG_BODY_MAY_THROW:
-            return "throw";
+        case XG_BODY_MAY_ERROR:
+            return "error";
+        case XG_BODY_MAY_PANIC:
+            return "panic";
         case XG_BODY_MAY_SUSPEND:
             return "suspend";
         case XG_BODY_MAY_ALLOC:
@@ -1158,9 +1160,11 @@ XR_FUNC const char *xg_body_effect_name(uint32_t effect) {
 
 XR_FUNC const uint32_t *xg_body_effect_catalog(uint32_t *out_count) {
     static const uint32_t effects[] = {
-        XG_BODY_MAY_THROW,        XG_BODY_MAY_SUSPEND,     XG_BODY_MAY_ALLOC,
-        XG_BODY_MAY_MUTATE,       XG_BODY_MAY_CALL_NATIVE, XG_BODY_MAY_READ_MEM,
-        XG_BODY_MAY_CALL,         XG_BODY_MAY_SPAWN,       XG_BODY_ACCESSES_MUTABLE_MODULE,
+        XG_BODY_MAY_ERROR,        XG_BODY_MAY_PANIC,
+        XG_BODY_MAY_SUSPEND,      XG_BODY_MAY_ALLOC,
+        XG_BODY_MAY_MUTATE,       XG_BODY_MAY_CALL_NATIVE,
+        XG_BODY_MAY_READ_MEM,     XG_BODY_MAY_CALL,
+        XG_BODY_MAY_SPAWN,        XG_BODY_ACCESSES_MUTABLE_MODULE,
         XG_BODY_OBSERVES_TASK_ID,
     };
     if (out_count)

@@ -9276,7 +9276,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 walk_body_for_calls(bc, node->as.new_expr.arguments[i]);
             break;
         case AST_THROW_STMT:
-            bc->effect_bits |= XG_BODY_MAY_THROW;
+            bc->effect_bits |= XG_BODY_MAY_ERROR;
             walk_body_for_calls(bc, node->as.throw_stmt.expression);
             break;
         case AST_AWAIT_EXPR:
@@ -9417,11 +9417,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         }
         case AST_TRY_CATCH:
-            bc->effect_bits |= XG_BODY_MAY_THROW;
             for (int i = 0; i < node->as.try_catch.catch_count; i++) {
                 XrCatchClause *cc =
                     node->as.try_catch.catch_clauses ? node->as.try_catch.catch_clauses[i] : NULL;
                 if (cc && cc->is_panic) {
+                    bc->effect_bits |= XG_BODY_MAY_PANIC;
                     bc->capability_bits |= XG_CAP_EXCEPTION;
                     break;
                 }

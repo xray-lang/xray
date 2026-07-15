@@ -428,8 +428,9 @@ static bool verify_func_attr_plan(const XaotBundle *bundle, const XaotFuncAttrPl
     if (!xg_body_effects_compose_closed_world_calls(ev, body, &composed_effect_bits))
         return set_error(errbuf, errbuf_len,
                          "AOT function attribute plan has unresolved call effects");
-    if ((composed_effect_bits & (XG_BODY_MAY_THROW | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
-                                 XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE)) != 0)
+    if ((composed_effect_bits &
+         (XG_BODY_MAY_ERROR | XG_BODY_MAY_PANIC | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
+          XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE)) != 0)
         return set_error(errbuf, errbuf_len,
                          "AOT function attribute plan contradicts body summary");
     if (!xaot_bundle_find_func_plan(bundle, plan->func))

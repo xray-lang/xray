@@ -3636,8 +3636,8 @@ static bool func_attr_body_summary_disqualifies(const XaotBundle *bundle, const 
         return true;
     if (out_effect_bits)
         *out_effect_bits = effect_bits;
-    return (effect_bits & (XG_BODY_MAY_THROW | XG_BODY_MAY_SUSPEND | XG_BODY_MAY_ALLOC |
-                           XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE)) != 0;
+    return (effect_bits & (XG_BODY_MAY_ERROR | XG_BODY_MAY_PANIC | XG_BODY_MAY_SUSPEND |
+                           XG_BODY_MAY_ALLOC | XG_BODY_MAY_MUTATE | XG_BODY_MAY_CALL_NATIVE)) != 0;
 }
 
 /* Prove a function free of observable effects so Cgen can emit
