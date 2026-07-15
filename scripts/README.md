@@ -100,6 +100,16 @@ lowering/runtime 名，以及领域对象或 C layout 中合法出现的 `length
 历史 `XI_BYTES_*`、`OP_BYTES_*`、`xr_array_bytes_*`、`xrt_bytes_*`、`emit_builtin_bytes_*`、
 `emit_bytes_*`、`cg_bytes_*` 与 `XR_ERROR_CORE_BYTES_*` 名称应保持为 0。
 
+### `check_c_interop_surface.py`
+
+扫描 `src/`、`stdlib/`、`tests/`、`spec/`、`demos/`、`tools/`、`scripts/` 和语言规范，
+把 task 190 的 C interop public surface 收敛状态分类为 canonical `Ptr<T>`/`MutPtr<T>`、
+canonical `mem.ptr/mutPtr/addr/load/store`、允许保留的 compile-error 负例，以及旧
+`RawPtr`/`RawMut`、`mem.fromAddress/addressOf`、raw-pointer `loadLE/storeLE` 和
+`ptrUnchecked` 回流。默认模式只打印 inventory；`--json` 输出机器可读结果；
+`--fail-on-active-removed` 在旧表面出现在负例之外时返回 1。CTest
+`c_interop_surface_residue` 打开该 strict 模式，阻止 task 190 旧 C interop 表面回流。
+
 ### `check_byte_width_predicates.py`
 
 扫描 `src/frontend/analyzer`、`src/ir` 与 `src/aot` 中最容易让 204 语义回流的直接 U8 判断：
