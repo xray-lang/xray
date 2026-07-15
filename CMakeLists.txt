@@ -1820,6 +1820,18 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME source_unknown_inventory_classification
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/frontend/test_source_unknown_inventory.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(source_unknown_inventory_classification PROPERTIES
+        LABELS "frontend;types;metadata"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME source_unknown_aot_baseline
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_source_unknown_aot_baseline.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
