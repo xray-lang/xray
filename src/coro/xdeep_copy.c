@@ -889,14 +889,12 @@ XrValue xr_deep_copy_to_transit(struct XrVMRuntime *X, XrValue value) {
     return xr_deep_copy_to_transit_core(xr_isolate_get_runtime_core(X), value);
 }
 
-/* ========== Zero-copy buffer move for self-contained scalar arrays ==========
+/* ========== Legacy transit buffer adopt for self-contained scalar arrays ==========
  *
- * A typed (non-ANY) array's data buffer holds only scalars, so it has no
- * interior pointers into any coroutine heap and can be re-homed across heaps
- * (sender → transit → receiver) by moving the malloc'd buffer pointer instead
- * of allocating + memcpy'ing it twice. The small XrArray struct is still
- * allocated per side; only the (potentially large) data buffer moves. Every
- * unsafe shape falls back (returns false) to the normal deep-copy path:
+ * A typed (non-ANY) TRANSIT array's data buffer holds only scalars, so it has no
+ * interior pointers into any coroutine heap and can be re-homed into the
+ * receiver heap by moving the malloc'd buffer pointer instead of allocating +
+ * memcpy'ing it. Every unsafe shape falls back to the normal deep-copy path:
  *   - ANY arrays / contains_refs : interior pointers, not self-contained.
  *   - slices (data_storage == BORROWED) : share a backing store.
  *   - data_on_region_heap : Region-blob data is bound to its owner heap and is
@@ -907,60 +905,6 @@ static bool array_is_movable_scalar(const XrArray *a) {
     return a && a->elem_type != XR_ELEM_ANY && !a->contains_refs &&
            a->data_storage == XR_ARRAY_DATA_HEAP && a->source == NULL && a->storage == NULL &&
            a->capacity > 0 && !a->data_on_region_heap && a->data != NULL && a->length > 0;
-}
-
-bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, XrValue *out) {
-    if (!core || !out || !XR_IS_PTR(value))
-        return false;
-    XrObjHeader *obj = XR_VALUE_GCPTR(value);
-    if (!obj || XR_OBJ_GET_TYPE(obj) != XR_TARRAY || XR_OBJ_IS_SHARED(obj))
-        return false; /* not a coroutine-local array source */
-    XrArray *src = (XrArray *) obj;
-    if (!array_is_movable_scalar(src))
-        return false;
-
-    XrSystemHeap *heap = core->sys_heap;
-    if (!heap)
-        return false;
-    XrObjHeader *th = (XrObjHeader *) xr_sysheap_alloc_shared(heap, sizeof(XrArray), XR_TARRAY);
-    if (!th)
-        return false;
-    th->objsize = (uint32_t) sizeof(XrArray);
-    xr_shared_init(th); /* storage = SHARED, atomic refcount = 1 (channel owns) */
-    XR_OBJ_SET_FLAG(th, XR_OBJ_TRANSIT);
-
-    XrArray *t = (XrArray *) th;
-    t->data = src->data; /* steal the buffer — no element copy */
-    t->length = src->length;
-    t->capacity = src->capacity;
-    t->source = NULL;
-    t->storage = NULL; /* movable scalars never carry a shared storage block */
-    t->data_storage = XR_ARRAY_DATA_HEAP;
-    t->elem_type = src->elem_type;
-    t->elem_size = src->elem_size;
-    t->elem_tid = src->elem_tid;
-    t->contains_refs = 0;
-    t->data_on_region_heap = 0;
-    memset(t->_pad, 0, sizeof(t->_pad));
-
-    /* Detach the buffer from the source so the caller's subsequent destruction
-     * of the (now empty) source struct does not free the moved buffer, and
-     * remove its bytes from the sender heap's external accounting (the transit
-     * object carries no per-coro accounting). */
-    size_t data_bytes = (size_t) src->elem_size * (size_t) src->capacity;
-    src->data = NULL;
-    src->capacity = 0;
-    src->length = 0;
-    xr_coro_heap_sub_external(xr_current_coro_heap(), (int64_t) data_bytes);
-
-    *out = XR_FROM_PTR(t);
-    return true;
-}
-
-bool xr_chan_try_move_array_to_transit(struct XrVMRuntime *X, XrValue value, XrValue *out) {
-    if (!X)
-        return false;
-    return xr_chan_try_move_array_to_transit_core(xr_isolate_get_runtime_core(X), value, out);
 }
 
 bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine *recv_coro,
