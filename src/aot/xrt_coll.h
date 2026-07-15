@@ -1851,6 +1851,29 @@ static inline XrValue xrt_map_new_vt(int64_t cap, uint8_t value_type) {
     return mv;
 }
 
+static inline XrValue xrt_map_static_storage_init(xrt_map_t *m, uint8_t *ctrl, int32_t *indices,
+                                                  XrMapEntry *entries, uint32_t indices_size,
+                                                  uint32_t entries_cap, uint8_t value_type) {
+    xrt_map_init_header(m);
+    memset(ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) indices_size + XR_SWISS_GROUP);
+    for (uint32_t i = 0; i < indices_size; i++)
+        indices[i] = XR_MAP_IX_EMPTY;
+    memset(entries, 0, sizeof(XrMapEntry) * (size_t) entries_cap);
+    m->ctrl = ctrl;
+    m->indices = indices;
+    m->entries = entries;
+    m->indices_size = indices_size;
+    m->entries_cap = entries_cap;
+    m->flags = XR_MAP_FLAG_NODES_ON_STACK;
+    m->value_type = value_type;
+    return xr_mkptr(m, XR_TAG_MAP);
+}
+
+static inline XrValue xrt_map_static_storage_freeze(xrt_map_t *m) {
+    m->flags |= XR_MAP_FLAG_STATIC_READONLY;
+    return xr_mkptr(m, XR_TAG_MAP);
+}
+
 #ifndef xrt_map_stack_new
 #define xrt_map_stack_new(cap_expr)                                                                \
     ({                                                                                             \
@@ -1969,6 +1992,14 @@ static inline XrValue xrt_map_get_small(xrt_map_t *m, XrValue key) {
 
 static inline XrValue xrt_map_get_small_owned(xrt_map_t *m, XrValue key) {
     return xrt_value_to_owned(xrt_map_get_small(m, key));
+}
+
+static inline void xrt_map_require_mutable(const xrt_map_t *m, const char *operation) {
+    if (XR_UNLIKELY(m && (m->flags & XR_MAP_FLAG_STATIC_READONLY))) {
+        fprintf(stderr, "%s: readonly static Map cannot be mutated\n",
+                operation ? operation : "Map mutation");
+        abort();
+    }
 }
 
 static inline int64_t xrt_map_find_dense_i64_slot(xrt_map_t *m, XrValue key) {
@@ -2098,6 +2129,7 @@ static inline int xrt_map_has_dense_enum(xrt_map_t *m, XrValue key) {
 }
 
 static inline int xrt_map_delete(xrt_map_t *m, XrValue key) {
+    xrt_map_require_mutable(m, "Map.delete");
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_delete_v((xrt_boolmap_t *) m, key);
     if (xrt_map_is_typed(m))
@@ -2122,6 +2154,7 @@ static inline int xrt_map_delete(xrt_map_t *m, XrValue key) {
 }
 
 static inline int xrt_map_delete_prehashed(xrt_map_t *m, XrValue key, uint32_t hash) {
+    xrt_map_require_mutable(m, "Map.delete");
     if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
         return xrt_map_delete(m, key);
     uint8_t key_tt = xrt_value_type_tag(key);
@@ -2145,6 +2178,7 @@ static inline int xrt_map_delete_prehashed(xrt_map_t *m, XrValue key, uint32_t h
 static inline int xrt_map_delete_user_hash_eq(xrt_map_t *m, XrValue key, uint16_t expected_type_id,
                                               const char *expected_class_name,
                                               xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
+    xrt_map_require_mutable(m, "Map.delete");
     if (!hash_fn || !eq_fn || xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
         return xrt_map_delete(m, key);
     uint8_t key_tt = xrt_value_type_tag(key);
@@ -2168,6 +2202,7 @@ static inline int xrt_map_delete_user_hash_eq(xrt_map_t *m, XrValue key, uint16_
 }
 
 static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
+    xrt_map_require_mutable(m, "Map.set");
     if (xrt_map_is_boolmap(m)) {
         xrt_boolmap_set_v((xrt_boolmap_t *) m, key, val);
         return;
@@ -2243,6 +2278,7 @@ static inline int64_t xrt_path_len(XrValue path) {
 }
 
 static inline void xrt_map_set_prehashed(xrt_map_t *m, XrValue key, XrValue val, uint32_t hash) {
+    xrt_map_require_mutable(m, "Map.set");
     if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m)) {
         xrt_map_set(m, key, val);
         return;
@@ -2281,6 +2317,7 @@ static inline void xrt_map_set_user_hash_eq(xrt_map_t *m, XrValue key, XrValue v
                                             uint16_t expected_type_id,
                                             const char *expected_class_name,
                                             xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
+    xrt_map_require_mutable(m, "Map.set");
     if (!hash_fn || !eq_fn || xrt_map_is_boolmap(m) || xrt_map_is_typed(m)) {
         xrt_map_set(m, key, val);
         return;
@@ -2318,6 +2355,7 @@ static inline void xrt_map_set_user_hash_eq(xrt_map_t *m, XrValue key, XrValue v
 }
 
 static inline void xrt_map_clear(xrt_map_t *m) {
+    xrt_map_require_mutable(m, "Map.clear");
     if (!m)
         return;
     if (xrt_map_is_boolmap(m)) {
@@ -2677,6 +2715,28 @@ static inline XrValue xrt_set_new(int64_t cap) {
     return xrt_set_new_typed(cap, XR_ELEM_ANY);
 }
 
+static inline XrValue xrt_set_static_storage_init(xrt_set_t *s, uint8_t *ctrl, int32_t *indices,
+                                                  XrSetEntry *entries, uint32_t indices_size,
+                                                  uint32_t entries_cap) {
+    xrt_set_init_header(s, XR_ELEM_ANY);
+    memset(ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) indices_size + XR_SWISS_GROUP);
+    for (uint32_t i = 0; i < indices_size; i++)
+        indices[i] = XR_SET_IX_EMPTY;
+    memset(entries, 0, sizeof(XrSetEntry) * (size_t) entries_cap);
+    s->ctrl = ctrl;
+    s->indices = indices;
+    s->entries = entries;
+    s->indices_size = indices_size;
+    s->entries_cap = entries_cap;
+    s->flags = XR_SET_FLAG_NODES_ON_STACK;
+    return xr_mkptr(s, XR_TAG_SET);
+}
+
+static inline XrValue xrt_set_static_storage_freeze(xrt_set_t *s) {
+    s->flags |= XR_SET_FLAG_STATIC_READONLY;
+    return xr_mkptr(s, XR_TAG_SET);
+}
+
 #ifndef xrt_set_stack_new
 #define xrt_set_stack_new(cap_expr)                                                                \
     ({                                                                                             \
@@ -2776,6 +2836,14 @@ static inline int xrt_set_has_small(xrt_set_t *s, XrValue value) {
     return xrt_set_find_entry_small(s, value) >= 0;
 }
 
+static inline void xrt_set_require_mutable(const xrt_set_t *s, const char *operation) {
+    if (XR_UNLIKELY(s && (s->flags & XR_SET_FLAG_STATIC_READONLY))) {
+        fprintf(stderr, "%s: readonly static Set cannot be mutated\n",
+                operation ? operation : "Set mutation");
+        abort();
+    }
+}
+
 static inline int64_t xrt_set_find_dense_i64_slot(xrt_set_t *s, XrValue value) {
     if (!s || !XR_IS_INT(value) || value.i < 0)
         return -1;
@@ -2825,6 +2893,7 @@ static inline int xrt_set_has_dense_enum(xrt_set_t *s, XrValue value) {
 }
 
 static inline int xrt_set_add(xrt_set_t *s, XrValue value) {
+    xrt_set_require_mutable(s, "Set.add");
     if (!xrt_set_is_typed(s)) {
         uint32_t hash = xrt_hash32_value(value);
         if (xrt_set_find_entry(s, value, hash) >= 0) {
@@ -2853,6 +2922,7 @@ static inline int xrt_set_add(xrt_set_t *s, XrValue value) {
 }
 
 static inline int xrt_set_add_prehashed(xrt_set_t *s, XrValue value, uint32_t hash) {
+    xrt_set_require_mutable(s, "Set.add");
     if (xrt_set_is_typed(s))
         return xrt_set_add(s, value);
     if (xrt_set_find_entry(s, value, hash) >= 0) {
@@ -2877,6 +2947,7 @@ static inline int xrt_set_add_prehashed(xrt_set_t *s, XrValue value, uint32_t ha
 static inline int xrt_set_add_user_hash_eq(xrt_set_t *s, XrValue value, uint16_t expected_type_id,
                                            const char *expected_class_name,
                                            xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
+    xrt_set_require_mutable(s, "Set.add");
     if (!hash_fn || !eq_fn || xrt_set_is_typed(s))
         return xrt_set_add(s, value);
     uint32_t hash = xrt_user_hash_value(value, expected_type_id, expected_class_name, hash_fn);
@@ -2901,6 +2972,7 @@ static inline int xrt_set_add_user_hash_eq(xrt_set_t *s, XrValue value, uint16_t
 }
 
 static inline int xrt_set_delete(xrt_set_t *s, XrValue value) {
+    xrt_set_require_mutable(s, "Set.delete");
     if (!xrt_set_is_typed(s)) {
         uint32_t hash = xrt_hash32_value(value);
         int32_t eidx = -1;
@@ -2924,6 +2996,7 @@ static inline int xrt_set_delete(xrt_set_t *s, XrValue value) {
 }
 
 static inline int xrt_set_delete_prehashed(xrt_set_t *s, XrValue value, uint32_t hash) {
+    xrt_set_require_mutable(s, "Set.delete");
     if (xrt_set_is_typed(s))
         return xrt_set_delete(s, value);
     int32_t eidx = -1;
@@ -2944,6 +3017,7 @@ static inline int xrt_set_delete_user_hash_eq(xrt_set_t *s, XrValue value,
                                               uint16_t expected_type_id,
                                               const char *expected_class_name,
                                               xrt_user_hash_fn_t hash_fn, xrt_user_eq_fn_t eq_fn) {
+    xrt_set_require_mutable(s, "Set.delete");
     if (!hash_fn || !eq_fn || xrt_set_is_typed(s))
         return xrt_set_delete(s, value);
     int32_t eidx = -1;
@@ -2982,6 +3056,7 @@ static inline int xrt_set_delete_i64(xrt_set_t *s, int64_t value) {
 }
 
 static inline void xrt_set_clear(xrt_set_t *s) {
+    xrt_set_require_mutable(s, "Set.clear");
     if (!xrt_set_is_typed(s)) {
         if (s->flags & XR_SET_FLAG_DUMMY)
             return;

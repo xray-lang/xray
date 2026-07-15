@@ -361,6 +361,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->xg_record_access_id = 0;
     v->xg_record_merge_id = 0;
     v->xg_key_access_id = 0;
+    v->xg_map_shape_id = 0;
     v->xg_class_field_id = 0;
     v->xg_sequence_access_id = 0;
     v->xg_capacity_op_id = 0;

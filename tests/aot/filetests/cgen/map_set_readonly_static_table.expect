@@ -1,0 +1,11 @@
+args=--dump-xaot-plan
+regex=map-shape-plan [0-9]+ .* container=map source=static action=readonly_static_table .* literal_count=2 .*
+regex=map-shape-plan [0-9]+ .* container=set source=static action=readonly_static_table .* literal_count=2 .*
+regex=key-access-plan [0-9]+ .* container=map op=index_get .* action=prehashed_lookup .*
+regex=key-access-plan [0-9]+ .* container=set op=has .* action=prehashed_lookup .*
+c_contains=xrt_map_static_storage_init
+c_contains=xrt_set_static_storage_init
+c_contains=xrt_map_set_prehashed
+c_contains=xrt_set_add_prehashed
+c_not_contains=xrt_map_new(2)
+c_not_contains=xrt_set_new(2)

@@ -5468,6 +5468,19 @@ static XiValue *lower_map_literal(XiLower *l, AstNode *node) {
         return NULL;
     map_val->args[0] = cap;
     map_val->line = (uint32_t) node->line;
+    xi_lower_bind_map_shape_id(l, map_val, (uint32_t) node->line, XG_MAP_CONTAINER_MAP);
+    if (map_val->xg_map_shape_id != XG_NO_ID) {
+        XiMapLiteralData *data =
+            (XiMapLiteralData *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiMapLiteralData));
+        if (!data)
+            return NULL;
+        data->keys = key_vals;
+        data->values = val_vals;
+        data->count = (uint16_t) count;
+        data->container_kind = XG_MAP_CONTAINER_MAP;
+        map_val->aux = data;
+        map_val->aux_kind = XI_AUX_KIND_MAP_LITERAL;
+    }
 
     /* Populate: INDEX_SET for each key-value pair */
     for (int i = 0; i < n; i++) {
@@ -5478,6 +5491,7 @@ static XiValue *lower_map_literal(XiLower *l, AstNode *node) {
         set->args[1] = key_vals[i];
         set->args[2] = val_vals[i];
         set->flags |= XI_FLAG_SIDE_EFFECT;
+        set->xg_map_shape_id = map_val->xg_map_shape_id;
     }
     return map_val;
 }
@@ -7227,6 +7241,19 @@ static XiValue *lower_set_literal(XiLower *l, AstNode *node) {
         return NULL;
     set_val->args[0] = cap;
     set_val->line = (uint32_t) node->line;
+    xi_lower_bind_map_shape_id(l, set_val, (uint32_t) node->line, XG_MAP_CONTAINER_SET);
+    if (set_val->xg_map_shape_id != XG_NO_ID) {
+        XiMapLiteralData *data =
+            (XiMapLiteralData *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiMapLiteralData));
+        if (!data)
+            return NULL;
+        data->keys = elem_vals;
+        data->values = NULL;
+        data->count = (uint16_t) count;
+        data->container_kind = XG_MAP_CONTAINER_SET;
+        set_val->aux = data;
+        set_val->aux_kind = XI_AUX_KIND_MAP_LITERAL;
+    }
 
     /* Populate: CALL_METHOD("add") for each element */
     for (int i = 0; i < n; i++) {
@@ -7238,6 +7265,7 @@ static XiValue *lower_set_literal(XiLower *l, AstNode *node) {
         add->aux = (void *) "add";
         add->aux_int = (int64_t) xi_lower_method_symbol(l, "add") << 1;
         add->flags |= XI_FLAG_SIDE_EFFECT;
+        add->xg_map_shape_id = set_val->xg_map_shape_id;
     }
     return set_val;
 }

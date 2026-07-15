@@ -1,0 +1,3 @@
+const SCORES: Map<string, int> = #{"ada": 1}
+
+SCORES.set("ada", 2)

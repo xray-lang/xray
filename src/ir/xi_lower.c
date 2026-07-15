@@ -1220,6 +1220,31 @@ XR_FUNC void xi_lower_bind_key_access_id(XiLower *l, XiValue *access, uint32_t s
         access->xg_key_access_id = match->access_id;
 }
 
+XR_FUNC void xi_lower_bind_map_shape_id(XiLower *l, XiValue *literal, uint32_t source_span_id,
+                                        uint8_t container_kind) {
+    const XgGlobalEvidence *ev;
+    const XgMapShapeSummary *match = NULL;
+    if (!l || !literal || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID ||
+        (literal->op != XI_MAP_NEW && literal->op != XI_SET_NEW))
+        return;
+    ev = l->global_evidence;
+    for (uint32_t i = 0; i < ev->nmap_shapes; i++) {
+        const XgMapShapeSummary *shape = &ev->map_shapes[i];
+        if (shape->owner_func_id != (XgFuncId) l->func->xg_body_func_id ||
+            !xi_lower_evidence_module_matches(l, shape->module_id) ||
+            shape->source_span_id != source_span_id || shape->container_kind != container_kind ||
+            shape->source != XG_MAP_SHAPE_SRC_STATIC ||
+            (shape->flags & (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY)) !=
+                (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY))
+            continue;
+        if (match)
+            return;
+        match = shape;
+    }
+    if (match)
+        literal->xg_map_shape_id = match->shape_id;
+}
+
 XR_FUNC void xi_lower_take_sequence_evidence_ids(XiLower *l, uint32_t source_span_id,
                                                  XiSequenceEvidenceKinds kinds,
                                                  XiSequenceEvidenceIds *out_ids) {
