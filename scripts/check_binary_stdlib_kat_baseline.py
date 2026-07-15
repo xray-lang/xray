@@ -292,6 +292,45 @@ BASELINES = (
         ),
     ),
     Baseline(
+        category="IO_BINARY_CONTRACT_CORPUS",
+        path="tests/stdlib/contracts/io/contract.toml",
+        contains=(
+            'module = "io"',
+            'id = "text-binary-file-split"',
+            'id = "byte-file-roundtrip"',
+            'id = "path-owner-boundary"',
+            'id = "string-binary-file-overlap"',
+            'diff_cases_manifest = "tests/stdlib/contracts/io/diff_cases.txt"',
+        ),
+    ),
+    Baseline(
+        category="IO_BINARY_DIFF_CORPUS",
+        path="tests/stdlib/contracts/io/diff_cases.txt",
+        contains=(
+            "tests/diff/cases/semantics/stdlib/io_system_direct.xr",
+        ),
+    ),
+    Baseline(
+        category="WS_BINARY_CONTRACT_CORPUS",
+        path="tests/stdlib/contracts/ws/contract.toml",
+        contains=(
+            'module = "ws"',
+            'id = "rfc6455-accept-key"',
+            'id = "upgrade-handshake"',
+            'id = "close-payload-utf8"',
+            'id = "frame-byte-roundtrip"',
+            'id = "string-binary-message-alias"',
+            'diff_cases_manifest = "tests/stdlib/contracts/ws/diff_cases.txt"',
+        ),
+    ),
+    Baseline(
+        category="WS_BINARY_DIFF_CORPUS",
+        path="tests/stdlib/contracts/ws/diff_cases.txt",
+        contains=(
+            "tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr",
+        ),
+    ),
+    Baseline(
         category="AOT_BASE64_LINK_BASELINE",
         path="tests/aot/filetests/link/core_base64.expect",
         contains=(
