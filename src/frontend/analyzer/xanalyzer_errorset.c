@@ -2158,6 +2158,39 @@ static void maybe_add_for_in_catch_alias(ErrorSetCtx *ctx, ForInStmtNode *fi) {
     add_current_catch_alias(ctx, fi->item_symbol_id, fi->item_name);
 }
 
+static bool set_add_preserves_catch_element_alias(ErrorSetCtx *ctx, AstNode *callee,
+                                                  const CallExprNode *call, uint32_t *container_id,
+                                                  const char **container_name) {
+    AstNode *source = identity_source(callee);
+    if (!ctx || !ctx->current_caught || !source || source->type != AST_MEMBER_ACCESS || !call ||
+        call->arg_count != 1 || !call->arguments || !call->arguments[0])
+        return false;
+
+    MemberAccessNode *ma = &source->as.member_access;
+    if (!ma->name || strcmp(ma->name, "add") != 0 || !ma->object)
+        return false;
+    XrType *receiver_type = xa_analyzer_get_node_type(ctx->analyzer, ma->object);
+    if (!receiver_type || !XR_TYPE_IS_SET(receiver_type))
+        return false;
+
+    uint32_t id = 0;
+    const char *name = NULL;
+    if (!variable_ref_symbol(ctx, ma->object, &id, &name))
+        return false;
+    CatchAggregateAlias alias = {
+        .container_id = id, .container_name = name, .kind = CATCH_AGGREGATE_ELEMENT, .index = -1};
+    if (current_catch_aggregate_alias_index(ctx, &alias) < 0)
+        return false;
+    if (!is_current_caught_ref(ctx, call->arguments[0]))
+        return false;
+
+    if (container_id)
+        *container_id = id;
+    if (container_name)
+        *container_name = name;
+    return true;
+}
+
 static bool catch_aggregate_decl_allows_tracking(ErrorSetCtx *ctx, AstNode *node) {
     if (!ctx || !node || (node->type != AST_CONST_DECL && node->type != AST_VAR_DECL))
         return false;
@@ -2493,9 +2526,17 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
             }
             es_walk_expr(ctx, node->as.call_expr.callee);
             AstNode *callee_source = identity_source(node->as.call_expr.callee);
+            uint32_t preserved_set_id = 0;
+            const char *preserved_set_name = NULL;
+            bool preserve_set_element_alias = set_add_preserves_catch_element_alias(
+                ctx, node->as.call_expr.callee, &node->as.call_expr, &preserved_set_id,
+                &preserved_set_name);
             if (callee_source && callee_source->type == AST_MEMBER_ACCESS)
                 invalidate_catch_aggregate_container_ref(ctx,
                                                          callee_source->as.member_access.object);
+            if (preserve_set_element_alias)
+                add_current_catch_aggregate_alias(ctx, preserved_set_id, preserved_set_name,
+                                                  CATCH_AGGREGATE_ELEMENT, -1, 0, NULL, NULL, NULL);
 
             if (es_walk_immediate_function_expr_call(ctx, node->as.call_expr.callee))
                 break;
