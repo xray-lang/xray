@@ -2870,14 +2870,20 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     emit_codegen_abort_expr(out);
 }
 
-static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiValue *v) {
+static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiFunc *f,
+                                                     const XiValue *v) {
     if (!ctx || !v || v->nargs != 1)
         return NULL;
     const XiValue *arg = v->args[0];
     if (!arg)
         return NULL;
-    if (arg->op == XI_BOX && arg->nargs >= 1)
+    const XiValue *boxed = NULL;
+    if (arg->op == XI_BOX && arg->nargs >= 1) {
+        boxed = arg;
         arg = arg->args[0];
+    }
+    if (boxed && cg_func_needs_aot_coro_ctx(ctx, f) && cg_coro_value_needs_frame(ctx, f, boxed))
+        return NULL;
     if (!arg->type || arg->type->kind != XR_KIND_INT || arg->type->is_nullable)
         return NULL;  // nullable ints print via the tagged path so null -> "null"
     XrRep rep = cg_value_plan_storage_rep(ctx, arg);
@@ -2965,7 +2971,7 @@ static bool xicgen_box_only_feeds_native_int_print(XiCgenCtx *ctx, const XiFunc 
                 if (user->args[ai] != box)
                     continue;
                 if (user->op == XI_PRINT && ai == 0 &&
-                    xicgen_native_int_print_source(ctx, user) == box->args[0]) {
+                    xicgen_native_int_print_source(ctx, f, user) == box->args[0]) {
                     saw_print = true;
                     continue;
                 }
@@ -2976,12 +2982,12 @@ static bool xicgen_box_only_feeds_native_int_print(XiCgenCtx *ctx, const XiFunc 
     return saw_print;
 }
 
-static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
     XR_DCHECK(v->nargs >= 1, "xicgen_emit_print_expr: missing print value");
     int flags = (int) v->aux_int;
     bool add_space = (flags & 1) != 0;
     bool newline = (flags & 2) != 0;
-    const XiValue *native_int = xicgen_native_int_print_source(ctx, v);
+    const XiValue *native_int = xicgen_native_int_print_source(ctx, f, v);
     bool print_span = !native_int && v->args[0] && cg_value_plan_is_span_aggregate(ctx, v->args[0]);
 
     if (ctx && ctx->freestanding_profile) {
@@ -3046,9 +3052,8 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) 
 
 static void xicgen_print(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
-    (void) f;
     (void) prefix;
-    xicgen_emit_print_expr(ctx, out, v);
+    xicgen_emit_print_expr(ctx, out, f, v);
 }
 
 static bool xicgen_verify_json_direct_index_access(XiCgenCtx *ctx, const XiValue *v,
@@ -4104,7 +4109,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     if (bn[0] == '\0' && v->aux_int == 0 && v->nargs == 0) {
         fprintf(out, "XR_FROM_BOOL(false)");
     } else if (strcmp(bn, "print") == 0) {
-        xicgen_emit_print_expr(ctx, out, v);
+        xicgen_emit_print_expr(ctx, out, f, v);
     } else if (strcmp(bn, "str_concat") == 0) {
         xicgen_str_concat(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "array_new") == 0) {
