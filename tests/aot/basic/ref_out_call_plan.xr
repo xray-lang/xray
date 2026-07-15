@@ -1,0 +1,33 @@
+fn bump(value: ref int) -> int {
+    value = value + 1
+    return value
+}
+
+fn fill(value: out int) -> int {
+    value = 9
+    return value
+}
+
+fn invokeBump(action: (ref int) -> int, value: ref int) -> int {
+    return action(ref value)
+}
+
+fn invokeFill(action: (out int) -> int, value: out int) -> int {
+    return action(out value)
+}
+
+var value = 1
+print(bump(ref value))
+print(value)
+
+var slot = 0
+print(fill(out slot))
+print(slot)
+
+var indirect = 4
+print(invokeBump(bump, ref indirect))
+print(indirect)
+
+var indirectSlot = 0
+print(invokeFill(fill, out indirectSlot))
+print(indirectSlot)

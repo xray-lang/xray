@@ -1,0 +1,11 @@
+contains=param 0 class=ptr kind=view rep=rawptr c_type=int64_t *
+contains=value v0 op=PARAM kind=view rep=rawptr c_type=int64_t *
+contains=value v7 op=LOCAL_ADDR kind=view rep=rawptr c_type=void *
+c_regex=static int64_t .*_bump_[0-9]+\(xrt_closure_t \*_cl, int64_t \* p0\)
+c_regex=static int64_t .*_fill_[0-9]+\(xrt_closure_t \*_cl, int64_t \* p0\)
+c_contains=(*(int64_t *)(v0))
+c_contains=(void *)(&
+c_not_contains=_cfn
+c_not_contains=_boxed
+c_not_contains=xrt_box
+c_not_contains=malloc(

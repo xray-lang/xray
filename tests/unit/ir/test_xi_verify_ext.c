@@ -196,6 +196,113 @@ TEST(tail_call_with_function_callee_passes) {
     xi_func_free(f);
 }
 
+/* ========== Ref/out call-plan contracts ========== */
+
+static XiCallPlan *make_single_ref_call_plan(XiFunc *f, XiValue *place) {
+    XiCallPlan *plan = (XiCallPlan *) xi_func_arena_alloc(f, sizeof(*plan));
+    XiCallArgPlan *arg = (XiCallArgPlan *) xi_func_arena_alloc(f, sizeof(*arg));
+    if (!plan || !arg)
+        return NULL;
+    memset(plan, 0, sizeof(*plan));
+    memset(arg, 0, sizeof(*arg));
+    arg->param_mode = XR_PARAM_REF;
+    arg->access = XR_CALL_ARG_REF;
+    arg->origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+    arg->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+    arg->escape = XI_PLACE_ESCAPE_NONE;
+    arg->addressable = true;
+    arg->origin_var_id = 0;
+    arg->place = place;
+    plan->args = arg;
+    plan->nargs = 1;
+    plan->verified = true;
+    return plan;
+}
+
+static XiValue *make_ref_call(XiFunc *f, XiBlock *entry, XiValue **place_out) {
+    f->source_var_count = 1;
+    XiValue *source = xi_const_int(f, entry, 1, &stub_int);
+    source->var_id = 0;
+    XiValue *place = xi_value_new(f, entry, XI_LOCAL_ADDR, &stub_int, 1);
+    XiValue *callee = xi_value_new(f, entry, XI_CLOSURE_NEW, &stub_func, 0);
+    XiValue *call = xi_value_new(f, entry, XI_CALL, &stub_int, 2);
+    if (!place || !callee || !call)
+        return NULL;
+    place->args[0] = source;
+    call->args[0] = callee;
+    call->args[1] = place;
+    call->call_plan = make_single_ref_call_plan(f, place);
+    if (place_out)
+        *place_out = place;
+    return call;
+}
+
+TEST(call_plan_valid_ref_local_place_passes) {
+    XiFunc *f = make_func("call_plan_valid");
+    ASSERT(f != NULL);
+    XiValue *place = NULL;
+    XiValue *call = make_ref_call(f, f->entry, &place);
+    ASSERT(call != NULL && call->call_plan != NULL && place != NULL);
+    XiValue *load = xi_value_new(f, f->entry, XI_PLACE_LOAD, &stub_int, 1);
+    ASSERT(load != NULL);
+    load->args[0] = place;
+    xi_block_set_return(f->entry, load);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_rejects_unverified_plan) {
+    XiFunc *f = make_func("call_plan_unverified");
+    ASSERT(f != NULL);
+    XiValue *place = NULL;
+    XiValue *call = make_ref_call(f, f->entry, &place);
+    ASSERT(call != NULL && call->call_plan != NULL);
+    call->call_plan->verified = false;
+    xi_block_set_return(f->entry, call);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_rejects_place_mismatch) {
+    XiFunc *f = make_func("call_plan_place_mismatch");
+    ASSERT(f != NULL);
+    XiValue *place = NULL;
+    XiValue *call = make_ref_call(f, f->entry, &place);
+    ASSERT(call != NULL && call->call_plan != NULL && place != NULL);
+    call->call_plan->args[0].place = place->args[0];
+    xi_block_set_return(f->entry, call);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_rejects_declared_escape) {
+    XiFunc *f = make_func("call_plan_escape");
+    ASSERT(f != NULL);
+    XiValue *call = make_ref_call(f, f->entry, NULL);
+    ASSERT(call != NULL && call->call_plan != NULL);
+    call->call_plan->args[0].escape = XI_PLACE_ESCAPE_RETURN;
+    xi_block_set_return(f->entry, call);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(call_bound_place_rejects_return_escape) {
+    XiFunc *f = make_func("call_place_return_escape");
+    ASSERT(f != NULL);
+    XiValue *source = xi_const_int(f, f->entry, 1, &stub_int);
+    XiValue *place = xi_value_new(f, f->entry, XI_LOCAL_ADDR, &stub_int, 1);
+    ASSERT(source != NULL && place != NULL);
+    place->args[0] = source;
+    xi_block_set_return(f->entry, place);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
 /* ========== TBAA metadata consistency ========== */
 
 TEST(tbaa_memory_op_requires_mem_group) {
@@ -1309,6 +1416,11 @@ int main(void) {
     run_tail_flag_on_non_call_fails();
     run_tail_call_with_non_function_callee_fails();
     run_tail_call_with_function_callee_passes();
+    run_call_plan_valid_ref_local_place_passes();
+    run_call_plan_rejects_unverified_plan();
+    run_call_plan_rejects_place_mismatch();
+    run_call_plan_rejects_declared_escape();
+    run_call_bound_place_rejects_return_escape();
     run_tbaa_memory_op_requires_mem_group();
     run_tbaa_memory_op_with_group_passes();
     run_tbaa_store_requires_mem_group();

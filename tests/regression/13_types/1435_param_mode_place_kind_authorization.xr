@@ -18,6 +18,7 @@ fn test_var_and_owned_places_accept_ref_out() {
 
     var slot = 0
     assert_eq(fill(out slot), 7)
+    assert_eq(slot, 7)
 
     owned values = Array<int>(0)
     assert_eq(observe(ref values), 0)
