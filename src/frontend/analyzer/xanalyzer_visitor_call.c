@@ -499,6 +499,12 @@ static void xa_check_payload_enum_variant_call(XaInferContext *ctx, AstNode *nod
                      enum_name ? enum_name : "?", variant_name ? variant_name : "?");
             xa_check_span_value_escape(ctx, arg, arg_type, context);
         }
+        if (arg_type && XR_TYPE_IS_POINTER(arg_type)) {
+            char context[160];
+            snprintf(context, sizeof(context), "store raw pointer borrow in enum payload '%s.%s'",
+                     enum_name ? enum_name : "?", variant_name ? variant_name : "?");
+            xa_check_pointer_borrow_escape(ctx, arg, arg, arg_type, context);
+        }
         if (!param_type || XR_TYPE_IS_UNKNOWN(param_type) || !arg_type ||
             XR_TYPE_IS_UNKNOWN(arg_type))
             continue;
@@ -2807,6 +2813,13 @@ static void xa_check_borrowed_mutator_arg_escape(XaInferContext *ctx, AstNode *c
     if (!ctx || !call_node || !arg_node ||
         !xa_method_stores_argument(receiver_type, method_name, slot))
         return;
+    if (arg_type && XR_TYPE_IS_POINTER(arg_type)) {
+        char context[160];
+        snprintf(context, sizeof(context), "store raw pointer borrow through method '%s'",
+                 method_name ? method_name : "?");
+        xa_check_pointer_borrow_escape(ctx, arg_node, arg_node, arg_type, context);
+        return;
+    }
     if (xa_type_contains_span_view(arg_type)) {
         char context[160];
         snprintf(context, sizeof(context), "pass Slice view to mutating method '%s'",
@@ -3456,6 +3469,15 @@ static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *c
     if (!ctx || !call_node || !callee_links || !callee_links->param_escapes || slot < 0 ||
         slot >= callee_links->param_escape_count || !callee_links->param_escapes[slot])
         return;
+    if (arg_type && XR_TYPE_IS_POINTER(arg_type)) {
+        char context[192];
+        snprintf(context, sizeof(context),
+                 "pass raw pointer borrow to escaping parameter %d of '%s'", slot + 1,
+                 callee_name ? callee_name : "callee");
+        xa_check_pointer_borrow_escape(ctx, arg_node ? arg_node : call_node, arg_node, arg_type,
+                                       context);
+        return;
+    }
     if (xa_type_contains_span_view(arg_type)) {
         char context[160];
         snprintf(context, sizeof(context), "pass Slice view to escaping parameter %d of '%s'",
@@ -3524,6 +3546,37 @@ static bool xa_call_is_unknown_function_value_callee(CallExprNode *call, XaSymbo
     if (fn_sym && fn_sym->kind == XA_SYM_CLASS)
         return false;
     return !fn_links || !fn_links->param_mutations || slot >= fn_links->param_mutation_count;
+}
+
+static bool xa_call_has_unknown_function_value_escape(CallExprNode *call, XaSymbol *fn_sym,
+                                                      XaSymbolLinks *fn_links, XrType *callee_type,
+                                                      int slot) {
+    if (!call || !call->callee || !callee_type || !XR_TYPE_IS_FUNCTION(callee_type) || slot < 0)
+        return false;
+    if (call->callee->type != AST_VARIABLE)
+        return true;
+    if (fn_sym && (fn_sym->kind == XA_SYM_FUNCTION || fn_sym->kind == XA_SYM_CLASS))
+        return false;
+    return !fn_links || !fn_links->param_escapes || slot >= fn_links->param_escape_count;
+}
+
+static void xa_check_pointer_unknown_function_value_arg(XaInferContext *ctx, AstNode *call_node,
+                                                        CallExprNode *call, XaSymbol *fn_sym,
+                                                        XaSymbolLinks *fn_links,
+                                                        XrType *callee_type, AstNode *arg_node,
+                                                        XrType *arg_type, int slot) {
+    if (!ctx || !call_node || !call || !arg_node || !arg_type || !XR_TYPE_IS_POINTER(arg_type) ||
+        !xa_call_has_unknown_function_value_escape(call, fn_sym, fn_links, callee_type, slot))
+        return;
+    const char *callee_name = call->callee && call->callee->type == AST_VARIABLE
+                                  ? call->callee->as.variable.name
+                                  : "function value";
+    char context[224];
+    snprintf(context, sizeof(context),
+             "pass raw pointer borrow to parameter %d of function value '%s' with unknown escape "
+             "summary",
+             slot + 1, callee_name ? callee_name : "?");
+    xa_check_pointer_borrow_escape(ctx, arg_node, arg_node, arg_type, context);
 }
 
 static void xa_check_shared_unknown_function_value_arg(XaInferContext *ctx, AstNode *call_node,
@@ -4671,6 +4724,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
         if (is_mem_addr && slot == 0) {
             xa_check_mem_addr_arg(ctx, arg_node, arg_type);
+            xa_check_pointer_borrow_escape(ctx, arg_node, arg_node, arg_type,
+                                           "erase raw pointer borrow provenance with mem.addr");
             slot++;
             continue;
         }
@@ -4773,6 +4828,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     xa_visit_call_arg_for_param_mode(ctx, arg_node, NULL, access, param_mode);
             }
             xa_check_shared_unknown_function_value_arg(
+                ctx, node, call, fn_sym, fn_links, callee_type, arg_node, arg_type, direct_slot);
+            xa_check_pointer_unknown_function_value_arg(
                 ctx, node, call, fn_sym, fn_links, callee_type, arg_node, arg_type, direct_slot);
             direct_slot++;
         }

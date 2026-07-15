@@ -1,0 +1,6 @@
+import mem
+
+var buffer = mem.alloc(8)
+const leaked = unsafe { buffer.borrowPtr() }
+
+print(leaked.isNull())

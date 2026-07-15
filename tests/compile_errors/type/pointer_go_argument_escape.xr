@@ -1,0 +1,11 @@
+fn read(ptr: Ptr<byte>) -> byte {
+    return unsafe { ptr.deref() }
+}
+
+fn run() {
+    const local = c"x"
+    var task = go read(unsafe { local.ptr() })
+    print(await task)
+}
+
+run()

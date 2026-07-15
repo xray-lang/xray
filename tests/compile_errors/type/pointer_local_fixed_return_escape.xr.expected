@@ -1,0 +1,1 @@
+cannot return raw pointer borrow; raw pointer is tied to stack storage 'local' and has only call-bound lifetime

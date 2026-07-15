@@ -1,0 +1,11 @@
+fn identity(ptr: Ptr<byte>) -> Ptr<byte> {
+    return ptr
+}
+
+fn run() {
+    const local = c"local"
+    var escaped = identity(unsafe { local.ptr() })
+    print(escaped.isNull())
+}
+
+run()

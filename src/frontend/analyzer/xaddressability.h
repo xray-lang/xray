@@ -65,11 +65,24 @@ typedef struct XaAddressability {
     bool is_shared;
 } XaAddressability;
 
+typedef struct XaPointerProvenance {
+    XrAddressProvenance address;
+    struct XaSymbol *owner_symbol;
+    bool mixed;
+} XaPointerProvenance;
+
 /* Classifies every lvalue shape without opening a public address-taking
  * surface. A classified local/parameter remains rejected until the VM native
  * slot contract can prove a stable call-bound lifetime. */
 XR_FUNC XaAddressability xa_classify_addressability(struct XaInferContext *ctx,
                                                     struct AstNode *expr, bool wants_mutable);
+XR_FUNC bool xa_pointer_provenance_for_expr(struct XaInferContext *ctx, struct AstNode *expr,
+                                            XaPointerProvenance *out);
+XR_FUNC void xa_record_pointer_provenance(struct XaInferContext *ctx, struct XaSymbol *symbol,
+                                          struct AstNode *value, struct XrType *value_type);
+XR_FUNC void xa_check_pointer_borrow_escape(struct XaInferContext *ctx,
+                                            struct AstNode *location_node, struct AstNode *value,
+                                            struct XrType *value_type, const char *escape_context);
 XR_FUNC const char *xa_address_kind_name(XaAddressKind kind);
 XR_FUNC const char *xa_address_reject_reason_name(XaAddressRejectReason reason);
 

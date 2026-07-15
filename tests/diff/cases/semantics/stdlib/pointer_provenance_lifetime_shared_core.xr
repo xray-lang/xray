@@ -1,0 +1,25 @@
+// Static/module pointers may escape, while owner/stack borrows may cross only
+// direct noescape calls within their verified call-bound lifetime.
+const MODULE_BYTES = c"AZ"
+const MODULE_PTR = unsafe { MODULE_BYTES.ptr() }
+
+fn modulePtr() -> Ptr<byte> {
+    return MODULE_PTR
+}
+
+fn literalPtr() -> Ptr<byte> {
+    return unsafe { c"ok".ptr() }
+}
+
+fn read(ptr: Ptr<byte>) -> byte {
+    return unsafe { ptr.deref() }
+}
+
+fn readLocal() -> byte {
+    const local = c"Q"
+    return read(unsafe { local.ptr() })
+}
+
+print(int(read(modulePtr())))
+print(int(read(literalPtr())))
+print(int(readLocal()))

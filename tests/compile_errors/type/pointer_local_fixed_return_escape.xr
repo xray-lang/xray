@@ -1,0 +1,6 @@
+fn raw() -> Ptr<byte> {
+    const local = c"local"
+    return unsafe { local.ptr() }
+}
+
+print(raw().isNull())

@@ -28,6 +28,7 @@
 #include "../../base/xdefs.h"
 #include "../../base/xhashmap.h"
 #include "../../base/xlocation.h"
+#include "../../base/xstorage.h"
 
 // Symbol kinds
 typedef enum XaSymbolKind {
@@ -93,6 +94,14 @@ struct XaSymbolLinks {
 
     // Definite assignment tracking
     bool is_definitely_assigned;  // true if variable has been assigned a value
+
+    // Analyzer-side provenance for Ptr<T>/MutPtr<T> values. This is the
+    // source-level lifetime proof consumed by escape checks before either VM
+    // or AOT lowering; a raw pointer type alone never grants stable escape.
+    XrAddressProvenance pointer_provenance;
+    struct XaSymbol *pointer_owner_symbol;
+    bool pointer_provenance_known;
+    bool pointer_provenance_mixed;
 
     // Move state for explicit ownership transfer of local variables.
     XaMoveState move_state;  // Current ownership state

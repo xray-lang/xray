@@ -1,0 +1,9 @@
+import mem
+
+fn address() -> int {
+    var buffer = mem.alloc(8)
+    var ptr = unsafe { buffer.borrowPtr() }
+    return mem.addr(ptr)
+}
+
+print(address())

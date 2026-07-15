@@ -1,0 +1,12 @@
+var saved = Ptr<byte>.null()
+
+fn keep(ptr: Ptr<byte>) {
+    saved = ptr
+}
+
+fn run() {
+    const local = c"local"
+    keep(unsafe { local.ptr() })
+}
+
+run()
