@@ -304,6 +304,44 @@ void xa_effect_summary_clear(XaEffectSummary *summary) {
     xa_effect_summary_init(summary);
 }
 
+bool xa_effect_summary_add_root(XaEffectSummary *summary, XaEffectEdgeId root_id) {
+    if (!summary || root_id == XA_EFFECT_EDGE_NONE)
+        return false;
+    uint32_t pos = 0;
+    while (pos < summary->root_count && summary->roots[pos] < root_id)
+        pos++;
+    if (pos < summary->root_count && summary->roots[pos] == root_id)
+        return true;
+    if (!grow_array((void **) &summary->roots, &summary->root_capacity, sizeof(XaEffectEdgeId),
+                    summary->root_count + 1u))
+        return false;
+    if (pos < summary->root_count) {
+        memmove(&summary->roots[pos + 1u], &summary->roots[pos],
+                (size_t) (summary->root_count - pos) * sizeof(XaEffectEdgeId));
+    }
+    summary->roots[pos] = root_id;
+    summary->root_count++;
+    return true;
+}
+
+static bool summary_add_roots(XaEffectSummary *summary, const XaEffectSummary *src, bool *changed) {
+    if (changed)
+        *changed = false;
+    if (src->root_count == 0)
+        return true;
+    if (!grow_array((void **) &summary->roots, &summary->root_capacity, sizeof(XaEffectEdgeId),
+                    summary->root_count + src->root_count))
+        return false;
+    for (uint32_t i = 0; i < src->root_count; i++) {
+        uint32_t old_count = summary->root_count;
+        if (!xa_effect_summary_add_root(summary, src->roots[i]))
+            return false;
+        if (changed && summary->root_count != old_count)
+            *changed = true;
+    }
+    return true;
+}
+
 static int summary_find_type(const XaEffectSummary *summary, XaErrorTypeId type_id,
                              uint64_t stable_type_key) {
     if (!summary || type_id == XA_ERROR_TYPE_NONE)
@@ -408,6 +446,7 @@ bool xa_effect_summary_add_summary(XaEffectDatabase *db, XaEffectSummary *summar
             }
         }
     }
+    ok = summary_add_roots(summary, src, NULL) && ok;
     return ok;
 }
 
@@ -652,15 +691,10 @@ static bool summary_copy(XaEffectSummary *dst, const XaEffectSummary *src) {
         }
     }
     if (src->root_count > 0) {
-        dst->roots =
-            (XaEffectEdgeId *) xr_malloc((size_t) src->root_count * sizeof(XaEffectEdgeId));
-        if (!dst->roots) {
+        if (!summary_add_roots(dst, src, NULL)) {
             xa_effect_summary_clear(dst);
             return false;
         }
-        memcpy(dst->roots, src->roots, (size_t) src->root_count * sizeof(XaEffectEdgeId));
-        dst->root_count = src->root_count;
-        dst->root_capacity = src->root_count;
     }
     return true;
 }
@@ -695,6 +729,13 @@ XaEffectId xa_effect_db_intern(XaEffectDatabase *db, const XaEffectSummary *summ
     for (uint32_t i = 0; i < db->summary_count; i++) {
         if (db->summaries[i].fingerprint == normalized.fingerprint &&
             summary_equals(&db->summaries[i], &normalized)) {
+            bool roots_changed = false;
+            if (!summary_add_roots(&db->summaries[i], &normalized, &roots_changed)) {
+                xa_effect_summary_clear(&normalized);
+                return XA_EFFECT_NONE;
+            }
+            if (roots_changed)
+                db->summaries[i].revision = ++db->next_revision;
             xa_effect_summary_clear(&normalized);
             return i + 1u;
         }

@@ -213,6 +213,60 @@ TEST(summary_merge_preserves_variants_and_incomplete_reason) {
     xa_effect_db_free(db);
 }
 
+TEST(provenance_roots_merge_without_changing_semantic_identity) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+
+    XaEffectSummary dest;
+    XaEffectSummary src;
+    xa_effect_summary_init(&dest);
+    xa_effect_summary_init(&src);
+    ASSERT(!xa_effect_summary_add_root(&src, XA_EFFECT_EDGE_NONE));
+    ASSERT(xa_effect_summary_add_root(&src, 9));
+    ASSERT(xa_effect_summary_add_root(&src, 3));
+    ASSERT(xa_effect_summary_add_root(&src, 9));
+    ASSERT(src.root_count == 2);
+    ASSERT(src.roots[0] == 3);
+    ASSERT(src.roots[1] == 9);
+    ASSERT(xa_effect_summary_add_root(&dest, 7));
+    ASSERT(xa_effect_summary_add_summary(db, &dest, &src));
+    ASSERT(dest.root_count == 3);
+    ASSERT(dest.roots[0] == 3);
+    ASSERT(dest.roots[1] == 7);
+    ASSERT(dest.roots[2] == 9);
+
+    uint64_t fingerprint = xa_effect_summary_fingerprint(db, &dest);
+    XaEffectId id = xa_effect_db_intern(db, &dest);
+    ASSERT(id != XA_EFFECT_NONE);
+    const XaEffectSummary *stored = xa_effect_db_get(db, id);
+    ASSERT(stored != NULL);
+    uint32_t first_revision = stored->revision;
+
+    XaEffectSummary equivalent;
+    xa_effect_summary_init(&equivalent);
+    ASSERT(xa_effect_summary_add_root(&equivalent, 11));
+    ASSERT(xa_effect_summary_fingerprint(db, &equivalent) == fingerprint);
+    XaEffectId equivalent_id = xa_effect_db_intern(db, &equivalent);
+    ASSERT(equivalent_id == id);
+    ASSERT(xa_effect_db_summary_count(db) == 1);
+    stored = xa_effect_db_get(db, id);
+    ASSERT(stored != NULL);
+    ASSERT(stored->revision > first_revision);
+    ASSERT(stored->root_count == 4);
+    ASSERT(stored->roots[0] == 3);
+    ASSERT(stored->roots[1] == 7);
+    ASSERT(stored->roots[2] == 9);
+    ASSERT(stored->roots[3] == 11);
+    uint32_t merged_revision = stored->revision;
+    ASSERT(xa_effect_db_intern(db, &equivalent) == id);
+    ASSERT(xa_effect_db_get(db, id)->revision == merged_revision);
+
+    xa_effect_summary_clear(&equivalent);
+    xa_effect_summary_clear(&dest);
+    xa_effect_summary_clear(&src);
+    xa_effect_db_free(db);
+}
+
 TEST(error_type_handle_is_bound_by_stable_key) {
     XaEffectDatabase *db = xa_effect_db_new();
     ASSERT(db != NULL);
@@ -272,6 +326,7 @@ int main(void) {
     RUN_TEST(stable_variant_keys_survive_session_variant_order);
     RUN_TEST(incomplete_empty_is_not_nothrow);
     RUN_TEST(summary_merge_preserves_variants_and_incomplete_reason);
+    RUN_TEST(provenance_roots_merge_without_changing_semantic_identity);
     RUN_TEST(error_type_handle_is_bound_by_stable_key);
     RUN_TEST(summary_subtract_type_and_clear_escaping_preserve_incomplete);
 
