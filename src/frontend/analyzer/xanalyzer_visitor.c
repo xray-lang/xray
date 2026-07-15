@@ -5787,7 +5787,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     XrType *catch_type = xa_resolve_catch_binding_type(ctx, cc, true);
                     xa_register_catch_pattern_bindings(ctx, cc, catch_type);
                 }
-                xa_visit_infer_stmt(ctx, cc->body);
+                xa_visit_inline_statement_sequence_with_cursor(ctx, cc->body);
                 xa_analyzer_exit_scope(ctx->analyzer);
                 xa_out_param_da_record_path(out_da, out_da_count,
                                             xa_statement_can_fall_through(cc->body));
