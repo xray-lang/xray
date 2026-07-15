@@ -3183,7 +3183,8 @@ static bool cg_array_fill_loop_match(XiCgenCtx *ctx, const XiFunc *f, const XiVa
     if (push->xg_capacity_op_id != XG_NO_ID) {
         const XaotCapacityPlan *plan = xaot_bundle_find_capacity_plan(
             cg_ctx_aot_bundle(ctx), (XgCapacityOpId) push->xg_capacity_op_id);
-        const uint32_t required = XAOT_CAPACITY_EV_EXACT_COUNT | XAOT_CAPACITY_EV_LOOP_APPEND;
+        const uint32_t required = XAOT_CAPACITY_EV_EXACT_COUNT | XAOT_CAPACITY_EV_LOOP_APPEND |
+                                  XAOT_CAPACITY_EV_NO_CLOBBER;
         if (!plan || plan->action != XAOT_CAPACITY_RESERVE_ONCE ||
             (plan->evidence & required) != required)
             return false;
