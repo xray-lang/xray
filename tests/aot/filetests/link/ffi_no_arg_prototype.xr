@@ -1,0 +1,4 @@
+@extern("C") @dylib("xrayffi_smoke") fn xrayffi_noarg() -> int32
+@extern("C") @dylib("xrayffi_unused") fn xrayffi_unused_float(x: float64) -> float64
+
+print(unsafe { xrayffi_noarg() })
