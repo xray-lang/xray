@@ -1,0 +1,19 @@
+// Task 199 P0 baseline. Run with a release VM binary before/after grapheme work.
+import time
+
+fn main() {
+    var text = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-"
+    var iterations = 200000
+    var checksum = 0
+    var start = time.nanos()
+    for (var i = 0; i < iterations; i++) {
+        var iterator = text.runes()
+        while (iterator.hasNext()) {
+            checksum += int(iterator.next().toUInt32())
+        }
+    }
+    var elapsed = time.nanos() - start
+    print("bytes=12800000 elapsed_ns=${elapsed} checksum=${checksum}")
+}
+
+main()

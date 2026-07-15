@@ -1,0 +1,13 @@
+# Xray task 199 baseline corpus
+#
+# Format: <case-name> ; <code points separated by spaces> ; <byte offsets>
+# Byte offsets include both 0 and the exclusive end of the UTF-8 input.
+
+empty ; ; 0
+ascii ; 0061 0062 0063 ; 0 1 2 3
+crlf ; 000D 000A ; 0 2
+combining ; 0061 0308 0062 ; 0 3 4
+emoji_zwj ; 1F469 200D 1F4BB ; 0 11
+regional_indicators_3 ; 1F1FA 1F1F8 1F1E6 ; 0 8 12
+hangul_jamo ; 1100 1161 11A8 ; 0 9
+indic_conjunct ; 0915 094D 0915 ; 0 9
