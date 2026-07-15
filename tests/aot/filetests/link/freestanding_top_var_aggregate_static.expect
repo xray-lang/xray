@@ -5,17 +5,17 @@ contains="stdlib_objects": []
 contains="system_libs": []
 contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
 c_contains=#include "xrt_core_freestanding.h"
-c_contains=static struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _xctstruct_freestanding_top_var_aggregate_static_
-c_contains=static struct { union { int32_t f0; uint32_t f1; int32_t f2; uint32_t f3; } f0; int64_t f1; union { int32_t f0; uint32_t f1; int32_t f2; uint32_t f3; } f2; int64_t f3; } _xctstruct_freestanding_top_var_aggregate_static_
-c_contains=.f0 = (int64_t)INT64_C(1)
-c_contains=.f1 = (int64_t)INT64_C(10)
-c_contains=.f1 = (uint32_t)INT64_C(7)
-c_contains=.f1 = (int64_t)INT64_C(3)
+c_contains=static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_static_
+c_contains=static struct { union { int32_t i; uint32_t u; } bits; int64_t count; } _xctstruct_freestanding_top_var_aggregate_static_
+c_contains=.value = (int64_t)INT64_C(1)
+c_contains=.limit = (int64_t)INT64_C(10)
+c_contains=.u = (uint32_t)INT64_C(7)
+c_contains=.count = (int64_t)INT64_C(3)
 c_contains=xray_top_var_aggregate_static
-c_contains=.f0 =
-c_contains=.f1 =
-c_contains=.f0.f1
-c_not_contains=const struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _xctstruct_freestanding_top_var_aggregate_static_
+c_contains=.value =
+c_contains=.count =
+c_contains=.bits.u
+c_not_contains=const struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_static_
 c_not_contains=xrt_shared[0] =
 c_not_contains=xrt_shared[1] =
 c_not_contains=xrt_arc_alloc
