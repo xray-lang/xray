@@ -249,6 +249,31 @@ static bool vm_rescue_array_ref_to_ret_arena(XrVMContext *vm_ctx, XrValue *slot)
     return true;
 }
 
+static bool vm_copy_array_ref_to_fixed_heap(XrVMRuntime *isolate, XrValue *slot) {
+    if (!isolate || !slot || !XR_IS_ARRAY_REF(*slot) || !slot->ptr)
+        return true;
+
+    uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(*slot);
+    uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(*slot);
+    uint8_t elem_size = xr_native_type_size(elem_type);
+    if (elem_size == 0 || elem_count == 0)
+        return false;
+
+    size_t bytes = (size_t) elem_size * (size_t) elem_count;
+    if (bytes > UINT32_MAX - sizeof(XrObjHeader))
+        return false;
+    size_t total = sizeof(XrObjHeader) + bytes;
+    XrObjHeader *storage =
+        (XrObjHeader *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate), total, XR_TBLOB);
+    if (!storage)
+        return false;
+
+    uint8_t *data = (uint8_t *) storage + sizeof(XrObjHeader);
+    memcpy(data, slot->ptr, bytes);
+    slot->ptr = data;
+    return true;
+}
+
 /* ========== VM Execution Loop ========== */
 
 // Optimized VM loop with local variable caching
