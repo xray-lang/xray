@@ -3175,8 +3175,12 @@ static bool xicgen_verify_record_direct_field_access(XiCgenCtx *ctx, const XiVal
                 v->id, v->xg_record_access_id);
         return false;
     }
-    if (plan->action != XAOT_RECORD_ACCESS_DIRECT_FIELD || plan->access_kind != expected_kind ||
-        plan->field_ordinal != (uint16_t) v->aux_int) {
+    bool direct_field =
+        plan->action == XAOT_RECORD_ACCESS_DIRECT_FIELD && plan->access_kind == expected_kind;
+    bool destructure_copy = expected_kind == XG_RECORD_ACCESS_FIELD_GET &&
+                            plan->action == XAOT_RECORD_ACCESS_COPY_DESTRUCTURE &&
+                            plan->access_kind == XG_RECORD_ACCESS_DESTRUCTURE;
+    if ((!direct_field && !destructure_copy) || plan->field_ordinal != (uint16_t) v->aux_int) {
         if (ctx)
             ctx->error = true;
         fprintf(stderr,

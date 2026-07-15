@@ -5998,6 +5998,107 @@ static void body_add_record_member_access(XgBodyCollect *bc, const AstNode *node
     (void) xg_global_evidence_add_record_access(bc->evidence, &row);
 }
 
+static const XgRecordFieldSummary *body_find_record_shape_field(const XgBodyCollect *bc,
+                                                                XgRecordShapeId shape_id,
+                                                                uint16_t field_ordinal) {
+    if (!bc || !bc->evidence || shape_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < bc->evidence->nrecord_fields; i++) {
+        const XgRecordFieldSummary *field = &bc->evidence->record_fields[i];
+        if (field->shape_id == shape_id && field->field_ordinal == field_ordinal)
+            return field;
+    }
+    return NULL;
+}
+
+static void body_push_destructure_pattern_locals(XgBodyCollect *bc,
+                                                 const XrDestructurePattern *pattern,
+                                                 uint32_t type_key) {
+    if (!bc || !pattern)
+        return;
+    switch (pattern->type) {
+        case PATTERN_IDENTIFIER:
+            (void) body_push_local(bc, pattern->as.identifier.name,
+                                   pattern->as.identifier.symbol_id, XG_NO_ID, XG_NO_ID, type_key,
+                                   NULL, type_key != 0);
+            break;
+        case PATTERN_ARRAY:
+        case PATTERN_TUPLE:
+            for (int i = 0; i < pattern->as.array.element_count; i++)
+                body_push_destructure_pattern_locals(bc, pattern->as.array.elements[i], 0);
+            break;
+        case PATTERN_OBJECT:
+            for (int i = 0; i < pattern->as.object.field_count; i++)
+                body_push_destructure_pattern_locals(bc, pattern->as.object.patterns[i], 0);
+            break;
+        case PATTERN_SKIP:
+            break;
+        default:
+            break;
+    }
+}
+
+static void body_add_record_destructure_accesses(XgBodyCollect *bc,
+                                                 const XrDestructurePattern *pattern,
+                                                 const AstNode *source, uint32_t source_span_id,
+                                                 bool declare_locals) {
+    const ObjectLiteralNode *literal = NULL;
+    XgRecordShapeId shape_id;
+    if (!bc || !pattern || !source)
+        return;
+    if (pattern->type != PATTERN_OBJECT) {
+        if (declare_locals)
+            body_push_destructure_pattern_locals(bc, pattern, 0);
+        return;
+    }
+
+    shape_id = body_lookup_record_shape(bc, source, &literal);
+    if (shape_id == XG_NO_ID) {
+        literal = body_static_object_literal(source);
+        if (literal)
+            shape_id = body_add_record_shape_for_literal(bc, literal, source_span_id,
+                                                         body_expr_type_key(bc, source));
+    }
+    if (shape_id == XG_NO_ID) {
+        if (declare_locals)
+            body_push_destructure_pattern_locals(bc, pattern, 0);
+        return;
+    }
+
+    for (int i = 0; i < pattern->as.object.field_count; i++) {
+        const char *name = pattern->as.object.field_names[i];
+        const XrDestructurePattern *binding = pattern->as.object.patterns[i];
+        int field_index = body_record_shape_static_field_index(bc, shape_id, literal, name);
+        uint32_t result_type_key = 0;
+        if (!name || field_index < 0 || field_index > UINT16_MAX) {
+            if (declare_locals)
+                body_push_destructure_pattern_locals(bc, binding, 0);
+            continue;
+        }
+        const XgRecordFieldSummary *field =
+            body_find_record_shape_field(bc, shape_id, (uint16_t) field_index);
+        if (field)
+            result_type_key = field->type_key;
+
+        XgRecordAccessSummary row;
+        memset(&row, 0, sizeof(row));
+        row.record_access_id = (XgRecordAccessId) (bc->evidence->nrecord_accesses + 1);
+        row.module_id = bc->module_id;
+        row.owner_func_id = bc->owner_func_id;
+        row.receiver_shape_id = shape_id;
+        row.source_span_id = source_span_id;
+        row.field_name_id = hash_name32(name);
+        row.result_type_key = result_type_key;
+        row.field_ordinal = (uint16_t) field_index;
+        row.access_kind = XG_RECORD_ACCESS_DESTRUCTURE;
+        row.flags = XG_RECORD_ACCESS_STATIC_FIELD | XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN;
+        (void) xg_global_evidence_add_record_access(bc->evidence, &row);
+
+        if (declare_locals)
+            body_push_destructure_pattern_locals(bc, binding, result_type_key);
+    }
+}
+
 static uint32_t body_const_expr_id(XgBodyCollect *bc, const AstNode *expr) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     if (!expr)
@@ -8549,6 +8650,20 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                                            (uint32_t) node->line);
             break;
         }
+        case AST_DESTRUCTURE_DECL:
+            walk_body_for_calls(bc, node->as.destructure_decl.initializer);
+            body_add_record_destructure_accesses(bc, node->as.destructure_decl.pattern,
+                                                 node->as.destructure_decl.initializer,
+                                                 (uint32_t) node->line, true);
+            bc->effect_bits |= XG_BODY_MAY_READ_MEM;
+            break;
+        case AST_DESTRUCTURE_ASSIGN:
+            walk_body_for_calls(bc, node->as.destructure_assign.value);
+            body_add_record_destructure_accesses(bc, node->as.destructure_assign.pattern,
+                                                 node->as.destructure_assign.value,
+                                                 (uint32_t) node->line, false);
+            bc->effect_bits |= XG_BODY_MAY_READ_MEM | XG_BODY_MAY_MUTATE;
+            break;
         case AST_ASSIGNMENT: {
             XgLocalType *target_row = body_find_local(bc, node->as.assignment.name);
             bool target_is_json = body_local_type_is_json(target_row);
