@@ -5214,7 +5214,7 @@ static void emit_imported_class_shared_native_storage_decls(XiCgenCtx *ctx, FILE
 static bool cg_class_shared_native_ctor_value_is_elided(const XiCgenCtx *ctx, const XiFunc *f,
                                                         const XiValue *v, int *out_slot) {
     (void) f;
-    if (!ctx || !v || v->op != XI_CALL)
+    if (!ctx || !v || (v->op != XI_CALL && v->op != XI_CALL_METHOD))
         return false;
     int limit = ctx->nshared < ctx->shared_cap ? ctx->nshared : ctx->shared_cap;
     for (int slot = 0; slot < limit; slot++) {
