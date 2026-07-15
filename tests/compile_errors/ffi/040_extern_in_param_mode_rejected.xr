@@ -1,0 +1,6 @@
+extern "C" {
+    fn view_i32(value: in int32) -> int32
+}
+
+var x: int32 = 1
+print(unsafe { view_i32(x) })
