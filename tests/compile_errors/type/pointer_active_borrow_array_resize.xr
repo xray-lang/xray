@@ -1,0 +1,9 @@
+fn run() {
+    var values = Array<int>(0)
+    values.push(1)
+    var ptr = unsafe { values.mutPtr() }
+    values.push(2)
+    unsafe { print(ptr.deref()) }
+}
+
+run()
