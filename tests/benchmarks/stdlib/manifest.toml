@@ -24,6 +24,45 @@ compare = ["vm", "aot"]
 vm_budget_ratio = 30.0
 
 [[benchmark]]
+id = "encoding.contract"
+module = "encoding"
+suite = "stdlib/encoding"
+kind = "cpu_kernel"
+source = "tests/diff/cases/semantics/stdlib/encoding_module.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 60.0
+
+[[benchmark]]
+id = "compress.contract"
+module = "compress"
+suite = "stdlib/compress"
+kind = "cpu_kernel"
+source = "tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 80.0
+
+[[benchmark]]
+id = "crypto.contract"
+module = "crypto"
+suite = "stdlib/crypto"
+kind = "cpu_kernel"
+source = "tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 80.0
+
+[[benchmark]]
 id = "path.contract"
 module = "path"
 suite = "stdlib/path"
