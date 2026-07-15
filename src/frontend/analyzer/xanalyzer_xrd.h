@@ -29,6 +29,9 @@
 // The returned pointer is valid for the lifetime of the process.
 XR_FUNC const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path);
 
+// Describes the last schema/load failure. Cleared at the start of each load.
+XR_FUNC const char *xa_xrd_last_error(void);
+
 // Try to find and load a .xrd for the given module name.
 // Searches: <script_dir>/<name>.xrd, then $XRAY_TYPEPATH/<name>.xrd
 // Returns NULL if no .xrd file found.

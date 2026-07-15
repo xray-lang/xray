@@ -16,11 +16,12 @@
 
 #include "xanalyzer_xrd.h"
 #include "../../base/xchecks.h"
+#include "../../base/xmalloc.h"
+#include <ctype.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "../../base/xmalloc.h"
 #include <string.h>
-#include <ctype.h>
 
 // Dynamic module storage (linked list, grows as .xrd files are loaded)
 typedef struct XrdModule {
@@ -35,9 +36,62 @@ typedef struct XrdModule {
 } XrdModule;
 
 static XrdModule *g_xrd_modules = NULL;
+static char g_xrd_error[256];
 
 // Use unified xr_strdup from xmalloc.h
 #define xrd_strdup xr_strdup
+
+const char *xa_xrd_last_error(void) {
+    return g_xrd_error;
+}
+
+static void xrd_set_error(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    vsnprintf(g_xrd_error, sizeof(g_xrd_error), format, args);
+    va_end(args);
+}
+
+static void clear_effect_contract(XaEffectContract *contract) {
+    if (!contract)
+        return;
+    for (uint32_t i = 0; i < contract->error_count; i++)
+        xr_free((void *) contract->errors[i]);
+    xr_free(contract->errors);
+    memset(contract, 0, sizeof(*contract));
+}
+
+static void free_xrd_module(XrdModule *module) {
+    if (!module)
+        return;
+    for (int i = 0; i < module->module.function_count; i++) {
+        xr_free((void *) module->functions[i].name);
+        xr_free((void *) module->functions[i].signature);
+        xr_free((void *) module->functions[i].doc);
+        clear_effect_contract(&module->functions[i].effect_contract);
+    }
+    xr_free(module->functions);
+    for (int i = 0; i < module->module.handle_count; i++) {
+        xr_free((void *) module->handles[i].name);
+        for (int j = 0; j < module->handles[i].field_count; j++) {
+            xr_free((void *) module->handles[i].fields[j].name);
+            xr_free((void *) module->handles[i].fields[j].type_str);
+        }
+        xr_free((void *) module->handles[i].fields);
+        for (int j = 0; j < module->handles[i].method_count; j++) {
+            XaBuiltinMember *method = (XaBuiltinMember *) &module->handles[i].methods[j];
+            xr_free((void *) method->name);
+            xr_free((void *) method->signature);
+            xr_free((void *) method->doc);
+            clear_effect_contract(&method->effect_contract);
+        }
+        xr_free((void *) module->handles[i].methods);
+    }
+    xr_free(module->handles);
+    xr_free(module->handle_method_caps);
+    xr_free(module->name_buf);
+    xr_free(module);
+}
 
 // Skip whitespace
 static const char *skip_ws(const char *p) {
@@ -68,6 +122,136 @@ static const char *read_to_eol(const char *p, char *buf, size_t buf_size) {
         buf[--i] = '\0';
     }
     return p;
+}
+
+static int compare_effect_error_refs(const void *lhs, const void *rhs) {
+    const char *const *a = (const char *const *) lhs;
+    const char *const *b = (const char *const *) rhs;
+    return strcmp(*a, *b);
+}
+
+static bool effect_ref_char(char c) {
+    return isalnum((unsigned char) c) || c == '_' || c == '.' || c == ':';
+}
+
+static char *duplicate_effect_ref(const char *start, size_t len) {
+    char *result = (char *) xr_malloc(len + 1u);
+    if (!result)
+        return NULL;
+    memcpy(result, start, len);
+    result[len] = '\0';
+    return result;
+}
+
+static bool parse_effect_contract(char *signature, XaEffectContract *contract) {
+    memset(contract, 0, sizeof(*contract));
+    char *at = strchr(signature, '@');
+    if (!at)
+        return true;
+
+    char metadata[256];
+    size_t metadata_len = strlen(at);
+    if (metadata_len >= sizeof(metadata)) {
+        xrd_set_error("effect metadata is too long");
+        return false;
+    }
+    memcpy(metadata, at, metadata_len + 1u);
+    char *signature_end = at;
+    while (signature_end > signature && isspace((unsigned char) signature_end[-1]))
+        signature_end--;
+    *signature_end = '\0';
+
+    if (strncmp(metadata, "@nothrow", 8) == 0) {
+        const char *tail = skip_ws(metadata + 8);
+        if (*tail != '\0') {
+            xrd_set_error("invalid or conflicting effect metadata after @nothrow");
+            return false;
+        }
+        contract->kind = XA_EFFECT_CONTRACT_NOTHROW;
+        return true;
+    }
+    if (strncmp(metadata, "@errors", 7) != 0) {
+        xrd_set_error("unknown effect metadata '%s'", metadata);
+        return false;
+    }
+
+    const char *p = skip_ws(metadata + 7);
+    if (*p != '(') {
+        xrd_set_error("@errors must contain a parenthesized error list");
+        return false;
+    }
+    p++;
+    uint32_t capacity = 0;
+    bool expects_entry = true;
+    bool closed = false;
+    while (*p) {
+        p = skip_ws(p);
+        if (*p == ')') {
+            if (expects_entry) {
+                xrd_set_error("@errors requires a non-empty error list");
+                clear_effect_contract(contract);
+                return false;
+            }
+            p++;
+            closed = true;
+            break;
+        }
+        const char *start = p;
+        if (!(isalpha((unsigned char) *p) || *p == '_')) {
+            xrd_set_error("invalid error reference in @errors");
+            clear_effect_contract(contract);
+            return false;
+        }
+        while (*p && effect_ref_char(*p))
+            p++;
+        size_t len = (size_t) (p - start);
+        p = skip_ws(p);
+        if (*p != ',' && *p != ')') {
+            xrd_set_error("invalid error reference in @errors");
+            clear_effect_contract(contract);
+            return false;
+        }
+        if (contract->error_count == capacity) {
+            uint32_t next_capacity = capacity ? capacity * 2u : 4u;
+            const char **next = (const char **) xr_realloc(
+                contract->errors, (size_t) next_capacity * sizeof(const char *));
+            if (!next) {
+                xrd_set_error("out of memory while parsing @errors");
+                clear_effect_contract(contract);
+                return false;
+            }
+            contract->errors = next;
+            capacity = next_capacity;
+        }
+        char *error_ref = duplicate_effect_ref(start, len);
+        if (!error_ref) {
+            xrd_set_error("out of memory while parsing @errors");
+            clear_effect_contract(contract);
+            return false;
+        }
+        contract->errors[contract->error_count++] = error_ref;
+        expects_entry = false;
+        if (*p == ',') {
+            p++;
+            expects_entry = true;
+        }
+    }
+    if (!closed || expects_entry || *skip_ws(p) != '\0') {
+        xrd_set_error("invalid trailing content in @errors metadata");
+        clear_effect_contract(contract);
+        return false;
+    }
+
+    qsort(contract->errors, contract->error_count, sizeof(const char *), compare_effect_error_refs);
+    for (uint32_t i = 1; i < contract->error_count; i++) {
+        if (strcmp(contract->errors[i - 1u], contract->errors[i]) == 0) {
+            xrd_set_error("duplicate error '%s' in @errors", contract->errors[i]);
+            clear_effect_contract(contract);
+            return false;
+        }
+    }
+    contract->kind = XA_EFFECT_CONTRACT_ERRORS;
+    return true;
 }
 
 // Parse handle fields from "{ const fd: int, const type: string }"
@@ -154,10 +338,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
     xrd->handles = xr_calloc(xrd->handle_cap, sizeof(XaBuiltinHandle));
     xrd->handle_method_caps = xr_calloc(xrd->handle_cap, sizeof(int));
     if (!xrd->functions || !xrd->handles || !xrd->handle_method_caps) {
-        xr_free(xrd->functions);
-        xr_free(xrd->handles);
-        xr_free(xrd->handle_method_caps);
-        xr_free(xrd);
+        free_xrd_module(xrd);
         return NULL;
     }
 
@@ -241,6 +422,11 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
 
                 char sig[256];
                 read_to_eol(after_ident, sig, sizeof(sig));
+                XaEffectContract effect_contract;
+                if (!parse_effect_contract(sig, &effect_contract)) {
+                    free_xrd_module(xrd);
+                    return NULL;
+                }
 
                 // Find handle by name
                 int handle_idx = -1;
@@ -275,8 +461,13 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                         methods[midx].is_internal = false;
                         methods[midx].is_lowered_only = false;
                         methods[midx].is_yieldable = false;
+                        methods[midx].effect_contract = effect_contract;
                         h->method_count++;
+                    } else {
+                        clear_effect_contract(&effect_contract);
                     }
+                } else {
+                    clear_effect_contract(&effect_contract);
                 }
 
                 // Skip to next line
@@ -299,6 +490,11 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
             // Rest of line is the signature
             char sig[256];
             p = read_to_eol(p, sig, sizeof(sig));
+            XaEffectContract effect_contract;
+            if (!parse_effect_contract(sig, &effect_contract)) {
+                free_xrd_module(xrd);
+                return NULL;
+            }
 
             if (func_name[0] && sig[0]) {
                 int idx = xrd->module.function_count;
@@ -316,7 +512,10 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                 xrd->functions[idx].is_internal = false;
                 xrd->functions[idx].is_lowered_only = false;
                 xrd->functions[idx].is_yieldable = false;
+                xrd->functions[idx].effect_contract = effect_contract;
                 xrd->module.function_count++;
+            } else {
+                clear_effect_contract(&effect_contract);
             }
 
             if (*p)
@@ -364,6 +563,7 @@ static char *read_file_content(const char *path) {
 }
 
 const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path) {
+    g_xrd_error[0] = '\0';
     if (!xrd_path)
         return NULL;
 
@@ -394,13 +594,7 @@ const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path) {
     xr_free(content);
 
     if (!xrd || (xrd->module.function_count == 0 && xrd->module.handle_count == 0)) {
-        if (xrd) {
-            xr_free(xrd->functions);
-            xr_free(xrd->handles);
-            xr_free(xrd->handle_method_caps);
-            xr_free(xrd->name_buf);
-            xr_free(xrd);
-        }
+        free_xrd_module(xrd);
         return NULL;
     }
 
@@ -470,35 +664,7 @@ void xa_xrd_cleanup(void) {
     XrdModule *m = g_xrd_modules;
     while (m) {
         XrdModule *next = m->next;
-
-        // Free function strings
-        for (int i = 0; i < m->module.function_count; i++) {
-            xr_free((void *) m->functions[i].name);
-            xr_free((void *) m->functions[i].signature);
-            xr_free((void *) m->functions[i].doc);
-        }
-        xr_free(m->functions);
-
-        // Free handle strings and methods
-        for (int i = 0; i < m->module.handle_count; i++) {
-            xr_free((void *) m->handles[i].name);
-            for (int j = 0; j < m->handles[i].field_count; j++) {
-                xr_free((void *) m->handles[i].fields[j].name);
-                xr_free((void *) m->handles[i].fields[j].type_str);
-            }
-            xr_free((void *) m->handles[i].fields);
-            for (int j = 0; j < m->handles[i].method_count; j++) {
-                xr_free((void *) m->handles[i].methods[j].name);
-                xr_free((void *) m->handles[i].methods[j].signature);
-                xr_free((void *) m->handles[i].methods[j].doc);
-            }
-            xr_free((void *) m->handles[i].methods);
-        }
-        xr_free(m->handles);
-        xr_free(m->handle_method_caps);
-
-        xr_free(m->name_buf);
-        xr_free(m);
+        free_xrd_module(m);
         m = next;
     }
     g_xrd_modules = NULL;
