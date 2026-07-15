@@ -2917,6 +2917,13 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
                          "    box[key] = e\n"
                          "    throw box[other]\n"
                          "  }\n"
+                         "}\n"
+                         "fn mapContainsKeyPreserves() {\n"
+                         "  try { failMap() } catch (e: MapErr) {\n"
+                         "    var box = #{\"caught\": e}\n"
+                         "    box.containsKey(\"other\")\n"
+                         "    throw box[\"caught\"]\n"
+                         "  }\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -2933,6 +2940,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     const XaEffectSummary *dynamic_invalidated =
         analyzer_function_effect_summary(a, "mapDynamicKeyMutationInvalidates");
     const XaEffectSummary *mismatch = analyzer_function_effect_summary(a, "mapDynamicKeyMismatch");
+    const XaEffectSummary *contains_key =
+        analyzer_function_effect_summary(a, "mapContainsKeyPreserves");
     ASSERT(literal != NULL);
     ASSERT(other_key != NULL);
     ASSERT(invalidated != NULL);
@@ -2940,6 +2949,7 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(stable_local_key != NULL);
     ASSERT(dynamic_invalidated != NULL);
     ASSERT(mismatch != NULL);
+    ASSERT(contains_key != NULL);
 
     const XaErrorTypeSet *literal_set = effect_summary_enum_set_named(a, literal, "MapErr");
     const XaErrorTypeSet *other_key_set = effect_summary_enum_set_named(a, other_key, "MapErr");
@@ -2950,6 +2960,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     const XaErrorTypeSet *dynamic_invalidated_set =
         effect_summary_enum_set_named(a, dynamic_invalidated, "MapErr");
     const XaErrorTypeSet *mismatch_set = effect_summary_enum_set_named(a, mismatch, "MapErr");
+    const XaErrorTypeSet *contains_key_set =
+        effect_summary_enum_set_named(a, contains_key, "MapErr");
     ASSERT(literal_set != NULL);
     ASSERT(other_key_set != NULL);
     ASSERT(invalidated_set != NULL);
@@ -2957,6 +2969,7 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(stable_local_key_set != NULL);
     ASSERT(dynamic_invalidated_set != NULL);
     ASSERT(mismatch_set != NULL);
+    ASSERT(contains_key_set != NULL);
     ASSERT(!literal_set->all_variants);
     ASSERT(xa_bitset_test(&literal_set->variants, 0));
     ASSERT(!xa_bitset_test(&literal_set->variants, 1));
@@ -2972,6 +2985,9 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!xa_bitset_test(&stable_local_key_set->variants, 1));
     ASSERT(dynamic_invalidated_set->all_variants);
     ASSERT(mismatch_set->all_variants);
+    ASSERT(!contains_key_set->all_variants);
+    ASSERT(xa_bitset_test(&contains_key_set->variants, 0));
+    ASSERT(!xa_bitset_test(&contains_key_set->variants, 1));
 
     xa_analyzer_free(a);
     setup_pool();
