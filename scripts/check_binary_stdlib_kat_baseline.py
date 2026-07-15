@@ -176,6 +176,21 @@ BASELINES = (
         ),
     ),
     Baseline(
+        category="BINARY_NATIVE_RANDOMIZED_FUZZ_HARNESS",
+        path="tests/diff/fuzz_binary_native_stdlib.py",
+        contains=(
+            "Seeded cross-oracle fuzzing for task-200 native binary stdlib baselines.",
+            "zlib.crc32(data)",
+            "zlib.adler32(data)",
+            "hashlib.sha256(data).hexdigest()",
+            "hmac.new(key, data, getattr(hashlib, algo)).hexdigest()",
+            "compress.gzip(text",
+            "crypto.sha512(text",
+            '[str(xray), "run", str(source_path)]',
+            '[str(xray), "build", "--native", str(source_path), "-o", str(binary)]',
+        ),
+    ),
+    Baseline(
         category="COMPRESS_CHECKSUM_KAT",
         path="tests/regression/10_stdlib/1301_compress.xr",
         contains=(
