@@ -277,7 +277,7 @@ op_call_closure:
         XrClosure *closure = xr_value_to_closure(func_val);
         XrProto *proto = closure->proto;
 
-        // FFI: @extern foreign function — marshal args and invoke the C symbol
+        // FFI: extern foreign function — marshal args and invoke the C symbol
         // through libffi instead of executing the synthesized stub body.
         if (XR_UNLIKELY(proto->is_extern)) {
             XrValue result = xr_ffi_call_proto(isolate, proto, &R(a + 1), nargs);

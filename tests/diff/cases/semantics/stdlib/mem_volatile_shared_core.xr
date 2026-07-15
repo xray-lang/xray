@@ -4,8 +4,10 @@
 // native-order sized value. size in {1,2,4,8}. MutPtr args coerce into the
 // Ptr param of volatileLoad via mut->const.
 import mem
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
 
 var p = unsafe { malloc(16) }
 mem.set(p, 0, 16)

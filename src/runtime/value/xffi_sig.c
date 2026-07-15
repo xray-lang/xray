@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xffi_sig.c - @extern call signature carried by XrProto.
+ * xffi_sig.c - extern call signature carried by XrProto.
  */
 
 #include "xffi_sig.h"

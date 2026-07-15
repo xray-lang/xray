@@ -990,7 +990,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     ctx.proto->test_attr = f->test_attr;
     ctx.proto->test_timeout = f->test_timeout;
     ctx.proto->is_extern = f->is_extern;
-    /* FFI: build the self-contained @extern signature on the proto so the VM's
+    /* FFI: build the self-contained extern signature on the proto so the VM's
      * libffi invoker works without the Xi IR (which is not serialized into an
      * embedded bytecode binary). The AOT backend ignores this and emits direct
      * C calls. */

@@ -9311,7 +9311,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
         if (f->children[i])
             xi_cgen_func(ctx, out, f->children[i], prefix);
     }
-    /* FFI: @extern functions have no Xray definition. Only the `extern Ret
+    /* FFI: extern functions have no Xray definition. Only the `extern Ret
      * sym(...)` forward declaration is emitted (see emit_one_forward_decl);
      * call sites emit a direct C call. Never emit a body. */
     if (f->is_extern)
@@ -9482,7 +9482,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
  * needs.  Used both for a unit's own functions (via emit_forward_decls) and for
  * the imported cross-module functions a unit references (114). */
 static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
-    /* FFI: @extern function — declare the foreign C symbol directly (no name
+    /* FFI: extern-block function — declare the foreign C symbol directly (no name
      * mangling, no hidden _cl). The linker resolves it from the process / a
      * linked library; call sites emit `sym(args)`. */
     if (f->is_extern) {

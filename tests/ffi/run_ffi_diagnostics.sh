@@ -1,7 +1,7 @@
 #!/bin/bash
 # FFI diagnostic regression tests.
 #
-# Locks user-facing error contracts for @extern/@dylib failures that are not
+# Locks user-facing error contracts for extern/dylib failures that are not
 # compile errors: VM runtime resolution and AOT native link failures.
 
 set -u
@@ -95,7 +95,7 @@ MISSING_SYMBOL="xray_missing_symbol_nope_zz"
 
 VM_MISSING_LIB_SRC="$WORK/vm_missing_lib.xr"
 cat > "$VM_MISSING_LIB_SRC" <<XR
-@extern("C") @dylib("$MISSING_LIB") fn nope(x: int32) -> int32
+extern "C" dylib("$MISSING_LIB") { fn nope(x: int32) -> int32 }
 print(unsafe { nope(1) })
 XR
 
@@ -111,7 +111,7 @@ fi
 
 VM_MISSING_SYMBOL_SRC="$WORK/vm_missing_symbol.xr"
 cat > "$VM_MISSING_SYMBOL_SRC" <<XR
-@extern("C") fn $MISSING_SYMBOL(x: int32) -> int32
+extern "C" { fn $MISSING_SYMBOL(x: int32) -> int32 }
 print(unsafe { $MISSING_SYMBOL(1) })
 XR
 

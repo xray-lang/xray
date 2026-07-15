@@ -5,10 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xffi_sig.h - Self-contained @extern call signature carried by XrProto.
+ * xffi_sig.h - Self-contained extern call signature carried by XrProto.
  *
- * The AOT backend emits direct C calls for @extern functions and never needs
- * this. The bytecode VM, however, marshals @extern calls through libffi at
+ * The AOT backend emits direct C calls for extern functions and never needs
+ * this. The bytecode VM, however, marshals extern calls through libffi at
  * runtime — and the bytecode that backs an embedded ("xray build") binary is
  * serialized without the compile-time Xi IR. This signature therefore lives on
  * the proto and round-trips through bytecode so the VM can resolve the symbol
@@ -66,12 +66,12 @@ typedef struct XrFFICallbackSig {
 } XrFFICallbackSig;
 
 /*
- * @extern call signature. Owned by the XrProto that carries it and freed via
+ * Extern call signature. Owned by the XrProto that carries it and freed via
  * xr_ffi_sig_free in xr_proto_free.
  */
 typedef struct XrFFISig {
     char *symbol;                    /* C symbol to resolve (owned, never NULL) */
-    char *dylib;                     /* @dylib library name, or NULL = process/default (owned) */
+    char *dylib;                     /* extern library target, or NULL = process/default (owned) */
     uint8_t *params;                 /* [nparams] XrFFIType codes (owned, NULL when nparams==0) */
     XrFFICallbackSig **param_cbacks; /* [nparams] optional CFn signatures */
     uint8_t nparams;                 /* declared parameter count */

@@ -1439,7 +1439,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     xi_lower_bind_function_body_id(&l,
                                    xi_lower_function_evidence_source_node_id(&l, func_node, fdecl));
 
-    /* FFI: @extern("C") functions are bodyless foreign declarations. Record
+    /* FFI: extern "C" functions are bodyless foreign declarations. Record
      * the C symbol + optional dylib; the body below stays empty and a trivial
      * zero return is synthesized so the IR is well-formed (codegen replaces it
      * with `extern Ret sym(...)` and direct calls). */
@@ -1451,7 +1451,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
             if (a->kind == ATTR_EXTERN) {
                 l.func->is_extern = true;
                 l.func->extern_symbol = fdecl->name;
-            } else if (a->kind == ATTR_DYLIB) {
+            } else if (a->kind == ATTR_DYLIB || a->kind == ATTR_LINK) {
                 l.func->extern_dylib = a->str_arg;
             } else if (a->kind == ATTR_C_EXPORT) {
                 l.func->c_export = true;

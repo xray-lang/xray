@@ -59,17 +59,19 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 #### `unsafe { }`
 
-`unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `@extern` 函数、读取/写入 `Ptr<T>` / `MutPtr<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
+`unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `extern "C"` 函数、读取/写入 `Ptr<T>` / `MutPtr<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
 
 var p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果
 unsafe {
     p[0] = 7                      // MutPtr 写入必须在 unsafe 内
     print(p.deref())              // 解引用必须在 unsafe 内
-    free(p)                       // @extern 调用必须在 unsafe 内
+    free(p)                       // extern 调用必须在 unsafe 内
 }
 ```
 
@@ -627,17 +629,19 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 #### `unsafe { }`
 
-`unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `@extern` functions, reads/writes through `Ptr<T>` / `MutPtr<T>` foreign memory, and `deref()` calls that dereference raw pointers.
+`unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `extern "C"` functions, reads/writes through `Ptr<T>` / `MutPtr<T>` foreign memory, and `deref()` calls that dereference raw pointers.
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
 
 var p = unsafe { malloc(1) }      // the final expression is the block result
 unsafe {
     p[0] = 7                      // MutPtr writes must be inside unsafe
     print(p.deref())              // dereference must be inside unsafe
-    free(p)                       // @extern calls must be inside unsafe
+    free(p)                       // extern calls must be inside unsafe
 }
 ```
 

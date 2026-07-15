@@ -1,0 +1,1 @@
+@extern("C") fn abs(x: int32) -> int32

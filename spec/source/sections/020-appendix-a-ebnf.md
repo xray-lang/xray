@@ -169,6 +169,7 @@ Statement ::= ExprStmt
            |  IncDecStmt
            |  VarDecl
            |  FnDecl
+           |  ExternBlock
            |  ClassDecl
            |  StructDecl
            |  InterfaceDecl
@@ -245,8 +246,10 @@ BindingPattern ::= Identifier
                 |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
 ObjectBinding ::= Identifier (':' Identifier)?
 
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
-FnBody ::= Block | ';'?                         // 空函数体仅允许 @extern
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternFnDecl+ '}'
+ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
+ExternFnDecl ::= AttrList? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
@@ -300,7 +303,7 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // 例如 @extern("C")、@dylib("m")、@c_export("sym")
+AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // 例如 @c_export("sym")、@section(".text")
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'
@@ -478,6 +481,7 @@ Statement ::= ExprStmt
            |  IncDecStmt
            |  VarDecl
            |  FnDecl
+           |  ExternBlock
            |  ClassDecl
            |  StructDecl
            |  InterfaceDecl
@@ -554,8 +558,10 @@ BindingPattern ::= Identifier
                 |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
 ObjectBinding ::= Identifier (':' Identifier)?
 
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
-FnBody ::= Block | ';'?                         // empty body is only allowed for @extern
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternFnDecl+ '}'
+ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
+ExternFnDecl ::= AttrList? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
@@ -609,7 +615,7 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // e.g. @extern("C"), @dylib("m"), @c_export("sym")
+AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // e.g. @c_export("sym"), @section(".text")
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

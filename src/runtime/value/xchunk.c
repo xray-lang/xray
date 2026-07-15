@@ -167,7 +167,7 @@ void xr_vm_proto_free(XrProto *proto) {
         proto->xi_func = NULL;
     }
 
-    // Free self-contained @extern signature
+    // Free self-contained extern signature
     if (proto->ffi_sig != NULL) {
         xr_ffi_sig_free(proto->ffi_sig);
         proto->ffi_sig = NULL;

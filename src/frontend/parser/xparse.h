@@ -86,7 +86,7 @@ struct Parser {
     // True while parsing a @native class body: methods have no body.
     bool parsing_native_class;
 
-    // True while parsing an @extern function declaration: it is bodyless
+    // True while parsing a bodyless function declaration inside an extern block.
     // (foreign implementation), so no `{ }` block follows the signature.
     bool parsing_extern_fn;
 

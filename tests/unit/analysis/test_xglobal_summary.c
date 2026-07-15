@@ -7490,7 +7490,7 @@ TEST(global_evidence_composes_recursive_direct_call_effects) {
 
 TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls) {
     setup_parser_session();
-    const char *source = "@extern(\"C\") @dylib(\"m\") fn cos(x: float64) -> float64\n"
+    const char *source = "extern \"C\" dylib(\"m\") { fn cos(x: float64) -> float64 }\n"
                          "fn useCos() -> float64 { return cos(0.0) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -16852,8 +16852,8 @@ TEST(global_evidence_producer_marks_sys_thread_spawn_capability) {
 
 TEST(global_evidence_producer_marks_extern_dylib_link_dependency) {
     setup_parser_session();
-    const char *source = "@extern(\"C\") @dylib(\"m\") fn cos(x: float64) -> float64\n"
-                         "@extern(\"C\") @dylib(\"unusedffi\") fn unused(x: float64) -> float64\n"
+    const char *source = "extern \"C\" dylib(\"m\") { fn cos(x: float64) -> float64 }\n"
+                         "extern \"C\" dylib(\"unusedffi\") { fn unused(x: float64) -> float64 }\n"
                          "fn useCos() -> float64 { return cos(0.0) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);

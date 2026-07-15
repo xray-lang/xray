@@ -396,6 +396,24 @@ TEST(parameter_modes_roundtrip) {
     teardown();
 }
 
+TEST(extern_block_roundtrip) {
+    setup();
+    const char *src = "extern \"C\" link(\"m\") {\n"
+                      "  fn cos(x: float64) -> float64\n"
+                      "  fn clear(value: out int32)\n"
+                      "}\n";
+    char *fmt1 = parse_and_format(src, "extern-block.xr");
+    ASSERT_NOT_NULL(fmt1);
+    ASSERT_TRUE(contains(fmt1, "extern \"C\" link(\"m\")"));
+    ASSERT_TRUE(!contains(fmt1, "@extern"));
+    char *fmt2 = parse_and_format(fmt1, "extern-block-formatted.xr");
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
+    teardown();
+}
+
 TEST(parameter_modes_comments_roundtrip) {
     setup();
     const char *src = "/// function docs\n"
@@ -813,6 +831,7 @@ RUN_TEST(empty_string_roundtrip);
 RUN_TEST(arrow_return_type_emitted);
 RUN_TEST(object_destructure_rename_roundtrip);
 RUN_TEST(parameter_modes_roundtrip);
+RUN_TEST(extern_block_roundtrip);
 RUN_TEST(parameter_modes_comments_roundtrip);
 
 RUN_TEST(branch_arrows_default_aligned);

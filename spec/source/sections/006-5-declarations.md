@@ -88,7 +88,7 @@ var { name: localName, age } = { name: "Alice", age: 30 }
 ### 5.2 `fn` 函数声明
 
 ```ebnf
-FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 ParamList ::= Param (',' Param)*
 Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
@@ -96,8 +96,6 @@ ParamType ::= ParamMode? Type
 ParamMode ::= 'in' | 'ref' | 'out'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // 元组返回
-FnBody ::= Block
-         | <empty>                              // 仅 @extern 函数可省略函数体
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
 AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 ```
@@ -233,14 +231,18 @@ greet()                   // 必须显式调用
 - 顶层不允许 `return`（编译错误 `E0306`）。
 - 多文件项目的入口由 `xray.toml` 的 `entry` 字段指定，对应文件按上述脚本规则执行。
 
-#### 5.2.9 `@extern` C FFI 函数
+#### 5.2.9 `extern "C"` C FFI 声明块
 
-`@extern("C")` 声明外部 C ABI 函数。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
+`extern "C"` 块声明共享 C ABI 和可选库契约的外部函数。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
-@extern("C") @dylib("m") fn cos(x: float64) -> float64
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
+extern "C" dylib("m") {
+    fn cos(x: float64) -> float64
+}
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -251,21 +253,23 @@ unsafe {
 ```
 
 规则：
-- `@extern("C")` 当前表示默认 C ABI；省略字符串时也按 C ABI 处理。
-- `@dylib("name")` 指定符号所在动态库；未指定时从默认进程/系统查找路径解析。
-- `@extern` 函数只能声明签名，不能带 `{ }` 函数体；非 `@extern` 函数必须带块体。
+- ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
+- `dylib("name-or-path")` 指定符号所在动态库；`link("name")` 指定 AOT 系统链接名。二者都进入统一 typed FFI descriptor，未指定时从默认进程/系统路径解析。
+- extern 块内函数只能声明签名，不能带 `{ }` 函数体；普通函数必须带块体。
 - 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
-- 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 `@extern` 函数本身会被拒绝。
+- 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
 
 ```xray
-@extern("C") fn bsearch(
-    key: Ptr<byte>,
-    base: Ptr<byte>,
-    count: uintsize,
-    size: uintsize,
-    cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>
-) -> Ptr<byte>
+extern "C" {
+    fn bsearch(
+        key: Ptr<byte>,
+        base: Ptr<byte>,
+        count: uintsize,
+        size: uintsize,
+        cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>
+    ) -> Ptr<byte>
+}
 
 fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
     return 0
@@ -289,7 +293,7 @@ print(add(19, 23))        // xray 内部仍是普通函数调用
 
 规则：
 - `@c_export` 只能标注模块级 `fn` 声明；不能标注 class、struct、方法、匿名函数或嵌套函数。
-- `@c_export` 函数必须有 xray 函数体，不能同时是 `@extern` 函数。
+- `@c_export` 函数必须有 xray 函数体，不能同时是 extern 函数。
 - 字符串参数必须是非空 C identifier；该字符串就是导出的 C 符号名。
 - 同一个 AOT bundle 中每个 `@c_export` 符号名必须唯一；重复符号是编译错误。
 - 当前支持的导出边界类型是 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
@@ -938,7 +942,7 @@ Constraints:
 ### 5.2 `fn` function declaration
 
 ```ebnf
-FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 ParamList ::= Param (',' Param)*
 Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
@@ -946,8 +950,6 @@ ParamType ::= ParamMode? Type
 ParamMode ::= 'in' | 'ref' | 'out'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // tuple return
-FnBody ::= Block
-         | <empty>                              // only @extern functions may omit a body
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
 AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 ```
@@ -1083,14 +1085,18 @@ greet()                   // must be called explicitly
 - Top-level `return` is forbidden (compile error `E0306`).
 - Multi-file projects specify the entry via the `entry` field of `xray.toml`; the corresponding file follows the script execution rules above.
 
-#### 5.2.9 `@extern` C FFI Functions
+#### 5.2.9 `extern "C"` C FFI Declaration Blocks
 
-`@extern("C")` declares an external C ABI function. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
+An `extern "C"` block declares external functions that share a C ABI and optional library contract. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
-@extern("C") @dylib("m") fn cos(x: float64) -> float64
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
+extern "C" dylib("m") {
+    fn cos(x: float64) -> float64
+}
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -1101,21 +1107,23 @@ unsafe {
 ```
 
 Rules:
-- `@extern("C")` currently denotes the default C ABI; omitting the string is also treated as C ABI.
-- `@dylib("name")` selects the dynamic library that provides the symbol; without it, resolution uses the default process/system lookup path.
-- An `@extern` function may only declare its signature and cannot have a `{ }` body; every non-`@extern` function must have a block body.
+- The ABI string is mandatory; `"C"` is currently the only supported value.
+- `dylib("name-or-path")` selects a dynamic library, while `link("name")` selects an AOT system link name. Both feed the same typed FFI descriptor; without either, resolution uses the default process/system lookup path.
+- Functions inside an extern block may only declare signatures and cannot have `{ }` bodies; ordinary functions require block bodies.
 - Boundary types that are aligned across the VM/AOT backends include `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
 - C callback parameters must use `CFn<(A, B) -> R>`, not the ordinary xray function type `(A, B) -> R`.
-- A current `CFn` argument must be a module-level, noncapturing xray function with an exact signature match; anonymous functions, capturing closures, and `@extern` functions themselves are rejected.
+- A current `CFn` argument must be a module-level, noncapturing xray function with an exact signature match; anonymous functions, capturing closures, and extern functions themselves are rejected.
 
 ```xray
-@extern("C") fn bsearch(
-    key: Ptr<byte>,
-    base: Ptr<byte>,
-    count: uintsize,
-    size: uintsize,
-    cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>
-) -> Ptr<byte>
+extern "C" {
+    fn bsearch(
+        key: Ptr<byte>,
+        base: Ptr<byte>,
+        count: uintsize,
+        size: uintsize,
+        cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>
+    ) -> Ptr<byte>
+}
 
 fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
     return 0
@@ -1139,7 +1147,7 @@ print(add(19, 23))        // still an ordinary xray call inside xray
 
 Rules:
 - `@c_export` may only annotate a module-level `fn` declaration; it cannot annotate classes, structs, methods, anonymous functions, or nested functions.
-- A `@c_export` function must have an xray function body and cannot also be an `@extern` function.
+- A `@c_export` function must have an xray function body and cannot also be an extern function.
 - The string argument must be a non-empty C identifier; that string is the exported C symbol name.
 - Each `@c_export` symbol name must be unique within one AOT bundle; duplicate symbols are compile errors.
 - Currently supported export boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.

@@ -643,13 +643,15 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 | `intsize` | `ptrdiff_t` / 平台有符号宽度 | 当前支持目标上为 `int64` |
 | `Ptr<T>` | `const void *` 边界值 | 只读裸指针；`T` 用于 xray 端解引用/索引宽度 |
 | `MutPtr<T>` | `void *` 边界值 | 可写裸指针；可传给需要 `Ptr<T>` 的位置 |
-| `CFn<(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `@extern` 函数 |
+| `CFn<(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `extern "C"` 函数 |
 
 裸指针值可以安全地保存、传递、比较和用 `offset(i)` 做按元素宽度缩放的指针偏移；真正读写外部内存必须写在 `unsafe { }` 内：
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -661,7 +663,7 @@ unsafe {
 
 `Ptr<T>` 只能读取，写入必须使用 `MutPtr<T>`；`unsafe` 不会绕过这个类型规则。裸指针访问不做空指针或边界检查，调用方必须保证地址、生命周期、对齐和别名规则正确。
 
-`CFn<(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 `@extern` 函数本身不能作为 `CFn` 回调实参。
+`CFn<(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 extern 函数本身不能作为 `CFn` 回调实参。
 
 ### 2.4 复合类型
 
@@ -1090,17 +1092,19 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 #### `unsafe { }`
 
-`unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `@extern` 函数、读取/写入 `Ptr<T>` / `MutPtr<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
+`unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `extern "C"` 函数、读取/写入 `Ptr<T>` / `MutPtr<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
 
 var p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果
 unsafe {
     p[0] = 7                      // MutPtr 写入必须在 unsafe 内
     print(p.deref())              // 解引用必须在 unsafe 内
-    free(p)                       // @extern 调用必须在 unsafe 内
+    free(p)                       // extern 调用必须在 unsafe 内
 }
 ```
 
@@ -1995,7 +1999,7 @@ var { name: localName, age } = { name: "Alice", age: 30 }
 ### 5.2 `fn` 函数声明
 
 ```ebnf
-FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 ParamList ::= Param (',' Param)*
 Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
@@ -2003,8 +2007,6 @@ ParamType ::= ParamMode? Type
 ParamMode ::= 'in' | 'ref' | 'out'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // 元组返回
-FnBody ::= Block
-         | <empty>                              // 仅 @extern 函数可省略函数体
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
 AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 ```
@@ -2140,14 +2142,18 @@ greet()                   // 必须显式调用
 - 顶层不允许 `return`（编译错误 `E0306`）。
 - 多文件项目的入口由 `xray.toml` 的 `entry` 字段指定，对应文件按上述脚本规则执行。
 
-#### 5.2.9 `@extern` C FFI 函数
+#### 5.2.9 `extern "C"` C FFI 声明块
 
-`@extern("C")` 声明外部 C ABI 函数。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
+`extern "C"` 块声明共享 C ABI 和可选库契约的外部函数。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
-@extern("C") @dylib("m") fn cos(x: float64) -> float64
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
+extern "C" dylib("m") {
+    fn cos(x: float64) -> float64
+}
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -2158,21 +2164,23 @@ unsafe {
 ```
 
 规则：
-- `@extern("C")` 当前表示默认 C ABI；省略字符串时也按 C ABI 处理。
-- `@dylib("name")` 指定符号所在动态库；未指定时从默认进程/系统查找路径解析。
-- `@extern` 函数只能声明签名，不能带 `{ }` 函数体；非 `@extern` 函数必须带块体。
+- ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
+- `dylib("name-or-path")` 指定符号所在动态库；`link("name")` 指定 AOT 系统链接名。二者都进入统一 typed FFI descriptor，未指定时从默认进程/系统路径解析。
+- extern 块内函数只能声明签名，不能带 `{ }` 函数体；普通函数必须带块体。
 - 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
-- 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 `@extern` 函数本身会被拒绝。
+- 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
 
 ```xray
-@extern("C") fn bsearch(
-    key: Ptr<byte>,
-    base: Ptr<byte>,
-    count: uintsize,
-    size: uintsize,
-    cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>
-) -> Ptr<byte>
+extern "C" {
+    fn bsearch(
+        key: Ptr<byte>,
+        base: Ptr<byte>,
+        count: uintsize,
+        size: uintsize,
+        cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>
+    ) -> Ptr<byte>
+}
 
 fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
     return 0
@@ -2196,7 +2204,7 @@ print(add(19, 23))        // xray 内部仍是普通函数调用
 
 规则：
 - `@c_export` 只能标注模块级 `fn` 声明；不能标注 class、struct、方法、匿名函数或嵌套函数。
-- `@c_export` 函数必须有 xray 函数体，不能同时是 `@extern` 函数。
+- `@c_export` 函数必须有 xray 函数体，不能同时是 extern 函数。
 - 字符串参数必须是非空 C identifier；该字符串就是导出的 C 符号名。
 - 同一个 AOT bundle 中每个 `@c_export` 符号名必须唯一；重复符号是编译错误。
 - 当前支持的导出边界类型是 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
@@ -5481,6 +5489,7 @@ Statement ::= ExprStmt
            |  IncDecStmt
            |  VarDecl
            |  FnDecl
+           |  ExternBlock
            |  ClassDecl
            |  StructDecl
            |  InterfaceDecl
@@ -5557,8 +5566,10 @@ BindingPattern ::= Identifier
                 |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
 ObjectBinding ::= Identifier (':' Identifier)?
 
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
-FnBody ::= Block | ';'?                         // 空函数体仅允许 @extern
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternFnDecl+ '}'
+ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
+ExternFnDecl ::= AttrList? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
@@ -5612,7 +5623,7 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // 例如 @extern("C")、@dylib("m")、@c_export("sym")
+AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // 例如 @c_export("sym")、@section(".text")
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

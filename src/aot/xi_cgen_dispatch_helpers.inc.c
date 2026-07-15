@@ -2754,7 +2754,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     if (target && !xicgen_generic_body_call_preflight(ctx, out, f, v, &target, &call_prefix))
         return;
 
-    /* FFI: direct C-ABI call to an @extern function. Emit `c_sym(args)` with no
+    /* FFI: direct C-ABI call to an extern function. Emit `c_sym(args)` with no
      * hidden _cl closure and arguments converted to their native C reps (the
      * same conversion as a typed direct call, so e.g. tagged -> double). */
     if (target && target->is_extern) {
