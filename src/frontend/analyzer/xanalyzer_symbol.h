@@ -85,6 +85,11 @@ typedef struct XaRefLocation {
     struct XaRefLocation *next;
 } XaRefLocation;
 
+typedef struct XaOutFieldDaPath {
+    char *path;
+    struct XaOutFieldDaPath *next;
+} XaOutFieldDaPath;
+
 // Symbol links - type information stored inline inside XaSymbol.
 // Access via sym->links (no intmap lookup required).
 struct XaSymbolLinks {
@@ -94,6 +99,7 @@ struct XaSymbolLinks {
 
     // Definite assignment tracking
     bool is_definitely_assigned;  // true if variable has been assigned a value
+    XaOutFieldDaPath *out_field_da_paths;
 
     // Analyzer-side provenance for Ptr<T>/MutPtr<T> values. This is the
     // source-level lifetime proof consumed by escape checks before either VM
@@ -290,6 +296,8 @@ XR_FUNC XaScope *xa_scope_find_by_node(XaScope *root, void *ast_node);
 XR_FUNC void xa_symbol_add_ref(XaSymbolLinks *links, uint32_t line, uint32_t col, uint32_t end_col,
                                bool is_write);
 XR_FUNC XaRefLocation *xa_symbol_get_refs(XaSymbolLinks *links, int *count);
+XR_FUNC void xa_symbol_links_mark_out_field_assigned(XaSymbolLinks *links, const char *path);
+XR_FUNC bool xa_symbol_links_out_field_assigned(XaSymbolLinks *links, const char *path);
 
 // API: Class info
 XR_FUNC XrClassInfo *xa_class_info_new(const char *name);

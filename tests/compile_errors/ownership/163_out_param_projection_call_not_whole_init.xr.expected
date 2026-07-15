@@ -1,1 +1,1 @@
-out parameter 'pair' is read before being assigned
+out parameter 'pair' must be assigned before function exits

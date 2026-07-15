@@ -5205,7 +5205,24 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_MEMBER_SET: {
             // Infer types for member set expression
             MemberSetNode *ms = &node->as.member_set;
-            XrType *obj_type = xa_visit_infer_expr(ctx, ms->object);
+            XrType *obj_type = NULL;
+            if (ms->object && ms->object->type == AST_VARIABLE && ms->object->as.variable.name &&
+                ms->member) {
+                XaSymbol *root = xa_lookup_visible_symbol(ctx, ms->object->as.variable.name);
+                XaSymbolLinks *root_links =
+                    root ? xa_analyzer_get_links(ctx->analyzer, root) : NULL;
+                if (root && root->kind == XA_SYM_PARAMETER && root->passing_mode == XR_PARAM_OUT &&
+                    root_links && !root_links->is_definitely_assigned) {
+                    ms->object->as.variable.symbol_id = root->id;
+                    obj_type = xa_analyzer_get_type(ctx->analyzer, root);
+                    if (!obj_type)
+                        obj_type = root_links->type ? root_links->type : root_links->declared_type;
+                    if (obj_type)
+                        xa_analyzer_set_node_type(ctx->analyzer, ms->object, obj_type);
+                }
+            }
+            if (!obj_type)
+                obj_type = xa_visit_infer_expr(ctx, ms->object);
             bool is_c_view = obj_type && XR_TYPE_IS_POINTER(obj_type) && obj_type->ptr_is_c_view;
             if (is_c_view && !obj_type->ptr_is_mut) {
                 XrLocation loc = {
@@ -5383,6 +5400,24 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                              ms->member, obj_name);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+                }
+            }
+            {
+                char path[256];
+                path[0] = '\0';
+                XaSymbol *root = NULL;
+                if (ms->object && ms->object->type == AST_VARIABLE &&
+                    ms->object->as.variable.name && ms->member) {
+                    int n = snprintf(path, sizeof(path), "%s.%s", ms->object->as.variable.name,
+                                     ms->member);
+                    if (n > 0 && (size_t) n < sizeof(path))
+                        root = xa_lookup_visible_symbol(ctx, ms->object->as.variable.name);
+                }
+                if (root && path[0] != '\0') {
+                    XaSymbolLinks *root_links = xa_analyzer_get_links(ctx->analyzer, root);
+                    if (root->kind == XA_SYM_PARAMETER && root->passing_mode == XR_PARAM_OUT &&
+                        root_links && !root_links->is_definitely_assigned)
+                        xa_symbol_links_mark_out_field_assigned(root_links, path);
                 }
             }
             break;

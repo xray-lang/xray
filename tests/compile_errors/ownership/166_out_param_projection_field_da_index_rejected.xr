@@ -1,0 +1,13 @@
+struct ProjectionDaBox {
+    values: Array<int>
+}
+
+fn fill(value: out int) {
+    value = 1
+}
+
+fn bad(box: out ProjectionDaBox) {
+    fill(out box.values[0])
+    var observed = box.values[0]
+    box = ProjectionDaBox{values: [observed]}
+}
