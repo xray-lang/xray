@@ -755,6 +755,12 @@ const char *xa_builtin_get_module_func_doc(const char *module_name, const char *
     return member ? member->doc : NULL;
 }
 
+const XaEffectContract *xa_builtin_get_module_func_effect_contract(const char *module_name,
+                                                                   const char *func_name) {
+    const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, true);
+    return member ? &member->effect_contract : NULL;
+}
+
 bool xa_builtin_module_func_is_yieldable(const char *module_name, const char *func_name) {
     const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, false);
     return member && member->is_method && member->is_yieldable;
@@ -788,6 +794,19 @@ const XaBuiltinHandle *xa_builtin_find_handle_by_name(const char *handle_name) {
 
     // Search dynamically loaded .xrd modules
     return xa_xrd_find_handle_by_name(handle_name);
+}
+
+const XaEffectContract *xa_builtin_get_handle_method_effect_contract(const char *handle_name,
+                                                                     const char *method_name) {
+    const XaBuiltinHandle *handle = xa_builtin_find_handle_by_name(handle_name);
+    if (!handle || !method_name)
+        return NULL;
+    for (int i = 0; i < handle->method_count; i++) {
+        const XaBuiltinMember *method = &handle->methods[i];
+        if (method->is_method && method->name && strcmp(method->name, method_name) == 0)
+            return &method->effect_contract;
+    }
+    return NULL;
 }
 
 const char *xa_builtin_find_handle_module(const char *handle_name) {
