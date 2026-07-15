@@ -1,0 +1,7 @@
+regex=generic-body-plan [0-9]+ .*action=clone .*evidence=row\+inst\+types\+origin_body\+specialized_body\+root reason=none
+regex=generic-storage-plan [0-9]+ .*kind=array action=typed_inline .*container_plan=[1-9][0-9]* evidence=row\+inst\+specialized_type\+container_plan reason=none
+contains=function 2 name=pick$i64
+regex=array-storage [0-9]+ func=pick\$i64 .*elem=XR_ELEM_I64/i64/int64_t
+c_contains=xrt_array_new_typed_ptr(0, XR_ELEM_I64)
+c_contains=((int64_t*)_a->data)[_idx]
+c_not_contains=xrt_index_get(
