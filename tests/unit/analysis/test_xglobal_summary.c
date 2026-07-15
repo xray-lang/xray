@@ -1941,7 +1941,11 @@ TEST(global_evidence_verifier_rederives_dispatch_plans) {
                   &good.method_dispatch_plans[0]);
     xi_call.line = 0;
     xi_call.aux = (void *) "other";
-    ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));
+    ASSERT_EQ_PTR(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call),
+                  &good.method_dispatch_plans[0]);
+    xi_call.aux = NULL;
+    ASSERT_EQ_PTR(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call),
+                  &good.method_dispatch_plans[0]);
     xi_call.aux = (void *) "draw";
     xi_call.nargs = 3;
     ASSERT_NULL(xaot_bundle_find_method_dispatch_plan_for_xi_call(&good, &xi_call));

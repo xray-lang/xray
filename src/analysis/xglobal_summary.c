@@ -2528,6 +2528,30 @@ xg_global_evidence_find_visible_interface_method(const XgGlobalEvidence *evidenc
     return NULL;
 }
 
+XR_FUNC bool xg_global_evidence_interface_dispatch_slot(const XgGlobalEvidence *evidence,
+                                                        XgInterfaceId receiver_interface_id,
+                                                        XgInterfaceMethodId interface_method_id,
+                                                        uint32_t *out_slot) {
+    uint32_t slot = 0;
+    if (out_slot)
+        *out_slot = UINT32_MAX;
+    if (!evidence || receiver_interface_id == XG_NO_ID || interface_method_id == XG_NO_ID ||
+        !out_slot)
+        return false;
+    for (uint32_t i = 0; i < evidence->ninterface_methods; i++) {
+        const XgInterfaceMethodSummary *method = &evidence->interface_methods[i];
+        if (!xg_global_evidence_interface_method_visible_from(evidence, receiver_interface_id,
+                                                              method))
+            continue;
+        if (method->interface_method_id == interface_method_id) {
+            *out_slot = slot;
+            return true;
+        }
+        slot++;
+    }
+    return false;
+}
+
 static bool xg_method_callsite_is_direct_dispatch(const XgGlobalEvidence *evidence,
                                                   const XgCallsiteSummary *call) {
     const XgClassSummary *receiver_class;

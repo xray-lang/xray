@@ -606,23 +606,6 @@ static bool xg_evidence_interface_method_visible_from(const XgGlobalEvidence *ev
                                                  method->owner_interface_id, 0);
 }
 
-static uint32_t xg_evidence_interface_dispatch_slot(const XgGlobalEvidence *ev,
-                                                    XgInterfaceId receiver_interface_id,
-                                                    uint32_t name_id, uint32_t signature_key) {
-    uint32_t slot = 0;
-    if (!ev || receiver_interface_id == XG_NO_ID || name_id == 0 || signature_key == 0)
-        return UINT32_MAX;
-    for (uint32_t i = 0; i < ev->ninterface_methods; i++) {
-        const XgInterfaceMethodSummary *method = &ev->interface_methods[i];
-        if (!xg_evidence_interface_method_visible_from(ev, receiver_interface_id, method))
-            continue;
-        if (method->name_id == name_id && method->signature_key == signature_key)
-            return slot;
-        slot++;
-    }
-    return UINT32_MAX;
-}
-
 static uint32_t xg_evidence_interface_visible_method_count(const XgGlobalEvidence *ev,
                                                            XgInterfaceId interface_id) {
     uint32_t count = 0;
@@ -991,9 +974,8 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
             kind = XAOT_DISPATCH_ITABLE;
             reason = XAOT_DISPATCH_UNPROVEN_NO_INTERFACE_ID;
         } else {
-            dispatch_slot = xg_evidence_interface_dispatch_slot(
-                ev, call->receiver_static_interface_id, call->method_name_id,
-                call->method_signature_key);
+            (void) xg_global_evidence_interface_dispatch_slot(
+                ev, call->receiver_static_interface_id, call->method_id, &dispatch_slot);
             for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
                 const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
                 const XgMethodSummary *target_method;
@@ -4289,16 +4271,10 @@ static XgFuncId xi_call_owner_body_func_id(const XiValue *call) {
 XR_FUNC const XaotMethodDispatchPlan *
 xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, const XiValue *call) {
     const XaotMethodDispatchPlan *plan;
-    const char *method_name;
-    uint32_t method_name_id;
     uint16_t arg_count;
     XgFuncId owner_func_id;
     if (!bundle || !call || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
         call->nargs == 0 || call->xg_callsite_id == XG_NO_ID || call->xg_method_id == XG_NO_ID)
-        return NULL;
-    method_name = call->aux ? (const char *) call->aux : NULL;
-    method_name_id = xg_name_id(method_name);
-    if (method_name_id == 0)
         return NULL;
     arg_count = (uint16_t) (call->nargs - 1);
     owner_func_id = xi_call_owner_body_func_id(call);
@@ -4306,8 +4282,11 @@ xaot_bundle_find_method_dispatch_plan_for_xi_call(const XaotBundle *bundle, cons
         return NULL;
     plan = xaot_bundle_find_method_dispatch_plan(bundle, call->xg_callsite_id);
     if (!plan || plan->method_id != call->xg_method_id || plan->owner_func_id != owner_func_id ||
-        plan->arg_count != arg_count || plan->method_name_id == 0 ||
-        plan->method_name_id != method_name_id)
+        plan->arg_count != arg_count || plan->method_name_id == 0)
+        return NULL;
+    if (plan->receiver_static_interface_id != XG_NO_ID &&
+        (call->xg_interface_dispatch_slot == UINT32_MAX ||
+         plan->dispatch_slot != call->xg_interface_dispatch_slot))
         return NULL;
     return plan;
 }
