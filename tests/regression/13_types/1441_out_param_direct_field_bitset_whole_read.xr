@@ -1,0 +1,20 @@
+struct OutDirectFieldReadPair {
+    left: int
+    right: int
+}
+
+fn initialize_and_read_whole(pair: out OutDirectFieldReadPair) -> int {
+    pair.left = 43
+    pair.right = 47
+    var whole = pair
+    return whole.left + whole.right
+}
+
+@test
+fn test_out_param_direct_field_bitset_whole_read() {
+    var value = OutDirectFieldReadPair{left: 0, right: 0}
+    var total = initialize_and_read_whole(out value)
+    assert_eq(total, 90)
+    assert_eq(value.left, 43)
+    assert_eq(value.right, 47)
+}
