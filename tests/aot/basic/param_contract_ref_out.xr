@@ -9,6 +9,10 @@ fn fill(value: out int) -> int {
     return value
 }
 
+fn initialize(value: out int) {
+    value = 42
+}
+
 fn runLocal() {
     var value = 1
     print(bump(ref value))
@@ -17,6 +21,10 @@ fn runLocal() {
     var slot = 0
     print(fill(out slot))
     print(slot)
+
+    var initialized = 0
+    initialize(out initialized)
+    print(initialized)
 }
 
 runLocal()

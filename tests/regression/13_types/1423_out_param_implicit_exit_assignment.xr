@@ -6,4 +6,5 @@ fn initialize(x: out int) {
 fn test_out_param_assignment_before_implicit_exit() {
     var value = 0
     initialize(out value)
+    assert_eq(value, 42)
 }
