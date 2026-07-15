@@ -1,0 +1,14 @@
+extern "C" {
+    fn memchr(s: Ptr<byte>, c: int32, n: uintsize) -> Ptr<byte>
+    fn sinf(x: float32) -> float32
+}
+
+extern "C" dylib("xrayffi_unused_task190_next") {
+    fn xrayffi_unused_float(x: float64) -> float64
+}
+
+const bytes = b"ABC"
+var found = unsafe { memchr(bytes.ptr(), 66, 3) }
+print(found.isNull())
+print(unsafe { found.deref() })
+print(unsafe { sinf(0.0) == 0.0 })

@@ -1,6 +1,7 @@
 tests/diff/cases/semantics/ffi/extern_libm.xr
 tests/diff/cases/semantics/ffi/extern_libm_dylib.xr
 tests/diff/cases/semantics/ffi/extern_no_arg_void_and_unused.xr
+tests/diff/cases/semantics/ffi/extern_pointer_float_prototypes.xr
 tests/diff/cases/semantics/ffi/extern_direct_noescape_pointer.xr
 tests/diff/cases/semantics/ffi/cfn_bsearch.xr
 tests/diff/cases/semantics/ffi/ptr_memory.xr
