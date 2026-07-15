@@ -217,10 +217,55 @@ def lane_by_slot(data: dict[str, Any], slot: str) -> dict[str, Any]:
     raise RuntimeError(f"unknown stdlib intake lane: {slot}")
 
 
+def branch_worktrees(root: Path) -> dict[str, Path]:
+    result = _git(root, "worktree", "list", "--porcelain")
+    out: dict[str, Path] = {}
+    worktree: Path | None = None
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            worktree = Path(line.removeprefix("worktree "))
+        elif line.startswith("branch refs/heads/") and worktree is not None:
+            branch = line.removeprefix("branch refs/heads/")
+            out[branch] = worktree
+        elif not line:
+            worktree = None
+    return out
+
+
+def worktree_dirty_paths(path: Path) -> list[str]:
+    result = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=path,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode:
+        return [f"<status unavailable: {result.stderr.strip()}>"]
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def queue_status(audit_status: str, dirty_paths: list[str]) -> str:
+    if audit_status in {"missing", "blocked"}:
+        return audit_status
+    if dirty_paths:
+        return "in-progress"
+    return audit_status
+
+
 def queue_report(root: Path, data: dict[str, Any], base: str) -> dict[str, Any]:
     lanes: list[dict[str, Any]] = []
+    worktrees = branch_worktrees(root)
     for lane in data.get("lane", ()):
-        audit = audit_candidate(root, data, base, str(lane["branch"]))
+        branch = str(lane["branch"])
+        audit = audit_candidate(root, data, base, branch)
+        worktree = worktrees.get(branch)
+        dirty_paths = worktree_dirty_paths(worktree) if worktree else []
+        audit["committed_status"] = audit["status"]
+        audit["status"] = queue_status(str(audit["status"]), dirty_paths)
+        audit["worktree"] = str(worktree) if worktree else None
+        audit["dirty_paths"] = dirty_paths
         lanes.append({**lane, **audit})
     return {
         "schema": 1,
@@ -238,10 +283,11 @@ def render_queue(report: dict[str, Any]) -> str:
     ]
     for lane in report["lanes"]:
         modules = ",".join(lane.get("modules", ())) or "-"
+        dirty_count = len(lane.get("dirty_paths", ()))
         lines.append(
             f"{lane['slot']} task-{lane['task']} {lane['branch']}: {lane['status']} "
             f"(candidate_ahead={lane.get('candidate_ahead', 0)}, "
-            f"base_ahead={lane.get('base_ahead', 0)}, modules={modules})"
+            f"base_ahead={lane.get('base_ahead', 0)}, dirty={dirty_count}, modules={modules})"
         )
         for violation in lane.get("violations", ()):
             lines.append(f"  BLOCK: {violation}")
