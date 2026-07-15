@@ -2943,10 +2943,10 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
     if (func_count == 0)
         goto cleanup;
 
-    /* Phase 2: Fixpoint iteration (handles recursion)
-     * Max iterations = func_count + 1 to guarantee convergence. */
-    int max_iter = func_count + 1;
-    for (int iter = 0; iter < max_iter; iter++) {
+    /* Phase 2: Iterate the finite monotone effect/target domains to a real fixed point.
+     * Do not stop after a guessed round count: an unfinished recursive component must
+     * never be published as complete. */
+    for (;;) {
         ctx.changed = false;
 
         for (int i = 0; i < func_count; i++) {
