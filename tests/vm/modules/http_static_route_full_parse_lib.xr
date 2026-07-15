@@ -7,7 +7,7 @@ const PORT = 9196
 fn serveStaticRoutes(port: int) {
     http.route("GET", "/plain", "hello static")
     http.route("GET", "/empty", "")
-    http.route("POST", "/dynamic", fn(req: Json) -> string {
+    http.routeHandler("POST", "/dynamic", fn(req: Json) -> string {
         return Json.containsKey(req, "streaming") ? "handler:true" : "handler:false"
     })
     http.listen(port)

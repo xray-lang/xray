@@ -665,23 +665,17 @@ fn router() -> Router {
     return Router()
 }
 
-class _RouteHandler {
-    handler: (Json) -> Json
-
-    constructor(handler: (Json) -> Json) {
-        this.handler = handler
-    }
-}
-
 class _ServerRouteMatch {
     value: Json
-    handler: _RouteHandler?
+    handler: (Json) -> Json
+    hasHandler: bool
     params: Json
 
-    constructor(value: Json, params: Json, handler: _RouteHandler? = null) {
+    constructor(value: Json, params: Json, handler: (Json) -> Json, hasHandler: bool) {
         this.value = value
         this.params = params
         this.handler = handler
+        this.hasHandler = hasHandler
     }
 }
 
@@ -689,14 +683,20 @@ class _ServerRouteEntry {
     method: string
     path: string
     value: Json
-    handler: _RouteHandler?
+    handler: (Json) -> Json
+    hasHandler: bool
 
-    constructor(method: string, path: string, value: Json, handler: _RouteHandler? = null) {
+    constructor(method: string, path: string, value: Json, handler: (Json) -> Json, hasHandler: bool) {
         this.method = method
         this.path = path
         this.value = value
         this.handler = handler
+        this.hasHandler = hasHandler
     }
+}
+
+fn _serverDefaultHandler(req: Json) -> Json {
+    return null
 }
 
 class _ServerRouter {
@@ -707,25 +707,31 @@ class _ServerRouter {
     }
 
     add<T>(method: string, path: string, value: T) -> bool {
-        return this.addRouteJson(method, path, Json.encode(value), null)
+        return this.addRouteJson(method, path, Json.encode(value), _serverDefaultHandler, false)
     }
 
-    addHandler(method: string, path: string, handler: _RouteHandler) -> bool {
+    addHandler(method: string, path: string, handler: (Json) -> Json) -> bool {
         var value: Json = {}
-        return this.addRouteJson(method, path, value, handler)
+        return this.addRouteJson(method, path, value, handler, true)
     }
 
-    addRouteJson(method: string, path: string, value: Json, handler: _RouteHandler?) -> bool {
+    addRouteJson(
+        method: string,
+        path: string,
+        value: Json,
+        handler: (Json) -> Json,
+        hasHandler: bool
+    ) -> bool {
         var m = _routeMethodKey(method)
         if (len(m) == 0 || !_routePatternValid(path)) { return false }
         for (var i = 0; i < len(this.routes); i++) {
             var entry = this.routes[i]
             if (entry.method == m && entry.path == path) {
-                this.routes[i] = _ServerRouteEntry(m, path, value, handler)
+                this.routes[i] = _ServerRouteEntry(m, path, value, handler, hasHandler)
                 return true
             }
         }
-        this.routes.push(_ServerRouteEntry(m, path, value, handler))
+        this.routes.push(_ServerRouteEntry(m, path, value, handler, hasHandler))
         return true
     }
 
@@ -739,7 +745,7 @@ class _ServerRouter {
             if (entry.method != m) { continue }
             var params = _matchRoutePath(entry.path, path)
             if (params != null) {
-                var found = _ServerRouteMatch(entry.value, params, entry.handler)
+                var found = _ServerRouteMatch(entry.value, params, entry.handler, entry.hasHandler)
                 if (_routePatternIsStatic(entry.path)) { return found }
                 if (dynamicMatch == null) { dynamicMatch = found }
             }
@@ -752,12 +758,12 @@ var _serverRouter = _ServerRouter()
 var _serverRunning = false
 var _serverListener: NetListener? = null
 
-fn route<T>(method: string, path: string, handler: T) {
-    if (typeName(handler) == "function") {
-        _serverRouter.addHandler(method, path, _RouteHandler(handler as (Json) -> Json))
-        return
-    }
-    _serverRouter.add(method, path, handler)
+fn route<T>(method: string, path: string, value: T) {
+    _serverRouter.add(method, path, value)
+}
+
+fn routeHandler(method: string, path: string, handler: (Json) -> Json) {
+    _serverRouter.addHandler(method, path, handler)
 }
 
 fn _serverTargetPath(target: string) -> string {
@@ -805,7 +811,7 @@ fn _serverRequestJson(msg: RequestMessage, params: Json) -> Json {
     req["method"] = msg.head.method
     req["path"] = _serverTargetPath(msg.head.target)
     req["query"] = _serverQueryJson(msg.head.target)
-    req["headers"] = _headersJson(msg.head.headers as Headers)
+    req["headers"] = _headersJson(msg.head.headers)
     req["body"] = msg.body
     req["contentLength"] = msg.head.contentLength
     req["params"] = params
@@ -889,10 +895,10 @@ fn _serverDispatch(conn: NetConn, msg: RequestMessage) -> bool {
     }
 
     var result: Json = found!.value
-    if (found!.handler != null) {
+    if (found!.hasHandler) {
         var req = _serverRequestJson(msg, found!.params)
         try {
-            var handler = found!.handler!.handler
+            var handler = found!.handler
             result = handler(req)
         } catch (e) {
             var body = "Internal Server Error: " + string(e)
@@ -2423,6 +2429,7 @@ export {
     ResponseMessage,
     router,
     route,
+    routeHandler,
     listen,
     stopServer,
     urlEncode,

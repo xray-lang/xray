@@ -63,7 +63,8 @@ conn.error                      // 连接失败时的错误字段
 ```
 
 ### HTTP 服务端
-- `http.route(method, path, handler)` - 添加动态路由或静态响应
+- `http.route(method, path, value)` - 添加静态响应
+- `http.routeHandler(method, path, handler)` - 添加 `(Json) -> Json` 动态路由
 - `http.listen(port)` - 监听端口并由纯 Xray 控制面调度 HTTP/1.x 请求
 - `http.stopServer()` - 停止服务器
 
