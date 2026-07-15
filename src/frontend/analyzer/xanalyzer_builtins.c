@@ -153,10 +153,42 @@ static const XaBuiltinMember *xa_builtin_find_instance_member(XrType *type,
     return NULL;
 }
 
+static const XaBuiltinMember *xa_builtin_find_named_type_member(const XaBuiltinType *bt,
+                                                                const char *member_name,
+                                                                bool is_static) {
+    if (!bt || !member_name)
+        return NULL;
+    for (int i = 0; i < bt->member_count; i++) {
+        const XaBuiltinMember *m = &bt->members[i];
+        if (m->is_static == is_static && strcmp(m->name, member_name) == 0)
+            return m;
+    }
+    return NULL;
+}
+
 // Get member signature for instance access and hover
 const char *xa_builtin_get_member_signature(XrType *type, const char *member_name) {
     const XaBuiltinMember *m = xa_builtin_find_instance_member(type, member_name);
     return m ? m->signature : NULL;
+}
+
+const XaEffectContract *
+xa_builtin_get_type_member_effect_contract(XrType *type, const char *member_name, bool is_static) {
+    const XaBuiltinType *bt = xa_builtin_get_type_info(type);
+    if (!bt || !member_name)
+        return NULL;
+    if (!is_static && !xa_builtin_member_available_for_type(type, member_name))
+        return NULL;
+    const XaBuiltinMember *m = xa_builtin_find_named_type_member(bt, member_name, is_static);
+    return m ? &m->effect_contract : NULL;
+}
+
+const XaEffectContract *xa_builtin_get_named_type_member_effect_contract(const char *type_name,
+                                                                         const char *member_name,
+                                                                         bool is_static) {
+    const XaBuiltinType *bt = xa_builtin_get_by_name(type_name);
+    const XaBuiltinMember *m = xa_builtin_find_named_type_member(bt, member_name, is_static);
+    return m ? &m->effect_contract : NULL;
 }
 
 // Get member documentation

@@ -17,6 +17,7 @@
 
 #include "xanalyzer_native_types.h"
 #include "xanalyzer_builtins.h"
+#include "xanalyzer_xrd.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype_names.h"
@@ -227,6 +228,13 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
 
         char *signature = dup_range(sig_start, sig_len);
         trim_trailing(signature);
+        XaEffectContract effect_contract;
+        if (!xa_effect_contract_parse_suffix(signature, &effect_contract)) {
+            const char *err = xa_xrd_last_error();
+            xr_free(signature);
+            XR_CHECK_FMT(false, "invalid @native class effect contract for %s: %s",
+                         member_name ? member_name : "?", err ? err : "unknown error");
+        }
 
         members[count].name = member_name;
         members[count].signature = signature;
@@ -236,6 +244,7 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         members[count].is_internal = false;
         members[count].is_lowered_only = next_member_lowered_only;
         members[count].is_yieldable = false;
+        members[count].effect_contract = effect_contract;
         next_member_lowered_only = false;
         count++;
 
@@ -348,6 +357,7 @@ static void load_one_source(const char *source) {
                     for (int i = 0; i < member_count; i++) {
                         xr_free((void *) members[i].name);
                         xr_free((void *) members[i].signature);
+                        xa_effect_contract_clear(&members[i].effect_contract);
                     }
                     xr_free(members);
                 }
@@ -359,6 +369,7 @@ static void load_one_source(const char *source) {
                     for (int i = 0; i < member_count; i++) {
                         xr_free((void *) members[i].name);
                         xr_free((void *) members[i].signature);
+                        xa_effect_contract_clear(&members[i].effect_contract);
                     }
                     xr_free(members);
                 }

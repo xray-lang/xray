@@ -2009,6 +2009,82 @@ TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
     setup_pool();
 }
 
+static XaBuiltinMember *mutable_builtin_type_member(XrType *type, const char *name,
+                                                    bool is_static) {
+    const XaBuiltinMember *members = NULL;
+    int count = xa_builtin_get_members_for_type(type, &members);
+    if (!members)
+        return NULL;
+    for (int i = 0; i < count; i++) {
+        if (members[i].is_static == is_static && members[i].name &&
+            strcmp(members[i].name, name) == 0)
+            return (XaBuiltinMember *) &members[i];
+    }
+    return NULL;
+}
+
+TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
+    XrType *string_type = xr_type_new_string(g_isolate);
+    ASSERT(string_type != NULL);
+    XaBuiltinMember *from_utf8 = mutable_builtin_type_member(string_type, "fromUtf8", true);
+    XaBuiltinMember *slice_bytes = mutable_builtin_type_member(string_type, "sliceBytes", false);
+    ASSERT(from_utf8 != NULL);
+    ASSERT(slice_bytes != NULL);
+    const XaEffectContract *lossy_contract =
+        xa_builtin_get_type_member_effect_contract(string_type, "fromUtf8Lossy", true);
+    ASSERT(lossy_contract != NULL);
+    ASSERT(lossy_contract->kind == XA_EFFECT_CONTRACT_NOTHROW);
+
+    char from_utf8_sig[] = "(bytes: Slice<byte>): string @errors(NativeStringErr.BadUtf8)";
+    char slice_bytes_sig[] = "(start: int, end: int): string @errors(NativeStringErr.BadSlice)";
+    XaEffectContract from_utf8_contract;
+    XaEffectContract slice_bytes_contract;
+    ASSERT(xa_effect_contract_parse_suffix(from_utf8_sig, &from_utf8_contract));
+    ASSERT(xa_effect_contract_parse_suffix(slice_bytes_sig, &slice_bytes_contract));
+
+    XaEffectContract old_from_utf8 = from_utf8->effect_contract;
+    XaEffectContract old_slice_bytes = slice_bytes->effect_contract;
+    from_utf8->effect_contract = from_utf8_contract;
+    slice_bytes->effect_contract = slice_bytes_contract;
+
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "enum NativeStringErr { BadUtf8, BadSlice }\n"
+                         "fn viaStatic(bytes: Slice<byte>) { string.fromUtf8(bytes) }\n"
+                         "fn viaInstance(s: string) { s.sliceBytes(0, 1) }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_builtin_type_member_contracts.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "error"));
+
+    const XaEffectSummary *static_call = analyzer_function_effect_summary(a, "viaStatic");
+    const XaEffectSummary *instance_call = analyzer_function_effect_summary(a, "viaInstance");
+    ASSERT(static_call != NULL);
+    ASSERT(instance_call != NULL);
+    ASSERT(static_call->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(instance_call->completeness == XA_EFFECT_COMPLETE);
+
+    const XaErrorTypeSet *static_set =
+        effect_summary_enum_set_named(a, static_call, "NativeStringErr");
+    const XaErrorTypeSet *instance_set =
+        effect_summary_enum_set_named(a, instance_call, "NativeStringErr");
+    ASSERT(static_set != NULL);
+    ASSERT(instance_set != NULL);
+    ASSERT(!static_set->all_variants);
+    ASSERT(!instance_set->all_variants);
+    ASSERT(xa_bitset_test(&static_set->variants, 0));
+    ASSERT(!xa_bitset_test(&static_set->variants, 1));
+    ASSERT(!xa_bitset_test(&instance_set->variants, 0));
+    ASSERT(xa_bitset_test(&instance_set->variants, 1));
+
+    xa_analyzer_free(a);
+    from_utf8->effect_contract = old_from_utf8;
+    slice_bytes->effect_contract = old_slice_bytes;
+    xa_effect_contract_clear(&from_utf8_contract);
+    xa_effect_contract_clear(&slice_bytes_contract);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_subtracts_typed_catches) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -3487,6 +3563,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_direct_method_calls);
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
     RUN_TEST(analyzer_error_effect_consumes_xrd_native_contracts);
+    RUN_TEST(analyzer_error_effect_consumes_builtin_type_member_contracts);
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
     RUN_TEST(analyzer_error_effect_marks_invalid_program_partial_facts);
     RUN_TEST(analyzer_error_effect_tracks_map_catch_aliases);

@@ -2402,6 +2402,30 @@ static const XaEffectContract *es_handle_method_effect_contract(ErrorSetCtx *ctx
     return xa_builtin_get_handle_method_effect_contract(handle_name, ma->name);
 }
 
+static const XaEffectContract *es_builtin_type_member_effect_contract(ErrorSetCtx *ctx,
+                                                                      AstNode *callee) {
+    if (!ctx || !callee || callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object)
+        return NULL;
+
+    const XaEffectContract *contract = NULL;
+    if (ma->object->type == AST_VARIABLE && ma->object->as.variable.name) {
+        XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, ma->object);
+        if (!sym || sym->kind != XA_SYM_MODULE) {
+            contract = xa_builtin_get_named_type_member_effect_contract(
+                ma->object->as.variable.name, ma->name, true);
+            if (contract && contract->kind != XA_EFFECT_CONTRACT_MISSING)
+                return contract;
+        }
+    }
+
+    XrType *receiver_type = xa_analyzer_get_node_type(ctx->analyzer, ma->object);
+    contract = xa_builtin_get_type_member_effect_contract(receiver_type, ma->name, false);
+    return (contract && contract->kind != XA_EFFECT_CONTRACT_MISSING) ? contract : NULL;
+}
+
 static bool es_apply_native_call_contract(ErrorSetCtx *ctx, AstNode *callee) {
     AstNode *source = identity_source(callee);
     const XaEffectContract *contract = es_imported_function_effect_contract(ctx, source);
@@ -2409,6 +2433,8 @@ static bool es_apply_native_call_contract(ErrorSetCtx *ctx, AstNode *callee) {
         contract = es_module_member_effect_contract(ctx, source);
     if (!contract)
         contract = es_handle_method_effect_contract(ctx, source);
+    if (!contract)
+        contract = es_builtin_type_member_effect_contract(ctx, source);
     return es_apply_effect_contract(ctx, contract);
 }
 

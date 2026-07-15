@@ -80,6 +80,17 @@ XR_FUNC XaSymbol **xa_builtin_get_members(XrType *type, int *count);
 // Get member signature for hover
 XR_FUNC const char *xa_builtin_get_member_signature(XrType *type, const char *member_name);
 
+// Get built-in type member error-effect contract. Static members are used for
+// namespace-style calls such as string.fromUtf8(...); instance members are used
+// for receiver calls such as s.sliceBytes(...).
+XR_FUNC const XaEffectContract *
+xa_builtin_get_type_member_effect_contract(XrType *type, const char *member_name, bool is_static);
+
+// Same as above, but starts from a built-in type namespace name.
+XR_FUNC const XaEffectContract *
+xa_builtin_get_named_type_member_effect_contract(const char *type_name, const char *member_name,
+                                                 bool is_static);
+
 // Get member documentation
 XR_FUNC const char *xa_builtin_get_member_doc(XrType *type, const char *member_name);
 

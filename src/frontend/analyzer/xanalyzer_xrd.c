@@ -52,7 +52,7 @@ static void xrd_set_error(const char *format, ...) {
     va_end(args);
 }
 
-static void clear_effect_contract(XaEffectContract *contract) {
+void xa_effect_contract_clear(XaEffectContract *contract) {
     if (!contract)
         return;
     for (uint32_t i = 0; i < contract->error_count; i++)
@@ -68,7 +68,7 @@ static void free_xrd_module(XrdModule *module) {
         xr_free((void *) module->functions[i].name);
         xr_free((void *) module->functions[i].signature);
         xr_free((void *) module->functions[i].doc);
-        clear_effect_contract(&module->functions[i].effect_contract);
+        xa_effect_contract_clear(&module->functions[i].effect_contract);
     }
     xr_free(module->functions);
     for (int i = 0; i < module->module.handle_count; i++) {
@@ -83,7 +83,7 @@ static void free_xrd_module(XrdModule *module) {
             xr_free((void *) method->name);
             xr_free((void *) method->signature);
             xr_free((void *) method->doc);
-            clear_effect_contract(&method->effect_contract);
+            xa_effect_contract_clear(&method->effect_contract);
         }
         xr_free((void *) module->handles[i].methods);
     }
@@ -143,7 +143,7 @@ static char *duplicate_effect_ref(const char *start, size_t len) {
     return result;
 }
 
-static bool parse_effect_contract(char *signature, XaEffectContract *contract) {
+bool xa_effect_contract_parse_suffix(char *signature, XaEffectContract *contract) {
     memset(contract, 0, sizeof(*contract));
     char *at = strchr(signature, '@');
     if (!at)
@@ -189,7 +189,7 @@ static bool parse_effect_contract(char *signature, XaEffectContract *contract) {
         if (*p == ')') {
             if (expects_entry) {
                 xrd_set_error("@errors requires a non-empty error list");
-                clear_effect_contract(contract);
+                xa_effect_contract_clear(contract);
                 return false;
             }
             p++;
@@ -199,7 +199,7 @@ static bool parse_effect_contract(char *signature, XaEffectContract *contract) {
         const char *start = p;
         if (!(isalpha((unsigned char) *p) || *p == '_')) {
             xrd_set_error("invalid error reference in @errors");
-            clear_effect_contract(contract);
+            xa_effect_contract_clear(contract);
             return false;
         }
         while (*p && effect_ref_char(*p))
@@ -208,7 +208,7 @@ static bool parse_effect_contract(char *signature, XaEffectContract *contract) {
         p = skip_ws(p);
         if (*p != ',' && *p != ')') {
             xrd_set_error("invalid error reference in @errors");
-            clear_effect_contract(contract);
+            xa_effect_contract_clear(contract);
             return false;
         }
         if (contract->error_count == capacity) {
@@ -217,7 +217,7 @@ static bool parse_effect_contract(char *signature, XaEffectContract *contract) {
                 contract->errors, (size_t) next_capacity * sizeof(const char *));
             if (!next) {
                 xrd_set_error("out of memory while parsing @errors");
-                clear_effect_contract(contract);
+                xa_effect_contract_clear(contract);
                 return false;
             }
             contract->errors = next;
@@ -226,7 +226,7 @@ static bool parse_effect_contract(char *signature, XaEffectContract *contract) {
         char *error_ref = duplicate_effect_ref(start, len);
         if (!error_ref) {
             xrd_set_error("out of memory while parsing @errors");
-            clear_effect_contract(contract);
+            xa_effect_contract_clear(contract);
             return false;
         }
         contract->errors[contract->error_count++] = error_ref;
@@ -238,7 +238,7 @@ static bool parse_effect_contract(char *signature, XaEffectContract *contract) {
     }
     if (!closed || expects_entry || *skip_ws(p) != '\0') {
         xrd_set_error("invalid trailing content in @errors metadata");
-        clear_effect_contract(contract);
+        xa_effect_contract_clear(contract);
         return false;
     }
 
@@ -246,7 +246,7 @@ static bool parse_effect_contract(char *signature, XaEffectContract *contract) {
     for (uint32_t i = 1; i < contract->error_count; i++) {
         if (strcmp(contract->errors[i - 1u], contract->errors[i]) == 0) {
             xrd_set_error("duplicate error '%s' in @errors", contract->errors[i]);
-            clear_effect_contract(contract);
+            xa_effect_contract_clear(contract);
             return false;
         }
     }
@@ -423,7 +423,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                 char sig[256];
                 read_to_eol(after_ident, sig, sizeof(sig));
                 XaEffectContract effect_contract;
-                if (!parse_effect_contract(sig, &effect_contract)) {
+                if (!xa_effect_contract_parse_suffix(sig, &effect_contract)) {
                     free_xrd_module(xrd);
                     return NULL;
                 }
@@ -464,10 +464,10 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                         methods[midx].effect_contract = effect_contract;
                         h->method_count++;
                     } else {
-                        clear_effect_contract(&effect_contract);
+                        xa_effect_contract_clear(&effect_contract);
                     }
                 } else {
-                    clear_effect_contract(&effect_contract);
+                    xa_effect_contract_clear(&effect_contract);
                 }
 
                 // Skip to next line
@@ -491,7 +491,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
             char sig[256];
             p = read_to_eol(p, sig, sizeof(sig));
             XaEffectContract effect_contract;
-            if (!parse_effect_contract(sig, &effect_contract)) {
+            if (!xa_effect_contract_parse_suffix(sig, &effect_contract)) {
                 free_xrd_module(xrd);
                 return NULL;
             }
@@ -515,7 +515,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                 xrd->functions[idx].effect_contract = effect_contract;
                 xrd->module.function_count++;
             } else {
-                clear_effect_contract(&effect_contract);
+                xa_effect_contract_clear(&effect_contract);
             }
 
             if (*p)
