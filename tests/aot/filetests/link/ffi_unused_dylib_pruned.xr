@@ -1,0 +1,3 @@
+@extern("C") @dylib("xrayffi_unused") fn xrayffi_unused(x: int32) -> int32
+
+print(42)
