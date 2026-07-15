@@ -9,8 +9,8 @@ enum TaskResult<T> {
 }
 
 enum TaskOutcome {
-    Success(Json)
-    Failed(Json)
+    Success(PanicInfo)
+    Failed(PanicInfo)
     Cancelled
 }
 
