@@ -47,49 +47,41 @@ static inline bool xr_chan_value_is_owned_message(XrValue value) {
  *   - scalars: the value itself, no RC involved.
  *   - shared refs (channel, atomic, ...): the caller's +1 transfers to
  *     the buffer and is handed to the receiver on delivery.
- *   - deep values (array, map, instance, ...): a coroutine-independent
- *     TRANSIT graph replaces the original; the caller's reference is
+ *   - deep values (array, map, instance, ...): a coroutine-independent owned
+ *     message root replaces the original; the caller's reference is
  *     released HERE — the single send-side consumption point.
  *
  * Re-entrant: a value that is already a TRANSIT root (a blocked send
- * being retried after suspension) passes through unchanged. */
+ * created by an older path and retried after suspension) passes through
+ * unchanged. New channel sends do not create TRANSIT graphs. */
 static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue value) {
     if (!XR_IS_PTR(value))
         return value;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj)
+        return value;
     if (obj && XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
         return value; /* already prepared (blocked-send retry path) */
+    if (XR_OBJ_IS_SHARED(obj))
+        return value; /* shared frozen/sync identity: transfer the caller's reference */
     if (XR_OBJ_IS_OWNED(obj))
         return value; /* owned-message root: move the owner token, not the graph */
     if (!xr_value_needs_copy(value))
         return value;
-    /* Zero-copy move fast path applies ONLY to coroutine-local (non-shared)
-     * sources we uniquely own. Shared-by-pointer values must keep the original
-     * copy-then-drop order: deep_copy increfs them and hands them out by
-     * pointer, and the drop rebalances — dropping first then rc_destroy would
-     * free a shared value the receiver still aliases. drop_is_last is
-     * mutating, so it is evaluated exactly once on each path. */
+    /* drop_is_last is mutating, so evaluate it exactly once on each path. */
     bool coro_local = obj && !XR_OBJ_IS_SHARED(obj);
     if (coro_local && xr_obj_drop_is_last((XrObjHeader *) obj)) {
-        /* Unique owner (move semantics): steal the buffer for self-contained
-         * scalar arrays, else deep-copy. Either way free the source struct. */
-        XrValue moved;
-        if (xr_chan_try_move_array_to_transit_core(core, value, &moved)) {
-            xr_coro_heap_destroy_obj(xr_current_coro_heap(), obj); /* free emptied source struct */
-            return moved;
-        }
-        XrValue copied = xr_deep_copy_to_transit_core(core, value);
+        XrValue copied = xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED);
         xr_coro_heap_destroy_obj(xr_current_coro_heap(), obj);
         return copied;
     }
     if (coro_local) {
         /* Not the last reference (already dropped above): copy, no destroy. */
-        return xr_deep_copy_to_transit_core(core, value);
+        return xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED);
     }
-    /* Shared / pointer-shared values: original copy-then-drop order. */
-    XrValue copied = xr_deep_copy_to_transit_core(core, value);
+    XrValue copied = xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED);
     if (obj && xr_obj_drop_is_last((XrObjHeader *) obj))
-        xr_coro_heap_destroy_obj(xr_current_coro_heap(), obj);
+        xr_owned_destroy_core(core, obj);
     return copied;
 }
 
@@ -120,7 +112,7 @@ static inline XrValue xr_chan_prepare_send_transfer_core(XrRuntimeCore *core, Xr
         xr_shared_retain(obj);
         return value;
     }
-    return xr_deep_copy_to_transit_core(core, value);
+    return xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED);
 }
 
 static inline XrValue xr_chan_prepare_send(struct XrVMRuntime *isolate, XrValue value) {
@@ -165,10 +157,10 @@ static inline void xr_chan_abandon_send_core(XrRuntimeCore *core, XrValue prepar
 
 /* ========== Recv-side deep copy ========== */
 
-/* Deep copy a mutable value received from a channel into the
- * receiver's coroutine-local GC, then release the channel buffer's
- * transit reference (frees the transit graph).  Returns the original
- * value unchanged for scalars and immutables. */
+/* Deliver a channel value to the receiver. Owned message roots move through
+ * unchanged; residual TRANSIT graphs are deep-copied into the receiver's
+ * coroutine-local heap and then released. Scalars and immutable/shared handles
+ * are returned unchanged. */
 static inline XrValue xr_chan_copy_recv_core(XrRuntimeCore *core, XrValue value,
                                              struct XrCoroutine *recv_coro) {
     if (!XR_IS_PTR(value))

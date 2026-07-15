@@ -1077,6 +1077,53 @@ TEST(coro_channel_copy_payload_materializes_owned_message) {
     close_fixture_cleanup(&f);
 }
 
+TEST(coro_channel_default_payload_materializes_owned_message) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 1);
+    ASSERT_NOT_NULL(ch);
+
+    XrCoroutine sender;
+    memset(&sender, 0, sizeof(sender));
+    xr_obj_header_init_type(&sender.hdr, XR_TCOROUTINE);
+    sender.id = 408;
+    attach_test_coro_context(&sender, &f.isolate_storage);
+    atomic_store_explicit(&f.machine.current_coro, &sender, memory_order_relaxed);
+
+    XrArray *payload = xr_array_new(&sender);
+    ASSERT_NOT_NULL(payload);
+    xr_array_push(payload, xr_int(71));
+    xr_array_push(payload, xr_int(72));
+
+    ASSERT_TRUE(xr_chan_try_send_core(&f.core, ch, xr_value_from_array(payload)));
+
+    bool ok = false;
+    XrValue queued = xr_channel_try_recv(ch, &ok);
+    ASSERT_TRUE(ok);
+    ASSERT_TRUE(XR_IS_ARRAY(queued));
+    XrObjHeader *queued_obj = XR_VALUE_GCPTR(queued);
+    ASSERT_TRUE(XR_OBJ_IS_OWNED(queued_obj));
+    ASSERT_FALSE(XR_OBJ_GET_FLAG(queued_obj, XR_OBJ_TRANSIT));
+
+    XrValue received = xr_chan_copy_recv_core(&f.core, queued, &sender);
+    ASSERT_EQ_PTR(XR_VALUE_GCPTR(received), queued_obj);
+    XrArray *arr = XR_TO_ARRAY(received);
+    ASSERT_EQ_INT(xr_array_size(arr), 2);
+    ASSERT_EQ_INT((int) XR_TO_INT(xr_array_get(arr, 0)), 71);
+    ASSERT_EQ_INT((int) XR_TO_INT(xr_array_get(arr, 1)), 72);
+
+    xr_chan_abandon_send_core(&f.core, received);
+    atomic_store_explicit(&f.machine.current_coro, NULL, memory_order_relaxed);
+    if (sender.heap) {
+        xr_coro_heap_destroy(sender.heap);
+        sender.heap = NULL;
+    }
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel) + sizeof(XrValue));
+    close_fixture_cleanup(&f);
+}
+
 TEST(coro_channel_move_owned_payload_preserves_root) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
@@ -2201,6 +2248,7 @@ RUN_TEST(coro_channel_recv_sets_recv_slot_only_when_blocking);
 RUN_TEST(coro_channel_recv_delivered_wake_writes_value_and_ok_slots);
 RUN_TEST(coro_channel_recv_delivery_gated_for_deep_copy_values);
 RUN_TEST(coro_channel_copy_payload_materializes_owned_message);
+RUN_TEST(coro_channel_default_payload_materializes_owned_message);
 RUN_TEST(coro_channel_move_owned_payload_preserves_root);
 RUN_TEST(coro_task_result_materializes_owned_payload_and_moves_to_awaiter);
 RUN_TEST(coro_channel_recv_close_wake_stays_on_replay_protocol);
