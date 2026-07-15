@@ -17667,6 +17667,80 @@ TEST(address_plan_rejects_owner_pointer_escape) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(address_plan_rejects_owner_pointer_field_escape) {
+    XgBuildKey key = {.source_hash = 0x1871,
+                      .compiler_semver_hash = 2,
+                      .profile_hash = 3,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    XgBodySummary entry = {
+        .func_id = 1, .module_id = 1, .kind = XG_BODY_MODULE_INIT, .body_hash = 0x1871};
+    XrType ptr_type = {.kind = XR_KIND_POINTER, .ptr_is_mut = false};
+    XrType array_type = {.kind = XR_KIND_ARRAY};
+    XrType object_type = {.kind = XR_KIND_CLASS};
+    XrType unit_type = {.kind = XR_KIND_UNIT};
+    XiValue owner;
+    XiValue address;
+    XiValue object;
+    XiValue store_field;
+    XiValue *address_args[1];
+    XiValue *store_args[2];
+    XiValue *values[2];
+    XiBlock block;
+    XiBlock *blocks[1];
+    XiFunc init;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &entry));
+    memset(&owner, 0, sizeof(owner));
+    memset(&address, 0, sizeof(address));
+    memset(&object, 0, sizeof(object));
+    memset(&store_field, 0, sizeof(store_field));
+    memset(&block, 0, sizeof(block));
+    memset(&init, 0, sizeof(init));
+    memset(&module, 0, sizeof(module));
+    owner.id = 1;
+    owner.type = &array_type;
+    address.id = 2;
+    address.op = XI_ARRAY_DATA_PTR;
+    address.type = &ptr_type;
+    address_args[0] = &owner;
+    address.args = address_args;
+    address.nargs = 1;
+    object.id = 3;
+    object.type = &object_type;
+    store_field.id = 4;
+    store_field.op = XI_STORE_FIELD;
+    store_field.type = &unit_type;
+    store_field.aux = (void *) "ptr";
+    store_args[0] = &object;
+    store_args[1] = &address;
+    store_field.args = store_args;
+    store_field.nargs = 2;
+    values[0] = &address;
+    values[1] = &store_field;
+    block.values = values;
+    block.nvalues = 2;
+    blocks[0] = &block;
+    init.name = "field_escaping_address";
+    init.xg_body_func_id = entry.func_id;
+    init.blocks = blocks;
+    init.nblocks = 1;
+    module.name = "address_field";
+    module.path = "address_field.xr";
+    module.init = &init;
+    modules[0] = &module;
+
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    ASSERT_FALSE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xglobal_summary");
 RUN_TEST(global_evidence_adds_rows_and_grows);
@@ -17892,4 +17966,5 @@ RUN_TEST(entry_plan_uses_only_reachable_effects_and_provider_contract);
 RUN_TEST(storage_and_capture_plans_close_owner_actions);
 RUN_TEST(global_evidence_producer_records_storage_provenance);
 RUN_TEST(address_plan_rejects_owner_pointer_escape);
+RUN_TEST(address_plan_rejects_owner_pointer_field_escape);
 TEST_MAIN_END()

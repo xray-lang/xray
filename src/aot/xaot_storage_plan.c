@@ -286,6 +286,7 @@ static bool address_has_forbidden_escape(const XiFunc *func, const XaotAddressPl
                     case XI_THREAD_SPAWN:
                     case XI_SET_SHARED:
                     case XI_SET_GLOBAL:
+                    case XI_STORE_FIELD:
                     case XI_STORE_UPVAL:
                     case XI_CLOSURE_NEW:
                     case XI_ARRAY_PUSH:
