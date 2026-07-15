@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused task-206 AOT ParamContract write-back gate."""
+"""Focused task-206 AOT ParamContract VM/native parity gate."""
 
 from __future__ import annotations
 
@@ -14,7 +14,13 @@ ROOT = Path(__file__).resolve().parents[3]
 
 POSITIVE_AOT_CASES = (
     "tests/aot/basic/dynamic_function_value_ref_out_call_plan.xr",
+    "tests/aot/filetests/cgen/fixed_array_ref_param_abi.xr",
 )
+
+EXPECTED_OUTPUTS = {
+    "tests/aot/basic/dynamic_function_value_ref_out_call_plan.xr": b"2\n2\n4\n4\n10\n10\n20\n20\n",
+    "tests/aot/filetests/cgen/fixed_array_ref_param_abi.xr": b"10\n",
+}
 
 
 class ParamContractAotTest(unittest.TestCase):
@@ -30,11 +36,12 @@ class ParamContractAotTest(unittest.TestCase):
             timeout=30,
         )
 
-    def test_dynamic_function_value_ref_out_writeback(self) -> None:
+    def test_param_contract_vm_aot_parity(self) -> None:
         for rel in POSITIVE_AOT_CASES:
             with self.subTest(rel=rel):
                 src = ROOT / rel
                 vm = self.run_checked([str(self.xray), str(src)]).stdout
+                self.assertEqual(EXPECTED_OUTPUTS[rel], vm, rel)
 
                 with tempfile.TemporaryDirectory(prefix="xray-param-contract-aot-") as tmp:
                     native = Path(tmp) / "case"
