@@ -125,6 +125,7 @@ def execute(entry: dict[str, Any], xray: Path, quick: bool, work: Path) -> dict[
         "id": entry["id"],
         "module": entry["module"],
         "kind": entry["kind"],
+        "aot_binary_size_bytes": binary.stat().st_size,
         "samples_ns": samples,
         "median_ns": medians,
         "vm_aot_ratio": ratio,
