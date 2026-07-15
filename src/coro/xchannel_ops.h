@@ -28,11 +28,17 @@
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xshared.h"
 #include "../runtime/mem/xalloc_unified.h"
+#include "../runtime/mem/xsystem_heap.h"
 
 struct XrCoroutine;
 struct XrVMRuntime;
 
 /* ========== Send-side ownership ========== */
+
+static inline bool xr_chan_value_is_owned_message(XrValue value) {
+    return XR_IS_PTR(value) && XR_VALUE_GCPTR(value) && XR_OBJ_IS_OWNED(XR_VALUE_GCPTR(value)) &&
+           !XR_OBJ_GET_FLAG(XR_VALUE_GCPTR(value), XR_OBJ_TRANSIT);
+}
 
 /* Send CONSUMES the caller's reference (XI_CHAN_SEND classifies its args
  * as consuming uses; the compiler dups beforehand when the caller still
@@ -53,6 +59,8 @@ static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue val
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (obj && XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
         return value; /* already prepared (blocked-send retry path) */
+    if (XR_OBJ_IS_OWNED(obj))
+        return value; /* owned-message root: move the owner token, not the graph */
     if (!xr_value_needs_copy(value))
         return value;
     /* Zero-copy move fast path applies ONLY to coroutine-local (non-shared)
@@ -97,13 +105,17 @@ static inline XrValue xr_chan_prepare_send_transfer_core(XrRuntimeCore *core, Xr
         return value;
     if (XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
         return value;
+    if (XR_OBJ_IS_OWNED(obj))
+        return mode == XR_TRANSFER_COPY
+                   ? xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED)
+                   : value;
     if (!xr_value_needs_copy(value)) {
         if (XR_OBJ_IS_SHARED(obj))
             xr_shared_retain(obj);
         return value;
     }
     if (mode == XR_TRANSFER_COPY)
-        return xr_deep_copy_to_transit_core(core, value);
+        return xr_deep_copy_explicit_to_storage_core(core, value, XR_OBJ_STORAGE_OWNED);
     if (XR_OBJ_IS_SHARED(obj)) {
         xr_shared_retain(obj);
         return value;
@@ -138,6 +150,11 @@ static inline void xr_chan_abandon_send_core(XrRuntimeCore *core, XrValue prepar
         xr_chan_transit_release_core(core, prepared);
         return;
     }
+    if (XR_OBJ_IS_OWNED(obj)) {
+        if (xr_obj_drop_is_last(obj))
+            xr_owned_destroy_core(core, obj);
+        return;
+    }
     if (XR_OBJ_IS_SHARED(obj)) {
         /* Atomic refcount: safe from any thread. Managed objects
          * (channels) make drop_is_last a no-op by design. */
@@ -155,6 +172,8 @@ static inline void xr_chan_abandon_send_core(XrRuntimeCore *core, XrValue prepar
 static inline XrValue xr_chan_copy_recv_core(XrRuntimeCore *core, XrValue value,
                                              struct XrCoroutine *recv_coro) {
     if (!XR_IS_PTR(value))
+        return value;
+    if (xr_chan_value_is_owned_message(value))
         return value;
     if (!xr_value_needs_copy(value))
         return value;
