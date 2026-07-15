@@ -1,0 +1,1 @@
+Fixed array.ptr() must be inside an unsafe block

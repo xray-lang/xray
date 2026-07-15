@@ -1,0 +1,3 @@
+fn raw(values: [int; 2]) -> Ptr<int> {
+    return values.ptr()
+}

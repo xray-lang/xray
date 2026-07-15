@@ -5156,9 +5156,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return v;
         }
 
-        if (recv->type && (XR_TYPE_IS_ARRAY(recv->type) || XR_TYPE_IS_SPAN(recv->type)) &&
+        if (recv->type &&
+            (XR_TYPE_IS_ARRAY(recv->type) || XR_TYPE_IS_SPAN(recv->type) ||
+             recv->type->kind == XR_KIND_FIXED_ARRAY) &&
             ma->name && n == 0 &&
-            (strcmp(ma->name, "ptr") == 0 || strcmp(ma->name, "mutPtr") == 0)) {
+            (strcmp(ma->name, "ptr") == 0 ||
+             (recv->type->kind != XR_KIND_FIXED_ARRAY && strcmp(ma->name, "mutPtr") == 0))) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_ARRAY_DATA_PTR, result_type, 1);
             if (!v)
                 return NULL;

@@ -1041,13 +1041,18 @@ vmcase(OP_LEN) {
 vmcase(OP_ARRAY_DATA_PTR) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
+    if (XR_IS_ARRAY_REF(R(b))) {
+        R(a) = xr_int((xr_Integer) (intptr_t) R(b).ptr);
+        vmbreak;
+    }
     if (XR_IS_SPAN_REF(R(b))) {
         XrSpanView *span = XR_TO_SPAN_REF(R(b));
         R(a) = xr_int((xr_Integer) (intptr_t) (span ? span->data : NULL));
         vmbreak;
     }
     if (!XR_IS_ARRAY(R(b))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array.ptr() expects an array or span receiver");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "ptr() expects an array, fixed array, or slice receiver");
     }
     XrArray *arr = XR_TO_ARRAY(R(b));
     R(a) = xr_int((xr_Integer) (intptr_t) arr->data);
