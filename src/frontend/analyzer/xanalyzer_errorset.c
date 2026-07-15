@@ -2416,14 +2416,14 @@ static const XaEffectContract *es_builtin_type_member_effect_contract(ErrorSetCt
         if (!sym || sym->kind != XA_SYM_MODULE) {
             contract = xa_builtin_get_named_type_member_effect_contract(
                 ma->object->as.variable.name, ma->name, true);
-            if (contract && contract->kind != XA_EFFECT_CONTRACT_MISSING)
+            if (contract)
                 return contract;
         }
     }
 
     XrType *receiver_type = xa_analyzer_get_node_type(ctx->analyzer, ma->object);
     contract = xa_builtin_get_type_member_effect_contract(receiver_type, ma->name, false);
-    return (contract && contract->kind != XA_EFFECT_CONTRACT_MISSING) ? contract : NULL;
+    return contract;
 }
 
 static bool es_apply_native_call_contract(ErrorSetCtx *ctx, AstNode *callee) {
