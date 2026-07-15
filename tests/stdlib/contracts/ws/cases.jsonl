@@ -1,0 +1,1 @@
+{"case":"websocket-protocol-bytes","probe":"tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"RFC 6455 handshake, close payload, masking, framing, and strict UTF-8 payload rules"}

@@ -1,0 +1,1 @@
+{"case":"filesystem-text-and-bytes","probe":"tests/diff/cases/semantics/stdlib/io_system_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"filesystem text and byte roundtrip invariants including NUL and 0xff byte payloads"}
