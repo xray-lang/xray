@@ -3017,6 +3017,13 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
                          "    for (item in box) { throw item }\n"
                          "  }\n"
                          "}\n"
+                         "fn setContainsIteratorPreserves() {\n"
+                         "  try { failSet() } catch (e: SetErr) {\n"
+                         "    var box: Set<SetErr> = #[e]\n"
+                         "    box.contains(SetErr.Other)\n"
+                         "    for (item in box) { throw item }\n"
+                         "  }\n"
+                         "}\n"
                          "fn setOrdinaryIteratorFallsBack() {\n"
                          "  const box: Set<SetErr> = #[SetErr.Boom, SetErr.Other]\n"
                          "  for (item in box) { throw item }\n"
@@ -3033,6 +3040,8 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
         analyzer_function_effect_summary(a, "setMutatedIteratorFallsBack");
     const XaEffectSummary *add_caught =
         analyzer_function_effect_summary(a, "setAddCaughtIteratorPreserves");
+    const XaEffectSummary *contains =
+        analyzer_function_effect_summary(a, "setContainsIteratorPreserves");
     const XaEffectSummary *ordinary =
         analyzer_function_effect_summary(a, "setOrdinaryIteratorFallsBack");
     ASSERT(singleton != NULL);
@@ -3040,6 +3049,7 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(mixed != NULL);
     ASSERT(mutated != NULL);
     ASSERT(add_caught != NULL);
+    ASSERT(contains != NULL);
     ASSERT(ordinary != NULL);
 
     const XaErrorTypeSet *singleton_set = effect_summary_enum_set_named(a, singleton, "SetErr");
@@ -3047,12 +3057,14 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     const XaErrorTypeSet *mixed_set = effect_summary_enum_set_named(a, mixed, "SetErr");
     const XaErrorTypeSet *mutated_set = effect_summary_enum_set_named(a, mutated, "SetErr");
     const XaErrorTypeSet *add_caught_set = effect_summary_enum_set_named(a, add_caught, "SetErr");
+    const XaErrorTypeSet *contains_set = effect_summary_enum_set_named(a, contains, "SetErr");
     const XaErrorTypeSet *ordinary_set = effect_summary_enum_set_named(a, ordinary, "SetErr");
     ASSERT(singleton_set != NULL);
     ASSERT(dedup_set != NULL);
     ASSERT(mixed_set != NULL);
     ASSERT(mutated_set != NULL);
     ASSERT(add_caught_set != NULL);
+    ASSERT(contains_set != NULL);
     ASSERT(ordinary_set != NULL);
     ASSERT(!singleton_set->all_variants);
     ASSERT(xa_bitset_test(&singleton_set->variants, 0));
@@ -3065,6 +3077,9 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(!add_caught_set->all_variants);
     ASSERT(xa_bitset_test(&add_caught_set->variants, 0));
     ASSERT(!xa_bitset_test(&add_caught_set->variants, 1));
+    ASSERT(!contains_set->all_variants);
+    ASSERT(xa_bitset_test(&contains_set->variants, 0));
+    ASSERT(!xa_bitset_test(&contains_set->variants, 1));
     ASSERT(ordinary_set->all_variants);
 
     xa_analyzer_free(a);
