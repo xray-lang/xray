@@ -25,7 +25,7 @@ http.route("GET", "/plaintext", "Hello, World!")
 // JSON route (pass Json object directly, C layer auto-serializes to prebuilt response)
 http.route("GET", "/json", { message: "Hello, World!" })
 
-http.route("POST", "/echo", fn(req: Json) -> string {
+http.routeHandler("POST", "/echo", fn(req: Json) -> string {
     return req.body ?? ""
 })
 

@@ -4,5 +4,5 @@ fn handle(req: Json) -> Json {
     return { ok: true, path: req.path }
 }
 
-http.route("GET", "/hello", handle)
+http.routeHandler("GET", "/hello", handle)
 print("registered")

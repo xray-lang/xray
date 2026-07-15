@@ -73,13 +73,13 @@ BASELINES = (
         category="HTTP_HANDLER_AOT_BASELINE",
         xr_path="tests/aot/filetests/cgen/http_route_handler_boundary.xr",
         expect_path="tests/aot/filetests/cgen/http_route_handler_boundary.expect",
-        source_contains=("http.route", "handle(req: Json) -> Json"),
+        source_contains=("http.routeHandler", "handle(req: Json) -> Json"),
         expect_contains=(
-            "name=http.route",
-            "xrt_typename(",
-            'xrt_map_set_class_name(_inst, "_RouteHandler")',
+            "name=http.routeHandler",
+            "c_not_contains=xrt_typename(",
+            'c_not_contains=xrt_map_set_class_name(_inst, "_RouteHandler")',
             "xrt_json_get_name_owned",
-            r"c_regex=void http_[0-9a-f]+_route_exp",
+            r"c_regex=void http_[0-9a-f]+_routeHandler_exp",
         ),
     ),
 )

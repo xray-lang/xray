@@ -21,17 +21,17 @@ if (len(process.args) > 0) {
 }
 
 // Dynamic plaintext (fn callback, NOT prebuilt)
-http.route("GET", "/plaintext", fn(req) {
+http.routeHandler("GET", "/plaintext", fn(req: Json) {
     return "Hello, World!"
 })
 
 // Dynamic JSON (fn callback builds Json each time)
-http.route("GET", "/json", fn(req) {
+http.routeHandler("GET", "/json", fn(req: Json) {
     return { message: "Hello, World!" }
 })
 
 // Path params + string concatenation
-http.route("GET", "/users/:id", fn(req) {
+http.routeHandler("GET", "/users/:id", fn(req: Json) {
     return "User: " + req.params.id
 })
 
