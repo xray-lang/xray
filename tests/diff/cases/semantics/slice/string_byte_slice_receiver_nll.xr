@@ -1,0 +1,9 @@
+fn main() {
+    var text = "hello"
+    var view: Slice<byte> = text.bytes()
+    print(len(view))
+    text = "bye"
+    print(len(text))
+}
+
+main()
