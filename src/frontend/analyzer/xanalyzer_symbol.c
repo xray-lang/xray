@@ -302,6 +302,76 @@ bool xa_symbol_links_out_field_assigned(XaSymbolLinks *links, const char *path) 
     return false;
 }
 
+void xa_symbol_links_free_out_field_da_paths(XaOutFieldDaPath *paths) {
+    while (paths) {
+        XaOutFieldDaPath *next = paths->next;
+        xr_free(paths->path);
+        xr_free(paths);
+        paths = next;
+    }
+}
+
+static bool out_field_path_list_contains(XaOutFieldDaPath *paths, const char *path) {
+    if (!path || path[0] == '\0')
+        return false;
+    for (XaOutFieldDaPath *it = paths; it; it = it->next) {
+        if (it->path && strcmp(it->path, path) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool out_field_path_list_prepend(XaOutFieldDaPath **paths, const char *path) {
+    if (!paths || !path || path[0] == '\0' || out_field_path_list_contains(*paths, path))
+        return true;
+    XaOutFieldDaPath *entry = (XaOutFieldDaPath *) xr_calloc(1, sizeof(*entry));
+    if (!entry)
+        return false;
+    entry->path = xr_strdup(path);
+    if (!entry->path) {
+        xr_free(entry);
+        return false;
+    }
+    entry->next = *paths;
+    *paths = entry;
+    return true;
+}
+
+XaOutFieldDaPath *xa_symbol_links_clone_out_field_da_paths(XaSymbolLinks *links) {
+    if (!links)
+        return NULL;
+    XaOutFieldDaPath *copy = NULL;
+    for (XaOutFieldDaPath *it = links->out_field_da_paths; it; it = it->next) {
+        if (!out_field_path_list_prepend(&copy, it->path)) {
+            xa_symbol_links_free_out_field_da_paths(copy);
+            return NULL;
+        }
+    }
+    return copy;
+}
+
+void xa_symbol_links_restore_out_field_da_paths(XaSymbolLinks *links, XaOutFieldDaPath *paths) {
+    if (!links)
+        return;
+    xa_symbol_links_free_out_field_da_paths(links->out_field_da_paths);
+    links->out_field_da_paths = NULL;
+    for (XaOutFieldDaPath *it = paths; it; it = it->next)
+        (void) out_field_path_list_prepend(&links->out_field_da_paths, it->path);
+}
+
+XaOutFieldDaPath *xa_symbol_links_intersect_out_field_da_paths(XaOutFieldDaPath *left,
+                                                               XaOutFieldDaPath *right) {
+    XaOutFieldDaPath *intersection = NULL;
+    for (XaOutFieldDaPath *it = left; it; it = it->next) {
+        if (out_field_path_list_contains(right, it->path) &&
+            !out_field_path_list_prepend(&intersection, it->path)) {
+            xa_symbol_links_free_out_field_da_paths(intersection);
+            return NULL;
+        }
+    }
+    return intersection;
+}
+
 // Create a new scope
 XaScope *xa_scope_new(XaScopeKind kind, XaScope *parent) {
     XR_DCHECK(kind >= 0, "scope_new: invalid scope kind");

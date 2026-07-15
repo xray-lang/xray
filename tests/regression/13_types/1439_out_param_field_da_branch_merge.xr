@@ -1,0 +1,28 @@
+struct OutBranchFieldPair {
+    left: int
+    right: int
+}
+
+fn fill(value: out int, next: int) {
+    value = next
+}
+
+fn initialize(flag: bool, pair: out OutBranchFieldPair) {
+    if (flag) {
+        fill(out pair.left, 11)
+    } else {
+        pair.left = 13
+    }
+    pair = OutBranchFieldPair{left: pair.left, right: 17}
+}
+
+@test
+fn test_out_param_field_da_branch_merge() {
+    var value = OutBranchFieldPair{left: 0, right: 0}
+    initialize(true, out value)
+    assert(value.left == 11)
+    assert(value.right == 17)
+    initialize(false, out value)
+    assert(value.left == 13)
+    assert(value.right == 17)
+}
