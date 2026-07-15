@@ -23,6 +23,11 @@ NEGATIVE_CASES = (
     "tests/compile_errors/ownership/151_out_marker_rejects_in_param.xr",
     "tests/compile_errors/ownership/152_out_marker_rejects_ref_param.xr",
     "tests/compile_errors/ownership/153_ref_marker_rejects_out_param.xr",
+    "tests/compile_errors/ownership/112_out_rejects_grouped_in_alias_arg.xr",
+    "tests/compile_errors/ownership/113_out_rejects_member_projection_alias_arg.xr",
+    "tests/compile_errors/ownership/114_out_rejects_index_projection_alias_arg.xr",
+    "tests/compile_errors/ownership/115_out_rejects_slice_projection_alias_arg.xr",
+    "tests/compile_errors/ownership/116_out_rejects_as_wrapped_alias_arg.xr",
     "tests/compile_errors/ownership/105_out_param_read_before_write.xr",
     "tests/compile_errors/ownership/106_out_param_return_without_assignment.xr",
     "tests/compile_errors/ownership/108_out_param_method_return_without_assignment.xr",
@@ -45,6 +50,7 @@ NEGATIVE_CASES = (
 
 POSITIVE_CASES = (
     "tests/regression/08_oop/0914_ref_constructor_call_authorization.xr",
+    "tests/regression/13_types/1422_param_mode_nonoverlap_projection_alias.xr",
     "tests/regression/13_types/1423_out_param_implicit_exit_assignment.xr",
     "tests/regression/13_types/1424_out_param_if_branches_assign.xr",
     "tests/regression/13_types/1425_out_param_loop_preassigned.xr",
