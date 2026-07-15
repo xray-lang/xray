@@ -403,6 +403,16 @@ static XrValue mem_store_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc
     return xr_null();
 }
 
+/* mem.view<T> is erased to an identity pointer conversion before bytecode or
+ * AOT emission. This export exists only so native stdlib metadata has a
+ * complete module surface; dynamic invocation cannot carry T and is invalid. */
+static XrValue mem_view_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    return xr_null();
+}
+
 /*
  * Volatile load/store (MMIO). The VM is an interpreter — every read re-fetches
  * from memory and nothing is reordered/elided, so "volatile" is satisfied by a

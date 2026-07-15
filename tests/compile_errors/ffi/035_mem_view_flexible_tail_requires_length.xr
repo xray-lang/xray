@@ -1,0 +1,12 @@
+import mem
+
+extern "C" {
+    struct Packet {
+        length: uint32
+        data: flex uint8
+    }
+}
+
+var p = mem.mutPtr<Packet>(0)
+var view = unsafe { mem.view<Packet>(p) }
+print(view.data)

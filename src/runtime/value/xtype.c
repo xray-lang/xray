@@ -1073,6 +1073,7 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
         case XR_KIND_POINTER:
             copy->container.element_type = type->container.element_type;
             copy->ptr_is_mut = type->ptr_is_mut;  // harmless for non-pointer container kinds
+            copy->ptr_is_c_view = type->ptr_is_c_view;
             break;
         case XR_KIND_MAP:
             copy->map.key_type = type->map.key_type;
@@ -1562,6 +1563,8 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     // (mut -> const), not the reverse; pointee types are invariant. A null
     // raw pointer (Ptr.null()) is modelled as POINTER and assignable either way.
     if (target->kind == XR_KIND_POINTER && source->kind == XR_KIND_POINTER) {
+        if (target->ptr_is_c_view && !source->ptr_is_c_view)
+            return false;  // only mem.view may introduce the field-projection capability
         if (source->ptr_is_mut == false && target->ptr_is_mut == true)
             return false;  // const -> mut is not allowed
         XrType *te = target->container.element_type;
@@ -1734,7 +1737,7 @@ bool xr_type_equals(XrType *a, XrType *b) {
         return xr_type_equals(a->container.element_type, b->container.element_type);
     }
     if (a->kind == XR_KIND_POINTER) {
-        return a->ptr_is_mut == b->ptr_is_mut &&
+        return a->ptr_is_mut == b->ptr_is_mut && a->ptr_is_c_view == b->ptr_is_c_view &&
                xr_type_equals(a->container.element_type, b->container.element_type);
     }
     if (a->kind == XR_KIND_MAP) {

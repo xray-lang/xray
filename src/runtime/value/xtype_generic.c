@@ -107,7 +107,10 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
         XrType *elem =
             xr_type_substitute(X, type->container.element_type, param_names, actual_types, count);
         if (elem != type->container.element_type) {
-            return xr_type_new_pointer(X, elem, type->ptr_is_mut);
+            XrType *result = xr_type_new_pointer(X, elem, type->ptr_is_mut);
+            if (result)
+                result->ptr_is_c_view = type->ptr_is_c_view;
+            return result;
         }
         return type;
     }

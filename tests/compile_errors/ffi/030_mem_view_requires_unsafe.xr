@@ -1,0 +1,11 @@
+import mem
+
+extern "C" {
+    struct Header {
+        value: uint32
+    }
+}
+
+var p = mem.mutPtr<Header>(0)
+var view = mem.view<Header>(p)
+print(view.value)

@@ -238,6 +238,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"sizeOf", "(): int", "Compile-time size in bytes of a statically laid out type T", true, false, false, false, false},
     {"alignOf", "(): int", "Compile-time alignment in bytes of a statically laid out type T", true, false, false, false, false},
     {"offsetOf", "(field: string): int", "Compile-time byte offset of a field in a fixed-layout struct T", true, false, false, false, false},
+    {"view", "(ptr: Ptr<byte>): Ptr<byte>", "Unsafe zero-cost typed projection of a raw pointer onto an extern C struct or union T", true, false, false, false, false},
     {"alloc", "(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false, false, false, false},
     {"allocZeroed", "(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false, false, false, false},
     {"allocAligned", "(n: int, align: int): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, false, false, false},
@@ -261,7 +262,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"PROT_WRITE", ": int", "Writable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false},
     {"PROT_EXEC", ": int", "Executable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false},
 };
-#define GEN_MEM_FUNCTION_COUNT 30
+#define GEN_MEM_FUNCTION_COUNT 31
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {

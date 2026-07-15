@@ -1,0 +1,11 @@
+import mem
+
+extern "C" {
+    struct Header {
+        value: uint32
+    }
+}
+
+var view = unsafe { mem.view<Header>(mem.mutPtr<Header>(0)) }
+var plain = mem.mutPtr<Header>(0)
+view = plain

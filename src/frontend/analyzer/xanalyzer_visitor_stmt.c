@@ -5842,6 +5842,37 @@ static bool xa_call_expr_is_borrowed_view(AstNode *expr) {
                     strcmp(name, "asMutBytes") == 0 || strcmp(name, "reinterpret") == 0);
 }
 
+static bool xa_call_expr_is_mem_view_syntax(AstNode *expr) {
+    if (!expr || expr->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &expr->as.call_expr;
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS || call->arg_count != 1 ||
+        !call->arguments || !call->arguments[0])
+        return false;
+    MemberAccessNode *member = &call->callee->as.member_access;
+    return member->name && strcmp(member->name, "view") == 0 && member->object &&
+           member->object->type == AST_VARIABLE && member->object->as.variable.name &&
+           strcmp(member->object->as.variable.name, "mem") == 0;
+}
+
+static bool xa_call_expr_is_mem_view(XaInferContext *ctx, AstNode *expr) {
+    if (xa_call_expr_is_mem_view_syntax(expr))
+        return true;
+    if (!ctx || !ctx->analyzer || !expr || expr->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &expr->as.call_expr;
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS || call->arg_count != 1 ||
+        !call->arguments || !call->arguments[0])
+        return false;
+    MemberAccessNode *member = &call->callee->as.member_access;
+    if (!member->name || strcmp(member->name, "view") != 0 || !member->object ||
+        member->object->type != AST_VARIABLE || !member->object->as.variable.name)
+        return false;
+    XaSymbol *symbol = xa_lookup_visible_symbol(ctx, member->object->as.variable.name);
+    XaSymbolLinks *links = symbol ? xa_analyzer_get_links(ctx->analyzer, symbol) : NULL;
+    return links && links->module_name && strcmp(links->module_name, "mem") == 0;
+}
+
 static AstNode *xa_unsafe_expr_result(AstNode *expr) {
     if (!expr || expr->type != AST_UNSAFE_EXPR)
         return NULL;
@@ -5861,6 +5892,11 @@ static bool xa_call_expr_preserves_owner_borrow(XaInferContext *ctx, AstNode *ex
         *out_pointer_borrow = false;
     if (xa_call_expr_is_borrowed_view(expr))
         return true;
+    if (xa_call_expr_is_mem_view(ctx, expr)) {
+        if (out_pointer_borrow)
+            *out_pointer_borrow = true;
+        return true;
+    }
     if (!ctx || !ctx->analyzer || !expr || expr->type != AST_CALL_EXPR)
         return false;
     CallExprNode *call = &expr->as.call_expr;
@@ -5916,6 +5952,10 @@ XR_FUNC bool xa_expr_has_stable_borrow_owner(AstNode *expr) {
                 expr = xa_unsafe_expr_result(expr);
                 break;
             case AST_CALL_EXPR:
+                if (xa_call_expr_is_mem_view_syntax(expr)) {
+                    expr = expr->as.call_expr.arguments[0];
+                    break;
+                }
                 if (!xa_call_expr_is_borrowed_view(expr))
                     return false;
                 expr = expr->as.call_expr.callee->as.member_access.object;
@@ -6052,10 +6092,17 @@ static bool xa_pointer_expr_has_owner_borrow(XaInferContext *ctx, AstNode *expr)
         XaActiveSpanBorrow *borrow = xa_active_span_borrow_for_view(ctx, sym);
         return borrow && borrow->is_pointer_borrow;
     }
+    if (expr->type == AST_MEMBER_ACCESS) {
+        XrType *type = xa_analyzer_get_node_type(ctx->analyzer, expr);
+        return type && XR_TYPE_IS_POINTER(type) && type->ptr_is_c_view &&
+               xa_pointer_expr_has_owner_borrow(ctx, expr->as.member_access.object);
+    }
     if (expr->type != AST_CALL_EXPR || !expr->as.call_expr.callee ||
         expr->as.call_expr.callee->type != AST_MEMBER_ACCESS)
         return false;
     MemberAccessNode *member = &expr->as.call_expr.callee->as.member_access;
+    if (xa_call_expr_is_mem_view(ctx, expr))
+        return xa_pointer_expr_has_owner_borrow(ctx, expr->as.call_expr.arguments[0]);
     return member->name && strcmp(member->name, "offset") == 0 &&
            xa_pointer_expr_has_owner_borrow(ctx, member->object);
 }
@@ -6186,6 +6233,9 @@ static XaSymbol *xa_root_path_for_expr(XaInferContext *ctx, AstNode *expr, char 
             if (xa_call_expr_preserves_owner_borrow(ctx, expr, NULL) && expr->as.call_expr.callee &&
                 expr->as.call_expr.callee->type == AST_MEMBER_ACCESS) {
                 MemberAccessNode *member = &expr->as.call_expr.callee->as.member_access;
+                if (xa_call_expr_is_mem_view(ctx, expr))
+                    return xa_root_path_for_expr(ctx, expr->as.call_expr.arguments[0], path_buf,
+                                                 path_buf_size, out_precise, follow_active_view);
                 if (member->name && strcmp(member->name, "offset") == 0 &&
                     !xa_pointer_expr_has_owner_borrow(ctx, member->object))
                     return NULL;

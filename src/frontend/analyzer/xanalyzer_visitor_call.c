@@ -2119,6 +2119,66 @@ static const char *xa_mem_pointer_constructor_member(XaInferContext *ctx, CallEx
     return ma->name;
 }
 
+static bool xa_mem_view_call(XaInferContext *ctx, CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    return ma->name && strcmp(ma->name, "view") == 0 &&
+           xa_call_object_is_module(ctx, ma->object, "mem");
+}
+
+static XrType *xa_mem_view_return_type(XaInferContext *ctx, AstNode *node, CallExprNode *call) {
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    if (ctx->unsafe_depth == 0) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   "mem.view<T>() must be inside an unsafe block", &loc);
+    }
+    if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   "mem.view<T>() expects exactly one type argument", &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+    if (call->arg_count != 1 || !call->arguments || !call->arguments[0]) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   "mem.view<T>() expects exactly one raw pointer argument", &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+
+    XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+    if (xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument",
+                                          "mem.view", node ? node->line : 0,
+                                          node ? node->column : 0))
+        return xr_type_new_error(NULL);
+    XrClassInfo *info = target && XR_TYPE_IS_INSTANCE(target) ? target->instance.class_ref : NULL;
+    if (!info || !info->is_extern_layout || !info->struct_layout ||
+        !info->struct_layout->is_extern_layout) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "mem.view<T>() requires T to be an extern C struct or union, got '%s'",
+                 target ? xr_type_to_string(target) : "unknown");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+    }
+
+    XrType *source = xa_visit_infer_expr(ctx, call->arguments[0]);
+    if (!source || !XR_TYPE_IS_POINTER(source)) {
+        char msg[224];
+        snprintf(msg, sizeof(msg), "mem.view<T>() expects Ptr<U> or MutPtr<U>, got '%s'",
+                 source ? xr_type_to_string(source) : "unknown");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+
+    if (!target)
+        target = xr_type_new_unknown(ctx->analyzer->isolate);
+    XrType *result = xr_type_new_pointer(
+        ctx->analyzer->isolate, target, source && XR_TYPE_IS_POINTER(source) && source->ptr_is_mut);
+    if (result)
+        result->ptr_is_c_view = true;
+    return result ? result : xr_type_new_unknown(ctx->analyzer->isolate);
+}
+
 static XrType *xa_mem_pointer_constructor_return_type(XaInferContext *ctx, AstNode *node,
                                                       CallExprNode *call, const char *member) {
     XrLocation loc = {
@@ -3856,6 +3916,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     const char *mem_pointer_member = xa_mem_pointer_constructor_member(ctx, call);
     if (mem_pointer_member)
         return xa_mem_pointer_constructor_return_type(ctx, node, call, mem_pointer_member);
+    if (xa_mem_view_call(ctx, call))
+        return xa_mem_view_return_type(ctx, node, call);
     const char *mem_access = xa_mem_access_member(ctx, call);
     if (mem_access)
         return xa_mem_access_return_type(ctx, node, call, mem_access);

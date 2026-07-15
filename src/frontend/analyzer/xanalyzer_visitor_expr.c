@@ -1459,6 +1459,83 @@ static bool xa_check_nullable_access(XaInferContext *ctx, AstNode *node, XrType 
     return true;
 }
 
+static XrClassInfo *xa_c_view_class_info(XrType *type) {
+    if (!type || !XR_TYPE_IS_POINTER(type) || !type->ptr_is_c_view || !type->container.element_type)
+        return NULL;
+    XrType *pointee = type->container.element_type;
+    if (!XR_TYPE_IS_INSTANCE(pointee) || !pointee->instance.class_ref)
+        return NULL;
+    XrClassInfo *info = pointee->instance.class_ref;
+    return info->is_extern_layout && info->struct_layout && info->struct_layout->is_extern_layout
+               ? info
+               : NULL;
+}
+
+static int xa_c_view_layout_field_index(const XrAggregateLayout *layout, const char *name) {
+    if (!layout || !layout->field_names || !name)
+        return -1;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        if (layout->field_names[i] && strcmp(layout->field_names[i], name) == 0)
+            return (int) i;
+    }
+    return -1;
+}
+
+static XrType *xa_c_view_member_type(XaInferContext *ctx, AstNode *node, XrType *view_type,
+                                     const char *name) {
+    XrClassInfo *info = xa_c_view_class_info(view_type);
+    if (!info)
+        return NULL;
+    int field_index = xa_c_view_layout_field_index(info->struct_layout, name);
+    XaSymbol *field = xa_class_info_lookup_instance_member(info, name);
+    XaSymbolLinks *links = field ? xa_analyzer_get_links(ctx->analyzer, field) : NULL;
+    if (field_index < 0 || !links || !links->type)
+        return NULL;
+
+    XrAggregateFieldLayout *layout_field = &info->struct_layout->fields[field_index];
+    if (layout_field->is_flexible) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "flexible field '%s.%s' requires an explicit validated length projection; "
+                 "direct field access is not allowed",
+                 info->name ? info->name : "?", name ? name : "?");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+    if (links->type->kind == XR_KIND_FIXED_ARRAY) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "fixed-array field '%s.%s' requires a bounded C-array projection; direct "
+                 "field access is not allowed",
+                 info->name ? info->name : "?", name ? name : "?");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+
+    XrType *result = links->type;
+    if (layout_field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+        result = xr_type_new_pointer(ctx->analyzer->isolate, links->type, view_type->ptr_is_mut);
+        if (result)
+            result->ptr_is_c_view = true;
+    } else if (XR_TYPE_IS_POINTER(result)) {
+        result = xr_type_copy(ctx->analyzer->isolate, result);
+        XrType *pointee = result ? result->container.element_type : NULL;
+        XrClassInfo *pointee_info =
+            pointee && XR_TYPE_IS_INSTANCE(pointee) ? pointee->instance.class_ref : NULL;
+        if (result && pointee_info && pointee_info->is_extern_layout &&
+            pointee_info->struct_layout && pointee_info->struct_layout->is_extern_layout)
+            result->ptr_is_c_view = true;
+    }
+    if (!result)
+        result = xr_type_new_unknown(ctx->analyzer->isolate);
+    record_selection(ctx, node, XA_SEL_FIELD, view_type, field, field_index, result, false);
+    return result;
+}
+
 XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);
@@ -1936,6 +2013,12 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     XrType *data_ptr_method = xa_array_data_ptr_method_type(ctx, obj_type, ma->name);
     if (data_ptr_method)
         return data_ptr_method;
+
+    if (XR_TYPE_IS_POINTER(obj_type)) {
+        XrType *view_member = xa_c_view_member_type(ctx, node, obj_type, ma->name);
+        if (view_member)
+            return view_member;
+    }
 
     XrType *ptr_method = xa_pointer_method_type(ctx, obj_type, ma->name, node);
     if (ptr_method)

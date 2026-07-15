@@ -223,6 +223,7 @@ struct XrType {
     bool is_weak;             // Weak variant: WeakMap (kind==MAP) / WeakSet (kind==SET)
     bool is_cycle_candidate;  // Class type graph forms a cycle (RC cycle collector)
     bool ptr_is_mut;          // POINTER only: MutPtr<T> (true) vs Ptr<T> (false, const)
+    bool ptr_is_c_view;       // POINTER only: compiler-issued mem.view projection capability
 
     // Native width for int/float types (XrSlotType value)
     // 0 = default (int=int64, float=float64), nonzero = specific width

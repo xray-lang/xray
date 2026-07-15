@@ -1,0 +1,16 @@
+import mem
+
+extern "C" {
+    struct Header {
+        value: uint32
+    }
+}
+
+fn run() {
+    var buffer = mem.alloc(mem.sizeOf<Header>())
+    var view = unsafe { mem.view<Header>(buffer.borrowPtr()) }
+    buffer.resize(32)
+    print(view.value)
+}
+
+run()

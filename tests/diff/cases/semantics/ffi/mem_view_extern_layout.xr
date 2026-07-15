@@ -1,0 +1,34 @@
+import mem
+
+extern "C" {
+    struct Child {
+        code: uint32
+    }
+
+    struct Header {
+        tag: uint8
+        count: uint32
+        next: Ptr<Child>
+        child: Child
+    }
+
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
+
+var raw = unsafe { malloc(mem.sizeOf<Header>()) }
+var header = unsafe { mem.view<Header>(raw) }
+
+header.tag = 7
+header.count = 4099
+header.count += 1
+var child = header.child
+child.code = 91
+header.next = child
+
+print(header.tag)
+print(header.count)
+print(child.code)
+print(header.next.code)
+
+unsafe { free(raw) }
