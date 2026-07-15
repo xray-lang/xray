@@ -3151,6 +3151,15 @@ static inline void xrt_set_clear(xrt_set_t *s) {
     if (!xrt_set_is_typed(s)) {
         if (s->flags & XR_SET_FLAG_DUMMY)
             return;
+        if (!(s->flags & XR_SET_FLAG_WEAK)) {
+            for (uint32_t i = 0; i < s->nentries; i++) {
+                if (s->entries[i].val_tt == XR_SET_ENTRY_NIL)
+                    continue;
+                xrt_release(s->entries[i].value);
+                s->entries[i].value = XR_NULL_VAL;
+                s->entries[i].val_tt = XR_SET_ENTRY_NIL;
+            }
+        }
         memset(s->ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) s->indices_size + XR_SWISS_GROUP);
         for (uint32_t i = 0; i < s->indices_size; i++)
             s->indices[i] = XR_SET_IX_EMPTY;
