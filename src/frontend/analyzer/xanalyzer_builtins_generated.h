@@ -17,11 +17,12 @@
 
 // Buffer methods
 static const XaBuiltinMember g_gen_buffer_members[] = {
-    {"asSpan", "(): Slice<byte>", "Borrow this buffer as a mutable Slice<byte> value", true, false, false, false, false},
-    {"ptr", "(): MutPtr<byte>", "Return the underlying raw pointer; requires unsafe at the call site", true, false, false, false, false},
+    {"asBytes", "(): Slice<byte>", "Borrow this buffer as a readonly Slice<byte> view", true, false, false, false, false},
+    {"asMutBytes", "(): Slice<byte>", "Borrow this buffer as a mutable Slice<byte> view", true, false, false, false, false},
+    {"borrowPtr", "(): MutPtr<byte>", "Borrow the underlying mutable pointer; requires unsafe at the call site", true, false, false, false, false},
     {"resize", "(n: int): bool", "Resize this buffer; returns false on allocation failure", true, false, false, false, false},
 };
-#define GEN_BUFFER_MEMBER_COUNT 3
+#define GEN_BUFFER_MEMBER_COUNT 4
 
 // OsBarrier methods
 static const XaBuiltinMember g_gen_osbarrier_members[] = {

@@ -2637,7 +2637,8 @@ static bool xa_method_call_creates_span_borrow(XrType *receiver_type, const char
         return false;
     if (XR_TYPE_IS_STRING(receiver_type) && strcmp(method_name, "bytes") == 0)
         return true;
-    if (xr_type_is_named_class(receiver_type, "Buffer") && strcmp(method_name, "asSpan") == 0)
+    if (xr_type_is_named_class(receiver_type, "Buffer") &&
+        (strcmp(method_name, "asBytes") == 0 || strcmp(method_name, "asMutBytes") == 0))
         return true;
     if (XR_TYPE_IS_SPAN(receiver_type) &&
         (strcmp(method_name, "asBytes") == 0 || strcmp(method_name, "reinterpret") == 0))
@@ -2663,8 +2664,8 @@ static bool xa_expr_needs_contextual_view_type(AstNode *expr) {
     if (!call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return false;
     const char *name = call->callee->as.member_access.name;
-    return name && (strcmp(name, "bytes") == 0 || strcmp(name, "asSpan") == 0 ||
-                    strcmp(name, "asBytes") == 0 || strcmp(name, "reinterpret") == 0);
+    return name && (strcmp(name, "bytes") == 0 || strcmp(name, "asBytes") == 0 ||
+                    strcmp(name, "asMutBytes") == 0 || strcmp(name, "reinterpret") == 0);
 }
 
 static bool xa_type_is_u8_view_or_owner(XrType *type) {

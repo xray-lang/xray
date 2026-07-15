@@ -1,0 +1,14 @@
+import mem
+
+fn main() {
+    var buffer = mem.allocZeroed(1)
+    {
+        var bytes: Slice<byte> = buffer.asMutBytes()
+        bytes[0] = 7
+    }
+    var readonly: Slice<byte> = buffer.asBytes()
+    readonly[0] = 9
+    print("unreachable")
+}
+
+main()

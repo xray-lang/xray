@@ -2,5 +2,5 @@ import mem
 
 fn raw() -> MutPtr<byte> {
     var b = mem.alloc(8)
-    return b.ptr()
+    return b.borrowPtr()
 }

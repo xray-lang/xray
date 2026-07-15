@@ -1,28 +1,33 @@
 // mem.alloc / allocAligned / allocZeroed return managed Buffer handles.
-// Raw pointer access is only available through unsafe Buffer.ptr().
+// Raw pointer access is only available through unsafe Buffer.borrowPtr().
 import mem
 
 var p = mem.alloc(16)
 print(len(p))
 
-var pp = unsafe { p.ptr() }
+var pp = unsafe { p.borrowPtr() }
 unsafe { pp[0] = 42 }
 unsafe { pp[15] = 99 }
 unsafe { print(pp[0]) }
 unsafe { print(pp[15]) }
 
 {
-    var ps: Slice<byte> = p.asSpan()
-    print(len(ps))
-    ps[0] = 43
-    print(ps[0])
+    var ro: Slice<byte> = p.asBytes()
+    print(len(ro))
+    print(ro[0])
+}
+
+{
+    var rw: Slice<byte> = p.asMutBytes()
+    rw[0] = 43
+    print(rw[0])
     unsafe { print(pp[0]) }
 }
 
 // aligned allocation
 var q = mem.allocAligned(128, 64)
 print(len(q))
-var qp = unsafe { q.ptr() }
+var qp = unsafe { q.borrowPtr() }
 mem.set(qp, 5, 128)
 unsafe { print(qp[0]) }
 unsafe { print(qp[127]) }
@@ -31,7 +36,7 @@ print(mem.addr(qp) % 64)
 // zeroed allocation
 var z = mem.allocZeroed(8)
 print(len(z))
-var zp = unsafe { z.ptr() }
+var zp = unsafe { z.borrowPtr() }
 unsafe { print(zp[0]) }
 unsafe { print(zp[7]) }
 unsafe { zp[3] = 11 }
@@ -40,7 +45,7 @@ unsafe { print(zp[3]) }
 // resize keeps existing bytes and updates the Buffer length.
 print(p.resize(64))
 print(len(p))
-var rp = unsafe { p.ptr() }
+var rp = unsafe { p.borrowPtr() }
 unsafe { print(rp[0]) }
 unsafe { print(rp[15]) }
 

@@ -1,0 +1,6 @@
+import mem
+
+var buffer = mem.allocZeroed(8)
+var view: Slice<byte> = buffer.asMutBytes()
+buffer.resize(16)
+print(view[0])

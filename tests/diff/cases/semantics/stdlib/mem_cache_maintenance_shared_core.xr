@@ -4,7 +4,7 @@
 import mem
 
 var buf = mem.allocZeroed(96)
-var p = unsafe { buf.ptr() }
+var p = unsafe { buf.borrowPtr() }
 unsafe { p[0] = 11 }
 unsafe { p[63] = 12 }
 unsafe { p[64] = 13 }
