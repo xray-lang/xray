@@ -17,6 +17,7 @@
 #include "xanalyzer_infer.h"
 #include "xanalyzer_mono.h"
 #include "xanalyzer_visitor.h"
+#include "xanalyzer_xrd.h"
 #include "xast_nodes.h"
 #include "xparse.h"
 #include "xtype_ref.h"
@@ -1924,6 +1925,90 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     setup_pool();
 }
 
+TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
+    char tmpdir_template[] = "/tmp/xray_effect_xrd_XXXXXX";
+    char *tmpdir = mkdtemp(tmpdir_template);
+    ASSERT(tmpdir != NULL);
+
+    char xrd_path[256];
+    snprintf(xrd_path, sizeof(xrd_path), "%s/native_effects.xrd", tmpdir);
+    ASSERT(write_text_file(xrd_path, "export fn failNative(): int @errors(NativeErr.Boom)\n"
+                                     "export fn noThrowNative(): int @nothrow\n"
+                                     "export fn missingNative(): int\n"
+                                     "export fn makeBox(): NativeBox @nothrow\n"
+                                     "type NativeBox = { const id: int }\n"
+                                     "fn NativeBox.failMethod(): int @errors(NativeErr.Other)\n"));
+
+    const char *old_typepath = getenv("XRAY_TYPEPATH");
+    char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
+    ASSERT(setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
+    xa_xrd_cleanup();
+
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "enum NativeErr { Boom, Other }\n"
+                         "import native_effects\n"
+                         "import { failNative, noThrowNative, missingNative } from "
+                         "\"native_effects\"\n"
+                         "fn viaNamespace() { native_effects.failNative() }\n"
+                         "fn viaSelective() { failNative() }\n"
+                         "fn viaNoThrow() { noThrowNative() }\n"
+                         "fn viaMissing() { missingNative() }\n"
+                         "fn viaHandle() { native_effects.makeBox().failMethod() }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_xrd_native_contracts.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "error"));
+
+    const XaEffectSummary *namespace_call = analyzer_function_effect_summary(a, "viaNamespace");
+    const XaEffectSummary *selective_call = analyzer_function_effect_summary(a, "viaSelective");
+    const XaEffectSummary *nothrow_call = analyzer_function_effect_summary(a, "viaNoThrow");
+    const XaEffectSummary *missing_call = analyzer_function_effect_summary(a, "viaMissing");
+    const XaEffectSummary *handle_call = analyzer_function_effect_summary(a, "viaHandle");
+    ASSERT(namespace_call != NULL);
+    ASSERT(selective_call != NULL);
+    ASSERT(nothrow_call != NULL);
+    ASSERT(missing_call != NULL);
+    ASSERT(handle_call != NULL);
+    ASSERT(namespace_call->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(selective_call->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(handle_call->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(xa_effect_summary_is_nothrow(nothrow_call));
+    ASSERT(missing_call->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((missing_call->unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
+    ASSERT((missing_call->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+
+    const XaErrorTypeSet *namespace_set =
+        effect_summary_enum_set_named(a, namespace_call, "NativeErr");
+    const XaErrorTypeSet *selective_set =
+        effect_summary_enum_set_named(a, selective_call, "NativeErr");
+    const XaErrorTypeSet *handle_set = effect_summary_enum_set_named(a, handle_call, "NativeErr");
+    ASSERT(namespace_set != NULL);
+    ASSERT(selective_set != NULL);
+    ASSERT(handle_set != NULL);
+    ASSERT(!namespace_set->all_variants);
+    ASSERT(!selective_set->all_variants);
+    ASSERT(!handle_set->all_variants);
+    ASSERT(xa_bitset_test(&namespace_set->variants, 0));
+    ASSERT(!xa_bitset_test(&namespace_set->variants, 1));
+    ASSERT(xa_bitset_test(&selective_set->variants, 0));
+    ASSERT(!xa_bitset_test(&selective_set->variants, 1));
+    ASSERT(!xa_bitset_test(&handle_set->variants, 0));
+    ASSERT(xa_bitset_test(&handle_set->variants, 1));
+
+    xa_analyzer_free(a);
+    xa_xrd_cleanup();
+    if (old_typepath_copy) {
+        ASSERT(setenv("XRAY_TYPEPATH", old_typepath_copy, 1) == 0);
+        free(old_typepath_copy);
+    } else {
+        unsetenv("XRAY_TYPEPATH");
+    }
+    unlink(xrd_path);
+    rmdir(tmpdir);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_subtracts_typed_catches) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -3401,6 +3486,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_immediate_function_expr_calls);
     RUN_TEST(analyzer_error_effect_propagates_direct_method_calls);
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
+    RUN_TEST(analyzer_error_effect_consumes_xrd_native_contracts);
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
     RUN_TEST(analyzer_error_effect_marks_invalid_program_partial_facts);
     RUN_TEST(analyzer_error_effect_tracks_map_catch_aliases);

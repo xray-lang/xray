@@ -22,6 +22,7 @@
  */
 
 #include "xanalyzer_errorset.h"
+#include "xanalyzer_builtins.h"
 #include "xanalyzer_visitor.h"
 #include "xa_effect_db.h"
 #include "xa_selection.h"
@@ -2269,6 +2270,148 @@ static XaSymbol *lookup_enum_symbol(XaAnalyzer *analyzer, const char *enum_name)
     return (sym && sym->kind == XA_SYM_ENUM) ? sym : NULL;
 }
 
+static bool copy_contract_ident_segment(char *dst, size_t dst_size, const char *start,
+                                        const char *end) {
+    if (!dst || dst_size == 0 || !start || !end || end <= start)
+        return false;
+    const char *segment = start;
+    for (const char *p = start; p < end; p++) {
+        if (*p == '.')
+            segment = p + 1;
+        else if (*p == ':' && p + 1 < end && p[1] == ':')
+            segment = p + 2;
+    }
+    size_t len = (size_t) (end - segment);
+    if (len == 0 || len >= dst_size)
+        return false;
+    memcpy(dst, segment, len);
+    dst[len] = '\0';
+    return true;
+}
+
+static bool split_effect_contract_ref(const char *ref, char *enum_name, size_t enum_name_size,
+                                      char *variant_name, size_t variant_name_size,
+                                      bool *has_variant) {
+    if (!ref || !enum_name || !variant_name || !has_variant)
+        return false;
+    const char *end = ref + strlen(ref);
+    const char *dot = strrchr(ref, '.');
+    *has_variant = dot && dot + 1 < end;
+    if (*has_variant) {
+        if (!copy_contract_ident_segment(enum_name, enum_name_size, ref, dot))
+            return false;
+        size_t variant_len = (size_t) (end - (dot + 1));
+        if (variant_len == 0 || variant_len >= variant_name_size)
+            return false;
+        memcpy(variant_name, dot + 1, variant_len);
+        variant_name[variant_len] = '\0';
+    } else {
+        if (!copy_contract_ident_segment(enum_name, enum_name_size, ref, end))
+            return false;
+        variant_name[0] = '\0';
+    }
+    return true;
+}
+
+static bool es_apply_effect_contract(ErrorSetCtx *ctx, const XaEffectContract *contract) {
+    if (!ctx || !ctx->current_summary || !contract)
+        return false;
+    if (contract->kind == XA_EFFECT_CONTRACT_NOTHROW)
+        return true;
+    if (contract->kind == XA_EFFECT_CONTRACT_MISSING) {
+        xa_effect_summary_mark_incomplete(ctx->current_summary, XA_UNKNOWN_NATIVE_CONTRACT_MISSING);
+        return true;
+    }
+
+    bool complete = true;
+    for (uint32_t i = 0; i < contract->error_count; i++) {
+        char enum_name[128];
+        char variant_name[128];
+        bool has_variant = false;
+        if (!split_effect_contract_ref(contract->errors[i], enum_name, sizeof(enum_name),
+                                       variant_name, sizeof(variant_name), &has_variant)) {
+            complete = false;
+            continue;
+        }
+        XaSymbol *enum_sym = lookup_enum_symbol(ctx->analyzer, enum_name);
+        XrType *enum_type =
+            (enum_sym && enum_sym->kind == XA_SYM_ENUM) ? enum_sym->links.type : NULL;
+        if (!enum_type || !XR_TYPE_IS_ENUM(enum_type)) {
+            complete = false;
+            continue;
+        }
+        if (!has_variant) {
+            es_summary_add_enum_all(ctx->analyzer->effect_db, ctx->current_summary, enum_type);
+            continue;
+        }
+        int case_index = find_enum_case_index(enum_sym, variant_name);
+        if (case_index < 0) {
+            complete = false;
+            continue;
+        }
+        es_summary_add_enum_case(ctx->analyzer->effect_db, ctx->current_summary, enum_type,
+                                 (uint32_t) case_index);
+    }
+    if (!complete)
+        xa_effect_summary_mark_incomplete(ctx->current_summary, XA_UNKNOWN_NATIVE_CONTRACT_MISSING);
+    return true;
+}
+
+static const XaEffectContract *es_module_member_effect_contract(ErrorSetCtx *ctx, AstNode *callee) {
+    if (!ctx || !callee || callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE ||
+        !ma->object->as.variable.name)
+        return NULL;
+    XaSymbol *mod_sym = lookup_variable_symbol(ctx->analyzer, ma->object);
+    if (!mod_sym || mod_sym->kind != XA_SYM_MODULE)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
+    const char *module_name =
+        (links && links->module_name) ? links->module_name : ma->object->as.variable.name;
+    return xa_builtin_get_module_func_effect_contract(module_name, ma->name);
+}
+
+static const XaEffectContract *es_imported_function_effect_contract(ErrorSetCtx *ctx,
+                                                                    AstNode *callee) {
+    if (!ctx || !callee || callee->type != AST_VARIABLE)
+        return NULL;
+    XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, callee);
+    if (!sym)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links || !links->module_name || !links->import_member_name)
+        return NULL;
+    return xa_builtin_get_module_func_effect_contract(links->module_name,
+                                                      links->import_member_name);
+}
+
+static const XaEffectContract *es_handle_method_effect_contract(ErrorSetCtx *ctx, AstNode *callee) {
+    if (!ctx || !callee || callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object)
+        return NULL;
+    XrType *receiver_type = xa_analyzer_get_node_type(ctx->analyzer, ma->object);
+    const char *handle_name = receiver_type && XR_TYPE_IS_INSTANCE(receiver_type)
+                                  ? receiver_type->instance.class_name
+                                  : NULL;
+    if (!handle_name)
+        return NULL;
+    return xa_builtin_get_handle_method_effect_contract(handle_name, ma->name);
+}
+
+static bool es_apply_native_call_contract(ErrorSetCtx *ctx, AstNode *callee) {
+    AstNode *source = identity_source(callee);
+    const XaEffectContract *contract = es_imported_function_effect_contract(ctx, source);
+    if (!contract)
+        contract = es_module_member_effect_contract(ctx, source);
+    if (!contract)
+        contract = es_handle_method_effect_contract(ctx, source);
+    return es_apply_effect_contract(ctx, contract);
+}
+
 /* ========== Expression Walking ========== */
 
 static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
@@ -2289,6 +2432,8 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
                                                          callee_source->as.member_access.object);
 
             if (es_walk_immediate_function_expr_call(ctx, node->as.call_expr.callee))
+                break;
+            if (es_apply_native_call_contract(ctx, node->as.call_expr.callee))
                 break;
 
             const XaSelection *callee_selection =

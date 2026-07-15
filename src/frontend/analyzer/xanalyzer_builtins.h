@@ -120,6 +120,10 @@ XR_FUNC const char *xa_builtin_get_module_func_signature(const char *module_name
 // Get module function doc
 XR_FUNC const char *xa_builtin_get_module_func_doc(const char *module_name, const char *func_name);
 
+// Get module function error-effect contract.
+XR_FUNC const XaEffectContract *xa_builtin_get_module_func_effect_contract(const char *module_name,
+                                                                           const char *func_name);
+
 // Check if a module function is registered as yieldable in stdlib metadata.
 XR_FUNC bool xa_builtin_module_func_is_yieldable(const char *module_name, const char *func_name);
 
@@ -129,6 +133,10 @@ XR_FUNC const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_nam
 
 // Find a handle type by name across all loaded modules (builtin + .xrd)
 XR_FUNC const XaBuiltinHandle *xa_builtin_find_handle_by_name(const char *handle_name);
+
+// Get a handle method error-effect contract by handle and method name.
+XR_FUNC const XaEffectContract *
+xa_builtin_get_handle_method_effect_contract(const char *handle_name, const char *method_name);
 
 // Owning builtin module name for a handle type, or NULL if no builtin module
 // declares one with this name (used for user-class name-collision diagnostics)
