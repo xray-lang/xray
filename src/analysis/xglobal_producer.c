@@ -5481,6 +5481,12 @@ static XgRecordShapeId body_lookup_local_record_shape(XgBodyCollect *bc, const A
                                                       const ObjectLiteralNode **out_literal);
 static XgRecordShapeId body_lookup_record_shape(XgBodyCollect *bc, const AstNode *expr,
                                                 const ObjectLiteralNode **out_literal);
+static XgRecordShapeId body_lookup_or_add_record_shape(XgBodyCollect *bc, const AstNode *expr,
+                                                       const ObjectLiteralNode **out_literal);
+static XgRecordShapeId body_add_record_shape_for_literal(XgBodyCollect *bc,
+                                                         const ObjectLiteralNode *obj,
+                                                         uint32_t source_span_id,
+                                                         uint32_t type_key);
 
 static int record_shape_key_index(const char **keys, uint32_t count, const char *key) {
     if (!keys || !key)
@@ -5513,7 +5519,7 @@ static bool record_shape_count_candidate_keys(XgBodyCollect *bc, const ObjectLit
             const ObjectLiteralNode *source_literal = NULL;
             AstNode *spread = obj->values[i];
             if (!spread ||
-                body_lookup_record_shape(bc, spread->as.spread_expr.expr, &source_literal) ==
+                body_lookup_or_add_record_shape(bc, spread->as.spread_expr.expr, &source_literal) ==
                     XG_NO_ID ||
                 !source_literal)
                 return false;
@@ -5540,7 +5546,7 @@ static bool record_shape_collect_keys(XgBodyCollect *bc, const ObjectLiteralNode
             if (has_spread)
                 *has_spread = true;
             if (!spread ||
-                body_lookup_record_shape(bc, spread->as.spread_expr.expr, &source_literal) ==
+                body_lookup_or_add_record_shape(bc, spread->as.spread_expr.expr, &source_literal) ==
                     XG_NO_ID ||
                 !source_literal)
                 return false;
@@ -5758,7 +5764,8 @@ static void body_add_record_merge_rows_for_literal(XgBodyCollect *bc, const Obje
         spread = obj->values[i];
         if (!spread)
             continue;
-        base_shape_id = body_lookup_record_shape(bc, spread->as.spread_expr.expr, &source_literal);
+        base_shape_id =
+            body_lookup_or_add_record_shape(bc, spread->as.spread_expr.expr, &source_literal);
         if (base_shape_id == XG_NO_ID || !source_literal)
             continue;
         if (patch_shape_id == XG_NO_ID) {
@@ -5814,20 +5821,37 @@ static XgRecordShapeId body_add_record_shape_for_literal(XgBodyCollect *bc,
     uint32_t shape_key_count = 0;
     bool has_spread = false;
     uint64_t shape_hash = 0;
+    uint32_t resolved_type_key;
+    uint8_t shape_kind;
     if (!bc || !bc->evidence || !obj)
         return XG_NO_ID;
     if (!record_shape_collect_literal_keys(bc, obj, &shape_keys, &shape_key_count, &has_spread,
                                            &shape_hash))
         return XG_NO_ID;
+    resolved_type_key = type_key ? type_key : body_record_type_key(obj);
+    shape_kind = has_spread ? XG_RECORD_SHAPE_SPREAD : XG_RECORD_SHAPE_LITERAL;
+    for (uint32_t i = 0; i < bc->evidence->nrecord_shapes; i++) {
+        const XgRecordShapeSummary *existing = &bc->evidence->record_shapes[i];
+        if (existing->module_id == bc->module_id && existing->owner_func_id == bc->owner_func_id &&
+            existing->source_span_id == source_span_id && existing->type_key == resolved_type_key &&
+            existing->shape_kind == shape_kind &&
+            existing->field_count ==
+                (uint16_t) (shape_key_count < UINT16_MAX ? shape_key_count : UINT16_MAX) &&
+            existing->shape_hash == shape_hash) {
+            XgRecordShapeId existing_id = existing->record_shape_id;
+            xr_free(shape_keys);
+            return existing_id;
+        }
+    }
     memset(&row, 0, sizeof(row));
     row.record_shape_id = (XgRecordShapeId) (bc->evidence->nrecord_shapes + 1);
     row.module_id = bc->module_id;
     row.owner_func_id = bc->owner_func_id;
     row.source_span_id = source_span_id;
-    row.type_key = type_key ? type_key : body_record_type_key(obj);
+    row.type_key = resolved_type_key;
     row.field_name_start = (uint32_t) (shape_hash & UINT32_MAX);
     row.field_count = (uint16_t) (shape_key_count < UINT16_MAX ? shape_key_count : UINT16_MAX);
-    row.shape_kind = has_spread ? XG_RECORD_SHAPE_SPREAD : XG_RECORD_SHAPE_LITERAL;
+    row.shape_kind = shape_kind;
     row.flags =
         XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_JSON_BRIDGEABLE;
     if (has_spread)
@@ -6075,6 +6099,23 @@ static XgRecordShapeId body_lookup_record_shape(XgBodyCollect *bc, const AstNode
     if (shape_id != XG_NO_ID)
         return shape_id;
     return body_lookup_class_field_record_shape(bc, expr);
+}
+
+static XgRecordShapeId body_lookup_or_add_record_shape(XgBodyCollect *bc, const AstNode *expr,
+                                                       const ObjectLiteralNode **out_literal) {
+    XgRecordShapeId shape_id = body_lookup_record_shape(bc, expr, out_literal);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+
+    const ObjectLiteralNode *literal = body_static_object_literal(expr);
+    if (!literal)
+        return XG_NO_ID;
+    shape_id = body_add_record_shape_for_literal(bc, literal,
+                                                 expr && expr->line > 0 ? (uint32_t) expr->line : 0,
+                                                 body_expr_type_key(bc, expr));
+    if (shape_id != XG_NO_ID && out_literal)
+        *out_literal = literal;
+    return shape_id;
 }
 
 static int body_record_shape_static_field_index(XgBodyCollect *bc, XgRecordShapeId shape_id,
