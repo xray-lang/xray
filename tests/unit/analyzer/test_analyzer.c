@@ -2457,6 +2457,45 @@ TEST(analyzer_rejects_error_type_container_success_types) {
     setup_pool();
 }
 
+TEST(analyzer_type_ref_failures_use_error_recovery) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    XrArena arena;
+    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
+    XrCompilerSessionScope scope;
+    ASSERT(xr_compiler_session_push_arena(g_session, &arena, "type_ref_error_recovery.xr", &scope));
+
+    XrType *missing =
+        xr_tref_resolve_in_analyzer(a, xr_tref_named(g_session, "DefinitelyMissingType"));
+    ASSERT(missing != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(missing));
+
+    XrType *removed = xr_tref_resolve_in_analyzer(a, xr_tref_named(g_session, "EnumValue"));
+    ASSERT(removed != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(removed));
+
+    XrTypeRef *missing_args[] = {xr_tref_int(g_session)};
+    XrType *missing_generic = xr_tref_resolve_in_analyzer(
+        a, xr_tref_generic(g_session, "DefinitelyMissingGeneric", missing_args, 1));
+    ASSERT(missing_generic != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(missing_generic));
+
+    XrTypeRef *invalid_fixed = xr_tref_fixed_array_expr(g_session, xr_tref_int(g_session), NULL, 0);
+    XrType *fixed = xr_tref_resolve_in_analyzer(a, invalid_fixed);
+    ASSERT(fixed != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(fixed));
+
+    ASSERT(analyzer_diag_contains(a, "undefined type 'DefinitelyMissingType'"));
+    ASSERT(analyzer_diag_contains(a, "runtime enum wrapper type 'EnumValue' has been removed"));
+    ASSERT(analyzer_diag_contains(a, "undefined type 'DefinitelyMissingGeneric'"));
+    ASSERT(analyzer_diag_contains(a, "fixed array length must be greater than zero"));
+
+    xr_compiler_session_pop_arena(&scope);
+    xr_arena_destroy(&arena);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -2810,6 +2849,7 @@ int main(void) {
     RUN_TEST(analyzer_empty_map_uses_unsolved_infer_var);
     RUN_TEST(analyzer_rejects_builtin_generic_arity);
     RUN_TEST(analyzer_rejects_error_type_container_success_types);
+    RUN_TEST(analyzer_type_ref_failures_use_error_recovery);
     RUN_TEST(analyzer_rejects_error_type_generic_argument_and_constraint);
     RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);
     RUN_TEST(compile_type_class);
