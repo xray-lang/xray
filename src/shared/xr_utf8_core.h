@@ -36,6 +36,12 @@ typedef struct XrUtf8Step {
     XrUtf8ErrorKind error;
 } XrUtf8Step;
 
+typedef struct XrUtf8LossyPlan {
+    size_t output_length;
+    size_t rune_count;
+    int overflow;
+} XrUtf8LossyPlan;
+
 #define XR_UTF8_CORE_REPLACEMENT UINT32_C(0xFFFD)
 
 static inline int xr_utf8_core_is_continuation(uint8_t byte) {
@@ -185,6 +191,55 @@ static inline XrUtf8ScanResult xr_utf8_core_scan_strict(const uint8_t *data, siz
 
     out.byte_offset = len;
     return out;
+}
+
+static inline XrUtf8LossyPlan xr_utf8_core_lossy_plan(const uint8_t *data, size_t len) {
+    XrUtf8LossyPlan out = {0, 0, 0};
+    if (!data && len != 0) {
+        out.overflow = 1;
+        return out;
+    }
+
+    size_t pos = 0;
+    while (pos < len) {
+        XrUtf8Step step = xr_utf8_core_decode_step(data + pos, len - pos);
+        if (step.consumed == 0) {
+            out.overflow = 1;
+            return out;
+        }
+        size_t add = step.error == XR_UTF8_OK ? step.consumed : 3;
+        if (out.output_length > (size_t) -1 - add) {
+            out.overflow = 1;
+            return out;
+        }
+        out.output_length += add;
+        out.rune_count++;
+        pos += step.consumed;
+    }
+    return out;
+}
+
+static inline size_t xr_utf8_core_lossy_write(char *out, const uint8_t *data, size_t len) {
+    if (!out || (!data && len != 0))
+        return 0;
+
+    size_t src = 0;
+    size_t dst = 0;
+    while (src < len) {
+        XrUtf8Step step = xr_utf8_core_decode_step(data + src, len - src);
+        if (step.consumed == 0)
+            break;
+        if (step.error != XR_UTF8_OK) {
+            out[dst++] = (char) 0xEF;
+            out[dst++] = (char) 0xBF;
+            out[dst++] = (char) 0xBD;
+        } else {
+            for (size_t i = 0; i < step.consumed; i++)
+                out[dst++] = (char) data[src + i];
+        }
+        src += step.consumed;
+    }
+    return dst;
 }
 
 #endif /* XRAY_SHARED_XR_UTF8_CORE_H */

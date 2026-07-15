@@ -271,30 +271,19 @@ static XrValue m_from_utf8_lossy(XrVMRuntime *iso, XrValue self, XrValue *args, 
         return result ? xr_string_value(result) : xr_null();
     }
 
-    if (len > (SIZE_MAX - 1) / 3) {
+    XrUtf8LossyPlan plan = xr_utf8_core_lossy_plan(data, len);
+    if (plan.overflow || plan.output_length > SIZE_MAX - 1) {
         xr_free(owned);
         return xr_null();
     }
-    char *buf = (char *) xr_malloc(len * 3 + 1);
+    char *buf = (char *) xr_malloc(plan.output_length + 1);
     if (!buf) {
         xr_free(owned);
         return xr_null();
     }
-    size_t src = 0, dst = 0, rune_count = 0;
-    while (src < len) {
-        XrUtf8Step step = xr_utf8_decode_step(data + src, len - src);
-        if (step.error != XR_UTF8_OK) {
-            static const char replacement[] = {(char) 0xEF, (char) 0xBF, (char) 0xBD};
-            memcpy(buf + dst, replacement, sizeof(replacement));
-            dst += sizeof(replacement);
-        } else {
-            memcpy(buf + dst, data + src, step.consumed);
-            dst += step.consumed;
-        }
-        src += step.consumed;
-        rune_count++;
-    }
-    XrString *result = xr_string_new_valid_utf8(iso, buf, dst, rune_count);
+    size_t dst = xr_utf8_core_lossy_write(buf, data, len);
+    buf[dst] = '\0';
+    XrString *result = xr_string_new_valid_utf8(iso, buf, dst, plan.rune_count);
     xr_free(buf);
     xr_free(owned);
     return result ? xr_string_value(result) : xr_null();
