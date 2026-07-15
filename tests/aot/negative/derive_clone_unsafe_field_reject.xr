@@ -1,0 +1,20 @@
+class UnsafeCloneHandle {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+@derive(Clone)
+class UnsafeCloneOwner {
+    handle: UnsafeCloneHandle
+
+    constructor(handle: UnsafeCloneHandle) {
+        this.handle = handle
+    }
+}
+
+var original = UnsafeCloneOwner(UnsafeCloneHandle(1))
+var cloned = copy(original)
+print(cloned.handle.value)

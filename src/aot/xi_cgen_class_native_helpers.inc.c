@@ -176,6 +176,36 @@ cg_class_native_derive_for_data_kind(XiCgenCtx *ctx, const XiClassData *cd, uint
                    : NULL;
 }
 
+static bool cg_class_native_clone_action_supported(uint8_t action) {
+    return action == XAOT_DERIVED_CLONE_BITWISE_COPY ||
+           action == XAOT_DERIVED_CLONE_FIELDWISE_COPY ||
+           action == XAOT_DERIVED_CLONE_DEEP_COPY_PLAN;
+}
+
+static const XaotDerivedClonePlan *
+cg_class_native_derived_clone_plan(XiCgenCtx *ctx, const XiClassData *cd, bool report_error) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgDeriveSummary *derive = cg_class_native_derive_for_data_kind(ctx, cd, XG_DERIVE_CLONE);
+    const XaotDerivedClonePlan *plan =
+        bundle && derive ? xaot_bundle_find_derived_clone_plan(bundle, derive->type_key) : NULL;
+    if (derive && plan && plan->clone_derive_id == derive->derive_id &&
+        plan->owner_decl_id == derive->owner_decl_id &&
+        cg_class_native_clone_action_supported(plan->action) &&
+        plan->unproven_reason == XAOT_CLONE_UNPROVEN_NONE)
+        return plan;
+    if (report_error) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: derived Clone for class %s has no consumable verified plan "
+                "(derive=%u action=%u reason=%u)\n",
+                cd && cd->class_name ? cd->class_name : "?",
+                derive ? (unsigned) derive->derive_id : 0u, plan ? (unsigned) plan->action : 0u,
+                plan ? (unsigned) plan->unproven_reason
+                     : (unsigned) XAOT_CLONE_UNPROVEN_MISSING_CLONE);
+    }
+    return NULL;
+}
+
 static bool cg_class_native_class_is_descendant_or_self(const XgGlobalEvidence *ev,
                                                         XgClassId class_id, XgClassId ancestor_id) {
     uint32_t depth = 0;
@@ -418,6 +448,16 @@ static void emit_class_native_dtor_name(FILE *out, const char *prefix, const XiC
     fprintf(out, "_dtor");
 }
 
+static void emit_class_native_clone_name(FILE *out, const char *prefix, const XiClassData *cd) {
+    emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
+    fprintf(out, "_derived_clone");
+}
+
+static void emit_class_boxed_clone_name(FILE *out, const char *prefix, const XiClassData *cd) {
+    emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
+    fprintf(out, "_derived_clone_boxed");
+}
+
 static void emit_class_native_ref_field_value(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
                                               const XrAggregateLayout *layout, uint16_t idx,
                                               const char *object_expr) {
@@ -461,6 +501,195 @@ static void emit_class_native_receiver_ref_field_value(XiCgenCtx *ctx, FILE *out
         return;
     }
     fprintf(out, "XR_NULL_VAL");
+}
+
+static bool cg_class_native_derive_covers_field(const XgGlobalEvidence *ev,
+                                                const XgDeriveSummary *derive, XgFieldId field_id) {
+    if (!ev || !derive || derive->field_count == 0 || derive->field_start == 0 ||
+        field_id == XG_NO_ID)
+        return false;
+    uint32_t end = derive->field_start + (uint32_t) derive->field_count - 1u;
+    if (end < derive->field_start || end > ev->nderived_fields)
+        return false;
+    for (uint32_t i = 0; i < derive->field_count; i++) {
+        const XgDerivedFieldSummary *field = &ev->derived_fields[derive->field_start - 1u + i];
+        if (field->derive_id == derive->derive_id && field->source_field_id == field_id)
+            return true;
+    }
+    return false;
+}
+
+static bool cg_class_native_clone_field_supported(XiCgenCtx *ctx, const XiClassData *cd,
+                                                  uint16_t slot,
+                                                  const XgClassFieldSummary **out_source) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
+    const XaotClassFieldPlan *field_plan = cg_class_native_field_plan_for_slot(ctx, cd, slot);
+    const XgClassFieldSummary *source =
+        ev && field_plan ? xg_global_evidence_find_class_field(ev, field_plan->field_id) : NULL;
+    const XgClassSummary *owner =
+        source ? cg_class_native_evidence_class_by_id(ev, source->owner_class_id) : NULL;
+    const XgDeriveSummary *owner_clone =
+        owner ? cg_class_native_evidence_derive_by_decl_kind(ev, owner->decl_id, XG_DERIVE_CLONE)
+              : NULL;
+    const XaotDerivedClonePlan *owner_plan =
+        bundle && owner_clone ? xaot_bundle_find_derived_clone_plan(bundle, owner_clone->type_key)
+                              : NULL;
+    const XrAggregateFieldLayout *layout_field =
+        cd && cd->instance_layout ? cg_struct_field(cd->instance_layout, slot) : NULL;
+    if (!source || !owner_clone || !owner_plan ||
+        !cg_class_native_clone_action_supported(owner_plan->action) ||
+        owner_plan->unproven_reason != XAOT_CLONE_UNPROVEN_NONE ||
+        !cg_class_native_derive_covers_field(ev, owner_clone, source->field_id) || !layout_field) {
+        cg_ctx_set_error(ctx);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: derived Clone field %u for class %s is not covered by "
+                "verified source evidence\n",
+                (unsigned) slot, cd && cd->class_name ? cd->class_name : "?");
+        return false;
+    }
+    switch ((XgClassFieldTypeKind) source->semantic_kind) {
+        case XG_CLASS_FIELD_TYPE_I8:
+        case XG_CLASS_FIELD_TYPE_U8:
+        case XG_CLASS_FIELD_TYPE_I16:
+        case XG_CLASS_FIELD_TYPE_U16:
+        case XG_CLASS_FIELD_TYPE_I32:
+        case XG_CLASS_FIELD_TYPE_U32:
+        case XG_CLASS_FIELD_TYPE_I64:
+        case XG_CLASS_FIELD_TYPE_U64:
+        case XG_CLASS_FIELD_TYPE_ISIZE:
+        case XG_CLASS_FIELD_TYPE_USIZE:
+        case XG_CLASS_FIELD_TYPE_F32:
+        case XG_CLASS_FIELD_TYPE_F64:
+        case XG_CLASS_FIELD_TYPE_BOOL:
+        case XG_CLASS_FIELD_TYPE_RUNE:
+        case XG_CLASS_FIELD_TYPE_STRING:
+        case XG_CLASS_FIELD_TYPE_ARRAY:
+        case XG_CLASS_FIELD_TYPE_MAP:
+        case XG_CLASS_FIELD_TYPE_SET:
+        case XG_CLASS_FIELD_TYPE_ENUM:
+        case XG_CLASS_FIELD_TYPE_UNIT:
+        case XG_CLASS_FIELD_TYPE_NULL:
+            break;
+        case XG_CLASS_FIELD_TYPE_CLASS: {
+            const XgClassSummary *target_summary =
+                cg_class_native_evidence_class_by_id(ev, source->target_class_id);
+            const XiClassData *target =
+                cg_class_native_data_for_evidence_class(ctx, bundle, target_summary);
+            if (layout_field->native_type != XR_NATIVE_VALUE || !target ||
+                !cg_class_native_derived_clone_plan(ctx, target, false)) {
+                cg_ctx_set_error(ctx);
+                fprintf(stderr,
+                        "[xi_cgen] ERROR: nested derived Clone field %u for class %s has no "
+                        "native Clone backend\n",
+                        (unsigned) slot, cd && cd->class_name ? cd->class_name : "?");
+                return false;
+            }
+            break;
+        }
+        default:
+            cg_ctx_set_error(ctx);
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: derived Clone field %u for class %s has unsupported "
+                    "semantic kind %u\n",
+                    (unsigned) slot, cd && cd->class_name ? cd->class_name : "?",
+                    (unsigned) source->semantic_kind);
+            return false;
+    }
+    if (out_source)
+        *out_source = source;
+    return true;
+}
+
+static bool cg_class_native_clone_layout_supported(XiCgenCtx *ctx, const XiClassData *cd) {
+    if (!cd || !cd->instance_layout || !cg_class_native_derived_clone_plan(ctx, cd, false))
+        return false;
+    for (uint16_t slot = 0; slot < cd->instance_layout->field_count; slot++) {
+        if (!cg_class_native_clone_field_supported(ctx, cd, slot, NULL))
+            return false;
+    }
+    return true;
+}
+
+static void emit_class_native_cloned_ref_field(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                               uint16_t slot) {
+    const XrAggregateFieldLayout *field = cg_struct_field(cd->instance_layout, slot);
+    fprintf(out, "    { XrValue _field_clone_%u = xrt_value_clone_for_coro(", (unsigned) slot);
+    if (field && field->native_type == XR_NATIVE_VALUE) {
+        emit_class_native_field_ref(ctx, out, cd, "src", slot);
+    } else {
+        emit_class_native_ref_field_value(ctx, out, cd, cd->instance_layout, slot, "src");
+    }
+    fprintf(out, "); ");
+    emit_class_native_field_ref(ctx, out, cd, "dst", slot);
+    if (field && field->native_type != XR_NATIVE_STRING && field->native_type != XR_NATIVE_VALUE)
+        fprintf(out, " = (%s)_field_clone_%u.ptr; }\n",
+                cg_struct_field_c_type(cd->instance_layout, slot), (unsigned) slot);
+    else
+        fprintf(out, " = _field_clone_%u; }\n", (unsigned) slot);
+}
+
+static void emit_class_native_clone_helper(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                           const char *prefix) {
+    if (!cd || !cd->instance_layout || (cd->derive_flags & XR_DERIVE_CLONE) == 0 ||
+        !cg_class_native_derived_clone_plan(ctx, cd, false))
+        return;
+    if (!cg_class_native_clone_layout_supported(ctx, cd))
+        return;
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " *");
+    emit_class_native_clone_name(out, prefix, cd);
+    fprintf(out, "(");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " *src) {\n");
+    fprintf(out, "    if (!src) return NULL;\n");
+    fprintf(out, "    ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " *dst = (");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, "*)xrt_obj_alloc((uint16_t)");
+    if (!emit_class_native_type_id_expr(ctx, out, cd)) {
+        cg_ctx_set_error(ctx);
+        fprintf(out, "0");
+    }
+    fprintf(out, ", (uint32_t)sizeof(*dst));\n");
+    fprintf(out, "    memset(dst, 0, sizeof(*dst));\n");
+    for (uint16_t slot = 0; slot < cd->instance_layout->field_count; slot++) {
+        const XgClassFieldSummary *source = NULL;
+        if (!cg_class_native_clone_field_supported(ctx, cd, slot, &source))
+            return;
+        if (source->semantic_kind == XG_CLASS_FIELD_TYPE_CLASS) {
+            const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
+            const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+            const XgClassSummary *target_summary =
+                cg_class_native_evidence_class_by_id(ev, source->target_class_id);
+            const XiClassData *target =
+                cg_class_native_data_for_evidence_class(ctx, bundle, target_summary);
+            const char *target_prefix = cg_class_native_prefix_for_data(ctx, target, prefix);
+            fprintf(out, "    ");
+            emit_class_native_field_ref(ctx, out, cd, "dst", slot);
+            fprintf(out, " = xrt_box_obj(");
+            emit_class_native_clone_name(out, target_prefix, target);
+            fprintf(out, "((");
+            emit_class_native_type_name(out, target_prefix, target->class_name);
+            fprintf(out, " *)");
+            emit_class_native_field_ref(ctx, out, cd, "src", slot);
+            fprintf(out, ".ptr));\n");
+        } else if (source->semantic_kind == XG_CLASS_FIELD_TYPE_STRING ||
+                   source->semantic_kind == XG_CLASS_FIELD_TYPE_ARRAY ||
+                   source->semantic_kind == XG_CLASS_FIELD_TYPE_MAP ||
+                   source->semantic_kind == XG_CLASS_FIELD_TYPE_SET) {
+            emit_class_native_cloned_ref_field(ctx, out, cd, slot);
+        } else {
+            fprintf(out, "    ");
+            emit_class_native_field_ref(ctx, out, cd, "dst", slot);
+            fprintf(out, " = ");
+            emit_class_native_field_ref(ctx, out, cd, "src", slot);
+            fprintf(out, ";\n");
+        }
+    }
+    fprintf(out, "    return dst;\n");
+    fprintf(out, "}\n");
 }
 
 static bool emit_class_native_ref_field_store_expr(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
@@ -843,12 +1072,164 @@ static void emit_class_boxed_derived_eq_hash_callbacks(XiCgenCtx *ctx, FILE *out
     fprintf(out, "}\n");
 }
 
+static bool cg_class_boxed_clone_field_supported(XiCgenCtx *ctx,
+                                                 const XgClassFieldSummary *source) {
+    if (!source)
+        return false;
+    switch ((XgClassFieldTypeKind) source->semantic_kind) {
+        case XG_CLASS_FIELD_TYPE_I8:
+        case XG_CLASS_FIELD_TYPE_U8:
+        case XG_CLASS_FIELD_TYPE_I16:
+        case XG_CLASS_FIELD_TYPE_U16:
+        case XG_CLASS_FIELD_TYPE_I32:
+        case XG_CLASS_FIELD_TYPE_U32:
+        case XG_CLASS_FIELD_TYPE_I64:
+        case XG_CLASS_FIELD_TYPE_U64:
+        case XG_CLASS_FIELD_TYPE_ISIZE:
+        case XG_CLASS_FIELD_TYPE_USIZE:
+        case XG_CLASS_FIELD_TYPE_F32:
+        case XG_CLASS_FIELD_TYPE_F64:
+        case XG_CLASS_FIELD_TYPE_BOOL:
+        case XG_CLASS_FIELD_TYPE_RUNE:
+        case XG_CLASS_FIELD_TYPE_STRING:
+        case XG_CLASS_FIELD_TYPE_ARRAY:
+        case XG_CLASS_FIELD_TYPE_MAP:
+        case XG_CLASS_FIELD_TYPE_SET:
+        case XG_CLASS_FIELD_TYPE_ENUM:
+        case XG_CLASS_FIELD_TYPE_UNIT:
+        case XG_CLASS_FIELD_TYPE_NULL:
+            return true;
+        case XG_CLASS_FIELD_TYPE_CLASS: {
+            const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
+            const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+            const XgClassSummary *target_summary =
+                cg_class_native_evidence_class_by_id(ev, source->target_class_id);
+            const XiClassData *target =
+                cg_class_native_data_for_evidence_class(ctx, bundle, target_summary);
+            return target && cg_class_native_derived_clone_plan(ctx, target, false);
+        }
+        default:
+            return false;
+    }
+}
+
+static void emit_class_boxed_clone_value(XiCgenCtx *ctx, FILE *out,
+                                         const XgClassFieldSummary *source, const char *field_expr,
+                                         const char *prefix) {
+    if (source->semantic_kind != XG_CLASS_FIELD_TYPE_CLASS) {
+        fprintf(out, "xrt_value_clone_for_coro(%s)", field_expr);
+        return;
+    }
+    const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgClassSummary *target_summary =
+        cg_class_native_evidence_class_by_id(ev, source->target_class_id);
+    const XiClassData *target =
+        cg_class_native_data_for_evidence_class(ctx, bundle, target_summary);
+    const char *target_prefix = cg_class_native_prefix_for_data(ctx, target, prefix);
+    if (!target || !target_prefix) {
+        cg_ctx_set_error(ctx);
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
+    if (target->instance_layout) {
+        fprintf(out, "xrt_box_obj(");
+        emit_class_native_clone_name(out, target_prefix, target);
+        fprintf(out, "((");
+        emit_class_native_type_name(out, target_prefix, target->class_name);
+        fprintf(out, " *)%s.ptr))", field_expr);
+    } else {
+        emit_class_boxed_clone_name(out, target_prefix, target);
+        fprintf(out, "(%s)", field_expr);
+    }
+}
+
+static void emit_class_boxed_clone_helper(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                          const char *prefix) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
+    const XgDeriveSummary *derive = cg_class_native_derive_for_data_kind(ctx, cd, XG_DERIVE_CLONE);
+    XgClassId class_id = cg_class_native_class_id_for_data(ctx, cd);
+    const XgClassSummary *summary = cg_class_native_evidence_class_by_id(ev, class_id);
+    if (!cd || cd->instance_layout || !derive || !summary ||
+        !cg_class_native_derived_clone_plan(ctx, cd, false))
+        return;
+    for (uint16_t fi = 0; fi < derive->field_count; fi++) {
+        uint32_t idx = derive->field_start - 1u + fi;
+        const XgDerivedFieldSummary *derived =
+            idx < ev->nderived_fields ? &ev->derived_fields[idx] : NULL;
+        const XgClassFieldSummary *source =
+            derived ? xg_global_evidence_find_class_field(ev, derived->source_field_id) : NULL;
+        if (!derived || !source || !cg_class_native_boxed_derived_field_name(ev, derive, cd, fi) ||
+            !cg_class_boxed_clone_field_supported(ctx, source)) {
+            cg_ctx_set_error(ctx);
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: boxed derived Clone field %u for class %s has no "
+                    "verified backend\n",
+                    (unsigned) fi, cd->class_name ? cd->class_name : "?");
+            return;
+        }
+    }
+    if (summary->parent_class_id != XG_NO_ID) {
+        const XgClassSummary *parent_summary =
+            cg_class_native_evidence_class_by_id(ev, summary->parent_class_id);
+        const XiClassData *parent =
+            cg_class_native_data_for_evidence_class(ctx, bundle, parent_summary);
+        if (!parent || parent->instance_layout ||
+            !cg_class_native_derived_clone_plan(ctx, parent, false)) {
+            cg_ctx_set_error(ctx);
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: boxed derived Clone class %s has no boxed parent Clone "
+                    "backend\n",
+                    cd->class_name ? cd->class_name : "?");
+            return;
+        }
+    }
+
+    fprintf(out, "XrValue ");
+    emit_class_boxed_clone_name(out, prefix, cd);
+    fprintf(out, "(XrValue src) {\n");
+    fprintf(out, "    if (!src.ptr) return src;\n");
+    if (summary->parent_class_id != XG_NO_ID) {
+        const XgClassSummary *parent_summary =
+            cg_class_native_evidence_class_by_id(ev, summary->parent_class_id);
+        const XiClassData *parent =
+            cg_class_native_data_for_evidence_class(ctx, bundle, parent_summary);
+        const char *parent_prefix = cg_class_native_prefix_for_data(ctx, parent, prefix);
+        fprintf(out, "    XrValue dst = ");
+        emit_class_boxed_clone_name(out, parent_prefix, parent);
+        fprintf(out, "(src);\n");
+    } else {
+        fprintf(out, "    XrValue dst = xrt_map_new(%u);\n",
+                (unsigned) (derive->field_count > 0 ? derive->field_count * 2u : 1u));
+    }
+    fprintf(out, "    xrt_map_set_class_name(dst, ");
+    emit_c_string_literal(out, cd->class_name ? cd->class_name : "");
+    fprintf(out, ");\n");
+    for (uint16_t fi = 0; fi < derive->field_count; fi++) {
+        uint32_t idx = derive->field_start - 1u + fi;
+        const XgDerivedFieldSummary *derived = &ev->derived_fields[idx];
+        const XgClassFieldSummary *source =
+            xg_global_evidence_find_class_field(ev, derived->source_field_id);
+        const char *field_name = cg_class_native_boxed_derived_field_name(ev, derive, cd, fi);
+        fprintf(out, "    { XrValue field = xrt_getprop_name(src, ");
+        emit_c_string_literal(out, field_name);
+        fprintf(out, "); XrValue cloned = ");
+        emit_class_boxed_clone_value(ctx, out, source, "field", prefix);
+        fprintf(out, "; xrt_setprop_name(dst, ");
+        emit_c_string_literal(out, field_name);
+        fprintf(out, ", cloned); }\n");
+    }
+    fprintf(out, "    return dst;\n");
+    fprintf(out, "}\n");
+}
+
 static void emit_class_native_type_derive_init(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
                                                const char *prefix, const char *type_id_expr) {
     (void) ctx;
     if (!cd)
         return;
-    uint32_t derive_flags = cd->derive_flags & XR_DERIVE_KNOWN_MASK;
+    uint32_t derive_flags = cd->derive_flags & (XR_DERIVE_INSPECT | XR_DERIVE_JSON);
     if (derive_flags == 0)
         return;
     fprintf(out, "xrt_type_set_derive(%s, %uu, ", type_id_expr, (unsigned) derive_flags);
@@ -5044,6 +5425,11 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
     if (!cd)
         return;
     if (!cd->instance_layout) {
+        if ((cd->derive_flags & XR_DERIVE_CLONE) != 0) {
+            fprintf(out, "XrValue ");
+            emit_class_boxed_clone_name(out, prefix, cd);
+            fprintf(out, "(XrValue src);\n");
+        }
         emit_class_boxed_derived_eq_hash_callbacks(ctx, out, cd, prefix);
         return;
     }
@@ -5061,6 +5447,14 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
     fprintf(out, "} ");
     emit_class_native_type_name(out, prefix, cd->class_name);
     fprintf(out, ";\n");
+    if ((cd->derive_flags & XR_DERIVE_CLONE) != 0) {
+        emit_class_native_type_name(out, prefix, cd->class_name);
+        fprintf(out, " *");
+        emit_class_native_clone_name(out, prefix, cd);
+        fprintf(out, "(");
+        emit_class_native_type_name(out, prefix, cd->class_name);
+        fprintf(out, " *src);\n");
+    }
     if (cg_class_native_has_inspect_sidecar(cd)) {
         fprintf(out, "static const XrtInspectField ");
         emit_class_native_inspect_fields_name(out, prefix, cd);
@@ -5107,6 +5501,19 @@ static void emit_class_native_typedefs(XiCgenCtx *ctx, FILE *out, XiModule *modu
         return;
     for (uint16_t ci = 0; ci < module->nclasses; ci++)
         emit_one_class_native_typedef(ctx, out, module->classes[ci], prefix);
+}
+
+static void emit_class_native_clone_helpers(XiCgenCtx *ctx, FILE *out, XiModule *module,
+                                            const char *prefix) {
+    if (!module || !module->classes)
+        return;
+    for (uint16_t ci = 0; ci < module->nclasses; ci++) {
+        const XiClassData *cd = module->classes[ci];
+        if (cd && cd->instance_layout)
+            emit_class_native_clone_helper(ctx, out, cd, prefix);
+        else
+            emit_class_boxed_clone_helper(ctx, out, cd, prefix);
+    }
 }
 
 /* The exported class that owns f as a constructor or method, when f belongs to

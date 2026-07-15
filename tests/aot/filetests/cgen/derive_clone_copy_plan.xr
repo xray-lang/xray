@@ -1,0 +1,28 @@
+@derive(Clone)
+class Child {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+@derive(Clone)
+class Snapshot {
+    values: Array<int>
+    child: Child
+
+    constructor(values: Array<int>, child: Child) {
+        this.values = values
+        this.child = child
+    }
+}
+
+var original = Snapshot([1, 2], Child(3))
+var cloned = copy(original)
+cloned.values[0] = 9
+cloned.child.value = 8
+print(original.values[0])
+print(original.child.value)
+print(cloned.values[0])
+print(cloned.child.value)

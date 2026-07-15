@@ -108,7 +108,8 @@ map_set_dense_lookup|covered|key-access-plan .*action=direct_dense_index|tests/a
 map_bool_direct|covered|map-shape-plan .*container=map .*action=bool_direct|tests/aot/filetests/cgen|Bool-keyed Map literals with boolmap-supported scalar values produce verified bool-direct storage plans and lookup plans; Set<bool> stays on small-scan until a boolset representation exists.
 user_hash_eq_direct_backend|covered|map_set_user_hash_eq_direct_backend_.*_hash_|tests/aot/filetests/cgen|User Hash/Eq direct-call backend consumption passes verified target function pointers to Map/Set helpers.
 fixed_layout_enum_scalarization|covered|enum-scalar-plan .*action=compact_aggregate|tests/aot/filetests/cgen|Enum compact aggregate scalarization ABI is a XaotEnumPlan decision consumed by ABI and prepare.
-derive_clone_plan|covered|derive-plan .*kind=clone action=field_table_sidecar|tests/aot/filetests/cgen|Clone derive emits a verified field-table sidecar plan without pulling reflection metadata.
+derive_clone_plan|covered|derived-clone-plan .*action=deep_copy_plan|tests/aot/filetests/cgen|Clone derive classifies verified field evidence into explicit copy actions.
+derive_clone_backend_consumption|covered|_derived_clone(_boxed)?|tests/aot/filetests/cgen|Native and boxed class copy sites consume verified Clone plans through generated field-clone helpers.
 sequence_access_plan|covered|sequence-access-plan|tests/aot/filetests/link|Sequence access summaries lower into verified sequence access plans.
 sequence_capacity_plan|covered|capacity-plan|tests/aot/filetests/link|Array<byte>/StringBuilder capacity operations lower into verified capacity plans.
 sequence_capacity_reserve_once|covered|capacity-plan .*action=reserve_once|tests/aot/filetests/link|Array push capacity evidence fixes the reserve-once action in plan output.
