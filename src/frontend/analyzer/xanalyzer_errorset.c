@@ -1870,6 +1870,26 @@ static void remove_current_catch_aggregate_aliases_for_container(ErrorSetCtx *ct
     }
 }
 
+static void remove_current_catch_aggregate_alias_for_index(ErrorSetCtx *ctx, uint32_t symbol_id,
+                                                           const char *name, int64_t index,
+                                                           uint32_t index_symbol_id,
+                                                           const char *index_symbol_name,
+                                                           const char *index_string) {
+    if (!ctx || (symbol_id == 0 && !name))
+        return;
+    CatchAggregateAlias alias = {.container_id = symbol_id,
+                                 .container_name = name,
+                                 .kind = CATCH_AGGREGATE_INDEX,
+                                 .index = index,
+                                 .index_symbol_id = index_symbol_id,
+                                 .index_symbol_name = index_symbol_name,
+                                 .index_string = index_string,
+                                 .field_name = NULL};
+    int alias_index = current_catch_aggregate_alias_index(ctx, &alias);
+    if (alias_index >= 0)
+        remove_current_catch_aggregate_alias(ctx, alias_index);
+}
+
 static void add_current_catch_aggregate_alias(ErrorSetCtx *ctx, uint32_t symbol_id,
                                               const char *name, CatchAggregateAliasKind kind,
                                               int64_t index, uint32_t index_symbol_id,
@@ -1900,6 +1920,17 @@ static bool current_catch_has_aggregate_container(ErrorSetCtx *ctx, uint32_t sym
             return true;
     }
     return false;
+}
+
+static bool current_catch_has_element_aggregate_container(ErrorSetCtx *ctx, uint32_t symbol_id,
+                                                          const char *name) {
+    if (!ctx || (symbol_id == 0 && !name))
+        return false;
+    CatchAggregateAlias alias = {.container_id = symbol_id,
+                                 .container_name = name,
+                                 .kind = CATCH_AGGREGATE_ELEMENT,
+                                 .index = -1};
+    return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
 }
 
 static bool literal_i64_index(AstNode *expr, int64_t *out) {
@@ -2158,73 +2189,128 @@ static void maybe_add_for_in_catch_alias(ErrorSetCtx *ctx, ForInStmtNode *fi) {
     add_current_catch_alias(ctx, fi->item_symbol_id, fi->item_name);
 }
 
-static bool readonly_collection_member_preserves_catch_aggregate_aliases(ErrorSetCtx *ctx,
-                                                                         AstNode *callee,
-                                                                         const CallExprNode *call) {
+typedef enum CatchAggregateMemberAction {
+    CATCH_AGGREGATE_MEMBER_INVALIDATE,
+    CATCH_AGGREGATE_MEMBER_PRESERVE,
+    CATCH_AGGREGATE_MEMBER_SET_ADD_CAUGHT,
+    CATCH_AGGREGATE_MEMBER_MAP_SET_PRECISE,
+    CATCH_AGGREGATE_MEMBER_MAP_DELETE_PRECISE,
+} CatchAggregateMemberAction;
+
+typedef struct CatchAggregateMemberUpdate {
+    CatchAggregateMemberAction action;
+    uint32_t container_id;
+    const char *container_name;
+    int64_t index;
+    uint32_t index_symbol_id;
+    const char *index_symbol_name;
+    const char *index_string;
+    bool value_is_caught;
+} CatchAggregateMemberUpdate;
+
+static CatchAggregateMemberUpdate catch_aggregate_member_update(ErrorSetCtx *ctx, AstNode *callee,
+                                                                const CallExprNode *call) {
+    CatchAggregateMemberUpdate update = {.action = CATCH_AGGREGATE_MEMBER_INVALIDATE, .index = -1};
     AstNode *source = identity_source(callee);
     if (!ctx || !ctx->current_caught || !source || source->type != AST_MEMBER_ACCESS || !call ||
         (call->arg_count > 0 && !call->arguments))
-        return false;
+        return update;
 
     MemberAccessNode *ma = &source->as.member_access;
     if (!ma->name || !ma->object)
-        return false;
+        return update;
     XrType *receiver_type = xa_analyzer_get_node_type(ctx->analyzer, ma->object);
     if (!receiver_type || (!XR_TYPE_IS_SET(receiver_type) && !XR_TYPE_IS_MAP(receiver_type)))
-        return false;
+        return update;
 
     uint32_t id = 0;
     const char *name = NULL;
     if (!variable_ref_symbol(ctx, ma->object, &id, &name))
-        return false;
-    if (!current_catch_has_aggregate_container(ctx, id, name))
-        return false;
+        return update;
+    update.container_id = id;
+    update.container_name = name;
 
-    if (XR_TYPE_IS_SET(receiver_type) &&
-        ((call->arg_count == 1 && strcmp(ma->name, "contains") == 0) ||
-         (call->arg_count == 0 && strcmp(ma->name, "values") == 0)))
-        return true;
-    if (XR_TYPE_IS_MAP(receiver_type) && call->arg_count == 1 &&
+    if (XR_TYPE_IS_SET(receiver_type)) {
+        if (!current_catch_has_aggregate_container(ctx, id, name))
+            return update;
+        if ((call->arg_count == 1 && strcmp(ma->name, "contains") == 0) ||
+            (call->arg_count == 0 &&
+             (strcmp(ma->name, "values") == 0 || strcmp(ma->name, "clear") == 0)) ||
+            (call->arg_count == 1 && strcmp(ma->name, "delete") == 0 &&
+             current_catch_has_element_aggregate_container(ctx, id, name))) {
+            update.action = CATCH_AGGREGATE_MEMBER_PRESERVE;
+            return update;
+        }
+        if (call->arg_count == 1 && strcmp(ma->name, "add") == 0 &&
+            current_catch_has_element_aggregate_container(ctx, id, name) &&
+            is_current_caught_ref(ctx, call->arguments[0])) {
+            update.action = CATCH_AGGREGATE_MEMBER_SET_ADD_CAUGHT;
+            return update;
+        }
+        return update;
+    }
+
+    if (call->arg_count == 2 && strcmp(ma->name, "set") == 0 &&
+        catch_aggregate_index_key(ctx, call->arguments[0], &update.index, &update.index_symbol_id,
+                                  &update.index_symbol_name, &update.index_string)) {
+        update.value_is_caught = is_current_caught_ref(ctx, call->arguments[1]);
+        if (update.value_is_caught || current_catch_has_aggregate_container(ctx, id, name))
+            update.action = CATCH_AGGREGATE_MEMBER_MAP_SET_PRECISE;
+        return update;
+    }
+    if (!current_catch_has_aggregate_container(ctx, id, name))
+        return update;
+    if (call->arg_count == 1 &&
         (strcmp(ma->name, "get") == 0 || strcmp(ma->name, "containsKey") == 0 ||
-         strcmp(ma->name, "containsValue") == 0))
-        return true;
-    if (XR_TYPE_IS_MAP(receiver_type) && call->arg_count == 0 &&
-        (strcmp(ma->name, "keys") == 0 || strcmp(ma->name, "values") == 0 ||
-         strcmp(ma->name, "entries") == 0))
-        return true;
-    return false;
+         strcmp(ma->name, "containsValue") == 0)) {
+        update.action = CATCH_AGGREGATE_MEMBER_PRESERVE;
+        return update;
+    }
+    if (call->arg_count == 0 && (strcmp(ma->name, "keys") == 0 || strcmp(ma->name, "values") == 0 ||
+                                 strcmp(ma->name, "entries") == 0)) {
+        update.action = CATCH_AGGREGATE_MEMBER_PRESERVE;
+        return update;
+    }
+    if (call->arg_count == 1 && strcmp(ma->name, "delete") == 0 &&
+        catch_aggregate_index_key(ctx, call->arguments[0], &update.index, &update.index_symbol_id,
+                                  &update.index_symbol_name, &update.index_string)) {
+        update.action = CATCH_AGGREGATE_MEMBER_MAP_DELETE_PRECISE;
+        return update;
+    }
+    return update;
 }
 
-static bool set_add_preserves_catch_element_alias(ErrorSetCtx *ctx, AstNode *callee,
-                                                  const CallExprNode *call, uint32_t *container_id,
-                                                  const char **container_name) {
-    AstNode *source = identity_source(callee);
-    if (!ctx || !ctx->current_caught || !source || source->type != AST_MEMBER_ACCESS || !call ||
-        call->arg_count != 1 || !call->arguments || !call->arguments[0])
-        return false;
-
-    MemberAccessNode *ma = &source->as.member_access;
-    if (!ma->name || strcmp(ma->name, "add") != 0 || !ma->object)
-        return false;
-    XrType *receiver_type = xa_analyzer_get_node_type(ctx->analyzer, ma->object);
-    if (!receiver_type || !XR_TYPE_IS_SET(receiver_type))
-        return false;
-
-    uint32_t id = 0;
-    const char *name = NULL;
-    if (!variable_ref_symbol(ctx, ma->object, &id, &name))
-        return false;
-    CatchAggregateAlias alias = {
-        .container_id = id, .container_name = name, .kind = CATCH_AGGREGATE_ELEMENT, .index = -1};
-    if (current_catch_aggregate_alias_index(ctx, &alias) < 0)
-        return false;
-    if (container_id)
-        *container_id = id;
-    if (container_name)
-        *container_name = name;
-    if (!is_current_caught_ref(ctx, call->arguments[0]))
-        return false;
-    return true;
+static void apply_catch_aggregate_member_update(ErrorSetCtx *ctx,
+                                                const CatchAggregateMemberUpdate *update) {
+    if (!ctx || !update)
+        return;
+    switch (update->action) {
+        case CATCH_AGGREGATE_MEMBER_PRESERVE:
+            break;
+        case CATCH_AGGREGATE_MEMBER_SET_ADD_CAUGHT:
+            add_current_catch_aggregate_alias(ctx, update->container_id, update->container_name,
+                                              CATCH_AGGREGATE_ELEMENT, -1, 0, NULL, NULL, NULL);
+            break;
+        case CATCH_AGGREGATE_MEMBER_MAP_SET_PRECISE:
+            remove_current_catch_aggregate_alias_for_index(
+                ctx, update->container_id, update->container_name, update->index,
+                update->index_symbol_id, update->index_symbol_name, update->index_string);
+            if (update->value_is_caught)
+                add_current_catch_aggregate_alias(
+                    ctx, update->container_id, update->container_name, CATCH_AGGREGATE_INDEX,
+                    update->index, update->index_symbol_id, update->index_symbol_name,
+                    update->index_string, NULL);
+            break;
+        case CATCH_AGGREGATE_MEMBER_MAP_DELETE_PRECISE:
+            remove_current_catch_aggregate_alias_for_index(
+                ctx, update->container_id, update->container_name, update->index,
+                update->index_symbol_id, update->index_symbol_name, update->index_string);
+            break;
+        case CATCH_AGGREGATE_MEMBER_INVALIDATE:
+            remove_current_catch_aggregate_aliases_for_container(ctx, update->container_id,
+                                                                 update->container_name);
+            break;
+    }
 }
 
 static bool catch_aggregate_decl_allows_tracking(ErrorSetCtx *ctx, AstNode *node) {
@@ -2562,21 +2648,10 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
             }
             es_walk_expr(ctx, node->as.call_expr.callee);
             AstNode *callee_source = identity_source(node->as.call_expr.callee);
-            uint32_t preserved_set_id = 0;
-            const char *preserved_set_name = NULL;
-            bool preserve_readonly_receiver =
-                readonly_collection_member_preserves_catch_aggregate_aliases(
-                    ctx, node->as.call_expr.callee, &node->as.call_expr);
-            bool preserve_set_element_alias = set_add_preserves_catch_element_alias(
-                ctx, node->as.call_expr.callee, &node->as.call_expr, &preserved_set_id,
-                &preserved_set_name);
-            if (callee_source && callee_source->type == AST_MEMBER_ACCESS &&
-                !preserve_readonly_receiver)
-                invalidate_catch_aggregate_container_ref(ctx,
-                                                         callee_source->as.member_access.object);
-            if (preserve_set_element_alias)
-                add_current_catch_aggregate_alias(ctx, preserved_set_id, preserved_set_name,
-                                                  CATCH_AGGREGATE_ELEMENT, -1, 0, NULL, NULL, NULL);
+            CatchAggregateMemberUpdate member_update =
+                catch_aggregate_member_update(ctx, node->as.call_expr.callee, &node->as.call_expr);
+            if (callee_source && callee_source->type == AST_MEMBER_ACCESS)
+                apply_catch_aggregate_member_update(ctx, &member_update);
 
             if (es_walk_immediate_function_expr_call(ctx, node->as.call_expr.callee))
                 break;
