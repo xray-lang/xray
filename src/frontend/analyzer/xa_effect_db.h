@@ -23,6 +23,7 @@ typedef struct XrType XrType;
 
 #define XA_EFFECT_NONE ((XaEffectId) 0u)
 #define XA_EFFECT_ID_NONE XA_EFFECT_NONE
+#define XA_EFFECT_EDGE_NONE ((XaEffectEdgeId) 0u)
 #define XA_ERROR_TYPE_NONE ((XaErrorTypeId) 0u)
 #define XA_ERROR_VARIANT_INVALID ((XaErrorVariantId) UINT32_MAX)
 
@@ -93,6 +94,7 @@ XR_FUNC uint64_t xa_effect_db_error_variant_key(const XaEffectDatabase *db, XaEr
 
 XR_FUNC void xa_effect_summary_init(XaEffectSummary *summary);
 XR_FUNC void xa_effect_summary_clear(XaEffectSummary *summary);
+XR_FUNC bool xa_effect_summary_add_root(XaEffectSummary *summary, XaEffectEdgeId root_id);
 XR_FUNC bool xa_effect_summary_add_variant(XaEffectDatabase *db, XaEffectSummary *summary,
                                            XaErrorTypeId type_id, XaErrorVariantId variant_id);
 XR_FUNC bool xa_effect_summary_add_all_variants(XaEffectDatabase *db, XaEffectSummary *summary,
