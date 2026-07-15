@@ -1651,6 +1651,19 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME c_interop_surface_residue
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_c_interop_surface.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --fail-on-active-removed
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(c_interop_surface_residue PROPERTIES
+        LABELS "frontend;ffi;task-190"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME query_surface_residue
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_query_surface_residue.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
