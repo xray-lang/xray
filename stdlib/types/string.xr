@@ -11,7 +11,7 @@
 @native
 class string {
     static fromUtf8(bytes: Slice<byte>) -> string?
-    static fromUtf8Lossy(bytes: Slice<byte>) -> string
+    static fromUtf8Lossy(bytes: Slice<byte>) -> string @nothrow
     static fromRune(value: rune) -> string
     static join(parts: Array<string>, separator?: string) -> string
     contains(search: string) -> bool

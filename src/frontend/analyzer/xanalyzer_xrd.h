@@ -44,4 +44,13 @@ XR_FUNC const XaBuiltinHandle *xa_xrd_find_handle_by_name(const char *handle_nam
 // Free all dynamically loaded .xrd modules (call at shutdown)
 XR_FUNC void xa_xrd_cleanup(void);
 
+// Shared parser for trailing native/bodyless effect metadata such as
+// "@nothrow" and "@errors(Enum.Case)".  On success, the metadata is removed
+// from signature in-place and out_contract is populated.  Missing metadata is
+// represented as XA_EFFECT_CONTRACT_MISSING.
+XR_FUNC bool xa_effect_contract_parse_suffix(char *signature, XaEffectContract *out_contract);
+
+// Free heap owned by a parsed effect contract.
+XR_FUNC void xa_effect_contract_clear(XaEffectContract *contract);
+
 #endif  // XANALYZER_XRD_H
