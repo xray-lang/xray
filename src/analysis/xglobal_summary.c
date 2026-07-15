@@ -2645,9 +2645,6 @@ static bool xg_method_callsite_compose_target_set(const XgGlobalEvidence *eviden
 static bool xg_interface_callsite_compose_target_set(const XgGlobalEvidence *evidence,
                                                      const XgCallsiteSummary *call, uint8_t *state,
                                                      uint32_t *memo, uint32_t *effect_bits) {
-    enum {
-        XG_SMALL_IMPLEMENTOR_LIMIT = 4
-    };
     const XgInterfaceMethodSummary *interface_method;
     uint32_t target_count = 0;
 
@@ -2670,8 +2667,6 @@ static bool xg_interface_callsite_compose_target_set(const XgGlobalEvidence *evi
                 evidence, call->receiver_static_interface_id, impl->implementor_class_id, i))
             continue;
         target_count++;
-        if (target_count > XG_SMALL_IMPLEMENTOR_LIMIT)
-            return false;
         target_method = xg_global_evidence_find_method_by_signature_in_hierarchy(
             evidence, impl->implementor_class_id, call->method_name_id, call->method_signature_key);
         if (!target_method)
