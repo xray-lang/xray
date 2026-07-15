@@ -9303,9 +9303,8 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
                                      body_type_ref_sequence_elem_type_ref(param_type));
         {
             const XgLocalType *container_local = body_find_local(bc, param_name);
-            body_add_generic_container_storage(bc, param_type, 0,
-                                               container_local ? container_local->map_shape_id
-                                                               : XG_NO_ID);
+            body_add_generic_container_storage(
+                bc, param_type, 0, container_local ? container_local->map_shape_id : XG_NO_ID);
         }
     }
 }
