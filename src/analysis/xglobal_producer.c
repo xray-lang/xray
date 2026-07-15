@@ -138,6 +138,7 @@ struct XgLocalType {
     uint8_t sequence_kind;
     uint32_t sequence_elem_type_key;
     uint32_t sequence_storage_id;
+    bool sequence_elem_managed_ref;
     XgJsonShapeId sequence_elem_json_shape_id;
     const ObjectLiteralNode *sequence_elem_json_shape_literal;
     uint8_t sequence_elem_map_container_kind;
@@ -1919,6 +1920,7 @@ static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol
     row->map_value_type_key = 0;
     row->sequence_kind = 0;
     row->sequence_elem_type_key = 0;
+    row->sequence_elem_managed_ref = false;
     row->sequence_elem_json_shape_id = XG_NO_ID;
     row->sequence_elem_json_shape_literal = NULL;
     row->sequence_elem_map_container_kind = 0;
@@ -7032,6 +7034,7 @@ static void body_bind_sequence_local(XgBodyCollect *bc, const char *name, uint8_
     row->sequence_kind = sequence_kind;
     row->sequence_elem_type_key = elem_type_key;
     row->sequence_storage_id = 0;
+    row->sequence_elem_managed_ref = body_type_ref_is_managed_storage_ref(elem_type_ref);
     row->sequence_elem_json_shape_id = XG_NO_ID;
     row->sequence_elem_json_shape_literal = NULL;
     row->sequence_elem_map_container_kind = 0;
@@ -7069,6 +7072,7 @@ static void body_bind_sequence_local_from_source(XgBodyCollect *bc, const char *
     row->sequence_kind = source->sequence_kind;
     row->sequence_elem_type_key = source->sequence_elem_type_key;
     row->sequence_storage_id = source->sequence_storage_id;
+    row->sequence_elem_managed_ref = source->sequence_elem_managed_ref;
     row->sequence_elem_json_shape_id = source->sequence_elem_json_shape_id;
     row->sequence_elem_json_shape_literal = source->sequence_elem_json_shape_literal;
     row->sequence_elem_map_container_kind = source->sequence_elem_map_container_kind;
@@ -7088,6 +7092,7 @@ static void body_inherit_sequence_source_metadata(XgBodyCollect *bc, const char 
     if (row->sequence_elem_type_key == 0)
         row->sequence_elem_type_key = source->sequence_elem_type_key;
     row->sequence_storage_id = source->sequence_storage_id;
+    row->sequence_elem_managed_ref = source->sequence_elem_managed_ref;
     row->sequence_elem_json_shape_id = source->sequence_elem_json_shape_id;
     row->sequence_elem_json_shape_literal = source->sequence_elem_json_shape_literal;
     row->sequence_elem_map_container_kind = source->sequence_elem_map_container_kind;
@@ -7177,6 +7182,7 @@ static void body_clear_sequence_local(XgBodyCollect *bc, const char *name) {
     row->sequence_kind = 0;
     row->sequence_elem_type_key = 0;
     row->sequence_storage_id = 0;
+    row->sequence_elem_managed_ref = false;
     row->sequence_elem_json_shape_id = XG_NO_ID;
     row->sequence_elem_json_shape_literal = NULL;
     row->sequence_elem_map_container_kind = 0;
@@ -7841,6 +7847,23 @@ static bool body_string_builder_append_has_exact_count(const XgLocalType *local,
            value->type == AST_LITERAL_STRING && value->node_id != 0;
 }
 
+static bool body_expr_is_zero_fill_literal(const AstNode *value) {
+    if (!value)
+        return false;
+    switch ((AstNodeType) value->type) {
+        case AST_LITERAL_INT:
+            return !value->as.literal.int_overflows_i64 && value->as.literal.raw_value.int_val == 0;
+        case AST_LITERAL_FLOAT:
+            return value->as.literal.raw_value.float_val == 0.0;
+        case AST_LITERAL_RUNE:
+            return value->as.literal.raw_value.rune_val == 0;
+        case AST_LITERAL_FALSE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static void body_add_capacity_op(XgBodyCollect *bc, const AstNode *node, const XgLocalType *local,
                                  uint8_t op_kind, const AstNode *count_expr, uint32_t loop_id,
                                  uint32_t proof_flags, bool may_grow) {
@@ -7892,7 +7915,10 @@ static void body_add_bulk_op(XgBodyCollect *bc, const AstNode *node, uint8_t op_
         row.flags |= XG_BULK_POD;
     if (overlap_possible)
         row.flags |= XG_BULK_OVERLAP_POSSIBLE;
-    if (op_kind != XG_BULK_COMPARE && dst_local->sequence_kind == XG_SEQ_ARRAY)
+    if (op_kind == XG_BULK_FILL && body_expr_is_zero_fill_literal(src_expr))
+        row.flags |= XG_BULK_ZERO_FILL;
+    if (op_kind != XG_BULK_COMPARE && dst_local->sequence_kind == XG_SEQ_ARRAY &&
+        dst_local->sequence_elem_managed_ref)
         row.flags |= XG_BULK_WRITE_BARRIER;
     (void) xg_global_evidence_add_bulk_op(bc->evidence, &row);
 }
