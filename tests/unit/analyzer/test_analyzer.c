@@ -2895,6 +2895,22 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
                          "    throw box[key]\n"
                          "  }\n"
                          "}\n"
+                         "fn mapStableLocalKeyRethrows() {\n"
+                         "  try { failMap() } catch (e: MapErr) {\n"
+                         "    const key = \"caught\"\n"
+                         "    var box: Map<string, MapErr> = #{}\n"
+                         "    box[key] = e\n"
+                         "    throw box[key]\n"
+                         "  }\n"
+                         "}\n"
+                         "fn mapDynamicKeyMutationInvalidates(key: string) {\n"
+                         "  try { failMap() } catch (e: MapErr) {\n"
+                         "    var box: Map<string, MapErr> = #{}\n"
+                         "    box[key] = e\n"
+                         "    box[key] = MapErr.Other\n"
+                         "    throw box[key]\n"
+                         "  }\n"
+                         "}\n"
                          "fn mapDynamicKeyMismatch(key: string, other: string) {\n"
                          "  try { failMap() } catch (e: MapErr) {\n"
                          "    var box: Map<string, MapErr> = #{}\n"
@@ -2912,22 +2928,34 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     const XaEffectSummary *invalidated =
         analyzer_function_effect_summary(a, "mapCaughtKeyMutationInvalidates");
     const XaEffectSummary *dynamic = analyzer_function_effect_summary(a, "mapDynamicKeyRethrows");
+    const XaEffectSummary *stable_local_key =
+        analyzer_function_effect_summary(a, "mapStableLocalKeyRethrows");
+    const XaEffectSummary *dynamic_invalidated =
+        analyzer_function_effect_summary(a, "mapDynamicKeyMutationInvalidates");
     const XaEffectSummary *mismatch = analyzer_function_effect_summary(a, "mapDynamicKeyMismatch");
     ASSERT(literal != NULL);
     ASSERT(other_key != NULL);
     ASSERT(invalidated != NULL);
     ASSERT(dynamic != NULL);
+    ASSERT(stable_local_key != NULL);
+    ASSERT(dynamic_invalidated != NULL);
     ASSERT(mismatch != NULL);
 
     const XaErrorTypeSet *literal_set = effect_summary_enum_set_named(a, literal, "MapErr");
     const XaErrorTypeSet *other_key_set = effect_summary_enum_set_named(a, other_key, "MapErr");
     const XaErrorTypeSet *invalidated_set = effect_summary_enum_set_named(a, invalidated, "MapErr");
     const XaErrorTypeSet *dynamic_set = effect_summary_enum_set_named(a, dynamic, "MapErr");
+    const XaErrorTypeSet *stable_local_key_set =
+        effect_summary_enum_set_named(a, stable_local_key, "MapErr");
+    const XaErrorTypeSet *dynamic_invalidated_set =
+        effect_summary_enum_set_named(a, dynamic_invalidated, "MapErr");
     const XaErrorTypeSet *mismatch_set = effect_summary_enum_set_named(a, mismatch, "MapErr");
     ASSERT(literal_set != NULL);
     ASSERT(other_key_set != NULL);
     ASSERT(invalidated_set != NULL);
     ASSERT(dynamic_set != NULL);
+    ASSERT(stable_local_key_set != NULL);
+    ASSERT(dynamic_invalidated_set != NULL);
     ASSERT(mismatch_set != NULL);
     ASSERT(!literal_set->all_variants);
     ASSERT(xa_bitset_test(&literal_set->variants, 0));
@@ -2939,6 +2967,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!dynamic_set->all_variants);
     ASSERT(xa_bitset_test(&dynamic_set->variants, 0));
     ASSERT(!xa_bitset_test(&dynamic_set->variants, 1));
+    ASSERT(!stable_local_key_set->all_variants);
+    ASSERT(xa_bitset_test(&stable_local_key_set->variants, 0));
+    ASSERT(!xa_bitset_test(&stable_local_key_set->variants, 1));
+    ASSERT(dynamic_invalidated_set->all_variants);
     ASSERT(mismatch_set->all_variants);
 
     xa_analyzer_free(a);
