@@ -1,0 +1,20 @@
+enum GateErr {
+    Boom
+}
+
+fn typed_error(flag: bool) -> int {
+    if (flag) {
+        throw GateErr.Boom
+    }
+    return 1
+}
+
+fn panic_boundary(n: int) -> int {
+    try {
+        return 10 / n
+    } catch panic (p) {
+        return -1
+    }
+}
+
+print(typed_error(false) + panic_boundary(1))
