@@ -16853,7 +16853,8 @@ TEST(global_evidence_producer_marks_sys_thread_spawn_capability) {
 TEST(global_evidence_producer_marks_extern_dylib_link_dependency) {
     setup_parser_session();
     const char *source = "@extern(\"C\") @dylib(\"m\") fn cos(x: float64) -> float64\n"
-                         "@extern(\"C\") @dylib(\"m\") fn sin(x: float64) -> float64\n";
+                         "@extern(\"C\") @dylib(\"unusedffi\") fn unused(x: float64) -> float64\n"
+                         "fn useCos() -> float64 { return cos(0.0) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -16875,6 +16876,7 @@ TEST(global_evidence_producer_marks_extern_dylib_link_dependency) {
     ASSERT_EQ_UINT(ev.nlink_deps, 1);
     ASSERT_TRUE((ev.decls[0].flags & XG_DECL_EXTERN) != 0);
     ASSERT_TRUE((ev.decls[1].flags & XG_DECL_EXTERN) != 0);
+    ASSERT_TRUE((ev.decls[2].flags & XG_DECL_EXTERN) == 0);
     ASSERT_EQ_UINT(ev.link_deps[0].kind, XG_LINK_DEP_EXTERN_DYLIB);
     ASSERT_STR_EQ(ev.link_deps[0].name, "m");
 

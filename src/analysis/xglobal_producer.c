@@ -43,7 +43,9 @@ typedef struct XgClassNameRow {
 } XgClassNameRow;
 
 typedef struct XgFuncNameRow {
+    XgModuleId module_id;
     const char *name;
+    const char *extern_dylib;
     XgFuncId func_id;
     XgDeclId decl_id;
     uint32_t decl_flags;
@@ -1034,13 +1036,16 @@ static XgFuncId producer_next_func_id(XgProducer *p) {
     return id;
 }
 
-static bool producer_register_func(XgProducer *p, const char *name, XgFuncId func_id,
-                                   XgDeclId decl_id, uint32_t decl_flags) {
+static bool producer_register_func(XgProducer *p, XgModuleId module_id, const char *name,
+                                   const char *extern_dylib, XgFuncId func_id, XgDeclId decl_id,
+                                   uint32_t decl_flags) {
     if (!name || func_id == XG_NO_ID)
         return true;
     if (!producer_reserve_funcs(p, p->nfuncs + 1))
         return false;
+    p->funcs[p->nfuncs].module_id = module_id;
     p->funcs[p->nfuncs].name = name;
+    p->funcs[p->nfuncs].extern_dylib = extern_dylib;
     p->funcs[p->nfuncs].func_id = func_id;
     p->funcs[p->nfuncs].decl_id = decl_id;
     p->funcs[p->nfuncs].decl_flags = decl_flags;
@@ -8118,6 +8123,10 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             bc->capability_bits |= XG_CAP_OBJECTS;
         bc->capability_bits |= body_capabilities_for_builtin_constructor(callee_name);
         if (target && (target->decl_flags & XG_DECL_EXTERN)) {
+            if (target->extern_dylib && target->extern_dylib[0])
+                (void) producer_add_link_dependency(bc->producer, target->module_id,
+                                                    target->decl_id, (uint32_t) call->line,
+                                                    XG_LINK_DEP_EXTERN_DYLIB, target->extern_dylib);
             bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
             bc->escape_bits |= XG_BODY_ESCAPE_EXTERN;
             if ((target->decl_flags & (XG_DECL_NAKED | XG_DECL_INTERRUPT)) == 0)
@@ -9459,12 +9468,9 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
         decl.flags |= XG_DECL_INTERRUPT;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
-    if (extern_attr && dylib_attr && dylib_attr->str_arg && dylib_attr->str_arg[0]) {
-        if (!producer_add_link_dependency(p, module_id, decl_id, (uint32_t) node->line,
-                                          XG_LINK_DEP_EXTERN_DYLIB, dylib_attr->str_arg))
-            return false;
-    }
-    if (!producer_register_func(p, fn->name, func_id, decl_id, decl.flags))
+    if (!producer_register_func(p, module_id, fn->name,
+                                extern_attr && dylib_attr ? dylib_attr->str_arg : NULL, func_id,
+                                decl_id, decl.flags))
         return false;
     return producer_enqueue_body(p, func_id, module_id, decl_id, XG_NO_ID, XG_NO_ID,
                                  hash_name32(fn->name), decl.signature_key, decl.source_node_id,
