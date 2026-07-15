@@ -1010,12 +1010,22 @@ static bool typecheck_source_precise_for_target(XrType *target, XrType *source) 
     return true;
 }
 
+bool xa_recovery_compatible(XrType *target, XrType *source) {
+    XR_DCHECK(target != NULL, "xa_recovery_compatible: NULL target");
+    XR_DCHECK(source != NULL, "xa_recovery_compatible: NULL source");
+    if (!target || !source)
+        return false;
+    if (xr_type_contains_error(target) || xr_type_contains_error(source))
+        return true;
+    return xr_type_assignable(target, source);
+}
+
 bool xa_typecheck_assignable(XrType *target, XrType *source) {
     XR_DCHECK(target != NULL, "xa_typecheck_assignable: NULL target");
     XR_DCHECK(source != NULL, "xa_typecheck_assignable: NULL source");
     if (!target || !source)
         return false;
-    if (!xr_type_assignable(target, source))
+    if (!xa_recovery_compatible(target, source))
         return false;
     return typecheck_source_precise_for_target(target, source);
 }
