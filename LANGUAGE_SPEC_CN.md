@@ -2144,7 +2144,7 @@ greet()                   // 必须显式调用
 
 #### 5.2.9 `extern "C"` C FFI 声明块
 
-`extern "C"` 块声明共享 C ABI 和可选库契约的外部函数。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
+`extern "C"` 块声明共享 C ABI 的外部函数与原生聚合布局。可选库契约只参与外部函数的符号解析。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
 
 ```xray
 extern "C" {
@@ -2163,10 +2163,37 @@ unsafe {
 }
 ```
 
+同一语法也可声明由 C 拥有的 struct / union 布局；这些声明是布局身份，不是可构造的 xray 值类型：
+
+```xray
+import mem
+
+extern "C" {
+    struct CHeader {
+        tag: uint8
+        count: uint32
+        next: MutPtr<byte>
+        samples: [uint16; 3]
+    }
+
+    union CWord {
+        word: uint32
+        bytes: [uint8; 4]
+    }
+}
+
+print(mem.sizeOf<CHeader>())
+print(mem.alignOf<CHeader>())
+print(mem.offsetOf<CHeader>("next"))
+```
+
 规则：
 - ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
 - `dylib("name-or-path")` 指定符号所在动态库；`link("name")` 指定 AOT 系统链接名。二者都进入统一 typed FFI descriptor，未指定时从默认进程/系统路径解析。
 - extern 块内函数只能声明签名，不能带 `{ }` 函数体；普通函数必须带块体。
+- extern 块内可声明 `struct`、`union` 与 `packed struct`。布局字段只能使用 C ABI 标量、`Ptr<T>` / `MutPtr<T>`、标量定长数组，或另一个 extern layout；普通 xray struct、class、`string`、nullable 与其他 managed 类型均被拒绝。
+- extern layout 不允许泛型、接口、方法、字段修饰符或字段初始化器；按值嵌套的聚合必须也在 extern 块中声明。
+- extern layout 不能用 `T(...)` 或 struct literal 构造为 xray 值；它只定义由外部内存承载的原生布局。`mem.sizeOf<T>()`、`mem.alignOf<T>()` 与 `mem.offsetOf<T>(field)` 使用该原生布局表。
 - 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
 - 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
@@ -5567,9 +5594,12 @@ BindingPattern ::= Identifier
 ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternFnDecl+ '}'
+ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternDecl+ '}'
 ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
+ExternDecl ::= ExternFnDecl | ExternLayoutDecl
 ExternFnDecl ::= AttrList? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
+ExternLayoutDecl ::= ('packed'? 'struct' | 'union') Identifier '{' ExternLayoutField* '}'
+ExternLayoutField ::= Identifier ':' Type ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type

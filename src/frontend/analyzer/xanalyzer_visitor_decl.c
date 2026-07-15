@@ -62,6 +62,49 @@ static int xa_fixed_array_elem_native_lane(XrType *elem) {
     return XR_NATIVE_VALUE;
 }
 
+static bool xa_extern_layout_pointer_pointee_supported(const XrType *type, int depth) {
+    if (!type || type->is_nullable || depth > 16)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_BOOL:
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+            return true;
+        case XR_KIND_POINTER:
+            return xa_extern_layout_pointer_pointee_supported(type->container.element_type,
+                                                              depth + 1);
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+            return type->instance.class_ref && type->instance.class_ref->is_extern_layout;
+        default:
+            return false;
+    }
+}
+
+static bool xa_extern_layout_field_type_supported(const XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_BOOL:
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+            return true;
+        case XR_KIND_POINTER:
+            return xa_extern_layout_pointer_pointee_supported(type->container.element_type, 0);
+        case XR_KIND_FIXED_ARRAY:
+            return type->fixed_array.length > 0 && type->fixed_array.element_type &&
+                   !type->fixed_array.element_type->is_nullable &&
+                   (type->fixed_array.element_type->kind == XR_KIND_BOOL ||
+                    type->fixed_array.element_type->kind == XR_KIND_INT ||
+                    type->fixed_array.element_type->kind == XR_KIND_FLOAT);
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+            return type->instance.class_ref && type->instance.class_ref->is_extern_layout;
+        default:
+            return false;
+    }
+}
+
 static XrAttribute *xa_function_attr(const FunctionDeclNode *fn, AttributeKind kind) {
     if (!fn || !fn->attributes)
         return NULL;
@@ -115,6 +158,7 @@ static bool xa_c_export_native_scalar_supported(uint8_t native_type) {
         case XR_NATIVE_U64:
         case XR_NATIVE_ISIZE:
         case XR_NATIVE_USIZE:
+        case XR_NATIVE_POINTER:
         case XR_NATIVE_F32:
             return true;
         default:
@@ -3000,6 +3044,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     ClassDeclNode *cls = (node->type == AST_CLASS_DECL) ? &node->as.class_decl
                          : is_struct_decl               ? &node->as.struct_decl
                                                         : &node->as.union_decl;
+    bool is_extern_layout = is_aggregate_decl && cls->is_extern_layout;
 
     // @native class is reserved for builtin type declarations embedded at
     // compile time.  User code cannot bind C implementations, so reject early.
@@ -3047,9 +3092,16 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     XrClassInfo *info = links ? links->class_info : NULL;
+    /* The hoisting collector and direct declaration visitor can both reach the
+     * same declaration.  Once the class scope exists, its fields/methods and
+     * layout are already complete; collecting them again duplicates physical
+     * fields and silently doubles struct size. */
+    if (info && info->scope)
+        return;
     if (!info) {
         info = xa_class_info_new(cls->name);
         info->explicit_final = cls->explicit_final;
+        info->is_extern_layout = is_extern_layout;
         info->derive_flags = xa_class_decl_derive_flags(cls->attributes, cls->attr_count);
         info->location =
             (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -3059,6 +3111,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         links->class_info = info;
     } else {
         info->explicit_final = cls->explicit_final;
+        info->is_extern_layout = is_extern_layout;
         info->derive_flags = xa_class_decl_derive_flags(cls->attributes, cls->attr_count);
         info->location =
             (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -3071,7 +3124,26 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         links->type->is_value_type = true;
     }
 
-    if (is_union_decl) {
+    if (is_extern_layout) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line};
+        if (cls->type_param_count > 0) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                       "extern layout declarations cannot be generic", &loc);
+        }
+        if (cls->interface_count > 0) {
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                "extern layout declarations cannot implement interfaces", &loc);
+        }
+        if (cls->method_count > 0) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                       "extern layout declarations cannot declare methods", &loc);
+        }
+    }
+
+    if (is_union_decl && !is_extern_layout) {
         if (cls->type_param_count > 0) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line};
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
@@ -3222,6 +3294,37 @@ skip_interfaces:
                 continue;
             XrType *ft = fl->type;
 
+            AstNode *field_node = (i < cls->field_count) ? cls->fields[i] : NULL;
+            FieldDeclNode *field_decl = field_node && field_node->type == AST_FIELD_DECL
+                                            ? &field_node->as.field_decl
+                                            : NULL;
+            if (is_extern_layout && field_decl &&
+                (field_decl->is_private || field_decl->is_protected || field_decl->is_static ||
+                 field_decl->is_const || field_decl->initializer)) {
+                XrLocation loc = {.file = ctx->file_path, .line = field_node->line};
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "extern layout field '%s' cannot have modifiers or an initializer",
+                         fs->name ? fs->name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                struct_field_types_valid = false;
+                continue;
+            }
+
+            if (is_extern_layout && !xa_extern_layout_field_type_supported(ft)) {
+                XrLocation loc = {.file = ctx->file_path, .line = fs->location.line};
+                char msg[320];
+                snprintf(msg, sizeof(msg),
+                         "extern layout field '%s' has non-native type '%s'; use a native scalar, "
+                         "Ptr/MutPtr, fixed array, or another extern layout type",
+                         fs->name ? fs->name : "?", xr_type_to_string(ft));
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                struct_field_types_valid = false;
+                continue;
+            }
+
             if (ft->kind == XR_KIND_ARRAY || ft->kind == XR_KIND_MAP || ft->kind == XR_KIND_SET) {
                 XrLocation loc = {.file = ctx->file_path, .line = fs->location.line};
                 char msg[256];
@@ -3290,6 +3393,7 @@ skip_interfaces:
             layout->kind = XR_AGG_LAYOUT_STRUCT;
         }
         layout->explicit_align = st->explicit_align;
+        layout->is_extern_layout = is_extern_layout;
         bool layout_valid = true;
         if (layout->explicit_align != 0 &&
             (layout->explicit_align & (layout->explicit_align - 1)) != 0) {
@@ -3334,6 +3438,8 @@ skip_interfaces:
             }
 
             int native = xr_type_kind_to_native(ft->kind, ft->native_width);
+            if (native < 0 && is_extern_layout && ft->kind == XR_KIND_POINTER)
+                native = XR_NATIVE_POINTER;
             if (native < 0) {
                 // Fixed-size array field: [T; N]
                 if (ft->kind == XR_KIND_FIXED_ARRAY && ft->fixed_array.element_type) {
@@ -3402,7 +3508,7 @@ skip_interfaces:
                         }
                     }
                 }
-                if (sub_layout) {
+                if (sub_layout && (!is_extern_layout || sub_layout->is_extern_layout)) {
                     layout->fields[i].native_type = XR_NATIVE_NESTED_AGGREGATE;
                     layout->fields[i].size =
                         (uint16_t) xr_aggregate_layout_storage_size(sub_layout);

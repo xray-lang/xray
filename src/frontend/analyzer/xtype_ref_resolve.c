@@ -24,6 +24,7 @@
 #include "../parser/xtype_ref.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
+#include "../../runtime/value/xstruct_layout.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
@@ -72,6 +73,60 @@ static double ct_as_double(const XrCtValue *v) {
 
 static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
                          const char **err, uint32_t *stack, int depth);
+
+static bool ct_object_is_module(XaAnalyzer *analyzer, const AstNode *object,
+                                const char *module_name) {
+    if (!analyzer || !object || object->type != AST_VARIABLE || !module_name ||
+        !object->as.variable.name)
+        return false;
+    XaSymbol *sym = xa_scope_lookup(analyzer->current_scope, object->as.variable.name);
+    if (!sym || sym->kind != XA_SYM_MODULE)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+    return links && links->module_name && strcmp(links->module_name, module_name) == 0;
+}
+
+static bool ct_eval_mem_layout_call(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
+                                    const char **err) {
+    if (!analyzer || !expr || expr->type != AST_CALL_EXPR || !out)
+        return false;
+    const CallExprNode *call = &expr->as.call_expr;
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    const MemberAccessNode *member = &call->callee->as.member_access;
+    if (!member->name || !ct_object_is_module(analyzer, member->object, "mem"))
+        return false;
+    bool is_size = strcmp(member->name, "sizeOf") == 0;
+    bool is_align = strcmp(member->name, "alignOf") == 0;
+    bool is_offset = strcmp(member->name, "offsetOf") == 0;
+    if (!is_size && !is_align && !is_offset)
+        return false;
+    if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0])
+        return ct_fail(err, "mem layout consteval requires exactly one type argument");
+    if (call->arg_count != (is_offset ? 1 : 0))
+        return ct_fail(err, "mem layout consteval received the wrong number of arguments");
+
+    XrType *target = xr_tref_resolve_in_analyzer(analyzer, call->type_args[0]);
+    uint32_t size = 0;
+    uint32_t align = 0;
+    if (!xr_type_has_static_layout(target, &size, &align))
+        return ct_fail(err, "mem layout consteval requires a statically laid out type");
+
+    uint32_t value = is_size ? size : align;
+    if (is_offset) {
+        const AstNode *field_arg = call->arguments ? call->arguments[0] : NULL;
+        if (!field_arg || field_arg->type != AST_LITERAL_STRING ||
+            !field_arg->as.literal.raw_value.string_val)
+            return ct_fail(err, "mem.offsetOf consteval requires a string literal field name");
+        if (!xr_type_has_static_field_offset(target, field_arg->as.literal.raw_value.string_val,
+                                             &value))
+            return ct_fail(err, "mem.offsetOf consteval could not resolve the field");
+    }
+
+    out->kind = XR_CT_INT;
+    out->as.int_val = (int64_t) value;
+    return true;
+}
 
 static XrArena *ct_value_arena(XaAnalyzer *analyzer) {
     return analyzer ? analyzer->consteval_arena : NULL;
@@ -816,6 +871,10 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
             break;
         }
         case AST_CALL_EXPR:
+            if (ct_eval_mem_layout_call(analyzer, expr, out, err)) {
+                ok = true;
+                break;
+            }
             return ct_fail(err, "function calls are not consteval-safe in this phase");
         case AST_BLOCK:
             return ct_fail(err, "comptime block engine is not implemented in this phase");

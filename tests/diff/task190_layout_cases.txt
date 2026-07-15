@@ -1,0 +1,2 @@
+tests/diff/cases/semantics/ffi/extern_layout_introspection.xr
+tests/diff/cases/semantics/stdlib/mem_layout_introspection.xr

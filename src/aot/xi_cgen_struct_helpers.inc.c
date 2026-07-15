@@ -2253,6 +2253,11 @@ static void emit_struct_field_boxed_value(FILE *out, const XrAggregateLayout *sl
             emit_value_as_rep(out, value, XR_REP_I64);
             fprintf(out, ")");
             break;
+        case XR_NATIVE_POINTER:
+            fprintf(out, "xr_mkptr(");
+            emit_value_as_rep(out, value, XR_REP_RAWPTR);
+            fprintf(out, ", XR_TAG_PTR)");
+            break;
         default:
             emit_value_as_rep(out, value, XR_REP_TAGGED);
             break;

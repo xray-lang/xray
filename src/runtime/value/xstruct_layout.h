@@ -72,6 +72,7 @@ typedef struct XrAggregateLayout {
     uint16_t field_count;      // number of fields
     uint16_t layout_id;        // global layout registry index
     uint8_t kind;              // XrAggregateLayoutKind
+    bool is_extern_layout;     // layout is a native C interop contract
     uint32_t explicit_align;   // align(N), 0 = natural
     const char **field_names;  // [field_count] parallel to fields[], NULL-able
     XrAggregateFieldLayout fields[XR_MAX_AGG_FIELDS];

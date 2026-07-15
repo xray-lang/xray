@@ -36,6 +36,7 @@ typedef enum {
     XR_NATIVE_VALUE = 17,             // full tagged XrValue lane
     XR_NATIVE_ISIZE = 18,             // ptrdiff_t (target pointer-width signed int)
     XR_NATIVE_USIZE = 19,             // size_t (target pointer-width unsigned int)
+    XR_NATIVE_POINTER = 20,           // raw C pointer (void *, target pointer width)
 } XrNativeType;
 
 static inline uint8_t xr_native_type_size(uint8_t native_type) {
@@ -49,6 +50,8 @@ static inline uint8_t xr_native_type_size(uint8_t native_type) {
             return (uint8_t) sizeof(ptrdiff_t);
         case XR_NATIVE_USIZE:
             return (uint8_t) sizeof(size_t);
+        case XR_NATIVE_POINTER:
+            return (uint8_t) sizeof(void *);
         case XR_NATIVE_ARRAY_REF:
         case XR_NATIVE_MAP_REF:
         case XR_NATIVE_SET_REF:
@@ -83,6 +86,8 @@ static inline uint8_t xr_native_type_align(uint8_t native_type) {
             return (uint8_t) _Alignof(ptrdiff_t);
         case XR_NATIVE_USIZE:
             return (uint8_t) _Alignof(size_t);
+        case XR_NATIVE_POINTER:
+            return (uint8_t) _Alignof(void *);
         default:
             return xr_native_type_size(native_type);
     }

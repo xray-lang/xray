@@ -538,6 +538,9 @@ vmcase(OP_GETPROP) {
                 case XR_NATIVE_USIZE:
                     R(a) = XR_FROM_INT((int64_t) *(size_t *) fp);
                     break;
+                case XR_NATIVE_POINTER:
+                    R(a) = XR_FROM_INT((int64_t) (uintptr_t) *(void **) fp);
+                    break;
                 case XR_NATIVE_F64:
                     R(a) = XR_FROM_FLOAT(*(double *) fp);
                     break;

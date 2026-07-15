@@ -247,9 +247,12 @@ BindingPattern ::= Identifier
 ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternFnDecl+ '}'
+ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternDecl+ '}'
 ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
+ExternDecl ::= ExternFnDecl | ExternLayoutDecl
 ExternFnDecl ::= AttrList? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
+ExternLayoutDecl ::= ('packed'? 'struct' | 'union') Identifier '{' ExternLayoutField* '}'
+ExternLayoutField ::= Identifier ':' Type ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
@@ -559,9 +562,12 @@ BindingPattern ::= Identifier
 ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternFnDecl+ '}'
+ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternDecl+ '}'
 ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
+ExternDecl ::= ExternFnDecl | ExternLayoutDecl
 ExternFnDecl ::= AttrList? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
+ExternLayoutDecl ::= ('packed'? 'struct' | 'union') Identifier '{' ExternLayoutField* '}'
+ExternLayoutField ::= Identifier ':' Type ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type

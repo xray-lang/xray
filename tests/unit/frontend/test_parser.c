@@ -310,6 +310,25 @@ TEST(parser_extern_block_flattens_typed_descriptors) {
     teardown();
 }
 
+TEST(parser_extern_block_flattens_layout_declarations) {
+    setup();
+    AstNode *program = parse_ok("extern \"C\" {\n"
+                                "  struct Header { tag: uint8 next: Ptr<byte> }\n"
+                                "  packed struct Packed { tag: uint8 count: uint32 }\n"
+                                "  union Word { bits: uint32 bytes: [uint8; 4] }\n"
+                                "}");
+    ASSERT_EQ_INT(program->as.program.count, 3);
+    ASSERT_EQ_INT(program->as.program.statements[0]->type, AST_STRUCT_DECL);
+    ASSERT_TRUE(program->as.program.statements[0]->as.struct_decl.is_extern_layout);
+    ASSERT_FALSE(program->as.program.statements[0]->as.struct_decl.is_packed);
+    ASSERT_EQ_INT(program->as.program.statements[1]->type, AST_STRUCT_DECL);
+    ASSERT_TRUE(program->as.program.statements[1]->as.struct_decl.is_extern_layout);
+    ASSERT_TRUE(program->as.program.statements[1]->as.struct_decl.is_packed);
+    ASSERT_EQ_INT(program->as.program.statements[2]->type, AST_UNION_DECL);
+    ASSERT_TRUE(program->as.program.statements[2]->as.union_decl.is_extern_layout);
+    teardown();
+}
+
 static void assert_ast_param_modes(XrParamNode **params, int actual_count,
                                    const XrParamMode *expected, int expected_count) {
     ASSERT_EQ_INT(actual_count, expected_count);
@@ -991,6 +1010,7 @@ int main(void) {
     // Functions
     RUN_TEST(parser_function_decl);
     RUN_TEST(parser_extern_block_flattens_typed_descriptors);
+    RUN_TEST(parser_extern_block_flattens_layout_declarations);
     RUN_TEST(parser_parameter_modes_share_annotation_parser);
     RUN_TEST(parser_oop_parameter_modes_share_annotation_parser);
     RUN_TEST(parser_function_type_param_modes);

@@ -414,6 +414,27 @@ TEST(extern_block_roundtrip) {
     teardown();
 }
 
+TEST(extern_layout_roundtrip) {
+    setup();
+    const char *src = "extern \"C\" {\n"
+                      "  struct Header { tag: uint8 next: Ptr<byte> }\n"
+                      "  packed struct Packed align(8) { tag: uint8 count: uint32 }\n"
+                      "  union Word { bits: uint32 bytes: [uint8; 4] }\n"
+                      "}\n";
+    char *fmt1 = parse_and_format(src, "extern-layout.xr");
+    ASSERT_NOT_NULL(fmt1);
+    ASSERT_TRUE(contains(fmt1, "extern \"C\""));
+    ASSERT_TRUE(contains(fmt1, "struct Header"));
+    ASSERT_TRUE(contains(fmt1, "packed struct Packed align(8)"));
+    ASSERT_TRUE(contains(fmt1, "union Word"));
+    char *fmt2 = parse_and_format(fmt1, "extern-layout-formatted.xr");
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
+    teardown();
+}
+
 TEST(parameter_modes_comments_roundtrip) {
     setup();
     const char *src = "/// function docs\n"
@@ -832,6 +853,7 @@ RUN_TEST(arrow_return_type_emitted);
 RUN_TEST(object_destructure_rename_roundtrip);
 RUN_TEST(parameter_modes_roundtrip);
 RUN_TEST(extern_block_roundtrip);
+RUN_TEST(extern_layout_roundtrip);
 RUN_TEST(parameter_modes_comments_roundtrip);
 
 RUN_TEST(branch_arrows_default_aligned);

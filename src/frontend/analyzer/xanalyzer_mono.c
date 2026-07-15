@@ -813,6 +813,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->explicit_final = src->explicit_final;
             dst->is_native = src->is_native;
             dst->is_packed = src->is_packed;
+            dst->is_extern_layout = src->is_extern_layout;
             dst->explicit_align = src->explicit_align;
             dst->attributes = src->attributes;
             dst->attr_count = src->attr_count;

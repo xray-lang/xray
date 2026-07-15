@@ -8370,6 +8370,7 @@ static bool cg_c_export_native_scalar_supported(uint8_t native_type) {
         case XR_NATIVE_U64:
         case XR_NATIVE_ISIZE:
         case XR_NATIVE_USIZE:
+        case XR_NATIVE_POINTER:
         case XR_NATIVE_F32:
             return true;
         default:

@@ -74,6 +74,7 @@ typedef struct ClassDeclNode {
     bool explicit_final;       // User-visible final class contract; not inferred-final evidence
     bool is_native;            // @native: C runtime provides implementation
     bool is_packed;            // struct-only: `packed struct`
+    bool is_extern_layout;     // struct/union declared inside an extern "C" block
     uint32_t explicit_align;   // struct-only: `struct S align(N)`, 0 = natural
     XrAttribute **attributes;  // Declaration attributes
     int attr_count;

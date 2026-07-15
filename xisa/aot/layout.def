@@ -105,6 +105,14 @@
   :heap-field yes
   :ref-tag none)
 
+(define-aot-layout raw-pointer
+  :native-type XR_NATIVE_POINTER
+  :field-kind scalar
+  :rep rawptr
+  :c-type "void *"
+  :heap-field yes
+  :ref-tag none)
+
 (define-aot-layout string-ref
   :native-type XR_NATIVE_STRING
   :field-kind boxed-ref

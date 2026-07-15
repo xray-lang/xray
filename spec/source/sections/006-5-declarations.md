@@ -233,7 +233,7 @@ greet()                   // 必须显式调用
 
 #### 5.2.9 `extern "C"` C FFI 声明块
 
-`extern "C"` 块声明共享 C ABI 和可选库契约的外部函数。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
+`extern "C"` 块声明共享 C ABI 的外部函数与原生聚合布局。可选库契约只参与外部函数的符号解析。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
 
 ```xray
 extern "C" {
@@ -252,10 +252,37 @@ unsafe {
 }
 ```
 
+同一语法也可声明由 C 拥有的 struct / union 布局；这些声明是布局身份，不是可构造的 xray 值类型：
+
+```xray
+import mem
+
+extern "C" {
+    struct CHeader {
+        tag: uint8
+        count: uint32
+        next: MutPtr<byte>
+        samples: [uint16; 3]
+    }
+
+    union CWord {
+        word: uint32
+        bytes: [uint8; 4]
+    }
+}
+
+print(mem.sizeOf<CHeader>())
+print(mem.alignOf<CHeader>())
+print(mem.offsetOf<CHeader>("next"))
+```
+
 规则：
 - ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
 - `dylib("name-or-path")` 指定符号所在动态库；`link("name")` 指定 AOT 系统链接名。二者都进入统一 typed FFI descriptor，未指定时从默认进程/系统路径解析。
 - extern 块内函数只能声明签名，不能带 `{ }` 函数体；普通函数必须带块体。
+- extern 块内可声明 `struct`、`union` 与 `packed struct`。布局字段只能使用 C ABI 标量、`Ptr<T>` / `MutPtr<T>`、标量定长数组，或另一个 extern layout；普通 xray struct、class、`string`、nullable 与其他 managed 类型均被拒绝。
+- extern layout 不允许泛型、接口、方法、字段修饰符或字段初始化器；按值嵌套的聚合必须也在 extern 块中声明。
+- extern layout 不能用 `T(...)` 或 struct literal 构造为 xray 值；它只定义由外部内存承载的原生布局。`mem.sizeOf<T>()`、`mem.alignOf<T>()` 与 `mem.offsetOf<T>(field)` 使用该原生布局表。
 - 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
 - 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
@@ -1087,7 +1114,7 @@ greet()                   // must be called explicitly
 
 #### 5.2.9 `extern "C"` C FFI Declaration Blocks
 
-An `extern "C"` block declares external functions that share a C ABI and optional library contract. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
+An `extern "C"` block declares external functions and native aggregate layouts that share a C ABI. An optional library contract participates only in external-function symbol resolution. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
 
 ```xray
 extern "C" {
@@ -1106,10 +1133,37 @@ unsafe {
 }
 ```
 
+The same syntax declares C-owned struct / union layouts. These declarations are layout identities, not constructible xray value types:
+
+```xray
+import mem
+
+extern "C" {
+    struct CHeader {
+        tag: uint8
+        count: uint32
+        next: MutPtr<byte>
+        samples: [uint16; 3]
+    }
+
+    union CWord {
+        word: uint32
+        bytes: [uint8; 4]
+    }
+}
+
+print(mem.sizeOf<CHeader>())
+print(mem.alignOf<CHeader>())
+print(mem.offsetOf<CHeader>("next"))
+```
+
 Rules:
 - The ABI string is mandatory; `"C"` is currently the only supported value.
 - `dylib("name-or-path")` selects a dynamic library, while `link("name")` selects an AOT system link name. Both feed the same typed FFI descriptor; without either, resolution uses the default process/system lookup path.
 - Functions inside an extern block may only declare signatures and cannot have `{ }` bodies; ordinary functions require block bodies.
+- An extern block may declare `struct`, `union`, and `packed struct` layouts. Layout fields may contain only C ABI scalars, `Ptr<T>` / `MutPtr<T>`, fixed arrays of scalars, or another extern layout. Ordinary xray structs, classes, `string`, nullable types, and other managed types are rejected.
+- Extern layouts cannot have generics, interfaces, methods, field modifiers, or field initializers. Any aggregate nested by value must itself be declared as an extern layout.
+- An extern layout cannot be constructed as an xray value with `T(...)` or a struct literal; it only describes native storage owned outside xray. `mem.sizeOf<T>()`, `mem.alignOf<T>()`, and `mem.offsetOf<T>(field)` consume the native layout table.
 - Boundary types that are aligned across the VM/AOT backends include `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
 - C callback parameters must use `CFn<(A, B) -> R>`, not the ordinary xray function type `(A, B) -> R`.
 - A current `CFn` argument must be a module-level, noncapturing xray function with an exact signature match; anonymous functions, capturing closures, and extern functions themselves are rejected.

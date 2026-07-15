@@ -71,7 +71,7 @@ typedef struct {
     X(RUNE, "rune", "uint32_t", 4, 4, false, false, false, XAOT_DYNAMIC_SCALAR, false, 0, XR_REP_I64) \
     X(TAGGED, "tagged", "XrValue", 16, 8, false, false, true, XAOT_DYNAMIC_TAGGED, true, XR_NATIVE_VALUE, XR_REP_TAGGED) \
     X(PTR, "ptr", "void *", 8, 8, false, false, false, XAOT_DYNAMIC_POINTER, false, 0, XR_REP_PTR) \
-    X(RAWPTR, "rawptr", "void *", 8, 8, false, false, false, XAOT_DYNAMIC_POINTER, false, 0, XR_REP_RAWPTR) \
+    X(RAWPTR, "rawptr", "void *", 8, 8, false, false, false, XAOT_DYNAMIC_POINTER, true, XR_NATIVE_POINTER, XR_REP_RAWPTR) \
     X(SPAN, "span", "xr_span_t", 32, 8, false, false, false, XAOT_DYNAMIC_AGGREGATE, false, 0, XR_REP_TAGGED) \
     X(VOID, "void", "void", 0, 1, false, false, false, XAOT_DYNAMIC_VOID, false, 0, XR_REP_VOID)
 
@@ -195,7 +195,7 @@ static inline const XaotRepInfo *xaot_rep_info(XaotRep rep) {
                                       false, false,
                                       false,
                                       XAOT_DYNAMIC_POINTER,
-                                      false, 0,
+                                      true, XR_NATIVE_POINTER,
                                       XR_REP_RAWPTR},
         [XAOT_REP_SPAN] = {"span", "xr_span_t",
                                       32, 8,
@@ -261,6 +261,9 @@ static inline bool xaot_rep_from_native_type(uint8_t native_type, XaotRep *out) 
         case XR_NATIVE_VALUE:
             if (out) *out = XAOT_REP_TAGGED;
             return true;
+        case XR_NATIVE_POINTER:
+            if (out) *out = XAOT_REP_RAWPTR;
+            return true;
         default:
             return false;
     }
@@ -323,6 +326,8 @@ static inline const char *xaot_elem_name_for_native_type(uint8_t native_type) {
             return "XR_ELEM_BOOL";
         case XR_NATIVE_VALUE:
             return "XR_ELEM_TAGGED";
+        case XR_NATIVE_POINTER:
+            return "XR_ELEM_RAWPTR";
         default:
             return NULL;
     }
