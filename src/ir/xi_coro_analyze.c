@@ -315,6 +315,8 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
                                       const XiCoroResolver *resolver) {
     if (!v)
         return false;
+    if ((v->flags & XI_FLAG_MAY_SUSPEND) != 0)
+        return true;
     if (v->op == XI_YIELD || v->op == XI_GEN_YIELD || v->op == XI_GO || v->op == XI_AWAIT ||
         v->op == XI_CHAN_SEND || v->op == XI_CHAN_RECV || v->op == XI_SELECT_BLOCK ||
         v->op == XI_SCOPE_EXIT)
