@@ -1950,6 +1950,51 @@ static inline XrValue xrt_map_get_user_hash_eq(xrt_map_t *m, XrValue key, uint16
     return eidx >= 0 ? m->entries[eidx].value : XR_NULL_VAL;
 }
 
+static inline XrValue xrt_map_key_not_found(void) {
+    xrt_throw_error(XR_ERR_KEY_NOT_FOUND, "Map key not found");
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_boolmap_index_get_v(xrt_boolmap_t *b, XrValue key) {
+    int i = 0;
+    if (!xrt_boolmap_key_index_v(key, &i) || ((b->present >> i) & 1) == 0)
+        return xrt_map_key_not_found();
+    return xrt_boolmap_box_value(b, i);
+}
+
+static inline XrValue xrt_map_index_get(xrt_map_t *m, XrValue key) {
+    if (xrt_map_is_boolmap(m))
+        return xrt_boolmap_index_get_v((xrt_boolmap_t *) m, key);
+    if (xrt_map_is_typed(m)) {
+        int64_t slot = xrt_map_find_typed(m, key);
+        return slot >= 0 ? xrt_map_slot_value(m, slot) : xrt_map_key_not_found();
+    }
+    uint8_t key_tt = xrt_value_type_tag(key);
+    uint32_t hash = xrt_hash32_value(key);
+    int32_t eidx = xrt_map_find_entry(m, key, hash, key_tt);
+    return eidx >= 0 ? m->entries[eidx].value : xrt_map_key_not_found();
+}
+
+static inline XrValue xrt_map_index_get_prehashed(xrt_map_t *m, XrValue key, uint32_t hash) {
+    if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
+        return xrt_map_index_get(m, key);
+    int32_t eidx = xrt_map_find_entry(m, key, hash, xrt_value_type_tag(key));
+    return eidx >= 0 ? m->entries[eidx].value : xrt_map_key_not_found();
+}
+
+static inline XrValue xrt_map_index_get_user_hash_eq(xrt_map_t *m, XrValue key,
+                                                     uint16_t expected_type_id,
+                                                     const char *expected_class_name,
+                                                     xrt_user_hash_fn_t hash_fn,
+                                                     xrt_user_eq_fn_t eq_fn) {
+    if (!hash_fn || !eq_fn || xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
+        return xrt_map_index_get(m, key);
+    uint32_t hash = xrt_user_hash_value(key, expected_type_id, expected_class_name, hash_fn);
+    int32_t eidx =
+        xrt_map_find_entry_user_eq(m, key, hash, expected_type_id, expected_class_name, eq_fn);
+    return eidx >= 0 ? m->entries[eidx].value : xrt_map_key_not_found();
+}
+
 static inline XrValue xrt_map_get_owned(xrt_map_t *m, XrValue key) {
     return xrt_value_to_owned(xrt_map_get(m, key));
 }
@@ -1965,6 +2010,23 @@ static inline XrValue xrt_map_get_user_hash_eq_owned(xrt_map_t *m, XrValue key,
                                                      xrt_user_eq_fn_t eq_fn) {
     return xrt_value_to_owned(
         xrt_map_get_user_hash_eq(m, key, expected_type_id, expected_class_name, hash_fn, eq_fn));
+}
+
+static inline XrValue xrt_map_index_get_owned(xrt_map_t *m, XrValue key) {
+    return xrt_value_to_owned(xrt_map_index_get(m, key));
+}
+
+static inline XrValue xrt_map_index_get_prehashed_owned(xrt_map_t *m, XrValue key, uint32_t hash) {
+    return xrt_value_to_owned(xrt_map_index_get_prehashed(m, key, hash));
+}
+
+static inline XrValue xrt_map_index_get_user_hash_eq_owned(xrt_map_t *m, XrValue key,
+                                                           uint16_t expected_type_id,
+                                                           const char *expected_class_name,
+                                                           xrt_user_hash_fn_t hash_fn,
+                                                           xrt_user_eq_fn_t eq_fn) {
+    return xrt_value_to_owned(xrt_map_index_get_user_hash_eq(m, key, expected_type_id,
+                                                             expected_class_name, hash_fn, eq_fn));
 }
 
 static inline int32_t xrt_map_find_entry_small(xrt_map_t *m, XrValue key) {
@@ -1992,6 +2054,17 @@ static inline XrValue xrt_map_get_small(xrt_map_t *m, XrValue key) {
 
 static inline XrValue xrt_map_get_small_owned(xrt_map_t *m, XrValue key) {
     return xrt_value_to_owned(xrt_map_get_small(m, key));
+}
+
+static inline XrValue xrt_map_index_get_small(xrt_map_t *m, XrValue key) {
+    if (xrt_map_is_boolmap(m) || xrt_map_is_typed(m))
+        return xrt_map_index_get(m, key);
+    int32_t eidx = xrt_map_find_entry_small(m, key);
+    return eidx >= 0 ? m->entries[eidx].value : xrt_map_key_not_found();
+}
+
+static inline XrValue xrt_map_index_get_small_owned(xrt_map_t *m, XrValue key) {
+    return xrt_value_to_owned(xrt_map_index_get_small(m, key));
 }
 
 static inline void xrt_map_require_mutable(const xrt_map_t *m, const char *operation) {
@@ -2038,6 +2111,15 @@ static inline XrValue xrt_map_get_dense_i64_owned(xrt_map_t *m, XrValue key) {
     return xrt_value_to_owned(xrt_map_get_dense_i64(m, key));
 }
 
+static inline XrValue xrt_map_index_get_dense_i64(xrt_map_t *m, XrValue key) {
+    int64_t slot = xrt_map_find_dense_i64_slot(m, key);
+    return slot >= 0 ? xrt_map_slot_value(m, slot) : xrt_map_index_get(m, key);
+}
+
+static inline XrValue xrt_map_index_get_dense_i64_owned(xrt_map_t *m, XrValue key) {
+    return xrt_value_to_owned(xrt_map_index_get_dense_i64(m, key));
+}
+
 static inline int64_t xrt_map_find_dense_enum_slot(xrt_map_t *m, XrValue key) {
     uint32_t ordinal = 0;
     if (!m || xrt_map_is_boolmap(m) || xrt_map_is_typed(m) || (m->flags & XR_MAP_FLAG_DUMMY) != 0 ||
@@ -2056,6 +2138,15 @@ static inline XrValue xrt_map_get_dense_enum(xrt_map_t *m, XrValue key) {
 
 static inline XrValue xrt_map_get_dense_enum_owned(xrt_map_t *m, XrValue key) {
     return xrt_value_to_owned(xrt_map_get_dense_enum(m, key));
+}
+
+static inline XrValue xrt_map_index_get_dense_enum(xrt_map_t *m, XrValue key) {
+    int64_t slot = xrt_map_find_dense_enum_slot(m, key);
+    return slot >= 0 ? xrt_map_slot_value(m, slot) : xrt_map_index_get(m, key);
+}
+
+static inline XrValue xrt_map_index_get_dense_enum_owned(xrt_map_t *m, XrValue key) {
+    return xrt_value_to_owned(xrt_map_index_get_dense_enum(m, key));
 }
 
 static inline int xrt_map_has(xrt_map_t *m, XrValue key) {

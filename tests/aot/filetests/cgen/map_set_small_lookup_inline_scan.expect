@@ -5,6 +5,7 @@ regex=key-access-plan [0-9]+ id=[0-9]+ func=[0-9]+ span=[0-9]+ ordinal=[0-9]+ co
 regex=key-access-plan [0-9]+ id=[0-9]+ func=[0-9]+ span=[0-9]+ ordinal=[0-9]+ container=map op=get shape=[0-9]+ action=inline_small_scan receiver_type=[0-9]+ key_type=[0-9]+ value_type=[0-9]+ key_const=[0-9]+ prehash=[0-9a-f]+ evidence=0x5d reason=none
 regex=key-access-plan [0-9]+ id=[0-9]+ func=[0-9]+ span=[0-9]+ ordinal=[0-9]+ container=map op=has shape=[0-9]+ action=inline_small_scan receiver_type=[0-9]+ key_type=[0-9]+ value_type=[0-9]+ key_const=[0-9]+ prehash=[0-9a-f]+ evidence=0x5d reason=none
 regex=key-access-plan [0-9]+ id=[0-9]+ func=[0-9]+ span=[0-9]+ ordinal=[0-9]+ container=set op=has shape=[0-9]+ action=inline_small_scan receiver_type=[0-9]+ key_type=[0-9]+ value_type=0 key_const=[0-9]+ prehash=[0-9a-f]+ evidence=0x5d reason=none
+c_contains=xrt_map_index_get_small_owned
 c_contains=xrt_map_get_small_owned
 c_contains=xrt_map_has_small
 c_contains=xrt_set_has_small

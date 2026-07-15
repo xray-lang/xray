@@ -8376,7 +8376,7 @@ static bool xicgen_emit_map_index_get_builtin_hash_eq(XiCgenCtx *ctx, FILE *out,
         return false;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "xrt_map_get_owned(");
+    fprintf(out, "xrt_map_index_get_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8408,7 +8408,7 @@ static bool xicgen_emit_map_index_get_prehashed(XiCgenCtx *ctx, FILE *out, const
         return false;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "xrt_map_get_prehashed_owned(");
+    fprintf(out, "xrt_map_index_get_prehashed_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8424,7 +8424,7 @@ static bool xicgen_emit_map_index_get_bool_direct(XiCgenCtx *ctx, FILE *out, con
         return false;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "xrt_boolmap_get_v((xrt_boolmap_t*)");
+    fprintf(out, "xrt_boolmap_index_get_v((xrt_boolmap_t*)");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8440,7 +8440,7 @@ static bool xicgen_emit_map_index_get_small_scan(XiCgenCtx *ctx, FILE *out, cons
         return false;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "xrt_map_get_small_owned(");
+    fprintf(out, "xrt_map_index_get_small_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8461,7 +8461,8 @@ static bool xicgen_emit_map_index_get_dense_index(XiCgenCtx *ctx, FILE *out, con
     }
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, dense_enum ? "xrt_map_get_dense_enum_owned(" : "xrt_map_get_dense_i64_owned(");
+    fprintf(out, dense_enum ? "xrt_map_index_get_dense_enum_owned("
+                            : "xrt_map_index_get_dense_i64_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
@@ -8486,7 +8487,7 @@ static bool xicgen_emit_map_index_get_user_hash_eq(XiCgenCtx *ctx, FILE *out, co
     }
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "xrt_map_get_user_hash_eq_owned(");
+    fprintf(out, "xrt_map_index_get_user_hash_eq_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
     cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);
@@ -8515,7 +8516,7 @@ static bool xicgen_emit_map_index_get_derived_hash_eq(XiCgenCtx *ctx, FILE *out,
     }
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "xrt_map_get_user_hash_eq_owned(");
+    fprintf(out, "xrt_map_index_get_user_hash_eq_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
     cg_emit_user_hash_eq_tagged_key(ctx, out, v->args[1]);

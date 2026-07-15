@@ -203,7 +203,7 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         int64_t value = xrt_range_index_ptr((const xrt_range_t *) obj.ptr, key.i, &ok);
         return ok ? XR_FROM_INT(value) : XR_NULL_VAL;
     } else if (XR_IS_MAP(obj)) {
-        return xrt_map_get_owned((xrt_map_t *) obj.ptr, key);
+        return xrt_map_index_get_owned((xrt_map_t *) obj.ptr, key);
     } else if (XR_IS_SET(obj) && key.tag == XR_TAG_I64) {
         // Positional access into the set's insertion order (used by for-in).
         xrt_set_t *s = (xrt_set_t *) obj.ptr;

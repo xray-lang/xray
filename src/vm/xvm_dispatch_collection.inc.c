@@ -1953,7 +1953,8 @@ vmcase(OP_MAP_GETK) {
         XrString *key_str = XR_TO_STRING(key_val);
         bool found;
         XR_MAP_GET_STRING_FAST(map, key_str, R(a), found);
-        (void) found;
+        if (!found)
+            VM_RUNTIME_ERROR(XR_ERR_KEY_NOT_FOUND, "Map key not found");
         vmbreak;
     }
     // Json object support
@@ -2209,7 +2210,7 @@ vmcase(OP_INDEX_GET) {
         bool found;
         R(a) = xr_map_get(map, key_val, &found);
         if (!found)
-            R(a) = xr_null();
+            VM_RUNTIME_ERROR(XR_ERR_KEY_NOT_FOUND, "Map key not found");
         vmbreak;
     }
     // Fast path: Json object (string keys only)

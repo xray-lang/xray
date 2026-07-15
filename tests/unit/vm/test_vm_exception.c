@@ -89,6 +89,45 @@ TEST(runtime_error_records_trace) {
     xray_vm_delete(iso);
 }
 
+TEST(map_getk_missing_key_throws_e0431) {
+    XrVMRuntime *iso = make_quiet_isolate();
+    ASSERT_NOT_NULL(iso);
+    ASSERT_NOT_NULL(xr_test_init_coro(iso));
+
+    XrString *present = xr_string_intern(iso, "present", 7, xr_string_hash("present", 7));
+    XrString *missing = xr_string_intern(iso, "missing", 7, xr_string_hash("missing", 7));
+    ASSERT_NOT_NULL(present);
+    ASSERT_NOT_NULL(missing);
+
+    XrMap *map = xr_map_new(xr_test_get_coro(iso));
+    ASSERT_NOT_NULL(map);
+    xr_map_set(map, xr_string_value(present), xr_int(7));
+
+    XrProto *proto = xr_vm_proto_new();
+    ASSERT_NOT_NULL(proto);
+    proto->source_file = "<test-op-map-getk-missing-key>";
+    proto->maxstacksize = 4;
+
+    int map_k = xr_vm_proto_add_constant(proto, XR_FROM_PTR(map));
+    int missing_k = xr_vm_proto_add_constant(proto, xr_string_value(missing));
+    ASSERT_EQ_INT(map_k, 0);
+    ASSERT_EQ_INT(missing_k, 1);
+
+    xr_vm_proto_write(proto, CREATE_ABx(OP_LOADK, 0, (uint32_t) map_k), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_MAP_GETK, 1, 0, (uint32_t) missing_k), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN1, 1, 0, 0), 1);
+
+    XrVMResult result = xr_vm_interpret_proto(iso, proto);
+    ASSERT_EQ_INT(result, XR_VM_RUNTIME_ERROR);
+
+    XrVMContext *ctx = xr_vm_current_ctx(iso);
+    ASSERT(xr_value_is_panic_info(iso, ctx->current_exception));
+    ASSERT_EQ_INT(xr_panic_info_get_code(iso, ctx->current_exception), XR_ERR_KEY_NOT_FOUND);
+    ASSERT_STR_EQ(xr_panic_info_get_message(iso, ctx->current_exception), "Map key not found");
+
+    xray_vm_delete(iso);
+}
+
 /* ========== Catch clears the pending error channel ========== */
 
 TEST(catch_clears_pending_error_state) {
@@ -154,6 +193,7 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Unified throw/unwind contract");
 RUN_TEST(uncaught_enum_error_returns_nonzero);
 RUN_TEST(runtime_error_records_trace);
+RUN_TEST(map_getk_missing_key_throws_e0431);
 
 RUN_TEST_SUITE("Catch state cleanup");
 RUN_TEST(catch_clears_pending_error_state);
