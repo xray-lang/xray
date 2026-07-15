@@ -63,6 +63,18 @@ typedef enum XaUnknownReason {
 
 typedef uint32_t XaUnknownReasonSet;
 
+typedef enum XaEffectContractKind {
+    XA_EFFECT_CONTRACT_MISSING = 0,
+    XA_EFFECT_CONTRACT_NOTHROW,
+    XA_EFFECT_CONTRACT_ERRORS,
+} XaEffectContractKind;
+
+typedef struct XaEffectContract {
+    XaEffectContractKind kind;
+    const char **errors;
+    uint32_t error_count;
+} XaEffectContract;
+
 typedef struct XaEffectSummary {
     XaErrorSet escaping;
     XaEffectCompleteness completeness;

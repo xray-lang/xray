@@ -104,6 +104,7 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
 
     /* Scratch buffer for members */
     XaBuiltinMember members[MAX_MEMBERS_PER_TYPE];
+    memset(members, 0, sizeof(members));
     int count = 0;
 
     const char *p = source;
@@ -384,8 +385,21 @@ static void load_one_source(const char *source) {
     }
 }
 
-/* Generated member tables for stdlib definition files rather than .xr declarations. */
+/* Generated member tables for stdlib definition files rather than .xr declarations.
+ * An omitted trailing contract is XA_EFFECT_CONTRACT_MISSING, never nothrow. */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-field-initializers"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#endif
 #include "xanalyzer_builtins_generated.h"
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 static void xa_native_types_init_once(void) {
     memset(native_builtin_types, 0, sizeof(native_builtin_types));

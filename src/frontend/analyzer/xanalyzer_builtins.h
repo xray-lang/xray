@@ -23,13 +23,14 @@
 // Built-in member info
 typedef struct XaBuiltinMember {
     const char *name;
-    const char *signature;  // e.g., "(index: int): T"
-    const char *doc;        // Documentation
-    bool is_method;         // true = method, false = property
-    bool is_static;         // true = static member
-    bool is_internal;       // true = visible only to stdlib implementation modules
-    bool is_lowered_only;   // true = compiler/VM lowering surface, not an XrClass method
-    bool is_yieldable;      // true = VM binding may suspend/resume the current coroutine
+    const char *signature;             // e.g., "(index: int): T"
+    const char *doc;                   // Documentation
+    bool is_method;                    // true = method, false = property
+    bool is_static;                    // true = static member
+    bool is_internal;                  // true = visible only to stdlib implementation modules
+    bool is_lowered_only;              // true = compiler/VM lowering surface, not an XrClass method
+    bool is_yieldable;                 // true = VM binding may suspend/resume the current coroutine
+    XaEffectContract effect_contract;  // bodyless error contract; zero means missing/incomplete
 } XaBuiltinMember;
 
 // Built-in type info

@@ -613,6 +613,15 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
 // C Module type declarations (auto-generated from C source annotations)
 // ============================================================================
 
+/* Generated rows that do not yet declare an effect contract intentionally
+ * zero-initialize the trailing field to XA_EFFECT_CONTRACT_MISSING. */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-field-initializers"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#endif
 #include "xanalyzer_builtins_generated.h"
 #include "xanalyzer_xrd.h"
 
@@ -667,6 +676,12 @@ static const XaBuiltinModule g_rt_builtin_modules[] = {
     {"CoroPool", g_rt_coropool_functions, RT_COROPOOL_FUNCTION_COUNT, NULL, 0},
 };
 #define RT_BUILTIN_MODULE_COUNT 2
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 // Script directory for .xrd search (set by analyzer or LSP)
 static const char *g_script_dir = NULL;
