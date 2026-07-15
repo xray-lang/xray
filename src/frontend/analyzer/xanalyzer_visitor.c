@@ -17,6 +17,7 @@
 #include "xaddressability.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_errorset.h"
+#include "xanalyzer_xrd.h"
 #include "xconsteval.h"
 #include "xtype_ref_resolve.h"
 #include "../parser/xtype_ref.h"
@@ -471,8 +472,17 @@ XR_FUNC void xa_report_unknown_stdlib_member(XaInferContext *ctx, AstNode *node,
                                              const char *module_name, const char *member_name) {
     if (!ctx || !ctx->analyzer || !node || !module_name || !member_name)
         return;
-    if (!xa_builtin_get_module_info(module_name))
+    if (!xa_builtin_get_module_info(module_name)) {
+        const char *xrd_error = xa_xrd_last_error();
+        if (xrd_error && xrd_error[0]) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            char msg[384];
+            snprintf(msg, sizeof(msg), "invalid XRD descriptor for module '%s': %s", module_name,
+                     xrd_error);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg, &loc);
+        }
         return;
+    }
 
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     char msg[256];

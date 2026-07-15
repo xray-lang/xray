@@ -2020,7 +2020,7 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     snprintf(legacy_path, sizeof(legacy_path), "%s/native_legacy_byte_effects.xrd", tmpdir);
     ASSERT(write_text_file(ok_path, "export fn decode(input: Slice<byte>): Array<byte> "
                                     "@errors(NativeByteErr.BadInput)\n"));
-    ASSERT(write_text_file(legacy_path, "export fn decodeOld(input: ByteSpan): Array<byte> "
+    ASSERT(write_text_file(legacy_path, "export fn decodeOld(input: ByteSpan): Bytes "
                                         "@errors(NativeByteErr.BadInput)\n"
                                         "export fn viewOld(input: ByteView): int @nothrow\n"));
 
@@ -2057,6 +2057,8 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     AstNode *legacy_program = xr_parse(g_session, legacy_source);
     ASSERT(legacy_program != NULL);
     xa_analyzer_analyze(legacy, "effect_xrd_native_legacy_byte_contracts.xr", legacy_program);
+    ASSERT(analyzer_diag_contains(legacy, "invalid XRD descriptor"));
+    ASSERT(analyzer_diag_contains(legacy, "removed byte alias 'Bytes'"));
     ASSERT(analyzer_diag_contains(legacy, "undefined type 'ByteSpan'"));
     ASSERT(analyzer_diag_contains(legacy, "undefined type 'ByteView'"));
     xa_analyzer_free(legacy);
