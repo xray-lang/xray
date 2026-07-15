@@ -4,7 +4,13 @@ var invalid: Array<byte> = [65, 255, 66]
 
 print(string.fromUtf8(ascii[:]))
 print(string.fromUtf8(unicode[:]))
-print(string.fromUtf8(invalid[:]))
+var caught_invalid_utf8 = false
+try {
+    string.fromUtf8(invalid[:])
+} catch (e: Utf8Error) {
+    caught_invalid_utf8 = true
+}
+print(caught_invalid_utf8)
 print(string.fromUtf8Lossy(invalid[:]))
 var nonShortest: Array<byte> = [192, 175, 224, 128, 191, 240, 129, 130, 65]
 print(string.fromUtf8Lossy(nonShortest[:]))
@@ -27,7 +33,7 @@ print(s.sliceBytes(3, 6))
 var caught_mid_scalar = false
 try {
     s.sliceBytes(2, 3)
-} catch panic (p) {
+} catch (e: StringSliceError) {
     caught_mid_scalar = true
 }
 print(caught_mid_scalar)
@@ -35,7 +41,7 @@ print(caught_mid_scalar)
 var caught_oob = false
 try {
     s.sliceBytes(0, 7)
-} catch panic (p) {
+} catch (e: StringSliceError) {
     caught_oob = true
 }
 print(caught_oob)

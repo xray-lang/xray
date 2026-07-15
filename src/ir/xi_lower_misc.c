@@ -53,6 +53,10 @@ static int prelude_enum_builtin_index(const char *enum_name) {
         return XR_GLOBAL_VAR_TASK_OUTCOME;
     if (strcmp(enum_name, "TaskStatus") == 0)
         return XR_GLOBAL_VAR_TASK_STATUS;
+    if (strcmp(enum_name, "Utf8Error") == 0)
+        return XR_GLOBAL_VAR_UTF8_ERROR;
+    if (strcmp(enum_name, "StringSliceError") == 0)
+        return XR_GLOBAL_VAR_STRING_SLICE_ERROR;
     return -1;
 }
 

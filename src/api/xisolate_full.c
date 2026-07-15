@@ -44,6 +44,8 @@
 #include <stdio.h>
 #include <string.h>
 
+void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate);
+
 /* ========== Full Init Callback ========== */
 
 static int isolate_init_full(XrVMRuntime *isolate) {
@@ -149,6 +151,7 @@ static int isolate_init_full(XrVMRuntime *isolate) {
         if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
             isolate->vm.builtin_count = XR_USER_GLOBALS_START;
     }
+    xr_isolate_register_runtime_prelude_enums(isolate);
 
 #if XR_DEBUG
     // Verify C-registered methods match .xr declarations

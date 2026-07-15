@@ -98,6 +98,8 @@ static int xi_lower_builtin_class_global_index(const char *name) {
         {"TaskResult", XR_GLOBAL_VAR_TASK_RESULT},
         {"TaskOutcome", XR_GLOBAL_VAR_TASK_OUTCOME},
         {"TaskStatus", XR_GLOBAL_VAR_TASK_STATUS},
+        {"Utf8Error", XR_GLOBAL_VAR_UTF8_ERROR},
+        {"StringSliceError", XR_GLOBAL_VAR_STRING_SLICE_ERROR},
         {"WorkQueue", XR_GLOBAL_VAR_WORKQUEUE},
         {"ResultGroup", XR_GLOBAL_VAR_RESULTGROUP},
         {"CountdownLatch", XR_GLOBAL_VAR_COUNTDOWNLATCH},
@@ -7966,6 +7968,18 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
                 XiTopBinding tb = xi_lower_find_top_binding(l, 0, tref->name);
                 if (xi_top_binding_valid(tb))
                     type_val = xi_lower_emit_top_load(l, tb, l->type_any);
+            }
+            if (!type_val) {
+                int builtin_index = xi_lower_builtin_class_global_index(tref->name);
+                if (builtin_index >= 0) {
+                    type_val = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN,
+                                            target_type ? target_type : l->type_any, 0);
+                    if (type_val) {
+                        type_val->aux_int = builtin_index;
+                        type_val->aux = (void *) tref->name;
+                        type_val->line = (uint32_t) line;
+                    }
+                }
             }
         }
     }

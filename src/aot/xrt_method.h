@@ -34,6 +34,15 @@
 #include "xrt_range_methods.inc.c"
 #include "xrt_sort.inc.c"
 
+extern XR_THREAD_LOCAL XrValue xrt_pending_error;
+
+static inline void xrt_set_builtin_enum_error(const char *enum_name, const char *member_name,
+                                              uint32_t member_index) {
+    XrAotEnumAggregate err =
+        xrt_enum_aggregate_make(0, (int64_t) member_index, 0, enum_name, member_name, NULL);
+    xrt_pending_error = xrt_enum_aggregate_box(err);
+}
+
 static inline int xrt_weak_value_is_heap_object(XrValue v) {
     if (!v.ptr)
         return 0;
@@ -590,8 +599,10 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
             xr_str_hdr(out)->rune_len = (int64_t) scan.rune_count;
             return out;
         }
-        if (sym == XRT_SYM_FROM_UTF8)
+        if (sym == XRT_SYM_FROM_UTF8) {
+            xrt_set_builtin_enum_error("Utf8Error", "InvalidUtf8", 0);
             return XR_NULL_VAL;
+        }
 
         XrUtf8LossyPlan plan = xr_utf8_core_lossy_plan(data, len);
         if (plan.overflow || plan.rune_count > (size_t) INT64_MAX ||
@@ -932,9 +943,8 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         XrStringCoreByteRange range =
             xr_string_core_utf8_byte_range(s, slen > 0 ? (size_t) slen : 0, start, end);
         if (range.error != XR_STRING_CORE_BYTE_RANGE_OK) {
-            xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                            "string.sliceBytes byte range out of bounds or not on UTF-8 scalar "
-                            "boundaries");
+            xrt_set_builtin_enum_error("StringSliceError", "InvalidByteRange", 0);
+            return XR_NULL_VAL;
         }
         XrValue out = xrt_str_alloc(range.slice.len);
         if (range.slice.len > 0)

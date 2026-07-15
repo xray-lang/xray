@@ -24,8 +24,12 @@
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
 #include "../symbol/xsymbol_table.h"
+#include "../class/xenum.h"
+#include "../core/xr_runtime_core.h"
+#include "../xisolate_api.h"
 #include "../../coro/xcoroutine.h"
 #include "../../base/xchecks.h"
+#include "../../base/xglobal_indices.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xutf8.h"
 #include "../../vm/xvm.h"
@@ -35,6 +39,26 @@
 static inline XrString *str_self(XrValue self) {
     XR_DCHECK(XR_IS_STRING(self), "string method: receiver is not a string");
     return XR_TO_STRING(self);
+}
+
+static void string_set_builtin_enum_error(XrVMRuntime *iso, int builtin_index,
+                                          uint32_t member_index, const char *fallback_message) {
+    if (iso && builtin_index >= 0 && builtin_index < XR_USER_GLOBALS_START) {
+        XrRuntimeCore *core = xr_isolate_get_runtime_core(iso);
+        XrValue enum_value = xr_runtime_core_builtin(core, builtin_index);
+        if (XR_IS_ENUM_TYPE(enum_value)) {
+            XrEnumType *type = (XrEnumType *) XR_TO_PTR(enum_value);
+            XrEnumAggregateValue *value = xr_enum_zero_payload_value(iso, type, member_index);
+            if (value) {
+                xr_vm_set_pending_error(iso, XR_FROM_PTR(value));
+                return;
+            }
+        }
+    }
+    XrValue exc = xr_panic_info_newf(iso, XR_ERR_INTERNAL, "%s",
+                                     fallback_message ? fallback_message
+                                                      : "failed to construct typed string error");
+    xr_vm_throw_exception(iso, exc);
 }
 
 static XrValue m_slice(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -66,10 +90,8 @@ static XrValue m_slice_bytes(XrVMRuntime *iso, XrValue self, XrValue *args, int 
     xr_Integer end = XR_TO_INT(args[1]);
     XrString *result = xr_string_slice_bytes(iso, str, start, end);
     if (!result) {
-        XrValue exc = xr_panic_info_newf(
-            iso, XR_ERR_INDEX_OUT_OF_BOUNDS,
-            "string.sliceBytes byte range out of bounds or not on UTF-8 scalar boundaries");
-        xr_vm_throw_exception(iso, exc);
+        string_set_builtin_enum_error(iso, XR_GLOBAL_VAR_STRING_SLICE_ERROR, 0,
+                                      "string.sliceBytes invalid byte range");
         return xr_null();
     }
     return xr_string_value(result);
@@ -250,6 +272,8 @@ static XrValue m_from_utf8(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
     XrUtf8ScanResult scan = xr_utf8_scan_strict(data, len);
     if (scan.error != XR_UTF8_OK) {
         xr_free(owned);
+        string_set_builtin_enum_error(iso, XR_GLOBAL_VAR_UTF8_ERROR, 0,
+                                      "string.fromUtf8 invalid UTF-8");
         return xr_null();
     }
     XrString *result = xr_string_new_valid_utf8(iso, (const char *) data, len, scan.rune_count);
