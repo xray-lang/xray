@@ -1661,6 +1661,27 @@ static XrRep sr_type_native_boundary_rep(const struct XrType *type) {
     }
 }
 
+/* A call-bound place must use the same pointee representation as its ABI
+ * slot.  Heap/reference aggregates stay tagged so taking their address does
+ * not reinterpret a native object pointer as an XrValue (or vice versa).
+ * Scalar, raw-pointer, fixed-array and Slice lanes retain their native view. */
+static XrRep sr_type_call_place_pointee_rep(const struct XrType *type) {
+    if (!type)
+        return XR_REP_TAGGED;
+    XrRep scalar = sr_type_scalar_rep(type);
+    if (scalar != XR_REP_TAGGED)
+        return scalar;
+    if (type->is_nullable)
+        return XR_REP_TAGGED;
+    switch (type->kind) {
+        case XR_KIND_FIXED_ARRAY:
+        case XR_KIND_SPAN:
+            return XR_REP_PTR;
+        default:
+            return XR_REP_TAGGED;
+    }
+}
+
 static bool sr_convert_can_return_null(const XiValue *v) {
     if (!v || v->op != XI_CONVERT || v->nargs < 1 || !v->type)
         return false;
@@ -2756,8 +2777,9 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
              * source value.  Requiring the semantic type's native boundary
              * rep inserts an explicit UNBOX temporary for tagged globals,
              * captures, and phis; PLACE_LOAD then performs the writeback. */
-            return arg_idx == 0 && user->args[0] ? sr_type_native_boundary_rep(user->args[0]->type)
-                                                 : XR_REP_TAGGED;
+            return arg_idx == 0 && user->args[0]
+                       ? sr_type_call_place_pointee_rep(user->args[0]->type)
+                       : XR_REP_TAGGED;
         case XI_PLACE_LOAD:
             return arg_idx == 0 ? XR_REP_RAWPTR : XR_REP_TAGGED;
         case XI_PLACE_STORE:
