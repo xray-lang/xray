@@ -59,7 +59,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 23,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 24,
 };
 
 typedef enum XgBuildProfile {
@@ -1026,6 +1026,7 @@ typedef struct XgJsonCodecSummary {
     XgJsonCodecId codec_id;
     XgModuleId module_id;
     XgFuncId owner_func_id;
+    uint32_t source_node_id;
     uint32_t source_span_id;
     uint8_t codec_kind;
     uint32_t input_type_key;

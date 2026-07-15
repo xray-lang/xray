@@ -28,6 +28,7 @@
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xmemstream.h"
+#include "../../../src/base/xglobal_indices.h"
 #include "../../../include/xray.h"
 
 #include <stdio.h>
@@ -5545,6 +5546,109 @@ TEST(cgen_unknown_method_symbol_fails_fast) {
     xi_func_free(ir);
 }
 
+static XiFunc *make_marked_json_parse_ir(void) {
+    static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 108, .frozen = true};
+    static XrType stub_any = {.kind = XR_KIND_UNKNOWN, .id = 109, .frozen = true};
+    static XrType stub_string = {.kind = XR_KIND_STRING, .id = 110, .frozen = true};
+    static XrType stub_json = {.kind = XR_KIND_JSON, .id = 111, .frozen = true};
+    XiFunc *ir = xi_func_new("main", &stub_unit);
+    if (!ir)
+        return NULL;
+    XiBlock *entry = xi_block_new(ir);
+    if (!entry) {
+        xi_func_free(ir);
+        return NULL;
+    }
+    XiValue *json_ns = xi_value_new(ir, entry, XI_GET_BUILTIN, &stub_any, 0);
+    XiValue *text = xi_const_str(ir, entry, "{}", &stub_string);
+    XiValue *parse = xi_value_new(ir, entry, XI_CALL_METHOD, &stub_json, 2);
+    if (!json_ns || !text || !parse) {
+        xi_func_free(ir);
+        return NULL;
+    }
+    json_ns->aux_int = XR_GLOBAL_VAR_JSON;
+    parse->args[0] = json_ns;
+    parse->args[1] = text;
+    parse->aux = (void *) "parse";
+    parse->flags |= XI_FLAG_SIDE_EFFECT;
+    parse->line = 17;
+    parse->xg_json_codec_id = 1;
+    xi_block_set_return(entry, NULL);
+    return ir;
+}
+
+static char *generate_c_with_injected_json_codec_plan(XiFunc *ir,
+                                                      const XaotJsonCodecPlan *codec_plan,
+                                                      bool *had_error) {
+    if (ir->stage < XI_STAGE_REPPED) {
+        XiRepPolicy policy = xi_rep_policy_native_boundary();
+        xi_opt_select_rep_with_policy(ir, &policy);
+    }
+    XiModule *mod = xi_module_new("test.xr", "test", ir);
+    TEST_REQUIRE(mod != NULL, "Json codec preflight module allocation failed");
+    XiModule *modules[] = {mod};
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 1, 0);
+    if (codec_plan) {
+        TEST_REQUIRE(plan.bundle.njson_codec_plans == 0,
+                     "fixture bundle should start without Json codec plans");
+        plan.bundle.json_codec_plans = xr_malloc(sizeof(*plan.bundle.json_codec_plans));
+        TEST_REQUIRE(plan.bundle.json_codec_plans != NULL,
+                     "Json codec preflight plan allocation failed");
+        plan.bundle.json_codec_plans[0] = *codec_plan;
+        plan.bundle.njson_codec_plans = 1;
+        plan.bundle.json_codec_plan_cap = 1;
+    }
+
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TEST_REQUIRE(ctx != NULL, "Json codec preflight CGen context allocation failed");
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    char *buf = NULL;
+    size_t bufsz = 0;
+    FILE *mem = xr_open_memstream(&buf, &bufsz);
+    TEST_REQUIRE(mem != NULL, "Json codec preflight memstream allocation failed");
+    xi_cgen_program(ctx, mem, mod);
+    int rc = xr_close_memstream(mem, &buf, &bufsz);
+    TEST_REQUIRE(rc == 0, "Json codec preflight memstream close failed");
+    if (had_error)
+        *had_error = xi_cgen_has_error(ctx);
+
+    xi_cgen_ctx_free(ctx);
+    test_aot_plan_free(&plan);
+    mod->init = NULL;
+    xi_module_free(mod);
+    return buf;
+}
+
+TEST(cgen_json_codec_plan_preflight_rejects_missing_stale_kind_and_action) {
+    XaotJsonCodecPlan stale = {.codec_id = 1,
+                               .owner_func_id = 7,
+                               .source_node_id = 0,
+                               .codec_kind = XG_JSON_CODEC_PARSE,
+                               .action = XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT,
+                               .evidence = XAOT_JSON_EV_GLOBAL_ROW};
+    XaotJsonCodecPlan wrong_kind = stale;
+    wrong_kind.source_node_id = 99;
+    wrong_kind.codec_kind = XG_JSON_CODEC_DECODE;
+    wrong_kind.action = XAOT_JSON_CODEC_DECODE_VALIDATE_COPY;
+    XaotJsonCodecPlan wrong_action = stale;
+    wrong_action.source_node_id = 99;
+    wrong_action.action = XAOT_JSON_CODEC_PARSE_DOM_BRIDGE;
+    const XaotJsonCodecPlan *cases[] = {NULL, &stale, &wrong_kind, &wrong_action};
+
+    for (uint32_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        XiFunc *ir = make_marked_json_parse_ir();
+        TEST_REQUIRE(ir != NULL, "marked Json.parse fixture should build");
+        bool had_error = false;
+        char *code = generate_c_with_injected_json_codec_plan(ir, cases[i], &had_error);
+        TEST_REQUIRE(code != NULL, "Json codec preflight should return a C buffer");
+        TEST_REQUIRE(had_error, "invalid marked Json codec plan must fail C generation");
+        TEST_REQUIRE(code[0] == '\0', "Json codec preflight must fail before emitting C");
+        xr_free(code);
+        xi_func_free(ir);
+    }
+}
+
 TEST(cgen_suspendable_wrapper_aborts) {
     const char *src = "fn worker(n: int) -> int {\n"
                       "    Coro.yield()\n"
@@ -8090,6 +8194,7 @@ int main(void) {
 
     run_aot_type_fingerprint_includes_param_modes();
     run_aot_type_fingerprint_separates_error_recovery();
+    run_cgen_json_codec_plan_preflight_rejects_missing_stale_kind_and_action();
     run_cgen_simple_arith();
     run_cgen_skips_unused_process_builtin_init();
     run_cgen_initializes_used_process_builtin();

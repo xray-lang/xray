@@ -1007,6 +1007,7 @@ typedef struct XaotJsonCodecPlan {
     XgJsonCodecId codec_id;
     XgModuleId module_id;
     XgFuncId owner_func_id;
+    uint32_t source_node_id;
     uint32_t source_span_id;
     uint8_t codec_kind;
     uint8_t action;

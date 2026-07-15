@@ -789,7 +789,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=23 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=24 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1176,15 +1176,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=23 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=23 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=23 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=23 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=24 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=24 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=24 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=24 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=23 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=23 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=23 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=23 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=24 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=24 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=24 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=24 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -9942,6 +9942,7 @@ TEST(global_evidence_records_json_codec_plans) {
     XgJsonCodecSummary parse = {.codec_id = 1,
                                 .module_id = 1,
                                 .owner_func_id = 7,
+                                .source_node_id = 1001,
                                 .source_span_id = 101,
                                 .codec_kind = XG_JSON_CODEC_PARSE,
                                 .input_type_key = 10,
@@ -9949,6 +9950,7 @@ TEST(global_evidence_records_json_codec_plans) {
     XgJsonCodecSummary decode = {.codec_id = 2,
                                  .module_id = 1,
                                  .owner_func_id = 7,
+                                 .source_node_id = 1002,
                                  .source_span_id = 102,
                                  .codec_kind = XG_JSON_CODEC_DECODE,
                                  .input_type_key = 20,
@@ -9962,6 +9964,7 @@ TEST(global_evidence_records_json_codec_plans) {
     XgJsonCodecSummary encode = {.codec_id = 3,
                                  .module_id = 1,
                                  .owner_func_id = 7,
+                                 .source_node_id = 1003,
                                  .source_span_id = 103,
                                  .codec_kind = XG_JSON_CODEC_ENCODE,
                                  .input_type_key = 30,
@@ -9972,6 +9975,7 @@ TEST(global_evidence_records_json_codec_plans) {
     XgJsonCodecSummary stringify = {.codec_id = 4,
                                     .module_id = 1,
                                     .owner_func_id = 7,
+                                    .source_node_id = 1004,
                                     .source_span_id = 104,
                                     .codec_kind = XG_JSON_CODEC_STRINGIFY,
                                     .input_type_key = 30,
@@ -10002,11 +10006,31 @@ TEST(global_evidence_records_json_codec_plans) {
     char *dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "json_codecs=4"));
-    ASSERT_NOT_NULL(strstr(dump, "json-codec 0 id=1 module=1 func=7 kind=parse"));
-    ASSERT_NOT_NULL(strstr(dump, "json-codec 1 id=2 module=1 func=7 kind=decode"));
-    ASSERT_NOT_NULL(strstr(dump, "json-codec 2 id=3 module=1 func=7 kind=encode"));
-    ASSERT_NOT_NULL(strstr(dump, "json-codec 3 id=4 module=1 func=7 kind=stringify"));
+    ASSERT_NOT_NULL(strstr(dump, "json-codec 0 id=1 module=1 func=7 node=1001 kind=parse"));
+    ASSERT_NOT_NULL(strstr(dump, "json-codec 1 id=2 module=1 func=7 node=1002 kind=decode"));
+    ASSERT_NOT_NULL(strstr(dump, "json-codec 2 id=3 module=1 func=7 node=1003 kind=encode"));
+    ASSERT_NOT_NULL(strstr(dump, "json-codec 3 id=4 module=1 func=7 node=1004 kind=stringify"));
     xr_free(dump);
+
+    uint64_t evidence_hash = xg_global_evidence_hash(&ev);
+    XgEvidenceCacheKey cache_key =
+        xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    ev.json_codecs[0].source_node_id++;
+    ASSERT_NE(xg_global_evidence_hash(&ev), evidence_hash);
+    ASSERT_NE(xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE).content_hash,
+              cache_key.content_hash);
+    ev.json_codecs[0].source_node_id--;
+
+    char *payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    XgGlobalEvidence materialized = {0};
+    ASSERT_NOT_NULL(payload);
+    ASSERT_NOT_NULL(strstr(payload, "json-codec id=1 module=1 func=7 node=1001"));
+    ASSERT_TRUE(xg_evidence_cache_payload_materialize(payload, &materialized));
+    ASSERT_EQ_UINT(materialized.njson_codecs, 4);
+    ASSERT_EQ_UINT(materialized.json_codecs[0].source_node_id, 1001);
+    ASSERT_EQ_UINT(materialized.json_codecs[1].source_node_id, 1002);
+    xg_global_evidence_free(&materialized);
+    xr_free(payload);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
@@ -10020,6 +10044,8 @@ TEST(global_evidence_records_json_codec_plans) {
     ASSERT_NOT_NULL(decode_plan);
     ASSERT_NOT_NULL(encode_plan);
     ASSERT_NOT_NULL(stringify_plan);
+    ASSERT_EQ_UINT(parse_plan->source_node_id, 1001);
+    ASSERT_EQ_UINT(decode_plan->source_node_id, 1002);
     ASSERT_EQ_UINT(parse_plan->action, XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT);
     ASSERT_EQ_UINT(decode_plan->action, XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
     ASSERT_EQ_UINT(encode_plan->action, XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR);
@@ -10057,6 +10083,11 @@ TEST(global_evidence_records_json_codec_plans) {
     char err[256];
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    bundle.json_codec_plans[1].source_node_id++;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT Json codec plan identity does not re-derive"));
+    bundle.json_codec_plans[1].source_node_id--;
     bundle.json_codec_plans[1].action = XAOT_JSON_CODEC_PARSE_DOM_BRIDGE;
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
@@ -10380,6 +10411,7 @@ static void init_json_codec_integrity_fixture(XgGlobalEvidence *ev, XgBuildKey k
     XgJsonCodecSummary decode = {.codec_id = 1,
                                  .module_id = 1,
                                  .owner_func_id = 7,
+                                 .source_node_id = 1001,
                                  .source_span_id = 101,
                                  .codec_kind = XG_JSON_CODEC_DECODE,
                                  .input_type_key = 10,
@@ -10443,6 +10475,33 @@ TEST(global_evidence_verifier_rederives_json_codec_record_shape) {
     init_json_codec_integrity_fixture(&ev, key);
     ev.json_codecs[0].flags &= ~XG_JSON_CODEC_HAS_OUTPUT_SHAPE;
     assert_json_evidence_rejected(&ev, "AOT Json codec output shape flag does not re-derive");
+    xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_verifier_rejects_json_codec_source_identity) {
+    XgBuildKey key = {.source_hash = 353,
+                      .compiler_semver_hash = 363,
+                      .profile_hash = 373,
+                      .imported_summary_hash = 383,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+
+    init_json_codec_integrity_fixture(&ev, key);
+    ev.json_codecs[0].source_node_id = 0;
+    assert_json_evidence_rejected(&ev, "AOT Json codec source identity is missing");
+    xg_global_evidence_free(&ev);
+
+    init_json_codec_integrity_fixture(&ev, key);
+    ev.json_codecs[0].owner_func_id = XG_NO_ID;
+    assert_json_evidence_rejected(&ev, "AOT Json codec source identity is missing");
+    xg_global_evidence_free(&ev);
+
+    init_json_codec_integrity_fixture(&ev, key);
+    XgJsonCodecSummary duplicate = ev.json_codecs[0];
+    duplicate.codec_id++;
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &duplicate));
+    assert_json_evidence_rejected(&ev, "AOT Json codec source identity is duplicated");
     xg_global_evidence_free(&ev);
 }
 
@@ -11430,6 +11489,13 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     }
     ASSERT_NOT_NULL(bridge_shape);
     ASSERT_EQ_UINT(ev.njson_codecs, 4);
+    for (uint32_t i = 0; i < ev.njson_codecs; i++) {
+        ASSERT_NE(ev.json_codecs[i].source_node_id, 0);
+        for (uint32_t j = i + 1; j < ev.njson_codecs; j++) {
+            ASSERT_TRUE(ev.json_codecs[i].owner_func_id != ev.json_codecs[j].owner_func_id ||
+                        ev.json_codecs[i].source_node_id != ev.json_codecs[j].source_node_id);
+        }
+    }
     ASSERT_EQ_UINT(ev.json_codecs[0].codec_kind, XG_JSON_CODEC_PARSE);
     ASSERT_TRUE((ev.json_codecs[0].flags & XG_JSON_CODEC_STATIC_TEXT) != 0);
     ASSERT_EQ_UINT(ev.json_codecs[1].codec_kind, XG_JSON_CODEC_DECODE);
@@ -16939,6 +17005,7 @@ RUN_TEST(global_evidence_records_record_shape_and_access_plans);
 RUN_TEST(global_evidence_verifier_rejects_stale_json_record_field_rows);
 RUN_TEST(global_evidence_verifier_rederives_json_shape_fields);
 RUN_TEST(global_evidence_verifier_rederives_json_codec_record_shape);
+RUN_TEST(global_evidence_verifier_rejects_json_codec_source_identity);
 RUN_TEST(global_evidence_records_record_merge_plans);
 RUN_TEST(global_evidence_records_options_bag_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);

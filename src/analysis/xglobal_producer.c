@@ -5260,6 +5260,7 @@ static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
     row.codec_id = (XgJsonCodecId) (bc->evidence->njson_codecs + 1);
     row.module_id = bc->module_id;
     row.owner_func_id = bc->owner_func_id;
+    row.source_node_id = producer_source_node_id(bc->module_id, node);
     row.source_span_id = (uint32_t) node->line;
     if (call->arg_count > 0)
         arg0 = call->arguments[0];

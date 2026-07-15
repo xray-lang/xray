@@ -110,6 +110,8 @@ XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t sourc
 XR_FUNC void xi_lower_bind_class_field_id(XiLower *l, XiValue *access,
                                           const struct XrType *receiver_type,
                                           const char *field_name);
+XR_FUNC void xi_lower_bind_json_codec_id(XiLower *l, XiValue *value, uint32_t source_node_id,
+                                         uint8_t expected_kind);
 XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const char *field_name,
                                           uint32_t source_span_id, uint16_t field_ordinal,
                                           uint8_t access_kind);

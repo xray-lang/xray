@@ -2351,6 +2351,7 @@ static bool xaot_bundle_add_json_codec_plan(XaotBundle *bundle, const XgJsonCode
     plan->codec_id = codec->codec_id;
     plan->module_id = codec->module_id;
     plan->owner_func_id = codec->owner_func_id;
+    plan->source_node_id = codec->source_node_id;
     plan->source_span_id = codec->source_span_id;
     plan->codec_kind = codec->codec_kind;
     plan->action = json_codec_action_for(codec);
@@ -7326,13 +7327,13 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     for (uint32_t ji = 0; ji < bundle->njson_codec_plans; ji++) {
         const XaotJsonCodecPlan *jp = &bundle->json_codec_plans[ji];
         fprintf(out,
-                "json-codec-plan %u id=%u module=%u func=%u span=%u kind=%s action=%s "
+                "json-codec-plan %u id=%u module=%u func=%u node=%u span=%u kind=%s action=%s "
                 "input_type=%u target_type=%u input_shape=%u output_shape=%u fields=%u "
                 "evidence=0x%x reason=%s\n",
-                ji, jp->codec_id, jp->module_id, jp->owner_func_id, jp->source_span_id,
-                xg_json_codec_kind_name(jp->codec_kind), json_codec_action_name(jp->action),
-                jp->input_type_key, jp->target_type_key, jp->input_shape_id, jp->output_shape_id,
-                (unsigned) jp->field_count, jp->evidence,
+                ji, jp->codec_id, jp->module_id, jp->owner_func_id, jp->source_node_id,
+                jp->source_span_id, xg_json_codec_kind_name(jp->codec_kind),
+                json_codec_action_name(jp->action), jp->input_type_key, jp->target_type_key,
+                jp->input_shape_id, jp->output_shape_id, (unsigned) jp->field_count, jp->evidence,
                 json_unproven_reason_name(jp->unproven_reason));
     }
 

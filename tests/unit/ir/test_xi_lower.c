@@ -1435,6 +1435,130 @@ TEST(record_access_lowers_with_global_evidence_id) {
 #undef REQUIRE_RECORD_EVIDENCE
 }
 
+static const char *json_codec_same_line_source(void) {
+    return "type User = { name: string, age: int }\n"
+           "fn codecs() -> string {\n"
+           "    var parsed: Json = Json.parse(\"{\\\"name\\\":\\\"A\\\",\\\"age\\\":1}\"); var "
+           "decoded: User = Json.decode<User>(parsed); var encoded: Json = Json.encode(decoded); "
+           "return Json.stringify(encoded)\n"
+           "}\n"
+           "print(codecs())\n";
+}
+
+static uint8_t xi_json_codec_kind_for_test(const XiValue *value) {
+    if (!value)
+        return 0;
+    if (value->op == XI_JSON_DECODE)
+        return XG_JSON_CODEC_DECODE;
+    if (value->op != XI_CALL_METHOD || !value->aux)
+        return 0;
+    const char *method = (const char *) value->aux;
+    if (strcmp(method, "parse") == 0)
+        return XG_JSON_CODEC_PARSE;
+    if (strcmp(method, "encode") == 0)
+        return XG_JSON_CODEC_ENCODE;
+    if (strcmp(method, "stringify") == 0)
+        return XG_JSON_CODEC_STRINGIFY;
+    return 0;
+}
+
+static void invalidate_json_codec_source_nodes(XgGlobalEvidence *evidence) {
+    if (!evidence)
+        return;
+    for (uint32_t i = 0; i < evidence->njson_codecs; i++)
+        evidence->json_codecs[i].source_node_id += UINT32_C(1000000);
+}
+
+#define TEST_REQUIRE(cond, msg)                                                                    \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "json_codec_source_identity: %s\n", (msg));                            \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+TEST(json_codec_calls_bind_exact_source_node_evidence_ids) {
+    XgGlobalEvidence ev = {0};
+    XiFunc *root = lower_source_with_global_evidence(json_codec_same_line_source(), &ev);
+    TEST_REQUIRE(root != NULL, "same-line Json codec source should lower");
+    TEST_REQUIRE(ev.njson_codecs == 4, "producer should record all four Json codec calls");
+    XiFunc *codecs = func_tree_find_func_name(root, "codecs");
+    TEST_REQUIRE(codecs != NULL && codecs->xg_body_func_id != XG_NO_ID,
+                 "codec body should bind its global body id");
+
+    uint32_t codec_sites = 0;
+    uint32_t bound_sites = 0;
+    uint32_t shared_span = ev.json_codecs[0].source_span_id;
+    for (uint32_t i = 0; i < ev.njson_codecs; i++) {
+        TEST_REQUIRE(ev.json_codecs[i].source_node_id != 0,
+                     "codec evidence should preserve AST node identity");
+        TEST_REQUIRE(ev.json_codecs[i].source_span_id == shared_span,
+                     "fixture should place all codec calls on one source line");
+        for (uint32_t j = i + 1; j < ev.njson_codecs; j++)
+            TEST_REQUIRE(ev.json_codecs[i].source_node_id != ev.json_codecs[j].source_node_id,
+                         "same-line codec calls should have distinct AST node ids");
+    }
+    for (uint32_t b = 0; b < codecs->nblocks; b++) {
+        XiBlock *block = codecs->blocks[b];
+        if (!block)
+            continue;
+        for (uint32_t i = 0; i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            uint8_t expected_kind = xi_json_codec_kind_for_test(value);
+            if (expected_kind == 0)
+                continue;
+            codec_sites++;
+            TEST_REQUIRE(value->xg_json_codec_id != XG_NO_ID,
+                         "codec Xi value should carry a stable evidence id");
+            const XgJsonCodecSummary *row =
+                xg_global_evidence_find_json_codec(&ev, value->xg_json_codec_id);
+            TEST_REQUIRE(row != NULL, "bound codec id should resolve to evidence");
+            TEST_REQUIRE(row->owner_func_id == codecs->xg_body_func_id,
+                         "codec id should bind within the current owner body");
+            TEST_REQUIRE(row->codec_kind == expected_kind,
+                         "codec id should bind the expected codec kind");
+            bound_sites++;
+        }
+    }
+    TEST_REQUIRE(codec_sites == 4 && bound_sites == 4,
+                 "parse/decode/encode/stringify should all bind exactly once");
+
+    xi_func_free(root);
+    xg_global_evidence_free(&ev);
+}
+
+TEST(json_codec_binding_does_not_fallback_to_source_span) {
+    XgGlobalEvidence ev = {0};
+    XiFunc *root = lower_source_with_global_evidence_ex(json_codec_same_line_source(), &ev,
+                                                        invalidate_json_codec_source_nodes);
+    TEST_REQUIRE(root != NULL, "codec source with stale node ids should still lower semantically");
+    XiFunc *codecs = func_tree_find_func_name(root, "codecs");
+    TEST_REQUIRE(codecs != NULL, "codec body should be present");
+
+    uint32_t codec_sites = 0;
+    uint32_t bound_sites = 0;
+    for (uint32_t b = 0; b < codecs->nblocks; b++) {
+        XiBlock *block = codecs->blocks[b];
+        if (!block)
+            continue;
+        for (uint32_t i = 0; i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            if (xi_json_codec_kind_for_test(value) == 0)
+                continue;
+            codec_sites++;
+            if (value->xg_json_codec_id != XG_NO_ID)
+                bound_sites++;
+        }
+    }
+    TEST_REQUIRE(codec_sites == 4, "fixture should still contain all codec sites");
+    TEST_REQUIRE(bound_sites == 0, "stale AST node ids must not bind through matching line spans");
+
+    xi_func_free(root);
+    xg_global_evidence_free(&ev);
+}
+
+#undef TEST_REQUIRE
+
 TEST(map_key_access_lowers_with_global_evidence_id) {
 #define REQUIRE_KEY_EVIDENCE(cond, msg)                                                            \
     do {                                                                                           \
@@ -2353,6 +2477,8 @@ int main(void) {
     run_json_open_shape_member_access_lowers_to_dynamic_lookup();
     run_json_open_shape_static_key_index_lowers_to_dynamic_lookup();
     run_record_access_lowers_with_global_evidence_id();
+    run_json_codec_calls_bind_exact_source_node_evidence_ids();
+    run_json_codec_binding_does_not_fallback_to_source_span();
     run_map_key_access_lowers_with_global_evidence_id();
     run_map_key_access_alias_shape_lowers_with_global_evidence_id();
     run_map_set_method_key_access_lowers_with_global_evidence_id();
