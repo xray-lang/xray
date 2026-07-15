@@ -96,6 +96,7 @@ array_t_concrete_storage|covered|generic-storage-plan .*kind=array action=typed_
 generic_array_storage_hot_loop|covered|generic_array_storage|tests/benchmarks/aot/zero_cost/benchmarks.tsv|Generic Array<T> storage has a dedicated runtime hot-loop benchmark case.
 generic_map_lookup_hot_loop|covered|generic_map_lookup|tests/benchmarks/aot/zero_cost/benchmarks.tsv|Generic Map<K,V> lookup has a dedicated runtime hot-loop benchmark case.
 generic_set_contains_hot_loop|covered|generic_set_contains|tests/benchmarks/aot/zero_cost/benchmarks.tsv|Generic Set<T> contains has a dedicated runtime hot-loop benchmark case.
+generic_codesize_force_clone_hot_loop|covered|generic_codesize_force_clone|tests/benchmarks/aot/zero_cost/benchmarks.tsv|Code-size forced generic clones have a dedicated runtime hot-loop benchmark case.
 generic_code_size_policy|covered|generic-code-size-plan .*action=allow_clone|tests/aot/filetests/cgen|Generic clone decisions include a verified static code-size policy plan.
 generic_constraint_direct_call|covered|generic_constraint_direct_call_.*_area|tests/aot/filetests/cgen|Concrete generic interface-constraint calls specialize to direct class method calls without interface helpers.
 generic_constraint_type_switch|covered|generic-specialization .*action=type_switch|tests/aot/filetests/cgen|Interface-object generic constraint calls specialize through a verified type-switch dispatch in the cloned body.
