@@ -3325,44 +3325,111 @@ static bool body_type_key_is_pod_array_lane(uint32_t type_key) {
     return false;
 }
 
-static uint64_t body_generic_storage_hash(uint8_t storage_kind, uint32_t origin_type_key,
-                                          uint32_t specialized_type_key, uint32_t elem_type_key) {
+static bool body_type_ref_contains_type_param(const XrTypeRef *type) {
+    if (!type)
+        return false;
+    if (type->kind == XR_TREF_TYPE_PARAM || type->kind == XR_TREF_ERROR)
+        return true;
+    for (uint8_t i = 0; i < type->nchildren; i++) {
+        if (body_type_ref_contains_type_param(type->children ? type->children[i] : NULL))
+            return true;
+    }
+    return false;
+}
+
+static bool body_type_ref_is_managed_storage_ref(const XrTypeRef *type) {
+    if (!type)
+        return false;
+    switch ((XrTypeRefKind) type->kind) {
+        case XR_TREF_STRING:
+        case XR_TREF_NAMED:
+        case XR_TREF_GENERIC:
+        case XR_TREF_FUNCTION:
+        case XR_TREF_OBJECT:
+            return true;
+        case XR_TREF_OPTIONAL:
+        case XR_TREF_UNION:
+        case XR_TREF_TUPLE:
+        case XR_TREF_FIXED_ARRAY:
+            for (uint8_t i = 0; i < type->nchildren; i++) {
+                if (body_type_ref_is_managed_storage_ref(type->children ? type->children[i] : NULL))
+                    return true;
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
+static uint64_t body_generic_storage_hash(const XgGenericStorageSummary *storage) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
-    h = fold_u64(h, storage_kind);
-    h = fold_u64(h, origin_type_key);
-    h = fold_u64(h, specialized_type_key);
-    h = fold_u64(h, elem_type_key);
+    if (!storage)
+        return 0;
+    h = fold_u64(h, storage->generic_inst_id);
+    h = fold_u64(h, storage->module_id);
+    h = fold_u64(h, storage->storage_kind);
+    h = fold_u64(h, storage->origin_type_key);
+    h = fold_u64(h, storage->specialized_type_key);
+    h = fold_u64(h, storage->elem_type_key);
+    h = fold_u64(h, storage->key_type_key);
+    h = fold_u64(h, storage->value_type_key);
+    h = fold_u64(h, storage->container_plan_id);
+    h = fold_u64(h, storage->flags);
     return h ? h : 1;
 }
 
-static void body_add_generic_array_storage(XgBodyCollect *bc, const XrTypeRef *type,
-                                           uint32_t source_span_id) {
-    XrTypeRef *elem_type;
-    XrTypeRef *type_args[1];
+static bool body_type_ref_map_parts(const XrTypeRef *type, uint8_t *out_container_kind,
+                                    uint32_t *out_key_type_key, uint32_t *out_value_type_key);
+
+static void body_add_generic_container_storage(XgBodyCollect *bc, const XrTypeRef *type,
+                                               uint32_t source_span_id,
+                                               uint32_t container_plan_id) {
+    XrTypeRef *type_args[2] = {NULL, NULL};
     XgGenericInstSummary inst;
     XgGenericStorageSummary storage;
-    uint32_t elem_type_key;
+    const char *container_name;
+    uint8_t storage_kind;
+    uint8_t map_container_kind = 0;
+    uint16_t type_arg_count;
+    uint32_t elem_type_key = 0;
+    uint32_t key_type_key = 0;
+    uint32_t value_type_key = 0;
     uint32_t origin_type_key;
     uint32_t specialized_type_key;
     if (!bc || !bc->evidence || !type || type->kind != XR_TREF_GENERIC || !type->name ||
-        strcmp(type->name, "Array") != 0 || !type->children || type->nchildren == 0)
-        return;
-    elem_type = type->children[0];
-    elem_type_key = hash_tref32(elem_type);
-    if (!body_type_key_is_pod_array_lane(elem_type_key))
+        !type->children || type->nchildren == 0 || body_type_ref_contains_type_param(type))
         return;
 
-    type_args[0] = elem_type;
-    origin_type_key = hash_named_type_key32("Array", NULL, 0);
-    specialized_type_key = hash_named_type_key32("Array", type_args, 1);
+    if (strcmp(type->name, "Array") == 0 && type->nchildren >= 1) {
+        container_name = "Array";
+        storage_kind = XG_GENERIC_STORAGE_ARRAY;
+        type_arg_count = 1;
+        type_args[0] = type->children[0];
+        elem_type_key = hash_tref32(type_args[0]);
+    } else if (body_type_ref_map_parts(type, &map_container_kind, &key_type_key, &value_type_key)) {
+        storage_kind = map_container_kind == XG_MAP_CONTAINER_SET ? XG_GENERIC_STORAGE_SET
+                                                                  : XG_GENERIC_STORAGE_MAP;
+        container_name = storage_kind == XG_GENERIC_STORAGE_SET ? "Set" : "Map";
+        type_arg_count = storage_kind == XG_GENERIC_STORAGE_SET ? 1 : 2;
+        type_args[0] = type->children[0];
+        type_args[1] = type_arg_count == 2 ? type->children[1] : NULL;
+        if (storage_kind == XG_GENERIC_STORAGE_SET)
+            elem_type_key = key_type_key;
+    } else {
+        return;
+    }
+
+    origin_type_key = hash_named_type_key32(container_name, NULL, 0);
+    specialized_type_key = hash_named_type_key32(container_name, type_args, type_arg_count);
 
     memset(&inst, 0, sizeof(inst));
     inst.generic_inst_id = (XgGenericInstId) (bc->evidence->ngeneric_insts + 1);
     inst.module_id = bc->module_id;
-    inst.name_id = hash_name32("Array");
-    inst.type_key = hash_generic_inst_type_key("Array", type_args, 1, XG_GENERIC_INST_CONTAINER);
-    inst.type_arg_key_start = hash_tref_list32(type_args, 1);
-    inst.type_arg_count = 1;
+    inst.name_id = hash_name32(container_name);
+    inst.type_key = hash_generic_inst_type_key(container_name, type_args, type_arg_count,
+                                               XG_GENERIC_INST_CONTAINER);
+    inst.type_arg_key_start = hash_tref_list32(type_args, type_arg_count);
+    inst.type_arg_count = type_arg_count;
     inst.source_span_id = source_span_id;
     inst.kind = XG_GENERIC_INST_CONTAINER;
     inst.flags = XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_CONCRETE_STORAGE;
@@ -3373,14 +3440,54 @@ static void body_add_generic_array_storage(XgBodyCollect *bc, const XrTypeRef *t
     storage.storage_id = (XgGenericStorageId) (bc->evidence->ngeneric_storages + 1);
     storage.generic_inst_id = inst.generic_inst_id;
     storage.module_id = bc->module_id;
-    storage.storage_kind = XG_GENERIC_STORAGE_ARRAY;
+    storage.storage_kind = storage_kind;
     storage.origin_type_key = origin_type_key;
     storage.specialized_type_key = specialized_type_key;
     storage.elem_type_key = elem_type_key;
-    storage.flags = XG_GENERIC_STORAGE_TYPED_INLINE | XG_GENERIC_STORAGE_POD;
-    storage.storage_hash = body_generic_storage_hash(storage.storage_kind, origin_type_key,
-                                                     specialized_type_key, elem_type_key);
+    storage.key_type_key = key_type_key;
+    storage.value_type_key = value_type_key;
+    storage.container_plan_id = container_plan_id;
+    if ((storage_kind == XG_GENERIC_STORAGE_ARRAY &&
+         body_type_key_is_pod_array_lane(elem_type_key)) ||
+        (storage_kind == XG_GENERIC_STORAGE_MAP && body_type_key_is_pod_array_lane(key_type_key) &&
+         body_type_key_is_pod_array_lane(value_type_key)) ||
+        (storage_kind == XG_GENERIC_STORAGE_SET && body_type_key_is_pod_array_lane(key_type_key))) {
+        storage.flags = XG_GENERIC_STORAGE_TYPED_INLINE | XG_GENERIC_STORAGE_POD;
+    } else {
+        storage.flags = XG_GENERIC_STORAGE_BOXED;
+        for (uint16_t i = 0; i < type_arg_count; i++) {
+            if (body_type_ref_is_managed_storage_ref(type_args[i])) {
+                storage.flags |= XG_GENERIC_STORAGE_MANAGED_REF;
+                break;
+            }
+        }
+    }
+    storage.storage_hash = body_generic_storage_hash(&storage);
     (void) xg_global_evidence_add_generic_storage(bc->evidence, &storage);
+}
+
+static void body_link_generic_array_storage_plans(XgBodyCollect *bc, uint32_t generic_storage_start,
+                                                  uint32_t sequence_access_start) {
+    if (!bc || !bc->evidence)
+        return;
+    for (uint32_t i = generic_storage_start; i < bc->evidence->ngeneric_storages; i++) {
+        XgGenericStorageSummary *storage = &bc->evidence->generic_storages[i];
+        if (storage->storage_kind != XG_GENERIC_STORAGE_ARRAY ||
+            storage->container_plan_id != XG_NO_ID)
+            continue;
+        for (uint32_t j = sequence_access_start; j < bc->evidence->nsequence_accesses; j++) {
+            const XgSequenceAccessSummary *sequence = &bc->evidence->sequence_accesses[j];
+            if (sequence->owner_func_id != bc->owner_func_id ||
+                (sequence->sequence_kind != XG_SEQ_ARRAY &&
+                 sequence->sequence_kind != XG_SEQ_BYTES) ||
+                sequence->receiver_type_key != storage->specialized_type_key ||
+                sequence->elem_type_key != storage->elem_type_key)
+                continue;
+            storage->container_plan_id = sequence->access_id;
+            storage->storage_hash = body_generic_storage_hash(storage);
+            break;
+        }
+    }
 }
 
 static bool body_type_ref_map_parts(const XrTypeRef *type, uint8_t *out_container_kind,
@@ -8688,8 +8795,12 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 body_bind_sequence_json_shape_local(bc, node->as.var_decl.name,
                                                     sequence_json_shape_id, sequence_json_literal);
             }
-            body_add_generic_array_storage(bc, node->as.var_decl.type_annotation,
-                                           (uint32_t) node->line);
+            {
+                const XgLocalType *container_local = body_find_local(bc, node->as.var_decl.name);
+                body_add_generic_container_storage(
+                    bc, node->as.var_decl.type_annotation, (uint32_t) node->line,
+                    container_local ? container_local->map_shape_id : XG_NO_ID);
+            }
             break;
         }
         case AST_DESTRUCTURE_DECL:
@@ -9190,7 +9301,12 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
         if (body_type_ref_sequence_parts(param_type, &sequence_kind, &sequence_elem_type_key))
             body_bind_sequence_local(bc, param_name, sequence_kind, sequence_elem_type_key,
                                      body_type_ref_sequence_elem_type_ref(param_type));
-        body_add_generic_array_storage(bc, param_type, 0);
+        {
+            const XgLocalType *container_local = body_find_local(bc, param_name);
+            body_add_generic_container_storage(bc, param_type, 0,
+                                               container_local ? container_local->map_shape_id
+                                                               : XG_NO_ID);
+        }
     }
 }
 
@@ -9222,7 +9338,13 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
             body_bind_sequence_local(
                 bc, param ? param->name : NULL, sequence_kind, sequence_elem_type_key,
                 body_type_ref_sequence_elem_type_ref(param ? param->type : NULL));
-        body_add_generic_array_storage(bc, param ? param->type : NULL, 0);
+        {
+            const XgLocalType *container_local = body_find_local(bc, param ? param->name : NULL);
+            body_add_generic_container_storage(
+                bc, param ? param->type : NULL,
+                param && param->line > 0 ? (uint32_t) param->line : 0,
+                container_local ? container_local->map_shape_id : XG_NO_ID);
+        }
     }
 }
 
@@ -9230,6 +9352,8 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     XgBodyCollect bc;
     XgBodySummary row;
     XgPendingBody pending_copy;
+    uint32_t generic_storage_start;
+    uint32_t sequence_access_start;
     if (!producer || !pending || !pending->body)
         return true;
     pending_copy = *pending;
@@ -9244,6 +9368,8 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     bc.return_type = pending->method     ? pending->method->return_type
                      : pending->function ? pending->function->return_type
                                          : NULL;
+    generic_storage_start = producer->evidence->ngeneric_storages;
+    sequence_access_start = producer->evidence->nsequence_accesses;
     if (!body_seed_captured_locals(&bc, pending)) {
         xr_free(bc.locals);
         xr_free(bc.name_locals);
@@ -9254,6 +9380,7 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     if (pending->function && pending->function->is_generator)
         bc.capability_bits |= XG_CAP_GENERATOR | XG_CAP_COROUTINE;
     walk_body_for_calls(&bc, pending->body);
+    body_link_generic_array_storage_plans(&bc, generic_storage_start, sequence_access_start);
 
     memset(&row, 0, sizeof(row));
     row.func_id = pending->func_id;

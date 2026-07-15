@@ -7046,6 +7046,13 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
                                        .flags =
                                            XG_GENERIC_STORAGE_TYPED_INLINE | XG_GENERIC_STORAGE_POD,
                                        .storage_hash = 0x1837};
+    XgSequenceAccessSummary sequence = {.access_id = 7,
+                                        .owner_func_id = 2,
+                                        .source_span_id = 12,
+                                        .sequence_kind = XG_SEQ_ARRAY,
+                                        .access_kind = XG_SEQ_ACCESS_INDEX_GET,
+                                        .receiver_type_key = 301,
+                                        .elem_type_key = 200};
     XgGenericCodeSizeSummary code_size = {.code_size_id = 1,
                                           .generic_inst_id = 1,
                                           .module_id = 1,
@@ -7070,6 +7077,7 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
     ASSERT_NOT_NULL(xg_global_evidence_add_generic_inst(&ev, &inst));
     ASSERT_NOT_NULL(xg_global_evidence_add_generic_body_use(&ev, &body_use));
     ASSERT_NOT_NULL(xg_global_evidence_add_generic_storage(&ev, &storage));
+    ASSERT_NOT_NULL(xg_global_evidence_add_sequence_access(&ev, &sequence));
     ASSERT_NOT_NULL(xg_global_evidence_add_generic_code_size(&ev, &code_size));
 
     char *dump = xg_global_evidence_dump(&ev);
@@ -7129,6 +7137,24 @@ TEST(global_evidence_records_generic_body_storage_code_size_plans) {
     ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT generic storage plan action does not re-derive"));
     bundle.generic_storage_plans[0].action = XAOT_GENERIC_STORAGE_TYPED_INLINE;
+
+    ev.generic_storages[0].container_plan_id = 99;
+    bundle.generic_storage_plans[0].container_plan_id = 99;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_MSG(strstr(err, "references missing 180 sequence plan") != NULL, err);
+    ev.generic_storages[0].container_plan_id = 7;
+    bundle.generic_storage_plans[0].container_plan_id = 7;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+
+    ev.generic_storages[0].flags |= XG_GENERIC_STORAGE_BOXED;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_MSG(strstr(err, "storage action evidence is ambiguous") != NULL, err);
+    ev.generic_storages[0].flags &= ~XG_GENERIC_STORAGE_BOXED;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
 
     bundle.generic_code_size_plans[0].action = XAOT_GENERIC_CODESIZE_SHARE_CANONICAL_BODY;
     memset(err, 0, sizeof(err));
@@ -11550,6 +11576,11 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_EQ_UINT(ev.ncapacity_ops, 3);
     ASSERT_EQ_UINT(ev.nbulk_ops, 3);
     ASSERT_EQ_UINT(ev.nencoding_ops, 2);
+    ASSERT_EQ_UINT(ev.ngeneric_storages, 2);
+    ASSERT_EQ_UINT(ev.generic_storages[0].storage_kind, XG_GENERIC_STORAGE_ARRAY);
+    ASSERT_TRUE(ev.generic_storages[0].container_plan_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.generic_storages[1].storage_kind, XG_GENERIC_STORAGE_ARRAY);
+    ASSERT_TRUE(ev.generic_storages[1].container_plan_id != XG_NO_ID);
 
     bool saw_index = false;
     bool saw_slice = false;
@@ -16370,6 +16401,7 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     ASSERT_EQ_UINT(ev.nmap_entries, 0);
     ASSERT_EQ_UINT(ev.nhash_eqs, 2);
     ASSERT_EQ_UINT(ev.nkey_accesses, 0);
+    ASSERT_EQ_UINT(ev.ngeneric_storages, 2);
     ASSERT_EQ_UINT(ev.map_shapes[0].container_kind, XG_MAP_CONTAINER_MAP);
     ASSERT_EQ_UINT(ev.map_shapes[0].literal_count, 0);
     ASSERT_TRUE(ev.map_shapes[0].key_type_key != 0);
@@ -16380,6 +16412,14 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     ASSERT_EQ_UINT(ev.map_shapes[1].value_type_key, 0);
     ASSERT_EQ_UINT(ev.hash_eqs[0].kind, XG_HASH_EQ_BUILTIN);
     ASSERT_EQ_UINT(ev.hash_eqs[1].kind, XG_HASH_EQ_BUILTIN);
+    ASSERT_EQ_UINT(ev.generic_storages[0].storage_kind, XG_GENERIC_STORAGE_MAP);
+    ASSERT_EQ_UINT(ev.generic_storages[0].container_plan_id, ev.map_shapes[0].shape_id);
+    ASSERT_TRUE((ev.generic_storages[0].flags & XG_GENERIC_STORAGE_BOXED) != 0);
+    ASSERT_TRUE((ev.generic_storages[0].flags & XG_GENERIC_STORAGE_MANAGED_REF) != 0);
+    ASSERT_EQ_UINT(ev.generic_storages[1].storage_kind, XG_GENERIC_STORAGE_SET);
+    ASSERT_EQ_UINT(ev.generic_storages[1].container_plan_id, ev.map_shapes[1].shape_id);
+    ASSERT_TRUE((ev.generic_storages[1].flags & XG_GENERIC_STORAGE_TYPED_INLINE) != 0);
+    ASSERT_TRUE((ev.generic_storages[1].flags & XG_GENERIC_STORAGE_POD) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
@@ -16387,6 +16427,7 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     ASSERT_EQ_UINT(bundle.nmap_shape_plans, 2);
     ASSERT_EQ_UINT(bundle.nhash_eq_plans, 2);
     ASSERT_EQ_UINT(bundle.nkey_access_plans, 0);
+    ASSERT_EQ_UINT(bundle.ngeneric_storage_plans, 2);
     const XaotMapShapePlan *map_plan =
         xaot_bundle_find_map_shape_plan(&bundle, ev.map_shapes[0].shape_id);
     const XaotMapShapePlan *set_plan =
@@ -16395,6 +16436,8 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     ASSERT_NOT_NULL(set_plan);
     ASSERT_EQ_UINT(map_plan->action, XAOT_MAP_SHAPE_PREALLOC_HASH);
     ASSERT_EQ_UINT(set_plan->action, XAOT_MAP_SHAPE_PREALLOC_HASH);
+    ASSERT_EQ_UINT(bundle.generic_storage_plans[0].action, XAOT_GENERIC_STORAGE_BOXED);
+    ASSERT_EQ_UINT(bundle.generic_storage_plans[1].action, XAOT_GENERIC_STORAGE_TYPED_INLINE);
     ASSERT_NOT_NULL(xaot_bundle_find_hash_eq_plan(&bundle, ev.map_shapes[0].key_type_key));
     ASSERT_NOT_NULL(xaot_bundle_find_hash_eq_plan(&bundle, ev.map_shapes[1].key_type_key));
     xaot_bundle_free(&bundle);
