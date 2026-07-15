@@ -1665,6 +1665,8 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                     // Replace callee variable name.
                     // Note: old name is arena-allocated, do not free.
                     call->callee->as.variable.name = xr_strdup(mangled);
+                    if (decl->inject_clone)
+                        call->callee->as.variable.symbol_id = 0;
                     // Clear type args (no longer generic call)
                     call->type_args = NULL;
                     call->type_arg_count = 0;
