@@ -303,6 +303,63 @@ TEST(call_bound_place_rejects_return_escape) {
     xi_func_free(f);
 }
 
+static XiValue *make_ref_param(XiFunc *f) {
+    f->nparams = 1;
+    f->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+    if (!f->params)
+        return NULL;
+    XiValue *param = xi_param(f, f->entry, 0, &stub_int);
+    if (!param)
+        return NULL;
+    f->params[0] = param;
+    if (!xi_func_set_param_passing_mode(f, 0, XR_PARAM_REF))
+        return NULL;
+    return param;
+}
+
+TEST(call_bound_param_last_use_before_suspend_passes) {
+    XiFunc *f = make_func("call_place_nll_before_suspend");
+    ASSERT(f != NULL);
+    XiValue *param = make_ref_param(f);
+    ASSERT(param != NULL);
+    XiValue *load = xi_value_new(f, f->entry, XI_PLACE_LOAD, &stub_int, 1);
+    XiValue *yield = xi_value_new(f, f->entry, XI_YIELD, &stub_unit, 0);
+    XiValue *result = xi_const_int(f, f->entry, 0, &stub_int);
+    ASSERT(load != NULL && yield != NULL && result != NULL);
+    load->args[0] = param;
+    xi_block_set_return(f->entry, result);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(call_bound_param_use_after_suspend_fails) {
+    XiFunc *f = make_func("call_place_live_across_suspend");
+    ASSERT(f != NULL);
+    XiValue *param = make_ref_param(f);
+    ASSERT(param != NULL);
+    XiValue *yield = xi_value_new(f, f->entry, XI_YIELD, &stub_unit, 0);
+    XiValue *load = xi_value_new(f, f->entry, XI_PLACE_LOAD, &stub_int, 1);
+    ASSERT(yield != NULL && load != NULL);
+    load->args[0] = param;
+    xi_block_set_return(f->entry, load);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_rejects_suspendable_call_boundary) {
+    XiFunc *f = make_func("call_place_suspendable_call");
+    ASSERT(f != NULL);
+    XiValue *call = make_ref_call(f, f->entry, NULL);
+    ASSERT(call != NULL);
+    call->flags |= XI_FLAG_MAY_SUSPEND;
+    xi_block_set_return(f->entry, call);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
 /* ========== TBAA metadata consistency ========== */
 
 TEST(tbaa_memory_op_requires_mem_group) {
@@ -1421,6 +1478,9 @@ int main(void) {
     run_call_plan_rejects_place_mismatch();
     run_call_plan_rejects_declared_escape();
     run_call_bound_place_rejects_return_escape();
+    run_call_bound_param_last_use_before_suspend_passes();
+    run_call_bound_param_use_after_suspend_fails();
+    run_call_plan_rejects_suspendable_call_boundary();
     run_tbaa_memory_op_requires_mem_group();
     run_tbaa_memory_op_with_group_passes();
     run_tbaa_store_requires_mem_group();
