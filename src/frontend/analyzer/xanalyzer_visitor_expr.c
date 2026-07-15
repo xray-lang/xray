@@ -4604,6 +4604,55 @@ XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
     return xr_type_new_task(ctx->analyzer->isolate, result_type);
 }
 
+static const char *xa_await_many_label(const AwaitExprNode *await) {
+    if (!await)
+        return "await";
+    if (await->is_all)
+        return "await all";
+    if (await->is_any_success)
+        return "await anySuccess";
+    if (await->is_any)
+        return "await any";
+    return "await";
+}
+
+static XrType *xa_report_await_task_array_expected(XaInferContext *ctx, AstNode *node,
+                                                   const AwaitExprNode *await, XrType *actual) {
+    if (!ctx || !ctx->analyzer || !node)
+        return xr_type_new_error(NULL);
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg), "%s expects an Array<Task<T>> operand, got '%s'",
+             xa_await_many_label(await), actual ? xr_type_to_string(actual) : "<error>");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_AWAIT_TYPE, msg,
+                               &loc);
+    return xr_type_new_error(ctx->analyzer->isolate);
+}
+
+static XrType *xa_await_array_result_element(XaInferContext *ctx, AstNode *node,
+                                             const AwaitExprNode *await, XrType *array_type) {
+    if (!ctx || !ctx->analyzer)
+        return xr_type_new_error(NULL);
+    if (!array_type || XR_TYPE_IS_ERROR(array_type))
+        return xr_type_new_error(ctx->analyzer->isolate);
+    if (XR_TYPE_IS_UNKNOWN(array_type))
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    if (!XR_TYPE_IS_ARRAY(array_type))
+        return xa_report_await_task_array_expected(ctx, node, await, array_type);
+
+    XrType *elem = array_type->container.element_type;
+    if (!elem || XR_TYPE_IS_UNKNOWN(elem))
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    if (XR_TYPE_IS_ERROR(elem))
+        return xr_type_new_error(ctx->analyzer->isolate);
+    if (!xr_type_is_named_class(elem, "Task") || elem->instance.type_arg_count <= 0) {
+        return xa_report_await_task_array_expected(ctx, node, await, array_type);
+    }
+
+    XrType *result_elem = elem->instance.type_args[0];
+    return result_elem ? result_elem : xr_type_new_unknown(ctx->analyzer->isolate);
+}
+
 XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
@@ -4616,13 +4665,10 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
 
         // await all/any/anySuccess operates on Array<Task<T>> → Array<T> / T
         if (await->is_all || await->is_any || await->is_any_success) {
-            // These forms take an array of tasks; extract element type
+            XrType *result_elem = xa_await_array_result_element(ctx, node, await, expr_type);
+            if (result_elem && XR_TYPE_IS_ERROR(result_elem))
+                return result_elem;
             if (expr_type && XR_TYPE_IS_ARRAY(expr_type)) {
-                XrType *elem = expr_type->container.element_type;
-                XrType *result_elem = xr_type_new_unknown(NULL);
-                if (xr_type_is_named_class(elem, "Task") && elem->instance.type_arg_count > 0) {
-                    result_elem = elem->instance.type_args[0];
-                }
                 if (await->is_all) {
                     if (await->into) {
                         XrType *into_type = xa_visit_infer_expr(ctx, await->into);
@@ -4666,7 +4712,7 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
                 // await any / anySuccess returns single element
                 return result_elem;
             }
-            return xr_type_new_unknown(NULL);
+            return result_elem;
         }
 
         // Single await: extract result type from Task<T>
@@ -4681,11 +4727,9 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
 
         // await [arr] is syntactic sugar for await all — treat array as Task array
         if (XR_TYPE_IS_ARRAY(expr_type)) {
-            XrType *elem = expr_type->container.element_type;
-            XrType *result_elem = xr_type_new_unknown(NULL);
-            if (elem && xr_type_is_named_class(elem, "Task") && elem->instance.type_arg_count > 0) {
-                result_elem = elem->instance.type_args[0];
-            }
+            XrType *result_elem = xa_await_array_result_element(ctx, node, await, expr_type);
+            if (result_elem && XR_TYPE_IS_ERROR(result_elem))
+                return result_elem;
             return xr_type_new_array(ctx->analyzer->isolate, result_elem);
         }
 

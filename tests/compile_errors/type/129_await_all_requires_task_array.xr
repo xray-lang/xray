@@ -1,0 +1,2 @@
+var values = await all [1, 2]
+print(values)

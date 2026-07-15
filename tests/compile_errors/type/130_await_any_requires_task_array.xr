@@ -1,0 +1,2 @@
+var value = await any [1, 2]
+print(value)
