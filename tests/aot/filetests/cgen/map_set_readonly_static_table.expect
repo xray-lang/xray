@@ -6,6 +6,7 @@ regex=key-access-plan [0-9]+ .* container=set op=has .* action=prehashed_lookup 
 c_contains=xrt_map_static_storage_init
 c_contains=xrt_set_static_storage_init
 c_contains=xrt_map_set_prehashed
+c_contains=xrt_map_index_get_prehashed_owned
 c_contains=xrt_set_add_prehashed
 c_not_contains=xrt_map_new(2)
 c_not_contains=xrt_set_new(2)

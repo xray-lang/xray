@@ -1,0 +1,22 @@
+// anchor: map-index-missing-key-panic
+// `m[k]` is strict: a missing key raises E0431. `Map.get(k)` remains the
+// nullable/default-preserving API for absent keys and stored null payloads.
+
+var scores = #{"ada": 7, "lin": 9}
+print(scores["ada"])
+
+try {
+    print(scores["missing"])
+    print("bad-index")
+} catch panic (p) {
+    print(p.message)
+    print(p.code)
+}
+
+print(scores.get("missing") == null)
+
+var payloads: Map<string, int?> = #{"present-null": null, "present-value": 5}
+if (payloads.containsKey("present-null")) {
+    print(payloads["present-null"] == null)
+}
+print(payloads.get("absent") == null)
