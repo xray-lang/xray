@@ -310,6 +310,7 @@ BASELINES = (
             'module = "io"',
             'id = "text-binary-file-split"',
             'id = "byte-file-roundtrip"',
+            'id = "all-byte-file-roundtrip"',
             'id = "path-owner-boundary"',
             'id = "string-binary-file-overlap"',
             'diff_cases_manifest = "tests/stdlib/contracts/io/diff_cases.txt"',
@@ -320,6 +321,7 @@ BASELINES = (
         path="tests/stdlib/contracts/io/diff_cases.txt",
         contains=(
             "tests/diff/cases/semantics/stdlib/io_system_direct.xr",
+            "tests/diff/cases/semantics/stdlib/io_binary_file_boundary_direct.xr",
         ),
     ),
     Baseline(

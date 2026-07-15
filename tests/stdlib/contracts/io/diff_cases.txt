@@ -1,1 +1,2 @@
 tests/diff/cases/semantics/stdlib/io_system_direct.xr
+tests/diff/cases/semantics/stdlib/io_binary_file_boundary_direct.xr
