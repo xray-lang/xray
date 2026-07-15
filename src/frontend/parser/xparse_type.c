@@ -549,8 +549,13 @@ XR_FUNC void xr_parse_reject_ref_out_default_param(Parser *parser, const XrParam
     xr_parser_error_at_previous(parser, message);
 }
 
-XR_FUNC XrParamNode *xr_parse_parameter(Parser *parser, uint32_t flags) {
-    XR_DCHECK(parser != NULL, "xr_parse_parameter: NULL parser");
+static bool xr_parse_parameter_starts_destructure(Parser *parser) {
+    return xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE) ||
+           xr_parser_check(parser, TK_LPAREN);
+}
+
+XR_FUNC XrParamNode *xr_parse_parameter_at(Parser *parser, uint32_t flags, int param_index) {
+    XR_DCHECK(parser != NULL, "xr_parse_parameter_at: NULL parser");
     bool is_rest = false;
     if (flags & XR_PARSE_PARAMETER_ALLOW_REST)
         is_rest = xr_parser_match(parser, TK_DOT_DOT_DOT);
@@ -577,6 +582,27 @@ XR_FUNC XrParamNode *xr_parse_parameter(Parser *parser, uint32_t flags) {
             "Write parameter modes after the colon, for example `name: ref T`.");
     }
 
+    if (!is_rest && (flags & XR_PARSE_PARAMETER_ALLOW_DESTRUCTURE) &&
+        xr_parse_parameter_starts_destructure(parser)) {
+        int pattern_line = parser->current.line;
+        int pattern_column = parser->current.column;
+        XrDestructurePattern *pattern = xr_parse_destructure_pattern(parser);
+        if (!pattern) {
+            xr_parser_error(parser, "failed to parse destructure parameter");
+            return NULL;
+        }
+
+        char temp_name[32];
+        snprintf(temp_name, sizeof(temp_name), "__param%d", param_index >= 0 ? param_index : 0);
+
+        XrParamNode *param =
+            xr_param_node_new(parser->compiler_session, temp_name, pattern_line, pattern_column);
+        param->pattern = pattern;
+
+        xr_parse_optional_param_type_annotation(parser, false, &param->passing_mode, &param->type);
+        return param;
+    }
+
     xr_parser_consume(parser, TK_NAME,
                       is_rest ? "expected parameter name after ..." : "expected parameter name");
     Token name_token = parser->previous;
@@ -594,6 +620,10 @@ XR_FUNC XrParamNode *xr_parse_parameter(Parser *parser, uint32_t flags) {
     if ((flags & XR_PARSE_PARAMETER_REQUIRE_TYPE) && !has_type)
         xr_parser_error(parser, "expected ':' and type annotation after parameter name");
     return param;
+}
+
+XR_FUNC XrParamNode *xr_parse_parameter(Parser *parser, uint32_t flags) {
+    return xr_parse_parameter_at(parser, flags, -1);
 }
 
 /* ---- Base type (no trailing ? or |) ---- */
