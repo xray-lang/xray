@@ -1,0 +1,7 @@
+args=--dump-xaot-plan
+regex=derived-clone-plan [0-9]+ .* action=fieldwise_copy .* reason=none
+regex=derived-clone-plan [0-9]+ .* action=deep_copy_plan .* reason=none
+c_regex=Child_derived_clone\(.*Child \*src\)
+c_regex=Snapshot_derived_clone_boxed\(XrValue src\)
+c_contains=xrt_value_clone_for_coro(field)
+c_regex=Snapshot_derived_clone_boxed\(v[0-9]+\)

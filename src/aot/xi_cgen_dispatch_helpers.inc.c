@@ -4038,6 +4038,38 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
             emit_conversion_suffix(out, conv_suffix);
             return;
         }
+        const XiClassData *clone_class =
+            cg_class_data_for_type_name(ctx, v->args[0] ? v->args[0]->type : NULL);
+        if (clone_class && (clone_class->derive_flags & XR_DERIVE_CLONE) != 0) {
+            const XaotDerivedClonePlan *clone_plan =
+                cg_class_native_derived_clone_plan(ctx, clone_class, true);
+            const char *clone_prefix = cg_class_native_prefix_for_data(ctx, clone_class, prefix);
+            XrRep result_rep = cg_value_plan_storage_rep(ctx, v);
+            if (!clone_plan || !clone_prefix ||
+                (clone_class->instance_layout && result_rep != XR_REP_PTR &&
+                 result_rep != XR_REP_TAGGED) ||
+                (!clone_class->instance_layout && result_rep != XR_REP_TAGGED)) {
+                cg_ctx_set_error(ctx);
+                emit_codegen_abort_expr(out);
+                return;
+            }
+            if (!clone_class->instance_layout) {
+                emit_class_boxed_clone_name(out, clone_prefix, clone_class);
+                fprintf(out, "(");
+                emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+                fprintf(out, ")");
+                return;
+            }
+            if (result_rep == XR_REP_TAGGED)
+                fprintf(out, "xrt_box_obj(");
+            emit_class_native_clone_name(out, clone_prefix, clone_class);
+            fprintf(out, "(");
+            emit_class_native_instance_base_ref(ctx, out, f, v->args[0]);
+            fprintf(out, ")");
+            if (result_rep == XR_REP_TAGGED)
+                fprintf(out, ")");
+            return;
+        }
         bool is_json = v->args[0] && XR_TYPE_HAS_OBJECT_SHAPE(v->args[0]->type);
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));

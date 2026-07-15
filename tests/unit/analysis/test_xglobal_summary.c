@@ -9742,6 +9742,21 @@ TEST(global_evidence_producer_classifies_derived_clone_fields) {
                          "}\n"
                          "@derive(Clone)\n"
                          "class Empty {\n"
+                         "}\n"
+                         "class Base {\n"
+                         "    base: int\n"
+                         "}\n"
+                         "@derive(Clone)\n"
+                         "class ChildWithoutCloneBase extends Base {\n"
+                         "    child: int\n"
+                         "}\n"
+                         "@derive(Clone)\n"
+                         "class CloneBase {\n"
+                         "    base: int\n"
+                         "}\n"
+                         "@derive(Clone)\n"
+                         "class CloneChild extends CloneBase {\n"
+                         "    child: int\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -9761,19 +9776,21 @@ TEST(global_evidence_producer_classifies_derived_clone_fields) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.nderives, 5);
-    ASSERT_EQ_UINT(ev.nderived_fields, 4);
+    ASSERT_EQ_UINT(ev.nderives, 8);
+    ASSERT_EQ_UINT(ev.nderived_fields, 7);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.nderived_clone_plans, 5);
+    ASSERT_EQ_UINT(bundle.nderived_clone_plans, 8);
 
     const XaotDerivedClonePlan *scalar_plan = NULL;
     const XaotDerivedClonePlan *deep_plan = NULL;
     const XaotDerivedClonePlan *unsafe_plan = NULL;
     const XaotDerivedClonePlan *nested_plan = NULL;
     const XaotDerivedClonePlan *empty_plan = NULL;
+    const XaotDerivedClonePlan *unproven_parent_plan = NULL;
+    const XaotDerivedClonePlan *clone_child_plan = NULL;
     for (uint32_t i = 0; i < ev.nderives; i++) {
         const XgDeriveSummary *derive = &ev.derives[i];
         const XgClassSummary *owner = NULL;
@@ -9799,6 +9816,10 @@ TEST(global_evidence_producer_classifies_derived_clone_fields) {
             nested_plan = plan;
         } else if (owner->name_id == xg_name_id("Empty")) {
             empty_plan = plan;
+        } else if (owner->name_id == xg_name_id("ChildWithoutCloneBase")) {
+            unproven_parent_plan = plan;
+        } else if (owner->name_id == xg_name_id("CloneChild")) {
+            clone_child_plan = plan;
         }
     }
     ASSERT_NOT_NULL(scalar_plan);
@@ -9806,12 +9827,17 @@ TEST(global_evidence_producer_classifies_derived_clone_fields) {
     ASSERT_NOT_NULL(unsafe_plan);
     ASSERT_NOT_NULL(nested_plan);
     ASSERT_NOT_NULL(empty_plan);
+    ASSERT_NOT_NULL(unproven_parent_plan);
+    ASSERT_NOT_NULL(clone_child_plan);
     ASSERT_EQ_UINT(scalar_plan->action, XAOT_DERIVED_CLONE_FIELDWISE_COPY);
     ASSERT_EQ_UINT(deep_plan->action, XAOT_DERIVED_CLONE_DEEP_COPY_PLAN);
     ASSERT_EQ_UINT(unsafe_plan->action, XAOT_DERIVED_CLONE_REJECT);
     ASSERT_EQ_UINT(unsafe_plan->unproven_reason, XAOT_CLONE_UNPROVEN_UNSAFE_FIELD);
     ASSERT_EQ_UINT(nested_plan->action, XAOT_DERIVED_CLONE_DEEP_COPY_PLAN);
     ASSERT_EQ_UINT(empty_plan->action, XAOT_DERIVED_CLONE_BITWISE_COPY);
+    ASSERT_EQ_UINT(unproven_parent_plan->action, XAOT_DERIVED_CLONE_REJECT);
+    ASSERT_EQ_UINT(unproven_parent_plan->unproven_reason, XAOT_CLONE_UNPROVEN_UNSAFE_FIELD);
+    ASSERT_EQ_UINT(clone_child_plan->action, XAOT_DERIVED_CLONE_DEEP_COPY_PLAN);
 
     char err[256];
     XiFunc init_func;

@@ -530,6 +530,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     }
 
     emit_class_native_typedefs(ctx, body, module, prefix);
+    emit_class_native_clone_helpers(ctx, body, module, prefix);
     emit_class_shared_native_storage_decls(ctx, body, prefix);
     emit_struct_native_typedefs(body, main_func, prefix);
     emit_enum_native_typedefs(ctx, body, module);
@@ -742,6 +743,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
      * this module's own classes. */
     emit_imported_class_native_typedefs(ctx, out);
     emit_class_native_typedefs(ctx, out, module, prefix);
+    emit_class_native_clone_helpers(ctx, out, module, prefix);
     emit_class_shared_native_storage_decls(ctx, out, prefix);
     emit_imported_class_shared_native_storage_decls(ctx, out);
     emit_struct_native_typedefs(out, module->init, prefix);

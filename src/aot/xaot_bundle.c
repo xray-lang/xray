@@ -2059,6 +2059,17 @@ static const XgClassSummary *derived_clone_class_by_id(const XgGlobalEvidence *e
     return NULL;
 }
 
+static const XgClassSummary *derived_clone_class_by_decl(const XgGlobalEvidence *evidence,
+                                                         XgDeclId decl_id) {
+    if (!evidence || decl_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nclasses; i++) {
+        if (evidence->classes[i].decl_id == decl_id)
+            return &evidence->classes[i];
+    }
+    return NULL;
+}
+
 static bool derived_clone_class_has_clone(const XgGlobalEvidence *evidence, XgClassId class_id) {
     const XgClassSummary *cls = derived_clone_class_by_id(evidence, class_id);
     if (!cls)
@@ -2074,8 +2085,16 @@ static bool derived_clone_class_has_clone(const XgGlobalEvidence *evidence, XgCl
 static uint8_t derived_clone_source_action(const XgGlobalEvidence *evidence,
                                            const XgDeriveSummary *clone) {
     bool needs_deep_copy = false;
+    const XgClassSummary *owner = derived_clone_class_by_decl(evidence, clone->owner_decl_id);
     if (!derived_clone_field_range_valid(evidence, clone))
         return XAOT_DERIVED_CLONE_REJECT;
+    if (!owner)
+        return XAOT_DERIVED_CLONE_REJECT;
+    if (owner->parent_class_id != XG_NO_ID) {
+        if (!derived_clone_class_has_clone(evidence, owner->parent_class_id))
+            return XAOT_DERIVED_CLONE_REJECT;
+        needs_deep_copy = true;
+    }
     for (uint32_t i = 0; i < clone->field_count; i++) {
         const XgDerivedFieldSummary *derived =
             &evidence->derived_fields[clone->field_start - 1 + i];
@@ -2106,12 +2125,6 @@ static uint8_t derived_clone_source_action(const XgGlobalEvidence *evidence,
             case XG_CLASS_FIELD_TYPE_ARRAY:
             case XG_CLASS_FIELD_TYPE_MAP:
             case XG_CLASS_FIELD_TYPE_SET:
-            case XG_CLASS_FIELD_TYPE_STRUCT:
-            case XG_CLASS_FIELD_TYPE_FIXED_UNION:
-            case XG_CLASS_FIELD_TYPE_FIXED_ARRAY:
-            case XG_CLASS_FIELD_TYPE_OPTIONAL:
-            case XG_CLASS_FIELD_TYPE_UNION:
-            case XG_CLASS_FIELD_TYPE_TUPLE:
                 needs_deep_copy = true;
                 break;
             case XG_CLASS_FIELD_TYPE_CLASS:
@@ -2120,7 +2133,13 @@ static uint8_t derived_clone_source_action(const XgGlobalEvidence *evidence,
                 needs_deep_copy = true;
                 break;
             case XG_CLASS_FIELD_TYPE_INTERFACE:
+            case XG_CLASS_FIELD_TYPE_STRUCT:
+            case XG_CLASS_FIELD_TYPE_FIXED_UNION:
+            case XG_CLASS_FIELD_TYPE_FIXED_ARRAY:
+            case XG_CLASS_FIELD_TYPE_OPTIONAL:
+            case XG_CLASS_FIELD_TYPE_UNION:
             case XG_CLASS_FIELD_TYPE_FUNCTION:
+            case XG_CLASS_FIELD_TYPE_TUPLE:
             case XG_CLASS_FIELD_TYPE_OBJECT:
             case XG_CLASS_FIELD_TYPE_TYPE_PARAM:
             case XG_CLASS_FIELD_TYPE_DYNAMIC:
