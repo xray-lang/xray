@@ -134,7 +134,7 @@ class Process {
         return __processKill(this._id, sig)
     }
 
-    static spawn(program: string, args: Array<string> = [], options: ProcessOptions? = null) -> Process? {
+    static spawn(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null) -> Process? {
         var cwd: string? = null
         var envKeys: Array<string>? = null
         var envValues: Array<string>? = null

@@ -55,7 +55,8 @@ if (detached != null) {
     print(detached!.kill())
 }
 
-var missing = sys.Process.spawn("", [])
+var missingArgs: Array<string> = []
+var missing = sys.Process.spawn("", missingArgs)
 if (missing != null) {
     print(false)
     print(missing!.wait())
