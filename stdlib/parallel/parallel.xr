@@ -83,6 +83,7 @@ class Plan<S> {
     private _states: Array<S>
     private _closed: bool
     private _active: bool
+    private _releasePending: bool
 
     constructor(options: Options, init: (int) -> S) {
         var laneCount = _referenceLaneCount(options)
@@ -94,6 +95,7 @@ class Plan<S> {
         this._states = states
         this._closed = false
         this._active = false
+        this._releasePending = false
     }
 
     private _begin() {
@@ -108,6 +110,10 @@ class Plan<S> {
 
     private _end() {
         this._active = false
+        if (this._releasePending) {
+            this._states.clear()
+            this._releasePending = false
+        }
     }
 
     private _stateFor(offset: int) -> S {
@@ -157,7 +163,11 @@ class Plan<S> {
     close() {
         if (!this._closed) {
             this._closed = true
-            this._states.clear()
+            if (this._active) {
+                this._releasePending = true
+            } else {
+                this._states.clear()
+            }
         }
     }
 }

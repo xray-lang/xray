@@ -4615,13 +4615,113 @@ static bool xicgen_class_data_is_parallel_plan(XiCgenCtx *ctx, const XiClassData
     return slot_module && xicgen_path_is_parallel_stdlib_module(slot_module->path);
 }
 
+static const XiClassData *xicgen_parallel_plan_ctor_result_class(XiCgenCtx *ctx, const XiFunc *f,
+                                                                 const XiValue *value,
+                                                                 uint8_t depth) {
+    if (!ctx || !value || depth > 8)
+        return NULL;
+    const XiValue *v = cg_unwrap_identity_value(value);
+    while (v && ((xi_copy_is_identity_alias(v) || v->op == XI_MOVE || v->op == XI_BOX ||
+                  v->op == XI_UNBOX || cg_class_native_shared_copy_wrapper(v)) &&
+                 v->nargs >= 1)) {
+        if (++depth > 8)
+            return NULL;
+        v = cg_unwrap_identity_value(v->args[0]);
+    }
+    if (!v || v->nargs < 1)
+        return NULL;
+    CgStaticFunctionCall call;
+    memset(&call, 0, sizeof(call));
+    const XiClassData *class_data = NULL;
+    if (v->op == XI_CALL) {
+        const XiValue *callee = cg_unwrap_identity_value(v->args[0]);
+        call = cg_resolve_static_function_call(ctx, f, callee);
+        if (call.is_class_constructor)
+            class_data = call.class_data;
+        if (!class_data)
+            class_data = xicgen_shared_class_data(ctx, callee);
+        if (!class_data && callee && callee->op == XI_CLASS_CREATE && callee->aux)
+            class_data = (const XiClassData *) callee->aux;
+        if (!class_data)
+            class_data = cg_class_native_class_value_data(ctx, f, callee);
+        if (!class_data)
+            class_data = cg_class_data_for_type_name(ctx, v->type);
+    } else if (v->op == XI_CALL_METHOD && v->aux) {
+        call = cg_resolve_module_member_call(ctx, f, v, (const char *) v->aux);
+        if (call.is_class_constructor)
+            class_data = call.class_data;
+        if (!class_data && strcmp((const char *) v->aux, "constructor") == 0)
+            class_data = cg_class_native_class_value_data(ctx, f, v->args[0]);
+        if (!class_data && strcmp((const char *) v->aux, "constructor") == 0)
+            class_data = cg_class_data_for_type_name(ctx, v->type);
+    }
+    return xicgen_class_data_is_parallel_plan(ctx, class_data) ? class_data : NULL;
+}
+
+typedef struct {
+    uint16_t set_count;
+    bool invalid;
+    const XiClassData *class_data;
+} XicgenParallelPlanSlotInit;
+
+static void xicgen_scan_parallel_plan_slot_init(XiCgenCtx *ctx, const XiFunc *f, int slot,
+                                                XicgenParallelPlanSlotInit *out) {
+    if (!ctx || !f || !out || out->invalid)
+        return;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_SET_SHARED || (int) v->aux_int != slot || v->nargs < 1)
+                continue;
+            out->set_count++;
+            if (out->set_count > 1) {
+                out->invalid = true;
+                return;
+            }
+            const XiClassData *class_data =
+                xicgen_parallel_plan_ctor_result_class(ctx, f, v->args[0], 0);
+            if (!class_data) {
+                out->invalid = true;
+                return;
+            }
+            out->class_data = class_data;
+        }
+    }
+    for (uint16_t ci = 0; ci < f->nchildren; ci++)
+        xicgen_scan_parallel_plan_slot_init(ctx, f->children[ci], slot, out);
+}
+
+static const XiClassData *xicgen_parallel_plan_shared_slot_init_class(XiCgenCtx *ctx,
+                                                                      const XiFunc *f, int slot) {
+    const XiModule *module = f && f->module ? f->module : (ctx ? ctx->module : NULL);
+    int nshared = module && module->init ? (int) module->init->nshared : 0;
+    if (!ctx || !module || !module->init || slot < 0 || slot >= nshared)
+        return NULL;
+    XicgenParallelPlanSlotInit init;
+    memset(&init, 0, sizeof(init));
+    xicgen_scan_parallel_plan_slot_init(ctx, module->init, slot, &init);
+    return !init.invalid && init.set_count == 1 ? init.class_data : NULL;
+}
+
 static const XiClassData *xicgen_parallel_plan_class_for_call(XiCgenCtx *ctx, const XiFunc *f,
                                                               const XiValue *v) {
     if (!ctx || !v || v->nargs != 1 || !v->args || !v->args[0])
         return NULL;
-    const XiClassData *class_data = cg_class_native_instance_data(ctx, f, v->args[0]);
+    const XiValue *receiver = cg_unwrap_identity_value(v->args[0]);
+    const XiClassData *class_data =
+        cg_class_native_instance_data(ctx, f, receiver ? receiver : v->args[0]);
+    if (!xicgen_class_data_is_parallel_plan(ctx, class_data))
+        class_data = xicgen_shared_class_data(ctx, receiver ? receiver : v->args[0]);
+    if (!xicgen_class_data_is_parallel_plan(ctx, class_data) && receiver &&
+        receiver->op == XI_GET_SHARED) {
+        class_data = xicgen_parallel_plan_shared_slot_init_class(ctx, f, (int) receiver->aux_int);
+    }
     if (!xicgen_class_data_is_parallel_plan(ctx, class_data)) {
-        const char *recv_class = cg_class_native_receiver_class_name(ctx, f, v->args[0]);
+        const char *recv_class =
+            cg_class_native_receiver_class_name(ctx, f, receiver ? receiver : v->args[0]);
         class_data = recv_class ? cg_class_native_data_by_name(ctx, recv_class) : NULL;
     }
     return xicgen_class_data_is_parallel_plan(ctx, class_data) ? class_data : NULL;
@@ -4699,7 +4799,9 @@ static const XiFunc *xicgen_parallel_plan_lifecycle_target(XiCgenCtx *ctx,
 static bool xicgen_emit_parallel_plan_lifecycle_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                        const XiValue *v, const char *prefix,
                                                        const char *method, uint16_t nargs) {
-    if (!method || nargs != 0 || (strcmp(method, "_begin") != 0 && strcmp(method, "_end") != 0))
+    if (!method || nargs != 0 ||
+        (strcmp(method, "_begin") != 0 && strcmp(method, "_end") != 0 &&
+         strcmp(method, "close") != 0))
         return false;
     const XiClassData *class_data = xicgen_parallel_plan_class_for_call(ctx, f, v);
     if (!class_data && (v->lowering_flags & XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE) &&
@@ -5715,6 +5817,10 @@ static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current
     if (cg_span_common_prefix_trusted_nothrow(ctx, v))
         return true;
     if (xicgen_byte_slice_common_prefix_method_drops_helper(ctx, v))
+        return true;
+    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->aux &&
+        strcmp((const char *) v->aux, "close") == 0 &&
+        xicgen_parallel_plan_class_for_call(ctx, current, v))
         return true;
     return xicgen_call_is_nothrow_direct_depth(ctx, current, v, depth);
 }

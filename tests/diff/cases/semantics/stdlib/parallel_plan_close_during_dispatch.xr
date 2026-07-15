@@ -1,0 +1,31 @@
+import { Options, ParallelError, Plan } from parallel
+
+var plan = Plan<int>(Options(2), (lane) -> lane + 10)
+
+fn closePlan() {
+    plan.close()
+}
+
+var sum = plan.reduce(0..8, 0, (state, i) -> {
+    if (i == 3) {
+        closePlan()
+    }
+    return state + i
+}, (a, b) -> a + b)
+
+print(sum >= 108)
+
+try {
+    plan.forEach(0..1, (state, i) -> {
+        print(state + i)
+    })
+    print("miss")
+} catch (e) {
+    match (e) {
+        ParallelError.ClosedPlan -> print("closed")
+        _ -> print("other")
+    }
+}
+
+plan.close()
+print("done")
