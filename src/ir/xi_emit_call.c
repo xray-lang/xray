@@ -575,6 +575,41 @@ XR_FUNC void xi_emit_ptr_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_PTR_LOAD, dst, addr, (XiEmitReg) (v->aux_int & 0xff)));
 }
 
+XR_FUNC void xi_emit_local_addr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs != 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg source = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_LOCAL_ADDR, dst, source, 0));
+}
+
+XR_FUNC void xi_emit_place_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs != 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg place = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_PLACE_LOAD, dst, place, 0));
+}
+
+XR_FUNC void xi_emit_place_store(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (v->nargs != 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg place = reg_of(ctx, v->args[0]);
+    XiEmitReg value = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_PLACE_STORE, place, value, 0));
+}
+
 /* FFI raw-pointer store: *(T*)R[addr] = R[val], width code in C operand. */
 XR_FUNC void xi_emit_ptr_store(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;

@@ -252,6 +252,10 @@ XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
 XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx) {
     if (!user)
         return true;
+    if ((user->op == XI_CALL || user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
+        user->call_plan && arg_idx > 0 && arg_idx <= user->call_plan->nargs &&
+        user->call_plan->args[arg_idx - 1].param_mode != XR_PARAM_VALUE)
+        return false;
     if (low_level_byte_method_arg_is_borrowed(user, arg_idx))
         return false;
     if (builtin_call_arg_is_borrowed(user, arg_idx))

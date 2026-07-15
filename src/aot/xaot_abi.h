@@ -41,10 +41,15 @@ typedef enum XaotArgClass {
 typedef struct XaotAbiSlot {
     XaotArgClass cls;
     XaotValueRep rep;
+    XaotValueRep pointee_rep;
     const char *c_type;
     const char *c_name;
     uint32_t flags;
 } XaotAbiSlot;
+
+enum {
+    XAOT_ABI_SLOT_BORROWED_PLACE = 1u << 0,
+};
 
 typedef struct XaotFuncAbi {
     XaotAbiKind kind;

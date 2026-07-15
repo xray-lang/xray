@@ -2196,6 +2196,14 @@ static bool sr_param_uses_default_sentinel(const XiValue *v) {
     return param_index >= f->min_params && param_index < f->nparams;
 }
 
+static bool sr_param_is_call_bound_place(const XiValue *v) {
+    if (!v || v->op != XI_PARAM || !v->block || !v->block->func || v->aux_int < 0 ||
+        v->aux_int > UINT16_MAX)
+        return false;
+    XrParamMode mode = xi_func_param_passing_mode(v->block->func, (uint16_t) v->aux_int);
+    return mode == XR_PARAM_IN || mode == XR_PARAM_REF || mode == XR_PARAM_OUT;
+}
+
 static bool sr_value_is_null_const(const XiValue *v) {
     return v && v->op == XI_CONST && v->type && v->type->kind == XR_KIND_NULL;
 }
@@ -2246,6 +2254,12 @@ static bool sr_def_rep_memory_op(const XiValue *v, XrRep *out) {
             return true;
         case XI_ARRAY_DATA_PTR:
             *out = XR_REP_RAWPTR;
+            return true;
+        case XI_LOCAL_ADDR:
+            *out = XR_REP_RAWPTR;
+            return true;
+        case XI_PLACE_LOAD:
+            *out = sr_type_native_boundary_rep(v->type);
             return true;
         case XI_PTR_LOAD:
             *out = sr_type_native_boundary_rep(v->type);
@@ -2361,6 +2375,8 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         return memory_rep;
     switch (v->op) {
         case XI_PARAM: {
+            if (sr_param_is_call_bound_place(v))
+                return XR_REP_RAWPTR;
             if (sr_param_uses_default_sentinel(v))
                 return XR_REP_TAGGED;
             /* Typed boundary params get concrete rep.  The AOT backend can
@@ -2725,10 +2741,30 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             }
             return XR_REP_TAGGED;
         case XI_CALL:
+            if (arg_idx > 0 && arg_idx < user->nargs && user->args[arg_idx] &&
+                (user->args[arg_idx]->op == XI_LOCAL_ADDR ||
+                 sr_param_is_call_bound_place(user->args[arg_idx])))
+                return XR_REP_RAWPTR;
             if (arg_idx > 0 && policy && policy->prefer_call_args_native && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
                 return sr_type_native_boundary_rep(user->args[arg_idx]->type);
             }
+            return XR_REP_TAGGED;
+        case XI_LOCAL_ADDR:
+            /* A call-bound place points at the callee's native ABI storage,
+             * not necessarily at the representation used by the caller's
+             * source value.  Requiring the semantic type's native boundary
+             * rep inserts an explicit UNBOX temporary for tagged globals,
+             * captures, and phis; PLACE_LOAD then performs the writeback. */
+            return arg_idx == 0 && user->args[0] ? sr_type_native_boundary_rep(user->args[0]->type)
+                                                 : XR_REP_TAGGED;
+        case XI_PLACE_LOAD:
+            return arg_idx == 0 ? XR_REP_RAWPTR : XR_REP_TAGGED;
+        case XI_PLACE_STORE:
+            if (arg_idx == 0)
+                return XR_REP_RAWPTR;
+            if (arg_idx == 1 && user->args[1])
+                return sr_def_rep(user->args[1], policy);
             return XR_REP_TAGGED;
         case XI_CALL_BUILTIN: {
             const char *name = (const char *) user->aux;
@@ -2745,6 +2781,10 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_CALL_METHOD_DIRECT:
             if (arg_idx == 0 && sr_is_typed_array_native_receiver_method(user))
                 return sr_type_native_boundary_rep(user->args[0]->type);
+            if (arg_idx > 0 && arg_idx < user->nargs && user->args[arg_idx] &&
+                (user->args[arg_idx]->op == XI_LOCAL_ADDR ||
+                 sr_param_is_call_bound_place(user->args[arg_idx])))
+                return XR_REP_RAWPTR;
             if (arg_idx > 0 && policy && policy->prefer_call_args_native && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
                 return sr_type_native_boundary_rep(user->args[arg_idx]->type);

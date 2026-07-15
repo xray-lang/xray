@@ -918,6 +918,16 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
             b.type = l->vars[var_id].type;
             return xi_lower_emit_top_load(l, b, NULL);
         }
+        if (l->vars[var_id].call_place) {
+            XiValue *load =
+                xi_value_new(l->func, l->cur_block, XI_PLACE_LOAD, l->vars[var_id].type, 1);
+            if (!load)
+                return NULL;
+            load->args[0] = l->vars[var_id].call_place;
+            load->var_id = (XiVarId) var_id;
+            load->line = (uint32_t) node->line;
+            return load;
+        }
         XiValue *cur = xi_lower_braun_read(l, var_id, l->cur_block);
         if (cur && var_id < l->var_count && l->vars[var_id].captured_by_child) {
             XiValue *load = xi_value_new(l->func, l->cur_block, XI_COPY, cur->type, 1);
@@ -1047,6 +1057,14 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
                     xi_lower_mark_value_clone_copy(copy);
                 val = copy;
             }
+        }
+        if (l->vars[var_id].call_place) {
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_PLACE_STORE, l->type_unit, 2);
+            if (!store)
+                return NULL;
+            store->args[0] = l->vars[var_id].call_place;
+            store->args[1] = val;
+            store->line = (uint32_t) node->line;
         }
         xi_lower_braun_write(l, var_id, l->cur_block, val);
 
@@ -3651,6 +3669,264 @@ static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowe
     return true;
 }
 
+typedef struct XiCallWriteback {
+    XiValue *source;
+    XiValue *place;
+    XiTopBinding top_binding;
+    int var_id;
+    bool projection;
+} XiCallWriteback;
+
+static AstNode *lower_call_unwrap_place(AstNode *node) {
+    while (node && node->type == AST_GROUPING)
+        node = node->as.grouping;
+    return node;
+}
+
+static XrCallArgAccess lower_call_arg_access(const CallExprNode *call, int index) {
+    if (!call || index < 0 || index >= call->arg_count || !call->arg_accesses)
+        return XR_CALL_ARG_VALUE;
+    XrCallArgAccess access = call->arg_accesses[index];
+    return xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_VALUE;
+}
+
+static XiValue *lower_call_projection_base(XiValue *value) {
+    while (value && value->nargs >= 1) {
+        switch (value->op) {
+            case XI_COPY:
+            case XI_MOVE:
+            case XI_NARROW_I8:
+            case XI_NARROW_U8:
+            case XI_NARROW_I16:
+            case XI_NARROW_U16:
+            case XI_NARROW_I32:
+            case XI_NARROW_U32:
+            case XI_NARROW_F32:
+            case XI_WIDEN_I8:
+            case XI_WIDEN_U8:
+            case XI_WIDEN_I16:
+            case XI_WIDEN_U16:
+            case XI_WIDEN_I32:
+            case XI_WIDEN_U32:
+            case XI_WIDEN_F32:
+                value = value->args[0];
+                continue;
+            default:
+                return value;
+        }
+    }
+    return value;
+}
+
+static bool lower_call_store_projection(XiLower *l, XiValue *source, XiValue *updated, int line) {
+    XiValue *base = lower_call_projection_base(source);
+    if (!l || !base || !updated)
+        return false;
+    XiValue *store = NULL;
+    switch (base->op) {
+        case XI_LOAD_FIELD:
+            store = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD, l->type_unit, 2);
+            if (store) {
+                store->args[0] = base->args[0];
+                store->args[1] = updated;
+                store->aux = base->aux;
+                store->aux_int = base->aux_int;
+                store->xg_class_field_id = base->xg_class_field_id;
+            }
+            break;
+        case XI_AGG_GET:
+            store = xi_value_new(l->func, l->cur_block, XI_AGG_SET, l->type_unit, 2);
+            if (store) {
+                store->args[0] = base->args[0];
+                store->args[1] = updated;
+                store->aux = base->aux;
+                store->aux_int = base->aux_int;
+            }
+            break;
+        case XI_INDEX_GET:
+            store = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
+            if (store) {
+                store->args[0] = base->args[0];
+                store->args[1] = base->args[1];
+                store->args[2] = updated;
+                store->xg_sequence_access_id = base->xg_sequence_access_id;
+                store->xg_key_access_id = base->xg_key_access_id;
+            }
+            break;
+        case XI_JSON_GET_F:
+            store = xi_value_new(l->func, l->cur_block, XI_JSON_SET_F, l->type_unit, 2);
+            if (store) {
+                store->args[0] = base->args[0];
+                store->args[1] = updated;
+                store->aux_int = base->aux_int;
+                store->xg_json_access_id = base->xg_json_access_id;
+            }
+            break;
+        case XI_PTR_LOAD:
+            store = xi_value_new(l->func, l->cur_block, XI_PTR_STORE, l->type_unit, 2);
+            if (store) {
+                store->args[0] = base->args[0];
+                store->args[1] = updated;
+                store->aux_int = base->aux_int;
+            }
+            break;
+        default:
+            break;
+    }
+    if (!store) {
+        fprintf(stderr, "[LOWER] unsupported ref/out projection writeback at line %d\n", line);
+        l->had_error = true;
+        return false;
+    }
+    store->line = (uint32_t) line;
+    return true;
+}
+
+static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue **arg_vals, int n,
+                                         const XrParamMode *pmodes, int pcount,
+                                         const XrType *function_type,
+                                         XiCallWriteback **out_writebacks, int line) {
+    if (out_writebacks)
+        *out_writebacks = NULL;
+    bool needs_plan = false;
+    for (int i = 0; i < n && i < pcount; i++) {
+        if (pmodes && pmodes[i] != XR_PARAM_VALUE) {
+            needs_plan = true;
+            break;
+        }
+    }
+    if (!needs_plan)
+        return NULL;
+    if (!call || n != call->arg_count) {
+        fprintf(stderr, "[LOWER] borrowed call arguments cannot be spread at line %d\n", line);
+        l->had_error = true;
+        return NULL;
+    }
+
+    XiCallPlan *plan = (XiCallPlan *) xi_func_arena_alloc(l->func, sizeof(*plan));
+    XiCallArgPlan *plans = (XiCallArgPlan *) xi_func_arena_alloc(
+        l->func, (uint32_t) ((size_t) n * sizeof(XiCallArgPlan)));
+    XiCallWriteback *writebacks = (XiCallWriteback *) xi_func_arena_alloc(
+        l->func, (uint32_t) ((size_t) n * sizeof(XiCallWriteback)));
+    if (!plan || !plans || !writebacks) {
+        l->had_error = true;
+        return NULL;
+    }
+    memset(plan, 0, sizeof(*plan));
+    memset(plans, 0, (size_t) n * sizeof(*plans));
+    memset(writebacks, 0, (size_t) n * sizeof(*writebacks));
+    plan->args = plans;
+    plan->nargs = (uint16_t) n;
+
+    for (int i = 0; i < n; i++) {
+        XrParamMode mode = (pmodes && i < pcount) ? pmodes[i] : XR_PARAM_VALUE;
+        XrCallArgAccess access = lower_call_arg_access(call, i);
+        XiCallArgPlan *arg_plan = &plans[i];
+        arg_plan->param_mode = mode;
+        arg_plan->access = access;
+        arg_plan->origin_var_id = XI_NO_VAR_ID;
+        if (mode == XR_PARAM_VALUE)
+            continue;
+
+        bool access_ok = (mode == XR_PARAM_IN && access == XR_CALL_ARG_VALUE) ||
+                         (mode == XR_PARAM_REF && access == XR_CALL_ARG_REF) ||
+                         (mode == XR_PARAM_OUT && access == XR_CALL_ARG_OUT);
+        if (!access_ok) {
+            fprintf(stderr,
+                    "[LOWER] call contract drift at line %d: slot %d is %s but access is %s\n",
+                    line, i + 1, xr_param_mode_label(mode), xr_call_arg_access_label(access));
+            l->had_error = true;
+            return NULL;
+        }
+
+        AstNode *place_node = lower_call_unwrap_place(call->arguments[i]);
+        int var_id = -1;
+        XiTopBinding top_binding = {.slot = -1, .name = NULL, .type = NULL};
+        if (place_node && place_node->type == AST_VARIABLE) {
+            var_id = xi_lower_var_find(l, place_node->as.variable.symbol_id,
+                                       place_node->as.variable.name);
+            if (var_id >= 0 && l->is_program && l->shared_map[var_id] >= 0) {
+                top_binding.slot = l->shared_map[var_id];
+                top_binding.name = l->vars[var_id].name;
+                top_binding.type = l->vars[var_id].type;
+            } else if (var_id < 0) {
+                top_binding = xi_lower_find_top_binding(l, place_node->as.variable.symbol_id,
+                                                        place_node->as.variable.name);
+            }
+        }
+
+        XiValue *place = NULL;
+        if (var_id >= 0 && l->vars[var_id].call_place) {
+            place = l->vars[var_id].call_place;
+            arg_plan->origin = XI_PLACE_ORIGIN_PARAM;
+            arg_plan->origin_var_id = (XiVarId) var_id;
+        } else {
+            XiValue *source = arg_vals[i];
+            XrType *place_type = source ? source->type : l->type_any;
+            if (function_type && function_type->kind == XR_KIND_FUNCTION &&
+                i < function_type->function.param_count) {
+                XrType *formal = xr_type_function_param_type(function_type, i);
+                if (formal)
+                    place_type = formal;
+            }
+            place = xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR, place_type, 1);
+            if (!place)
+                return NULL;
+            place->args[0] = source;
+            place->line = (uint32_t) line;
+            arg_plan->origin =
+                var_id >= 0 ? XI_PLACE_ORIGIN_STACK_LOCAL : XI_PLACE_ORIGIN_PROJECTION_TEMP;
+            if (var_id >= 0)
+                arg_plan->origin_var_id = (XiVarId) var_id;
+            if (mode == XR_PARAM_REF || mode == XR_PARAM_OUT) {
+                writebacks[i].source = source;
+                writebacks[i].place = place;
+                writebacks[i].top_binding = top_binding;
+                writebacks[i].var_id = var_id;
+                writebacks[i].projection = var_id < 0 && !xi_top_binding_valid(top_binding);
+            }
+        }
+        arg_vals[i] = place;
+        arg_plan->place = place;
+        arg_plan->addressable = true;
+        arg_plan->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+        arg_plan->escape = XI_PLACE_ESCAPE_NONE;
+    }
+    plan->verified = true;
+    if (out_writebacks)
+        *out_writebacks = writebacks;
+    return plan;
+}
+
+static bool lower_apply_call_writebacks(XiLower *l, const XiCallPlan *plan,
+                                        XiCallWriteback *writebacks, int line) {
+    if (!plan || !writebacks)
+        return true;
+    for (uint16_t i = 0; i < plan->nargs; i++) {
+        XiCallWriteback *wb = &writebacks[i];
+        if (!wb->place)
+            continue;
+        XiValue *load = xi_value_new(l->func, l->cur_block, XI_PLACE_LOAD,
+                                     wb->source ? wb->source->type : l->type_any, 1);
+        if (!load)
+            return false;
+        load->args[0] = wb->place;
+        load->line = (uint32_t) line;
+        if (xi_top_binding_valid(wb->top_binding)) {
+            if (!xi_lower_emit_top_store(l, wb->top_binding, load))
+                return false;
+            if (wb->var_id >= 0)
+                xi_lower_braun_write(l, wb->var_id, l->cur_block, load);
+        } else if (wb->var_id >= 0) {
+            load->var_id = (XiVarId) wb->var_id;
+            xi_lower_braun_write(l, wb->var_id, l->cur_block, load);
+        } else if (wb->projection && !lower_call_store_projection(l, wb->source, load, line)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode *call,
                                          XiValue *callee_val, struct XrType *callee_type) {
     if (!callee_val)
@@ -3667,6 +3943,18 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     }
 
     XiFunc *static_callee = lower_resolve_static_callee_func(l, callee_val);
+    XrParamMode *owned_static_modes = NULL;
+    if ((!pmodes || pcount == 0) && static_callee && static_callee->nparams > 0) {
+        owned_static_modes = (XrParamMode *) xi_func_arena_alloc(
+            l->func, (uint32_t) ((size_t) static_callee->nparams * sizeof(XrParamMode)));
+        if (!owned_static_modes)
+            return NULL;
+        for (uint16_t i = 0; i < static_callee->nparams; i++)
+            owned_static_modes[i] = xi_func_param_passing_mode(static_callee, i);
+        pmodes = owned_static_modes;
+        pcount = static_callee->nparams;
+    }
+
     XrParamMode stack_auto_modes[64];
     const XrParamMode *effective_pmodes = pmodes;
     int effective_pcount = pcount;
@@ -3740,6 +4028,12 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
         }
     }
 
+    XiCallWriteback *writebacks = NULL;
+    XiCallPlan *call_plan = lower_build_call_plan(l, call, arg_vals, n, pmodes, pcount, callee_type,
+                                                  &writebacks, (int) node->line);
+    if (l->had_error)
+        return NULL;
+
     bool is_self_call = (l->self_var_id >= 0 && (uint32_t) l->self_var_id <= XI_MAX_VAR_ID &&
                          callee_val->var_id == (XiVarId) l->self_var_id);
 
@@ -3758,9 +4052,12 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     v->line = (uint32_t) node->line;
     if (is_self_call)
         v->aux_int = 1;
+    v->call_plan = call_plan;
 
     xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
     xi_lower_insert_err_check(l, node);
+    if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
+        return NULL;
     return v;
 }
 
@@ -5134,6 +5431,22 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return phi ? &phi->value : chan_recv;
         }
 
+        XrParamMode stack_method_modes[64];
+        const XrParamMode *method_modes = NULL;
+        int method_pcount = 0;
+        XrType *method_type = xr_type_non_nullable(l->isolate, xi_lower_node_type(l, call->callee));
+        if (method_type && method_type->kind == XR_KIND_FUNCTION) {
+            method_modes = lower_function_param_modes(
+                l, method_type, stack_method_modes,
+                (int) (sizeof(stack_method_modes) / sizeof(stack_method_modes[0])), &method_pcount);
+        }
+        XiCallWriteback *writebacks = NULL;
+        XiCallPlan *call_plan =
+            lower_build_call_plan(l, call, arg_vals, n, method_modes, method_pcount, method_type,
+                                  &writebacks, (int) node->line);
+        if (l->had_error)
+            return NULL;
+
         uint16_t nargs = (uint16_t) (n + 1); /* receiver + args */
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, nargs);
         if (!v)
@@ -5143,6 +5456,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->args[i + 1] = arg_vals[i];
         v->aux = (void *) arena_strdup(l->func, ma->name);
         v->aux_int = (int64_t) xi_lower_method_symbol(l, ma->name) << 1;
+        v->call_plan = call_plan;
         v->flags |= XI_FLAG_SIDE_EFFECT;
         if (xi_lower_method_may_suspend(recv->type, ma->name, n))
             v->flags |= XI_FLAG_MAY_SUSPEND;
@@ -5155,6 +5469,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                                     method_key_access_op);
 
         xi_lower_insert_err_check(l, node);
+        if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
+            return NULL;
         return v;
     }
 

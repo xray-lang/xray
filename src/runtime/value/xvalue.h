@@ -71,6 +71,7 @@ typedef enum {
     XR_TAG_PTR = 5,       // GC heap object pointer (stored in .ptr)
     XR_TAG_AGG_REF = 6,   // frame-local aggregate ref (stored in .ptr)
     XR_TAG_NOTFOUND = 7,  // sentinel: map lookup miss
+    XR_TAG_PLACE = 8,     // VM-only call-bound place (payload is absolute stack slot)
 } XrValueTag;
 
 /* ========== Tagged Union Value (16 bytes, struct-of-union) ========== */
@@ -136,6 +137,7 @@ static inline XrValue xr_make_ptr_val(void *p) {
 #define XR_IS_BOOL(v) ((v).tag == XR_TAG_BOOL)
 #define XR_IS_RUNE(v) ((v).tag == XR_TAG_RUNE)
 #define XR_IS_NOTFOUND(v) ((v).tag == XR_TAG_NOTFOUND)
+#define XR_IS_PLACE(v) ((v).tag == XR_TAG_PLACE)
 #define XR_IS_TRUE(v) (XR_IS_BOOL(v) && (v).i != 0)
 #define XR_IS_FALSE(v) (XR_IS_BOOL(v) && (v).i == 0)
 

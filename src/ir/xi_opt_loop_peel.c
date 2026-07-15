@@ -168,6 +168,8 @@ static bool clone_block_values(XiFunc *f, XiBlock *src, XiBlock *dst, PeelMap *m
         for (uint16_t a = 0; a < orig->nargs; a++) {
             clone->args[a] = peel_resolve_arg(map, orig->args[a]);
         }
+        if (!xi_value_clone_call_plan(f, clone, orig))
+            return false;
         if (!peel_map_add(map, orig, clone))
             return false;
     }

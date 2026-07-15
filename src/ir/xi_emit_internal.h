@@ -276,6 +276,9 @@ XR_FUNC void xi_emit_array_data_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 /* ========== Generated FFI raw-pointer lowering drivers ========== */
 XR_FUNC void xi_emit_ptr_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_ptr_store(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_local_addr(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_place_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_place_store(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_ptr_copy_nonoverlap(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 
 /* ========== Emit Handler Type ========== */

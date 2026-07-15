@@ -49,6 +49,7 @@
 #define KOP_A_LIT XR_OPF_LIT, XR_OPF_NONE, XR_OPF_NONE
 #define KOP_AB_UNARY XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_NONE
 #define KOP_AB_INPLACE XR_OPF_REG_INOUT, XR_OPF_REG_IN, XR_OPF_NONE
+#define KOP_AB_STORE XR_OPF_REG_IN, XR_OPF_REG_IN, XR_OPF_NONE
 #define KOP_AB_INOUT_IN XR_OPF_REG_INOUT, XR_OPF_REG_IN, XR_OPF_NONE
 #define KOP_AB_NEW_LIT XR_OPF_REG_OUT, XR_OPF_LIT, XR_OPF_NONE
 #define KOP_AB_BASE_LIT XR_OPF_REG_BASE, XR_OPF_LIT, XR_OPF_NONE
@@ -210,6 +211,9 @@
     _(SPAN_COMPARE, FMT_A, KOP_A_USE, "R[A] = R[A].compare(R[A+1])")                               \
     _(SPAN_REINTERPRET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].reinterpret<T>(), C=slot/meta")         \
     _(ARRAY_DATA_PTR, FMT_ABC, KOP_ABC_BIN, "R[A] = raw data pointer of Array/Span R[B]")          \
+    _(LOCAL_ADDR, FMT_AB, KOP_AB_UNARY, "R[A] = call-bound address of R[B]")                       \
+    _(PLACE_LOAD, FMT_AB, KOP_AB_UNARY, "R[A] = load call-bound place R[B]")                       \
+    _(PLACE_STORE, FMT_AB, KOP_AB_STORE, "store R[B] through call-bound place R[A]")               \
     _(STRING_BYTES_SPAN, FMT_ABC, KOP_ABC_BIN,                                                     \
       "R[A] = borrowed Slice<byte> of string R[B], C=slot")                                        \
     _(BYTE_ARRAY_COPY_WITHIN, FMT_A, KOP_A_INOUT, "R[A].copyWithin(R[A+1], R[A+2], R[A+3])")       \

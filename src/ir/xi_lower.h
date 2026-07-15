@@ -67,6 +67,8 @@ typedef struct XiVarEntry {
                              * hoisting reorders the closure before the actual
                              * initializer, and the upvalue/cell must see the
                              * real value rather than the braun-read null. */
+    XiValue *call_place;    /* non-NULL for in/ref/out formal parameters */
+    XrParamMode place_mode;
 } XiVarEntry;
 
 /*

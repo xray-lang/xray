@@ -140,15 +140,24 @@ static bool fixed_array_lane_native_info(const XrType *type, uint8_t *native_out
     return true;
 }
 
-static bool fixed_array_ref_param_can_use_ptr_abi(const XiFunc *func, const XiValue *value,
-                                                  const XrType *type, bool is_return,
-                                                  const char **elem_ctype_out) {
-    if (is_return || !func || func->is_extern || func->c_export || !value ||
-        value->op != XI_PARAM || value->aux_int < 0 || !type || type->kind != XR_KIND_FIXED_ARRAY)
+static bool param_uses_place_abi(const XiFunc *func, const XiValue *value, bool is_return,
+                                 XrParamMode *mode_out) {
+    if (is_return || !func || !value || value->op != XI_PARAM || value->aux_int < 0)
         return false;
     uint16_t index = (uint16_t) value->aux_int;
     XrParamMode mode = xi_func_param_passing_mode(func, index);
-    if (mode != XR_PARAM_REF && mode != XR_PARAM_IN)
+    if (mode == XR_PARAM_VALUE)
+        return false;
+    if (mode_out)
+        *mode_out = mode;
+    return true;
+}
+
+static bool fixed_array_place_param_can_use_ptr_abi(const XiFunc *func, const XiValue *value,
+                                                    const XrType *type, bool is_return,
+                                                    const char **elem_ctype_out) {
+    if (!param_uses_place_abi(func, value, is_return, NULL) || !value || value->op != XI_PARAM ||
+        value->aux_int < 0 || !type || type->kind != XR_KIND_FIXED_ARRAY)
         return false;
     return fixed_array_lane_native_info(type, NULL, elem_ctype_out);
 }
@@ -163,7 +172,7 @@ static char *fixed_array_ref_param_c_type(const char *elem_ctype) {
     return xr_strdup(buf);
 }
 
-static XaotAbiSlot fixed_array_ref_param_slot(const XrType *type, const char *elem_ctype) {
+static XaotAbiSlot fixed_array_place_param_slot(const XrType *type, const char *elem_ctype) {
     XaotAbiSlot slot;
     memset(&slot, 0, sizeof(slot));
     char *c_type = fixed_array_ref_param_c_type(elem_ctype);
@@ -171,11 +180,16 @@ static XaotAbiSlot fixed_array_ref_param_slot(const XrType *type, const char *el
         return tagged_slot(type);
     slot.cls = XAOT_ARG_PTR;
     slot.rep.kind = XAOT_VALUE_VIEW;
-    slot.rep.rep = XAOT_REP_PTR;
+    slot.rep.rep = XAOT_REP_RAWPTR;
     slot.rep.type = type;
     slot.rep.c_type = c_type;
     slot.rep.flags = XAOT_VALUE_FLAG_OWNED_C_TYPE;
+    slot.pointee_rep.kind = XAOT_VALUE_VIEW;
+    slot.pointee_rep.rep = XAOT_REP_RAWPTR;
+    slot.pointee_rep.type = type;
+    slot.pointee_rep.c_type = "void *";
     slot.c_type = slot.rep.c_type;
+    slot.flags |= XAOT_ABI_SLOT_BORROWED_PLACE;
     return slot;
 }
 
@@ -375,19 +389,16 @@ static XaotAbiSlot compact_adt_return_slot(const XaotBundle *bundle, const XrTyp
     return slot;
 }
 
-static XaotAbiSlot native_slot_for_type(const XaotBundle *bundle, const XiFunc *func,
-                                        const XrType *type, const XiValue *value, bool is_return) {
+static XaotAbiSlot native_value_slot_for_type(const XaotBundle *bundle, const XiFunc *func,
+                                              const XrType *type, const XiValue *value,
+                                              bool is_return) {
     XaotAbiSlot slot;
     XaotValueRep struct_rep;
-    const char *fixed_array_elem_ctype = NULL;
 
     if (type_is_freestanding_ordinal_enum(bundle, type))
         return enum_ordinal_slot(type);
     if (type_is_class_instance_ptr_boundary(bundle, type))
         return ptr_slot(type);
-    if (fixed_array_ref_param_can_use_ptr_abi(func, value, type, is_return,
-                                              &fixed_array_elem_ctype))
-        return fixed_array_ref_param_slot(type, fixed_array_elem_ctype);
     struct_rep = struct_value_rep_for_slot(bundle, func, type, value, is_return);
     if (struct_rep.kind == XAOT_VALUE_AGGREGATE) {
         memset(&slot, 0, sizeof(slot));
@@ -402,6 +413,40 @@ static XaotAbiSlot native_slot_for_type(const XaotBundle *bundle, const XiFunc *
     slot.cls = arg_class_for_value_rep(slot.rep);
     slot.c_type = slot.rep.c_type;
     return slot;
+}
+
+static XaotAbiSlot borrowed_place_slot(const XrType *type, XaotAbiSlot value_slot) {
+    XaotAbiSlot slot;
+    memset(&slot, 0, sizeof(slot));
+    const char *pointee_c_type = value_slot.c_type ? value_slot.c_type : "XrValue";
+    size_t n = strlen(pointee_c_type) + 3;
+    char *c_type = (char *) xr_malloc(n);
+    if (!c_type)
+        return tagged_slot(type);
+    snprintf(c_type, n, "%s *", pointee_c_type);
+    slot.cls = XAOT_ARG_PTR;
+    slot.rep.kind = XAOT_VALUE_VIEW;
+    slot.rep.rep = XAOT_REP_RAWPTR;
+    slot.rep.type = type;
+    slot.rep.c_type = c_type;
+    slot.rep.flags = XAOT_VALUE_FLAG_OWNED_C_TYPE;
+    slot.pointee_rep = value_slot.rep;
+    slot.c_type = slot.rep.c_type;
+    slot.flags = XAOT_ABI_SLOT_BORROWED_PLACE;
+    return slot;
+}
+
+static XaotAbiSlot native_slot_for_type(const XaotBundle *bundle, const XiFunc *func,
+                                        const XrType *type, const XiValue *value, bool is_return) {
+    if (param_uses_place_abi(func, value, is_return, NULL)) {
+        const char *fixed_array_elem_ctype = NULL;
+        if (fixed_array_place_param_can_use_ptr_abi(func, value, type, is_return,
+                                                    &fixed_array_elem_ctype))
+            return fixed_array_place_param_slot(type, fixed_array_elem_ctype);
+        return borrowed_place_slot(
+            type, native_value_slot_for_type(bundle, func, type, value, is_return));
+    }
+    return native_value_slot_for_type(bundle, func, type, value, is_return);
 }
 
 static bool type_can_use_native_return_boundary(const XaotBundle *bundle, const XiFunc *func,
@@ -466,7 +511,10 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
         abi->ret = tagged_slot(func->return_type);
         for (i = 0; i < abi_nparams; i++) {
             const XiValue *param = func->params ? func->params[i] : NULL;
-            abi->params[i] = tagged_slot(param ? param->type : NULL);
+            abi->params[i] =
+                param_uses_place_abi(func, param, false, NULL)
+                    ? native_slot_for_type(bundle, func, param ? param->type : NULL, param, false)
+                    : tagged_slot(param ? param->type : NULL);
         }
         return true;
     }
@@ -490,9 +538,13 @@ XR_FUNC void xaot_abi_free(XaotFuncAbi *abi) {
         return;
     if ((abi->ret.rep.flags & XAOT_VALUE_FLAG_OWNED_C_TYPE) != 0)
         xr_free((void *) abi->ret.rep.c_type);
+    if ((abi->ret.pointee_rep.flags & XAOT_VALUE_FLAG_OWNED_C_TYPE) != 0)
+        xr_free((void *) abi->ret.pointee_rep.c_type);
     for (uint16_t i = 0; i < abi->nparams; i++) {
         if ((abi->params[i].rep.flags & XAOT_VALUE_FLAG_OWNED_C_TYPE) != 0)
             xr_free((void *) abi->params[i].rep.c_type);
+        if ((abi->params[i].pointee_rep.flags & XAOT_VALUE_FLAG_OWNED_C_TYPE) != 0)
+            xr_free((void *) abi->params[i].pointee_rep.c_type);
     }
     xr_free(abi->params);
     memset(abi, 0, sizeof(*abi));
