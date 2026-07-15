@@ -4,11 +4,11 @@ regex=dispatch-target [0-9]+ callsite=[0-9]+ recv_class=[1-9][0-9]* method=[1-9]
 regex=interface-use [0-9]+ interface=[1-9][0-9]* implementor=[1-9][0-9]* use_site=[1-9][0-9]* reason=value flags=iface_object\+type_switchable
 regex=interface-abi [0-9]+ interface=[1-9][0-9]* callsites=1 implementors=2 slots=1 flags=iface_object\+itable\+type_switch_tag\+boxed_receiver data=boxed_value type=native_type_id itable=dispatch_slot tag=native_type_id evidence=callsite\+methods\+implementors\+dispatch\+object_use reason=none
 regex=fn-attr [0-9]+ func=score body=[0-9]+ attr=pure effect=0x60 escape=0x1 evidence=0x7
-c_regex=static XRT_FN_PURE int64_t interface_type_switch_direct_score_[0-9]+\(xrt_closure_t \*_cl, XrValue p0\)
+c_regex=static XRT_FN_PURE int64_t interface_type_switch_direct_[0-9a-f]{16}_score_[0-9]+\(xrt_closure_t \*_cl, XrValue p0\)
 c_contains=xrt_instanceof(
 c_regex=if \(xrt_instanceof\(_xr_ts_recv_[0-9]+, \(uint16_t\).+\)\)
 c_regex=else if \(xrt_instanceof\(_xr_ts_recv_[0-9]+, \(uint16_t\).+\)\)
-c_regex=_xr_ts_result_[0-9]+ = XR_TO_INT\(interface_type_switch_direct_area_[0-9]+_boxed\(NULL, v[0-9]+\)\);
+c_regex=_xr_ts_result_[0-9]+ = XR_TO_INT\(interface_type_switch_direct_[0-9a-f]{16}_area_[0-9]+_boxed\(NULL, v[0-9]+\)\);
 c_contains=xray AOT: verified interface type-switch dispatch missed
 c_not_contains=xrt_method_
 not_contains=verified AOT dispatch plan kind

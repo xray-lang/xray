@@ -3,16 +3,16 @@ regex=function [0-9]+ name=run module=0 depth=1 abi=native boundary=none params=
 regex=class-field-plan [0-9]+ field=1 owner=1 .* slot=0 offset=0 .*storage=scalar action=native_scalar rep=native_scalar .*evidence=0x7f
 regex=class-field-plan [0-9]+ field=2 owner=2 .* slot=1 offset=8 .*storage=scalar action=native_scalar rep=native_scalar .*evidence=0x7f
 regex=class-field-plan [0-9]+ field=3 owner=2 .* slot=2 offset=16 .*storage=scalar action=native_scalar rep=native_scalar .*evidence=0x7f
-c_contains=typedef struct xrt_native_stack_native_class_descriptor_elision_Shape { int64_t f0; }
-c_contains=typedef struct xrt_native_stack_native_class_descriptor_elision_Rect { xrt_native_stack_native_class_descriptor_elision_Shape base; int64_t f1; int64_t f2; }
+c_regex=typedef struct xrt_native_stack_native_class_descriptor_elision_[0-9a-f]{16}_Shape \{ int64_t f0; \}
+c_regex=typedef struct xrt_native_stack_native_class_descriptor_elision_[0-9a-f]{16}_Rect \{ xrt_native_stack_native_class_descriptor_elision_[0-9a-f]{16}_Shape base; int64_t f1; int64_t f2; \}
 c_contains=&((p0)->base)
 c_contains=((p0)->f1 = (int64_t)v1)
 c_contains=((p0)->f2 = (int64_t)v2)
 c_contains=int64_t _cf0 = p0->base.f0;
 c_contains=int64_t _cf0 = p0->f1;
 c_contains=int64_t _cf1 = p0->f2;
-c_regex=int64_t v[0-9]+ = stack_native_class_descriptor_elision_area_[0-9]+\(NULL,
-c_regex=int64_t v[0-9]+ = stack_native_class_descriptor_elision_kind_plus_[0-9]+\(NULL,
+c_regex=int64_t v[0-9]+ = stack_native_class_descriptor_elision_[0-9a-f]{16}_area_[0-9]+\(NULL,
+c_regex=int64_t v[0-9]+ = stack_native_class_descriptor_elision_[0-9a-f]{16}_kind_plus_[0-9]+\(NULL,
 c_not_contains=xrt_method_
 c_not_contains=xrt_type_register_hot(
 c_not_contains=xrt_type_set_name(
