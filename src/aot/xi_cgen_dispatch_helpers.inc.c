@@ -8209,9 +8209,11 @@ static void xicgen_json_merge(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 2, "xicgen_json_merge: need dst and src");
-    const bool dst_is_record =
-        v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_RECORD;
-    fprintf(out, "%s(", dst_is_record ? "xrt_record_merge" : "xrt_json_merge");
+    const XaotRecordMergePlan *record_plan =
+        v->xg_record_merge_id != XG_NO_ID
+            ? xaot_bundle_find_record_merge_plan(cg_ctx_aot_bundle(ctx), v->xg_record_merge_id)
+            : NULL;
+    fprintf(out, "%s(", record_plan ? "xrt_record_merge" : "xrt_json_merge");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);

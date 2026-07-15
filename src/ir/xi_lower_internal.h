@@ -125,6 +125,7 @@ XR_FUNC bool xi_lower_find_json_direct_field_ordinal(XiLower *l, const char *fie
 XR_FUNC void xi_lower_bind_record_access_id(XiLower *l, XiValue *access, const char *field_name,
                                             uint32_t source_span_id, uint16_t field_ordinal,
                                             uint8_t access_kind);
+XR_FUNC void xi_lower_bind_record_merge_id(XiLower *l, XiValue *merge, uint32_t source_node_id);
 XR_FUNC void xi_lower_bind_key_access_id(XiLower *l, XiValue *access, uint32_t source_span_id,
                                          uint32_t body_ordinal, uint8_t access_op);
 

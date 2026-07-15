@@ -740,9 +740,10 @@ typedef struct XiValue {
     uint32_t xg_json_access_id; /* stable XgJsonAccessId for evidence-backed Json slot access */
     uint32_t xg_json_codec_id;  /* stable XgJsonCodecId for evidence-backed Json codec calls */
     uint32_t
-        xg_record_access_id;    /* stable XgRecordAccessId for evidence-backed Record slot access */
-    uint32_t xg_key_access_id;  /* stable XgKeyAccessId for evidence-backed Map/Set key access */
-    uint32_t xg_class_field_id; /* stable XgFieldId for evidence-backed class field access */
+        xg_record_access_id; /* stable XgRecordAccessId for evidence-backed Record slot access */
+    uint32_t xg_record_merge_id; /* stable XgRecordMergeId for evidence-backed Record spread */
+    uint32_t xg_key_access_id;   /* stable XgKeyAccessId for evidence-backed Map/Set key access */
+    uint32_t xg_class_field_id;  /* stable XgFieldId for evidence-backed class field access */
     uint32_t
         xg_sequence_access_id;  /* stable XgSequenceAccessId for linear-container access plans */
     uint32_t xg_capacity_op_id; /* stable XgCapacityOpId for capacity/growth plans */
@@ -769,6 +770,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->xg_json_access_id = src->xg_json_access_id;
     dst->xg_json_codec_id = src->xg_json_codec_id;
     dst->xg_record_access_id = src->xg_record_access_id;
+    dst->xg_record_merge_id = src->xg_record_merge_id;
     dst->xg_key_access_id = src->xg_key_access_id;
     dst->xg_class_field_id = src->xg_class_field_id;
     dst->xg_sequence_access_id = src->xg_sequence_access_id;

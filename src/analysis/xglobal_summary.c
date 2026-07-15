@@ -624,6 +624,7 @@ static uint64_t hash_record_merge_summary(uint64_t hash, const XgRecordMergeSumm
     hash = hash_u32(hash, row->merge_id);
     hash = hash_u32(hash, row->module_id);
     hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->source_node_id);
     hash = hash_u32(hash, row->source_span_id);
     hash = hash_u32(hash, row->base_shape_id);
     hash = hash_u32(hash, row->patch_shape_id);
@@ -3786,14 +3787,15 @@ static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *e
     }
     for (uint32_t i = 0; i < evidence->nrecord_merges; i++) {
         const XgRecordMergeSummary *m = &evidence->record_merges[i];
-        fprintf(out,
-                "record-merge id=%u module=%u func=%u span=%u base_shape=%u patch_shape=%u "
-                "result_shape=%u base_fields=%u patch_fields=%u result_fields=%u overwrites=%u "
-                "copy_table=%u flags=0x%x hash=%016" PRIx64 "\n",
-                m->merge_id, m->module_id, m->owner_func_id, m->source_span_id, m->base_shape_id,
-                m->patch_shape_id, m->result_shape_id, (unsigned) m->base_field_count,
-                (unsigned) m->patch_field_count, (unsigned) m->result_field_count,
-                (unsigned) m->overwrite_count, m->copy_table_id, m->flags, m->merge_hash);
+        fprintf(
+            out,
+            "record-merge id=%u module=%u func=%u source=%u span=%u base_shape=%u patch_shape=%u "
+            "result_shape=%u base_fields=%u patch_fields=%u result_fields=%u overwrites=%u "
+            "copy_table=%u flags=0x%x hash=%016" PRIx64 "\n",
+            m->merge_id, m->module_id, m->owner_func_id, m->source_node_id, m->source_span_id,
+            m->base_shape_id, m->patch_shape_id, m->result_shape_id, (unsigned) m->base_field_count,
+            (unsigned) m->patch_field_count, (unsigned) m->result_field_count,
+            (unsigned) m->overwrite_count, m->copy_table_id, m->flags, m->merge_hash);
     }
     for (uint32_t i = 0; i < evidence->noptions_bags; i++) {
         const XgOptionsBagSummary *o = &evidence->options_bags[i];
@@ -4805,15 +4807,16 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
-                   "record-merge id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " span=%" SCNu32
-                   " base_shape=%" SCNu32 " patch_shape=%" SCNu32 " result_shape=%" SCNu32
-                   " base_fields=%" SCNu32 " patch_fields=%" SCNu32 " result_fields=%" SCNu32
-                   " overwrites=%" SCNu32 " copy_table=%" SCNu32 " flags=0x%" SCNx32
-                   " hash=%" SCNx64 " %c",
-                   &row.merge_id, &row.module_id, &row.owner_func_id, &row.source_span_id,
-                   &row.base_shape_id, &row.patch_shape_id, &row.result_shape_id, &base_field_count,
-                   &patch_field_count, &result_field_count, &overwrite_count, &row.copy_table_id,
-                   &row.flags, &row.merge_hash, &trailing) != 14)
+                   "record-merge id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " source=%" SCNu32
+                   " span=%" SCNu32 " base_shape=%" SCNu32 " patch_shape=%" SCNu32
+                   " result_shape=%" SCNu32 " base_fields=%" SCNu32 " patch_fields=%" SCNu32
+                   " result_fields=%" SCNu32 " overwrites=%" SCNu32 " copy_table=%" SCNu32
+                   " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
+                   &row.merge_id, &row.module_id, &row.owner_func_id, &row.source_node_id,
+                   &row.source_span_id, &row.base_shape_id, &row.patch_shape_id,
+                   &row.result_shape_id, &base_field_count, &patch_field_count, &result_field_count,
+                   &overwrite_count, &row.copy_table_id, &row.flags, &row.merge_hash,
+                   &trailing) != 15)
             return false;
         row.base_field_count = (uint16_t) base_field_count;
         row.patch_field_count = (uint16_t) patch_field_count;
@@ -6518,13 +6521,15 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->nrecord_merges; i++) {
         const XgRecordMergeSummary *m = &evidence->record_merges[i];
         fprintf(out,
-                "record-merge %u id=%u module=%u func=%u span=%u base_shape=%u patch_shape=%u "
+                "record-merge %u id=%u module=%u func=%u source=%u span=%u base_shape=%u "
+                "patch_shape=%u "
                 "result_shape=%u base_fields=%u patch_fields=%u result_fields=%u overwrites=%u "
                 "copy_table=%u flags=0x%x hash=%016" PRIx64 "\n",
-                i, m->merge_id, m->module_id, m->owner_func_id, m->source_span_id, m->base_shape_id,
-                m->patch_shape_id, m->result_shape_id, (unsigned) m->base_field_count,
-                (unsigned) m->patch_field_count, (unsigned) m->result_field_count,
-                (unsigned) m->overwrite_count, m->copy_table_id, m->flags, m->merge_hash);
+                i, m->merge_id, m->module_id, m->owner_func_id, m->source_node_id,
+                m->source_span_id, m->base_shape_id, m->patch_shape_id, m->result_shape_id,
+                (unsigned) m->base_field_count, (unsigned) m->patch_field_count,
+                (unsigned) m->result_field_count, (unsigned) m->overwrite_count, m->copy_table_id,
+                m->flags, m->merge_hash);
     }
     for (uint32_t i = 0; i < evidence->noptions_bags; i++) {
         const XgOptionsBagSummary *o = &evidence->options_bags[i];

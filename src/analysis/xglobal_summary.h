@@ -59,7 +59,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 25,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 26,
 };
 
 typedef enum XgBuildProfile {
@@ -1081,6 +1081,7 @@ typedef struct XgRecordMergeSummary {
     XgRecordMergeId merge_id;
     XgModuleId module_id;
     XgFuncId owner_func_id;
+    uint32_t source_node_id;
     uint32_t source_span_id;
     XgRecordShapeId base_shape_id;
     XgRecordShapeId patch_shape_id;

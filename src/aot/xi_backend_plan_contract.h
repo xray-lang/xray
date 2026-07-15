@@ -42,6 +42,7 @@ typedef enum XaotBackendContractIssue {
     XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH,
     XAOT_BACKEND_CONTRACT_JSON_CODEC_KIND_MISMATCH,
     XAOT_BACKEND_CONTRACT_JSON_CODEC_ACTION_REJECTED,
+    XAOT_BACKEND_CONTRACT_RECORD_MERGE_ACTION_REJECTED,
 } XaotBackendContractIssue;
 
 static inline const char *xaot_backend_contract_issue_name(XaotBackendContractIssue issue) {
@@ -78,6 +79,8 @@ static inline const char *xaot_backend_contract_issue_name(XaotBackendContractIs
             return "json_codec_kind_mismatch";
         case XAOT_BACKEND_CONTRACT_JSON_CODEC_ACTION_REJECTED:
             return "json_codec_action_rejected";
+        case XAOT_BACKEND_CONTRACT_RECORD_MERGE_ACTION_REJECTED:
+            return "record_merge_action_rejected";
     }
     return "unknown";
 }
@@ -345,6 +348,37 @@ xaot_backend_contract_json_codec_plan_allowed(const XaotJsonCodecPlan *plan, uin
     if ((allowed_actions & xaot_backend_json_codec_action_bit(plan->action)) == 0) {
         xaot_backend_contract_set_issue(out_issue,
                                         XAOT_BACKEND_CONTRACT_JSON_CODEC_ACTION_REJECTED);
+        return false;
+    }
+    xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_OK);
+    return true;
+}
+
+static inline uint32_t xaot_backend_record_merge_action_bit(uint8_t action) {
+    return action < 32 ? UINT32_C(1) << action : 0;
+}
+
+static inline bool
+xaot_backend_contract_record_merge_plan_allowed(const XaotRecordMergePlan *plan,
+                                                uint32_t allowed_actions,
+                                                XaotBackendContractIssue *out_issue) {
+    const uint32_t required_evidence = XAOT_RECORD_EV_GLOBAL_ROW | XAOT_RECORD_EV_BASE_SHAPE |
+                                       XAOT_RECORD_EV_PATCH_SHAPE | XAOT_RECORD_EV_RESULT_SHAPE |
+                                       XAOT_RECORD_EV_COPY_TABLE;
+    if (!plan) {
+        xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN);
+        return false;
+    }
+    if (plan->owner_func_id == XG_NO_ID || plan->source_node_id == 0 ||
+        (plan->evidence & required_evidence) != required_evidence || plan->copy_table_id == 0) {
+        xaot_backend_contract_set_issue(out_issue,
+                                        XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH);
+        return false;
+    }
+    if ((allowed_actions & xaot_backend_record_merge_action_bit(plan->action)) == 0 ||
+        plan->unproven_reason != XAOT_RECORD_UNPROVEN_NONE) {
+        xaot_backend_contract_set_issue(out_issue,
+                                        XAOT_BACKEND_CONTRACT_RECORD_MERGE_ACTION_REJECTED);
         return false;
     }
     xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_OK);

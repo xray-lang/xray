@@ -2621,6 +2621,7 @@ static bool xaot_bundle_add_record_merge_plan(XaotBundle *bundle, const XgGlobal
     plan->merge_id = merge->merge_id;
     plan->module_id = merge->module_id;
     plan->owner_func_id = merge->owner_func_id;
+    plan->source_node_id = merge->source_node_id;
     plan->source_span_id = merge->source_span_id;
     plan->base_shape_id = merge->base_shape_id;
     plan->patch_shape_id = merge->patch_shape_id;
@@ -7367,13 +7368,13 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     for (uint32_t ri = 0; ri < bundle->nrecord_merge_plans; ri++) {
         const XaotRecordMergePlan *rp = &bundle->record_merge_plans[ri];
         fprintf(out,
-                "record-merge-plan %u id=%u module=%u func=%u span=%u action=%s "
+                "record-merge-plan %u id=%u module=%u func=%u source=%u span=%u action=%s "
                 "base_shape=%u patch_shape=%u result_shape=%u base_fields=%u patch_fields=%u "
                 "result_fields=%u overwrites=%u copy_table=%u hash=%016" PRIx64
                 " evidence=0x%x reason=%s\n",
-                ri, rp->merge_id, rp->module_id, rp->owner_func_id, rp->source_span_id,
-                record_merge_action_name(rp->action), rp->base_shape_id, rp->patch_shape_id,
-                rp->result_shape_id, (unsigned) rp->base_field_count,
+                ri, rp->merge_id, rp->module_id, rp->owner_func_id, rp->source_node_id,
+                rp->source_span_id, record_merge_action_name(rp->action), rp->base_shape_id,
+                rp->patch_shape_id, rp->result_shape_id, (unsigned) rp->base_field_count,
                 (unsigned) rp->patch_field_count, (unsigned) rp->result_field_count,
                 (unsigned) rp->overwrite_count, rp->copy_table_id, rp->merge_hash, rp->evidence,
                 record_unproven_reason_name(rp->unproven_reason));

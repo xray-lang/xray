@@ -1101,6 +1101,7 @@ typedef struct XaotRecordMergePlan {
     XgRecordMergeId merge_id;
     XgModuleId module_id;
     XgFuncId owner_func_id;
+    uint32_t source_node_id;
     uint32_t source_span_id;
     XgRecordShapeId base_shape_id;
     XgRecordShapeId patch_shape_id;
