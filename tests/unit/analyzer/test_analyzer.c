@@ -2496,6 +2496,54 @@ TEST(analyzer_type_ref_failures_use_error_recovery) {
     setup_pool();
 }
 
+TEST(analyzer_cast_error_recovery_and_union_overlap) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    AstNode *program = xr_parse(g_session, "var value = 1 as MissingCastType\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "cast_error_recovery.xr", program);
+
+    int count = 0;
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count == 1);
+    ASSERT(analyzer_diag_contains(a, "undefined type 'MissingCastType'"));
+    ASSERT(!analyzer_diag_contains(a, "Cannot cast type"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+
+    a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    program = xr_parse(g_session, "var value: string | bool = \"text\"\n"
+                                  "var result = value as int\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "cast_disjoint_union.xr", program);
+
+    count = 0;
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count == 1);
+    ASSERT(analyzer_diag_contains(a, "Cannot cast type"));
+    ASSERT(analyzer_diag_contains(a, "to unrelated type 'int'"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+
+    a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    program = xr_parse(g_session, "var value: int | string = 1\n"
+                                  "var result = value as string\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "cast_overlapping_union.xr", program);
+
+    count = 0;
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count == 0);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -2850,6 +2898,7 @@ int main(void) {
     RUN_TEST(analyzer_rejects_builtin_generic_arity);
     RUN_TEST(analyzer_rejects_error_type_container_success_types);
     RUN_TEST(analyzer_type_ref_failures_use_error_recovery);
+    RUN_TEST(analyzer_cast_error_recovery_and_union_overlap);
     RUN_TEST(analyzer_rejects_error_type_generic_argument_and_constraint);
     RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);
     RUN_TEST(compile_type_class);
