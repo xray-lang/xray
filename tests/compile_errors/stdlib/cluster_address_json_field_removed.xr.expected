@@ -1,1 +1,1 @@
-only Array, Map, Json, Set, Range, typed array, and operator[] support indexing
+type 'NodeAddress' does not support indexed access
