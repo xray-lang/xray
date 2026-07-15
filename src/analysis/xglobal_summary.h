@@ -59,7 +59,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 22,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 23,
 };
 
 typedef enum XgBuildProfile {

@@ -3582,6 +3582,8 @@ static uint64_t body_type_alias_record_shape_hash(const TypeAliasNode *alias) {
 
 static uint64_t body_type_alias_json_shape_hash(const TypeAliasNode *alias) {
     int count = body_type_alias_record_field_count(alias);
+    if (count > (int) UINT16_MAX)
+        count = (int) UINT16_MAX;
     uint64_t h = xg_json_shape_hash_begin((uint32_t) (count > 0 ? count : 0));
     for (int i = 0; i < count; i++) {
         const char *name = body_type_alias_record_field_name(alias, i);
@@ -3663,6 +3665,8 @@ static void body_add_json_fields_for_type_alias(XgGlobalEvidence *evidence, XgJs
     int field_count = body_type_alias_record_field_count(alias);
     if (!evidence || shape_id == XG_NO_ID || !alias)
         return;
+    if (field_count > (int) UINT16_MAX)
+        field_count = (int) UINT16_MAX;
     for (int i = 0; i < field_count; i++) {
         const char *name = body_type_alias_record_field_name(alias, i);
         const XrTypeRef *field_type = body_type_alias_record_field_type(alias, i);
