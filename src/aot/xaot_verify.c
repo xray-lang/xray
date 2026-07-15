@@ -1393,6 +1393,58 @@ static bool verify_json_codec_row_kind_valid(uint8_t kind) {
     }
 }
 
+static bool verify_json_shape_fields(const XgGlobalEvidence *ev, const XgJsonShapeSummary *shape,
+                                     char *errbuf, size_t errbuf_len) {
+    uint32_t actual_count = 0;
+    uint64_t shape_hash;
+    if (!ev || !shape)
+        return set_error(errbuf, errbuf_len, "AOT Json shape field verifier has incomplete input");
+    for (uint32_t i = 0; i < ev->njson_fields; i++) {
+        if (ev->json_fields[i].shape_id == shape->json_shape_id)
+            actual_count++;
+    }
+    if (actual_count != shape->field_count)
+        return set_error(errbuf, errbuf_len, "AOT Json shape field count does not re-derive");
+
+    shape_hash = xg_json_shape_hash_begin(shape->field_count);
+    for (uint32_t ordinal = 0; ordinal < shape->field_count; ordinal++) {
+        const XgJsonFieldSummary *field = NULL;
+        for (uint32_t i = 0; i < ev->njson_fields; i++) {
+            const XgJsonFieldSummary *candidate = &ev->json_fields[i];
+            if (candidate->shape_id != shape->json_shape_id || candidate->field_ordinal != ordinal)
+                continue;
+            if (field)
+                return set_error(errbuf, errbuf_len, "AOT Json shape field ordinal is duplicated");
+            field = candidate;
+        }
+        if (!field)
+            return set_error(errbuf, errbuf_len,
+                             "AOT Json shape field ordinals are not contiguous");
+        if (((field->flags & XG_JSON_FIELD_TYPED) != 0) != (field->type_key != 0))
+            return set_error(errbuf, errbuf_len,
+                             "AOT Json field typed contract does not re-derive");
+        if (shape->shape_kind == XG_JSON_SHAPE_RECORD_BRIDGE &&
+            ((field->flags & XG_JSON_FIELD_RECORD_BRIDGE) == 0 || field->type_key == 0))
+            return set_error(errbuf, errbuf_len,
+                             "AOT Json Record bridge field contract does not re-derive");
+        shape_hash = xg_json_shape_hash_add_field(shape_hash, shape->shape_kind, field->name_id,
+                                                  field->type_key);
+    }
+    for (uint32_t i = 0; i < ev->njson_fields; i++) {
+        const XgJsonFieldSummary *field = &ev->json_fields[i];
+        if (field->shape_id != shape->json_shape_id)
+            continue;
+        for (uint32_t j = i + 1; j < ev->njson_fields; j++) {
+            const XgJsonFieldSummary *other = &ev->json_fields[j];
+            if (other->shape_id == shape->json_shape_id && other->name_id == field->name_id)
+                return set_error(errbuf, errbuf_len, "AOT Json shape field name is duplicated");
+        }
+    }
+    if (shape_hash != shape->shape_hash)
+        return set_error(errbuf, errbuf_len, "AOT Json shape hash does not re-derive from fields");
+    return true;
+}
+
 static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
     if (!ev)
         return set_error(errbuf, errbuf_len, "AOT global evidence Json verifier has no evidence");
@@ -1423,6 +1475,10 @@ static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t er
             return set_error(errbuf, errbuf_len, "AOT Json field ordinal is stale");
         if (field->name_id == 0)
             return set_error(errbuf, errbuf_len, "AOT Json field has no static key");
+    }
+    for (uint32_t i = 0; i < ev->njson_shapes; i++) {
+        if (!verify_json_shape_fields(ev, &ev->json_shapes[i], errbuf, errbuf_len))
+            return false;
     }
     for (uint32_t i = 0; i < ev->njson_accesses; i++) {
         const XgJsonAccessSummary *access = &ev->json_accesses[i];
