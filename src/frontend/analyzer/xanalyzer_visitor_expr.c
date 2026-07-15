@@ -3627,8 +3627,8 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
 static bool xa_cast_type_is_uncertain(XrType *type) {
     if (!type)
         return true;
-    if (XR_TYPE_IS_UNKNOWN(type) || XR_TYPE_IS_NEVER(type) || XR_TYPE_IS_TYPE_PARAM(type) ||
-        XR_TYPE_IS_UNION(type) || XR_TYPE_IS_JSON(type))
+    if (XR_TYPE_IS_UNKNOWN_OR_ERROR(type) || XR_TYPE_IS_NEVER(type) ||
+        XR_TYPE_IS_TYPE_PARAM(type) || XR_TYPE_IS_JSON(type))
         return true;
     return false;
 }
@@ -3664,6 +3664,20 @@ static bool xa_cast_types_have_builtin_conversion(XrType *source, XrType *target
 static bool xa_cast_types_may_overlap(XrType *source, XrType *target) {
     if (xa_cast_type_is_uncertain(source) || xa_cast_type_is_uncertain(target))
         return true;
+    if (XR_TYPE_IS_UNION(source)) {
+        for (int i = 0; i < source->union_type.member_count; i++) {
+            if (xa_cast_types_may_overlap(source->union_type.members[i], target))
+                return true;
+        }
+        return false;
+    }
+    if (XR_TYPE_IS_UNION(target)) {
+        for (int i = 0; i < target->union_type.member_count; i++) {
+            if (xa_cast_types_may_overlap(source, target->union_type.members[i]))
+                return true;
+        }
+        return false;
+    }
     if (xa_cast_types_have_builtin_conversion(source, target))
         return true;
     if (xr_type_assignable(target, source))
@@ -3676,7 +3690,7 @@ static bool xa_cast_types_may_overlap(XrType *source, XrType *target) {
 /* as type cast: expr as T — returns T (non-safe), or T? (safe). */
 XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
     // Visit operand to ensure it's analyzed (side effects, narrowing). `as`
     // is an explicit conversion, so do not use the target as assignment
     // context; casts such as `2147483648 as int32` intentionally truncate.
@@ -3685,7 +3699,7 @@ XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
                          ? xr_tref_resolve_in_analyzer(ctx->analyzer, node->as.as_expr.type)
                          : NULL;
     if (!target)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
     if (!xa_cast_types_may_overlap(source, target)) {
         char msg[256];
         snprintf(msg, sizeof(msg), "Cannot cast type '%s' to unrelated type '%s'",
