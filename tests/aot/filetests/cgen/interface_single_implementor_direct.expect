@@ -3,7 +3,7 @@ regex=method-dispatch [0-9]+ callsite=[0-9]+ span=[0-9]+ kind=direct .*recv_clas
 regex=dispatch-target [0-9]+ callsite=[0-9]+ recv_class=[1-9][0-9]* method=[1-9][0-9]* owner_class=[1-9][0-9]* body=[1-9][0-9]* name=[1-9][0-9]* sig=[1-9][0-9]* root=[1-9][0-9]* depth=[0-9]+ evidence=0x31
 regex=interface-use [0-9]+ interface=[1-9][0-9]* implementor=[1-9][0-9]* use_site=[1-9][0-9]* reason=value flags=iface_object
 regex=interface-abi [0-9]+ interface=[1-9][0-9]* callsites=1 implementors=1 slots=1 flags=iface_object\+itable\+boxed_receiver data=boxed_value type=native_type_id itable=dispatch_slot tag=none evidence=callsite\+methods\+implementors\+dispatch\+object_use reason=none
-c_regex=int64_t v[0-9]+ = XR_TO_INT\(interface_single_implementor_direct_area_[0-9]+_boxed\(NULL, v[0-9]+\)\);
-c_regex=static XrValue interface_single_implementor_direct_area_[0-9]+_boxed\(xrt_closure_t \*_cl, XrValue p0\)
+c_regex=int64_t v[0-9]+ = XR_TO_INT\(interface_single_implementor_direct_[0-9a-f]{16}_area_[0-9]+_boxed\(NULL, v[0-9]+\)\);
+c_regex=static XrValue interface_single_implementor_direct_[0-9a-f]{16}_area_[0-9]+_boxed\(xrt_closure_t \*_cl, XrValue p0\)
 c_not_contains=xrt_method_
 not_contains=verified AOT dispatch plan kind
