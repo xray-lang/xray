@@ -1032,7 +1032,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_JSON, 4) == 0) {
         type = xr_type_new_json(NULL);
     } else if (base_len == 7 && strncmp(s, TYPE_NAME_UNKNOWN, 7) == 0) {
-        type = xr_type_new_unknown(NULL);
+        type = xr_type_new_error(X);
     } else if (base_len == 8 && strncmp(s, "Ordering", 8) == 0) {
         type = xr_type_new_enum(X, "Ordering");
     } else if (base_len == 6 && strncmp(s, "Endian", 6) == 0) {
