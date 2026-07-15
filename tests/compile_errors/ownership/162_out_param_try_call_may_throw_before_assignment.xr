@@ -1,0 +1,14 @@
+enum InitErr {
+    Fail
+}
+
+fn failBeforeAssign(x: out int) {
+    throw InitErr.Fail
+}
+
+fn bad(x: out int) {
+    try {
+        failBeforeAssign(out x)
+    } catch (e) {
+    }
+}
