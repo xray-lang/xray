@@ -2455,6 +2455,89 @@ TEST(analyzer_error_effect_marks_invalid_program_partial_facts) {
     setup_pool();
 }
 
+TEST(analyzer_error_effect_tracks_map_catch_aliases) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum MapErr { Boom, Other }\n"
+                         "fn failMap() { throw MapErr.Boom }\n"
+                         "fn mapLiteralRethrows() {\n"
+                         "  try { failMap() } catch (e: MapErr) {\n"
+                         "    const box = #{\"caught\": e, \"other\": MapErr.Other}\n"
+                         "    throw box[\"caught\"]\n"
+                         "  }\n"
+                         "}\n"
+                         "fn mapOtherKeyMutationPreserves() {\n"
+                         "  try { failMap() } catch (e: MapErr) {\n"
+                         "    var box = #{\"caught\": e, \"other\": e}\n"
+                         "    box[\"other\"] = MapErr.Other\n"
+                         "    throw box[\"caught\"]\n"
+                         "  }\n"
+                         "}\n"
+                         "fn mapCaughtKeyMutationInvalidates() {\n"
+                         "  try { failMap() } catch (e: MapErr) {\n"
+                         "    var box = #{\"caught\": e}\n"
+                         "    box[\"caught\"] = MapErr.Other\n"
+                         "    throw box[\"caught\"]\n"
+                         "  }\n"
+                         "}\n"
+                         "fn mapDynamicKeyRethrows(key: string) {\n"
+                         "  try { failMap() } catch (e: MapErr) {\n"
+                         "    var box: Map<string, MapErr> = #{}\n"
+                         "    box[key] = e\n"
+                         "    throw box[key]\n"
+                         "  }\n"
+                         "}\n"
+                         "fn mapDynamicKeyMismatch(key: string, other: string) {\n"
+                         "  try { failMap() } catch (e: MapErr) {\n"
+                         "    var box: Map<string, MapErr> = #{}\n"
+                         "    box[key] = e\n"
+                         "    throw box[other]\n"
+                         "  }\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_map_catch_alias.xr", program);
+
+    const XaEffectSummary *literal = analyzer_function_effect_summary(a, "mapLiteralRethrows");
+    const XaEffectSummary *other_key =
+        analyzer_function_effect_summary(a, "mapOtherKeyMutationPreserves");
+    const XaEffectSummary *invalidated =
+        analyzer_function_effect_summary(a, "mapCaughtKeyMutationInvalidates");
+    const XaEffectSummary *dynamic = analyzer_function_effect_summary(a, "mapDynamicKeyRethrows");
+    const XaEffectSummary *mismatch = analyzer_function_effect_summary(a, "mapDynamicKeyMismatch");
+    ASSERT(literal != NULL);
+    ASSERT(other_key != NULL);
+    ASSERT(invalidated != NULL);
+    ASSERT(dynamic != NULL);
+    ASSERT(mismatch != NULL);
+
+    const XaErrorTypeSet *literal_set = effect_summary_enum_set_named(a, literal, "MapErr");
+    const XaErrorTypeSet *other_key_set = effect_summary_enum_set_named(a, other_key, "MapErr");
+    const XaErrorTypeSet *invalidated_set = effect_summary_enum_set_named(a, invalidated, "MapErr");
+    const XaErrorTypeSet *dynamic_set = effect_summary_enum_set_named(a, dynamic, "MapErr");
+    const XaErrorTypeSet *mismatch_set = effect_summary_enum_set_named(a, mismatch, "MapErr");
+    ASSERT(literal_set != NULL);
+    ASSERT(other_key_set != NULL);
+    ASSERT(invalidated_set != NULL);
+    ASSERT(dynamic_set != NULL);
+    ASSERT(mismatch_set != NULL);
+    ASSERT(!literal_set->all_variants);
+    ASSERT(xa_bitset_test(&literal_set->variants, 0));
+    ASSERT(!xa_bitset_test(&literal_set->variants, 1));
+    ASSERT(!other_key_set->all_variants);
+    ASSERT(xa_bitset_test(&other_key_set->variants, 0));
+    ASSERT(!xa_bitset_test(&other_key_set->variants, 1));
+    ASSERT(invalidated_set->all_variants);
+    ASSERT(!dynamic_set->all_variants);
+    ASSERT(xa_bitset_test(&dynamic_set->variants, 0));
+    ASSERT(!xa_bitset_test(&dynamic_set->variants, 1));
+    ASSERT(mismatch_set->all_variants);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_converges_recursive_components) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -3170,6 +3253,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
     RUN_TEST(analyzer_error_effect_marks_invalid_program_partial_facts);
+    RUN_TEST(analyzer_error_effect_tracks_map_catch_aliases);
     RUN_TEST(analyzer_error_effect_converges_recursive_components);
 
     printf("\nFlow analysis tests:\n");
