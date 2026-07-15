@@ -3362,6 +3362,8 @@ static bool capacity_op_kind_valid(uint8_t kind) {
 }
 
 static uint8_t capacity_action_for(const XgCapacityOpSummary *cap) {
+    bool exact_count;
+    bool loop_append;
     if (!cap || !sequence_kind_valid(cap->sequence_kind) || !capacity_op_kind_valid(cap->op_kind) ||
         cap->receiver_type_key == 0)
         return XAOT_CAPACITY_REJECT;
@@ -3376,21 +3378,40 @@ static uint8_t capacity_action_for(const XgCapacityOpSummary *cap) {
         case XG_CAPACITY_APPEND:
         case XG_CAPACITY_EXTEND:
         case XG_CAPACITY_CONCAT:
-            return ((cap->flags & (XG_CAPACITY_EXACT_COUNT | XG_CAPACITY_LOOP_APPEND)) != 0)
-                       ? XAOT_CAPACITY_RESERVE_ONCE
-                       : XAOT_CAPACITY_CHECKED_GROW;
+            exact_count = (cap->flags & XG_CAPACITY_EXACT_COUNT) != 0;
+            loop_append = (cap->flags & XG_CAPACITY_LOOP_APPEND) != 0;
+            if (!exact_count)
+                return XAOT_CAPACITY_CHECKED_GROW;
+            if (loop_append && (cap->flags & XG_CAPACITY_NO_CLOBBER) == 0)
+                return XAOT_CAPACITY_CHECKED_GROW;
+            return XAOT_CAPACITY_RESERVE_ONCE;
         default:
             return XAOT_CAPACITY_REJECT;
     }
 }
 
 static uint8_t capacity_reason_for(const XgCapacityOpSummary *cap) {
+    bool exact_count;
+    bool loop_append;
     if (!cap || !sequence_kind_valid(cap->sequence_kind) || !capacity_op_kind_valid(cap->op_kind))
         return XAOT_CAPACITY_UNPROVEN_INVALID_KIND;
     if (cap->receiver_type_key == 0)
         return XAOT_CAPACITY_UNPROVEN_MISSING_RECEIVER_TYPE;
-    if (capacity_action_for(cap) == XAOT_CAPACITY_CHECKED_GROW)
+    switch ((XgCapacityOpKind) cap->op_kind) {
+        case XG_CAPACITY_PUSH:
+        case XG_CAPACITY_APPEND:
+        case XG_CAPACITY_EXTEND:
+        case XG_CAPACITY_CONCAT:
+            break;
+        default:
+            return XAOT_CAPACITY_UNPROVEN_NONE;
+    }
+    exact_count = (cap->flags & XG_CAPACITY_EXACT_COUNT) != 0;
+    loop_append = (cap->flags & XG_CAPACITY_LOOP_APPEND) != 0;
+    if (!exact_count)
         return XAOT_CAPACITY_UNPROVEN_COUNT_UNKNOWN;
+    if (loop_append && (cap->flags & XG_CAPACITY_NO_CLOBBER) == 0)
+        return XAOT_CAPACITY_UNPROVEN_ALIAS_OR_CLOBBER;
     return XAOT_CAPACITY_UNPROVEN_NONE;
 }
 
@@ -3408,6 +3429,8 @@ static uint32_t capacity_evidence_for(const XgCapacityOpSummary *cap) {
         bits |= XAOT_CAPACITY_EV_LOOP_APPEND;
     if ((cap->flags & XG_CAPACITY_MAY_GROW) != 0)
         bits |= XAOT_CAPACITY_EV_MAY_GROW;
+    if ((cap->flags & XG_CAPACITY_NO_CLOBBER) != 0)
+        bits |= XAOT_CAPACITY_EV_NO_CLOBBER;
     return bits;
 }
 
@@ -6268,6 +6291,8 @@ static const char *capacity_unproven_reason_name(uint8_t reason) {
             return "missing_receiver_type";
         case XAOT_CAPACITY_UNPROVEN_COUNT_UNKNOWN:
             return "count_unknown";
+        case XAOT_CAPACITY_UNPROVEN_ALIAS_OR_CLOBBER:
+            return "alias_or_clobber";
         default:
             return "unknown";
     }
@@ -6288,6 +6313,7 @@ static void print_capacity_evidence_bits(FILE *out, uint32_t bits) {
     PRINT_BIT(XAOT_CAPACITY_EV_EXACT_COUNT, "exact_count");
     PRINT_BIT(XAOT_CAPACITY_EV_LOOP_APPEND, "loop_append");
     PRINT_BIT(XAOT_CAPACITY_EV_MAY_GROW, "may_grow");
+    PRINT_BIT(XAOT_CAPACITY_EV_NO_CLOBBER, "no_clobber");
     if (first)
         fprintf(out, "none");
 #undef PRINT_BIT

@@ -7218,6 +7218,19 @@ static bool body_bulk_overlap_possible(XgBodyCollect *bc, const XgLocalType *dst
     return dst_local->sequence_storage_id == src_local->sequence_storage_id;
 }
 
+static uint32_t body_sequence_storage_alias_count(const XgBodyCollect *bc,
+                                                  const XgLocalType *local) {
+    uint32_t count = 0;
+    if (!bc || !local || local->sequence_storage_id == 0)
+        return 0;
+    for (uint32_t i = 0; i < bc->nlocals; i++) {
+        const XgLocalType *row = &bc->locals[i];
+        if (row->sequence_kind != 0 && row->sequence_storage_id == local->sequence_storage_id)
+            count++;
+    }
+    return count;
+}
+
 static XgLocalType *body_lookup_local_map_shape(XgBodyCollect *bc, const AstNode *expr) {
     XgLocalType *row;
     if (!bc || !expr)
@@ -7791,9 +7804,9 @@ static const AstNode *body_single_expr_statement(const AstNode *body) {
     return body->as.block.statements[0]->as.expr_stmt;
 }
 
-static bool body_counted_loop_push_is_proven(const XgBodyCollect *bc, const AstNode *call,
-                                             const XgLocalType *local, const AstNode *receiver,
-                                             const AstNode *value) {
+static bool body_counted_loop_push_count_is_proven(const XgBodyCollect *bc, const AstNode *call,
+                                                   const XgLocalType *local,
+                                                   const AstNode *receiver, const AstNode *value) {
     if (!bc || !call || !local || !local->sequence_fresh_empty || !receiver || !value ||
         receiver->type != AST_VARIABLE ||
         body_single_expr_statement(bc->counted_loop_body) != call || !bc->counted_loop_count_expr ||
@@ -7815,6 +7828,11 @@ static bool body_counted_loop_push_is_proven(const XgBodyCollect *bc, const AstN
         default:
             return false;
     }
+}
+
+static bool body_counted_loop_push_no_clobber_is_proven(const XgBodyCollect *bc,
+                                                        const XgLocalType *local) {
+    return body_sequence_storage_alias_count(bc, local) == 1;
 }
 
 static bool body_string_builder_append_has_exact_count(const XgLocalType *local,
@@ -7966,12 +7984,17 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
     if (local) {
         if (body_sequence_registry_method_matches(local, member->name, call->arg_count,
                                                   XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH)) {
-            bool loop_push =
-                body_counted_loop_push_is_proven(bc, node, local, member->object, arg0);
-            body_add_capacity_op(
-                bc, node, local, XG_CAPACITY_PUSH, loop_push ? bc->counted_loop_count_expr : NULL,
-                loop_push ? bc->counted_loop_id : 0,
-                loop_push ? XG_CAPACITY_EXACT_COUNT | XG_CAPACITY_LOOP_APPEND : 0, true);
+            bool loop_push_count =
+                body_counted_loop_push_count_is_proven(bc, node, local, member->object, arg0);
+            uint32_t proof_flags = 0;
+            if (loop_push_count) {
+                proof_flags |= XG_CAPACITY_EXACT_COUNT | XG_CAPACITY_LOOP_APPEND;
+                if (body_counted_loop_push_no_clobber_is_proven(bc, local))
+                    proof_flags |= XG_CAPACITY_NO_CLOBBER;
+            }
+            body_add_capacity_op(bc, node, local, XG_CAPACITY_PUSH,
+                                 loop_push_count ? bc->counted_loop_count_expr : NULL,
+                                 loop_push_count ? bc->counted_loop_id : 0, proof_flags, true);
             local->sequence_fresh_empty = false;
             body_update_sequence_json_shape_from_value(bc, local, arg0);
             return;

@@ -445,6 +445,7 @@ enum {
     XG_CAPACITY_EXACT_COUNT = 1u << 1,
     XG_CAPACITY_LOOP_APPEND = 1u << 2,
     XG_CAPACITY_BUILDER_FINAL = 1u << 3,
+    XG_CAPACITY_NO_CLOBBER = 1u << 4,
 };
 
 enum {

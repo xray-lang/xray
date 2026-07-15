@@ -11543,6 +11543,85 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(capacity_plan_requires_no_clobber_for_counted_loop_reserve_once) {
+    XgBuildKey key = {.source_hash = 311,
+                      .compiler_semver_hash = 312,
+                      .profile_hash = 313,
+                      .imported_summary_hash = 314,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    xg_global_evidence_init(&ev, key);
+
+    XgCapacityOpSummary clobbered = {.op_id = 1,
+                                     .owner_func_id = 7,
+                                     .source_span_id = 20,
+                                     .body_ordinal = 0,
+                                     .sequence_kind = XG_SEQ_ARRAY,
+                                     .op_kind = XG_CAPACITY_PUSH,
+                                     .receiver_type_key = 300,
+                                     .elem_type_key = 301,
+                                     .count_expr_id = 9,
+                                     .loop_id = 11,
+                                     .flags = XG_CAPACITY_MAY_GROW | XG_CAPACITY_EXACT_COUNT |
+                                              XG_CAPACITY_LOOP_APPEND};
+    XgCapacityOpSummary no_clobber = clobbered;
+    no_clobber.op_id = 2;
+    no_clobber.body_ordinal = 1;
+    no_clobber.flags |= XG_CAPACITY_NO_CLOBBER;
+    ASSERT_NOT_NULL(xg_global_evidence_add_capacity_op(&ev, &clobbered));
+    ASSERT_NOT_NULL(xg_global_evidence_add_capacity_op(&ev, &no_clobber));
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.ncapacity_plans, 2);
+    const XaotCapacityPlan *clobbered_plan = xaot_bundle_find_capacity_plan(&bundle, 1);
+    const XaotCapacityPlan *no_clobber_plan = xaot_bundle_find_capacity_plan(&bundle, 2);
+    ASSERT_NOT_NULL(clobbered_plan);
+    ASSERT_NOT_NULL(no_clobber_plan);
+    ASSERT_EQ_UINT(clobbered_plan->action, XAOT_CAPACITY_CHECKED_GROW);
+    ASSERT_EQ_UINT(clobbered_plan->unproven_reason, XAOT_CAPACITY_UNPROVEN_ALIAS_OR_CLOBBER);
+    ASSERT_TRUE((clobbered_plan->evidence & XAOT_CAPACITY_EV_EXACT_COUNT) != 0);
+    ASSERT_TRUE((clobbered_plan->evidence & XAOT_CAPACITY_EV_LOOP_APPEND) != 0);
+    ASSERT_TRUE((clobbered_plan->evidence & XAOT_CAPACITY_EV_NO_CLOBBER) == 0);
+    ASSERT_EQ_UINT(no_clobber_plan->action, XAOT_CAPACITY_RESERVE_ONCE);
+    ASSERT_EQ_UINT(no_clobber_plan->unproven_reason, XAOT_CAPACITY_UNPROVEN_NONE);
+    ASSERT_TRUE((no_clobber_plan->evidence & XAOT_CAPACITY_EV_NO_CLOBBER) != 0);
+
+    char *plan_dump = xaot_bundle_dump_plan(&bundle);
+    ASSERT_NOT_NULL(plan_dump);
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=checked_grow"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "reason=alias_or_clobber"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "exact_count+loop_append+may_grow+no_clobber"));
+    xr_free(plan_dump);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    char err[256];
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+
+    bundle.capacity_plans[0].action = XAOT_CAPACITY_RESERVE_ONCE;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT capacity plan action does not re-derive"));
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     setup_parser_session();
     const char *source = "fn touch(xs: Array<int>, b: Array<byte>, refs: Array<string>, s: string, "
@@ -11654,6 +11733,75 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_NOT_NULL(strstr(dump, "bulk-op"));
     ASSERT_NOT_NULL(strstr(dump, "encoding-op"));
     xr_free(dump);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_marks_aliased_counted_loop_capacity_checked) {
+    setup_parser_session();
+    const char *source = "fn direct(n: int) -> int {\n"
+                         "    var xs: Array<int> = []\n"
+                         "    for (i in 0..n) { xs.push(i) }\n"
+                         "    return len(xs)\n"
+                         "}\n"
+                         "fn aliased(n: int) -> int {\n"
+                         "    var xs: Array<int> = []\n"
+                         "    var alias: Array<int> = xs\n"
+                         "    for (i in 0..n) { xs.push(i) }\n"
+                         "    return len(alias)\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+
+    const XgCapacityOpSummary *direct_push = NULL;
+    const XgCapacityOpSummary *aliased_push = NULL;
+    for (uint32_t i = 0; i < ev.ncapacity_ops; i++) {
+        const XgCapacityOpSummary *row = &ev.capacity_ops[i];
+        if (row->op_kind != XG_CAPACITY_PUSH || (row->flags & XG_CAPACITY_LOOP_APPEND) == 0)
+            continue;
+        if ((row->flags & XG_CAPACITY_NO_CLOBBER) != 0)
+            direct_push = row;
+        else
+            aliased_push = row;
+    }
+    ASSERT_NOT_NULL(direct_push);
+    ASSERT_NOT_NULL(aliased_push);
+    ASSERT_TRUE((direct_push->flags & XG_CAPACITY_EXACT_COUNT) != 0);
+    ASSERT_TRUE((direct_push->flags & XG_CAPACITY_NO_CLOBBER) != 0);
+    ASSERT_TRUE((aliased_push->flags & XG_CAPACITY_EXACT_COUNT) != 0);
+    ASSERT_TRUE((aliased_push->flags & XG_CAPACITY_NO_CLOBBER) == 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotCapacityPlan *direct_plan =
+        xaot_bundle_find_capacity_plan(&bundle, direct_push->op_id);
+    const XaotCapacityPlan *aliased_plan =
+        xaot_bundle_find_capacity_plan(&bundle, aliased_push->op_id);
+    ASSERT_NOT_NULL(direct_plan);
+    ASSERT_NOT_NULL(aliased_plan);
+    ASSERT_EQ_UINT(direct_plan->action, XAOT_CAPACITY_RESERVE_ONCE);
+    ASSERT_EQ_UINT(direct_plan->unproven_reason, XAOT_CAPACITY_UNPROVEN_NONE);
+    ASSERT_EQ_UINT(aliased_plan->action, XAOT_CAPACITY_CHECKED_GROW);
+    ASSERT_EQ_UINT(aliased_plan->unproven_reason, XAOT_CAPACITY_UNPROVEN_ALIAS_OR_CLOBBER);
+
+    xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
     teardown_parser_session();
 }
@@ -17515,7 +17663,9 @@ RUN_TEST(global_evidence_records_options_bag_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);
 RUN_TEST(global_evidence_producer_records_user_hashable_direct_call_plan);
 RUN_TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows);
+RUN_TEST(capacity_plan_requires_no_clobber_for_counted_loop_reserve_once);
 RUN_TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows);
+RUN_TEST(global_evidence_producer_marks_aliased_counted_loop_capacity_checked);
 RUN_TEST(global_evidence_producer_proves_stringbuilder_literal_append_count);
 RUN_TEST(global_evidence_producer_canonicalizes_byte_uint8_sequence_type_keys);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
