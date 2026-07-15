@@ -208,10 +208,35 @@ def check_dynamic(root: Path, require_clean: bool = False) -> tuple[list[str], d
     manifest = load_manifest(root)
     policy = manifest.raw.get("dynamic_audit", {})
     migration_modules = set(policy.get("migration_modules", ()))
-    allowed = set(policy.get("allowed_symbols", ()))
+    allowlist = manifest.raw.get("dynamic_allowlist", ())
+    allowed: set[str] = set()
     items = dynamic_public_items(root)
     errors: list[str] = []
     debt: list[dict[str, object]] = []
+    required = {"symbol", "direction", "domain", "reason", "owner", "review_task"}
+    valid_directions = {"input", "output", "field"}
+    valid_domains = {"json_document", "json_wire_payload", "explicit_bridge"}
+    for index, entry in enumerate(allowlist, 1):
+        missing = sorted(required - set(entry))
+        symbol = str(entry.get("symbol", ""))
+        label = symbol or f"entry {index}"
+        if missing:
+            errors.append(f"dynamic_allowlist {label}: missing {', '.join(missing)}")
+        if not symbol:
+            continue
+        if symbol in allowed:
+            errors.append(f"dynamic_allowlist contains duplicate symbol: {symbol}")
+        allowed.add(symbol)
+        if entry.get("direction") not in valid_directions:
+            errors.append(f"dynamic_allowlist {symbol}: invalid direction {entry.get('direction')!r}")
+        if entry.get("domain") not in valid_domains:
+            errors.append(f"dynamic_allowlist {symbol}: invalid domain {entry.get('domain')!r}")
+        if not str(entry.get("reason", "")).strip():
+            errors.append(f"dynamic_allowlist {symbol}: reason must be non-empty")
+        if not str(entry.get("owner", "")).strip():
+            errors.append(f"dynamic_allowlist {symbol}: owner must be non-empty")
+        if not re.fullmatch(r"task-[0-9]+", str(entry.get("review_task", ""))):
+            errors.append(f"dynamic_allowlist {symbol}: review_task must be task-<number>")
     for item in items:
         symbol = str(item.get("qualified", ""))
         module = _dynamic_module(item)
@@ -240,6 +265,7 @@ def check_dynamic(root: Path, require_clean: bool = False) -> tuple[list[str], d
     report = {
         "schema": 1,
         "allowed_count": sum(1 for item in items if str(item.get("qualified", "")) in allowed),
+        "allowlist": list(allowlist),
         "migration_debt_count": len(debt),
         "migration_debt": debt,
     }
