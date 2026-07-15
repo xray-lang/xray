@@ -199,6 +199,13 @@ typedef struct FunctionReturnTargetEntry {
     bool unknown;
 } FunctionReturnTargetEntry;
 
+typedef struct SpecializedParamTargetEntry {
+    uint32_t function_id;
+    uint32_t param_id;
+    FunctionValueTarget target;
+    bool unknown;
+} SpecializedParamTargetEntry;
+
 typedef struct FunctionExprCaptureEntry {
     AstNode *function_expr;
     FunctionValueAliasState state;
@@ -227,6 +234,9 @@ struct ErrorSetCtx {
     FunctionReturnTargetEntry *function_return_targets;
     int function_return_target_count;
     int function_return_target_capacity;
+    SpecializedParamTargetEntry *specialized_param_targets;
+    int specialized_param_target_count;
+    int specialized_param_target_capacity;
     FunctionExprCaptureEntry *function_expr_captures;
     int function_expr_capture_count;
     int function_expr_capture_capacity;
@@ -760,6 +770,90 @@ static void store_function_return_target(ErrorSetCtx *ctx, XaSymbol *sym) {
     entry->seen = seen;
     entry->unknown = unknown;
     entry->target = target;
+}
+
+static bool is_mono_specialized_function_symbol(XaSymbol *sym) {
+    if (!sym || sym->kind != XA_SYM_FUNCTION || !sym->name || !strchr(sym->name, '$'))
+        return false;
+    AstNode *node = sym->links.function_decl_node;
+    return node && node->type == AST_FUNCTION_DECL && node->as.function_decl.type_param_count == 0;
+}
+
+static SpecializedParamTargetEntry *
+lookup_specialized_param_target_entry(ErrorSetCtx *ctx, XaSymbol *func_sym, XaSymbol *param_sym) {
+    if (!ctx || !func_sym || !param_sym || func_sym->id == 0 || param_sym->id == 0)
+        return NULL;
+    for (int i = 0; i < ctx->specialized_param_target_count; i++) {
+        SpecializedParamTargetEntry *entry = &ctx->specialized_param_targets[i];
+        if (entry->function_id == func_sym->id && entry->param_id == param_sym->id)
+            return entry;
+    }
+    return NULL;
+}
+
+static SpecializedParamTargetEntry *
+ensure_specialized_param_target_entry(ErrorSetCtx *ctx, XaSymbol *func_sym, XaSymbol *param_sym) {
+    SpecializedParamTargetEntry *entry =
+        lookup_specialized_param_target_entry(ctx, func_sym, param_sym);
+    if (entry)
+        return entry;
+    if (!ctx || !func_sym || !param_sym || func_sym->id == 0 || param_sym->id == 0)
+        return NULL;
+    if (ctx->specialized_param_target_count >= ctx->specialized_param_target_capacity) {
+        int new_cap = ctx->specialized_param_target_capacity == 0
+                          ? 32
+                          : ctx->specialized_param_target_capacity * 2;
+        XR_REALLOC_OR_ABORT(ctx->specialized_param_targets,
+                            (size_t) new_cap * sizeof(SpecializedParamTargetEntry),
+                            "specialized param target grow");
+        ctx->specialized_param_target_capacity = new_cap;
+    }
+    entry = &ctx->specialized_param_targets[ctx->specialized_param_target_count++];
+    memset(entry, 0, sizeof(*entry));
+    entry->function_id = func_sym->id;
+    entry->param_id = param_sym->id;
+    entry->target = function_value_target_none();
+    ctx->changed = true;
+    return entry;
+}
+
+static void record_specialized_param_target(ErrorSetCtx *ctx, XaSymbol *func_sym,
+                                            XaSymbol *param_sym, FunctionValueTarget target,
+                                            bool unknown) {
+    if (!ctx || !is_mono_specialized_function_symbol(func_sym) || !param_sym ||
+        !symbol_has_function_type(param_sym))
+        return;
+    SpecializedParamTargetEntry *entry =
+        ensure_specialized_param_target_entry(ctx, func_sym, param_sym);
+    if (!entry)
+        return;
+
+    if (unknown || !function_value_target_is_exact(target)) {
+        if (!entry->unknown || function_value_target_is_exact(entry->target)) {
+            entry->unknown = true;
+            entry->target = function_value_target_none();
+            ctx->changed = true;
+        }
+        return;
+    }
+    if (entry->unknown)
+        return;
+    if (!function_value_target_is_exact(entry->target)) {
+        entry->target = target;
+        ctx->changed = true;
+        return;
+    }
+    FunctionValueTarget merged = function_value_target_merge(entry->target, target);
+    if (!function_value_target_is_exact(merged)) {
+        entry->unknown = true;
+        entry->target = function_value_target_none();
+        ctx->changed = true;
+        return;
+    }
+    if (!function_value_target_equal(entry->target, merged)) {
+        entry->target = merged;
+        ctx->changed = true;
+    }
 }
 
 static XaSymbol *lookup_symbol_by_id(ErrorSetCtx *ctx, uint32_t symbol_id) {
@@ -1372,6 +1466,61 @@ static XaSymbol *function_like_param_symbol(ErrorSetCtx *ctx, AstNode *node, XaS
         return name && fn_scope ? xa_scope_lookup_local(fn_scope, name) : NULL;
     }
     return NULL;
+}
+
+static void clear_function_value_param_aliases(ErrorSetCtx *ctx, AstNode *fn_node) {
+    if (!ctx || !fn_node)
+        return;
+    XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, fn_node);
+    int param_count = function_like_param_count(fn_node);
+    for (int i = 0; i < param_count; i++) {
+        XaSymbol *param_sym = function_like_param_symbol(ctx, fn_node, fn_scope, i);
+        if (param_sym && symbol_has_function_type(param_sym))
+            invalidate_function_value_alias_target(ctx, param_sym->id);
+    }
+}
+
+static void apply_specialized_function_param_targets(ErrorSetCtx *ctx, AstNode *fn_node,
+                                                     XaSymbol *func_sym) {
+    if (!ctx || !fn_node || !is_mono_specialized_function_symbol(func_sym))
+        return;
+    for (int i = 0; i < ctx->specialized_param_target_count; i++) {
+        SpecializedParamTargetEntry *entry = &ctx->specialized_param_targets[i];
+        if (entry->function_id != func_sym->id)
+            continue;
+        XaSymbol *param_sym = lookup_symbol_by_id(ctx, entry->param_id);
+        if (!param_sym || !symbol_has_function_type(param_sym)) {
+            continue;
+        }
+        invalidate_function_value_alias_target(ctx, param_sym->id);
+        if (!entry->unknown && function_value_target_is_exact(entry->target))
+            set_function_value_alias_target(ctx, param_sym, entry->target);
+    }
+}
+
+static void record_specialized_function_call_targets(ErrorSetCtx *ctx, XaSymbol *callee_sym,
+                                                     const CallExprNode *call) {
+    if (!ctx || !call || !is_mono_specialized_function_symbol(callee_sym))
+        return;
+    AstNode *fn_node = callee_sym->links.function_decl_node;
+    if (!fn_node)
+        return;
+    XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, fn_node);
+    int param_count = function_like_param_count(fn_node);
+    int n = param_count < call->arg_count ? param_count : call->arg_count;
+    for (int i = 0; i < n; i++) {
+        AstNode *arg = call->arguments ? call->arguments[i] : NULL;
+        XaSymbol *param_sym = function_like_param_symbol(ctx, fn_node, fn_scope, i);
+        if (!arg || !param_sym || !symbol_has_function_type(param_sym))
+            continue;
+        FunctionValueTarget arg_target = resolve_function_value_expr_target(ctx, arg, 0);
+        if (function_value_target_is_exact(arg_target)) {
+            record_specialized_param_target(ctx, callee_sym, param_sym, arg_target, false);
+        } else if (expr_has_function_type(ctx, arg)) {
+            record_specialized_param_target(ctx, callee_sym, param_sym,
+                                            function_value_target_none(), true);
+        }
+    }
 }
 
 static bool es_walk_callsite_function_decl_body(ErrorSetCtx *ctx, XaSymbol *callee_sym,
@@ -2166,6 +2315,7 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
                         es_walk_function_expr_body(ctx, function_expr);
                         continue;
                     }
+                    record_specialized_function_call_targets(ctx, callee_sym, &node->as.call_expr);
                     if (es_walk_callsite_function_decl_body(ctx, callee_sym, &node->as.call_expr))
                         continue;
                     if (callee_sym &&
@@ -2900,6 +3050,8 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
     ctx->current_return_target = function_value_target_none();
     ctx->current_return_target_seen = false;
     ctx->current_return_target_unknown = false;
+    clear_function_value_param_aliases(ctx, func_node);
+    apply_specialized_function_param_targets(ctx, func_node, func_sym);
     es_walk_block(ctx, body);
     if (function_has_error_diagnostic(ctx, func_node, func_sym))
         xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_INVALID_PROGRAM);
@@ -2997,5 +3149,6 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
 cleanup:
     xr_free(funcs);
     xr_free(ctx.function_return_targets);
+    xr_free(ctx.specialized_param_targets);
     clear_function_expr_captures(&ctx);
 }
