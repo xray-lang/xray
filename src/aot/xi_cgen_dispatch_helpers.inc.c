@@ -6724,20 +6724,121 @@ static void xicgen_emit_map_instance_alloc(FILE *out, const char *class_name) {
     fprintf(out, "); ");
 }
 
-static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                         const XiValue *v, const char *prefix) {
-    const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
-    if (!class_name)
+static bool xicgen_class_data_same_identity(const XiClassData *a, const XiClassData *b) {
+    if (a == b)
+        return true;
+    if (!a || !b)
         return false;
-    const char *call_prefix = NULL;
-    const XiFunc *ctor = cg_lookup_class_ctor_global(ctx, class_name, &call_prefix);
+    if (a->class_name && b->class_name && strcmp(a->class_name, b->class_name) == 0)
+        return true;
+    if (a->display_name && b->display_name && strcmp(a->display_name, b->display_name) == 0)
+        return true;
+    if (a->class_name && b->display_name && strcmp(a->class_name, b->display_name) == 0)
+        return true;
+    return a->display_name && b->class_name && strcmp(a->display_name, b->class_name) == 0;
+}
+
+static const XiFunc *xicgen_find_constructor_for_class_data(XiCgenCtx *ctx, const XiFunc *f,
+                                                            const XiClassData *class_data,
+                                                            const char **out_prefix) {
+    if (out_prefix)
+        *out_prefix = NULL;
+    if (!class_data)
+        return NULL;
+
+    const XiFunc *ctor = NULL;
+    if (ctx && ctx->module && ctx->module->init) {
+        ctor = cg_find_constructor(ctx->module->init, class_data);
+        if (ctor) {
+            if (out_prefix)
+                *out_prefix = cg_module_prefix_for_func(ctx, ctor);
+            return ctor;
+        }
+    }
+    ctor = cg_find_constructor(f, class_data);
+    if (ctor) {
+        if (out_prefix)
+            *out_prefix = cg_module_prefix_for_func(ctx, ctor);
+        return ctor;
+    }
+
+    for (int i = 0; ctx && i < ctx->nimports; i++) {
+        const CgImportEntry *imp = &ctx->imports[i];
+        if (!xicgen_class_data_same_identity(imp->target_class, class_data))
+            continue;
+        ctor = imp->target_func;
+        if (!ctor && imp->target_class && imp->exporter_func)
+            ctor = cg_find_constructor(imp->exporter_func, imp->target_class);
+        if (ctor) {
+            if (out_prefix)
+                *out_prefix = imp->target_mod_name;
+            return ctor;
+        }
+    }
+
+    for (int mi = 0; ctx && mi < ctx->all_nmodules; mi++) {
+        const XiModule *mod = ctx->all_modules ? ctx->all_modules[mi] : NULL;
+        if (!mod || !mod->init)
+            continue;
+        for (uint16_t ci = 0; ci < mod->nclasses; ci++) {
+            const XiClassData *cd = mod->classes ? mod->classes[ci] : NULL;
+            if (!xicgen_class_data_same_identity(cd, class_data))
+                continue;
+            ctor = cg_find_constructor(mod->init, cd);
+            if (ctor) {
+                if (out_prefix)
+                    *out_prefix = mod->name;
+                return ctor;
+            }
+        }
+        for (uint16_t si = 0; si < mod->nslots; si++) {
+            const XiClassData *cd = mod->slot_classes ? mod->slot_classes[si] : NULL;
+            if (!xicgen_class_data_same_identity(cd, class_data))
+                continue;
+            ctor = cg_find_constructor(mod->init, cd);
+            if (ctor) {
+                if (out_prefix)
+                    *out_prefix = mod->name;
+                return ctor;
+            }
+        }
+    }
+    return NULL;
+}
+
+static bool xicgen_emit_resolved_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                  const XiValue *v, const char *prefix,
+                                                  const XiFunc *ctor, const char *call_prefix,
+                                                  const XiClassData *class_data) {
+    const char *resolved_prefix = call_prefix;
+    if (!ctor && class_data)
+        ctor = xicgen_find_constructor_for_class_data(ctx, f, class_data, &resolved_prefix);
+    if (!ctor && class_data &&
+        emit_class_native_default_constructor_expr(ctx, out, prefix, v, class_data, call_prefix))
+        return true;
     if (!ctor)
         return false;
-    if (emit_class_native_constructor_expr(ctx, out, f, prefix, v, ctor, call_prefix))
+    if (!resolved_prefix)
+        resolved_prefix = cg_module_prefix_for_func(ctx, ctor);
+    if (emit_class_native_constructor_expr(ctx, out, f, prefix, v, ctor, resolved_prefix))
         return true;
+    if (cg_func_needs_aot_coro_ctx(ctx, ctor)) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: unsupported AOT sync class constructor call to suspendable "
+                "function '%s'\n",
+                ctor->name ? ctor->name : "?");
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
+    if (!class_name && class_data)
+        class_name = class_data->class_name ? class_data->class_name : class_data->display_name;
+    if (!class_name)
+        return false;
     fprintf(out, "({ ");
     xicgen_emit_map_instance_alloc(out, class_name);
-    emit_fname(ctx, out, call_prefix ? call_prefix : prefix, ctor);
+    emit_fname(ctx, out, resolved_prefix ? resolved_prefix : prefix, ctor);
     fprintf(out, "(NULL, _inst");
     for (uint16_t a = 1; a < v->nargs; a++) {
         fprintf(out, ", ");
@@ -6746,6 +6847,22 @@ static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc
     }
     fprintf(out, "); _inst; })");
     return true;
+}
+
+static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                         const XiValue *v, const char *prefix) {
+    CgStaticFunctionCall static_call = cg_resolve_static_function_call(ctx, f, v->args[0]);
+    if (static_call.is_class_constructor &&
+        xicgen_emit_resolved_user_constructor(ctx, out, f, v, prefix, static_call.func,
+                                              static_call.prefix, static_call.class_data))
+        return true;
+
+    const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
+    if (!class_name)
+        return false;
+    const char *call_prefix = NULL;
+    const XiFunc *ctor = cg_lookup_class_ctor_global(ctx, class_name, &call_prefix);
+    return xicgen_emit_resolved_user_constructor(ctx, out, f, v, prefix, ctor, call_prefix, NULL);
 }
 
 /* Resolve a static method by class and name, walking the (possibly
@@ -7543,12 +7660,67 @@ static void xicgen_unbox(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     emit_conversion_suffix(out, conv_suffix);
 }
 
+static uint32_t xicgen_enum_layout_id_for_data(const XiEnumData *ed) {
+    if (!ed)
+        return 0;
+    if (ed->layout_id != 0)
+        return ed->layout_id;
+    const XrType *type = (const XrType *) ed->runtime_type;
+    if (type && type->kind == XR_KIND_ENUM)
+        return type->enum_type.layout && type->enum_type.layout->layout_id != 0
+                   ? type->enum_type.layout->layout_id
+                   : type->enum_type.layout_id;
+    return 0;
+}
+
+static bool xicgen_is_enum_evidence(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
+                                    const XrType *target, uint32_t *out_layout_id) {
+    uint32_t layout_id = 0;
+    bool found = false;
+    if (target && target->kind == XR_KIND_ENUM) {
+        layout_id = cg_enum_layout_id_for_type(ctx, target);
+        found = true;
+    }
+    if ((!found || layout_id == 0) && v && v->nargs >= 2) {
+        const XiEnumData *ed = cg_enum_for_shared_value_in_func(ctx, f, v->args[1]);
+        if (!ed)
+            ed = cg_resolve_imported_enum_value(ctx, f, v->args[1]);
+        if (ed) {
+            uint32_t data_layout_id = xicgen_enum_layout_id_for_data(ed);
+            if (layout_id == 0)
+                layout_id = data_layout_id;
+            found = true;
+        }
+    }
+    if (out_layout_id)
+        *out_layout_id = layout_id;
+    return found;
+}
+
+static void xicgen_emit_enum_is_predicate(FILE *out, const XiValue *value, uint32_t layout_id) {
+    fprintf(out, "(");
+    emit_vref(out, value);
+    fprintf(out, ".tag == XR_TAG_ENUM");
+    if (layout_id != 0) {
+        fprintf(out, " && (xrt_enum_value_layout_id(");
+        emit_vref(out, value);
+        fprintf(out, ") == 0 || xrt_enum_value_layout_id(");
+        emit_vref(out, value);
+        fprintf(out, ") == %u)", (unsigned) layout_id);
+    }
+    fprintf(out, ")");
+}
+
 static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                       const char *prefix) {
-    (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_is: missing arg");
     struct XrType *target = (struct XrType *) v->aux;
+    uint32_t enum_layout_id = 0;
+    if (xicgen_is_enum_evidence(ctx, f, v, target, &enum_layout_id)) {
+        xicgen_emit_enum_is_predicate(out, v->args[0], enum_layout_id);
+        return;
+    }
     if (!target) {
         fprintf(out, "0 /* XI_IS: NULL target type */");
         return;
@@ -7596,18 +7768,7 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
             break;
         }
         case XR_KIND_ENUM:
-            fprintf(out, "(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ".tag == XR_TAG_ENUM");
-            uint32_t layout_id = cg_enum_layout_id_for_type(ctx, target);
-            if (layout_id != 0) {
-                fprintf(out, " && (xrt_enum_value_layout_id(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ") == 0 || xrt_enum_value_layout_id(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ") == %u)", (unsigned) layout_id);
-            }
-            fprintf(out, ")");
+            xicgen_emit_enum_is_predicate(out, v->args[0], cg_enum_layout_id_for_type(ctx, target));
             break;
         default: {
             uint8_t tag = xr_type_to_xr_tag(target);

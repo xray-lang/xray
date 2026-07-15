@@ -901,6 +901,23 @@ static const XiFunc *cg_coro_direct_suspend_call_target(XiCgenCtx *ctx, const Xi
     return cg_coro_direct_suspend_call_target_info(ctx, current, v).func;
 }
 
+static CgStaticFunctionCall cg_coro_verified_direct_method_call(XiCgenCtx *ctx, const XiValue *v) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XaotMethodDispatchPlan *plan =
+        xaot_bundle_find_method_dispatch_plan_for_xi_call(bundle, v);
+    if (!bundle || !plan || plan->kind != XAOT_DISPATCH_DIRECT || plan->target_count != 1 ||
+        plan->target_start == 0 || plan->target_start - 1 >= bundle->ndispatch_target_cases)
+        return cg_no_static_function_call();
+
+    const XaotDispatchTargetCase *target = &bundle->dispatch_target_cases[plan->target_start - 1];
+    const char *target_prefix = NULL;
+    const XiFunc *target_func =
+        xaot_bundle_find_dispatch_target_func(bundle, target, &target_prefix);
+    if (!target_func)
+        return cg_no_static_function_call();
+    return cg_static_function_call(target_func, target_prefix);
+}
+
 static CgCoroSuspendCallSite cg_coro_direct_call_site_info(XiCgenCtx *ctx, const XiFunc *current,
                                                            const XiValue *v) {
     if (!v || v->nargs < 1)
@@ -925,6 +942,8 @@ static CgCoroSuspendCallSite cg_coro_direct_call_site_info(XiCgenCtx *ctx, const
             if (site.call.func)
                 site.arg_start = 1;
         }
+        if (!site.call.func)
+            site.call = cg_coro_verified_direct_method_call(ctx, v);
         if (!site.call.func) {
             const char *method_prefix = NULL;
             const XiFunc *mfunc =

@@ -6946,6 +6946,22 @@ generic_constructor:;
                 cls->aux_int = upval_idx;
         }
     }
+    /* Named-imported generic class construction is rewritten by
+     * monomorphization to the concrete export name (`Foo$i64(args)`), while
+     * the source import binding remains under the generic origin name
+     * (`import { Foo } ...`).  If no local/top/upvalue class object exists,
+     * preserve the cross-module provenance by emitting an import ref for the
+     * monomorphic export itself instead of falling through to a null receiver.
+     * AOT then resolves the constructor through the normal import/export table
+     * using the same metadata path as namespace imports. */
+    if (!cls && !force_builtin_class && module_name == NULL && class_sym && cname &&
+        strchr(cname, '$')) {
+        const char *module_path = xi_lower_export_module_for_symbol(l, class_sym, cname);
+        if (module_path)
+            cls = xi_lower_emit_import_ref(l, module_path, cname,
+                                           class_links ? class_links->type : l->type_any,
+                                           node ? (int) node->line : 0);
+    }
     /* Built-in unified-class names (Exception, Range, sync classes, etc.)
      * are populated into the VM builtins array by the prelude module
      * loader at fixed XR_GLOBAL_VAR_* indices. Resolve them via

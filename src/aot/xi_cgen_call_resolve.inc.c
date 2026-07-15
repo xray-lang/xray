@@ -214,7 +214,7 @@ static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, cons
                                                                : current;
         const XiImportRef *ref = cg_shared_slot_import_ref(module_init, slot);
         CgStaticFunctionCall imported = cg_resolve_import_function_call(ctx, ref);
-        if (imported.func)
+        if (imported.func || imported.is_class_constructor)
             return imported;
     }
 
