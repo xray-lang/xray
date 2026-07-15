@@ -139,8 +139,13 @@ vmcase(OP_CHAN_SEND) {
         XrValue _v = base[GETARG_C(i)];
         if (_transfer_mode != XR_TRANSFER_MOVE && XR_IS_PTR(_v))
             break;
-        if (XR_IS_PTR(_v) && xr_value_needs_copy(_v))
-            break;
+        if (XR_IS_PTR(_v)) {
+            XrObjHeader *_obj = XR_VALUE_GCPTR(_v);
+            XR_CHECK(!_obj || !XR_OBJ_GET_FLAG(_obj, XR_OBJ_TRANSIT),
+                     "OP_CHAN_SEND fast path: TRANSIT payload is not a valid channel transport");
+            if (xr_value_needs_copy(_v))
+                break;
+        }
         if (!xr_amutex_trylock(&_ch->lock))
             break;
         if (XR_UNLIKELY(atomic_load_explicit(&_ch->closed, memory_order_relaxed) ||
