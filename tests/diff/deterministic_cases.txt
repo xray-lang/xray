@@ -3,6 +3,7 @@
 tests/diff/cases/limits/select_cases_over_32.xr
 tests/diff/cases/semantics/cleanup/defer_async_await.xr
 tests/diff/cases/semantics/cleanup/defer_coroutine.xr
+tests/diff/cases/semantics/collections/map_index_missing_key_panic.xr
 tests/diff/cases/semantics/coro/await_array.xr
 tests/diff/cases/semantics/coro/await_tuple_destructure.xr
 tests/diff/cases/semantics/coro/channel_nonblocking_prelude_enums.xr

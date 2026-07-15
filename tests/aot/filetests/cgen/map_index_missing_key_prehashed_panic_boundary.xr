@@ -1,0 +1,9 @@
+const SCORES: Map<string, int> = #{"ada": 7}
+
+print(SCORES.get("missing") == null)
+try {
+    print(SCORES["missing"])
+    print("bad-index")
+} catch panic (p) {
+    print(p.code)
+}
