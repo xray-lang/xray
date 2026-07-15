@@ -1254,6 +1254,16 @@ static const char *binary_operator_spelling(int op) {
             return "/";
         case AST_BINARY_MOD:
             return "%";
+        case AST_BINARY_BAND:
+            return "&";
+        case AST_BINARY_BOR:
+            return "|";
+        case AST_BINARY_BXOR:
+            return "^";
+        case AST_BINARY_LSHIFT:
+            return "<<";
+        case AST_BINARY_RSHIFT:
+            return ">>";
         default:
             return "?";
     }
@@ -1345,7 +1355,7 @@ static void xa_check_removed_typeof_string_compare(XaInferContext *ctx, AstNode 
 
 XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
 
     XrType *saved_expected = ctx->expected_type;
     ctx->expected_type = NULL;
@@ -1367,6 +1377,11 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         right = xa_visit_infer_expr(ctx, node->as.binary.right);
     }
     ctx->expected_type = saved_expected;
+
+    if (XR_TYPE_IS_ERROR(left))
+        return left;
+    if (XR_TYPE_IS_ERROR(right))
+        return right;
 
     if (xa_freestanding_profile_enabled(ctx->analyzer) && node->type == AST_BINARY_ADD &&
         (XR_TYPE_IS_STRING(left) || XR_TYPE_IS_STRING(right))) {
@@ -1402,7 +1417,13 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         case AST_BINARY_RSHIFT: {
             XrType *r = binary_int_result_pair(
                 left, right, node->type == AST_BINARY_LSHIFT || node->type == AST_BINARY_RSHIFT);
-            return r ? r : xr_type_new_unknown(NULL);
+            if (r)
+                return r;
+            if (xa_binary_operator_should_report_static_error(left, right)) {
+                xa_report_binary_operator_type_error(ctx, node, node->type, left, right);
+                return xr_type_new_error(ctx->analyzer->isolate);
+            }
+            return xr_type_new_unknown(NULL);
         }
         default:
             break;
@@ -1416,7 +1437,7 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
     if (node->type == AST_BINARY_MOD &&
         (xa_type_contains_float(left) || xa_type_contains_float(right))) {
         xa_report_float_modulo_error(ctx, node, left, right);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     switch (node->type) {
@@ -1427,8 +1448,10 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         case AST_BINARY_MOD: {
             XrType *result = binary_arith_distribute(ctx, node->type, left, right);
             if (result && XR_TYPE_IS_UNKNOWN(result) &&
-                xa_binary_operator_should_report_static_error(left, right))
+                xa_binary_operator_should_report_static_error(left, right)) {
                 xa_report_binary_operator_type_error(ctx, node, node->type, left, right);
+                return xr_type_new_error(ctx->analyzer->isolate);
+            }
             return result;
         }
         default:
@@ -2258,7 +2281,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
 
 XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
 
     IndexGetNode *ig = &node->as.index_get;
     /*
@@ -2288,6 +2311,11 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     if (ig->index) {
         index_type = xa_visit_infer_expr(ctx, ig->index);
     }
+
+    if (container && XR_TYPE_IS_ERROR(container))
+        return container;
+    if (index_type && XR_TYPE_IS_ERROR(index_type))
+        return index_type;
 
     // FFI raw pointer subscript p[i] => *(p + i): yields the pointee type.
     // Dereferencing is unsafe (no bounds/null check), so it is only allowed
@@ -2323,6 +2351,11 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
             add_index_type_error(ctx, node, index_type, container->map.key_type);
         return container->map.value_type;
     }
+    if (xr_type_is_named_class(container, "Range")) {
+        if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
+            add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+        return xr_type_new_int(ctx->analyzer->isolate);
+    }
     if (XR_TYPE_IS_STRING(container)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         xa_analyzer_add_diagnostic(
@@ -2330,7 +2363,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
             "string does not support integer indexing or slice syntax; use runes(), bytes(), or "
             "slice(start, end)",
             &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     // Json subscript access: json["key"] → Json (or nullable schema field type if known).
@@ -2356,7 +2389,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                          object_shape_type_label(container), key);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-                return xr_type_new_unknown(NULL);
+                return xr_type_new_error(ctx->analyzer->isolate);
             }
         }
         // No schema or unknown key → result is Json (any JSON value including null)
@@ -2381,6 +2414,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                          object_shape_type_label(container), key);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                return xr_type_new_error(ctx->analyzer->isolate);
             }
             return xr_type_new_unknown(NULL);
         }
@@ -2389,10 +2423,20 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
             xa_analyzer_add_diagnostic(
                 ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                 "sealed Record index access requires a string literal key", &loc);
+            return xr_type_new_error(ctx->analyzer->isolate);
         }
         return xr_type_new_unknown(NULL);
     }
 
+    if (container && !XR_TYPE_IS_UNKNOWN(container)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[192];
+        snprintf(msg, sizeof(msg), "type '%s' does not support indexed access",
+                 xr_type_to_string(container));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
     return xr_type_new_unknown(NULL);
 }
 
@@ -2864,7 +2908,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
             xa_analyzer_add_diagnostic(
                 ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                 "empty object literal '{}' requires an explicit Record or Json context", &loc);
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(ctx->analyzer->isolate);
         }
         return xr_type_new_record_with_fields(ctx->analyzer->isolate, NULL, NULL, 0,
                                               expected->object.is_sealed);
