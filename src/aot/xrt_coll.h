@@ -4609,6 +4609,27 @@ static inline void xrt_record_merge(XrValue dst_val, XrValue src_val) {
     }
 }
 
+static inline void xrt_record_merge_copy_table(XrValue dst_val, XrValue src_val,
+                                               int64_t copy_pair_count,
+                                               const uint16_t *dst_src_ordinals) {
+    if (copy_pair_count <= 0 || !dst_src_ordinals)
+        return;
+    if (dst_val.tag != XR_TAG_PTR || !dst_val.ptr)
+        return;
+    if (src_val.tag != XR_TAG_PTR || !src_val.ptr)
+        return;
+    xrt_json_t *dst = (xrt_json_t *) dst_val.ptr;
+    xrt_json_t *src = (xrt_json_t *) src_val.ptr;
+    if (dst->object_kind != XRT_OBJECT_RECORD || src->object_kind != XRT_OBJECT_RECORD)
+        return;
+    for (int64_t i = 0; i < copy_pair_count; i++) {
+        uint16_t dst_idx = dst_src_ordinals[i * 2];
+        uint16_t src_idx = dst_src_ordinals[i * 2 + 1];
+        if ((int64_t) dst_idx < dst->field_count && (int64_t) src_idx < src->field_count)
+            dst->fields[dst_idx] = src->fields[src_idx];
+    }
+}
+
 #include "xrt_index_helpers.inc.c"
 
 /* =========================================================================

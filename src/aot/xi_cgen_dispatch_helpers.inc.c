@@ -8721,7 +8721,84 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     fprintf(out, ")");
 }
 
-/* Object spread merge: sealed Records use the Record helper; Json stays dynamic. */
+static const XgRecordFieldSummary *xicgen_record_field_by_shape_ordinal(const XgGlobalEvidence *ev,
+                                                                        XgRecordShapeId shape_id,
+                                                                        uint16_t ordinal) {
+    if (!ev || shape_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nrecord_fields; i++) {
+        const XgRecordFieldSummary *field = &ev->record_fields[i];
+        if (field->shape_id == shape_id && field->field_ordinal == ordinal)
+            return field;
+    }
+    return NULL;
+}
+
+static bool xicgen_record_shape_field_ordinal_by_name_id(const XgGlobalEvidence *ev,
+                                                         XgRecordShapeId shape_id, uint32_t name_id,
+                                                         uint16_t *out_ordinal) {
+    if (!ev || shape_id == XG_NO_ID || name_id == 0 || !out_ordinal)
+        return false;
+    for (uint32_t i = 0; i < ev->nrecord_fields; i++) {
+        const XgRecordFieldSummary *field = &ev->record_fields[i];
+        if (field->shape_id == shape_id && field->name_id == name_id) {
+            *out_ordinal = field->field_ordinal;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool xicgen_emit_record_merge_copy_table(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                const XaotRecordMergePlan *plan) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
+    if (!ev || !v || !plan || plan->base_field_count == 0 || plan->result_field_count == 0) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: Record merge plan has no field evidence table\n");
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+
+    for (uint16_t src_ord = 0; src_ord < plan->base_field_count; src_ord++) {
+        const XgRecordFieldSummary *src_field =
+            xicgen_record_field_by_shape_ordinal(ev, plan->base_shape_id, src_ord);
+        uint16_t dst_ord = UINT16_MAX;
+        if (!src_field || src_field->name_id == 0 ||
+            !xicgen_record_shape_field_ordinal_by_name_id(ev, plan->result_shape_id,
+                                                          src_field->name_id, &dst_ord)) {
+            if (ctx)
+                ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: Record merge plan %u cannot rederive copy table "
+                    "(src_ord=%u)\n",
+                    plan->merge_id, (unsigned) src_ord);
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+    }
+
+    fprintf(out, "xrt_record_merge_copy_table(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ", %u, (const uint16_t[]){", (unsigned) plan->base_field_count);
+    for (uint16_t src_ord = 0; src_ord < plan->base_field_count; src_ord++) {
+        const XgRecordFieldSummary *src_field =
+            xicgen_record_field_by_shape_ordinal(ev, plan->base_shape_id, src_ord);
+        uint16_t dst_ord = UINT16_MAX;
+        (void) xicgen_record_shape_field_ordinal_by_name_id(ev, plan->result_shape_id,
+                                                            src_field->name_id, &dst_ord);
+        if (src_ord > 0)
+            fprintf(out, ", ");
+        fprintf(out, "%u, %u", (unsigned) dst_ord, (unsigned) src_ord);
+    }
+    fprintf(out, "})");
+    return true;
+}
+
+/* Object spread merge: verified Records use a direct ordinal copy table; Json stays dynamic. */
 static void xicgen_json_merge(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) f;
@@ -8731,7 +8808,12 @@ static void xicgen_json_merge(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         v->xg_record_merge_id != XG_NO_ID
             ? xaot_bundle_find_record_merge_plan(cg_ctx_aot_bundle(ctx), v->xg_record_merge_id)
             : NULL;
-    fprintf(out, "%s(", record_plan ? "xrt_record_merge" : "xrt_json_merge");
+    if (record_plan && (record_plan->action == XAOT_RECORD_MERGE_COPY_WITH_OVERWRITE ||
+                        record_plan->action == XAOT_RECORD_MERGE_COPY_APPEND)) {
+        xicgen_emit_record_merge_copy_table(ctx, out, v, record_plan);
+        return;
+    }
+    fprintf(out, "xrt_json_merge(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
