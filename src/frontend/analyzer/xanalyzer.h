@@ -264,6 +264,9 @@ XR_FUNC bool xa_analyzer_check_assignment(XaAnalyzer *analyzer, XrType *target, 
                                           XrLocation *loc);
 XR_FUNC bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type, XrType **arg_types,
                                     int arg_count, XrLocation *loc);
+// Analyzer-only diagnostic recovery. Normal language assignability remains in
+// xr_type_assignable(); this helper only suppresses cascades after ErrorType exists.
+XR_FUNC bool xa_recovery_compatible(XrType *target, XrType *source);
 XR_FUNC bool xa_typecheck_assignable(XrType *target, XrType *source);
 
 // API: Iterable/Iterator structural type checking

@@ -156,6 +156,7 @@ TEST(type_union) {
 
 TEST(type_error_recovery) {
     XrType *t_error = xr_type_new_error(NULL);
+    XrType *t_int = xr_type_new_int(NULL);
     ASSERT(t_error != NULL);
     ASSERT(XR_TYPE_IS_ERROR(t_error));
     ASSERT(XR_TYPE_IS_UNKNOWN_OR_ERROR(t_error));
@@ -174,6 +175,13 @@ TEST(type_error_recovery) {
     XrType *poisoned = xr_type_union(g_isolate, xr_type_new_int(NULL), t_error);
     ASSERT(poisoned != NULL);
     ASSERT(XR_TYPE_IS_ERROR(poisoned));
+
+    ASSERT(!xr_type_assignable(t_int, t_error));
+    ASSERT(!xr_type_assignable(t_error, t_int));
+    ASSERT(xa_recovery_compatible(t_int, t_error));
+    ASSERT(xa_recovery_compatible(t_error, t_int));
+    ASSERT(xa_typecheck_assignable(t_int, t_error));
+    ASSERT(xa_typecheck_assignable(t_error, t_int));
 }
 
 TEST(type_assignable) {
@@ -2544,6 +2552,24 @@ TEST(analyzer_cast_error_recovery_and_union_overlap) {
     setup_pool();
 }
 
+TEST(analyzer_assignment_error_recovery_suppresses_cascade) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    AstNode *program = xr_parse(g_session, "var value: MissingAssignmentType = 1\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "assignment_error_recovery.xr", program);
+
+    int count = 0;
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count == 1);
+    ASSERT(analyzer_diag_contains(a, "undefined type 'MissingAssignmentType'"));
+    ASSERT(!analyzer_diag_contains(a, "not assignable"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -2899,6 +2925,7 @@ int main(void) {
     RUN_TEST(analyzer_rejects_error_type_container_success_types);
     RUN_TEST(analyzer_type_ref_failures_use_error_recovery);
     RUN_TEST(analyzer_cast_error_recovery_and_union_overlap);
+    RUN_TEST(analyzer_assignment_error_recovery_suppresses_cascade);
     RUN_TEST(analyzer_rejects_error_type_generic_argument_and_constraint);
     RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);
     RUN_TEST(compile_type_class);
