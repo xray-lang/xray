@@ -15,12 +15,14 @@ ROOT = Path(__file__).resolve().parents[3]
 POSITIVE_AOT_CASES = (
     "tests/aot/basic/ref_out_call_plan.xr",
     "tests/aot/basic/dynamic_function_value_ref_out_call_plan.xr",
+    "tests/aot/modules/import_param_contract.xr",
     "tests/aot/filetests/cgen/fixed_array_ref_param_abi.xr",
 )
 
 EXPECTED_OUTPUTS = {
     "tests/aot/basic/ref_out_call_plan.xr": b"2\n2\n9\n9\n5\n5\n9\n9\n",
     "tests/aot/basic/dynamic_function_value_ref_out_call_plan.xr": b"2\n2\n4\n4\n10\n10\n20\n20\n",
+    "tests/aot/modules/import_param_contract.xr": b"2\n2\n9\n9\n4\n4\n9\n9\n6\n6\n11\n11\n7\n7\n11\n11\n",
     "tests/aot/filetests/cgen/fixed_array_ref_param_abi.xr": b"10\n",
 }
 
