@@ -94,7 +94,7 @@ value_level_sroa|covered|allocation-plan .*action=stack|tests/aot/filetests/cgen
 generic_function_clone|covered|generic-body-plan .*action=clone|tests/aot/filetests/cgen|Specialized function body and ABI clone evidence now produces a verified clone plan.
 array_t_concrete_storage|covered|generic-storage-plan .*kind=array action=typed_inline|tests/aot/filetests/link|Array<T> POD lane storage produces a verified typed-inline generic storage plan.
 generic_code_size_policy|covered|generic-code-size-plan .*action=allow_clone|tests/aot/filetests/cgen|Generic clone decisions include a verified static code-size policy plan.
-generic_constraint_direct_call|covered|generic_constraint_direct_call_area|tests/aot/filetests/cgen|Concrete generic interface-constraint calls specialize to direct class method calls without interface helpers.
+generic_constraint_direct_call|covered|generic_constraint_direct_call_.*_area|tests/aot/filetests/cgen|Concrete generic interface-constraint calls specialize to direct class method calls without interface helpers.
 generic_constraint_type_switch|covered|generic-specialization .*action=type_switch|tests/aot/filetests/cgen|Interface-object generic constraint calls specialize through a verified type-switch dispatch in the cloned body.
 generic_code_size_share_policy|covered|generic-code-size-plan .*action=share_canonical_body .*reason=code_size_threshold|tests/aot/filetests/cgen|Large generic bodies consume a verified static code-size threshold and share the canonical body instead of cloning.
 interface_object_storage|covered|interface-abi .*iface_object.*itable.*boxed_receiver|tests/aot/filetests/cgen|Interface object ABI is covered by boxed receiver storage with verified itable metadata.
