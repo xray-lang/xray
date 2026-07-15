@@ -2035,6 +2035,33 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
     ASSERT(lossy_contract != NULL);
     ASSERT(lossy_contract->kind == XA_EFFECT_CONTRACT_NOTHROW);
 
+    XaAnalyzer *current = xa_analyzer_new(g_session);
+    ASSERT(current != NULL);
+    const char *current_source = "fn currentStatic(bytes: Slice<byte>) { string.fromUtf8(bytes) }\n"
+                                 "fn currentInstance(s: string) { s.sliceBytes(0, 1) }\n"
+                                 "fn currentLossy(bytes: Slice<byte>) { "
+                                 "string.fromUtf8Lossy(bytes) }\n";
+    AstNode *current_program = xr_parse(g_session, current_source);
+    ASSERT(current_program != NULL);
+    xa_analyzer_analyze(current, "effect_builtin_type_member_current_contracts.xr",
+                        current_program);
+    ASSERT(!analyzer_diag_contains(current, "error"));
+    const XaEffectSummary *current_static =
+        analyzer_function_effect_summary(current, "currentStatic");
+    const XaEffectSummary *current_instance =
+        analyzer_function_effect_summary(current, "currentInstance");
+    const XaEffectSummary *current_lossy =
+        analyzer_function_effect_summary(current, "currentLossy");
+    ASSERT(current_static != NULL);
+    ASSERT(current_instance != NULL);
+    ASSERT(current_lossy != NULL);
+    ASSERT(current_static->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT(current_instance->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((current_static->unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
+    ASSERT((current_instance->unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
+    ASSERT(xa_effect_summary_is_nothrow(current_lossy));
+    xa_analyzer_free(current);
+
     char from_utf8_sig[] = "(bytes: Slice<byte>): string @errors(NativeStringErr.BadUtf8)";
     char slice_bytes_sig[] = "(start: int, end: int): string @errors(NativeStringErr.BadSlice)";
     XaEffectContract from_utf8_contract;
