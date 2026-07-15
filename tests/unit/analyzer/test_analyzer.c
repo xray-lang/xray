@@ -2645,10 +2645,11 @@ TEST(analyzer_container_recovery_rejects_poisoned_success_types) {
     xa_analyzer_analyze(a, "container_error_recovery.xr", program);
 
     ASSERT(analyzer_diag_contains(a, "Undeclared variable 'missingElement'"));
-    ASSERT(analyzer_diag_contains(a, "generic constructor 'Array' expects 1 type argument"));
+    ASSERT(
+        analyzer_diag_contains(a, "cannot infer type arguments for generic constructor 'Array'"));
     ASSERT(!analyzer_diag_contains(a, "Array has no member 'missing'"));
     ASSERT(!analyzer_diag_contains(a, "Value is not callable"));
-    ASSERT(a->unresolved_inference_count == 0);
+    ASSERT(a->unresolved_inference_count == 1);
     ASSERT(a->recovery_poison_type_count >= 2);
 
     xa_analyzer_free(a);
@@ -2656,7 +2657,11 @@ TEST(analyzer_container_recovery_rejects_poisoned_success_types) {
 
     a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    program = xr_parse(g_session, "var typed = Array<int>()\nvar value: int = typed[0]\n");
+    program = xr_parse(g_session, "var typed = Array<int>()\n"
+                                  "var value: int = typed[0]\n"
+                                  "var contextualArray: Array<int> = Array()\n"
+                                  "var contextualMap: Map<string, int> = Map()\n"
+                                  "var contextualSet: Set<string> = Set()\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "typed_container_constructor.xr", program);
     int count = 0;

@@ -3111,15 +3111,20 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
 
     NewExprNode *ne = &node->as.new_expr;
 
+    bool poisoned_argument = false;
     /* Visit argument expressions so their types are resolved. */
     for (int i = 0; i < ne->arg_count; i++) {
-        if (ne->arguments[i])
-            xa_visit_infer_expr(ctx, ne->arguments[i]);
+        if (ne->arguments[i]) {
+            XrType *argument_type = xa_visit_infer_expr(ctx, ne->arguments[i]);
+            if (argument_type && XR_TYPE_IS_ERROR(argument_type))
+                poisoned_argument = true;
+        }
     }
 
     /* Builtin heap types: return the correct container/channel type
-     * directly, bypassing class-symbol lookup. Container construction
-     * requires explicit type arguments: Map<string, int>(), Channel<int>(). */
+     * directly, bypassing class-symbol lookup. Container construction must
+     * resolve its type arguments explicitly, contextually, or from a value
+     * argument; an erased success type is never constructed. */
     if (ne->class_name && !ne->module_name) {
         XrVMRuntime *X = ctx->analyzer->isolate;
         const char *cn = ne->class_name;
@@ -3131,7 +3136,8 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         else if (strcmp(cn, "Array") == 0 || strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0 ||
                  strcmp(cn, "Channel") == 0)
             required_type_args = 1;
-        if (required_type_args >= 0 && ne->type_arg_count != required_type_args) {
+        if (required_type_args >= 0 && ne->type_arg_count > 0 &&
+            ne->type_arg_count != required_type_args) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[192];
             snprintf(msg, sizeof(msg),
@@ -3148,6 +3154,55 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         for (int i = 0; i < tac; i++)
             ta[i] = ne->type_args[i] ? xr_tref_resolve_in_analyzer(ctx->analyzer, ne->type_args[i])
                                      : xr_type_new_error(NULL);
+
+        if (required_type_args >= 0 && tac == 0) {
+            XrType *expected = ctx->expected_type;
+            if ((strcmp(cn, "Map") == 0 || strcmp(cn, "WeakMap") == 0) && expected &&
+                XR_TYPE_IS_MAP(expected)) {
+                ta[0] = expected->map.key_type;
+                ta[1] = expected->map.value_type;
+            } else if (strcmp(cn, "Array") == 0 && expected && XR_TYPE_IS_ARRAY(expected)) {
+                ta[0] = expected->container.element_type;
+            } else if ((strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0) && expected &&
+                       expected->kind == XR_KIND_SET) {
+                ta[0] = expected->container.element_type;
+            } else if (strcmp(cn, "Channel") == 0 && expected &&
+                       expected->kind == XR_KIND_CHANNEL) {
+                ta[0] = expected->container.element_type;
+            }
+
+            if (!ta[0] && strcmp(cn, "Array") == 0 && ne->arg_count >= 2 && ne->arguments) {
+                ta[0] = xa_analyzer_get_node_type(ctx->analyzer, ne->arguments[1]);
+            }
+            if (!ta[0] && (strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0) &&
+                ne->arg_count >= 1 && ne->arguments) {
+                XrType *source = xa_analyzer_get_node_type(ctx->analyzer, ne->arguments[0]);
+                if (source && XR_TYPE_IS_ARRAY(source))
+                    ta[0] = source->container.element_type;
+            }
+
+            bool all_inferred = true;
+            for (int i = 0; i < required_type_args; i++) {
+                if (!ta[i]) {
+                    all_inferred = false;
+                    break;
+                }
+            }
+            if (!all_inferred) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                XaInferVar *var =
+                    xa_infer_var_new(ctx, "container constructor type arguments", &loc);
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "cannot infer type arguments for generic constructor '%s'; add explicit "
+                         "%s<T> type arguments or a contextual type",
+                         cn, cn);
+                return xa_infer_var_report_unsolved(ctx, var, msg);
+            }
+            tac = required_type_args;
+        }
+
         bool poisoned_type_arg = false;
         for (int i = 0; i < tac; i++) {
             if (xa_reject_error_type_success_type(ctx->analyzer, ta[i], "generic type argument", cn,
@@ -3156,6 +3211,8 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         }
         if (poisoned_type_arg)
             return xr_type_new_error(NULL);
+        if (required_type_args >= 0 && poisoned_argument)
+            return xr_type_new_error(X);
 
         if (strcmp(cn, "Map") == 0 || strcmp(cn, "WeakMap") == 0) {
             bt = xr_type_new_map(X, ta[0], ta[1]);
