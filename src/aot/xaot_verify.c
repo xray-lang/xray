@@ -1301,17 +1301,41 @@ static bool verify_derive_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
     }
     for (uint32_t i = 0; i < ev->nderived_fields; i++) {
         const XgDerivedFieldSummary *field = &ev->derived_fields[i];
+        const XgDeriveSummary *derive;
+        const XgClassFieldSummary *source;
+        const XgClassSummary *owner;
+        uint32_t expected_flags;
         if (field->field_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT derived field evidence has no id");
         for (uint32_t j = i + 1; j < ev->nderived_fields; j++) {
             if (ev->derived_fields[j].field_id == field->field_id)
                 return set_error(errbuf, errbuf_len, "AOT derived field evidence id is duplicated");
         }
-        if (!verify_find_derive_by_id(ev, field->derive_id))
+        derive = verify_find_derive_by_id(ev, field->derive_id);
+        if (!derive)
             return set_error(errbuf, errbuf_len, "AOT derived field owner derive is missing");
-        if (field->source_field_id == XG_NO_ID ||
-            !xg_global_evidence_find_class_field(ev, field->source_field_id))
+        source = xg_global_evidence_find_class_field(ev, field->source_field_id);
+        if (field->source_field_id == XG_NO_ID || !source)
             return set_error(errbuf, errbuf_len, "AOT derived source field is missing");
+        owner = verify_find_evidence_class(ev, source->owner_class_id);
+        if (!owner || owner->decl_id != derive->owner_decl_id)
+            return set_error(errbuf, errbuf_len,
+                             "AOT derived source field owner does not re-derive");
+        if ((source->flags & XG_CLASS_FIELD_STATIC) != 0 ||
+            source->instance_slot != field->field_ordinal)
+            return set_error(errbuf, errbuf_len,
+                             "AOT derived source field slot does not re-derive");
+        if (source->name_id != field->name_id || source->type_key != field->type_key)
+            return set_error(errbuf, errbuf_len,
+                             "AOT derived source field identity does not re-derive");
+        expected_flags = (source->flags & XG_CLASS_FIELD_PRIVATE) != 0 ? XG_DERIVED_FIELD_PRIVATE
+                         : (source->flags & XG_CLASS_FIELD_PROTECTED) != 0
+                             ? XG_DERIVED_FIELD_PROTECTED
+                             : XG_DERIVED_FIELD_PUBLIC;
+        if ((source->flags & XG_CLASS_FIELD_CONST) != 0)
+            expected_flags |= XG_DERIVED_FIELD_READONLY;
+        if (field->flags != expected_flags)
+            return set_error(errbuf, errbuf_len, "AOT derived source field flags do not re-derive");
     }
     for (uint32_t i = 0; i < ev->nderived_methods; i++) {
         const XgDerivedMethodSummary *method = &ev->derived_methods[i];
@@ -4187,19 +4211,118 @@ static bool verify_derived_eq_hash_plan_rederives(const XgGlobalEvidence *ev,
     return true;
 }
 
-static uint8_t verify_derived_clone_action_for(const XgDeriveSummary *clone) {
+static bool verify_derived_clone_field_range_valid(const XgGlobalEvidence *ev,
+                                                   const XgDeriveSummary *clone) {
+    uint32_t end;
+    if (!ev || !clone)
+        return false;
+    if (clone->field_count == 0)
+        return clone->field_start == 0;
+    if (clone->field_start == 0)
+        return false;
+    end = clone->field_start + (uint32_t) clone->field_count - 1;
+    return end >= clone->field_start && end <= ev->nderived_fields;
+}
+
+static const XgClassSummary *verify_derived_clone_class_by_id(const XgGlobalEvidence *ev,
+                                                              XgClassId class_id) {
+    if (!ev || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        if (ev->classes[i].class_id == class_id)
+            return &ev->classes[i];
+    }
+    return NULL;
+}
+
+static bool verify_derived_clone_class_has_clone(const XgGlobalEvidence *ev, XgClassId class_id) {
+    const XgClassSummary *cls = verify_derived_clone_class_by_id(ev, class_id);
+    if (!cls)
+        return false;
+    for (uint32_t i = 0; i < ev->nderives; i++) {
+        if (ev->derives[i].owner_decl_id == cls->decl_id &&
+            ev->derives[i].derive_kind == XG_DERIVE_CLONE)
+            return true;
+    }
+    return false;
+}
+
+static uint8_t verify_derived_clone_source_action(const XgGlobalEvidence *ev,
+                                                  const XgDeriveSummary *clone) {
+    bool needs_deep_copy = false;
+    if (!verify_derived_clone_field_range_valid(ev, clone))
+        return XAOT_DERIVED_CLONE_REJECT;
+    for (uint32_t i = 0; i < clone->field_count; i++) {
+        const XgDerivedFieldSummary *derived = &ev->derived_fields[clone->field_start - 1 + i];
+        const XgClassFieldSummary *field =
+            xg_global_evidence_find_class_field(ev, derived->source_field_id);
+        if (!field || field->field_id == XG_NO_ID || (field->flags & XG_CLASS_FIELD_STATIC) != 0)
+            return XAOT_DERIVED_CLONE_REJECT;
+        switch ((XgClassFieldTypeKind) field->semantic_kind) {
+            case XG_CLASS_FIELD_TYPE_I8:
+            case XG_CLASS_FIELD_TYPE_U8:
+            case XG_CLASS_FIELD_TYPE_I16:
+            case XG_CLASS_FIELD_TYPE_U16:
+            case XG_CLASS_FIELD_TYPE_I32:
+            case XG_CLASS_FIELD_TYPE_U32:
+            case XG_CLASS_FIELD_TYPE_I64:
+            case XG_CLASS_FIELD_TYPE_U64:
+            case XG_CLASS_FIELD_TYPE_ISIZE:
+            case XG_CLASS_FIELD_TYPE_USIZE:
+            case XG_CLASS_FIELD_TYPE_F32:
+            case XG_CLASS_FIELD_TYPE_F64:
+            case XG_CLASS_FIELD_TYPE_BOOL:
+            case XG_CLASS_FIELD_TYPE_RUNE:
+            case XG_CLASS_FIELD_TYPE_STRING:
+            case XG_CLASS_FIELD_TYPE_ENUM:
+            case XG_CLASS_FIELD_TYPE_UNIT:
+            case XG_CLASS_FIELD_TYPE_NULL:
+                break;
+            case XG_CLASS_FIELD_TYPE_ARRAY:
+            case XG_CLASS_FIELD_TYPE_MAP:
+            case XG_CLASS_FIELD_TYPE_SET:
+            case XG_CLASS_FIELD_TYPE_STRUCT:
+            case XG_CLASS_FIELD_TYPE_FIXED_UNION:
+            case XG_CLASS_FIELD_TYPE_FIXED_ARRAY:
+            case XG_CLASS_FIELD_TYPE_OPTIONAL:
+            case XG_CLASS_FIELD_TYPE_UNION:
+            case XG_CLASS_FIELD_TYPE_TUPLE:
+                needs_deep_copy = true;
+                break;
+            case XG_CLASS_FIELD_TYPE_CLASS:
+                if (!verify_derived_clone_class_has_clone(ev, field->target_class_id))
+                    return XAOT_DERIVED_CLONE_REJECT;
+                needs_deep_copy = true;
+                break;
+            case XG_CLASS_FIELD_TYPE_INTERFACE:
+            case XG_CLASS_FIELD_TYPE_FUNCTION:
+            case XG_CLASS_FIELD_TYPE_OBJECT:
+            case XG_CLASS_FIELD_TYPE_TYPE_PARAM:
+            case XG_CLASS_FIELD_TYPE_DYNAMIC:
+            default:
+                return XAOT_DERIVED_CLONE_REJECT;
+        }
+    }
+    if (clone->field_count == 0)
+        return XAOT_DERIVED_CLONE_BITWISE_COPY;
+    return needs_deep_copy ? XAOT_DERIVED_CLONE_DEEP_COPY_PLAN : XAOT_DERIVED_CLONE_FIELDWISE_COPY;
+}
+
+static uint8_t verify_derived_clone_action_for(const XgGlobalEvidence *ev,
+                                               const XgDeriveSummary *clone) {
     if (!clone || clone->derive_kind != XG_DERIVE_CLONE)
         return XAOT_DERIVED_CLONE_REJECT;
     if (clone->method_count != 0)
         return XAOT_DERIVED_CLONE_DIRECT_GENERATED_CALL;
-    if (clone->field_count == 0)
-        return XAOT_DERIVED_CLONE_BITWISE_COPY;
-    return XAOT_DERIVED_CLONE_FIELDWISE_COPY;
+    return verify_derived_clone_source_action(ev, clone);
 }
 
-static uint8_t verify_derived_clone_reason_for(const XgDeriveSummary *clone) {
+static uint8_t verify_derived_clone_reason_for(const XgGlobalEvidence *ev,
+                                               const XgDeriveSummary *clone) {
     if (!clone || clone->derive_kind != XG_DERIVE_CLONE)
         return XAOT_CLONE_UNPROVEN_MISSING_CLONE;
+    if (verify_derived_clone_action_for(ev, clone) == XAOT_DERIVED_CLONE_REJECT)
+        return XAOT_CLONE_UNPROVEN_UNSAFE_FIELD;
     return XAOT_CLONE_UNPROVEN_NONE;
 }
 
@@ -4229,8 +4352,8 @@ static bool verify_derived_clone_plan_rederives(const XgGlobalEvidence *ev,
         return set_error(errbuf, errbuf_len, "AOT derived Clone generated body is stale");
     if (plan->transfer_plan_id != XG_NO_ID)
         return set_error(errbuf, errbuf_len, "AOT derived Clone transfer plan does not re-derive");
-    if (plan->action != verify_derived_clone_action_for(clone) ||
-        plan->unproven_reason != verify_derived_clone_reason_for(clone))
+    if (plan->action != verify_derived_clone_action_for(ev, clone) ||
+        plan->unproven_reason != verify_derived_clone_reason_for(ev, clone))
         return set_error(errbuf, errbuf_len, "AOT derived Clone action does not re-derive");
     if (plan->evidence != verify_derived_clone_evidence_for(clone))
         return set_error(errbuf, errbuf_len, "AOT derived Clone evidence does not re-derive");
