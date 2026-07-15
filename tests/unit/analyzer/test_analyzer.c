@@ -2694,6 +2694,45 @@ TEST(analyzer_rejects_builtin_generic_arity) {
     setup_pool();
 }
 
+TEST(analyzer_rejects_generator_yield_value_mismatch) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    XrArena arena;
+    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
+    XrCompilerSessionScope scope;
+    ASSERT(xr_compiler_session_push_arena(g_session, &arena, "generator_yield_value_mismatch.xr",
+                                          &scope));
+
+    XrTypeRef *iter_args[] = {xr_tref_int(g_session)};
+    XrType *iter_type =
+        xr_tref_resolve_in_analyzer(a, xr_tref_generic(g_session, "Iterator", iter_args, 1));
+    ASSERT(iter_type != NULL);
+    ASSERT(iter_type->kind == XR_KIND_INTERFACE || iter_type->kind == XR_KIND_INSTANCE);
+    ASSERT(iter_type->instance.type_arg_count == 1);
+    ASSERT(iter_type->instance.type_args != NULL);
+    ASSERT(iter_type->instance.type_args[0] != NULL);
+    ASSERT(XR_TYPE_IS_INT(iter_type->instance.type_args[0]));
+    XrType *iter_elem = NULL;
+    ASSERT(xa_analyzer_is_iterable(a, iter_type, &iter_elem));
+    ASSERT(iter_elem != NULL);
+    ASSERT(XR_TYPE_IS_INT(iter_elem));
+    ASSERT(!xa_typecheck_assignable(iter_elem, xr_type_new_string(NULL)));
+
+    const char *source = "fn bad() -> Iterator<int> { yield \"x\" }";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+
+    xa_analyzer_analyze(a, "generator_yield_value_mismatch.xr", program);
+
+    ASSERT(analyzer_diag_contains(
+        a, "yielded value of type 'string' is not assignable to generator element type 'int'"));
+
+    xr_compiler_session_pop_arena(&scope);
+    xr_arena_destroy(&arena);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_rejects_error_type_container_success_types) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -3286,6 +3325,7 @@ int main(void) {
     RUN_TEST(analyzer_empty_set_uses_unsolved_infer_var);
     RUN_TEST(analyzer_empty_map_uses_unsolved_infer_var);
     RUN_TEST(analyzer_rejects_builtin_generic_arity);
+    RUN_TEST(analyzer_rejects_generator_yield_value_mismatch);
     RUN_TEST(analyzer_rejects_error_type_container_success_types);
     RUN_TEST(analyzer_type_ref_failures_use_error_recovery);
     RUN_TEST(analyzer_cast_error_recovery_and_union_overlap);

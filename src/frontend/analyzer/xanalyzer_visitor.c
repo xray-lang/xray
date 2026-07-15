@@ -6317,8 +6317,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                     "`yield` is only valid inside a generator function declared `-> Iterator<T>`",
                     &yloc);
-            } else if (elem && val_type && !XR_TYPE_IS_UNKNOWN(val_type) &&
-                       !xr_type_assignable(elem, val_type)) {
+            } else if (elem && val_type && !xa_typecheck_assignable(elem, val_type)) {
                 char msg[256];
                 snprintf(msg, sizeof(msg),
                          "yielded value of type '%s' is not assignable to generator element "

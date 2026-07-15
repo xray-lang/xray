@@ -1545,6 +1545,8 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         if (expected_arity >= 0 && tref->nchildren != expected_arity)
             return report_generic_arity_error(analyzer, tref->name, expected_arity,
                                               tref->nchildren);
+        if (xa_is_builtin_interface_name(tref->name))
+            return resolve_known_generic_in_analyzer(analyzer, tref);
         XaSymbol *sym = resolve_type_symbol(analyzer, tref->name);
         if (sym && sym->kind == XA_SYM_TYPE_ALIAS)
             return resolve_type_alias_symbol_in_analyzer(analyzer, sym, tref->children,
