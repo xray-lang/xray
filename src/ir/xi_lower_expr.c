@@ -1512,11 +1512,10 @@ static XiValue *lower_mem_layout_call(XiLower *l, AstNode *node, CallExprNode *c
     return xi_const_int(l->func, l->cur_block, (int64_t) value, l->type_int);
 }
 
-static XiValue *lower_mem_address_of_rawptr_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                                 const char *member) {
-    if (!l || !node || !call || !member || strcmp(member, "addressOf") != 0 ||
-        call->arg_count != 1 || call->type_arg_count != 0 || !call->arguments ||
-        !call->arguments[0])
+static XiValue *lower_mem_addr_pointer_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                            const char *member) {
+    if (!l || !node || !call || !member || strcmp(member, "addr") != 0 || call->arg_count != 1 ||
+        call->type_arg_count != 0 || !call->arguments || !call->arguments[0])
         return NULL;
 
     struct XrType *arg_type = xi_lower_node_type(l, call->arguments[0]);
@@ -1534,6 +1533,25 @@ static XiValue *lower_mem_address_of_rawptr_call(XiLower *l, AstNode *node, Call
     if (!v)
         return NULL;
     v->args[0] = ptr;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_mem_pointer_constructor_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                                   const char *member) {
+    if (!l || !node || !call || !member ||
+        (strcmp(member, "ptr") != 0 && strcmp(member, "mutPtr") != 0) || call->arg_count != 1 ||
+        call->type_arg_count != 1 || !call->arguments || !call->arguments[0])
+        return NULL;
+
+    XiValue *addr = xi_lower_expr(l, call->arguments[0]);
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    if (!addr || !result_type || !XR_TYPE_IS_POINTER(result_type))
+        return NULL;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CONVERT, result_type, 1);
+    if (!v)
+        return NULL;
+    v->args[0] = addr;
     v->line = (uint32_t) node->line;
     return v;
 }
@@ -4806,9 +4824,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *layout_const = lower_mem_layout_call(l, node, call, ma->name);
             if (layout_const)
                 return layout_const;
-            XiValue *addr_of = lower_mem_address_of_rawptr_call(l, node, call, ma->name);
-            if (addr_of)
-                return addr_of;
+            XiValue *pointer = lower_mem_pointer_constructor_call(l, node, call, ma->name);
+            if (pointer)
+                return pointer;
+            XiValue *addr = lower_mem_addr_pointer_call(l, node, call, ma->name);
+            if (addr)
+                return addr;
         }
 
         const XaParallelCallPlan *analyzer_parallel_plan =
@@ -4871,9 +4892,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *layout_const = lower_mem_layout_call(l, node, call, ma->name);
             if (layout_const)
                 return layout_const;
-            XiValue *addr_of = lower_mem_address_of_rawptr_call(l, node, call, ma->name);
-            if (addr_of)
-                return addr_of;
+            XiValue *pointer = lower_mem_pointer_constructor_call(l, node, call, ma->name);
+            if (pointer)
+                return pointer;
+            XiValue *addr = lower_mem_addr_pointer_call(l, node, call, ma->name);
+            if (addr)
+                return addr;
         }
 
         XiValue *chan_send = lower_channel_send_boundary_call(l, node, call, ma->name, recv);

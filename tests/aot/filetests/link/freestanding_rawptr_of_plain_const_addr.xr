@@ -5,6 +5,6 @@ const PLAIN_LABEL = comptime "plain"
 
 @c_export("xray_plain_const_addr")
 fn plainConstAddr() -> int {
-    return mem.addressOf(Ptr<int>.of(PLAIN_MAGIC)) +
-        mem.addressOf(Ptr<string>.of(PLAIN_LABEL))
+    return mem.addr(Ptr<int>.of(PLAIN_MAGIC)) +
+        mem.addr(Ptr<string>.of(PLAIN_LABEL))
 }

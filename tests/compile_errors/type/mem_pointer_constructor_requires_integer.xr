@@ -1,0 +1,4 @@
+import mem
+
+var p = mem.mutPtr<byte>("not an address")
+print(p.isNull())

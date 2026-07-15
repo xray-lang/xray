@@ -26,7 +26,7 @@ var qp = unsafe { q.ptr() }
 mem.set(qp, 5, 128)
 unsafe { print(qp[0]) }
 unsafe { print(qp[127]) }
-print(mem.addressOf(qp) % 64)
+print(mem.addr(qp) % 64)
 
 // zeroed allocation
 var z = mem.allocZeroed(8)

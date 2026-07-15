@@ -2168,9 +2168,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Writable page protection bit for mem.pageAlloc/pageProtect",
     },
     {
-        .name = "addressOf",
+        .name = "addr",
         .signature = "(ptr: Ptr<byte>): int",
-        .summary = "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)",
+        .summary = "Numeric address of any Ptr<T> or MutPtr<T>",
     },
     {
         .name = "alignOf",
@@ -2223,14 +2223,14 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)",
     },
     {
-        .name = "fromAddress",
-        .signature = "(addr: int): MutPtr<byte>",
-        .summary = "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe",
-    },
-    {
         .name = "move",
         .signature = "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()",
         .summary = "Copy n bytes from src to dst (may overlap; memmove)",
+    },
+    {
+        .name = "mutPtr",
+        .signature = "(addr: int): MutPtr<byte>",
+        .summary = "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe",
     },
     {
         .name = "nontemporalStore",
@@ -2261,6 +2261,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "prefetch",
         .signature = "(ptr: Ptr<byte>, rw: int): ()",
         .summary = "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch",
+    },
+    {
+        .name = "ptr",
+        .signature = "(addr: int): Ptr<byte>",
+        .summary = "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe",
     },
     {
         .name = "set",
@@ -6438,7 +6443,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.PROT_NONE` | `: int` | No access protection for mem.pageAlloc/pageProtect |\n"
             "| `mem.PROT_READ` | `: int` | Readable page protection bit for mem.pageAlloc/pageProtect |\n"
             "| `mem.PROT_WRITE` | `: int` | Writable page protection bit for mem.pageAlloc/pageProtect |\n"
-            "| `mem.addressOf` | `(ptr: Ptr<byte>): int` | Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress) |\n"
+            "| `mem.addr` | `(ptr: Ptr<byte>): int` | Numeric address of any Ptr<T> or MutPtr<T> |\n"
             "| `mem.alignOf` | `(): int` | Compile-time alignment in bytes of a statically laid out type T |\n"
             "| `mem.alloc` | `(n: int): Buffer` | Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped |\n"
             "| `mem.allocAligned` | `(n: int, align: int): Buffer` | Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*)) |\n"
@@ -6449,14 +6454,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.compare` | `(a: Ptr<byte>, b: Ptr<byte>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
             "| `mem.copy` | `(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
             "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
-            "| `mem.fromAddress` | `(addr: int): MutPtr<byte>` | Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 \xc2\xa7""7.2). Constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.move` | `(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
+            "| `mem.mutPtr` | `(addr: int): MutPtr<byte>` | Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.nontemporalStore` | `(ptr: MutPtr<byte>, v: int, size: int): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
             "| `mem.offsetOf` | `(field: string): int` | Compile-time byte offset of a field in a fixed-layout struct T |\n"
             "| `mem.pageAlloc` | `(bytes: int, prot?: int): MutPtr<byte>` | Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
             "| `mem.pageFree` | `(ptr: MutPtr<byte>, bytes: int): bool` | Release anonymous pages from mem.pageAlloc; returns false on OS failure |\n"
             "| `mem.pageProtect` | `(ptr: MutPtr<byte>, bytes: int, prot: int): bool` | Change anonymous page protection bits; returns false on OS failure |\n"
             "| `mem.prefetch` | `(ptr: Ptr<byte>, rw: int): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
+            "| `mem.ptr` | `(addr: int): Ptr<byte>` | Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.set` | `(dst: MutPtr<byte>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
             "| `mem.sizeOf` | `(): int` | Compile-time size in bytes of a statically laid out type T |\n"
             "| `mem.volatileLoad` | `(ptr: Ptr<byte>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"

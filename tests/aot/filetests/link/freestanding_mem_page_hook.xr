@@ -8,11 +8,11 @@ fn xray_page_hook_score(n: int) -> int {
     }
 
     var rw = mem.pageAlloc(size)
-    var rw_addr = mem.addressOf(rw)
+    var rw_addr = mem.addr(rw)
     var rw_freed = mem.pageFree(rw, size)
 
     var p = mem.pageAlloc(size, mem.PROT_READ | mem.PROT_WRITE)
-    var p_addr = mem.addressOf(p)
+    var p_addr = mem.addr(p)
     var protect_ok = mem.pageProtect(p, size, mem.PROT_READ)
     var freed = mem.pageFree(p, size)
 

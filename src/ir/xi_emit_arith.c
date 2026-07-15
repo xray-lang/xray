@@ -266,6 +266,11 @@ XR_FUNC void xi_emit_convert(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         case XR_KIND_RUNE:
             emit_inst(ctx, CREATE_ABC(OP_TORUNE, dst, src, 0));
             break;
+        case XR_KIND_POINTER:
+            /* VM pointer values use the same address-width integer payload as
+             * numeric addresses; the type distinction is compile-time only. */
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
+            break;
         default:
             emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
             return;

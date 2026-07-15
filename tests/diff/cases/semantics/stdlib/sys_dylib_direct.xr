@@ -28,7 +28,7 @@ if (lib != null) {
     print(sym != null)
     if (sym != null) {
         var symPtr: Ptr<byte> = sym!
-        print(mem.addressOf(symPtr) != 0)
+        print(mem.addr(symPtr) != 0)
     }
 
     var missingSym = lib!.symbol("__xray_missing_symbol_for_dylib_test__")

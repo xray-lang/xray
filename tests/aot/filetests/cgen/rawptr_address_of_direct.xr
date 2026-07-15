@@ -2,10 +2,10 @@ import mem
 
 @c_export("xray_rawptr_address_before")
 fn xray_rawptr_address_before(p: Ptr<byte>, q: Ptr<byte>) -> bool {
-    return mem.addressOf(p) < mem.addressOf(q)
+    return mem.addr(p) < mem.addr(q)
 }
 
 @c_export("xray_rawmut_address")
 fn xray_rawmut_address(p: MutPtr<uint32>) -> int {
-    return mem.addressOf(p)
+    return mem.addr(p)
 }

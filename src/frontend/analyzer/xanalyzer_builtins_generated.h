@@ -243,8 +243,9 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"pageAlloc", "(bytes: int, prot?: int): MutPtr<byte>", "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree", true, false, false, false, false},
     {"pageProtect", "(ptr: MutPtr<byte>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, false, false, false},
     {"pageFree", "(ptr: MutPtr<byte>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, false, false, false},
-    {"fromAddress", "(addr: int): MutPtr<byte>", "Construct a raw pointer from a numeric address (MMIO/physical memory; task 147 §7.2). Constructing is safe, dereferencing requires unsafe", true, false, false, false, false},
-    {"addressOf", "(ptr: Ptr<byte>): int", "Numeric address of any raw pointer (alignment checks, diagnostics; inverse of mem.fromAddress)", true, false, false, false, false},
+    {"ptr", "(addr: int): Ptr<byte>", "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", true, false, false, false, false},
+    {"mutPtr", "(addr: int): MutPtr<byte>", "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", true, false, false, false, false},
+    {"addr", "(ptr: Ptr<byte>): int", "Numeric address of any Ptr<T> or MutPtr<T>", true, false, false, false, false},
     {"copy", "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()", "Copy n bytes from src to dst (non-overlapping; memcpy)", true, false, false, false, false},
     {"move", "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()", "Copy n bytes from src to dst (may overlap; memmove)", true, false, false, false, false},
     {"set", "(dst: MutPtr<byte>, byte: int, n: int): ()", "Fill n bytes at dst with byte (memset)", true, false, false, false, false},
@@ -257,7 +258,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"PROT_WRITE", ": int", "Writable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false},
     {"PROT_EXEC", ": int", "Executable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false},
 };
-#define GEN_MEM_FUNCTION_COUNT 27
+#define GEN_MEM_FUNCTION_COUNT 28
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {

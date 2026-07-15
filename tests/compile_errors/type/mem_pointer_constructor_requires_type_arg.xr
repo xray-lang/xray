@@ -1,0 +1,4 @@
+import mem
+
+var p = mem.ptr(0)
+print(p.isNull())

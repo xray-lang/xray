@@ -457,15 +457,15 @@ fn xray_top_const_struct_array_nested_union_runtime(row: int, col: int) -> int {
 
 @c_export("xray_top_const_static_addr")
 fn xray_top_const_static_addr() -> int {
-    return mem.addressOf(Ptr<[int; 4]>.of(TABLE)) +
-        mem.addressOf(Ptr<[[byte; 4]; 2]>.of(MATRIX)) +
-        mem.addressOf(Ptr<[[[int; 2]; 2]; 2]>.of(CUBE)) +
-        mem.addressOf(Ptr<Header>.of(HEADER)) +
-        mem.addressOf(Ptr<[Outer; 2]>.of(GROUPS)) +
-        mem.addressOf(Ptr<string>.of(LABEL)) +
-        mem.addressOf(Ptr<[[[string; 2]; 2]; 2]>.of(LABEL_CUBE)) +
-        mem.addressOf(Ptr<(int, int, float)>.of(PAIR)) +
-        mem.addressOf(Ptr<[(string, int); 2]>.of(LABELED_ROWS)) +
-        mem.addressOf(Ptr<[Entry; 2]>.of(ENTRIES)) +
-        mem.addressOf(Ptr<I32Bits>.of(BITS))
+    return mem.addr(Ptr<[int; 4]>.of(TABLE)) +
+        mem.addr(Ptr<[[byte; 4]; 2]>.of(MATRIX)) +
+        mem.addr(Ptr<[[[int; 2]; 2]; 2]>.of(CUBE)) +
+        mem.addr(Ptr<Header>.of(HEADER)) +
+        mem.addr(Ptr<[Outer; 2]>.of(GROUPS)) +
+        mem.addr(Ptr<string>.of(LABEL)) +
+        mem.addr(Ptr<[[[string; 2]; 2]; 2]>.of(LABEL_CUBE)) +
+        mem.addr(Ptr<(int, int, float)>.of(PAIR)) +
+        mem.addr(Ptr<[(string, int); 2]>.of(LABELED_ROWS)) +
+        mem.addr(Ptr<[Entry; 2]>.of(ENTRIES)) +
+        mem.addr(Ptr<I32Bits>.of(BITS))
 }

@@ -342,17 +342,21 @@ static inline XrValue xrt_mem_page_free(XrValue ptr, XrValue bytes) {
 #endif
 }
 
-/* Address <-> pointer bridge (mem.fromAddress / mem.addressOf). fromAddress
+/* Address <-> pointer bridge (mem.ptr / mem.mutPtr / mem.addr). ptr/mutPtr
  * builds a raw pointer from a numeric address (MMIO / physical memory, 147
  * §7.2) — the cgen converts the tagged result to its RAWPTR rep exactly like
- * mem.alloc. addressOf is the inverse (alignment checks, diagnostics). The VM
+ * mem.alloc. addr is the inverse (alignment checks, diagnostics). The VM
  * side (mem.c) represents raw pointers as address ints, so both directions
  * agree byte-for-byte across backends. */
-static inline XrValue xrt_mem_from_address(XrValue addr) {
+static inline XrValue xrt_mem_ptr(XrValue addr) {
     return xr_mkptr((void *) (uintptr_t) (int64_t) xrt_mem_int_arg(addr), XR_TAG_PTR);
 }
 
-static inline XrValue xrt_mem_address_of(XrValue ptr) {
+static inline XrValue xrt_mem_mut_ptr(XrValue addr) {
+    return xrt_mem_ptr(addr);
+}
+
+static inline XrValue xrt_mem_addr(XrValue ptr) {
     return XR_FROM_INT((int64_t) (intptr_t) ptr.ptr);
 }
 

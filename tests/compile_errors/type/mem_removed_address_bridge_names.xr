@@ -1,0 +1,4 @@
+import mem
+
+var p = mem.fromAddress(0)
+print(mem.addressOf(p))

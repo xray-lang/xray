@@ -337,9 +337,11 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
         return true;
     if (strcmp(symbol, "mem.allocAligned") == 0)
         return true;
-    if (strcmp(symbol, "mem.fromAddress") == 0)
+    if (strcmp(symbol, "mem.ptr") == 0)
         return true;
-    if (strcmp(symbol, "mem.addressOf") == 0)
+    if (strcmp(symbol, "mem.mutPtr") == 0)
+        return true;
+    if (strcmp(symbol, "mem.addr") == 0)
         return true;
     if (strcmp(symbol, "mem.copy") == 0)
         return true;
