@@ -73,46 +73,64 @@ fn _decodeChar(c: int, alphabet: Base64Alphabet) -> int {
     return -1
 }
 
-fn _decodeRequired(src: Slice<byte>, offset: int, options: Base64DecodeOptions) -> int {
-    var value = _decodeChar(src[offset], options.alphabet)
-    if (value < 0) {
-        throw Base64Error.InvalidByte(offset, src[offset])
-    }
-    return value
-}
+// Shared non-throwing scanner result:
+//   kind: 0 valid, 1 length, 2 byte, 3 padding, 4 trailing bits
+//   arg: error length/offset; byteValue: InvalidByte payload
+//   end/rem/outLen: validated decode plan
+fn _scan(text: string, options: Base64DecodeOptions) -> (int, int, byte, int, int, int) {
+    var src: Slice<byte> = text.bytes()
+    var end = len(src)
+    while (end > 0 && src[end - 1] == 61) { end = end - 1 }
 
-fn _checkPadding(src: Slice<byte>, end: int, paddingCount: int, rem: int,
-                 options: Base64DecodeOptions) {
+    var zero: byte = 0
+    var paddingCount = len(src) - end
+    var rem = end % 4
     if (paddingCount > 2) {
-        throw Base64Error.InvalidPadding(end)
+        return (3, end, zero, 0, 0, 0)
     }
     for (var i = 0; i < end; i++) {
         if (src[i] == 61) {
-            throw Base64Error.InvalidPadding(i)
+            return (3, i, zero, 0, 0, 0)
         }
     }
     if (rem == 1) {
-        throw Base64Error.InvalidLength(end)
+        return (1, end, zero, 0, 0, 0)
     }
     if (options.padding == Base64PaddingPolicy.Forbidden && paddingCount > 0) {
-        throw Base64Error.InvalidPadding(end)
+        return (3, end, zero, 0, 0, 0)
     }
     if (rem == 0) {
         if (paddingCount > 0) {
-            throw Base64Error.InvalidPadding(end)
+            return (3, end, zero, 0, 0, 0)
         }
-        return
+    } else {
+        var requiredPadding = 2
+        if (rem == 3) { requiredPadding = 1 }
+        if (options.padding == Base64PaddingPolicy.Required && paddingCount != requiredPadding) {
+            return (3, end, zero, 0, 0, 0)
+        }
+        if (options.padding == Base64PaddingPolicy.Optional &&
+            paddingCount != 0 && paddingCount != requiredPadding) {
+            return (3, end, zero, 0, 0, 0)
+        }
     }
 
-    var requiredPadding = 2
-    if (rem == 3) { requiredPadding = 1 }
-    if (options.padding == Base64PaddingPolicy.Required && paddingCount != requiredPadding) {
-        throw Base64Error.InvalidPadding(end)
+    for (var i = 0; i < end; i++) {
+        if (_decodeChar(src[i], options.alphabet) < 0) {
+            return (2, i, src[i], 0, 0, 0)
+        }
     }
-    if (options.padding == Base64PaddingPolicy.Optional &&
-        paddingCount != 0 && paddingCount != requiredPadding) {
-        throw Base64Error.InvalidPadding(end)
+    if (rem == 2 && (_decodeChar(src[end - 1], options.alphabet) & 15) != 0) {
+        return (4, end - 1, zero, 0, 0, 0)
     }
+    if (rem == 3 && (_decodeChar(src[end - 1], options.alphabet) & 3) != 0) {
+        return (4, end - 1, zero, 0, 0, 0)
+    }
+
+    var outLen = (end / 4) * 3
+    if (rem == 2) { outLen = outLen + 1 }
+    else if (rem == 3) { outLen = outLen + 2 }
+    return (0, 0, zero, end, rem, outLen)
 }
 
 fn _encodeAlpha(data: Slice<byte>, alpha: string, padding: bool) -> string {
@@ -146,28 +164,16 @@ fn _encodeAlpha(data: Slice<byte>, alpha: string, padding: bool) -> string {
     return out.toString()
 }
 
-fn _decodeImpl(text: string, options: Base64DecodeOptions) -> Array<byte> {
-    var src: Slice<byte> = text.bytes()
-    var end = len(src)
-    while (end > 0 && src[end - 1] == 61) { end = end - 1 }
-
-    var paddingCount = len(src) - end
-    var rem = end % 4
-    _checkPadding(src, end, paddingCount, rem, options)
-
-    var full = end / 4
-    var outLen = full * 3
-    if (rem == 2) { outLen = outLen + 1 }
-    else if (rem == 3) { outLen = outLen + 2 }
-
+fn _decodeValidated(src: Slice<byte>, end: int, rem: int, outLen: int,
+                    options: Base64DecodeOptions) -> Array<byte> {
     var out = Array<byte>(outLen)
     var oi = 0
     var i = 0
     while (i + 4 <= end) {
-        var c0 = _decodeRequired(src, i, options)
-        var c1 = _decodeRequired(src, i + 1, options)
-        var c2 = _decodeRequired(src, i + 2, options)
-        var c3 = _decodeRequired(src, i + 3, options)
+        var c0 = _decodeChar(src[i], options.alphabet)
+        var c1 = _decodeChar(src[i + 1], options.alphabet)
+        var c2 = _decodeChar(src[i + 2], options.alphabet)
+        var c3 = _decodeChar(src[i + 3], options.alphabet)
         out[oi] = ((c0 << 2) | (c1 >> 4)) & 255
         out[oi + 1] = (((c1 & 15) << 4) | (c2 >> 2)) & 255
         out[oi + 2] = (((c2 & 3) << 6) | c3) & 255
@@ -175,23 +181,28 @@ fn _decodeImpl(text: string, options: Base64DecodeOptions) -> Array<byte> {
         i = i + 4
     }
     if (rem == 2) {
-        var c0 = _decodeRequired(src, i, options)
-        var c1 = _decodeRequired(src, i + 1, options)
-        if ((c1 & 15) != 0) {
-            throw Base64Error.NonCanonicalTrailingBits(i + 1)
-        }
+        var c0 = _decodeChar(src[i], options.alphabet)
+        var c1 = _decodeChar(src[i + 1], options.alphabet)
         out[oi] = ((c0 << 2) | (c1 >> 4)) & 255
     } else if (rem == 3) {
-        var c0 = _decodeRequired(src, i, options)
-        var c1 = _decodeRequired(src, i + 1, options)
-        var c2 = _decodeRequired(src, i + 2, options)
-        if ((c2 & 3) != 0) {
-            throw Base64Error.NonCanonicalTrailingBits(i + 2)
-        }
+        var c0 = _decodeChar(src[i], options.alphabet)
+        var c1 = _decodeChar(src[i + 1], options.alphabet)
+        var c2 = _decodeChar(src[i + 2], options.alphabet)
         out[oi] = ((c0 << 2) | (c1 >> 4)) & 255
         out[oi + 1] = (((c1 & 15) << 4) | (c2 >> 2)) & 255
     }
     return out
+}
+
+fn _decodeImpl(text: string, options: Base64DecodeOptions) -> Array<byte> {
+    var scan = _scan(text, options)
+    if (scan.0 == 1) { throw Base64Error.InvalidLength(scan.1) }
+    if (scan.0 == 2) { throw Base64Error.InvalidByte(scan.1, scan.2) }
+    if (scan.0 == 3) { throw Base64Error.InvalidPadding(scan.1) }
+    if (scan.0 == 4) { throw Base64Error.NonCanonicalTrailingBits(scan.1) }
+
+    var src: Slice<byte> = text.bytes()
+    return _decodeValidated(src, scan.3, scan.4, scan.5, options)
 }
 
 fn encode(data: Slice<byte>, options: Base64EncodeOptions? = null) -> string {
@@ -204,12 +215,7 @@ fn decode(text: string, options: Base64DecodeOptions? = null) -> Array<byte> {
 }
 
 fn isValid(text: string, options: Base64DecodeOptions? = null) -> bool {
-    try {
-        var decoded = _decodeImpl(text, _decodeOptions(options))
-        return len(decoded) >= 0
-    } catch (e: Base64Error) {
-        return false
-    }
+    return _scan(text, _decodeOptions(options)).0 == 0
 }
 
 export {

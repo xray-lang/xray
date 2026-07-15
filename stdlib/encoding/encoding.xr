@@ -52,12 +52,12 @@ fn hexDecode(hex: string) -> Array<byte> {
 }
 
 fn hexValid(hex: string) -> bool {
-    try {
-        var decoded = hexDecode(hex)
-        return len(decoded) >= 0
-    } catch (e: HexError) {
-        return false
+    var src: Slice<byte> = hex.bytes()
+    if (len(src) % 2 != 0) { return false }
+    for (var i = 0; i < len(src); i++) {
+        if (_hexVal(src[i]) < 0) { return false }
     }
+    return true
 }
 
 // ---- UTF-8 ----
