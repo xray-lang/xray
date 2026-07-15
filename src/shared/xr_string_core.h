@@ -29,6 +29,21 @@ typedef struct XrStringCoreSlice {
     size_t len;
 } XrStringCoreSlice;
 
+typedef enum XrStringCoreByteRangeError {
+    XR_STRING_CORE_BYTE_RANGE_OK = 0,
+    XR_STRING_CORE_BYTE_RANGE_OUT_OF_BOUNDS,
+    XR_STRING_CORE_BYTE_RANGE_NOT_SCALAR_BOUNDARY
+} XrStringCoreByteRangeError;
+
+typedef struct XrStringCoreByteRange {
+    XrStringCoreByteRangeError error;
+    XrStringCoreSlice slice;
+    int64_t start;
+    int64_t end;
+    int64_t byte_length;
+    int64_t boundary_offset;
+} XrStringCoreByteRange;
+
 typedef enum XrStringCoreRepeatKind {
     XR_STRING_CORE_REPEAT_INVALID = 0,
     XR_STRING_CORE_REPEAT_EMPTY,
@@ -113,6 +128,44 @@ static inline XrStringCoreSlice xr_string_core_slice_at(const char *data, size_t
         slice_len = len - start;
     out.data = data ? data + start : data;
     out.len = slice_len;
+    return out;
+}
+
+static inline bool xr_string_core_utf8_byte_boundary(const char *data, size_t len, int64_t offset) {
+    if (!data && len != 0)
+        return false;
+    int64_t n = xr_string_core_len_i64(len);
+    if (offset < 0 || offset > n)
+        return false;
+    if (offset == 0 || offset == n)
+        return true;
+    return !xr_utf8_core_is_continuation((uint8_t) data[(size_t) offset]);
+}
+
+static inline XrStringCoreByteRange xr_string_core_utf8_byte_range(const char *data, size_t len,
+                                                                   int64_t start, int64_t end) {
+    XrStringCoreByteRange out = {
+        XR_STRING_CORE_BYTE_RANGE_OK, {NULL, 0}, start, end, xr_string_core_len_i64(len), -1,
+    };
+    if (!data && len != 0) {
+        out.error = XR_STRING_CORE_BYTE_RANGE_OUT_OF_BOUNDS;
+        return out;
+    }
+    if (start < 0 || end < start || end > out.byte_length) {
+        out.error = XR_STRING_CORE_BYTE_RANGE_OUT_OF_BOUNDS;
+        return out;
+    }
+    if (!xr_string_core_utf8_byte_boundary(data, len, start)) {
+        out.error = XR_STRING_CORE_BYTE_RANGE_NOT_SCALAR_BOUNDARY;
+        out.boundary_offset = start;
+        return out;
+    }
+    if (!xr_string_core_utf8_byte_boundary(data, len, end)) {
+        out.error = XR_STRING_CORE_BYTE_RANGE_NOT_SCALAR_BOUNDARY;
+        out.boundary_offset = end;
+        return out;
+    }
+    out.slice = xr_string_core_slice_at(data, len, (size_t) start, (size_t) (end - start));
     return out;
 }
 
