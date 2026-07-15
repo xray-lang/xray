@@ -552,10 +552,10 @@ static bool xa_contextual_view_method_without_target(XaInferContext *ctx, XrType
                                                      const char *name, AstNode *node) {
     if (!receiver || !name)
         return false;
-    bool is_view_method =
-        (xr_type_is_named_class(receiver, "Buffer") && strcmp(name, "asSpan") == 0) ||
-        (XR_TYPE_IS_SPAN(receiver) &&
-         (strcmp(name, "asBytes") == 0 || strcmp(name, "reinterpret") == 0));
+    bool is_view_method = (xr_type_is_named_class(receiver, "Buffer") &&
+                           (strcmp(name, "asBytes") == 0 || strcmp(name, "asMutBytes") == 0)) ||
+                          (XR_TYPE_IS_SPAN(receiver) &&
+                           (strcmp(name, "asBytes") == 0 || strcmp(name, "reinterpret") == 0));
     if (!is_view_method || xa_has_view_target_context(ctx))
         return false;
     xa_report_view_expr_requires_target(ctx, node, name);
@@ -1903,11 +1903,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
     }
-    if (xr_type_is_named_class(obj_type, "Buffer") && ma->name && strcmp(ma->name, "ptr") == 0 &&
-        ctx->unsafe_depth == 0) {
+    if (xr_type_is_named_class(obj_type, "Buffer") && ma->name &&
+        strcmp(ma->name, "borrowPtr") == 0 && ctx->unsafe_depth == 0) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
-                                   "Buffer.ptr() must be inside an unsafe block", &loc);
+                                   "Buffer.borrowPtr() must be inside an unsafe block", &loc);
     }
     if (obj_type->kind == XR_KIND_CHANNEL) {
         if (prop_sym == SYMBOL_CANCELLED)
@@ -2252,8 +2252,8 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
         CallExprNode *call = &ig->array->as.call_expr;
         if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
             const char *name = call->callee->as.member_access.name;
-            if (name && (strcmp(name, "bytes") == 0 || strcmp(name, "asSpan") == 0 ||
-                         strcmp(name, "asBytes") == 0 || strcmp(name, "reinterpret") == 0))
+            if (name && (strcmp(name, "bytes") == 0 || strcmp(name, "asBytes") == 0 ||
+                         strcmp(name, "asMutBytes") == 0 || strcmp(name, "reinterpret") == 0))
                 ctx->allow_view_expr_for_copy = true;
         }
     }

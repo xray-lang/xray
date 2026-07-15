@@ -1,0 +1,5 @@
+import mem
+
+var b = mem.alloc(8)
+var view: Slice<byte> = b.asSpan()
+print(len(view))

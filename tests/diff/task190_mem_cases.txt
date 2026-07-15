@@ -1,3 +1,4 @@
 tests/diff/cases/semantics/stdlib/mem_load_store_scalar_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr
 tests/diff/cases/semantics/stdlib/mem_from_address_shared_core.xr
+tests/diff/cases/semantics/stdlib/buffer_asbytes_write_rejected_shared_core.xr

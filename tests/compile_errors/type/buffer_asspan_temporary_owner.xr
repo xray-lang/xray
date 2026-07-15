@@ -1,4 +1,0 @@
-import mem
-
-var view: Slice<byte> = mem.alloc(8).asSpan()
-print(len(view))

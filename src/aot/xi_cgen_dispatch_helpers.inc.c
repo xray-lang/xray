@@ -6672,10 +6672,12 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return;
     if (xicgen_emit_event_count_method(out, v, method, nargs))
         return;
-    if (method && strcmp(method, "asSpan") == 0 && nargs == 0 && v->nargs >= 1 &&
-        xr_type_is_named_class(v->args[0]->type, "Buffer")) {
+    if (method && (strcmp(method, "asBytes") == 0 || strcmp(method, "asMutBytes") == 0) &&
+        nargs == 0 && v->nargs >= 1 && xr_type_is_named_class(v->args[0]->type, "Buffer")) {
         if (cg_value_plan_is_span_aggregate(ctx, v)) {
-            fprintf(out, "xrt_buffer_as_span(");
+            fprintf(out, "%s(",
+                    strcmp(method, "asBytes") == 0 ? "xrt_buffer_as_bytes"
+                                                   : "xrt_buffer_as_mut_bytes");
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ")");
             return;
@@ -6685,10 +6687,10 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
-    if (method && strcmp(method, "ptr") == 0 && nargs == 0 && v->nargs >= 1 &&
+    if (method && strcmp(method, "borrowPtr") == 0 && nargs == 0 && v->nargs >= 1 &&
         xr_type_is_named_class(v->args[0]->type, "Buffer")) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-        fprintf(out, "xrt_buffer_data_ptr(");
+        fprintf(out, "xrt_buffer_borrow_ptr(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);

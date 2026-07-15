@@ -9,7 +9,7 @@ fn dynamicRoundTrip(p: MutPtr<byte>, offset: int, endian: Endian) -> uint32 {
 }
 
 var buffer = mem.allocZeroed(96)
-var p = unsafe { buffer.ptr() }
+var p = unsafe { buffer.borrowPtr() }
 
 unsafe {
     mem.store<int8>(p, 0, -2)

@@ -4,7 +4,7 @@
 import mem
 
 var buf = mem.allocZeroed(16)
-var p = unsafe { buf.ptr() }
+var p = unsafe { buf.borrowPtr() }
 mem.nontemporalStore(p, 0x12, 1)
 var p2 = unsafe { p.offset(2) }
 var p4 = unsafe { p.offset(4) }

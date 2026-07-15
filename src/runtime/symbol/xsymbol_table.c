@@ -299,6 +299,8 @@ static const char *xr_builtin_symbol_names[] = {
     "reinterpret",
     "asBytes",
     "mutPtr",
+    "asMutBytes",
+    "borrowPtr",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

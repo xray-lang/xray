@@ -448,8 +448,9 @@ static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
     {"sys", "OsCondvar", "broadcast", "(): ()", "Wake all waiters"},
     {"sys", "OsBarrier", "wait", "(): bool", "Wait until all parties have arrived"},
     {"sys", "OsOnce", "call", "(body: fn(): ()): ()", "Run the closure exactly once"},
-    {"mem", "Buffer", "asSpan", "(): Slice<byte>", "Borrow this buffer as a mutable Slice<byte> value"},
-    {"mem", "Buffer", "ptr", "(): MutPtr<byte>", "Return the underlying raw pointer; requires unsafe at the call site"},
+    {"mem", "Buffer", "asBytes", "(): Slice<byte>", "Borrow this buffer as a readonly Slice<byte> view"},
+    {"mem", "Buffer", "asMutBytes", "(): Slice<byte>", "Borrow this buffer as a mutable Slice<byte> view"},
+    {"mem", "Buffer", "borrowPtr", "(): MutPtr<byte>", "Borrow the underlying mutable pointer; requires unsafe at the call site"},
     {"mem", "Buffer", "resize", "(n: int): bool", "Resize this buffer; returns false on allocation failure"},
 };
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
@@ -493,8 +494,9 @@ static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = 
     {"regex", "Regex", "findAll", "re_m_find_all", 2, "0"},
     {"regex", "Regex", "replace", "re_m_replace", 2, "0"},
     {"regex", "Regex", "split", "re_m_split", 2, "0"},
-    {"mem", "Buffer", "asSpan", "mem_buffer_as_span", 0, "0"},
-    {"mem", "Buffer", "ptr", "mem_buffer_ptr", 0, "0"},
+    {"mem", "Buffer", "asBytes", "mem_buffer_as_bytes", 0, "0"},
+    {"mem", "Buffer", "asMutBytes", "mem_buffer_as_mut_bytes", 0, "0"},
+    {"mem", "Buffer", "borrowPtr", "mem_buffer_borrow_ptr", 0, "0"},
     {"mem", "Buffer", "resize", "mem_buffer_resize", 1, "0"},
     {"net", "NetConn", "fd", "conn_method_fd", 0, "0"},
     {"net", "NetConn", "close", "conn_method_close", 0, "0"},

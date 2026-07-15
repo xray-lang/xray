@@ -2565,13 +2565,18 @@ module mem {
     builtin_kind: "XR_BK_BUFFER"
   }
 
-  class_method Buffer.asSpan {
-    vm: "mem_buffer_as_span"
+  class_method Buffer.asBytes {
+    vm: "mem_buffer_as_bytes"
     argc: 0
   }
 
-  class_method Buffer.ptr {
-    vm: "mem_buffer_ptr"
+  class_method Buffer.asMutBytes {
+    vm: "mem_buffer_as_mut_bytes"
+    argc: 0
+  }
+
+  class_method Buffer.borrowPtr {
+    vm: "mem_buffer_borrow_ptr"
     argc: 0
   }
 
@@ -2939,16 +2944,22 @@ module mem {
     layer: "core"
   }
 
-  type_method Buffer.asSpan {
+  type_method Buffer.asBytes {
     signature: "(): Slice<byte>"
     receiver: "Buffer"
-    doc: "Borrow this buffer as a mutable Slice<byte> value"
+    doc: "Borrow this buffer as a readonly Slice<byte> view"
   }
 
-  type_method Buffer.ptr {
+  type_method Buffer.asMutBytes {
+    signature: "(): Slice<byte>"
+    receiver: "Buffer"
+    doc: "Borrow this buffer as a mutable Slice<byte> view"
+  }
+
+  type_method Buffer.borrowPtr {
     signature: "(): MutPtr<byte>"
     receiver: "Buffer"
-    doc: "Return the underlying raw pointer; requires unsafe at the call site"
+    doc: "Borrow the underlying mutable pointer; requires unsafe at the call site"
   }
 
   type_method Buffer.resize {

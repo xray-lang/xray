@@ -9,8 +9,9 @@
  *
  * KEY CONCEPT:
  *   `mem.alloc*` returns a managed Buffer handle whose native body owns the
- *   allocated byte block and releases it on drop. Low-level callers can cross
- *   into the raw pointer world through unsafe Buffer.ptr().
+ *   allocated byte block and releases it on drop. Safe callers borrow byte
+ *   views through Buffer.asBytes()/asMutBytes(); low-level callers cross into
+ *   the raw pointer world through unsafe Buffer.borrowPtr().
  *
  *   The module also carries raw-memory capabilities: memory fence, cache
  *   performance hints (prefetch/flush/invalidate/non-temporal store),
@@ -87,7 +88,8 @@ static inline void *mem_rawptr_arg(XrValue v) {
 typedef struct XrMemBufferBody {
     void *data;
     int64_t length;
-    XrSpanView span_cache;
+    XrSpanView readonly_span_cache;
+    XrSpanView mutable_span_cache;
 } XrMemBufferBody;
 
 int64_t xr_mem_buffer_length(XrValue value) {
@@ -263,7 +265,7 @@ static XrValue mem_alloc_aligned(XrVMRuntime *isolate, XrValue *args, int argc) 
     return mem_buffer_new(isolate, n, false, a);
 }
 
-static XrValue mem_buffer_ptr(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+static XrValue mem_buffer_borrow_ptr(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
     (void) isolate;
     (void) args;
     (void) argc;
@@ -271,21 +273,33 @@ static XrValue mem_buffer_ptr(XrVMRuntime *isolate, XrValue self, XrValue *args,
     return mem_ptr_result(buf ? buf->data : NULL);
 }
 
-static XrValue mem_buffer_as_span(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
+static XrValue mem_buffer_bytes_view(XrVMRuntime *isolate, XrValue self, bool readonly) {
     XrMemBufferBody *buf = mem_buffer_body(isolate, self);
     if (!buf)
         return xr_span_ref(NULL);
-    buf->span_cache.data = buf->data;
-    buf->span_cache.length = buf->length;
-    buf->span_cache.elem_type = XR_ELEM_U8;
-    buf->span_cache.elem_size = 1;
-    buf->span_cache.elem_tid = 0;
-    buf->span_cache.contains_refs = 0;
-    buf->span_cache.reserved = 0;
-    buf->span_cache.guard = XR_TO_PTR(self);
-    return xr_span_ref(&buf->span_cache);
+    XrSpanView *span = readonly ? &buf->readonly_span_cache : &buf->mutable_span_cache;
+    span->data = buf->data;
+    span->length = buf->length;
+    span->elem_type = XR_ELEM_U8;
+    span->elem_size = 1;
+    span->elem_tid = 0;
+    span->contains_refs = 0;
+    span->reserved = readonly ? XR_SPAN_VIEW_READONLY : 0;
+    span->guard = XR_TO_PTR(self);
+    return xr_span_ref(span);
+}
+
+static XrValue mem_buffer_as_bytes(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    return mem_buffer_bytes_view(isolate, self, true);
+}
+
+static XrValue mem_buffer_as_mut_bytes(XrVMRuntime *isolate, XrValue self, XrValue *args,
+                                       int argc) {
+    (void) args;
+    (void) argc;
+    return mem_buffer_bytes_view(isolate, self, false);
 }
 
 static XrValue mem_buffer_resize(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {

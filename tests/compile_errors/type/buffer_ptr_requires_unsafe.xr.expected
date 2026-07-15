@@ -1,1 +1,0 @@
-Buffer.ptr() must be inside an unsafe block

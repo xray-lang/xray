@@ -1,5 +1,5 @@
 // anchor: buffer-direct-index-rejected
-// Buffer is an opaque managed allocation; byte access goes through asSpan()
+// Buffer is an opaque managed allocation; byte access goes through asBytes()/asMutBytes().
 // or unsafe ptr(), not direct [] indexing.
 import mem
 

@@ -108,7 +108,7 @@ static inline XrValue xrt_buffer_new(int64_t length, int zeroed, size_t align) {
     return xrt_buffer_box(buf);
 }
 
-static inline xr_span_t xrt_buffer_as_span(XrValue value) {
+static inline xr_span_t xrt_buffer_bytes_view(XrValue value, int readonly) {
     xrt_buffer_object_t *buf = xrt_buffer_obj_ptr(value);
     if (!buf)
         return xrt_span_empty();
@@ -120,11 +120,19 @@ static inline xr_span_t xrt_buffer_as_span(XrValue value) {
     out.elem_size = 1;
     out.elem_tid = 0;
     out.contains_refs = 0;
-    out.flags = 0;
+    out.flags = readonly ? XRT_SPAN_FLAG_READONLY : 0;
     return out;
 }
 
-static inline XrValue xrt_buffer_data_ptr(XrValue value) {
+static inline xr_span_t xrt_buffer_as_bytes(XrValue value) {
+    return xrt_buffer_bytes_view(value, 1);
+}
+
+static inline xr_span_t xrt_buffer_as_mut_bytes(XrValue value) {
+    return xrt_buffer_bytes_view(value, 0);
+}
+
+static inline XrValue xrt_buffer_borrow_ptr(XrValue value) {
     xrt_buffer_object_t *buf = xrt_buffer_obj_ptr(value);
     return xr_mkptr(buf ? buf->data : NULL, XR_TAG_PTR);
 }
@@ -166,8 +174,8 @@ static inline XrValue xrt_buffer_method_0(XrValue recv, int sym) {
         return XR_NULL_VAL;
     if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
         return XR_FROM_INT(buf->length);
-    if (sym == XRT_SYM_PTR)
-        return xrt_buffer_data_ptr(recv);
+    if (sym == XRT_SYM_BORROW_PTR)
+        return xrt_buffer_borrow_ptr(recv);
     return XR_NULL_VAL;
 }
 

@@ -5837,8 +5837,8 @@ static bool xa_call_expr_is_borrowed_view(AstNode *expr) {
     if (!call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return false;
     const char *name = call->callee->as.member_access.name;
-    return name && (strcmp(name, "bytes") == 0 || strcmp(name, "asSpan") == 0 ||
-                    strcmp(name, "asBytes") == 0 || strcmp(name, "reinterpret") == 0);
+    return name && (strcmp(name, "bytes") == 0 || strcmp(name, "asBytes") == 0 ||
+                    strcmp(name, "asMutBytes") == 0 || strcmp(name, "reinterpret") == 0);
 }
 
 XR_FUNC bool xa_expr_has_stable_borrow_owner(AstNode *expr) {

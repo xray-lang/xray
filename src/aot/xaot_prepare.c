@@ -1986,7 +1986,7 @@ static bool prepare_span_value_writable_proven(const XaotBundle *bundle, const X
             return origin->nargs >= 1 &&
                    prepare_span_value_writable_proven(bundle, origin->args[0], depth + 1);
         case XI_CALL_METHOD:
-            return origin->aux && strcmp((const char *) origin->aux, "asSpan") == 0 &&
+            return origin->aux && strcmp((const char *) origin->aux, "asMutBytes") == 0 &&
                    origin->nargs >= 1 && origin->args[0] && origin->args[0]->type &&
                    xr_type_is_named_class(origin->args[0]->type, "Buffer") &&
                    !xr_type_is_const(origin->args[0]->type);

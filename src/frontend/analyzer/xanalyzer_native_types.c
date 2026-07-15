@@ -527,7 +527,7 @@ static bool xa_native_protocol_intrinsic_method(XrTypeId tid, const char *name, 
     }
     if (tid == XR_TID_BUFFER) {
         static const char *buffer_methods[] = {
-            "length", "asSpan", "ptr", "resize", NULL,
+            "length", "asBytes", "asMutBytes", "borrowPtr", "resize", NULL,
         };
         for (int i = 0; buffer_methods[i]; i++) {
             if (strcmp(name, buffer_methods[i]) == 0)

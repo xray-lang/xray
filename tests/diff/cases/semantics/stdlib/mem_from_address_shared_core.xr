@@ -13,7 +13,7 @@ print(mem.addr(z))
 // Data round-trip: rebuild a pointer from its numeric address and observe
 // the same bytes through both the original and the rebuilt pointer.
 var b = mem.alloc(16)
-var p = unsafe { b.ptr() }
+var p = unsafe { b.borrowPtr() }
 unsafe { p[0] = 42 }
 unsafe { p[15] = 99 }
 var addr = mem.addr(p)
@@ -54,7 +54,7 @@ print(mem.addr(typed_mut_null))
 
 // Alignment observation: an allocAligned(_, 64) buffer's address is 64-aligned.
 var ab = mem.allocAligned(128, 64)
-var a = unsafe { ab.ptr() }
+var a = unsafe { ab.borrowPtr() }
 print(mem.addr(a) % 64)
 
 // MMIO access pattern: volatile store/load through an address-constructed
