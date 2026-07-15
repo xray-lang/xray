@@ -307,7 +307,13 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
             return NULL;
         }
         XR_DCHECK(param != NULL && param->name != NULL, "method param name must not be NULL");
-        xi_lower_braun_write(&ml, xi_lower_var_create(&ml, 0, param->name, pt), entry, p);
+        int param_var = xi_lower_var_create(&ml, param->symbol_id, param->name, pt);
+        if ((base + i) < fixed_params && mode != XR_PARAM_VALUE) {
+            ml.vars[param_var].call_place = p;
+            ml.vars[param_var].place_mode = mode;
+        } else {
+            xi_lower_braun_write(&ml, param_var, entry, p);
+        }
     }
 
     /* For constructors: emit field default init for complex expressions.

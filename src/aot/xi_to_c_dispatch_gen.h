@@ -132,6 +132,9 @@
     X(BYTE_ARRAY_REPEAT_FROM, "xi.byte.array.repeat.from", xicgen_byte_array_repeat_from) \
     X(ARRAY_DATA_PTR, "xi.array.data.ptr", xicgen_array_data_ptr) \
     X(STATIC_ADDR, "xi.static.addr", xicgen_static_addr) \
+    X(LOCAL_ADDR, "xi.local.addr", xicgen_local_addr) \
+    X(PLACE_LOAD, "xi.place.load", xicgen_place_load) \
+    X(PLACE_STORE, "xi.place.store", xicgen_place_store) \
     X(PTR_LOAD, "xi.ptr.load", xicgen_ptr_load) \
     X(PTR_STORE, "xi.ptr.store", xicgen_ptr_store) \
     X(PTR_COPY_NONOVERLAP, "xi.ptr.copy.nonoverlap", xicgen_ptr_copy_nonoverlap)

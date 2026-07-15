@@ -1533,7 +1533,12 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
 
         /* Register parameter in Braun SSA using analyzer-assigned symbol_id */
         int var_id = xi_lower_var_create(&l, p->symbol_id, p->name, ptype);
-        xi_lower_braun_write(&l, var_id, entry, param_val);
+        if (i < l.func->nparams && p && p->passing_mode != XR_PARAM_VALUE) {
+            l.vars[var_id].call_place = param_val;
+            l.vars[var_id].place_mode = p->passing_mode;
+        } else {
+            xi_lower_braun_write(&l, var_id, entry, param_val);
+        }
     }
 
     /* Default parameter values are filled at the call site (C1): the analyzer

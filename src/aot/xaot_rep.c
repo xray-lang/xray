@@ -231,6 +231,12 @@ static XaotValueRep fixed_array_view_rep(const XiValue *value) {
     return rep;
 }
 
+static XaotValueRep call_bound_raw_view_rep(const XiValue *value) {
+    XaotValueRep rep = value_rep_make(value ? value->type : NULL, XAOT_REP_RAWPTR);
+    rep.kind = XAOT_VALUE_VIEW;
+    return rep;
+}
+
 XR_FUNC XaotValueRep xaot_value_rep_for_value(const XiValue *value) {
     XaotRep rep;
 
@@ -239,12 +245,16 @@ XR_FUNC XaotValueRep xaot_value_rep_for_value(const XiValue *value) {
     if ((value->type && XR_TYPE_IS_UNIT(value->type)) ||
         xi_generated_op_result_kind(value->op) == XI_GEN_RESULT_VOID)
         return value_rep_make(value->type, XAOT_REP_VOID);
+    if (value->op == XI_LOCAL_ADDR)
+        return call_bound_raw_view_rep(value);
     if (value->type && value->type->kind == XR_KIND_SPAN)
         return value_rep_make(value->type, XAOT_REP_SPAN);
     if (trace_fixed_array_field_ref(value))
         return fixed_array_view_rep(value);
     if (fixed_array_elem_rep_for_value(value, &rep))
         return value_rep_make(value->type, rep);
+    if (value->type && value->type->kind == XR_KIND_FIXED_ARRAY && value->op == XI_PLACE_LOAD)
+        return call_bound_raw_view_rep(value);
     if (value->type && value->type->kind == XR_KIND_FIXED_ARRAY)
         return value_rep_make(value->type, XAOT_REP_TAGGED);
     if (rep_from_native_name(xi_generated_op_result_native_type(value->op), &rep))

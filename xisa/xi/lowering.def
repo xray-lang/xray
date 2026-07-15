@@ -916,6 +916,24 @@
   :required-targets (aot-c)
   :aot-c (driver xicgen_static_addr))
 
+(lower xi.local.addr
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_local_addr)
+  :aot-c (driver xicgen_local_addr))
+
+(lower xi.place.load
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_place_load)
+  :aot-c (driver xicgen_place_load))
+
+(lower xi.place.store
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_place_store)
+  :aot-c (driver xicgen_place_store))
+
 (lower xi.ptr.load
   :match ()
   :required-targets (vm-bytecode aot-c)

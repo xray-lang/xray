@@ -10180,6 +10180,110 @@ static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     emit_conversion_suffix(out, conv_suffix);
 }
 
+static XaotValueRep xicgen_place_pointee_value_rep(XiCgenCtx *ctx, const XiFunc *f,
+                                                   const XiValue *place) {
+    XaotValueRep rep;
+    memset(&rep, 0, sizeof(rep));
+    if (place && place->op == XI_LOCAL_ADDR && place->nargs == 1 && place->args[0]) {
+        const XaotValuePlan *source_plan = cg_value_plan(ctx, place->args[0]);
+        if (source_plan)
+            return source_plan->rep;
+    }
+    if (place && place->op == XI_PARAM && place->aux_int >= 0) {
+        const XaotFuncPlan *func_plan = cg_func_plan(ctx, f);
+        uint16_t index = (uint16_t) place->aux_int;
+        if (func_plan && func_plan->abi.params && index < func_plan->abi.nparams &&
+            (func_plan->abi.params[index].flags & XAOT_ABI_SLOT_BORROWED_PLACE) != 0)
+            return func_plan->abi.params[index].pointee_rep;
+    }
+    return xaot_value_rep_for_type(place ? place->type : NULL);
+}
+
+static const char *xicgen_place_pointee_c_type(XiCgenCtx *ctx, const XiFunc *f,
+                                               const XiValue *place, XaotValueRep *rep_out) {
+    XaotValueRep rep = xicgen_place_pointee_value_rep(ctx, f, place);
+    if (rep_out)
+        *rep_out = rep;
+    return rep.c_type ? rep.c_type : ctype_str(xaot_value_storage_rep(rep));
+}
+
+static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    (void) f;
+    (void) prefix;
+    if (!v || v->nargs != 1 || !v->args[0]) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (v->type && v->type->kind == XR_KIND_SPAN && cg_type_is_byte_slice(v->type) &&
+        v->args[0]->type && v->args[0]->type->kind == XR_KIND_ARRAY) {
+        fprintf(out, "(void *)((xr_span_t[]){xrt_byte_slice_from_value(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", XR_ERROR_CORE_BYTE_SLICE_ARG_EXPECTS_MSG)})");
+        return;
+    }
+    CgFixedArrayLaneInfo fixed;
+    if (cg_fixed_array_lane_info_from_value(v->args[0], &fixed)) {
+        fprintf(out, "(void *)(");
+        emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &fixed);
+        fprintf(out, ")");
+        return;
+    }
+    fprintf(out, "(void *)(&");
+    emit_vref(out, v->args[0]);
+    fprintf(out, ")");
+}
+
+static void xicgen_place_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    (void) prefix;
+    if (!v || v->nargs != 1 || !v->args[0]) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    CgFixedArrayLaneInfo fixed;
+    if (cg_fixed_array_lane_info_from_type(v->type, &fixed)) {
+        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_RAWPTR) {
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+            return;
+        }
+        fprintf(out, "xr_array_ref((void *)(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+        fprintf(out, "), %u, %u)", (unsigned) fixed.native_type, (unsigned) fixed.count);
+        return;
+    }
+    XaotValueRep pointee_rep;
+    const char *cty = xicgen_place_pointee_c_type(ctx, f, v->args[0], &pointee_rep);
+    XrRep from_rep = xaot_value_storage_rep(pointee_rep);
+    XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, from_rep, to_rep);
+    fprintf(out, "(*(%s *)(", cty);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+    fprintf(out, "))");
+    emit_conversion_suffix(out, conv_suffix);
+}
+
+static void xicgen_place_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                               const char *prefix) {
+    (void) prefix;
+    if (!v || v->nargs != 2 || !v->args[0] || !v->args[1]) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    XaotValueRep pointee_rep;
+    const char *cty = xicgen_place_pointee_c_type(ctx, f, v->args[0], &pointee_rep);
+    XrRep pointee_storage_rep = xaot_value_storage_rep(pointee_rep);
+    fprintf(out, "(*(%s *)(", cty);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+    fprintf(out, ")) = ");
+    const XaotValuePlan *value_plan = cg_value_plan(ctx, v->args[1]);
+    if (pointee_rep.kind == XAOT_VALUE_AGGREGATE && value_plan &&
+        value_plan->rep.kind == XAOT_VALUE_AGGREGATE)
+        emit_vref(out, v->args[1]);
+    else
+        emit_value_as_rep_ctx(ctx, out, v->args[1], pointee_storage_rep);
+}
+
 /* R[dst] = *(T*)addr — inline typed load from a raw address. */
 static void xicgen_ptr_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {

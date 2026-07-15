@@ -284,6 +284,8 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
         else
             cloned->args[a] = orig_arg; /* external reference (e.g. caller value) */
     }
+    if (!xi_value_clone_call_plan(caller, cloned, src))
+        return NULL;
 
     /* Register in value_map */
     if (src->id < map_size)

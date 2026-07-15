@@ -139,6 +139,45 @@ static inline bool xi_var_id_is_valid(XiVarId var_id) {
     return var_id != XI_NO_VAR_ID;
 }
 
+struct XiValue;
+
+typedef enum XiPlaceOrigin {
+    XI_PLACE_ORIGIN_NONE = 0,
+    XI_PLACE_ORIGIN_STACK_LOCAL = 1,
+    XI_PLACE_ORIGIN_PARAM = 2,
+    XI_PLACE_ORIGIN_PROJECTION_TEMP = 3,
+} XiPlaceOrigin;
+
+typedef enum XiPlaceLifetime {
+    XI_PLACE_LIFETIME_NONE = 0,
+    XI_PLACE_LIFETIME_CALL_BOUND = 1,
+} XiPlaceLifetime;
+
+typedef enum XiPlaceEscape {
+    XI_PLACE_ESCAPE_NONE = 0,
+    XI_PLACE_ESCAPE_RETURN = 1,
+    XI_PLACE_ESCAPE_STORE = 2,
+    XI_PLACE_ESCAPE_CAPTURE = 3,
+    XI_PLACE_ESCAPE_THREAD = 4,
+} XiPlaceEscape;
+
+typedef struct XiCallArgPlan {
+    XrParamMode param_mode;
+    XrCallArgAccess access;
+    uint8_t origin;
+    uint8_t lifetime;
+    uint8_t escape;
+    bool addressable;
+    XiVarId origin_var_id;
+    struct XiValue *place;
+} XiCallArgPlan;
+
+typedef struct XiCallPlan {
+    XiCallArgPlan *args;
+    uint16_t nargs;
+    bool verified;
+} XiCallPlan;
+
 /* Invariant mask implied by reaching a given stage. */
 static inline XiInvariantMask xi_stage_invariants(XiStage s) {
     switch (s) {
@@ -315,6 +354,9 @@ typedef enum {
     XI_BYTE_ARRAY_REPEAT_FROM, /* args[0]=dst Array<byte>, args[1]=distance, args[2]=count */
     XI_ARRAY_DATA_PTR,         /* args[0]=Array<T>/Span<T>; result RawPtr<T>/RawMut<T> address */
     XI_STATIC_ADDR,            /* aux_int=shared slot; result RawPtr<T>/RawMut<T> to static data */
+    XI_LOCAL_ADDR,             /* args[0]=caller SSA slot; call-bound place address */
+    XI_PLACE_LOAD,             /* args[0]=call-bound place; result pointee value */
+    XI_PLACE_STORE,            /* args[0]=call-bound place, args[1]=value; result void */
 
     /* FFI raw-pointer memory access. The address is an address-width int
      * (RawPtr<T>/RawMut<T> value). aux_int carries an XrFFIType width code in
@@ -736,6 +778,7 @@ typedef struct XiValue {
     struct XrType *type;     /* authoritative compile-time type (never NULL) */
     int64_t aux_int;         /* auxiliary integer: const value, symbol ID, etc. */
     void *aux;               /* auxiliary pointer: proto, string literal, etc. */
+    XiCallPlan *call_plan;   /* verified ref/out call-bound place contract */
     struct XiValue **args;   /* operand values (SSA uses) */
     uint16_t nargs;          /* number of args */
     int16_t uses;            /* use count (for DCE; -1 = not computed) */
@@ -795,6 +838,10 @@ typedef struct XiMapLiteralData {
     uint16_t count;
     uint8_t container_kind;
 } XiMapLiteralData;
+
+static inline const XiCallPlan *xi_call_plan(const XiValue *v) {
+    return v ? v->call_plan : NULL;
+}
 
 static inline bool xi_load_field_is_adt(const XiValue *v) {
     return v && v->op == XI_LOAD_FIELD && v->aux_kind == XI_AUX_KIND_ADT_FIELD;

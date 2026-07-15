@@ -364,6 +364,8 @@ static bool cg_cfn_xray_func_signature_supported(const XiFunc *f) {
     if (!cg_cfn_value_type_supported(f->return_type, true))
         return false;
     for (uint16_t i = 0; i < f->nparams; i++) {
+        if (xi_func_param_passing_mode(f, i) != XR_PARAM_VALUE)
+            return false;
         const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
         if (!cg_cfn_value_type_supported(pt, false))
             return false;
@@ -379,6 +381,8 @@ static bool cg_cfn_xray_func_matches_expected(const XiFunc *f, const XrType *exp
     if (!xr_type_equals(f->return_type, expected->function.return_type))
         return false;
     for (uint16_t i = 0; i < f->nparams; i++) {
+        if (xi_func_param_passing_mode(f, i) != XR_PARAM_VALUE)
+            return false;
         const XrType *actual = f->params && f->params[i] ? f->params[i]->type : NULL;
         const XrType *want = xr_type_function_param_type(expected, i);
         if (!xr_type_equals((XrType *) actual, (XrType *) want))
@@ -661,8 +665,19 @@ static void emit_value_as_rep(FILE *out, const XiValue *v, XrRep target_rep) {
         emit_unit_materialized_as_rep(out, target_rep);
         return;
     }
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v ? v->type : NULL, cg_rep(v), target_rep);
+    XrRep from_rep = cg_rep(v);
+    if (target_rep == XR_REP_TAGGED && (from_rep == XR_REP_PTR || from_rep == XR_REP_RAWPTR) && v &&
+        v->type && v->type->kind == XR_KIND_FIXED_ARRAY) {
+        uint8_t native = XR_NATIVE_VALUE;
+        uint16_t count = 0;
+        if (cg_fixed_array_type_info(v->type, &native, &count)) {
+            fprintf(out, "xr_array_ref((void *)(");
+            emit_vref(out, v);
+            fprintf(out, "), %u, %u)", (unsigned) native, (unsigned) count);
+            return;
+        }
+    }
+    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, from_rep, target_rep);
     emit_vref(out, v);
     emit_conversion_suffix(out, conv_suffix);
 }
@@ -716,14 +731,14 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
     }
     XrRep from_rep = plan ? xaot_value_storage_rep(plan->rep)
                           : (ctx ? cg_value_plan_storage_rep(ctx, v) : cg_rep(v));
-    if (target_rep == XR_REP_TAGGED && from_rep == XR_REP_PTR && v && v->type &&
-        v->type->kind == XR_KIND_FIXED_ARRAY) {
+    if (target_rep == XR_REP_TAGGED && (from_rep == XR_REP_PTR || from_rep == XR_REP_RAWPTR) && v &&
+        v->type && v->type->kind == XR_KIND_FIXED_ARRAY) {
         uint8_t native = XR_NATIVE_VALUE;
         uint16_t count = 0;
         if (cg_fixed_array_type_info(v->type, &native, &count)) {
-            fprintf(out, "xr_array_ref(");
+            fprintf(out, "xr_array_ref((void *)(");
             emit_vref(out, v);
-            fprintf(out, ", %u, %u)", (unsigned) native, (unsigned) count);
+            fprintf(out, "), %u, %u)", (unsigned) native, (unsigned) count);
             return;
         }
     }

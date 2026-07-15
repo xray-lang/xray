@@ -778,6 +778,41 @@
   :observable ()
   :targets (aot-c aot-verify))
 
+; Call-bound address of a caller-owned SSA storage slot. Unlike RawPtr/RawMut,
+; this value is verifier-confined to a ref/out call interval and cannot escape.
+(define-xi-op xi.local.addr
+  :class pure
+  :arity 1
+  :result-ownership borrowed
+  :own-use borrow
+  :effects ()
+  :requires (addressable call-bound)
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+; Typed access through a call-bound place. These are distinct from unsafe raw
+; pointer operations: the verifier proves their origin and noescape interval.
+(define-xi-op xi.place.load
+  :class memory-read
+  :arity 1
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (memory-read)
+  :requires (call-bound-place)
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.place.store
+  :class memory-write
+  :arity 2
+  :result-kind void
+  :result-ownership none
+  :own-use borrow
+  :effects (side-effect memory-write)
+  :requires (call-bound-place)
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 ; FFI raw-pointer load/store. The address is an address-width int; aux_int holds
 ; the XrFFIType width of the pointee. No bounds check (unsafe-only). Modeled on
 ; the bytes primitives: implicit TBAA-NONE keeps them out of value numbering and

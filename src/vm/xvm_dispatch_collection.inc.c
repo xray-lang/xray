@@ -1761,6 +1761,37 @@ vmcase(OP_BYTE_SLICE_REPEAT) {
 
 #undef VM_BYTE_SLICE_VIEW
 
+/* Call-bound place descriptors use an absolute stack-slot index instead of a
+ * raw pointer, so VM stack growth cannot invalidate an active ref/out borrow. */
+vmcase(OP_LOCAL_ADDR) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    R(a) = (XrValue) {0};
+    R(a).tag = XR_TAG_PLACE;
+    R(a).i = (int64_t) ((base + b) - vm_ctx->stack);
+    vmbreak;
+}
+
+vmcase(OP_PLACE_LOAD) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    if (!XR_IS_PLACE(R(b)) || R(b).i < 0 || R(b).i >= vm_ctx->stack_capacity) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid call-bound place load");
+    }
+    R(a) = vm_ctx->stack[R(b).i];
+    vmbreak;
+}
+
+vmcase(OP_PLACE_STORE) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    if (!XR_IS_PLACE(R(a)) || R(a).i < 0 || R(a).i >= vm_ctx->stack_capacity) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid call-bound place store");
+    }
+    vm_ctx->stack[R(a).i] = R(b);
+    vmbreak;
+}
+
 /* FFI raw-pointer access. B (load) / A (store) holds an address-width int;
  * C is the XrFFIType width of the pointee. No bounds/null check (unsafe). */
 vmcase(OP_PTR_LOAD) {

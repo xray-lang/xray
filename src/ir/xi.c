@@ -85,6 +85,37 @@ void *xi_func_arena_alloc(XiFunc *f, uint32_t size) {
     return arena_alloc(f, size);
 }
 
+bool xi_value_clone_call_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
+    if (!f || !dst || !src)
+        return false;
+    dst->call_plan = NULL;
+    if (!src->call_plan)
+        return true;
+    if ((dst->op != XI_CALL && dst->op != XI_CALL_METHOD && dst->op != XI_CALL_METHOD_DIRECT) ||
+        dst->nargs < 1 || src->call_plan->nargs != (uint16_t) (dst->nargs - 1) ||
+        (src->call_plan->nargs > 0 && !src->call_plan->args))
+        return false;
+
+    XiCallPlan *plan = (XiCallPlan *) xi_func_arena_alloc(f, sizeof(*plan));
+    if (!plan)
+        return false;
+    *plan = *src->call_plan;
+    plan->args = NULL;
+    if (plan->nargs > 0) {
+        plan->args = (XiCallArgPlan *) xi_func_arena_alloc(
+            f, (uint32_t) ((size_t) plan->nargs * sizeof(*plan->args)));
+        if (!plan->args)
+            return false;
+        memcpy(plan->args, src->call_plan->args, (size_t) plan->nargs * sizeof(*plan->args));
+        for (uint16_t i = 0; i < plan->nargs; i++) {
+            plan->args[i].place =
+                plan->args[i].param_mode == XR_PARAM_VALUE ? NULL : dst->args[i + 1];
+        }
+    }
+    dst->call_plan = plan;
+    return true;
+}
+
 XR_FUNC bool xi_func_set_param_passing_mode(XiFunc *f, uint16_t index, XrParamMode mode) {
     if (!f || index >= f->nparams)
         return false;
