@@ -164,6 +164,7 @@ typedef enum CatchAggregateAliasKind {
     CATCH_AGGREGATE_INDEX,
     CATCH_AGGREGATE_FIELD,
     CATCH_AGGREGATE_ELEMENT,
+    CATCH_AGGREGATE_ENTRY_VALUE,
 } CatchAggregateAliasKind;
 
 typedef struct CatchAggregateAlias {
@@ -1946,6 +1947,17 @@ static bool current_catch_has_element_aggregate_container(ErrorSetCtx *ctx, uint
     return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
 }
 
+static bool current_catch_has_entry_value_aggregate_container(ErrorSetCtx *ctx, uint32_t symbol_id,
+                                                              const char *name) {
+    if (!ctx || (symbol_id == 0 && !name))
+        return false;
+    CatchAggregateAlias alias = {.container_id = symbol_id,
+                                 .container_name = name,
+                                 .kind = CATCH_AGGREGATE_ENTRY_VALUE,
+                                 .index = -1};
+    return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
+}
+
 static bool literal_i64_index(AstNode *expr, int64_t *out) {
     expr = identity_source(expr);
     if (!expr || expr->type != AST_LITERAL_INT || expr->as.literal.int_overflows_i64 ||
@@ -2184,6 +2196,34 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
                                               NULL, NULL, NULL);
             break;
 
+        case AST_CALL_EXPR: {
+            CallExprNode *call = &initializer->as.call_expr;
+            if (!call->callee || call->arg_count != 0)
+                break;
+            AstNode *callee = identity_source(call->callee);
+            if (!callee || callee->type != AST_MEMBER_ACCESS)
+                break;
+            MemberAccessNode *ma = &callee->as.member_access;
+            if (!ma->name || !ma->object)
+                break;
+            XrType *receiver_type = xa_analyzer_get_node_type(ctx->analyzer, ma->object);
+            if (!receiver_type || !XR_TYPE_IS_MAP(receiver_type))
+                break;
+            uint32_t source_id = 0;
+            const char *source_name = NULL;
+            if (!variable_ref_symbol(ctx, ma->object, &source_id, &source_name) ||
+                !current_catch_has_element_aggregate_container(ctx, source_id, source_name))
+                break;
+            if (strcmp(ma->name, "values") == 0) {
+                add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_ELEMENT, -1,
+                                                  0, NULL, NULL, NULL);
+            } else if (strcmp(ma->name, "entries") == 0) {
+                add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_ENTRY_VALUE,
+                                                  -1, 0, NULL, NULL, NULL);
+            }
+            break;
+        }
+
         default:
             break;
     }
@@ -2204,13 +2244,19 @@ static bool current_catch_aggregate_element_for_collection(ErrorSetCtx *ctx, Ast
 static void maybe_add_for_in_catch_alias(ErrorSetCtx *ctx, ForInStmtNode *fi) {
     if (!ctx || !fi || !ctx->current_caught)
         return;
-    if (!current_catch_aggregate_element_for_collection(ctx, fi->collection))
+    bool element_is_caught = current_catch_aggregate_element_for_collection(ctx, fi->collection);
+    uint32_t collection_id = 0;
+    const char *collection_name = NULL;
+    bool entry_value_is_caught =
+        variable_ref_symbol(ctx, fi->collection, &collection_id, &collection_name) &&
+        current_catch_has_entry_value_aggregate_container(ctx, collection_id, collection_name);
+    if (!element_is_caught && !entry_value_is_caught)
         return;
 
     XrType *collection_type = xa_analyzer_get_node_type(ctx->analyzer, fi->collection);
     if (fi->is_keyvalue) {
-        if (!collection_type || !XR_TYPE_IS_MAP(collection_type) || fi->value_symbol_id == 0 ||
-            !fi->value_name)
+        if (!element_is_caught || !collection_type || !XR_TYPE_IS_MAP(collection_type) ||
+            fi->value_symbol_id == 0 || !fi->value_name)
             return;
         add_current_catch_alias(ctx, fi->value_symbol_id, fi->value_name);
         return;
@@ -2219,6 +2265,11 @@ static void maybe_add_for_in_catch_alias(ErrorSetCtx *ctx, ForInStmtNode *fi) {
     if ((collection_type && XR_TYPE_IS_MAP(collection_type)) || fi->item_symbol_id == 0 ||
         !fi->item_name)
         return;
+    if (entry_value_is_caught) {
+        add_current_catch_aggregate_alias(ctx, fi->item_symbol_id, fi->item_name,
+                                          CATCH_AGGREGATE_INDEX, 1, 0, NULL, NULL, NULL);
+        return;
+    }
     add_current_catch_alias(ctx, fi->item_symbol_id, fi->item_name);
 }
 
