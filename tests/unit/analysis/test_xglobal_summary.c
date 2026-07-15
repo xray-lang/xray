@@ -789,7 +789,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=24 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=25 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1176,15 +1176,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=24 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=24 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=24 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=24 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=25 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=25 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=25 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=25 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=24 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=24 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=24 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=24 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=25 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=25 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=25 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=25 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -9891,6 +9891,7 @@ TEST(global_evidence_records_json_codec_plans) {
     xg_global_evidence_init(&ev, key);
 
     XgJsonShapeSummary shape = {.json_shape_id = 1,
+                                .record_shape_id = 1,
                                 .module_id = 1,
                                 .owner_func_id = 7,
                                 .source_span_id = 100,
@@ -9916,6 +9917,7 @@ TEST(global_evidence_records_json_codec_plans) {
                                     .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED |
                                              XG_JSON_FIELD_RECORD_BRIDGE};
     XgRecordShapeSummary record_shape = {.record_shape_id = 1,
+                                         .json_shape_id = 1,
                                          .module_id = 1,
                                          .owner_func_id = 7,
                                          .source_span_id = 100,
@@ -9947,20 +9949,21 @@ TEST(global_evidence_records_json_codec_plans) {
                                 .codec_kind = XG_JSON_CODEC_PARSE,
                                 .input_type_key = 10,
                                 .field_count = 0};
-    XgJsonCodecSummary decode = {.codec_id = 2,
-                                 .module_id = 1,
-                                 .owner_func_id = 7,
-                                 .source_node_id = 1002,
-                                 .source_span_id = 102,
-                                 .codec_kind = XG_JSON_CODEC_DECODE,
-                                 .input_type_key = 20,
-                                 .target_type_key = 30,
-                                 .input_shape_id = 1,
-                                 .output_shape_id = 1,
-                                 .field_count = 2,
-                                 .flags = XG_JSON_CODEC_HAS_INPUT_SHAPE |
-                                          XG_JSON_CODEC_HAS_OUTPUT_SHAPE |
-                                          XG_JSON_CODEC_HAS_TARGET_TYPE};
+    XgJsonCodecSummary decode = {
+        .codec_id = 2,
+        .module_id = 1,
+        .owner_func_id = 7,
+        .source_node_id = 1002,
+        .source_span_id = 102,
+        .codec_kind = XG_JSON_CODEC_DECODE,
+        .input_type_key = 20,
+        .target_type_key = 30,
+        .input_shape_id = 1,
+        .output_shape_id = 1,
+        .record_shape_id = 1,
+        .field_count = 2,
+        .flags = XG_JSON_CODEC_HAS_INPUT_SHAPE | XG_JSON_CODEC_HAS_OUTPUT_SHAPE |
+                 XG_JSON_CODEC_HAS_TARGET_TYPE | XG_JSON_CODEC_HAS_RECORD_SHAPE};
     XgJsonCodecSummary encode = {.codec_id = 3,
                                  .module_id = 1,
                                  .owner_func_id = 7,
@@ -9969,9 +9972,11 @@ TEST(global_evidence_records_json_codec_plans) {
                                  .codec_kind = XG_JSON_CODEC_ENCODE,
                                  .input_type_key = 30,
                                  .input_shape_id = 1,
+                                 .record_shape_id = 1,
                                  .field_count = 2,
-                                 .flags =
-                                     XG_JSON_CODEC_HAS_INPUT_SHAPE | XG_JSON_CODEC_USES_DERIVE};
+                                 .flags = XG_JSON_CODEC_HAS_INPUT_SHAPE |
+                                          XG_JSON_CODEC_USES_DERIVE |
+                                          XG_JSON_CODEC_HAS_RECORD_SHAPE};
     XgJsonCodecSummary stringify = {.codec_id = 4,
                                     .module_id = 1,
                                     .owner_func_id = 7,
@@ -10029,6 +10034,10 @@ TEST(global_evidence_records_json_codec_plans) {
     ASSERT_EQ_UINT(materialized.njson_codecs, 4);
     ASSERT_EQ_UINT(materialized.json_codecs[0].source_node_id, 1001);
     ASSERT_EQ_UINT(materialized.json_codecs[1].source_node_id, 1002);
+    ASSERT_EQ_UINT(materialized.json_shapes[0].record_shape_id, 1);
+    ASSERT_EQ_UINT(materialized.record_shapes[0].json_shape_id, 1);
+    ASSERT_EQ_UINT(materialized.json_codecs[1].record_shape_id, 1);
+    ASSERT_EQ_UINT(materialized.json_codecs[2].record_shape_id, 1);
     xg_global_evidence_free(&materialized);
     xr_free(payload);
 
@@ -10051,9 +10060,10 @@ TEST(global_evidence_records_json_codec_plans) {
     ASSERT_EQ_UINT(encode_plan->action, XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR);
     ASSERT_EQ_UINT(stringify_plan->action, XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK);
     ASSERT_EQ_UINT(decode_plan->evidence, XAOT_JSON_EV_GLOBAL_ROW | XAOT_JSON_EV_INPUT_SHAPE |
-                                              XAOT_JSON_EV_OUTPUT_SHAPE | XAOT_JSON_EV_TARGET_TYPE);
-    ASSERT_EQ_UINT(encode_plan->evidence,
-                   XAOT_JSON_EV_GLOBAL_ROW | XAOT_JSON_EV_INPUT_SHAPE | XAOT_JSON_EV_DERIVE);
+                                              XAOT_JSON_EV_OUTPUT_SHAPE | XAOT_JSON_EV_TARGET_TYPE |
+                                              XAOT_JSON_EV_RECORD_BRIDGE);
+    ASSERT_EQ_UINT(encode_plan->evidence, XAOT_JSON_EV_GLOBAL_ROW | XAOT_JSON_EV_INPUT_SHAPE |
+                                              XAOT_JSON_EV_DERIVE | XAOT_JSON_EV_RECORD_BRIDGE);
 
     char *plan_dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(plan_dump);
@@ -10362,6 +10372,7 @@ TEST(global_evidence_verifier_rederives_json_shape_fields) {
 
 static void init_json_codec_integrity_fixture(XgGlobalEvidence *ev, XgBuildKey key) {
     XgJsonShapeSummary json_shape = {.json_shape_id = 1,
+                                     .record_shape_id = 1,
                                      .module_id = 1,
                                      .owner_func_id = XG_NO_ID,
                                      .source_span_id = 100,
@@ -10385,6 +10396,7 @@ static void init_json_codec_integrity_fixture(XgGlobalEvidence *ev, XgBuildKey k
                                    .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED |
                                             XG_JSON_FIELD_RECORD_BRIDGE};
     XgRecordShapeSummary record_shape = {.record_shape_id = 1,
+                                         .json_shape_id = 1,
                                          .module_id = 1,
                                          .owner_func_id = XG_NO_ID,
                                          .source_span_id = 100,
@@ -10417,9 +10429,11 @@ static void init_json_codec_integrity_fixture(XgGlobalEvidence *ev, XgBuildKey k
                                  .input_type_key = 10,
                                  .target_type_key = 200,
                                  .output_shape_id = 1,
+                                 .record_shape_id = 1,
                                  .field_count = 2,
                                  .flags = XG_JSON_CODEC_HAS_OUTPUT_SHAPE |
-                                          XG_JSON_CODEC_HAS_TARGET_TYPE};
+                                          XG_JSON_CODEC_HAS_TARGET_TYPE |
+                                          XG_JSON_CODEC_HAS_RECORD_SHAPE};
     xg_global_evidence_init(ev, key);
     json_shape.shape_hash = xg_json_shape_hash_begin(json_shape.field_count);
     json_shape.shape_hash = xg_json_shape_hash_add_field(
@@ -10454,7 +10468,7 @@ TEST(global_evidence_verifier_rederives_json_codec_record_shape) {
 
     init_json_codec_integrity_fixture(&ev, key);
     ev.json_shapes[0].type_key++;
-    assert_json_evidence_rejected(&ev, "AOT Json decode target type does not match output shape");
+    assert_json_evidence_rejected(&ev, "AOT Json/Record bridge shape identity is stale");
     xg_global_evidence_free(&ev);
 
     init_json_codec_integrity_fixture(&ev, key);
@@ -10464,12 +10478,12 @@ TEST(global_evidence_verifier_rederives_json_codec_record_shape) {
 
     init_json_codec_integrity_fixture(&ev, key);
     ev.record_fields[1].type_key++;
-    assert_json_evidence_rejected(&ev, "AOT Json decode Record bridge fields do not re-derive");
+    assert_json_evidence_rejected(&ev, "AOT Json/Record bridge field identity is stale");
     xg_global_evidence_free(&ev);
 
     init_json_codec_integrity_fixture(&ev, key);
     ev.nrecord_fields--;
-    assert_json_evidence_rejected(&ev, "AOT Json decode sealed Record field rows do not re-derive");
+    assert_json_evidence_rejected(&ev, "AOT Json/Record bridge field row is missing");
     xg_global_evidence_free(&ev);
 
     init_json_codec_integrity_fixture(&ev, key);
@@ -10502,6 +10516,184 @@ TEST(global_evidence_verifier_rejects_json_codec_source_identity) {
     duplicate.codec_id++;
     ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &duplicate));
     assert_json_evidence_rejected(&ev, "AOT Json codec source identity is duplicated");
+    xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_verifier_cross_checks_json_record_bridge_ids) {
+    XgBuildKey key = {.source_hash = 0x1811,
+                      .compiler_semver_hash = 0x1812,
+                      .profile_hash = 0x1813,
+                      .imported_summary_hash = 0x1814,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    xg_global_evidence_init(&ev, key);
+
+    XgJsonShapeSummary json_shapes[2] = {
+        {.json_shape_id = 1,
+         .record_shape_id = 1,
+         .module_id = 1,
+         .owner_func_id = XG_NO_ID,
+         .source_span_id = 10,
+         .type_key = 100,
+         .field_name_start = 50,
+         .field_count = 1,
+         .shape_kind = XG_JSON_SHAPE_RECORD_BRIDGE,
+         .flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_RECORD_BRIDGEABLE,
+         .shape_hash = UINT64_C(0x18101)},
+        {.json_shape_id = 2,
+         .record_shape_id = 2,
+         .module_id = 1,
+         .owner_func_id = XG_NO_ID,
+         .source_span_id = 20,
+         .type_key = 101,
+         .field_name_start = 51,
+         .field_count = 1,
+         .shape_kind = XG_JSON_SHAPE_RECORD_BRIDGE,
+         .flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_RECORD_BRIDGEABLE,
+         .shape_hash = UINT64_C(0x18102)}};
+    XgRecordShapeSummary record_shapes[2] = {
+        {.record_shape_id = 1,
+         .json_shape_id = 1,
+         .module_id = 1,
+         .owner_func_id = XG_NO_ID,
+         .source_span_id = 10,
+         .type_key = 100,
+         .field_name_start = 50,
+         .field_count = 1,
+         .shape_kind = XG_RECORD_SHAPE_STATIC,
+         .flags =
+             XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_JSON_BRIDGEABLE,
+         .shape_hash = UINT64_C(0x18101)},
+        {.record_shape_id = 2,
+         .json_shape_id = 2,
+         .module_id = 1,
+         .owner_func_id = XG_NO_ID,
+         .source_span_id = 20,
+         .type_key = 101,
+         .field_name_start = 51,
+         .field_count = 1,
+         .shape_kind = XG_RECORD_SHAPE_STATIC,
+         .flags =
+             XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_JSON_BRIDGEABLE,
+         .shape_hash = UINT64_C(0x18102)}};
+    XgJsonFieldSummary json_fields[2] = {
+        {.field_id = 1,
+         .shape_id = 1,
+         .field_ordinal = 0,
+         .name_id = 1000,
+         .type_key = 200,
+         .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED | XG_JSON_FIELD_RECORD_BRIDGE},
+        {.field_id = 2,
+         .shape_id = 2,
+         .field_ordinal = 0,
+         .name_id = 1001,
+         .type_key = 201,
+         .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED | XG_JSON_FIELD_RECORD_BRIDGE}};
+    XgRecordFieldSummary record_fields[2] = {
+        {.field_id = 1,
+         .shape_id = 1,
+         .field_ordinal = 0,
+         .name_id = 1000,
+         .type_key = 200,
+         .flags = XG_RECORD_FIELD_REQUIRED | XG_RECORD_FIELD_STATIC_KEY},
+        {.field_id = 2,
+         .shape_id = 2,
+         .field_ordinal = 0,
+         .name_id = 1001,
+         .type_key = 201,
+         .flags = XG_RECORD_FIELD_REQUIRED | XG_RECORD_FIELD_STATIC_KEY}};
+    XgJsonCodecSummary codec = {.codec_id = 1,
+                                .module_id = 1,
+                                .owner_func_id = 7,
+                                .source_node_id = 3001,
+                                .source_span_id = 30,
+                                .codec_kind = XG_JSON_CODEC_DECODE,
+                                .input_type_key = 20,
+                                .target_type_key = 100,
+                                .output_shape_id = 1,
+                                .record_shape_id = 1,
+                                .field_count = 1,
+                                .flags = XG_JSON_CODEC_HAS_OUTPUT_SHAPE |
+                                         XG_JSON_CODEC_HAS_TARGET_TYPE |
+                                         XG_JSON_CODEC_HAS_RECORD_SHAPE};
+    for (uint32_t i = 0; i < 2; i++) {
+        json_shapes[i].shape_hash = xg_json_shape_hash_begin(json_shapes[i].field_count);
+        json_shapes[i].shape_hash =
+            xg_json_shape_hash_add_field(json_shapes[i].shape_hash, json_shapes[i].shape_kind,
+                                         json_fields[i].name_id, json_fields[i].type_key);
+        record_shapes[i].shape_hash = json_shapes[i].shape_hash;
+        ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(&ev, &json_shapes[i]));
+        ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &record_shapes[i]));
+        ASSERT_NOT_NULL(xg_global_evidence_add_json_field(&ev, &json_fields[i]));
+        ASSERT_NOT_NULL(xg_global_evidence_add_record_field(&ev, &record_fields[i]));
+    }
+    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &codec));
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "bridge.xr";
+    module.name = "bridge";
+    module.init = &init_func;
+    modules[0] = &module;
+    char err[256];
+
+    XaotBundle valid;
+    memset(&valid, 0, sizeof(valid));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&valid, &ev, XG_BUILD_NATIVE_RELEASE));
+    valid.modules = modules;
+    valid.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&valid, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&valid, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+    valid.json_shape_plans[0].record_shape_id = 2;
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&valid, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT Json shape plan identity does not re-derive"));
+    xaot_bundle_free(&valid);
+
+    ev.json_shapes[0].record_shape_id = 2;
+    XaotBundle crossed;
+    memset(&crossed, 0, sizeof(crossed));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&crossed, &ev, XG_BUILD_NATIVE_RELEASE));
+    crossed.modules = modules;
+    crossed.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&crossed, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&crossed, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT Json/Record bridge ids are not reciprocal"));
+    xaot_bundle_free(&crossed);
+
+    ev.json_shapes[0].record_shape_id = 1;
+    ev.record_fields[0].type_key = 999;
+    XaotBundle stale_field;
+    memset(&stale_field, 0, sizeof(stale_field));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_field, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_field.modules = modules;
+    stale_field.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_field, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_field, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT Json/Record bridge field identity is stale"));
+    xaot_bundle_free(&stale_field);
+
+    ev.record_fields[0].type_key = 200;
+    ev.json_codecs[0].record_shape_id = 2;
+    XaotBundle stale_codec;
+    memset(&stale_codec, 0, sizeof(stale_codec));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_codec, &ev, XG_BUILD_NATIVE_RELEASE));
+    stale_codec.modules = modules;
+    stale_codec.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_codec, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&stale_codec, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT Json codec Record bridge shape id is stale"));
+    xaot_bundle_free(&stale_codec);
+
     xg_global_evidence_free(&ev);
 }
 
@@ -11481,6 +11673,7 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
     ASSERT_EQ_UINT(ev.record_shapes[0].shape_kind, XG_RECORD_SHAPE_STATIC);
     ASSERT_TRUE((ev.record_shapes[0].flags & XG_RECORD_SHAPE_JSON_BRIDGEABLE) != 0);
+    ASSERT_EQ_UINT(ev.nrecord_fields, 2);
     ASSERT_EQ_UINT(ev.njson_shapes, 2);
     const XgJsonShapeSummary *bridge_shape = NULL;
     for (uint32_t i = 0; i < ev.njson_shapes; i++) {
@@ -11488,6 +11681,16 @@ TEST(global_evidence_producer_records_json_codec_calls) {
             bridge_shape = &ev.json_shapes[i];
     }
     ASSERT_NOT_NULL(bridge_shape);
+    ASSERT_EQ_UINT(bridge_shape->record_shape_id, ev.record_shapes[0].record_shape_id);
+    ASSERT_EQ_UINT(ev.record_shapes[0].json_shape_id, bridge_shape->json_shape_id);
+    ASSERT_EQ_UINT(bridge_shape->type_key, ev.record_shapes[0].type_key);
+    ASSERT_EQ_UINT(bridge_shape->field_count, ev.record_shapes[0].field_count);
+    ASSERT_NE(bridge_shape->shape_hash, 0);
+    ASSERT_NE(ev.record_shapes[0].shape_hash, 0);
+    ASSERT_EQ_UINT(ev.json_fields[0].name_id, ev.record_fields[0].name_id);
+    ASSERT_EQ_UINT(ev.json_fields[0].type_key, ev.record_fields[0].type_key);
+    ASSERT_EQ_UINT(ev.json_fields[1].name_id, ev.record_fields[1].name_id);
+    ASSERT_EQ_UINT(ev.json_fields[1].type_key, ev.record_fields[1].type_key);
     ASSERT_EQ_UINT(ev.njson_codecs, 4);
     for (uint32_t i = 0; i < ev.njson_codecs; i++) {
         ASSERT_NE(ev.json_codecs[i].source_node_id, 0);
@@ -11503,11 +11706,15 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     ASSERT_TRUE((ev.json_codecs[1].flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0);
     ASSERT_NE(ev.json_codecs[1].target_type_key, 0);
     ASSERT_EQ_UINT(ev.json_codecs[1].output_shape_id, bridge_shape->json_shape_id);
+    ASSERT_EQ_UINT(ev.json_codecs[1].record_shape_id, ev.record_shapes[0].record_shape_id);
+    ASSERT_TRUE((ev.json_codecs[1].flags & XG_JSON_CODEC_HAS_RECORD_SHAPE) != 0);
     ASSERT_EQ_UINT(ev.json_codecs[1].field_count, 2);
     ASSERT_EQ_UINT(ev.json_codecs[2].codec_kind, XG_JSON_CODEC_ENCODE);
     ASSERT_NE(ev.json_codecs[2].input_type_key, 0);
     ASSERT_TRUE((ev.json_codecs[2].flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0);
     ASSERT_EQ_UINT(ev.json_codecs[2].input_shape_id, bridge_shape->json_shape_id);
+    ASSERT_EQ_UINT(ev.json_codecs[2].record_shape_id, ev.record_shapes[0].record_shape_id);
+    ASSERT_TRUE((ev.json_codecs[2].flags & XG_JSON_CODEC_HAS_RECORD_SHAPE) != 0);
     ASSERT_EQ_UINT(ev.json_codecs[2].field_count, 2);
     ASSERT_EQ_UINT(ev.json_codecs[3].codec_kind, XG_JSON_CODEC_STRINGIFY);
     ASSERT_TRUE((ev.json_codecs[3].flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0);
@@ -11529,6 +11736,16 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     ASSERT_EQ_UINT(bundle.json_codec_plans[1].action, XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
     ASSERT_EQ_UINT(bundle.json_codec_plans[2].action, XAOT_JSON_CODEC_ENCODE_FIELD_TABLE);
     ASSERT_EQ_UINT(bundle.json_codec_plans[3].action, XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK);
+    const XaotJsonShapePlan *bridge_plan =
+        xaot_bundle_find_json_shape_plan(&bundle, bridge_shape->json_shape_id);
+    const XaotRecordShapePlan *record_plan =
+        xaot_bundle_find_record_shape_plan(&bundle, ev.record_shapes[0].record_shape_id);
+    ASSERT_NOT_NULL(bridge_plan);
+    ASSERT_NOT_NULL(record_plan);
+    ASSERT_EQ_UINT(bridge_plan->record_shape_id, ev.record_shapes[0].record_shape_id);
+    ASSERT_EQ_UINT(record_plan->json_shape_id, bridge_shape->json_shape_id);
+    ASSERT_EQ_UINT(bundle.json_codec_plans[1].record_shape_id, ev.record_shapes[0].record_shape_id);
+    ASSERT_EQ_UINT(bundle.json_codec_plans[2].record_shape_id, ev.record_shapes[0].record_shape_id);
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -17006,6 +17223,7 @@ RUN_TEST(global_evidence_verifier_rejects_stale_json_record_field_rows);
 RUN_TEST(global_evidence_verifier_rederives_json_shape_fields);
 RUN_TEST(global_evidence_verifier_rederives_json_codec_record_shape);
 RUN_TEST(global_evidence_verifier_rejects_json_codec_source_identity);
+RUN_TEST(global_evidence_verifier_cross_checks_json_record_bridge_ids);
 RUN_TEST(global_evidence_records_record_merge_plans);
 RUN_TEST(global_evidence_records_options_bag_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);

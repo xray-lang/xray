@@ -977,6 +977,7 @@ enum {
 
 typedef struct XaotJsonShapePlan {
     XgJsonShapeId json_shape_id;
+    XgRecordShapeId record_shape_id;
     XgModuleId module_id;
     XgFuncId owner_func_id;
     uint32_t type_key;
@@ -1015,6 +1016,7 @@ typedef struct XaotJsonCodecPlan {
     uint32_t target_type_key;
     XgJsonShapeId input_shape_id;
     XgJsonShapeId output_shape_id;
+    XgRecordShapeId record_shape_id;
     uint16_t field_count;
     uint32_t evidence;
     uint8_t unproven_reason;
@@ -1068,6 +1070,7 @@ enum {
 
 typedef struct XaotRecordShapePlan {
     XgRecordShapeId record_shape_id;
+    XgJsonShapeId json_shape_id;
     XgModuleId module_id;
     XgFuncId owner_func_id;
     uint32_t type_key;
