@@ -1,0 +1,22 @@
+// AOT ParamContract: local direct ref/out calls must write back caller slots.
+fn bump(value: ref int) -> int {
+    value = value + 1
+    return value
+}
+
+fn fill(value: out int) -> int {
+    value = 9
+    return value
+}
+
+fn runLocal() {
+    var value = 1
+    print(bump(ref value))
+    print(value)
+
+    var slot = 0
+    print(fill(out slot))
+    print(slot)
+}
+
+runLocal()

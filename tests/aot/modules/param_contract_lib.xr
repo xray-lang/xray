@@ -1,0 +1,20 @@
+// AOT ParamContract module fixture: exported functions and function values with ref/out params.
+export fn bumpRef(value: ref int) -> int {
+    value = value + 1
+    return value
+}
+
+export fn fillOut(value: out int) -> int {
+    value = 9
+    return value
+}
+
+export const bumpRefValue = fn(value: ref int) -> int {
+    value = value + 1
+    return value
+}
+
+export const fillOutValue = fn(value: out int) -> int {
+    value = 11
+    return value
+}
