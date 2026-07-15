@@ -28,7 +28,7 @@ fn test_concurrent_short_concat() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go short_concat_task(i))
     }
@@ -65,7 +65,7 @@ fn test_concurrent_long_concat() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go long_concat_task(i))
     }
@@ -110,7 +110,7 @@ fn test_concurrent_mixed_concat() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go mixed_concat_task(i))
     }
@@ -158,7 +158,7 @@ fn test_concurrent_loop_concat() {
     }
     
     var n = 30
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go loop_concat_task(i))
     }
@@ -202,7 +202,7 @@ fn test_concurrent_threshold_boundary() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<int>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go boundary_concat_task(i))
     }
@@ -256,7 +256,7 @@ fn test_concurrent_data_isolation() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<Json>> = []
     for (var i = 0; i < n; i++) {
         var unique_char = chars[i % 26]
         tasks.push(go isolation_task(i, unique_char))
@@ -267,7 +267,7 @@ fn test_concurrent_data_isolation() {
     var correct = 0
     for (var i = 0; i < n; i++) {
         var r = results[i]
-        if (r["prefix_ok"] && r["suffix_ok"] && r["contains_id"]) {
+        if (r["prefix_ok"] == true && r["suffix_ok"] == true && r["contains_id"] == true) {
             correct = correct + 1
         } else {
             var task_id = r["id"]
@@ -305,7 +305,7 @@ fn test_stress_concurrent_concat() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<Array<string>>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go stress_task(i))
     }
