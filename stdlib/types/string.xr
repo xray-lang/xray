@@ -9,8 +9,18 @@
 // error (never a silent null).
 
 @native
+enum Utf8Error {
+    InvalidUtf8
+}
+
+@native
+enum StringSliceError {
+    InvalidByteRange
+}
+
+@native
 class string {
-    static fromUtf8(bytes: Slice<byte>) -> string?
+    static fromUtf8(bytes: Slice<byte>) -> string @errors(Utf8Error.InvalidUtf8)
     static fromUtf8Lossy(bytes: Slice<byte>) -> string @nothrow
     static fromRune(value: rune) -> string
     static join(parts: Array<string>, separator?: string) -> string
@@ -18,7 +28,7 @@ class string {
     indexOf(search: string, start?: int) -> int
     lastIndexOf(search: string) -> int
     slice(start: int, end?: int) -> string
-    sliceBytes(start: int, end: int) -> string
+    sliceBytes(start: int, end: int) -> string @errors(StringSliceError.InvalidByteRange)
     toString() -> string
     split(separator: string, limit?: int) -> Array<string>
     replace(search: string, replacement: string) -> string
