@@ -154,6 +154,12 @@ expect_output_workers \
     2
 
 expect_output_workers \
+    "parallel_plan_close_during_dispatch" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_close_during_dispatch.xr" \
+    $'true\nclosed\ndone' \
+    2
+
+expect_output_workers \
     "parallel_lane_panic_propagates_original" \
     "$PROJECT_DIR/tests/vm/parallel_lane_panic_propagates_original.xr" \
     $'true\ntrue\ntrue' \

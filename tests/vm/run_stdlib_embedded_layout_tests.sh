@@ -57,5 +57,6 @@ check_backend_diff "tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.x
 check_backend_diff "tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr"
 check_backend_diff "tests/diff/cases/semantics/stdlib/parallel_api_reference.xr"
 check_backend_diff "tests/diff/cases/semantics/stdlib/parallel_plan_close_lifecycle.xr"
+check_backend_diff "tests/diff/cases/semantics/stdlib/parallel_plan_close_during_dispatch.xr"
 
 echo "stdlib embedded layout tests passed"

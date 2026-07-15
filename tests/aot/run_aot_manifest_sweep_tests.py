@@ -47,6 +47,7 @@ ALLOWED_RUNTIME_CASES = {
     "tests/diff/cases/semantics/stdlib/parallel_api_reference.xr",
     "tests/diff/cases/semantics/stdlib/parallel_for_each_vm_batch.xr",
     "tests/diff/cases/semantics/stdlib/parallel_map_vm_batch.xr",
+    "tests/diff/cases/semantics/stdlib/parallel_plan_close_during_dispatch.xr",
     "tests/diff/cases/semantics/stdlib/parallel_plan_close_lifecycle.xr",
     "tests/diff/cases/semantics/stdlib/parallel_reduce_vm_batch.xr",
     # `sync.fence` itself lowers to the freestanding mem.fence helper, but the
