@@ -87,9 +87,9 @@ void xr_copy_context_init(XrCopyContext *ctx, struct XrVMRuntime *X,
                              dst_fixed_heap ? dst_fixed_heap : xr_isolate_get_fixed_heap(X));
 }
 
-// Channel-transit allocation: coroutine-independent shared object with
-// one atomic reference owned by the channel buffer. Freed wholesale via
-// xr_shared_destroy when the receive-side copy releases that reference.
+// Residual transit allocation: coroutine-independent shared object with
+// one atomic reference owned by the temporary transfer slot. Freed wholesale
+// via xr_shared_destroy when the consumer releases that reference.
 static void *copy_ctx_alloc_transit(XrCopyContext *ctx, size_t size, uint8_t type) {
     XrSystemHeap *heap = ctx->core ? ctx->core->sys_heap : NULL;
     if (!heap)

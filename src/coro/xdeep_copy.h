@@ -124,20 +124,19 @@ XR_FUNC XrValue xr_deep_copy_explicit_to_storage_core(struct XrRuntimeCore *core
 XR_FUNC XrValue xr_deep_copy_to_coro_counted_core(struct XrRuntimeCore *core, XrValue value,
                                                   struct XrCoroutine *dst_coro, int *out_count);
 
-/* ========== Channel Transit Copies ==========
+/* ========== Residual Transit Copies ==========
  *
- * A value sent through a channel must outlive the sending coroutine, so
- * the send side deep-copies it into a coroutine-independent TRANSIT graph
- * (atomic refcount, one reference owned by the channel buffer / blocked
- * sender). The receive side deep-copies the graph into the receiving
- * coroutine's heap and releases the buffer reference, which frees the
- * whole transit graph through the regular shared-destroy path. */
+ * New Channel payloads are materialized as owned message roots. TRANSIT remains
+ * only for older blocked-send retry values and non-Channel runtime aggregation
+ * paths that still need a coroutine-independent temporary graph. The consumer
+ * deep-copies the graph into its private heap and releases the transit
+ * reference, freeing the graph through the regular shared-destroy path. */
 
 XR_FUNC XrValue xr_deep_copy_to_transit_core(struct XrRuntimeCore *core, XrValue value);
 XR_FUNC XrValue xr_deep_copy_to_transit(struct XrVMRuntime *X, XrValue value);
 XR_FUNC void xr_chan_transit_release_core(struct XrRuntimeCore *core, XrValue value);
 
-/* ========== Zero-copy buffer move for self-contained scalar arrays ==========
+/* ========== Legacy transit buffer move for self-contained scalar arrays ==========
  *
  * A typed (non-ANY) array's data buffer holds only scalars — no interior
  * pointers into any coroutine heap — so when the sender holds the unique
