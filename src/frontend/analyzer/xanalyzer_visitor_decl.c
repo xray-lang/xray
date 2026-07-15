@@ -2754,10 +2754,10 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
             if (!param_types)
                 continue;
             for (int j = 0; j < im->param_count; j++) {
-                param_types[j] =
-                    im->param_types && im->param_types[j]
-                        ? xr_tref_resolve_in_analyzer(ctx->analyzer, im->param_types[j])
-                        : xr_type_new_unknown(NULL);
+                XrParamNode *param = im->params ? im->params[j] : NULL;
+                param_types[j] = (param && param->type)
+                                     ? xr_tref_resolve_in_analyzer(ctx->analyzer, param->type)
+                                     : xr_type_new_unknown(NULL);
             }
         }
         XrType *ret_type = im->return_type
@@ -2765,9 +2765,12 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
                                : xr_type_new_unit(NULL);
         mlinks->type = xr_type_new_function(ctx->analyzer->isolate, param_types, im->param_count,
                                             ret_type, false);
-        if (mlinks->type && im->param_passing_modes) {
-            for (int j = 0; j < im->param_count; j++)
-                xr_type_function_set_param_mode(mlinks->type, j, im->param_passing_modes[j]);
+        if (mlinks->type && im->params) {
+            for (int j = 0; j < im->param_count; j++) {
+                XrParamNode *param = im->params[j];
+                xr_type_function_set_param_mode(mlinks->type, j,
+                                                param ? param->passing_mode : XR_PARAM_VALUE);
+            }
         }
         if (param_types)
             xr_free(param_types);
@@ -3484,20 +3487,19 @@ skip_layout:
                     param_names = NULL;
                 }
                 for (int j = 0; param_types && j < md->param_count; j++) {
-                    param_types[j] =
-                        (md->param_types && md->param_types[j])
-                            ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->param_types[j])
-                            : xr_type_new_unknown(NULL);
-                    param_names[j] = md->parameters ? md->parameters[j] : NULL;
+                    XrParamNode *param = md->params ? md->params[j] : NULL;
+                    param_types[j] = (param && param->type)
+                                         ? xr_tref_resolve_in_analyzer(ctx->analyzer, param->type)
+                                         : xr_type_new_unknown(NULL);
+                    param_names[j] = param ? param->name : NULL;
 
                     // Warn: method parameter missing type annotation (skip constructor)
-                    bool is_rest_param = md->is_variadic && j == md->param_count - 1;
-                    if (!(md->param_types && md->param_types[j]) && !md->is_constructor &&
-                        !is_rest_param) {
+                    bool is_rest_param = param && param->is_rest;
+                    if (!(param && param->type) && !md->is_constructor && !is_rest_param) {
                         char msg[256];
                         snprintf(msg, sizeof(msg),
                                  "Parameter '%s' of method '%s' is missing type annotation",
-                                 md->parameters ? md->parameters[j] : "?",
+                                 param && param->name ? param->name : "?",
                                  md->name ? md->name : "?");
                         XrLocation loc = {.file = ctx->file_path, .line = method->line};
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
@@ -3561,9 +3563,12 @@ skip_layout:
             if (method_type)
                 method_type->function.min_params = md->required_count;
 
-            if (method_type && md->param_passing_modes) {
-                for (int j = 0; j < md->param_count; j++)
-                    xr_type_function_set_param_mode(method_type, j, md->param_passing_modes[j]);
+            if (method_type && md->params) {
+                for (int j = 0; j < md->param_count; j++) {
+                    XrParamNode *param = md->params[j];
+                    xr_type_function_set_param_mode(method_type, j,
+                                                    param ? param->passing_mode : XR_PARAM_VALUE);
+                }
             }
 
             method_links->type = method_type;
@@ -3575,12 +3580,16 @@ skip_layout:
                                              md->param_count, ret_type);
             xa_symbol_links_set_param_escape_summary(ctx, method_links, param_types, param_names,
                                                      md->param_count, ret_type, md->body, info);
-            // Record method/constructor default expressions for caller-side
-            // default filling (methods store defaults in md->default_values).
+            // Record method/constructor default expressions for caller-side default filling.
             if (md->param_count > 0) {
-                xa_bind_param_default_exprs(ctx, md->default_values, param_types, md->param_count);
-                xa_symbol_links_set_param_defaults(method_links, md->default_values,
-                                                   md->param_count);
+                AstNode **defs = (AstNode **) xr_calloc(md->param_count, sizeof(AstNode *));
+                if (defs) {
+                    for (int j = 0; j < md->param_count; j++)
+                        defs[j] = md->params && md->params[j] ? md->params[j]->default_value : NULL;
+                    xa_bind_param_default_exprs(ctx, defs, param_types, md->param_count);
+                    xa_symbol_links_set_param_defaults(method_links, defs, md->param_count);
+                    xr_free(defs);
+                }
             }
 
             // Store generic type parameters for the method.  Method-level
@@ -3619,7 +3628,7 @@ skip_layout:
                 // Count required params (those without default values)
                 int required = 0;
                 for (int j = 0; j < md->param_count; j++) {
-                    if (!md->default_values || !md->default_values[j])
+                    if (!md->params || !md->params[j] || !md->params[j]->default_value)
                         required++;
                 }
                 info->constructor_required_params = required;
@@ -3665,15 +3674,14 @@ skip_layout:
         XaSymbolLinks *mlinks = msym ? xa_analyzer_get_links(ctx->analyzer, msym) : NULL;
 
         for (int j = 0; j < md->param_count; j++) {
-            const char *pname = md->parameters ? md->parameters[j] : NULL;
+            XrParamNode *source_param = md->params ? md->params[j] : NULL;
+            const char *pname = source_param ? source_param->name : NULL;
             if (!pname)
                 continue;
 
             XaSymbol *param = xa_symbol_new(pname, XA_SYM_PARAMETER);
             param->location.line = method->line;
-            if (md->param_passing_modes) {
-                param->passing_mode = md->param_passing_modes[j];
-            }
+            param->passing_mode = source_param->passing_mode;
             xa_visit_add_symbol_checked(ctx, param, 0);
 
             XaSymbolLinks *plinks = xa_analyzer_get_links(ctx->analyzer, param);

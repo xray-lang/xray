@@ -279,16 +279,16 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         xi_lower_braun_write(&ml, xi_lower_var_create(&ml, 0, "this", this_type), entry, th);
     }
 
-    /* User-declared parameters. m->param_types is XrTypeRef** (AST
-     * syntax), not XrType** — resolve each entry through the analyzer
-     * resolver so XiValue->type carries a real runtime type. */
+    /* Resolve each source ParamContract type through the analyzer so
+     * XiValue->type carries a real runtime type. */
     for (int i = 0; i < m->param_count; i++) {
+        XrParamNode *param = m->params ? m->params[i] : NULL;
         struct XrType *pt = ml.type_any;
         struct XrType *sig_param = xr_type_function_param_type(method_sig, i);
         if (sig_param) {
             pt = sig_param;
-        } else if (m->param_types && m->param_types[i]) {
-            struct XrType *resolved = xr_tref_resolve_in_analyzer(l->analyzer, m->param_types[i]);
+        } else if (param && param->type) {
+            struct XrType *resolved = xr_tref_resolve_in_analyzer(l->analyzer, param->type);
             if (resolved)
                 pt = resolved;
         }
@@ -299,18 +299,15 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         }
         XiValue *p = xi_param(ml.func, entry, (uint16_t) (base + i), pt);
         ml.func->params[base + i] = p;
-        XrParamMode mode = (m->param_passing_modes && i < m->param_count)
-                               ? m->param_passing_modes[i]
-                               : XR_PARAM_VALUE;
+        XrParamMode mode = param ? param->passing_mode : XR_PARAM_VALUE;
         if ((base + i) < fixed_params && mode != XR_PARAM_VALUE &&
             !xi_func_set_param_passing_mode(ml.func, (uint16_t) (base + i), mode)) {
             xi_func_free(ml.func);
             xi_lower_cleanup(&ml);
             return NULL;
         }
-        XR_DCHECK(m->parameters != NULL && m->parameters[i] != NULL,
-                  "method param name must not be NULL");
-        xi_lower_braun_write(&ml, xi_lower_var_create(&ml, 0, m->parameters[i], pt), entry, p);
+        XR_DCHECK(param != NULL && param->name != NULL, "method param name must not be NULL");
+        xi_lower_braun_write(&ml, xi_lower_var_create(&ml, 0, param->name, pt), entry, p);
     }
 
     /* For constructors: emit field default init for complex expressions.

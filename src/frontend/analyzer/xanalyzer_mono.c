@@ -829,8 +829,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->param_count = src->param_count;
             dst->required_count = src->required_count;
             dst->is_variadic = src->is_variadic;
-            dst->parameters = clone_str_array(src->parameters, src->param_count);
-            dst->param_types = clone_tref_array(src->param_types, src->param_count, map, mc);
+            dst->params = clone_params(src->params, src->param_count, map, mc, clone_ctx);
             dst->return_type = sub_tref(src->return_type, map, mc);
             dst->body = xr_ast_clone_ctx(src->body, map, mc, clone_ctx);
             dst->is_constructor = src->is_constructor;
@@ -845,8 +844,6 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->base_arg_count = src->base_arg_count;
             dst->base_args =
                 clone_node_array(src->base_args, src->base_arg_count, map, mc, clone_ctx);
-            dst->default_values =
-                clone_node_array(src->default_values, src->param_count, map, mc, clone_ctx);
             // Class monomorphization substitutes the enclosing class type
             // params (for example T in Box<T>) but must preserve method-local
             // params (for example U in map<U>). Clearing them makes the

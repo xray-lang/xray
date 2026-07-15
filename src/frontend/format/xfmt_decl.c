@@ -175,6 +175,22 @@ void xfmt_emit_destructure_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_newline(ctx);
 }
 
+static void xfmt_emit_param(XrFmtContext *ctx, const XrParamNode *param) {
+    if (!param)
+        return;
+    if (param->is_rest)
+        xfmt_write_str(ctx, "...");
+    if (param->pattern)
+        xfmt_emit_pattern(ctx, param->pattern);
+    else
+        xfmt_write_str(ctx, param->name);
+    xfmt_emit_param_annotation(ctx, param->passing_mode, param->type);
+    if (param->default_value) {
+        xfmt_write_str(ctx, " = ");
+        xfmt_emit_expression(ctx, param->default_value);
+    }
+}
+
 void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
     FunctionDeclNode *fn = &node->as.function_decl;
     xfmt_emit_attributes(ctx, fn->attributes, fn->attr_count);
@@ -188,13 +204,7 @@ void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
     for (int i = 0; i < fn->param_count; i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
-        XrParamNode *param = fn->params[i];
-        xfmt_write_str(ctx, param->name);
-        xfmt_emit_param_annotation(ctx, param->passing_mode, param->type);
-        if (param->default_value) {
-            xfmt_write_str(ctx, " = ");
-            xfmt_emit_expression(ctx, param->default_value);
-        }
+        xfmt_emit_param(ctx, fn->params[i]);
     }
     xfmt_write_char(ctx, ')');
 
@@ -393,8 +403,9 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
 
             // Property type from getter return type or setter param type
             XrTypeRef *prop_type = getter ? getter->return_type : NULL;
-            if (!prop_type && setter && setter->param_count > 0 && setter->param_types)
-                prop_type = setter->param_types[0];
+            if (!prop_type && setter && setter->param_count > 0 && setter->params &&
+                setter->params[0])
+                prop_type = setter->params[0]->type;
             if (prop_type) {
                 xfmt_write_str(ctx, ": ");
                 xfmt_emit_type(ctx, prop_type);
@@ -419,13 +430,7 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
                 for (int j = 0; j < setter->param_count; j++) {
                     if (j > 0)
                         xfmt_write_str(ctx, ", ");
-                    xfmt_write_str(ctx, setter->parameters[j]);
-                    if (setter->param_types && setter->param_types[j]) {
-                        XrParamMode mode = setter->param_passing_modes
-                                               ? setter->param_passing_modes[j]
-                                               : XR_PARAM_VALUE;
-                        xfmt_emit_param_annotation(ctx, mode, setter->param_types[j]);
-                    }
+                    xfmt_emit_param(ctx, setter->params[j]);
                 }
                 xfmt_write_str(ctx, ") ");
                 xfmt_emit_block(ctx, setter->body);
@@ -480,12 +485,7 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         for (int j = 0; j < m->param_count; j++) {
             if (j > 0)
                 xfmt_write_str(ctx, ", ");
-            xfmt_write_str(ctx, m->parameters[j]);
-            if (m->param_types && m->param_types[j]) {
-                XrParamMode mode =
-                    m->param_passing_modes ? m->param_passing_modes[j] : XR_PARAM_VALUE;
-                xfmt_emit_param_annotation(ctx, mode, m->param_types[j]);
-            }
+            xfmt_emit_param(ctx, m->params[j]);
         }
         xfmt_write_char(ctx, ')');
 
@@ -591,12 +591,7 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
         for (int j = 0; j < m->param_count; j++) {
             if (j > 0)
                 xfmt_write_str(ctx, ", ");
-            xfmt_write_str(ctx, m->parameters[j]);
-            if (m->param_types && m->param_types[j]) {
-                XrParamMode mode =
-                    m->param_passing_modes ? m->param_passing_modes[j] : XR_PARAM_VALUE;
-                xfmt_emit_param_annotation(ctx, mode, m->param_types[j]);
-            }
+            xfmt_emit_param(ctx, m->params[j]);
         }
         xfmt_write_char(ctx, ')');
         if (m->return_type) {

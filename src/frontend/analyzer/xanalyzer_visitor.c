@@ -2916,10 +2916,11 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
             param_names = NULL;
         }
         for (int i = 0; param_types && i < md->param_count; i++) {
-            param_types[i] = (md->param_types && md->param_types[i])
-                                 ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->param_types[i])
+            XrParamNode *param = md->params ? md->params[i] : NULL;
+            param_types[i] = (param && param->type)
+                                 ? xr_tref_resolve_in_analyzer(ctx->analyzer, param->type)
                                  : xr_type_new_unknown(NULL);
-            param_names[i] = md->parameters ? md->parameters[i] : NULL;
+            param_names[i] = param ? param->name : NULL;
         }
     }
 
@@ -2932,9 +2933,12 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
                                                ret_type, md->is_variadic);
     if (method_type)
         method_type->function.min_params = md->required_count;
-    if (method_type && md->param_passing_modes) {
-        for (int i = 0; i < md->param_count; i++)
-            xr_type_function_set_param_mode(method_type, i, md->param_passing_modes[i]);
+    if (method_type && md->params) {
+        for (int i = 0; i < md->param_count; i++) {
+            XrParamNode *param = md->params[i];
+            xr_type_function_set_param_mode(method_type, i,
+                                            param ? param->passing_mode : XR_PARAM_VALUE);
+        }
     }
 
     XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
@@ -2943,8 +2947,14 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
     xa_symbol_links_set_function_sig(method_links, param_types, param_names, md->param_count,
                                      ret_type);
     if (md->param_count > 0) {
-        xa_bind_param_default_exprs(ctx, md->default_values, param_types, md->param_count);
-        xa_symbol_links_set_param_defaults(method_links, md->default_values, md->param_count);
+        AstNode **defs = (AstNode **) xr_calloc(md->param_count, sizeof(AstNode *));
+        if (defs) {
+            for (int i = 0; i < md->param_count; i++)
+                defs[i] = md->params && md->params[i] ? md->params[i]->default_value : NULL;
+            xa_bind_param_default_exprs(ctx, defs, param_types, md->param_count);
+            xa_symbol_links_set_param_defaults(method_links, defs, md->param_count);
+            xr_free(defs);
+        }
     }
 
     xa_class_info_add_method(info, method_sym);
@@ -2964,13 +2974,13 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
         }
 
         for (int i = 0; i < md->param_count; i++) {
-            const char *pname = md->parameters ? md->parameters[i] : NULL;
+            XrParamNode *source_param = md->params ? md->params[i] : NULL;
+            const char *pname = source_param ? source_param->name : NULL;
             if (!pname)
                 continue;
             XaSymbol *param = xa_symbol_new(pname, XA_SYM_PARAMETER);
             param->location.line = method->line;
-            if (md->param_passing_modes)
-                param->passing_mode = md->param_passing_modes[i];
+            param->passing_mode = source_param->passing_mode;
             xa_visit_add_symbol_checked(ctx, param, 0);
             XaSymbolLinks *plinks = xa_analyzer_get_links(ctx->analyzer, param);
             if (plinks) {

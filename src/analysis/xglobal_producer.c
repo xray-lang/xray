@@ -879,22 +879,18 @@ static uint32_t hash_generic_inst_name_type_key(const char *name, const char **t
     return hash_folded32(h);
 }
 
-static XrParamMode signature_param_mode(const XrParamMode *param_modes, int index) {
-    if (!param_modes)
-        return XR_PARAM_VALUE;
-    return xr_param_mode_is_valid(param_modes[index]) ? param_modes[index] : XR_PARAM_VALUE;
-}
-
-static uint32_t hash_method_signature_parts(XrTypeRef **param_types, const XrParamMode *param_modes,
-                                            int param_count, XrTypeRef *return_type, bool is_static,
+static uint32_t hash_method_signature_parts(XrParamNode **params, int param_count,
+                                            XrTypeRef *return_type, bool is_static,
                                             bool is_constructor) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     h = fold_u64(h, (uint64_t) param_count);
     h = fold_u64(h, is_static ? 1 : 0);
     h = fold_u64(h, is_constructor ? 1 : 0);
     for (int i = 0; i < param_count; i++) {
-        h = fold_u64(h, signature_param_mode(param_modes, i));
-        h = hash_tref(h, param_types ? param_types[i] : NULL);
+        XrParamNode *param = params ? params[i] : NULL;
+        XrParamMode mode = param ? param->passing_mode : XR_PARAM_VALUE;
+        h = fold_u64(h, xr_param_mode_is_valid(mode) ? mode : XR_PARAM_VALUE);
+        h = hash_tref(h, param ? param->type : NULL);
     }
     h = hash_tref(h, return_type);
     return (uint32_t) (h ^ (h >> 32));
@@ -903,15 +899,14 @@ static uint32_t hash_method_signature_parts(XrTypeRef **param_types, const XrPar
 static uint32_t hash_method_signature(const MethodDeclNode *m) {
     if (!m)
         return 0;
-    return hash_method_signature_parts(m->param_types, m->param_passing_modes, m->param_count,
-                                       m->return_type, m->is_static, m->is_constructor);
+    return hash_method_signature_parts(m->params, m->param_count, m->return_type, m->is_static,
+                                       m->is_constructor);
 }
 
 static uint32_t hash_interface_method_signature(const InterfaceMethodNode *m) {
     if (!m)
         return 0;
-    return hash_method_signature_parts(m->param_types, m->param_passing_modes, m->param_count,
-                                       m->return_type, false, false);
+    return hash_method_signature_parts(m->params, m->param_count, m->return_type, false, false);
 }
 
 static uint32_t hash_function_signature(const FunctionDeclNode *f) {
@@ -6350,7 +6345,8 @@ static bool body_hash_method_valid(const MethodDeclNode *method) {
 static bool body_eq_method_valid(const MethodDeclNode *method, const char *type_name) {
     return method && !method->is_static && !method->is_private && !method->is_constructor &&
            method->is_operator && method->param_count == 1 &&
-           body_type_ref_is_named(method->param_types ? method->param_types[0] : NULL, type_name) &&
+           body_type_ref_is_named(
+               method->params && method->params[0] ? method->params[0]->type : NULL, type_name) &&
            body_type_ref_is_bool(method->return_type);
 }
 
@@ -8938,36 +8934,25 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
     if (!bc || !method)
         return;
     for (int i = 0; i < method->param_count; i++) {
-        XgClassId class_id = producer_lookup_class_from_tref(
-            bc->producer, method->param_types ? method->param_types[i] : NULL);
-        XgInterfaceId interface_id = producer_lookup_interface_from_tref(
-            bc->producer, method->param_types ? method->param_types[i] : NULL);
-        uint32_t type_key =
-            method->param_types && method->param_types[i] ? hash_tref32(method->param_types[i]) : 0;
+        XrParamNode *param = method->params ? method->params[i] : NULL;
+        XrTypeRef *param_type = param ? param->type : NULL;
+        const char *param_name = param ? param->name : NULL;
+        XgClassId class_id = producer_lookup_class_from_tref(bc->producer, param_type);
+        XgInterfaceId interface_id = producer_lookup_interface_from_tref(bc->producer, param_type);
+        uint32_t type_key = param_type ? hash_tref32(param_type) : 0;
         uint8_t sequence_kind = 0;
         uint32_t sequence_elem_type_key = 0;
-        bc->capability_bits |=
-            body_capabilities_for_type_ref(method->param_types ? method->param_types[i] : NULL);
-        (void) body_add_interface_object_uses_for_type_ref(
-            bc, method->param_types ? method->param_types[i] : NULL, XG_INTERFACE_OBJECT_USE_PARAM,
-            0);
-        (void) body_push_local(
-            bc, method->parameters ? method->parameters[i] : NULL, 0, class_id, interface_id,
-            type_key,
-            method->param_types && method->param_types[i] ? method->param_types[i]->name : NULL,
-            false);
-        body_bind_record_bridge_shapes_for_type_key(
-            bc, method->parameters ? method->parameters[i] : NULL, type_key);
-        body_bind_map_shape_local_for_type_ref(
-            bc, method->parameters ? method->parameters[i] : NULL,
-            method->param_types ? method->param_types[i] : NULL, 0);
-        if (body_type_ref_sequence_parts(method->param_types ? method->param_types[i] : NULL,
-                                         &sequence_kind, &sequence_elem_type_key))
-            body_bind_sequence_local(bc, method->parameters ? method->parameters[i] : NULL,
-                                     sequence_kind, sequence_elem_type_key,
-                                     body_type_ref_sequence_elem_type_ref(
-                                         method->param_types ? method->param_types[i] : NULL));
-        body_add_generic_array_storage(bc, method->param_types ? method->param_types[i] : NULL, 0);
+        bc->capability_bits |= body_capabilities_for_type_ref(param_type);
+        (void) body_add_interface_object_uses_for_type_ref(bc, param_type,
+                                                           XG_INTERFACE_OBJECT_USE_PARAM, 0);
+        (void) body_push_local(bc, param_name, 0, class_id, interface_id, type_key,
+                               param_type ? param_type->name : NULL, false);
+        body_bind_record_bridge_shapes_for_type_key(bc, param_name, type_key);
+        body_bind_map_shape_local_for_type_ref(bc, param_name, param_type, 0);
+        if (body_type_ref_sequence_parts(param_type, &sequence_kind, &sequence_elem_type_key))
+            body_bind_sequence_local(bc, param_name, sequence_kind, sequence_elem_type_key,
+                                     body_type_ref_sequence_elem_type_ref(param_type));
+        body_add_generic_array_storage(bc, param_type, 0);
     }
 }
 
