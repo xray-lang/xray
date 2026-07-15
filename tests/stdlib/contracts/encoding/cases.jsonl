@@ -1,0 +1,4 @@
+{"case":"hex-and-utf8-kat","probe":"tests/diff/cases/semantics/stdlib/encoding_module.xr","equivalence":["value","error","effect"],"oracle":"Python bytes.hex and Unicode strict UTF-8 reference vectors"}
+{"case":"utf16-endian-and-errors","probe":"tests/diff/cases/semantics/stdlib/encoding_core_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"Unicode UTF-16 encoding rules and BOM semantics"}
+{"case":"deterministic-codec-fuzz","probe":"tests/diff/cases/semantics/stdlib/encoding_property_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"Python hex aggregate plus Unicode boundary and deterministic roundtrip properties"}
+{"case":"seeded-cross-oracle-fuzz","probe":"tests/diff/fuzz_binary_stdlib.py","equivalence":["value","error","complexity"],"oracle":"Python bytes.hex and strict UTF-8 implementations compared with VM and AOT"}

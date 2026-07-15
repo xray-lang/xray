@@ -62,6 +62,28 @@ BASELINES = (
         contains=(
             "tests/diff/cases/semantics/stdlib/base64_module.xr",
             "tests/diff/cases/semantics/stdlib/base64_isvalid_direct.xr",
+            "tests/diff/cases/semantics/stdlib/base64_property_direct.xr",
+        ),
+    ),
+    Baseline(
+        category="BASE64_PROPERTY_FUZZ",
+        path="tests/regression/10_stdlib/1181_binary_codec_properties.xr",
+        contains=(
+            "test_base64_full_rfc4648_vectors",
+            "test_base64_independent_all_byte_aggregate",
+            "assert_eq(aggregate, 544432900)",
+            "test_base64_deterministic_roundtrip_fuzz",
+        ),
+    ),
+    Baseline(
+        category="BASE64_TYPED_ERROR_DIFF",
+        path="tests/diff/cases/semantics/stdlib/base64_property_direct.xr",
+        contains=(
+            "fn errorCode(text: string) -> int",
+            "aggregate == 544432900",
+            'print(errorCode("A"))',
+            'print(errorCode("QR=="))',
+            'print(errorCode("AA=A"))',
         ),
     ),
     Baseline(
@@ -97,6 +119,60 @@ BASELINES = (
             "utf16DecodeFails(missing[:])",
             "utf16DecodeFails(invalid[:])",
             "consumeBom",
+        ),
+    ),
+    Baseline(
+        category="ENCODING_CONTRACT_CORPUS",
+        path="tests/stdlib/contracts/encoding/contract.toml",
+        contains=(
+            'module = "encoding"',
+            'id = "hex-byte-roundtrip"',
+            'id = "strict-utf8-validation"',
+            'id = "utf16-endian-bom-roundtrip"',
+            'id = "utf16-typed-errors"',
+            'diff_cases_manifest = "tests/stdlib/contracts/encoding/diff_cases.txt"',
+        ),
+    ),
+    Baseline(
+        category="ENCODING_DIFF_CORPUS",
+        path="tests/stdlib/contracts/encoding/diff_cases.txt",
+        contains=(
+            "tests/diff/cases/semantics/stdlib/encoding_module.xr",
+            "tests/diff/cases/semantics/stdlib/encoding_core_direct.xr",
+            "tests/diff/cases/semantics/stdlib/encoding_property_direct.xr",
+        ),
+    ),
+    Baseline(
+        category="ENCODING_PROPERTY_FUZZ",
+        path="tests/regression/10_stdlib/1181_binary_codec_properties.xr",
+        contains=(
+            "test_hex_full_byte_kat",
+            "test_hex_deterministic_roundtrip_fuzz",
+            "test_utf8_exhaustive_single_and_two_byte_space",
+            "test_utf8_scalar_boundaries",
+            "test_utf16_supplementary_kat_and_roundtrip",
+        ),
+    ),
+    Baseline(
+        category="ENCODING_TYPED_ERROR_DIFF",
+        path="tests/diff/cases/semantics/stdlib/encoding_property_direct.xr",
+        contains=(
+            "fn hexErrorCode(text: string) -> int",
+            "fn utf16ErrorCode(data: Slice<byte>) -> int",
+            'print(hexErrorCode("abc"))',
+            "print(utf16ErrorCode(invalidPair[:]))",
+        ),
+    ),
+    Baseline(
+        category="BINARY_CODEC_RANDOMIZED_FUZZ_HARNESS",
+        path="tests/diff/fuzz_binary_stdlib.py",
+        contains=(
+            "Seeded cross-oracle fuzzing for task-200 pure binary codecs.",
+            "base64.b64encode(data)",
+            "base64.urlsafe_b64encode(data)",
+            'data.decode("utf-8", "strict")',
+            '[str(xray), "run", str(source_path)]',
+            '[str(xray), "build", "--native", str(source_path), "-o", str(binary)]',
         ),
     ),
     Baseline(

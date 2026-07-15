@@ -1,0 +1,125 @@
+// Deterministic task-200 encoding property corpus. The full-byte hex vector is
+// generated independently with Python bytes.hex; VM and AOT must also agree on
+// generated roundtrips, strict UTF-8 boundaries, UTF-16 pairs, and typed errors.
+
+import encoding
+import { HexError, Utf16DecodeOptions, Utf16EncodeOptions, Utf16Error } from encoding
+
+const ALL_BYTES_HEX = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
+
+fn sameBytes(a: Array<byte>, b: Array<byte>) -> bool {
+    if (len(a) != len(b)) { return false }
+    for (var i = 0; i < len(a); i++) {
+        if (a[i] != b[i]) { return false }
+    }
+    return true
+}
+
+fn nextState(state: int) -> int {
+    return (state * 48271) % 2147483647
+}
+
+fn fuzzBytes(length: int, seed: int) -> Array<byte> {
+    var out = Array<byte>(length)
+    var state = seed
+    for (var i = 0; i < length; i++) {
+        state = nextState(state)
+        out[i] = state & 255
+    }
+    return out
+}
+
+fn utf16EncodeOptions(order: Endian) -> Utf16EncodeOptions {
+    var options = Utf16EncodeOptions()
+    options.order = order
+    return options
+}
+
+fn utf16DecodeOptions(order: Endian) -> Utf16DecodeOptions {
+    var options = Utf16DecodeOptions()
+    options.order = order
+    return options
+}
+
+fn hexErrorCode(text: string) -> int {
+    try {
+        var decoded = encoding.hexDecode(text)
+        return -1 - len(decoded)
+    } catch (e: HexError) {
+        return match (e) {
+            HexError.OddLength(length) -> 1000 + length,
+            HexError.InvalidDigit(offset, value) -> 2000 + offset
+        }
+    }
+}
+
+fn utf16ErrorCode(data: Slice<byte>) -> int {
+    try {
+        var decoded = encoding.utf16Decode(data)
+        return -1 - len(decoded)
+    } catch (e: Utf16Error) {
+        return match (e) {
+            Utf16Error.OddByteLength(length) -> 1000 + length,
+            Utf16Error.UnexpectedLowSurrogate(offset, value) -> 2000 + offset,
+            Utf16Error.MissingLowSurrogate(offset, value) -> 3000 + offset,
+            Utf16Error.InvalidLowSurrogate(offset, value) -> 4000 + offset
+        }
+    }
+}
+
+var allBytes = Array<byte>(256)
+for (var i = 0; i < 256; i++) { allBytes[i] = i }
+print(encoding.hexEncode(allBytes[:]) == ALL_BYTES_HEX)
+
+var roundtripOk = true
+for (var length = 0; length <= 96; length++) {
+    var input = fuzzBytes(length, 193 + length)
+    var decoded = encoding.hexDecode(encoding.hexEncode(input[:]))
+    if (!sameBytes(input, decoded)) { roundtripOk = false }
+}
+print(roundtripOk)
+
+var singleByteUtf8Ok = true
+var one = Array<byte>(1)
+for (var value = 0; value < 256; value++) {
+    one[0] = value
+    if (encoding.utf8Valid(one[:]) != (value < 128)) { singleByteUtf8Ok = false }
+}
+print(singleByteUtf8Ok)
+
+var twoByteUtf8Ok = true
+var pair = Array<byte>(2)
+for (var lead = 0xC2; lead <= 0xDF; lead++) {
+    pair[0] = lead
+    for (var trail = 0x80; trail <= 0xBF; trail++) {
+        pair[1] = trail
+        if (!encoding.utf8Valid(pair[:])) { twoByteUtf8Ok = false }
+    }
+}
+print(twoByteUtf8Ok)
+
+var text = "A😀𝄞"
+var le = encoding.utf16Encode(text)
+var be = encoding.utf16Encode(text, utf16EncodeOptions(Endian.BE))
+print(len(le))
+print(encoding.utf16Decode(le[:]) == text)
+print(encoding.utf16Decode(be[:], utf16DecodeOptions(Endian.BE)) == text)
+
+print(hexErrorCode("abc"))
+print(hexErrorCode("0g"))
+var odd = Array<byte>(1)
+print(utf16ErrorCode(odd[:]))
+var low = Array<byte>(2)
+low[0] = 0x00
+low[1] = 0xDC
+print(utf16ErrorCode(low[:]))
+var high = Array<byte>(2)
+high[0] = 0x00
+high[1] = 0xD8
+print(utf16ErrorCode(high[:]))
+var invalidPair = Array<byte>(4)
+invalidPair[0] = 0x00
+invalidPair[1] = 0xD8
+invalidPair[2] = 0x41
+invalidPair[3] = 0x00
+print(utf16ErrorCode(invalidPair[:]))

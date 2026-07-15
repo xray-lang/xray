@@ -1,0 +1,92 @@
+// Deterministic task-200 Base64 property corpus. The aggregate is generated
+// independently from Python's RFC 4648 implementation; VM and AOT must also
+// agree on byte roundtrips, URL-safe policy, and typed error variants.
+
+import base64
+import {
+    Base64Alphabet,
+    Base64DecodeOptions,
+    Base64EncodeOptions,
+    Base64Error,
+    Base64PaddingPolicy
+} from base64
+
+fn sameBytes(a: Array<byte>, b: Array<byte>) -> bool {
+    if (len(a) != len(b)) { return false }
+    for (var i = 0; i < len(a); i++) {
+        if (a[i] != b[i]) { return false }
+    }
+    return true
+}
+
+fn nextState(state: int) -> int {
+    return (state * 48271) % 2147483647
+}
+
+fn fuzzBytes(length: int, seed: int) -> Array<byte> {
+    var out = Array<byte>(length)
+    var state = seed
+    for (var i = 0; i < length; i++) {
+        state = nextState(state)
+        out[i] = state & 255
+    }
+    return out
+}
+
+fn urlEncodeOptions() -> Base64EncodeOptions {
+    var options = Base64EncodeOptions()
+    options.alphabet = Base64Alphabet.UrlSafe
+    options.padding = false
+    return options
+}
+
+fn urlDecodeOptions() -> Base64DecodeOptions {
+    var options = Base64DecodeOptions()
+    options.alphabet = Base64Alphabet.UrlSafe
+    options.padding = Base64PaddingPolicy.Forbidden
+    return options
+}
+
+fn errorCode(text: string) -> int {
+    try {
+        var decoded = base64.decode(text)
+        return -1 - len(decoded)
+    } catch (e: Base64Error) {
+        return match (e) {
+            Base64Error.InvalidLength(length) -> 1000 + length,
+            Base64Error.InvalidByte(offset, value) -> 2000 + offset,
+            Base64Error.InvalidPadding(offset) -> 3000 + offset,
+            Base64Error.NonCanonicalTrailingBits(offset) -> 4000 + offset
+        }
+    }
+}
+
+var aggregate = 0
+for (var value = 0; value < 256; value++) {
+    var one = Array<byte>(1)
+    one[0] = value
+    var encoded = base64.encode(one[:])
+    var encodedBytes: Slice<byte> = encoded.bytes()
+    for (var i = 0; i < len(encodedBytes); i++) {
+        var encodedByte: int = encodedBytes[i]
+        aggregate = ((aggregate * 257) + encodedByte) % 1000000007
+    }
+}
+print(aggregate == 544432900)
+
+var roundtripOk = true
+for (var length = 0; length <= 96; length++) {
+    var input = fuzzBytes(length, 97 + length)
+    var standard = base64.decode(base64.encode(input[:]))
+    if (!sameBytes(input, standard)) { roundtripOk = false }
+
+    var encodedUrl = base64.encode(input[:], urlEncodeOptions())
+    var decodedUrl = base64.decode(encodedUrl, urlDecodeOptions())
+    if (!sameBytes(input, decodedUrl)) { roundtripOk = false }
+}
+print(roundtripOk)
+print(errorCode("A"))
+print(errorCode("!!!!"))
+print(errorCode("Q==="))
+print(errorCode("QR=="))
+print(errorCode("AA=A"))

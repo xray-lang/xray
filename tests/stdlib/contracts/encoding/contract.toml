@@ -1,0 +1,51 @@
+schema = 1
+module = "encoding"
+contract_revision = 1
+legacy_commit = "e571b17d0ac7bf8a47f741a271686cd46b2bff68"
+legacy_oracle = "classification_only"
+legacy_public_surface = [
+  "hexEncode",
+  "hexDecode",
+  "hexDecodeString",
+  "utf8Valid",
+  "utf8Count",
+  "utf8ByteLength",
+  "utf16Encode",
+  "utf16Decode",
+  "LE",
+  "BE"
+]
+intentional_semantic_changes = [
+  "hexEncode accepts Slice<byte> and hexDecode returns Array<byte>",
+  "hexDecode throws HexError instead of returning null",
+  "hexDecodeString and valid-string UTF-8 metric aliases are removed",
+  "utf8Valid accepts arbitrary Slice<byte> and enforces strict shortest-form UTF-8",
+  "UTF-16 uses Endian options and throws Utf16Error instead of returning null"
+]
+known_legacy_bugs = [
+  "legacy utf8Valid accepted string only and therefore could not validate arbitrary bytes",
+  "legacy UTF-16 decode collapsed malformed input classes into a null sentinel"
+]
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/encoding/diff_cases.txt"
+benchmark_suite = "stdlib/encoding"
+
+[[legacy_behavior]]
+id = "hex-byte-roundtrip"
+classification = "required"
+new_behavior = "all byte values round-trip through lowercase hex with uppercase decode accepted"
+
+[[legacy_behavior]]
+id = "strict-utf8-validation"
+classification = "required"
+new_behavior = "validation accepts Unicode scalar encodings and rejects overlong, surrogate, truncated, continuation-only, and out-of-range sequences"
+
+[[legacy_behavior]]
+id = "utf16-endian-bom-roundtrip"
+classification = "required"
+new_behavior = "little-endian and big-endian data, BOM consumption, BMP values, and supplementary pairs round-trip deterministically"
+
+[[legacy_behavior]]
+id = "utf16-typed-errors"
+classification = "required"
+new_behavior = "odd lengths and malformed surrogate sequences report precise Utf16Error variants and byte offsets"

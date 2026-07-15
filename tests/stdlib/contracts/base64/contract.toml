@@ -1,9 +1,17 @@
 schema = 1
 module = "base64"
-contract_revision = 1
+contract_revision = 2
 legacy_commit = "e50953853746185e1f2e8e2d6371898166c6a42a"
 legacy_oracle = "classification_only"
-legacy_public_surface = ["encode", "decode", "encodeUrl", "decodeUrl", "isValid"]
+legacy_public_surface = [
+  "encode",
+  "decode",
+  "encodeBytes",
+  "decodeToBytes",
+  "encodeUrl",
+  "decodeUrl",
+  "isValid"
+]
 intentional_semantic_changes = [
   "public encode accepts Slice<byte>",
   "decode returns Array<byte> and throws Base64Error on invalid input",
@@ -24,3 +32,13 @@ new_behavior = "standard and URL-safe alphabets round-trip through Slice<byte>/A
 id = "typed-error-invalid-input"
 classification = "required"
 new_behavior = "invalid encodings throw Base64Error and do not produce partial output"
+
+[[legacy_behavior]]
+id = "canonical-trailing-bits"
+classification = "required"
+new_behavior = "decoding rejects non-zero unused bits and reports the offending byte offset"
+
+[[legacy_behavior]]
+id = "explicit-alphabet-padding-policy"
+classification = "required"
+new_behavior = "standard and URL-safe alphabets plus required, optional, or forbidden padding are selected explicitly"
