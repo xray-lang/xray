@@ -12,6 +12,7 @@ from typing import Any
 
 from check_stdlib_boundary import (
     check_dynamic,
+    check_error_model_policy,
     check_fastpaths,
     check_manifest,
     check_semantic_owners,
@@ -22,7 +23,12 @@ from stdlib_migration import contract_modules, validate_contract
 
 def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
     manifest = load_manifest(root)
-    errors = check_manifest(root) + check_semantic_owners(root) + check_fastpaths(root)
+    errors = (
+        check_manifest(root)
+        + check_semantic_owners(root)
+        + check_error_model_policy(root)
+        + check_fastpaths(root)
+    )
     dynamic_errors, dynamic_report = check_dynamic(root)
     errors.extend(dynamic_errors)
     owners: dict[str, list[str]] = defaultdict(list)
@@ -129,7 +135,6 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
         },
         "remaining_native_boundaries": native_boundaries,
         "dynamic_surface": {
-            "allowed_symbols": manifest.raw.get("dynamic_audit", {}).get("allowed_symbols", []),
             **dynamic_report,
         },
         "vm_fastpaths": list(manifest.vm_fastpaths),

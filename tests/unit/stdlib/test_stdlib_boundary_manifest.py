@@ -38,6 +38,12 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
     def test_dynamic_surface_is_fully_classified(self) -> None:
         errors, report = check_dynamic(ROOT)
         self.assertEqual([], errors)
+        self.assertEqual(report["allowed_count"], len(report["allowlist"]))
+        for entry in report["allowlist"]:
+            self.assertEqual(
+                {"symbol", "direction", "domain", "reason", "owner", "review_task"},
+                set(entry),
+            )
         self.assertGreater(report["migration_debt_count"], 0)
 
     def test_consistency_is_not_reported_as_completion(self) -> None:

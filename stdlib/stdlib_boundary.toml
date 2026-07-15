@@ -15,13 +15,112 @@ migration_modules = [
   "Coro", "CoroPool", "cluster", "csv", "http", "log", "net", "toml",
   "url", "ws", "xml", "yaml",
 ]
-# Exact, reviewed dynamic boundaries. New entries require a source API plus a
-# domain justification in the review that changes this list.
-allowed_symbols = [
-  "Logger.child", "Logger.debug", "Logger.error", "Logger.fatal", "Logger.info",
-  "Logger.warn", "cluster.publish", "log.child", "log.debug", "log.error",
-  "log.fatal", "log.info", "log.warn", "mem.addressOf",
-]
+# Exact, reviewed dynamic boundaries live in the structured entries below.
+# New entries require a source API and all ownership/domain metadata.
+
+[[dynamic_allowlist]]
+symbol = "Logger.child"
+direction = "input"
+domain = "explicit_bridge"
+reason = "Structured logging fields intentionally accept arbitrary Json values"
+owner = "stdlib/log"
+review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "Logger.debug"
+direction = "input"
+domain = "explicit_bridge"
+reason = "Structured log arguments intentionally accept arbitrary Json values"
+owner = "stdlib/log"
+review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "Logger.error"
+direction = "input"
+domain = "explicit_bridge"
+reason = "Structured log arguments intentionally accept arbitrary Json values"
+owner = "stdlib/log"
+review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "Logger.fatal"
+direction = "input"
+domain = "explicit_bridge"
+reason = "Structured log arguments intentionally accept arbitrary Json values"
+owner = "stdlib/log"
+review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "Logger.info"
+direction = "input"
+domain = "explicit_bridge"
+reason = "Structured log arguments intentionally accept arbitrary Json values"
+owner = "stdlib/log"
+review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "Logger.warn"
+direction = "input"
+domain = "explicit_bridge"
+reason = "Structured log arguments intentionally accept arbitrary Json values"
+owner = "stdlib/log"
+review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "cluster.publish"
+direction = "input"
+domain = "json_wire_payload"
+reason = "Cluster publish explicitly transports an arbitrary Json message payload"
+owner = "stdlib/cluster"
+review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "log.child"
+direction = "input"
+domain = "explicit_bridge"
+reason = "Structured logging fields intentionally accept arbitrary Json values"
+owner = "stdlib/log"
+review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "log.debug"
+direction = "input"
+domain = "explicit_bridge"
+reason = "Structured log arguments intentionally accept arbitrary Json values"
+owner = "stdlib/log"
+review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "log.error"
+direction = "input"
+domain = "explicit_bridge"
+reason = "Structured log arguments intentionally accept arbitrary Json values"
+owner = "stdlib/log"
+review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "log.fatal"
+direction = "input"
+domain = "explicit_bridge"
+reason = "Structured log arguments intentionally accept arbitrary Json values"
+owner = "stdlib/log"
+review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "log.info"
+direction = "input"
+domain = "explicit_bridge"
+reason = "Structured log arguments intentionally accept arbitrary Json values"
+owner = "stdlib/log"
+review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "log.warn"
+direction = "input"
+domain = "explicit_bridge"
+reason = "Structured log arguments intentionally accept arbitrary Json values"
+owner = "stdlib/log"
+review_task = "task-196"
 
 [[module]]
 name = "prelude"
