@@ -1445,71 +1445,50 @@ static bool verify_json_shape_fields(const XgGlobalEvidence *ev, const XgJsonSha
     return true;
 }
 
-static const XgJsonFieldSummary *
-verify_find_json_shape_field(const XgGlobalEvidence *ev, XgJsonShapeId shape_id, uint32_t ordinal) {
-    if (!ev || shape_id == XG_NO_ID)
-        return NULL;
-    for (uint32_t i = 0; i < ev->njson_fields; i++) {
-        const XgJsonFieldSummary *field = &ev->json_fields[i];
-        if (field->shape_id == shape_id && field->field_ordinal == ordinal)
-            return field;
-    }
-    return NULL;
-}
-
-static const XgRecordShapeSummary *
-verify_find_sealed_record_shape_by_type(const XgGlobalEvidence *ev, XgModuleId module_id,
-                                        uint32_t type_key) {
-    const XgRecordShapeSummary *match = NULL;
-    if (!ev || type_key == 0)
-        return NULL;
-    for (uint32_t i = 0; i < ev->nrecord_shapes; i++) {
-        const XgRecordShapeSummary *shape = &ev->record_shapes[i];
-        if (shape->module_id != module_id || shape->type_key != type_key ||
-            shape->shape_kind != XG_RECORD_SHAPE_STATIC ||
-            (shape->flags & XG_RECORD_SHAPE_SEALED) == 0)
-            continue;
-        if (match)
-            return NULL;
-        match = shape;
-    }
-    return match;
-}
-
-static bool verify_json_decode_record_bridge(const XgGlobalEvidence *ev,
-                                             const XgJsonCodecSummary *codec,
-                                             const XgJsonShapeSummary *output_shape, char *errbuf,
-                                             size_t errbuf_len) {
+static bool verify_json_record_bridge_pair(const XgGlobalEvidence *ev,
+                                           const XgJsonShapeSummary *json_shape, char *errbuf,
+                                           size_t errbuf_len) {
     const XgRecordShapeSummary *record_shape;
-    uint32_t record_field_count = 0;
-    if (!ev || !codec || !output_shape)
-        return set_error(errbuf, errbuf_len,
-                         "AOT Json decode verifier has incomplete Record bridge input");
-    if (output_shape->shape_kind != XG_JSON_SHAPE_RECORD_BRIDGE ||
-        (output_shape->flags & XG_JSON_SHAPE_RECORD_BRIDGEABLE) == 0)
-        return set_error(errbuf, errbuf_len, "AOT Json decode output is not a Record bridge shape");
-    if (output_shape->type_key != codec->target_type_key)
-        return set_error(errbuf, errbuf_len,
-                         "AOT Json decode target type does not match output shape");
-    record_shape = verify_find_sealed_record_shape_by_type(ev, output_shape->module_id,
-                                                           codec->target_type_key);
-    if (!record_shape)
-        return set_error(errbuf, errbuf_len,
-                         "AOT Json decode target sealed Record shape is missing or ambiguous");
-    if (record_shape->field_count != output_shape->field_count)
-        return set_error(errbuf, errbuf_len,
-                         "AOT Json decode Record bridge field count does not re-derive");
-    for (uint32_t i = 0; i < ev->nrecord_fields; i++) {
-        if (ev->record_fields[i].shape_id == record_shape->record_shape_id)
-            record_field_count++;
+    if (!ev || !json_shape)
+        return set_error(errbuf, errbuf_len, "AOT Json/Record bridge verifier has no shape");
+    if (json_shape->shape_kind != XG_JSON_SHAPE_RECORD_BRIDGE) {
+        if (json_shape->record_shape_id != XG_NO_ID)
+            return set_error(errbuf, errbuf_len,
+                             "AOT non-bridge Json shape references a Record shape");
+        return true;
     }
-    if (record_field_count != record_shape->field_count)
-        return set_error(errbuf, errbuf_len,
-                         "AOT Json decode sealed Record field rows do not re-derive");
-    for (uint32_t ordinal = 0; ordinal < output_shape->field_count; ordinal++) {
-        const XgJsonFieldSummary *json_field =
-            verify_find_json_shape_field(ev, output_shape->json_shape_id, ordinal);
+    if (json_shape->record_shape_id == XG_NO_ID)
+        return set_error(errbuf, errbuf_len, "AOT Json bridge shape has no Record shape id");
+    record_shape = xg_global_evidence_find_record_shape(ev, json_shape->record_shape_id);
+    if (!record_shape)
+        return set_error(errbuf, errbuf_len, "AOT Json bridge references missing Record shape");
+    if (record_shape->json_shape_id != json_shape->json_shape_id)
+        return set_error(errbuf, errbuf_len, "AOT Json/Record bridge ids are not reciprocal");
+    if (record_shape->shape_kind != XG_RECORD_SHAPE_STATIC ||
+        (record_shape->flags & (XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_JSON_BRIDGEABLE)) !=
+            (XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_JSON_BRIDGEABLE) ||
+        (json_shape->flags & XG_JSON_SHAPE_RECORD_BRIDGEABLE) == 0)
+        return set_error(errbuf, errbuf_len, "AOT Json/Record bridge shape kind is stale");
+    if (record_shape->module_id != json_shape->module_id ||
+        record_shape->owner_func_id != json_shape->owner_func_id ||
+        record_shape->source_span_id != json_shape->source_span_id ||
+        record_shape->type_key != json_shape->type_key ||
+        record_shape->field_count != json_shape->field_count)
+        return set_error(errbuf, errbuf_len, "AOT Json/Record bridge shape identity is stale");
+
+    for (uint32_t ordinal = 0; ordinal < json_shape->field_count; ordinal++) {
+        const XgJsonFieldSummary *json_field = NULL;
         const XgRecordFieldSummary *record_field = NULL;
+        for (uint32_t i = 0; i < ev->njson_fields; i++) {
+            const XgJsonFieldSummary *candidate = &ev->json_fields[i];
+            if (candidate->shape_id != json_shape->json_shape_id ||
+                candidate->field_ordinal != ordinal)
+                continue;
+            if (json_field)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT Json/Record bridge field ordinal is duplicated");
+            json_field = candidate;
+        }
         for (uint32_t i = 0; i < ev->nrecord_fields; i++) {
             const XgRecordFieldSummary *candidate = &ev->record_fields[i];
             if (candidate->shape_id != record_shape->record_shape_id ||
@@ -1517,14 +1496,44 @@ static bool verify_json_decode_record_bridge(const XgGlobalEvidence *ev,
                 continue;
             if (record_field)
                 return set_error(errbuf, errbuf_len,
-                                 "AOT Json decode sealed Record field ordinal is duplicated");
+                                 "AOT Json/Record bridge field ordinal is duplicated");
             record_field = candidate;
         }
-        if (!json_field || !record_field || json_field->name_id != record_field->name_id ||
-            json_field->type_key != record_field->type_key)
-            return set_error(errbuf, errbuf_len,
-                             "AOT Json decode Record bridge fields do not re-derive");
+        if (!json_field || !record_field)
+            return set_error(errbuf, errbuf_len, "AOT Json/Record bridge field row is missing");
+        if (json_field->name_id != record_field->name_id ||
+            json_field->type_key != record_field->type_key ||
+            (json_field->flags & XG_JSON_FIELD_RECORD_BRIDGE) == 0 ||
+            (record_field->flags & XG_RECORD_FIELD_STATIC_KEY) == 0)
+            return set_error(errbuf, errbuf_len, "AOT Json/Record bridge field identity is stale");
     }
+    return true;
+}
+
+static bool verify_json_decode_record_bridge(const XgGlobalEvidence *ev,
+                                             const XgJsonCodecSummary *codec,
+                                             const XgJsonShapeSummary *output_shape, char *errbuf,
+                                             size_t errbuf_len) {
+    const XgRecordShapeSummary *record_shape;
+    if (!ev || !codec || !output_shape)
+        return set_error(errbuf, errbuf_len,
+                         "AOT Json decode verifier has incomplete Record bridge input");
+    if (output_shape->shape_kind != XG_JSON_SHAPE_RECORD_BRIDGE ||
+        (output_shape->flags & XG_JSON_SHAPE_RECORD_BRIDGEABLE) == 0)
+        return set_error(errbuf, errbuf_len, "AOT Json decode output is not a Record bridge shape");
+    if (!verify_json_record_bridge_pair(ev, output_shape, errbuf, errbuf_len))
+        return false;
+    record_shape = xg_global_evidence_find_record_shape(ev, output_shape->record_shape_id);
+    if (!record_shape || codec->record_shape_id != record_shape->record_shape_id)
+        return set_error(errbuf, errbuf_len, "AOT Json codec Record bridge shape id is stale");
+    if (output_shape->type_key != codec->target_type_key ||
+        record_shape->type_key != codec->target_type_key)
+        return set_error(errbuf, errbuf_len,
+                         "AOT Json decode target type does not match output shape");
+    if (record_shape->field_count != output_shape->field_count ||
+        codec->field_count != record_shape->field_count)
+        return set_error(errbuf, errbuf_len,
+                         "AOT Json decode Record bridge field count does not re-derive");
     return true;
 }
 
@@ -1602,6 +1611,39 @@ static bool verify_json_codec_shape_contract(const XgGlobalEvidence *ev,
     }
 }
 
+static bool verify_json_codec_record_bridge_contract(const XgGlobalEvidence *ev,
+                                                     const XgJsonCodecSummary *codec, char *errbuf,
+                                                     size_t errbuf_len) {
+    const XgJsonShapeSummary *bridge_shape = NULL;
+    const XgRecordShapeSummary *record_shape;
+    const bool has_record_shape = (codec->flags & XG_JSON_CODEC_HAS_RECORD_SHAPE) != 0;
+    if (has_record_shape != (codec->record_shape_id != XG_NO_ID))
+        return set_error(errbuf, errbuf_len,
+                         "AOT Json codec Record shape flag does not match its id");
+    if (codec->codec_kind == XG_JSON_CODEC_DECODE && codec->output_shape_id != XG_NO_ID)
+        bridge_shape = xg_global_evidence_find_json_shape(ev, codec->output_shape_id);
+    else if (codec->codec_kind == XG_JSON_CODEC_ENCODE && codec->input_shape_id != XG_NO_ID)
+        bridge_shape = xg_global_evidence_find_json_shape(ev, codec->input_shape_id);
+    if (!bridge_shape || bridge_shape->shape_kind != XG_JSON_SHAPE_RECORD_BRIDGE) {
+        if (codec->record_shape_id != XG_NO_ID)
+            return set_error(errbuf, errbuf_len,
+                             "AOT Json codec references Record shape without Json bridge");
+        return true;
+    }
+    record_shape = xg_global_evidence_find_record_shape(ev, codec->record_shape_id);
+    if (!record_shape || bridge_shape->record_shape_id != codec->record_shape_id ||
+        record_shape->json_shape_id != bridge_shape->json_shape_id)
+        return set_error(errbuf, errbuf_len, "AOT Json codec Record bridge shape id is stale");
+    if (codec->field_count != record_shape->field_count)
+        return set_error(errbuf, errbuf_len, "AOT Json codec Record bridge field count is stale");
+    if ((codec->codec_kind == XG_JSON_CODEC_DECODE &&
+         codec->target_type_key != record_shape->type_key) ||
+        (codec->codec_kind == XG_JSON_CODEC_ENCODE &&
+         codec->input_type_key != record_shape->type_key))
+        return set_error(errbuf, errbuf_len, "AOT Json codec Record bridge type is stale");
+    return true;
+}
+
 static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
     if (!ev)
         return set_error(errbuf, errbuf_len, "AOT global evidence Json verifier has no evidence");
@@ -1615,6 +1657,8 @@ static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t er
             if (ev->json_shapes[j].json_shape_id == shape->json_shape_id)
                 return set_error(errbuf, errbuf_len, "AOT Json shape evidence id is duplicated");
         }
+        if (!verify_json_record_bridge_pair(ev, shape, errbuf, errbuf_len))
+            return false;
     }
     for (uint32_t i = 0; i < ev->njson_fields; i++) {
         const XgJsonFieldSummary *field = &ev->json_fields[i];
@@ -1675,6 +1719,8 @@ static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t er
         }
         if (!verify_json_codec_shape_contract(ev, codec, errbuf, errbuf_len))
             return false;
+        if (!verify_json_codec_record_bridge_contract(ev, codec, errbuf, errbuf_len))
+            return false;
     }
     return true;
 }
@@ -1715,6 +1761,22 @@ static bool verify_record_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
         for (uint32_t j = i + 1; j < ev->nrecord_shapes; j++) {
             if (ev->record_shapes[j].record_shape_id == shape->record_shape_id)
                 return set_error(errbuf, errbuf_len, "AOT Record shape evidence id is duplicated");
+        }
+        if (shape->json_shape_id != XG_NO_ID) {
+            const XgJsonShapeSummary *json_shape =
+                xg_global_evidence_find_json_shape(ev, shape->json_shape_id);
+            if (!json_shape)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT Record bridge references missing Json shape");
+            if (json_shape->record_shape_id != shape->record_shape_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT Json/Record bridge ids are not reciprocal");
+            if (!verify_json_record_bridge_pair(ev, json_shape, errbuf, errbuf_len))
+                return false;
+        } else if (shape->shape_kind == XG_RECORD_SHAPE_STATIC &&
+                   (shape->flags & XG_RECORD_SHAPE_JSON_BRIDGEABLE) != 0) {
+            return set_error(errbuf, errbuf_len,
+                             "AOT static Record bridge shape has no Json shape id");
         }
     }
     for (uint32_t i = 0; i < ev->nrecord_fields; i++) {
@@ -4205,7 +4267,8 @@ static bool verify_json_shape_plan_rederives(const XaotJsonShapePlan *plan,
                                              size_t errbuf_len) {
     if (!plan || !shape)
         return set_error(errbuf, errbuf_len, "AOT Json shape verifier has incomplete input");
-    if (plan->json_shape_id != shape->json_shape_id || plan->module_id != shape->module_id ||
+    if (plan->json_shape_id != shape->json_shape_id ||
+        plan->record_shape_id != shape->record_shape_id || plan->module_id != shape->module_id ||
         plan->owner_func_id != shape->owner_func_id || plan->type_key != shape->type_key ||
         plan->field_name_start != shape->field_name_start ||
         plan->field_count != shape->field_count || plan->shape_kind != shape->shape_kind ||
@@ -4351,6 +4414,8 @@ static uint32_t verify_json_codec_evidence_for(const XgJsonCodecSummary *codec) 
         evidence |= XAOT_JSON_EV_TARGET_TYPE;
     if ((codec->flags & XG_JSON_CODEC_USES_DERIVE) != 0)
         evidence |= XAOT_JSON_EV_DERIVE;
+    if ((codec->flags & XG_JSON_CODEC_HAS_RECORD_SHAPE) != 0 && codec->record_shape_id != XG_NO_ID)
+        evidence |= XAOT_JSON_EV_RECORD_BRIDGE;
     return evidence;
 }
 
@@ -4366,7 +4431,8 @@ static bool verify_json_codec_plan_rederives(const XaotJsonCodecPlan *plan,
         plan->input_type_key != codec->input_type_key ||
         plan->target_type_key != codec->target_type_key ||
         plan->input_shape_id != codec->input_shape_id ||
-        plan->output_shape_id != codec->output_shape_id || plan->field_count != codec->field_count)
+        plan->output_shape_id != codec->output_shape_id ||
+        plan->record_shape_id != codec->record_shape_id || plan->field_count != codec->field_count)
         return set_error(errbuf, errbuf_len, "AOT Json codec plan identity does not re-derive");
     if (plan->action != verify_json_codec_action_for(codec) ||
         plan->unproven_reason != verify_json_codec_reason_for(codec))
@@ -4419,7 +4485,8 @@ static bool verify_record_shape_plan_rederives(const XaotRecordShapePlan *plan,
                                                size_t errbuf_len) {
     if (!plan || !shape)
         return set_error(errbuf, errbuf_len, "AOT Record shape verifier has incomplete input");
-    if (plan->record_shape_id != shape->record_shape_id || plan->module_id != shape->module_id ||
+    if (plan->record_shape_id != shape->record_shape_id ||
+        plan->json_shape_id != shape->json_shape_id || plan->module_id != shape->module_id ||
         plan->owner_func_id != shape->owner_func_id || plan->type_key != shape->type_key ||
         plan->field_name_start != shape->field_name_start ||
         plan->field_count != shape->field_count || plan->shape_kind != shape->shape_kind ||

@@ -59,7 +59,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 24,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 25,
 };
 
 typedef enum XgBuildProfile {
@@ -504,6 +504,7 @@ enum {
     XG_JSON_CODEC_HAS_TARGET_TYPE = 1u << 2,
     XG_JSON_CODEC_USES_DERIVE = 1u << 3,
     XG_JSON_CODEC_STATIC_TEXT = 1u << 4,
+    XG_JSON_CODEC_HAS_RECORD_SHAPE = 1u << 5,
 };
 
 enum {
@@ -989,6 +990,7 @@ typedef struct XgDerivedMethodSummary {
 
 typedef struct XgJsonShapeSummary {
     XgJsonShapeId json_shape_id;
+    XgRecordShapeId record_shape_id;
     XgModuleId module_id;
     XgFuncId owner_func_id;
     uint32_t source_span_id;
@@ -1033,12 +1035,14 @@ typedef struct XgJsonCodecSummary {
     uint32_t target_type_key;
     XgJsonShapeId input_shape_id;
     XgJsonShapeId output_shape_id;
+    XgRecordShapeId record_shape_id;
     uint16_t field_count;
     uint32_t flags;
 } XgJsonCodecSummary;
 
 typedef struct XgRecordShapeSummary {
     XgRecordShapeId record_shape_id;
+    XgJsonShapeId json_shape_id;
     XgModuleId module_id;
     XgFuncId owner_func_id;
     uint32_t source_span_id;

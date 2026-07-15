@@ -519,6 +519,7 @@ static uint64_t hash_json_shape_summary(uint64_t hash, const XgJsonShapeSummary 
     if (!row)
         return hash_u32(hash, 0);
     hash = hash_u32(hash, row->json_shape_id);
+    hash = hash_u32(hash, row->record_shape_id);
     hash = hash_u32(hash, row->module_id);
     hash = hash_u32(hash, row->owner_func_id);
     hash = hash_u32(hash, row->source_span_id);
@@ -569,6 +570,7 @@ static uint64_t hash_json_codec_summary(uint64_t hash, const XgJsonCodecSummary 
     hash = hash_u32(hash, row->target_type_key);
     hash = hash_u32(hash, row->input_shape_id);
     hash = hash_u32(hash, row->output_shape_id);
+    hash = hash_u32(hash, row->record_shape_id);
     hash = hash_u32(hash, row->field_count);
     return hash_u32(hash, row->flags);
 }
@@ -577,6 +579,7 @@ static uint64_t hash_record_shape_summary(uint64_t hash, const XgRecordShapeSumm
     if (!row)
         return hash_u32(hash, 0);
     hash = hash_u32(hash, row->record_shape_id);
+    hash = hash_u32(hash, row->json_shape_id);
     hash = hash_u32(hash, row->module_id);
     hash = hash_u32(hash, row->owner_func_id);
     hash = hash_u32(hash, row->source_span_id);
@@ -3722,9 +3725,10 @@ static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *e
     for (uint32_t i = 0; i < evidence->njson_shapes; i++) {
         const XgJsonShapeSummary *s = &evidence->json_shapes[i];
         fprintf(out,
-                "json-shape id=%u module=%u func=%u type=%u kind=%u span=%u fields=%u+%u "
+                "json-shape id=%u record_shape=%u module=%u func=%u type=%u kind=%u span=%u "
+                "fields=%u+%u "
                 "flags=0x%x hash=%016" PRIx64 "\n",
-                s->json_shape_id, s->module_id, s->owner_func_id, s->type_key,
+                s->json_shape_id, s->record_shape_id, s->module_id, s->owner_func_id, s->type_key,
                 (unsigned) s->shape_kind, s->source_span_id, s->field_name_start,
                 (unsigned) s->field_count, s->flags, s->shape_hash);
     }
@@ -3745,19 +3749,22 @@ static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *e
     }
     for (uint32_t i = 0; i < evidence->njson_codecs; i++) {
         const XgJsonCodecSummary *c = &evidence->json_codecs[i];
-        fprintf(out,
-                "json-codec id=%u module=%u func=%u node=%u kind=%u span=%u input_type=%u "
-                "target_type=%u input_shape=%u output_shape=%u fields=%u flags=0x%x\n",
-                c->codec_id, c->module_id, c->owner_func_id, c->source_node_id,
-                (unsigned) c->codec_kind, c->source_span_id, c->input_type_key, c->target_type_key,
-                c->input_shape_id, c->output_shape_id, (unsigned) c->field_count, c->flags);
+        fprintf(
+            out,
+            "json-codec id=%u module=%u func=%u node=%u kind=%u span=%u input_type=%u "
+            "target_type=%u input_shape=%u output_shape=%u record_shape=%u fields=%u flags=0x%x\n",
+            c->codec_id, c->module_id, c->owner_func_id, c->source_node_id,
+            (unsigned) c->codec_kind, c->source_span_id, c->input_type_key, c->target_type_key,
+            c->input_shape_id, c->output_shape_id, c->record_shape_id, (unsigned) c->field_count,
+            c->flags);
     }
     for (uint32_t i = 0; i < evidence->nrecord_shapes; i++) {
         const XgRecordShapeSummary *s = &evidence->record_shapes[i];
         fprintf(out,
-                "record-shape id=%u module=%u func=%u type=%u kind=%u span=%u fields=%u+%u "
+                "record-shape id=%u json_shape=%u module=%u func=%u type=%u kind=%u span=%u "
+                "fields=%u+%u "
                 "flags=0x%x hash=%016" PRIx64 "\n",
-                s->record_shape_id, s->module_id, s->owner_func_id, s->type_key,
+                s->record_shape_id, s->json_shape_id, s->module_id, s->owner_func_id, s->type_key,
                 (unsigned) s->shape_kind, s->source_span_id, s->field_name_start,
                 (unsigned) s->field_count, s->flags, s->shape_hash);
     }
@@ -4655,12 +4662,12 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
-                   "json-shape id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " type=%" SCNu32
-                   " kind=%" SCNu32 " span=%" SCNu32 " fields=%" SCNu32 "+%" SCNu32
-                   " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
-                   &row.json_shape_id, &row.module_id, &row.owner_func_id, &row.type_key,
-                   &shape_kind, &row.source_span_id, &row.field_name_start, &field_count,
-                   &row.flags, &row.shape_hash, &trailing) != 10)
+                   "json-shape id=%" SCNu32 " record_shape=%" SCNu32 " module=%" SCNu32
+                   " func=%" SCNu32 " type=%" SCNu32 " kind=%" SCNu32 " span=%" SCNu32
+                   " fields=%" SCNu32 "+%" SCNu32 " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
+                   &row.json_shape_id, &row.record_shape_id, &row.module_id, &row.owner_func_id,
+                   &row.type_key, &shape_kind, &row.source_span_id, &row.field_name_start,
+                   &field_count, &row.flags, &row.shape_hash, &trailing) != 11)
             return false;
         row.shape_kind = (uint8_t) shape_kind;
         row.field_count = (uint16_t) field_count;
@@ -4716,12 +4723,12 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
         if (sscanf(line,
                    "json-codec id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " node=%" SCNu32
                    " kind=%" SCNu32 " span=%" SCNu32 " input_type=%" SCNu32 " target_type=%" SCNu32
-                   " input_shape=%" SCNu32 " output_shape=%" SCNu32 " fields=%" SCNu32
-                   " flags=0x%" SCNx32 " %c",
+                   " input_shape=%" SCNu32 " output_shape=%" SCNu32 " record_shape=%" SCNu32
+                   " fields=%" SCNu32 " flags=0x%" SCNx32 " %c",
                    &row.codec_id, &row.module_id, &row.owner_func_id, &row.source_node_id,
                    &codec_kind, &row.source_span_id, &row.input_type_key, &row.target_type_key,
-                   &row.input_shape_id, &row.output_shape_id, &field_count, &row.flags,
-                   &trailing) != 12)
+                   &row.input_shape_id, &row.output_shape_id, &row.record_shape_id, &field_count,
+                   &row.flags, &trailing) != 13)
             return false;
         row.codec_kind = (uint8_t) codec_kind;
         row.field_count = (uint16_t) field_count;
@@ -4737,12 +4744,12 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
-                   "record-shape id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " type=%" SCNu32
-                   " kind=%" SCNu32 " span=%" SCNu32 " fields=%" SCNu32 "+%" SCNu32
-                   " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
-                   &row.record_shape_id, &row.module_id, &row.owner_func_id, &row.type_key,
-                   &shape_kind, &row.source_span_id, &row.field_name_start, &field_count,
-                   &row.flags, &row.shape_hash, &trailing) != 10)
+                   "record-shape id=%" SCNu32 " json_shape=%" SCNu32 " module=%" SCNu32
+                   " func=%" SCNu32 " type=%" SCNu32 " kind=%" SCNu32 " span=%" SCNu32
+                   " fields=%" SCNu32 "+%" SCNu32 " flags=0x%" SCNx32 " hash=%" SCNx64 " %c",
+                   &row.record_shape_id, &row.json_shape_id, &row.module_id, &row.owner_func_id,
+                   &row.type_key, &shape_kind, &row.source_span_id, &row.field_name_start,
+                   &field_count, &row.flags, &row.shape_hash, &trailing) != 11)
             return false;
         row.shape_kind = (uint8_t) shape_kind;
         row.field_count = (uint16_t) field_count;
@@ -5277,6 +5284,8 @@ static void collect_import_offsets(const XgGlobalEvidence *target,
     for (uint32_t i = 0; i < target->njson_shapes; i++) {
         offsets->json_shape_id =
             max_u32(offsets->json_shape_id, target->json_shapes[i].json_shape_id);
+        offsets->record_shape_id =
+            max_u32(offsets->record_shape_id, target->json_shapes[i].record_shape_id);
         offsets->func_id = max_u32(offsets->func_id, target->json_shapes[i].owner_func_id);
     }
     for (uint32_t i = 0; i < target->njson_fields; i++) {
@@ -5297,10 +5306,14 @@ static void collect_import_offsets(const XgGlobalEvidence *target,
             max_u32(offsets->json_shape_id, target->json_codecs[i].input_shape_id);
         offsets->json_shape_id =
             max_u32(offsets->json_shape_id, target->json_codecs[i].output_shape_id);
+        offsets->record_shape_id =
+            max_u32(offsets->record_shape_id, target->json_codecs[i].record_shape_id);
     }
     for (uint32_t i = 0; i < target->nrecord_shapes; i++) {
         offsets->record_shape_id =
             max_u32(offsets->record_shape_id, target->record_shapes[i].record_shape_id);
+        offsets->json_shape_id =
+            max_u32(offsets->json_shape_id, target->record_shapes[i].json_shape_id);
         offsets->func_id = max_u32(offsets->func_id, target->record_shapes[i].owner_func_id);
     }
     for (uint32_t i = 0; i < target->nrecord_fields; i++) {
@@ -5914,6 +5927,7 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
     for (uint32_t i = 0; i < package.njson_shapes; i++) {
         XgJsonShapeSummary row = package.json_shapes[i];
         REMAP_ID(row.json_shape_id, offsets.json_shape_id);
+        REMAP_ID(row.record_shape_id, offsets.record_shape_id);
         REMAP_MODULE(row.module_id);
         REMAP_ID(row.owner_func_id, offsets.func_id);
         if (!xg_global_evidence_add_json_shape(target, &row))
@@ -5942,12 +5956,14 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
         REMAP_ID(row.owner_func_id, offsets.func_id);
         REMAP_ID(row.input_shape_id, offsets.json_shape_id);
         REMAP_ID(row.output_shape_id, offsets.json_shape_id);
+        REMAP_ID(row.record_shape_id, offsets.record_shape_id);
         if (!xg_global_evidence_add_json_codec(target, &row))
             goto done;
     }
     for (uint32_t i = 0; i < package.nrecord_shapes; i++) {
         XgRecordShapeSummary row = package.record_shapes[i];
         REMAP_ID(row.record_shape_id, offsets.record_shape_id);
+        REMAP_ID(row.json_shape_id, offsets.json_shape_id);
         REMAP_MODULE(row.module_id);
         REMAP_ID(row.owner_func_id, offsets.func_id);
         if (!xg_global_evidence_add_record_shape(target, &row))
@@ -6443,10 +6459,10 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         const XgJsonShapeSummary *s = &evidence->json_shapes[i];
         fprintf(out,
                 "json-shape %u id=%u module=%u func=%u type=%u kind=%s span=%u fields=%u+%u "
-                "flags=0x%x hash=%016" PRIx64 "\n",
+                "record_shape=%u flags=0x%x hash=%016" PRIx64 "\n",
                 i, s->json_shape_id, s->module_id, s->owner_func_id, s->type_key,
                 xg_json_shape_kind_name(s->shape_kind), s->source_span_id, s->field_name_start,
-                (unsigned) s->field_count, s->flags, s->shape_hash);
+                (unsigned) s->field_count, s->record_shape_id, s->flags, s->shape_hash);
     }
     for (uint32_t i = 0; i < evidence->njson_fields; i++) {
         const XgJsonFieldSummary *f = &evidence->json_fields[i];
@@ -6467,20 +6483,21 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
         const XgJsonCodecSummary *c = &evidence->json_codecs[i];
         fprintf(out,
                 "json-codec %u id=%u module=%u func=%u node=%u kind=%s span=%u input_type=%u "
-                "target_type=%u input_shape=%u output_shape=%u fields=%u flags=0x%x\n",
+                "target_type=%u input_shape=%u output_shape=%u fields=%u record_shape=%u "
+                "flags=0x%x\n",
                 i, c->codec_id, c->module_id, c->owner_func_id, c->source_node_id,
                 xg_json_codec_kind_name(c->codec_kind), c->source_span_id, c->input_type_key,
                 c->target_type_key, c->input_shape_id, c->output_shape_id,
-                (unsigned) c->field_count, c->flags);
+                (unsigned) c->field_count, c->record_shape_id, c->flags);
     }
     for (uint32_t i = 0; i < evidence->nrecord_shapes; i++) {
         const XgRecordShapeSummary *s = &evidence->record_shapes[i];
         fprintf(out,
                 "record-shape %u id=%u module=%u func=%u type=%u kind=%s span=%u fields=%u+%u "
-                "flags=0x%x hash=%016" PRIx64 "\n",
+                "json_shape=%u flags=0x%x hash=%016" PRIx64 "\n",
                 i, s->record_shape_id, s->module_id, s->owner_func_id, s->type_key,
                 xg_record_shape_kind_name(s->shape_kind), s->source_span_id, s->field_name_start,
-                (unsigned) s->field_count, s->flags, s->shape_hash);
+                (unsigned) s->field_count, s->json_shape_id, s->flags, s->shape_hash);
     }
     for (uint32_t i = 0; i < evidence->nrecord_fields; i++) {
         const XgRecordFieldSummary *f = &evidence->record_fields[i];

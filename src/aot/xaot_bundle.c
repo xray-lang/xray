@@ -2154,6 +2154,7 @@ static bool xaot_bundle_add_json_shape_plan(XaotBundle *bundle, const XgJsonShap
     plan = &bundle->json_shape_plans[bundle->njson_shape_plans++];
     memset(plan, 0, sizeof(*plan));
     plan->json_shape_id = shape->json_shape_id;
+    plan->record_shape_id = shape->record_shape_id;
     plan->module_id = shape->module_id;
     plan->owner_func_id = shape->owner_func_id;
     plan->type_key = shape->type_key;
@@ -2336,6 +2337,8 @@ static uint32_t json_codec_evidence_for(const XgJsonCodecSummary *codec) {
         evidence |= XAOT_JSON_EV_TARGET_TYPE;
     if ((codec->flags & XG_JSON_CODEC_USES_DERIVE) != 0)
         evidence |= XAOT_JSON_EV_DERIVE;
+    if ((codec->flags & XG_JSON_CODEC_HAS_RECORD_SHAPE) != 0 && codec->record_shape_id != XG_NO_ID)
+        evidence |= XAOT_JSON_EV_RECORD_BRIDGE;
     return evidence;
 }
 
@@ -2359,6 +2362,7 @@ static bool xaot_bundle_add_json_codec_plan(XaotBundle *bundle, const XgJsonCode
     plan->target_type_key = codec->target_type_key;
     plan->input_shape_id = codec->input_shape_id;
     plan->output_shape_id = codec->output_shape_id;
+    plan->record_shape_id = codec->record_shape_id;
     plan->field_count = codec->field_count;
     plan->evidence = json_codec_evidence_for(codec);
     plan->unproven_reason = json_codec_reason_for(codec);
@@ -2447,6 +2451,7 @@ static bool xaot_bundle_add_record_shape_plan(XaotBundle *bundle,
     plan = &bundle->record_shape_plans[bundle->nrecord_shape_plans++];
     memset(plan, 0, sizeof(*plan));
     plan->record_shape_id = shape->record_shape_id;
+    plan->json_shape_id = shape->json_shape_id;
     plan->module_id = shape->module_id;
     plan->owner_func_id = shape->owner_func_id;
     plan->type_key = shape->type_key;
@@ -7306,11 +7311,11 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         const XaotJsonShapePlan *jp = &bundle->json_shape_plans[ji];
         fprintf(out,
                 "json-shape-plan %u id=%u module=%u func=%u type=%u kind=%s action=%s "
-                "fields=%u+%u hash=%016" PRIx64 " evidence=0x%x reason=%s\n",
+                "fields=%u+%u hash=%016" PRIx64 " evidence=0x%x reason=%s record_shape=%u\n",
                 ji, jp->json_shape_id, jp->module_id, jp->owner_func_id, jp->type_key,
                 xg_json_shape_kind_name(jp->shape_kind), json_shape_action_name(jp->action),
                 jp->field_name_start, (unsigned) jp->field_count, jp->shape_hash, jp->evidence,
-                json_unproven_reason_name(jp->unproven_reason));
+                json_unproven_reason_name(jp->unproven_reason), jp->record_shape_id);
     }
 
     for (uint32_t ji = 0; ji < bundle->njson_access_plans; ji++) {
@@ -7329,23 +7334,23 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         fprintf(out,
                 "json-codec-plan %u id=%u module=%u func=%u node=%u span=%u kind=%s action=%s "
                 "input_type=%u target_type=%u input_shape=%u output_shape=%u fields=%u "
-                "evidence=0x%x reason=%s\n",
+                "evidence=0x%x reason=%s record_shape=%u\n",
                 ji, jp->codec_id, jp->module_id, jp->owner_func_id, jp->source_node_id,
                 jp->source_span_id, xg_json_codec_kind_name(jp->codec_kind),
                 json_codec_action_name(jp->action), jp->input_type_key, jp->target_type_key,
                 jp->input_shape_id, jp->output_shape_id, (unsigned) jp->field_count, jp->evidence,
-                json_unproven_reason_name(jp->unproven_reason));
+                json_unproven_reason_name(jp->unproven_reason), jp->record_shape_id);
     }
 
     for (uint32_t ri = 0; ri < bundle->nrecord_shape_plans; ri++) {
         const XaotRecordShapePlan *rp = &bundle->record_shape_plans[ri];
         fprintf(out,
                 "record-shape-plan %u id=%u module=%u func=%u type=%u kind=%s action=%s "
-                "fields=%u+%u hash=%016" PRIx64 " evidence=0x%x reason=%s\n",
+                "fields=%u+%u hash=%016" PRIx64 " evidence=0x%x reason=%s json_shape=%u\n",
                 ri, rp->record_shape_id, rp->module_id, rp->owner_func_id, rp->type_key,
                 xg_record_shape_kind_name(rp->shape_kind), record_shape_action_name(rp->action),
                 rp->field_name_start, (unsigned) rp->field_count, rp->shape_hash, rp->evidence,
-                record_unproven_reason_name(rp->unproven_reason));
+                record_unproven_reason_name(rp->unproven_reason), rp->json_shape_id);
     }
 
     for (uint32_t ri = 0; ri < bundle->nrecord_access_plans; ri++) {
