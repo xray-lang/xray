@@ -2536,8 +2536,14 @@ static void xa_mark_out_call_arg_assigned(XaInferContext *ctx, AstNode *arg_node
         if (root->kind != XA_SYM_PARAMETER || root->passing_mode != XR_PARAM_OUT)
             return;
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, root);
-        if (links)
+        if (links) {
             xa_symbol_links_mark_out_field_assigned(links, path);
+            XrType *root_type = xa_analyzer_get_type(ctx->analyzer, root);
+            if (!root_type)
+                root_type = links->type ? links->type : links->declared_type;
+            xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_type(
+                links, root->name, root_type);
+        }
         return;
     }
     if (place->type != AST_VARIABLE)

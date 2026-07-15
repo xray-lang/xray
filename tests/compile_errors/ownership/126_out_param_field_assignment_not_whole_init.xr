@@ -5,7 +5,6 @@ struct OutPairFieldGate {
 
 fn bad(p: out OutPairFieldGate) {
     p.left = 1
-    p.right = 2
 }
 
 var value = OutPairFieldGate{left: 0, right: 0}

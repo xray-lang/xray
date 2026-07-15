@@ -302,6 +302,38 @@ bool xa_symbol_links_out_field_assigned(XaSymbolLinks *links, const char *path) 
     return false;
 }
 
+bool xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_class(
+    XaSymbolLinks *links, const char *root_name, XrClassInfo *info) {
+    if (!links || links->is_definitely_assigned || !root_name || root_name[0] == '\0')
+        return false;
+    if (!info)
+        return false;
+    if (!info->struct_layout || info->field_count <= 0 || !info->fields)
+        return false;
+
+    for (int i = 0; i < info->field_count; i++) {
+        XaSymbol *field = info->fields[i];
+        if (!field || !field->name)
+            return false;
+        char path[256];
+        int n = snprintf(path, sizeof(path), "%s.%s", root_name, field->name);
+        if (n <= 0 || (size_t) n >= sizeof(path) ||
+            !xa_symbol_links_out_field_assigned(links, path))
+            return false;
+    }
+    links->is_definitely_assigned = true;
+    return true;
+}
+
+bool xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_type(
+    XaSymbolLinks *links, const char *root_name, XrType *type) {
+    if (!type || !type->is_value_type || (!XR_TYPE_IS_INSTANCE(type) && !XR_TYPE_IS_CLASS(type)) ||
+        !type->instance.class_ref)
+        return false;
+    return xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_class(
+        links, root_name, type->instance.class_ref);
+}
+
 void xa_symbol_links_free_out_field_da_paths(XaOutFieldDaPath *paths) {
     while (paths) {
         XaOutFieldDaPath *next = paths->next;

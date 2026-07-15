@@ -5269,9 +5269,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Bidirectional inference: propagate field declared type to value
             XrType *saved_expected = ctx->expected_type;
             XrType *member_type = NULL;
+            XrClassInfo *member_class_info = NULL;
             if (ms->member) {
                 XaSymbolLinks *class_links = NULL;
                 XrClassInfo *class_info = member_set_class_info(ctx, obj_type, &class_links);
+                member_class_info = class_info;
                 if (class_info) {
                     XrClassInfo *field_owner = NULL;
                     XaSymbol *field =
@@ -5416,8 +5418,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 if (root && path[0] != '\0') {
                     XaSymbolLinks *root_links = xa_analyzer_get_links(ctx->analyzer, root);
                     if (root->kind == XA_SYM_PARAMETER && root->passing_mode == XR_PARAM_OUT &&
-                        root_links && !root_links->is_definitely_assigned)
+                        root_links && !root_links->is_definitely_assigned) {
                         xa_symbol_links_mark_out_field_assigned(root_links, path);
+                        xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_class(
+                            root_links, root->name, member_class_info);
+                    }
                 }
             }
             break;
