@@ -1,0 +1,7 @@
+regex=capacity-plan [0-9]+ .*kind=string_builder op=clear action=clear_direct .*reason=none
+c_contains=xrt_strbuf_reserve_extra_exact(v2, INT64_C(4));
+c_contains=xrt_strbuf_clear(v2)
+c_contains=xrt_strbuf_reserve_extra_exact(v2, INT64_C(7));
+c_contains=xrt_strbuf_finish(v2)
+c_not_contains=xrt_strbuf_reserve_extra_exact(v2, INT64_C(11));
+c_not_contains=xrt_method_0(v2,

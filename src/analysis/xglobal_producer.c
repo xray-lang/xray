@@ -7648,7 +7648,9 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
             return;
         }
         if (body_sequence_registry_method_matches(local, member->name, call->arg_count,
-                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_CLEAR)) {
+                                                  XA_BUILTIN_RECEIVER_METHOD_ARRAY_CLEAR) ||
+            (local->sequence_kind == XG_SEQ_STRING_BUILDER && strcmp(member->name, "clear") == 0 &&
+             call->arg_count == 0)) {
             body_add_capacity_op(bc, node, local, XG_CAPACITY_CLEAR, NULL, 0, 0, false);
             local->sequence_fresh_empty = false;
             body_clear_sequence_json_shape(local);

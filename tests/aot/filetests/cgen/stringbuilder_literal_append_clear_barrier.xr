@@ -1,0 +1,9 @@
+fn build() -> string {
+    var sb = StringBuilder()
+    sb.append("abcd")
+    sb.clear()
+    sb.append("abcdefg")
+    return sb.toString()
+}
+
+print(build())
