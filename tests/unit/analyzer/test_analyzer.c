@@ -270,6 +270,12 @@ TEST(type_to_string) {
     ASSERT(strcmp(xr_type_to_string(t_mode_fn), "fn(in int, ref string, out bool): ()") == 0);
 }
 
+TEST(type_string_parser_rejects_unknown_type_name) {
+    XrType *type = xa_builtin_parse_type_string(g_isolate, "unknown");
+    ASSERT(type != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(type));
+}
+
 TEST(type_narrowing) {
     XrType *t_int = xr_type_new_int(NULL);
     XrType *t_null = xr_type_new_null(NULL);
@@ -4069,6 +4075,7 @@ int main(void) {
     RUN_TEST(type_void_never);
     RUN_TEST(type_rejects_invalid_counts);
     RUN_TEST(type_function_copy_preserves_metadata);
+    RUN_TEST(type_string_parser_rejects_unknown_type_name);
 
     printf("\nInference context tests:\n");
     RUN_TEST(infer_context_create);
