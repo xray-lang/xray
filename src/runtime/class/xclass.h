@@ -261,6 +261,9 @@ struct XrClass {
 #define XR_CLASS_CYCLE_CANDIDATE (1 << 12)  // Type graph analysis determined this class may cycle
 #define XR_CLASS_DERIVE_INSPECT (1 << 13)   // @derive(Inspect): opt-in structural formatting
 #define XR_CLASS_DERIVE_JSON (1 << 14)      // @derive(Json): opt-in class/struct JSON serde
+#define XR_CLASS_DERIVE_EQ (1 << 15)        // @derive(Eq): structural instance equality
+#define XR_CLASS_DERIVE_HASH (1 << 16)      // @derive(Hash): structural instance hash
+#define XR_CLASS_DERIVE_CLONE (1 << 17)     // @derive(Clone): structural instance copy
 
 static inline uint32_t xr_class_flags_from_derive(uint32_t derive_flags) {
     uint32_t flags = 0;
@@ -268,6 +271,12 @@ static inline uint32_t xr_class_flags_from_derive(uint32_t derive_flags) {
         flags |= XR_CLASS_DERIVE_INSPECT;
     if (derive_flags & XR_DERIVE_JSON)
         flags |= XR_CLASS_DERIVE_JSON;
+    if (derive_flags & XR_DERIVE_EQ)
+        flags |= XR_CLASS_DERIVE_EQ;
+    if (derive_flags & XR_DERIVE_HASH)
+        flags |= XR_CLASS_DERIVE_HASH;
+    if (derive_flags & XR_DERIVE_CLONE)
+        flags |= XR_CLASS_DERIVE_CLONE;
     return flags;
 }
 

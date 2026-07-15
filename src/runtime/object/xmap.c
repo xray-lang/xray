@@ -62,30 +62,9 @@ static inline uint8_t get_key_tt(XrValue key) {
     return (uint8_t) (xr_value_typeid(key) + 1);
 }
 
-// Read hash from string (lazy: compute on first use for non-interned strings)
-static inline uint32_t string_hash_fast(XrString *str) {
-    if (str->hash == 0) {
-        uint32_t h = xr_string_hash(str->data, str->length);
-        h = (h == 0) ? 1 : h;
-        if (!XR_OBJ_IS_SHARED(&str->hdr))
-            str->hash = h;
-        return h;
-    }
-    return str->hash;
-}
-
-// Compute a key's hash (mirrors the original mainposition hashing).
+// Map and Set share one canonical key hash contract.
 static uint32_t hash_value(XrValue key) {
-    if (XR_LIKELY(XR_IS_STRING(key))) {
-        return string_hash_fast((XrString *) key.ptr);
-    } else if (XR_IS_INT(key)) {
-        return xr_hash_int(XR_TO_INT(key));
-    } else if (XR_IS_FLOAT(key)) {
-        return xr_hash_float(XR_TO_FLOAT(key));
-    } else if (XR_IS_BOOL(key)) {
-        return XR_TO_BOOL(key) ? 1u : 0u;
-    }
-    return (uint32_t) (uintptr_t) XR_TO_PTR(key);
+    return xr_hash_value(key);
 }
 
 // Compare an entry's key against (key, key_tt). Short strings compare by data.
@@ -114,7 +93,7 @@ static inline int entry_key_equal(const XrMapEntry *e, XrValue key, uint8_t key_
         return XR_TO_BOOL(e->key) == XR_TO_BOOL(key);
     if (tid == XR_TID_NULL)
         return true;
-    return XR_TO_PTR(e->key) == XR_TO_PTR(key);
+    return xr_value_eq(e->key, key);
 }
 
 static inline bool map_is_weak(const XrMap *map) {

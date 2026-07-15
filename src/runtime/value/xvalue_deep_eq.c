@@ -113,10 +113,21 @@ deep_compare: {
     bool result;
     if (XR_OBJ_GET_TYPE(gc_a) == XR_TINSTANCE) {
         XrInstance *ia = (XrInstance *) gc_a;
+        XrInstance *ib = (XrInstance *) gc_b;
         if (ia->klass &&
             (ia->klass->builtin_kind == XR_BK_JSON || ia->klass->builtin_kind == XR_BK_RECORD))
             result = xr_json_equals_deep(ctx, a, b);
-        else
+        else if (ia->klass && ia->klass == ib->klass &&
+                 (ia->klass->flags & XR_CLASS_DERIVE_EQ) != 0) {
+            uint32_t field_count = xr_class_instance_field_count(ia->klass);
+            result = true;
+            for (uint32_t i = 0; i < field_count; i++) {
+                if (!deep_eq_ctx(ctx, ia->fields[i], ib->fields[i])) {
+                    result = false;
+                    break;
+                }
+            }
+        } else
             result = (gc_a == gc_b);
     } else if (XR_OBJ_GET_TYPE(gc_a) == XR_TARRAY) {
         result = xr_array_equals_deep(ctx, a, b);
