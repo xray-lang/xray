@@ -1215,6 +1215,21 @@ static bool xa_summary_return_type_escapes_borrowed_value(XrType *return_type) {
            xa_type_needs_borrow_escape_guard(return_type);
 }
 
+static void xa_report_return_type_contains_span_view(XaInferContext *ctx, AstNode *node,
+                                                     const char *kind, const char *name,
+                                                     XrType *return_type) {
+    if (!ctx || !ctx->analyzer || !node || !xa_type_contains_span_view(return_type))
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "cannot declare %s '%s' returning Slice view; return an owner container or an owned "
+             "Array value",
+             kind ? kind : "function", name ? name : "?");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
     if (!summary || !node)
         return;
@@ -2147,6 +2162,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
                  param_names && param_names[i] ? param_names[i] : "?");
         xa_freestanding_report_tagged_type_unavailable(ctx, node, param_types[i], context);
     }
+    xa_report_return_type_contains_span_view(ctx, node, "function", fn->name, return_type);
     xa_freestanding_report_tagged_type_unavailable(ctx, node, return_type, "function return type");
 
     XrType *fn_type = xr_type_new_function(ctx->analyzer->isolate, param_types, fn->param_count,
@@ -3718,6 +3734,9 @@ skip_layout:
             }
             if (!ret_type) {
                 ret_type = xr_type_new_unit(NULL);
+            }
+            if (!md->is_constructor) {
+                xa_report_return_type_contains_span_view(ctx, method, "method", md->name, ret_type);
             }
             if (md->is_operator && md->op_type == OPTYPE_LEN) {
                 bool valid = !md->is_static && md->param_count == 0 && ret_type &&

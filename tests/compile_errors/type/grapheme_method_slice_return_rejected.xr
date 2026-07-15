@@ -1,0 +1,23 @@
+class GraphemeProbe {
+    text: string = ""
+
+    constructor(text: string) {
+        this.text = text
+    }
+
+    graphemes() -> Iterator<Slice<byte>> {
+        var view: Slice<byte> = this.text.bytes()
+        if (len(view) > 0) {
+            print(len(view))
+        }
+    }
+}
+
+fn main() {
+    var probe = GraphemeProbe("hello")
+    for (cluster in probe.graphemes()) {
+        print(len(cluster))
+    }
+}
+
+main()

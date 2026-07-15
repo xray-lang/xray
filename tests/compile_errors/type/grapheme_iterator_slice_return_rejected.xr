@@ -1,0 +1,14 @@
+fn graphemes(text: string) -> Iterator<Slice<byte>> {
+    var view: Slice<byte> = text.bytes()
+    if (len(view) > 0) {
+        print(len(view))
+    }
+}
+
+fn main() {
+    for (cluster in graphemes("hello")) {
+        print(len(cluster))
+    }
+}
+
+main()
