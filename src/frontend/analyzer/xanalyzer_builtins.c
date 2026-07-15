@@ -933,7 +933,7 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len);
 // Public wrapper with NUL-terminated string.
 XrType *xa_builtin_parse_type_string(XrVMRuntime *X, const char *s) {
     if (!s)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(X);
     return parse_type_str(X, s, strlen(s));
 }
 
@@ -973,7 +973,7 @@ static size_t parse_type_find_top_pipe(const char *s, size_t len, size_t from) {
 
 static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     if (!s || len == 0)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(X);
 
     // Top-level union: T1 | T2 | ... . Mirrors the parser's union rule
     // in xr_parse_type_annotation, except we work on the cfunc-signature
@@ -1001,7 +1001,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         }
 
         if (count == 0)
-            return xr_type_new_unknown(X);
+            return xr_type_new_error(X);
         if (count == 1)
             return members[0];
         return xr_type_new_union(X, members, count);
@@ -1119,7 +1119,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
             type =
                 xr_type_new_map(X, parse_type_str(X, inner, klen), parse_type_str(X, vstart, vlen));
         } else {
-            type = xr_type_new_map(X, xr_type_new_unknown(NULL), xr_type_new_unknown(NULL));
+            type = xr_type_new_error(X);
         }
     } else if (base_len >= 4 && strncmp(s, TYPE_NAME_SET "<", 4) == 0) {
         const char *inner = s + 4;
@@ -1233,7 +1233,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
             type = parse_fn_type_str(X, synth, off);
             xr_free(synth);
         } else {
-            type = xr_type_new_unknown(X);
+            type = xr_type_new_error(X);
         }
     } else if (base_len >= 2 && ((s[0] == '[' && s[base_len - 1] == ']') ||
                                  (s[0] == '(' && s[base_len - 1] == ')'))) {
@@ -1329,7 +1329,7 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
     while (i < len && s[i] == ' ')
         i++;
     if (i >= len || s[i] != '(')
-        return xr_type_new_unknown(X);
+        return xr_type_new_error(X);
     size_t open = i;
 
     // Locate the matching ')' at depth 0.
@@ -1347,7 +1347,7 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
         }
     }
     if (close == len)
-        return xr_type_new_unknown(X);
+        return xr_type_new_error(X);
 
     // Parse parameter list between (open, close).
     XrType *param_types[16];
@@ -1425,7 +1425,7 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
         } else {
             while (p < close && s[p] != ',')
                 p++;
-            param_types[param_count] = xr_type_new_unknown(NULL);
+            param_types[param_count] = xr_type_new_error(X);
             if (!seen_optional)
                 min_params = param_count + 1;
             param_count++;

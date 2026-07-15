@@ -270,10 +270,36 @@ TEST(type_to_string) {
     ASSERT(strcmp(xr_type_to_string(t_mode_fn), "fn(in int, ref string, out bool): ()") == 0);
 }
 
-TEST(type_string_parser_rejects_unknown_type_name) {
-    XrType *type = xa_builtin_parse_type_string(g_isolate, "unknown");
-    ASSERT(type != NULL);
-    ASSERT(XR_TYPE_IS_ERROR(type));
+TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
+    XrType *unknown_name = xa_builtin_parse_type_string(g_isolate, "unknown");
+    ASSERT(unknown_name != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(unknown_name));
+
+    XrType *missing = xa_builtin_parse_type_string(g_isolate, NULL);
+    ASSERT(missing != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(missing));
+
+    XrType *empty = xa_builtin_parse_type_string(g_isolate, "");
+    ASSERT(empty != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(empty));
+
+    XrType *empty_union = xa_builtin_parse_type_string(g_isolate, "|");
+    ASSERT(empty_union != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(empty_union));
+
+    XrType *bad_map = xa_builtin_parse_type_string(g_isolate, "Map<int>");
+    ASSERT(bad_map != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(bad_map));
+
+    XrType *bad_fn = xa_builtin_parse_type_string(g_isolate, "fn(");
+    ASSERT(bad_fn != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(bad_fn));
+
+    XrType *bad_param = xa_builtin_parse_type_string(g_isolate, "fn(value): int");
+    ASSERT(bad_param != NULL);
+    ASSERT(XR_TYPE_IS_FUNCTION(bad_param));
+    ASSERT(bad_param->function.param_count == 1);
+    ASSERT(XR_TYPE_IS_ERROR(bad_param->function.params[0].type));
 }
 
 TEST(type_narrowing) {
@@ -4143,7 +4169,7 @@ int main(void) {
     RUN_TEST(type_void_never);
     RUN_TEST(type_rejects_invalid_counts);
     RUN_TEST(type_function_copy_preserves_metadata);
-    RUN_TEST(type_string_parser_rejects_unknown_type_name);
+    RUN_TEST(type_string_parser_uses_error_recovery_for_invalid_types);
 
     printf("\nInference context tests:\n");
     RUN_TEST(infer_context_create);
