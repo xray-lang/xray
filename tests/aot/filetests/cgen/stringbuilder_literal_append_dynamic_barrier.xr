@@ -1,0 +1,9 @@
+fn build(dynamicPart: string) -> string {
+    var sb = StringBuilder()
+    sb.append("abcd")
+    sb.append(dynamicPart)
+    sb.append("abcdefg")
+    return sb.toString()
+}
+
+print(build("-dynamic-"))

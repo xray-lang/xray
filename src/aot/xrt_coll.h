@@ -1096,6 +1096,47 @@ static inline void xrt_strbuf_grow(xrt_strbuf_t *sb, int64_t need) {
     sb->buf = tmp;
 }
 
+static inline void xrt_strbuf_reserve_extra_exact(XrValue sbv, int64_t extra) {
+    xrt_strbuf_t *sb = (xrt_strbuf_t *) sbv.ptr;
+    if (XR_UNLIKELY(!sb || sb->len < 0 || sb->cap <= 0 || sb->len >= sb->cap || extra < 0 ||
+                    extra > INT64_MAX - sb->len - 1)) {
+        fprintf(stderr, "xrt_strbuf_reserve_extra_exact: invalid capacity request\n");
+        abort();
+    }
+    int64_t required = sb->len + extra + 1;
+    if (XR_LIKELY(required <= sb->cap))
+        return;
+    if (XR_UNLIKELY((uint64_t) required > (uint64_t) SIZE_MAX)) {
+        fprintf(stderr, "xrt_strbuf_reserve_extra_exact: capacity overflow\n");
+        abort();
+    }
+    char *tmp = (char *) XRT_REALLOC(sb->buf, (size_t) required);
+    if (XR_UNLIKELY(!tmp)) {
+        fprintf(stderr, "xrt_strbuf_reserve_extra_exact: out of memory\n");
+        abort();
+    }
+    sb->buf = tmp;
+    sb->cap = required;
+}
+
+static inline void xrt_strbuf_append_string_no_grow(XrValue sbv, XrValue val) {
+    xrt_strbuf_t *sb = (xrt_strbuf_t *) sbv.ptr;
+    if (XR_UNLIKELY(!sb || (val.tag != XR_TAG_STR && val.tag != XR_TAG_STR_ARC))) {
+        fprintf(stderr, "xrt_strbuf_append_string_no_grow: invalid proven append\n");
+        abort();
+    }
+    const char *s = xr_str_data(val);
+    int64_t slen = xr_str_len(val);
+    if (XR_UNLIKELY(slen < 0 || sb->len < 0 || sb->cap <= 0 || sb->len >= sb->cap ||
+                    slen > sb->cap - sb->len - 1)) {
+        fprintf(stderr, "xrt_strbuf_append_string_no_grow: capacity proof violated\n");
+        abort();
+    }
+    memcpy(sb->buf + sb->len, s, (size_t) slen);
+    sb->len += slen;
+    sb->buf[sb->len] = 0;
+}
+
 static inline void xrt_strbuf_append(XrValue sbv, XrValue val) {
     xrt_strbuf_t *sb = (xrt_strbuf_t *) sbv.ptr;
     if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC) {
@@ -1149,6 +1190,12 @@ static inline void xrt_strbuf_append(XrValue sbv, XrValue val) {
         sb->len += slen;
         sb->buf[sb->len] = 0;
     }
+}
+
+static inline void xrt_strbuf_clear(XrValue sbv) {
+    xrt_strbuf_t *sb = (xrt_strbuf_t *) sbv.ptr;
+    sb->len = 0;
+    sb->buf[0] = 0;
 }
 
 static inline XrValue xrt_strbuf_finish(XrValue sbv) {

@@ -4277,6 +4277,8 @@ static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
         else if (xi_lower_receiver_method_call_matches(receiver_type, member->name, call->arg_count,
                                                        XA_BUILTIN_RECEIVER_METHOD_ARRAY_CLEAR))
             capacity_kind = XG_CAPACITY_CLEAR;
+        else if (is_string_builder && strcmp(member->name, "clear") == 0 && call->arg_count == 0)
+            capacity_kind = XG_CAPACITY_CLEAR;
         else if (xi_lower_receiver_method_call_matches(
                      receiver_type, member->name, call->arg_count,
                      XA_BUILTIN_RECEIVER_METHOD_ARRAY_TO_STRING) ||

@@ -10906,6 +10906,7 @@ TEST(global_evidence_producer_proves_stringbuilder_literal_append_count) {
                          "    var sb = StringBuilder()\n"
                          "    sb.append(\"known\")\n"
                          "    sb.append(dynamicPart)\n"
+                         "    sb.clear()\n"
                          "    return sb.toString()\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -10926,10 +10927,11 @@ TEST(global_evidence_producer_proves_stringbuilder_literal_append_count) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.ncapacity_ops, 3);
+    ASSERT_EQ_UINT(ev.ncapacity_ops, 4);
 
     const XgCapacityOpSummary *literal_append = NULL;
     const XgCapacityOpSummary *dynamic_append = NULL;
+    const XgCapacityOpSummary *clear = NULL;
     const XgCapacityOpSummary *finish = NULL;
     for (uint32_t i = 0; i < ev.ncapacity_ops; i++) {
         const XgCapacityOpSummary *row = &ev.capacity_ops[i];
@@ -10937,11 +10939,14 @@ TEST(global_evidence_producer_proves_stringbuilder_literal_append_count) {
             literal_append = row;
         else if (row->op_kind == XG_CAPACITY_APPEND)
             dynamic_append = row;
+        else if (row->op_kind == XG_CAPACITY_CLEAR)
+            clear = row;
         else if (row->op_kind == XG_CAPACITY_TO_STRING)
             finish = row;
     }
     ASSERT_NOT_NULL(literal_append);
     ASSERT_NOT_NULL(dynamic_append);
+    ASSERT_NOT_NULL(clear);
     ASSERT_NOT_NULL(finish);
     ASSERT_EQ_UINT(literal_append->sequence_kind, XG_SEQ_STRING_BUILDER);
     ASSERT_TRUE((literal_append->flags & XG_CAPACITY_EXACT_COUNT) != 0);
@@ -10956,14 +10961,17 @@ TEST(global_evidence_producer_proves_stringbuilder_literal_append_count) {
         xaot_bundle_find_capacity_plan(&bundle, literal_append->op_id);
     const XaotCapacityPlan *dynamic_plan =
         xaot_bundle_find_capacity_plan(&bundle, dynamic_append->op_id);
+    const XaotCapacityPlan *clear_plan = xaot_bundle_find_capacity_plan(&bundle, clear->op_id);
     const XaotCapacityPlan *finish_plan = xaot_bundle_find_capacity_plan(&bundle, finish->op_id);
     ASSERT_NOT_NULL(literal_plan);
     ASSERT_NOT_NULL(dynamic_plan);
+    ASSERT_NOT_NULL(clear_plan);
     ASSERT_NOT_NULL(finish_plan);
     ASSERT_EQ_UINT(literal_plan->action, XAOT_CAPACITY_RESERVE_ONCE);
     ASSERT_TRUE((literal_plan->evidence & XAOT_CAPACITY_EV_EXACT_COUNT) != 0);
     ASSERT_EQ_UINT(dynamic_plan->action, XAOT_CAPACITY_CHECKED_GROW);
     ASSERT_EQ_UINT(dynamic_plan->unproven_reason, XAOT_CAPACITY_UNPROVEN_COUNT_UNKNOWN);
+    ASSERT_EQ_UINT(clear_plan->action, XAOT_CAPACITY_CLEAR_DIRECT);
     ASSERT_EQ_UINT(finish_plan->action, XAOT_CAPACITY_BUILDER_FINISH);
 
     xaot_bundle_free(&bundle);

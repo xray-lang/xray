@@ -7264,6 +7264,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
         XiValue *v = blk->values[i];
         if (!v)
             continue;
+        xicgen_emit_stringbuilder_literal_append_reserve(ctx, out, blk, i);
         emit_value_stmt(ctx, out, f, v, prefix);
         if (cg_value_terminates_c_path(v))
             return;
