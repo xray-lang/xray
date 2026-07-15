@@ -1408,6 +1408,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "routeHandler",
+        .signature = "(method: string, path: string, handler: (Json): Json)",
+        .summary = "",
+    },
+    {
         .name = "router",
         .signature = "(): Router",
         .summary = "",
@@ -6210,6 +6215,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.request` | `(options: Json): HttpResponse` |  |\n"
             "| `http.requestText` | `(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
             "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
+            "| `http.routeHandler` | `(method: string, path: string, handler: (Json): Json)` |  |\n"
             "| `http.router` | `(): Router` |  |\n"
             "| `http.stopServer` | `(): ()` |  |\n"
             "| `http.urlDecode` | `(s: string): string` |  |\n"
