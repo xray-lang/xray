@@ -223,6 +223,13 @@ static void links_release_dynamic(XaSymbolLinks *links) {
         xr_free(ref);
         ref = next;
     }
+    XaOutFieldDaPath *path = links->out_field_da_paths;
+    while (path) {
+        XaOutFieldDaPath *next = path->next;
+        xr_free(path->path);
+        xr_free(path);
+        path = next;
+    }
 }
 
 // Free a symbol (also releases its inline links dynamic fields)
@@ -264,6 +271,35 @@ XaRefLocation *xa_symbol_get_refs(XaSymbolLinks *links, int *count) {
     if (count)
         *count = links->ref_count;
     return links->references;
+}
+
+void xa_symbol_links_mark_out_field_assigned(XaSymbolLinks *links, const char *path) {
+    if (!links || !path || path[0] == '\0')
+        return;
+    for (XaOutFieldDaPath *it = links->out_field_da_paths; it; it = it->next) {
+        if (it->path && strcmp(it->path, path) == 0)
+            return;
+    }
+    XaOutFieldDaPath *entry = (XaOutFieldDaPath *) xr_calloc(1, sizeof(*entry));
+    if (!entry)
+        return;
+    entry->path = xr_strdup(path);
+    if (!entry->path) {
+        xr_free(entry);
+        return;
+    }
+    entry->next = links->out_field_da_paths;
+    links->out_field_da_paths = entry;
+}
+
+bool xa_symbol_links_out_field_assigned(XaSymbolLinks *links, const char *path) {
+    if (!links || !path || path[0] == '\0')
+        return false;
+    for (XaOutFieldDaPath *it = links->out_field_da_paths; it; it = it->next) {
+        if (it->path && strcmp(it->path, path) == 0)
+            return true;
+    }
+    return false;
 }
 
 // Create a new scope

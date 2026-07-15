@@ -1,0 +1,13 @@
+struct ProjectionDaBox {
+    values: Array<int>
+}
+
+fn read_and_fill(view: in Slice<int>, target: out int) {
+    target = view[0]
+}
+
+fn bad(box: out ProjectionDaBox) {
+    read_and_fill(box.values[:], out box.values[0])
+    var observed = box.values[0]
+    box = ProjectionDaBox{values: [observed]}
+}

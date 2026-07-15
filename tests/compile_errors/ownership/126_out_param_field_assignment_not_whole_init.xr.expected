@@ -1,1 +1,1 @@
-out parameter 'p' is read before being assigned
+out parameter 'p' must be assigned before function exits

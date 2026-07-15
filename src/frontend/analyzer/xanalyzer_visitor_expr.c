@@ -1569,7 +1569,37 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (expected_enum_member)
         return expected_enum_member;
 
-    XrType *obj_type = xa_visit_infer_expr(ctx, ma->object);
+    XrType *obj_type = NULL;
+    if (ctx && ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
+        ma->name) {
+        XaSymbol *root = xa_lookup_visible_symbol(ctx, ma->object->as.variable.name);
+        XaSymbolLinks *root_links = root ? xa_analyzer_get_links(ctx->analyzer, root) : NULL;
+        char path[256];
+        int n = snprintf(path, sizeof(path), "%s.%s", ma->object->as.variable.name, ma->name);
+        bool exact_path = n > 0 && (size_t) n < sizeof(path);
+        bool write_target = exact_path && root && root->id == ctx->out_field_da_read_symbol_id &&
+                            ctx->out_field_da_read_path &&
+                            strcmp(ctx->out_field_da_read_path, path) == 0;
+        bool field_assigned =
+            exact_path && root_links && xa_symbol_links_out_field_assigned(root_links, path);
+        if (root && root_links && !root_links->is_definitely_assigned &&
+            (write_target || field_assigned)) {
+            uint32_t saved_symbol_id = ctx->out_field_da_read_symbol_id;
+            const char *saved_path = ctx->out_field_da_read_path;
+            ctx->out_field_da_read_symbol_id = 0;
+            ctx->out_field_da_read_path = NULL;
+            ma->object->as.variable.symbol_id = root->id;
+            obj_type = xa_analyzer_get_type(ctx->analyzer, root);
+            if (!obj_type)
+                obj_type = root_links->type ? root_links->type : root_links->declared_type;
+            if (obj_type)
+                xa_analyzer_set_node_type(ctx->analyzer, ma->object, obj_type);
+            ctx->out_field_da_read_symbol_id = saved_symbol_id;
+            ctx->out_field_da_read_path = saved_path;
+        }
+    }
+    if (!obj_type)
+        obj_type = xa_visit_infer_expr(ctx, ma->object);
 
     // A diagnosed receiver failure is recovery poison, not an unresolved type.
     // Propagate it without emitting a secondary member-access diagnostic.

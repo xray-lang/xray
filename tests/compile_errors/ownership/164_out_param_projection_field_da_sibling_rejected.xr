@@ -1,0 +1,14 @@
+struct ProjectionDaPair {
+    left: int
+    right: int
+}
+
+fn fill(value: out int) {
+    value = 1
+}
+
+fn bad(pair: out ProjectionDaPair) {
+    fill(out pair.left)
+    var other = pair.right
+    pair = ProjectionDaPair{left: 1, right: other}
+}
