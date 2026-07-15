@@ -4867,7 +4867,7 @@ static bool emit_typed_array_fill_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
-    if (bulk && bulk->action == XAOT_BULK_TYPED_LOOP && info.rep != XR_REP_TAGGED) {
+    if (bulk && bulk->action == XAOT_BULK_TYPED_LOOP) {
         fprintf(out, "; int64_t _start = ");
         if (call->nargs >= 3)
             emit_value_as_rep_ctx(ctx, out, call->args[2], XR_REP_I64);
@@ -4878,15 +4878,27 @@ static bool emit_typed_array_fill_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
             emit_value_as_rep_ctx(ctx, out, call->args[3], XR_REP_I64);
         else
             fprintf(out, "_a->length");
-        fprintf(out,
-                "; XrArrayCoreRange _r = xr_array_core_fill_range(_a->length, _start, _end); "
-                "%s _fill = ",
-                info.ctype);
-        emit_typed_array_store_value(out, &info, call->args[1]);
-        fprintf(out,
-                "; for (int64_t _i = 0; _i < _r.count; _i++) "
-                "((%s*)_a->data)[_r.start + _i] = _fill; xr_mkptr(_a, XR_TAG_ARRAY); })",
-                info.ctype);
+        if (info.rep == XR_REP_TAGGED) {
+            fprintf(out,
+                    "; XrArrayCoreRange _r = xr_array_core_fill_range(_a->length, _start, _end); "
+                    "XrValue _fill = ");
+            emit_value_as_rep_ctx(ctx, out, call->args[1], XR_REP_TAGGED);
+            fprintf(out,
+                    "; for (int64_t _i = 0; _i < _r.count; _i++) { "
+                    "int64_t _idx = _r.start + _i; XrValue _old = ((XrValue*)_a->data)[_idx]; "
+                    "xrt_retain(_fill); ((XrValue*)_a->data)[_idx] = _fill; xrt_release(_old); } "
+                    "XR_ARRAY_MARK_MUTATED(_a); xr_mkptr(_a, XR_TAG_ARRAY); })");
+        } else {
+            fprintf(out,
+                    "; XrArrayCoreRange _r = xr_array_core_fill_range(_a->length, _start, _end); "
+                    "%s _fill = ",
+                    info.ctype);
+            emit_typed_array_store_value(out, &info, call->args[1]);
+            fprintf(out,
+                    "; for (int64_t _i = 0; _i < _r.count; _i++) "
+                    "((%s*)_a->data)[_r.start + _i] = _fill; xr_mkptr(_a, XR_TAG_ARRAY); })",
+                    info.ctype);
+        }
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
