@@ -298,6 +298,12 @@ XR_FUNC void xa_symbol_add_ref(XaSymbolLinks *links, uint32_t line, uint32_t col
 XR_FUNC XaRefLocation *xa_symbol_get_refs(XaSymbolLinks *links, int *count);
 XR_FUNC void xa_symbol_links_mark_out_field_assigned(XaSymbolLinks *links, const char *path);
 XR_FUNC bool xa_symbol_links_out_field_assigned(XaSymbolLinks *links, const char *path);
+XR_FUNC XaOutFieldDaPath *xa_symbol_links_clone_out_field_da_paths(XaSymbolLinks *links);
+XR_FUNC void xa_symbol_links_restore_out_field_da_paths(XaSymbolLinks *links,
+                                                        XaOutFieldDaPath *paths);
+XR_FUNC XaOutFieldDaPath *xa_symbol_links_intersect_out_field_da_paths(XaOutFieldDaPath *left,
+                                                                       XaOutFieldDaPath *right);
+XR_FUNC void xa_symbol_links_free_out_field_da_paths(XaOutFieldDaPath *paths);
 
 // API: Class info
 XR_FUNC XrClassInfo *xa_class_info_new(const char *name);

@@ -64,6 +64,7 @@ POSITIVE_CASES = (
     "tests/regression/13_types/1435_param_mode_place_kind_authorization.xr",
     "tests/regression/13_types/1437_generic_method_param_contract.xr",
     "tests/regression/13_types/1438_out_param_try_call_catch_assign.xr",
+    "tests/regression/13_types/1439_out_param_field_da_branch_merge.xr",
 )
 
 

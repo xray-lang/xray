@@ -8546,6 +8546,11 @@ struct XaOutParamDaState {
     bool else_assigned;
     bool path_merge_has_fallthrough;
     bool path_merge_assigned;
+    bool path_merge_fields_initialized;
+    XaOutFieldDaPath *before_fields;
+    XaOutFieldDaPath *then_fields;
+    XaOutFieldDaPath *else_fields;
+    XaOutFieldDaPath *path_merge_fields;
 };
 
 XR_FUNC XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out_count) {
@@ -8562,7 +8567,7 @@ XR_FUNC XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out
         return NULL;
     }
 
-    XaOutParamDaState *states = xr_calloc((size_t) symbol_count, sizeof(XaOutParamDaState));
+    XaOutParamDaState *states = xr_calloc((size_t) symbol_count + 1u, sizeof(XaOutParamDaState));
     if (!states) {
         xr_free(symbols);
         return NULL;
@@ -8582,6 +8587,11 @@ XR_FUNC XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out
         states[count].else_assigned = links->is_definitely_assigned;
         states[count].path_merge_has_fallthrough = false;
         states[count].path_merge_assigned = true;
+        states[count].path_merge_fields_initialized = false;
+        states[count].before_fields = xa_symbol_links_clone_out_field_da_paths(links);
+        states[count].then_fields = xa_symbol_links_clone_out_field_da_paths(links);
+        states[count].else_fields = xa_symbol_links_clone_out_field_da_paths(links);
+        states[count].path_merge_fields = NULL;
         count++;
     }
     xr_free(symbols);
@@ -8596,8 +8606,10 @@ XR_FUNC XaOutParamDaState *xa_out_param_da_capture(XaInferContext *ctx, int *out
 
 XR_FUNC void xa_out_param_da_restore_before(XaOutParamDaState *states, int count) {
     for (int i = 0; states && i < count; i++) {
-        if (states[i].links)
+        if (states[i].links) {
             states[i].links->is_definitely_assigned = states[i].before_assigned;
+            xa_symbol_links_restore_out_field_da_paths(states[i].links, states[i].before_fields);
+        }
     }
 }
 
@@ -8605,6 +8617,9 @@ XR_FUNC void xa_out_param_da_begin_path_merge(XaOutParamDaState *states, int cou
     for (int i = 0; states && i < count; i++) {
         states[i].path_merge_has_fallthrough = false;
         states[i].path_merge_assigned = true;
+        states[i].path_merge_fields_initialized = false;
+        xa_symbol_links_free_out_field_da_paths(states[i].path_merge_fields);
+        states[i].path_merge_fields = NULL;
     }
 }
 
@@ -8616,30 +8631,59 @@ XR_FUNC void xa_out_param_da_record_path(XaOutParamDaState *states, int count, b
         states[i].path_merge_assigned =
             states[i].path_merge_assigned &&
             (states[i].links ? states[i].links->is_definitely_assigned : states[i].before_assigned);
+        XaOutFieldDaPath *path_fields =
+            states[i].links ? xa_symbol_links_clone_out_field_da_paths(states[i].links) : NULL;
+        if (!states[i].path_merge_fields_initialized) {
+            states[i].path_merge_fields = path_fields;
+            states[i].path_merge_fields_initialized = true;
+        } else {
+            XaOutFieldDaPath *merged = xa_symbol_links_intersect_out_field_da_paths(
+                states[i].path_merge_fields, path_fields);
+            xa_symbol_links_free_out_field_da_paths(states[i].path_merge_fields);
+            xa_symbol_links_free_out_field_da_paths(path_fields);
+            states[i].path_merge_fields = merged;
+        }
     }
 }
 
 XR_FUNC void xa_out_param_da_apply_path_merge(XaOutParamDaState *states, int count) {
     for (int i = 0; states && i < count; i++) {
-        if (states[i].links && states[i].path_merge_has_fallthrough)
+        if (states[i].links && states[i].path_merge_has_fallthrough) {
             states[i].links->is_definitely_assigned = states[i].path_merge_assigned;
+            xa_symbol_links_restore_out_field_da_paths(states[i].links,
+                                                       states[i].path_merge_fields);
+        }
     }
 }
 
 XR_FUNC void xa_out_param_da_free(XaOutParamDaState *states) {
+    for (int i = 0; states && states[i].links; i++) {
+        xa_symbol_links_free_out_field_da_paths(states[i].before_fields);
+        xa_symbol_links_free_out_field_da_paths(states[i].then_fields);
+        xa_symbol_links_free_out_field_da_paths(states[i].else_fields);
+        xa_symbol_links_free_out_field_da_paths(states[i].path_merge_fields);
+    }
     xr_free(states);
 }
 
 static void xa_out_param_da_record_then(XaOutParamDaState *states, int count) {
-    for (int i = 0; states && i < count; i++)
+    for (int i = 0; states && i < count; i++) {
         states[i].then_assigned =
             states[i].links ? states[i].links->is_definitely_assigned : states[i].before_assigned;
+        xa_symbol_links_free_out_field_da_paths(states[i].then_fields);
+        states[i].then_fields =
+            states[i].links ? xa_symbol_links_clone_out_field_da_paths(states[i].links) : NULL;
+    }
 }
 
 static void xa_out_param_da_record_else(XaOutParamDaState *states, int count) {
-    for (int i = 0; states && i < count; i++)
+    for (int i = 0; states && i < count; i++) {
         states[i].else_assigned =
             states[i].links ? states[i].links->is_definitely_assigned : states[i].before_assigned;
+        xa_symbol_links_free_out_field_da_paths(states[i].else_fields);
+        states[i].else_fields =
+            states[i].links ? xa_symbol_links_clone_out_field_da_paths(states[i].links) : NULL;
+    }
 }
 
 static void xa_out_param_da_apply_if_merge(XaOutParamDaState *states, int count,
@@ -8656,6 +8700,18 @@ static void xa_out_param_da_apply_if_merge(XaOutParamDaState *states, int count,
             merged = states[i].else_assigned;
         }
         states[i].links->is_definitely_assigned = merged;
+        XaOutFieldDaPath *merged_fields = NULL;
+        if (then_falls_through && else_falls_through) {
+            merged_fields = xa_symbol_links_intersect_out_field_da_paths(states[i].then_fields,
+                                                                         states[i].else_fields);
+        } else if (then_falls_through) {
+            merged_fields = states[i].then_fields;
+        } else if (else_falls_through) {
+            merged_fields = states[i].else_fields;
+        } else {
+            merged_fields = states[i].before_fields;
+        }
+        xa_symbol_links_restore_out_field_da_paths(states[i].links, merged_fields);
     }
 }
 
