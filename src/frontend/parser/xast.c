@@ -1050,14 +1050,11 @@ AstNode *xr_ast_interface_decl(XrCompilerSession *session, const char *name, XrT
 }
 
 // Create interface method signature node
-AstNode *xr_ast_interface_method(XrCompilerSession *session, const char *name, char **parameters,
-                                 XrTypeRef **param_types, XrParamMode *param_passing_modes,
+AstNode *xr_ast_interface_method(XrCompilerSession *session, const char *name, XrParamNode **params,
                                  int param_count, XrTypeRef *return_type, int line) {
     AstNode *node = alloc_node(session, AST_INTERFACE_METHOD, line);
     node->as.interface_method.name = (char *) name;
-    node->as.interface_method.parameters = parameters;
-    node->as.interface_method.param_types = param_types;
-    node->as.interface_method.param_passing_modes = param_passing_modes;
+    node->as.interface_method.params = params;
     node->as.interface_method.param_count = param_count;
     node->as.interface_method.return_type = return_type;
     return node;
@@ -1086,14 +1083,13 @@ AstNode *xr_ast_field_decl(XrCompilerSession *session, const char *name, XrTypeR
 }
 
 // Create method declaration node
-AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, char **parameters,
-                            XrTypeRef **param_types, int param_count, XrTypeRef *return_type,
-                            AstNode *body, bool is_constructor, bool is_static, bool is_private,
-                            bool is_getter, bool is_setter, int line) {
+AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, XrParamNode **params,
+                            int param_count, XrTypeRef *return_type, AstNode *body,
+                            bool is_constructor, bool is_static, bool is_private, bool is_getter,
+                            bool is_setter, int line) {
     AstNode *node = alloc_node(session, AST_METHOD_DECL, line);
     node->as.method_decl.name = (char *) name;
-    node->as.method_decl.parameters = parameters;
-    node->as.method_decl.param_types = param_types;
+    node->as.method_decl.params = params;
     node->as.method_decl.param_count = param_count;
     node->as.method_decl.return_type = return_type;
     node->as.method_decl.body = body;
@@ -1109,10 +1105,6 @@ AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, char *
     // Initialize base() call fields
     node->as.method_decl.base_args = NULL;
     node->as.method_decl.base_arg_count = 0;
-
-    // Initialize default parameter fields
-    node->as.method_decl.default_values = NULL;
-    node->as.method_decl.param_passing_modes = NULL;
 
     node->as.method_decl.is_operator = false;  // Ensure is_operator is initialized
     node->as.method_decl.op_type =

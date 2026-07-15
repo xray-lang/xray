@@ -92,9 +92,7 @@ typedef struct ClassDeclNode {
 
 typedef struct InterfaceMethodNode {
     char *name;
-    char **parameters;
-    XrTypeRef **param_types;
-    XrParamMode *param_passing_modes;
+    XrParamNode **params;
     int param_count;
     XrTypeRef *return_type;
 } InterfaceMethodNode;
@@ -135,9 +133,7 @@ typedef struct FieldDeclNode {
 // Supports generic methods: add<T>(item: T): void { ... }
 typedef struct MethodDeclNode {
     char *name;
-    char **parameters;
-    XrTypeRef **param_types;
-    XrParamMode *param_passing_modes;
+    XrParamNode **params;
     int param_count;
     XrTypeRef *return_type;
     AstNode *body;
@@ -152,7 +148,6 @@ typedef struct MethodDeclNode {
     int required_count;
     AstNode **base_args;
     int base_arg_count;
-    AstNode **default_values;
     bool is_operator;
     OperatorType op_type;
     char **type_param_names;  // Generic type parameters

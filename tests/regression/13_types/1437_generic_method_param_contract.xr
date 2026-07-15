@@ -1,0 +1,18 @@
+class Box<T> {
+    value: T
+
+    constructor(value: T) {
+        this.value = value
+    }
+
+    touch(value: ref T) {
+        assert_eq(value, this.value)
+    }
+}
+
+@test
+fn test_generic_method_keeps_ref_contract() {
+    var box = Box<int>(7)
+    var value = 7
+    box.touch(ref value)
+}

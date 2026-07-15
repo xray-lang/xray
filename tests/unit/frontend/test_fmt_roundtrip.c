@@ -366,6 +366,8 @@ TEST(parameter_modes_roundtrip) {
                       "var f = fn(a: int, b: in int, c: ref int, d: out int) -> int { return a }\n"
                       "class ParamModeBox {\n"
                       "    touch(a: int, b: in int, c: ref int, d: out int) { }\n"
+                      "    configure(limit: in int = 4) { }\n"
+                      "    collect(...values: int) { }\n"
                       "}\n"
                       "interface ParamModeIface {\n"
                       "    touch(a: int, b: in int, c: ref int, d: out int) -> int\n"
@@ -377,6 +379,8 @@ TEST(parameter_modes_roundtrip) {
     ASSERT_TRUE(contains(fmt1, "fn param_modes(a: int, b: in int, c: ref int, d: out int)"));
     ASSERT_TRUE(contains(fmt1, "fn(a: int, b: in int, c: ref int, d: out int) -> int"));
     ASSERT_TRUE(contains(fmt1, "touch(a: int, b: in int, c: ref int, d: out int)"));
+    ASSERT_TRUE(contains(fmt1, "configure(limit: in int = 4)"));
+    ASSERT_TRUE(contains(fmt1, "collect(...values: int)"));
     ASSERT_TRUE(contains(fmt1, "type ComplexHandler = (in Array<int>, ref Slice<uint8>?, "
                                "out [uint8; 16], (int, string), in (ref int) -> bool) -> "
                                "Array<string>"));

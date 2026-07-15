@@ -887,9 +887,11 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_METHOD_DECL: {
             MethodDeclNode *m = &node->as.method_decl;
             canon_node(ctx, m->body);
-            if (m->default_values) {
-                for (int i = 0; i < m->param_count; i++)
-                    canon_node(ctx, m->default_values[i]);
+            if (m->params) {
+                for (int i = 0; i < m->param_count; i++) {
+                    XrParamNode *param = m->params[i];
+                    canon_node(ctx, param ? param->default_value : NULL);
+                }
             }
             if (m->base_args) {
                 for (int i = 0; i < m->base_arg_count; i++)

@@ -912,10 +912,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     // Parse parameter list
     xr_parser_consume(parser, TK_LPAREN, "expected '(' to start parameter list");
 
-    char **parameters = NULL;
-    XrTypeRef **param_types = NULL;
-    XrParamMode *param_passing_modes = NULL;
-    AstNode **default_values = NULL;
+    XrParamNode **params = NULL;
     int param_count = 0;
     int param_capacity = 0;
     int required_count = 0;
@@ -929,46 +926,17 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                 int old_capacity = param_capacity;
                 param_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
 
-                char **_new_parameters = (char **) ast_alloc_array(
-                    parser->compiler_session, sizeof(char *), (size_t) param_capacity);
-                if (old_capacity > 0 && parameters) {
-                    memcpy(_new_parameters, parameters, sizeof(char *) * (size_t) old_capacity);
+                XrParamNode **_new_params = (XrParamNode **) ast_alloc_array(
+                    parser->compiler_session, sizeof(XrParamNode *), (size_t) param_capacity);
+                if (old_capacity > 0 && params) {
+                    memcpy(_new_params, params, sizeof(XrParamNode *) * (size_t) old_capacity);
                 }
-                parameters = _new_parameters;
-
-                XrTypeRef **_new_param_types = (XrTypeRef **) ast_alloc_array(
-                    parser->compiler_session, sizeof(XrTypeRef *), (size_t) param_capacity);
-                if (old_capacity > 0 && param_types) {
-                    memcpy(_new_param_types, param_types,
-                           sizeof(XrTypeRef *) * (size_t) old_capacity);
-                }
-                param_types = _new_param_types;
-
-                XrParamMode *_new_modes = (XrParamMode *) ast_alloc_array(
-                    parser->compiler_session, sizeof(XrParamMode), (size_t) param_capacity);
-                if (old_capacity > 0 && param_passing_modes) {
-                    memcpy(_new_modes, param_passing_modes,
-                           sizeof(XrParamMode) * (size_t) old_capacity);
-                }
-                param_passing_modes = _new_modes;
-
-                AstNode **_new_defaults = (AstNode **) ast_alloc_array(
-                    parser->compiler_session, sizeof(AstNode *), (size_t) param_capacity);
-                if (old_capacity > 0 && default_values) {
-                    memcpy(_new_defaults, default_values,
-                           sizeof(AstNode *) * (size_t) old_capacity);
-                }
-                for (int i = old_capacity; i < param_capacity; i++)
-                    _new_defaults[i] = NULL;
-                default_values = _new_defaults;
+                params = _new_params;
             }
 
             if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
                 XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_REST);
-                parameters[param_count] = param->name;
-                param_passing_modes[param_count] = param->passing_mode;
-                param_types[param_count] = param->type;
-                default_values[param_count] = NULL;
+                params[param_count] = param;
                 is_variadic = true;
                 param_count++;
                 if (xr_parser_check(parser, TK_COMMA)) {
@@ -980,32 +948,30 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
 
             // Parse parameter name
             XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
-            parameters[param_count] = param->name;
-            param_passing_modes[param_count] = param->passing_mode;
-            param_types[param_count] = param->type;
+            params[param_count] = param;
 
             if (xr_parser_match(parser, TK_ASSIGN)) {
                 xr_parse_reject_ref_out_default_param(parser, param);
-                default_values[param_count] = xr_parse_expression(parser);
-                if (param_types[param_count] == NULL && default_values[param_count] != NULL) {
-                    AstNode *dv = default_values[param_count];
+                param->default_value = xr_parse_expression(parser);
+                if (param->type == NULL && param->default_value != NULL) {
+                    AstNode *dv = param->default_value;
                     switch (dv->type) {
                         case AST_LITERAL_INT:
-                            param_types[param_count] = xr_tref_int(parser->compiler_session);
+                            param->type = xr_tref_int(parser->compiler_session);
                             break;
                         case AST_LITERAL_FLOAT:
-                            param_types[param_count] = xr_tref_float(parser->compiler_session);
+                            param->type = xr_tref_float(parser->compiler_session);
                             break;
                         case AST_LITERAL_STRING:
                         case AST_TEMPLATE_STRING:
-                            param_types[param_count] = xr_tref_string(parser->compiler_session);
+                            param->type = xr_tref_string(parser->compiler_session);
                             break;
                         case AST_LITERAL_TRUE:
                         case AST_LITERAL_FALSE:
-                            param_types[param_count] = xr_tref_bool(parser->compiler_session);
+                            param->type = xr_tref_bool(parser->compiler_session);
                             break;
                         case AST_LITERAL_NULL:
-                            param_types[param_count] = xr_tref_null(parser->compiler_session);
+                            param->type = xr_tref_null(parser->compiler_session);
                             break;
                         default:
                             break;
@@ -1013,7 +979,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                 }
             }
 
-            if (default_values[param_count]) {
+            if (param->default_value) {
                 seen_default = true;
             } else if (seen_default) {
                 xr_parser_error(parser, "required parameter cannot follow optional parameter");
@@ -1050,8 +1016,8 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
 
     // Create method declaration node
     AstNode *method_node = xr_ast_method_decl(
-        parser->compiler_session, name, parameters, param_types, param_count, return_type, body,
-        is_constructor, is_static, is_private, false, false, line);  // is_getter, is_setter
+        parser->compiler_session, name, params, param_count, return_type, body, is_constructor,
+        is_static, is_private, false, false, line);  // is_getter, is_setter
 
     method_node->column = name_column;
     if (body && body->end_line > 0) {
@@ -1064,8 +1030,6 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
         method_node->end_column = name_column + (int) strlen(name);
     }
 
-    method_node->as.method_decl.param_passing_modes = param_passing_modes;
-    method_node->as.method_decl.default_values = default_values;
     method_node->as.method_decl.is_variadic = is_variadic;
     method_node->as.method_decl.required_count = required_count;
 
@@ -1452,9 +1416,7 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     // Parse parameter list
     xr_parser_consume(parser, TK_LPAREN, "expected '(' to start parameter list");
 
-    char **parameters = NULL;
-    XrTypeRef **param_types = NULL;
-    XrParamMode *param_passing_modes = NULL;
+    XrParamNode **params = NULL;
     int param_count = 0;
 
     // Parse parameters: most operators need 1, []= needs 2, unary operators need 0
@@ -1466,24 +1428,17 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
         }
         // Unary operators (expected_params == 0) can have no parameters
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to end parameter list");
-        parameters = NULL;
-        param_types = NULL;
+        params = NULL;
         param_count = 0;
         // Go directly to return type parsing, no goto needed
     } else {
         // Allocate parameter arrays in the parse arena
-        parameters = (char **) ast_alloc_array(parser->compiler_session, sizeof(char *),
-                                               (size_t) expected_params);
-        param_types = (XrTypeRef **) ast_alloc_array(parser->compiler_session, sizeof(XrTypeRef *),
-                                                     (size_t) expected_params);
-        param_passing_modes = (XrParamMode *) ast_alloc_array(
-            parser->compiler_session, sizeof(XrParamMode), (size_t) expected_params);
+        params = (XrParamNode **) ast_alloc_array(parser->compiler_session, sizeof(XrParamNode *),
+                                                  (size_t) expected_params);
 
         // Parse first parameter
         XrParamNode *first_param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
-        parameters[0] = first_param->name;
-        param_types[0] = first_param->type;
-        param_passing_modes[0] = first_param->passing_mode;
+        params[0] = first_param;
 
         param_count = 1;
 
@@ -1495,9 +1450,7 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
             }
 
             XrParamNode *second_param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
-            parameters[1] = second_param->name;
-            param_types[1] = second_param->type;
-            param_passing_modes[1] = second_param->passing_mode;
+            params[1] = second_param;
 
             param_count = 2;
         }
@@ -1535,13 +1488,13 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     AstNode *body = xr_parse_block(parser);
 
     // Create method node
-    AstNode *method = xr_ast_method_decl(parser->compiler_session, name, parameters, param_types,
-                                         param_count, return_type, body,
-                                         false,  // is_constructor
-                                         is_static, is_private,
-                                         false,  // is_getter
-                                         false,  // is_setter
-                                         line);
+    AstNode *method =
+        xr_ast_method_decl(parser->compiler_session, name, params, param_count, return_type, body,
+                           false,  // is_constructor
+                           is_static, is_private,
+                           false,  // is_getter
+                           false,  // is_setter
+                           line);
 
     method->column = name_column;
     if (body && body->end_line > 0) {
@@ -1555,17 +1508,9 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     // Set operator flags
     method->as.method_decl.is_operator = true;     // mark as operator method
     method->as.method_decl.op_type = op_type_val;  // set specific operator type
-    method->as.method_decl.param_passing_modes = param_passing_modes;
-
     return method;
 
 fail:
-    // Release the operator-method state we still own. XrType entries are
-    // shared via the type pool and are NOT freed here.
-    if (parameters) {
-        for (int i = 0; i < param_count; i++) {
-        }
-    }
     return NULL;
 }
 
@@ -1600,22 +1545,17 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name, Xr
         // Parse parameter list
         xr_parser_consume(parser, TK_LPAREN, "expected '(' to start parameter list");
 
-        char **parameters = NULL;
-        XrTypeRef **param_types = NULL;
-        XrParamMode *param_passing_modes = NULL;
+        XrParamNode **params = NULL;
         int param_count = 0;
 
         if (!xr_parser_check(parser, TK_RPAREN)) {
             // Has parameters = setter
-            parameters = (char **) ast_alloc(parser->compiler_session, sizeof(char *));
-            param_types = (XrTypeRef **) ast_alloc(parser->compiler_session, sizeof(XrTypeRef *));
-            param_passing_modes =
-                (XrParamMode *) ast_alloc(parser->compiler_session, sizeof(XrParamMode));
+            params = (XrParamNode **) ast_alloc(parser->compiler_session, sizeof(XrParamNode *));
 
             XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
-            parameters[0] = param->name;
-            param_types[0] = param->type ? param->type : field_type;
-            param_passing_modes[0] = param->passing_mode;
+            if (!param->type)
+                param->type = field_type;
+            params[0] = param;
 
             param_count = 1;
 
@@ -1651,10 +1591,9 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name, Xr
         snprintf(method_name, name_len, "%s:%s", is_getter ? "get" : "set", name);
 
         // Create method declaration node
-        AstNode *method_node = xr_ast_method_decl(
-            parser->compiler_session, method_name, parameters, param_types, param_count,
-            return_type, body, false, is_static, is_private, is_getter, !is_getter, line);
-        method_node->as.method_decl.param_passing_modes = param_passing_modes;
+        AstNode *method_node = xr_ast_method_decl(parser->compiler_session, method_name, params,
+                                                  param_count, return_type, body, false, is_static,
+                                                  is_private, is_getter, !is_getter, line);
 
         method_node->column = 1;  // property accessors are synthetic — column
                                   //   mirrors the declaration line (safe 1)
@@ -1866,7 +1805,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         xr_parser_match(parser, TK_SEMICOLON);
         return xr_ast_interface_method(parser->compiler_session,
                                        ast_strdup(parser->compiler_session, "__operator_len"), NULL,
-                                       NULL, NULL, 0, return_type, member_line);
+                                       0, return_type, member_line);
     }
 
     // Optional `const` modifier — only valid for property signatures.
@@ -1893,9 +1832,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     // Method signature: `name(params): retType`
     xr_parser_consume(parser, TK_LPAREN, "expected '(' or ':' after interface member name");
 
-    char **parameters = NULL;
-    XrTypeRef **param_types = NULL;
-    XrParamMode *param_passing_modes = NULL;
+    XrParamNode **params = NULL;
     int param_count = 0;
     int param_capacity = 0;
 
@@ -1909,32 +1846,14 @@ AstNode *xr_parse_interface_member(Parser *parser) {
                 int old_capacity = param_capacity;
                 param_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
 
-                char **_new_parameters = (char **) ast_alloc_array(
-                    parser->compiler_session, sizeof(char *), (size_t) param_capacity);
-                if (old_capacity > 0 && parameters) {
-                    memcpy(_new_parameters, parameters, sizeof(char *) * (size_t) old_capacity);
+                XrParamNode **_new_params = (XrParamNode **) ast_alloc_array(
+                    parser->compiler_session, sizeof(XrParamNode *), (size_t) param_capacity);
+                if (old_capacity > 0 && params) {
+                    memcpy(_new_params, params, sizeof(XrParamNode *) * (size_t) old_capacity);
                 }
-                parameters = _new_parameters;
-
-                XrTypeRef **_new_param_types = (XrTypeRef **) ast_alloc_array(
-                    parser->compiler_session, sizeof(XrTypeRef *), (size_t) param_capacity);
-                if (old_capacity > 0 && param_types) {
-                    memcpy(_new_param_types, param_types,
-                           sizeof(XrTypeRef *) * (size_t) old_capacity);
-                }
-                param_types = _new_param_types;
-
-                XrParamMode *_new_modes = (XrParamMode *) ast_alloc_array(
-                    parser->compiler_session, sizeof(XrParamMode), (size_t) param_capacity);
-                if (old_capacity > 0 && param_passing_modes) {
-                    memcpy(_new_modes, param_passing_modes,
-                           sizeof(XrParamMode) * (size_t) old_capacity);
-                }
-                param_passing_modes = _new_modes;
+                params = _new_params;
             }
-            parameters[param_count] = param->name;
-            param_types[param_count] = param->type;
-            param_passing_modes[param_count] = param->passing_mode;
+            params[param_count] = param;
             param_count++;
 
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
@@ -1956,10 +1875,8 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     // Interface method signature ends with semicolon (optional)
     xr_parser_match(parser, TK_SEMICOLON);
 
-    // Create interface method signature node. xr_ast_interface_method
-    // takes ownership of member_name, parameters[], param_types[] and modes[].
-    return xr_ast_interface_method(parser->compiler_session, member_name, parameters, param_types,
-                                   param_passing_modes, param_count, return_type, member_line);
+    return xr_ast_interface_method(parser->compiler_session, member_name, params, param_count,
+                                   return_type, member_line);
 }
 
 /* ========== Enum Declaration Parsing ========== */
@@ -2315,8 +2232,8 @@ AstNode *xr_parse_static_constructor(Parser *parser, bool is_private) {
 
     // Create method declaration node
     AstNode *method_node =
-        xr_ast_method_decl(parser->compiler_session, "<clinit>", NULL, NULL, 0,  // no parameters
-                           NULL,                                                 // no return type
+        xr_ast_method_decl(parser->compiler_session, "<clinit>", NULL, 0,  // no parameters
+                           NULL,                                           // no return type
                            body,
                            false,  // not a regular constructor
                            true,   // is static

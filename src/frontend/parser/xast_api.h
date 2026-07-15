@@ -218,8 +218,7 @@ XR_FUNC AstNode *xr_ast_interface_decl(XrCompilerSession *session, const char *n
 
 // Create interface method signature node
 XR_FUNC AstNode *xr_ast_interface_method(XrCompilerSession *session, const char *name,
-                                         char **parameters, XrTypeRef **param_types,
-                                         XrParamMode *param_passing_modes, int param_count,
+                                         XrParamNode **params, int param_count,
                                          XrTypeRef *return_type, int line);
 
 // Create interface property signature node (e.g. `length: int`)
@@ -232,11 +231,10 @@ XR_FUNC AstNode *xr_ast_field_decl(XrCompilerSession *session, const char *name,
                                    AstNode *initializer, int line);
 
 // Create method declaration node
-XR_FUNC AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name, char **parameters,
-                                    XrTypeRef **param_types, int param_count,
-                                    XrTypeRef *return_type, AstNode *body, bool is_constructor,
-                                    bool is_static, bool is_private, bool is_getter, bool is_setter,
-                                    int line);
+XR_FUNC AstNode *xr_ast_method_decl(XrCompilerSession *session, const char *name,
+                                    XrParamNode **params, int param_count, XrTypeRef *return_type,
+                                    AstNode *body, bool is_constructor, bool is_static,
+                                    bool is_private, bool is_getter, bool is_setter, int line);
 
 // Create new expression node (supports new module.Class() and new Box<int>() syntax)
 XR_FUNC AstNode *xr_ast_new_expr(XrCompilerSession *session, const char *module_name,

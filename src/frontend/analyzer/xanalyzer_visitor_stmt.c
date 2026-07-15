@@ -6135,6 +6135,16 @@ static bool xa_node_array_uses_symbol_name(AstNode **nodes, int count, const cha
     return false;
 }
 
+static bool xa_param_defaults_use_symbol_name(XrParamNode **params, int count, const char *name) {
+    if (!params || count <= 0)
+        return false;
+    for (int i = 0; i < count; i++) {
+        if (params[i] && xa_node_uses_symbol_name(params[i]->default_value, name))
+            return true;
+    }
+    return false;
+}
+
 static bool xa_block_uses_symbol_name_from(AstNode *node, const char *name, int start_index) {
     if (!node || !name)
         return false;
@@ -6332,8 +6342,8 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
         case AST_METHOD_DECL:
             return xa_node_array_uses_symbol_name(node->as.method_decl.base_args,
                                                   node->as.method_decl.base_arg_count, name) ||
-                   xa_node_array_uses_symbol_name(node->as.method_decl.default_values,
-                                                  node->as.method_decl.param_count, name) ||
+                   xa_param_defaults_use_symbol_name(node->as.method_decl.params,
+                                                     node->as.method_decl.param_count, name) ||
                    xa_node_uses_symbol_name(node->as.method_decl.body, name);
 
         case AST_ENUM_DECL:

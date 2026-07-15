@@ -295,13 +295,6 @@ static void assert_ast_param_modes(XrParamNode **params, int actual_count,
         ASSERT_EQ_INT(params[i]->passing_mode, expected[i]);
 }
 
-static void assert_param_modes(const XrParamMode *actual, int actual_count,
-                               const XrParamMode *expected, int expected_count) {
-    ASSERT_EQ_INT(actual_count, expected_count);
-    for (int i = 0; i < expected_count; i++)
-        ASSERT_EQ_INT(actual[i], expected[i]);
-}
-
 TEST(parser_parameter_modes_share_annotation_parser) {
     setup();
 
@@ -330,15 +323,15 @@ TEST(parser_parameter_modes_share_annotation_parser) {
         parse_first("class Box {\n  touch(a: int, b: in int, c: ref int, d: out int) {}\n}");
     AstNode *method = method_stmt->as.class_decl.methods[0];
     ASSERT_EQ_INT(method->type, AST_METHOD_DECL);
-    assert_param_modes(method->as.method_decl.param_passing_modes,
-                       method->as.method_decl.param_count, modes, mode_count);
+    assert_ast_param_modes(method->as.method_decl.params, method->as.method_decl.param_count, modes,
+                           mode_count);
 
     AstNode *iface = parse_first(
         "interface Sink {\n  write(a: int, b: in int, c: ref int, d: out int) -> ()\n}");
     AstNode *iface_method = iface->as.interface_decl.methods[0];
     ASSERT_EQ_INT(iface_method->type, AST_INTERFACE_METHOD);
-    assert_param_modes(iface_method->as.interface_method.param_passing_modes,
-                       iface_method->as.interface_method.param_count, modes, mode_count);
+    assert_ast_param_modes(iface_method->as.interface_method.params,
+                           iface_method->as.interface_method.param_count, modes, mode_count);
 
     teardown();
 }
@@ -353,7 +346,7 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     ASSERT_EQ_INT(ctor->type, AST_METHOD_DECL);
     ASSERT(ctor->as.method_decl.is_constructor);
     ASSERT_EQ_INT(ctor->as.method_decl.param_count, 1);
-    ASSERT_EQ_INT(ctor->as.method_decl.param_passing_modes[0], XR_PARAM_REF);
+    ASSERT_EQ_INT(ctor->as.method_decl.params[0]->passing_mode, XR_PARAM_REF);
 
     AstNode *operator_class = parse_first("class Matrix {\n"
                                           "  operator[]=(index: in int, value: out int) {}\n"
@@ -362,8 +355,8 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     ASSERT_EQ_INT(op->type, AST_METHOD_DECL);
     ASSERT(op->as.method_decl.is_operator);
     ASSERT_EQ_INT(op->as.method_decl.param_count, 2);
-    ASSERT_EQ_INT(op->as.method_decl.param_passing_modes[0], XR_PARAM_IN);
-    ASSERT_EQ_INT(op->as.method_decl.param_passing_modes[1], XR_PARAM_OUT);
+    ASSERT_EQ_INT(op->as.method_decl.params[0]->passing_mode, XR_PARAM_IN);
+    ASSERT_EQ_INT(op->as.method_decl.params[1]->passing_mode, XR_PARAM_OUT);
 
     AstNode *setter_class = parse_first("class Meter {\n"
                                         "  value: int {\n"
@@ -374,7 +367,27 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     ASSERT_EQ_INT(setter->type, AST_METHOD_DECL);
     ASSERT(setter->as.method_decl.is_setter);
     ASSERT_EQ_INT(setter->as.method_decl.param_count, 1);
-    ASSERT_EQ_INT(setter->as.method_decl.param_passing_modes[0], XR_PARAM_REF);
+    ASSERT_EQ_INT(setter->as.method_decl.params[0]->passing_mode, XR_PARAM_REF);
+
+    AstNode *contract_class = parse_first("class ContractBox {\n"
+                                          "  configure(limit: in int = 4) {}\n"
+                                          "  collect(...values: int) {}\n"
+                                          "}");
+    MethodDeclNode *configure = &contract_class->as.class_decl.methods[0]->as.method_decl;
+    ASSERT_EQ_INT(configure->param_count, 1);
+    ASSERT_STR_EQ(configure->params[0]->name, "limit");
+    ASSERT_EQ_INT(configure->params[0]->passing_mode, XR_PARAM_IN);
+    ASSERT_NOT_NULL(configure->params[0]->type);
+    ASSERT_NOT_NULL(configure->params[0]->default_value);
+    ASSERT_FALSE(configure->params[0]->is_rest);
+
+    MethodDeclNode *collect = &contract_class->as.class_decl.methods[1]->as.method_decl;
+    ASSERT_EQ_INT(collect->param_count, 1);
+    ASSERT_STR_EQ(collect->params[0]->name, "values");
+    ASSERT_EQ_INT(collect->params[0]->passing_mode, XR_PARAM_VALUE);
+    ASSERT_NOT_NULL(collect->params[0]->type);
+    ASSERT_NULL(collect->params[0]->default_value);
+    ASSERT(collect->params[0]->is_rest);
 
     teardown();
 }

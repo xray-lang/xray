@@ -764,11 +764,11 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
                 ea_push_scope(ctx);
                 int old_boundary = ctx->func_boundary;
                 ctx->func_boundary = ctx->depth;
-                // Register method params (MethodDeclNode uses char **parameters)
-                if (m->parameters) {
+                // Register method params from the declaration ParamContract nodes.
+                if (m->params) {
                     for (int i = 0; i < m->param_count; i++) {
-                        if (m->parameters[i])
-                            ea_register_var(ctx, m->parameters[i], NULL);
+                        if (m->params[i] && m->params[i]->name)
+                            ea_register_var(ctx, m->params[i]->name, NULL);
                     }
                 }
                 ea_walk(ctx, m->body);

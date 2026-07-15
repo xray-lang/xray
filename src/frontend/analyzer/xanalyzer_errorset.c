@@ -1341,8 +1341,9 @@ static XaSymbol *function_like_param_symbol(ErrorSetCtx *ctx, AstNode *node, XaS
     }
     if (node->type == AST_METHOD_DECL) {
         MethodDeclNode *md = &node->as.method_decl;
-        const char *name =
-            (md->parameters && index < md->param_count) ? md->parameters[index] : NULL;
+        const char *name = (md->params && index < md->param_count && md->params[index])
+                               ? md->params[index]->name
+                               : NULL;
         return name && fn_scope ? xa_scope_lookup_local(fn_scope, name) : NULL;
     }
     return NULL;
