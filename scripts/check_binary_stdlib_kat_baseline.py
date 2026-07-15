@@ -331,6 +331,25 @@ BASELINES = (
         ),
     ),
     Baseline(
+        category="HTTP_BODY_CONTRACT_CORPUS",
+        path="tests/stdlib/contracts/http/contract.toml",
+        contains=(
+            'module = "http"',
+            'id = "request-body-framing"',
+            'id = "response-body-framing"',
+            'id = "binary-body-string-shortcut"',
+            'diff_cases_manifest = "tests/stdlib/contracts/http/diff_cases.txt"',
+        ),
+    ),
+    Baseline(
+        category="HTTP_BODY_DIFF_CORPUS",
+        path="tests/stdlib/contracts/http/diff_cases.txt",
+        contains=(
+            "tests/diff/cases/semantics/stdlib/http_request_message_pure_direct.xr",
+            "tests/diff/cases/semantics/stdlib/http_response_text_pure_direct.xr",
+        ),
+    ),
+    Baseline(
         category="AOT_BASE64_LINK_BASELINE",
         path="tests/aot/filetests/link/core_base64.expect",
         contains=(
