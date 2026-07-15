@@ -5,6 +5,7 @@ generic_array_storage|generic_instantiation/generic_array_storage_loop.xr|257811
 generic_map_lookup|generic_instantiation/generic_map_lookup_loop.xr|257811
 generic_set_contains|generic_instantiation/generic_set_contains_loop.xr|30000
 generic_codesize_share|../../../aot/filetests/cgen/generic_codesize_share_plan.xr|42
+generic_codesize_force_clone|../../../aot/filetests/cgen/generic_array_storage_force_clone_plan.xr|257811
 generic_constraint_direct|generic_instantiation/generic_constraint_direct_loop.xr|980000
 generic_constraint_type_switch|generic_instantiation/generic_constraint_type_switch_loop.xr|260000
 closure_noescape|closure_noescape/direct_symbol_loop.xr|299985
