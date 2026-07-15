@@ -1,0 +1,10 @@
+// Foreign pointers are stable values, not owner borrows. Rebinding the source
+// pointer must not invalidate or freeze a previously derived offset pointer.
+import mem
+
+var base = mem.mutPtr<byte>(16)
+var offset = base.offset(1)
+base = mem.mutPtr<byte>(32)
+
+print(mem.addr(offset))
+print(mem.addr(base))

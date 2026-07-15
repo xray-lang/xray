@@ -1,0 +1,10 @@
+import mem
+
+fn run() {
+    var buffer = mem.alloc(8)
+    var ptr = unsafe { buffer.borrowPtr() }
+    buffer.resize(16)
+    unsafe { print(ptr.deref()) }
+}
+
+run()
