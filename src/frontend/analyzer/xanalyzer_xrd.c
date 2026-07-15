@@ -288,21 +288,23 @@ bool xa_effect_contract_parse_suffix(char *signature, XaEffectContract *contract
 }
 
 // Parse handle fields from "{ const fd: int, const type: string }"
-static XaBuiltinHandleField *parse_handle_fields(const char *p, int *out_count) {
+static bool parse_handle_fields(const char *p, XaBuiltinHandleField **out_fields, int *out_count) {
+    if (out_fields)
+        *out_fields = NULL;
     *out_count = 0;
 
     // Skip to opening brace
     while (*p && *p != '{')
         p++;
     if (*p != '{')
-        return NULL;
+        return true;
     p++;
 
     // Count commas to estimate field count
     int cap = 8;
     XaBuiltinHandleField *fields = xr_calloc(cap, sizeof(XaBuiltinHandleField));
     if (!fields)
-        return NULL;
+        return false;
 
     int count = 0;
     while (*p && *p != '}') {
@@ -332,6 +334,14 @@ static XaBuiltinHandleField *parse_handle_fields(const char *p, int *out_count) 
         p = read_ident(p, type_str, sizeof(type_str));
 
         if (name[0] && type_str[0]) {
+            if (!xrd_validate_signature_types(type_str)) {
+                for (int i = 0; i < count; i++) {
+                    xr_free((void *) fields[i].name);
+                    xr_free((void *) fields[i].type_str);
+                }
+                xr_free(fields);
+                return false;
+            }
             if (count >= cap) {
                 cap *= 2;
                 XR_REALLOC_OR_ABORT(fields, (size_t) cap * sizeof(XaBuiltinHandleField),
@@ -350,7 +360,11 @@ static XaBuiltinHandleField *parse_handle_fields(const char *p, int *out_count) 
     }
 
     *out_count = count;
-    return fields;
+    if (out_fields)
+        *out_fields = fields;
+    else
+        xr_free(fields);
+    return true;
 }
 
 // Parse a single .xrd file content into an XrdModule
@@ -405,7 +419,11 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
             p = skip_ws(p);
 
             int field_count = 0;
-            XaBuiltinHandleField *fields = parse_handle_fields(p, &field_count);
+            XaBuiltinHandleField *fields = NULL;
+            if (!parse_handle_fields(p, &fields, &field_count)) {
+                free_xrd_module(xrd);
+                return NULL;
+            }
 
             {
                 int idx = xrd->module.handle_count;
