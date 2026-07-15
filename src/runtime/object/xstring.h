@@ -154,7 +154,7 @@ XR_FUNC XrString *xr_global_pool_insert(XrGlobalStringPool *pool, XrVMRuntime *i
 XR_FUNC void xr_global_pool_freeze(XrGlobalStringPool *pool);
 XR_FUNC XrString *xr_global_pool_lookup(XrGlobalStringPool *pool, const char *chars, size_t len,
                                         uint32_t hash);
-XR_FUNC XrString *xr_compile_time_intern(XrVMRuntime *iso, const char *chars, size_t len);
+XR_FUNC XrString *xr_string_intern_permanent(XrVMRuntime *iso, const char *chars, size_t len);
 XR_FUNC size_t xr_global_pool_sweep(XrGlobalStringPool *pool);
 
 /* ========== String Creation ========== */

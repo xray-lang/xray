@@ -14,6 +14,7 @@
 #include "../../base/xlog.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xutf8.h"
+#include "../xisolate_api.h"
 #include <string.h>
 
 void xr_global_pool_init(XrGlobalStringPool *pool) {
@@ -163,6 +164,26 @@ XrString *xr_global_pool_insert(XrGlobalStringPool *pool, XrVMRuntime *iso, cons
         pool->permanent_count++;
     }
     return str;
+}
+
+XrString *xr_string_intern_permanent(XrVMRuntime *iso, const char *chars, size_t len) {
+    XrGlobalStringPool *pool = xr_isolate_get_string_pool(iso);
+    if (!pool) {
+        xr_log_warning("string", "string_intern_permanent: isolate or global pool is NULL");
+        return NULL;
+    }
+
+    uint32_t hash = xr_string_hash(chars, len);
+    xr_rwlock_rdlock(&pool->lock);
+    XrString *found = xr_global_pool_lookup(pool, chars, len, hash);
+    xr_rwlock_rdunlock(&pool->lock);
+    if (found && XR_STR_IS_PERMANENT(found))
+        return found;
+
+    xr_rwlock_wrlock(&pool->lock);
+    found = xr_global_pool_insert(pool, iso, chars, len, hash);
+    xr_rwlock_wrunlock(&pool->lock);
+    return found;
 }
 
 void xr_global_pool_freeze(XrGlobalStringPool *pool) {

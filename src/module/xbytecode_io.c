@@ -833,7 +833,7 @@ static XrValue bc_read_value(BcReader *r) {
             /* Bytecode literals are module-lifetime constants.  Re-enter the
              * permanent compiler pool so embedded-NUL/raw byte payloads remain
              * valid and pool sweeps cannot invalidate proto constants. */
-            XrString *s = xr_compile_time_intern(r->X, str, len);
+            XrString *s = xr_string_intern_permanent(r->X, str, len);
             xr_free(str);
             return s ? xr_string_value(s) : xr_null();
         }
