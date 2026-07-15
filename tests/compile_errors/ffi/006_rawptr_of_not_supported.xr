@@ -1,7 +1,7 @@
-fn badRawPtrOf() -> int {
+fn badPtrOf() -> int {
     var value = 1
-    var p = RawPtr<int>.of(value)
+    var p = Ptr<int>.of(value)
     return 0
 }
 
-badRawPtrOf()
+badPtrOf()

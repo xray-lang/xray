@@ -158,7 +158,7 @@ const char *xr_type_to_string(XrType *type) {
         const char *elem = type->container.element_type
                                ? xr_type_to_string(type->container.element_type)
                                : "<error>";
-        snprintf(buf, TYPE_STR_BUF_SIZE, "%s<%s>", type->ptr_is_mut ? "RawMut" : "RawPtr", elem);
+        snprintf(buf, TYPE_STR_BUF_SIZE, "%s<%s>", type->ptr_is_mut ? "MutPtr" : "Ptr", elem);
         return xr_pool_strdup(pool, buf);
     }
 

@@ -9,9 +9,9 @@ class Array<T> {
     // @lowered
     set(index: int, value: T)
     // @lowered
-    ptr() -> RawPtr<T>
+    ptr() -> Ptr<T>
     // @lowered
-    mutPtr() -> RawMut<T>
+    mutPtr() -> MutPtr<T>
     pop() -> T?
     shift() -> T?
     unshift(value: T)

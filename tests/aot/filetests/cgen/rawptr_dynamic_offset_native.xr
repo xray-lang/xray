@@ -1,5 +1,5 @@
 @c_export("xray_store_offset")
-fn storeOffset(p: RawMut<uint8>, offset: int, value: uint8) -> uint8 {
+fn storeOffset(p: MutPtr<uint8>, offset: int, value: uint8) -> uint8 {
     unsafe {
         p[offset + 1] = value
         return p[offset + 1]

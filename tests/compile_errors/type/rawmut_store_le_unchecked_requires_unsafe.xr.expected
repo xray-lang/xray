@@ -1,1 +1,1 @@
-RawMut.storeLE() must be inside an unsafe block
+MutPtr.storeLE() must be inside an unsafe block

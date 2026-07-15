@@ -1558,9 +1558,9 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         return xr_type_assignable(target->container.element_type, source->container.element_type);
     }
 
-    // Raw pointer compatibility (FFI). RawMut<T> is assignable to RawPtr<T>
+    // Raw pointer compatibility (FFI). MutPtr<T> is assignable to Ptr<T>
     // (mut -> const), not the reverse; pointee types are invariant. A null
-    // raw pointer (RawPtr.null()) is modelled as POINTER and assignable either way.
+    // raw pointer (Ptr.null()) is modelled as POINTER and assignable either way.
     if (target->kind == XR_KIND_POINTER && source->kind == XR_KIND_POINTER) {
         if (source->ptr_is_mut == false && target->ptr_is_mut == true)
             return false;  // const -> mut is not allowed

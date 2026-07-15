@@ -97,7 +97,7 @@
   :native-width no
   :typed-boundary no)
 
-; FFI raw pointer (RawPtr<T> / RawMut<T>). Carried as a native C pointer in AOT
+; FFI raw pointer (Ptr<T> / MutPtr<T>). Carried as a native C pointer in AOT
 ; hot code, but never treated as an owning/GC-traced pointer. Tagged/VM boundaries
 ; still encode it as an address-width integer so VM and AOT value semantics align.
 (define-aot-abi pointer

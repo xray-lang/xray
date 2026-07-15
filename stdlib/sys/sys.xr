@@ -266,7 +266,7 @@ class Dylib {
         this._open = handle != 0
     }
 
-    symbol(name: string) -> RawPtr<byte>? {
+    symbol(name: string) -> Ptr<byte>? {
         if (!this._open) { return null }
         return __dylibSymbol(this._handle, name)
     }

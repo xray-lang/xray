@@ -352,14 +352,14 @@ typedef enum {
                                 * args[3]=dst_off, args[4]=count */
     XI_BYTE_ARRAY_APPEND_FROM, /* args[0]=dst Array<byte>, args[1]=src Slice<byte>; result dst */
     XI_BYTE_ARRAY_REPEAT_FROM, /* args[0]=dst Array<byte>, args[1]=distance, args[2]=count */
-    XI_ARRAY_DATA_PTR,         /* args[0]=Array<T>/Span<T>; result RawPtr<T>/RawMut<T> address */
-    XI_STATIC_ADDR,            /* aux_int=shared slot; result RawPtr<T>/RawMut<T> to static data */
+    XI_ARRAY_DATA_PTR,         /* args[0]=Array<T>/Span<T>; result Ptr<T>/MutPtr<T> address */
+    XI_STATIC_ADDR,            /* aux_int=shared slot; result Ptr<T>/MutPtr<T> to static data */
     XI_LOCAL_ADDR,             /* args[0]=caller SSA slot; call-bound place address */
     XI_PLACE_LOAD,             /* args[0]=call-bound place; result pointee value */
     XI_PLACE_STORE,            /* args[0]=call-bound place, args[1]=value; result void */
 
     /* FFI raw-pointer memory access. The address is an address-width int
-     * (RawPtr<T>/RawMut<T> value). aux_int carries an XrFFIType width code in
+     * (Ptr<T>/MutPtr<T> value). aux_int carries an XrFFIType width code in
      * the low bits plus optional pointer-load flags (see xffi_sig.h) so both
      * backends pick the exact scalar access semantics without re-deriving them
      * from operand types. No bounds check: only valid inside `unsafe`
@@ -369,7 +369,7 @@ typedef enum {
      * STORE args: args[0]=address, args[1]=value; result void. */
     XI_PTR_LOAD,
     XI_PTR_STORE,
-    XI_PTR_COPY_NONOVERLAP, /* args[0]=dst RawMut<T>, args[1]=src RawPtr<T>, args[2]=count */
+    XI_PTR_COPY_NONOVERLAP, /* args[0]=dst MutPtr<T>, args[1]=src Ptr<T>, args[2]=count */
 
     /* Struct native storage: typed field access with compile-time layout.
      * args[0]=class_val for NEW; args[0]=struct for GET/SET.

@@ -7,5 +7,5 @@ struct AddressPair {
 @c_export("xray_rawptr_of_field_reject")
 fn rawptrOfFieldReject() -> int {
     var pair = AddressPair{value: 7}
-    return mem.addressOf(RawPtr<int>.of(pair.value))
+    return mem.addressOf(Ptr<int>.of(pair.value))
 }

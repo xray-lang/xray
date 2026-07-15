@@ -2595,22 +2595,22 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "run function body should be bounded");
     assert(count_between(fn, fn_end, "void *") > 0 &&
-           "RawPtr/RawMut locals must use native pointer C storage");
+           "Ptr/MutPtr locals must use native pointer C storage");
     assert(count_between(fn, fn_end, "*(uint8_t *)(") > 0 &&
-           "RawMut<uint8>/RawPtr<uint8> accesses must lower to direct pointer load/store");
+           "MutPtr<uint8>/Ptr<uint8> accesses must lower to direct pointer load/store");
     assert(count_between(fn, fn_end, "memcpy(") > 0 &&
-           "RawMut.copyFromNonOverlapping must lower to raw memcpy");
+           "MutPtr.copyFromNonOverlapping must lower to raw memcpy");
     assert(count_between(fn, fn_end, "(size_t)INT64_C(2)") > 0 &&
-           "constant-size RawMut.copyFromNonOverlapping should expose literal byte count");
+           "constant-size MutPtr.copyFromNonOverlapping should expose literal byte count");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
-           "RawPtr/RawMut hot locals must not round-trip through integer pointer casts");
+           "Ptr/MutPtr hot locals must not round-trip through integer pointer casts");
     assert(count_between(fn, fn_end, "memcpy((void *)(uintptr_t)") == 0 &&
-           "RawPtr memcpy must use native pointer locals directly");
+           "Ptr memcpy must use native pointer locals directly");
     const char *slice_call = strstr(fn, "xrt_span_from_array_slice(");
     assert(slice_call != NULL && "test should still exercise Slice<byte> ptr() after array slice");
     assert(count_between(fn, slice_call, "XR_TO_INT(") == 0 &&
            count_between(fn, fn_end, "XR_TAG_PTR") == 0 &&
-           "RawPtr/RawMut locals must stay in native address representation");
+           "Ptr/MutPtr locals must stay in native address representation");
     assert(count_between(fn, fn_end, "xrt_release(") == 1 &&
            "the owning Array<byte> must be released exactly once; raw pointers add no ARC");
 
@@ -2643,12 +2643,12 @@ TEST(cgen_rawptr_parallel_for_each_capture_keeps_owner_alive) {
                       "run(4)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    CHECK_RAWPTR_PAR_CAPTURE(ir != NULL, "RawMut capture inside parallel.forEach should lower");
+    CHECK_RAWPTR_PAR_CAPTURE(ir != NULL, "MutPtr capture inside parallel.forEach should lower");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     CHECK_RAWPTR_PAR_CAPTURE(code != NULL, "C code generation failed");
-    CHECK_RAWPTR_PAR_CAPTURE(!had_error, "RawMut capture inside parallel.forEach should generate");
+    CHECK_RAWPTR_PAR_CAPTURE(!had_error, "MutPtr capture inside parallel.forEach should generate");
 
     const char *run = code;
     while ((run = strstr(run, "static void test_run_")) != NULL) {
@@ -2674,9 +2674,9 @@ TEST(cgen_rawptr_parallel_for_each_capture_keeps_owner_alive) {
     const char *release = strstr(run, "xrt_release(xr_mkptr(");
     CHECK_RAWPTR_PAR_CAPTURE(release && release < run_end, "owner Array should still be released");
     CHECK_RAWPTR_PAR_CAPTURE(release > par_for,
-                             "Array owner borrowed by mutPtr must outlive RawMut parallel capture");
+                             "Array owner borrowed by mutPtr must outlive MutPtr parallel capture");
 
-    printf("  Generated RawMut parallel.forEach capture owner-lifetime path %zu bytes of C code\n",
+    printf("  Generated MutPtr parallel.forEach capture owner-lifetime path %zu bytes of C code\n",
            strlen(code));
     xr_free(code);
     xi_func_free(ir);
@@ -2880,7 +2880,7 @@ TEST(cgen_rawptr_load_le_uses_pointer_helper) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "RawPtr.loadLE should generate");
+    assert(!had_error && "Ptr.loadLE should generate");
 
     const char *fn = strstr(code, "static int64_t test_read_");
     assert(fn != NULL && "read declaration should exist");
@@ -2890,28 +2890,28 @@ TEST(cgen_rawptr_load_le_uses_pointer_helper) {
     assert(fn_end != NULL && "read function body should be bounded");
 
     assert(count_between(fn, fn_end, "xrt_ptr_load_u16_le_unchecked_raw(") > 0 &&
-           "RawPtr.loadLE<uint16> must lower to the raw pointer helper");
+           "Ptr.loadLE<uint16> must lower to the raw pointer helper");
     assert(count_between(fn, fn_end, "xrt_ptr_load_u32_le_unchecked_raw(") > 0 &&
-           "RawPtr.loadLE<uint32> must lower to the raw pointer helper");
+           "Ptr.loadLE<uint32> must lower to the raw pointer helper");
     assert(count_between(fn, fn_end, "xrt_ptr_load_u64_le_unchecked_raw(") > 0 &&
-           "RawPtr.loadLE<uint64> must lower to the raw pointer helper");
+           "Ptr.loadLE<uint64> must lower to the raw pointer helper");
     assert(count_between(fn, fn_end, "void *") > 0 &&
-           "RawPtr.loadLE should keep the data pointer in native C storage");
+           "Ptr.loadLE should keep the data pointer in native C storage");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
-           "RawPtr.loadLE hot path must not round-trip through integer pointer casts");
+           "Ptr.loadLE hot path must not round-trip through integer pointer casts");
     assert(count_between(fn, fn_end, "XR_FROM_INT(") == 0 &&
            count_between(fn, fn_end, "XR_TO_INT(") == 0 &&
-           "RawPtr.loadLE hot path must not box or unbox pointer values");
+           "Ptr.loadLE hot path must not box or unbox pointer values");
     assert(count_between(fn, fn_end, "xrt_byte_array_load_u16_le_") == 0 &&
            count_between(fn, fn_end, "xrt_byte_array_load_u32_le_") == 0 &&
            count_between(fn, fn_end, "xrt_byte_array_load_u64_le_") == 0 &&
-           "RawPtr loadLE must not route back through Array<byte>/Slice<byte> helpers");
+           "Ptr loadLE must not route back through Array<byte>/Slice<byte> helpers");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "RawPtr.loadLE hot path must not keep a dead ERR_CHECK");
+           "Ptr.loadLE hot path must not keep a dead ERR_CHECK");
     assert(!contains(code, "loadLE") &&
-           "RawPtr.loadLE method name must not survive as dynamic dispatch");
+           "Ptr.loadLE method name must not survive as dynamic dispatch");
 
-    printf("  Generated RawPtr loadLE fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated Ptr loadLE fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -2939,7 +2939,7 @@ TEST(cgen_rawmut_store_le_uses_pointer_helper) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "RawMut.storeLE should generate");
+    assert(!had_error && "MutPtr.storeLE should generate");
 
     const char *fn = strstr(code, "static void test_write_");
     assert(fn != NULL && "write declaration should exist");
@@ -2949,23 +2949,23 @@ TEST(cgen_rawmut_store_le_uses_pointer_helper) {
     assert(fn_end != NULL && "write function body should be bounded");
 
     assert(count_between(fn, fn_end, "xrt_ptr_store_u16_le_unchecked_raw(v") > 0 &&
-           "RawMut.storeLE<uint16> must pass a native pointer to the raw helper");
+           "MutPtr.storeLE<uint16> must pass a native pointer to the raw helper");
     assert(count_between(fn, fn_end, "xrt_ptr_store_u32_le_unchecked_raw(v") > 0 &&
-           "RawMut.storeLE<uint32> must pass a native pointer to the raw helper");
+           "MutPtr.storeLE<uint32> must pass a native pointer to the raw helper");
     assert(count_between(fn, fn_end, "xrt_ptr_store_u64_le_unchecked_raw(v") > 0 &&
-           "RawMut.storeLE<uint64> must pass a native pointer to the raw helper");
+           "MutPtr.storeLE<uint64> must pass a native pointer to the raw helper");
     assert(count_between(fn, fn_end, "void *") > 0 &&
-           "RawMut.storeLE should keep the data pointer in native C storage");
+           "MutPtr.storeLE should keep the data pointer in native C storage");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
-           "RawMut.storeLE hot path must not round-trip through integer pointer casts");
+           "MutPtr.storeLE hot path must not round-trip through integer pointer casts");
     assert(count_between(fn, fn_end, "xrt_byte_slice_store_") == 0 &&
-           "RawMut.storeLE must not route back through Slice<byte> helpers");
+           "MutPtr.storeLE must not route back through Slice<byte> helpers");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "RawMut.storeLE hot path must not keep a dead ERR_CHECK");
+           "MutPtr.storeLE hot path must not keep a dead ERR_CHECK");
     assert(!contains(code, "storeLE") &&
-           "RawMut.storeLE method name must not survive as dynamic dispatch");
+           "MutPtr.storeLE method name must not survive as dynamic dispatch");
 
-    printf("  Generated RawMut storeLE fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated MutPtr storeLE fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -2993,22 +2993,22 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "local RawPtr read chain should generate");
+    assert(!had_error && "local Ptr read chain should generate");
     assert(contains(code, "xrt_span_from_array_slice(") &&
            "in Slice<byte> call should pass a native span slice view");
     assert(!contains(code, "xrt_array_stack_slice_view_release(") &&
            "borrowed in Slice<byte> stack slice must not release storage");
     assert(!contains(code, "xrt_slice(") &&
-           "local RawPtr read chain must not force a heap slice view");
+           "local Ptr read chain must not force a heap slice view");
 
-    printf("  Generated stack-borrow slice RawPtr read-chain fast path %zu bytes of C code\n",
+    printf("  Generated stack-borrow slice Ptr read-chain fast path %zu bytes of C code\n",
            strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
-    const char *src = "fn leakPtr(src: in Slice<byte>) -> RawPtr<uint8> {\n"
+    const char *src = "fn leakPtr(src: in Slice<byte>) -> Ptr<uint8> {\n"
                       "    unsafe {\n"
                       "        return src.ptr()\n"
                       "    }\n"
@@ -3040,7 +3040,7 @@ TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
     XiModule *modules[] = {module};
     TestAotPlan plan;
     bool prepared = test_aot_plan_try_prepare(&plan, modules, 1, 0);
-    assert(!prepared && "returned borrowed RawPtr must fail AOT planning");
+    assert(!prepared && "returned borrowed Ptr must fail AOT planning");
     assert(plan.bundle.error_msg != NULL);
     assert(strstr(plan.bundle.error_msg, "address borrow escapes its verified lifetime") != NULL);
     test_aot_plan_free(&plan);
@@ -3049,7 +3049,7 @@ TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
         xi_module_free(module);
     }
 
-    printf("  Rejected returned RawPtr that escapes its verified borrow lifetime\n");
+    printf("  Rejected returned Ptr that escapes its verified borrow lifetime\n");
     xi_func_free(ir);
 }
 

@@ -69,9 +69,9 @@ static XrType *xa_call_raw_pointer_type_namespace(XaInferContext *ctx, AstNode *
         !ne->type_args[0])
         return NULL;
     bool is_mut = false;
-    if (strcmp(ne->class_name, "RawPtr") == 0) {
+    if (strcmp(ne->class_name, "Ptr") == 0) {
         is_mut = false;
-    } else if (strcmp(ne->class_name, "RawMut") == 0) {
+    } else if (strcmp(ne->class_name, "MutPtr") == 0) {
         is_mut = true;
     } else {
         return NULL;
@@ -107,7 +107,7 @@ static void xa_check_mem_address_of_arg(XaInferContext *ctx, AstNode *arg_node, 
         return;
     XrLocation loc = {.file = ctx->file_path, .line = arg_node->line, .column = arg_node->column};
     char msg[192];
-    snprintf(msg, sizeof(msg), "mem.addressOf expects RawPtr<T> or RawMut<T>, got '%s'",
+    snprintf(msg, sizeof(msg), "mem.addressOf expects Ptr<T> or MutPtr<T>, got '%s'",
              arg_type ? xr_type_to_string(arg_type) : "unknown");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                &loc);
@@ -368,8 +368,8 @@ static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *nod
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
             ptr_type->ptr_is_mut
-                ? "RawMut.of requires exactly one top-level mutable static name or field"
-                : "RawPtr.of requires exactly one top-level const name",
+                ? "MutPtr.of requires exactly one top-level mutable static name or field"
+                : "Ptr.of requires exactly one top-level const name",
             &loc);
         return;
     }
@@ -386,7 +386,7 @@ static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *nod
                 !xa_type_has_fixed_layout_data_object(base_type)) {
                 xa_analyzer_add_diagnostic(
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                    "RawMut.of can only take a field of a top-level mutable aggregate static "
+                    "MutPtr.of can only take a field of a top-level mutable aggregate static "
                     "object with static field layout",
                     &aloc);
             }
@@ -397,7 +397,7 @@ static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *nod
             !xa_rawmut_type_is_mutable_static_object(sym_type)) {
             char message[256];
             snprintf(message, sizeof(message),
-                     "RawMut.of classified this expression as %s (%s); only a top-level mutable "
+                     "MutPtr.of classified this expression as %s (%s); only a top-level mutable "
                      "scalar or aggregate static object has stable mutable storage",
                      xa_address_kind_name(address.kind),
                      xa_address_reject_reason_name(address.rejection));
@@ -410,7 +410,7 @@ static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *nod
         sym->kind != XA_SYM_VARIABLE || !sym->is_const || sym->is_shared) {
         char message[256];
         snprintf(message, sizeof(message),
-                 "RawPtr.of classified this expression as %s (%s); only a top-level const "
+                 "Ptr.of classified this expression as %s (%s); only a top-level const "
                  "static object has stable readonly storage",
                  xa_address_kind_name(address.kind),
                  xa_address_reject_reason_name(address.rejection));
@@ -4798,10 +4798,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return_type = xa_byte_slice_reinterpret_return_type(ctx, node, call);
 
     if (xa_call_is_rawptr_load_le(call, callee_obj_type))
-        return_type = xa_load_le_return_type(ctx, node, call, "RawPtr.loadLE<T>()", false);
+        return_type = xa_load_le_return_type(ctx, node, call, "Ptr.loadLE<T>()", false);
 
     if (xa_call_is_rawmut_store_le(call, callee_obj_type)) {
-        (void) xa_byte_slice_typed_type_arg(ctx, node, call, "RawMut.storeLE<T>()", false);
+        (void) xa_byte_slice_typed_type_arg(ctx, node, call, "MutPtr.storeLE<T>()", false);
         return_type = xr_type_new_unit(ctx->analyzer->isolate);
     }
 

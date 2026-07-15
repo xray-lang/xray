@@ -1,10 +1,10 @@
 // mem.copy/move/set/compare + mem.cacheLineSize (task 147 §7.4/§7.5). libc
 // memcpy/memmove/memset/memcmp are the shared semantics; VM decodes raw
 // pointers from address-ints, AOT uses the native .ptr — both must agree.
-// RawMut args flow into RawPtr params via mut->const coercion.
+// MutPtr args flow into Ptr params via mut->const coercion.
 import mem
-@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
-@extern("C") fn free(p: RawMut<byte>)
+@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
+@extern("C") fn free(p: MutPtr<byte>)
 
 print(mem.cacheLineSize())
 

@@ -1454,7 +1454,7 @@ AstNode *xr_parse_recoverable(Parser *parser) {
 // Uses lookahead to detect identifier<...>( pattern, avoiding confusion with comparison
 // Uses space sensitivity: foo<T>() is generic, foo < T is comparison
 static bool is_raw_pointer_type_name(const char *name) {
-    return name && (strcmp(name, "RawPtr") == 0 || strcmp(name, "RawMut") == 0);
+    return name && (strcmp(name, "Ptr") == 0 || strcmp(name, "MutPtr") == 0);
 }
 
 // Returns: number of type args parsed, 0 means not a generic call/type namespace.

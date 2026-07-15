@@ -1125,12 +1125,12 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
 
             if (strcmp(name_buf, "Task") == 0 && argc >= 1) {
                 type = xr_type_new_task(X, args[0]);
-            } else if (strcmp(name_buf, "RawPtr") == 0 && argc >= 1) {
+            } else if (strcmp(name_buf, "Ptr") == 0 && argc >= 1) {
                 // Raw pointers must round-trip as XR_KIND_POINTER (not a generic
                 // named instance) so stdlib-function pointer params compare equal
-                // to @extern-derived RawPtr/RawMut args (mirrors xtype_ref_resolve).
+                // to @extern-derived Ptr/MutPtr args (mirrors xtype_ref_resolve).
                 type = xr_type_new_pointer(X, args[0], false);
-            } else if (strcmp(name_buf, "RawMut") == 0 && argc >= 1) {
+            } else if (strcmp(name_buf, "MutPtr") == 0 && argc >= 1) {
                 type = xr_type_new_pointer(X, args[0], true);
             } else if (argc > 0) {
                 type = xr_type_new_generic_instance(X, name_buf, NULL, args, argc);

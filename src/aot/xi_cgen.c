@@ -4162,7 +4162,7 @@ static bool cg_no_alloc_type_name_allocates(const char *type) {
         return true;
     if (strncmp(type, "Json", 4) == 0)
         return true;
-    if (strncmp(type, "RawPtr", 6) == 0 || strncmp(type, "RawMut", 6) == 0 ||
+    if (strncmp(type, "Ptr", 6) == 0 || strncmp(type, "MutPtr", 6) == 0 ||
         strncmp(type, "CFn", 3) == 0)
         return false;
     return type[0] >= 'A' && type[0] <= 'Z';

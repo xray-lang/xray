@@ -1,6 +1,6 @@
 // anchor: rawmut-store-le-unchecked-shared-core
-// RawMut<byte>.storeLE<T> is the write-side pair of
-// RawPtr<byte>.loadLE<T>: unsafe, unchecked, little-endian, and
+// MutPtr<byte>.storeLE<T> is the write-side pair of
+// Ptr<byte>.loadLE<T>: unsafe, unchecked, little-endian, and
 // intentionally limited to uint16/uint32/uint64.
 fn run() {
     var bytes = Array<byte>(16)
@@ -11,7 +11,7 @@ fn run() {
         p.storeLE<uint32>(4, 0x01020304)
         p.storeLE<uint64>(8, 0x0102030405060708)
 
-        var rp: RawPtr<byte> = p
+        var rp: Ptr<byte> = p
         print(int(rp.loadLE<uint16>(1)))
         print(int(rp.loadLE<uint32>(4)))
         print(int(rp.loadLE<uint64>(8)))

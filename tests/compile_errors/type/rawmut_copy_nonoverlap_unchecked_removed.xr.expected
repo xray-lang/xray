@@ -1,1 +1,1 @@
-RawMut has no member 'copyFromNonOverlappingUnchecked'
+MutPtr has no member 'copyFromNonOverlappingUnchecked'

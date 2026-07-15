@@ -1374,7 +1374,7 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
     if (node->type == AST_NEW_EXPR) {
         NewExprNode *ne = &node->as.new_expr;
         if (ne->class_name &&
-            (strcmp(ne->class_name, "RawPtr") == 0 || strcmp(ne->class_name, "RawMut") == 0))
+            (strcmp(ne->class_name, "Ptr") == 0 || strcmp(ne->class_name, "MutPtr") == 0))
             return;
         if (ne->type_arg_count > 0) {
             XaGenericDecl *decl = registry_find(registry, ne->class_name);
@@ -1693,7 +1693,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
     if (node->type == AST_NEW_EXPR) {
         NewExprNode *ne = &node->as.new_expr;
         if (ne->class_name &&
-            (strcmp(ne->class_name, "RawPtr") == 0 || strcmp(ne->class_name, "RawMut") == 0))
+            (strcmp(ne->class_name, "Ptr") == 0 || strcmp(ne->class_name, "MutPtr") == 0))
             return;
         if (ne->type_arg_count > 0 && ne->class_name) {
             XaGenericDecl *decl = registry_find(registry, ne->class_name);

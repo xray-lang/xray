@@ -2791,7 +2791,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                                            v->args[a]))
                     return;
             } else if (p_ptr) {
-                /* A RawPtr<T>/RawMut<T> argument is an address-width int; emit it
+                /* A Ptr<T>/MutPtr<T> argument is an address-width int; emit it
                  * as I64 and cast straight to the C pointer type. Routing through
                  * the ABI-slot rep would re-box it to a tagged XrValue. */
                 fprintf(out, "(%s)(intptr_t)(", p_ptr);
@@ -9986,7 +9986,7 @@ static const char *cg_ffi_ptr_le_store_helper(uint8_t code) {
 }
 
 /* Unsafe Array<T>/Span<T> data pointer borrow. VM/tagged values keep the address
- * as an integer; AOT hot code carries RawPtr/RawMut as a non-owning C pointer. */
+ * as an integer; AOT hot code carries Ptr/MutPtr as a non-owning C pointer. */
 static const XiConstLiteral *xicgen_static_addr_resolve_literal(XiCgenCtx *ctx, const XiFunc *f,
                                                                 int64_t slot, bool want_mutable,
                                                                 const XiModule **out_module,
@@ -10108,7 +10108,7 @@ static bool xicgen_emit_static_addr_symbol_name(XiCgenCtx *ctx, FILE *out, const
     fprintf(stderr,
             "[xi_cgen] ERROR: %s requires a materialized freestanding static %sobject; "
             "'%s.%s' is not addressable\n",
-            want_mutable ? "RawMut.of" : "RawPtr.of", want_mutable ? "mutable " : "const ",
+            want_mutable ? "MutPtr.of" : "Ptr.of", want_mutable ? "mutable " : "const ",
             module && module->name ? module->name : "?",
             cg_module_const_slot_name(module, slot) ? cg_module_const_slot_name(module, slot)
                                                     : "?");
@@ -10135,7 +10135,7 @@ static void xicgen_static_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         (!want_mutable && address->provenance.owner != XR_STORAGE_MODULE)) {
         fprintf(stderr,
                 "[xi_cgen] ERROR: %s requires verified stable %s storage provenance for '%s.%s'\n",
-                want_mutable ? "RawMut.of" : "RawPtr.of", want_mutable ? "mutable" : "readonly",
+                want_mutable ? "MutPtr.of" : "Ptr.of", want_mutable ? "mutable" : "readonly",
                 module && module->name ? module->name : "?",
                 module && slot >= 0 && cg_module_const_slot_name(module, slot)
                     ? cg_module_const_slot_name(module, slot)
@@ -10362,7 +10362,7 @@ static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     }
 }
 
-/* memcpy(dst, src, byte_count) for RawMut<T>.copyFromNonOverlapping. */
+/* memcpy(dst, src, byte_count) for MutPtr<T>.copyFromNonOverlapping. */
 static void xicgen_ptr_copy_nonoverlap(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *prefix) {
     (void) f;
@@ -11443,7 +11443,7 @@ static const char *xicgen_type_label_noalloc(const XrType *type) {
         case XR_KIND_FIXED_ARRAY:
             return "fixed array";
         case XR_KIND_POINTER:
-            return type->ptr_is_mut ? "RawMut" : "RawPtr";
+            return type->ptr_is_mut ? "MutPtr" : "Ptr";
         case XR_KIND_RUNE:
             return "rune";
         case XR_KIND_RECORD:

@@ -59,21 +59,21 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 #### `unsafe { }`
 
-`unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `@extern` 函数、读取/写入 `RawPtr<T>` / `RawMut<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
+`unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `@extern` 函数、读取/写入 `Ptr<T>` / `MutPtr<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
-@extern("C") fn free(p: RawMut<byte>)
+@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
+@extern("C") fn free(p: MutPtr<byte>)
 
 var p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果
 unsafe {
-    p[0] = 7                      // RawMut 写入必须在 unsafe 内
+    p[0] = 7                      // MutPtr 写入必须在 unsafe 内
     print(p.deref())              // 解引用必须在 unsafe 内
     free(p)                       // @extern 调用必须在 unsafe 内
 }
 ```
 
-`unsafe` 不改变表达式的结果类型；多语句块的最后一个表达式语句产生块值，否则结果为 `()`。`unsafe` 也不关闭普通类型检查：`RawPtr<T>` 仍不可写，`RawMut<T>` 才能写入；空指针、越界、生命周期和对齐由调用方负责。
+`unsafe` 不改变表达式的结果类型；多语句块的最后一个表达式语句产生块值，否则结果为 `()`。`unsafe` 也不关闭普通类型检查：`Ptr<T>` 仍不可写，`MutPtr<T>` 才能写入；空指针、越界、生命周期和对齐由调用方负责。
 
 #### `comptime expr`
 
@@ -627,21 +627,21 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 #### `unsafe { }`
 
-`unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `@extern` functions, reads/writes through `RawPtr<T>` / `RawMut<T>` foreign memory, and `deref()` calls that dereference raw pointers.
+`unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `@extern` functions, reads/writes through `Ptr<T>` / `MutPtr<T>` foreign memory, and `deref()` calls that dereference raw pointers.
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> RawMut<byte>
-@extern("C") fn free(p: RawMut<byte>)
+@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
+@extern("C") fn free(p: MutPtr<byte>)
 
 var p = unsafe { malloc(1) }      // the final expression is the block result
 unsafe {
-    p[0] = 7                      // RawMut writes must be inside unsafe
+    p[0] = 7                      // MutPtr writes must be inside unsafe
     print(p.deref())              // dereference must be inside unsafe
     free(p)                       // @extern calls must be inside unsafe
 }
 ```
 
-`unsafe` does not change the expression's result type; in a multi-statement block, the trailing expression statement yields the block value, otherwise the result is `()`. `unsafe` also does not disable ordinary type checking: `RawPtr<T>` is still read-only, and writes require `RawMut<T>`; null pointers, bounds, lifetimes, and alignment remain the caller's responsibility.
+`unsafe` does not change the expression's result type; in a multi-statement block, the trailing expression statement yields the block value, otherwise the result is `()`. `unsafe` also does not disable ordinary type checking: `Ptr<T>` is still read-only, and writes require `MutPtr<T>`; null pointers, bounds, lifetimes, and alignment remain the caller's responsibility.
 
 #### `comptime expr`
 

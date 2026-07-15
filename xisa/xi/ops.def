@@ -750,7 +750,7 @@
   :targets (vm-bytecode aot-c aot-verify))
 
 ; Unsafe container data-pointer borrow. Returns the current element-storage
-; address as a RawPtr<T>/RawMut<T> address-width scalar. The caller must uphold
+; address as a Ptr<T>/MutPtr<T> address-width scalar. The caller must uphold
 ; lifetime, capacity, bounds and aliasing rules.
 (define-xi-op xi.array.data.ptr
   :class memory-read
@@ -763,7 +763,7 @@
   :targets (vm-bytecode aot-c aot-verify))
 
 ; Freestanding static-data address. Returns the address of an already
-; materialized top-level const object as RawPtr<T>. aux_int is the module
+; materialized top-level const object as Ptr<T>. aux_int is the module
 ; shared slot; imported slots resolve to the target module's weak data symbol.
 ; This is deliberately narrower than a general address-of/lvalue op.
 (define-xi-op xi.static.addr
@@ -778,7 +778,7 @@
   :observable ()
   :targets (aot-c aot-verify))
 
-; Call-bound address of a caller-owned SSA storage slot. Unlike RawPtr/RawMut,
+; Call-bound address of a caller-owned SSA storage slot. Unlike Ptr/MutPtr,
 ; this value is verifier-confined to a ref/out call interval and cannot escape.
 (define-xi-op xi.local.addr
   :class pure

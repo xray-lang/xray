@@ -45,5 +45,5 @@ fn xray_scalar_string_print() -> int {
 
 @c_export("xray_scalar_null_addr")
 fn xray_scalar_null_addr() -> int {
-    return mem.addressOf(RawPtr<int?>.of(NOTHING))
+    return mem.addressOf(Ptr<int?>.of(NOTHING))
 }

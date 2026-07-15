@@ -3409,29 +3409,29 @@ expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_local_reject.xr" \
     "$WORK/freestanding_rawptr_of_local_reject" \
     "$WORK/freestanding_rawptr_of_local_reject.log" \
-    "freestanding-profile/static-address: rejects local RawPtr.of" \
-    "RawPtr.of classified this expression as stack local (escape cannot be proven)"
+    "freestanding-profile/static-address: rejects local Ptr.of" \
+    "Ptr.of classified this expression as stack local (escape cannot be proven)"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawptr_of_import_nonweak_reject.xr" \
     "$WORK/freestanding_rawptr_of_import_nonweak_reject" \
     "$WORK/freestanding_rawptr_of_import_nonweak_reject.log" \
-    "freestanding-profile/static-address: rejects imported non-weak RawPtr.of" \
+    "freestanding-profile/static-address: rejects imported non-weak Ptr.of" \
     "requires @weak for cross-module data access"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_static_reject.xr" \
     "$WORK/freestanding_rawmut_of_static_reject" \
     "$WORK/freestanding_rawmut_of_static_reject.log" \
-    "freestanding-profile/static-address: rejects RawMut.of static const" \
-    "RawMut.of classified this expression as module static (readonly storage)"
+    "freestanding-profile/static-address: rejects MutPtr.of static const" \
+    "MutPtr.of classified this expression as module static (readonly storage)"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_rawmut_of_string_var_reject.xr" \
     "$WORK/freestanding_rawmut_of_string_var_reject" \
     "$WORK/freestanding_rawmut_of_string_var_reject.log" \
-    "freestanding-profile/static-address: rejects RawMut.of string var" \
-    "RawMut.of classified this expression as module static (addressable)"
+    "freestanding-profile/static-address: rejects MutPtr.of string var" \
+    "MutPtr.of classified this expression as module static (addressable)"
 
 expect_freestanding_reject \
     "$PROJECT_DIR/tests/aot/filetests/link/freestanding_heap_constructs_reject.xr" \

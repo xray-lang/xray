@@ -359,7 +359,7 @@ static inline XrValue xrt_mem_address_of(XrValue ptr) {
 /* Volatile load/store (MMIO). `size` in {1,2,4,8} selects the access width; the
  * `volatile` qualifier forbids the compiler from eliding or reordering the
  * access. Native byte order (matches the VM's sized memcpy in mem.c). The
- * generic mem.volatileLoad<T> sugar is a follow-up (RawPtr method + IR op). */
+ * generic mem.volatileLoad<T> sugar is a follow-up (Ptr method + IR op). */
 static inline XrValue xrt_mem_volatile_load(XrValue ptr, XrValue size) {
     void *p = ptr.ptr;
     uint64_t v = 0;
