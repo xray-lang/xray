@@ -156,6 +156,7 @@ typedef struct XgBodyCollect {
     XgFuncId owner_func_id;
     XgModuleId module_id;
     XgClassId current_class_id;
+    uint8_t body_kind;
     XgLocalType *locals;
     uint32_t nlocals;
     uint32_t local_cap;
@@ -6651,11 +6652,14 @@ static void body_ensure_hash_eq(XgBodyCollect *bc, uint32_t key_type_key) {
     body_ensure_user_hash_eq(bc, key_type_key);
 }
 
-static XgMapShapeId
-body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
-                               const XrTypeRef *type_annotation, uint32_t source_span_id,
-                               uint32_t *out_receiver_type_key, uint32_t *out_key_type_key,
-                               uint32_t *out_value_type_key, uint8_t *out_container_kind) {
+static bool body_owner_is_module_init(const XgBodyCollect *bc) {
+    return bc && bc->body_kind == XG_BODY_MODULE_INIT;
+}
+
+static XgMapShapeId body_add_map_shape_for_literal(
+    XgBodyCollect *bc, const AstNode *node, const XrTypeRef *type_annotation,
+    uint32_t source_span_id, bool readonly_static_candidate, uint32_t *out_receiver_type_key,
+    uint32_t *out_key_type_key, uint32_t *out_value_type_key, uint8_t *out_container_kind) {
     XgMapShapeSummary shape;
     uint8_t container_kind;
     uint8_t annotated_container_kind = 0;
@@ -6669,6 +6673,8 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
     uint32_t *const_ids = const_stack;
     bool const_ids_heap = false;
     bool dense_enum_domain = false;
+    bool all_entries_const = true;
+    bool all_keys_are_string_literals = true;
     if (out_receiver_type_key)
         *out_receiver_type_key = 0;
     if (out_key_type_key)
@@ -6707,6 +6713,10 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
         if (value_type_key == 0 && vt != 0)
             value_type_key = vt;
         const_ids[i] = body_const_expr_id(bc, keys ? keys[i] : NULL);
+        if (const_ids[i] == 0 || (values && body_const_expr_id(bc, values[i]) == 0))
+            all_entries_const = false;
+        if (!keys || !keys[i] || keys[i]->type != AST_LITERAL_STRING)
+            all_keys_are_string_literals = false;
     }
     if (key_type_key == 0 || (container_kind == XG_MAP_CONTAINER_MAP && value_type_key == 0)) {
         if (const_ids_heap)
@@ -6720,13 +6730,20 @@ body_add_map_shape_for_literal(XgBodyCollect *bc, const AstNode *node,
     shape.owner_func_id = bc->owner_func_id;
     shape.source_span_id = source_span_id;
     shape.container_kind = container_kind;
-    shape.source = XG_MAP_SHAPE_SRC_LITERAL;
+    if (readonly_static_candidate && count > 0 && all_entries_const &&
+        all_keys_are_string_literals) {
+        shape.source = XG_MAP_SHAPE_SRC_STATIC;
+    } else {
+        shape.source = XG_MAP_SHAPE_SRC_LITERAL;
+    }
     shape.key_type_key = key_type_key;
     shape.value_type_key = container_kind == XG_MAP_CONTAINER_SET ? 0 : value_type_key;
     shape.entry_start = count > 0 ? (uint32_t) (bc->evidence->nmap_entries + 1) : 0;
     shape.entry_count = (uint16_t) (count < UINT16_MAX ? count : UINT16_MAX);
     shape.literal_count = (uint32_t) (count > 0 ? count : 0);
     shape.flags = XG_MAP_SHAPE_LITERAL;
+    if (shape.source == XG_MAP_SHAPE_SRC_STATIC)
+        shape.flags |= XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY;
     if (count > 0 && count <= XG_SMALL_MAP_LITERAL_MAX)
         shape.flags |= XG_MAP_SHAPE_SMALL;
     if (container_kind == XG_MAP_CONTAINER_MAP &&
@@ -8566,8 +8583,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                  node->as.var_decl.initializer->type == AST_SET_LITERAL)) {
                 map_shape_id = body_add_map_shape_for_literal(
                     bc, node->as.var_decl.initializer, node->as.var_decl.type_annotation,
-                    (uint32_t) node->line, &map_receiver_type_key, &map_key_type_key,
-                    &map_value_type_key, &map_container_kind);
+                    (uint32_t) node->line,
+                    node->type == AST_CONST_DECL && body_owner_is_module_init(bc),
+                    &map_receiver_type_key, &map_key_type_key, &map_value_type_key,
+                    &map_container_kind);
                 if (type_key == 0 && map_receiver_type_key != 0)
                     type_key = map_receiver_type_key;
             }
@@ -9221,6 +9240,7 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     bc.owner_func_id = pending->func_id;
     bc.module_id = pending->module_id;
     bc.current_class_id = pending->current_class_id;
+    bc.body_kind = pending->kind;
     bc.return_type = pending->method     ? pending->method->return_type
                      : pending->function ? pending->function->return_type
                                          : NULL;

@@ -2946,15 +2946,50 @@ static bool map_shape_supports_bool_direct(const XgMapShapeSummary *shape) {
            shape->entry_count > 0 && shape->entry_count <= 2;
 }
 
-static uint8_t map_shape_action_for(const XgMapShapeSummary *shape) {
+static bool map_shape_static_evidence_valid(const XgGlobalEvidence *evidence,
+                                            const XgMapShapeSummary *shape) {
+    const XgBodySummary *owner = NULL;
+    if (!evidence || !shape || shape->source != XG_MAP_SHAPE_SRC_STATIC ||
+        (shape->flags & (XG_MAP_SHAPE_LITERAL | XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY)) !=
+            (XG_MAP_SHAPE_LITERAL | XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY) ||
+        shape->entry_count == 0 || shape->entry_count != shape->literal_count ||
+        shape->entry_start == 0)
+        return false;
+    for (uint32_t i = 0; i < evidence->nbodies; i++) {
+        if (evidence->bodies[i].func_id == shape->owner_func_id) {
+            owner = &evidence->bodies[i];
+            break;
+        }
+    }
+    if (!owner || owner->module_id != shape->module_id || owner->kind != XG_BODY_MODULE_INIT)
+        return false;
+    if ((uint64_t) shape->entry_start - 1u + shape->entry_count > evidence->nmap_entries)
+        return false;
+    for (uint32_t i = 0; i < shape->entry_count; i++) {
+        const XgMapEntrySummary *entry = &evidence->map_entries[shape->entry_start - 1u + i];
+        uint8_t required = XG_MAP_ENTRY_CONST_KEY;
+        if (shape->container_kind == XG_MAP_CONTAINER_MAP)
+            required |= XG_MAP_ENTRY_CONST_VALUE;
+        if (entry->shape_id != shape->shape_id || entry->entry_ordinal != i ||
+            (entry->flags & required) != required)
+            return false;
+    }
+    return true;
+}
+
+static uint8_t map_shape_action_for(const XgGlobalEvidence *evidence,
+                                    const XgMapShapeSummary *shape) {
     if (!shape || !map_container_kind_valid(shape->container_kind) ||
         !map_shape_source_valid(shape->source))
         return XAOT_MAP_SHAPE_REJECT;
     if ((shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0 && !map_shape_supports_bool_direct(shape))
         return XAOT_MAP_SHAPE_REJECT;
     if ((shape->flags & (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY)) ==
-        (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY))
-        return XAOT_MAP_SHAPE_READONLY_STATIC_TABLE;
+        (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY)) {
+        return map_shape_static_evidence_valid(evidence, shape)
+                   ? XAOT_MAP_SHAPE_READONLY_STATIC_TABLE
+                   : XAOT_MAP_SHAPE_REJECT;
+    }
     if ((shape->flags & XG_MAP_SHAPE_DENSE_ENUM) != 0)
         return XAOT_MAP_SHAPE_DENSE_ENUM_TABLE;
     if ((shape->flags & XG_MAP_SHAPE_DENSE_INT) != 0)
@@ -2990,7 +3025,8 @@ static uint32_t map_shape_evidence_for(const XgMapShapeSummary *shape) {
     return evidence;
 }
 
-static bool xaot_bundle_add_map_shape_plan(XaotBundle *bundle, const XgMapShapeSummary *shape) {
+static bool xaot_bundle_add_map_shape_plan(XaotBundle *bundle, const XgGlobalEvidence *evidence,
+                                           const XgMapShapeSummary *shape) {
     XaotMapShapePlan *plan;
     if (!bundle || !shape)
         return false;
@@ -3009,7 +3045,7 @@ static bool xaot_bundle_add_map_shape_plan(XaotBundle *bundle, const XgMapShapeS
     plan->entry_start = shape->entry_start;
     plan->entry_count = shape->entry_count;
     plan->literal_count = shape->literal_count;
-    plan->action = map_shape_action_for(shape);
+    plan->action = map_shape_action_for(evidence, shape);
     plan->evidence = map_shape_evidence_for(shape);
     plan->unproven_reason = map_shape_reason_for(shape);
     plan->shape_hash = shape->shape_hash;
@@ -3020,7 +3056,7 @@ static bool xaot_bundle_add_map_shape_plans(XaotBundle *bundle, const XgGlobalEv
     if (!bundle || !evidence)
         return false;
     for (uint32_t i = 0; i < evidence->nmap_shapes; i++) {
-        if (!xaot_bundle_add_map_shape_plan(bundle, &evidence->map_shapes[i]))
+        if (!xaot_bundle_add_map_shape_plan(bundle, evidence, &evidence->map_shapes[i]))
             return false;
     }
     return true;
@@ -3108,12 +3144,15 @@ static uint8_t key_access_action_for(const XgGlobalEvidence *evidence,
             return XAOT_KEY_ACCESS_REJECT;
         bool lookup_op = access->op == XG_KEY_ACCESS_GET || access->op == XG_KEY_ACCESS_INDEX_GET ||
                          access->op == XG_KEY_ACCESS_HAS;
-        if (lookup_op && access->container_kind == XG_MAP_CONTAINER_MAP &&
+        bool static_table = (shape->flags & (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY)) ==
+                            (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY);
+        if (lookup_op && !static_table && access->container_kind == XG_MAP_CONTAINER_MAP &&
             (shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0 && map_shape_supports_bool_direct(shape))
             return XAOT_KEY_ACCESS_BOOL_DIRECT_LOOKUP;
-        if (lookup_op && (shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
+        if (lookup_op && !static_table &&
+            (shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
             return XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX;
-        if (lookup_op && (shape->flags & XG_MAP_SHAPE_SMALL) != 0)
+        if (lookup_op && !static_table && (shape->flags & XG_MAP_SHAPE_SMALL) != 0)
             return XAOT_KEY_ACCESS_INLINE_SMALL_SCAN;
     }
     hash_eq = xg_global_evidence_find_hash_eq(evidence, access->key_type_key);

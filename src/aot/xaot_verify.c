@@ -4917,7 +4917,34 @@ static bool verify_options_plan_rederives(const XgGlobalEvidence *ev, const Xaot
     return true;
 }
 
-static uint8_t verify_map_shape_action_for(const XgMapShapeSummary *shape) {
+static bool verify_map_shape_static_evidence_valid(const XgGlobalEvidence *ev,
+                                                   const XgMapShapeSummary *shape) {
+    const XgBodySummary *owner;
+    if (!ev || !shape || shape->source != XG_MAP_SHAPE_SRC_STATIC ||
+        (shape->flags & (XG_MAP_SHAPE_LITERAL | XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY)) !=
+            (XG_MAP_SHAPE_LITERAL | XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY) ||
+        shape->entry_count == 0 || shape->entry_count != shape->literal_count ||
+        shape->entry_start == 0)
+        return false;
+    owner = verify_find_evidence_body_by_func(ev, shape->owner_func_id);
+    if (!owner || owner->module_id != shape->module_id || owner->kind != XG_BODY_MODULE_INIT)
+        return false;
+    if ((uint64_t) shape->entry_start - 1u + shape->entry_count > ev->nmap_entries)
+        return false;
+    for (uint32_t i = 0; i < shape->entry_count; i++) {
+        const XgMapEntrySummary *entry = &ev->map_entries[shape->entry_start - 1u + i];
+        uint8_t required = XG_MAP_ENTRY_CONST_KEY;
+        if (shape->container_kind == XG_MAP_CONTAINER_MAP)
+            required |= XG_MAP_ENTRY_CONST_VALUE;
+        if (entry->shape_id != shape->shape_id || entry->entry_ordinal != i ||
+            (entry->flags & required) != required)
+            return false;
+    }
+    return true;
+}
+
+static uint8_t verify_map_shape_action_for(const XgGlobalEvidence *ev,
+                                           const XgMapShapeSummary *shape) {
     if (!shape || !verify_map_container_kind_valid(shape->container_kind) ||
         !verify_map_shape_source_valid(shape->source))
         return XAOT_MAP_SHAPE_REJECT;
@@ -4925,8 +4952,11 @@ static uint8_t verify_map_shape_action_for(const XgMapShapeSummary *shape) {
         !verify_map_shape_supports_bool_direct(shape))
         return XAOT_MAP_SHAPE_REJECT;
     if ((shape->flags & (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY)) ==
-        (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY))
-        return XAOT_MAP_SHAPE_READONLY_STATIC_TABLE;
+        (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY)) {
+        return verify_map_shape_static_evidence_valid(ev, shape)
+                   ? XAOT_MAP_SHAPE_READONLY_STATIC_TABLE
+                   : XAOT_MAP_SHAPE_REJECT;
+    }
     if ((shape->flags & XG_MAP_SHAPE_DENSE_ENUM) != 0)
         return XAOT_MAP_SHAPE_DENSE_ENUM_TABLE;
     if ((shape->flags & XG_MAP_SHAPE_DENSE_INT) != 0)
@@ -4964,7 +4994,8 @@ static uint32_t verify_map_shape_evidence_for(const XgMapShapeSummary *shape) {
     return evidence;
 }
 
-static bool verify_map_shape_plan_rederives(const XaotMapShapePlan *plan,
+static bool verify_map_shape_plan_rederives(const XgGlobalEvidence *ev,
+                                            const XaotMapShapePlan *plan,
                                             const XgMapShapeSummary *shape, char *errbuf,
                                             size_t errbuf_len) {
     if (!plan || !shape)
@@ -4977,7 +5008,7 @@ static bool verify_map_shape_plan_rederives(const XaotMapShapePlan *plan,
         plan->entry_count != shape->entry_count || plan->literal_count != shape->literal_count ||
         plan->shape_hash != shape->shape_hash)
         return set_error(errbuf, errbuf_len, "AOT Map/Set shape plan identity does not re-derive");
-    if (plan->action != verify_map_shape_action_for(shape) ||
+    if (plan->action != verify_map_shape_action_for(ev, shape) ||
         plan->unproven_reason != verify_map_shape_reason_for(shape))
         return set_error(errbuf, errbuf_len, "AOT Map/Set shape plan action does not re-derive");
     if (plan->evidence != verify_map_shape_evidence_for(shape))
@@ -5052,13 +5083,16 @@ static uint8_t verify_key_access_action_for(const XgGlobalEvidence *ev,
             return XAOT_KEY_ACCESS_REJECT;
         bool lookup_op = access->op == XG_KEY_ACCESS_GET || access->op == XG_KEY_ACCESS_INDEX_GET ||
                          access->op == XG_KEY_ACCESS_HAS;
-        if (lookup_op && access->container_kind == XG_MAP_CONTAINER_MAP &&
+        bool static_table = (shape->flags & (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY)) ==
+                            (XG_MAP_SHAPE_STATIC | XG_MAP_SHAPE_READONLY);
+        if (lookup_op && !static_table && access->container_kind == XG_MAP_CONTAINER_MAP &&
             (shape->flags & XG_MAP_SHAPE_BOOL_DIRECT) != 0 &&
             verify_map_shape_supports_bool_direct(shape))
             return XAOT_KEY_ACCESS_BOOL_DIRECT_LOOKUP;
-        if (lookup_op && (shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
+        if (lookup_op && !static_table &&
+            (shape->flags & (XG_MAP_SHAPE_DENSE_ENUM | XG_MAP_SHAPE_DENSE_INT)) != 0)
             return XAOT_KEY_ACCESS_DIRECT_DENSE_INDEX;
-        if (lookup_op && (shape->flags & XG_MAP_SHAPE_SMALL) != 0)
+        if (lookup_op && !static_table && (shape->flags & XG_MAP_SHAPE_SMALL) != 0)
             return XAOT_KEY_ACCESS_INLINE_SMALL_SCAN;
     }
     hash_eq = xg_global_evidence_find_hash_eq(ev, access->key_type_key);
@@ -6424,7 +6458,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         plan = xaot_bundle_find_map_shape_plan(bundle, shape->shape_id);
         if (!plan)
             return set_error(errbuf, errbuf_len, "AOT Map/Set shape evidence has no shape plan");
-        if (!verify_map_shape_plan_rederives(plan, shape, errbuf, errbuf_len))
+        if (!verify_map_shape_plan_rederives(ev, plan, shape, errbuf, errbuf_len))
             return false;
     }
     if (bundle->nmap_shape_plans != expected_map_shape_plans)
