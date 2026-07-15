@@ -2455,6 +2455,66 @@ TEST(analyzer_error_effect_marks_invalid_program_partial_facts) {
     setup_pool();
 }
 
+TEST(analyzer_error_effect_converges_recursive_components) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum RecursiveErr { Boom, Other }\n"
+                         "fn directRecursive(flag: bool) {\n"
+                         "  if (flag) { throw RecursiveErr.Boom }\n"
+                         "  directRecursive(false)\n"
+                         "}\n"
+                         "fn cycleA() { cycleB() }\n"
+                         "fn cycleB() { cycleC() }\n"
+                         "fn cycleC() { cycleA(); throw RecursiveErr.Boom }\n"
+                         "fn caughtCycleA() { try { caughtCycleB() } catch RecursiveErr { } }\n"
+                         "fn caughtCycleB() { caughtCycleA(); throw RecursiveErr.Boom }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_recursive_fixpoint.xr", program);
+
+    const XaEffectSummary *direct = analyzer_function_effect_summary(a, "directRecursive");
+    const XaEffectSummary *cycle_a = analyzer_function_effect_summary(a, "cycleA");
+    const XaEffectSummary *cycle_b = analyzer_function_effect_summary(a, "cycleB");
+    const XaEffectSummary *cycle_c = analyzer_function_effect_summary(a, "cycleC");
+    const XaEffectSummary *caught_a = analyzer_function_effect_summary(a, "caughtCycleA");
+    const XaEffectSummary *caught_b = analyzer_function_effect_summary(a, "caughtCycleB");
+    ASSERT(direct != NULL);
+    ASSERT(cycle_a != NULL);
+    ASSERT(cycle_b != NULL);
+    ASSERT(cycle_c != NULL);
+    ASSERT(caught_a != NULL);
+    ASSERT(caught_b != NULL);
+    ASSERT(direct->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(cycle_a->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(cycle_b->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(cycle_c->completeness == XA_EFFECT_COMPLETE);
+    const XaErrorTypeSet *direct_set = effect_summary_enum_set_named(a, direct, "RecursiveErr");
+    const XaErrorTypeSet *cycle_a_set = effect_summary_enum_set_named(a, cycle_a, "RecursiveErr");
+    const XaErrorTypeSet *cycle_b_set = effect_summary_enum_set_named(a, cycle_b, "RecursiveErr");
+    const XaErrorTypeSet *cycle_c_set = effect_summary_enum_set_named(a, cycle_c, "RecursiveErr");
+    ASSERT(direct_set != NULL);
+    ASSERT(cycle_a_set != NULL);
+    ASSERT(cycle_b_set != NULL);
+    ASSERT(cycle_c_set != NULL);
+    ASSERT(!direct_set->all_variants);
+    ASSERT(!cycle_a_set->all_variants);
+    ASSERT(!cycle_b_set->all_variants);
+    ASSERT(!cycle_c_set->all_variants);
+    ASSERT(xa_bitset_test(&direct_set->variants, 0));
+    ASSERT(xa_bitset_test(&cycle_a_set->variants, 0));
+    ASSERT(xa_bitset_test(&cycle_b_set->variants, 0));
+    ASSERT(xa_bitset_test(&cycle_c_set->variants, 0));
+    ASSERT(xa_effect_summary_is_nothrow(caught_a));
+    const XaErrorTypeSet *caught_b_set = effect_summary_enum_set_named(a, caught_b, "RecursiveErr");
+    ASSERT(caught_b_set != NULL);
+    ASSERT(!caught_b_set->all_variants);
+    ASSERT(xa_bitset_test(&caught_b_set->variants, 0));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_empty_array_uses_unsolved_infer_var) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -3110,6 +3170,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
     RUN_TEST(analyzer_error_effect_marks_invalid_program_partial_facts);
+    RUN_TEST(analyzer_error_effect_converges_recursive_components);
 
     printf("\nFlow analysis tests:\n");
     RUN_TEST(flow_builder_create);
