@@ -19,6 +19,7 @@
 #include "xi_verify_gen.h"
 #include "xi_op_name.h"
 #include "xi_analysis.h"
+#include "xi_own.h"
 #include "xi_tbaa.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xdefs.h"
@@ -971,6 +972,70 @@ static void verify_place_uses(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
+static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed)
+        return;
+
+    bool needs_liveness = false;
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            if (v->call_plan && xi_coro_is_suspend_point(f, v, NULL)) {
+                verr(ctx,
+                     "func '%s': call v%u carries a call-bound place across a suspension point",
+                     f->name, v->id);
+                break;
+            }
+            if ((v->op == XI_PARAM && verify_is_call_bound_place(v)) ||
+                (v->op == XI_PLACE_LOAD && xi_own_type_may_be_ref(v->type)))
+                needs_liveness = true;
+        }
+    }
+    if (ctx->failed || !needs_liveness)
+        return;
+
+    XiLiveness *live = xi_compute_liveness((XiFunc *) f);
+    if (!live) {
+        verr(ctx, "func '%s': cannot compute call-bound place liveness", f->name);
+        return;
+    }
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+
+            if (v->op == XI_PARAM && verify_is_call_bound_place(v) &&
+                xi_coro_value_live_across_suspend(f, live, v, NULL)) {
+                verr(ctx,
+                     "func '%s': call-bound parameter place v%u is live across a suspension "
+                     "point",
+                     f->name, v->id);
+                break;
+            }
+
+            if (v->op == XI_PLACE_LOAD && v->nargs == 1 && v->args[0] &&
+                xi_own_type_may_be_ref(v->type) &&
+                xi_coro_value_live_across_suspend(f, live, v, NULL)) {
+                verr(ctx, "func '%s': borrowed place load v%u is live across a suspension point",
+                     f->name, v->id);
+                break;
+            }
+        }
+    }
+
+    xi_liveness_free(live);
+}
+
 /* ========== Check 14: Tail Call Safety ========== */
 
 /* XI_FLAG_TAIL may only appear on call ops.
@@ -1597,6 +1662,9 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
     }
     if (!ctx.failed) {
         verify_place_uses(&ctx, f);
+    }
+    if (!ctx.failed) {
+        verify_place_suspend_intervals(&ctx, f);
     }
 
     /* Tail call safety: only on call ops with valid callee */
