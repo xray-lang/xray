@@ -10,4 +10,5 @@ fn forward(x: out int) {
 fn test_out_param_forward_initializes_caller() {
     var value = 0
     forward(out value)
+    assert_eq(value, 42)
 }
