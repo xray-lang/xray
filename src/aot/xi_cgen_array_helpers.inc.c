@@ -1164,6 +1164,8 @@ static bool cg_static_fixed_array_ref_safe_uses(XiCgenCtx *ctx, const XiFunc *f,
             for (uint16_t a = 0; a < v->nargs; a++) {
                 if (v->args[a] != target)
                     continue;
+                if (v->op == XI_ARRAY_DATA_PTR && a == 0)
+                    continue;
                 if (v->op == XI_INDEX_GET && a == 0)
                     continue;
                 if (cg_is_static_const_ref_alias(v) && a == 0) {
@@ -1589,6 +1591,14 @@ static bool cg_emit_freestanding_static_fixed_cube_defs(XiCgenCtx *ctx, FILE *ou
 
 static void emit_fixed_array_lane_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiValue *value,
                                            const CgFixedArrayLaneInfo *info) {
+    const XiModule *static_module = NULL;
+    int64_t static_slot = -1;
+    if (ctx && ctx->freestanding_profile &&
+        cg_freestanding_static_fixed_array_value_ex(ctx, value, NULL, &static_slot,
+                                                    &static_module)) {
+        cg_emit_static_fixed_array_name(ctx, out, static_module, static_slot);
+        return;
+    }
     if (info->stack_origin) {
         fprintf(out, "_fa%u", info->stack_origin->id);
         return;

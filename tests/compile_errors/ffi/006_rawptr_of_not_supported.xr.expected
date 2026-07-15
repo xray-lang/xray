@@ -1,1 +1,1 @@
-Ptr.of general lvalue address-taking is not enabled
+Ptr has no static member 'of'

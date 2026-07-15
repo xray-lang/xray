@@ -1,6 +1,0 @@
-import mem
-
-@c_export("xray_rawptr_of_parameter_reject")
-fn rawptrOfParameterReject(value: int) -> int {
-    return mem.addr(Ptr<int>.of(value))
-}

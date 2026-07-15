@@ -1,7 +1,0 @@
-import mem
-
-@c_export("xray_rawptr_of_fixed_array_element_reject")
-fn rawptrOfFixedArrayElementReject() -> int {
-    var values: [int; 2] = [7, 11]
-    return mem.addr(Ptr<int>.of(values[0]))
-}

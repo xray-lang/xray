@@ -10114,7 +10114,7 @@ static bool xicgen_emit_static_addr_symbol_name(XiCgenCtx *ctx, FILE *out, const
     fprintf(stderr,
             "[xi_cgen] ERROR: %s requires a materialized freestanding static %sobject; "
             "'%s.%s' is not addressable\n",
-            want_mutable ? "MutPtr.of" : "Ptr.of", want_mutable ? "mutable " : "const ",
+            "static address", want_mutable ? "mutable " : "const ",
             module && module->name ? module->name : "?",
             cg_module_const_slot_name(module, slot) ? cg_module_const_slot_name(module, slot)
                                                     : "?");
@@ -10141,7 +10141,7 @@ static void xicgen_static_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         (!want_mutable && address->provenance.owner != XR_STORAGE_MODULE)) {
         fprintf(stderr,
                 "[xi_cgen] ERROR: %s requires verified stable %s storage provenance for '%s.%s'\n",
-                want_mutable ? "MutPtr.of" : "Ptr.of", want_mutable ? "mutable" : "readonly",
+                "static address", want_mutable ? "mutable" : "readonly",
                 module && module->name ? module->name : "?",
                 module && slot >= 0 && cg_module_const_slot_name(module, slot)
                     ? cg_module_const_slot_name(module, slot)
@@ -10165,9 +10165,15 @@ static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         return;
     }
     const XaotAddressPlan *address = xaot_address_plan_find(cg_ctx_aot_bundle(ctx), v);
-    if (!address || address->provenance.origin != XR_POINTER_ORIGIN_OWNER_BORROW ||
-        address->provenance.escape != XR_POINTER_ESCAPE_CALL_BOUND) {
-        fprintf(stderr, "[xi_cgen] ERROR: owner pointer borrow has no verified address plan\n");
+    bool owner_borrow = address && address->provenance.origin == XR_POINTER_ORIGIN_OWNER_BORROW &&
+                        address->provenance.escape == XR_POINTER_ESCAPE_CALL_BOUND;
+    bool static_borrow = address && address->provenance.origin == XR_POINTER_ORIGIN_MODULE &&
+                         address->provenance.owner == XR_STORAGE_MODULE &&
+                         address->provenance.mutability == XR_STORAGE_READONLY &&
+                         address->provenance.address_identity == XR_ADDRESS_MODULE_STABLE &&
+                         address->provenance.escape == XR_POINTER_ESCAPE_STABLE;
+    if (!owner_borrow && !static_borrow) {
+        fprintf(stderr, "[xi_cgen] ERROR: pointer projection has no verified address plan\n");
         ctx->error = true;
         emit_codegen_abort_expr(out);
         return;

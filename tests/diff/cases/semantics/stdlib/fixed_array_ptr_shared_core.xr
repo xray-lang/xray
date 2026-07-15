@@ -1,7 +1,14 @@
+const STATIC_VALUES: [int32; 3] = [11, 22, 33]
+
 fn readLocal() -> int {
     var values: [int32; 3] = [4, 5, 6]
     var p = unsafe { values.ptr() }
     return unsafe { p[1] }
+}
+
+fn readStatic() -> int {
+    var p = unsafe { STATIC_VALUES.ptr() }
+    return unsafe { p[2] }
 }
 
 fn readBytes() -> int {
@@ -10,4 +17,5 @@ fn readBytes() -> int {
 }
 
 print(readLocal())
+print(readStatic())
 print(readBytes())

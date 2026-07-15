@@ -1,5 +1,3 @@
-import mem
-
 @section("__DATA,.xray_table")
 @weak
 @used
@@ -453,19 +451,4 @@ fn xray_top_const_struct_array_nested_union_runtime(row: int, col: int) -> int {
     return (unsafe { BIT_GROUPS[row].bits.u } as int) +
         (unsafe { WORD_GROUPS[row].word.b }[col] as int) +
         BIT_GROUPS[row].base + WORD_GROUPS[row].base
-}
-
-@c_export("xray_top_const_static_addr")
-fn xray_top_const_static_addr() -> int {
-    return mem.addr(Ptr<[int; 4]>.of(TABLE)) +
-        mem.addr(Ptr<[[byte; 4]; 2]>.of(MATRIX)) +
-        mem.addr(Ptr<[[[int; 2]; 2]; 2]>.of(CUBE)) +
-        mem.addr(Ptr<Header>.of(HEADER)) +
-        mem.addr(Ptr<[Outer; 2]>.of(GROUPS)) +
-        mem.addr(Ptr<string>.of(LABEL)) +
-        mem.addr(Ptr<[[[string; 2]; 2]; 2]>.of(LABEL_CUBE)) +
-        mem.addr(Ptr<(int, int, float)>.of(PAIR)) +
-        mem.addr(Ptr<[(string, int); 2]>.of(LABELED_ROWS)) +
-        mem.addr(Ptr<[Entry; 2]>.of(ENTRIES)) +
-        mem.addr(Ptr<I32Bits>.of(BITS))
 }

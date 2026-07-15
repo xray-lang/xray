@@ -1,4 +1,0 @@
-args=--profile freestanding
-status=fail
-contains=Ptr.of classified this expression as none (temporary expression)
-not_contains=CRASH

@@ -352,75 +352,6 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
     return inst;
 }
 
-static bool xa_rawmut_type_is_mutable_static_object(XrType *type) {
-    return type && (xa_type_has_fixed_layout_data_object(type) ||
-                    (!type->is_nullable &&
-                     ((type->kind == XR_KIND_INT && type->native_width == XR_NATIVE_I64) ||
-                      (type->kind == XR_KIND_FLOAT && type->native_width != XR_NATIVE_F32) ||
-                      type->kind == XR_KIND_BOOL || type->kind == XR_KIND_RUNE)));
-}
-
-static void xa_check_raw_pointer_of_static_arg(XaInferContext *ctx, AstNode *node,
-                                               CallExprNode *call, XrType *ptr_type) {
-    if (!ctx || !ctx->analyzer || !node || !call || !ptr_type ||
-        !xa_freestanding_profile_enabled(ctx->analyzer))
-        return;
-    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-    if (call->arg_count != 1 || !call->arguments || !call->arguments[0]) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            ptr_type->ptr_is_mut
-                ? "MutPtr.of requires exactly one top-level mutable static name or field"
-                : "Ptr.of requires exactly one top-level const name",
-            &loc);
-        return;
-    }
-    AstNode *arg = call->arguments[0];
-    XaAddressability address = xa_classify_addressability(ctx, arg, ptr_type->ptr_is_mut);
-    XaSymbol *sym = address.base_symbol;
-    XrLocation aloc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
-    if (ptr_type->ptr_is_mut) {
-        XrType *sym_type = sym ? xa_analyzer_get_type(ctx->analyzer, sym) : NULL;
-        if (arg->type == AST_MEMBER_ACCESS) {
-            XrType *base_type = sym ? xa_analyzer_get_type(ctx->analyzer, sym) : NULL;
-            if (address.kind != XA_ADDRESS_FIELD || address.rejection != XA_ADDRESS_OK || !sym ||
-                sym->is_const || sym->is_shared || sym->is_imported ||
-                !xa_type_has_fixed_layout_data_object(base_type)) {
-                xa_analyzer_add_diagnostic(
-                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                    "MutPtr.of can only take a field of a top-level mutable aggregate static "
-                    "object with static field layout",
-                    &aloc);
-            }
-            return;
-        }
-        if (address.kind != XA_ADDRESS_MODULE_STATIC || address.rejection != XA_ADDRESS_OK ||
-            !sym || sym->is_const || sym->is_shared || sym->is_imported ||
-            !xa_rawmut_type_is_mutable_static_object(sym_type)) {
-            char message[256];
-            snprintf(message, sizeof(message),
-                     "MutPtr.of classified this expression as %s (%s); only a top-level mutable "
-                     "scalar or aggregate static object has stable mutable storage",
-                     xa_address_kind_name(address.kind),
-                     xa_address_reject_reason_name(address.rejection));
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       message, &aloc);
-        }
-        return;
-    }
-    if (address.kind != XA_ADDRESS_MODULE_STATIC || address.rejection != XA_ADDRESS_OK || !sym ||
-        sym->kind != XA_SYM_VARIABLE || !sym->is_const || sym->is_shared) {
-        char message[256];
-        snprintf(message, sizeof(message),
-                 "Ptr.of classified this expression as %s (%s); only a top-level const "
-                 "static object has stable readonly storage",
-                 xa_address_kind_name(address.kind),
-                 xa_address_reject_reason_name(address.rejection));
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   message, &aloc);
-    }
-}
-
 static bool xa_type_is_c_callback(const XrType *type) {
     return type && XR_TYPE_IS_C_FUNCTION(type);
 }
@@ -4096,8 +4027,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             fn_links = xa_static_method_fn_links_from_type(ctx, callee_obj_type, method_name);
         if (!fn_links)
             fn_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
-        if (raw_pointer_namespace_type && method_name && strcmp(method_name, "of") == 0)
-            xa_check_raw_pointer_of_static_arg(ctx, node, call, raw_pointer_namespace_type);
         xa_check_threadlocal_suspend_context(ctx, node, callee_obj_type, method_name);
 
         if (xa_method_call_creates_span_borrow(callee_obj_type, method_name) &&
