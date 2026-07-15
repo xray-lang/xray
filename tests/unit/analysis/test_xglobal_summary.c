@@ -17488,12 +17488,15 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     memset(shared, 0, sizeof(shared));
 
     child.name = "capture_body";
-    child.ncaptures = 2;
+    child.ncaptures = 3;
     child.captures[0].name = "module_const";
     child.captures[0].capture_kind = XI_CAPTURE_MODULE_LIVE;
     child.captures[1].name = "shared_state";
     child.captures[1].capture_kind = XI_CAPTURE_SHARED;
     child.captures[1].is_shared = true;
+    child.captures[2].name = "local_limit";
+    child.captures[2].capture_kind = XI_CAPTURE_BY_COPY;
+    child.captures[2].type = &stub_int_type;
     children[0] = &child;
 
     init_func.name = "init";
@@ -17535,11 +17538,13 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     const XaotStoragePlan *shared_state = xaot_storage_plan_find(&bundle, &module, 1);
     const XaotCapturePlan *module_capture = xaot_capture_plan_find(&bundle, &child, 0);
     const XaotCapturePlan *shared_capture = xaot_capture_plan_find(&bundle, &child, 1);
+    const XaotCapturePlan *local_capture = xaot_capture_plan_find(&bundle, &child, 2);
     const XaotAddressPlan *address = xaot_address_plan_find(&bundle, &static_addr);
     ASSERT_NOT_NULL(module_const);
     ASSERT_NOT_NULL(shared_state);
     ASSERT_NOT_NULL(module_capture);
     ASSERT_NOT_NULL(shared_capture);
+    ASSERT_NOT_NULL(local_capture);
     ASSERT_NOT_NULL(address);
     ASSERT_EQ_UINT(module_const->owner, XR_STORAGE_MODULE);
     ASSERT_EQ_UINT(module_const->mutability, XR_STORAGE_READONLY);
@@ -17548,12 +17553,24 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     ASSERT_EQ_UINT(shared_state->owner, XR_STORAGE_SHARED_SYSTEM);
     ASSERT_EQ_UINT(shared_state->address_identity, XR_ADDRESS_SHARED_STABLE);
     ASSERT_EQ_UINT(module_capture->action, XR_CAPTURE_MODULE_READONLY);
+    ASSERT_EQ_UINT(module_capture->source_owner, XR_STORAGE_MODULE);
     ASSERT_EQ_UINT(shared_capture->action, XR_CAPTURE_SHARED_REF);
+    ASSERT_EQ_UINT(shared_capture->source_owner, XR_STORAGE_SHARED_SYSTEM);
+    ASSERT_EQ_UINT(local_capture->action, XR_CAPTURE_INLINE_VALUE);
+    ASSERT_EQ_UINT(local_capture->source_owner, XR_STORAGE_EXEC_LOCAL);
     ASSERT_EQ_UINT(address->provenance.storage_id, module_const_decl.decl_id);
     ASSERT_EQ_UINT(address->provenance.owner, XR_STORAGE_MODULE);
     ASSERT_EQ_UINT(address->provenance.origin, XR_POINTER_ORIGIN_MODULE);
     ASSERT_EQ_UINT(address->provenance.escape, XR_POINTER_ESCAPE_STABLE);
     ASSERT_TRUE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
+    bundle.capture_plans[1].source_owner = XR_STORAGE_EXEC_LOCAL;
+    ASSERT_FALSE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
+    ASSERT_NOT_NULL(strstr(verify_error, "AOT capture plan is stale"));
+    bundle.capture_plans[1].source_owner = XR_STORAGE_SHARED_SYSTEM;
+    bundle.capture_plans[2].action = XR_CAPTURE_MOVE;
+    ASSERT_FALSE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
+    ASSERT_NOT_NULL(strstr(verify_error, "AOT capture plan is stale"));
+    bundle.capture_plans[2].action = XR_CAPTURE_INLINE_VALUE;
     bundle.address_plans[0].provenance.origin = XR_POINTER_ORIGIN_STACK_BORROW;
     ASSERT_FALSE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
     xaot_bundle_free(&bundle);
