@@ -134,7 +134,8 @@ const char *xr_type_to_string(XrType *type) {
         const char *key = type->map.key_type ? xr_type_to_string(type->map.key_type) : "<error>";
         const char *val =
             type->map.value_type ? xr_type_to_string(type->map.value_type) : "<error>";
-        snprintf(buf, TYPE_STR_BUF_SIZE, "Map<%s, %s>", key, val);
+        snprintf(buf, TYPE_STR_BUF_SIZE, "%s<%s, %s>",
+                 type->is_weak ? TYPE_NAME_WEAKMAP : TYPE_NAME_MAP, key, val);
         return xr_pool_strdup(pool, buf);
     }
 
@@ -142,7 +143,8 @@ const char *xr_type_to_string(XrType *type) {
         const char *elem = type->container.element_type
                                ? xr_type_to_string(type->container.element_type)
                                : "<error>";
-        snprintf(buf, TYPE_STR_BUF_SIZE, "Set<%s>", elem);
+        snprintf(buf, TYPE_STR_BUF_SIZE, "%s<%s>",
+                 type->is_weak ? TYPE_NAME_WEAKSET : TYPE_NAME_SET, elem);
         return xr_pool_strdup(pool, buf);
     }
 

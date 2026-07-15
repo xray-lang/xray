@@ -2970,6 +2970,40 @@ TEST(analyzer_container_recovery_rejects_poisoned_success_types) {
     setup_pool();
 }
 
+TEST(analyzer_weak_containers_use_identity_keys) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    AstNode *program = xr_parse(g_session, "var r = 1..4\n"
+                                           "var wm = WeakMap<Range, string>()\n"
+                                           "var ws = WeakSet<Range>()\n"
+                                           "var keep = r\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "weak_identity_keys.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "must satisfy Hashable"));
+    ASSERT(!analyzer_diag_contains(a, "undefined type 'WeakMap'"));
+    ASSERT(!analyzer_diag_contains(a, "undefined type 'WeakSet'"));
+    ASSERT(a->unresolved_inference_count == 0);
+
+    xa_analyzer_free(a);
+    setup_pool();
+
+    a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    program = xr_parse(g_session, "var wm = WeakMap()\n"
+                                  "var ws = WeakSet()\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "weak_bare_constructor_rejected.xr", program);
+    ASSERT(
+        analyzer_diag_contains(a, "cannot infer type arguments for generic constructor 'WeakMap'"));
+    ASSERT(
+        analyzer_diag_contains(a, "cannot infer type arguments for generic constructor 'WeakSet'"));
+    ASSERT(a->unresolved_inference_count == 2);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -3334,6 +3368,7 @@ int main(void) {
     RUN_TEST(analyzer_operator_and_index_failures_use_error_recovery);
     RUN_TEST(analyzer_non_callable_failure_uses_error_recovery);
     RUN_TEST(analyzer_container_recovery_rejects_poisoned_success_types);
+    RUN_TEST(analyzer_weak_containers_use_identity_keys);
     RUN_TEST(analyzer_rejects_error_type_generic_argument_and_constraint);
     RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);
     RUN_TEST(compile_type_class);
