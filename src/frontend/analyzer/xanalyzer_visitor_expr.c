@@ -15,6 +15,7 @@
 
 #include "xanalyzer_visitor_internal.h"
 #include "xaddressability.h"
+#include "xanalyzer_xrd.h"
 #include "xtype_ref_resolve.h"
 #include "xa_selection.h"
 #include "xanalyzer_mono.h"
@@ -1648,6 +1649,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     }
                     return mod_result;
                 }
+                xa_report_unknown_stdlib_member(ctx, node, mod_name, ma->name);
+                return xr_type_new_error(ctx->analyzer->isolate);
+            }
+            const char *xrd_error = xa_xrd_last_error();
+            if (xrd_error && xrd_error[0]) {
                 xa_report_unknown_stdlib_member(ctx, node, mod_name, ma->name);
                 return xr_type_new_error(ctx->analyzer->isolate);
             }
