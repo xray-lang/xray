@@ -11580,11 +11580,18 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_EQ_UINT(ev.ncapacity_ops, 3);
     ASSERT_EQ_UINT(ev.nbulk_ops, 3);
     ASSERT_EQ_UINT(ev.nencoding_ops, 2);
-    ASSERT_EQ_UINT(ev.ngeneric_storages, 2);
-    ASSERT_EQ_UINT(ev.generic_storages[0].storage_kind, XG_GENERIC_STORAGE_ARRAY);
-    ASSERT_TRUE(ev.generic_storages[0].container_plan_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.generic_storages[1].storage_kind, XG_GENERIC_STORAGE_ARRAY);
-    ASSERT_TRUE(ev.generic_storages[1].container_plan_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.ngeneric_storages, 3);
+    uint32_t array_storage_with_plan_count = 0;
+    uint32_t array_storage_without_plan_count = 0;
+    for (uint32_t i = 0; i < ev.ngeneric_storages; i++) {
+        ASSERT_EQ_UINT(ev.generic_storages[i].storage_kind, XG_GENERIC_STORAGE_ARRAY);
+        if (ev.generic_storages[i].container_plan_id != XG_NO_ID)
+            array_storage_with_plan_count++;
+        else
+            array_storage_without_plan_count++;
+    }
+    ASSERT_EQ_UINT(array_storage_with_plan_count, 2);
+    ASSERT_EQ_UINT(array_storage_without_plan_count, 1);
 
     bool saw_index = false;
     bool saw_slice = false;
