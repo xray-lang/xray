@@ -1,4 +1,6 @@
 contains=xaot-plan v0
+regex=generic-storage-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* kind=map action=boxed .*key_type=[1-9][0-9]* value_type=[1-9][0-9]* container_plan=[1-9][0-9]* evidence=row\+inst\+specialized_type\+container_plan reason=none
+regex=generic-storage-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* kind=set action=boxed .*elem_type=[1-9][0-9]* key_type=[1-9][0-9]* value_type=0 container_plan=[1-9][0-9]* evidence=row\+inst\+specialized_type\+container_plan reason=none
 regex=key-access-plan [0-9]+ id=[0-9]+ func=[0-9]+ span=[0-9]+ ordinal=[0-9]+ container=map op=set shape=[0-9]+ action=prehashed_lookup receiver_type=[0-9]+ key_type=[0-9]+ value_type=[0-9]+ key_const=[0-9]+ prehash=[0-9a-f]+ evidence=0x1d reason=none
 regex=key-access-plan [0-9]+ id=[0-9]+ func=[0-9]+ span=[0-9]+ ordinal=[0-9]+ container=map op=has shape=[0-9]+ action=prehashed_lookup receiver_type=[0-9]+ key_type=[0-9]+ value_type=[0-9]+ key_const=[0-9]+ prehash=[0-9a-f]+ evidence=0x1d reason=none
 regex=key-access-plan [0-9]+ id=[0-9]+ func=[0-9]+ span=[0-9]+ ordinal=[0-9]+ container=map op=get shape=[0-9]+ action=prehashed_lookup receiver_type=[0-9]+ key_type=[0-9]+ value_type=[0-9]+ key_const=[0-9]+ prehash=[0-9a-f]+ evidence=0x1d reason=none

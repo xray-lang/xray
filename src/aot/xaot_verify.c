@@ -1130,6 +1130,53 @@ static bool verify_generic_storage_kind_valid(uint8_t kind) {
     }
 }
 
+static bool verify_generic_storage_container_evidence(const XgGlobalEvidence *ev,
+                                                      const XgGenericStorageSummary *storage,
+                                                      char *errbuf, size_t errbuf_len) {
+    if (!ev || !storage)
+        return set_error(errbuf, errbuf_len,
+                         "AOT generic storage container verifier has incomplete input");
+    if (storage->container_plan_id == XG_NO_ID) {
+        if (storage->storage_kind == XG_GENERIC_STORAGE_MAP ||
+            storage->storage_kind == XG_GENERIC_STORAGE_SET)
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic Map/Set storage has no 179 map-shape link");
+        return true;
+    }
+    if (storage->storage_kind == XG_GENERIC_STORAGE_ARRAY) {
+        const XgSequenceAccessSummary *sequence =
+            xg_global_evidence_find_sequence_access(ev, storage->container_plan_id);
+        if (!sequence)
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic Array storage references missing 180 sequence plan");
+        if ((sequence->sequence_kind != XG_SEQ_ARRAY && sequence->sequence_kind != XG_SEQ_BYTES) ||
+            sequence->receiver_type_key != storage->specialized_type_key ||
+            sequence->elem_type_key != storage->elem_type_key)
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic Array storage 180 sequence link is stale");
+        return true;
+    }
+    if (storage->storage_kind == XG_GENERIC_STORAGE_MAP ||
+        storage->storage_kind == XG_GENERIC_STORAGE_SET) {
+        const XgMapShapeSummary *shape =
+            xg_global_evidence_find_map_shape(ev, storage->container_plan_id);
+        uint8_t expected_kind = storage->storage_kind == XG_GENERIC_STORAGE_SET
+                                    ? XG_MAP_CONTAINER_SET
+                                    : XG_MAP_CONTAINER_MAP;
+        if (!shape)
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic Map/Set storage references missing 179 map-shape plan");
+        if (shape->module_id != storage->module_id || shape->container_kind != expected_kind ||
+            shape->key_type_key != storage->key_type_key ||
+            shape->value_type_key != storage->value_type_key)
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic Map/Set storage 179 map-shape link is stale");
+        return true;
+    }
+    return set_error(errbuf, errbuf_len,
+                     "AOT generic class/struct storage has an invalid container plan link");
+}
+
 static bool verify_generic_deepen_rows(const XgGlobalEvidence *ev, char *errbuf,
                                        size_t errbuf_len) {
     if (!ev)
@@ -1160,16 +1207,61 @@ static bool verify_generic_deepen_rows(const XgGlobalEvidence *ev, char *errbuf,
     }
     for (uint32_t i = 0; i < ev->ngeneric_storages; i++) {
         const XgGenericStorageSummary *storage = &ev->generic_storages[i];
+        const XgGenericInstSummary *inst;
+        uint32_t action_flags;
         if (storage->storage_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT generic storage evidence has no id");
-        if (!xg_global_evidence_find_generic_inst(ev, storage->generic_inst_id))
+        inst = xg_global_evidence_find_generic_inst(ev, storage->generic_inst_id);
+        if (!inst)
             return set_error(errbuf, errbuf_len, "AOT generic storage references missing inst");
         if (storage->module_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT generic storage evidence has no module");
+        if (inst->module_id != storage->module_id ||
+            (inst->flags & (XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_CONCRETE_STORAGE)) !=
+                (XG_GENERIC_INST_CONCRETE_TYPES | XG_GENERIC_INST_CONCRETE_STORAGE))
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic storage inst identity does not re-derive");
         if (!verify_generic_storage_kind_valid(storage->storage_kind))
             return set_error(errbuf, errbuf_len, "AOT generic storage evidence has invalid kind");
-        if (storage->origin_type_key == 0)
-            return set_error(errbuf, errbuf_len, "AOT generic storage evidence has no origin type");
+        if (storage->origin_type_key == 0 || storage->specialized_type_key == 0)
+            return set_error(errbuf, errbuf_len, "AOT generic storage type evidence is incomplete");
+        action_flags = storage->flags & (XG_GENERIC_STORAGE_TYPED_INLINE |
+                                         XG_GENERIC_STORAGE_REF_LANE | XG_GENERIC_STORAGE_BOXED);
+        if (action_flags == 0 || (action_flags & (action_flags - 1)) != 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic storage action evidence is ambiguous");
+        if ((storage->flags & XG_GENERIC_STORAGE_POD) != 0 &&
+            action_flags != XG_GENERIC_STORAGE_TYPED_INLINE)
+            return set_error(errbuf, errbuf_len, "AOT generic POD storage is not typed inline");
+        if (action_flags == XG_GENERIC_STORAGE_REF_LANE &&
+            (storage->flags & XG_GENERIC_STORAGE_MANAGED_REF) == 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT generic ref-lane storage lacks managed-ref evidence");
+        switch ((XgGenericStorageKind) storage->storage_kind) {
+            case XG_GENERIC_STORAGE_ARRAY:
+                if (storage->elem_type_key == 0 || storage->key_type_key != 0 ||
+                    storage->value_type_key != 0)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT generic Array storage type lanes are stale");
+                break;
+            case XG_GENERIC_STORAGE_MAP:
+                if (storage->elem_type_key != 0 || storage->key_type_key == 0 ||
+                    storage->value_type_key == 0)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT generic Map storage type lanes are stale");
+                break;
+            case XG_GENERIC_STORAGE_SET:
+                if (storage->elem_type_key == 0 ||
+                    storage->elem_type_key != storage->key_type_key || storage->value_type_key != 0)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT generic Set storage type lanes are stale");
+                break;
+            case XG_GENERIC_STORAGE_CLASS:
+            case XG_GENERIC_STORAGE_STRUCT:
+                break;
+        }
+        if (!verify_generic_storage_container_evidence(ev, storage, errbuf, errbuf_len))
+            return false;
         for (uint32_t j = i + 1; j < ev->ngeneric_storages; j++) {
             if (ev->generic_storages[j].storage_id == storage->storage_id)
                 return set_error(errbuf, errbuf_len, "AOT generic storage id is duplicated");
@@ -3923,11 +4015,12 @@ static uint32_t verify_generic_storage_evidence_for(const XgGlobalEvidence *ev,
     return bits;
 }
 
-static bool verify_generic_storage_plan_rederives(const XgGlobalEvidence *ev,
+static bool verify_generic_storage_plan_rederives(const XaotBundle *bundle,
+                                                  const XgGlobalEvidence *ev,
                                                   const XaotGenericStoragePlan *plan,
                                                   const XgGenericStorageSummary *storage,
                                                   char *errbuf, size_t errbuf_len) {
-    if (!ev || !plan || !storage)
+    if (!bundle || !ev || !plan || !storage)
         return set_error(errbuf, errbuf_len,
                          "AOT generic storage plan verifier has incomplete input");
     if (plan->storage_id != storage->storage_id ||
@@ -3947,6 +4040,32 @@ static bool verify_generic_storage_plan_rederives(const XgGlobalEvidence *ev,
     if (plan->evidence != verify_generic_storage_evidence_for(ev, storage))
         return set_error(errbuf, errbuf_len,
                          "AOT generic storage plan evidence does not re-derive");
+    if (plan->container_plan_id != XG_NO_ID) {
+        if (plan->storage_kind == XG_GENERIC_STORAGE_ARRAY) {
+            const XaotSequenceAccessPlan *sequence = xaot_bundle_find_sequence_access_plan(
+                bundle, (XgSequenceAccessId) plan->container_plan_id);
+            if (!sequence || sequence->action == XAOT_SEQUENCE_ACCESS_REJECT ||
+                (sequence->sequence_kind != XG_SEQ_ARRAY &&
+                 sequence->sequence_kind != XG_SEQ_BYTES) ||
+                sequence->receiver_type_key != plan->specialized_type_key ||
+                sequence->elem_type_key != plan->elem_type_key)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT generic Array storage plan does not consume 180 plan");
+        } else if (plan->storage_kind == XG_GENERIC_STORAGE_MAP ||
+                   plan->storage_kind == XG_GENERIC_STORAGE_SET) {
+            const XaotMapShapePlan *shape =
+                xaot_bundle_find_map_shape_plan(bundle, (XgMapShapeId) plan->container_plan_id);
+            uint8_t expected_kind = plan->storage_kind == XG_GENERIC_STORAGE_SET
+                                        ? XG_MAP_CONTAINER_SET
+                                        : XG_MAP_CONTAINER_MAP;
+            if (!shape || shape->action == XAOT_MAP_SHAPE_REJECT ||
+                shape->container_kind != expected_kind ||
+                shape->key_type_key != plan->key_type_key ||
+                shape->value_type_key != plan->value_type_key)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT generic Map/Set storage plan does not consume 179 plan");
+        }
+    }
     return true;
 }
 
@@ -6278,7 +6397,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         if (!plan)
             return set_error(errbuf, errbuf_len,
                              "AOT generic storage evidence has no storage plan");
-        if (!verify_generic_storage_plan_rederives(ev, plan, storage, errbuf, errbuf_len))
+        if (!verify_generic_storage_plan_rederives(bundle, ev, plan, storage, errbuf, errbuf_len))
             return false;
     }
     if (bundle->ngeneric_storage_plans != expected_generic_storage_plans)

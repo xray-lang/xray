@@ -1,5 +1,6 @@
 regex=container [0-9]+ kind=array flags=0x5 elem=XR_ELEM_ANY/tagged/XrValue type-key=[0-9a-f]{16}
 regex=array-storage [0-9]+ func=taggedArrayOps value=v[0-9]+ origin=v[0-9]+ flags=0x3 elem=XR_ELEM_ANY/tagged/XrValue
+regex=generic-storage-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* kind=array action=boxed .*elem_type=[1-9][0-9]* key_type=0 value_type=0 container_plan=[1-9][0-9]* evidence=row\+inst\+specialized_type\+container_plan reason=none
 c_contains=xrt_array_new_typed_ptr(0, XR_ELEM_ANY)
 c_contains=((XrValue*)_a->data)[_a->length++] =
 c_contains=xrt_value_to_owned(((XrValue*)_a->data)[_idx])
