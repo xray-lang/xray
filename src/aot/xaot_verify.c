@@ -1661,11 +1661,17 @@ static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t er
         const XgJsonCodecSummary *codec = &ev->json_codecs[i];
         if (codec->codec_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT Json codec evidence has no id");
+        if (codec->owner_func_id == XG_NO_ID || codec->source_node_id == 0)
+            return set_error(errbuf, errbuf_len, "AOT Json codec source identity is missing");
         if (!verify_json_codec_row_kind_valid(codec->codec_kind))
             return set_error(errbuf, errbuf_len, "AOT Json codec evidence has invalid kind");
         for (uint32_t j = i + 1; j < ev->njson_codecs; j++) {
             if (ev->json_codecs[j].codec_id == codec->codec_id)
                 return set_error(errbuf, errbuf_len, "AOT Json codec evidence id is duplicated");
+            if (ev->json_codecs[j].owner_func_id == codec->owner_func_id &&
+                ev->json_codecs[j].source_node_id == codec->source_node_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT Json codec source identity is duplicated");
         }
         if (!verify_json_codec_shape_contract(ev, codec, errbuf, errbuf_len))
             return false;
@@ -4355,6 +4361,7 @@ static bool verify_json_codec_plan_rederives(const XaotJsonCodecPlan *plan,
         return set_error(errbuf, errbuf_len, "AOT Json codec verifier has incomplete input");
     if (plan->codec_id != codec->codec_id || plan->module_id != codec->module_id ||
         plan->owner_func_id != codec->owner_func_id ||
+        plan->source_node_id != codec->source_node_id ||
         plan->source_span_id != codec->source_span_id || plan->codec_kind != codec->codec_kind ||
         plan->input_type_key != codec->input_type_key ||
         plan->target_type_key != codec->target_type_key ||

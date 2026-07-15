@@ -170,12 +170,16 @@ static void dump_value(FILE *out, const XiValue *v) {
             fprintf(out, " [callsite=%u]", v->xg_callsite_id);
         if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->xg_method_id != 0)
             fprintf(out, " [xg_method=%u]", v->xg_method_id);
+        if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->xg_json_codec_id != 0)
+            fprintf(out, " [json_codec=%u]", v->xg_json_codec_id);
         if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->xg_key_access_id != 0)
             fprintf(out, " [key_access=%u]", v->xg_key_access_id);
     } else if (v->op == XI_GET_GLOBAL || v->op == XI_SET_GLOBAL) {
         const char *nm = (const char *) v->aux;
         fprintf(out, " [name=%s]", nm ? nm : "?");
     }
+    if (v->xg_json_codec_id != 0 && v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT)
+        fprintf(out, " [json_codec=%u]", v->xg_json_codec_id);
 
     /* Type + rep annotation */
     fprintf(out, "  ; %s", xi_type_name(v->type));

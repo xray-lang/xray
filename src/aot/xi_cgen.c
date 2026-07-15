@@ -9141,6 +9141,113 @@ static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *t
     return memo && memo->reachable;
 }
 
+static void cg_report_mandatory_plan_contract_failure(XiCgenCtx *ctx, const XiFunc *func,
+                                                      const XiValue *value, const char *plan_kind,
+                                                      uint32_t stable_id,
+                                                      XaotBackendContractIssue issue) {
+    cg_ctx_set_error(ctx);
+    fprintf(stderr,
+            "[xi_cgen] ERROR: %s plan contract failed in function '%s' for Xi value v%u "
+            "(stable_id=%u span=%u issue=%s)\n",
+            plan_kind, func && func->name ? func->name : "?", value ? value->id : 0, stable_id,
+            value ? value->line : 0, xaot_backend_contract_issue_name(issue));
+}
+
+static bool cg_json_codec_site_contract(const XiValue *value, uint8_t *out_kind,
+                                        uint32_t *out_allowed_actions) {
+    uint8_t kind = 0;
+    uint32_t actions = 0;
+    if (!value || !out_kind || !out_allowed_actions)
+        return false;
+    if (value->op == XI_JSON_DECODE) {
+        kind = XG_JSON_CODEC_DECODE;
+        actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
+    } else if (value->op == XI_CALL_METHOD && value->nargs >= 1 && value->aux &&
+               xicgen_receiver_is_builtin_global(value->args[0], XR_GLOBAL_VAR_JSON)) {
+        const char *method = (const char *) value->aux;
+        if (strcmp(method, "parse") == 0) {
+            kind = XG_JSON_CODEC_PARSE;
+            actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT);
+        } else if (strcmp(method, "encode") == 0) {
+            kind = XG_JSON_CODEC_ENCODE;
+            actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_ENCODE_FIELD_TABLE) |
+                      xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR);
+        } else if (strcmp(method, "stringify") == 0) {
+            kind = XG_JSON_CODEC_STRINGIFY;
+            actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK);
+        }
+    }
+    if (kind == 0 || actions == 0)
+        return false;
+    *out_kind = kind;
+    *out_allowed_actions = actions;
+    return true;
+}
+
+static bool cg_mandatory_plans_preflight_value(XiCgenCtx *ctx, const XiFunc *func,
+                                               const XiValue *value) {
+    if (!value)
+        return true;
+
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+    bool valid = true;
+
+    uint8_t expected_kind = 0;
+    uint32_t allowed_actions = 0;
+    bool json_codec_site = cg_json_codec_site_contract(value, &expected_kind, &allowed_actions);
+    if (json_codec_site) {
+        if (value->xg_json_codec_id == XG_NO_ID) {
+            issue = XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN;
+            cg_report_mandatory_plan_contract_failure(ctx, func, value, "json-codec", XG_NO_ID,
+                                                      issue);
+            return false;
+        }
+        const XaotJsonCodecPlan *plan =
+            xaot_bundle_find_json_codec_plan(bundle, value->xg_json_codec_id);
+        if (!xaot_backend_contract_json_codec_plan_allowed(plan, expected_kind, allowed_actions,
+                                                           &issue)) {
+            cg_report_mandatory_plan_contract_failure(ctx, func, value, "json-codec",
+                                                      value->xg_json_codec_id, issue);
+            valid = false;
+        }
+    } else if (value->xg_json_codec_id != XG_NO_ID) {
+        issue = XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH;
+        cg_report_mandatory_plan_contract_failure(ctx, func, value, "json-codec",
+                                                  value->xg_json_codec_id, issue);
+        valid = false;
+    }
+    return valid;
+}
+
+static bool cg_mandatory_plans_preflight_func_tree(XiCgenCtx *ctx, const XiFunc *func) {
+    if (!func)
+        return true;
+
+    bool valid = true;
+    for (uint16_t ci = 0; ci < func->nchildren; ci++) {
+        if (!cg_mandatory_plans_preflight_func_tree(ctx, func->children[ci]))
+            valid = false;
+    }
+    if (func->is_extern || !cg_func_body_is_reachable_from_roots(ctx, func, 0))
+        return valid;
+
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            if (!cg_mandatory_plans_preflight_value(ctx, func, &phi->value))
+                valid = false;
+        }
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            if (!cg_mandatory_plans_preflight_value(ctx, func, block->values[vi]))
+                valid = false;
+        }
+    }
+    return valid;
+}
+
 static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     XR_DCHECK(out != NULL, "xi_cgen_func: NULL output");
     XR_DCHECK(f != NULL, "xi_cgen_func: NULL func");

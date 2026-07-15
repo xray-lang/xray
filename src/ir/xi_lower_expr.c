@@ -4232,6 +4232,21 @@ static bool lower_map_set_method_key_access_op(struct XrType *receiver_type, con
     return *out_op != 0;
 }
 
+static uint8_t lower_json_static_codec_kind(const MemberAccessNode *member) {
+    if (!member || !member->name || !member->object || member->object->type != AST_VARIABLE ||
+        !member->object->as.variable.name || strcmp(member->object->as.variable.name, "Json") != 0)
+        return 0;
+    if (strcmp(member->name, "parse") == 0)
+        return XG_JSON_CODEC_PARSE;
+    if (strcmp(member->name, "decode") == 0)
+        return XG_JSON_CODEC_DECODE;
+    if (strcmp(member->name, "encode") == 0)
+        return XG_JSON_CODEC_ENCODE;
+    if (strcmp(member->name, "stringify") == 0)
+        return XG_JSON_CODEC_STRINGIFY;
+    return 0;
+}
+
 static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
                                               const CallExprNode *call,
                                               const MemberAccessNode *member,
@@ -4415,6 +4430,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
      * which rely on OP_INVOKE dispatch rather than GETPROP + CALL. */
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *ma = &call->callee->as.member_access;
+        uint8_t json_codec_kind = lower_json_static_codec_kind(ma);
         XiSequenceEvidenceIds sequence_ids;
         lower_take_sequence_call_evidence(l, node, call, ma, &sequence_ids);
 
@@ -4470,6 +4486,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 v->aux_int = fc;
                 v->flags |= XI_FLAG_SIDE_EFFECT;
                 v->line = (uint32_t) node->line;
+                xi_lower_bind_json_codec_id(l, v, xi_lower_source_node_id(l, node),
+                                            XG_JSON_CODEC_DECODE);
                 return v;
             }
         }
@@ -5131,6 +5149,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         v->line = (uint32_t) node->line;
         xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
         xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
+        if (json_codec_kind != 0)
+            xi_lower_bind_json_codec_id(l, v, xi_lower_source_node_id(l, node), json_codec_kind);
         xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, method_key_access_ordinal,
                                     method_key_access_op);
 

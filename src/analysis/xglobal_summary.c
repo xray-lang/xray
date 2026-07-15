@@ -562,6 +562,7 @@ static uint64_t hash_json_codec_summary(uint64_t hash, const XgJsonCodecSummary 
     hash = hash_u32(hash, row->codec_id);
     hash = hash_u32(hash, row->module_id);
     hash = hash_u32(hash, row->owner_func_id);
+    hash = hash_u32(hash, row->source_node_id);
     hash = hash_u32(hash, row->source_span_id);
     hash = hash_u8(hash, row->codec_kind);
     hash = hash_u32(hash, row->input_type_key);
@@ -3745,11 +3746,11 @@ static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *e
     for (uint32_t i = 0; i < evidence->njson_codecs; i++) {
         const XgJsonCodecSummary *c = &evidence->json_codecs[i];
         fprintf(out,
-                "json-codec id=%u module=%u func=%u kind=%u span=%u input_type=%u "
+                "json-codec id=%u module=%u func=%u node=%u kind=%u span=%u input_type=%u "
                 "target_type=%u input_shape=%u output_shape=%u fields=%u flags=0x%x\n",
-                c->codec_id, c->module_id, c->owner_func_id, (unsigned) c->codec_kind,
-                c->source_span_id, c->input_type_key, c->target_type_key, c->input_shape_id,
-                c->output_shape_id, (unsigned) c->field_count, c->flags);
+                c->codec_id, c->module_id, c->owner_func_id, c->source_node_id,
+                (unsigned) c->codec_kind, c->source_span_id, c->input_type_key, c->target_type_key,
+                c->input_shape_id, c->output_shape_id, (unsigned) c->field_count, c->flags);
     }
     for (uint32_t i = 0; i < evidence->nrecord_shapes; i++) {
         const XgRecordShapeSummary *s = &evidence->record_shapes[i];
@@ -4713,14 +4714,14 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
             return false;
         memset(&row, 0, sizeof(row));
         if (sscanf(line,
-                   "json-codec id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " kind=%" SCNu32
-                   " span=%" SCNu32 " input_type=%" SCNu32 " target_type=%" SCNu32
+                   "json-codec id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32 " node=%" SCNu32
+                   " kind=%" SCNu32 " span=%" SCNu32 " input_type=%" SCNu32 " target_type=%" SCNu32
                    " input_shape=%" SCNu32 " output_shape=%" SCNu32 " fields=%" SCNu32
                    " flags=0x%" SCNx32 " %c",
-                   &row.codec_id, &row.module_id, &row.owner_func_id, &codec_kind,
-                   &row.source_span_id, &row.input_type_key, &row.target_type_key,
+                   &row.codec_id, &row.module_id, &row.owner_func_id, &row.source_node_id,
+                   &codec_kind, &row.source_span_id, &row.input_type_key, &row.target_type_key,
                    &row.input_shape_id, &row.output_shape_id, &field_count, &row.flags,
-                   &trailing) != 11)
+                   &trailing) != 12)
             return false;
         row.codec_kind = (uint8_t) codec_kind;
         row.field_count = (uint16_t) field_count;
@@ -6465,9 +6466,9 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->njson_codecs; i++) {
         const XgJsonCodecSummary *c = &evidence->json_codecs[i];
         fprintf(out,
-                "json-codec %u id=%u module=%u func=%u kind=%s span=%u input_type=%u "
+                "json-codec %u id=%u module=%u func=%u node=%u kind=%s span=%u input_type=%u "
                 "target_type=%u input_shape=%u output_shape=%u fields=%u flags=0x%x\n",
-                i, c->codec_id, c->module_id, c->owner_func_id,
+                i, c->codec_id, c->module_id, c->owner_func_id, c->source_node_id,
                 xg_json_codec_kind_name(c->codec_kind), c->source_span_id, c->input_type_key,
                 c->target_type_key, c->input_shape_id, c->output_shape_id,
                 (unsigned) c->field_count, c->flags);

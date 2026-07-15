@@ -1,6 +1,6 @@
 contains=xaot-plan v0
-regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ span=[0-9]+ kind=decode action=decode_validate_copy input_type=[1-9][0-9]* target_type=[1-9][0-9]* input_shape=[1-9][0-9]* output_shape=[1-9][0-9]* fields=2 evidence=0xe1 reason=none
-regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ span=[0-9]+ kind=encode action=encode_field_table input_type=[1-9][0-9]* target_type=0 input_shape=[1-9][0-9]* output_shape=0 fields=2 evidence=0x21 reason=none
+regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ node=[1-9][0-9]* span=[0-9]+ kind=decode action=decode_validate_copy input_type=[1-9][0-9]* target_type=[1-9][0-9]* input_shape=[1-9][0-9]* output_shape=[1-9][0-9]* fields=2 evidence=0xe1 reason=none
+regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ node=[1-9][0-9]* span=[0-9]+ kind=encode action=encode_field_table input_type=[1-9][0-9]* target_type=0 input_shape=[1-9][0-9]* output_shape=0 fields=2 evidence=0x21 reason=none
 c_contains=xrt_json_decode_record
 c_contains=xrt_json_encode
 c_contains=(const uint8_t[]){5, 3}

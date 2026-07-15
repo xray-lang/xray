@@ -942,6 +942,36 @@ XR_FUNC void xi_lower_bind_class_field_id(XiLower *l, XiValue *access,
     }
 }
 
+XR_FUNC void xi_lower_bind_json_codec_id(XiLower *l, XiValue *value, uint32_t source_node_id,
+                                         uint8_t expected_kind) {
+    const XgGlobalEvidence *ev;
+    const XgJsonCodecSummary *match = NULL;
+    if (!l || !value || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID ||
+        source_node_id == 0)
+        return;
+    switch ((XgJsonCodecKind) expected_kind) {
+        case XG_JSON_CODEC_PARSE:
+        case XG_JSON_CODEC_DECODE:
+        case XG_JSON_CODEC_ENCODE:
+        case XG_JSON_CODEC_STRINGIFY:
+            break;
+        default:
+            return;
+    }
+    ev = l->global_evidence;
+    for (uint32_t i = 0; i < ev->njson_codecs; i++) {
+        const XgJsonCodecSummary *row = &ev->json_codecs[i];
+        if (row->owner_func_id != (XgFuncId) l->func->xg_body_func_id ||
+            row->source_node_id != source_node_id || row->codec_kind != expected_kind)
+            continue;
+        if (match)
+            return;
+        match = row;
+    }
+    if (match)
+        value->xg_json_codec_id = match->codec_id;
+}
+
 static bool xi_lower_json_access_row_requires_dynamic_lookup(const XgGlobalEvidence *ev,
                                                              const XgJsonAccessSummary *row);
 
