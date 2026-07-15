@@ -1,0 +1,6 @@
+import mem
+
+@c_export("xray_static_bytes_ptr_addr")
+fn xray_static_bytes_ptr_addr() -> int {
+    return mem.addr(unsafe { b"A\0B".ptr() }) + mem.addr(unsafe { c"ok".ptr() })
+}

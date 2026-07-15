@@ -541,6 +541,24 @@ XR_FUNC void xi_emit_array_data_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_ARRAY_DATA_PTR, dst, arr, 0));
 }
 
+/* Direct byte literals enter the bytecode constant pool with their exact
+ * length (including embedded NUL).  Loading the constant recreates/permanently
+ * interns its storage after bytecode deserialization; ARRAY_DATA_PTR then
+ * projects that stable storage instead of baking a compiler-process address. */
+XR_FUNC void xi_emit_static_bytes_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!ctx || !v || v->nargs != 0 || v->aux_int < 0 || (v->aux_int > 0 && !v->aux)) {
+        if (ctx)
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    int kidx = add_const_string_n(ctx, (const char *) v->aux, (size_t) v->aux_int);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABx(OP_LOADK, dst, (uint32_t) kidx));
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_DATA_PTR, dst, dst, 0));
+}
+
 static void emit_builtin_string_byte_slice(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs != 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);

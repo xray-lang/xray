@@ -162,10 +162,12 @@ TEST(bytecode_roundtrips_exact_string_constant_lengths) {
     ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 2);
     XrValue value = PROTO_CONSTANT(roundtrip, 0);
     ASSERT_TRUE(XR_IS_STRING(value));
+    ASSERT_TRUE(XR_STR_IS_PERMANENT(XR_TO_STRING(value)));
     ASSERT_EQ_UINT(XR_TO_STRING(value)->length, 0);
     ASSERT_STR_EQ(XR_TO_STRING(value)->data, "");
     value = PROTO_CONSTANT(roundtrip, 1);
     ASSERT_TRUE(XR_IS_STRING(value));
+    ASSERT_TRUE(XR_STR_IS_PERMANENT(XR_TO_STRING(value)));
     ASSERT_EQ_UINT(XR_TO_STRING(value)->length, sizeof(embedded_nul));
     ASSERT_TRUE(memcmp(XR_TO_STRING(value)->data, embedded_nul, sizeof(embedded_nul)) == 0);
 

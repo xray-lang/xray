@@ -355,6 +355,7 @@ typedef enum {
     XI_BYTE_ARRAY_APPEND_FROM, /* args[0]=dst Array<byte>, args[1]=src Slice<byte>; result dst */
     XI_BYTE_ARRAY_REPEAT_FROM, /* args[0]=dst Array<byte>, args[1]=distance, args[2]=count */
     XI_ARRAY_DATA_PTR,         /* args[0]=Array<T>/Span<T>/[T;N]; result raw pointer borrow */
+    XI_STATIC_BYTES_PTR,       /* aux=exact bytes, aux_int=length; stable Ptr<byte> */
     XI_STATIC_ADDR,            /* aux_int=shared slot; result Ptr<T>/MutPtr<T> to static data */
     XI_LOCAL_ADDR,             /* args[0]=caller SSA slot; call-bound place address */
     XI_PLACE_LOAD,             /* args[0]=call-bound place; result pointee value */

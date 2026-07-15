@@ -185,6 +185,17 @@ static bool address_plan_for_value(const XaotBundle *bundle, const XiModule *mod
         out->evidence |= XAOT_ADDRESS_EV_STORAGE_PLAN;
         return true;
     }
+    if (value->op == XI_STATIC_BYTES_PTR && value->aux_int >= 0 && value->aux) {
+        out->origin_value = value;
+        out->provenance.storage_id = value->id + 1;
+        out->provenance.lifetime_id = value->id + 1;
+        out->provenance.owner = XR_STORAGE_MODULE;
+        out->provenance.mutability = XR_STORAGE_READONLY;
+        out->provenance.address_identity = XR_ADDRESS_MODULE_STABLE;
+        out->provenance.origin = XR_POINTER_ORIGIN_STATIC;
+        out->provenance.escape = XR_POINTER_ESCAPE_STABLE;
+        return true;
+    }
     if (value->op == XI_ARRAY_DATA_PTR && value->nargs > 0 && value->args[0]) {
         const XiValue *owner = value->args[0];
         if (owner->type && owner->type->kind == XR_KIND_FIXED_ARRAY && owner->op == XI_GET_SHARED &&

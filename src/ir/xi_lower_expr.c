@@ -2593,6 +2593,47 @@ static XiValue *lower_fixed_array_literal(XiLower *l, AstNode *node, ArrayLitera
     return arr_val;
 }
 
+static XiValue *lower_static_bytes_literal_ptr(XiLower *l, AstNode *call_node,
+                                               AstNode *literal_node) {
+    if (!l || !call_node || !literal_node || literal_node->type != AST_ARRAY_LITERAL ||
+        !literal_node->as.array_literal.is_fixed_bytes_literal)
+        return NULL;
+
+    ArrayLiteralNode *literal = &literal_node->as.array_literal;
+    int count = literal->count;
+    if (count < 0) {
+        l->had_error = true;
+        return NULL;
+    }
+
+    uint32_t alloc_size = (uint32_t) (count > 0 ? count : 1);
+    uint8_t *bytes = (uint8_t *) xi_func_arena_alloc(l->func, alloc_size);
+    if (!bytes)
+        return NULL;
+    for (int i = 0; i < count; i++) {
+        AstNode *element = literal->elements ? literal->elements[i] : NULL;
+        if (!element || element->type != AST_LITERAL_INT ||
+            element->as.literal.raw_value.int_val < 0 ||
+            element->as.literal.raw_value.int_val > UINT8_MAX) {
+            fprintf(stderr, "[LOWER] malformed byte literal at line %d\n", (int) call_node->line);
+            l->had_error = true;
+            return NULL;
+        }
+        bytes[i] = (uint8_t) element->as.literal.raw_value.int_val;
+    }
+    if (count == 0)
+        bytes[0] = 0;
+
+    struct XrType *result_type = xi_lower_node_type(l, call_node);
+    XiValue *address = xi_value_new(l->func, l->cur_block, XI_STATIC_BYTES_PTR, result_type, 0);
+    if (!address)
+        return NULL;
+    address->aux = bytes;
+    address->aux_int = count;
+    address->line = (uint32_t) call_node->line;
+    return address;
+}
+
 static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
     ArrayLiteralNode *arr = &node->as.array_literal;
     int count = arr->count;
@@ -4876,6 +4917,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
 
         struct XrType *method_receiver_type = ma->object ? xi_lower_node_type(l, ma->object) : NULL;
+
+        if (ma->name && strcmp(ma->name, "ptr") == 0 && call->arg_count == 0 && ma->object &&
+            ma->object->type == AST_ARRAY_LITERAL &&
+            ma->object->as.array_literal.is_fixed_bytes_literal) {
+            return lower_static_bytes_literal_ptr(l, node, ma->object);
+        }
 
         uint8_t method_key_access_op = 0;
         uint32_t method_key_access_ordinal = UINT32_MAX;

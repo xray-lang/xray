@@ -762,6 +762,19 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+; Address of the immutable storage owned by a direct b"..."/c"..." literal.
+; aux points at the exact byte payload and aux_int is its byte length.  Unlike
+; xi.array.data.ptr this has static lifetime and may cross call boundaries.
+(define-xi-op xi.static.bytes.ptr
+  :class pure
+  :arity 0
+  :result-ownership borrowed
+  :own-use borrow
+  :effects ()
+  :requires (static-bytes addressable)
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 ; Freestanding static-data address. Returns the address of an already
 ; materialized top-level const object as Ptr<T>. aux_int is the module
 ; shared slot; imported slots resolve to the target module's weak data symbol.
