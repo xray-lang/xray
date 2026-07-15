@@ -3765,16 +3765,66 @@ XrType *xa_visit_nullish_coalesce(XaInferContext *ctx, AstNode *node) {
  * Optional Chain: obj?.prop, obj?.[index], obj?.method(), func?.()
  * Result is always nullable: typeof(obj.prop) | null => T?
  * -------------------------------------------------------------------------- */
+static XrType *xa_optional_error(XaInferContext *ctx) {
+    return xr_type_new_error(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL);
+}
+
+static bool xa_optional_is_legacy_unknown(XrType *type) {
+    return type && type->kind == XR_KIND_UNKNOWN;
+}
+
+static XrType *xa_optional_nullable_result(XaInferContext *ctx, XrType *type) {
+    if (!ctx || !ctx->analyzer || !type)
+        return xa_optional_error(ctx);
+    XrType *copy = xr_type_copy(ctx->analyzer->isolate, type);
+    return copy ? xr_type_make_nullable(ctx->analyzer->isolate, copy) : xa_optional_error(ctx);
+}
+
+static XrType *xa_optional_null_result(XaInferContext *ctx) {
+    return xr_type_new_null(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL);
+}
+
+static XrType *xa_optional_report_missing_member(XaInferContext *ctx, AstNode *node,
+                                                 XrType *receiver, const char *member) {
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[192];
+    snprintf(msg, sizeof(msg), "%s has no member '%s'",
+             receiver ? xr_type_to_string(receiver) : "<error>", member ? member : "");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE, msg,
+                               &loc);
+    return xa_optional_error(ctx);
+}
+
+static XrType *xa_optional_report_not_indexable(XaInferContext *ctx, AstNode *node,
+                                                XrType *receiver) {
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[192];
+    snprintf(msg, sizeof(msg), "type '%s' does not support indexed access",
+             receiver ? xr_type_to_string(receiver) : "<error>");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+    return xa_optional_error(ctx);
+}
+
 XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
-        return xr_type_new_unknown(NULL);
+        return xa_optional_error(ctx);
 
     XrType *obj_type = xa_visit_infer_expr(ctx, node->as.optional_chain.object);
 
-    // If object is unknown, result is unknown
-    if (XR_TYPE_IS_UNKNOWN(obj_type)) {
+    // Recovery poison remains recovery poison: do not emit a secondary optional-chain diagnostic.
+    if (XR_TYPE_IS_ERROR(obj_type))
+        return obj_type;
+
+    // Legacy unknown remains a recovery/imprecision boundary for now. Do not turn it into a
+    // successful user-visible result in new paths below.
+    if (xa_optional_is_legacy_unknown(obj_type))
         return xr_type_new_unknown(NULL);
-    }
+
+    // A statically-null optional chain short-circuits to null without requiring member/index
+    // metadata from the null receiver itself.
+    if (XR_TYPE_IS_NULL(obj_type))
+        return xa_optional_null_result(ctx);
 
     // Strip nullable from object for member lookup
     XrType *base_type = xr_type_non_nullable(ctx->analyzer->isolate, obj_type);
@@ -3782,9 +3832,14 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
     // Optional function-call callee: func?.()
     if (node->as.optional_chain.chain_type == 3) {
         if (XR_TYPE_IS_FUNCTION(base_type))
-            return xr_type_make_nullable(ctx->analyzer->isolate,
-                                         xr_type_copy(ctx->analyzer->isolate, base_type));
-        return xr_type_new_unknown(NULL);
+            return xa_optional_nullable_result(ctx, base_type);
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[192];
+        snprintf(msg, sizeof(msg), "optional call receiver type '%s' is not callable",
+                 base_type ? xr_type_to_string(base_type) : "<error>");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xa_optional_error(ctx);
     }
 
     // Property access: obj?.name
@@ -3794,34 +3849,44 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
         const char *prop_name = node->as.optional_chain.name;
 
         if (xa_freestanding_reject_string_member(ctx, node, base_type, prop_name))
-            return xr_type_new_unknown(NULL);
+            return xa_optional_error(ctx);
 
         // Built-in properties — result is nullable (object may be null)
         if (xa_symbol_is_collection_length(xr_builtin_symbol_from_name(prop_name), base_type)) {
-            return xr_type_make_nullable(ctx->analyzer->isolate, xr_type_new_int(NULL));
+            return xa_optional_nullable_result(ctx, xr_type_new_int(NULL));
         }
 
-        // Class instance member
-        if (XR_TYPE_IS_INSTANCE(base_type) && base_type->instance.class_name) {
+        // Named class/instance member. Some local-class paths still do not carry complete field
+        // metadata through optional chaining, so only hard-diagnose named class receivers once
+        // class metadata convergence is complete.
+        if ((XR_TYPE_IS_INSTANCE(base_type) || base_type->kind == XR_KIND_CLASS) &&
+            base_type->instance.class_name) {
             XaSymbol *class_sym =
-                xa_scope_lookup(ctx->analyzer->global_scope, base_type->instance.class_name);
-            if (class_sym && class_sym->kind == XA_SYM_CLASS) {
-                XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
-                if (class_links && class_links->class_info) {
-                    XaSymbol *member =
-                        xa_class_info_lookup_instance_member(class_links->class_info, prop_name);
-                    if (member) {
-                        XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
-                        if (ml && ml->type) {
-                            XrType *result = xr_type_copy(ctx->analyzer->isolate, ml->type);
-                            if (result)
-                                result->is_nullable = true;
-                            return result;
-                        }
+                xa_analyzer_lookup_deep(ctx->analyzer, base_type->instance.class_name);
+            XaSymbolLinks *class_links = (class_sym && class_sym->kind == XA_SYM_CLASS)
+                                             ? xa_analyzer_get_links(ctx->analyzer, class_sym)
+                                             : NULL;
+            XrClassInfo *class_info = class_links ? class_links->class_info : NULL;
+            if (!class_info)
+                class_info = base_type->instance.class_ref;
+            if (class_info) {
+                struct XrClassInfo *member_owner = NULL;
+                XaSymbol *member = xa_class_info_lookup_instance_member_owner(class_info, prop_name,
+                                                                              &member_owner);
+                if (member) {
+                    XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
+                    if (ml && ml->type) {
+                        return xa_optional_nullable_result(ctx, ml->type);
                     }
                 }
             }
+            return xr_type_new_unknown(NULL);
         }
+
+        // Plain Json is an explicit dynamic data domain. Optional field access stays inside Json
+        // instead of falling back to the language-wide unknown type.
+        if (XR_TYPE_IS_JSON(base_type) && base_type->object.field_count == 0)
+            return xa_optional_nullable_result(ctx, xr_type_new_json(ctx->analyzer->isolate));
 
         // Record/Json field access through optional chain: result is nullable
         // because the receiver may be null.
@@ -3829,13 +3894,20 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
             for (int i = 0; i < base_type->object.field_count; i++) {
                 if (base_type->object.field_names[i] &&
                     strcmp(base_type->object.field_names[i], prop_name) == 0) {
-                    XrType *result =
-                        xr_type_copy(ctx->analyzer->isolate, base_type->object.field_types[i]);
-                    if (result)
-                        result->is_nullable = true;
-                    return result;
+                    return xa_optional_nullable_result(ctx, base_type->object.field_types[i]);
                 }
             }
+            if (base_type->object.is_sealed) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[256];
+                snprintf(msg, sizeof(msg), "类型 '%s' 没有字段 '%s'",
+                         object_shape_type_label(base_type), prop_name);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                return xa_optional_error(ctx);
+            }
+            return xr_type_new_unknown(NULL);
         }
 
         // Built-in methods on primitive/container types (e.g. string?.toInt())
@@ -3844,8 +3916,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
             if (sig) {
                 XrType *fn_type = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
                 if (fn_type) {
-                    XrType *result = xr_type_make_nullable(ctx->analyzer->isolate, fn_type);
-                    return result;
+                    return xa_optional_nullable_result(ctx, fn_type);
                 }
             }
         }
@@ -3859,34 +3930,51 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
                     type_str++;
                 XrType *prop_type = xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
                 if (prop_type)
-                    return xr_type_make_nullable(ctx->analyzer->isolate, prop_type);
+                    return xa_optional_nullable_result(ctx, prop_type);
             }
         }
+
+        return xa_optional_report_missing_member(ctx, node, base_type, prop_name);
     }
 
     // Index access: obj?.[index]
     if (node->as.optional_chain.index) {
-        xa_visit_infer_expr(ctx, node->as.optional_chain.index);
+        XrType *index_type = xa_visit_infer_expr(ctx, node->as.optional_chain.index);
+        if (index_type && XR_TYPE_IS_ERROR(index_type))
+            return index_type;
 
         if ((XR_TYPE_IS_ARRAY(base_type) || XR_TYPE_IS_VIEW(base_type) ||
              XR_TYPE_IS_SPAN(base_type)) &&
             base_type->container.element_type) {
-            XrType *result =
-                xr_type_copy(ctx->analyzer->isolate, base_type->container.element_type);
-            if (result)
-                result->is_nullable = true;
-            return result;
+            if (index_type && !xa_optional_is_legacy_unknown(index_type) &&
+                !XR_TYPE_IS_INT(index_type)) {
+                add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+                return xa_optional_error(ctx);
+            }
+            return xa_optional_nullable_result(ctx, base_type->container.element_type);
         }
         if (XR_TYPE_IS_MAP(base_type) && base_type->map.value_type) {
-            XrType *result = xr_type_copy(ctx->analyzer->isolate, base_type->map.value_type);
-            if (result)
-                result->is_nullable = true;
-            return result;
+            if (index_type && base_type->map.key_type &&
+                !xa_optional_is_legacy_unknown(index_type) &&
+                !xa_typecheck_assignable(base_type->map.key_type, index_type)) {
+                add_index_type_error(ctx, node, index_type, base_type->map.key_type);
+                return xa_optional_error(ctx);
+            }
+            return xa_optional_nullable_result(ctx, base_type->map.value_type);
         }
+        if (base_type && base_type->kind == XR_KIND_FIXED_ARRAY &&
+            base_type->fixed_array.element_type) {
+            if (index_type && !xa_optional_is_legacy_unknown(index_type) &&
+                !XR_TYPE_IS_INT(index_type)) {
+                add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+                return xa_optional_error(ctx);
+            }
+            return xa_optional_nullable_result(ctx, base_type->fixed_array.element_type);
+        }
+        return xa_optional_report_not_indexable(ctx, node, base_type);
     }
 
-    // Fallback: any?
-    return xr_type_new_unknown(NULL);
+    return xa_optional_error(ctx);
 }
 
 static bool xa_cast_type_is_uncertain(XrType *type) {
