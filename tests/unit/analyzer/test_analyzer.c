@@ -2924,6 +2924,17 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
                          "    box.containsKey(\"other\")\n"
                          "    throw box[\"caught\"]\n"
                          "  }\n"
+                         "}\n"
+                         "fn mapReadOnlyViewsPreserve() {\n"
+                         "  try { failMap() } catch (e: MapErr) {\n"
+                         "    var box = #{\"caught\": e}\n"
+                         "    box.get(\"other\")\n"
+                         "    box.containsValue(MapErr.Other)\n"
+                         "    box.keys()\n"
+                         "    box.values()\n"
+                         "    box.entries()\n"
+                         "    throw box[\"caught\"]\n"
+                         "  }\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -2942,6 +2953,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     const XaEffectSummary *mismatch = analyzer_function_effect_summary(a, "mapDynamicKeyMismatch");
     const XaEffectSummary *contains_key =
         analyzer_function_effect_summary(a, "mapContainsKeyPreserves");
+    const XaEffectSummary *readonly_views =
+        analyzer_function_effect_summary(a, "mapReadOnlyViewsPreserve");
     ASSERT(literal != NULL);
     ASSERT(other_key != NULL);
     ASSERT(invalidated != NULL);
@@ -2950,6 +2963,7 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(dynamic_invalidated != NULL);
     ASSERT(mismatch != NULL);
     ASSERT(contains_key != NULL);
+    ASSERT(readonly_views != NULL);
 
     const XaErrorTypeSet *literal_set = effect_summary_enum_set_named(a, literal, "MapErr");
     const XaErrorTypeSet *other_key_set = effect_summary_enum_set_named(a, other_key, "MapErr");
@@ -2962,6 +2976,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     const XaErrorTypeSet *mismatch_set = effect_summary_enum_set_named(a, mismatch, "MapErr");
     const XaErrorTypeSet *contains_key_set =
         effect_summary_enum_set_named(a, contains_key, "MapErr");
+    const XaErrorTypeSet *readonly_views_set =
+        effect_summary_enum_set_named(a, readonly_views, "MapErr");
     ASSERT(literal_set != NULL);
     ASSERT(other_key_set != NULL);
     ASSERT(invalidated_set != NULL);
@@ -2970,6 +2986,7 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(dynamic_invalidated_set != NULL);
     ASSERT(mismatch_set != NULL);
     ASSERT(contains_key_set != NULL);
+    ASSERT(readonly_views_set != NULL);
     ASSERT(!literal_set->all_variants);
     ASSERT(xa_bitset_test(&literal_set->variants, 0));
     ASSERT(!xa_bitset_test(&literal_set->variants, 1));
@@ -2988,6 +3005,9 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!contains_key_set->all_variants);
     ASSERT(xa_bitset_test(&contains_key_set->variants, 0));
     ASSERT(!xa_bitset_test(&contains_key_set->variants, 1));
+    ASSERT(!readonly_views_set->all_variants);
+    ASSERT(xa_bitset_test(&readonly_views_set->variants, 0));
+    ASSERT(!xa_bitset_test(&readonly_views_set->variants, 1));
 
     xa_analyzer_free(a);
     setup_pool();
@@ -3040,6 +3060,13 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
                          "    for (item in box) { throw item }\n"
                          "  }\n"
                          "}\n"
+                         "fn setValuesIteratorPreserves() {\n"
+                         "  try { failSet() } catch (e: SetErr) {\n"
+                         "    var box: Set<SetErr> = #[e]\n"
+                         "    box.values()\n"
+                         "    for (item in box) { throw item }\n"
+                         "  }\n"
+                         "}\n"
                          "fn setOrdinaryIteratorFallsBack() {\n"
                          "  const box: Set<SetErr> = #[SetErr.Boom, SetErr.Other]\n"
                          "  for (item in box) { throw item }\n"
@@ -3058,6 +3085,8 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
         analyzer_function_effect_summary(a, "setAddCaughtIteratorPreserves");
     const XaEffectSummary *contains =
         analyzer_function_effect_summary(a, "setContainsIteratorPreserves");
+    const XaEffectSummary *values =
+        analyzer_function_effect_summary(a, "setValuesIteratorPreserves");
     const XaEffectSummary *ordinary =
         analyzer_function_effect_summary(a, "setOrdinaryIteratorFallsBack");
     ASSERT(singleton != NULL);
@@ -3066,6 +3095,7 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(mutated != NULL);
     ASSERT(add_caught != NULL);
     ASSERT(contains != NULL);
+    ASSERT(values != NULL);
     ASSERT(ordinary != NULL);
 
     const XaErrorTypeSet *singleton_set = effect_summary_enum_set_named(a, singleton, "SetErr");
@@ -3074,6 +3104,7 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     const XaErrorTypeSet *mutated_set = effect_summary_enum_set_named(a, mutated, "SetErr");
     const XaErrorTypeSet *add_caught_set = effect_summary_enum_set_named(a, add_caught, "SetErr");
     const XaErrorTypeSet *contains_set = effect_summary_enum_set_named(a, contains, "SetErr");
+    const XaErrorTypeSet *values_set = effect_summary_enum_set_named(a, values, "SetErr");
     const XaErrorTypeSet *ordinary_set = effect_summary_enum_set_named(a, ordinary, "SetErr");
     ASSERT(singleton_set != NULL);
     ASSERT(dedup_set != NULL);
@@ -3081,6 +3112,7 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(mutated_set != NULL);
     ASSERT(add_caught_set != NULL);
     ASSERT(contains_set != NULL);
+    ASSERT(values_set != NULL);
     ASSERT(ordinary_set != NULL);
     ASSERT(!singleton_set->all_variants);
     ASSERT(xa_bitset_test(&singleton_set->variants, 0));
@@ -3096,6 +3128,9 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(!contains_set->all_variants);
     ASSERT(xa_bitset_test(&contains_set->variants, 0));
     ASSERT(!xa_bitset_test(&contains_set->variants, 1));
+    ASSERT(!values_set->all_variants);
+    ASSERT(xa_bitset_test(&values_set->variants, 0));
+    ASSERT(!xa_bitset_test(&values_set->variants, 1));
     ASSERT(ordinary_set->all_variants);
 
     xa_analyzer_free(a);

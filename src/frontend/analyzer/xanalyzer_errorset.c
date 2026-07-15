@@ -2163,7 +2163,7 @@ static bool readonly_collection_member_preserves_catch_aggregate_aliases(ErrorSe
                                                                          const CallExprNode *call) {
     AstNode *source = identity_source(callee);
     if (!ctx || !ctx->current_caught || !source || source->type != AST_MEMBER_ACCESS || !call ||
-        !call->arguments)
+        (call->arg_count > 0 && !call->arguments))
         return false;
 
     MemberAccessNode *ma = &source->as.member_access;
@@ -2180,10 +2180,17 @@ static bool readonly_collection_member_preserves_catch_aggregate_aliases(ErrorSe
     if (!current_catch_has_aggregate_container(ctx, id, name))
         return false;
 
-    if (XR_TYPE_IS_SET(receiver_type) && call->arg_count == 1 && strcmp(ma->name, "contains") == 0)
+    if (XR_TYPE_IS_SET(receiver_type) &&
+        ((call->arg_count == 1 && strcmp(ma->name, "contains") == 0) ||
+         (call->arg_count == 0 && strcmp(ma->name, "values") == 0)))
         return true;
     if (XR_TYPE_IS_MAP(receiver_type) && call->arg_count == 1 &&
-        strcmp(ma->name, "containsKey") == 0)
+        (strcmp(ma->name, "get") == 0 || strcmp(ma->name, "containsKey") == 0 ||
+         strcmp(ma->name, "containsValue") == 0))
+        return true;
+    if (XR_TYPE_IS_MAP(receiver_type) && call->arg_count == 0 &&
+        (strcmp(ma->name, "keys") == 0 || strcmp(ma->name, "values") == 0 ||
+         strcmp(ma->name, "entries") == 0))
         return true;
     return false;
 }
