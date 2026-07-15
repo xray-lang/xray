@@ -1,0 +1,2 @@
+fn bad(...xs: in int) {
+}
