@@ -1503,6 +1503,17 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME test_stdlib_module_merge_gate
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_stdlib_module_merge_gate.py
+    )
+    set_tests_properties(test_stdlib_module_merge_gate PROPERTIES
+        LABELS "stdlib;boundary;merge;unit"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME stdlib_migration_contracts
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/stdlib_migration.py
                 check --root ${CMAKE_CURRENT_SOURCE_DIR}
@@ -1546,6 +1557,31 @@ if(BUILD_TESTS)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         VERBATIM
         COMMENT "Checking final task-196 stdlib self-hosting completion criteria"
+    )
+
+    add_custom_target(stdlib-module-merge-check
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_stdlib_module_merge.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                postmerge
+                --xray $<TARGET_FILE:xray>
+        DEPENDS xray
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        VERBATIM
+        COMMENT "Checking task-196 S0 integrated stdlib metadata and generated artifacts"
+    )
+
+    add_custom_target(regen-stdlib-governance
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_stdlib_module_merge.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                regenerate
+                --xray $<TARGET_FILE:xray>
+                --artifact-dir ${CMAKE_CURRENT_BINARY_DIR}/stdlib-governance
+        DEPENDS xray
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        VERBATIM
+        COMMENT "Regenerating task-196 S0 stdlib metadata, API/MCP artifacts and report"
     )
 
     add_test(

@@ -20,6 +20,7 @@ from check_stdlib_boundary import (  # noqa: E402
 )
 from stdlib_manifest import load_manifest, registry_modules  # noqa: E402
 from report_stdlib_self_hosting import build_report  # noqa: E402
+from check_stdlib_aot_helper_residue import check_forbidden_tokens  # noqa: E402
 
 
 class StdlibBoundaryManifestTest(unittest.TestCase):
@@ -31,6 +32,18 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
     def test_semantic_native_and_fastpath_contracts_are_source_derived(self) -> None:
         self.assertEqual([], check_semantic_owners(ROOT))
         self.assertEqual([], check_fastpaths(ROOT))
+
+    def test_exact_aot_runtime_adapters_do_not_allow_module_helper_families(self) -> None:
+        manifest = load_manifest(ROOT)
+        allowed = {
+            name: set(module.get("aot_runtime_adapters", ()))
+            for name, module in manifest.by_name.items()
+            if module.get("aot_runtime_adapters")
+        }
+        self.assertEqual(
+            [],
+            check_forbidden_tokens(ROOT, manifest.aot_helper_forbidden_modules, allowed),
+        )
 
     def test_superseded_global_result_cannot_reenter_prelude(self) -> None:
         self.assertEqual([], check_error_model_policy(ROOT))
