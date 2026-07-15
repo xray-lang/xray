@@ -128,6 +128,8 @@ XR_FUNC void xi_lower_bind_record_access_id(XiLower *l, XiValue *access, const c
 XR_FUNC void xi_lower_bind_record_merge_id(XiLower *l, XiValue *merge, uint32_t source_node_id);
 XR_FUNC void xi_lower_bind_key_access_id(XiLower *l, XiValue *access, uint32_t source_span_id,
                                          uint32_t body_ordinal, uint8_t access_op);
+XR_FUNC void xi_lower_bind_map_shape_id(XiLower *l, XiValue *literal, uint32_t source_span_id,
+                                        uint8_t container_kind);
 
 typedef struct XiSequenceEvidenceIds {
     uint32_t sequence_access_id;

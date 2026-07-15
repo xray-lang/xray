@@ -31,6 +31,7 @@
 #include "../shared/xr_array_core.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
+#include "../shared/xr_swiss_index.h"
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_ops_gen.h"
 #include "../ir/xi_opt.h"

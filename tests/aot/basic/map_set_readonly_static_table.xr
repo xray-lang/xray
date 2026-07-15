@@ -1,0 +1,8 @@
+const SCORES: Map<string, int> = #{"ada": 7, "lin": 9}
+const SEEN: Set<string> = #["ada", "lin"]
+
+print(SCORES["ada"])
+print(SCORES.get("lin"))
+print(SEEN.contains("ada"))
+print(len(SCORES))
+print(len(SEEN))

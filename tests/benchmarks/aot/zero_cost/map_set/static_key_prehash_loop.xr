@@ -1,12 +1,11 @@
-fn run(n: int) -> int {
-    var scores: Map<string, int> = #{}
-    scores.set("ada", 1)
+const SCORES: Map<string, int> = #{"ada": 1}
 
+fn run(n: int) -> int {
     var i = 0
     var sum = 0
     while (i < n) {
-        if (scores.containsKey("ada")) {
-            sum = sum + scores.get("ada")
+        if (SCORES.containsKey("ada")) {
+            sum = sum + SCORES.get("ada")
         }
         i = i + 1
     }

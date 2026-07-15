@@ -3431,10 +3431,145 @@ static void xicgen_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     }
 }
 
+static const XaotMapShapePlan *xicgen_static_map_shape_plan(XiCgenCtx *ctx, const XiValue *v) {
+    const XaotBundle *bundle;
+    const XaotMapShapePlan *plan;
+    if (!v || v->xg_map_shape_id == XG_NO_ID)
+        return NULL;
+    bundle = cg_ctx_aot_bundle(ctx);
+    plan = bundle ? xaot_bundle_find_map_shape_plan(bundle, v->xg_map_shape_id) : NULL;
+    if (!plan || plan->action != XAOT_MAP_SHAPE_READONLY_STATIC_TABLE) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: Map/Set construction has no verified readonly static plan "
+                "(shape=%u)\n",
+                v->xg_map_shape_id);
+        return NULL;
+    }
+    return plan;
+}
+
+static uint32_t xicgen_static_table_slots(uint32_t needed) {
+    uint32_t slots = XR_SWISS_GROUP;
+    while ((uint64_t) slots * 2u / 3u < needed)
+        slots <<= 1u;
+    return slots;
+}
+
+static const XgMapEntrySummary *
+xicgen_static_map_entry(XiCgenCtx *ctx, const XaotMapShapePlan *plan, uint32_t ordinal) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
+    if (!ev || !plan || ordinal >= plan->entry_count || plan->entry_start == 0 ||
+        (uint64_t) plan->entry_start - 1u + ordinal >= ev->nmap_entries) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: readonly static Map/Set entry evidence is stale\n");
+        return NULL;
+    }
+    return &ev->map_entries[plan->entry_start - 1u + ordinal];
+}
+
+static bool xicgen_emit_static_map_new(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                       const XaotMapShapePlan *plan) {
+    const XiMapLiteralData *data =
+        v && v->aux_kind == XI_AUX_KIND_MAP_LITERAL ? (const XiMapLiteralData *) v->aux : NULL;
+    if (!data || !plan || data->container_kind != XG_MAP_CONTAINER_MAP ||
+        data->count != plan->entry_count || !data->keys || !data->values) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: readonly static Map literal payload is stale\n");
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    uint32_t slots = xicgen_static_table_slots(data->count);
+    uint32_t entries_cap = (uint32_t) ((uint64_t) slots * 2u / 3u);
+    const char *value_elem = "XR_ELEM_ANY";
+    XaotContainerElemPlan value_plan;
+    if (v->type && XR_TYPE_IS_MAP(v->type) && v->type->map.value_type &&
+        xaot_container_elem_plan_for_type(v->type->map.value_type, &value_plan))
+        value_elem = value_plan.elem_name;
+    fprintf(out,
+            "({ static xrt_map_t _xrt_sm_%u; static uint8_t _xrt_sm_ctrl_%u[%u]; "
+            "static int32_t _xrt_sm_indices_%u[%u]; static XrMapEntry _xrt_sm_entries_%u[%u]; "
+            "static uint8_t _xrt_sm_init_%u; if (!_xrt_sm_init_%u) { "
+            "(void)xrt_map_static_storage_init(&_xrt_sm_%u, _xrt_sm_ctrl_%u, "
+            "_xrt_sm_indices_%u, _xrt_sm_entries_%u, %u, %u, %s); ",
+            v->id, v->id, slots + XR_SWISS_GROUP, v->id, slots, v->id, entries_cap, v->id, v->id,
+            v->id, v->id, v->id, v->id, slots, entries_cap, value_elem);
+    for (uint32_t i = 0; i < data->count; i++) {
+        const XgMapEntrySummary *entry = xicgen_static_map_entry(ctx, plan, i);
+        if (!entry) {
+            emit_codegen_abort_expr(out);
+            fprintf(out, "; })");
+            return true;
+        }
+        fprintf(out, "xrt_map_set_prehashed(&_xrt_sm_%u, ", v->id);
+        emit_value_as_rep_ctx(ctx, out, data->keys[i], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, data->values[i], XR_REP_TAGGED);
+        fprintf(out, ", UINT32_C(0x%08" PRIx32 ")); ", (uint32_t) entry->prehash);
+    }
+    fprintf(out,
+            "(void)xrt_map_static_storage_freeze(&_xrt_sm_%u); _xrt_sm_init_%u = 1; } "
+            "xr_mkptr(&_xrt_sm_%u, XR_TAG_MAP); })",
+            v->id, v->id, v->id);
+    return true;
+}
+
+static bool xicgen_emit_static_set_new(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                       const XaotMapShapePlan *plan) {
+    const XiMapLiteralData *data =
+        v && v->aux_kind == XI_AUX_KIND_MAP_LITERAL ? (const XiMapLiteralData *) v->aux : NULL;
+    if (!data || !plan || data->container_kind != XG_MAP_CONTAINER_SET ||
+        data->count != plan->entry_count || !data->keys) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: readonly static Set literal payload is stale\n");
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    uint32_t slots = xicgen_static_table_slots(data->count);
+    uint32_t entries_cap = (uint32_t) ((uint64_t) slots * 2u / 3u);
+    fprintf(out,
+            "({ static xrt_set_t _xrt_ss_%u; static uint8_t _xrt_ss_ctrl_%u[%u]; "
+            "static int32_t _xrt_ss_indices_%u[%u]; static XrSetEntry _xrt_ss_entries_%u[%u]; "
+            "static uint8_t _xrt_ss_init_%u; if (!_xrt_ss_init_%u) { "
+            "(void)xrt_set_static_storage_init(&_xrt_ss_%u, _xrt_ss_ctrl_%u, "
+            "_xrt_ss_indices_%u, _xrt_ss_entries_%u, %u, %u); ",
+            v->id, v->id, slots + XR_SWISS_GROUP, v->id, slots, v->id, entries_cap, v->id, v->id,
+            v->id, v->id, v->id, v->id, slots, entries_cap);
+    for (uint32_t i = 0; i < data->count; i++) {
+        const XgMapEntrySummary *entry = xicgen_static_map_entry(ctx, plan, i);
+        if (!entry) {
+            emit_codegen_abort_expr(out);
+            fprintf(out, "; })");
+            return true;
+        }
+        fprintf(out, "(void)xrt_set_add_prehashed(&_xrt_ss_%u, ", v->id);
+        emit_value_as_rep_ctx(ctx, out, data->keys[i], XR_REP_TAGGED);
+        fprintf(out, ", UINT32_C(0x%08" PRIx32 ")); ", (uint32_t) entry->prehash);
+    }
+    fprintf(out,
+            "(void)xrt_set_static_storage_freeze(&_xrt_ss_%u); _xrt_ss_init_%u = 1; } "
+            "xr_mkptr(&_xrt_ss_%u, XR_TAG_SET); })",
+            v->id, v->id, v->id);
+    return true;
+}
+
 static void xicgen_map_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
     (void) f;
     (void) prefix;
+    const XaotMapShapePlan *static_plan = xicgen_static_map_shape_plan(ctx, v);
+    if (v && v->xg_map_shape_id != XG_NO_ID) {
+        if (ctx && ctx->error)
+            emit_codegen_abort_expr(out);
+        else
+            (void) xicgen_emit_static_map_new(ctx, out, v, static_plan);
+        return;
+    }
     int64_t cap = xicgen_capacity_arg_or_default(v, 8);
     uint8_t flags = (uint8_t) ((v ? v->aux_int : 0) & 0x02);
     if (!flags && !emit_typed_map_new_expr(ctx, out, v, cap)) {
@@ -3458,6 +3593,14 @@ static void xicgen_set_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     (void) ctx;
     (void) f;
     (void) prefix;
+    const XaotMapShapePlan *static_plan = xicgen_static_map_shape_plan(ctx, v);
+    if (v && v->xg_map_shape_id != XG_NO_ID) {
+        if (ctx && ctx->error)
+            emit_codegen_abort_expr(out);
+        else
+            (void) xicgen_emit_static_set_new(ctx, out, v, static_plan);
+        return;
+    }
     int64_t cap = xicgen_capacity_arg_or_default(v, 8);
     uint8_t flags = (uint8_t) ((v ? v->aux_int : 0) & 0x02);
     if (!flags && !emit_typed_set_new_expr(ctx, out, v, cap))
@@ -6760,6 +6903,14 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
                                const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call_method: need receiver");
     const char *method = (const char *) v->aux;
+    if (v->xg_map_shape_id != XG_NO_ID && method && strcmp(method, "add") == 0) {
+        const XaotMapShapePlan *plan = xicgen_static_map_shape_plan(ctx, v);
+        if (!plan || plan->container_kind != XG_MAP_CONTAINER_SET)
+            emit_codegen_abort_expr(out);
+        else
+            fprintf(out, "((void)0)");
+        return;
+    }
     bool is_super = v->op == XI_CALL_METHOD && (v->aux_int & 1) != 0;
     const XiFunc *mfunc = NULL;
     const char *method_prefix = NULL;
@@ -8181,6 +8332,14 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
 static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
     XR_DCHECK(v->nargs >= 3, "xicgen_index_set: need obj, key, and value");
+    if (v->xg_map_shape_id != XG_NO_ID) {
+        const XaotMapShapePlan *plan = xicgen_static_map_shape_plan(ctx, v);
+        if (!plan || plan->container_kind != XG_MAP_CONTAINER_MAP)
+            emit_codegen_abort_expr(out);
+        else
+            fprintf(out, "((void)0)");
+        return;
+    }
     const XaotKeyAccessPlan *key_plan = xicgen_checked_key_access_plan(ctx, v, XG_KEY_ACCESS_SET);
     if (ctx && ctx->error) {
         emit_codegen_abort_expr(out);

@@ -126,6 +126,7 @@ typedef enum {
     XI_AUX_KIND_PAR_REDUCE = 3,
     XI_AUX_KIND_PAR_MAP = 4,
     XI_AUX_KIND_THREAD_SPAWN = 5,
+    XI_AUX_KIND_MAP_LITERAL = 6,
 } XiAuxKind;
 
 /* Source-variable IDs are carried on XiValue for backend register/cell
@@ -743,6 +744,7 @@ typedef struct XiValue {
         xg_record_access_id; /* stable XgRecordAccessId for evidence-backed Record slot access */
     uint32_t xg_record_merge_id; /* stable XgRecordMergeId for evidence-backed Record spread */
     uint32_t xg_key_access_id;   /* stable XgKeyAccessId for evidence-backed Map/Set key access */
+    uint32_t xg_map_shape_id;    /* stable XgMapShapeId for evidence-backed Map/Set construction */
     uint32_t xg_class_field_id;  /* stable XgFieldId for evidence-backed class field access */
     uint32_t
         xg_sequence_access_id;  /* stable XgSequenceAccessId for linear-container access plans */
@@ -772,12 +774,20 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->xg_record_access_id = src->xg_record_access_id;
     dst->xg_record_merge_id = src->xg_record_merge_id;
     dst->xg_key_access_id = src->xg_key_access_id;
+    dst->xg_map_shape_id = src->xg_map_shape_id;
     dst->xg_class_field_id = src->xg_class_field_id;
     dst->xg_sequence_access_id = src->xg_sequence_access_id;
     dst->xg_capacity_op_id = src->xg_capacity_op_id;
     dst->xg_bulk_op_id = src->xg_bulk_op_id;
     dst->xg_encoding_op_id = src->xg_encoding_op_id;
 }
+
+typedef struct XiMapLiteralData {
+    XiValue **keys;
+    XiValue **values;
+    uint16_t count;
+    uint8_t container_kind;
+} XiMapLiteralData;
 
 static inline bool xi_load_field_is_adt(const XiValue *v) {
     return v && v->op == XI_LOAD_FIELD && v->aux_kind == XI_AUX_KIND_ADT_FIELD;
