@@ -417,7 +417,7 @@ TEST(extern_block_roundtrip) {
 TEST(extern_layout_roundtrip) {
     setup();
     const char *src = "extern \"C\" {\n"
-                      "  struct Header { tag: uint8 next: Ptr<byte> }\n"
+                      "  struct Header { tag: uint8 next: Ptr<byte> tail: flex uint8 }\n"
                       "  packed struct Packed align(8) { tag: uint8 count: uint32 }\n"
                       "  union Word { bits: uint32 bytes: [uint8; 4] }\n"
                       "}\n";
@@ -425,6 +425,7 @@ TEST(extern_layout_roundtrip) {
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1, "extern \"C\""));
     ASSERT_TRUE(contains(fmt1, "struct Header"));
+    ASSERT_TRUE(contains(fmt1, "tail: flex uint8"));
     ASSERT_TRUE(contains(fmt1, "packed struct Packed align(8)"));
     ASSERT_TRUE(contains(fmt1, "union Word"));
     char *fmt2 = parse_and_format(fmt1, "extern-layout-formatted.xr");

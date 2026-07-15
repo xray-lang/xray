@@ -321,6 +321,8 @@ static bool struct_layout_can_use_value_abi_depth(const XrAggregateLayout *sl, i
         return false;
     for (uint16_t i = 0; i < sl->field_count; i++) {
         const XrAggregateFieldLayout *field = &sl->fields[i];
+        if (field->is_flexible)
+            return false;
         const XaotLayoutInfo *info = xaot_layout_for_native_type(field->native_type);
         if (!info)
             return false;

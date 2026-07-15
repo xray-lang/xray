@@ -161,6 +161,8 @@ XR_FUNC bool xr_vm_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
                                            XrAggregateFieldLayout *field, XrValue *out) {
     if (!fp || !field || !out)
         return false;
+    if (field->is_flexible)
+        return false;
 
     switch (field->native_type) {
         case XR_NATIVE_I64:
@@ -235,6 +237,8 @@ XR_FUNC bool xr_vm_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
 XR_FUNC bool xr_vm_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
                                             const XrAggregateFieldLayout *field, XrValue src) {
     if (!fp || !field)
+        return false;
+    if (field->is_flexible)
         return false;
 
     switch (field->native_type) {

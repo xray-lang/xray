@@ -27,6 +27,8 @@ static bool cg_struct_native_heap_supported_depth(const XrAggregateLayout *sl, i
     if (depth > 8)
         return false;
     for (uint16_t i = 0; i < sl->field_count; i++) {
+        if (sl->fields[i].is_flexible)
+            return false;
         uint8_t native_type = sl->fields[i].native_type;
         if (xaot_layout_native_field_direct_heap_supported(native_type))
             continue;
@@ -147,6 +149,8 @@ static uint64_t cg_struct_layout_hash_depth(const XrAggregateLayout *sl, int dep
         h *= UINT64_C(1099511628211);
         h ^= sl->fields[i].elem_count;
         h *= UINT64_C(1099511628211);
+        h ^= sl->fields[i].is_flexible ? 1u : 0u;
+        h *= UINT64_C(1099511628211);
         h ^= sl->fields[i].size;
         h *= UINT64_C(1099511628211);
         h ^= sl->fields[i].sub_layout_id;
@@ -180,6 +184,7 @@ static bool cg_struct_layout_same_shape_depth(const XrAggregateLayout *a,
         if (a->fields[i].native_type != b->fields[i].native_type ||
             a->fields[i].elem_native_type != b->fields[i].elem_native_type ||
             a->fields[i].elem_count != b->fields[i].elem_count ||
+            a->fields[i].is_flexible != b->fields[i].is_flexible ||
             a->fields[i].size != b->fields[i].size)
             return false;
         if (a->fields[i].native_type == XR_NATIVE_NESTED_AGGREGATE &&
@@ -206,6 +211,10 @@ static const XrAggregateLayout *cg_type_struct_layout(const XrType *type);
 static void emit_struct_field_decl(FILE *out, const XrAggregateLayout *sl, int64_t idx,
                                    const char *name, const char *prefix) {
     const XrAggregateFieldLayout *field = cg_struct_field(sl, idx);
+    if (field && field->is_flexible) {
+        fprintf(out, "%s %s[]", cg_struct_native_c_type(field->elem_native_type), name);
+        return;
+    }
     if (field && field->native_type == XR_NATIVE_NESTED_AGGREGATE && field->sub_layout) {
         char tname[128];
         cg_struct_heap_type_name(tname, sizeof(tname), prefix, field->sub_layout);

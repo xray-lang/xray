@@ -105,6 +105,19 @@ static bool xa_extern_layout_field_type_supported(const XrType *type) {
     }
 }
 
+static int xa_extern_flexible_elem_native_lane(const XrType *type) {
+    if (!type || type->is_nullable)
+        return -1;
+    int native = xr_type_kind_to_native(type->kind, type->native_width);
+    if (native >= 0 &&
+        (type->kind == XR_KIND_BOOL || type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT))
+        return native;
+    if (type->kind == XR_KIND_POINTER &&
+        xa_extern_layout_pointer_pointee_supported(type->container.element_type, 0))
+        return XR_NATIVE_POINTER;
+    return -1;
+}
+
 static XrAttribute *xa_function_attr(const FunctionDeclNode *fn, AttributeKind kind) {
     if (!fn || !fn->attributes)
         return NULL;
@@ -171,6 +184,8 @@ static bool xa_c_export_struct_layout_supported_depth(const XrAggregateLayout *l
         return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {
         const XrAggregateFieldLayout *field = &layout->fields[i];
+        if (field->is_flexible)
+            return false;
         if (xa_c_export_native_scalar_supported(field->native_type))
             continue;
         if (field->native_type == XR_NATIVE_ARRAY && field->elem_count > 0 &&
@@ -202,6 +217,8 @@ static bool xa_struct_layout_bitwise_reinterpretable_depth(const XrAggregateLayo
         return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {
         const XrAggregateFieldLayout *field = &layout->fields[i];
+        if (field->is_flexible)
+            return false;
         if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
             if (!xa_struct_layout_bitwise_reinterpretable_depth(field->sub_layout, depth + 1))
                 return false;
@@ -220,6 +237,8 @@ static bool xa_struct_layout_bitwise_reinterpretable_depth(const XrAggregateLayo
 
 static bool xa_struct_field_bitwise_reinterpretable(const XrAggregateFieldLayout *field) {
     if (!field)
+        return false;
+    if (field->is_flexible)
         return false;
     if (field->native_type == XR_NATIVE_NESTED_AGGREGATE)
         return xa_struct_layout_bitwise_reinterpretable_depth(field->sub_layout, 0);
@@ -3298,6 +3317,26 @@ skip_interfaces:
             FieldDeclNode *field_decl = field_node && field_node->type == AST_FIELD_DECL
                                             ? &field_node->as.field_decl
                                             : NULL;
+            if (field_decl && field_decl->is_flexible) {
+                XrLocation loc = {.file = ctx->file_path, .line = field_node->line};
+                const char *message = NULL;
+                if (!is_extern_layout)
+                    message = "flexible array fields are allowed only in extern layouts";
+                else if (is_union_decl)
+                    message = "extern unions cannot contain a flexible array field";
+                else if (i != info->field_count - 1)
+                    message = "a flexible array must be the last field of an extern struct";
+                else if (i == 0)
+                    message = "a flexible array requires at least one preceding field";
+                else if (xa_extern_flexible_elem_native_lane(ft) < 0)
+                    message = "a flexible array element must have a native scalar or pointer type";
+                if (message) {
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, message, &loc);
+                    struct_field_types_valid = false;
+                    continue;
+                }
+            }
             if (is_extern_layout && field_decl &&
                 (field_decl->is_private || field_decl->is_protected || field_decl->is_static ||
                  field_decl->is_const || field_decl->initializer)) {
@@ -3422,6 +3461,10 @@ skip_interfaces:
             }
             XaSymbolLinks *fl = xa_analyzer_get_links(ctx->analyzer, fs);
             XrType *ft = (fl && fl->type) ? fl->type : NULL;
+            AstNode *field_node = (i < cls->field_count) ? cls->fields[i] : NULL;
+            FieldDeclNode *field_decl = field_node && field_node->type == AST_FIELD_DECL
+                                            ? &field_node->as.field_decl
+                                            : NULL;
 
             if (!ft || ft->kind == XR_KIND_UNKNOWN) {
                 // Phase 1: struct fields must have explicit type annotations
@@ -3435,6 +3478,19 @@ skip_interfaces:
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 layout_valid = false;
                 break;
+            }
+
+            if (field_decl && field_decl->is_flexible) {
+                int elem_native = xa_extern_flexible_elem_native_lane(ft);
+                if (elem_native < 0) {
+                    layout_valid = false;
+                    break;
+                }
+                layout->fields[i].native_type = XR_NATIVE_ARRAY;
+                layout->fields[i].elem_native_type = (uint8_t) elem_native;
+                layout->fields[i].elem_count = 0;
+                layout->fields[i].is_flexible = true;
+                continue;
             }
 
             int native = xr_type_kind_to_native(ft->kind, ft->native_width);

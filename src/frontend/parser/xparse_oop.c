@@ -650,6 +650,11 @@ AstNode *xr_parse_union_declaration(Parser *parser) {
         }
 
         xr_parser_consume(parser, TK_COLON, "expected ':' after union field name");
+        bool is_flexible = false;
+        if (xr_parser_check_name(parser, "flex")) {
+            is_flexible = true;
+            xr_parser_advance(parser);
+        }
         XrTypeRef *field_type = xr_parse_type_annotation(parser);
 
         AstNode *initializer = NULL;
@@ -662,6 +667,7 @@ AstNode *xr_parse_union_declaration(Parser *parser) {
         AstNode *field = xr_ast_field_decl(parser->compiler_session, field_name, field_type, false,
                                            false, initializer, name_tok.line);
         if (field) {
+            field->as.field_decl.is_flexible = is_flexible;
             field->column = name_tok.column;
             field->end_line = name_tok.line;
             field->end_column = name_tok.column + name_tok.length;
@@ -702,6 +708,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     bool is_setter = false;
     (void) is_setter;
     bool is_const = false;
+    bool is_flexible = false;
 
     if (current_is_removed_public_modifier(parser)) {
         return reject_removed_member_modifier(
@@ -825,6 +832,10 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         // Parse type annotation (optional)
         XrTypeRef *field_type = NULL;
         if (xr_parser_match(parser, TK_COLON)) {
+            if (xr_parser_check_name(parser, "flex")) {
+                is_flexible = true;
+                xr_parser_advance(parser);
+            }
             // Use type annotation parser, supports all types and generic syntax
             field_type = xr_parse_type_annotation(parser);
         }
@@ -848,6 +859,10 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         AstNode *field = xr_ast_field_decl(parser->compiler_session, name, field_type, is_private,
                                            is_static, initializer, name_line);
         if (field) {
+            /* `flex` is contextual after a field colon, so it does not reserve
+             * the identifier globally.  Preserve it on the field rather than
+             * disguising an unsized tail as a zero-length fixed array. */
+            field->as.field_decl.is_flexible = is_flexible;
             field->as.field_decl.is_final = false;
             field->as.field_decl.is_protected = is_protected;
             field->as.field_decl.is_const = is_const;

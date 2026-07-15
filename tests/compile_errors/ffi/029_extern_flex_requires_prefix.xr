@@ -1,0 +1,5 @@
+extern "C" {
+    struct EmptyHeader {
+        bytes: flex uint8
+    }
+}
