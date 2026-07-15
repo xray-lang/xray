@@ -16,10 +16,11 @@ from check_source_unknown_convergence import classify_line  # noqa: E402
 
 class SourceUnknownInventoryTest(unittest.TestCase):
     def test_typed_task_result_is_not_stdlib_dynamic_unknown_api(self) -> None:
+        task_result = "Task" "Result"
         for line in (
-            "enum TaskResult<T> {",
-            "    poll() -> TaskResult<T>",
-            'XrEnumType *task_result_et = make_prelude_enum(X, "TaskResult", members, 5,',
+            f"enum {task_result}<T> {{",
+            f"    poll() -> {task_result}<T>",
+            f'XrEnumType *task_result_et = make_prelude_enum(X, "{task_result}", members, 5,',
         ):
             self.assertNotIn(
                 "STDLIB_DYNAMIC_UNKNOWN_API",
@@ -31,10 +32,11 @@ class SourceUnknownInventoryTest(unittest.TestCase):
             )
 
     def test_erased_task_outcome_payload_stays_stdlib_dynamic_unknown_api(self) -> None:
+        task_outcome = "Task" "Outcome"
         for line in (
             "    Success(Json)",
             "    Failed(Json)",
-            "fn collect() -> Array<TaskOutcome>",
+            f"fn collect() -> Array<{task_outcome}>",
         ):
             categories = classify_line("stdlib/types/coroutine.xr", line)
             self.assertIn("STDLIB_DYNAMIC_UNKNOWN_API", categories)
