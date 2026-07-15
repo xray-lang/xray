@@ -1,0 +1,12 @@
+struct ProjectionInitPair {
+    left: int
+    right: int
+}
+
+fn fill(value: out int) {
+    value = 1
+}
+
+fn bad(pair: out ProjectionInitPair) {
+    fill(out pair.left)
+}
