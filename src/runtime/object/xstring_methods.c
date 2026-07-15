@@ -247,11 +247,12 @@ static XrValue m_from_utf8(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
     uint8_t *owned = NULL;
     if (!string_bytes_arg(args, argc, &data, &len, &owned))
         return xr_null();
-    if (!xr_utf8_validate((const char *) data, len)) {
+    XrUtf8ScanResult scan = xr_utf8_scan_strict(data, len);
+    if (scan.error != XR_UTF8_OK) {
         xr_free(owned);
         return xr_null();
     }
-    XrString *result = xr_string_new(iso, (const char *) data, len);
+    XrString *result = xr_string_new_valid_utf8(iso, (const char *) data, len, scan.rune_count);
     xr_free(owned);
     return result ? xr_string_value(result) : xr_null();
 }
@@ -263,8 +264,9 @@ static XrValue m_from_utf8_lossy(XrVMRuntime *iso, XrValue self, XrValue *args, 
     uint8_t *owned = NULL;
     if (!string_bytes_arg(args, argc, &data, &len, &owned))
         return xr_string_value(xr_string_new(iso, "", 0));
-    if (xr_utf8_validate((const char *) data, len)) {
-        XrString *result = xr_string_new(iso, (const char *) data, len);
+    XrUtf8ScanResult scan = xr_utf8_scan_strict(data, len);
+    if (scan.error == XR_UTF8_OK) {
+        XrString *result = xr_string_new_valid_utf8(iso, (const char *) data, len, scan.rune_count);
         xr_free(owned);
         return result ? xr_string_value(result) : xr_null();
     }
@@ -278,21 +280,21 @@ static XrValue m_from_utf8_lossy(XrVMRuntime *iso, XrValue self, XrValue *args, 
         xr_free(owned);
         return xr_null();
     }
-    size_t src = 0, dst = 0;
+    size_t src = 0, dst = 0, rune_count = 0;
     while (src < len) {
-        uint32_t cp = 0;
-        int consumed = xr_utf8_decode((const char *) data + src, len - src, &cp);
-        if (consumed <= 0 || !xr_unicode_is_scalar(cp)) {
-            cp = XR_UNICODE_INVALID;
-            consumed = 1;
+        XrUtf8Step step = xr_utf8_decode_step(data + src, len - src);
+        if (step.error != XR_UTF8_OK) {
+            static const char replacement[] = {(char) 0xEF, (char) 0xBF, (char) 0xBD};
+            memcpy(buf + dst, replacement, sizeof(replacement));
+            dst += sizeof(replacement);
+        } else {
+            memcpy(buf + dst, data + src, step.consumed);
+            dst += step.consumed;
         }
-        char encoded[XR_UTF8_MAX_BYTES];
-        int written = xr_utf8_encode(cp, encoded);
-        memcpy(buf + dst, encoded, (size_t) written);
-        dst += (size_t) written;
-        src += (size_t) consumed;
+        src += step.consumed;
+        rune_count++;
     }
-    XrString *result = xr_string_new(iso, buf, dst);
+    XrString *result = xr_string_new_valid_utf8(iso, buf, dst, rune_count);
     xr_free(buf);
     xr_free(owned);
     return result ? xr_string_value(result) : xr_null();

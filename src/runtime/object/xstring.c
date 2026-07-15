@@ -107,14 +107,17 @@ static XrString *string_alloc_uninit(XrVMRuntime *iso, size_t length) {
     return str;
 }
 
-static XrString *string_alloc(XrVMRuntime *iso, const char *chars, size_t length) {
-    if (length > 0 && (!chars || !xr_utf8_validate(chars, length)))
+static XrString *string_alloc_valid_utf8(XrVMRuntime *iso, const char *chars, size_t length,
+                                         size_t rune_count) {
+    if (length > 0 && !chars)
+        return NULL;
+    if (rune_count > UINT32_MAX)
         return NULL;
     XrString *str = string_alloc_uninit(iso, length);
     if (!str)
         return NULL;
-    str->rune_length = (uint32_t) xr_utf8_strlen(chars ? chars : "", length);
-    if (chars)
+    str->rune_length = (uint32_t) rune_count;
+    if (chars && length > 0)
         memcpy(str->data, chars, length);
     return str;
 }
@@ -143,7 +146,17 @@ static uint32_t string_rune_count_lossy(const char *chars, size_t length) {
 XrString *xr_string_new(XrVMRuntime *iso, const char *chars, size_t length) {
     XR_DCHECK(iso != NULL, "string_new: NULL isolate");
     XR_DCHECK(length == 0 || chars != NULL, "string_new: NULL chars with length > 0");
-    XrString *str = string_alloc(iso, chars, length);
+    XrUtf8ScanResult scan = xr_utf8_scan_strict((const uint8_t *) chars, length);
+    if (scan.error != XR_UTF8_OK)
+        return NULL;
+    return xr_string_new_valid_utf8(iso, chars, length, scan.rune_count);
+}
+
+XrString *xr_string_new_valid_utf8(XrVMRuntime *iso, const char *chars, size_t length,
+                                   size_t rune_count) {
+    XR_DCHECK(iso != NULL, "string_new_valid_utf8: NULL isolate");
+    XR_DCHECK(length == 0 || chars != NULL, "string_new_valid_utf8: NULL chars with length > 0");
+    XrString *str = string_alloc_valid_utf8(iso, chars, length, rune_count);
     if (!str)
         return NULL;
     string_finish_runtime(str, str->data, length, 0);
@@ -267,7 +280,10 @@ XrString *xr_string_intern(XrVMRuntime *iso, const char *chars, size_t length, u
     if (core) {
         return xr_string_intern_core(core, chars, length, hash);
     }
-    XrString *s = string_alloc(iso, chars, length);
+    XrUtf8ScanResult scan = xr_utf8_scan_strict((const uint8_t *) chars, length);
+    if (scan.error != XR_UTF8_OK)
+        return NULL;
+    XrString *s = string_alloc_valid_utf8(iso, chars, length, scan.rune_count);
     if (s)
         string_finish_runtime(s, s->data, length, hash);
     return s;

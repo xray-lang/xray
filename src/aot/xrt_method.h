@@ -585,47 +585,41 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         xrt_array_t *bytes = (xrt_array_t *) arg0.ptr;
         if (!bytes || bytes->elem_type != XR_ELEM_U8)
             return sym == XRT_SYM_FROM_UTF8 ? XR_NULL_VAL : xrt_str_alloc(0);
-        const char *data = (const char *) bytes->data;
+        const uint8_t *data = (const uint8_t *) bytes->data;
         size_t len = (size_t) bytes->length;
-        bool valid = true;
-        for (size_t pos = 0; pos < len;) {
-            uint32_t cp = 0;
-            int consumed = xr_string_core_utf8_decode(data + pos, len - pos, &cp);
-            if (consumed <= 0 || (consumed == 1 && (unsigned char) data[pos] >= 0x80u)) {
-                valid = false;
-                break;
-            }
-            pos += (size_t) consumed;
-        }
-        if (valid) {
+        XrUtf8ScanResult scan = xr_utf8_core_scan_strict(data, len);
+        if (scan.error == XR_UTF8_OK) {
             XrValue out = xrt_str_alloc(len);
             if (len > 0)
                 memcpy(xr_str_buf(out), data, len);
             xr_str_buf(out)[len] = 0;
+            xr_str_hdr(out)->rune_len = (int64_t) scan.rune_count;
             return out;
         }
         if (sym == XRT_SYM_FROM_UTF8)
             return XR_NULL_VAL;
 
+        if (len > SIZE_MAX / 3)
+            return XR_NULL_VAL;
         XrValue out = xrt_str_alloc(len * 3);
         size_t src = 0, dst = 0;
+        int64_t rune_count = 0;
         while (src < len) {
-            uint32_t cp = 0;
-            int consumed = xr_string_core_utf8_decode(data + src, len - src, &cp);
-            bool invalid = consumed <= 0 || (consumed == 1 && (unsigned char) data[src] >= 0x80u);
-            if (invalid) {
+            XrUtf8Step step = xr_utf8_core_decode_step(data + src, len - src);
+            if (step.error != XR_UTF8_OK) {
                 static const char replacement[] = {(char) 0xEF, (char) 0xBF, (char) 0xBD};
                 memcpy(xr_str_buf(out) + dst, replacement, sizeof(replacement));
-                consumed = 1;
                 dst += sizeof(replacement);
             } else {
-                memcpy(xr_str_buf(out) + dst, data + src, (size_t) consumed);
-                dst += (size_t) consumed;
+                memcpy(xr_str_buf(out) + dst, data + src, step.consumed);
+                dst += step.consumed;
             }
-            src += (size_t) consumed;
+            src += step.consumed;
+            rune_count++;
         }
         xr_str_buf(out)[dst] = 0;
         xr_str_hdr(out)->len = (int64_t) dst;
+        xr_str_hdr(out)->rune_len = rune_count;
         return out;
     }
     if (sym == XRT_SYM_CONTAINS && XR_IS_STR(arg0)) {
