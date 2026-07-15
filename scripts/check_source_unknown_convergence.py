@@ -88,8 +88,8 @@ TASK_ERASURE_RE = re.compile(
     r"\b(?:TaskOutcome|TaskResult|Task<[^>\n]*,\s*[^>\n]*>|Failed\(unknown\))\b"
 )
 STDLIB_UNKNOWN_API_RE = re.compile(
-    r"\b(?:fixed-shape Json/unknown|TaskOutcome|TaskResult|Failed\(unknown\)|"
-    r"unknown APIs|Array<TaskOutcome>)\b"
+    r"(?:\bfixed-shape Json/unknown\b|\bFailed\(unknown\)|\bunknown APIs\b|"
+    r"\bArray<TaskOutcome>|\b(?:Success|Failed)\(Json\))"
 )
 
 SPEC_OR_DOC_PREFIXES = ("LANGUAGE_SPEC", "spec/")
@@ -207,7 +207,14 @@ def classify_line(rel_path: str, line: str) -> list[str]:
     has_error = "error" in line or "ERROR" in line
     has_erasure_slot = "type_any" in line or "XR_SLOT_ANY" in line or "XR_ELEM_ANY" in line
     has_task_result = "Task" in line or "Failed(unknown)" in line
-    has_stdlib_unknown_api = has_task_result or "unknown APIs" in line or "Json/unknown" in line
+    has_stdlib_unknown_api = (
+        "unknown APIs" in line
+        or "Json/unknown" in line
+        or "Failed(unknown)" in line
+        or "Array<TaskOutcome>" in line
+        or "Success(Json)" in line
+        or "Failed(Json)" in line
+    )
 
     if (
         has_unknown
