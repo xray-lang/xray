@@ -1,0 +1,4 @@
+import mem
+
+var buf = mem.alloc(4)
+print(buf[0])
