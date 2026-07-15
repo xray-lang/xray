@@ -2194,6 +2194,30 @@ if(BUILD_TESTS)
         TIMEOUT 900
     )
 
+    foreach(_task190_diff
+            extern:tests/diff/task190_extern_cases.txt
+            layout:tests/diff/task190_layout_cases.txt
+            mem:tests/diff/task190_mem_cases.txt)
+        string(REPLACE ":" ";" _task190_diff_parts "${_task190_diff}")
+        list(GET _task190_diff_parts 0 _task190_diff_name)
+        list(GET _task190_diff_parts 1 _task190_diff_manifest)
+        add_test(
+            NAME task190_${_task190_diff_name}_backend_diff
+            COMMAND ${CMAKE_COMMAND} -E env
+                    XRAY_DIFF_CASES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/${_task190_diff_manifest}
+                    XRAY_DIFF_EXTRA_CASES_FILE=
+                    XRAY_DIFF_MAX_AUTO_JOBS=4
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
+                    $<TARGET_FILE:xray>
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(task190_${_task190_diff_name}_backend_diff PROPERTIES
+            LABELS "diff;cross;backend;ffi;task-190"
+            PROCESSORS 2
+            TIMEOUT 180
+        )
+    endforeach()
+
     add_test(
         NAME backend_diff_deterministic
         COMMAND ${CMAKE_COMMAND} -E env
