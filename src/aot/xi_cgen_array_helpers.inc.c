@@ -3830,14 +3830,14 @@ static bool cg_span_index_bounds_proven(XiCgenCtx *ctx, const XiFunc *f, const X
     return cg_span_index_plan_drops(ctx, v, kind, XAOT_SPAN_DROP_BOUNDS);
 }
 
-static void emit_typed_array_store_value(FILE *out, const CgArrayElemInfo *info,
+static void emit_typed_array_store_value(XiCgenCtx *ctx, FILE *out, const CgArrayElemInfo *info,
                                          const XiValue *value) {
     if (info->rep == XR_REP_TAGGED) {
-        emit_value_as_rep(out, value, XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
         return;
     }
     fprintf(out, "(%s)", info->ctype);
-    emit_value_as_rep(out, value, info->rep);
+    emit_value_as_rep_ctx(ctx, out, value, info->rep);
 }
 
 static void emit_typed_array_load_value(FILE *out, const CgArrayElemInfo *info, bool borrowed) {
@@ -4256,7 +4256,7 @@ static bool emit_span_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     if (!unchecked)
         fprintf(out, "if (XR_LIKELY(_idx >= 0 && _idx < _s.length)) { ");
     fprintf(out, "((%s*)_s.data)[_idx] = ", info.ctype);
-    emit_typed_array_store_value(out, &info, v->args[2]);
+    emit_typed_array_store_value(ctx, out, &info, v->args[2]);
     fprintf(out, "; ");
     if (info.rep == XR_REP_TAGGED)
         fprintf(out,
@@ -4289,7 +4289,7 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
         }
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
         fprintf(out, "] = ");
-        emit_typed_array_store_value(out, &info, v->args[2]);
+        emit_typed_array_store_value(ctx, out, &info, v->args[2]);
         if (use_cache)
             emit_aot_hot_region_end(out, "typed_array_raw_access");
         fprintf(out, "; XR_NULL_VAL; })");
@@ -4305,7 +4305,7 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     fprintf(out, "; ");
     fprintf(out, "if (XR_LIKELY(_idx >= 0 && _idx < _a->length)) { ((%s*)_a->data)[_idx] = ",
             info.ctype);
-    emit_typed_array_store_value(out, &info, v->args[2]);
+    emit_typed_array_store_value(ctx, out, &info, v->args[2]);
     fprintf(out, "; } else { xrt_index_oob(_idx, _a->length); } XR_NULL_VAL; })");
     return true;
 }
@@ -4342,7 +4342,7 @@ static bool emit_typed_array_push_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
         }
         emit_value_as_rep(out, fill.index_value, XR_REP_I64);
         fprintf(out, "] = ");
-        emit_typed_array_store_value(out, &info, arg);
+        emit_typed_array_store_value(ctx, out, &info, arg);
         if (use_cache && use_final_len)
             emit_aot_hot_region_end(out, "typed_array_raw_access");
         if (!use_final_len) {
@@ -4372,7 +4372,7 @@ static bool emit_typed_array_push_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
                 "((%s*)_a->data)[_a->length++] = ",
                 info.ctype);
     }
-    emit_typed_array_store_value(out, &info, arg);
+    emit_typed_array_store_value(ctx, out, &info, arg);
     if (info.rep == XR_REP_TAGGED)
         fprintf(out, "; XR_ARRAY_MARK_MUTATED(_a)");
     fprintf(out, "; XR_NULL_VAL; })");
@@ -4403,7 +4403,7 @@ static bool emit_typed_array_set_unchecked_expr(XiCgenCtx *ctx, FILE *out, const
     }
     emit_value_as_rep(out, call->args[1], XR_REP_I64);
     fprintf(out, "] = ");
-    emit_typed_array_store_value(out, &info, call->args[2]);
+    emit_typed_array_store_value(ctx, out, &info, call->args[2]);
     if (use_cache)
         emit_aot_hot_region_end(out, "typed_array_raw_access");
     fprintf(out, "; XR_NULL_VAL; })");
@@ -4910,7 +4910,7 @@ static bool emit_typed_array_fill_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
                     "; XrArrayCoreRange _r = xr_array_core_fill_range(_a->length, _start, _end); "
                     "%s _fill = ",
                     info.ctype);
-            emit_typed_array_store_value(out, &info, call->args[1]);
+            emit_typed_array_store_value(ctx, out, &info, call->args[1]);
             fprintf(out,
                     "; for (int64_t _i = 0; _i < _r.count; _i++) "
                     "((%s*)_a->data)[_r.start + _i] = _fill; xr_mkptr(_a, XR_TAG_ARRAY); })",
