@@ -1,0 +1,4 @@
+@c_export("xray_normalize_type")
+fn normalizeType(value: int8) -> uint8 {
+    return (-(value as int)) as uint8
+}
