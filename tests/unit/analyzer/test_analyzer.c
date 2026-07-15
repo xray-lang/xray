@@ -2009,6 +2009,71 @@ TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
     setup_pool();
 }
 
+TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
+    char tmpdir_template[] = "/tmp/xray_effect_xrd_byte_XXXXXX";
+    char *tmpdir = mkdtemp(tmpdir_template);
+    ASSERT(tmpdir != NULL);
+
+    char ok_path[256];
+    char legacy_path[256];
+    snprintf(ok_path, sizeof(ok_path), "%s/native_byte_effects.xrd", tmpdir);
+    snprintf(legacy_path, sizeof(legacy_path), "%s/native_legacy_byte_effects.xrd", tmpdir);
+    ASSERT(write_text_file(ok_path, "export fn decode(input: Slice<byte>): Array<byte> "
+                                    "@errors(NativeByteErr.BadInput)\n"));
+    ASSERT(write_text_file(legacy_path, "export fn decodeOld(input: ByteSpan): Array<byte> "
+                                        "@errors(NativeByteErr.BadInput)\n"
+                                        "export fn viewOld(input: ByteView): int @nothrow\n"));
+
+    const char *old_typepath = getenv("XRAY_TYPEPATH");
+    char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
+    ASSERT(setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
+    xa_xrd_cleanup();
+
+    XaAnalyzer *ok = xa_analyzer_new(g_session);
+    ASSERT(ok != NULL);
+    const char *ok_source = "enum NativeByteErr { BadInput }\n"
+                            "import { decode } from \"native_byte_effects\"\n"
+                            "fn viaNative(input: Slice<byte>) { decode(input) }\n";
+    AstNode *ok_program = xr_parse(g_session, ok_source);
+    ASSERT(ok_program != NULL);
+    xa_analyzer_analyze(ok, "effect_xrd_native_byte_contracts.xr", ok_program);
+    ASSERT(!analyzer_diag_contains(ok, "error"));
+    const XaEffectSummary *ok_effect = analyzer_function_effect_summary(ok, "viaNative");
+    ASSERT(ok_effect != NULL);
+    ASSERT(ok_effect->completeness == XA_EFFECT_COMPLETE);
+    const XaErrorTypeSet *ok_set = effect_summary_enum_set_named(ok, ok_effect, "NativeByteErr");
+    ASSERT(ok_set != NULL);
+    ASSERT(!ok_set->all_variants);
+    ASSERT(xa_bitset_test(&ok_set->variants, 0));
+    xa_analyzer_free(ok);
+
+    XaAnalyzer *legacy = xa_analyzer_new(g_session);
+    ASSERT(legacy != NULL);
+    const char *legacy_source = "enum NativeByteErr { BadInput }\n"
+                                "import { decodeOld, viewOld } from "
+                                "\"native_legacy_byte_effects\"\n"
+                                "fn viaOld(input: ByteSpan) { decodeOld(input) }\n"
+                                "fn viaView(input: ByteView) { viewOld(input) }\n";
+    AstNode *legacy_program = xr_parse(g_session, legacy_source);
+    ASSERT(legacy_program != NULL);
+    xa_analyzer_analyze(legacy, "effect_xrd_native_legacy_byte_contracts.xr", legacy_program);
+    ASSERT(analyzer_diag_contains(legacy, "undefined type 'ByteSpan'"));
+    ASSERT(analyzer_diag_contains(legacy, "undefined type 'ByteView'"));
+    xa_analyzer_free(legacy);
+
+    xa_xrd_cleanup();
+    if (old_typepath_copy) {
+        ASSERT(setenv("XRAY_TYPEPATH", old_typepath_copy, 1) == 0);
+        free(old_typepath_copy);
+    } else {
+        unsetenv("XRAY_TYPEPATH");
+    }
+    unlink(ok_path);
+    unlink(legacy_path);
+    rmdir(tmpdir);
+    setup_pool();
+}
+
 static XaBuiltinMember *mutable_builtin_type_member(XrType *type, const char *name,
                                                     bool is_static) {
     const XaBuiltinMember *members = NULL;
@@ -3590,6 +3655,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_direct_method_calls);
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
     RUN_TEST(analyzer_error_effect_consumes_xrd_native_contracts);
+    RUN_TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases);
     RUN_TEST(analyzer_error_effect_consumes_builtin_type_member_contracts);
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
     RUN_TEST(analyzer_error_effect_marks_invalid_program_partial_facts);
