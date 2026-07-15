@@ -149,6 +149,8 @@ static bool struct_layout_has_heap_field_views_depth(const XrAggregateLayout *sl
     if (!sl || sl->field_count == 0 || sl->field_count > XR_MAX_AGG_FIELDS || depth > 8)
         return false;
     for (uint16_t i = 0; i < sl->field_count; i++) {
+        if (sl->fields[i].is_flexible)
+            return false;
         uint8_t native_type = sl->fields[i].native_type;
         if (xaot_layout_native_field_direct_heap_supported(native_type))
             continue;

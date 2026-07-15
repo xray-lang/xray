@@ -14,6 +14,13 @@ extern "C" {
         samples: [uint16; 3]
     }
 
+    struct M3FuncType {
+        next: Ptr<M3FuncType>
+        numRets: uint16
+        numArgs: uint16
+        types: flex uint8
+    }
+
     struct CHeader {
         tag: uint8
         count: uint32
@@ -36,6 +43,12 @@ comptime {
     compile_assert(mem.sizeOf<CScalar>() == 8)
     compile_assert(mem.sizeOf<CPointer>() == 8)
     compile_assert(mem.sizeOf<CArray>() == 6)
+    compile_assert(mem.sizeOf<M3FuncType>() == 16)
+    compile_assert(mem.alignOf<M3FuncType>() == 8)
+    compile_assert(mem.offsetOf<M3FuncType>("next") == 0)
+    compile_assert(mem.offsetOf<M3FuncType>("numRets") == 8)
+    compile_assert(mem.offsetOf<M3FuncType>("numArgs") == 10)
+    compile_assert(mem.offsetOf<M3FuncType>("types") == 12)
     compile_assert(mem.sizeOf<CHeader>() == 24)
     compile_assert(mem.alignOf<CHeader>() == 8)
     compile_assert(mem.offsetOf<CHeader>("tag") == 0)
@@ -55,6 +68,12 @@ comptime {
 print(mem.sizeOf<CScalar>())
 print(mem.sizeOf<CPointer>())
 print(mem.sizeOf<CArray>())
+print(mem.sizeOf<M3FuncType>())
+print(mem.alignOf<M3FuncType>())
+print(mem.offsetOf<M3FuncType>("next"))
+print(mem.offsetOf<M3FuncType>("numRets"))
+print(mem.offsetOf<M3FuncType>("numArgs"))
+print(mem.offsetOf<M3FuncType>("types"))
 print(mem.sizeOf<CHeader>())
 print(mem.alignOf<CHeader>())
 print(mem.offsetOf<CHeader>("tag"))

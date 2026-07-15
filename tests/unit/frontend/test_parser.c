@@ -313,7 +313,7 @@ TEST(parser_extern_block_flattens_typed_descriptors) {
 TEST(parser_extern_block_flattens_layout_declarations) {
     setup();
     AstNode *program = parse_ok("extern \"C\" {\n"
-                                "  struct Header { tag: uint8 next: Ptr<byte> }\n"
+                                "  struct Header { tag: uint8 next: Ptr<byte> tail: flex uint8 }\n"
                                 "  packed struct Packed { tag: uint8 count: uint32 }\n"
                                 "  union Word { bits: uint32 bytes: [uint8; 4] }\n"
                                 "}");
@@ -321,6 +321,8 @@ TEST(parser_extern_block_flattens_layout_declarations) {
     ASSERT_EQ_INT(program->as.program.statements[0]->type, AST_STRUCT_DECL);
     ASSERT_TRUE(program->as.program.statements[0]->as.struct_decl.is_extern_layout);
     ASSERT_FALSE(program->as.program.statements[0]->as.struct_decl.is_packed);
+    ASSERT_TRUE(
+        program->as.program.statements[0]->as.struct_decl.fields[2]->as.field_decl.is_flexible);
     ASSERT_EQ_INT(program->as.program.statements[1]->type, AST_STRUCT_DECL);
     ASSERT_TRUE(program->as.program.statements[1]->as.struct_decl.is_extern_layout);
     ASSERT_TRUE(program->as.program.statements[1]->as.struct_decl.is_packed);

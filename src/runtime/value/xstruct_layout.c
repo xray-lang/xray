@@ -53,7 +53,11 @@ void xr_aggregate_layout_compute(XrAggregateLayout *layout) {
         XrAggregateFieldLayout *f = &layout->fields[i];
 
         // Auto-compute size from native_type (except nested struct and array)
-        if (f->native_type == XR_NATIVE_ARRAY) {
+        if (f->is_flexible) {
+            // C flexible array member: it contributes alignment and an offset,
+            // but sizeof(struct) contains only the padded header.
+            f->size = 0;
+        } else if (f->native_type == XR_NATIVE_ARRAY) {
             // Fixed-size array: size = elem_count * elem_size
             uint8_t es = xr_native_type_size(f->elem_native_type);
             f->size = (uint16_t) (f->elem_count * es);
@@ -64,6 +68,8 @@ void xr_aggregate_layout_compute(XrAggregateLayout *layout) {
         uint32_t field_align;
         if (layout->kind == XR_AGG_LAYOUT_PACKED_STRUCT) {
             field_align = 1;
+        } else if (f->is_flexible) {
+            field_align = xr_native_type_align(f->elem_native_type);
         } else if (f->native_type == XR_NATIVE_NESTED_AGGREGATE) {
             field_align = f->sub_layout ? f->sub_layout->alignment : 8;
         } else if (f->native_type == XR_NATIVE_ARRAY) {

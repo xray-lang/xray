@@ -1,0 +1,4 @@
+struct BadSafeTail {
+    count: uint32
+    bytes: flex uint8
+}

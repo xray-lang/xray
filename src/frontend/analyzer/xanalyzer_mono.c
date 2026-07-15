@@ -865,6 +865,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->is_static = src->is_static;
             dst->is_final = src->is_final;
             dst->is_const = src->is_const;
+            dst->is_flexible = src->is_flexible;
             dst->initializer = xr_ast_clone_ctx(src->initializer, map, mc, clone_ctx);
             break;
         }

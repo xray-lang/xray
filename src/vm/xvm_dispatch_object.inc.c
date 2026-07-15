@@ -524,6 +524,10 @@ vmcase(OP_GETPROP) {
         int fidx = xr_vm_struct_layout_field_index(isolate, slayout, prop_symbol);
         if (fidx >= 0 && fidx < slayout->field_count) {
             XrAggregateFieldLayout *sf = &slayout->fields[fidx];
+            if (sf->is_flexible) {
+                R(a) = xr_null();
+                vmbreak;
+            }
             uint8_t *fp = payload + sf->offset;
             switch (sf->native_type) {
                 case XR_NATIVE_I64:

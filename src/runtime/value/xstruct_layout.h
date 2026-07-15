@@ -56,6 +56,7 @@ typedef struct {
     struct XrAggregateLayout *sub_layout;  // nested struct/union layout
     uint8_t elem_native_type;              // element type for XR_NATIVE_ARRAY
     uint16_t elem_count;                   // element count for XR_NATIVE_ARRAY
+    bool is_flexible;                      // unsized C tail; size is zero in the header layout
 } XrAggregateFieldLayout;
 
 #define XR_MAX_AGG_FIELDS 64

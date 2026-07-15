@@ -360,6 +360,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
                     xfmt_write_char(ctx, ' ');
             }
             xfmt_write_str(ctx, ": ");
+            if (f->is_flexible)
+                xfmt_write_str(ctx, "flex ");
             xfmt_emit_type(ctx, f->field_type);
         }
         if (f->initializer) {

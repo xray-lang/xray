@@ -1,0 +1,1 @@
+extern unions cannot contain a flexible array field

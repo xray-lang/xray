@@ -136,6 +136,8 @@ static uint64_t struct_layout_hash_depth(const XrAggregateLayout *sl, int depth)
         h *= UINT64_C(1099511628211);
         h ^= sl->fields[i].elem_count;
         h *= UINT64_C(1099511628211);
+        h ^= sl->fields[i].is_flexible ? 1u : 0u;
+        h *= UINT64_C(1099511628211);
         h ^= sl->fields[i].size;
         h *= UINT64_C(1099511628211);
         h ^= sl->fields[i].sub_layout_id;

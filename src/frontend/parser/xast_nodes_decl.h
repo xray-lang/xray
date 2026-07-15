@@ -126,7 +126,8 @@ typedef struct FieldDeclNode {
     bool is_protected;
     bool is_static;
     bool is_final;
-    bool is_const;  // immutable field (assignable only in the constructor)
+    bool is_const;     // immutable field (assignable only in the constructor)
+    bool is_flexible;  // extern-layout unsized tail: `name: flex T`
     AstNode *initializer;
 } FieldDeclNode;
 

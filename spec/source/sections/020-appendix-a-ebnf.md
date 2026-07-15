@@ -252,7 +252,7 @@ ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
 ExternDecl ::= ExternFnDecl | ExternLayoutDecl
 ExternFnDecl ::= AttrList? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ExternLayoutDecl ::= ('packed'? 'struct' | 'union') Identifier '{' ExternLayoutField* '}'
-ExternLayoutField ::= Identifier ':' Type ';'?
+ExternLayoutField ::= Identifier ':' ('flex' Type | Type) ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
@@ -567,7 +567,7 @@ ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
 ExternDecl ::= ExternFnDecl | ExternLayoutDecl
 ExternFnDecl ::= AttrList? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ExternLayoutDecl ::= ('packed'? 'struct' | 'union') Identifier '{' ExternLayoutField* '}'
-ExternLayoutField ::= Identifier ':' Type ';'?
+ExternLayoutField ::= Identifier ':' ('flex' Type | Type) ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type

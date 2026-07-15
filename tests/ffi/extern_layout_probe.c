@@ -15,6 +15,13 @@ typedef struct CArray {
     uint16_t samples[3];
 } CArray;
 
+typedef struct M3FuncType {
+    struct M3FuncType *next;
+    uint16_t numRets;
+    uint16_t numArgs;
+    uint8_t types[];
+} M3FuncType;
+
 typedef struct CHeader {
     uint8_t tag;
     uint32_t count;
@@ -36,6 +43,12 @@ int main(void) {
     printf("%zu\n", sizeof(CScalar));
     printf("%zu\n", sizeof(CPointer));
     printf("%zu\n", sizeof(CArray));
+    printf("%zu\n", sizeof(M3FuncType));
+    printf("%zu\n", _Alignof(M3FuncType));
+    printf("%zu\n", offsetof(M3FuncType, next));
+    printf("%zu\n", offsetof(M3FuncType, numRets));
+    printf("%zu\n", offsetof(M3FuncType, numArgs));
+    printf("%zu\n", offsetof(M3FuncType, types));
     printf("%zu\n", sizeof(CHeader));
     printf("%zu\n", _Alignof(CHeader));
     printf("%zu\n", offsetof(CHeader, tag));
