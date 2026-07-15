@@ -1568,6 +1568,32 @@ static void verify_coro_plan(VerifyCtx *ctx, const XiFunc *f) {
 
 /* ========== Public API ========== */
 
+static void verify_tbaa_annotations(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed || !(f->invariant_mask & XI_INV_TBAA_ANNOTATED))
+        return;
+    for (uint32_t bi = 0; bi < f->nblocks && !ctx->failed; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues && !ctx->failed; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            bool is_mem = xi_is_memory_op(v->op);
+            if (is_mem && v->mem_group == XI_MEM_NONE) {
+                verr(ctx, "v%u (%s): memory op has XI_MEM_NONE after TBAA annotation", v->id,
+                     xi_op_name(v->op));
+            } else if (!is_mem && !xi_is_memory_clobber(v->op) && v->op != XI_CALL &&
+                       v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT &&
+                       v->op != XI_CALL_BUILTIN && v->mem_group != XI_MEM_NONE) {
+                /* Memory-clobber ops and calls legitimately carry a TOP mem_group. */
+                verr(ctx, "v%u (%s): non-memory op has mem_group=%u (expected XI_MEM_NONE)", v->id,
+                     xi_op_name(v->op), v->mem_group);
+            }
+        }
+    }
+}
+
 XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
     XR_DCHECK(errbuf != NULL, "xi_verify: NULL errbuf");
     XR_DCHECK(errbuf_size > 0, "xi_verify: errbuf_size <= 0");
@@ -1694,32 +1720,7 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
         verify_narrow_before_typed_store(&ctx, f);
     }
 
-    /* TBAA annotation consistency (only when invariant bit is set) */
-    if (!ctx.failed && (f->invariant_mask & XI_INV_TBAA_ANNOTATED)) {
-        for (uint32_t bi = 0; bi < f->nblocks && !ctx.failed; bi++) {
-            XiBlock *blk = f->blocks[bi];
-            if (!blk)
-                continue;
-            for (uint32_t vi = 0; vi < blk->nvalues && !ctx.failed; vi++) {
-                XiValue *v = blk->values[vi];
-                if (!v)
-                    continue;
-                bool is_mem = xi_is_memory_op(v->op);
-                if (is_mem && v->mem_group == XI_MEM_NONE) {
-                    verr(&ctx, "v%u (%s): memory op has XI_MEM_NONE after TBAA annotation", v->id,
-                         xi_op_name(v->op));
-                } else if (!is_mem && !xi_is_memory_clobber(v->op) && v->op != XI_CALL &&
-                           v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT &&
-                           v->op != XI_CALL_BUILTIN && v->mem_group != XI_MEM_NONE) {
-                    /* Memory-clobber ops (e.g. GEN_CALL, channel sends) and the
-                     * call family legitimately carry a TOP mem_group for alias
-                     * analysis even though they are not direct load/store ops. */
-                    verr(&ctx, "v%u (%s): non-memory op has mem_group=%u (expected XI_MEM_NONE)",
-                         v->id, xi_op_name(v->op), v->mem_group);
-                }
-            }
-        }
-    }
+    verify_tbaa_annotations(&ctx, f);
 
     return !ctx.failed;
 }

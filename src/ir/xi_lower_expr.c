@@ -1043,6 +1043,24 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
     return NULL;
 }
 
+static void lower_assignment_mark_child_capture(XiLower *l, int var_id, const char *name,
+                                                XiValue *val) {
+    for (uint16_t ci_fn = 0; ci_fn < l->func->nchildren; ci_fn++) {
+        XiFunc *child = l->func->children[ci_fn];
+        if (!child)
+            continue;
+        for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
+            if (child->captures[ci].source == XI_CAPTURE_SRC_REG && child->captures[ci].name &&
+                name && strcmp(child->captures[ci].name, name) == 0) {
+                child->captures[ci].needs_cell = true;
+                if (var_id < l->var_count)
+                    l->vars[var_id].captured_by_child = true;
+                val->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        }
+    }
+}
+
 static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     const char *name = node->as.assignment.name;
     uint32_t sid = node->as.assignment.symbol_id;
@@ -1110,20 +1128,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
          * enable cell indirection so the closure sees the updated value.
          * Also mark captured_by_child so the new SSA value survives DCE
          * (the emitter redirects it through CELL_SET at emit time). */
-        for (uint16_t ci_fn = 0; ci_fn < l->func->nchildren; ci_fn++) {
-            XiFunc *child = l->func->children[ci_fn];
-            if (!child)
-                continue;
-            for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
-                if (child->captures[ci].source == XI_CAPTURE_SRC_REG && child->captures[ci].name &&
-                    name && strcmp(child->captures[ci].name, name) == 0) {
-                    child->captures[ci].needs_cell = true;
-                    if (var_id < l->var_count)
-                        l->vars[var_id].captured_by_child = true;
-                    val->flags |= XI_FLAG_SIDE_EFFECT;
-                }
-            }
-        }
+        lower_assignment_mark_child_capture(l, var_id, name, val);
 
         /* If this is a program-level variable, also update backing store */
         if (l->is_program && l->shared_map[var_id] >= 0) {
@@ -1734,6 +1739,71 @@ static bool lower_type_has_sequence_evidence(const struct XrType *type) {
                     xr_type_is_named_class(type, "StringBuilder"));
 }
 
+static bool lower_c_view_member_access(XiLower *l, AstNode *node, XiValue *obj,
+                                       struct XrType *result_type, XrAggregateLayout *layout,
+                                       XiValue **out) {
+    *out = NULL;
+    int field_index = xi_lower_struct_field_index(layout, node->as.member_access.name);
+    if (field_index < 0)
+        return false;
+
+    XrAggregateFieldLayout *field = &layout->fields[field_index];
+    if (field->is_flexible || field->native_type == XR_NATIVE_ARRAY)
+        return true;
+    XiValue *offset = xi_const_int(l->func, l->cur_block, (int64_t) field->offset, l->type_int);
+    struct XrType *address_type =
+        field->native_type == XR_NATIVE_NESTED_AGGREGATE ? result_type : obj->type;
+    XiValue *address = xi_value_new(l->func, l->cur_block, XI_ADD, address_type, 2);
+    if (!offset || !address)
+        return true;
+    address->args[0] = obj;
+    address->args[1] = offset;
+    address->line = (uint32_t) node->line;
+    if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+        *out = address;
+        return true;
+    }
+
+    uint8_t code = xr_ffi_type_from_xrtype(result_type, false);
+    if (code == XR_FFI_T_VOID || code > XR_FFI_T_PTR)
+        return true;
+    XiValue *endian = xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 2);
+    if (!endian || !v)
+        return true;
+    v->args[0] = address;
+    v->args[1] = endian;
+    v->aux_int = (int64_t) xr_ffi_ptr_aux(code, layout->kind == XR_AGG_LAYOUT_PACKED_STRUCT);
+    v->flags |= XI_FLAG_READS_MEM;
+    v->line = (uint32_t) node->line;
+    *out = v;
+    return true;
+}
+
+static XiValue *lower_type_namespace_member(XiLower *l, const MemberAccessNode *ma) {
+    if (!ma->object || ma->object->type != AST_VARIABLE || !ma->object->as.variable.name ||
+        strcmp(ma->object->as.variable.name, "Type") != 0)
+        return NULL;
+    int tid = xi_lower_type_constant_id(ma->name);
+    if (tid < 0)
+        return NULL;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
+    if (v)
+        v->aux_int = tid;
+    return v;
+}
+
+static XiValue *lower_module_member_constant(XiLower *l, XiValue *obj, const char *name) {
+    XiValue *constant = NULL;
+    if (lower_value_is_whole_module_import(l, obj, "math") &&
+        lower_math_constant(l, name, &constant))
+        return constant;
+    if (lower_value_is_whole_module_import(l, obj, "encoding") &&
+        lower_encoding_constant(l, name, &constant))
+        return constant;
+    return NULL;
+}
+
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
     XiSequenceEvidenceIds sequence_ids;
@@ -1769,31 +1839,17 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         }
     }
 
-    if (ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
-        strcmp(ma->object->as.variable.name, "Type") == 0) {
-        int tid = xi_lower_type_constant_id(ma->name);
-        if (tid >= 0) {
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
-            if (v)
-                v->aux_int = tid;
-            return v;
-        }
-    }
+    XiValue *type_member = lower_type_namespace_member(l, ma);
+    if (type_member)
+        return type_member;
 
     XiValue *obj = xi_lower_expr(l, ma->object);
     if (!obj)
         return NULL;
 
-    if (lower_value_is_whole_module_import(l, obj, "math")) {
-        XiValue *constant = NULL;
-        if (lower_math_constant(l, ma->name, &constant))
-            return constant;
-    }
-    if (lower_value_is_whole_module_import(l, obj, "encoding")) {
-        XiValue *constant = NULL;
-        if (lower_encoding_constant(l, ma->name, &constant))
-            return constant;
-    }
+    XiValue *module_constant = lower_module_member_constant(l, obj, ma->name);
+    if (module_constant)
+        return module_constant;
 
     struct XrType *result_type = xi_lower_node_type(l, node);
     if (sel && sel->result_type && sel->result_type->kind != XR_KIND_UNKNOWN &&
@@ -1809,41 +1865,10 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
             info->struct_layout->is_extern_layout)
             c_view_layout = info->struct_layout;
     }
-    if (c_view_layout) {
-        int field_index = xi_lower_struct_field_index(c_view_layout, ma->name);
-        if (field_index >= 0) {
-            XrAggregateFieldLayout *field = &c_view_layout->fields[field_index];
-            if (field->is_flexible || field->native_type == XR_NATIVE_ARRAY)
-                return NULL;
-            XiValue *offset =
-                xi_const_int(l->func, l->cur_block, (int64_t) field->offset, l->type_int);
-            struct XrType *address_type =
-                field->native_type == XR_NATIVE_NESTED_AGGREGATE ? result_type : obj->type;
-            XiValue *address = xi_value_new(l->func, l->cur_block, XI_ADD, address_type, 2);
-            if (!offset || !address)
-                return NULL;
-            address->args[0] = obj;
-            address->args[1] = offset;
-            address->line = (uint32_t) node->line;
-            if (field->native_type == XR_NATIVE_NESTED_AGGREGATE)
-                return address;
-
-            uint8_t code = xr_ffi_type_from_xrtype(result_type, false);
-            if (code == XR_FFI_T_VOID || code > XR_FFI_T_PTR)
-                return NULL;
-            XiValue *endian = xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 2);
-            if (!endian || !v)
-                return NULL;
-            v->args[0] = address;
-            v->args[1] = endian;
-            v->aux_int =
-                (int64_t) xr_ffi_ptr_aux(code, c_view_layout->kind == XR_AGG_LAYOUT_PACKED_STRUCT);
-            v->flags |= XI_FLAG_READS_MEM;
-            v->line = (uint32_t) node->line;
-            return v;
-        }
-    }
+    XiValue *c_view_result = NULL;
+    if (c_view_layout &&
+        lower_c_view_member_access(l, node, obj, result_type, c_view_layout, &c_view_result))
+        return c_view_result;
 
     /* Struct with compile-time layout → XI_AGG_GET (emitter decides
      * whether to stack-allocate or fall back to OP_GETPROP) */
@@ -3973,8 +3998,6 @@ static bool lower_call_store_projection(XiLower *l, XiValue *source, XiValue *up
                 store->args[2] = base->args[1];
                 store->aux_int = base->aux_int;
             }
-            break;
-        default:
             break;
     }
     if (!store) {

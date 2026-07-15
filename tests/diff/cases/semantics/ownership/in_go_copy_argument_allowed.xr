@@ -1,10 +1,11 @@
 fn launch(data: in Array<int>) {
+    var originalLength = len(data)
     var task = go fn(buffer: Array<int>) -> int {
         buffer.push(5)
         return len(buffer)
     }(copy(data))
     print(await task)
-    print(len(data))
+    print(originalLength)
 }
 
 var values: Array<int> = [1, 2, 3, 4]
