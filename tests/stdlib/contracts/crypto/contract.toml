@@ -38,6 +38,11 @@ classification = "required"
 new_behavior = "MD5, SHA-1, SHA-256, SHA-512, and HMAC vectors keep identical digest bytes while presentation moves to encoding composition"
 
 [[legacy_behavior]]
+id = "unsupported-hmac-algorithm"
+classification = "removed"
+new_behavior = "future converged HMAC uses an algorithm enum, so unsupported algorithm strings disappear instead of returning null"
+
+[[legacy_behavior]]
 id = "timing-safe-equal"
 classification = "required"
 new_behavior = "equal-length and different-length comparisons return deterministic booleans without leaking first-difference position"

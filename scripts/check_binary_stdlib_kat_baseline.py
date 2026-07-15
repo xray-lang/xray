@@ -186,6 +186,7 @@ BASELINES = (
             "hmac.new(key, data, getattr(hashlib, algo)).hexdigest()",
             "compress.gzip(text",
             "crypto.sha512(text",
+            'crypto.hmac("sha224"',
             '[str(xray), "run", str(source_path)]',
             '[str(xray), "build", "--native", str(source_path), "-o", str(binary)]',
         ),
@@ -249,6 +250,8 @@ BASELINES = (
             '"6e9ef29b75fffc5b7abae527d58fdadb2fe42e7219011976917343065f58ed4a"',
             '"2088df74d5f2146b48146caf4965377e9d0be3a4"',
             '"4e4748e62b463521f6775fbf921234b5"',
+            '"5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"',
+            'crypto.hmac("sha224", "key", "message")',
         ),
     ),
     Baseline(
@@ -276,6 +279,7 @@ BASELINES = (
         contains=(
             'module = "crypto"',
             'id = "hash-and-hmac-kat"',
+            'id = "unsupported-hmac-algorithm"',
             'id = "timing-safe-equal"',
             'id = "random-shape"',
             'id = "hex-digest-presentation"',
@@ -289,6 +293,14 @@ BASELINES = (
         contains=(
             "tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr",
             "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr",
+        ),
+    ),
+    Baseline(
+        category="CRYPTO_DIRECT_HMAC_NEGATIVE_BASELINE",
+        path="tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr",
+        contains=(
+            'crypto.hmac("sha256", "Jefe", "what do ya want for nothing?")',
+            'crypto.hmac("sha224", "key", "data") == null',
         ),
     ),
     Baseline(
