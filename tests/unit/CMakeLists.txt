@@ -325,6 +325,16 @@ add_test(
 set_tests_properties(test_param_mode_diagnostics PROPERTIES
     LABELS "api;syntax;diagnostics;tooling"
 )
+add_test(
+    NAME test_param_contract_frontend
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_param_contract_frontend.py
+            --xray $<TARGET_FILE:xray>
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(test_param_contract_frontend PROPERTIES
+    LABELS "frontend;syntax;analyzer;task-206"
+    TIMEOUT 60
+)
 
 # test_repl needs the isolate-profile factory (xr_isolate_profile_*)
 # in addition to xray_core, so build it like test_cli_spec with an
