@@ -617,7 +617,20 @@ XR_FUNC void xi_emit_local_addr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg source = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_LOCAL_ADDR, dst, source, 0));
+    /* A place descriptor outlives the ordinary register-allocation last use of
+     * its source.  Keep the pointee in a dedicated frame slot so a later
+     * argument/address value cannot recycle and overwrite that register before
+     * or during the call. */
+    if (ctx->next_reg + 1 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg storage = (XiEmitReg) ctx->next_reg++;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    if (source != storage)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, storage, source, 0));
+    emit_inst(ctx, CREATE_ABC(OP_LOCAL_ADDR, dst, storage, 0));
 }
 
 XR_FUNC void xi_emit_place_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {

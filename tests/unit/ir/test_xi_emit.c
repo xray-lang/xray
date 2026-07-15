@@ -1158,6 +1158,40 @@ TEST(emit_cancelled_builtin) {
     xi_func_free(f);
 }
 
+TEST(emit_local_addr_pins_source_slot) {
+    XiFunc *f = make_func("borrow", &stub_int);
+    XiBlock *entry = f->entry;
+    XiValue *param = xi_param(f, entry, 0, &stub_int);
+    XiValue *place = xi_value_new(f, entry, XI_LOCAL_ADDR, &stub_int, 1);
+    place->args[0] = param;
+    XiValue *load = xi_value_new(f, entry, XI_PLACE_LOAD, &stub_int, 1);
+    load->args[0] = place;
+    xi_block_set_return(entry, load);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found_pinning_move = false;
+    bool found_addr = false;
+    uint32_t storage = 0;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        XrInstruction inst = PROTO_CODE(proto, i);
+        if (GET_OPCODE(inst) == OP_MOVE && GETARG_B(inst) == 0) {
+            storage = GETARG_A(inst);
+            found_pinning_move = storage != 0;
+        } else if (GET_OPCODE(inst) == OP_LOCAL_ADDR) {
+            found_addr = true;
+            assert(found_pinning_move);
+            assert(GETARG_B(inst) == storage);
+        }
+    }
+    assert(found_addr);
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
 /* ========== Error Handling ========== */
 
 TEST(emit_status_str) {
@@ -1233,6 +1267,7 @@ int main(void) {
     run_emit_set_new();
     run_emit_is_check();
     run_emit_cancelled_builtin();
+    run_emit_local_addr_pins_source_slot();
 
     /* Error handling */
     run_emit_status_str();
