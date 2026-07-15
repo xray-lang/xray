@@ -2988,6 +2988,13 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
                          "    const box = #[e]\n"
                          "    for (item in box) { throw item }\n"
                          "  }\n"
+                         "}\n"
+                         "fn setDedupIteratorRethrows() {\n"
+                         "  try { failSet() } catch (e: SetErr) {\n"
+                         "    const alias = e\n"
+                         "    const box = #[e, alias, e]\n"
+                         "    for (item in box) { throw item }\n"
+                         "  }\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -2995,13 +3002,20 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
 
     const XaEffectSummary *singleton =
         analyzer_function_effect_summary(a, "setSingletonIteratorRethrows");
+    const XaEffectSummary *dedup = analyzer_function_effect_summary(a, "setDedupIteratorRethrows");
     ASSERT(singleton != NULL);
+    ASSERT(dedup != NULL);
 
     const XaErrorTypeSet *singleton_set = effect_summary_enum_set_named(a, singleton, "SetErr");
+    const XaErrorTypeSet *dedup_set = effect_summary_enum_set_named(a, dedup, "SetErr");
     ASSERT(singleton_set != NULL);
+    ASSERT(dedup_set != NULL);
     ASSERT(!singleton_set->all_variants);
     ASSERT(xa_bitset_test(&singleton_set->variants, 0));
     ASSERT(!xa_bitset_test(&singleton_set->variants, 1));
+    ASSERT(!dedup_set->all_variants);
+    ASSERT(xa_bitset_test(&dedup_set->variants, 0));
+    ASSERT(!xa_bitset_test(&dedup_set->variants, 1));
 
     xa_analyzer_free(a);
     setup_pool();

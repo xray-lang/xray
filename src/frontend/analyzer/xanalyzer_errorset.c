@@ -2117,10 +2117,19 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
             break;
 
         case AST_SET_LITERAL:
-            if (initializer->as.set_literal.count == 1 &&
-                is_current_caught_ref(ctx, initializer->as.set_literal.elements[0]))
-                add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_ELEMENT, -1,
-                                                  0, NULL, NULL, NULL);
+            if (initializer->as.set_literal.count <= 0)
+                break;
+            bool all_elements_are_caught = true;
+            for (int i = 0; i < initializer->as.set_literal.count; i++) {
+                if (!is_current_caught_ref(ctx, initializer->as.set_literal.elements[i])) {
+                    all_elements_are_caught = false;
+                    break;
+                }
+            }
+            if (!all_elements_are_caught)
+                break;
+            add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_ELEMENT, -1, 0,
+                                              NULL, NULL, NULL);
             break;
 
         default:
