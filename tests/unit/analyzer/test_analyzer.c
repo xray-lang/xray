@@ -2076,6 +2076,44 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     setup_pool();
 }
 
+TEST(analyzer_xrd_handle_fields_reject_legacy_byte_aliases) {
+    char tmpdir_template[] = "/tmp/xray_xrd_handle_byte_XXXXXX";
+    char *tmpdir = mkdtemp(tmpdir_template);
+    ASSERT(tmpdir != NULL);
+
+    char xrd_path[256];
+    snprintf(xrd_path, sizeof(xrd_path), "%s/native_handle_bytes.xrd", tmpdir);
+    ASSERT(write_text_file(xrd_path, "type NativeBox = { const payload: Bytes }\n"
+                                     "export fn makeBox(): NativeBox @nothrow\n"));
+
+    const char *old_typepath = getenv("XRAY_TYPEPATH");
+    char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
+    ASSERT(setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
+    xa_xrd_cleanup();
+
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "import { makeBox } from \"native_handle_bytes\"\n"
+                         "fn payload() { makeBox().payload }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_xrd_handle_legacy_byte_field.xr", program);
+    ASSERT(analyzer_diag_contains(a, "invalid XRD descriptor"));
+    ASSERT(analyzer_diag_contains(a, "removed byte alias 'Bytes'"));
+    xa_analyzer_free(a);
+
+    xa_xrd_cleanup();
+    if (old_typepath_copy) {
+        ASSERT(setenv("XRAY_TYPEPATH", old_typepath_copy, 1) == 0);
+        free(old_typepath_copy);
+    } else {
+        unsetenv("XRAY_TYPEPATH");
+    }
+    unlink(xrd_path);
+    rmdir(tmpdir);
+    setup_pool();
+}
+
 static XaBuiltinMember *mutable_builtin_type_member(XrType *type, const char *name,
                                                     bool is_static) {
     const XaBuiltinMember *members = NULL;
@@ -3658,6 +3696,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
     RUN_TEST(analyzer_error_effect_consumes_xrd_native_contracts);
     RUN_TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases);
+    RUN_TEST(analyzer_xrd_handle_fields_reject_legacy_byte_aliases);
     RUN_TEST(analyzer_error_effect_consumes_builtin_type_member_contracts);
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
     RUN_TEST(analyzer_error_effect_marks_invalid_program_partial_facts);
