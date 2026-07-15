@@ -32,6 +32,7 @@ typedef struct XaActiveSpanBorrow {
     char *owner_path;
     struct XaSymbol *view_symbol;
     struct XaScope *view_scope;
+    int loop_depth_at_creation;
     bool is_pointer_borrow;
     struct XaActiveSpanBorrow *next;
 } XaActiveSpanBorrow;
