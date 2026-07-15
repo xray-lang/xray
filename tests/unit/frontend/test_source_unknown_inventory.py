@@ -31,13 +31,13 @@ class SourceUnknownInventoryTest(unittest.TestCase):
                 classify_line("stdlib/types/coroutine.xr", line),
             )
 
-    def test_erased_task_outcome_payload_stays_stdlib_dynamic_unknown_api(self) -> None:
+    def test_task_outcome_payload_surface_is_not_json_unknown_api(self) -> None:
         task_outcome = "Task" "Outcome"
-        for line in (
-            "    Success(Json)",
-            "    Failed(Json)",
-            f"fn collect() -> Array<{task_outcome}>",
-        ):
+        for line in ("    Success(PanicInfo)", "    Failed(PanicInfo)"):
+            categories = classify_line("stdlib/types/coroutine.xr", line)
+            self.assertNotIn("STDLIB_DYNAMIC_UNKNOWN_API", categories)
+
+        for line in (f"fn collect() -> Array<{task_outcome}>",):
             categories = classify_line("stdlib/types/coroutine.xr", line)
             self.assertIn("STDLIB_DYNAMIC_UNKNOWN_API", categories)
 
