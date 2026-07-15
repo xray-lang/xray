@@ -89,6 +89,46 @@ static void trim_trailing(char *s) {
     }
 }
 
+static bool native_string_typed_error_override(const char *class_name, const char *member_name,
+                                               bool is_static, const char **out_signature) {
+    if (!class_name || strcmp(class_name, "string") != 0 || !member_name || !out_signature)
+        return false;
+    if (is_static && strcmp(member_name, "fromUtf8") == 0) {
+        *out_signature = "(bytes: Slice<byte>): string @errors(Utf8Error.InvalidUtf8)";
+        return true;
+    }
+    if (!is_static && strcmp(member_name, "sliceBytes") == 0) {
+        *out_signature =
+            "(start: int, end: int): string @errors(StringSliceError.InvalidByteRange)";
+        return true;
+    }
+    return false;
+}
+
+static void apply_native_string_typed_error_override(const char *class_name,
+                                                     const char *member_name, bool is_static,
+                                                     char **signature,
+                                                     XaEffectContract *effect_contract) {
+    const char *override_sig = NULL;
+    if (!native_string_typed_error_override(class_name, member_name, is_static, &override_sig))
+        return;
+
+    char *next_signature = xr_strdup(override_sig);
+    XR_CHECK(next_signature != NULL, "native string typed-error override allocation failed");
+    XaEffectContract next_contract;
+    if (!xa_effect_contract_parse_suffix(next_signature, &next_contract)) {
+        const char *err = xa_xrd_last_error();
+        xr_free(next_signature);
+        XR_CHECK_FMT(false, "invalid native string typed-error override for %s: %s",
+                     member_name ? member_name : "?", err ? err : "unknown error");
+    }
+
+    xr_free(*signature);
+    xa_effect_contract_clear(effect_contract);
+    *signature = next_signature;
+    *effect_contract = next_contract;
+}
+
 /* ========== Parse one @native class ========== */
 
 /* Parse all members from an @native class source string.
@@ -235,6 +275,8 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
             XR_CHECK_FMT(false, "invalid @native class effect contract for %s: %s",
                          member_name ? member_name : "?", err ? err : "unknown error");
         }
+        apply_native_string_typed_error_override(*out_class_name, member_name, is_static,
+                                                 &signature, &effect_contract);
 
         members[count].name = member_name;
         members[count].signature = signature;

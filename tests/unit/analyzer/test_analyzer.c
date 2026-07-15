@@ -2177,6 +2177,18 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
         xa_builtin_get_type_member_effect_contract(string_type, "fromUtf8Lossy", true);
     ASSERT(lossy_contract != NULL);
     ASSERT(lossy_contract->kind == XA_EFFECT_CONTRACT_NOTHROW);
+    const XaEffectContract *from_utf8_contract =
+        xa_builtin_get_type_member_effect_contract(string_type, "fromUtf8", true);
+    const XaEffectContract *slice_bytes_contract =
+        xa_builtin_get_type_member_effect_contract(string_type, "sliceBytes", false);
+    ASSERT(from_utf8_contract != NULL);
+    ASSERT(slice_bytes_contract != NULL);
+    ASSERT(from_utf8_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
+    ASSERT(slice_bytes_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
+    ASSERT(from_utf8_contract->error_count == 1);
+    ASSERT(slice_bytes_contract->error_count == 1);
+    ASSERT(strcmp(from_utf8_contract->errors[0], "Utf8Error.InvalidUtf8") == 0);
+    ASSERT(strcmp(slice_bytes_contract->errors[0], "StringSliceError.InvalidByteRange") == 0);
 
     XaAnalyzer *current = xa_analyzer_new(g_session);
     ASSERT(current != NULL);
@@ -2198,29 +2210,24 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
     ASSERT(current_static != NULL);
     ASSERT(current_instance != NULL);
     ASSERT(current_lossy != NULL);
-    ASSERT(current_static->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT(current_instance->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((current_static->unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
-    ASSERT((current_instance->unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
+    ASSERT(current_static->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(current_instance->completeness == XA_EFFECT_COMPLETE);
+    const XaErrorTypeSet *current_static_set =
+        effect_summary_enum_set_named(current, current_static, "Utf8Error");
+    const XaErrorTypeSet *current_instance_set =
+        effect_summary_enum_set_named(current, current_instance, "StringSliceError");
+    ASSERT(current_static_set != NULL);
+    ASSERT(current_instance_set != NULL);
+    ASSERT(!current_static_set->all_variants);
+    ASSERT(!current_instance_set->all_variants);
+    ASSERT(xa_bitset_test(&current_static_set->variants, 0));
+    ASSERT(xa_bitset_test(&current_instance_set->variants, 0));
     ASSERT(xa_effect_summary_is_nothrow(current_lossy));
     xa_analyzer_free(current);
 
-    char from_utf8_sig[] = "(bytes: Slice<byte>): string @errors(NativeStringErr.BadUtf8)";
-    char slice_bytes_sig[] = "(start: int, end: int): string @errors(NativeStringErr.BadSlice)";
-    XaEffectContract from_utf8_contract;
-    XaEffectContract slice_bytes_contract;
-    ASSERT(xa_effect_contract_parse_suffix(from_utf8_sig, &from_utf8_contract));
-    ASSERT(xa_effect_contract_parse_suffix(slice_bytes_sig, &slice_bytes_contract));
-
-    XaEffectContract old_from_utf8 = from_utf8->effect_contract;
-    XaEffectContract old_slice_bytes = slice_bytes->effect_contract;
-    from_utf8->effect_contract = from_utf8_contract;
-    slice_bytes->effect_contract = slice_bytes_contract;
-
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "enum NativeStringErr { BadUtf8, BadSlice }\n"
-                         "fn viaStatic(bytes: Slice<byte>) { string.fromUtf8(bytes) }\n"
+    const char *source = "fn viaStatic(bytes: Slice<byte>) { string.fromUtf8(bytes) }\n"
                          "fn viaInstance(s: string) { s.sliceBytes(0, 1) }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -2234,24 +2241,17 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
     ASSERT(static_call->completeness == XA_EFFECT_COMPLETE);
     ASSERT(instance_call->completeness == XA_EFFECT_COMPLETE);
 
-    const XaErrorTypeSet *static_set =
-        effect_summary_enum_set_named(a, static_call, "NativeStringErr");
+    const XaErrorTypeSet *static_set = effect_summary_enum_set_named(a, static_call, "Utf8Error");
     const XaErrorTypeSet *instance_set =
-        effect_summary_enum_set_named(a, instance_call, "NativeStringErr");
+        effect_summary_enum_set_named(a, instance_call, "StringSliceError");
     ASSERT(static_set != NULL);
     ASSERT(instance_set != NULL);
     ASSERT(!static_set->all_variants);
     ASSERT(!instance_set->all_variants);
     ASSERT(xa_bitset_test(&static_set->variants, 0));
-    ASSERT(!xa_bitset_test(&static_set->variants, 1));
-    ASSERT(!xa_bitset_test(&instance_set->variants, 0));
-    ASSERT(xa_bitset_test(&instance_set->variants, 1));
+    ASSERT(xa_bitset_test(&instance_set->variants, 0));
 
     xa_analyzer_free(a);
-    from_utf8->effect_contract = old_from_utf8;
-    slice_bytes->effect_contract = old_slice_bytes;
-    xa_effect_contract_clear(&from_utf8_contract);
-    xa_effect_contract_clear(&slice_bytes_contract);
     setup_pool();
 }
 
