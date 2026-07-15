@@ -315,7 +315,9 @@ fi
 
 FFI_SRC="$WORK/ffi_dylib_path.xr"
 cat > "$FFI_SRC" <<XR
-@extern("C") @dylib("$FFI_LIB") fn xrayffi_add1(x: int32) -> int32
+extern "C" dylib("$FFI_LIB") {
+    fn xrayffi_add1(x: int32) -> int32
+}
 
 print(unsafe { xrayffi_add1(41) })
 XR

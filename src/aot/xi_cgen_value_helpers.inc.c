@@ -1124,7 +1124,7 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
                                   const char *prefix, const XiValue *v) {
     if (v->aux) {
         XiFunc *child = (XiFunc *) v->aux;
-        /* FFI: an @extern function has no Xray closure entry (its body is the
+        /* FFI: an extern function has no Xray closure entry (its body is the
          * foreign C symbol). Calls to it resolve statically to a direct C call,
          * so the closure value itself is never invoked — emit a NULL so the
          * shared-slot store is well-formed without referencing a missing

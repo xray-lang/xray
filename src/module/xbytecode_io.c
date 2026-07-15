@@ -1025,7 +1025,7 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
         !bc_put_u8(w, proto->entry_plan.unproven_reason))
         return false;
 
-    // 3b. FFI @extern signature (self-contained; the Xi IR is not serialized,
+    // 3b. FFI extern signature (self-contained; the Xi IR is not serialized,
     // so the embedded-bytecode VM resolves the C symbol from here). The flag
     // doubles as "a signature follows" so a malformed extern proto without a
     // sig stays byte-aligned.
@@ -1211,7 +1211,7 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     if (r->error != XR_BC_OK)
         goto fail;
 
-    // 3b. FFI @extern signature
+    // 3b. FFI extern signature
     {
         uint8_t has_ffi = bc_get_u8(r);
         if (r->error != XR_BC_OK)

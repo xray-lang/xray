@@ -30,14 +30,14 @@ static bool current_can_start_top_level_after_recovery(Parser *parser) {
            xr_parser_check(parser, TK_VAR) || xr_parser_check(parser, TK_CONST) ||
            xr_parser_check(parser, TK_COMPTIME) || xr_parser_check(parser, TK_TYPE_ALIAS) ||
            xr_parser_check(parser, TK_IMPORT) || xr_parser_check(parser, TK_EXPORT) ||
-           xr_parser_check_name(parser, "asm");
+           xr_parser_check_name(parser, "asm") || xr_parser_check_name(parser, "extern");
 }
 
 /* ========== Function Parsing ========== */
 
 // Extract the content of the just-consumed string-literal token (quotes
 // stripped) into an arena-allocated, NUL-terminated string. Used for
-// attribute string arguments like @extern("C") / @dylib("name").
+// string arguments carried by internal attributes synthesized from extern blocks.
 static const char *xr_attr_string_arg(Parser *parser) {
     Token t = parser->previous;
     size_t len = t.length >= 2 ? (size_t) (t.length - 2) : 0;
@@ -218,9 +218,7 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
             xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @deprecated");
         }
     } else if (name_token.length == 6 && memcmp(name_token.start, "extern", 6) == 0) {
-        // @extern("C") — foreign function. The string is the calling convention
-        // (only "C" is supported for now); it is an open/text arg, hence a string
-        // literal rather than a bare keyword.
+        xr_parser_error(parser, "@extern was removed; use extern \"C\" { fn name(...) -> Type }");
         attr->kind = ATTR_EXTERN;
         attr->str_arg = "C";
         if (xr_parser_match(parser, TK_LPAREN)) {
@@ -228,19 +226,19 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
                 xr_parser_advance(parser);
                 attr->str_arg = xr_attr_string_arg(parser);
             }
-            xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @extern");
+            xr_parser_consume(parser, TK_RPAREN, "expected ')' after removed @extern syntax");
         }
     } else if (name_token.length == 5 && memcmp(name_token.start, "dylib", 5) == 0) {
-        // @dylib("name") — resolve from a named dynamic library.
+        xr_parser_error(parser, "@dylib was removed; use extern \"C\" dylib(\"name\") { ... }");
         attr->kind = ATTR_DYLIB;
-        xr_parser_consume(parser, TK_LPAREN, "expected '(' after @dylib");
+        xr_parser_consume(parser, TK_LPAREN, "expected '(' after removed @dylib syntax");
         if (xr_parser_check(parser, TK_LITERAL_STRING)) {
             xr_parser_advance(parser);
             attr->str_arg = xr_attr_string_arg(parser);
         } else {
-            xr_parser_error(parser, "@dylib requires a library name string, e.g. @dylib(\"m\")");
+            xr_parser_error(parser, "removed @dylib syntax requires a library name string");
         }
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @dylib");
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' after removed @dylib syntax");
     } else if (name_token.length == 8 && memcmp(name_token.start, "c_export", 8) == 0) {
         // @c_export("name") — expose a top-level function through an AOT C ABI
         // wrapper. The exported symbol is open text, so it uses a string arg.
@@ -597,16 +595,17 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         return NULL;
     }
 
-    // @test fn ..., @native fn ..., @extern("C") fn ..., @c_export("sym") fn ...
+    // @test fn ..., @native fn ..., @c_export("sym") fn ...
     if (xr_parser_match(parser, TK_FN)) {
         if (derive_flags != 0) {
             xr_parser_error(parser, "@derive can only annotate class, struct, or enum");
             return NULL;
         }
-        bool is_extern = attrs_has(attributes, attr_count, ATTR_EXTERN);
+        bool saved_extern_context = parser->parsing_extern_fn;
+        bool is_extern = saved_extern_context || attrs_has(attributes, attr_count, ATTR_EXTERN);
         parser->parsing_extern_fn = is_extern;
         AstNode *func = xr_parse_function_declaration(parser);
-        parser->parsing_extern_fn = false;
+        parser->parsing_extern_fn = saved_extern_context;
         if (!func)
             return NULL;
         func->as.function_decl.attributes = attributes;
@@ -619,6 +618,117 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         "attributes can only annotate declaration items; use 'fn name(...)' for function item "
         "attributes");
     return NULL;
+}
+
+static XrAttribute *xr_make_string_attribute(Parser *parser, AttributeKind kind,
+                                             const char *value) {
+    XrAttribute *attr = (XrAttribute *) ast_alloc(parser->compiler_session, sizeof(XrAttribute));
+    attr->kind = kind;
+    attr->timeout = 0;
+    attr->str_arg = value;
+    attr->derive_flags = 0;
+    return attr;
+}
+
+static void xr_function_append_attribute(Parser *parser, AstNode *node, XrAttribute *attr) {
+    XR_DCHECK(node && node->type == AST_FUNCTION_DECL,
+              "function_append_attribute: expected function declaration");
+    FunctionDeclNode *fn = &node->as.function_decl;
+    XrAttribute **attrs = (XrAttribute **) ast_alloc_array(
+        parser->compiler_session, sizeof(XrAttribute *), (size_t) fn->attr_count + 1);
+    if (fn->attr_count > 0 && fn->attributes)
+        memcpy(attrs, fn->attributes, sizeof(XrAttribute *) * (size_t) fn->attr_count);
+    attrs[fn->attr_count++] = attr;
+    fn->attributes = attrs;
+}
+
+/* Parse the canonical foreign-declaration surface:
+ *
+ *   extern "C" dylib("m") {
+ *       fn cos(x: float64) -> float64
+ *   }
+ *
+ * `link("m")` shares the existing descriptor field with `dylib("m")`:
+ * AOT already distinguishes a link name from a concrete library path, while
+ * VM resolves both through the same typed FFI descriptor.  The transient
+ * AST_PROGRAM is flattened by xr_ast_program_add. */
+static AstNode *xr_parse_extern_block_declaration(Parser *parser) {
+    int line = parser->previous.line;
+    if (parser->scope_depth > 0) {
+        xr_parser_error(parser, "extern blocks must appear at module top level");
+        return NULL;
+    }
+
+    xr_parser_consume(parser, TK_LITERAL_STRING,
+                      "expected ABI string after extern, e.g. extern \"C\"");
+    const char *abi = xr_attr_string_arg(parser);
+    if (strcmp(abi, "C") != 0)
+        xr_parser_error(parser, "only extern \"C\" is supported");
+
+    const char *library = NULL;
+    bool library_is_link = false;
+    if (xr_parser_check(parser, TK_NAME)) {
+        bool is_dylib = xr_parser_check_name(parser, "dylib");
+        bool is_link = xr_parser_check_name(parser, "link");
+        if (is_dylib || is_link) {
+            library_is_link = is_link;
+            xr_parser_advance(parser);
+            xr_parser_consume(parser, TK_LPAREN,
+                              is_dylib ? "expected '(' after dylib" : "expected '(' after link");
+            xr_parser_consume(parser, TK_LITERAL_STRING,
+                              is_dylib ? "dylib requires a library string"
+                                       : "link requires a library string");
+            library = xr_attr_string_arg(parser);
+            xr_parser_consume(parser, TK_RPAREN,
+                              is_dylib ? "expected ')' after dylib" : "expected ')' after link");
+        }
+    }
+
+    xr_parser_consume(parser, TK_LBRACE, "expected '{' to open extern block");
+    AstNode *group = xr_ast_program(parser->compiler_session);
+    XrAttribute *extern_attr = xr_make_string_attribute(parser, ATTR_EXTERN, abi);
+    XrAttribute *library_attr =
+        library
+            ? xr_make_string_attribute(parser, library_is_link ? ATTR_LINK : ATTR_DYLIB, library)
+            : NULL;
+
+    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
+        bool saved_extern_context = parser->parsing_extern_fn;
+        parser->parsing_extern_fn = true;
+
+        AstNode *decl = NULL;
+        if (xr_parser_check(parser, TK_AT)) {
+            decl = xr_parse_attributed_declaration(parser);
+        } else if (xr_parser_match(parser, TK_FN)) {
+            decl = xr_parse_function_declaration(parser);
+        } else {
+            xr_parser_error_at_current(
+                parser, "extern blocks currently contain function declarations only");
+        }
+        parser->parsing_extern_fn = saved_extern_context;
+
+        if (!decl)
+            return NULL;
+        if (decl->type == AST_FUNCTION_DECL) {
+            xr_function_append_attribute(parser, decl, extern_attr);
+            if (library_attr)
+                xr_function_append_attribute(parser, decl, library_attr);
+        } else {
+            xr_parser_error_at_current(
+                parser, "extern blocks currently contain function declarations only");
+            return NULL;
+        }
+        xr_ast_program_add(parser->compiler_session, group, decl);
+        xr_parser_match(parser, TK_SEMICOLON);
+    }
+
+    xr_parser_consume(parser, TK_RBRACE, "expected '}' to close extern block");
+    if (group->as.program.count == 0)
+        xr_parser_error(parser, "extern block requires at least one declaration");
+    group->line = line;
+    group->end_line = parser->previous.line;
+    group->end_column = parser->previous.column + 1;
+    return group;
 }
 
 // Parse function declaration: fn add(a, b) { return a + b }
@@ -816,7 +926,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
         return_type = xr_parse_type_annotation(parser);
     }
 
-    // Parse function body. @extern functions are bodyless: the implementation
+    // Parse function body. Functions declared in an extern block are bodyless: the implementation
     // lives in a foreign C library, so the signature stands alone (optionally
     // followed by a `;`). All other functions require a `{ }` block.
     AstNode *body = NULL;
@@ -1722,6 +1832,11 @@ AstNode *xr_parse_declaration(Parser *parser) {
             return NULL;
         }
         return xr_parse_export_declaration(parser);
+    }
+
+    if (xr_parser_check_name(parser, "extern")) {
+        xr_parser_advance(parser);
+        return xr_parse_extern_block_declaration(parser);
     }
 
     if (xr_is_global_asm_start(parser)) {

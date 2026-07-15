@@ -2,9 +2,11 @@
 // Exercises Ptr/MutPtr subscript read+write, deref(), offset(), isNull(),
 // and a multi-statement unsafe block. The VM (libffi + OP_PTR_LOAD/STORE) and
 // AOT (direct C call + inline *(T*)) backends must produce identical output.
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
-@extern("C") fn memcpy(dst: MutPtr<byte>, src: Ptr<byte>, n: uintsize) -> MutPtr<byte>
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+    fn memcpy(dst: MutPtr<byte>, src: Ptr<byte>, n: uintsize) -> MutPtr<byte>
+}
 
 var src = unsafe { malloc(4) }
 var dst = unsafe { malloc(4) }

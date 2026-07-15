@@ -140,7 +140,7 @@ struct XaSymbolLinks {
     bool return_fn_effect_scanned;
     bool return_fn_effect_scan_in_progress;
     struct AstNode *function_decl_node;
-    bool is_extern;    // @extern foreign function (FFI): calls require unsafe { }
+    bool is_extern;    // extern-block foreign function (FFI): calls require unsafe { }
     bool is_c_export;  // @c_export AOT C ABI wrapper
     const char *c_export_symbol;
     XaEffectId effect_id;  // Canonical analyzer-owned effect summary id (0 = not inferred yet)

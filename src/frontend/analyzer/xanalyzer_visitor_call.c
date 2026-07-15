@@ -3804,7 +3804,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
         }
         if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION) {
-            // FFI: calling an @extern function is unsafe — it crosses into a
+            // FFI: calling an extern function is unsafe — it crosses into a
             // foreign C ABI with no Xray safety guarantees. Permit it only
             // inside an `unsafe { }` region (Rust model).
             if (fn_links && fn_links->is_extern && ctx->unsafe_depth == 0) {

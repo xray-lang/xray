@@ -3,8 +3,10 @@
 // pointers from address-ints, AOT uses the native .ptr — both must agree.
 // MutPtr args flow into Ptr params via mut->const coercion.
 import mem
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
 
 print(mem.cacheLineSize())
 

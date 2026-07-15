@@ -3,8 +3,10 @@
 // load/store/swap/compareExchange with no per-type code. VM and AOT must agree.
 // Pointer bit-values are non-deterministic, so every assertion observes the
 // DATA behind the pointer (deterministic) or the CAS success flag.
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
 
 var p1 = unsafe { malloc(4) }
 var p2 = unsafe { malloc(4) }

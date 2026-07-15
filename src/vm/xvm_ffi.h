@@ -7,10 +7,10 @@
  *
  * xvm_ffi.h - VM-side foreign function (FFI) invocation.
  *
- * The AOT backend emits direct C calls for @extern functions. The bytecode
+ * The AOT backend emits direct C calls for extern functions. The bytecode
  * VM cannot emit C, so it marshals arguments and invokes the foreign symbol
  * through libffi at runtime. The proto carries `is_extern`; its retained
- * XiFunc holds the C symbol name, optional @dylib, and the typed signature.
+ * XiFunc holds the C symbol name, optional extern library target, and the typed signature.
  */
 
 #ifndef XVM_FFI_H
@@ -25,7 +25,7 @@
 struct XrVMRuntime;
 struct XrProto;
 
-/* Invoke the @extern function backing `proto` with `nargs` arguments (in
+/* Invoke the extern function backing `proto` with `nargs` arguments (in
  * XrValue form) and return the result as an XrValue. On failure (missing
  * symbol, unsupported signature, libffi unavailable) a runtime error is
  * raised on the isolate and XR_NULL is returned. */

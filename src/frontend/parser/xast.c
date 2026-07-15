@@ -252,6 +252,16 @@ AstNode *xr_ast_program(XrCompilerSession *session) {
 // Add statement to program node
 // Uses arena-based dynamic array; old buffer is not freed (arena bulk release).
 void xr_ast_program_add(XrCompilerSession *session, AstNode *program, AstNode *stmt) {
+    /* Declaration groups such as `extern "C" { ... }` are parsed into a
+     * transient AST_PROGRAM so the public AST remains a flat module item
+     * list.  Flatten here rather than teaching every analyzer/lowering pass
+     * about a second declaration-container node. */
+    if (stmt && stmt != program && stmt->type == AST_PROGRAM) {
+        for (int i = 0; i < stmt->as.program.count; i++)
+            xr_ast_program_add(session, program, stmt->as.program.statements[i]);
+        return;
+    }
+
     // Ensure enough space
     if (program->as.program.count >= program->as.program.capacity) {
         int old_capacity = program->as.program.capacity;

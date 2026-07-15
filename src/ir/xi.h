@@ -1260,7 +1260,7 @@ typedef struct XiFunc {
      * they must not be forced back to the generic tagged closure ABI. */
     XiNativeCallbackKind native_callback_kind;
 
-    /* FFI: foreign function declared with @extern("C"). When set, this XiFunc
+    /* FFI: foreign function declared in an extern "C" block. When set, this XiFunc
      * has no real body — the implementation is a C symbol. The AOT backend
      * emits `extern Ret sym(typed args);` plus direct C calls (no hidden _cl,
      * no tagged boxing); the VM binds `sym` through libffi. A trivial
@@ -1268,7 +1268,7 @@ typedef struct XiFunc {
      * pipeline passes; codegen never emits it. */
     bool is_extern;
     const char *extern_symbol; /* C symbol to resolve (defaults to the xray name) */
-    const char *extern_dylib;  /* @dylib("name") library, or NULL = default/process */
+    const char *extern_dylib;  /* extern-block dylib/link target, or NULL = default/process */
 
     /* FFI export: top-level AOT function exposed as a C ABI wrapper. The
      * internal Xray function keeps its normal hidden closure/context parameter;

@@ -9440,6 +9440,8 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     XrAttribute *native_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_NATIVE);
     XrAttribute *c_export_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_C_EXPORT);
     XrAttribute *dylib_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_DYLIB);
+    if (!dylib_attr)
+        dylib_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_LINK);
     XrAttribute *naked_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_NAKED);
     XrAttribute *interrupt_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_INTERRUPT);
     memset(&decl, 0, sizeof(decl));

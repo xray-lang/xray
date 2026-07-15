@@ -305,7 +305,7 @@ static void xa_validate_c_export_function_abi(XaInferContext *ctx, AstNode *node
 
     if (is_extern) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                   "@c_export cannot be used on an @extern function", &fn_loc);
+                                   "@c_export cannot be used on an extern function", &fn_loc);
     }
 
     if (!fn->body) {
@@ -622,26 +622,26 @@ static void xa_validate_aot_naked_attr(XaInferContext *ctx, AstNode *node, XrAtt
     }
 
     if (!extern_attr) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "@naked requires @extern(\"C\") with implementation supplied by global asm or "
-            "target objects",
-            &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@naked requires an extern \"C\" declaration with "
+                                   "implementation supplied by global asm or "
+                                   "target objects",
+                                   &loc);
     }
 
     if (c_export_attr) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "@naked cannot be combined with @c_export; declare the C symbol with @extern(\"C\")",
-            &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@naked cannot be combined with @c_export; declare the C symbol "
+                                   "in an extern \"C\" block",
+                                   &loc);
     }
 
     if (dylib_attr) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "@naked cannot be combined with @dylib; freestanding naked symbols are linked "
-            "statically",
-            &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@naked cannot be combined with an extern dylib target; "
+                                   "freestanding naked symbols are linked "
+                                   "statically",
+                                   &loc);
     }
 }
 
@@ -668,27 +668,27 @@ static void xa_validate_aot_interrupt_attr(XaInferContext *ctx, AstNode *node,
     }
 
     if (!extern_attr) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "@interrupt requires @extern(\"C\") with implementation supplied by global asm or "
-            "target objects",
-            &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@interrupt requires an extern \"C\" declaration with "
+                                   "implementation supplied by global asm or "
+                                   "target objects",
+                                   &loc);
     }
 
     if (c_export_attr) {
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
             "@interrupt cannot be combined with @c_export; declare the ISR symbol with "
-            "@extern(\"C\")",
+            "extern \"C\"",
             &loc);
     }
 
     if (dylib_attr) {
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "@interrupt cannot be combined with @dylib; freestanding interrupt symbols are linked "
-            "statically",
-            &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@interrupt cannot be combined with an extern dylib target; "
+                                   "freestanding interrupt symbols are linked "
+                                   "statically",
+                                   &loc);
     }
 
     if (naked_attr) {
@@ -2097,12 +2097,14 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     links->file_path = ctx->file_path;
     links->function_decl_node = node;
 
-    // FFI: mark @extern functions so call sites can require `unsafe { }`.
+    // FFI: mark extern-block functions so call sites can require `unsafe { }`.
     XrAttribute *c_export_attr = xa_function_attr(fn, ATTR_C_EXPORT);
     XrAttribute *section_attr = xa_function_attr(fn, ATTR_SECTION);
     XrAttribute *weak_attr = xa_function_attr(fn, ATTR_WEAK);
     XrAttribute *extern_attr = xa_function_attr(fn, ATTR_EXTERN);
     XrAttribute *dylib_attr = xa_function_attr(fn, ATTR_DYLIB);
+    if (!dylib_attr)
+        dylib_attr = xa_function_attr(fn, ATTR_LINK);
     XrAttribute *naked_attr = xa_function_attr(fn, ATTR_NAKED);
     XrAttribute *interrupt_attr = xa_function_attr(fn, ATTR_INTERRUPT);
     links->is_extern = extern_attr != NULL;

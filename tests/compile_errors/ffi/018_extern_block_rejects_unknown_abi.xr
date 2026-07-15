@@ -1,0 +1,1 @@
+extern "stdcall" { fn call() -> int32 }

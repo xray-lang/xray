@@ -288,6 +288,28 @@ TEST(parser_function_decl) {
     teardown();
 }
 
+TEST(parser_extern_block_flattens_typed_descriptors) {
+    setup();
+    AstNode *program = parse_ok("extern \"C\" dylib(\"m\") {\n"
+                                "  fn cos(x: float64) -> float64\n"
+                                "  fn clear(value: out int32)\n"
+                                "}");
+    ASSERT_EQ_INT(program->as.program.count, 2);
+    for (int i = 0; i < program->as.program.count; i++) {
+        AstNode *decl = program->as.program.statements[i];
+        ASSERT_EQ_INT(decl->type, AST_FUNCTION_DECL);
+        ASSERT_NULL(decl->as.function_decl.body);
+        ASSERT_EQ_INT(decl->as.function_decl.attr_count, 2);
+        ASSERT_EQ_INT(decl->as.function_decl.attributes[0]->kind, ATTR_EXTERN);
+        ASSERT_STR_EQ(decl->as.function_decl.attributes[0]->str_arg, "C");
+        ASSERT_EQ_INT(decl->as.function_decl.attributes[1]->kind, ATTR_DYLIB);
+        ASSERT_STR_EQ(decl->as.function_decl.attributes[1]->str_arg, "m");
+    }
+    ASSERT_EQ_INT(program->as.program.statements[1]->as.function_decl.params[0]->passing_mode,
+                  XR_PARAM_OUT);
+    teardown();
+}
+
 static void assert_ast_param_modes(XrParamNode **params, int actual_count,
                                    const XrParamMode *expected, int expected_count) {
     ASSERT_EQ_INT(actual_count, expected_count);
@@ -968,6 +990,7 @@ int main(void) {
 
     // Functions
     RUN_TEST(parser_function_decl);
+    RUN_TEST(parser_extern_block_flattens_typed_descriptors);
     RUN_TEST(parser_parameter_modes_share_annotation_parser);
     RUN_TEST(parser_oop_parameter_modes_share_annotation_parser);
     RUN_TEST(parser_function_type_param_modes);

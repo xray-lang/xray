@@ -642,13 +642,15 @@ Xray's C FFI uses explicit boundary types so ordinary xray objects are not impli
 | `intsize` | `ptrdiff_t` / platform signed width | `int64` on the currently supported targets |
 | `Ptr<T>` | `const void *` boundary value | read-only raw pointer; `T` gives the xray-side dereference/index width |
 | `MutPtr<T>` | `void *` boundary value | mutable raw pointer; assignable where `Ptr<T>` is expected |
-| `CFn<(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `@extern` function |
+| `CFn<(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `extern "C"` function |
 
 Raw pointer values may be stored, passed, compared, and offset with `offset(i)` using element-width scaling in safe code; actually reading or writing foreign memory must be inside `unsafe { }`:
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -660,7 +662,7 @@ unsafe {
 
 `Ptr<T>` is read-only; writes require `MutPtr<T>`. `unsafe` does not bypass that type rule. Raw pointer access performs no null or bounds checks, so the caller must guarantee address validity, lifetime, alignment, and aliasing correctness.
 
-`CFn<(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and `@extern` functions themselves cannot be used as `CFn` callback arguments.
+`CFn<(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and extern functions themselves cannot be used as `CFn` callback arguments.
 
 ### 2.4 Composite Types
 
@@ -1095,17 +1097,19 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 #### `unsafe { }`
 
-`unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `@extern` functions, reads/writes through `Ptr<T>` / `MutPtr<T>` foreign memory, and `deref()` calls that dereference raw pointers.
+`unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `extern "C"` functions, reads/writes through `Ptr<T>` / `MutPtr<T>` foreign memory, and `deref()` calls that dereference raw pointers.
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
 
 var p = unsafe { malloc(1) }      // the final expression is the block result
 unsafe {
     p[0] = 7                      // MutPtr writes must be inside unsafe
     print(p.deref())              // dereference must be inside unsafe
-    free(p)                       // @extern calls must be inside unsafe
+    free(p)                       // extern calls must be inside unsafe
 }
 ```
 
@@ -2002,7 +2006,7 @@ Constraints:
 ### 5.2 `fn` function declaration
 
 ```ebnf
-FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 ParamList ::= Param (',' Param)*
 Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
@@ -2010,8 +2014,6 @@ ParamType ::= ParamMode? Type
 ParamMode ::= 'in' | 'ref' | 'out'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // tuple return
-FnBody ::= Block
-         | <empty>                              // only @extern functions may omit a body
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
 AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 ```
@@ -2147,14 +2149,18 @@ greet()                   // must be called explicitly
 - Top-level `return` is forbidden (compile error `E0306`).
 - Multi-file projects specify the entry via the `entry` field of `xray.toml`; the corresponding file follows the script execution rules above.
 
-#### 5.2.9 `@extern` C FFI Functions
+#### 5.2.9 `extern "C"` C FFI Declaration Blocks
 
-`@extern("C")` declares an external C ABI function. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
+An `extern "C"` block declares external functions that share a C ABI and optional library contract. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
 
 ```xray
-@extern("C") fn malloc(n: uintsize) -> MutPtr<byte>
-@extern("C") fn free(p: MutPtr<byte>)
-@extern("C") @dylib("m") fn cos(x: float64) -> float64
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
+extern "C" dylib("m") {
+    fn cos(x: float64) -> float64
+}
 
 var p = unsafe { malloc(4) }
 unsafe {
@@ -2165,21 +2171,23 @@ unsafe {
 ```
 
 Rules:
-- `@extern("C")` currently denotes the default C ABI; omitting the string is also treated as C ABI.
-- `@dylib("name")` selects the dynamic library that provides the symbol; without it, resolution uses the default process/system lookup path.
-- An `@extern` function may only declare its signature and cannot have a `{ }` body; every non-`@extern` function must have a block body.
+- The ABI string is mandatory; `"C"` is currently the only supported value.
+- `dylib("name-or-path")` selects a dynamic library, while `link("name")` selects an AOT system link name. Both feed the same typed FFI descriptor; without either, resolution uses the default process/system lookup path.
+- Functions inside an extern block may only declare signatures and cannot have `{ }` bodies; ordinary functions require block bodies.
 - Boundary types that are aligned across the VM/AOT backends include `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
 - C callback parameters must use `CFn<(A, B) -> R>`, not the ordinary xray function type `(A, B) -> R`.
-- A current `CFn` argument must be a module-level, noncapturing xray function with an exact signature match; anonymous functions, capturing closures, and `@extern` functions themselves are rejected.
+- A current `CFn` argument must be a module-level, noncapturing xray function with an exact signature match; anonymous functions, capturing closures, and extern functions themselves are rejected.
 
 ```xray
-@extern("C") fn bsearch(
-    key: Ptr<byte>,
-    base: Ptr<byte>,
-    count: uintsize,
-    size: uintsize,
-    cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>
-) -> Ptr<byte>
+extern "C" {
+    fn bsearch(
+        key: Ptr<byte>,
+        base: Ptr<byte>,
+        count: uintsize,
+        size: uintsize,
+        cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>
+    ) -> Ptr<byte>
+}
 
 fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> int32 {
     return 0
@@ -2203,7 +2211,7 @@ print(add(19, 23))        // still an ordinary xray call inside xray
 
 Rules:
 - `@c_export` may only annotate a module-level `fn` declaration; it cannot annotate classes, structs, methods, anonymous functions, or nested functions.
-- A `@c_export` function must have an xray function body and cannot also be an `@extern` function.
+- A `@c_export` function must have an xray function body and cannot also be an extern function.
 - The string argument must be a non-empty C identifier; that string is the exported C symbol name.
 - Each `@c_export` symbol name must be unique within one AOT bundle; duplicate symbols are compile errors.
 - Currently supported export boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
@@ -5494,6 +5502,7 @@ Statement ::= ExprStmt
            |  IncDecStmt
            |  VarDecl
            |  FnDecl
+           |  ExternBlock
            |  ClassDecl
            |  StructDecl
            |  InterfaceDecl
@@ -5570,8 +5579,10 @@ BindingPattern ::= Identifier
                 |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
 ObjectBinding ::= Identifier (':' Identifier)?
 
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
-FnBody ::= Block | ';'?                         // empty body is only allowed for @extern
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternFnDecl+ '}'
+ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
+ExternFnDecl ::= AttrList? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
@@ -5625,7 +5636,7 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // e.g. @extern("C"), @dylib("m"), @c_export("sym")
+AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // e.g. @c_export("sym"), @section(".text")
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

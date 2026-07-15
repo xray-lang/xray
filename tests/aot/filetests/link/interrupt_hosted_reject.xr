@@ -1,6 +1,7 @@
-@interrupt("irq")
-@extern("C")
-fn xray_timer_irq()
+extern "C" {
+    @interrupt("irq")
+    fn xray_timer_irq()
+}
 
 fn answer() -> int {
     return 42

@@ -489,7 +489,7 @@ static void *ffi_resolve_symbol(struct XrVMRuntime *X, const char *symbol, const
         return xr_dylib_sym(lib, symbol);
     }
 #if defined(_WIN32)
-    /* Default (process) resolution on Windows is added with @dylib support. */
+    /* Default (process) resolution on Windows is added with extern dylib support. */
     (void) X;
     return NULL;
 #else
@@ -620,7 +620,7 @@ XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue 
     (void) args;
     (void) nargs;
     xr_runtime_error(
-        X, "FFI: this build has no libffi; @extern calls are unsupported in the VM (use AOT)\n");
+        X, "FFI: this build has no libffi; extern calls are unsupported in the VM (use AOT)\n");
     return xr_null();
 }
 

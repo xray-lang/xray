@@ -956,9 +956,9 @@ if(ZLIB_FOUND)
     target_compile_definitions(xray_vm_runtime PRIVATE XR_HAS_ZLIB=1)
 endif()
 
-# libffi: FFI / C interop. The bytecode VM marshals @extern calls through
+# libffi: FFI / C interop. The bytecode VM marshals extern calls through
 # libffi; the AOT backend emits direct C calls and does not need it. Optional —
-# when absent, @extern calls raise a clean runtime error in the VM (AOT still
+# when absent, extern calls raise a clean runtime error in the VM (AOT still
 # works). dlopen/dlsym (POSIX) is provided by libdl / libc.
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
@@ -980,13 +980,13 @@ if(LIBFFI_FOUND)
     target_link_libraries(xray_core PUBLIC ${LIBFFI_LIBRARIES})
     target_link_libraries(xray_vm_runtime PUBLIC ${LIBFFI_LIBRARIES})
     # PUBLIC: the CLI target builds AOT link commands by hand (invoke_cc) and
-    # must know xray_core embeds the libffi-based @extern invoker, so a runtime
+    # must know xray_core embeds the libffi-based extern invoker, so a runtime
     # program links -lffi too.
     target_compile_definitions(xray_stdlib_bootstrap_core PUBLIC XRAY_HAVE_LIBFFI=1)
     target_compile_definitions(xray_core PUBLIC XRAY_HAVE_LIBFFI=1)
     target_compile_definitions(xray_vm_runtime PUBLIC XRAY_HAVE_LIBFFI=1)
 else()
-    message(STATUS "libffi: not found (@extern calls limited to the AOT backend)")
+    message(STATUS "libffi: not found (extern calls limited to the AOT backend)")
 endif()
 if(NOT WIN32)
     target_link_libraries(xray_stdlib_bootstrap_core PUBLIC ${CMAKE_DL_LIBS})

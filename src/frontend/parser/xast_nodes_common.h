@@ -71,8 +71,8 @@ typedef struct LiteralNode {
 typedef struct XrAttribute {
     AttributeKind kind;
     int timeout;
-    // String argument for attributes that carry one: @extern("C") (ABI name),
-    // @dylib("name") (library name), @c_export("name") (C symbol),
+    // String argument for attributes that carry one: extern ABI/library metadata,
+    // @c_export("name") (C symbol),
     // @section("name") (AOT linker section).
     // Arena-allocated, NUL-terminated; NULL when absent.
     const char *str_arg;

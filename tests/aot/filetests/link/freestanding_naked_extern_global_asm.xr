@@ -1,6 +1,7 @@
-@naked
-@extern("C")
-fn xray_naked_stub()
+extern "C" {
+    @naked
+    fn xray_naked_stub()
+}
 
 asm {
     ".globl _xray_naked_stub"

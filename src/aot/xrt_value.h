@@ -40,7 +40,7 @@
  * hot path straight-line and moves cold blocks out of the way.
  * ========================================================================= */
 
-/* FFI: assembler symbol name for an @extern C function. The Mach-O toolchain
+/* FFI: assembler symbol name for an extern C function. The Mach-O toolchain
  * prefixes C symbols with an underscore; ELF/PE64 do not. Used as a GCC/clang
  * asm label so the generated alias binds to the real symbol without colliding
  * with libc prototypes or fortify macros (memcpy, memset, ...). Resolved by the
