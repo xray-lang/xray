@@ -210,6 +210,7 @@ BASELINES = (
             'module = "compress"',
             'id = "checksum-known-values"',
             'id = "roundtrip-formats"',
+            'id = "truncated-input-classification"',
             'id = "nullable-decompression-failure"',
             'id = "string-binary-payloads"',
             'diff_cases_manifest = "tests/stdlib/contracts/compress/diff_cases.txt"',
@@ -221,6 +222,7 @@ BASELINES = (
         contains=(
             "tests/diff/cases/semantics/stdlib/compress_checksum_direct.xr",
             "tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.xr",
+            "tests/diff/cases/semantics/stdlib/compress_truncated_direct.xr",
         ),
     ),
     Baseline(

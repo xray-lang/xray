@@ -1,6 +1,6 @@
 schema = 1
 module = "compress"
-contract_revision = 2
+contract_revision = 3
 legacy_commit = "d5cfcb587219468fde5bf8cda6cb76df875cf25b"
 legacy_oracle = "classification_only"
 legacy_public_surface = [
@@ -38,6 +38,11 @@ new_behavior = "CRC32 and Adler32 official vectors keep identical numeric values
 id = "roundtrip-formats"
 classification = "required"
 new_behavior = "gzip, deflate, and zlib round-trip data and reject malformed payloads deterministically"
+
+[[legacy_behavior]]
+id = "truncated-input-classification"
+classification = "required"
+new_behavior = "truncated gzip, deflate, and zlib payloads keep the same failure classification before becoming CompressionError.TruncatedInput"
 
 [[legacy_behavior]]
 id = "nullable-decompression-failure"
