@@ -1,0 +1,9 @@
+contains=op=fill action=typed_loop
+contains=evidence=row+write_barrier+length_expr reason=write_barrier
+c_contains=XrValue _old = ((XrValue*)_a->data)[_idx]
+c_contains=xrt_retain(_fill)
+c_contains=xrt_release(_old)
+c_contains=XR_ARRAY_MARK_MUTATED(_a)
+c_not_contains=xrt_array_fill_value(
+c_not_contains=memset((uint8_t*)_a->data
+c_not_contains=memcpy(_a->data
