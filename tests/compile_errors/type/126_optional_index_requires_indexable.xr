@@ -1,0 +1,5 @@
+fn main() {
+    var n: int? = 1
+    var x = n?[0]
+    print(x)
+}

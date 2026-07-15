@@ -1,0 +1,5 @@
+fn main() {
+    var xs: Array<int>? = [1]
+    var x = xs?["0"]
+    print(x)
+}
