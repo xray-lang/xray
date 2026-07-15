@@ -132,6 +132,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"parseSetCookie", XLSP_SYM_FUNCTION, "fn(header: string, requestDomain?: string, requestPath?: string, nowSeconds?: int): Cookie?", "", NULL, 0},
     {"cookieJar", XLSP_SYM_FUNCTION, "fn(maxCookies?: int): CookieJar", "", NULL, 0},
     {"router", XLSP_SYM_FUNCTION, "fn(): Router", "", NULL, 0},
+    {"routeHandler", XLSP_SYM_FUNCTION, "fn(method: string, path: string, handler: (Json): Json)", "", NULL, 0},
     {"listen", XLSP_SYM_FUNCTION, "fn(port: int): bool", "", NULL, 0},
     {"stopServer", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
     {"urlEncode", XLSP_SYM_FUNCTION, "fn(s: string): string", "Percent-encode using the HTTP module's historical URL helper", NULL, 0},
@@ -165,7 +166,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"MultipartBody", XLSP_SYM_CLASS, "type MultipartBody", "Built multipart/form-data payload and matching Content-Type.", NULL, 0},
     {"FormData", XLSP_SYM_CLASS, "type FormData", "Explicit multipart/form-data builder.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 36
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 37
 
 // io module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
