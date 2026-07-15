@@ -973,9 +973,25 @@ const char *get_typeof_arg_name(AstNode *node) {
     return call->arguments[0]->as.variable.name;
 }
 
+static bool xa_undefined_variable_already_reported(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node)
+        return false;
+    for (XaDiagnostic *diag = ctx->analyzer->diagnostics; diag; diag = diag->next) {
+        if (diag->code != XR_ERR_ANALYZE_UNDEFINED_VAR ||
+            diag->location.line != (uint32_t) node->line ||
+            diag->location.column != (uint32_t) node->column)
+            continue;
+        if ((!diag->location.file && !ctx->file_path) ||
+            (diag->location.file && ctx->file_path &&
+             strcmp(diag->location.file, ctx->file_path) == 0))
+            return true;
+    }
+    return false;
+}
+
 XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
 
     const char *name = node->as.variable.name;
     XaSymbol *sym = node->as.variable.symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope,
@@ -1018,9 +1034,10 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
         } else {
             snprintf(msg, sizeof(msg), "Undeclared variable '%s'", name);
         }
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNDEFINED_VAR,
-                                   msg, &loc);
-        return xr_type_new_unknown(NULL);
+        if (!xa_undefined_variable_already_reported(ctx, node))
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_UNDEFINED_VAR, msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     /* Write back resolved symbol ID for Xi lowering (Braun SSA key). */
@@ -1500,6 +1517,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return expected_enum_member;
 
     XrType *obj_type = xa_visit_infer_expr(ctx, ma->object);
+
+    // A diagnosed receiver failure is recovery poison, not an unresolved type.
+    // Propagate it without emitting a secondary member-access diagnostic.
+    if (XR_TYPE_IS_ERROR(obj_type))
+        return obj_type;
 
     // Reject `.member` on a possibly-null receiver (strict null checks).
     xa_check_nullable_access(ctx, node, obj_type, "member access");

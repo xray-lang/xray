@@ -4021,6 +4021,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_visit_infer_expr(ctx, call->arguments[i]);
     }
 
+    // A diagnosed callee failure is recovery poison, not an unresolved callable.
+    // Arguments were still visited above so their independent diagnostics survive.
+    if (XR_TYPE_IS_ERROR(callee_type))
+        return callee_type;
+
     if (payload_variant) {
         xa_check_payload_enum_variant_call(ctx, node, call, payload_variant, payload_enum_name,
                                            payload_variant_name);
