@@ -630,11 +630,11 @@ TEST(member_access_field_symbols_are_distinct) {
                              "}\n"
                              "var task = go worker()\n"
                              "print(task.done)\n"
-                             "print(task.cancelled)\n");
+                             "print(task.status)\n");
     assert(f != NULL);
 
     int64_t done_symbol = 0;
-    int64_t cancelled_symbol = 0;
+    int64_t status_symbol = 0;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; blk && i < blk->nvalues; i++) {
@@ -644,14 +644,14 @@ TEST(member_access_field_symbols_are_distinct) {
             const char *name = (const char *) v->aux;
             if (strcmp(name, "done") == 0)
                 done_symbol = v->aux_int;
-            if (strcmp(name, "cancelled") == 0)
-                cancelled_symbol = v->aux_int;
+            if (strcmp(name, "status") == 0)
+                status_symbol = v->aux_int;
         }
     }
 
     assert(done_symbol > 0 && "task.done should carry a field symbol");
-    assert(cancelled_symbol > 0 && "task.cancelled should carry a field symbol");
-    assert(done_symbol != cancelled_symbol && "different task fields need distinct symbols");
+    assert(status_symbol > 0 && "task.status should carry a field symbol");
+    assert(done_symbol != status_symbol && "different task fields need distinct symbols");
     xi_func_free(f);
 }
 
