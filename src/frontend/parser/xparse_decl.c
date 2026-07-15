@@ -836,11 +836,16 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 params = _new_params;
             }
 
-            // Check rest param: ...args
-            if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
-                XrParamNode *rest_param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_REST);
-                params[param_count++] = rest_param;
+            XrParamNode *param = xr_parse_parameter_at(parser,
+                                                       XR_PARSE_PARAMETER_ALLOW_MODE |
+                                                           XR_PARSE_PARAMETER_ALLOW_REST |
+                                                           XR_PARSE_PARAMETER_ALLOW_DESTRUCTURE,
+                                                       param_count);
+            if (!param)
+                goto fail;
 
+            if (param->is_rest) {
+                params[param_count++] = param;
                 if (xr_parser_check(parser, TK_COMMA)) {
                     xr_parser_error(parser, "rest parameter must be last");
                     goto fail;
@@ -848,36 +853,10 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 break;
             }
 
-            // Check for destructure pattern param: [x, y], {x, y} or (x, y)
-            if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE) ||
-                xr_parser_check(parser, TK_LPAREN)) {
-                XrDestructurePattern *pattern = xr_parse_destructure_pattern(parser);
-                if (!pattern) {
-                    xr_parser_error(parser, "failed to parse destructure parameter");
-                    goto fail;
-                }
-
-                // Generate temp name for destructure param
-                char temp_name[32];
-                snprintf(temp_name, sizeof(temp_name), "__param%d", param_count);
-
-                XrParamNode *param =
-                    xr_param_node_new(parser->compiler_session, temp_name, line, 0);
-                param->pattern = pattern;
-
-                /* A destructured parameter still needs a type annotation
-                 * so the analyzer can infer the constituent types. The
-                 * annotation lives on the outer XrParamNode and applies
-                 * to the temp variable that the destructure binds to. */
-                xr_parse_optional_param_type_annotation(parser, false, &param->passing_mode,
-                                                        &param->type);
-
+            if (param->pattern) {
                 params[param_count++] = param;
                 required_count++;
             } else {
-                // Regular parameter name
-                XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
-
                 // Parse optional default value
                 if (xr_parser_match(parser, TK_ASSIGN)) {
                     xr_parse_reject_ref_out_default_param(parser, param);
