@@ -178,11 +178,33 @@ static void test_decode_nested_record_field(void) {
     destroy_object(source);
 }
 
+static void test_decode_validates_array_json_field(void) {
+    static const char *names[] = {"items"};
+    static const XrJsonDecodeFieldSpec fields[] = {
+        {"items", XR_JSON_VALUE_ARRAY, NULL, 0},
+    };
+    XrValue source = xrt_json_new_named(1, names);
+    XrValue items = xrt_array_with_capacity(2);
+    xrt_array_push(items, XR_FROM_INT(1));
+    xrt_array_push(items, XR_TRUE_VAL);
+    xrt_json_set_field(source, 0, items);
+
+    XrValue decoded = xrt_json_decode_record(source, 1, fields);
+    ASSERT_TRUE(!XR_IS_NULL(decoded), "Array<Json> field should accept a JSON array");
+    destroy_object(decoded);
+
+    xrt_json_set_field(source, 0, xr_box_str("not-array"));
+    ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_record(source, 1, fields)),
+                "Array<Json> field should reject a scalar");
+    destroy_object(source);
+}
+
 int main(void) {
     test_decode_validates_each_primitive_field();
     test_decode_distinguishes_nullable_and_missing();
     test_decode_json_field_accepts_null();
     test_decode_nested_record_field();
+    test_decode_validates_array_json_field();
     printf("test_xrt_json_decode: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }

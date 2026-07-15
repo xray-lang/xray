@@ -1,0 +1,12 @@
+type JsonBag = { items: Array<Json> }
+
+fn main() -> int {
+    var data = Json.parse("{\"items\":[1,true,null]}")
+    var bag = Json.decode<JsonBag>(data)
+    if (bag == null) {
+        return -1
+    }
+    return len(bag!.items)
+}
+
+print(main())

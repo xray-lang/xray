@@ -98,6 +98,23 @@ fn test_decode_nested_record_wrong_kind() {
     assert_eq(profile, null)
 }
 
+type JsonBag = { items: Array<Json> }
+
+@test
+fn test_decode_array_json_field() {
+    var json = Json.parse("{\"items\": [1, true, null, {\"x\": 2}]}")
+    var bag = Json.decode<JsonBag>(json)
+    assert(bag != null)
+    assert_eq(len(bag!.items), 4)
+}
+
+@test
+fn test_decode_array_json_field_rejects_non_array() {
+    var json = Json.parse("{\"items\": 1}")
+    var bag = Json.decode<JsonBag>(json)
+    assert_eq(bag, null)
+}
+
 @test
 fn test_decode_null_input() {
     var n = Json.parse("null")

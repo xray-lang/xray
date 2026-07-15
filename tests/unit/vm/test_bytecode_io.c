@@ -328,10 +328,10 @@ TEST(bytecode_roundtrips_typed_record_decode_shape) {
         xr_class_build_record_chain(writer, nested_names, nested_kinds, 2, NULL, true);
     ASSERT_NOT_NULL(nested_shape);
 
-    const char *names[] = {"name", "address"};
-    const uint8_t kinds[] = {XR_JSON_VALUE_STRING, XR_JSON_VALUE_RECORD};
-    XrClass *nested_shapes[] = {NULL, nested_shape};
-    XrClass *shape = xr_class_build_record_chain(writer, names, kinds, 2, nested_shapes, true);
+    const char *names[] = {"name", "address", "items"};
+    const uint8_t kinds[] = {XR_JSON_VALUE_STRING, XR_JSON_VALUE_RECORD, XR_JSON_VALUE_ARRAY};
+    XrClass *nested_shapes[] = {NULL, nested_shape, NULL};
+    XrClass *shape = xr_class_build_record_chain(writer, names, kinds, 3, nested_shapes, true);
     ASSERT_NOT_NULL(shape);
 
     int kidx = xr_valuearray_add(&proto->constants, xr_int((int64_t) (intptr_t) shape));
@@ -354,6 +354,7 @@ TEST(bytecode_roundtrips_typed_record_decode_shape) {
     ASSERT_NOT_NULL(roundtrip_shape);
     ASSERT_EQ_UINT(roundtrip_shape->builtin_kind, XR_BK_RECORD);
     ASSERT_TRUE((roundtrip_shape->flags & XR_CLASS_DYNAMIC_SEALED) != 0);
+    ASSERT_EQ_UINT(roundtrip_shape->field_count, 3);
     ASSERT_EQ_UINT(roundtrip_shape->fields[0].json_value_kind, XR_JSON_VALUE_STRING);
     ASSERT_EQ_UINT(roundtrip_shape->fields[1].json_value_kind, XR_JSON_VALUE_RECORD);
     XrClass *roundtrip_nested = roundtrip_shape->fields[1].json_record_class;
@@ -364,6 +365,7 @@ TEST(bytecode_roundtrips_typed_record_decode_shape) {
     ASSERT_EQ_UINT(roundtrip_nested->fields[0].json_value_kind, XR_JSON_VALUE_STRING);
     ASSERT_STR_EQ(roundtrip_nested->fields[1].name, "zip");
     ASSERT_EQ_UINT(roundtrip_nested->fields[1].json_value_kind, XR_JSON_VALUE_INT);
+    ASSERT_EQ_UINT(roundtrip_shape->fields[2].json_value_kind, XR_JSON_VALUE_ARRAY);
 
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);
