@@ -821,6 +821,12 @@ XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t sourc
         if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT ||
             match->kind == XG_CALL_NATIVE || match->kind == XG_CALL_EXTERN)
             call->xg_method_id = match->method_id;
+        if (match->kind == XG_CALL_INTERFACE) {
+            uint32_t dispatch_slot = UINT32_MAX;
+            if (xg_global_evidence_interface_dispatch_slot(ev, match->receiver_static_interface_id,
+                                                           match->method_id, &dispatch_slot))
+                call->xg_interface_dispatch_slot = dispatch_slot;
+        }
     }
 }
 

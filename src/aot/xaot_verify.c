@@ -2606,23 +2606,6 @@ static bool verify_interface_method_visible_from(const XgGlobalEvidence *ev,
                                             0);
 }
 
-static uint32_t verify_interface_dispatch_slot(const XgGlobalEvidence *ev,
-                                               XgInterfaceId receiver_interface_id,
-                                               uint32_t name_id, uint32_t signature_key) {
-    uint32_t slot = 0;
-    if (!ev || receiver_interface_id == XG_NO_ID || name_id == 0 || signature_key == 0)
-        return UINT32_MAX;
-    for (uint32_t i = 0; i < ev->ninterface_methods; i++) {
-        const XgInterfaceMethodSummary *method = &ev->interface_methods[i];
-        if (!verify_interface_method_visible_from(ev, receiver_interface_id, method))
-            continue;
-        if (method->name_id == name_id && method->signature_key == signature_key)
-            return slot;
-        slot++;
-    }
-    return UINT32_MAX;
-}
-
 static bool verify_interface_method_visibility(const XgGlobalEvidence *ev, char *errbuf,
                                                size_t errbuf_len) {
     if (!ev)
@@ -3344,9 +3327,8 @@ static bool verify_method_dispatch_plan_rederives(const XgGlobalEvidence *ev,
         } else {
             uint32_t implementor_count = 0;
             bool all_targets_resolved = true;
-            expected_dispatch_slot =
-                verify_interface_dispatch_slot(ev, call->receiver_static_interface_id,
-                                               call->method_name_id, call->method_signature_key);
+            (void) xg_global_evidence_interface_dispatch_slot(
+                ev, call->receiver_static_interface_id, call->method_id, &expected_dispatch_slot);
             for (uint32_t i = 0; i < ev->ninterface_impls; i++) {
                 const XgInterfaceImplSummary *impl = &ev->interface_impls[i];
                 const XgMethodSummary *target_method;

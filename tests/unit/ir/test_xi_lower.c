@@ -1903,10 +1903,20 @@ TEST(strong_source_node_identity_binds_same_line_calls_and_same_name_bodies) {
                                         previous->source_node_id != callsite->source_node_id,
                                     "same-line calls must bind distinct source nodes");
         }
-        if (callsite->kind == XG_CALL_METHOD)
+        if (callsite->kind == XG_CALL_METHOD) {
+            REQUIRE_STRONG_IDENTITY(calls[i]->xg_interface_dispatch_slot == UINT32_MAX,
+                                    "class call must not carry an interface dispatch slot");
             method_calls++;
-        else if (callsite->kind == XG_CALL_INTERFACE)
+        } else if (callsite->kind == XG_CALL_INTERFACE) {
+            uint32_t expected_slot = UINT32_MAX;
+            REQUIRE_STRONG_IDENTITY(xg_global_evidence_interface_dispatch_slot(
+                                        &ev, callsite->receiver_static_interface_id,
+                                        callsite->method_id, &expected_slot),
+                                    "interface call evidence must resolve a dispatch slot");
+            REQUIRE_STRONG_IDENTITY(calls[i]->xg_interface_dispatch_slot == expected_slot,
+                                    "Xi interface slot must come from the matched method row");
             interface_calls++;
+        }
     }
     REQUIRE_STRONG_IDENTITY(method_calls == 2 && interface_calls == 1,
                             "callsite kind must distinguish class and interface dispatch");

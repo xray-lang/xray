@@ -1483,6 +1483,10 @@ XR_FUNC const XgClassFieldSummary *
 xg_global_evidence_find_class_field(const XgGlobalEvidence *evidence, XgFieldId field_id);
 XR_FUNC const XgCallsiteSummary *xg_global_evidence_find_callsite(const XgGlobalEvidence *evidence,
                                                                   XgCallsiteId callsite_id);
+XR_FUNC bool xg_global_evidence_interface_dispatch_slot(const XgGlobalEvidence *evidence,
+                                                        XgInterfaceId receiver_interface_id,
+                                                        XgInterfaceMethodId interface_method_id,
+                                                        uint32_t *out_slot);
 XR_FUNC const XgGenericInstSummary *
 xg_global_evidence_find_generic_inst(const XgGlobalEvidence *evidence,
                                      XgGenericInstId generic_inst_id);
