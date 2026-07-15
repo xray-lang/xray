@@ -375,11 +375,18 @@ TEST(analyzer_type_telemetry_splits_unknown_and_error) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    AstNode *missing_program = xr_parse(g_session, "missing;");
+    AstNode *missing_program = xr_parse(g_session, "missing.field(otherMissing);");
     ASSERT(missing_program != NULL);
-    xa_analyzer_analyze(a, "telemetry_unresolved_inference.xr", missing_program);
-    ASSERT(a->unresolved_inference_count >= 1);
-    ASSERT(a->recovery_poison_type_count == 0);
+    xa_analyzer_analyze(a, "telemetry_error_chain.xr", missing_program);
+    int missing_diag_count = 0;
+    XaDiagnostic *missing_diag = xa_analyzer_get_diagnostics(a, &missing_diag_count);
+    ASSERT(missing_diag_count == 2);
+    ASSERT(missing_diag != NULL);
+    ASSERT(missing_diag->code == XR_ERR_ANALYZE_UNDEFINED_VAR);
+    ASSERT(missing_diag->next != NULL);
+    ASSERT(missing_diag->next->code == XR_ERR_ANALYZE_UNDEFINED_VAR);
+    ASSERT(a->unresolved_inference_count == 0);
+    ASSERT(a->recovery_poison_type_count >= 1);
     xa_analyzer_free(a);
 
     a = xa_analyzer_new(g_session);
