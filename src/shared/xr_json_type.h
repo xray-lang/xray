@@ -22,6 +22,7 @@ typedef enum XrJsonValueKind {
     XR_JSON_VALUE_FLOAT = 4,
     XR_JSON_VALUE_STRING = 5,
     XR_JSON_VALUE_JSON = 6,
+    XR_JSON_VALUE_RECORD = 7,
 } XrJsonValueKind;
 
 enum {
@@ -36,5 +37,12 @@ static inline uint8_t xr_json_value_kind_base(uint8_t encoded) {
 static inline bool xr_json_value_kind_is_nullable(uint8_t encoded) {
     return (encoded & XR_JSON_VALUE_NULLABLE) != 0;
 }
+
+typedef struct XrJsonDecodeFieldSpec {
+    const char *name;
+    uint8_t value_kind;
+    const struct XrJsonDecodeFieldSpec *nested_fields;
+    uint16_t nested_field_count;
+} XrJsonDecodeFieldSpec;
 
 #endif

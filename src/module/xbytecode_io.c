@@ -292,8 +292,14 @@ static bool bc_write_dynamic_shape(BcWriter *w, XrValue val) {
         const char *name = (cls->fields && cls->fields[i].name) ? cls->fields[i].name : "";
         if (!bc_put_string(w, name))
             return false;
-        if (!bc_put_u8(w, cls->fields ? cls->fields[i].json_value_kind : XR_JSON_VALUE_ANY))
+        uint8_t value_kind = cls->fields ? cls->fields[i].json_value_kind : XR_JSON_VALUE_ANY;
+        if (!bc_put_u8(w, value_kind))
             return false;
+        if (xr_json_value_kind_base(value_kind) == XR_JSON_VALUE_RECORD) {
+            XrClass *nested = cls->fields ? cls->fields[i].json_record_class : NULL;
+            if (!nested || !bc_write_dynamic_shape(w, XR_FROM_INT((int64_t) (intptr_t) nested)))
+                return false;
+        }
     }
     return true;
 }
@@ -737,12 +743,15 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
 
     char **names = NULL;
     uint8_t *json_value_kinds = NULL;
+    XrClass **json_record_classes = NULL;
     if (count > 0) {
         names = xr_malloc(sizeof(char *) * (size_t) count);
         json_value_kinds = xr_malloc((size_t) count);
-        if (!names || !json_value_kinds) {
+        json_record_classes = xr_calloc((size_t) count, sizeof(XrClass *));
+        if (!names || !json_value_kinds || !json_record_classes) {
             xr_free(names);
             xr_free(json_value_kinds);
+            xr_free(json_record_classes);
             r->error = XR_BC_ERR_ALLOC;
             return xr_null();
         }
@@ -756,6 +765,7 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
                 xr_free(names[j]);
             xr_free(names);
             xr_free(json_value_kinds);
+            xr_free(json_record_classes);
             return xr_null();
         }
         if (!names[i]) {
@@ -766,6 +776,7 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
                     xr_free(names[j]);
                 xr_free(names);
                 xr_free(json_value_kinds);
+                xr_free(json_record_classes);
                 return xr_null();
             }
             names[i][0] = '\0';
@@ -776,15 +787,40 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
                 xr_free(names[j]);
             xr_free(names);
             xr_free(json_value_kinds);
+            xr_free(json_record_classes);
             return xr_null();
         }
-        if (xr_json_value_kind_base(json_value_kinds[i]) > XR_JSON_VALUE_JSON) {
+        if (xr_json_value_kind_base(json_value_kinds[i]) > XR_JSON_VALUE_RECORD) {
             r->error = XR_BC_ERR_CORRUPT;
             for (uint32_t j = 0; j <= i; j++)
                 xr_free(names[j]);
             xr_free(names);
             xr_free(json_value_kinds);
+            xr_free(json_record_classes);
             return xr_null();
+        }
+        if (xr_json_value_kind_base(json_value_kinds[i]) == XR_JSON_VALUE_RECORD) {
+            XrValue nested = bc_read_value(r);
+            if (r->error != XR_BC_OK || !XR_IS_INT(nested)) {
+                if (r->error == XR_BC_OK)
+                    r->error = XR_BC_ERR_CORRUPT;
+                for (uint32_t j = 0; j <= i; j++)
+                    xr_free(names[j]);
+                xr_free(names);
+                xr_free(json_value_kinds);
+                xr_free(json_record_classes);
+                return xr_null();
+            }
+            json_record_classes[i] = (XrClass *) (intptr_t) XR_TO_INT(nested);
+            if (!json_record_classes[i]) {
+                r->error = XR_BC_ERR_CORRUPT;
+                for (uint32_t j = 0; j <= i; j++)
+                    xr_free(names[j]);
+                xr_free(names);
+                xr_free(json_value_kinds);
+                xr_free(json_record_classes);
+                return xr_null();
+            }
         }
     }
 
@@ -794,13 +830,14 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
         cls = xr_class_build_json_chain(r->X, (const char *const *) names, (int) count, sealed);
     } else {
         cls = xr_class_build_record_chain(r->X, (const char *const *) names, json_value_kinds,
-                                          (int) count, sealed);
+                                          (int) count, json_record_classes, sealed);
     }
 
     for (uint32_t i = 0; i < count; i++)
         xr_free(names[i]);
     xr_free(names);
     xr_free(json_value_kinds);
+    xr_free(json_record_classes);
 
     if (!cls) {
         r->error = XR_BC_ERR_ALLOC;

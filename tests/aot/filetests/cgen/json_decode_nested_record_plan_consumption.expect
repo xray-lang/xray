@@ -4,10 +4,8 @@ regex=record-shape [0-9]+ id=[1-9][0-9]* .*kind=static .*json_shape=[1-9][0-9]*
 regex=json-codec [0-9]+ .*kind=decode .*record_shape=[1-9][0-9]*
 regex=json-codec [0-9]+ .*kind=encode .*record_shape=[1-9][0-9]*
 contains=xaot-plan v0
-regex=json-shape-plan [0-9]+ .*kind=record_bridge .*reason=none record_shape=[1-9][0-9]*
-regex=record-shape-plan [0-9]+ .*kind=static .*reason=none json_shape=[1-9][0-9]*
-regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ node=[1-9][0-9]* span=[0-9]+ kind=decode action=decode_validate_copy input_type=[1-9][0-9]* target_type=[1-9][0-9]* input_shape=[1-9][0-9]* output_shape=[1-9][0-9]* fields=2 evidence=0xf1 reason=none record_shape=[1-9][0-9]*
+regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ node=[1-9][0-9]* span=[0-9]+ kind=decode action=decode_validate_copy input_type=[1-9][0-9]* target_type=[1-9][0-9]* input_shape=0 output_shape=[1-9][0-9]* fields=2 evidence=0xd1 reason=none record_shape=[1-9][0-9]*
 regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ node=[1-9][0-9]* span=[0-9]+ kind=encode action=encode_field_table input_type=[1-9][0-9]* target_type=0 input_shape=[1-9][0-9]* output_shape=0 fields=2 evidence=0x31 reason=none record_shape=[1-9][0-9]*
 c_contains=xrt_json_decode_record
+c_contains=(const XrJsonDecodeFieldSpec[]){{"name", 5, NULL, 0}, {"address", 7, (const XrJsonDecodeFieldSpec[]){{"city", 5, NULL, 0}, {"zip", 3, NULL, 0}}, 2}}
 c_contains=xrt_json_encode
-c_contains=(const XrJsonDecodeFieldSpec[]){{"name", 5, NULL, 0}, {"age", 3, NULL, 0}}

@@ -45,14 +45,35 @@ uint8_t xr_type_json_value_kind(const XrType *type) {
         case XR_KIND_JSON:
             kind = XR_JSON_VALUE_JSON;
             break;
+        case XR_KIND_RECORD:
+            kind = XR_JSON_VALUE_RECORD;
+            break;
         default:
             return XR_JSON_VALUE_ANY;
     }
     return kind | (type->is_nullable ? XR_JSON_VALUE_NULLABLE : 0u);
 }
 
+static bool xr_type_is_json_decode_field_supported_depth(const XrType *type, int depth) {
+    if (!type || depth > 16)
+        return false;
+    uint8_t base = xr_json_value_kind_base(xr_type_json_value_kind(type));
+    if (base == XR_JSON_VALUE_RECORD) {
+        if (!XR_TYPE_IS_RECORD(type) || !type->object.is_sealed || type->object.field_count <= 0 ||
+            !type->object.field_names || !type->object.field_types)
+            return false;
+        for (int i = 0; i < type->object.field_count; i++) {
+            if (!xr_type_is_json_decode_field_supported_depth(type->object.field_types[i],
+                                                              depth + 1))
+                return false;
+        }
+        return true;
+    }
+    return base != XR_JSON_VALUE_ANY;
+}
+
 bool xr_type_is_json_decode_field_supported(const XrType *type) {
-    return xr_json_value_kind_base(xr_type_json_value_kind(type)) != XR_JSON_VALUE_ANY;
+    return xr_type_is_json_decode_field_supported_depth(type, 0);
 }
 
 // ========== Process-level static singletons (early init) ==========

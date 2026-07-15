@@ -71,6 +71,33 @@ fn test_decode_float_fields() {
     assert_eq(pt!.y, 2.7)
 }
 
+type Address = { city: string, zip: int }
+type Profile = { name: string, address: Address }
+
+@test
+fn test_decode_nested_record_field() {
+    var json = Json.parse("{\"name\": \"Dana\", \"address\": {\"city\": \"Hangzhou\", \"zip\": 310000}}")
+    var profile = Json.decode<Profile>(json)
+    assert(profile != null)
+    assert_eq(profile!.name, "Dana")
+    assert_eq(profile!.address.city, "Hangzhou")
+    assert_eq(profile!.address.zip, 310000)
+}
+
+@test
+fn test_decode_nested_record_wrong_type() {
+    var wrong = Json.parse("{\"name\": \"Dana\", \"address\": {\"city\": \"Hangzhou\", \"zip\": \"bad\"}}")
+    var profile = Json.decode<Profile>(wrong)
+    assert_eq(profile, null)
+}
+
+@test
+fn test_decode_nested_record_wrong_kind() {
+    var wrong = Json.parse("{\"name\": \"Dana\", \"address\": \"Hangzhou\"}")
+    var profile = Json.decode<Profile>(wrong)
+    assert_eq(profile, null)
+}
+
 @test
 fn test_decode_null_input() {
     var n = Json.parse("null")

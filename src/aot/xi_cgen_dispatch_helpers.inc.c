@@ -7489,37 +7489,58 @@ static void xicgen_json_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     xicgen_emit_json_new_expr(out, v);
 }
 
+static bool xicgen_emit_json_decode_field_specs(FILE *out, const XrType *record_type,
+                                                int64_t field_count, int depth) {
+    if (!out || !record_type || !XR_TYPE_IS_RECORD(record_type) ||
+        !record_type->object.field_names || !record_type->object.field_types ||
+        record_type->object.field_count != field_count || depth > 16)
+        return false;
+    fprintf(out, "(const XrJsonDecodeFieldSpec[]){");
+    for (int64_t i = 0; i < field_count; i++) {
+        if (i > 0)
+            fprintf(out, ", ");
+        const XrType *field_type = record_type->object.field_types[i];
+        uint8_t value_kind = xr_type_json_value_kind(field_type);
+        fprintf(out, "{");
+        xicgen_emit_c_string_literal(
+            out, record_type->object.field_names[i] ? record_type->object.field_names[i] : "?");
+        fprintf(out, ", %u, ", (unsigned) value_kind);
+        if (xr_json_value_kind_base(value_kind) == XR_JSON_VALUE_RECORD && field_type &&
+            XR_TYPE_IS_RECORD(field_type) && field_type->object.field_count > 0) {
+            if (!xicgen_emit_json_decode_field_specs(out, field_type,
+                                                     field_type->object.field_count, depth + 1))
+                return false;
+            fprintf(out, ", %u", (unsigned) field_type->object.field_count);
+        } else {
+            fprintf(out, "NULL, 0");
+        }
+        fprintf(out, "}");
+    }
+    fprintf(out, "}");
+    return true;
+}
+
 static void xicgen_json_decode(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
     (void) f;
     (void) prefix;
     int64_t field_count = v ? v->aux_int : 0;
-    const char **field_names = v ? (const char **) v->aux : NULL;
     const XrType *record_type = v ? v->type : NULL;
     const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_TAGGED,
                                                      v ? cg_rep(v) : XR_REP_TAGGED);
-    if (!v || v->nargs < 1 || field_count <= 0 || !field_names || !record_type ||
-        !XR_TYPE_IS_RECORD(record_type) || !record_type->object.field_types ||
-        record_type->object.field_count != field_count) {
+    if (!v || v->nargs < 1 || field_count <= 0 || !record_type || !XR_TYPE_IS_RECORD(record_type) ||
+        !record_type->object.field_types || record_type->object.field_count != field_count) {
         fprintf(out, "XR_NULL_VAL");
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
     fprintf(out, "xrt_json_decode_record(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ", %" PRId64 ", (const char*[]){", field_count);
-    for (int64_t i = 0; i < field_count; i++) {
-        if (i > 0)
-            fprintf(out, ", ");
-        xicgen_emit_c_string_literal(out, field_names[i] ? field_names[i] : "?");
+    fprintf(out, ", %" PRId64 ", ", field_count);
+    if (!xicgen_emit_json_decode_field_specs(out, record_type, field_count, 0)) {
+        fprintf(out, "NULL");
     }
-    fprintf(out, "}, (const uint8_t[]){");
-    for (int64_t i = 0; i < field_count; i++) {
-        if (i > 0)
-            fprintf(out, ", ");
-        fprintf(out, "%u", (unsigned) xr_type_json_value_kind(record_type->object.field_types[i]));
-    }
-    fprintf(out, "})");
+    fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
 }
 

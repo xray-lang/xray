@@ -524,6 +524,60 @@ static uint8_t *xi_json_record_value_kinds(const XrType *type, int field_count) 
     return kinds;
 }
 
+static XrClass *xi_json_record_class_from_type_depth(EmitCtx *ctx, const XrType *type, int depth);
+
+static bool xi_json_record_nested_classes(EmitCtx *ctx, const XrType *type, int field_count,
+                                          int depth, XrClass ***out_nested_classes) {
+    *out_nested_classes = NULL;
+    bool has_nested = false;
+    for (int i = 0; i < field_count; i++) {
+        uint8_t kind = xr_type_json_value_kind(type->object.field_types[i]);
+        if (xr_json_value_kind_base(kind) == XR_JSON_VALUE_RECORD) {
+            has_nested = true;
+            break;
+        }
+    }
+    if (!has_nested)
+        return true;
+
+    XrClass **nested_classes = (XrClass **) xr_calloc((size_t) field_count, sizeof(XrClass *));
+    if (!nested_classes)
+        return false;
+    for (int i = 0; i < field_count; i++) {
+        uint8_t kind = xr_type_json_value_kind(type->object.field_types[i]);
+        if (xr_json_value_kind_base(kind) != XR_JSON_VALUE_RECORD)
+            continue;
+        nested_classes[i] =
+            xi_json_record_class_from_type_depth(ctx, type->object.field_types[i], depth + 1);
+        if (!nested_classes[i]) {
+            xr_free(nested_classes);
+            return false;
+        }
+    }
+    *out_nested_classes = nested_classes;
+    return true;
+}
+
+static XrClass *xi_json_record_class_from_type_depth(EmitCtx *ctx, const XrType *type, int depth) {
+    if (!ctx || !ctx->isolate || !type || !XR_TYPE_IS_RECORD(type) || depth > 16 ||
+        type->object.field_count <= 0 || !type->object.field_names || !type->object.field_types)
+        return NULL;
+    int field_count = type->object.field_count;
+    uint8_t *value_kinds = xi_json_record_value_kinds(type, field_count);
+    if (!value_kinds)
+        return NULL;
+    XrClass **nested_classes = NULL;
+    if (!xi_json_record_nested_classes(ctx, type, field_count, depth, &nested_classes)) {
+        xr_free(value_kinds);
+        return NULL;
+    }
+    XrClass *cls = xr_class_build_record_chain(ctx->isolate, type->object.field_names, value_kinds,
+                                               field_count, nested_classes, type->object.is_sealed);
+    xr_free(nested_classes);
+    xr_free(value_kinds);
+    return cls;
+}
+
 /* Json object creation: build Shape, store in constant pool, emit OP_NEWJSON */
 XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int field_count = xi_json_field_count(v);
@@ -544,9 +598,9 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int n = field_count > 0 ? field_count : 0;
     bool is_record = v->type && v->type->kind == XR_KIND_RECORD;
     bool sealed = is_record ? v->type->object.is_sealed : false;
-    XrClass *cls = is_record
-                       ? xr_class_build_record_chain(ctx->isolate, field_names, NULL, n, sealed)
-                       : xr_class_build_json_chain(ctx->isolate, field_names, n, false);
+    XrClass *cls =
+        is_record ? xr_class_build_record_chain(ctx->isolate, field_names, NULL, n, NULL, sealed)
+                  : xr_class_build_json_chain(ctx->isolate, field_names, n, false);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -655,14 +709,7 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
 
     /* Build sealed Record class chain for typed Json.decode<T>. */
-    bool sealed = (v->type && v->type->kind == XR_KIND_RECORD && v->type->object.is_sealed);
-    uint8_t *value_kinds = xi_json_record_value_kinds(v->type, n);
-    if (!value_kinds) {
-        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-        return;
-    }
-    XrClass *cls = xr_class_build_record_chain(ctx->isolate, field_names, value_kinds, n, sealed);
-    xr_free(value_kinds);
+    XrClass *cls = xi_json_record_class_from_type_depth(ctx, v->type, 0);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
