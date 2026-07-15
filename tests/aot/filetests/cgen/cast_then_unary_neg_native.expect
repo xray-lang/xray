@@ -1,0 +1,5 @@
+contains=xaot-plan v0
+regex=value v[0-9]+ op=COPY kind=scalar rep=i64 c_type=int64_t
+not_contains=op=AS
+c_regex=int64_t v[0-9]+ = \(int64_t\) \(-\(uint64_t\) \(v[0-9]+\)\);
+c_not_contains=xrt_neg(

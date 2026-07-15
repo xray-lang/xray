@@ -7422,12 +7422,10 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     struct XrType *cast_type = tref ? xr_tref_resolve(l->isolate, tref) : NULL;
     cast_type = xi_lower_type_or_any(l, cast_type, "cast target type", node->line);
     if (!as->is_safe && cast_type) {
-        if (XR_TYPE_IS_INT(cast_type) && val->type && XR_TYPE_IS_INT(val->type) &&
-            cast_type->native_width != 0) {
+        if (XR_TYPE_IS_INT(cast_type) && val->type && XR_TYPE_IS_INT(val->type)) {
             return xi_lower_narrow_for_static_type(l, node, val, cast_type);
         }
-        if (XR_TYPE_IS_FLOAT(cast_type) && val->type && XR_TYPE_IS_FLOAT(val->type) &&
-            cast_type->native_width == XR_NATIVE_F32) {
+        if (XR_TYPE_IS_FLOAT(cast_type) && val->type && XR_TYPE_IS_FLOAT(val->type)) {
             return xi_lower_narrow_for_static_type(l, node, val, cast_type);
         }
     }
