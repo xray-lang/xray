@@ -1,0 +1,18 @@
+class Handle {
+    id: int
+
+    constructor(id: int) {
+        this.id = id
+    }
+}
+
+@derive(Eq, Hash)
+class Key {
+    handle: Handle
+
+    constructor(handle: Handle) {
+        this.handle = handle
+    }
+}
+
+var m: Map<Key, int> = #{}

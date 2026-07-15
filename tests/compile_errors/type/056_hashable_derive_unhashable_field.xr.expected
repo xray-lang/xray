@@ -1,0 +1,1 @@
+Derived Hash for class 'Key' cannot use field 'handle' of type 'Handle'; field type must satisfy Hashable

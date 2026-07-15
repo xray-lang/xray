@@ -6739,11 +6739,51 @@ static bool body_derive_fields_match(XgBodyCollect *bc, const XgDeriveSummary *e
     return true;
 }
 
-static void body_ensure_derived_hash_eq(XgBodyCollect *bc, uint32_t key_type_key) {
+static void body_ensure_hash_eq_depth(XgBodyCollect *bc, uint32_t key_type_key, uint32_t depth);
+
+static bool body_hash_eq_row_consumable(const XgHashEqSummary *hash_eq) {
+    if (!hash_eq)
+        return false;
+    switch ((XgHashEqKind) hash_eq->kind) {
+        case XG_HASH_EQ_BUILTIN:
+        case XG_HASH_EQ_ENUM_ORDINAL:
+        case XG_HASH_EQ_DERIVE:
+        case XG_HASH_EQ_USER_METHOD:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool body_derived_hash_eq_fields_supported(XgBodyCollect *bc, uint32_t owner_type_key,
+                                                  const XgDeriveSummary *eq,
+                                                  const XgDeriveSummary *hash, uint32_t depth) {
+    if (!bc || !bc->evidence || !body_derive_fields_match(bc, eq, hash))
+        return false;
+    if (!eq || eq->field_count == 0)
+        return true;
+    if (depth >= 8)
+        return false;
+    for (uint32_t i = 0; i < eq->field_count; i++) {
+        const XgDerivedFieldSummary *field = &bc->evidence->derived_fields[eq->field_start - 1 + i];
+        if (field->type_key == 0 || field->type_key == owner_type_key)
+            return false;
+        body_ensure_hash_eq_depth(bc, field->type_key, depth + 1);
+        if (!body_hash_eq_row_consumable(
+                xg_global_evidence_find_hash_eq(bc->evidence, field->type_key)))
+            return false;
+    }
+    return true;
+}
+
+static void body_ensure_derived_hash_eq_depth(XgBodyCollect *bc, uint32_t key_type_key,
+                                              uint32_t depth) {
     const char *type_name = NULL;
     const XgClassSummary *cls = body_find_class_by_type_key(bc, key_type_key, &type_name);
     XgHashEqSummary row;
     if (!bc || !bc->evidence || !cls || !type_name)
+        return;
+    if (depth >= 8)
         return;
     if (xg_global_evidence_find_hash_eq(bc->evidence, key_type_key))
         return;
@@ -6752,6 +6792,8 @@ static void body_ensure_derived_hash_eq(XgBodyCollect *bc, uint32_t key_type_key
     const XgDeriveSummary *hash =
         body_find_derive_by_type_kind(bc, key_type_key, cls->decl_id, XG_DERIVE_HASH);
     if (!eq || !hash || eq->type_key != hash->type_key || !body_derive_fields_match(bc, eq, hash))
+        return;
+    if (!body_derived_hash_eq_fields_supported(bc, key_type_key, eq, hash, depth))
         return;
     memset(&row, 0, sizeof(row));
     row.hash_eq_id = (XgHashEqId) (bc->evidence->nhash_eqs + 1);
@@ -6801,10 +6843,15 @@ static void body_ensure_user_hash_eq(XgBodyCollect *bc, uint32_t key_type_key) {
     (void) xg_global_evidence_add_hash_eq(bc->evidence, &row);
 }
 
-static void body_ensure_hash_eq(XgBodyCollect *bc, uint32_t key_type_key) {
+static void body_ensure_hash_eq_depth(XgBodyCollect *bc, uint32_t key_type_key, uint32_t depth) {
     body_ensure_builtin_hash_eq(bc, key_type_key);
-    body_ensure_derived_hash_eq(bc, key_type_key);
+    body_ensure_enum_hash_eq(bc, key_type_key);
+    body_ensure_derived_hash_eq_depth(bc, key_type_key, depth);
     body_ensure_user_hash_eq(bc, key_type_key);
+}
+
+static void body_ensure_hash_eq(XgBodyCollect *bc, uint32_t key_type_key) {
+    body_ensure_hash_eq_depth(bc, key_type_key, 0);
 }
 
 static bool body_owner_is_module_init(const XgBodyCollect *bc) {

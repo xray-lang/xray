@@ -1741,6 +1741,83 @@ static bool xa_eq_method_valid(XaSymbol *method, const char *self_name) {
     return xa_type_name_matches(param, self_name);
 }
 
+static void xa_report_derived_hashable_field_contract(XaInferContext *ctx, XrLocation *loc,
+                                                      const char *class_name,
+                                                      const char *field_name, XrType *field_type) {
+    if (!ctx || !ctx->analyzer || !loc)
+        return;
+    char msg[384];
+    snprintf(msg, sizeof(msg),
+             "Derived Hash for class '%s' cannot use field '%s' of type '%s'; field type must "
+             "satisfy Hashable",
+             class_name ? class_name : "?", field_name ? field_name : "?",
+             field_type ? xr_type_to_string(field_type) : "?");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_HASHABLE_CONTRACT,
+                               msg, loc);
+}
+
+static bool xa_type_is_hashable_for_derived_field(XaInferContext *ctx, XrType *type,
+                                                  XaSymbolLinks *generic_links,
+                                                  const char *owner_name, const char *field_name,
+                                                  XrLocation *loc, int depth);
+
+static bool xa_class_derived_hashable_fields_valid(XaInferContext *ctx, XrClassInfo *info,
+                                                   XaSymbolLinks *generic_links, XrLocation *loc,
+                                                   int depth) {
+    if (!ctx || !info)
+        return false;
+    if (depth >= 8)
+        return false;
+    for (int i = 0; i < info->field_count; i++) {
+        XaSymbol *field = info->fields ? info->fields[i] : NULL;
+        if (!field || field->is_static)
+            continue;
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, field);
+        XrType *field_type = links ? links->type : NULL;
+        if (!field_type || XR_TYPE_IS_UNKNOWN(field_type))
+            continue;
+        if (!xa_type_is_hashable_for_derived_field(ctx, field_type, generic_links, info->name,
+                                                   field->name, loc, depth + 1)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool xa_type_is_hashable_for_derived_field(XaInferContext *ctx, XrType *type,
+                                                  XaSymbolLinks *generic_links,
+                                                  const char *owner_name, const char *field_name,
+                                                  XrLocation *loc, int depth) {
+    if (!ctx || !type || XR_TYPE_IS_UNKNOWN(type))
+        return true;
+    if (xa_type_is_builtin_hashable(type))
+        return true;
+    if (depth >= 8) {
+        xa_report_derived_hashable_field_contract(ctx, loc, owner_name, field_name, type);
+        return false;
+    }
+    if (type->kind == XR_KIND_TYPE_PARAM) {
+        bool found = false;
+        if (xa_type_param_has_hashable_constraint(ctx, generic_links, type->type_param.name,
+                                                  &found))
+            return true;
+        xa_report_derived_hashable_field_contract(ctx, loc, owner_name, field_name, type);
+        return false;
+    }
+    XrClassInfo *info = xa_hashable_class_info_for_type(ctx, type);
+    if (info && info->name) {
+        if ((info->derive_flags & (XR_DERIVE_EQ | XR_DERIVE_HASH)) ==
+            (XR_DERIVE_EQ | XR_DERIVE_HASH))
+            return xa_class_derived_hashable_fields_valid(ctx, info, generic_links, loc, depth + 1);
+        XaSymbol *eq = xa_class_info_lookup_member(info, "==");
+        XaSymbol *hash = xa_class_info_lookup_member(info, "hash");
+        if (xa_eq_method_valid(eq, info->name) && xa_hash_method_valid(hash))
+            return true;
+    }
+    xa_report_derived_hashable_field_contract(ctx, loc, owner_name, field_name, type);
+    return false;
+}
+
 static void xa_report_hashable_contract(XaInferContext *ctx, XrLocation *loc, const char *type_name,
                                         const char *context, bool has_eq, bool has_hash) {
     if (!ctx || !ctx->analyzer || !loc)
@@ -1791,8 +1868,11 @@ static bool xa_validate_hashable_type(XaInferContext *ctx, XrType *type,
     XrClassInfo *info = xa_hashable_class_info_for_type(ctx, type);
     if (info && info->name) {
         if ((info->derive_flags & (XR_DERIVE_EQ | XR_DERIVE_HASH)) ==
-            (XR_DERIVE_EQ | XR_DERIVE_HASH))
+            (XR_DERIVE_EQ | XR_DERIVE_HASH)) {
+            if (!xa_class_derived_hashable_fields_valid(ctx, info, generic_links, loc, 0))
+                return false;
             return true;
+        }
         XaSymbol *eq = xa_class_info_lookup_member(info, "==");
         XaSymbol *hash = xa_class_info_lookup_member(info, "hash");
         bool has_eq = xa_eq_method_valid(eq, info->name);
