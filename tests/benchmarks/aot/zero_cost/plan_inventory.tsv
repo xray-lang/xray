@@ -62,6 +62,7 @@ json_container_receiver_shape|covered|jsonContainerReceiverPlan|tests/aot/filete
 json_dynamic_fallback|covered|json-access-plan .*action=dynamic_lookup|tests/aot/filetests/cgen|Json computed/open/unknown fallback reasons are covered.
 json_parse_runtime_direct_plan|covered|action=parse_runtime_direct|tests/unit/analysis|Json.parse uses an explicit verified runtime-direct parse plan instead of the old DOM bridge.
 json_decode_plan|covered|json-codec-plan .*kind=decode action=decode_validate_copy|tests/aot/filetests/cgen|Json.decode<Record> consumes a verified codec plan instead of assembling shape checks ad hoc.
+json_decode_mixed_record_array_plan|covered|jsonDecodeMixedRecordArrayPlan|tests/aot/filetests/cgen|Json.decode<Record> mixed primitive, nested Record, and Array<Json> fields share one verified decode plan and generated field-spec table.
 json_encode_field_table|covered|json-codec-plan .*kind=encode action=encode_field_table|tests/aot/filetests/cgen|Json.encode consumes verified field-table codec evidence.
 record_json_bridge|covered|XG_JSON_SHAPE_RECORD_BRIDGE|tests/unit/analysis|Record type aliases produce Json bridge shape and codec evidence.
 record_access_direct|covered|record-access-plan .*action=direct_field|tests/aot/filetests/cgen|Record field access consumes a verified direct-field plan.
