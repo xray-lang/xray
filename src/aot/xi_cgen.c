@@ -9079,6 +9079,28 @@ static void cg_func_reach_mark_dispatch_roots(XiCgenCtx *ctx) {
     }
 }
 
+static void cg_func_reach_mark_generic_body_roots(XiCgenCtx *ctx) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!ctx || !bundle)
+        return;
+    for (uint32_t i = 0; i < bundle->ngeneric_body_plans; i++) {
+        const XaotGenericBodyPlan *plan = &bundle->generic_body_plans[i];
+        XgFuncId body_func_id = XG_NO_ID;
+        switch ((XaotGenericBodyAction) plan->action) {
+            case XAOT_GENERIC_BODY_CLONE:
+                body_func_id = plan->specialized_body_func_id;
+                break;
+            case XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY:
+            case XAOT_GENERIC_BODY_DIRECT_CONSTRAINT_CALL:
+                body_func_id = plan->origin_body_func_id;
+                break;
+            case XAOT_GENERIC_BODY_REJECT:
+                break;
+        }
+        cg_func_reach_mark_root(ctx, xaot_bundle_find_body_func(bundle, body_func_id, NULL));
+    }
+}
+
 /* Compute executable function reachability as a monotonic fixed point over the
  * resolved call/reference graph.  The previous per-target recursive query
  * cached provisional negative answers while callers were still in the
@@ -9101,6 +9123,7 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
     }
     cg_func_reach_mark_hash_eq_roots(ctx);
     cg_func_reach_mark_dispatch_roots(ctx);
+    cg_func_reach_mark_generic_body_roots(ctx);
 
     bool changed;
     do {
