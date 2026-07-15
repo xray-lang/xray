@@ -30,6 +30,8 @@ NEGATIVE_CASES = (
     "tests/compile_errors/ownership/124_out_param_try_assign_catch_missing.xr",
     "tests/compile_errors/ownership/126_out_param_field_assignment_not_whole_init.xr",
     "tests/compile_errors/ownership/159_generic_method_ref_contract_retained.xr",
+    "tests/compile_errors/ownership/160_in_rest_param_mode_rejected.xr",
+    "tests/compile_errors/ownership/161_in_destructure_param_mode_rejected.xr",
     "tests/compile_errors/ffi/040_extern_in_param_mode_rejected.xr",
     "tests/compile_errors/ffi/041_extern_ref_param_mode_rejected.xr",
     "tests/compile_errors/ffi/042_extern_out_param_mode_rejected.xr",
