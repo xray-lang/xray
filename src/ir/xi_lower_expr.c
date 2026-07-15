@@ -6182,8 +6182,8 @@ static XiValue *lower_parallel_plan_lifecycle_call(XiLower *l, AstNode *node, Xi
     v->aux = (void *) arena_strdup(l->func, method);
     v->aux_int = (int64_t) xi_lower_method_symbol(l, method) << 1;
     v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+    v->lowering_flags |= XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE;
     v->line = (uint32_t) (node ? node->line : 0);
-    xi_lower_bind_callsite_id(l, v, node ? xi_lower_source_node_id(l, node) : 0);
     xi_lower_insert_err_check(l, node);
     return v;
 }

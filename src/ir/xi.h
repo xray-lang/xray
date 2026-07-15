@@ -627,6 +627,9 @@ typedef enum {
 #define XI_FLAG_CALL_EFFECTS                                                                       \
     (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
 
+/* Compiler-internal facts emitted by lowering for backend-only decisions. */
+#define XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE (1u << 0)
+
 /* XI_AWAIT aux_int bits. */
 #define XI_AWAIT_AUX_ANY (1 << 0)
 #define XI_AWAIT_AUX_ALL (1 << 1)
@@ -729,6 +732,7 @@ typedef struct XiValue {
                               * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
     uint8_t mem_group;       /* XiMemGroup (TBAA): memory group for alias analysis
                               * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
+    uint8_t lowering_flags;  /* XI_LOWERING_FLAG_* */
     struct XrType *type;     /* authoritative compile-time type (never NULL) */
     int64_t aux_int;         /* auxiliary integer: const value, symbol ID, etc. */
     void *aux;               /* auxiliary pointer: proto, string literal, etc. */
@@ -765,6 +769,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->aux_kind = src->aux_kind;
     dst->escape = src->escape;
     dst->mem_group = src->mem_group;
+    dst->lowering_flags = src->lowering_flags;
     dst->aux_int = src->aux_int;
     dst->aux = src->aux;
     dst->line = src->line;

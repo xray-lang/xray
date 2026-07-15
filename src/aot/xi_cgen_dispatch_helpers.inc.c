@@ -4560,6 +4560,163 @@ static bool xicgen_emit_direct_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     return true;
 }
 
+static bool xicgen_path_is_parallel_stdlib_module(const char *file) {
+    if (!file)
+        return false;
+    const char *suffixes[] = {"stdlib/parallel/parallel.xr",
+                              "<embedded stdlib>/parallel/parallel.xr"};
+    for (uint8_t i = 0; i < (uint8_t) (sizeof(suffixes) / sizeof(suffixes[0])); i++) {
+        size_t flen = strlen(file);
+        size_t slen = strlen(suffixes[i]);
+        if (flen >= slen && strcmp(file + flen - slen, suffixes[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool xicgen_class_data_has_instance_method(const XiClassData *class_data,
+                                                  const char *method) {
+    if (!class_data || !class_data->methods || !method)
+        return false;
+    for (uint16_t mi = 0; mi < class_data->nmethod; mi++) {
+        const XiClassMethod *m = &class_data->methods[mi];
+        if (!m->is_static && m->name && strcmp(m->name, method) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool xicgen_class_data_is_parallel_plan(XiCgenCtx *ctx, const XiClassData *class_data) {
+    if (!class_data)
+        return false;
+    const char *name =
+        class_data->generic_origin_name ? class_data->generic_origin_name : class_data->class_name;
+    if (!name || strcmp(name, "Plan") != 0)
+        return false;
+    const char *required_methods[] = {"_begin", "_end",    "_stateFor", "forEach",
+                                      "map",    "mapInto", "reduce",    "close"};
+    for (uint8_t i = 0; i < (uint8_t) (sizeof(required_methods) / sizeof(required_methods[0]));
+         i++) {
+        if (!xicgen_class_data_has_instance_method(class_data, required_methods[i]))
+            return false;
+    }
+    if (class_data->class_info &&
+        xicgen_path_is_parallel_stdlib_module(class_data->class_info->location.file))
+        return true;
+    const XiModule *decl_module = cg_class_native_decl_module_for_data(ctx, class_data);
+    if (decl_module && xicgen_path_is_parallel_stdlib_module(decl_module->path))
+        return true;
+    const XiModule *slot_module = cg_class_native_module_for_data(ctx, class_data);
+    return slot_module && xicgen_path_is_parallel_stdlib_module(slot_module->path);
+}
+
+static const XiClassData *xicgen_parallel_plan_class_for_call(XiCgenCtx *ctx, const XiFunc *f,
+                                                              const XiValue *v) {
+    if (!ctx || !v || v->nargs != 1 || !v->args || !v->args[0])
+        return NULL;
+    const XiClassData *class_data = cg_class_native_instance_data(ctx, f, v->args[0]);
+    if (!xicgen_class_data_is_parallel_plan(ctx, class_data)) {
+        const char *recv_class = cg_class_native_receiver_class_name(ctx, f, v->args[0]);
+        class_data = recv_class ? cg_class_native_data_by_name(ctx, recv_class) : NULL;
+    }
+    return xicgen_class_data_is_parallel_plan(ctx, class_data) ? class_data : NULL;
+}
+
+static const XiClassData *xicgen_find_parallel_plan_class_data(XiCgenCtx *ctx) {
+    if (!ctx)
+        return NULL;
+    for (int mi = 0; mi < ctx->all_nmodules; mi++) {
+        const XiModule *module = ctx->all_modules ? ctx->all_modules[mi] : NULL;
+        if (!module)
+            continue;
+        for (uint16_t ci = 0; ci < module->nclasses; ci++) {
+            const XiClassData *class_data = module->classes ? module->classes[ci] : NULL;
+            if (xicgen_class_data_is_parallel_plan(ctx, class_data))
+                return class_data;
+        }
+        for (uint16_t si = 0; si < module->nslots; si++) {
+            const XiClassData *class_data = module->slot_classes ? module->slot_classes[si] : NULL;
+            if (xicgen_class_data_is_parallel_plan(ctx, class_data))
+                return class_data;
+        }
+    }
+    for (int i = 0; i < ctx->nimports; i++) {
+        const XiClassData *class_data = ctx->imports[i].target_class;
+        if (xicgen_class_data_is_parallel_plan(ctx, class_data))
+            return class_data;
+    }
+    return NULL;
+}
+
+static const XiFunc *xicgen_parallel_plan_lifecycle_target(XiCgenCtx *ctx,
+                                                           const XiClassData *class_data,
+                                                           const char *method,
+                                                           const char **out_prefix) {
+    if (out_prefix)
+        *out_prefix = NULL;
+    if (!ctx || !class_data || !method)
+        return NULL;
+    const XiModule *decl_module = cg_class_native_decl_module_for_data(ctx, class_data);
+    if (decl_module && decl_module->init && class_data->methods) {
+        for (uint16_t mi = 0; mi < class_data->nmethod; mi++) {
+            const XiClassMethod *m = &class_data->methods[mi];
+            if (m->is_static || !m->name || strcmp(m->name, method) != 0)
+                continue;
+            const XiFunc *target =
+                cg_lookup_method_in_class_data(class_data, decl_module->init, (int) mi);
+            if (target) {
+                if (out_prefix)
+                    *out_prefix = decl_module->name;
+                return target;
+            }
+        }
+    }
+    for (int i = 0; i < ctx->nimports; i++) {
+        const CgImportEntry *imp = &ctx->imports[i];
+        if (!cg_class_native_data_matches(imp->target_class, class_data) || !imp->exporter_func)
+            continue;
+        for (uint16_t mi = 0; mi < class_data->nmethod; mi++) {
+            const XiClassMethod *m = &class_data->methods[mi];
+            if (m->is_static || !m->name || strcmp(m->name, method) != 0)
+                continue;
+            const XiFunc *target =
+                cg_lookup_method_in_class_data(class_data, imp->exporter_func, (int) mi);
+            if (target) {
+                if (out_prefix)
+                    *out_prefix = imp->target_mod_name;
+                return target;
+            }
+        }
+    }
+    return NULL;
+}
+
+static bool xicgen_emit_parallel_plan_lifecycle_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                       const XiValue *v, const char *prefix,
+                                                       const char *method, uint16_t nargs) {
+    if (!method || nargs != 0 || (strcmp(method, "_begin") != 0 && strcmp(method, "_end") != 0))
+        return false;
+    const XiClassData *class_data = xicgen_parallel_plan_class_for_call(ctx, f, v);
+    if (!class_data && (v->lowering_flags & XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE) &&
+        v->xg_callsite_id == XG_NO_ID && v->xg_method_id == XG_NO_ID)
+        class_data = xicgen_find_parallel_plan_class_data(ctx);
+    if (!class_data)
+        return false;
+    const char *method_prefix = NULL;
+    const XiFunc *target =
+        xicgen_parallel_plan_lifecycle_target(ctx, class_data, method, &method_prefix);
+    if (!target) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: verified parallel.Plan lifecycle method '%s' has no direct "
+                "target at line %u\n",
+                method, (unsigned) v->line);
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    return xicgen_emit_direct_method(ctx, out, f, v, prefix, target, method_prefix);
+}
+
 static const XgClassSummary *xicgen_dispatch_evidence_class(const XaotBundle *bundle,
                                                             XgClassId class_id) {
     const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
@@ -7060,6 +7217,8 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (xicgen_emit_enum_method(ctx, out, f, v, method))
         return;
     if (xicgen_emit_task_method(ctx, out, f, v, method, nargs))
+        return;
+    if (xicgen_emit_parallel_plan_lifecycle_method(ctx, out, f, v, prefix, method, nargs))
         return;
     if (xicgen_emit_planned_direct_method(ctx, out, f, v, prefix, dispatch_plan))
         return;
