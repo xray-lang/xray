@@ -14,5 +14,6 @@ map_dynamic_key|map_set/dynamic_key_lookup_loop.xr|20000
 map_dense_int|map_set/dense_int_lookup_loop.xr|520000
 map_user_hash_eq|map_set/user_hash_eq_loop.xr|1980000
 sequence_capacity_bulk_encoding|sequence/sequence_capacity_bulk_encoding_loop.xr|200330000
+stringbuilder_literal_append_chain|sequence/stringbuilder_literal_append_chain_loop.xr|1440000
 record_options|record_options/record_options_loop.xr|11599280
 derive_eq_hash_clone|derive/derive_eq_hash_clone_loop.xr|940000

@@ -1,0 +1,18 @@
+fn buildLine() -> string {
+    var sb = StringBuilder()
+    sb.append("abcdefghijklmnopqrstuvwxyz0123456789")
+    sb.append("ABCDEFGHIJKLMNOPQRSTUVWXYZ9876543210")
+    return sb.toString()
+}
+
+fn run(n: int) -> int {
+    var total = 0
+    var i = 0
+    while (i < n) {
+        total = total + len(buildLine())
+        i = i + 1
+    }
+    return total
+}
+
+print(run(20000))
