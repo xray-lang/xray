@@ -202,7 +202,7 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                                                   XaSymbolLinks *class_links,
                                                   XrClassInfo *class_info) {
     if (!ctx || !ctx->analyzer || !class_info)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
 
     xa_check_constructor_visibility(ctx, node, class_info);
 
@@ -1568,7 +1568,7 @@ static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                    "sys.Thread.spawn expects fn or (ThreadOptions, fn)", &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     if (body_index == 1 && call->arguments[0])
@@ -1687,7 +1687,7 @@ static bool xa_type_is_pod_span_elem(XrType *type) {
 static XrType *xa_byte_slice_typed_type_arg(XaInferContext *ctx, AstNode *node, CallExprNode *call,
                                             const char *label, bool allow_signed) {
     if (!ctx || !call)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
     XrLocation loc = {
         .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
     if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
@@ -1695,7 +1695,7 @@ static XrType *xa_byte_slice_typed_type_arg(XaInferContext *ctx, AstNode *node, 
         snprintf(msg, sizeof(msg), "%s expects exactly one type argument", label);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
                                    msg, &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
     XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
     if (xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument", label,
@@ -1710,7 +1710,7 @@ static XrType *xa_byte_slice_typed_type_arg(XaInferContext *ctx, AstNode *node, 
                               : "uint16, uint32 or uint64");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
     return target;
 }
@@ -1723,14 +1723,14 @@ static XrType *xa_load_le_return_type(XaInferContext *ctx, AstNode *node, CallEx
 static XrType *xa_byte_slice_reinterpret_return_type(XaInferContext *ctx, AstNode *node,
                                                      CallExprNode *call) {
     if (!ctx || !call)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
     XrLocation loc = {
         .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
     if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
                                    "Slice<byte>.reinterpret<T>() expects exactly one type argument",
                                    &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
     XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
     if (xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument",
@@ -1741,7 +1741,7 @@ static XrType *xa_byte_slice_reinterpret_return_type(XaInferContext *ctx, AstNod
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
                                    "Slice<byte>.reinterpret<T>() requires POD T", &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
     return xr_type_new_span(ctx->analyzer->isolate, target);
 }
@@ -1983,7 +1983,7 @@ static const char *xa_parallel_callback_label_for_plan(const XaParallelCallPlan 
 static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstNode *arg_node,
                                                        const char *callback_label) {
     if (!ctx || !arg_node)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
     const char *saved_pending = ctx->pending_parallel_callback_name;
     if (callback_label && arg_node->type == AST_FUNCTION_EXPR)
         ctx->pending_parallel_callback_name = callback_label;
@@ -2015,7 +2015,7 @@ static XrType *xa_mem_layout_return_type(XaInferContext *ctx, AstNode *node, Cal
         snprintf(msg, sizeof(msg), "mem.%s<T>() expects exactly one type argument", member);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
                                    msg, &loc);
-        return xr_type_new_unknown(ctx->analyzer->isolate);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     bool is_offset = strcmp(member, "offsetOf") == 0;
@@ -2030,7 +2030,7 @@ static XrType *xa_mem_layout_return_type(XaInferContext *ctx, AstNode *node, Cal
         }
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
-        return xr_type_new_unknown(ctx->analyzer->isolate);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
@@ -2046,7 +2046,7 @@ static XrType *xa_mem_layout_return_type(XaInferContext *ctx, AstNode *node, Cal
                  xr_type_to_string(target));
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
-        return xr_type_new_unknown(ctx->analyzer->isolate);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     if (is_offset) {
@@ -2056,7 +2056,7 @@ static XrType *xa_mem_layout_return_type(XaInferContext *ctx, AstNode *node, Cal
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                        "mem.offsetOf<T>() field name must be a string literal",
                                        &loc);
-            return xr_type_new_unknown(ctx->analyzer->isolate);
+            return xr_type_new_error(ctx->analyzer->isolate);
         }
         const char *field = field_arg->as.literal.raw_value.string_val;
         uint32_t offset = 0;
@@ -2066,7 +2066,7 @@ static XrType *xa_mem_layout_return_type(XaInferContext *ctx, AstNode *node, Cal
                      xr_type_to_string(target));
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
-            return xr_type_new_unknown(ctx->analyzer->isolate);
+            return xr_type_new_error(ctx->analyzer->isolate);
         }
     }
 
@@ -3527,7 +3527,7 @@ static bool xa_len_type_supported(XrType *type) {
 
 XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
 
     CallExprNode *call = &node->as.call_expr;
     bool optional_function_call = call->callee && call->callee->type == AST_OPTIONAL_CHAIN &&
@@ -3814,7 +3814,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
                     "Json.decode<T>() requires T to be a sealed Record type alias with fields",
                     &loc);
-                return xr_type_new_unknown(NULL);
+                return xr_type_new_error(ctx->analyzer->isolate);
             }
 
             // Validate: exactly 1 argument
@@ -3824,7 +3824,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_ARG_TYPE,
                                            "Json.decode<T>() expects exactly 1 argument", &loc);
-                return xr_type_new_unknown(NULL);
+                return xr_type_new_error(ctx->analyzer->isolate);
             }
 
             // Visit argument to ensure it's analyzed
@@ -4046,7 +4046,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 ctx, node, "class construction",
                 "use structs or explicit raw-memory APIs in this profile");
             if (xa_freestanding_profile_enabled(ctx->analyzer))
-                return xr_type_new_unknown(NULL);
+                return xr_type_new_error(ctx->analyzer->isolate);
             return ns_instance;
         }
     }
@@ -4086,7 +4086,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 xa_analyzer_add_diagnostic(
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                     "Thread handles can only be created by sys.Thread.spawn", &loc);
-                return xr_type_new_unknown(NULL);
+                return xr_type_new_error(ctx->analyzer->isolate);
             }
 
             // Construction `T(args)`: resolve the class in any visible scope
@@ -4102,7 +4102,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         ctx, node, "class construction",
                         "use structs or explicit raw-memory APIs in this profile");
                     if (xa_freestanding_profile_enabled(ctx->analyzer))
-                        return xr_type_new_unknown(NULL);
+                        return xr_type_new_error(ctx->analyzer->isolate);
                     return xa_class_constructor_instance_type(ctx, node, call, name, links,
                                                               links->class_info);
                 }
@@ -4165,7 +4165,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 xa_analyzer_add_diagnostic(
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                     "Thread handles can only be created by sys.Thread.spawn", &loc);
-                return xr_type_new_unknown(NULL);
+                return xr_type_new_error(ctx->analyzer->isolate);
             }
             XaSymbol *class_sym = xa_lookup_visible_symbol(ctx, class_name);
             if (!class_sym || class_sym->kind != XA_SYM_CLASS)
@@ -4177,7 +4177,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         ctx, node, "class construction",
                         "use structs or explicit raw-memory APIs in this profile");
                     if (xa_freestanding_profile_enabled(ctx->analyzer))
-                        return xr_type_new_unknown(NULL);
+                        return xr_type_new_error(ctx->analyzer->isolate);
                     return xa_class_constructor_instance_type(ctx, node, call, class_name, links,
                                                               links->class_info);
                 }
@@ -4223,7 +4223,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    "Value is not callable", &loc);
         xa_report_arg_accesses_require_known_contract(ctx, node, call);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     // Infer argument types
