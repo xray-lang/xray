@@ -1,6 +1,6 @@
 schema = 1
 module = "io"
-contract_revision = 1
+contract_revision = 2
 legacy_commit = "0a9f6fdb5bd77e5c1a5d729bd68a1064b1c5e6e7"
 legacy_oracle = "classification_only"
 legacy_public_surface = [
@@ -33,6 +33,11 @@ new_behavior = "readFile/writeFile remain text APIs while readFileBytes/writeFil
 id = "byte-file-roundtrip"
 classification = "required"
 new_behavior = "byte files round-trip arbitrary bytes and lengths on VM and AOT"
+
+[[legacy_behavior]]
+id = "all-byte-file-roundtrip"
+classification = "required"
+new_behavior = "readFileBytes/writeFileBytes preserve all byte values 0..255 without routing through string storage"
 
 [[legacy_behavior]]
 id = "path-owner-boundary"

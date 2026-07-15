@@ -1,0 +1,48 @@
+// Task-200 IO binary boundary: readFileBytes/writeFileBytes must preserve every
+// byte value through Array<byte>, including NUL and high bytes.
+import io
+import path
+
+fn allBytes() -> Array<byte> {
+    var out = Array<byte>(256)
+    for (var i = 0; i < 256; i++) {
+        out[i] = i
+    }
+    return out
+}
+
+fn rollingHash(data: Array<byte>) -> int {
+    var acc = 0
+    for (var i = 0; i < len(data); i++) {
+        var value: int = data[i]
+        acc = ((acc * 131) + value) % 1000000007
+    }
+    return acc
+}
+
+var root = io.tempDir()!
+var file = path.join(root, path.from("all-bytes.bin"))
+var payload = allBytes()
+
+print(io.writeFileBytes(file, payload))
+var read = io.readFileBytes(file)
+print(read != null)
+if (read != null) {
+    print(len(read))
+    print(read[0])
+    print(read[1])
+    print(read[127])
+    print(read[128])
+    print(read[255])
+    print(rollingHash(read!) == 290104970)
+} else {
+    print(0)
+    print(0)
+    print(0)
+    print(0)
+    print(0)
+    print(0)
+    print(false)
+}
+
+print(io.removeAll(root))

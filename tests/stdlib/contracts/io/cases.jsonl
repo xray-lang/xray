@@ -1,1 +1,2 @@
 {"case":"filesystem-text-and-bytes","probe":"tests/diff/cases/semantics/stdlib/io_system_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"filesystem text and byte roundtrip invariants including NUL and 0xff byte payloads"}
+{"case":"all-byte-file-boundary","probe":"tests/diff/cases/semantics/stdlib/io_binary_file_boundary_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"Array<byte> file roundtrip preserves every byte value 0..255 and a stable rolling hash on VM and AOT"}
