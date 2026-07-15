@@ -1,0 +1,2 @@
+{"case":"hash-hmac-aes-and-timing","probe":"tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"published digest/HMAC vectors plus deterministic timingSafeEqual and legacy AES failure classification"}
+{"case":"random-shape","probe":"tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr","equivalence":["value","error","complexity"],"oracle":"CSPRNG and UUID structural invariants that are stable across VM and AOT"}

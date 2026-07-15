@@ -189,6 +189,26 @@ BASELINES = (
         ),
     ),
     Baseline(
+        category="COMPRESS_CONTRACT_CORPUS",
+        path="tests/stdlib/contracts/compress/contract.toml",
+        contains=(
+            'module = "compress"',
+            'id = "checksum-known-values"',
+            'id = "roundtrip-formats"',
+            'id = "nullable-decompression-failure"',
+            'id = "string-binary-payloads"',
+            'diff_cases_manifest = "tests/stdlib/contracts/compress/diff_cases.txt"',
+        ),
+    ),
+    Baseline(
+        category="COMPRESS_DIFF_CORPUS",
+        path="tests/stdlib/contracts/compress/diff_cases.txt",
+        contains=(
+            "tests/diff/cases/semantics/stdlib/compress_checksum_direct.xr",
+            "tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.xr",
+        ),
+    ),
+    Baseline(
         category="CRYPTO_HASH_KAT",
         path="tests/regression/10_stdlib/1400_crypto_hash.xr",
         contains=(
@@ -231,6 +251,27 @@ BASELINES = (
             'crypto.timingSafeEqual("hello", "hello")',
             'crypto.timingSafeEqual("short", "longer string")',
             'crypto.hmac("sha256", "secret", "data")',
+        ),
+    ),
+    Baseline(
+        category="CRYPTO_CONTRACT_CORPUS",
+        path="tests/stdlib/contracts/crypto/contract.toml",
+        contains=(
+            'module = "crypto"',
+            'id = "hash-and-hmac-kat"',
+            'id = "timing-safe-equal"',
+            'id = "random-shape"',
+            'id = "hex-digest-presentation"',
+            'id = "ambiguous-encrypt-decrypt"',
+            'diff_cases_manifest = "tests/stdlib/contracts/crypto/diff_cases.txt"',
+        ),
+    ),
+    Baseline(
+        category="CRYPTO_DIFF_CORPUS",
+        path="tests/stdlib/contracts/crypto/diff_cases.txt",
+        contains=(
+            "tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr",
+            "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr",
         ),
     ),
     Baseline(

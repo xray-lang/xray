@@ -1,0 +1,2 @@
+tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr
+tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr
