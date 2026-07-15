@@ -989,7 +989,7 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
     XrType **args =
         (nargs <= 16) ? stack_args : (XrType **) xr_malloc((size_t) nargs * sizeof(XrType *));
     if (nargs > 0 && !args)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
     for (int i = 0; i < nargs; i++)
         args[i] = resolve_impl(X, t->children[i]);
 
@@ -1040,7 +1040,7 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
 
 static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
     if (!t)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
 
     switch ((XrTypeRefKind) t->kind) {
         case XR_TREF_INT:
@@ -1090,7 +1090,7 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
                                   ? stack_params
                                   : (XrType **) xr_malloc((size_t) nparam * sizeof(XrType *));
             if (nparam > 0 && !params)
-                return xr_type_new_unknown(NULL);
+                return xr_type_new_error(NULL);
             for (int i = 0; i < nparam; i++)
                 params[i] = resolve_impl(X, t->children[i]);
             XrType *ret = t->nchildren > 0 ? resolve_impl(X, t->children[t->nchildren - 1])
@@ -1113,7 +1113,7 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
                                  ? stack_elems
                                  : (XrType **) xr_malloc((size_t) count * sizeof(XrType *));
             if (count > 0 && !elems)
-                return xr_type_new_unknown(NULL);
+                return xr_type_new_error(NULL);
             for (int i = 0; i < count; i++)
                 elems[i] = resolve_impl(X, t->children[i]);
             XrType *result = xr_type_new_tuple(X, elems, count);
@@ -1130,7 +1130,7 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
                                  ? stack_types
                                  : (XrType **) xr_malloc((size_t) count * sizeof(XrType *));
             if (count > 0 && !types)
-                return xr_type_new_unknown(NULL);
+                return xr_type_new_error(NULL);
             for (int i = 0; i < count; i++)
                 types[i] = resolve_impl(X, t->children[i]);
             bool is_sealed = !t->extensible;
@@ -1146,9 +1146,9 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
 
         case XR_TREF_FIXED_ARRAY: {
             XrType *elem =
-                t->nchildren > 0 ? resolve_impl(X, t->children[0]) : xr_type_new_unknown(NULL);
+                t->nchildren > 0 ? resolve_impl(X, t->children[0]) : xr_type_new_error(NULL);
             if (t->fixed_length <= 0 || t->fixed_length > (int) UINT16_MAX)
-                return xr_type_new_unknown(X);
+                return xr_type_new_error(X);
             return xr_type_new_fixed_array(X, elem, (int) t->fixed_length);
         }
 
@@ -1156,7 +1156,7 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
             return xr_type_new_type_param(X, t->name, 0);
     }
 
-    return xr_type_new_unknown(NULL);
+    return xr_type_new_error(NULL);
 }
 
 XR_FUNC XrType *xr_tref_resolve(XrVMRuntime *X, const XrTypeRef *tref) {
@@ -1320,7 +1320,7 @@ static XrType *report_type_alias_error(XaAnalyzer *analyzer, const char *name,
         xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE, msg,
                                    &loc);
     }
-    return xr_type_new_unknown(NULL);
+    return xr_type_new_error(NULL);
 }
 
 static XrType *report_generic_arity_error(XaAnalyzer *analyzer, const char *name, int expected,
@@ -1378,7 +1378,7 @@ static XrType *resolve_type_alias_symbol_in_analyzer(XaAnalyzer *analyzer, XaSym
         map = expected <= 8 ? stack_map
                             : (XrMonoTypeMap *) xr_calloc((size_t) expected, sizeof(*map));
         if (!map)
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(NULL);
         for (int i = 0; i < expected; i++) {
             map[i].param_name = alias->type_params[i] ? alias->type_params[i]->name : NULL;
             map[i].concrete_type = type_args ? type_args[i] : NULL;
@@ -1395,7 +1395,7 @@ static XrType *resolve_type_alias_symbol_in_analyzer(XaAnalyzer *analyzer, XaSym
         xr_free(map);
 
     if (!resolved)
-        resolved = xr_type_new_unknown(NULL);
+        resolved = xr_type_new_error(NULL);
     if (expected == 0) {
         sym->alias_type = resolved;
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
@@ -1443,7 +1443,7 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
     XrType **args =
         (nargs <= 16) ? stack_args : (XrType **) xr_malloc((size_t) nargs * sizeof(XrType *));
     if (nargs > 0 && !args)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
     for (int i = 0; i < nargs; i++)
         args[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
 
@@ -1500,7 +1500,7 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
 
 XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {
     if (!tref)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
     if (!analyzer)
         return resolve_impl(NULL, tref);
 
@@ -1509,7 +1509,7 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
     if (tref->kind == XR_TREF_NAMED && tref->name) {
         if (is_removed_enum_runtime_wrapper_name(tref->name)) {
             report_removed_enum_runtime_wrapper_type(analyzer, tref->name);
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(NULL);
         }
         int type_param_index = active_type_param_index(analyzer, tref->name);
         if (type_param_index >= 0)
@@ -1527,7 +1527,7 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         if (known)
             return known;
         report_undefined_public_type(analyzer, tref->name);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
     }
 
     /* Generic form: preserve declaration-backed class/interface identity so
@@ -1535,11 +1535,11 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
     if (tref->kind == XR_TREF_GENERIC && tref->name) {
         if (is_removed_enum_runtime_wrapper_name(tref->name)) {
             report_removed_enum_runtime_wrapper_type(analyzer, tref->name);
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(NULL);
         }
         if (active_type_param_index(analyzer, tref->name) >= 0) {
             report_undefined_public_type(analyzer, tref->name);
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(NULL);
         }
         int expected_arity = known_type_head_arity(analyzer->isolate, tref->name);
         if (expected_arity >= 0 && tref->nchildren != expected_arity)
@@ -1579,13 +1579,13 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         if (known)
             return known;
         report_undefined_public_type(analyzer, tref->name);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
     }
 
     if (tref->kind == XR_TREF_OPTIONAL) {
         XrType *inner = tref->nchildren > 0
                             ? xr_tref_resolve_in_analyzer(analyzer, tref->children[0])
-                            : xr_type_new_unknown(NULL);
+                            : xr_type_new_error(NULL);
         return xr_type_new_optional(analyzer->isolate, inner);
     }
 
@@ -1604,7 +1604,7 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                               ? stack_params
                               : (XrType **) xr_malloc((size_t) nparam * sizeof(XrType *));
         if (nparam > 0 && !params)
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(NULL);
         for (int i = 0; i < nparam; i++)
             params[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
         XrType *ret =
@@ -1628,7 +1628,7 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         XrType **elems =
             (count <= 16) ? stack_elems : (XrType **) xr_malloc((size_t) count * sizeof(XrType *));
         if (count > 0 && !elems)
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(NULL);
         for (int i = 0; i < count; i++)
             elems[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
         XrType *result = xr_type_new_tuple(analyzer->isolate, elems, count);
@@ -1644,7 +1644,7 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         XrType **types =
             (count <= 16) ? stack_types : (XrType **) xr_malloc((size_t) count * sizeof(XrType *));
         if (count > 0 && !types)
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(NULL);
         for (int i = 0; i < count; i++)
             types[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
         bool is_sealed = !tref->extensible;
@@ -1663,7 +1663,7 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
     if (tref->kind == XR_TREF_FIXED_ARRAY) {
         XrType *elem = tref->nchildren > 0
                            ? xr_tref_resolve_in_analyzer(analyzer, tref->children[0])
-                           : xr_type_new_unknown(NULL);
+                           : xr_type_new_error(NULL);
         if (xa_reject_error_type_success_type(analyzer, elem, "container element type",
                                               "fixed array", 0, 0))
             return xr_type_new_error(NULL);
@@ -1677,18 +1677,18 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                          "fixed array length must be a compile-time integer expression%s%s",
                          err ? ": " : "", err ? err : "");
                 xa_report_fixed_array_length_diag(analyzer, length_expr, msg);
-                return xr_type_new_unknown(NULL);
+                return xr_type_new_error(NULL);
             }
         }
         if (length <= 0) {
             xa_report_fixed_array_length_diag(analyzer, length_expr,
                                               "fixed array length must be greater than zero");
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(NULL);
         }
         if (length > UINT16_MAX) {
             xa_report_fixed_array_length_diag(
                 analyzer, length_expr, "fixed array length exceeds maximum of 65535 elements");
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(NULL);
         }
         return xr_type_new_fixed_array(analyzer->isolate, elem, (int) length);
     }
