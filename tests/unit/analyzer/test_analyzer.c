@@ -2616,6 +2616,23 @@ TEST(analyzer_operator_and_index_failures_use_error_recovery) {
     setup_pool();
 }
 
+TEST(analyzer_non_callable_failure_uses_error_recovery) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    AstNode *program = xr_parse(g_session, "var called = (1)()\ncalled.missing()\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "non_callable_error_recovery.xr", program);
+
+    ASSERT(analyzer_diag_contains(a, "Value is not callable"));
+    ASSERT(!analyzer_diag_contains(a, "has no member 'missing'"));
+    ASSERT(a->unresolved_inference_count == 0);
+    ASSERT(a->recovery_poison_type_count >= 1);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -2974,6 +2991,7 @@ int main(void) {
     RUN_TEST(analyzer_assignment_error_recovery_suppresses_cascade);
     RUN_TEST(analyzer_member_error_recovery_suppresses_call_cascade);
     RUN_TEST(analyzer_operator_and_index_failures_use_error_recovery);
+    RUN_TEST(analyzer_non_callable_failure_uses_error_recovery);
     RUN_TEST(analyzer_rejects_error_type_generic_argument_and_constraint);
     RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);
     RUN_TEST(compile_type_class);
