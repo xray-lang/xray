@@ -2035,19 +2035,119 @@ static bool xaot_bundle_add_derived_eq_hash_plans(XaotBundle *bundle,
     return true;
 }
 
-static uint8_t derived_clone_action_for(const XgDeriveSummary *clone) {
+static bool derived_clone_field_range_valid(const XgGlobalEvidence *evidence,
+                                            const XgDeriveSummary *clone) {
+    uint32_t end;
+    if (!evidence || !clone)
+        return false;
+    if (clone->field_count == 0)
+        return clone->field_start == 0;
+    if (clone->field_start == 0)
+        return false;
+    end = clone->field_start + (uint32_t) clone->field_count - 1;
+    return end >= clone->field_start && end <= evidence->nderived_fields;
+}
+
+static const XgClassSummary *derived_clone_class_by_id(const XgGlobalEvidence *evidence,
+                                                       XgClassId class_id) {
+    if (!evidence || class_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nclasses; i++) {
+        if (evidence->classes[i].class_id == class_id)
+            return &evidence->classes[i];
+    }
+    return NULL;
+}
+
+static bool derived_clone_class_has_clone(const XgGlobalEvidence *evidence, XgClassId class_id) {
+    const XgClassSummary *cls = derived_clone_class_by_id(evidence, class_id);
+    if (!cls)
+        return false;
+    for (uint32_t i = 0; i < evidence->nderives; i++) {
+        if (evidence->derives[i].owner_decl_id == cls->decl_id &&
+            evidence->derives[i].derive_kind == XG_DERIVE_CLONE)
+            return true;
+    }
+    return false;
+}
+
+static uint8_t derived_clone_source_action(const XgGlobalEvidence *evidence,
+                                           const XgDeriveSummary *clone) {
+    bool needs_deep_copy = false;
+    if (!derived_clone_field_range_valid(evidence, clone))
+        return XAOT_DERIVED_CLONE_REJECT;
+    for (uint32_t i = 0; i < clone->field_count; i++) {
+        const XgDerivedFieldSummary *derived =
+            &evidence->derived_fields[clone->field_start - 1 + i];
+        const XgClassFieldSummary *field =
+            xg_global_evidence_find_class_field(evidence, derived->source_field_id);
+        if (!field || field->field_id == XG_NO_ID || (field->flags & XG_CLASS_FIELD_STATIC) != 0)
+            return XAOT_DERIVED_CLONE_REJECT;
+        switch ((XgClassFieldTypeKind) field->semantic_kind) {
+            case XG_CLASS_FIELD_TYPE_I8:
+            case XG_CLASS_FIELD_TYPE_U8:
+            case XG_CLASS_FIELD_TYPE_I16:
+            case XG_CLASS_FIELD_TYPE_U16:
+            case XG_CLASS_FIELD_TYPE_I32:
+            case XG_CLASS_FIELD_TYPE_U32:
+            case XG_CLASS_FIELD_TYPE_I64:
+            case XG_CLASS_FIELD_TYPE_U64:
+            case XG_CLASS_FIELD_TYPE_ISIZE:
+            case XG_CLASS_FIELD_TYPE_USIZE:
+            case XG_CLASS_FIELD_TYPE_F32:
+            case XG_CLASS_FIELD_TYPE_F64:
+            case XG_CLASS_FIELD_TYPE_BOOL:
+            case XG_CLASS_FIELD_TYPE_RUNE:
+            case XG_CLASS_FIELD_TYPE_STRING:
+            case XG_CLASS_FIELD_TYPE_ENUM:
+            case XG_CLASS_FIELD_TYPE_UNIT:
+            case XG_CLASS_FIELD_TYPE_NULL:
+                break;
+            case XG_CLASS_FIELD_TYPE_ARRAY:
+            case XG_CLASS_FIELD_TYPE_MAP:
+            case XG_CLASS_FIELD_TYPE_SET:
+            case XG_CLASS_FIELD_TYPE_STRUCT:
+            case XG_CLASS_FIELD_TYPE_FIXED_UNION:
+            case XG_CLASS_FIELD_TYPE_FIXED_ARRAY:
+            case XG_CLASS_FIELD_TYPE_OPTIONAL:
+            case XG_CLASS_FIELD_TYPE_UNION:
+            case XG_CLASS_FIELD_TYPE_TUPLE:
+                needs_deep_copy = true;
+                break;
+            case XG_CLASS_FIELD_TYPE_CLASS:
+                if (!derived_clone_class_has_clone(evidence, field->target_class_id))
+                    return XAOT_DERIVED_CLONE_REJECT;
+                needs_deep_copy = true;
+                break;
+            case XG_CLASS_FIELD_TYPE_INTERFACE:
+            case XG_CLASS_FIELD_TYPE_FUNCTION:
+            case XG_CLASS_FIELD_TYPE_OBJECT:
+            case XG_CLASS_FIELD_TYPE_TYPE_PARAM:
+            case XG_CLASS_FIELD_TYPE_DYNAMIC:
+            default:
+                return XAOT_DERIVED_CLONE_REJECT;
+        }
+    }
+    if (clone->field_count == 0)
+        return XAOT_DERIVED_CLONE_BITWISE_COPY;
+    return needs_deep_copy ? XAOT_DERIVED_CLONE_DEEP_COPY_PLAN : XAOT_DERIVED_CLONE_FIELDWISE_COPY;
+}
+
+static uint8_t derived_clone_action_for(const XgGlobalEvidence *evidence,
+                                        const XgDeriveSummary *clone) {
     if (!clone || clone->derive_kind != XG_DERIVE_CLONE)
         return XAOT_DERIVED_CLONE_REJECT;
     if (clone->method_count != 0)
         return XAOT_DERIVED_CLONE_DIRECT_GENERATED_CALL;
-    if (clone->field_count == 0)
-        return XAOT_DERIVED_CLONE_BITWISE_COPY;
-    return XAOT_DERIVED_CLONE_FIELDWISE_COPY;
+    return derived_clone_source_action(evidence, clone);
 }
 
-static uint8_t derived_clone_reason_for(const XgDeriveSummary *clone) {
+static uint8_t derived_clone_reason_for(const XgGlobalEvidence *evidence,
+                                        const XgDeriveSummary *clone) {
     if (!clone || clone->derive_kind != XG_DERIVE_CLONE)
         return XAOT_CLONE_UNPROVEN_MISSING_CLONE;
+    if (derived_clone_action_for(evidence, clone) == XAOT_DERIVED_CLONE_REJECT)
+        return XAOT_CLONE_UNPROVEN_UNSAFE_FIELD;
     return XAOT_CLONE_UNPROVEN_NONE;
 }
 
@@ -2084,9 +2184,9 @@ static bool xaot_bundle_add_derived_clone_plan(XaotBundle *bundle, const XgGloba
     plan->field_count = clone->field_count;
     plan->clone_body_func_id = derive_generated_body_func_id(evidence, clone);
     plan->transfer_plan_id = XG_NO_ID;
-    plan->action = derived_clone_action_for(clone);
+    plan->action = derived_clone_action_for(evidence, clone);
     plan->evidence = derived_clone_evidence_for(clone);
-    plan->unproven_reason = derived_clone_reason_for(clone);
+    plan->unproven_reason = derived_clone_reason_for(evidence, clone);
     return true;
 }
 

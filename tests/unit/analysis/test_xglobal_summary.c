@@ -9718,6 +9718,132 @@ TEST(global_evidence_producer_records_derived_clone_plan) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_classifies_derived_clone_fields) {
+    setup_parser_session();
+    const char *source = "@derive(Clone)\n"
+                         "class Scalar {\n"
+                         "    static total: int = 0\n"
+                         "    id: int\n"
+                         "}\n"
+                         "@derive(Clone)\n"
+                         "class Deep {\n"
+                         "    values: Array<int>\n"
+                         "}\n"
+                         "class Handle {\n"
+                         "    id: int\n"
+                         "}\n"
+                         "@derive(Clone)\n"
+                         "class Unsafe {\n"
+                         "    handle: Handle\n"
+                         "}\n"
+                         "@derive(Clone)\n"
+                         "class Nested {\n"
+                         "    deep: Deep\n"
+                         "}\n"
+                         "@derive(Clone)\n"
+                         "class Empty {\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_EQ_UINT(ev.nderives, 5);
+    ASSERT_EQ_UINT(ev.nderived_fields, 4);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.nderived_clone_plans, 5);
+
+    const XaotDerivedClonePlan *scalar_plan = NULL;
+    const XaotDerivedClonePlan *deep_plan = NULL;
+    const XaotDerivedClonePlan *unsafe_plan = NULL;
+    const XaotDerivedClonePlan *nested_plan = NULL;
+    const XaotDerivedClonePlan *empty_plan = NULL;
+    for (uint32_t i = 0; i < ev.nderives; i++) {
+        const XgDeriveSummary *derive = &ev.derives[i];
+        const XgClassSummary *owner = NULL;
+        for (uint32_t ci = 0; ci < ev.nclasses; ci++) {
+            if (ev.classes[ci].decl_id == derive->owner_decl_id) {
+                owner = &ev.classes[ci];
+                break;
+            }
+        }
+        ASSERT_NOT_NULL(owner);
+        const XaotDerivedClonePlan *plan =
+            xaot_bundle_find_derived_clone_plan(&bundle, derive->type_key);
+        ASSERT_NOT_NULL(plan);
+        if (owner->name_id == xg_name_id("Scalar")) {
+            scalar_plan = plan;
+            ASSERT_EQ_UINT(derive->field_count, 1);
+            ASSERT_EQ_UINT(ev.derived_fields[derive->field_start - 1].field_ordinal, 0);
+        } else if (owner->name_id == xg_name_id("Deep")) {
+            deep_plan = plan;
+        } else if (owner->name_id == xg_name_id("Unsafe")) {
+            unsafe_plan = plan;
+        } else if (owner->name_id == xg_name_id("Nested")) {
+            nested_plan = plan;
+        } else if (owner->name_id == xg_name_id("Empty")) {
+            empty_plan = plan;
+        }
+    }
+    ASSERT_NOT_NULL(scalar_plan);
+    ASSERT_NOT_NULL(deep_plan);
+    ASSERT_NOT_NULL(unsafe_plan);
+    ASSERT_NOT_NULL(nested_plan);
+    ASSERT_NOT_NULL(empty_plan);
+    ASSERT_EQ_UINT(scalar_plan->action, XAOT_DERIVED_CLONE_FIELDWISE_COPY);
+    ASSERT_EQ_UINT(deep_plan->action, XAOT_DERIVED_CLONE_DEEP_COPY_PLAN);
+    ASSERT_EQ_UINT(unsafe_plan->action, XAOT_DERIVED_CLONE_REJECT);
+    ASSERT_EQ_UINT(unsafe_plan->unproven_reason, XAOT_CLONE_UNPROVEN_UNSAFE_FIELD);
+    ASSERT_EQ_UINT(nested_plan->action, XAOT_DERIVED_CLONE_DEEP_COPY_PLAN);
+    ASSERT_EQ_UINT(empty_plan->action, XAOT_DERIVED_CLONE_BITWISE_COPY);
+
+    char err[256];
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    memset(&module, 0, sizeof(module));
+    module.path = "test.xr";
+    module.name = "test";
+    module.init = &init_func;
+    modules[0] = &module;
+    bundle.modules = modules;
+    bundle.nmodules = 1;
+    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+    memset(err, 0, sizeof(err));
+    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
+
+    uint32_t scalar_field_index = ev.derives[0].field_start - 1;
+    uint32_t saved_name_id = ev.derived_fields[scalar_field_index].name_id;
+    ev.derived_fields[scalar_field_index].name_id ^= 1u;
+    bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+    memset(err, 0, sizeof(err));
+    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
+    ASSERT_NOT_NULL(strstr(err, "AOT derived source field identity does not re-derive"));
+    ev.derived_fields[scalar_field_index].name_id = saved_name_id;
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_rejects_eq_only_as_hashable_plan) {
     XgBuildKey key = {.source_hash = 51,
                       .compiler_semver_hash = 52,
@@ -17217,6 +17343,7 @@ RUN_TEST(global_evidence_producer_records_derive_rows);
 RUN_TEST(global_evidence_verifier_rejects_missing_derive_rows);
 RUN_TEST(global_evidence_producer_records_derived_eq_hash_plan);
 RUN_TEST(global_evidence_producer_records_derived_clone_plan);
+RUN_TEST(global_evidence_producer_classifies_derived_clone_fields);
 RUN_TEST(global_evidence_rejects_eq_only_as_hashable_plan);
 RUN_TEST(global_evidence_records_json_shape_and_access_plans);
 RUN_TEST(global_evidence_records_json_codec_plans);

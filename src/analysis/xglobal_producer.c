@@ -2537,51 +2537,73 @@ static uint32_t derived_field_flags(const FieldDeclNode *field) {
 
 static uint64_t hash_derive_decl(uint32_t type_key, uint8_t derive_kind, const ClassDeclNode *cls) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
+    uint32_t instance_ordinal = 0;
     h = fold_u64(h, type_key);
     h = fold_u64(h, derive_kind);
     if (!cls || cls->field_count <= 0 || !cls->fields)
         return h ? h : 1;
-    h = fold_u64(h, (uint64_t) cls->field_count);
     for (int i = 0; i < cls->field_count; i++) {
         const AstNode *field_node = cls->fields[i];
         const FieldDeclNode *field =
             field_node && field_node->type == AST_FIELD_DECL ? &field_node->as.field_decl : NULL;
-        h = fold_u64(h, (uint64_t) i);
+        if (!field || field->is_static)
+            continue;
+        h = fold_u64(h, instance_ordinal++);
         h = fold_u64(h, field ? hash_name32(field->name) : 0);
         h = fold_u64(h, field ? hash_tref32(field->field_type) : 0);
         h = fold_u64(h, derived_field_flags(field));
     }
+    h = fold_u64(h, instance_ordinal);
     return h ? h : 1;
 }
 
-static XgFieldId producer_find_class_field_id(const XgProducer *p, XgClassId owner_class_id,
-                                              uint32_t decl_ordinal) {
+static const XgClassFieldSummary *
+producer_find_class_field(const XgProducer *p, XgClassId owner_class_id, uint32_t decl_ordinal) {
     if (!p || !p->evidence || owner_class_id == XG_NO_ID)
-        return XG_NO_ID;
+        return NULL;
     for (uint32_t i = 0; i < p->evidence->nclass_fields; i++) {
         const XgClassFieldSummary *field = &p->evidence->class_fields[i];
         if (field->owner_class_id == owner_class_id && field->decl_ordinal == decl_ordinal)
-            return field->field_id;
+            return field;
     }
-    return XG_NO_ID;
+    return NULL;
+}
+
+static uint16_t producer_derive_instance_field_count(const ClassDeclNode *cls) {
+    uint32_t count = 0;
+    if (!cls || cls->field_count <= 0 || !cls->fields)
+        return 0;
+    for (int i = 0; i < cls->field_count; i++) {
+        const AstNode *field_node = cls->fields[i];
+        const FieldDeclNode *field =
+            field_node && field_node->type == AST_FIELD_DECL ? &field_node->as.field_decl : NULL;
+        if (field && !field->is_static && count < UINT16_MAX)
+            count++;
+    }
+    return (uint16_t) count;
 }
 
 static bool producer_add_derive_fields(XgProducer *p, XgDeriveId derive_id,
                                        const ClassDeclNode *cls, XgClassId owner_class_id) {
+    uint16_t instance_ordinal = 0;
     if (!p || !p->evidence || !cls || cls->field_count <= 0)
         return true;
     for (int i = 0; i < cls->field_count; i++) {
         const AstNode *field_node = cls->fields ? cls->fields[i] : NULL;
         const FieldDeclNode *field =
             field_node && field_node->type == AST_FIELD_DECL ? &field_node->as.field_decl : NULL;
+        const XgClassFieldSummary *source_field;
         XgDerivedFieldSummary row;
+        if (!field || field->is_static)
+            continue;
+        source_field = producer_find_class_field(p, owner_class_id, (uint32_t) i);
         memset(&row, 0, sizeof(row));
         row.field_id = (XgDerivedFieldId) (p->evidence->nderived_fields + 1);
         row.derive_id = derive_id;
-        row.field_ordinal = (uint16_t) (i < UINT16_MAX ? i : UINT16_MAX);
+        row.field_ordinal = instance_ordinal++;
         row.name_id = field ? hash_name32(field->name) : 0;
         row.type_key = field ? hash_tref32(field->field_type) : 0;
-        row.source_field_id = producer_find_class_field_id(p, owner_class_id, (uint32_t) i);
+        row.source_field_id = source_field ? source_field->field_id : XG_NO_ID;
         row.flags = derived_field_flags(field);
         if (!xg_global_evidence_add_derived_field(p->evidence, &row))
             return false;
@@ -2604,8 +2626,10 @@ static bool producer_add_decl_derives(XgProducer *p, XgModuleId module_id, XgDec
         uint8_t kind = 0;
         XgDeriveSummary row;
         XgDeriveId derive_id;
+        uint16_t field_count;
         if ((derive_flags & flag) == 0 || !derive_kind_from_flag(flag, &kind))
             continue;
+        field_count = producer_derive_instance_field_count(cls);
         derive_id = (XgDeriveId) (p->evidence->nderives + 1);
         memset(&row, 0, sizeof(row));
         row.derive_id = derive_id;
@@ -2614,11 +2638,8 @@ static bool producer_add_decl_derives(XgProducer *p, XgModuleId module_id, XgDec
         row.source_span_id = source_span_id;
         row.type_key = type_key;
         row.derive_kind = kind;
-        row.field_start = cls && cls->field_count > 0 ? p->evidence->nderived_fields + 1 : 0;
-        row.field_count =
-            cls && cls->field_count > 0
-                ? (uint16_t) (cls->field_count < UINT16_MAX ? cls->field_count : UINT16_MAX)
-                : 0;
+        row.field_start = field_count > 0 ? p->evidence->nderived_fields + 1 : 0;
+        row.field_count = field_count;
         row.flags = XG_DERIVE_OPT_IN;
         row.derive_hash = hash_derive_decl(type_key, kind, cls);
         if (!xg_global_evidence_add_derive(p->evidence, &row))
