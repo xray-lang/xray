@@ -16,6 +16,7 @@ from check_stdlib_module_merge import (  # noqa: E402
     load_intake,
     owned_collisions,
     path_matches,
+    queue_status,
     validate_intake,
 )
 
@@ -67,6 +68,11 @@ class StdlibModuleMergeGateTest(unittest.TestCase):
         self.assertTrue(path_matches("tools/stdlibgen/**", "tools/stdlibgen"))
         self.assertTrue(path_matches("tools/stdlibgen/**", "tools/stdlibgen/stdlibgen.py"))
         self.assertFalse(path_matches("tools/stdlibgen/**", "tools/other.py"))
+
+    def test_dirty_worker_is_in_progress_but_committed_collision_stays_blocked(self) -> None:
+        self.assertEqual("in-progress", queue_status("waiting", [" M stdlib/text/text.xr"]))
+        self.assertEqual("in-progress", queue_status("needs-sync", ["?? tests/new.xr"]))
+        self.assertEqual("blocked", queue_status("blocked", [" M CMakeLists.txt"]))
 
 
 if __name__ == "__main__":
