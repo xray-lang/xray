@@ -3251,6 +3251,20 @@ static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_seq
     return false;
 }
 
+static bool body_expr_is_string_builder_constructor(const AstNode *expr) {
+    const AstNode *callee;
+    if (!expr)
+        return false;
+    if (expr->type == AST_NEW_EXPR)
+        return expr->as.new_expr.class_name &&
+               strcmp(expr->as.new_expr.class_name, "StringBuilder") == 0;
+    if (expr->type != AST_CALL_EXPR)
+        return false;
+    callee = expr->as.call_expr.callee;
+    return callee && callee->type == AST_VARIABLE && callee->as.variable.name &&
+           strcmp(callee->as.variable.name, "StringBuilder") == 0;
+}
+
 static const XrTypeRef *body_type_ref_sequence_elem_type_ref(const XrTypeRef *type) {
     if (!type || (type->kind != XR_TREF_GENERIC && type->kind != XR_TREF_NAMED) || !type->name ||
         !type->children || type->nchildren == 0)
@@ -7455,6 +7469,12 @@ static bool body_counted_loop_push_is_proven(const XgBodyCollect *bc, const AstN
     }
 }
 
+static bool body_string_builder_append_has_exact_count(const XgLocalType *local,
+                                                       const AstNode *value) {
+    return local && local->sequence_kind == XG_SEQ_STRING_BUILDER && value &&
+           value->type == AST_LITERAL_STRING && value->node_id != 0;
+}
+
 static void body_add_capacity_op(XgBodyCollect *bc, const AstNode *node, const XgLocalType *local,
                                  uint8_t op_kind, const AstNode *count_expr, uint32_t loop_id,
                                  uint32_t proof_flags, bool may_grow) {
@@ -7610,10 +7630,12 @@ static void body_add_sequence_method_evidence(XgBodyCollect *bc, const AstNode *
         }
         if ((strcmp(member->name, "append") == 0 || strcmp(member->name, "extend") == 0) &&
             call->arg_count >= 1) {
-            body_add_capacity_op(bc, node, local,
-                                 strcmp(member->name, "extend") == 0 ? XG_CAPACITY_EXTEND
-                                                                     : XG_CAPACITY_APPEND,
-                                 NULL, 0, 0, true);
+            bool exact_count = strcmp(member->name, "append") == 0 &&
+                               body_string_builder_append_has_exact_count(local, arg0);
+            body_add_capacity_op(
+                bc, node, local,
+                strcmp(member->name, "extend") == 0 ? XG_CAPACITY_EXTEND : XG_CAPACITY_APPEND,
+                exact_count ? arg0 : NULL, 0, exact_count ? XG_CAPACITY_EXACT_COUNT : 0, true);
             local->sequence_fresh_empty = false;
             if (body_sequence_local_elem_is_json(local))
                 body_clear_sequence_json_shape(local);
@@ -8338,6 +8360,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                                                  &sequence_elem_type_key)) {
                     sequence_elem_type_ref =
                         body_type_ref_sequence_elem_type_ref(inferred_sequence_type_ref);
+                } else if (body_expr_is_string_builder_constructor(node->as.var_decl.initializer)) {
+                    sequence_kind = XG_SEQ_STRING_BUILDER;
+                    sequence_elem_type_key = body_rune_type_key();
                 }
             }
             if (sequence_kind != 0 && body_type_ref_is_json(sequence_elem_type_ref))

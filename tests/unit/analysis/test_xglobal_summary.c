@@ -10900,6 +10900,77 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_proves_stringbuilder_literal_append_count) {
+    setup_parser_session();
+    const char *source = "fn build(dynamicPart: string) -> string {\n"
+                         "    var sb = StringBuilder()\n"
+                         "    sb.append(\"known\")\n"
+                         "    sb.append(dynamicPart)\n"
+                         "    return sb.toString()\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_EQ_UINT(ev.ncapacity_ops, 3);
+
+    const XgCapacityOpSummary *literal_append = NULL;
+    const XgCapacityOpSummary *dynamic_append = NULL;
+    const XgCapacityOpSummary *finish = NULL;
+    for (uint32_t i = 0; i < ev.ncapacity_ops; i++) {
+        const XgCapacityOpSummary *row = &ev.capacity_ops[i];
+        if (row->op_kind == XG_CAPACITY_APPEND && row->count_expr_id != 0)
+            literal_append = row;
+        else if (row->op_kind == XG_CAPACITY_APPEND)
+            dynamic_append = row;
+        else if (row->op_kind == XG_CAPACITY_TO_STRING)
+            finish = row;
+    }
+    ASSERT_NOT_NULL(literal_append);
+    ASSERT_NOT_NULL(dynamic_append);
+    ASSERT_NOT_NULL(finish);
+    ASSERT_EQ_UINT(literal_append->sequence_kind, XG_SEQ_STRING_BUILDER);
+    ASSERT_TRUE((literal_append->flags & XG_CAPACITY_EXACT_COUNT) != 0);
+    ASSERT_TRUE((literal_append->flags & XG_CAPACITY_MAY_GROW) != 0);
+    ASSERT_EQ_UINT(dynamic_append->count_expr_id, 0);
+    ASSERT_TRUE((dynamic_append->flags & XG_CAPACITY_EXACT_COUNT) == 0);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    const XaotCapacityPlan *literal_plan =
+        xaot_bundle_find_capacity_plan(&bundle, literal_append->op_id);
+    const XaotCapacityPlan *dynamic_plan =
+        xaot_bundle_find_capacity_plan(&bundle, dynamic_append->op_id);
+    const XaotCapacityPlan *finish_plan = xaot_bundle_find_capacity_plan(&bundle, finish->op_id);
+    ASSERT_NOT_NULL(literal_plan);
+    ASSERT_NOT_NULL(dynamic_plan);
+    ASSERT_NOT_NULL(finish_plan);
+    ASSERT_EQ_UINT(literal_plan->action, XAOT_CAPACITY_RESERVE_ONCE);
+    ASSERT_TRUE((literal_plan->evidence & XAOT_CAPACITY_EV_EXACT_COUNT) != 0);
+    ASSERT_EQ_UINT(dynamic_plan->action, XAOT_CAPACITY_CHECKED_GROW);
+    ASSERT_EQ_UINT(dynamic_plan->unproven_reason, XAOT_CAPACITY_UNPROVEN_COUNT_UNKNOWN);
+    ASSERT_EQ_UINT(finish_plan->action, XAOT_CAPACITY_BUILDER_FINISH);
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_canonicalizes_byte_uint8_sequence_type_keys) {
     setup_parser_session();
     const char *source =
@@ -16553,6 +16624,7 @@ RUN_TEST(global_evidence_records_map_set_key_plans);
 RUN_TEST(global_evidence_producer_records_user_hashable_direct_call_plan);
 RUN_TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows);
 RUN_TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows);
+RUN_TEST(global_evidence_producer_proves_stringbuilder_literal_append_count);
 RUN_TEST(global_evidence_producer_canonicalizes_byte_uint8_sequence_type_keys);
 RUN_TEST(global_evidence_producer_records_explicit_json_shape_access);
 RUN_TEST(global_evidence_producer_records_json_codec_calls);
