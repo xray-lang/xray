@@ -439,6 +439,17 @@ fn _limitExceeded(limit: int, current: int, added: int) -> bool {
     return limit > 0 && current + added > limit
 }
 
+fn _formBasename(path: Path) -> string {
+    var raw = path.raw
+    if (len(raw) == 0) { return "" }
+    var end = len(raw)
+    while (end > 0 && raw.slice(end - 1, end) == "/") { end = end - 1 }
+    if (end == 0) { return "" }
+    var start = end
+    while (start > 0 && raw.slice(start - 1, start) != "/") { start = start - 1 }
+    return raw.slice(start, end)
+}
+
 fn _boundary() -> string {
     return "----XrayFormBoundary" + crypto.randomBytes(16)
 }
@@ -1030,7 +1041,7 @@ class FormData {
         if (_limitExceeded(this.maxFileSize, 0, size)) { return false }
         if (_limitExceeded(this.maxTotalSize, this.totalSize, size)) { return false }
 
-        var filename = pathutil.basename(path)
+        var filename = _formBasename(path)
         if (len(filename) == 0) { filename = "file" }
         this.fields.push(_FormField("file", name, content, filename, _guessMimeType(filename)))
         this.totalSize = this.totalSize + size
