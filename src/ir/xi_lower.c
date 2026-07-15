@@ -2150,22 +2150,15 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
         bool is_exported = false;
         s = prescan_extract_decl(l, s, &name, &sid, &type, &is_const, &is_exported);
 
-        /* Export-list form: export a, b, c */
-        if (s && s->type == AST_EXPORT_STMT && s->as.export_stmt.export_names) {
-            ExportStmtNode *exp = &s->as.export_stmt;
-            for (int ei = 0; ei < exp->export_count; ei++) {
-                const char *ename = exp->export_names[ei];
-                if (!ename)
-                    continue;
-                int vid = xi_lower_var_find(l, 0, ename);
-                if (vid >= 0 && l->shared_map[vid] >= 0) {
-                    int slot = l->shared_map[vid];
-                    if (slot >= 0 && prescan_slot_meta_reserve(&slot_meta, (uint16_t) slot + 1u))
-                        slot_meta.export_names[slot] = ename;
-                }
-            }
+        /* Export-list names are resolved in a second pass after every
+         * top-level binding has been created.  Monomorphization appends
+         * exports such as `Box$i64` to the original `export class Box<T>`
+         * wrapper while inserting the concrete clone immediately after it;
+         * resolving export_names here would run before the clone binding
+         * exists and drop the export provenance needed by cross-module AOT. */
+        if (s && s->type == AST_EXPORT_STMT && s->as.export_stmt.export_names &&
+            !s->as.export_stmt.declaration)
             continue;
-        }
 
         /* Handle imports */
         if (s && s->type == AST_IMPORT_STMT) {
@@ -2236,6 +2229,29 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
         if (s && s->type == AST_ENUM_DECL)
             prescan_enum_method_bindings(l, &s->as.enum_decl, &next_shared);
     }
+
+    /* Resolve export-list names only after the first pass has created every
+     * top-level binding, including monomorphized clones inserted after their
+     * generic origin.  This covers both source `export a, b` lists and
+     * monomorphization-added names on an export wrapper with a declaration. */
+    for (int i = 0; i < count; i++) {
+        AstNode *s = stmts[i];
+        if (!s || s->type != AST_EXPORT_STMT || !s->as.export_stmt.export_names)
+            continue;
+        ExportStmtNode *exp = &s->as.export_stmt;
+        for (int ei = 0; ei < exp->export_count; ei++) {
+            const char *ename = exp->export_names[ei];
+            if (!ename)
+                continue;
+            int vid = xi_lower_var_find(l, 0, ename);
+            if (vid >= 0 && l->shared_map[vid] >= 0) {
+                int slot = l->shared_map[vid];
+                if (slot >= 0 && prescan_slot_meta_reserve(&slot_meta, (uint16_t) slot + 1u))
+                    slot_meta.export_names[slot] = ename;
+            }
+        }
+    }
+
     l->func->nshared = next_shared;
 
     /* Populate export_names, slot_owned_names, and optimization-time
