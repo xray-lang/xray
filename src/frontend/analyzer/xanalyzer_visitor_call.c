@@ -2412,6 +2412,8 @@ static XrType *xa_call_member_access_type_without_root_read(XaInferContext *ctx,
     XaSymbol *root = xa_call_alias_path_symbol(ctx, place, path, sizeof(path), &precise);
     if (!root || !precise || !path[0])
         return NULL;
+    if (root->kind != XA_SYM_PARAMETER || root->passing_mode != XR_PARAM_OUT)
+        return NULL;
     XaSymbolLinks *root_links = xa_analyzer_get_links(ctx->analyzer, root);
     if (!root_links || root_links->is_definitely_assigned)
         return NULL;
@@ -2530,6 +2532,8 @@ static void xa_mark_out_call_arg_assigned(XaInferContext *ctx, AstNode *arg_node
         char path[XA_CALL_ALIAS_PATH_MAX];
         XaSymbol *root = xa_call_alias_path_symbol(ctx, place, path, sizeof(path), &precise);
         if (!root || !precise || !path[0])
+            return;
+        if (root->kind != XA_SYM_PARAMETER || root->passing_mode != XR_PARAM_OUT)
             return;
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, root);
         if (links)
