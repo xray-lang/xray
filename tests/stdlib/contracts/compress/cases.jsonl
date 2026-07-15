@@ -1,0 +1,2 @@
+{"case":"checksum-kat","probe":"tests/diff/cases/semantics/stdlib/compress_checksum_direct.xr","equivalence":["value","effect","complexity"],"oracle":"zlib CRC32 and Adler32 published vectors"}
+{"case":"format-roundtrip-and-invalid","probe":"tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"zlib-compatible gzip, deflate, and zlib roundtrip plus malformed-input classification"}

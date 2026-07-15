@@ -1,0 +1,58 @@
+schema = 1
+module = "crypto"
+contract_revision = 1
+legacy_commit = "d5cfcb587219468fde5bf8cda6cb76df875cf25b"
+legacy_oracle = "classification_only"
+legacy_public_surface = [
+  "md5",
+  "sha1",
+  "sha256",
+  "sha512",
+  "hmac",
+  "timingSafeEqual",
+  "randomBytes",
+  "uuid",
+  "encrypt",
+  "decrypt"
+]
+intentional_semantic_changes = [
+  "fixed digest APIs return fixed byte arrays and use encoding.hexEncode only for presentation",
+  "HMAC uses an explicit algorithm enum and byte inputs",
+  "randomBytes returns Array<byte> and reports native failures through a typed error",
+  "timingSafeEqual compares Slice<byte> inputs without data-dependent early exit",
+  "ambiguous encrypt/decrypt helpers are removed in favor of explicit AEAD provider, nonce, AAD, ciphertext, and tag contracts"
+]
+known_legacy_bugs = [
+  "legacy hash and HMAC APIs conflate digest bytes with lowercase hex presentation",
+  "legacy randomBytes returns hex text rather than owned random bytes",
+  "legacy decrypt reports failure through null",
+  "legacy encrypt/decrypt does not expose an explicit AEAD wire contract"
+]
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/crypto/diff_cases.txt"
+benchmark_suite = "stdlib/crypto"
+
+[[legacy_behavior]]
+id = "hash-and-hmac-kat"
+classification = "required"
+new_behavior = "MD5, SHA-1, SHA-256, SHA-512, and HMAC vectors keep identical digest bytes while presentation moves to encoding composition"
+
+[[legacy_behavior]]
+id = "timing-safe-equal"
+classification = "required"
+new_behavior = "equal-length and different-length comparisons return deterministic booleans without leaking first-difference position"
+
+[[legacy_behavior]]
+id = "random-shape"
+classification = "required"
+new_behavior = "random byte output and UUID output preserve length, version, and variant invariants"
+
+[[legacy_behavior]]
+id = "hex-digest-presentation"
+classification = "removed"
+new_behavior = "future converged digest APIs return fixed byte arrays; hex strings are produced by encoding.hexEncode at call sites"
+
+[[legacy_behavior]]
+id = "ambiguous-encrypt-decrypt"
+classification = "removed"
+new_behavior = "future converged encryption uses an explicit AEAD provider with KAT, nonce, AAD, tamper, key, and tag gates"

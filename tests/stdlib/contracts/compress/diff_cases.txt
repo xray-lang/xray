@@ -1,0 +1,2 @@
+tests/diff/cases/semantics/stdlib/compress_checksum_direct.xr
+tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.xr
