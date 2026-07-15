@@ -23,6 +23,7 @@ typedef enum XrJsonValueKind {
     XR_JSON_VALUE_STRING = 5,
     XR_JSON_VALUE_JSON = 6,
     XR_JSON_VALUE_RECORD = 7,
+    XR_JSON_VALUE_ARRAY = 8,
 } XrJsonValueKind;
 
 enum {

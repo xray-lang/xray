@@ -3724,6 +3724,8 @@ static inline int xrt_json_value_matches_kind(XrValue value, uint8_t encoded_kin
                    (value.tag == XR_TAG_PTR && value.ptr && value.heap_type == 0);
         case XR_JSON_VALUE_RECORD:
             return value.tag == XR_TAG_PTR && value.ptr && value.heap_type == 0;
+        case XR_JSON_VALUE_ARRAY:
+            return XR_IS_ARRAY(value);
         case XR_JSON_VALUE_NULL:
         case XR_JSON_VALUE_ANY:
         default:

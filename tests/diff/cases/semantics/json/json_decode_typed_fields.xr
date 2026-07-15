@@ -22,3 +22,9 @@ type Payload = { payload: Json }
 var payload = Json.decode<Payload>(Json.parse("{\"payload\":null}"))
 print(payload == null)
 print(payload!.payload == null)
+
+type Items = { items: Array<Json> }
+var items = Json.decode<Items>(Json.parse("{\"items\":[1,true,null,{\"x\":2}]}"))
+print(items == null)
+print(len(items!.items))
+print(Json.decode<Items>(Json.parse("{\"items\":1}")) == null)

@@ -134,6 +134,8 @@ static inline bool xr_json_value_matches_kind(XrValue value, uint8_t encoded_kin
                    XR_IS_STRING(value) || XR_IS_ARRAY(value) || xr_value_is_json(value);
         case XR_JSON_VALUE_RECORD:
             return xr_value_has_object_shape(value);
+        case XR_JSON_VALUE_ARRAY:
+            return XR_IS_ARRAY(value);
         case XR_JSON_VALUE_NULL:
         case XR_JSON_VALUE_ANY:
         default:

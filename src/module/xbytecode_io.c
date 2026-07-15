@@ -790,7 +790,7 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
             xr_free(json_record_classes);
             return xr_null();
         }
-        if (xr_json_value_kind_base(json_value_kinds[i]) > XR_JSON_VALUE_RECORD) {
+        if (xr_json_value_kind_base(json_value_kinds[i]) > XR_JSON_VALUE_ARRAY) {
             r->error = XR_BC_ERR_CORRUPT;
             for (uint32_t j = 0; j <= i; j++)
                 xr_free(names[j]);

@@ -48,6 +48,12 @@ uint8_t xr_type_json_value_kind(const XrType *type) {
         case XR_KIND_RECORD:
             kind = XR_JSON_VALUE_RECORD;
             break;
+        case XR_KIND_ARRAY:
+            if (type->container.element_type && XR_TYPE_IS_JSON(type->container.element_type)) {
+                kind = XR_JSON_VALUE_ARRAY;
+                break;
+            }
+            return XR_JSON_VALUE_ANY;
         default:
             return XR_JSON_VALUE_ANY;
     }

@@ -1,1 +1,1 @@
-Json.decode<T>() field 'nested' has unsupported type 'Array<int>'; supported field types are null, bool, int, float, string, Json, nested Record, and nullable variants
+Json.decode<T>() field 'nested' has unsupported type 'Array<int>'; supported field types are null, bool, int, float, string, Json, nested Record, Array<Json>, and nullable variants
