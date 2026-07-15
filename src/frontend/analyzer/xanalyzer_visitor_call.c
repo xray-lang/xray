@@ -4102,7 +4102,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 char msg[256];
                 snprintf(msg, sizeof(msg),
                          "Json.decode<T>() field '%s' has unsupported type '%s'; supported field "
-                         "types are null, bool, int, float, string, Json, and nullable variants",
+                         "types are null, bool, int, float, string, Json, nested Record, and "
+                         "nullable variants",
                          field_name ? field_name : "?",
                          field_type ? xr_type_to_string(field_type) : "unknown");
                 XrLocation loc = {

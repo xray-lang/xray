@@ -322,9 +322,16 @@ TEST(bytecode_roundtrips_typed_record_decode_shape) {
 
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
-    const char *names[] = {"name", "age"};
-    const uint8_t kinds[] = {XR_JSON_VALUE_STRING, XR_JSON_VALUE_INT};
-    XrClass *shape = xr_class_build_record_chain(writer, names, kinds, 2, true);
+    const char *nested_names[] = {"city", "zip"};
+    const uint8_t nested_kinds[] = {XR_JSON_VALUE_STRING, XR_JSON_VALUE_INT};
+    XrClass *nested_shape =
+        xr_class_build_record_chain(writer, nested_names, nested_kinds, 2, NULL, true);
+    ASSERT_NOT_NULL(nested_shape);
+
+    const char *names[] = {"name", "address"};
+    const uint8_t kinds[] = {XR_JSON_VALUE_STRING, XR_JSON_VALUE_RECORD};
+    XrClass *nested_shapes[] = {NULL, nested_shape};
+    XrClass *shape = xr_class_build_record_chain(writer, names, kinds, 2, nested_shapes, true);
     ASSERT_NOT_NULL(shape);
 
     int kidx = xr_valuearray_add(&proto->constants, xr_int((int64_t) (intptr_t) shape));
@@ -348,7 +355,15 @@ TEST(bytecode_roundtrips_typed_record_decode_shape) {
     ASSERT_EQ_UINT(roundtrip_shape->builtin_kind, XR_BK_RECORD);
     ASSERT_TRUE((roundtrip_shape->flags & XR_CLASS_DYNAMIC_SEALED) != 0);
     ASSERT_EQ_UINT(roundtrip_shape->fields[0].json_value_kind, XR_JSON_VALUE_STRING);
-    ASSERT_EQ_UINT(roundtrip_shape->fields[1].json_value_kind, XR_JSON_VALUE_INT);
+    ASSERT_EQ_UINT(roundtrip_shape->fields[1].json_value_kind, XR_JSON_VALUE_RECORD);
+    XrClass *roundtrip_nested = roundtrip_shape->fields[1].json_record_class;
+    ASSERT_NOT_NULL(roundtrip_nested);
+    ASSERT_EQ_UINT(roundtrip_nested->builtin_kind, XR_BK_RECORD);
+    ASSERT_EQ_UINT(roundtrip_nested->field_count, 2);
+    ASSERT_STR_EQ(roundtrip_nested->fields[0].name, "city");
+    ASSERT_EQ_UINT(roundtrip_nested->fields[0].json_value_kind, XR_JSON_VALUE_STRING);
+    ASSERT_STR_EQ(roundtrip_nested->fields[1].name, "zip");
+    ASSERT_EQ_UINT(roundtrip_nested->fields[1].json_value_kind, XR_JSON_VALUE_INT);
 
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);

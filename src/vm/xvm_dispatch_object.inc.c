@@ -448,43 +448,7 @@ vmcase(OP_JSON_DECODE) {
         R(a) = xr_null();
         vmbreak;
     }
-    uint16_t field_count = cls->field_count;
-
-    bool valid = true;
-    for (uint16_t fi = 0; fi < field_count; fi++) {
-        const char *fname = cls->fields[fi].name;
-        int sym = cls->fields[fi].symbol;
-        if (!fname) {
-            valid = false;
-            break;
-        }
-        XrValue field_val = xr_json_get_by_key(isolate, src, fname);
-        if (XR_IS_NULL(field_val) && !xr_json_has_field(isolate, src, sym)) {
-            valid = false;
-            break;
-        }
-        if (!xr_json_value_matches_kind(field_val, cls->fields[fi].json_value_kind)) {
-            valid = false;
-            break;
-        }
-    }
-
-    if (!valid) {
-        R(a) = xr_null();
-        vmbreak;
-    }
-
-    XrJson *result = xr_json_new_with_class(VM_CURRENT_CORO, cls);
-    if (!result) {
-        R(a) = xr_null();
-        vmbreak;
-    }
-    for (uint16_t fi = 0; fi < field_count; fi++) {
-        XrValue field_val = xr_json_get_by_key(isolate, src, cls->fields[fi].name);
-        xr_instance_set_dynamic_field(isolate, result, fi, field_val);
-    }
-
-    R(a) = xr_json_value(result);
+    R(a) = xr_json_decode_record_with_class(isolate, VM_CURRENT_CORO, src, cls);
     checkGC(base + a + 1);
     vmbreak;
 }

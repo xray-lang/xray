@@ -1,5 +1,4 @@
-type Nested = { id: int }
-type Envelope = { nested: Nested }
+type Envelope = { nested: Array<int> }
 
-var data = Json.parse("{\"nested\": {\"id\": 1}}")
+var data = Json.parse("{\"nested\": [1, 2, 3]}")
 var envelope = Json.decode<Envelope>(data)

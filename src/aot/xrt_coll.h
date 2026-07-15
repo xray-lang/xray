@@ -3722,6 +3722,8 @@ static inline int xrt_json_value_matches_kind(XrValue value, uint8_t encoded_kin
             return XR_IS_BOOL(value) || XR_IS_INT(value) || XR_IS_FLOAT(value) ||
                    XR_IS_STR(value) || XR_IS_ARRAY(value) ||
                    (value.tag == XR_TAG_PTR && value.ptr && value.heap_type == 0);
+        case XR_JSON_VALUE_RECORD:
+            return value.tag == XR_TAG_PTR && value.ptr && value.heap_type == 0;
         case XR_JSON_VALUE_NULL:
         case XR_JSON_VALUE_ANY:
         default:
@@ -3730,26 +3732,58 @@ static inline int xrt_json_value_matches_kind(XrValue value, uint8_t encoded_kin
 }
 
 static inline XrValue xrt_json_decode_record(XrValue data, int64_t field_count,
-                                             const char *const *field_names,
-                                             const uint8_t *json_value_kinds) {
-    if (field_count <= 0 || !field_names || !json_value_kinds)
+                                             const XrJsonDecodeFieldSpec *fields) {
+    if (field_count <= 0 || !fields)
         return XR_NULL_VAL;
     if (data.tag != XR_TAG_PTR || !data.ptr || data.heap_type != 0)
         return XR_NULL_VAL;
     xrt_json_t *src = (xrt_json_t *) data.ptr;
-    if (src->object_kind != XRT_OBJECT_JSON)
+    if (src->object_kind != XRT_OBJECT_JSON && src->object_kind != XRT_OBJECT_RECORD)
         return XR_NULL_VAL;
+    XrValue *decoded_values = (XrValue *) XRT_MALLOC((size_t) field_count * sizeof(XrValue));
+    const char **field_names = (const char **) XRT_MALLOC((size_t) field_count * sizeof(char *));
+    if (XR_UNLIKELY(!decoded_values || !field_names)) {
+        fprintf(stderr, "xrt_json_decode_record: out of memory\n");
+        abort();
+    }
     for (int64_t i = 0; i < field_count; i++) {
-        const char *name = field_names[i];
-        if (!name || !xrt_json_has_name(data, name))
+        const XrJsonDecodeFieldSpec *field = &fields[i];
+        const char *name = field->name;
+        field_names[i] = name ? name : "?";
+        if (!name || !xrt_json_has_name(data, name)) {
+            XRT_FREE(decoded_values);
+            XRT_FREE(field_names);
             return XR_NULL_VAL;
+        }
         XrValue field_value = xrt_json_get_name(data, name);
-        if (!xrt_json_value_matches_kind(field_value, json_value_kinds[i]))
+        if (!xrt_json_value_matches_kind(field_value, field->value_kind)) {
+            XRT_FREE(decoded_values);
+            XRT_FREE(field_names);
             return XR_NULL_VAL;
+        }
+        if (xr_json_value_kind_base(field->value_kind) == XR_JSON_VALUE_RECORD &&
+            !XR_IS_NULL(field_value)) {
+            if (!field->nested_fields || field->nested_field_count == 0) {
+                XRT_FREE(decoded_values);
+                XRT_FREE(field_names);
+                return XR_NULL_VAL;
+            }
+            XrValue nested = xrt_json_decode_record(field_value, field->nested_field_count,
+                                                    field->nested_fields);
+            if (XR_IS_NULL(nested)) {
+                XRT_FREE(decoded_values);
+                XRT_FREE(field_names);
+                return XR_NULL_VAL;
+            }
+            field_value = nested;
+        }
+        decoded_values[i] = field_value;
     }
     XrValue dstv = xrt_record_new_named(field_count, field_names);
+    XRT_FREE(field_names);
     for (int64_t i = 0; i < field_count; i++)
-        xrt_json_set_field(dstv, (int) i, xrt_json_get_name(data, field_names[i]));
+        xrt_json_set_field(dstv, (int) i, decoded_values[i]);
+    XRT_FREE(decoded_values);
     return dstv;
 }
 

@@ -161,6 +161,7 @@ XR_FUNC struct XrClass *xr_class_build_json_chain(struct XrVMRuntime *X, const c
                                                   int count, bool sealed);
 XR_FUNC struct XrClass *xr_class_build_record_chain(struct XrVMRuntime *X, const char *const *names,
                                                     const uint8_t *json_value_kinds, int count,
+                                                    struct XrClass *const *json_record_classes,
                                                     bool sealed);
 
 #endif  // XINSTANCE_H

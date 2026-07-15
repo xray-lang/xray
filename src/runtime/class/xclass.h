@@ -81,6 +81,7 @@ typedef struct XrFieldDescriptor {
     uint16_t flags;
     int16_t static_slot;      // Pre-computed static slot index (-1 if not static)
     uint8_t json_value_kind;  // XrJsonValueKind plus XR_JSON_VALUE_NULLABLE
+    struct XrClass *json_record_class;
 } XrFieldDescriptor;
 
 // Field flags
@@ -99,8 +100,9 @@ typedef struct XrFieldDescriptor {
 // Each transition records: "adding field `symbol` to class `from` yields
 // class `to`". Transitions form a singly-linked list per class.
 typedef struct XrClassTransition {
-    int symbol;                      // Field symbol that triggers this transition
-    uint8_t json_value_kind;         // Typed Record identity; ANY for dynamic Json fields
+    int symbol;               // Field symbol that triggers this transition
+    uint8_t json_value_kind;  // Typed Record identity; ANY for dynamic Json fields
+    struct XrClass *json_record_class;
     struct XrClass *target;          // Resulting child class after adding the field
     struct XrClassTransition *next;  // Next transition in the linked list
 } XrClassTransition;

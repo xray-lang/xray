@@ -42,7 +42,7 @@ struct XrCompilerSession;
 struct XrProto;
 
 #define XR_BC_MAGIC 0x59415258  // "XRAY" (little-endian)
-#define XR_BC_VERSION 19        // v19: serializes typed Record field-kind metadata
+#define XR_BC_VERSION 20        // v20: serializes nested typed Record decode metadata
 
 // Serialization flags
 #define XR_BC_STRIP_DEBUG (1 << 0)   // Remove debug info (line numbers, var names)
