@@ -1,0 +1,6 @@
+extern "C" {
+    fn bump_i32(value: ref int32) -> int32
+}
+
+var x: int32 = 1
+print(unsafe { bump_i32(ref x) })

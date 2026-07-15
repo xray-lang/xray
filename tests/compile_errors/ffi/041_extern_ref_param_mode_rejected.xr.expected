@@ -1,0 +1,1 @@
+extern function parameter 'value' uses unsupported parameter mode 'ref' before verified extern ABI contract

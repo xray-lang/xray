@@ -272,10 +272,24 @@ static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
     if (!ctx || !ctx->analyzer || !fn)
         return;
     for (int i = 0; i < fn->param_count; i++) {
+        XrParamNode *param = fn->params ? fn->params[i] : NULL;
+        XrParamMode mode = param ? param->passing_mode : XR_PARAM_VALUE;
+        if (mode != XR_PARAM_VALUE) {
+            /* Fail closed until task-190/task-206 define verified extern ParamMode ABI wrappers. */
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = param ? param->line : (node ? node->line : 0),
+                              .column = param ? param->column : (node ? node->column : 0)};
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "extern function parameter '%s' uses unsupported parameter mode '%s' before "
+                     "verified extern ABI contract",
+                     param && param->name ? param->name : "?", xr_param_mode_label(mode));
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        }
         XrType *type = param_types ? param_types[i] : NULL;
         if (!type || !XR_TYPE_IS_FUNCTION(type) || XR_TYPE_IS_C_FUNCTION(type))
             continue;
-        XrParamNode *param = fn->params ? fn->params[i] : NULL;
         XrLocation loc = {.file = ctx->file_path,
                           .line = param ? param->line : (node ? node->line : 0),
                           .column = param ? param->column : (node ? node->column : 0)};
