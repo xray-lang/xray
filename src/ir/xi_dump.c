@@ -180,6 +180,8 @@ static void dump_value(FILE *out, const XiValue *v) {
     }
     if (v->xg_json_codec_id != 0 && v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT)
         fprintf(out, " [json_codec=%u]", v->xg_json_codec_id);
+    if (v->xg_record_merge_id != 0)
+        fprintf(out, " [record_merge=%u]", v->xg_record_merge_id);
 
     /* Type + rep annotation */
     fprintf(out, "  ; %s", xi_type_name(v->type));

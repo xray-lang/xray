@@ -1823,9 +1823,17 @@ static bool verify_record_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
         const XgRecordShapeSummary *result;
         if (merge->merge_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT Record merge evidence has no id");
+        if (merge->owner_func_id == XG_NO_ID || merge->source_node_id == 0)
+            return set_error(errbuf, errbuf_len,
+                             "AOT Record merge evidence has no stable source identity");
         for (uint32_t j = i + 1; j < ev->nrecord_merges; j++) {
             if (ev->record_merges[j].merge_id == merge->merge_id)
                 return set_error(errbuf, errbuf_len, "AOT Record merge evidence id is duplicated");
+            if (ev->record_merges[j].module_id == merge->module_id &&
+                ev->record_merges[j].owner_func_id == merge->owner_func_id &&
+                ev->record_merges[j].source_node_id == merge->source_node_id)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT Record merge stable source identity is duplicated");
         }
         base = xg_global_evidence_find_record_shape(ev, merge->base_shape_id);
         patch = xg_global_evidence_find_record_shape(ev, merge->patch_shape_id);
@@ -4626,6 +4634,7 @@ static bool verify_record_merge_plan_rederives(const XgGlobalEvidence *ev,
         return set_error(errbuf, errbuf_len, "AOT Record merge verifier has incomplete input");
     if (plan->merge_id != merge->merge_id || plan->module_id != merge->module_id ||
         plan->owner_func_id != merge->owner_func_id ||
+        plan->source_node_id != merge->source_node_id ||
         plan->source_span_id != merge->source_span_id ||
         plan->base_shape_id != merge->base_shape_id ||
         plan->patch_shape_id != merge->patch_shape_id ||

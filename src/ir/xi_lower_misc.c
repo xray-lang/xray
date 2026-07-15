@@ -383,7 +383,9 @@ static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
             mg->args[0] = obj_val;
             mg->args[1] = src;
             mg->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
-            mg->line = (uint32_t) node->line;
+            mg->line = (uint32_t) val->line;
+            xi_lower_bind_record_merge_id(l, mg,
+                                          xi_lower_source_node_id(l, val->as.spread_expr.expr));
             continue;
         }
 

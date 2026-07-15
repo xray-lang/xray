@@ -243,6 +243,41 @@ static void test_json_codec_plan_contracts(void) {
     passed++;
 }
 
+static void test_record_merge_plan_contracts(void) {
+    XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+    uint32_t copy_actions =
+        xaot_backend_record_merge_action_bit(XAOT_RECORD_MERGE_COPY_WITH_OVERWRITE) |
+        xaot_backend_record_merge_action_bit(XAOT_RECORD_MERGE_COPY_APPEND);
+    XaotRecordMergePlan plan = {
+        .merge_id = 1,
+        .owner_func_id = 7,
+        .source_node_id = 99,
+        .copy_table_id = 8,
+        .action = XAOT_RECORD_MERGE_COPY_WITH_OVERWRITE,
+        .evidence = XAOT_RECORD_EV_GLOBAL_ROW | XAOT_RECORD_EV_BASE_SHAPE |
+                    XAOT_RECORD_EV_PATCH_SHAPE | XAOT_RECORD_EV_RESULT_SHAPE |
+                    XAOT_RECORD_EV_COPY_TABLE,
+        .unproven_reason = XAOT_RECORD_UNPROVEN_NONE,
+    };
+
+    ASSERT_TRUE(!xaot_backend_contract_record_merge_plan_allowed(NULL, copy_actions, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN);
+
+    ASSERT_TRUE(xaot_backend_contract_record_merge_plan_allowed(&plan, copy_actions, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_OK);
+
+    plan.source_node_id = 0;
+    ASSERT_TRUE(!xaot_backend_contract_record_merge_plan_allowed(&plan, copy_actions, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH);
+    plan.source_node_id = 99;
+
+    plan.action = XAOT_RECORD_MERGE_JSON_BRIDGE;
+    ASSERT_TRUE(!xaot_backend_contract_record_merge_plan_allowed(&plan, copy_actions, &issue));
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_RECORD_MERGE_ACTION_REJECTED);
+
+    passed++;
+}
+
 int main(void) {
     test_runtime_helper_contract();
     test_target_case_contract();
@@ -250,6 +285,7 @@ int main(void) {
     test_profile_contracts();
     test_generic_body_contract();
     test_json_codec_plan_contracts();
+    test_record_merge_plan_contracts();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;
 }

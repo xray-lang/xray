@@ -1,0 +1,25 @@
+type Pair = { x: int, y: int }
+
+var order = 0
+
+fn mark(step: int) -> int {
+    order = order * 10 + step
+    return step
+}
+
+fn source(step: int, x: int, y: int) -> Pair {
+    mark(step)
+    return { x: x, y: y }
+}
+
+var merged = {
+    ...source(1, 10, 11),
+    y: mark(2),
+    ...source(3, 30, 31),
+    z: mark(4),
+}
+
+print(order)
+print(merged.x)
+print(merged.y)
+print(merged.z)

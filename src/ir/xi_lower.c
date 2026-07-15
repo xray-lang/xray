@@ -1174,6 +1174,27 @@ XR_FUNC void xi_lower_bind_record_access_id(XiLower *l, XiValue *access, const c
         access->xg_record_access_id = match->record_access_id;
 }
 
+XR_FUNC void xi_lower_bind_record_merge_id(XiLower *l, XiValue *merge, uint32_t source_node_id) {
+    const XgGlobalEvidence *ev;
+    const XgRecordMergeSummary *match = NULL;
+    if (!l || !merge || merge->op != XI_JSON_MERGE || !l->global_evidence || !l->func ||
+        l->func->xg_body_func_id == XG_NO_ID || source_node_id == 0)
+        return;
+    ev = l->global_evidence;
+    for (uint32_t i = 0; i < ev->nrecord_merges; i++) {
+        const XgRecordMergeSummary *row = &ev->record_merges[i];
+        if (row->owner_func_id != (XgFuncId) l->func->xg_body_func_id ||
+            row->source_node_id != source_node_id ||
+            !xi_lower_evidence_module_matches(l, row->module_id))
+            continue;
+        if (match)
+            return;
+        match = row;
+    }
+    if (match)
+        merge->xg_record_merge_id = match->merge_id;
+}
+
 XR_FUNC void xi_lower_bind_key_access_id(XiLower *l, XiValue *access, uint32_t source_span_id,
                                          uint32_t body_ordinal, uint8_t access_op) {
     const XgGlobalEvidence *ev;

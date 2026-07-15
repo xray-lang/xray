@@ -426,6 +426,7 @@ static void add_sample_global_extra_summary(XgGlobalEvidence *ev) {
     record_merge.merge_id = 204;
     record_merge.module_id = 7;
     record_merge.owner_func_id = 11;
+    record_merge.source_node_id = 31;
     record_merge.source_span_id = 30;
     record_merge.base_shape_id = 201;
     record_merge.patch_shape_id = 201;
@@ -771,6 +772,7 @@ TEST(cache_payload_materializes_global_evidence) {
     ASSERT_EQ_UINT(materialized.generic_body_uses[0].use_id, 91);
     ASSERT_EQ_UINT(materialized.json_shapes[0].json_shape_id, 101);
     ASSERT_EQ_UINT(materialized.record_merges[0].merge_id, 204);
+    ASSERT_EQ_UINT(materialized.record_merges[0].source_node_id, 31);
     ASSERT_EQ_UINT(materialized.key_accesses[0].access_id, 303);
 
     xg_global_evidence_free(&materialized);

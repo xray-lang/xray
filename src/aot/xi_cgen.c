@@ -9217,6 +9217,33 @@ static bool cg_mandatory_plans_preflight_value(XiCgenCtx *ctx, const XiFunc *fun
                                                   value->xg_json_codec_id, issue);
         valid = false;
     }
+
+    const bool record_merge_site = value->op == XI_JSON_MERGE && value->nargs >= 2 &&
+                                   value->args[0] && value->args[0]->type &&
+                                   value->args[0]->type->kind == XR_KIND_RECORD;
+    const uint32_t record_merge_actions =
+        xaot_backend_record_merge_action_bit(XAOT_RECORD_MERGE_COPY_WITH_OVERWRITE) |
+        xaot_backend_record_merge_action_bit(XAOT_RECORD_MERGE_COPY_APPEND);
+    if (record_merge_site) {
+        if (value->xg_record_merge_id == XG_NO_ID) {
+            issue = XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN;
+            cg_report_mandatory_plan_contract_failure(ctx, func, value, "record-merge", XG_NO_ID,
+                                                      issue);
+            return false;
+        }
+        const XaotRecordMergePlan *plan =
+            xaot_bundle_find_record_merge_plan(bundle, value->xg_record_merge_id);
+        if (!xaot_backend_contract_record_merge_plan_allowed(plan, record_merge_actions, &issue)) {
+            cg_report_mandatory_plan_contract_failure(ctx, func, value, "record-merge",
+                                                      value->xg_record_merge_id, issue);
+            valid = false;
+        }
+    } else if (value->xg_record_merge_id != XG_NO_ID) {
+        issue = XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH;
+        cg_report_mandatory_plan_contract_failure(ctx, func, value, "record-merge",
+                                                  value->xg_record_merge_id, issue);
+        valid = false;
+    }
     return valid;
 }
 

@@ -1,6 +1,6 @@
 args=--dump-global-evidence
 contains=xglobal-evidence v1 profile=native_release
-contains=xg-cache-key v1 schema=25 phase=4 module=1
+contains=xg-cache-key v1 schema=26 phase=4 module=1
 regex=decl [0-9]+ id=[0-9]+ module=1 node=[1-9][0-9]* kind=class flags=0x20 .* derive=0xc
 regex=derive [0-9]+ id=[0-9]+ module=1 decl=[0-9]+ type=[0-9]+ kind=eq .* fields=[0-9]+\+1 .* flags=0x1
 regex=derive [0-9]+ id=[0-9]+ module=1 decl=[0-9]+ type=[0-9]+ kind=hash .* fields=[0-9]+\+1 .* flags=0x1
