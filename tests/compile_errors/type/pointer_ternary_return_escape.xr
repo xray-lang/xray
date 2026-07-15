@@ -1,0 +1,11 @@
+import mem
+
+fn choose(flag: bool) -> MutPtr<byte> {
+    var buffer = mem.alloc(8)
+    var borrowed = unsafe { buffer.borrowPtr() }
+    var foreign = mem.mutPtr<byte>(0)
+    var selected = flag ? borrowed : foreign
+    return selected
+}
+
+print(choose(true).isNull())

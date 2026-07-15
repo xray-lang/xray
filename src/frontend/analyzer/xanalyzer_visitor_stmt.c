@@ -13,6 +13,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xaddressability.h"
 #include "xconsteval.h"
 #include "xtype_ref_resolve.h"
 #include "../parser/xtype_ref.h"
@@ -8304,6 +8305,14 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                                   : "store Slice view in module-level binding";
         xa_check_span_value_escape(ctx, var->initializer, var_type, context);
     }
+    if (var->initializer &&
+        (xa_is_module_level_scope(ctx->analyzer) || node->type == AST_SHARED_DECL) && var_type &&
+        XR_TYPE_IS_POINTER(var_type)) {
+        const char *context = node->type == AST_SHARED_DECL
+                                  ? "store raw pointer borrow in shared binding"
+                                  : "store raw pointer borrow in module-level binding";
+        xa_check_pointer_borrow_escape(ctx, var->initializer, var->initializer, var_type, context);
+    }
 
     char freestanding_var_context[160];
     snprintf(freestanding_var_context, sizeof(freestanding_var_context), "variable '%s'",
@@ -8313,6 +8322,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     links->type = var_type;
     xa_update_borrowed_alias_root(ctx, sym, var->initializer, var_type);
     xa_register_active_span_borrow(ctx, sym, var->initializer, var_type);
+    xa_record_pointer_provenance(ctx, sym, var->initializer, var_type);
 
     if (var_type && xa_type_is_concurrency_handle(var_type)) {
         if (!sym->is_shared) {
@@ -8450,6 +8460,12 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     XrType *value_type = xa_visit_infer_expr(ctx, assign->value);
     ctx->expected_type = saved_expected;
     xa_check_assignment_owned_alias_boundary(ctx, node, value_type);
+    if ((sym->is_shared || (sym->scope && sym->scope->kind == XA_SCOPE_GLOBAL)) && value_type &&
+        XR_TYPE_IS_POINTER(value_type)) {
+        const char *context = sym->is_shared ? "store raw pointer borrow in shared binding"
+                                             : "store raw pointer borrow in module-level binding";
+        xa_check_pointer_borrow_escape(ctx, node, assign->value, value_type, context);
+    }
     if (!sym->is_const && !sym->is_shared && !sym->is_owned && sym->is_rebindable)
         sym->is_shared_provenance =
             xa_expr_yields_shared_provenance(ctx, assign->value, value_type);
@@ -8461,6 +8477,7 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     }
     xa_update_borrowed_alias_root(ctx, sym, assign->value, value_type);
     xa_register_active_span_borrow(ctx, sym, assign->value, value_type);
+    xa_record_pointer_provenance(ctx, sym, assign->value, value_type);
 
     xa_assign_check_type(ctx, node, var_type, value_type, assign->name, NULL);
 
@@ -8909,6 +8926,8 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             ctx->expected_type = saved_expected;
             xa_check_borrowed_return_escape(ctx, node, ret->values[0], return_type);
             xa_check_span_return_escape(ctx, node, return_type);
+            xa_check_pointer_borrow_escape(ctx, node, ret->values[0], return_type,
+                                           "return raw pointer borrow");
             bool is_move = false;
             AstNode *source = xa_shared_boundary_source(ret->values[0], &is_move);
             XaSymbol *root = source ? xa_lookup_shared_source_symbol(ctx, source) : NULL;
@@ -8964,6 +8983,8 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             if (ret->values[i]) {
                 element_types[i] = xa_visit_infer_expr(ctx, ret->values[i]);
                 xa_check_borrowed_return_escape(ctx, node, ret->values[i], element_types[i]);
+                xa_check_pointer_borrow_escape(ctx, node, ret->values[i], element_types[i],
+                                               "return raw pointer borrow");
             } else {
                 element_types[i] = xr_type_new_unknown(NULL);
             }

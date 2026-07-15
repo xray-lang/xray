@@ -14,6 +14,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xaddressability.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_errorset.h"
 #include "xconsteval.h"
@@ -4666,6 +4667,9 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                     XrType *et = xa_visit_infer_expr(ctx, node->as.set_literal.elements[si]);
                     xa_check_span_value_escape(ctx, node->as.set_literal.elements[si], et,
                                                "store Slice view in set literal");
+                    xa_check_pointer_borrow_escape(ctx, node->as.set_literal.elements[si],
+                                                   node->as.set_literal.elements[si], et,
+                                                   "store raw pointer borrow in set literal");
                     if (!elem && si == 0)
                         elem = et;
                 }
@@ -5156,6 +5160,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             ctx->expected_type = saved_expected;
             xa_assign_check_type(ctx, node, member_type, value_type, ms->member, "member");
             xa_check_span_value_escape(ctx, node, value_type, "store Slice view into a member");
+            xa_check_pointer_borrow_escape(ctx, node, ms->value, value_type,
+                                           "store raw pointer borrow into a member");
             if (xa_type_needs_borrow_escape_guard(value_type)) {
                 XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, ms->value);
                 if (borrowed_root) {
@@ -6006,6 +6012,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             xa_check_span_value_escape(ctx, node, value_type,
                                        "store Slice view into an index target");
+            xa_check_pointer_borrow_escape(ctx, node, is->value, value_type,
+                                           "store raw pointer borrow into an index target");
             if (xa_type_needs_borrow_escape_guard(value_type)) {
                 XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, is->value);
                 if (borrowed_root) {

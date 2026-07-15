@@ -14,6 +14,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xaddressability.h"
 #include "xtype_ref_resolve.h"
 #include "xa_selection.h"
 #include "xanalyzer_mono.h"
@@ -899,9 +900,13 @@ static bool xa_symbol_is_outer_function_capture(XaInferContext *ctx, XaSymbol *s
 
 static void xa_check_span_view_closure_capture(XaInferContext *ctx, AstNode *node, XaSymbol *sym,
                                                XrType *type) {
-    if (!xa_symbol_is_outer_function_capture(ctx, sym) || !xa_type_contains_span_view(type))
+    if (!xa_symbol_is_outer_function_capture(ctx, sym))
         return;
-    xa_check_span_value_escape(ctx, node, type, "capture Slice view in closure");
+    if (xa_type_contains_span_view(type))
+        xa_check_span_value_escape(ctx, node, type, "capture Slice view in closure");
+    if (type && XR_TYPE_IS_POINTER(type))
+        xa_check_pointer_borrow_escape(ctx, node, node, type,
+                                       "capture raw pointer borrow in closure");
 }
 
 // Check if an AST node is a typeOf() call, return the argument variable name
@@ -2492,6 +2497,8 @@ XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
         }
         XrType *elem = xa_visit_infer_expr(ctx, child);
         xa_check_span_value_escape(ctx, child, elem, "store Slice view in tuple literal");
+        xa_check_pointer_borrow_escape(ctx, child, child, elem,
+                                       "store raw pointer borrow in tuple literal");
         if (elem && XR_TYPE_IS_ERROR(elem))
             poisoned = true;
         elem_types[slot++] = elem;
@@ -2571,6 +2578,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
         ctx->expected_type = saved_expected;
         xa_check_span_value_escape(ctx, arr->repeat_value, elem_type,
                                    "repeat Slice view in array literal");
+        xa_check_pointer_borrow_escape(ctx, arr->repeat_value, arr->repeat_value, elem_type,
+                                       "repeat raw pointer borrow in array literal");
         XrType *count_type = xa_visit_infer_expr(ctx, arr->repeat_count);
         if ((elem_type && XR_TYPE_IS_ERROR(elem_type)) ||
             (count_type && XR_TYPE_IS_ERROR(count_type)))
@@ -2635,6 +2644,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             XrType *elem_type = xa_visit_infer_expr(ctx, child);
             xa_check_span_value_escape(ctx, child, elem_type,
                                        "store Slice view in fixed array literal");
+            xa_check_pointer_borrow_escape(ctx, child, child, elem_type,
+                                           "store raw pointer borrow in fixed array literal");
             if (elem_type && XR_TYPE_IS_ERROR(elem_type)) {
                 poisoned = true;
                 continue;
@@ -2780,6 +2791,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
             contributed = xa_visit_infer_expr(ctx, child);
             xa_check_span_value_escape(ctx, child, contributed,
                                        "store Slice view in array literal");
+            xa_check_pointer_borrow_escape(ctx, child, child, contributed,
+                                           "store raw pointer borrow in array literal");
             if (contributed && XR_TYPE_IS_ERROR(contributed))
                 poisoned = true;
         }
@@ -2844,18 +2857,26 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
     ctx->expected_type = target_key_type;
     XrType *key_type = xa_visit_infer_expr(ctx, map->keys[0]);
     xa_check_span_value_escape(ctx, map->keys[0], key_type, "store Slice view as map literal key");
+    xa_check_pointer_borrow_escape(ctx, map->keys[0], map->keys[0], key_type,
+                                   "store raw pointer borrow as map literal key");
     ctx->expected_type = target_value_type;
     XrType *val_type = xa_visit_infer_expr(ctx, map->values[0]);
     xa_check_span_value_escape(ctx, map->values[0], val_type, "store Slice view in map literal");
+    xa_check_pointer_borrow_escape(ctx, map->values[0], map->values[0], val_type,
+                                   "store raw pointer borrow in map literal");
 
     // Union with remaining elements (same pattern as array_literal)
     for (int i = 1; i < map->count; i++) {
         ctx->expected_type = target_key_type;
         XrType *k = xa_visit_infer_expr(ctx, map->keys[i]);
         xa_check_span_value_escape(ctx, map->keys[i], k, "store Slice view as map literal key");
+        xa_check_pointer_borrow_escape(ctx, map->keys[i], map->keys[i], k,
+                                       "store raw pointer borrow as map literal key");
         ctx->expected_type = target_value_type;
         XrType *v = xa_visit_infer_expr(ctx, map->values[i]);
         xa_check_span_value_escape(ctx, map->values[i], v, "store Slice view in map literal");
+        xa_check_pointer_borrow_escape(ctx, map->values[i], map->values[i], v,
+                                       "store raw pointer borrow in map literal");
         if (!xr_type_equals(key_type, k)) {
             key_type = xr_type_union(ctx->analyzer->isolate, key_type, k);
         }
@@ -2974,6 +2995,8 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
             entry_types[i] = xa_visit_infer_expr(ctx, obj->values[i]);
             xa_check_span_value_escape(ctx, obj->values[i], entry_types[i],
                                        "store Slice view in object literal");
+            xa_check_pointer_borrow_escape(ctx, obj->values[i], obj->values[i], entry_types[i],
+                                           "store raw pointer borrow in object literal");
             ctx->expected_type = saved_expected;
             cap += 1;
 
@@ -3550,7 +3573,10 @@ XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
         XrType *saved_expected = ctx->expected_type;
         ctx->expected_type =
             class_info ? class_info_field_type(ctx, class_info, sl->field_names[i]) : NULL;
-        xa_visit_infer_expr(ctx, sl->field_values[i]);
+        XrType *field_value_type = xa_visit_infer_expr(ctx, sl->field_values[i]);
+        xa_check_pointer_borrow_escape(ctx, sl->field_values[i], sl->field_values[i],
+                                       field_value_type,
+                                       "store raw pointer borrow in struct literal");
         ctx->expected_type = saved_expected;
     }
 
@@ -4286,6 +4312,13 @@ void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
                                     XrType *arg_type, const char *boundary_label) {
     if (!ctx || !ctx->analyzer || !arg_node)
         return;
+    if (arg_type && XR_TYPE_IS_POINTER(arg_type)) {
+        char context[192];
+        snprintf(context, sizeof(context), "send raw pointer borrow across %s",
+                 boundary_label ? boundary_label : "coroutine boundary");
+        xa_check_pointer_borrow_escape(ctx, arg_node, arg_node, arg_type, context);
+        return;
+    }
     if (xa_type_contains_span_view(arg_type)) {
         char context[160];
         snprintf(context, sizeof(context), "send Slice view across %s",

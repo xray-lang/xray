@@ -1,0 +1,10 @@
+import mem
+
+fn run() {
+    var buffer = mem.alloc(8)
+    var ptr = unsafe { buffer.borrowPtr() }
+    var saved: Array<MutPtr<byte>> = []
+    saved.push(ptr)
+}
+
+run()

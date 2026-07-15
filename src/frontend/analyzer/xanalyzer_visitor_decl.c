@@ -393,6 +393,21 @@ static void xa_summary_set_alias(XaParamEscapeSummary *summary, const char *name
     summary->alias_count++;
 }
 
+static bool xa_summary_name_is_local(XaParamEscapeSummary *summary, const char *name) {
+    if (!summary || !name)
+        return false;
+    for (int i = summary->alias_count - 1; i >= 0; i--) {
+        if (summary->aliases[i] && strcmp(summary->aliases[i], name) == 0)
+            return true;
+    }
+    for (int i = 0; i < summary->param_count; i++) {
+        if (summary->param_names && summary->param_names[i] &&
+            strcmp(summary->param_names[i], name) == 0)
+            return true;
+    }
+    return false;
+}
+
 static int xa_summary_expr_root_param_slot(XaParamEscapeSummary *summary, AstNode *expr) {
     while (expr) {
         switch (expr->type) {
@@ -888,7 +903,8 @@ static void xa_summary_mark_unknown_function_value_args(XaParamEscapeSummary *su
     for (int i = 0; i < call->arg_count; i++) {
         AstNode *arg = call->arguments ? call->arguments[i] : NULL;
         XrType *arg_type = xa_summary_expr_type(summary, arg);
-        if (!xa_type_needs_borrow_escape_guard(arg_type))
+        if (!xa_type_needs_borrow_escape_guard(arg_type) &&
+            !(arg_type && XR_TYPE_IS_POINTER(arg_type)))
             continue;
         xa_summary_mark_expr(summary, arg);
         xa_summary_mark_mutation(summary, arg);
@@ -1118,6 +1134,7 @@ static void xa_summary_walk_function_expr(XaParamEscapeSummary *summary, AstNode
 
 static bool xa_summary_return_type_escapes_borrowed_value(XrType *return_type) {
     return !return_type || XR_TYPE_IS_UNKNOWN(return_type) ||
+           (return_type && XR_TYPE_IS_POINTER(return_type)) ||
            xa_type_needs_borrow_escape_guard(return_type);
 }
 
@@ -1146,7 +1163,10 @@ static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
         case AST_ASSIGNMENT: {
             AssignmentNode *assign = &node->as.assignment;
             int slot = xa_summary_expr_root_param_slot(summary, assign->value);
-            xa_summary_set_alias(summary, assign->name, slot);
+            if (xa_summary_name_is_local(summary, assign->name))
+                xa_summary_set_alias(summary, assign->name, slot);
+            else
+                xa_summary_mark_expr(summary, assign->value);
             xa_summary_walk(summary, assign->value);
             break;
         }
