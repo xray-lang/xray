@@ -114,7 +114,7 @@ static XrType *xa_freestanding_reject_owned_static_member(XaInferContext *ctx, A
     xa_freestanding_report_unavailable(
         ctx, node ? node : object, feature,
         "owned heap-backed containers are not part of the freestanding no-heap subset");
-    return xr_type_new_unknown(NULL);
+    return xr_type_new_error(ctx->analyzer->isolate);
 }
 
 static bool xa_freestanding_reject_string_member(XaInferContext *ctx, AstNode *node,
@@ -285,7 +285,7 @@ static XrType *xa_try_expected_enum_member_access(XaInferContext *ctx, AstNode *
                  enum_sym->name ? enum_sym->name : "?", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     XrType *enum_type =
@@ -533,7 +533,7 @@ static XrType *xa_string_view_method_type(XaInferContext *ctx, XrType *receiver,
         return NULL;
     if (!xa_has_view_target_context(ctx)) {
         xa_report_view_expr_requires_target(ctx, node, "string.bytes()");
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
     XrVMRuntime *X = ctx->analyzer->isolate;
     return xr_type_new_function(X, NULL, 0, xr_type_new_u8_slice(X), false);
@@ -549,7 +549,7 @@ static XrType *xa_array_view_method_type(XaInferContext *ctx, XrType *receiver, 
                                "Array.span() has been removed; use a target-typed slice such as "
                                "'const s: Span<T> = arr[:]'",
                                &loc);
-    return xr_type_new_unknown(NULL);
+    return xr_type_new_error(ctx->analyzer->isolate);
 }
 
 static bool xa_contextual_view_method_without_target(XaInferContext *ctx, XrType *receiver,
@@ -732,7 +732,7 @@ static XrType *xa_raw_pointer_static_method_type(XaInferContext *ctx, AstNode *n
                     : "RawPtr.of general lvalue address-taking is not enabled; the current "
                       "surface only exposes verified freestanding static const data",
                 &loc);
-            return xr_type_new_unknown(ctx->analyzer->isolate);
+            return xr_type_new_error(ctx->analyzer->isolate);
         }
         XrType *pointee = ptr_type->container.element_type;
         if (!pointee)
@@ -1486,7 +1486,7 @@ static bool xa_check_nullable_access(XaInferContext *ctx, AstNode *node, XrType 
 
 XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(NULL);
 
     MemberAccessNode *ma = &node->as.member_access;
 
@@ -1499,7 +1499,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         snprintf(msg, sizeof(msg), "Unknown TypeId constant 'Type.%s'", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNDEFINED_VAR,
                                    msg, &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     XrType *raw_pointer_static_fn =
@@ -1527,7 +1527,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     xa_check_nullable_access(ctx, node, obj_type, "member access");
 
     if (xa_freestanding_reject_string_member(ctx, node, obj_type, ma->name))
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
 
     XrType *static_capacity_fn = xa_static_capacity_method_type(ctx, ma->object, ma->name);
     if (static_capacity_fn)
@@ -1597,7 +1597,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     return mod_result;
                 }
                 xa_report_unknown_stdlib_member(ctx, node, mod_name, ma->name);
-                return xr_type_new_unknown(NULL);
+                return xr_type_new_error(ctx->analyzer->isolate);
             }
 
             /* User module namespaces are resolved above from graph exports. */
@@ -1623,7 +1623,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                      nm ? nm : "");
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_TUPLE_FIELD_NAME, msg, &loc);
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(ctx->analyzer->isolate);
         }
         long idx = strtol(nm, NULL, 10);
         int arity = obj_type->tuple.element_count;
@@ -1632,7 +1632,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             snprintf(msg, sizeof(msg), "tuple field index %ld out of range (arity %d)", idx, arity);
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_TUPLE_FIELD_RANGE, msg, &loc);
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(ctx->analyzer->isolate);
         }
         return obj_type->tuple.element_types[(int) idx];
     }
@@ -1677,7 +1677,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                                          obj_type->enum_type.enum_name, ma->name);
                                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                            XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
-                                return xr_type_new_unknown(NULL);
+                                return xr_type_new_error(ctx->analyzer->isolate);
                             }
                             XrType *enum_type = xr_type_new_enum(ctx->analyzer->isolate,
                                                                  obj_type->enum_type.enum_name);
@@ -1708,7 +1708,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                              obj_type->enum_type.enum_name, ma->name ? ma->name : "");
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
-                    return xr_type_new_unknown(NULL);
+                    return xr_type_new_error(ctx->analyzer->isolate);
                 } else if (el->class_info) {
                     XaSymbol *member =
                         xa_class_info_lookup_instance_member(el->class_info, ma->name);
@@ -1729,7 +1729,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                                 ctx, node, "enum.name",
                                 "payload enum name materialization still needs hosted string "
                                 "helpers; use ordinal or typed match in freestanding code");
-                            return xr_type_new_unknown(NULL);
+                            return xr_type_new_error(ctx->analyzer->isolate);
                         }
                         return xr_type_new_string(NULL);
                     }
@@ -1743,7 +1743,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                                 ctx, node, "enum.toString",
                                 "payload enum string materialization still needs hosted string "
                                 "helpers; use ordinal or typed match in freestanding code");
-                            return xr_type_new_unknown(NULL);
+                            return xr_type_new_error(ctx->analyzer->isolate);
                         }
                         XrType *ret = xr_type_new_string(NULL);
                         return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, ret, false);
@@ -1755,7 +1755,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                              ma->name ? ma->name : "");
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
-                    return xr_type_new_unknown(NULL);
+                    return xr_type_new_error(ctx->analyzer->isolate);
                 }
             }
         }
@@ -1833,7 +1833,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                  xr_type_to_string(obj_type), ma->name ? ma->name : "");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     // Handle built-in properties
@@ -1859,7 +1859,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         snprintf(msg, sizeof(msg), "Iterator has no member '%s'", ma->name ? ma->name : "");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     if (obj_type->kind == XR_KIND_INTERFACE && obj_type->instance.class_name) {
@@ -1909,7 +1909,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                  prop_sym == SYMBOL_IS_EMPTY ? " == 0" : "");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
     if (prop_sym == SYMBOL_CAPACITY && XR_TYPE_IS_ARRAY(obj_type)) {
         return xr_type_new_int(NULL);
@@ -1935,7 +1935,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     }
 
     if (xa_contextual_view_method_without_target(ctx, obj_type, ma->name, node))
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
 
     const XaBuiltinReceiverMethodSpec *builtin_receiver_spec =
         xa_find_builtin_receiver_method_spec(obj_type, ma->name);
@@ -1969,17 +1969,17 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                  obj_type->ptr_is_mut ? "RawMut" : "RawPtr", ma->name ? ma->name : "");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     if (XR_TYPE_IS_VIEW(obj_type)) {
         xa_report_view_member_error(ctx, node, obj_type, ma->name);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     if (XR_TYPE_IS_SPAN(obj_type)) {
         xa_report_span_member_error(ctx, node, obj_type, ma->name);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     if (obj_type->kind == XR_KIND_FIXED_ARRAY) {
@@ -1989,7 +1989,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                  "Fixed array has no member '%s'; use len(value) or indexed access", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     if (XR_TYPE_IS_INSTANCE(obj_type) && obj_type->instance.class_ref) {
@@ -2111,7 +2111,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                  ma->name ? ma->name : "");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     if (XR_TYPE_IS_ARRAY(obj_type)) {
@@ -2121,7 +2121,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                  xa_type_is_u8_array_type(obj_type) ? "Array<byte>" : "Array", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
-        return xr_type_new_unknown(NULL);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     // Handle class instance members
@@ -2219,7 +2219,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                      ma->name ? ma->name : "");
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(ctx->analyzer->isolate);
         }
     }
 
@@ -2248,7 +2248,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                      ma->name);
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-            return xr_type_new_unknown(NULL);
+            return xr_type_new_error(ctx->analyzer->isolate);
         }
         return xr_type_new_unknown(NULL);
     }
