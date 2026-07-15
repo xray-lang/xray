@@ -2594,6 +2594,28 @@ TEST(analyzer_member_error_recovery_suppresses_call_cascade) {
     setup_pool();
 }
 
+TEST(analyzer_operator_and_index_failures_use_error_recovery) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    AstNode *program = xr_parse(g_session, "var op = \"text\" - 1\n"
+                                           "op.missing()\n"
+                                           "var indexed = \"text\"[0]\n"
+                                           "indexed.missing()\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "operator_index_error_recovery.xr", program);
+
+    ASSERT(analyzer_diag_contains(a, "operator '-' is not defined"));
+    ASSERT(analyzer_diag_contains(a, "string does not support integer indexing"));
+    ASSERT(!analyzer_diag_contains(a, "has no member 'missing'"));
+    ASSERT(!analyzer_diag_contains(a, "Value is not callable"));
+    ASSERT(a->unresolved_inference_count == 0);
+    ASSERT(a->recovery_poison_type_count >= 2);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -2951,6 +2973,7 @@ int main(void) {
     RUN_TEST(analyzer_cast_error_recovery_and_union_overlap);
     RUN_TEST(analyzer_assignment_error_recovery_suppresses_cascade);
     RUN_TEST(analyzer_member_error_recovery_suppresses_call_cascade);
+    RUN_TEST(analyzer_operator_and_index_failures_use_error_recovery);
     RUN_TEST(analyzer_rejects_error_type_generic_argument_and_constraint);
     RUN_TEST(export_symbols_invalidate_table_on_nested_error_type);
     RUN_TEST(compile_type_class);
