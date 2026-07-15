@@ -15,6 +15,7 @@
 #include "xanalyzer_builtins.h"
 #include "xanalyzer_flow.h"
 #include "xanalyzer_infer.h"
+#include "xanalyzer_mono.h"
 #include "xanalyzer_visitor.h"
 #include "xast_nodes.h"
 #include "xparse.h"
@@ -1303,6 +1304,60 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT(!effect_summary_has_enum_named(a, higher_order_unknown, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, const_alias, "DynamicErr"));
     ASSERT((const_alias->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source =
+        "enum GenericIntErr { Boom }\n"
+        "enum GenericStringErr { Boom }\n"
+        "fn failGenericInt(x: int) -> int { throw GenericIntErr.Boom }\n"
+        "fn failGenericString(x: string) -> string { throw GenericStringErr.Boom }\n"
+        "fn runGeneric<T>(x: T, cb: (T) -> T) -> T {\n"
+        "  return cb(x)\n"
+        "}\n"
+        "fn viaGenericInt() {\n"
+        "  runGeneric<int>(1, failGenericInt)\n"
+        "}\n"
+        "fn viaGenericString() {\n"
+        "  runGeneric<string>(\"x\", failGenericString)\n"
+        "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+
+    xa_analyzer_analyze(a, "effect_generic_specialization.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "error"));
+    xa_mono_pass(program, g_isolate);
+    xa_analyzer_analyze(a, "effect_generic_specialization.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "error"));
+
+    const XaEffectSummary *generic_int = analyzer_function_effect_summary(a, "viaGenericInt");
+    const XaEffectSummary *generic_string = analyzer_function_effect_summary(a, "viaGenericString");
+    const XaEffectSummary *specialized_int = analyzer_function_effect_summary(a, "runGeneric$i64");
+    const XaEffectSummary *specialized_string =
+        analyzer_function_effect_summary(a, "runGeneric$str");
+    ASSERT(generic_int != NULL);
+    ASSERT(generic_string != NULL);
+    ASSERT(specialized_int != NULL);
+    ASSERT(specialized_string != NULL);
+
+    ASSERT(generic_int->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((generic_int->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(effect_summary_has_enum_named(a, generic_int, "GenericIntErr"));
+    ASSERT(!effect_summary_has_enum_named(a, generic_int, "GenericStringErr"));
+    ASSERT(generic_string->completeness == XA_EFFECT_COMPLETE);
+    ASSERT((generic_string->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(!effect_summary_has_enum_named(a, generic_string, "GenericIntErr"));
+    ASSERT(effect_summary_has_enum_named(a, generic_string, "GenericStringErr"));
+    ASSERT(specialized_int->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((specialized_int->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(specialized_string->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((specialized_string->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
 
     xa_analyzer_free(a);
     setup_pool();
@@ -3321,6 +3376,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_error_effect_propagates_const_function_value_aliases);
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
+    RUN_TEST(analyzer_error_effect_propagates_generic_specialization_target_sets);
     RUN_TEST(analyzer_error_effect_propagates_immediate_function_expr_calls);
     RUN_TEST(analyzer_error_effect_propagates_direct_method_calls);
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
