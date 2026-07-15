@@ -1718,6 +1718,19 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME param_contract_decl_ast_single_representation
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_param_mode_convergence.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --fail-on-decl-ast-contract
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(param_contract_decl_ast_single_representation PROPERTIES
+        LABELS "frontend;syntax;metadata"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME error_effect_convergence_inventory
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_error_effect_convergence.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}

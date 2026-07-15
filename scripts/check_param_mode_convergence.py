@@ -96,6 +96,10 @@ BACKEND_ABI_RE = re.compile(r"\b(?:xi_func_param_passing_mode|param_passing_mode
 ESCAPE_SUSPEND_RE = re.compile(
     r"\b(?:borrowed_root|borrow|escape|suspend|await|yield|noescape|lifetime)\b", re.IGNORECASE
 )
+DECL_AST_LEGACY_FIELD_RE = re.compile(
+    r"\b(?:char\s*\*\*parameters|XrTypeRef\s*\*\*param_types|"
+    r"XrParamMode\s*\*param_passing_modes|AstNode\s*\*\*default_values)\b"
+)
 
 ACTIVE_SPEC_PREFIXES = ("LANGUAGE_SPEC", "spec/", "demos/", "stdlib/")
 REMOVED_SYNTAX_NEGATIVE_FIXTURES = {
@@ -281,6 +285,28 @@ def print_text_inventory(inventory: dict[str, list[Hit]], max_per_category: int)
             print(f"  ... {len(hits) - max_per_category} more")
 
 
+def declaration_ast_contract_residue(root: Path) -> list[str]:
+    failures: list[str] = []
+    ast_header = root / "src/frontend/parser/xast_nodes_decl.h"
+    oop_parser = root / "src/frontend/parser/xparse_oop.c"
+
+    header_text = ast_header.read_text(encoding="utf-8")
+    if header_text.count("XrParamNode **params;") < 3:
+        failures.append(
+            f"{ast_header.relative_to(root)}: function, method, and interface declarations "
+            "must all store XrParamNode **params"
+        )
+    for lineno, line in enumerate(header_text.splitlines(), 1):
+        if DECL_AST_LEGACY_FIELD_RE.search(line):
+            failures.append(f"{ast_header.relative_to(root)}:{lineno}: {line.strip()}")
+
+    parser_text = oop_parser.read_text(encoding="utf-8")
+    for lineno, line in enumerate(parser_text.splitlines(), 1):
+        if re.search(r"\b(?:param_passing_modes|default_values)\b", line):
+            failures.append(f"{oop_parser.relative_to(root)}:{lineno}: {line.strip()}")
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".", help="repository root")
@@ -290,6 +316,11 @@ def main() -> int:
         type=int,
         default=20,
         help="text output limit per category; 0 prints all hits",
+    )
+    parser.add_argument(
+        "--fail-on-decl-ast-contract",
+        action="store_true",
+        help="fail if declaration AST methods/interfaces reintroduce parallel parameter arrays",
     )
     args = parser.parse_args()
 
@@ -306,6 +337,13 @@ def main() -> int:
         )
     else:
         print_text_inventory(inventory, args.max_per_category)
+    if args.fail_on_decl_ast_contract:
+        failures = declaration_ast_contract_residue(root)
+        if failures:
+            print("declaration AST ParamContract residue:", file=sys.stderr)
+            for failure in failures:
+                print(f"  {failure}", file=sys.stderr)
+            return 1
     return 0
 
 
