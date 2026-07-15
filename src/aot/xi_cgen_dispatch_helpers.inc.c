@@ -9866,7 +9866,7 @@ static void xicgen_span_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         return;
     }
     fprintf(out, "%s _fill = ", info.ctype);
-    emit_typed_array_store_value(out, &info, v->args[1]);
+    emit_typed_array_store_value(ctx, out, &info, v->args[1]);
     fprintf(out,
             "; for (int64_t _i = 0; _i < _s.length; _i++) "
             "((%s*)_s.data)[_i] = _fill; _s; })",

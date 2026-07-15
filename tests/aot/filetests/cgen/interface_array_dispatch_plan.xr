@@ -1,0 +1,29 @@
+interface Drawable {
+    draw() -> int
+}
+
+class Sprite implements Drawable {
+    constructor() {
+    }
+
+    draw() -> int { return 1 }
+}
+
+class Icon implements Drawable {
+    constructor() {
+    }
+
+    draw() -> int { return 2 }
+}
+
+fn drawAll(items: Array<Drawable>) -> int {
+    var i = 0
+    var sum = 0
+    while (i < len(items)) {
+        sum = sum + items[i].draw()
+        i = i + 1
+    }
+    return sum
+}
+
+print(drawAll([Sprite(), Icon()]))
