@@ -1,3 +1,5 @@
+contains=op=fill action=inline_memset
+contains=evidence=row+pod+length_expr+zero_fill reason=none
 c_contains=xr_array_core_fill_range(
 c_contains=memset((uint8_t*)_a->data +
 c_not_contains=xrt_array_fill_value(

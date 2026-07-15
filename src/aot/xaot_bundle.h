@@ -1335,6 +1335,7 @@ enum {
     XAOT_BULK_EV_READONLY_SRC = 1u << 3,
     XAOT_BULK_EV_WRITE_BARRIER = 1u << 4,
     XAOT_BULK_EV_LENGTH_EXPR = 1u << 5,
+    XAOT_BULK_EV_ZERO_FILL = 1u << 6,
 };
 
 enum {

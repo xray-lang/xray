@@ -3505,8 +3505,10 @@ static uint8_t bulk_action_for(const XgBulkOpSummary *bulk) {
         case XG_BULK_COPY_WITHIN:
             return XAOT_BULK_INLINE_MEMMOVE;
         case XG_BULK_FILL:
-            return bulk_elem_type_is_memset_byte(bulk->elem_type_key) ? XAOT_BULK_INLINE_MEMSET
-                                                                      : XAOT_BULK_TYPED_LOOP;
+            return ((bulk->flags & XG_BULK_ZERO_FILL) != 0 ||
+                    bulk_elem_type_is_memset_byte(bulk->elem_type_key))
+                       ? XAOT_BULK_INLINE_MEMSET
+                       : XAOT_BULK_TYPED_LOOP;
         case XG_BULK_COMPARE:
             return XAOT_BULK_INLINE_MEMCMP;
         case XG_BULK_REPEAT:
@@ -3542,6 +3544,8 @@ static uint32_t bulk_evidence_for(const XgBulkOpSummary *bulk) {
         bits |= XAOT_BULK_EV_WRITE_BARRIER;
     if (bulk->length_expr_id != 0)
         bits |= XAOT_BULK_EV_LENGTH_EXPR;
+    if ((bulk->flags & XG_BULK_ZERO_FILL) != 0)
+        bits |= XAOT_BULK_EV_ZERO_FILL;
     return bits;
 }
 
@@ -6372,6 +6376,7 @@ static void print_bulk_evidence_bits(FILE *out, uint32_t bits) {
     PRINT_BIT(XAOT_BULK_EV_READONLY_SRC, "readonly_src");
     PRINT_BIT(XAOT_BULK_EV_WRITE_BARRIER, "write_barrier");
     PRINT_BIT(XAOT_BULK_EV_LENGTH_EXPR, "length_expr");
+    PRINT_BIT(XAOT_BULK_EV_ZERO_FILL, "zero_fill");
     if (first)
         fprintf(out, "none");
 #undef PRINT_BIT

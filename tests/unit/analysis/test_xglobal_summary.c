@@ -789,7 +789,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=26 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=27 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1176,15 +1176,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=26 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=26 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=26 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=26 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=27 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=27 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=27 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=27 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=26 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=26 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=26 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=26 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=27 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=27 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=27 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=27 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -11429,6 +11429,16 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
                                     .dst_type_key = 602,
                                     .length_expr_id = 4,
                                     .flags = XG_BULK_WRITE_BARRIER};
+    XgBulkOpSummary zero_fill_bulk = {.op_id = 3,
+                                      .owner_func_id = 7,
+                                      .source_span_id = 105,
+                                      .body_ordinal = 2,
+                                      .op_kind = XG_BULK_FILL,
+                                      .elem_type_key = 701,
+                                      .src_type_key = 701,
+                                      .dst_type_key = 702,
+                                      .length_expr_id = 5,
+                                      .flags = XG_BULK_POD | XG_BULK_ZERO_FILL};
     XgEncodingOpSummary enc = {.op_id = 1,
                                .owner_func_id = 7,
                                .source_span_id = 103,
@@ -11441,6 +11451,7 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_NOT_NULL(xg_global_evidence_add_capacity_op(&ev, &cap));
     ASSERT_NOT_NULL(xg_global_evidence_add_bulk_op(&ev, &bulk));
     ASSERT_NOT_NULL(xg_global_evidence_add_bulk_op(&ev, &managed_bulk));
+    ASSERT_NOT_NULL(xg_global_evidence_add_bulk_op(&ev, &zero_fill_bulk));
     ASSERT_NOT_NULL(xg_global_evidence_add_encoding_op(&ev, &enc));
     ASSERT_NOT_NULL(xg_global_evidence_find_sequence_access(&ev, 1));
     ASSERT_NOT_NULL(xg_global_evidence_find_capacity_op(&ev, 1));
@@ -11465,17 +11476,19 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(bundle.nsequence_access_plans, 1);
     ASSERT_EQ_UINT(bundle.ncapacity_plans, 1);
-    ASSERT_EQ_UINT(bundle.nbulk_plans, 2);
+    ASSERT_EQ_UINT(bundle.nbulk_plans, 3);
     ASSERT_EQ_UINT(bundle.nencoding_plans, 1);
     const XaotSequenceAccessPlan *seq_plan = xaot_bundle_find_sequence_access_plan(&bundle, 1);
     const XaotCapacityPlan *cap_plan = xaot_bundle_find_capacity_plan(&bundle, 1);
     const XaotBulkPlan *bulk_plan = xaot_bundle_find_bulk_plan(&bundle, 1);
     const XaotBulkPlan *managed_bulk_plan = xaot_bundle_find_bulk_plan(&bundle, 2);
+    const XaotBulkPlan *zero_fill_bulk_plan = xaot_bundle_find_bulk_plan(&bundle, 3);
     const XaotEncodingPlan *enc_plan = xaot_bundle_find_encoding_plan(&bundle, 1);
     ASSERT_NOT_NULL(seq_plan);
     ASSERT_NOT_NULL(cap_plan);
     ASSERT_NOT_NULL(bulk_plan);
     ASSERT_NOT_NULL(managed_bulk_plan);
+    ASSERT_NOT_NULL(zero_fill_bulk_plan);
     ASSERT_NOT_NULL(enc_plan);
     ASSERT_EQ_UINT(seq_plan->action, XAOT_SEQUENCE_ACCESS_CHECKED_INDEX);
     ASSERT_EQ_UINT(seq_plan->evidence,
@@ -11493,6 +11506,11 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_EQ_UINT(managed_bulk_plan->evidence,
                    XAOT_BULK_EV_GLOBAL_ROW | XAOT_BULK_EV_WRITE_BARRIER | XAOT_BULK_EV_LENGTH_EXPR);
     ASSERT_EQ_UINT(managed_bulk_plan->unproven_reason, XAOT_BULK_UNPROVEN_WRITE_BARRIER);
+    ASSERT_EQ_UINT(zero_fill_bulk_plan->action, XAOT_BULK_INLINE_MEMSET);
+    ASSERT_EQ_UINT(zero_fill_bulk_plan->evidence, XAOT_BULK_EV_GLOBAL_ROW | XAOT_BULK_EV_POD |
+                                                      XAOT_BULK_EV_LENGTH_EXPR |
+                                                      XAOT_BULK_EV_ZERO_FILL);
+    ASSERT_EQ_UINT(zero_fill_bulk_plan->unproven_reason, XAOT_BULK_UNPROVEN_NONE);
     ASSERT_EQ_UINT(enc_plan->action, XAOT_ENCODING_VALIDATE_ELIDED);
     ASSERT_EQ_UINT(enc_plan->evidence, XAOT_ENCODING_EV_GLOBAL_ROW | XAOT_ENCODING_EV_KNOWN_UTF8 |
                                            XAOT_ENCODING_EV_VALIDATED_ONCE |
@@ -11509,6 +11527,8 @@ TEST(global_evidence_records_sequence_capacity_bulk_encoding_rows) {
     ASSERT_NOT_NULL(strstr(plan_dump, "action=inline_memcpy"));
     ASSERT_NOT_NULL(strstr(plan_dump, "action=typed_loop"));
     ASSERT_NOT_NULL(strstr(plan_dump, "reason=write_barrier"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=inline_memset"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "zero_fill"));
     ASSERT_NOT_NULL(strstr(plan_dump, "encoding-plan 0 id=1"));
     ASSERT_NOT_NULL(strstr(plan_dump, "action=validate_elided"));
     xr_free(plan_dump);
@@ -11630,6 +11650,7 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
                          "    var first = xs[0]\n"
                          "    var part = xs[0:1]\n"
                          "    var n = len(xs)\n"
+                         "    xs.fill(0)\n"
                          "    b.appendFrom(span)\n"
                          "    span.copyFrom(b[:])\n"
                          "    refs.fill(s)\n"
@@ -11657,7 +11678,7 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.nsequence_accesses, 4);
     ASSERT_EQ_UINT(ev.ncapacity_ops, 3);
-    ASSERT_EQ_UINT(ev.nbulk_ops, 3);
+    ASSERT_EQ_UINT(ev.nbulk_ops, 4);
     ASSERT_EQ_UINT(ev.nencoding_ops, 2);
     ASSERT_EQ_UINT(ev.ngeneric_storages, 3);
     uint32_t array_storage_with_plan_count = 0;
@@ -11704,6 +11725,7 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
 
     bool saw_bulk_copy = false;
     bool saw_managed_fill = false;
+    bool saw_pod_zero_fill = false;
     for (uint32_t i = 0; i < ev.nbulk_ops; i++) {
         if (ev.bulk_ops[i].op_kind == XG_BULK_COPY)
             saw_bulk_copy = true;
@@ -11711,9 +11733,16 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
             (ev.bulk_ops[i].flags & XG_BULK_WRITE_BARRIER) != 0 &&
             (ev.bulk_ops[i].flags & XG_BULK_POD) == 0)
             saw_managed_fill = true;
+        if (ev.bulk_ops[i].op_kind == XG_BULK_FILL &&
+            (ev.bulk_ops[i].flags & XG_BULK_ZERO_FILL) != 0 &&
+            (ev.bulk_ops[i].flags & XG_BULK_POD) != 0) {
+            ASSERT_TRUE((ev.bulk_ops[i].flags & XG_BULK_WRITE_BARRIER) == 0);
+            saw_pod_zero_fill = true;
+        }
     }
     ASSERT_TRUE(saw_bulk_copy);
     ASSERT_TRUE(saw_managed_fill);
+    ASSERT_TRUE(saw_pod_zero_fill);
 
     bool saw_string_to_bytes = false;
     bool saw_bytes_to_string = false;
