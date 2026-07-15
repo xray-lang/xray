@@ -124,6 +124,15 @@ add_xray_unit_test(test_ic vm/test_ic.c)
 add_xray_unit_test(test_ic_concurrent vm/test_ic_concurrent.c)
 add_xray_unit_test(test_vm_exception vm/test_vm_exception.c)
 add_xray_unit_test(test_vm_parallel_isolate vm/test_vm_parallel_isolate.c)
+add_xray_unit_test(test_vm_grapheme_iterator vm/test_vm_grapheme_iterator.c)
+add_test(
+    NAME test_grapheme_internal_boundary
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/vm/test_grapheme_internal_boundary.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(test_grapheme_internal_boundary PROPERTIES
+    LABELS "unicode;vm;task-199"
+)
 
 # ============================================================================
 # symbol/ — Symbol table
@@ -251,6 +260,19 @@ add_xray_unit_test(test_project module/test_project.c)
 # ============================================================================
 
 add_xray_unit_test(test_unicode encoding/test_unicode.c)
+add_xray_unit_test(test_unicode_grapheme_table encoding/test_unicode_grapheme_table.c)
+add_xray_unit_test(test_unicode_grapheme_cursor encoding/test_unicode_grapheme_cursor.c)
+target_compile_definitions(test_unicode_grapheme_cursor PRIVATE
+    XR_GRAPHEME_BREAK_TEST_FILE="${CMAKE_SOURCE_DIR}/third_party/unicode/17.0.0/GraphemeBreakTest.txt"
+)
+add_test(
+    NAME test_unicode_grapheme_generator
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/encoding/test_unicode_grapheme_generator.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(test_unicode_grapheme_generator PROPERTIES
+    LABELS "unicode;generator;task-199"
+)
 
 # ============================================================================
 # http/ — HTTP parser and HTTP/2 helpers

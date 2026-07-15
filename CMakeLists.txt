@@ -528,6 +528,10 @@ function(xray_exclude_include_fragments source_list_name)
 endfunction()
 
 file(GLOB BASE_SRC CONFIGURE_DEPENDS "src/base/*.c")
+list(APPEND BASE_SRC
+    "src/shared/xr_unicode_grapheme_data.c"
+    "src/shared/xr_unicode_grapheme.c"
+)
 # Cross-platform abstraction layer. Each impl file is exclusive to
 # its platform — no body guards, only the right subtree is built.
 if(WIN32)
