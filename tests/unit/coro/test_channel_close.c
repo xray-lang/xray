@@ -11,6 +11,7 @@
 #include "../test_framework.h"
 #include "coro/xblock.h"
 #include "coro/xchannel.h"
+#include "coro/xchannel_ops.h"
 #include "coro/xcoroutine.h"
 #include "coro/xdeep_copy.h"
 #include "coro/xnetpoll.h"
@@ -1036,6 +1037,83 @@ TEST(coro_channel_recv_delivery_gated_for_deep_copy_values) {
     destroy_task_array(&payload);
     xr_channel_destroy(ch);
     xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    close_fixture_cleanup(&f);
+}
+
+TEST(coro_channel_copy_payload_materializes_owned_message) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 1);
+    ASSERT_NOT_NULL(ch);
+
+    XrArray payload;
+    ASSERT_TRUE(init_task_array(&payload, 2));
+    xr_array_push(&payload, xr_int(41));
+    xr_array_push(&payload, xr_int(42));
+
+    XrValue source = xr_value_from_array(&payload);
+    ASSERT_TRUE(xr_chan_try_send_transfer_core(&f.core, ch, source, XR_TRANSFER_COPY));
+
+    bool ok = false;
+    XrValue queued = xr_channel_try_recv(ch, &ok);
+    ASSERT_TRUE(ok);
+    ASSERT_TRUE(XR_IS_ARRAY(queued));
+    XrObjHeader *queued_obj = XR_VALUE_GCPTR(queued);
+    ASSERT_TRUE(XR_OBJ_IS_OWNED(queued_obj));
+    ASSERT_FALSE(XR_OBJ_GET_FLAG(queued_obj, XR_OBJ_TRANSIT));
+
+    XrValue received = xr_chan_copy_recv_core(&f.core, queued, NULL);
+    ASSERT_EQ_PTR(XR_VALUE_GCPTR(received), queued_obj);
+    XrArray *arr = XR_TO_ARRAY(received);
+    ASSERT_EQ_INT(xr_array_size(arr), 2);
+    ASSERT_EQ_INT((int) XR_TO_INT(xr_array_get(arr, 0)), 41);
+    ASSERT_EQ_INT((int) XR_TO_INT(xr_array_get(arr, 1)), 42);
+
+    xr_chan_abandon_send_core(&f.core, received);
+    destroy_task_array(&payload);
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel) + sizeof(XrValue));
+    close_fixture_cleanup(&f);
+}
+
+TEST(coro_channel_move_owned_payload_preserves_root) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 1);
+    ASSERT_NOT_NULL(ch);
+
+    XrArray payload;
+    ASSERT_TRUE(init_task_array(&payload, 2));
+    xr_array_push(&payload, xr_int(51));
+    xr_array_push(&payload, xr_int(52));
+
+    XrValue owned = xr_deep_copy_explicit_to_storage_core(&f.core, xr_value_from_array(&payload),
+                                                          XR_OBJ_STORAGE_OWNED);
+    ASSERT_TRUE(XR_IS_ARRAY(owned));
+    XrObjHeader *owned_obj = XR_VALUE_GCPTR(owned);
+    ASSERT_TRUE(XR_OBJ_IS_OWNED(owned_obj));
+
+    ASSERT_TRUE(xr_chan_try_send_transfer_core(&f.core, ch, owned, XR_TRANSFER_MOVE));
+
+    bool ok = false;
+    XrValue queued = xr_channel_try_recv(ch, &ok);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_PTR(XR_VALUE_GCPTR(queued), owned_obj);
+    ASSERT_FALSE(XR_OBJ_GET_FLAG(owned_obj, XR_OBJ_TRANSIT));
+
+    XrValue received = xr_chan_copy_recv_core(&f.core, queued, NULL);
+    ASSERT_EQ_PTR(XR_VALUE_GCPTR(received), owned_obj);
+    XrArray *arr = XR_TO_ARRAY(received);
+    ASSERT_EQ_INT(xr_array_size(arr), 2);
+    ASSERT_EQ_INT((int) XR_TO_INT(xr_array_get(arr, 0)), 51);
+    ASSERT_EQ_INT((int) XR_TO_INT(xr_array_get(arr, 1)), 52);
+
+    xr_chan_abandon_send_core(&f.core, received);
+    destroy_task_array(&payload);
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel) + sizeof(XrValue));
     close_fixture_cleanup(&f);
 }
 
@@ -2080,6 +2158,8 @@ RUN_TEST(coro_channel_buffer_fast_paths_do_not_allocate_ext);
 RUN_TEST(coro_channel_recv_sets_recv_slot_only_when_blocking);
 RUN_TEST(coro_channel_recv_delivered_wake_writes_value_and_ok_slots);
 RUN_TEST(coro_channel_recv_delivery_gated_for_deep_copy_values);
+RUN_TEST(coro_channel_copy_payload_materializes_owned_message);
+RUN_TEST(coro_channel_move_owned_payload_preserves_root);
 RUN_TEST(coro_channel_recv_close_wake_stays_on_replay_protocol);
 RUN_TEST(channel_wait_token_tracks_block_wake_and_resume);
 RUN_TEST(channel_timed_wait_cancels_timer_on_channel_wake);

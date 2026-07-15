@@ -51,7 +51,7 @@ static inline void chan_try_deliver_recv(XrCoroutine *receiver, XrValue v) {
     XrCoroExt *ext = receiver->ext;
     if (!ext || ext->chan_ok_slot_ref.kind == XR_SLOT_NONE)
         return;
-    if (XR_IS_PTR(v) && xr_value_needs_copy(v))
+    if (XR_IS_PTR(v) && xr_value_needs_copy(v) && !xr_chan_value_is_owned_message(v))
         return;
     (void) xr_slot_store_value(ext->chan_ok_slot_ref, xr_bool(true));
     ext->chan_resume_delivered = true;
