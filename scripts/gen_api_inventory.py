@@ -240,6 +240,32 @@ def matching_brace_index(text: str, open_index: int) -> int:
     return -1
 
 
+def matching_paren_index(text: str, open_index: int) -> int:
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(open_index, len(text)):
+        ch = text[i]
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\" and in_string:
+            escaped = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
 def brace_delta(text: str) -> int:
     delta = 0
     in_string = False
@@ -313,6 +339,38 @@ MEMBER_SIGNATURE_START_RE = re.compile(r"^\s*(?:static\s+)?[A-Za-z_][A-Za-z0-9_]
 MEMBER_FIELD_RE = re.compile(r"^\s*(?:const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^=\n]+)$")
 
 
+def parse_signature_tail(line: str, open_index: int) -> tuple[str, str | None] | None:
+    close_index = matching_paren_index(line, open_index)
+    if close_index < 0:
+        return None
+    params = line[open_index + 1 : close_index]
+    tail_start = close_index + 1
+    while tail_start < len(line) and line[tail_start].isspace():
+        tail_start += 1
+    ret: str | None = None
+    if line.startswith("->", tail_start):
+        ret_start = tail_start + 2
+        ret_end = line.find("{", ret_start)
+        if ret_end < 0:
+            ret_end = len(line)
+        ret = line[ret_start:ret_end].strip()
+    return params, ret
+
+
+def parse_member_method_line(line: str) -> tuple[bool, str, str, str | None] | None:
+    match = MEMBER_METHOD_RE.match(line)
+    if not match:
+        return None
+    params = match.group("params")
+    ret = match.group("ret")
+    if "=" in params and params.count("(") > params.count(")"):
+        open_index = line.find("(", match.start())
+        parsed = parse_signature_tail(line, open_index)
+        if parsed is not None:
+            params, ret = parsed
+    return bool(match.group(1)), match.group(2), params, ret
+
+
 def parse_class_body(
     root: Path,
     path: Path,
@@ -340,10 +398,9 @@ def parse_class_body(
         if depth != 0:
             depth = max(0, depth + brace_delta(line))
             continue
-        method = MEMBER_METHOD_RE.match(line)
+        method = parse_member_method_line(line)
         if method:
-            static = bool(method.group(1))
-            name = method.group(2)
+            static, name, params, ret = method
             kind = "static-method" if static else "method"
             surface, module = stdlib_doc_surface_for_name(doc_surface, doc_module, name)
             out.append(
@@ -352,7 +409,7 @@ def parse_class_body(
                     namespace=class_name,
                     name=name,
                     kind=kind,
-                    signature=normalize_signature(method.group("params"), method.group("ret")),
+                    signature=normalize_signature(params, ret),
                     source=rel(root, path),
                     line=line_for_offset(text, body_offset) + local_lineno - 1,
                     doc_surface=surface,

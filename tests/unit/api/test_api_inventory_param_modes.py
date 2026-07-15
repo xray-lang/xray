@@ -61,6 +61,47 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             signatures[("Box", "touch", "method")],
         )
 
+    def test_pure_stdlib_inventory_keeps_member_call_defaults(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xray-api-inventory-call-defaults.") as tmp:
+            root = Path(tmp)
+            module_dir = root / "stdlib" / "process"
+            module_dir.mkdir(parents=True)
+            (module_dir / "process.xr").write_text(
+                "\n".join(
+                    [
+                        "export { Process }",
+                        "class Process {",
+                        "    static spawn(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null) -> Process? {",
+                        "        return null",
+                        "    }",
+                        "    configure(args: Array<string> = Array<string>(0)) -> bool {",
+                        "        return true",
+                        "    }",
+                        "}",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            items = api_inventory.collect_pure_stdlib(root)
+            signatures = {
+                (item["namespace"], item["name"], item["kind"]): item["signature"]
+                for item in items
+            }
+            keys = [(item["namespace"], item["name"], item["kind"]) for item in items]
+
+        self.assertEqual(len(keys), len(set(keys)))
+        self.assertEqual(3, len(items))
+        self.assertEqual(
+            "(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null): Process?",
+            signatures[("Process", "spawn", "static-method")],
+        )
+        self.assertEqual(
+            "(args: Array<string> = Array<string>(0)): bool",
+            signatures[("Process", "configure", "method")],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
