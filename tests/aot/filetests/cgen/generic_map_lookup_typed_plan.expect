@@ -1,0 +1,9 @@
+regex=generic-body-plan [0-9]+ .*action=clone .*evidence=row\+inst\+types\+origin_body\+specialized_body\+root reason=none
+regex=generic-storage-plan [0-9]+ .*kind=map action=typed_inline .*container_plan=[1-9][0-9]* evidence=row\+inst\+specialized_type\+container_plan reason=none
+regex=key-access-plan [0-9]+ .*container=map op=get .*action=specialized_hash_lookup .*evidence=0x11 reason=none
+contains=function 2 name=lookup$i64_i64
+c_contains=xrt_map_new_typed(0, XR_ELEM_I64, XR_ELEM_I64)
+c_contains=xrt_map_set_i64_i64_typed(
+c_contains=xrt_map_find_i64_typed(
+c_contains=xrt_map_get_i64_value_typed(
+c_not_contains=xrt_method_
