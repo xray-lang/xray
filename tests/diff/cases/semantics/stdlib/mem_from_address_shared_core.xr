@@ -5,62 +5,71 @@
 // bridge); AOT casts between int64 and the native .ptr slot.
 import mem
 
-// Null round-trip: address 0 is the null pointer.
-var z = mem.ptr<byte>(0)
-print(z.isNull())
-print(mem.addr(z))
+fn run() {
+    // Null round-trip: address 0 is the null pointer.
+    var z = mem.ptr<uint8>(0)
+    print(z.isNull())
+    print(mem.addr(z))
+    // Data round-trip: rebuild a pointer from its numeric address and observe
+    // the same bytes through both the original and the rebuilt pointer. pageAlloc
+    // is foreign stable storage; owner-borrow pointers intentionally cannot be
+    // erased into the integer address domain.
+    var p = mem.pageAlloc(4096)
+    unsafe {
+        p[0] = 42
+    }
+    unsafe {
+        p[15] = 99
+    }
+    var addr = mem.addr(p)
+    var q = mem.ptr<uint8>(addr)
+    print(q.isNull())
+    unsafe {
+        print(q[0])
+    }
+    unsafe {
+        print(q[15])
+    }
+    // Manual pointer arithmetic through the address domain: mutPtr(addr + i)
+    // must see byte i of the original buffer.
+    var q15 = mem.ptr<uint8>(addr + 15)
+    unsafe {
+        print(q15[0])
+    }
+    // addr is stable: same pointer, same address.
+    print(mem.addr(q) == addr)
+    // Typed C/MMIO pointers carry their pointee type directly.
+    var q32 = mem.mutPtr<uint32>(addr)
+    unsafe {
+        q32[0] = 16909060 as uint32
+    }
+    var p_ro: Ptr<uint8> = p
+    unsafe {
+        print(int(mem.load<uint32>(p_ro, 0, Endian.LE)))
+    }
+    // The address-domain view is not limited to integer pointees. C APIs often pass
+    // pointer slots and float buffers as raw bytes before rebuilding the typed view.
+    var qptr = mem.ptr<Ptr<uint8>>(addr)
+    var qf32 = mem.ptr<float32>(addr)
+    var qf64 = mem.ptr<float64>(addr)
+    print(mem.addr(qptr) == addr)
+    print(mem.addr(qf32) == addr)
+    print(mem.addr(qf64) == addr)
+    // addr is pointee-type agnostic: C pointer comparisons/differences often
+    // start from typed pointers, not only byte pointers.
+    var typed_null = mem.ptr<uint32>(0)
+    var typed_mut_null = mem.mutPtr<uint64>(0)
+    print(mem.addr(typed_null))
+    print(mem.addr(typed_mut_null))
+    // Page storage provides a stable, page-aligned foreign address.
+    print(addr % 4096)
+    // MMIO access pattern: volatile store/load through an address-constructed
+    // pointer (the real driver-code shape mutPtr exists for).
+    var reg = mem.mutPtr<uint8>(addr + 8)
+    mem.volatileStore(reg, 305419896, 4)
+    print(mem.volatileLoad(reg, 4))
+    print(mem.pageFree(p, 4096))
+    print("ok")
+}
 
-// Data round-trip: rebuild a pointer from its numeric address and observe
-// the same bytes through both the original and the rebuilt pointer.
-var b = mem.alloc(16)
-var p = unsafe { b.borrowPtr() }
-unsafe { p[0] = 42 }
-unsafe { p[15] = 99 }
-var addr = mem.addr(p)
-var q = mem.ptr<byte>(addr)
-print(q.isNull())
-unsafe { print(q[0]) }
-unsafe { print(q[15]) }
-
-// Manual pointer arithmetic through the address domain: mutPtr(addr + i)
-// must see byte i of the original buffer.
-var q15 = mem.ptr<byte>(addr + 15)
-unsafe { print(q15[0]) }
-
-// addr is stable: same pointer, same address.
-print(mem.addr(q) == addr)
-
-// Typed C/MMIO pointers carry their pointee type directly.
-var q32 = mem.mutPtr<uint32>(addr)
-unsafe { q32[0] = 0x01020304 as uint32 }
-var p_ro: Ptr<byte> = p
-unsafe { print(int(mem.load<uint32>(p_ro, 0, Endian.LE))) }
-
-// The address-domain view is not limited to integer pointees. C APIs often pass
-// pointer slots and float buffers as raw bytes before rebuilding the typed view.
-var qptr = mem.ptr<Ptr<byte>>(addr)
-var qf32 = mem.ptr<float32>(addr)
-var qf64 = mem.ptr<float64>(addr)
-print(mem.addr(qptr) == addr)
-print(mem.addr(qf32) == addr)
-print(mem.addr(qf64) == addr)
-
-// addr is pointee-type agnostic: C pointer comparisons/differences often
-// start from typed pointers, not only byte pointers.
-var typed_null = Ptr<uint32>.null()
-var typed_mut_null = MutPtr<uint64>.null()
-print(mem.addr(typed_null))
-print(mem.addr(typed_mut_null))
-
-// Alignment observation: an allocAligned(_, 64) buffer's address is 64-aligned.
-var ab = mem.allocAligned(128, 64)
-var a = unsafe { ab.borrowPtr() }
-print(mem.addr(a) % 64)
-
-// MMIO access pattern: volatile store/load through an address-constructed
-// pointer (the real driver-code shape mutPtr exists for).
-var reg = mem.mutPtr<byte>(mem.addr(a) + 8)
-mem.volatileStore(reg, 305419896, 4)
-print(mem.volatileLoad(reg, 4))
-
-print("ok")
+run()

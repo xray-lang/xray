@@ -3,20 +3,29 @@
 // normal store, while AOT may emit streaming stores on supported targets.
 import mem
 
-var buf = mem.allocZeroed(16)
-var p = unsafe { buf.borrowPtr() }
-mem.nontemporalStore(p, 0x12, 1)
-var p2 = unsafe { p.offset(2) }
-var p4 = unsafe { p.offset(4) }
-var p8 = unsafe { p.offset(8) }
+fn run() {
+    var buf = mem.allocZeroed(16)
+    var p = unsafe {
+        buf.borrowPtr()
+    }
+    mem.nontemporalStore(p, 18, 1)
+    var p2 = unsafe {
+        p.offset(2)
+    }
+    var p4 = unsafe {
+        p.offset(4)
+    }
+    var p8 = unsafe {
+        p.offset(8)
+    }
+    mem.nontemporalStore(p2, 13398, 2)
+    mem.nontemporalStore(p4, 2023406814, 4)
+    mem.nontemporalStore(p8, 72623859790382856, 8)
+    print(mem.volatileLoad(p, 1))
+    print(mem.volatileLoad(p2, 2))
+    print(mem.volatileLoad(p4, 4))
+    print(mem.volatileLoad(p8, 8))
+    print("nontemporal-stored")
+}
 
-mem.nontemporalStore(p2, 0x3456, 2)
-mem.nontemporalStore(p4, 0x789abcde, 4)
-mem.nontemporalStore(p8, 0x102030405060708, 8)
-
-print(mem.volatileLoad(p, 1))
-print(mem.volatileLoad(p2, 2))
-print(mem.volatileLoad(p4, 4))
-print(mem.volatileLoad(p8, 8))
-
-print("nontemporal-stored")
+run()

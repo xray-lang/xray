@@ -3,21 +3,37 @@
 // contents; unsupported platforms may lower them to a fence/no-op.
 import mem
 
-var buf = mem.allocZeroed(96)
-var p = unsafe { buf.borrowPtr() }
-unsafe { p[0] = 11 }
-unsafe { p[63] = 12 }
-unsafe { p[64] = 13 }
+fn run() {
+    var buf = mem.allocZeroed(96)
+    var p = unsafe {
+        buf.borrowPtr()
+    }
+    unsafe {
+        p[0] = 11
+    }
+    unsafe {
+        p[63] = 12
+    }
+    unsafe {
+        p[64] = 13
+    }
+    mem.cacheFlush(p, 96)
+    unsafe {
+        print(p[0])
+    }
+    unsafe {
+        print(p[63])
+    }
+    var mid = unsafe {
+        p.offset(32)
+    }
+    mem.cacheInvalidate(mid, 32)
+    unsafe {
+        print(p[64])
+    }
+    mem.cacheFlush(p, 0)
+    mem.cacheInvalidate(p, -1)
+    print("cache-maintained")
+}
 
-mem.cacheFlush(p, 96)
-unsafe { print(p[0]) }
-unsafe { print(p[63]) }
-
-var mid = unsafe { p.offset(32) }
-mem.cacheInvalidate(mid, 32)
-unsafe { print(p[64]) }
-
-mem.cacheFlush(p, 0)
-mem.cacheInvalidate(p, -1)
-
-print("cache-maintained")
+run()
