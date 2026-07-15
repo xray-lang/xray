@@ -1,6 +1,0 @@
-import mem
-
-@c_export("xray_rawptr_of_temporary_reject")
-fn rawptrOfTemporaryReject() -> int {
-    return mem.addr(Ptr<int>.of(40 + 2))
-}

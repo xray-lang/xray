@@ -1,4 +1,0 @@
-args=--profile freestanding
-status=fail
-contains=Ptr.of classified this expression as parameter (escape cannot be proven)
-not_contains=CRASH

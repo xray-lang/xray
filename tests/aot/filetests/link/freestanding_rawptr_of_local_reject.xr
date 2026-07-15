@@ -1,7 +1,0 @@
-import mem
-
-@c_export("xray_rawptr_of_local_reject")
-fn rawptrOfLocalReject() -> int {
-    const local = 7
-    return mem.addr(Ptr<int>.of(local))
-}

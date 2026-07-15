@@ -1,8 +1,0 @@
-import mem
-
-var LABEL = "boot"
-
-@c_export("xray_rawmut_of_string_var_reject")
-fn rawmutOfStringVarReject() -> int {
-    return mem.addr(MutPtr<string>.of(LABEL))
-}

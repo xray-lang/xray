@@ -1,4 +1,0 @@
-args=--profile freestanding
-status=fail
-contains=MutPtr.of classified this expression as module static (addressable)
-not_contains=CRASH

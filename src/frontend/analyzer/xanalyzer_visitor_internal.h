@@ -138,7 +138,7 @@ static inline bool xa_type_has_fixed_layout_data_object(const XrType *type) {
 
 /* Types whose freestanding top-level const representation is materialized as
  * stable native data. Addressability and declaration validation must share
- * this predicate so Ptr.of cannot reject storage the backend guarantees. */
+ * this predicate so addressability checks agree with backend storage guarantees. */
 static inline bool xa_type_supports_const_static_data_object(const XrType *type) {
     if (!type)
         return false;

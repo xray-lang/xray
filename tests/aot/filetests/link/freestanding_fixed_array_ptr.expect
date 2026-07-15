@@ -1,0 +1,13 @@
+args=--profile freestanding
+contains=address-plan
+contains=owner=module
+contains=identity=2
+contains=origin=module
+contains=escape=stable
+c_contains=static const int64_t _xctarr_freestanding_fixed_array_ptr_
+c_contains=static const uint8_t _xctarr_freestanding_fixed_array_ptr_
+c_contains=(void *)(_xctarr_freestanding_fixed_array_ptr_
+c_not_contains=xrt_mem_addr
+c_not_contains=xrt_shared[
+not_contains=xray_rt_coro
+not_contains=xray_core

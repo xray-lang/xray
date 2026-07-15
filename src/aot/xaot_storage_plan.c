@@ -186,6 +186,36 @@ static bool address_plan_for_value(const XaotBundle *bundle, const XiModule *mod
         return true;
     }
     if (value->op == XI_ARRAY_DATA_PTR && value->nargs > 0 && value->args[0]) {
+        const XiValue *owner = value->args[0];
+        if (owner->type && owner->type->kind == XR_KIND_FIXED_ARRAY && owner->op == XI_GET_SHARED &&
+            owner->aux_int >= 0) {
+            const XiModule *storage_module = module;
+            uint32_t storage_slot = (uint32_t) owner->aux_int;
+            if (owner->aux_int < module->nslots && module->slot_imports) {
+                const XiImportRef *ref = module->slot_imports[owner->aux_int];
+                if (ref && ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 &&
+                    (uint32_t) ref->resolved_mod_index < bundle->nmodules &&
+                    bundle->modules[ref->resolved_mod_index]) {
+                    storage_module = bundle->modules[ref->resolved_mod_index];
+                    storage_slot = (uint32_t) ref->resolved_shared_slot;
+                }
+            }
+            storage = xaot_storage_plan_find(bundle, storage_module, storage_slot);
+            if (storage && storage->owner == XR_STORAGE_MODULE &&
+                storage->mutability == XR_STORAGE_READONLY &&
+                storage->address_identity == XR_ADDRESS_MODULE_STABLE) {
+                out->origin_value = owner;
+                out->provenance.storage_id = storage->decl_id;
+                out->provenance.lifetime_id = storage->decl_id;
+                out->provenance.owner = storage->owner;
+                out->provenance.mutability = storage->mutability;
+                out->provenance.address_identity = storage->address_identity;
+                out->provenance.origin = XR_POINTER_ORIGIN_MODULE;
+                out->provenance.escape = XR_POINTER_ESCAPE_STABLE;
+                out->evidence |= XAOT_ADDRESS_EV_STORAGE_PLAN;
+                return true;
+            }
+        }
         out->origin_value = value->args[0];
         out->provenance.storage_id = value->args[0]->id + 1;
         out->provenance.lifetime_id = value->args[0]->id + 1;

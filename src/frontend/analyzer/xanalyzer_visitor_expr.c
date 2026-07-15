@@ -677,29 +677,16 @@ static XrType *xa_raw_pointer_static_method_type(XaInferContext *ctx, AstNode *n
         return NULL;
     if (name && strcmp(name, "null") == 0)
         return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, ptr_type, false);
-    if (name && strcmp(name, "of") == 0) {
-        XrLocation loc = {
-            .file = ctx->file_path,
-            .line = node ? node->line : (object ? object->line : 0),
-            .column = node ? node->column : (object ? object->column : 0),
-        };
-        if (!xa_freestanding_profile_enabled(ctx->analyzer)) {
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
-                ptr_type->ptr_is_mut
-                    ? "MutPtr.of general lvalue address-taking is not enabled; the current "
-                      "surface only exposes verified freestanding static data"
-                    : "Ptr.of general lvalue address-taking is not enabled; the current "
-                      "surface only exposes verified freestanding static const data",
-                &loc);
-            return xr_type_new_error(ctx->analyzer->isolate);
-        }
-        XrType *pointee = ptr_type->container.element_type;
-        if (!pointee)
-            pointee = xr_type_new_unknown(ctx->analyzer->isolate);
-        XrType *params[1] = {pointee};
-        return xr_type_new_function(ctx->analyzer->isolate, params, 1, ptr_type, false);
-    }
+    XrLocation loc = {
+        .file = ctx->file_path,
+        .line = node ? node->line : (object ? object->line : 0),
+        .column = node ? node->column : (object ? object->column : 0),
+    };
+    char message[128];
+    snprintf(message, sizeof(message), "%s has no static member '%s'",
+             ptr_type->ptr_is_mut ? "MutPtr" : "Ptr", name ? name : "");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                               message, &loc);
     return xr_type_new_unknown(ctx->analyzer->isolate);
 }
 
