@@ -169,6 +169,8 @@ typedef struct CatchAggregateAlias {
     const char *container_name;
     CatchAggregateAliasKind kind;
     int64_t index;
+    uint32_t index_symbol_id;
+    const char *index_symbol_name;
     const char *field_name;
 } CatchAggregateAlias;
 
@@ -240,6 +242,8 @@ static void capture_catch_alias_state(ErrorSetCtx *ctx, CatchAliasState *state);
 static void restore_catch_alias_state(ErrorSetCtx *ctx, const CatchAliasState *state);
 static int current_catch_aggregate_alias_index(ErrorSetCtx *ctx, const CatchAggregateAlias *alias);
 static bool literal_i64_index(AstNode *expr, int64_t *out);
+static bool catch_aggregate_index_key(ErrorSetCtx *ctx, AstNode *expr, int64_t *literal_index,
+                                      uint32_t *symbol_id, const char **symbol_name);
 static bool variable_ref_symbol(ErrorSetCtx *ctx, AstNode *expr, uint32_t *symbol_id,
                                 const char **name);
 
@@ -1422,13 +1426,18 @@ static bool is_current_caught_ref(ErrorSetCtx *ctx, AstNode *expr) {
         uint32_t container_id = 0;
         const char *container_name = NULL;
         int64_t index = -1;
+        uint32_t index_symbol_id = 0;
+        const char *index_symbol_name = NULL;
         if (!variable_ref_symbol(ctx, expr->as.index_get.array, &container_id, &container_name) ||
-            !literal_i64_index(expr->as.index_get.index, &index))
+            !catch_aggregate_index_key(ctx, expr->as.index_get.index, &index, &index_symbol_id,
+                                       &index_symbol_name))
             return false;
         CatchAggregateAlias alias = {.container_id = container_id,
                                      .container_name = container_name,
                                      .kind = CATCH_AGGREGATE_INDEX,
                                      .index = index,
+                                     .index_symbol_id = index_symbol_id,
+                                     .index_symbol_name = index_symbol_name,
                                      .field_name = NULL};
         return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
     }
@@ -1556,8 +1565,15 @@ static bool catch_aggregate_alias_matches(const CatchAggregateAlias *a,
         !catch_symbol_matches(a->container_id, a->container_name, b->container_id,
                               b->container_name))
         return false;
-    if (a->kind == CATCH_AGGREGATE_INDEX)
+    if (a->kind == CATCH_AGGREGATE_INDEX) {
+        bool a_symbolic = a->index_symbol_id != 0 || a->index_symbol_name != NULL;
+        bool b_symbolic = b->index_symbol_id != 0 || b->index_symbol_name != NULL;
+        if (a_symbolic || b_symbolic)
+            return a_symbolic && b_symbolic &&
+                   catch_symbol_matches(a->index_symbol_id, a->index_symbol_name,
+                                        b->index_symbol_id, b->index_symbol_name);
         return a->index == b->index;
+    }
     return names_equal(a->field_name, b->field_name);
 }
 
@@ -1676,13 +1692,17 @@ static void remove_current_catch_aggregate_aliases_for_container(ErrorSetCtx *ct
 
 static void add_current_catch_aggregate_alias(ErrorSetCtx *ctx, uint32_t symbol_id,
                                               const char *name, CatchAggregateAliasKind kind,
-                                              int64_t index, const char *field_name) {
+                                              int64_t index, uint32_t index_symbol_id,
+                                              const char *index_symbol_name,
+                                              const char *field_name) {
     if (!ctx || (symbol_id == 0 && !name) || ctx->current_catch_aggregate_alias_count >= 64)
         return;
     CatchAggregateAlias alias = {.container_id = symbol_id,
                                  .container_name = name,
                                  .kind = kind,
                                  .index = index,
+                                 .index_symbol_id = index_symbol_id,
+                                 .index_symbol_name = index_symbol_name,
                                  .field_name = field_name};
     if (current_catch_aggregate_alias_index(ctx, &alias) >= 0)
         return;
@@ -1709,6 +1729,40 @@ static bool literal_i64_index(AstNode *expr, int64_t *out) {
     if (out)
         *out = expr->as.literal.raw_value.int_val;
     return true;
+}
+
+static bool catch_aggregate_index_key(ErrorSetCtx *ctx, AstNode *expr, int64_t *literal_index,
+                                      uint32_t *symbol_id, const char **symbol_name) {
+    if (literal_index)
+        *literal_index = -1;
+    if (symbol_id)
+        *symbol_id = 0;
+    if (symbol_name)
+        *symbol_name = NULL;
+
+    if (literal_i64_index(expr, literal_index))
+        return true;
+
+    expr = identity_source(expr);
+    if (!ctx || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
+        return false;
+    XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, expr);
+    if (!sym || (sym->kind != XA_SYM_VARIABLE && sym->kind != XA_SYM_PARAMETER))
+        return false;
+
+    bool stable = false;
+    if (sym->kind == XA_SYM_PARAMETER)
+        stable = sym->links.assign_count == 0;
+    else
+        stable = sym->is_const || sym->links.assign_count == 1;
+    if (!stable)
+        return false;
+
+    if (symbol_id)
+        *symbol_id = sym->id;
+    if (symbol_name)
+        *symbol_name = sym->name;
+    return sym->id != 0 || sym->name != NULL;
 }
 
 static bool variable_ref_symbol(ErrorSetCtx *ctx, AstNode *expr, uint32_t *symbol_id,
@@ -1828,7 +1882,7 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
             for (int i = 0; i < initializer->as.array_literal.count; i++) {
                 if (is_current_caught_ref(ctx, initializer->as.array_literal.elements[i]))
                     add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_INDEX,
-                                                      i, NULL);
+                                                      i, 0, NULL, NULL);
             }
             break;
 
@@ -1838,7 +1892,7 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
                 if (field &&
                     is_current_caught_ref(ctx, initializer->as.struct_literal.field_values[i]))
                     add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_FIELD,
-                                                      -1, field);
+                                                      -1, 0, NULL, field);
             }
             break;
 
@@ -1852,7 +1906,7 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
                 const char *field = key->as.literal.raw_value.string_val;
                 if (field && is_current_caught_ref(ctx, initializer->as.object_literal.values[i]))
                     add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_FIELD,
-                                                      -1, field);
+                                                      -1, 0, NULL, field);
             }
             break;
 
@@ -1945,12 +1999,28 @@ static void record_catch_aggregate_index_set(ErrorSetCtx *ctx, IndexSetNode *set
     if (!variable_ref_symbol(ctx, set->array, &container_id, &container_name))
         return;
     int64_t index = -1;
+    uint32_t index_symbol_id = 0;
+    const char *index_symbol_name = NULL;
     bool rhs_is_caught = is_current_caught_ref(ctx, set->value);
-    bool has_static_index = literal_i64_index(set->index, &index);
-    remove_current_catch_aggregate_aliases_for_container(ctx, container_id, container_name);
-    if (rhs_is_caught && has_static_index)
+    bool has_precise_index =
+        catch_aggregate_index_key(ctx, set->index, &index, &index_symbol_id, &index_symbol_name);
+    if (!has_precise_index) {
+        remove_current_catch_aggregate_aliases_for_container(ctx, container_id, container_name);
+        return;
+    }
+    CatchAggregateAlias alias = {.container_id = container_id,
+                                 .container_name = container_name,
+                                 .kind = CATCH_AGGREGATE_INDEX,
+                                 .index = index,
+                                 .index_symbol_id = index_symbol_id,
+                                 .index_symbol_name = index_symbol_name,
+                                 .field_name = NULL};
+    int alias_index = current_catch_aggregate_alias_index(ctx, &alias);
+    if (alias_index >= 0)
+        remove_current_catch_aggregate_alias(ctx, alias_index);
+    if (rhs_is_caught)
         add_current_catch_aggregate_alias(ctx, container_id, container_name, CATCH_AGGREGATE_INDEX,
-                                          index, NULL);
+                                          index, index_symbol_id, index_symbol_name, NULL);
 }
 
 static void record_catch_aggregate_member_set(ErrorSetCtx *ctx, MemberSetNode *set) {
@@ -1961,10 +2031,17 @@ static void record_catch_aggregate_member_set(ErrorSetCtx *ctx, MemberSetNode *s
     if (!variable_ref_symbol(ctx, set->object, &container_id, &container_name))
         return;
     bool rhs_is_caught = is_current_caught_ref(ctx, set->value);
-    remove_current_catch_aggregate_aliases_for_container(ctx, container_id, container_name);
+    CatchAggregateAlias alias = {.container_id = container_id,
+                                 .container_name = container_name,
+                                 .kind = CATCH_AGGREGATE_FIELD,
+                                 .index = -1,
+                                 .field_name = set->member};
+    int alias_index = current_catch_aggregate_alias_index(ctx, &alias);
+    if (alias_index >= 0)
+        remove_current_catch_aggregate_alias(ctx, alias_index);
     if (rhs_is_caught && set->member)
         add_current_catch_aggregate_alias(ctx, container_id, container_name, CATCH_AGGREGATE_FIELD,
-                                          -1, set->member);
+                                          -1, 0, NULL, set->member);
 }
 
 /* Try to find the case index of an enum member.
