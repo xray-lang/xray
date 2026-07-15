@@ -272,6 +272,25 @@ static FunctionValueTarget resolve_call_target_depth(ErrorSetCtx *ctx, AstNode *
 static bool function_value_target_add(FunctionValueTarget *target, XaSymbol *sym,
                                       AstNode *function_expr);
 
+static bool function_has_error_diagnostic(ErrorSetCtx *ctx, AstNode *func_node,
+                                          XaSymbol *func_sym) {
+    if (!ctx || !ctx->analyzer || !func_node || !func_sym)
+        return false;
+    const char *function_file = func_sym->links.file_path;
+    int first_line = func_node->line;
+    int last_line = func_node->end_line > 0 ? func_node->end_line : first_line;
+    for (XaDiagnostic *diag = ctx->analyzer->diagnostics; diag; diag = diag->next) {
+        if (diag->severity != XR_DIAG_SEV_ERROR)
+            continue;
+        const char *diagnostic_file = diag->location.file;
+        if (function_file && diagnostic_file && strcmp(function_file, diagnostic_file) != 0)
+            continue;
+        if ((int) diag->location.line >= first_line && (int) diag->location.line <= last_line)
+            return true;
+    }
+    return false;
+}
+
 /* ========== Helpers ========== */
 
 static XaSymbol *resolve_func_symbol(XaAnalyzer *analyzer, AstNode *node) {
@@ -2845,6 +2864,8 @@ static void infer_function_error_set(ErrorSetCtx *ctx, AstNode *func_node, XaSym
     ctx->current_return_target_seen = false;
     ctx->current_return_target_unknown = false;
     es_walk_block(ctx, body);
+    if (function_has_error_diagnostic(ctx, func_node, func_sym))
+        xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_INVALID_PROGRAM);
     XaEffectId previous_id = func_sym->links.effect_id;
     func_sym->links.effect_id = xa_effect_db_intern(ctx->analyzer->effect_db, &summary);
     if (func_sym->links.effect_id != previous_id)

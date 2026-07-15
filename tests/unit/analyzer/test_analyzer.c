@@ -2419,6 +2419,42 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     setup_pool();
 }
 
+TEST(analyzer_error_effect_marks_invalid_program_partial_facts) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum PartialErr { Boom, Other }\n"
+                         "fn invalidPartial() { throw PartialErr.Boom; missingPartial() }\n"
+                         "fn invalidEmpty() { missingEmpty() }\n"
+                         "fn callsInvalid() { invalidEmpty() }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_invalid_partial.xr", program);
+
+    const XaEffectSummary *partial = analyzer_function_effect_summary(a, "invalidPartial");
+    const XaEffectSummary *empty = analyzer_function_effect_summary(a, "invalidEmpty");
+    const XaEffectSummary *caller = analyzer_function_effect_summary(a, "callsInvalid");
+    ASSERT(partial != NULL);
+    ASSERT(empty != NULL);
+    ASSERT(caller != NULL);
+    ASSERT(partial->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((partial->unknown_reasons & XA_UNKNOWN_INVALID_PROGRAM) != 0);
+    const XaErrorTypeSet *partial_set = effect_summary_enum_set_named(a, partial, "PartialErr");
+    ASSERT(partial_set != NULL);
+    ASSERT(!partial_set->all_variants);
+    ASSERT(xa_bitset_test(&partial_set->variants, 0));
+    ASSERT(!xa_bitset_test(&partial_set->variants, 1));
+    ASSERT(empty->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((empty->unknown_reasons & XA_UNKNOWN_INVALID_PROGRAM) != 0);
+    ASSERT(!xa_effect_summary_is_nothrow(empty));
+    ASSERT(caller->completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((caller->unknown_reasons & XA_UNKNOWN_INVALID_PROGRAM) != 0);
+    ASSERT(!xa_effect_summary_is_nothrow(caller));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_empty_array_uses_unsolved_infer_var) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -3073,6 +3109,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_direct_method_calls);
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
+    RUN_TEST(analyzer_error_effect_marks_invalid_program_partial_facts);
 
     printf("\nFlow analysis tests:\n");
     RUN_TEST(flow_builder_create);
