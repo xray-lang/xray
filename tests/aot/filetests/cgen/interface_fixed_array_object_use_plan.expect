@@ -1,0 +1,6 @@
+contains=xaot-plan v0
+regex=interface-use [0-9]+ interface=[1-9][0-9]* implementor=[1-9][0-9]* use_site=0 reason=implements flags=none
+regex=interface-use [0-9]+ interface=[1-9][0-9]* implementor=[1-9][0-9]* use_site=0 reason=value\+array\+param flags=iface_object\+itable object_use=[1-9][0-9]* owner=[1-9][0-9]* span=13 ordinal=1 type=[1-9][0-9]*
+regex=interface-use [0-9]+ interface=[1-9][0-9]* implementor=[1-9][0-9]* use_site=0 reason=value\+return flags=iface_object\+itable object_use=[1-9][0-9]* owner=[1-9][0-9]* span=14 ordinal=2 type=[1-9][0-9]*
+regex=interface-abi [0-9]+ interface=[1-9][0-9]* callsites=0 implementors=2 slots=1 flags=iface_object\+itable\+boxed_receiver data=boxed_value type=native_type_id itable=dispatch_slot tag=none evidence=methods\+implementors\+object_use reason=none
+c_not_contains=xrt_itable_method
