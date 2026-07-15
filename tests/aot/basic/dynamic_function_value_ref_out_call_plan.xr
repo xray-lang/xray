@@ -1,0 +1,37 @@
+fn bumpOne(value: ref int) -> int {
+    value = value + 1
+    return value
+}
+
+fn bumpTwo(value: ref int) -> int {
+    value = value + 2
+    return value
+}
+
+fn fillTen(value: out int) -> int {
+    value = 10
+    return value
+}
+
+fn fillTwenty(value: out int) -> int {
+    value = 20
+    return value
+}
+
+var bump = bumpOne
+var value = 1
+print(bump(ref value))
+print(value)
+
+bump = bumpTwo
+print(bump(ref value))
+print(value)
+
+var fill = fillTen
+var slot = 0
+print(fill(out slot))
+print(slot)
+
+fill = fillTwenty
+print(fill(out slot))
+print(slot)
