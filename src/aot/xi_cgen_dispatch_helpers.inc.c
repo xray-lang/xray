@@ -10174,7 +10174,12 @@ static void xicgen_array_data_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     }
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_RAWPTR, cg_value_plan_storage_rep(ctx, v));
-    if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
+    CgFixedArrayLaneInfo fixed;
+    if (cg_fixed_array_lane_info_from_value(v->args[0], &fixed)) {
+        fprintf(out, "(void *)(");
+        emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &fixed);
+        fprintf(out, ")");
+    } else if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
         fprintf(out, "(void *)((");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, ").data)");

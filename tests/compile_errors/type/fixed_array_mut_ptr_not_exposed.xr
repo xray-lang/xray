@@ -1,0 +1,3 @@
+fn raw(values: [int; 2]) -> MutPtr<int> {
+    return unsafe { values.mutPtr() }
+}

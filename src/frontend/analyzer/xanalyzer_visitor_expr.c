@@ -564,18 +564,21 @@ static bool xa_contextual_view_method_without_target(XaInferContext *ctx, XrType
 
 static XrType *xa_array_data_ptr_method_type(XaInferContext *ctx, XrType *receiver,
                                              const char *name) {
-    if (!receiver || !name || (!XR_TYPE_IS_ARRAY(receiver) && !XR_TYPE_IS_SPAN(receiver)))
+    if (!receiver || !name ||
+        (!XR_TYPE_IS_ARRAY(receiver) && !XR_TYPE_IS_SPAN(receiver) &&
+         receiver->kind != XR_KIND_FIXED_ARRAY))
         return NULL;
     bool mut = false;
     if (strcmp(name, "ptr") == 0) {
         mut = false;
-    } else if (strcmp(name, "mutPtr") == 0) {
+    } else if (strcmp(name, "mutPtr") == 0 && receiver->kind != XR_KIND_FIXED_ARRAY) {
         mut = true;
     } else {
         return NULL;
     }
     XrVMRuntime *X = ctx->analyzer->isolate;
-    XrType *elem = receiver->container.element_type;
+    XrType *elem = receiver->kind == XR_KIND_FIXED_ARRAY ? receiver->fixed_array.element_type
+                                                         : receiver->container.element_type;
     if (!elem)
         elem = xr_type_new_unknown(X);
     XrType *ret = xr_type_new_pointer(X, elem, mut);
@@ -1894,12 +1897,16 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (prop_sym == SYMBOL_CAPACITY && XR_TYPE_IS_ARRAY(obj_type)) {
         return xr_type_new_int(NULL);
     }
-    if (XR_TYPE_IS_SPAN(obj_type) && ma->name && ctx->unsafe_depth == 0 &&
+    if ((XR_TYPE_IS_SPAN(obj_type) || obj_type->kind == XR_KIND_FIXED_ARRAY) && ma->name &&
+        ctx->unsafe_depth == 0 &&
         (strcmp(ma->name, "ptr") == 0 || strcmp(ma->name, "mutPtr") == 0)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
         snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",
-                 xa_type_is_u8_slice_type(obj_type) ? "Slice<byte>" : "Slice", ma->name);
+                 obj_type->kind == XR_KIND_FIXED_ARRAY
+                     ? "Fixed array"
+                     : (xa_type_is_u8_slice_type(obj_type) ? "Slice<byte>" : "Slice"),
+                 ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
     }
