@@ -317,7 +317,7 @@ static void coro_cancel_owned_timer(XrCoroutine *coro) {
     atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
 }
 
-XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
+static XrCoroBlockResult coro_await_task_resume_impl(XrCoroutine *coro, XrTask *task) {
     if (!coro)
         return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
 
@@ -366,6 +366,13 @@ XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
     }
 
     return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
+}
+
+XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
+    XrCoroBlockResult result = coro_await_task_resume_impl(coro, task);
+    if (result.kind == XR_CORO_BLOCK_READY)
+        result.value = xr_coro_await_result_value(coro ? coro->core : NULL, coro, task, false);
+    return result;
 }
 
 XrValue xr_coro_await_result_value(XrRuntimeCore *core, XrCoroutine *dst_coro, XrTask *task,
@@ -620,7 +627,7 @@ static bool all_task_values_done(const XrValue *task_values, int task_count) {
 
 XrCoroBlockResult xr_coro_await_task_resume_slot(XrCoroutine *coro, XrTask *task,
                                                  XrSlotRef result_slot, bool discard_result) {
-    XrCoroBlockResult result = xr_coro_await_task_resume(coro, task);
+    XrCoroBlockResult result = coro_await_task_resume_impl(coro, task);
     if (result.kind == XR_CORO_BLOCK_READY) {
         XrValue value = xr_null();
         if (!await_store_result(coro, task, result_slot, discard_result, &value))
@@ -664,7 +671,10 @@ static XrCoroBlockResult coro_await_task_impl(XrCoroutine *coro, XrTask *task, i
 }
 
 XrCoroBlockResult xr_coro_await_task(XrCoroutine *coro, XrTask *task, int64_t timeout_ms) {
-    return coro_await_task_impl(coro, task, timeout_ms, true);
+    XrCoroBlockResult result = coro_await_task_impl(coro, task, timeout_ms, true);
+    if (result.kind == XR_CORO_BLOCK_READY)
+        result.value = xr_coro_await_result_value(coro ? coro->core : NULL, coro, task, false);
+    return result;
 }
 
 XrCoroBlockResult xr_coro_await_task_slot(XrCoroutine *coro, XrTask *task, XrSlotRef result_slot,

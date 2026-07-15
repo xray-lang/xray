@@ -91,6 +91,11 @@ typedef enum {
     XR_LINK_MONITORED = 2,  // monitored go fn() — one-way completion notification
 } XrLinkMode;
 
+typedef enum {
+    XR_TASK_PAYLOAD_NONE = 0,
+    XR_TASK_PAYLOAD_OWNED = 1,
+} XrTaskPayloadOwner;
+
 /* ========== Scope Mode (scope prefix modifier) ========== */
 
 typedef enum {
@@ -144,6 +149,9 @@ typedef struct XrTask {
     XrValue result;  // 16B
     XrValue error;   // 16B
 
+    // Runtime core that owns Task-independent payload storage/destructors.
+    struct XrRuntimeCore *core;  //  8B
+
     // Back-pointer to executor (NULL after completion + recycle).
     //
     // Doubles as the executor-ownership claim point and the destroy latch:
@@ -162,8 +170,9 @@ typedef struct XrTask {
      * task; one-shot destroy requires it (acquire) so the task is never
      * freed under the completer's feet. */
     _Atomic uint8_t completer_done;  //  1B
+    uint8_t result_owner;            //  1B: XrTaskPayloadOwner
+    uint8_t error_owner;             //  1B: XrTaskPayloadOwner
     uint16_t child_count;            //  2B
-    uint16_t _pad2;                  //  2B
 
     // Parent-Child hierarchy (only used with linked go / scope)
     _Atomic bool child_lock;      //  1B: spinlock for child list
@@ -204,7 +213,7 @@ typedef struct XrTask {
     struct XrTask *runtime_next;
     struct XrTask **runtime_prev_link;
 } XrTask;
-// ~144B total
+// ~168B total
 
 /* Heuristic read of the executor pointer (diagnostics, cancel targeting).
  * The executor may be claimed/recycled concurrently; never recycle or
@@ -219,6 +228,11 @@ static inline struct XrCoroutine *xr_task_executor_peek(const XrTask *task) {
  * release latch store; release publishes the claimer's prior writes. */
 static inline struct XrCoroutine *xr_task_claim_executor(XrTask *task) {
     return atomic_exchange_explicit(&task->coro, (struct XrCoroutine *) NULL, memory_order_acq_rel);
+}
+
+static inline bool xr_task_value_is_owned_payload(XrValue value) {
+    return XR_IS_PTR(value) && XR_VALUE_GCPTR(value) && XR_OBJ_IS_OWNED(XR_VALUE_GCPTR(value)) &&
+           !XR_OBJ_GET_FLAG(XR_VALUE_GCPTR(value), XR_OBJ_TRANSIT);
 }
 
 /* ========== Task Lifecycle API ========== */

@@ -287,7 +287,8 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
              * consuming the task on another worker. */
             bool reclaim_executor = false;
             if (done_task && !was_main && (done_task->flags & XR_TASK_FLG_RUNTIME_OWNED) &&
-                !xr_value_needs_copy(coro->result)) {
+                (!xr_value_needs_copy(coro->result) ||
+                 xr_task_value_is_owned_payload(coro->result))) {
                 reclaim_executor = true;
                 coro->task = NULL;
                 coro->gc_flags |= XR_CORO_GC_RECYCLABLE;

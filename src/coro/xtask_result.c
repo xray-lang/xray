@@ -29,10 +29,14 @@ XrValue xr_task_consume_result_copy(struct XrRuntimeCore *core, XrTask *task,
      * a torn cache write. */
     task_result_lock_acquire(&task->await_lock);
     XrValue result = task->result;
-    if (xr_value_needs_copy(result)) {
+    if (task->result_owner == XR_TASK_PAYLOAD_OWNED && xr_task_value_is_owned_payload(result)) {
+        task->result = xr_null();
+        task->result_owner = XR_TASK_PAYLOAD_NONE;
+    } else if (xr_value_needs_copy(result)) {
         XrValue copy = xr_deep_copy_to_coro_core(core, result, dst_coro);
         task->result = copy;
         result = copy;
+        task->result_owner = XR_TASK_PAYLOAD_NONE;
     }
     task_result_lock_release(&task->await_lock);
     return result;

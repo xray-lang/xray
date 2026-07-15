@@ -1117,6 +1117,48 @@ TEST(coro_channel_move_owned_payload_preserves_root) {
     close_fixture_cleanup(&f);
 }
 
+TEST(coro_task_result_materializes_owned_payload_and_moves_to_awaiter) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrArray payload;
+    ASSERT_TRUE(init_task_array(&payload, 2));
+    xr_array_push(&payload, xr_int(61));
+    xr_array_push(&payload, xr_int(62));
+
+    XrTask task;
+    init_stack_task(&task, XR_TASK_ACTIVE, xr_null(), xr_null());
+    task.core = &f.core;
+
+    xr_task_complete(&task, xr_value_from_array(&payload));
+
+    ASSERT_EQ_INT(atomic_load(&task.state), XR_TASK_COMPLETED);
+    ASSERT_TRUE(XR_IS_ARRAY(task.result));
+    XrObjHeader *result_obj = XR_VALUE_GCPTR(task.result);
+    ASSERT_TRUE(XR_OBJ_IS_OWNED(result_obj));
+    ASSERT_FALSE(XR_OBJ_GET_FLAG(result_obj, XR_OBJ_TRANSIT));
+    ASSERT_EQ_INT(task.result_owner, XR_TASK_PAYLOAD_OWNED);
+
+    XrCoroutine waiter;
+    memset(&waiter, 0, sizeof(waiter));
+    waiter.id = 409;
+    attach_test_coro_context(&waiter, &f.isolate_storage);
+
+    XrValue delivered = xr_coro_await_result_value(&f.core, &waiter, &task, false);
+    ASSERT_EQ_PTR(XR_VALUE_GCPTR(delivered), result_obj);
+    ASSERT_TRUE(XR_IS_NULL(task.result));
+    ASSERT_EQ_INT(task.result_owner, XR_TASK_PAYLOAD_NONE);
+
+    XrArray *arr = XR_TO_ARRAY(delivered);
+    ASSERT_EQ_INT(xr_array_size(arr), 2);
+    ASSERT_EQ_INT((int) XR_TO_INT(xr_array_get(arr, 0)), 61);
+    ASSERT_EQ_INT((int) XR_TO_INT(xr_array_get(arr, 1)), 62);
+
+    xr_chan_abandon_send_core(&f.core, delivered);
+    destroy_task_array(&payload);
+    close_fixture_cleanup(&f);
+}
+
 // Close wakes stay on the replay protocol: no waker-side delivery, the
 // re-executed recv derives (null, false) from CHANNEL_CLOSED status.
 TEST(coro_channel_recv_close_wake_stays_on_replay_protocol) {
@@ -2160,6 +2202,7 @@ RUN_TEST(coro_channel_recv_delivered_wake_writes_value_and_ok_slots);
 RUN_TEST(coro_channel_recv_delivery_gated_for_deep_copy_values);
 RUN_TEST(coro_channel_copy_payload_materializes_owned_message);
 RUN_TEST(coro_channel_move_owned_payload_preserves_root);
+RUN_TEST(coro_task_result_materializes_owned_payload_and_moves_to_awaiter);
 RUN_TEST(coro_channel_recv_close_wake_stays_on_replay_protocol);
 RUN_TEST(channel_wait_token_tracks_block_wake_and_resume);
 RUN_TEST(channel_timed_wait_cancels_timer_on_channel_wake);
