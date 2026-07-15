@@ -2977,6 +2977,36 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     setup_pool();
 }
 
+TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum SetErr { Boom, Other }\n"
+                         "fn failSet() { throw SetErr.Boom }\n"
+                         "fn setSingletonIteratorRethrows() {\n"
+                         "  try { failSet() } catch (e: SetErr) {\n"
+                         "    const box = #[e]\n"
+                         "    for (item in box) { throw item }\n"
+                         "  }\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_set_iterator_catch_alias.xr", program);
+
+    const XaEffectSummary *singleton =
+        analyzer_function_effect_summary(a, "setSingletonIteratorRethrows");
+    ASSERT(singleton != NULL);
+
+    const XaErrorTypeSet *singleton_set = effect_summary_enum_set_named(a, singleton, "SetErr");
+    ASSERT(singleton_set != NULL);
+    ASSERT(!singleton_set->all_variants);
+    ASSERT(xa_bitset_test(&singleton_set->variants, 0));
+    ASSERT(!xa_bitset_test(&singleton_set->variants, 1));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_converges_recursive_components) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -3772,6 +3802,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
     RUN_TEST(analyzer_error_effect_marks_invalid_program_partial_facts);
     RUN_TEST(analyzer_error_effect_tracks_map_catch_aliases);
+    RUN_TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases);
     RUN_TEST(analyzer_error_effect_converges_recursive_components);
 
     printf("\nFlow analysis tests:\n");

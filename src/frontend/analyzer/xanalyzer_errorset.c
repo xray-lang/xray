@@ -163,6 +163,7 @@ typedef struct FunctionValueAliasState {
 typedef enum CatchAggregateAliasKind {
     CATCH_AGGREGATE_INDEX,
     CATCH_AGGREGATE_FIELD,
+    CATCH_AGGREGATE_ELEMENT,
 } CatchAggregateAliasKind;
 
 typedef struct CatchAggregateAlias {
@@ -1738,6 +1739,8 @@ static bool catch_aggregate_alias_matches(const CatchAggregateAlias *a,
         !catch_symbol_matches(a->container_id, a->container_name, b->container_id,
                               b->container_name))
         return false;
+    if (a->kind == CATCH_AGGREGATE_ELEMENT)
+        return true;
     if (a->kind == CATCH_AGGREGATE_INDEX) {
         bool a_string = a->index_string != NULL;
         bool b_string = b->index_string != NULL;
@@ -2113,9 +2116,37 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
             }
             break;
 
+        case AST_SET_LITERAL:
+            if (initializer->as.set_literal.count == 1 &&
+                is_current_caught_ref(ctx, initializer->as.set_literal.elements[0]))
+                add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_ELEMENT, -1,
+                                                  0, NULL, NULL, NULL);
+            break;
+
         default:
             break;
     }
+}
+
+static bool current_catch_aggregate_element_for_collection(ErrorSetCtx *ctx, AstNode *collection) {
+    uint32_t container_id = 0;
+    const char *container_name = NULL;
+    if (!variable_ref_symbol(ctx, collection, &container_id, &container_name))
+        return false;
+    CatchAggregateAlias alias = {.container_id = container_id,
+                                 .container_name = container_name,
+                                 .kind = CATCH_AGGREGATE_ELEMENT,
+                                 .index = -1};
+    return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
+}
+
+static void maybe_add_for_in_catch_alias(ErrorSetCtx *ctx, ForInStmtNode *fi) {
+    if (!ctx || !fi || !ctx->current_caught || fi->is_keyvalue || fi->item_symbol_id == 0 ||
+        !fi->item_name)
+        return;
+    if (!current_catch_aggregate_element_for_collection(ctx, fi->collection))
+        return;
+    add_current_catch_alias(ctx, fi->item_symbol_id, fi->item_name);
 }
 
 static bool catch_aggregate_decl_allows_tracking(ErrorSetCtx *ctx, AstNode *node) {
@@ -3151,6 +3182,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 ctx->function_value_control_depth++;
                 if (merge_for_in_catch_aliases)
                     restore_catch_alias_state(ctx, &for_in_catch_base_state);
+                maybe_add_for_in_catch_alias(ctx, &node->as.for_in_stmt);
                 es_walk_block(ctx, node->as.for_in_stmt.body);
                 if (merge_for_in_catch_aliases)
                     capture_catch_alias_state(ctx, &for_in_catch_iteration_state);
@@ -3163,6 +3195,7 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                 restore_function_value_alias_state(ctx, &base_state);
                 if (merge_for_in_catch_aliases)
                     restore_catch_alias_state(ctx, &for_in_catch_base_state);
+                maybe_add_for_in_catch_alias(ctx, &node->as.for_in_stmt);
                 es_walk_block(ctx, node->as.for_in_stmt.body);
                 if (merge_for_in_catch_aliases)
                     capture_catch_alias_state(ctx, &for_in_catch_iteration_state);
