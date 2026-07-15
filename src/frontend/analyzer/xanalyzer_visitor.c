@@ -309,6 +309,22 @@ XR_FUNC void xa_report_view_expr_requires_target(XaInferContext *ctx, AstNode *n
                                &loc);
 }
 
+static XrType *xa_report_invalid_slice_source(XaInferContext *ctx, AstNode *node, XrType *src) {
+    if (!ctx || !ctx->analyzer || !node)
+        return xr_type_new_error(NULL);
+    if (src && XR_TYPE_IS_ERROR(src))
+        return xr_type_new_error(ctx->analyzer->isolate);
+    if (!src || src->kind == XR_KIND_UNKNOWN)
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[192];
+    snprintf(msg, sizeof(msg), "type '%s' does not support slice syntax", xr_type_to_string(src));
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+    return xr_type_new_error(ctx->analyzer->isolate);
+}
+
 static bool xa_span_target_matches_source(XrType *target, XrType *src) {
     if (!target || !src || !XR_TYPE_IS_SPAN(target))
         return false;
@@ -4862,9 +4878,9 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                     "string does not support integer indexing or slice syntax; use runes(), "
                     "bytes(), or slice(start, end)",
                     &loc);
-                result = xr_type_new_unknown(NULL);
+                result = xr_type_new_error(ctx->analyzer->isolate);
             } else {
-                result = xr_type_new_unknown(NULL);
+                result = xa_report_invalid_slice_source(ctx, node, src);
             }
             break;
         }

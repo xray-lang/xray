@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -124,19 +126,54 @@ def rel(root: Path, path: Path) -> Path:
         return path.resolve().relative_to(root)
 
 
+def is_scanned_text_path(path: Path) -> bool:
+    if any(part in SKIP_DIR_NAMES for part in path.parts):
+        return False
+    root = path.parts[0] if path.parts else ""
+    if root not in SCAN_DIRS and path.name not in EXTRA_FILES:
+        return False
+    return any(str(path).endswith(suffix) for suffix in TEXT_SUFFIXES)
+
+
+def iter_git_text_files(root: Path):
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z", "--cached"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+    files: list[Path] = []
+    for raw in proc.stdout.split(b"\0"):
+        if not raw:
+            continue
+        rel_path = Path(raw.decode("utf-8", errors="surrogateescape"))
+        if is_scanned_text_path(rel_path):
+            files.append(root / rel_path)
+    return sorted(files)
+
+
 def iter_text_files(root: Path):
+    git_files = iter_git_text_files(root)
+    if git_files is not None:
+        yield from git_files
+        return
+
     seen: set[Path] = set()
     for dirname in SCAN_DIRS:
         base = root / dirname
         if not base.exists():
             continue
-        for path in sorted(base.rglob("*")):
-            rel_path = rel(root, path)
-            if any(part in SKIP_DIR_NAMES for part in rel_path.parts):
-                continue
-            if path.is_file() and any(str(path).endswith(suffix) for suffix in TEXT_SUFFIXES):
-                seen.add(path)
-                yield path
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIR_NAMES)
+            for filename in sorted(filenames):
+                path = Path(dirpath) / filename
+                if any(str(path).endswith(suffix) for suffix in TEXT_SUFFIXES):
+                    seen.add(path)
+                    yield path
     for name in EXTRA_FILES:
         path = root / name
         if path.exists() and path not in seen:
@@ -166,41 +203,76 @@ def classify_line(rel_path: str, line: str) -> list[str]:
     if not line.strip():
         return categories
 
-    if is_source_unknown_surface_path(rel_path) and SOURCE_UNKNOWN_TYPE_RE.search(line):
+    has_unknown = "unknown" in line or "UNKNOWN" in line
+    has_error = "error" in line or "ERROR" in line
+    has_erasure_slot = "type_any" in line or "XR_SLOT_ANY" in line or "XR_ELEM_ANY" in line
+    has_task_result = "Task" in line or "Failed(unknown)" in line
+    has_stdlib_unknown_api = has_task_result or "unknown APIs" in line or "Json/unknown" in line
+
+    if (
+        has_unknown
+        and is_source_unknown_surface_path(rel_path)
+        and SOURCE_UNKNOWN_TYPE_RE.search(line)
+    ):
         categories.append("SOURCE_UNKNOWN_TYPE_SURFACE")
-    if is_unknown_identifier_guard_path(rel_path) and UNKNOWN_IDENTIFIER_GUARD_RE.search(line):
+    if (
+        has_unknown
+        and is_unknown_identifier_guard_path(rel_path)
+        and UNKNOWN_IDENTIFIER_GUARD_RE.search(line)
+    ):
         categories.append("UNKNOWN_IDENTIFIER_ALLOWED_GUARD")
-    if REMOVED_UNKNOWN_DIAGNOSTIC_RE.search(line):
+    if has_unknown and REMOVED_UNKNOWN_DIAGNOSTIC_RE.search(line):
         categories.append("REMOVED_SOURCE_UNKNOWN_DIAGNOSTIC")
-    if ERROR_TYPE_RECOVERY_RE.search(line):
+    if has_error and ERROR_TYPE_RECOVERY_RE.search(line):
         categories.append("ERROR_TYPE_RECOVERY")
-    if RUNTIME_UNKNOWN_RE.search(line):
+    if has_unknown and RUNTIME_UNKNOWN_RE.search(line):
         categories.append("RUNTIME_UNKNOWN_TYPE_SINGLETON_OR_FACTORY")
-    if XR_TYPE_IS_UNKNOWN_RE.search(line):
+    if "XR_TYPE_IS_UNKNOWN" in line and XR_TYPE_IS_UNKNOWN_RE.search(line):
         categories.append("XR_TYPE_IS_UNKNOWN_CONSUMER")
     if (
-        rel_path.startswith("src/runtime/value/xtype")
-        or rel_path.startswith("src/frontend/analyzer/")
-    ) and ASSIGNABILITY_GENERIC_RE.search(line):
+        has_unknown
+        and (
+            rel_path.startswith("src/runtime/value/xtype")
+            or rel_path.startswith("src/frontend/analyzer/")
+        )
+        and ASSIGNABILITY_GENERIC_RE.search(line)
+    ):
         categories.append("ASSIGNABILITY_OR_GENERIC_UNKNOWN_COMPAT")
-    if ERASURE_FALLBACK_RE.search(line):
+    if has_erasure_slot and ERASURE_FALLBACK_RE.search(line):
         categories.append("TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK")
-    if rel_path.startswith("src/ir/") and IR_UNKNOWN_RE.search(line):
+    if (
+        rel_path.startswith("src/ir/")
+        and (has_unknown or has_erasure_slot)
+        and IR_UNKNOWN_RE.search(line)
+    ):
         categories.append("IR_UNKNOWN_ERASURE_CONSUMER")
-    if rel_path.startswith("src/aot/") and AOT_UNKNOWN_RE.search(line):
+    if (
+        rel_path.startswith("src/aot/")
+        and (has_unknown or has_erasure_slot)
+        and AOT_UNKNOWN_RE.search(line)
+    ):
         categories.append("AOT_UNKNOWN_ERASURE_CONSUMER")
     if (
-        rel_path.startswith("src/app/lsp/")
-        or rel_path.startswith("src/frontend/format/")
-        or rel_path.startswith("src/runtime/value/xtype_format")
-    ) and FORMATTER_LSP_RE.search(line):
+        has_unknown
+        and (
+            rel_path.startswith("src/app/lsp/")
+            or rel_path.startswith("src/frontend/format/")
+            or rel_path.startswith("src/runtime/value/xtype_format")
+        )
+        and FORMATTER_LSP_RE.search(line)
+    ):
         categories.append("FORMATTER_LSP_UNKNOWN_SURFACE")
-    if TASK_ERASURE_RE.search(line):
+    if has_task_result and TASK_ERASURE_RE.search(line):
         categories.append("TASK_ERASED_RESULT_RESIDUE")
-    if rel_path.startswith("stdlib/") and STDLIB_UNKNOWN_API_RE.search(line):
+    if (
+        rel_path.startswith("stdlib/")
+        and has_stdlib_unknown_api
+        and STDLIB_UNKNOWN_API_RE.search(line)
+    ):
         categories.append("STDLIB_DYNAMIC_UNKNOWN_API")
     if is_spec_or_doc(rel_path) and (
-        SOURCE_UNKNOWN_TYPE_RE.search(line) or TASK_ERASURE_RE.search(line)
+        (has_unknown and SOURCE_UNKNOWN_TYPE_RE.search(line))
+        or (has_task_result and TASK_ERASURE_RE.search(line))
     ):
         categories.append("PUBLIC_SPEC_UNKNOWN_RESIDUE")
     return categories

@@ -1,0 +1,2 @@
+var bad = 1[:]
+print(bad)
