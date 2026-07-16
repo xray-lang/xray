@@ -1,1 +1,2 @@
-yielded value of type 'Slice<byte>' is not assignable to generator element type 'int'
+cannot declare function 'chunks' returning Slice view
+cannot yield Slice view from generator

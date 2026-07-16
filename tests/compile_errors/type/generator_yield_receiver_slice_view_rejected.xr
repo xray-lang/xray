@@ -1,11 +1,11 @@
-fn chunks(text: string) -> Iterator<int> {
+fn chunks(text: string) -> Iterator<Slice<byte>> {
     var view: Slice<byte> = text.bytes()
     yield view
 }
 
 fn main() {
     for (chunk in chunks("hello")) {
-        print(chunk)
+        print(len(chunk))
     }
 }
 
