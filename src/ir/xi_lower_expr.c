@@ -8762,11 +8762,9 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         case AST_MOVE_EXPR:
             return xi_lower_move_expr(l, node);
 
-        /* Scope block in expression context: supervisor returns Array<TaskOutcome>. */
+        /* Scope blocks are statement-only; keep a defensive null for old ASTs. */
         case AST_SCOPE_BLOCK: {
-            XiValue *scope_result = xi_lower_scope_block(l, node);
-            if (node->as.scope_block.scope_mode == 2 && scope_result)
-                return scope_result;
+            (void) xi_lower_scope_block(l, node);
             return xi_const_null(l->func, l->cur_block, l->type_null);
         }
 

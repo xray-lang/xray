@@ -1,21 +1,19 @@
-// Test supervisor scope TaskOutcome collection.
+// Supervisor scope is statement-only: child failures do not cancel siblings,
+// and callers observe explicit task handles instead of an outcome array.
 
 import time
 
 enum SvErr { Msg(string) }
 
-fn failing1() -> int {
-    throw SvErr.Msg("error1")
-    return 0
+fn ok_report(ch: Channel<int>, value: int) -> int {
+    ch.send(value)
+    return value
 }
 
-fn failing2() -> int {
-    throw SvErr.Msg("error2")
+fn fail_report(ch: Channel<int>, value: int) -> int {
+    ch.send(value)
+    throw SvErr.Msg("error_" + string(value))
     return 0
-}
-
-fn ok() -> int {
-    return 42
 }
 
 fn slow() -> int {
@@ -23,111 +21,57 @@ fn slow() -> int {
     return 7
 }
 
-fn count_success(outcomes: Array<TaskOutcome>) -> int {
-    var count = 0
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Success(_) -> { count = count + 1 }
+fn recv_sum(ch: Channel<int>, count: int) -> int {
+    var sum = 0
+    for (var i = 0; i < count; i++) {
+        match (ch.recv()) {
+            Recv.Value(v) -> { sum = sum + v }
             _ -> {}
         }
     }
-    return count
+    return sum
 }
 
-fn count_failed(outcomes: Array<TaskOutcome>) -> int {
-    var count = 0
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Failed(_) -> { count = count + 1 }
-            _ -> {}
+fn test_statement_waits_for_success_and_failure() {
+    shared ch = Channel<int>(3)
+    supervisor scope {
+        go ok_report(ch, 1)
+        go fail_report(ch, 10)
+        go ok_report(ch, 100)
+    }
+    assert_eq(recv_sum(ch, 3), 111)
+    ch.close()
+}
+
+fn test_explicit_task_handle_observes_failure() {
+    shared ch = Channel<int>(1)
+    supervisor scope {
+        var task = go fail_report(ch, 5)
+        var result = task.awaitResult()
+        match (result) {
+            TaskResult.Failed(_) -> {}
+            _ -> { assert(false, "failed task should be observed through TaskResult") }
         }
     }
-    return count
+    assert_eq(recv_sum(ch, 1), 5)
+    ch.close()
 }
 
-fn count_cancelled(outcomes: Array<TaskOutcome>) -> int {
-    var count = 0
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Cancelled -> { count = count + 1 }
-            _ -> {}
-        }
-    }
-    return count
-}
-
-fn has_failed_msg(outcomes: Array<TaskOutcome>, expected: string) -> bool {
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Failed(err) -> {
-                match (err) {
-                    SvErr.Msg(msg) -> {
-                        if (msg == expected) {
-                            return true
-                        }
-                    }
-                    _ -> {}
-                }
-            }
-            _ -> {}
-        }
-    }
-    return false
-}
-
-fn test_outcomes_collected() {
-    var outcomes = supervisor scope {
-        go ok()
-        go failing1()
-        go failing2()
-    }
-    assert_eq(len(outcomes), 3)
-    assert_eq(count_success(outcomes), 1)
-    assert_eq(count_failed(outcomes), 2)
-    assert(has_failed_msg(outcomes, "error1"), "Failed payload should preserve error1 enum")
-    assert(has_failed_msg(outcomes, "error2"), "Failed payload should preserve error2 enum")
-}
-
-fn test_all_success() {
-    var outcomes = supervisor scope {
-        go ok()
-        go ok()
-    }
-    assert_eq(len(outcomes), 2)
-    assert_eq(count_success(outcomes), 2)
-    assert_eq(count_failed(outcomes), 0)
-}
-
-fn test_single_error() {
-    var outcomes = supervisor scope {
-        go failing1()
-    }
-    assert_eq(len(outcomes), 1)
-    assert_eq(count_failed(outcomes), 1)
-    assert(has_failed_msg(outcomes, "error1"), "single failure should keep enum payload")
-}
-
-fn test_cancelled_child() {
-    var outcomes = supervisor scope {
+fn test_cancelled_child_is_local_to_scope() {
+    supervisor scope {
         var task = go slow()
         task.cancel()
-    }
-    assert_eq(len(outcomes), 1)
-    assert_eq(count_cancelled(outcomes), 1)
-}
-
-fn test_as_statement() {
-    supervisor scope {
-        go ok()
-        go failing1()
+        var result = task.awaitResult()
+        match (result) {
+            TaskResult.Cancelled -> {}
+            _ -> { assert(false, "cancelled task should report TaskResult.Cancelled") }
+        }
     }
 }
 
 @test
-fn test_supervisor_outcomes() {
-    test_outcomes_collected()
-    test_all_success()
-    test_single_error()
-    test_cancelled_child()
-    test_as_statement()
+fn test_supervisor_statement_errors() {
+    test_statement_waits_for_success_and_failure()
+    test_explicit_task_handle_observes_failure()
+    test_cancelled_child_is_local_to_scope()
 }

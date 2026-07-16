@@ -99,8 +99,8 @@ class SourceUnknownInventoryTest(unittest.TestCase):
 
     def test_parse_category_max_rejects_unknown_categories(self) -> None:
         self.assertEqual(
-            ("TASK_ERASED_RESULT_RESIDUE", 94),
-            parse_category_max("TASK_ERASED_RESULT_RESIDUE=94"),
+            ("TASK_ERASED_RESULT_RESIDUE", 54),
+            parse_category_max("TASK_ERASED_RESULT_RESIDUE=54"),
         )
         with self.assertRaises(argparse.ArgumentTypeError):
             parse_category_max("TASK_ERASED_RESULT_RESIDUE=-1")

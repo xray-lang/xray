@@ -1534,7 +1534,7 @@ rollback:
 // Parse variable reference: x
 // Supports generic call syntax: foo<int, string>(arg1, arg2)
 AstNode *xr_parse_variable(Parser *parser) {
-    // Context keyword intercept: "linked go" / "supervisor scope" as expression
+    // Context keyword intercept: "linked go" as expression.
     Token prev = parser->previous;
     if (prev.length == 6 && memcmp(prev.start, "linked", 6) == 0 &&
         xr_parser_check(parser, TK_GO)) {
@@ -1543,8 +1543,12 @@ AstNode *xr_parse_variable(Parser *parser) {
     }
     if (prev.length == 10 && memcmp(prev.start, "supervisor", 10) == 0 &&
         xr_parser_check(parser, TK_SCOPE)) {
-        xr_parser_advance(parser);  // consume "scope"
-        return xr_parse_scope_block_with_mode(parser, XR_SCOPE_SUPERVISOR);
+        xr_parser_error_at_previous(
+            parser, "`supervisor scope` is a statement, not an expression; keep typed task handles "
+                    "and observe them with awaitResult()");
+        xr_parser_advance(parser);  // consume "scope" for recovery
+        (void) xr_parse_scope_block_with_mode(parser, XR_SCOPE_SUPERVISOR);
+        return NULL;
     }
 
     // Contextual keyword intercept: "cancelled()" expression

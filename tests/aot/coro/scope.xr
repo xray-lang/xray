@@ -10,54 +10,28 @@ fn linked_value() -> int {
 
 enum ScopeAotErr { Msg(string) }
 
-fn supervisor_ok() -> int {
+fn supervisor_ok(ch: Channel<int>) -> int {
+    ch.send(1)
     return 5
 }
 
-fn supervisor_fail() -> int {
+fn supervisor_fail(ch: Channel<int>) -> int {
+    ch.send(10)
     throw ScopeAotErr.Msg("aot_fail")
     return 0
 }
 
-fn count_success(outcomes: Array<TaskOutcome>) -> int {
-    var count = 0
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Success(_) -> { count = count + 1 }
-            _ -> {}
-        }
-    }
-    return count
-}
-
-fn count_failed(outcomes: Array<TaskOutcome>) -> int {
-    var count = 0
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Failed(_) -> { count = count + 1 }
-            _ -> {}
-        }
-    }
-    return count
-}
-
-fn has_aot_error(outcomes: Array<TaskOutcome>) -> bool {
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Failed(err) -> {
-                match (err) {
-                    ScopeAotErr.Msg(msg) -> {
-                        if (msg == "aot_fail") {
-                            return true
-                        }
-                    }
-                    _ -> {}
-                }
+fn recv_sum(ch: Channel<int>, count: int) -> int {
+    var sum = 0
+    for (var i = 0; i < count; i++) {
+        match (ch.recv()) {
+            Recv.Value(v) -> {
+                sum = sum + v
             }
             _ -> {}
         }
     }
-    return false
+    return sum
 }
 
 shared ch = Channel<int>(2)
@@ -83,11 +57,10 @@ linked scope {
     print(value + 1)
 }
 
-var outcomes = supervisor scope {
-    go supervisor_ok()
-    go supervisor_fail()
+shared supervisor_ch = Channel<int>(2)
+supervisor scope {
+    go supervisor_ok(supervisor_ch)
+    go supervisor_fail(supervisor_ch)
 }
-print(len(outcomes))
-print(count_success(outcomes))
-print(count_failed(outcomes))
-print(has_aot_error(outcomes))
+print(recv_sum(supervisor_ch, 2))
+supervisor_ch.close()
