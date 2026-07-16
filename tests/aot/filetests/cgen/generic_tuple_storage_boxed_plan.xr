@@ -1,0 +1,17 @@
+fn first<T>(items: Array<T>) -> T {
+    return items[0]
+}
+
+fn run() -> int {
+    var values: Array<(int, bool)> = []
+    values.push((7, true))
+    values.push((11, false))
+
+    var item = first<(int, bool)>(values)
+    if (item.1) {
+        return item.0
+    }
+    return 0
+}
+
+print(run())
