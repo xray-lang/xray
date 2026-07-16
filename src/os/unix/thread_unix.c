@@ -27,8 +27,12 @@
 #include <sys/sysctl.h>
 #endif
 
+#ifndef XR_THREAD_DEFAULT_STACK_BYTES
+#define XR_THREAD_DEFAULT_STACK_BYTES (8 * 1024 * 1024)
+#endif
+
 bool xr_thread_create(xr_thread_t *t, xr_thread_fn fn, void *arg) {
-    return pthread_create(t, NULL, fn, arg) == 0;
+    return xr_thread_create_ex(t, fn, arg, XR_THREAD_DEFAULT_STACK_BYTES);
 }
 
 bool xr_thread_create_ex(xr_thread_t *t, xr_thread_fn fn, void *arg, size_t stack_size) {
@@ -38,7 +42,10 @@ bool xr_thread_create_ex(xr_thread_t *t, xr_thread_fn fn, void *arg, size_t stac
     pthread_attr_t attr;
     if (pthread_attr_init(&attr) != 0)
         return false;
-    pthread_attr_setstacksize(&attr, stack_size);
+    if (pthread_attr_setstacksize(&attr, stack_size) != 0) {
+        pthread_attr_destroy(&attr);
+        return false;
+    }
     int rc = pthread_create(t, &attr, fn, arg);
     pthread_attr_destroy(&attr);
     return rc == 0;

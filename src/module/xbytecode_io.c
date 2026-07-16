@@ -189,8 +189,8 @@ static uint32_t bc_get_u32(BcReader *r) {
         r->error = XR_BC_ERR_TRUNCATED;
         return 0;
     }
-    uint32_t v = r->buf[r->pos] | (r->buf[r->pos + 1] << 8) | (r->buf[r->pos + 2] << 16) |
-                 (r->buf[r->pos + 3] << 24);
+    uint32_t v = (uint32_t) r->buf[r->pos] | ((uint32_t) r->buf[r->pos + 1] << 8) |
+                 ((uint32_t) r->buf[r->pos + 2] << 16) | ((uint32_t) r->buf[r->pos + 3] << 24);
     r->pos += 4;
     return v;
 }

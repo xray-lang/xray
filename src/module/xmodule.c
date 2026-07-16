@@ -212,6 +212,7 @@ XrModule *xr_module_create_native(XrVMRuntime *isolate, const char *name) {
     module_init_exports(module);
 
     atomic_init(&module->state, XR_MODULE_NEW);
+    module->requires_script = false;
     module->native_handle = NULL;
     module->native_handle_destroy = NULL;
     module->init_fn = NULL;
@@ -237,6 +238,7 @@ XrModule *xr_module_create_script(XrVMRuntime *isolate, const char *name, const 
     module_init_exports(module);
 
     atomic_init(&module->state, XR_MODULE_NEW);
+    module->requires_script = false;
     module->native_handle = NULL;
     module->native_handle_destroy = NULL;
     module->init_fn = NULL;
