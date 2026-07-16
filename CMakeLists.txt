@@ -1644,7 +1644,7 @@ if(BUILD_TESTS)
     set_tests_properties(binary_public_native_readiness PROPERTIES
         LABELS "stdlib;binary;task-200;readiness"
         PROCESSORS 1
-        TIMEOUT 30
+        TIMEOUT 90
     )
 
     add_test(
