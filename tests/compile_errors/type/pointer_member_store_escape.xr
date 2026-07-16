@@ -1,0 +1,13 @@
+import mem
+
+class PtrBox {
+    ptr: MutPtr<byte>? = null
+}
+
+fn run() {
+    var buffer = mem.alloc(8)
+    var box = PtrBox()
+    box.ptr = unsafe { buffer.borrowPtr() }
+}
+
+run()
