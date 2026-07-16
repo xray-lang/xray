@@ -147,7 +147,7 @@ match t.poll() {
 }
 ```
 
-`TaskResult.Failed(err)` 保留原始失败值：业务错误是 `throw <enum>` 产生的 enum 值，运行时故障是 `PanicInfo`。payload 类型为 `unknown`，调用方按需要用 `match` / `is` 收窄；实现不得把业务 enum 错误包装成 `PanicInfo`。
+`TaskResult<T>` 的当前公开形状为 `Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。运行时故障通过 `PanicInfo` 进入 `Failed`；业务 enum 错误仍走语言的错误通道，plain `await task` 会按对应错误路径传播，调用方需要状态值时使用显式 task handle 与 `awaitResult()` / `awaitTimeout(ms)`。
 
 **取消语义**：`cancel()` 设置取消标志；协程在下一个 safepoint（GC 检查点、Channel 操作、`await`、`Coro.yield()`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
 
@@ -264,9 +264,9 @@ select {
 2. **结构化并发**（语义增强）：在 `scope` 块内 `go` 启动的协程，块退出前**自动等待**全部完成或取消。
 
 ```ebnf
-ScopeStmt          ::= 'scope' Block
-LinkedScopeStmt    ::= 'linked' 'scope' Block          // 兄弟失败 → 取消所有 + 重抛
-SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // 收集每个子协程结果，返回 Array<TaskOutcome>
+ScopeStmt           ::= 'scope' Block
+LinkedScopeStmt     ::= 'linked' 'scope' Block          // 兄弟失败 -> 取消所有 + 重抛
+SupervisorScopeStmt ::= 'supervisor' 'scope' Block      // 等待所有子协程；语句形式
 ```
 
 ```xray @id=coro-scope
@@ -292,19 +292,9 @@ scope {
 |---|---|---|
 | `scope { ... }` | 不取消兄弟；异常不向外传播（每个 task 独立） | 无（语句形式） |
 | `linked scope { ... }` | **取消所有兄弟**协程，并向外**重抛**最先抛出的异常 | 无 |
-| `supervisor scope { ... }` | **收集**每个子协程的完成结果，子协程之间互不影响 | `Array<TaskOutcome>`（每个子协程一个 outcome） |
+| `supervisor scope { ... }` | 等待所有子协程完成；子协程之间互不影响 | 无（语句形式） |
 
-`TaskOutcome` 是 prelude 枚举：
-
-```xray
-enum TaskOutcome {
-    Success(unknown)    // 子协程正常返回；payload 为返回值
-    Failed(unknown)     // 子协程抛异常；payload 为原始错误值，不强制字符串化
-    Cancelled           // 子协程被取消
-}
-```
-
-`supervisor scope` 会等待块内所有 `go` 子协程完成，并按完成记录追加 outcome。它不会为了旧式错误列表把失败转换成字符串；调用方需要消息时可在 `TaskOutcome.Failed(err)` 分支中自行决定如何格式化。
+`supervisor scope` 会等待块内所有 `go` 子协程完成，但不返回聚合结果。需要观察某个子任务状态时，显式保留 task handle 并调用 `awaitResult()` 或 `awaitTimeout(ms)`；把 `supervisor scope` 当表达式使用会被编译器拒绝。
 
 ```xray @id=coro-linked-supervisor-scope
 // linked scope：失败传播
@@ -606,7 +596,7 @@ match t.poll() {
 }
 ```
 
-`TaskResult.Failed(err)` preserves the original failure value: business errors are enum values produced by `throw <enum>`, and runtime faults are `PanicInfo`. The payload type is `unknown`, so callers narrow it with `match` / `is` as needed; implementations must not wrap business enum errors into `PanicInfo`.
+The current public shape of `TaskResult<T>` is `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, and `Pending`. Runtime faults enter `Failed` as `PanicInfo`; business enum errors still use the language error channel, so plain `await task` propagates through the matching error path, and callers that need a status value keep an explicit task handle and call `awaitResult()` / `awaitTimeout(ms)`.
 
 **Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `Coro.yield()`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
 
@@ -723,9 +713,9 @@ select {
 2. **Structured concurrency** (semantic enhancement): coroutines started via `go` inside the block are **awaited automatically** before the block exits.
 
 ```ebnf
-ScopeStmt          ::= 'scope' Block
-LinkedScopeStmt    ::= 'linked' 'scope' Block          // sibling failure → cancel all + rethrow
-SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // collect every child result, return Array<TaskOutcome>
+ScopeStmt           ::= 'scope' Block
+LinkedScopeStmt     ::= 'linked' 'scope' Block          // sibling failure -> cancel all + rethrow
+SupervisorScopeStmt ::= 'supervisor' 'scope' Block      // wait for all children; statement form
 ```
 
 ```xray @id=coro-scope
@@ -751,19 +741,9 @@ scope {
 |---|---|---|
 | `scope { ... }` | Siblings are not cancelled; exceptions do not propagate outward (each task is independent) | none (statement form) |
 | `linked scope { ... }` | **Cancels all siblings** and **rethrows** the first exception outward | none |
-| `supervisor scope { ... }` | **Collects** every child coroutine's completion result; siblings do not affect each other | `Array<TaskOutcome>` (one outcome per child) |
+| `supervisor scope { ... }` | Waits for every child coroutine to finish; siblings do not affect each other | none (statement form) |
 
-`TaskOutcome` is a prelude enum:
-
-```xray
-enum TaskOutcome {
-    Success(unknown)    // child returned normally; payload is the return value
-    Failed(unknown)     // child threw; payload is the original error value, not a forced string
-    Cancelled           // child was cancelled
-}
-```
-
-`supervisor scope` waits for all child coroutines started by `go` inside the block and appends an outcome for each completion. It does not flatten failures into a legacy error-message list; format the error explicitly inside a `TaskOutcome.Failed(err)` branch when text is needed.
+`supervisor scope` waits for all child coroutines started by `go` inside the block, but it does not return an aggregate result. To observe a specific child status, keep an explicit task handle and call `awaitResult()` or `awaitTimeout(ms)`; using `supervisor scope` as an expression is rejected by the compiler.
 
 ```xray @id=coro-linked-supervisor-scope
 // linked scope: failure propagation

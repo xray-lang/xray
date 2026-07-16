@@ -221,7 +221,7 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 `int` `int8` `int16` `int32` `int64` `byte` `uint16` `uint32` `uint64`
 `float` `float32` `float64` `bool` `string` `rune`
 
-`unknown` 在类型位置是内置擦除/未知值类型名（例如 `TaskOutcome.Success(unknown)`）；它不是词法关键字，表达式位置仍可作为普通标识符使用。
+类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `prelude` 自动引入的内置类型符号：
 > `Array` · `BigInt` · `Array<byte>` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
@@ -3899,7 +3899,7 @@ match t.poll() {
 }
 ```
 
-`TaskResult.Failed(err)` 保留原始失败值：业务错误是 `throw <enum>` 产生的 enum 值，运行时故障是 `PanicInfo`。payload 类型为 `unknown`，调用方按需要用 `match` / `is` 收窄；实现不得把业务 enum 错误包装成 `PanicInfo`。
+`TaskResult<T>` 的当前公开形状为 `Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。运行时故障通过 `PanicInfo` 进入 `Failed`；业务 enum 错误仍走语言的错误通道，plain `await task` 会按对应错误路径传播，调用方需要状态值时使用显式 task handle 与 `awaitResult()` / `awaitTimeout(ms)`。
 
 **取消语义**：`cancel()` 设置取消标志；协程在下一个 safepoint（GC 检查点、Channel 操作、`await`、`Coro.yield()`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
 
@@ -4016,9 +4016,9 @@ select {
 2. **结构化并发**（语义增强）：在 `scope` 块内 `go` 启动的协程，块退出前**自动等待**全部完成或取消。
 
 ```ebnf
-ScopeStmt          ::= 'scope' Block
-LinkedScopeStmt    ::= 'linked' 'scope' Block          // 兄弟失败 → 取消所有 + 重抛
-SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // 收集每个子协程结果，返回 Array<TaskOutcome>
+ScopeStmt           ::= 'scope' Block
+LinkedScopeStmt     ::= 'linked' 'scope' Block          // 兄弟失败 -> 取消所有 + 重抛
+SupervisorScopeStmt ::= 'supervisor' 'scope' Block      // 等待所有子协程；语句形式
 ```
 
 ```xray
@@ -4044,19 +4044,9 @@ scope {
 |---|---|---|
 | `scope { ... }` | 不取消兄弟；异常不向外传播（每个 task 独立） | 无（语句形式） |
 | `linked scope { ... }` | **取消所有兄弟**协程，并向外**重抛**最先抛出的异常 | 无 |
-| `supervisor scope { ... }` | **收集**每个子协程的完成结果，子协程之间互不影响 | `Array<TaskOutcome>`（每个子协程一个 outcome） |
+| `supervisor scope { ... }` | 等待所有子协程完成；子协程之间互不影响 | 无（语句形式） |
 
-`TaskOutcome` 是 prelude 枚举：
-
-```xray
-enum TaskOutcome {
-    Success(unknown)    // 子协程正常返回；payload 为返回值
-    Failed(unknown)     // 子协程抛异常；payload 为原始错误值，不强制字符串化
-    Cancelled           // 子协程被取消
-}
-```
-
-`supervisor scope` 会等待块内所有 `go` 子协程完成，并按完成记录追加 outcome。它不会为了旧式错误列表把失败转换成字符串；调用方需要消息时可在 `TaskOutcome.Failed(err)` 分支中自行决定如何格式化。
+`supervisor scope` 会等待块内所有 `go` 子协程完成，但不返回聚合结果。需要观察某个子任务状态时，显式保留 task handle 并调用 `awaitResult()` 或 `awaitTimeout(ms)`；把 `supervisor scope` 当表达式使用会被编译器拒绝。
 
 ```xray
 // linked scope：失败传播
@@ -4797,7 +4787,7 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 
 ### 14.17 `Task<T>` 与 enum 值
 
-`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`；`TaskResult.Failed(error)` 以 `unknown` 保留原始失败值（业务 enum 错误或 `PanicInfo`），plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。enum 值保留冷路径属性 `name`、`ordinal` 与方法 `toString()`；用户可见 `EnumValue` / `EnumType` wrapper 类已删除。
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`；当前公开形状为 `Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。enum 值保留冷路径属性 `name`、`ordinal` 与方法 `toString()`；用户可见 `EnumValue` / `EnumType` wrapper 类已删除。
 
 ### 14.18 其他 prelude 类型（`Logger` / `NetConn` / `NetListener`）
 
