@@ -18,12 +18,13 @@ fn userHashEqPlan() -> int {
     var token = Token(7)
     var values: Map<Token, int> = #{}
     values.set(token, 99)
+    var strict = values[token]
     var seen: Set<Token> = #[]
     seen.add(token)
     if (values.containsKey(token) && seen.contains(token)) {
         seen.delete(token)
         if (!seen.contains(token)) {
-            return values.get(token)
+            return strict + values.get(token)
         }
     }
     return 0

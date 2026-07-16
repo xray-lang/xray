@@ -206,6 +206,13 @@ static void test_map_user_hash_eq_wrong_type_falls_back_without_user_calls(void)
     ASSERT_TRUE(g_eq_calls > 0, "exact map lookup calls user equality");
 
     reset_call_counts();
+    ASSERT_EQ_INT(
+        xrt_map_index_get_user_hash_eq(map, token, token_type, NULL, token_hash, token_eq).i, 99,
+        "exact token strict index uses user hash/eq path");
+    ASSERT_TRUE(g_hash_calls > 0, "exact map index calls user hash");
+    ASSERT_TRUE(g_eq_calls > 0, "exact map index calls user equality");
+
+    reset_call_counts();
     ASSERT_TRUE(!xrt_map_has_user_hash_eq(map, other, token_type, NULL, token_hash, token_eq),
                 "wrong-type map lookup must not hit exact token");
     ASSERT_EQ_INT(g_hash_calls, 0, "wrong-type map lookup does not call user hash");
@@ -245,6 +252,14 @@ static void test_map_user_hash_eq_map_backed_class_name(void) {
     ASSERT_EQ_INT(
         xrt_map_get_user_hash_eq(map, equal_key, token_type, "Key", map_key_hash, map_key_eq).i, 88,
         "map-backed equal key gets stored value");
+
+    reset_call_counts();
+    ASSERT_EQ_INT(
+        xrt_map_index_get_user_hash_eq(map, equal_key, token_type, "Key", map_key_hash, map_key_eq)
+            .i,
+        88, "map-backed equal key strict index uses user hash/eq path");
+    ASSERT_TRUE(g_hash_calls > 0, "map-backed index calls user hash");
+    ASSERT_TRUE(g_eq_calls > 0, "map-backed index calls user equality");
 
     reset_call_counts();
     ASSERT_TRUE(
