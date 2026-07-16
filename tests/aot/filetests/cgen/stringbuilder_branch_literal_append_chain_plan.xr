@@ -1,0 +1,13 @@
+fn build(flag: bool) -> string {
+    var sb = StringBuilder()
+    if (flag) {
+        sb.append("alpha")
+        sb.append("beta")
+    } else {
+        sb.append("gamma!")
+        sb.append("delta")
+    }
+    return sb.toString()
+}
+
+print(build(true))
