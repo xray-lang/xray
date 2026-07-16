@@ -166,6 +166,12 @@ expect_output_workers \
     2
 
 expect_output_workers \
+    "parallel_plan_map_close_during_dispatch" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_map_close_during_dispatch.xr" \
+    $'true\nmap-closed\ntrue\ntrue\nmapinto-closed\ndone' \
+    2
+
+expect_output_workers \
     "parallel_plan_close_during_dispatch" \
     "$PROJECT_DIR/tests/vm/parallel_plan_close_during_dispatch.xr" \
     $'true\nclosed\ndone' \
