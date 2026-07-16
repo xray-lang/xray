@@ -76,6 +76,16 @@ class StringNativeErrorAbiTest(unittest.TestCase):
             timeout=60,
         )
 
+    def run_raw(self, args: list[str]) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(
+            args,
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            timeout=60,
+        )
+
     def test_public_declaration_is_typed_and_non_nullable(self) -> None:
         declaration = STRING_DECL.read_text(encoding="utf-8")
         generated = embedded_native_def("string")
@@ -127,6 +137,46 @@ class StringNativeErrorAbiTest(unittest.TestCase):
             aot_runtime,
         )
         self.assertIn("xrt_pending_error = xrt_enum_aggregate_box(err);", aot_runtime)
+
+    def test_uncaught_invalid_utf8_fails_instead_of_returning_null(self) -> None:
+        valid_source = "var valid: Array<uint8> = [111, 107]\nprint(string.fromUtf8(valid[:]))"
+        self.assertEqual(self.run_checked([str(self.xray), "-e", valid_source]).stdout, b"ok\n")
+
+        output_dir = ROOT / "build" / ".xray-test-tmp"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        source = output_dir / f"string_uncaught_invalid_utf8_{os.getpid()}.xr"
+        native = output_dir / f"string_uncaught_invalid_utf8_{os.getpid()}"
+        cache = ROOT / "build" / ".xray-test-cache" / "task-198-uncaught-invalid"
+        source.write_text(
+            "var invalid: Array<uint8> = [255]\nprint(string.fromUtf8(invalid[:]))\n",
+            encoding="utf-8",
+        )
+        try:
+            vm = self.run_raw([str(self.xray), str(source)])
+            self.assertNotEqual(vm.returncode, 0, vm.stdout.decode("utf-8", "replace"))
+            self.assertNotIn(b"null\n", vm.stdout)
+
+            self.run_checked(
+                [
+                    str(self.xray),
+                    "build",
+                    "--native",
+                    "-O",
+                    "0",
+                    str(source),
+                    "-o",
+                    str(native),
+                    "--cache-dir",
+                    str(cache),
+                ],
+                stdout=subprocess.DEVNULL,
+            )
+            aot = self.run_raw([str(native)])
+            self.assertNotEqual(aot.returncode, 0, aot.stdout.decode("utf-8", "replace"))
+            self.assertNotIn(b"null\n", aot.stdout)
+        finally:
+            native.unlink(missing_ok=True)
+            source.unlink(missing_ok=True)
 
     def test_vm_native_aot_typed_catch_parity(self) -> None:
         vm = self.run_checked([str(self.xray), str(FIXTURE)]).stdout
