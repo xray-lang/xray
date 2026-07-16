@@ -133,6 +133,7 @@ stringbuilder_literal_append_exact_reserve|covered|xrt_strbuf_reserve_extra_exac
 stringbuilder_literal_append_no_grow|covered|xrt_strbuf_append_string_no_grow|tests/aot/filetests/cgen|Literal append calls consume reserved capacity without per-append grow checks.
 stringbuilder_finish_direct|covered|xrt_strbuf_finish|tests/aot/filetests/cgen|Verified builder-finish plans lower to the direct final string allocation helper.
 stringbuilder_clear_direct|covered|xrt_strbuf_clear|tests/aot/filetests/cgen|Verified clear plans use direct builder state reset and terminate append aggregation.
+stringbuilder_alias_clobber_barrier|covered|stringbuilder_alias_append_barrier|tests/aot/filetests/cgen|StringBuilder literal append reserve aggregation stops at same-storage alias mutation barriers instead of treating aliases as a no-clobber append run.
 summary_payload_cache|covered|cache_payload_materializes|tests/unit/analysis|Declaration, semantic graph, body summary, and global payloads materialize back into validated summary rows.
 summary_payload_global_materialization|covered|cache_payload_materializes_global_evidence|tests/unit/analysis|Global evidence payload materializes every row family and rechecks the global content key.
 summary_payload_request_key|covered|xg-cache-request v1|tests/unit/analysis|Payload v2 separates producer-precomputable request identity from content-key row validation.
