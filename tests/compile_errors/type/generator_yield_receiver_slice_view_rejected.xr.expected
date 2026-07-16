@@ -1,0 +1,1 @@
+yielded value of type 'Slice<byte>' is not assignable to generator element type 'int'
