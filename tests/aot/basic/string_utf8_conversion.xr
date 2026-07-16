@@ -7,6 +7,19 @@ fn caughtUtf8Invalid(bytes: Array<uint8>) -> bool {
     return false
 }
 
+fn decodeStrict(bytes: Array<uint8>) -> string {
+    return string.fromUtf8(bytes[:])
+}
+
+fn caughtUtf8InvalidViaCall(bytes: Array<uint8>) -> bool {
+    try {
+        decodeStrict(bytes)
+    } catch (e: Utf8Error) {
+        return e.toString() == "Utf8Error.InvalidUtf8"
+    }
+    return false
+}
+
 fn caughtInvalidByteRange(s: string, start: int, end: int) -> bool {
     try {
         s.sliceBytes(start, end)
@@ -39,6 +52,7 @@ print(caughtUtf8Invalid(overlongNul))
 print(caughtUtf8Invalid(surrogateScalar))
 print(caughtUtf8Invalid(outOfRangeScalar))
 print(caughtUtf8Invalid(invalidContinuation))
+print(caughtUtf8InvalidViaCall(invalid))
 print(string.fromUtf8Lossy(invalid[:]))
 print(string.fromUtf8Lossy(invalidContinuation[:]))
 var truncatedFour: Array<uint8> = [240, 144, 128]
