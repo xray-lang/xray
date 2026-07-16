@@ -1,0 +1,5 @@
+regex=capacity-plan [0-9]+ .*kind=array op=push action=checked_grow .*evidence=row\+receiver_type\+elem_type\+exact_count\+loop_append\+may_grow reason=alias_or_clobber
+not_regex=capacity-plan [0-9]+ .*kind=array op=push action=reserve_once .*no_clobber
+c_regex=[A-Za-z0-9_]+->length >= [A-Za-z0-9_]+->capacity
+c_contains=xrt_array_data_grow(
+c_not_contains=XR_AOT_HOT_REGION_BEGIN typed_array_raw_access
