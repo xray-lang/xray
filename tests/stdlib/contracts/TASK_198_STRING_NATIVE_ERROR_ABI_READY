@@ -1,0 +1,16 @@
+scope: task-198 string native error ABI only
+
+This marker records the focused native/bodyless typed-error contract that is
+already validated for the built-in string boundary:
+
+- string.fromUtf8(Slice<byte>) -> string throws Utf8Error.InvalidUtf8 through
+  the typed enum value channel in VM and native AOT.
+- string.sliceBytes(start: int, end: int) -> string throws
+  StringSliceError.InvalidByteRange through the same channel in VM and native
+  AOT.
+- analyzer builtin/XRD effect metadata consumes the @errors contracts, and
+  legacy Bytes/ByteSpan/ByteView aliases remain rejected.
+
+This is not the full TASK_198_TYPED_NATIVE_ERRORS_READY marker.  The task-200
+public-native switch remains blocked until compress/crypto/io/net native
+typed-error ABI and task-197 Slice provenance readiness are closed.

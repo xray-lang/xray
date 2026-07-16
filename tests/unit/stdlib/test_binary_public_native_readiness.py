@@ -110,6 +110,26 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
                 self.assertTrue(result.ok, result.detail)
                 self.assertIn("public-native switch remains blocked", result.detail)
 
+    def test_task_198_string_native_error_marker_is_scoped(self) -> None:
+        marker = ROOT / "tests" / "stdlib" / "contracts" / "TASK_198_STRING_NATIVE_ERROR_ABI_READY"
+        text = marker.read_text(encoding="utf-8")
+        self.assertIn("scope: task-198 string native error ABI only", text)
+        self.assertIn(
+            "string.fromUtf8(Slice<byte>) -> string throws Utf8Error.InvalidUtf8",
+            text,
+        )
+        self.assertIn("public-native switch remains blocked", text)
+        self.assertFalse(
+            (ROOT / "tests" / "stdlib" / "contracts" / "TASK_198_TYPED_NATIVE_ERRORS_READY").exists(),
+            "scoped string ABI marker must not imply full task-198 readiness",
+        )
+
+        result = {
+            item.subject: item for item in readiness.check_partial_dependency_evidence(ROOT)
+        }["TASK_198_STRING_RUNTIME_ONLY"]
+        self.assertTrue(result.ok, result.detail)
+        self.assertIn("scoped marker is present", result.detail)
+
     def test_task_197_slice_provenance_is_partial_evidence_only(self) -> None:
         spec = readiness.PARTIAL_DEPENDENCY_EVIDENCE["TASK_197_VERIFIER_ONLY"]
         for path_text, anchors in spec["required"].items():
