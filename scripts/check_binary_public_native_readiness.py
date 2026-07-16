@@ -329,6 +329,43 @@ NATIVE_TYPED_ERROR_ABI_BLOCKERS = {
         "detail": "net typed native error ABI remains blocked by nullable/string/status sentinels",
     },
 }
+SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = {
+    "compress.gunzip": {
+        "module": "compress",
+        "function": "gunzip",
+        "required": {
+            "tests/stdlib/contracts/compress/contract.toml": (
+                "decompression failures must become typed CompressionError values",
+                "nullable-decompression-failure",
+                "future converged decompression APIs throw CompressionError",
+            ),
+            "stdlib/defs/core.def": (
+                "fn gunzip {",
+                'signature: "(data: string): string?"',
+                'vm: "compress_gunzip"',
+                'aot: "xrt_compress_gunzip"',
+            ),
+            "stdlib/compress/compress.c": (
+                "static XrValue compress_gunzip",
+                "uint8_t *output = xr_gunzip_alloc",
+                "if (!output)\n        return xr_null();",
+            ),
+            "src/aot/xrt_compress.h": (
+                "static inline XrValue xrt_compress_gunzip",
+                "uint8_t *buf = xr_compress_core_gunzip_alloc",
+                "if (!buf)\n        return XR_NULL_VAL;",
+            ),
+            "src/shared/xr_compress_core.h": (
+                "XrCompressError err = fn(input, in_len, output, cap, out_len);",
+                "if (err != XR_COMPRESS_ERR_BUFFER)\n            return NULL;",
+            ),
+        },
+        "detail": (
+            "compress.gunzip remains a null-sentinel VM/AOT native path; future switch "
+            "must emit CompressionError enum payloads before task-200 public-native cutover"
+        ),
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -392,6 +429,23 @@ def def_module_block(root: Path, module: str) -> str | None:
         return None
     next_module = text.find("\nmodule ", start + len(marker))
     return text[start:] if next_module < 0 else text[start:next_module]
+
+
+def def_function_blocks(root: Path, module: str, function: str) -> list[str]:
+    block = def_module_block(root, module)
+    if block is None:
+        return []
+    blocks: list[str] = []
+    marker = f"\n  fn {function} {{"
+    search_from = 0
+    while True:
+        start = block.find(marker, search_from)
+        if start < 0:
+            break
+        next_fn = block.find("\n  fn ", start + len(marker))
+        blocks.append(block[start:] if next_fn < 0 else block[start:next_fn])
+        search_from = start + len(marker)
+    return blocks
 
 
 def check_boundary(root: Path) -> list[CheckResult]:
@@ -737,6 +791,59 @@ def check_native_typed_error_abi_blockers(root: Path) -> list[CheckResult]:
     return results
 
 
+def check_single_function_native_typed_error_probes(root: Path) -> list[CheckResult]:
+    modules = load_boundary_modules(root)
+    results: list[CheckResult] = []
+    for subject, spec in SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES.items():
+        module_name = str(spec["module"])
+        function_name = str(spec["function"])
+        failures: list[str] = []
+
+        module = modules.get(module_name)
+        if module is None:
+            failures.append("missing stdlib boundary entry")
+        else:
+            public_native = module.get("public_native")
+            if not isinstance(public_native, list) or function_name not in public_native:
+                failures.append(f"{module_name}.{function_name} left pre-switch public_native")
+            if module.get("def_migration_complete") is True:
+                failures.append("def_migration_complete set before typed native error ABI closure")
+
+        required = spec["required"]
+        assert isinstance(required, dict)
+        for path_text, anchors in required.items():
+            missing = missing_anchors(root, str(path_text), anchors)
+            failures.extend(f"{path_text}: missing {anchor}" for anchor in missing)
+
+        function_blocks = def_function_blocks(root, module_name, function_name)
+        if not function_blocks:
+            failures.append(f"stdlib/defs/core.def: missing {subject} function block")
+        for function_block in function_blocks:
+            if "@errors(" in function_block:
+                failures.append(f"stdlib/defs/core.def: {subject} has @errors before readiness marker")
+            if "CompressionError" in function_block:
+                failures.append(
+                    f"stdlib/defs/core.def: {subject} mentions CompressionError before readiness marker"
+                )
+
+        marker_hits = list(root.rglob("TASK_198_TYPED_NATIVE_ERRORS_READY"))
+        if marker_hits:
+            failures.append(
+                "unexpected full-readiness marker present: "
+                + ", ".join(str(path.relative_to(root)) for path in marker_hits[:5])
+            )
+
+        results.append(
+            CheckResult(
+                "NATIVE_TYPED_ERROR_ABI_FUNCTION_BLOCKER",
+                subject,
+                not failures,
+                str(spec["detail"]) if not failures else "; ".join(failures),
+            )
+        )
+    return results
+
+
 def check_harness_anchors(root: Path) -> list[CheckResult]:
     anchors = {
         "tests/diff/fuzz_binary_stdlib.py": (
@@ -795,6 +902,7 @@ def build_results(root: Path) -> list[CheckResult]:
     results.extend(check_dependency_markers(root))
     results.extend(check_partial_dependency_evidence(root))
     results.extend(check_native_typed_error_abi_blockers(root))
+    results.extend(check_single_function_native_typed_error_probes(root))
     return results
 
 
