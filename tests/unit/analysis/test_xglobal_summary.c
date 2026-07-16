@@ -17519,6 +17519,7 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     XiModule *modules[1];
     uint8_t slot_consts[2] = {1, 0};
     const char *slot_names[2] = {"module_const", "shared_state"};
+    uint32_t saved_capture_plan_count;
     XiConstLiteral constants[2];
     XiConstLiteral shared[2];
     XaotBundle bundle;
@@ -17623,6 +17624,11 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     ASSERT_FALSE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
     ASSERT_NOT_NULL(strstr(verify_error, "AOT capture plan is stale"));
     bundle.capture_plans[2].action = XR_CAPTURE_INLINE_VALUE;
+    saved_capture_plan_count = bundle.ncapture_plans;
+    bundle.ncapture_plans--;
+    ASSERT_FALSE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
+    ASSERT_NOT_NULL(strstr(verify_error, "AOT capture plan count is stale"));
+    bundle.ncapture_plans = saved_capture_plan_count;
     bundle.address_plans[0].provenance.origin = XR_POINTER_ORIGIN_STACK_BORROW;
     ASSERT_FALSE(xaot_storage_capture_plans_verify(&bundle, verify_error, sizeof(verify_error)));
     xaot_bundle_free(&bundle);
