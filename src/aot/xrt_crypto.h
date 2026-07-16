@@ -160,8 +160,10 @@ static inline XrValue xrt_crypto_decrypt(const char *key, int64_t key_len, const
 
     size_t raw_len = 0;
     size_t cipher_len = 0;
-    if (!xr_crypto_core_aead_decrypt_plan((size_t) cipher_hex_len, &raw_len, &cipher_len))
+    if (!xr_crypto_core_aead_decrypt_plan((size_t) cipher_hex_len, &raw_len, &cipher_len)) {
+        xrt_crypto_set_builtin_enum_error("CryptoError", "InvalidLength", 0);
         return XR_NULL_VAL;
+    }
 
     uint8_t stack_raw[4096];
     uint8_t *raw = (raw_len <= sizeof(stack_raw)) ? stack_raw : (uint8_t *) XRT_MALLOC(raw_len);
