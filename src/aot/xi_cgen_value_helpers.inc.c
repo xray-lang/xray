@@ -404,6 +404,9 @@ static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
     static const CgPreludeEnumMember compression_error[] = {
         {"InvalidData", false},
     };
+    static const CgPreludeEnumMember crypto_error[] = {
+        {"InvalidLength", false},
+    };
     static const CgPreludeEnumData enums[] = {
         {XR_GLOBAL_VAR_ORDERING, "Ordering", ordering, 5},
         {XR_GLOBAL_VAR_ENDIAN, "Endian", endian, 3},
@@ -414,6 +417,7 @@ static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
         {XR_GLOBAL_VAR_UTF8_ERROR, "Utf8Error", utf8_error, 1},
         {XR_GLOBAL_VAR_STRING_SLICE_ERROR, "StringSliceError", string_slice_error, 1},
         {XR_GLOBAL_VAR_COMPRESSION_ERROR, "CompressionError", compression_error, 1},
+        {XR_GLOBAL_VAR_CRYPTO_ERROR, "CryptoError", crypto_error, 1},
     };
     for (uint32_t i = 0; i < (uint32_t) (sizeof(enums) / sizeof(enums[0])); i++) {
         if (enums[i].builtin_index == builtin_index)

@@ -100,6 +100,7 @@ static int xi_lower_builtin_class_global_index(const char *name) {
         {"Utf8Error", XR_GLOBAL_VAR_UTF8_ERROR},
         {"StringSliceError", XR_GLOBAL_VAR_STRING_SLICE_ERROR},
         {"CompressionError", XR_GLOBAL_VAR_COMPRESSION_ERROR},
+        {"CryptoError", XR_GLOBAL_VAR_CRYPTO_ERROR},
         {"WorkQueue", XR_GLOBAL_VAR_WORKQUEUE},
         {"ResultGroup", XR_GLOBAL_VAR_RESULTGROUP},
         {"CountdownLatch", XR_GLOBAL_VAR_COUNTDOWNLATCH},

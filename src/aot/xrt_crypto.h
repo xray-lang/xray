@@ -18,6 +18,15 @@
 #include "xrt_arc.h"
 #include "xrt_value.h"
 
+extern XR_THREAD_LOCAL XrValue xrt_pending_error;
+
+static inline void xrt_crypto_set_builtin_enum_error(const char *enum_name, const char *member_name,
+                                                     uint32_t member_index) {
+    XrAotEnumAggregate err =
+        xrt_enum_aggregate_make(0, (int64_t) member_index, 0, enum_name, member_name, NULL);
+    xrt_pending_error = xrt_enum_aggregate_box(err);
+}
+
 static inline XrValue xrt_crypto_hex_result(const uint8_t *digest, size_t digest_len) {
     if (!digest || digest_len > 64)
         return XR_NULL_VAL;
@@ -62,8 +71,10 @@ static inline XrValue xrt_crypto_random_bytes(XrValue len_value) {
     if (!XR_IS_INT(len_value))
         return XR_NULL_VAL;
     int64_t len64 = XR_TO_INT(len_value);
-    if (len64 <= 0 || len64 > 1024)
+    if (len64 <= 0 || len64 > 1024) {
+        xrt_crypto_set_builtin_enum_error("CryptoError", "InvalidLength", 0);
         return XR_NULL_VAL;
+    }
 
     size_t len = (size_t) len64;
     uint8_t buf[1024];

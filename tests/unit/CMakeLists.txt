@@ -392,6 +392,16 @@ set_tests_properties(test_compress_native_error_abi PROPERTIES
     LABELS "vm;aot;frontend;stdlib;compress;task-198"
     TIMEOUT 120
 )
+add_test(
+    NAME test_crypto_native_error_abi
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_crypto_native_error_abi.py
+            --xray $<TARGET_FILE:xray>
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(test_crypto_native_error_abi PROPERTIES
+    LABELS "vm;aot;frontend;stdlib;crypto;task-198"
+    TIMEOUT 120
+)
 
 # test_repl needs the isolate-profile factory (xr_isolate_profile_*)
 # in addition to xray_core, so build it like test_cli_spec with an

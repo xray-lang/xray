@@ -1,0 +1,19 @@
+import crypto
+
+fn invalidRandomBytesError(n: int) -> string {
+    try {
+        crypto.randomBytes(n)
+        return "no-error"
+    } catch (e: CryptoError) {
+        if (e.toString() != "CryptoError.InvalidLength") {
+            return "wrong-error"
+        }
+        return e.toString()
+    }
+}
+
+var r8 = crypto.randomBytes(8)
+print(len(r8) == 16)
+print(invalidRandomBytesError(0))
+print(invalidRandomBytesError(-1))
+print(invalidRandomBytesError(1025))

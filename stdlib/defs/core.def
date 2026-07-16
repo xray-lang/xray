@@ -908,6 +908,7 @@ module crypto {
   fn randomBytes {
     signature: "(n: int): string"
     doc: "Generate random bytes"
+    effect: "CryptoError.InvalidLength"
     vm: "crypto_random_bytes"
     aot: "xrt_crypto_random_bytes"
     argc: 1

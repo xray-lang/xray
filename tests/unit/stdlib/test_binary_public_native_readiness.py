@@ -176,7 +176,7 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
 
         self.assertTrue(result.ok, result.detail)
         self.assertEqual("NATIVE_TYPED_ERROR_ABI_FUNCTION_BLOCKER", result.category)
-        self.assertIn("hex-string VM/AOT native path", result.detail)
+        self.assertIn("focused VM/native-AOT typed CryptoError ABI slice", result.detail)
         self.assertIn("randomBytes", module["public_native"])
         self.assertIsNot(module.get("def_migration_complete"), True)
         for path_text, anchors in spec["required"].items():
@@ -189,10 +189,11 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
         self.assertTrue(blocks)
         for block in blocks:
             self.assertNotIn("@errors(", block)
-            self.assertNotIn(spec["typed_error"], block)
+            self.assertIn('effect: "CryptoError.InvalidLength"', block)
 
+        self.assertTrue(spec.get("allow_typed_error_before_full_marker"))
         self.assertIn("Array<byte>", spec["detail"])
-        self.assertIn("CryptoError enum payloads", spec["detail"])
+        self.assertIn("full task-198/task-200 readiness remains blocked", spec["detail"])
         self.assertFalse(
             (ROOT / "tests" / "stdlib" / "contracts" / "TASK_198_TYPED_NATIVE_ERRORS_READY").exists(),
             "task-198 full readiness marker must remain absent for this probe",

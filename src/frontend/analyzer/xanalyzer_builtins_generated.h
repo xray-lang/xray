@@ -107,6 +107,10 @@ static const XaBuiltinMember g_gen_compress_functions[] = {
 };
 #define GEN_COMPRESS_FUNCTION_COUNT 10
 
+static const char *g_gen_crypto_randombytes_5_errors[] = {
+    "CryptoError.InvalidLength",
+};
+
 // crypto module functions
 static const XaBuiltinMember g_gen_crypto_functions[] = {
     {"md5", "(data: string): string", "Compute MD5 hash", true, false, false, false, false},
@@ -114,7 +118,7 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
     {"sha256", "(data: string): string", "Compute SHA-256 hash", true, false, false, false, false},
     {"sha512", "(data: string): string", "Compute SHA-512 hash", true, false, false, false, false},
     {"hmac", "(algo: string, key: string, data: string): string?", "Compute HMAC", true, false, false, false, false},
-    {"randomBytes", "(n: int): string", "Generate random bytes", true, false, false, false, false},
+    {"randomBytes", "(n: int): string", "Generate random bytes", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_crypto_randombytes_5_errors, 1}},
     {"uuid", "(): string", "Generate UUID v4", true, false, false, false, false},
     {"encrypt", "(key: string, plaintext: string): string", "AES-256-CBC encrypt", true, false, false, false, false},
     {"decrypt", "(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", true, false, false, false, false},
