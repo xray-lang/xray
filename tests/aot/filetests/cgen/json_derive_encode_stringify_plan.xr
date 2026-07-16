@@ -1,0 +1,19 @@
+@derive(Json)
+class Point {
+    x: int
+    y: int
+
+    constructor(x: int, y: int) {
+        this.x = x
+        this.y = y
+    }
+}
+
+fn make_point() -> Point {
+    return Point(3, 4)
+}
+
+var point = make_point()
+var encoded = Json.encode(point)
+print(encoded.x)
+print(Json.stringify(point))

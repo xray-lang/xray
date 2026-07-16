@@ -4358,12 +4358,18 @@ static inline XrValue xrt_json_encode_set_value(xrt_set_t *src, int depth) {
     return dst;
 }
 
+static inline const XrtTypeDeriveInfo *xrt_json_instance_derive_info(XrValue val) {
+    if (val.tag != XR_TAG_PTR || val.heap_type != XR_TINSTANCE || !val.ptr)
+        return NULL;
+    XrObjHeader *hdr = XRT_ARC_HDR(val.ptr);
+    const XrtTypeInfo *ti = xrt_type_info(hdr ? hdr->type : 0);
+    return ti ? xrt_type_derive_info(ti->type_id) : NULL;
+}
+
 static inline XrValue xrt_json_encode_instance_value(XrValue val, int depth) {
     if (val.tag != XR_TAG_PTR || val.heap_type != XR_TINSTANCE || !val.ptr)
         xrt_json_encode_abort("cannot encode value to JSON", val);
-    XrObjHeader *hdr = XRT_ARC_HDR(val.ptr);
-    const XrtTypeInfo *ti = xrt_type_info(hdr ? hdr->type : 0);
-    const XrtTypeDeriveInfo *di = ti ? xrt_type_derive_info(ti->type_id) : NULL;
+    const XrtTypeDeriveInfo *di = xrt_json_instance_derive_info(val);
     if (!di || (di->derive_flags & XR_DERIVE_JSON) == 0)
         xrt_json_encode_abort("type does not derive Json", val);
     if (di->inspect_field_count > 0 && !di->inspect_fields)
@@ -4632,6 +4638,14 @@ static void xrt_json_stringify_value(xrt_strbuf_t *sb, XrValue val, int depth) {
             if (val.ptr && val.heap_type == 0) {
                 xrt_json_stringify_object_fields(sb, (xrt_json_t *) val.ptr, depth);
                 return;
+            }
+            if (val.ptr && val.heap_type == XR_TINSTANCE) {
+                const XrtTypeDeriveInfo *di = xrt_json_instance_derive_info(val);
+                if (di && (di->derive_flags & XR_DERIVE_JSON) != 0) {
+                    xrt_json_stringify_value(sb, xrt_json_encode_instance_value(val, depth + 1),
+                                             depth + 1);
+                    return;
+                }
             }
             break;
         default:

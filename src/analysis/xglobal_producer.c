@@ -2666,6 +2666,18 @@ static bool producer_add_decl_derives(XgProducer *p, XgModuleId module_id, XgDec
     return true;
 }
 
+static bool body_type_key_has_derive_kind(XgBodyCollect *bc, uint32_t type_key,
+                                          uint8_t derive_kind) {
+    if (!bc || !bc->evidence || type_key == 0)
+        return false;
+    for (uint32_t i = 0; i < bc->evidence->nderives; i++) {
+        const XgDeriveSummary *derive = &bc->evidence->derives[i];
+        if (derive->type_key == type_key && derive->derive_kind == derive_kind)
+            return true;
+    }
+    return false;
+}
+
 static XrAttribute *attrs_find(XrAttribute **attrs, int count, AttributeKind kind) {
     for (int i = 0; i < count; i++) {
         if (attrs[i] && attrs[i]->kind == kind)
@@ -5463,6 +5475,8 @@ static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
                 }
             }
         }
+        if (body_type_key_has_derive_kind(bc, row.input_type_key, XG_DERIVE_JSON))
+            row.flags |= XG_JSON_CODEC_USES_DERIVE;
     } else if (strcmp(method, "stringify") == 0) {
         row.codec_kind = XG_JSON_CODEC_STRINGIFY;
         if (arg0) {
@@ -5476,6 +5490,8 @@ static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
                     row.field_count = shape->field_count;
             }
         }
+        if (body_type_key_has_derive_kind(bc, row.input_type_key, XG_DERIVE_JSON))
+            row.flags |= XG_JSON_CODEC_USES_DERIVE;
     } else {
         return;
     }
