@@ -25,6 +25,7 @@ EXPECTED_OUTPUT = (
     "true\n"
     "true\n"
     "true\n"
+    "true\n"
     "A�B\n"
     "�(�\n"
     "�\n"
