@@ -24,19 +24,23 @@ from check_binary_public_native_readiness import (  # noqa: E402
 
 
 class BinaryPublicNativeReadinessTest(unittest.TestCase):
-    def run_fast_single_function_probe(self, modules: dict[str, dict[str, object]] | None = None):
+    def run_fast_single_function_probe(
+        self,
+        subject: str = "compress.gunzip",
+        modules: dict[str, dict[str, object]] | None = None,
+    ):
         original_modules = readiness.load_boundary_modules
         original_probes = readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES
-        probe = dict(original_probes["compress.gunzip"])
+        probe = dict(original_probes[subject])
         probe["required"] = {}
         if modules is not None:
             readiness.load_boundary_modules = lambda root: modules
-        readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = {"compress.gunzip": probe}
+        readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = {subject: probe}
         try:
             return {
                 result.subject: result
                 for result in check_single_function_native_typed_error_probes(ROOT)
-            }["compress.gunzip"]
+            }[subject]
         finally:
             readiness.load_boundary_modules = original_modules
             readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = original_probes
@@ -81,6 +85,35 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
             "task-198 full readiness marker must remain absent for this probe",
         )
 
+    def test_crypto_random_bytes_typed_error_abi_is_a_single_function_blocker(self) -> None:
+        spec = readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES["crypto.randomBytes"]
+        module = load_boundary_modules(ROOT)["crypto"]
+        result = self.run_fast_single_function_probe("crypto.randomBytes")
+
+        self.assertTrue(result.ok, result.detail)
+        self.assertEqual("NATIVE_TYPED_ERROR_ABI_FUNCTION_BLOCKER", result.category)
+        self.assertIn("hex-string VM/AOT native path", result.detail)
+        self.assertIn("randomBytes", module["public_native"])
+        self.assertIsNot(module.get("def_migration_complete"), True)
+        for path_text, anchors in spec["required"].items():
+            with self.subTest(path=path_text):
+                text = (ROOT / path_text).read_text(encoding="utf-8")
+                for anchor in anchors:
+                    self.assertIn(anchor, text)
+
+        blocks = readiness.def_function_blocks(ROOT, spec["module"], spec["function"])
+        self.assertTrue(blocks)
+        for block in blocks:
+            self.assertNotIn("@errors(", block)
+            self.assertNotIn(spec["typed_error"], block)
+
+        self.assertIn("Array<byte>", spec["detail"])
+        self.assertIn("CryptoError enum payloads", spec["detail"])
+        self.assertFalse(
+            (ROOT / "tests" / "stdlib" / "contracts" / "TASK_198_TYPED_NATIVE_ERRORS_READY").exists(),
+            "task-198 full readiness marker must remain absent for this probe",
+        )
+
     def test_compress_gunzip_probe_fails_closed_on_partial_public_switch(self) -> None:
         modules = {
             name: dict(module)
@@ -89,10 +122,23 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
         modules["compress"] = dict(modules["compress"])
         modules["compress"]["public_native"] = ["crc32"]
 
-        result = self.run_fast_single_function_probe(modules)
+        result = self.run_fast_single_function_probe(modules=modules)
 
         self.assertFalse(result.ok)
         self.assertIn("compress.gunzip left pre-switch public_native", result.detail)
+
+    def test_crypto_random_bytes_probe_fails_closed_on_partial_public_switch(self) -> None:
+        modules = {
+            name: dict(module)
+            for name, module in load_boundary_modules(ROOT).items()
+        }
+        modules["crypto"] = dict(modules["crypto"])
+        modules["crypto"]["public_native"] = ["uuid"]
+
+        result = self.run_fast_single_function_probe("crypto.randomBytes", modules)
+
+        self.assertFalse(result.ok)
+        self.assertIn("crypto.randomBytes left pre-switch public_native", result.detail)
 
     def test_public_switch_markers_remain_absent(self) -> None:
         results = check_dependency_markers(ROOT)
