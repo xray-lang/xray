@@ -651,6 +651,300 @@ static XaSymbol *xa_parallel_module_member_symbol(XaInferContext *ctx, AstNode *
     return xa_parallel_import_target_symbol(ctx, member);
 }
 
+static bool xa_out_da_stmt_may_throw(XaInferContext *ctx, AstNode *node, int depth);
+static bool xa_out_da_expr_may_throw(XaInferContext *ctx, AstNode *node, int depth);
+
+static bool xa_out_da_expr_list_may_throw(XaInferContext *ctx, AstNode **nodes, int count,
+                                          int depth) {
+    for (int i = 0; i < count; i++) {
+        if (xa_out_da_expr_may_throw(ctx, nodes ? nodes[i] : NULL, depth))
+            return true;
+    }
+    return false;
+}
+
+static AstNode *xa_out_da_symbol_function_body(XaInferContext *ctx, XaSymbol *sym) {
+    if (!ctx || !ctx->analyzer || !sym || sym->kind != XA_SYM_FUNCTION)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    AstNode *fn_node = links ? links->function_decl_node : NULL;
+    if (!fn_node)
+        return xa_parallel_symbol_function_body(ctx, sym);
+    if (fn_node->type == AST_FUNCTION_DECL)
+        return fn_node->as.function_decl.body;
+    if (fn_node->type == AST_FUNCTION_EXPR)
+        return fn_node->as.function_expr.body;
+    return NULL;
+}
+
+static bool xa_out_da_symbol_may_throw(XaInferContext *ctx, XaSymbol *sym, int depth) {
+    if (!ctx || !ctx->analyzer || !sym || depth > 8)
+        return true;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!links || sym->kind != XA_SYM_FUNCTION || sym->is_imported || links->is_extern)
+        return true;
+    if (links->effect_id != XA_EFFECT_NONE) {
+        const XaEffectSummary *summary =
+            xa_effect_db_get(ctx->analyzer->effect_db, links->effect_id);
+        return !summary || !xa_effect_summary_is_nothrow(summary);
+    }
+    AstNode *body = xa_out_da_symbol_function_body(ctx, sym);
+    if (!body)
+        return true;
+    return xa_out_da_stmt_may_throw(ctx, body, depth + 1);
+}
+
+static bool xa_out_da_call_may_throw(XaInferContext *ctx, AstNode *callee, int depth) {
+    if (!callee || depth > 8)
+        return true;
+    if (callee->type == AST_FUNCTION_DECL)
+        return xa_out_da_stmt_may_throw(ctx, callee->as.function_decl.body, depth + 1);
+    if (callee->type == AST_FUNCTION_EXPR)
+        return xa_out_da_stmt_may_throw(ctx, callee->as.function_expr.body, depth + 1);
+    if (callee->type != AST_VARIABLE)
+        return true;
+    return xa_out_da_symbol_may_throw(ctx, xa_parallel_symbol_from_variable_node(ctx, callee),
+                                      depth + 1);
+}
+
+static bool xa_out_da_match_arms_may_throw(XaInferContext *ctx, MatchExprNode *match, int depth) {
+    if (!match)
+        return false;
+    for (int i = 0; i < match->arm_count; i++) {
+        AstNode *arm = match->arms ? match->arms[i] : NULL;
+        if (!arm || arm->type != AST_MATCH_ARM)
+            return true;
+        if (xa_out_da_expr_may_throw(ctx, arm->as.match_arm.guard, depth) ||
+            xa_out_da_stmt_may_throw(ctx, arm->as.match_arm.body, depth))
+            return true;
+    }
+    return false;
+}
+
+static bool xa_out_da_expr_may_throw(XaInferContext *ctx, AstNode *node, int depth) {
+    if (!node)
+        return false;
+    if (depth > 8)
+        return true;
+
+    switch (node->type) {
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_BIGINT:
+        case AST_LITERAL_STRING:
+        case AST_LITERAL_RUNE:
+        case AST_LITERAL_REGEX:
+        case AST_LITERAL_NULL:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_VARIABLE:
+        case AST_THIS_EXPR:
+        case AST_FUNCTION_DECL:
+        case AST_FUNCTION_EXPR:
+            return false;
+        case AST_CALL_EXPR: {
+            CallExprNode *call = &node->as.call_expr;
+            return xa_out_da_expr_may_throw(ctx, call->callee, depth + 1) ||
+                   xa_out_da_expr_list_may_throw(ctx, call->arguments, call->arg_count,
+                                                 depth + 1) ||
+                   xa_out_da_call_may_throw(ctx, call->callee, depth + 1);
+        }
+        case AST_GROUPING:
+            return xa_out_da_expr_may_throw(ctx, node->as.grouping, depth + 1);
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+        case AST_FORCE_UNWRAP:
+        case AST_MOVE_EXPR:
+        case AST_COMPTIME_EXPR:
+        case AST_UNSAFE_EXPR:
+            return xa_out_da_expr_may_throw(ctx, node->as.unary.operand, depth + 1);
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_NULLISH_COALESCE:
+            return xa_out_da_expr_may_throw(ctx, node->as.binary.left, depth + 1) ||
+                   xa_out_da_expr_may_throw(ctx, node->as.binary.right, depth + 1);
+        case AST_TERNARY:
+            return xa_out_da_expr_may_throw(ctx, node->as.ternary.condition, depth + 1) ||
+                   xa_out_da_expr_may_throw(ctx, node->as.ternary.true_expr, depth + 1) ||
+                   xa_out_da_expr_may_throw(ctx, node->as.ternary.false_expr, depth + 1);
+        case AST_ASSIGNMENT:
+            return xa_out_da_expr_may_throw(ctx, node->as.assignment.value, depth + 1);
+        case AST_COMPOUND_ASSIGNMENT:
+            return xa_out_da_expr_may_throw(ctx, node->as.compound_assignment.object, depth + 1) ||
+                   xa_out_da_expr_may_throw(ctx, node->as.compound_assignment.value, depth + 1);
+        case AST_DESTRUCTURE_ASSIGN:
+            return xa_out_da_expr_may_throw(ctx, node->as.destructure_assign.value, depth + 1);
+        case AST_MEMBER_ACCESS:
+            return xa_out_da_expr_may_throw(ctx, node->as.member_access.object, depth + 1);
+        case AST_MEMBER_SET:
+            return xa_out_da_expr_may_throw(ctx, node->as.member_set.object, depth + 1) ||
+                   xa_out_da_expr_may_throw(ctx, node->as.member_set.value, depth + 1);
+        case AST_INDEX_GET:
+            return xa_out_da_expr_may_throw(ctx, node->as.index_get.array, depth + 1) ||
+                   xa_out_da_expr_may_throw(ctx, node->as.index_get.index, depth + 1);
+        case AST_INDEX_SET:
+            return xa_out_da_expr_may_throw(ctx, node->as.index_set.array, depth + 1) ||
+                   xa_out_da_expr_may_throw(ctx, node->as.index_set.index, depth + 1) ||
+                   xa_out_da_expr_may_throw(ctx, node->as.index_set.value, depth + 1);
+        case AST_SLICE_EXPR:
+            return xa_out_da_expr_may_throw(ctx, node->as.slice_expr.source, depth + 1) ||
+                   xa_out_da_expr_may_throw(ctx, node->as.slice_expr.start, depth + 1) ||
+                   xa_out_da_expr_may_throw(ctx, node->as.slice_expr.end, depth + 1);
+        case AST_ARRAY_LITERAL:
+            if (node->as.array_literal.is_repeat)
+                return xa_out_da_expr_may_throw(ctx, node->as.array_literal.repeat_value,
+                                                depth + 1) ||
+                       xa_out_da_expr_may_throw(ctx, node->as.array_literal.repeat_count,
+                                                depth + 1);
+            return xa_out_da_expr_list_may_throw(ctx, node->as.array_literal.elements,
+                                                 node->as.array_literal.count, depth + 1);
+        case AST_TUPLE_LITERAL:
+            return xa_out_da_expr_list_may_throw(ctx, node->as.tuple_literal.elements,
+                                                 node->as.tuple_literal.count, depth + 1);
+        case AST_OBJECT_LITERAL:
+            return xa_out_da_expr_list_may_throw(ctx, node->as.object_literal.keys,
+                                                 node->as.object_literal.count, depth + 1) ||
+                   xa_out_da_expr_list_may_throw(ctx, node->as.object_literal.values,
+                                                 node->as.object_literal.count, depth + 1);
+        case AST_MAP_LITERAL:
+            return xa_out_da_expr_list_may_throw(ctx, node->as.map_literal.keys,
+                                                 node->as.map_literal.count, depth + 1) ||
+                   xa_out_da_expr_list_may_throw(ctx, node->as.map_literal.values,
+                                                 node->as.map_literal.count, depth + 1);
+        case AST_SET_LITERAL:
+            return xa_out_da_expr_list_may_throw(ctx, node->as.set_literal.elements,
+                                                 node->as.set_literal.count, depth + 1);
+        case AST_STRUCT_LITERAL:
+            return xa_out_da_expr_list_may_throw(ctx, node->as.struct_literal.field_values,
+                                                 node->as.struct_literal.field_count, depth + 1);
+        case AST_TEMPLATE_STRING:
+            return xa_out_da_expr_list_may_throw(ctx, node->as.template_str.parts,
+                                                 node->as.template_str.part_count, depth + 1);
+        case AST_MATCH_EXPR:
+            return xa_out_da_expr_may_throw(ctx, node->as.match_expr.expr, depth + 1) ||
+                   xa_out_da_match_arms_may_throw(ctx, &node->as.match_expr, depth + 1);
+        case AST_SCOPE_BLOCK:
+            return xa_out_da_stmt_may_throw(ctx, node->as.scope_block.body, depth + 1);
+        case AST_AS_EXPR:
+            return xa_out_da_expr_may_throw(ctx, node->as.as_expr.expr, depth + 1);
+        case AST_IS_EXPR:
+            return xa_out_da_expr_may_throw(ctx, node->as.is_expr.expr, depth + 1);
+        case AST_AWAIT_EXPR:
+        case AST_GO_EXPR:
+        case AST_NEW_EXPR:
+            return true;
+        default:
+            return true;
+    }
+}
+
+static bool xa_out_da_stmt_may_throw(XaInferContext *ctx, AstNode *node, int depth) {
+    if (!node)
+        return false;
+    if (depth > 8)
+        return true;
+
+    switch (node->type) {
+        case AST_BLOCK:
+            for (int i = 0; i < node->as.block.count; i++) {
+                if (xa_out_da_stmt_may_throw(ctx, node->as.block.statements[i], depth + 1))
+                    return true;
+            }
+            return false;
+        case AST_PROGRAM:
+            for (int i = 0; i < node->as.program.count; i++) {
+                if (xa_out_da_stmt_may_throw(ctx, node->as.program.statements[i], depth + 1))
+                    return true;
+            }
+            return false;
+        case AST_EXPR_STMT:
+            return xa_out_da_expr_may_throw(ctx, node->as.expr_stmt, depth + 1);
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+        case AST_SHARED_DECL:
+        case AST_OWNED_DECL:
+            return xa_out_da_expr_may_throw(ctx, node->as.var_decl.initializer, depth + 1);
+        case AST_DESTRUCTURE_DECL:
+            return xa_out_da_expr_may_throw(ctx, node->as.destructure_decl.initializer, depth + 1);
+        case AST_ASSIGNMENT:
+        case AST_COMPOUND_ASSIGNMENT:
+        case AST_DESTRUCTURE_ASSIGN:
+        case AST_MEMBER_SET:
+        case AST_INDEX_SET:
+        case AST_MATCH_EXPR:
+            return xa_out_da_expr_may_throw(ctx, node, depth + 1);
+        case AST_RETURN_STMT:
+            return xa_out_da_expr_list_may_throw(ctx, node->as.return_stmt.values,
+                                                 node->as.return_stmt.value_count, depth + 1);
+        case AST_THROW_STMT:
+            return true;
+        case AST_IF_STMT:
+            return xa_out_da_expr_may_throw(ctx, node->as.if_stmt.condition, depth + 1) ||
+                   xa_out_da_stmt_may_throw(ctx, node->as.if_stmt.then_branch, depth + 1) ||
+                   xa_out_da_stmt_may_throw(ctx, node->as.if_stmt.else_branch, depth + 1);
+        case AST_WHILE_STMT:
+            return xa_out_da_expr_may_throw(ctx, node->as.while_stmt.condition, depth + 1) ||
+                   xa_out_da_stmt_may_throw(ctx, node->as.while_stmt.body, depth + 1);
+        case AST_FOR_STMT:
+            return xa_out_da_stmt_may_throw(ctx, node->as.for_stmt.initializer, depth + 1) ||
+                   xa_out_da_expr_may_throw(ctx, node->as.for_stmt.condition, depth + 1) ||
+                   xa_out_da_expr_may_throw(ctx, node->as.for_stmt.increment, depth + 1) ||
+                   xa_out_da_stmt_may_throw(ctx, node->as.for_stmt.body, depth + 1);
+        case AST_FOR_IN_STMT:
+            return xa_out_da_expr_may_throw(ctx, node->as.for_in_stmt.collection, depth + 1) ||
+                   xa_out_da_stmt_may_throw(ctx, node->as.for_in_stmt.body, depth + 1);
+        case AST_TRY_CATCH:
+            if (xa_out_da_stmt_may_throw(ctx, node->as.try_catch.try_body, depth + 1))
+                return true;
+            for (int i = 0; i < node->as.try_catch.catch_count; i++) {
+                XrCatchClause *cc =
+                    node->as.try_catch.catch_clauses ? node->as.try_catch.catch_clauses[i] : NULL;
+                if (cc && cc->is_panic)
+                    return true;
+                if (xa_out_da_stmt_may_throw(ctx, cc ? cc->body : NULL, depth + 1))
+                    return true;
+            }
+            return false;
+        case AST_PRINT_STMT:
+            return xa_out_da_expr_list_may_throw(ctx, node->as.print_stmt.exprs,
+                                                 node->as.print_stmt.expr_count, depth + 1);
+        case AST_DEFER_STMT:
+            return xa_out_da_expr_may_throw(ctx, node->as.defer_stmt.expr, depth + 1);
+        case AST_SCOPE_BLOCK:
+            return xa_out_da_stmt_may_throw(ctx, node->as.scope_block.body, depth + 1);
+        default:
+            return true;
+    }
+}
+
+static bool xa_out_da_try_catch_may_enter_catch(XaInferContext *ctx, TryCatchNode *tc) {
+    if (!tc)
+        return true;
+    for (int ci = 0; ci < tc->catch_count; ci++) {
+        XrCatchClause *cc = tc->catch_clauses ? tc->catch_clauses[ci] : NULL;
+        if (!cc || cc->is_panic)
+            return true;
+    }
+    return xa_out_da_stmt_may_throw(ctx, tc->try_body, 0);
+}
+
 static bool xa_parallel_call_is_coro_yield(XaInferContext *ctx, CallExprNode *call) {
     if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return false;
@@ -6021,11 +6315,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             xa_out_param_da_record_path(out_da, out_da_count,
                                         xa_statement_can_fall_through(tc->try_body));
 
+            bool catch_paths_reachable = xa_out_da_try_catch_may_enter_catch(ctx, tc);
             for (int ci = 0; ci < tc->catch_count; ci++) {
                 XrCatchClause *cc = tc->catch_clauses[ci];
                 xa_out_param_da_restore_before(out_da, out_da_count);
                 if (!cc || !cc->body) {
-                    xa_out_param_da_record_path(out_da, out_da_count, true);
+                    if (catch_paths_reachable)
+                        xa_out_param_da_record_path(out_da, out_da_count, true);
                     continue;
                 }
                 xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, cc->body);
@@ -6046,8 +6342,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 }
                 xa_visit_inline_statement_sequence_with_cursor(ctx, cc->body);
                 xa_analyzer_exit_scope(ctx->analyzer);
-                xa_out_param_da_record_path(out_da, out_da_count,
-                                            xa_statement_can_fall_through(cc->body));
+                if (catch_paths_reachable)
+                    xa_out_param_da_record_path(out_da, out_da_count,
+                                                xa_statement_can_fall_through(cc->body));
             }
             xa_out_param_da_apply_path_merge(out_da, out_da_count);
             xa_out_param_da_free(out_da);
