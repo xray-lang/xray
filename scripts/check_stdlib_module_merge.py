@@ -18,6 +18,52 @@ from stdlib_manifest import load_manifest, load_toml
 INTAKE_PATH = Path("stdlib/stdlib_module_intake.toml")
 
 
+def pattern_base(pattern: str) -> str:
+    if pattern.endswith("/**"):
+        return pattern[:-3].rstrip("/")
+    return pattern
+
+
+def pattern_is_ignored(root: Path, pattern: str) -> bool:
+    base = pattern_base(pattern)
+    result = subprocess.run(
+        ["git", "check-ignore", "-q", "--", base],
+        cwd=root,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def pattern_has_target(root: Path, pattern: str) -> bool:
+    if pattern.endswith("/**"):
+        return (root / pattern_base(pattern)).exists() or pattern_is_ignored(root, pattern)
+    if any(char in pattern for char in "*?["):
+        return any(root.glob(pattern)) or pattern_is_ignored(root, pattern)
+    return (root / pattern).exists() or pattern_is_ignored(root, pattern)
+
+
+def patterns_overlap(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    left_recursive = left.endswith("/**")
+    right_recursive = right.endswith("/**")
+    left_base = pattern_base(left)
+    right_base = pattern_base(right)
+    if left_recursive and right_recursive:
+        return (
+            left_base == right_base
+            or left_base.startswith(right_base + "/")
+            or right_base.startswith(left_base + "/")
+        )
+    if left_recursive:
+        return path_matches(left, right_base)
+    if right_recursive:
+        return path_matches(right, left_base)
+    return False
+
+
 def load_intake(root: Path) -> dict[str, Any]:
     path = root / INTAKE_PATH
     if not path.is_file():
@@ -25,7 +71,7 @@ def load_intake(root: Path) -> dict[str, Any]:
     return load_toml(path)
 
 
-def validate_intake(data: dict[str, Any]) -> list[str]:
+def validate_intake(data: dict[str, Any], root: Path | None = None) -> list[str]:
     errors: list[str] = []
     if data.get("schema") != 1:
         errors.append(f"{INTAKE_PATH}: schema must be 1")
@@ -36,6 +82,23 @@ def validate_intake(data: dict[str, Any]) -> list[str]:
         value = s0.get(field)
         if not isinstance(value, list):
             errors.append(f"{INTAKE_PATH}: s0.{field} must be a list")
+    for field in ("owned_patterns", "generated_patterns"):
+        patterns = [str(value) for value in s0.get(field, ())]
+        seen: set[str] = set()
+        for pattern in patterns:
+            if pattern in seen:
+                errors.append(f"{INTAKE_PATH}: duplicate s0.{field} pattern {pattern}")
+            seen.add(pattern)
+            if root is not None and not pattern_has_target(root, pattern):
+                errors.append(f"{INTAKE_PATH}: s0.{field} pattern matches no path: {pattern}")
+    owned_patterns = [str(value) for value in s0.get("owned_patterns", ())]
+    generated_patterns = [str(value) for value in s0.get("generated_patterns", ())]
+    for owned in owned_patterns:
+        for generated in generated_patterns:
+            if patterns_overlap(owned, generated):
+                errors.append(
+                    f"{INTAKE_PATH}: s0.owned_patterns pattern {owned} overlaps generated pattern {generated}"
+                )
     lanes = data.get("lane", ())
     slots: set[str] = set()
     branches: set[str] = set()
@@ -485,7 +548,7 @@ def main() -> int:
     root = Path(args.root).resolve()
     try:
         data = load_intake(root)
-        errors = validate_intake(data)
+        errors = validate_intake(data, root)
         if errors:
             raise RuntimeError("\n".join(errors))
         if args.command == "queue":

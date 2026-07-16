@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import sys
 import unittest
 from pathlib import Path
@@ -28,6 +29,7 @@ class StdlibModuleMergeGateTest(unittest.TestCase):
 
     def test_intake_manifest_has_unique_s1_s2_s3_lanes(self) -> None:
         self.assertEqual([], validate_intake(self.intake))
+        self.assertEqual([], validate_intake(self.intake, ROOT))
         self.assertEqual(
             [("S1", 198), ("S2", 199), ("S3", 200)],
             [(lane["slot"], lane["task"]) for lane in self.intake["lane"]],
@@ -38,6 +40,8 @@ class StdlibModuleMergeGateTest(unittest.TestCase):
             "stdlib/base64/base64.xr",
             "tests/stdlib/contracts/base64/contract.toml",
             "stdlib/stdlib_boundary.toml",
+            "spec/source/cards/stdlib/http.json",
+            "src/app/mcp/xmcp_knowledge_generated.h",
             "src/app/lsp/xlsp_stdlib_generated.inc",
             "tools/stdlibgen/stdlibgen.py",
         ]
@@ -45,10 +49,21 @@ class StdlibModuleMergeGateTest(unittest.TestCase):
         self.assertEqual(
             [
                 "stdlib/stdlib_boundary.toml",
+                "spec/source/cards/stdlib/http.json",
+                "src/app/mcp/xmcp_knowledge_generated.h",
                 "src/app/lsp/xlsp_stdlib_generated.inc",
                 "tools/stdlibgen/stdlibgen.py",
             ],
             [entry["path"] for entry in collisions],
+        )
+
+    def test_s0_pattern_hygiene_rejects_missing_tracked_path(self) -> None:
+        intake = copy.deepcopy(self.intake)
+        intake["s0"]["owned_patterns"].append("scripts/missing_stdlib_governance_gate.py")
+        self.assertIn(
+            "stdlib/stdlib_module_intake.toml: s0.owned_patterns pattern matches no path: "
+            "scripts/missing_stdlib_governance_gate.py",
+            validate_intake(intake, ROOT),
         )
 
     def test_module_inference_uses_source_contract_and_benchmark_paths(self) -> None:
