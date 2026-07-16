@@ -548,6 +548,60 @@ SINGLE_FUNCTION_PUBLIC_SURFACE_PROBES = {
             "encoding.hexEncode before task-200 public-native cutover"
         ),
     },
+    "net.read": {
+        "module": "net",
+        "function": "read",
+        "required": {
+            "tests/stdlib/contracts/net/contract.toml": (
+                "future converged net.read returns Array<byte> instead of string storage for arbitrary bytes",
+                "legacy net.read exposes arbitrary socket bytes as string?",
+                "loopback-string-status-sentinels",
+                "future converged read/write APIs use typed byte values and typed native errors instead of string? and status sentinels",
+            ),
+            "stdlib/defs/core.def": (
+                "fn read {",
+                'signature: "(conn: NetConn, maxlen?: int): string?"',
+                'vm: "net_read_handle_yieldable"',
+                'aot: "xrt_net_read_default"',
+                'aot: "xrt_net_read"',
+            ),
+            "stdlib/net/net.c": (
+                "net.read(conn_handle, maxlen?) -> string | null",
+                "static XrCFuncResult net_read_handle_yieldable",
+                "*result = xr_string_value(xr_string_new(X, state->buf, n));",
+                "*result = XR_NULL_VAL;",
+                "net_conn_set_error",
+            ),
+            "src/aot/xrt_net.h": (
+                "static inline XrValue xrt_net_read",
+                "XrValue out = xrt_str_alloc((size_t) n);",
+                "memcpy(xr_str_buf(out), buf, (size_t) n);",
+                "return XR_NULL_VAL;",
+                "xrt_net_set_error_base",
+            ),
+            "tests/regression/10_stdlib/1433_net_loopback.xr": (
+                "test_loopback_binary_high_bytes",
+                "var resp = net.read(c)!",
+                "assert_eq(resp.bytes()[0]!, 195)",
+                "assert_eq(resp.bytes()[4]!, 172)",
+            ),
+            "tests/stdlib/contracts/net/cases.jsonl": (
+                "high-byte-loopback",
+                "TCP loopback preserves high bytes through the current pre-switch net.read/net.write path",
+            ),
+        },
+        "forbidden_def_anchors": (
+            "Array<byte>",
+            "Slice<byte>",
+            "NetError",
+            "@errors(",
+        ),
+        "detail": (
+            "net.read remains a string?/null-sentinel native path; future switch "
+            "must return Array<byte> from a typed byte boundary and emit NetError "
+            "enum payloads before task-200 public-native cutover"
+        ),
+    },
 }
 
 

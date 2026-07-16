@@ -225,6 +225,32 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
         self.assertIn("Slice<byte>", spec["detail"])
         self.assertIn("encoding.hexEncode", spec["detail"])
 
+    def test_net_read_string_null_surface_is_a_single_function_blocker(self) -> None:
+        spec = SINGLE_FUNCTION_PUBLIC_SURFACE_PROBES["net.read"]
+        module = load_boundary_modules(ROOT)["net"]
+        result = self.run_fast_public_surface_probe("net.read")
+
+        self.assertTrue(result.ok, result.detail)
+        self.assertEqual("PUBLIC_NATIVE_FUNCTION_SURFACE_BLOCKER", result.category)
+        self.assertIn("string?/null-sentinel native path", result.detail)
+        self.assertIn("read", module["public_native"])
+        self.assertIsNot(module.get("def_migration_complete"), True)
+        for path_text, anchors in spec["required"].items():
+            with self.subTest(path=path_text):
+                text = (ROOT / path_text).read_text(encoding="utf-8")
+                for anchor in anchors:
+                    self.assertIn(anchor, text)
+
+        blocks = readiness.def_function_blocks(ROOT, spec["module"], spec["function"])
+        self.assertEqual(2, len(blocks))
+        for block in blocks:
+            for anchor in spec["forbidden_def_anchors"]:
+                self.assertNotIn(anchor, block)
+
+        self.assertIn("Array<byte>", spec["detail"])
+        self.assertIn("NetError", spec["detail"])
+        self.assertIn("typed byte boundary", spec["detail"])
+
     def test_compress_gunzip_probe_fails_closed_on_partial_public_switch(self) -> None:
         modules = {
             name: dict(module)
@@ -289,6 +315,19 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertIn("crypto.sha256 left pre-switch public_native", result.detail)
+
+    def test_net_read_probe_fails_closed_on_partial_public_switch(self) -> None:
+        modules = {
+            name: dict(module)
+            for name, module in load_boundary_modules(ROOT).items()
+        }
+        modules["net"] = dict(modules["net"])
+        modules["net"]["public_native"] = ["write"]
+
+        result = self.run_fast_public_surface_probe("net.read", modules)
+
+        self.assertFalse(result.ok)
+        self.assertIn("net.read left pre-switch public_native", result.detail)
 
     def test_public_switch_markers_remain_absent(self) -> None:
         results = check_dependency_markers(ROOT)
