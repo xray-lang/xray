@@ -91,6 +91,17 @@ static bool out_field_da_path_append(char *dst, size_t dst_size, const char *suf
     return n >= 0 && (size_t) n < dst_size - len;
 }
 
+static bool out_field_da_index_segment(AstNode *index, char *buf, size_t buf_size) {
+    if (!index || !buf || buf_size == 0)
+        return false;
+    while (index && (index->type == AST_GROUPING || index->type == AST_FORCE_UNWRAP))
+        index = index->type == AST_GROUPING ? index->as.grouping : index->as.unary.operand;
+    if (!index || index->type != AST_LITERAL_INT)
+        return false;
+    int n = snprintf(buf, buf_size, "[%lld]", (long long) index->as.literal.raw_value.int_val);
+    return n >= 0 && (size_t) n < buf_size;
+}
+
 static XaSymbol *out_field_da_member_path_symbol(XaInferContext *ctx, AstNode *expr, char *path,
                                                  size_t path_size) {
     if (!ctx || !ctx->analyzer || !expr || !path || path_size == 0)
@@ -112,23 +123,35 @@ static XaSymbol *out_field_da_member_path_symbol(XaInferContext *ctx, AstNode *e
             return NULL;
         return sym;
     }
-    if (expr->type != AST_MEMBER_ACCESS)
-        return NULL;
-    XaSymbol *root =
-        out_field_da_member_path_symbol(ctx, expr->as.member_access.object, path, path_size);
-    if (!root || !expr->as.member_access.name)
-        return NULL;
-    if (!out_field_da_path_append(path, path_size, ".") ||
-        !out_field_da_path_append(path, path_size, expr->as.member_access.name))
-        return NULL;
-    return root;
+    if (expr->type == AST_MEMBER_ACCESS) {
+        XaSymbol *root =
+            out_field_da_member_path_symbol(ctx, expr->as.member_access.object, path, path_size);
+        if (!root || !expr->as.member_access.name)
+            return NULL;
+        if (!out_field_da_path_append(path, path_size, ".") ||
+            !out_field_da_path_append(path, path_size, expr->as.member_access.name))
+            return NULL;
+        return root;
+    }
+    if (expr->type == AST_INDEX_GET) {
+        XaSymbol *root =
+            out_field_da_member_path_symbol(ctx, expr->as.index_get.array, path, path_size);
+        if (!root)
+            return NULL;
+        char segment[64];
+        if (!out_field_da_index_segment(expr->as.index_get.index, segment, sizeof(segment)) ||
+            !out_field_da_path_append(path, path_size, segment))
+            return NULL;
+        return root;
+    }
+    return NULL;
 }
 
 static bool out_field_da_path_is_same_or_nested(const char *path, const char *prefix) {
     if (!path || !prefix || prefix[0] == '\0')
         return false;
     size_t n = strlen(prefix);
-    return strncmp(path, prefix, n) == 0 && (path[n] == '\0' || path[n] == '.');
+    return strncmp(path, prefix, n) == 0 && (path[n] == '\0' || path[n] == '.' || path[n] == '[');
 }
 
 static XrType *out_field_da_member_type_without_receiver_read(XaInferContext *ctx, AstNode *node,
@@ -216,8 +239,13 @@ static bool out_field_da_all_class_fields_assigned_in_analyzer(XaInferContext *c
         XaSymbolLinks *field_links = xa_analyzer_get_links(ctx->analyzer, field);
         if (!field_type && field_links)
             field_type = field_links->type ? field_links->type : field_links->declared_type;
-        XrClassInfo *field_info = field_type ? field_type->instance.class_ref : NULL;
-        if (!field_info && field_type && field_type->instance.class_name) {
+        XrClassInfo *field_info =
+            field_type && (XR_TYPE_IS_INSTANCE(field_type) || XR_TYPE_IS_CLASS(field_type))
+                ? field_type->instance.class_ref
+                : NULL;
+        if (!field_info && field_type &&
+            (XR_TYPE_IS_INSTANCE(field_type) || XR_TYPE_IS_CLASS(field_type)) &&
+            field_type->instance.class_name) {
             XaSymbol *class_sym =
                 xa_analyzer_lookup_deep(ctx->analyzer, field_type->instance.class_name);
             XaSymbolLinks *class_links =
@@ -2537,7 +2565,24 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                 ctx->allow_view_expr_for_copy = true;
         }
     }
-    XrType *container = xa_visit_infer_expr(ctx, ig->array);
+    XrType *container = NULL;
+    if (ctx && ig->array) {
+        char path[256];
+        XaSymbol *root = out_field_da_member_path_symbol(ctx, node, path, sizeof(path));
+        XaSymbolLinks *root_links = root ? xa_analyzer_get_links(ctx->analyzer, root) : NULL;
+        bool exact_path = root && path[0] != '\0';
+        bool write_target = exact_path && root->id == ctx->out_field_da_read_symbol_id &&
+                            ctx->out_field_da_read_path &&
+                            strcmp(ctx->out_field_da_read_path, path) == 0;
+        bool field_assigned =
+            exact_path && root_links && xa_symbol_links_out_field_assigned(root_links, path);
+        if (root && root_links && !root_links->is_definitely_assigned &&
+            (write_target || field_assigned)) {
+            container = out_field_da_member_object_type_without_receiver_read(ctx, ig->array, path);
+        }
+    }
+    if (!container)
+        container = xa_visit_infer_expr(ctx, ig->array);
     ctx->allow_view_expr_for_copy = saved_view_context;
 
     // Reject `[...]` indexing of a possibly-null container (strict null checks).

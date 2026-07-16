@@ -1,5 +1,5 @@
 struct ProjectionDaBox {
-    values: Array<int>
+    slots: [int; 2]
 }
 
 fn fill(value: out int) {
@@ -7,7 +7,7 @@ fn fill(value: out int) {
 }
 
 fn bad(box: out ProjectionDaBox) {
-    fill(out box.values[0])
-    var observed = box.values[0]
-    box = ProjectionDaBox{values: [observed]}
+    fill(out box.slots[0])
+    var observed = box.slots[1]
+    box = ProjectionDaBox{slots: [box.slots[0], observed]}
 }
