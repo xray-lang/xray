@@ -1,0 +1,10 @@
+fn build(n: int) -> int {
+    var xs: Array<int> = []
+    var alias: Array<int> = xs
+    for (i in 0..n) {
+        xs.push(i)
+    }
+    return len(alias)
+}
+
+print(build(8))
