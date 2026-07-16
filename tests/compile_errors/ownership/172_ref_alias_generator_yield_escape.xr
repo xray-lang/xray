@@ -1,0 +1,9 @@
+fn leak(data: ref Array<int>) -> Iterator<Array<int>> {
+    var alias = data
+    yield alias
+}
+
+var values: Array<int> = [1, 2]
+for (item in leak(ref values)) {
+    print(len(item))
+}
