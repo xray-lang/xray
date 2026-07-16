@@ -1684,6 +1684,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
                                "import \"./effect_export_module\" as effects\n"
                                "import { failForeignCallback, CallbackErr } from "
                                "\"./effect_callback_module\"\n"
+                               "import \"./effect_callback_module\" as callbacks\n"
                                "import { failReexported, applyReexported } from "
                                "\"./effect_reexport_module\"\n"
                                "import \"./effect_reexport_module\" as facade\n"
@@ -1709,7 +1710,9 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
                                "fn viaImportedHigherOrderLocalCallback() { "
                                "applyImported(localCallbackForImportedHof) }\n"
                                "fn viaImportedHigherOrderForeignCallback() { "
-                               "applyImported(failForeignCallback) }\n";
+                               "applyImported(failForeignCallback) }\n"
+                               "fn viaImportedHigherOrderNamespaceCallback() { "
+                               "effects.applyImported(callbacks.failForeignCallback) }\n";
 
     char tmpdir[] = "/tmp/xray_effect_reexport_XXXXXX";
     ASSERT(mkdtemp(tmpdir) != NULL);
@@ -1871,6 +1874,8 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
         analyzer_function_effect_summary(a, "viaImportedHigherOrderLocalCallback");
     const XaEffectSummary *foreign_callback_hof =
         analyzer_function_effect_summary(a, "viaImportedHigherOrderForeignCallback");
+    const XaEffectSummary *namespace_callback_hof =
+        analyzer_function_effect_summary(a, "viaImportedHigherOrderNamespaceCallback");
     ASSERT(selective != NULL);
     ASSERT(ns != NULL);
     ASSERT(reexported != NULL);
@@ -1884,6 +1889,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(star_hof != NULL);
     ASSERT(local_callback_hof != NULL);
     ASSERT(foreign_callback_hof != NULL);
+    ASSERT(namespace_callback_hof != NULL);
 
     ASSERT(selective->completeness == XA_EFFECT_COMPLETE);
     ASSERT(ns->completeness == XA_EFFECT_COMPLETE);
@@ -1898,6 +1904,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(star_hof->completeness == XA_EFFECT_COMPLETE);
     ASSERT(local_callback_hof->completeness == XA_EFFECT_COMPLETE);
     ASSERT(foreign_callback_hof->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(namespace_callback_hof->completeness == XA_EFFECT_COMPLETE);
     ASSERT((selective->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
     ASSERT((ns->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
     ASSERT((reexported->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
@@ -1911,6 +1918,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT((star_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
     ASSERT((local_callback_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
     ASSERT((foreign_callback_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((namespace_callback_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
     ASSERT((imported_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT((namespace_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT((reexported_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
@@ -1918,6 +1926,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT((star_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT((local_callback_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT((foreign_callback_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((namespace_callback_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 
     const XaErrorTypeSet *selective_set =
         effect_summary_enum_set_named(a, selective, "ImportedErr");
@@ -1943,6 +1952,8 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
         effect_summary_enum_set_named(a, local_callback_hof, "CallbackErr");
     const XaErrorTypeSet *foreign_callback_hof_set =
         effect_summary_enum_set_named(a, foreign_callback_hof, "CallbackErr");
+    const XaErrorTypeSet *namespace_callback_hof_set =
+        effect_summary_enum_set_named(a, namespace_callback_hof, "CallbackErr");
     ASSERT(selective_set != NULL);
     ASSERT(namespace_set != NULL);
     ASSERT(reexported_set != NULL);
@@ -1956,6 +1967,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(star_hof_set != NULL);
     ASSERT(local_callback_hof_set != NULL);
     ASSERT(foreign_callback_hof_set != NULL);
+    ASSERT(namespace_callback_hof_set != NULL);
     ASSERT(!selective_set->all_variants);
     ASSERT(!namespace_set->all_variants);
     ASSERT(!reexported_set->all_variants);
@@ -1969,6 +1981,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(!star_hof_set->all_variants);
     ASSERT(!local_callback_hof_set->all_variants);
     ASSERT(!foreign_callback_hof_set->all_variants);
+    ASSERT(!namespace_callback_hof_set->all_variants);
     ASSERT(xa_bitset_test(&selective_set->variants, 0));
     ASSERT(!xa_bitset_test(&selective_set->variants, 1));
     ASSERT(!xa_bitset_test(&namespace_set->variants, 0));
@@ -1995,6 +2008,8 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(xa_bitset_test(&local_callback_hof_set->variants, 1));
     ASSERT(xa_bitset_test(&foreign_callback_hof_set->variants, 0));
     ASSERT(!xa_bitset_test(&foreign_callback_hof_set->variants, 1));
+    ASSERT(xa_bitset_test(&namespace_callback_hof_set->variants, 0));
+    ASSERT(!xa_bitset_test(&namespace_callback_hof_set->variants, 1));
 
     xr_hashmap_free(lib_exports);
     specs[0].export_symbols = NULL;

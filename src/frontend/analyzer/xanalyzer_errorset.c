@@ -1306,6 +1306,13 @@ static FunctionValueTarget resolve_function_value_expr_target(ErrorSetCtx *ctx, 
             return returned;
         return function_value_target_none();
     }
+    const XaSelection *sel = xa_analyzer_get_selection(ctx->analyzer, expr);
+    if (sel && sel->target_symbol &&
+        (sel->kind == XA_SEL_MODULE_EXPORT || sel->kind == XA_SEL_STATIC_MEMBER)) {
+        XaSymbol *selected = sel->target_symbol;
+        if (selected->kind == XA_SYM_FUNCTION || selected->kind == XA_SYM_METHOD)
+            return function_value_target_symbol(selected);
+    }
     if (expr->type != AST_VARIABLE)
         return function_value_target_none();
     XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, expr);
