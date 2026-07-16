@@ -1,0 +1,10 @@
+type Address = { city: string, zip: int }
+type Profile = { name: string, address: Address? }
+
+fn jsonDecodeNullableNestedRecordPlan() -> Json {
+    var data: Json = Json.parse("{\"name\":\"Dana\",\"address\":null}")
+    var profile = Json.decode<Profile>(data)
+    return Json.encode(profile!)
+}
+
+print(jsonDecodeNullableNestedRecordPlan())
