@@ -55,6 +55,7 @@ NEGATIVE_CASES = (
     "tests/compile_errors/ownership/171_out_param_projection_field_da_pointer_rejected.xr",
     "tests/compile_errors/ownership/173_out_param_nested_parent_field_read_not_whole_init.xr",
     "tests/compile_errors/ownership/174_out_param_try_call_field_da_exception_edge_rejected.xr",
+    "tests/compile_errors/ownership/175_out_param_try_catch_field_da_missing_sibling_rejected.xr",
     "tests/compile_errors/ffi/040_extern_in_param_mode_rejected.xr",
     "tests/compile_errors/ffi/041_extern_ref_param_mode_rejected.xr",
     "tests/compile_errors/ffi/042_extern_out_param_mode_rejected.xr",
@@ -87,6 +88,7 @@ POSITIVE_CASES = (
     "tests/regression/13_types/1447_super_out_param_projection_field_da.xr",
     "tests/regression/13_types/1448_out_param_index_projection_da_read.xr",
     "tests/regression/13_types/1449_out_param_branch_sibling_aggregate_whole_read.xr",
+    "tests/regression/13_types/1450_out_param_nothrow_try_field_da_exception_edge.xr",
 )
 
 
