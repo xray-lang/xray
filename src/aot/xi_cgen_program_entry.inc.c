@@ -198,6 +198,15 @@ static bool cg_entry_uses_root_descriptor(XiCgenCtx *ctx) {
     return bundle->entry_plan.root_representation == XR_ROOT_DESCRIPTOR;
 }
 
+static void cg_emit_main_pending_error_return(FILE *out, bool entry_needs_runtime) {
+    fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) {\n");
+    if (entry_needs_runtime)
+        fprintf(out, "        xr_aot_runtime_delete(rt);\n");
+    fprintf(out, "        xrt_bump_destroy();\n");
+    fprintf(out, "        return 1;\n");
+    fprintf(out, "    }\n");
+}
+
 /* Runtime include block shared by every generated translation unit.  The
  * runtime headers are stb-style: defining XRT_IMPL emits the single definition
  * of every runtime global; without it they are extern declarations.  Exactly
@@ -456,6 +465,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
             emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
                               modules[m]->init, "_aot_desc");
             fprintf(out, ", _entry_frame);\n");
+            cg_emit_main_pending_error_return(out, entry_needs_runtime);
         } else {
             if (cg_func_needs_aot_coro_ctx(ctx, modules[m]->init)) {
                 fprintf(stderr,
@@ -469,6 +479,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
             fprintf(out, "    ");
             emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
             fprintf(out, "(NULL);\n");
+            cg_emit_main_pending_error_return(out, entry_needs_runtime);
         }
     }
     if (entry_has_descriptor)
@@ -580,6 +591,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
             fprintf(body, "    xr_aot_run_main(rt, &");
             emit_fname_suffix(ctx, body, prefix, main_func, "_aot_desc");
             fprintf(body, ", _entry_frame);\n");
+            cg_emit_main_pending_error_return(body, entry_needs_runtime);
         } else {
             if (!entry_needs_runtime) {
                 fprintf(body, "    (void) argc;\n");
@@ -588,6 +600,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
             fprintf(body, "    ");
             emit_fname(ctx, body, prefix, main_func);
             fprintf(body, "(NULL);\n");
+            cg_emit_main_pending_error_return(body, entry_needs_runtime);
         }
         if (entry_has_descriptor)
             fprintf(body, "    if (!xr_aot_root_descriptor_end(rt)) { xr_aot_runtime_delete(rt); "
