@@ -164,6 +164,8 @@ typedef enum CatchAggregateAliasKind {
     CATCH_AGGREGATE_INDEX,
     CATCH_AGGREGATE_FIELD,
     CATCH_AGGREGATE_ELEMENT,
+    CATCH_AGGREGATE_KEY_ELEMENT,
+    CATCH_AGGREGATE_ENTRY_KEY,
     CATCH_AGGREGATE_ENTRY_VALUE,
 } CatchAggregateAliasKind;
 
@@ -1740,7 +1742,8 @@ static bool catch_aggregate_alias_matches(const CatchAggregateAlias *a,
         !catch_symbol_matches(a->container_id, a->container_name, b->container_id,
                               b->container_name))
         return false;
-    if (a->kind == CATCH_AGGREGATE_ELEMENT)
+    if (a->kind == CATCH_AGGREGATE_ELEMENT || a->kind == CATCH_AGGREGATE_KEY_ELEMENT ||
+        a->kind == CATCH_AGGREGATE_ENTRY_KEY || a->kind == CATCH_AGGREGATE_ENTRY_VALUE)
         return true;
     if (a->kind == CATCH_AGGREGATE_INDEX) {
         bool a_string = a->index_string != NULL;
@@ -1943,6 +1946,28 @@ static bool current_catch_has_element_aggregate_container(ErrorSetCtx *ctx, uint
     CatchAggregateAlias alias = {.container_id = symbol_id,
                                  .container_name = name,
                                  .kind = CATCH_AGGREGATE_ELEMENT,
+                                 .index = -1};
+    return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
+}
+
+static bool current_catch_has_key_element_aggregate_container(ErrorSetCtx *ctx, uint32_t symbol_id,
+                                                              const char *name) {
+    if (!ctx || (symbol_id == 0 && !name))
+        return false;
+    CatchAggregateAlias alias = {.container_id = symbol_id,
+                                 .container_name = name,
+                                 .kind = CATCH_AGGREGATE_KEY_ELEMENT,
+                                 .index = -1};
+    return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
+}
+
+static bool current_catch_has_entry_key_aggregate_container(ErrorSetCtx *ctx, uint32_t symbol_id,
+                                                            const char *name) {
+    if (!ctx || (symbol_id == 0 && !name))
+        return false;
+    CatchAggregateAlias alias = {.container_id = symbol_id,
+                                 .container_name = name,
+                                 .kind = CATCH_AGGREGATE_ENTRY_KEY,
                                  .index = -1};
     return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
 }
@@ -2158,9 +2183,12 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
 
         case AST_MAP_LITERAL: {
             bool all_values_are_caught = true;
+            bool all_keys_are_caught = true;
             for (int i = 0; i < initializer->as.map_literal.count; i++) {
                 if (!is_current_caught_ref(ctx, initializer->as.map_literal.values[i]))
                     all_values_are_caught = false;
+                if (!is_current_caught_ref(ctx, initializer->as.map_literal.keys[i]))
+                    all_keys_are_caught = false;
 
                 int64_t index = -1;
                 uint32_t index_symbol_id = 0;
@@ -2174,9 +2202,12 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
                                                   index, index_symbol_id, index_symbol_name,
                                                   index_string, NULL);
             }
-            if (all_values_are_caught)
+            if (initializer->as.map_literal.count > 0 && all_values_are_caught)
                 add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_ELEMENT, -1,
                                                   0, NULL, NULL, NULL);
+            if (initializer->as.map_literal.count > 0 && all_keys_are_caught)
+                add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_KEY_ELEMENT,
+                                                  -1, 0, NULL, NULL, NULL);
             break;
         }
 
@@ -2211,15 +2242,25 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
                 break;
             uint32_t source_id = 0;
             const char *source_name = NULL;
-            if (!variable_ref_symbol(ctx, ma->object, &source_id, &source_name) ||
-                !current_catch_has_element_aggregate_container(ctx, source_id, source_name))
+            if (!variable_ref_symbol(ctx, ma->object, &source_id, &source_name))
                 break;
             if (strcmp(ma->name, "values") == 0) {
+                if (!current_catch_has_element_aggregate_container(ctx, source_id, source_name))
+                    break;
                 add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_ELEMENT, -1,
                                                   0, NULL, NULL, NULL);
-            } else if (strcmp(ma->name, "entries") == 0) {
-                add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_ENTRY_VALUE,
+            } else if (strcmp(ma->name, "keys") == 0) {
+                if (!current_catch_has_key_element_aggregate_container(ctx, source_id, source_name))
+                    break;
+                add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_KEY_ELEMENT,
                                                   -1, 0, NULL, NULL, NULL);
+            } else if (strcmp(ma->name, "entries") == 0) {
+                if (current_catch_has_key_element_aggregate_container(ctx, source_id, source_name))
+                    add_current_catch_aggregate_alias(
+                        ctx, symbol_id, name, CATCH_AGGREGATE_ENTRY_KEY, -1, 0, NULL, NULL, NULL);
+                if (current_catch_has_element_aggregate_container(ctx, source_id, source_name))
+                    add_current_catch_aggregate_alias(
+                        ctx, symbol_id, name, CATCH_AGGREGATE_ENTRY_VALUE, -1, 0, NULL, NULL, NULL);
             }
             break;
         }
@@ -2247,24 +2288,44 @@ static void maybe_add_for_in_catch_alias(ErrorSetCtx *ctx, ForInStmtNode *fi) {
     bool element_is_caught = current_catch_aggregate_element_for_collection(ctx, fi->collection);
     uint32_t collection_id = 0;
     const char *collection_name = NULL;
+    bool has_collection_symbol =
+        variable_ref_symbol(ctx, fi->collection, &collection_id, &collection_name);
+    bool key_element_is_caught =
+        has_collection_symbol &&
+        current_catch_has_key_element_aggregate_container(ctx, collection_id, collection_name);
+    bool entry_key_is_caught =
+        has_collection_symbol &&
+        current_catch_has_entry_key_aggregate_container(ctx, collection_id, collection_name);
     bool entry_value_is_caught =
-        variable_ref_symbol(ctx, fi->collection, &collection_id, &collection_name) &&
+        has_collection_symbol &&
         current_catch_has_entry_value_aggregate_container(ctx, collection_id, collection_name);
-    if (!element_is_caught && !entry_value_is_caught)
+    if (!element_is_caught && !key_element_is_caught && !entry_key_is_caught &&
+        !entry_value_is_caught)
         return;
 
     XrType *collection_type = xa_analyzer_get_node_type(ctx->analyzer, fi->collection);
     if (fi->is_keyvalue) {
-        if (!element_is_caught || !collection_type || !XR_TYPE_IS_MAP(collection_type) ||
-            fi->value_symbol_id == 0 || !fi->value_name)
+        if (!collection_type || !XR_TYPE_IS_MAP(collection_type))
             return;
-        add_current_catch_alias(ctx, fi->value_symbol_id, fi->value_name);
+        if (key_element_is_caught && fi->item_symbol_id != 0 && fi->item_name)
+            add_current_catch_alias(ctx, fi->item_symbol_id, fi->item_name);
+        if (element_is_caught && fi->value_symbol_id != 0 && fi->value_name)
+            add_current_catch_alias(ctx, fi->value_symbol_id, fi->value_name);
         return;
     }
 
-    if ((collection_type && XR_TYPE_IS_MAP(collection_type)) || fi->item_symbol_id == 0 ||
-        !fi->item_name)
+    if (fi->item_symbol_id == 0 || !fi->item_name)
         return;
+    if (collection_type && XR_TYPE_IS_MAP(collection_type)) {
+        if (key_element_is_caught)
+            add_current_catch_alias(ctx, fi->item_symbol_id, fi->item_name);
+        return;
+    }
+    if (entry_key_is_caught) {
+        add_current_catch_aggregate_alias(ctx, fi->item_symbol_id, fi->item_name,
+                                          CATCH_AGGREGATE_INDEX, 0, 0, NULL, NULL, NULL);
+        return;
+    }
     if (entry_value_is_caught) {
         add_current_catch_aggregate_alias(ctx, fi->item_symbol_id, fi->item_name,
                                           CATCH_AGGREGATE_INDEX, 1, 0, NULL, NULL, NULL);
@@ -2290,6 +2351,7 @@ typedef struct CatchAggregateMemberUpdate {
     const char *index_symbol_name;
     const char *index_string;
     bool value_is_caught;
+    bool value_set_starts_tracked_map;
 } CatchAggregateMemberUpdate;
 
 static CatchAggregateMemberUpdate catch_aggregate_member_update(ErrorSetCtx *ctx, AstNode *callee,
@@ -2338,7 +2400,9 @@ static CatchAggregateMemberUpdate catch_aggregate_member_update(ErrorSetCtx *ctx
         catch_aggregate_index_key(ctx, call->arguments[0], &update.index, &update.index_symbol_id,
                                   &update.index_symbol_name, &update.index_string)) {
         update.value_is_caught = is_current_caught_ref(ctx, call->arguments[1]);
-        if (update.value_is_caught || current_catch_has_aggregate_container(ctx, id, name))
+        bool map_has_tracked_entries = current_catch_has_aggregate_container(ctx, id, name);
+        update.value_set_starts_tracked_map = update.value_is_caught && !map_has_tracked_entries;
+        if (update.value_is_caught || map_has_tracked_entries)
             update.action = CATCH_AGGREGATE_MEMBER_MAP_SET_PRECISE;
         return update;
     }
@@ -2384,6 +2448,10 @@ static void apply_catch_aggregate_member_update(ErrorSetCtx *ctx,
                     ctx, update->container_id, update->container_name, CATCH_AGGREGATE_INDEX,
                     update->index, update->index_symbol_id, update->index_symbol_name,
                     update->index_string, NULL);
+                if (update->value_set_starts_tracked_map)
+                    add_current_catch_aggregate_alias(
+                        ctx, update->container_id, update->container_name, CATCH_AGGREGATE_ELEMENT,
+                        -1, 0, NULL, NULL, NULL);
             } else {
                 remove_current_catch_aggregate_alias_for_element(ctx, update->container_id,
                                                                  update->container_name);
