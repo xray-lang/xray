@@ -824,6 +824,7 @@ static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
     char *task_status_members[] = {"Pending", "Running", "Success", "Failed", "Cancelled"};
     char *utf8_error_members[] = {"InvalidUtf8"};
     char *string_slice_error_members[] = {"InvalidByteRange"};
+    char *compression_error_members[] = {"InvalidData"};
     const int recv_payloads[] = {1, 0, 0, 0};
     const int task_result_payloads[] = {1, 1, 0, 0, 0};
 
@@ -843,6 +844,9 @@ static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
                                              utf8_error_members, 1, NULL) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_STRING_SLICE_ERROR,
                                              "StringSliceError", string_slice_error_members, 1,
+                                             NULL) &&
+           aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_COMPRESSION_ERROR,
+                                             "CompressionError", compression_error_members, 1,
                                              NULL);
 }
 
@@ -866,7 +870,8 @@ static bool aot_builtin_index_is_prelude_enum(int32_t index) {
     return index == XR_GLOBAL_VAR_ORDERING || index == XR_GLOBAL_VAR_RECV ||
            index == XR_GLOBAL_VAR_ENDIAN || index == XR_GLOBAL_VAR_SEND_RESULT ||
            index == XR_GLOBAL_VAR_TASK_RESULT || index == XR_GLOBAL_VAR_TASK_STATUS ||
-           index == XR_GLOBAL_VAR_UTF8_ERROR || index == XR_GLOBAL_VAR_STRING_SLICE_ERROR;
+           index == XR_GLOBAL_VAR_UTF8_ERROR || index == XR_GLOBAL_VAR_STRING_SLICE_ERROR ||
+           index == XR_GLOBAL_VAR_COMPRESSION_ERROR;
 }
 
 static XrValue aot_runtime_script_builtin_lazy(XrAotRuntime *runtime, int32_t index) {

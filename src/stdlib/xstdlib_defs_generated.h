@@ -158,7 +158,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"compress", "adler32", "(data: string): int", "Compute Adler-32 checksum", "compress_adler32", "normal", "", "xrt_compress_adler32", "s", "value", "", "", "core", "method", 1, true},
     {"compress", "gzip", "(data: string, level?: int): string?", "Gzip compress", "compress_gzip", "normal", "", "xrt_compress_gzip_default", "s", "value", "compress.gzip", "", "alloc", "method", 1, true},
     {"compress", "gzip", "(data: string, level?: int): string?", "Gzip compress", "compress_gzip", "normal", "", "xrt_compress_gzip", "sv", "value", "compress.gzip", "", "alloc", "method", 2, true},
-    {"compress", "gunzip", "(data: string): string?", "Gzip decompress", "compress_gunzip", "normal", "", "xrt_compress_gunzip", "s", "value", "compress.gunzip", "", "alloc", "method", 1, true},
+    {"compress", "gunzip", "(data: string): string", "Gzip decompress", "compress_gunzip", "normal", "", "xrt_compress_gunzip", "s", "value", "compress.gunzip", "", "alloc", "method", 1, true},
     {"compress", "deflate", "(data: string, level?: int): string?", "Deflate compress", "compress_deflate", "normal", "", "xrt_compress_deflate_default", "s", "value", "compress.deflate", "", "alloc", "method", 1, true},
     {"compress", "deflate", "(data: string, level?: int): string?", "Deflate compress", "compress_deflate", "normal", "", "xrt_compress_deflate", "sv", "value", "compress.deflate", "", "alloc", "method", 2, true},
     {"compress", "inflate", "(data: string): string?", "Inflate decompress", "compress_inflate", "normal", "", "xrt_compress_inflate", "s", "value", "compress.inflate", "", "alloc", "method", 1, true},

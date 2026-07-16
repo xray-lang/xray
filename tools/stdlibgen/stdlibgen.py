@@ -89,6 +89,7 @@ class StdlibEntry:
     define: str
     layer: str
     visibility: str
+    effect: str
     caps: tuple[str, ...]
 
     @property
@@ -387,6 +388,7 @@ def parse_def_metadata(
                     define=str(props.get("define", "")),
                     layer=str(props.get("layer", "")),
                     visibility=visibility,
+                    effect=str(props.get("effect", "")),
                     caps=caps,
                 )
             )

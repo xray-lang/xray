@@ -733,8 +733,9 @@ module compress {
   }
 
   fn gunzip {
-    signature: "(data: string): string?"
+    signature: "(data: string): string"
     doc: "Gzip decompress"
+    effect: "CompressionError.InvalidData"
     vm: "compress_gunzip"
     aot: "xrt_compress_gunzip"
     argc: 1

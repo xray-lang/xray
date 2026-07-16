@@ -516,6 +516,7 @@ def load_def_module_methods():
             'doc': entry.doc,
             'is_internal': entry.is_internal,
             'vm_binding': entry.vm_binding,
+            'effect': getattr(entry, 'effect', ''),
         })
     return modules
 
@@ -741,6 +742,19 @@ def lsp_kind_for_member(member):
     return "XLSP_SYM_PROPERTY"
 
 
+def effect_error_refs(member):
+    raw = (member.get('effect') or '').strip()
+    if not raw:
+        return []
+    if raw.startswith('@errors(') and raw.endswith(')'):
+        raw = raw[len('@errors('):-1].strip()
+    if raw.startswith('errors(') and raw.endswith(')'):
+        raw = raw[len('errors('):-1].strip()
+    if not raw or raw == 'nothrow':
+        return []
+    return [part.strip() for part in split_top_level_commas(raw) if part.strip()]
+
+
 def generate_header(type_results, module_results):
     """Generate the embedded header file content."""
     lines = [
@@ -822,16 +836,35 @@ def generate_header(type_results, module_results):
             constant_entries = list(mod_data.get('constants', []))
             total = len(method_entries) + len(constant_entries)
             if total > 0:
+                method_effect_vars = {}
+                for idx, m in enumerate(method_entries):
+                    errors = effect_error_refs(m)
+                    if not errors:
+                        continue
+                    var_name = f"g_gen_{mod_name}_{c_ident(m['name'])}_{idx}_errors"
+                    method_effect_vars[idx] = (var_name, errors)
+                    lines.append(f"static const char *{var_name}[] = {{")
+                    for error_ref in errors:
+                        lines.append(f'    "{c_string(error_ref)}",')
+                    lines.append("};")
+                    lines.append("")
                 lines.append(f"// {mod_name} module functions")
                 lines.append(f"static const XaBuiltinMember g_gen_{mod_name}_functions[] = {{")
-                for m in method_entries:
+                for idx, m in enumerate(method_entries):
                     is_method = "true" if '(' in m['signature'] else "false"
                     is_yieldable = "true" if m.get("vm_binding") == "yieldable" else "false"
+                    effect = method_effect_vars.get(idx)
+                    effect_init = ""
+                    if effect:
+                        var_name, errors = effect
+                        effect_init = (
+                            f", {{XA_EFFECT_CONTRACT_ERRORS, {var_name}, {len(errors)}}}"
+                        )
                     lines.append(
                         f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
                         f'"{c_string(m["doc"])}", {is_method}, false, '
                         f'{"true" if m.get("is_internal") else "false"}, false, '
-                        f'{is_yieldable}}},')
+                        f'{is_yieldable}{effect_init}}},')
                 if constant_entries:
                     lines.append(f"    // Module constants (is_method=false)")
                     for c in constant_entries:

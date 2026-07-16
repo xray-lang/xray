@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""Focused task-198 compress.gunzip typed native error ABI gate."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import subprocess
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[3]
+FIXTURE = ROOT / "tests/aot/basic/compress_gunzip_typed_error.xr"
+CORE_DEF = ROOT / "stdlib/defs/core.def"
+VM_RUNTIME = ROOT / "stdlib/compress/compress.c"
+AOT_RUNTIME = ROOT / "src/aot/xrt_compress.h"
+GENERATED = ROOT / "src/frontend/analyzer/xanalyzer_builtins_generated.h"
+EXPECTED_OUTPUT = b"true\nCompressionError.InvalidData\n"
+
+
+class CompressNativeErrorAbiTest(unittest.TestCase):
+    xray: Path
+
+    def run_checked(
+        self, args: list[str], *, stdout: int = subprocess.PIPE
+    ) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(
+            args,
+            cwd=ROOT,
+            stdout=stdout,
+            stderr=subprocess.STDOUT,
+            check=True,
+            timeout=60,
+        )
+
+    def test_public_contract_is_typed_and_non_nullable(self) -> None:
+        core_def = CORE_DEF.read_text(encoding="utf-8")
+        generated = GENERATED.read_text(encoding="utf-8")
+
+        self.assertIn('signature: "(data: string): string"', core_def)
+        self.assertIn('effect: "CompressionError.InvalidData"', core_def)
+        self.assertNotIn('fn gunzip {\n    signature: "(data: string): string?"', core_def)
+        self.assertIn('"gunzip", "(data: string): string"', generated)
+        self.assertIn("XA_EFFECT_CONTRACT_ERRORS", generated)
+        self.assertIn('"CompressionError.InvalidData"', generated)
+
+    def test_runtime_sources_route_failure_to_typed_error_channel(self) -> None:
+        vm_runtime = VM_RUNTIME.read_text(encoding="utf-8")
+        aot_runtime = AOT_RUNTIME.read_text(encoding="utf-8")
+        vm_gunzip = vm_runtime[
+            vm_runtime.index("static XrValue compress_gunzip") :
+            vm_runtime.index("static XrValue compress_deflate")
+        ]
+        aot_gunzip = aot_runtime[
+            aot_runtime.index("static inline XrValue xrt_compress_gunzip") :
+            aot_runtime.index("static inline XrValue xrt_compress_deflate")
+        ]
+
+        self.assertIn("XR_GLOBAL_VAR_COMPRESSION_ERROR", vm_gunzip)
+        self.assertIn("compress_set_builtin_enum_error", vm_gunzip)
+        self.assertIn('"CompressionError", "InvalidData"', aot_gunzip)
+        self.assertIn("xrt_pending_error = xrt_enum_aggregate_box(err);", aot_runtime)
+        self.assertNotIn("if (!output)\n        return xr_null();", vm_gunzip)
+        self.assertNotIn("if (!buf)\n        return XR_NULL_VAL;", aot_gunzip)
+
+    def test_vm_native_aot_typed_catch_parity(self) -> None:
+        vm = self.run_checked([str(self.xray), str(FIXTURE)]).stdout
+        self.assertEqual(EXPECTED_OUTPUT, vm)
+
+        output_dir = ROOT / "build" / ".xray-test-tmp"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        native = output_dir / f"compress_native_error_{os.getpid()}"
+        cache = ROOT / "build" / ".xray-test-cache" / "task-198-compress-native-error"
+        try:
+            self.run_checked(
+                [
+                    str(self.xray),
+                    "build",
+                    "--native",
+                    "-O",
+                    "0",
+                    str(FIXTURE),
+                    "-o",
+                    str(native),
+                    "--cache-dir",
+                    str(cache),
+                ],
+                stdout=subprocess.DEVNULL,
+            )
+            aot = self.run_checked([str(native)]).stdout
+        finally:
+            native.unlink(missing_ok=True)
+
+        self.assertEqual(vm, aot)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--xray", type=Path, default=ROOT / "build/xray")
+    args, unittest_args = parser.parse_known_args()
+    CompressNativeErrorAbiTest.xray = args.xray
+    unittest.main(argv=[__file__, *unittest_args])
+
+
+if __name__ == "__main__":
+    main()
