@@ -1,0 +1,10 @@
+contains=xaot-plan v0
+regex=generic-body-plan [0-9]+ .*action=clone .*evidence=row\+inst\+types\+origin_body\+specialized_body\+root reason=none
+regex=generic-storage-plan [0-9]+ .*kind=array action=boxed .*container_plan=[1-9][0-9]* evidence=row\+inst\+specialized_type\+container_plan reason=none
+not_regex=generic-storage-plan .*kind=array action=typed_inline
+not_regex=generic-storage-plan .*kind=array action=ref_lane
+regex=container [0-9]+ kind=array .*elem=XR_ELEM_ANY/tagged/XrValue
+regex=array-storage [0-9]+ func=first\$.*elem=XR_ELEM_ANY/tagged/XrValue
+c_contains=xrt_array_new_typed_ptr(0, XR_ELEM_ANY)
+c_contains=xrt_tuple_make(2
+c_not_contains=((int64_t*)_a->data)

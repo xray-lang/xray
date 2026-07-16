@@ -95,6 +95,7 @@ value_level_sroa|covered|allocation-plan .*action=stack|tests/aot/filetests/cgen
 generic_function_clone|covered|generic-body-plan .*action=clone|tests/aot/filetests/cgen|Specialized function body and ABI clone evidence now produces a verified clone plan.
 array_t_concrete_storage|covered|generic-storage-plan .*kind=array action=typed_inline|tests/aot/filetests/link|Array<T> POD lane storage produces a verified typed-inline generic storage plan.
 generic_ref_lane_storage|covered|generic-storage-plan .*action=ref_lane|tests/aot/filetests/cgen|Managed-reference generic containers produce verified ref-lane storage plans instead of opaque boxed fallback.
+generic_boxed_storage_fallback|covered|generic-storage-plan .*kind=array action=boxed|tests/aot/filetests/cgen|Unsupported aggregate generic Array<T> storage is explicitly boxed and guarded from typed-inline or ref-lane overreach.
 generic_array_storage_hot_loop|covered|generic_array_storage|tests/benchmarks/aot/zero_cost/benchmarks.tsv|Generic Array<T> storage has a dedicated runtime hot-loop benchmark case.
 generic_map_lookup_hot_loop|covered|generic_map_lookup|tests/benchmarks/aot/zero_cost/benchmarks.tsv|Generic Map<K,V> lookup has a dedicated runtime hot-loop benchmark case.
 generic_set_contains_hot_loop|covered|generic_set_contains|tests/benchmarks/aot/zero_cost/benchmarks.tsv|Generic Set<T> contains has a dedicated runtime hot-loop benchmark case.
