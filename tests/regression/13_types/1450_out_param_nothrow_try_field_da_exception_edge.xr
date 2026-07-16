@@ -14,8 +14,10 @@ fn initialize_nothrow_try_fields(pair: out OutNoThrowTryPair) -> int {
     } catch (e) {
     }
 
-    var whole = pair
-    return whole.left + whole.right
+    var left = pair.left
+    var right = pair.right
+    pair = OutNoThrowTryPair{left: left, right: right}
+    return left + right
 }
 
 @test
