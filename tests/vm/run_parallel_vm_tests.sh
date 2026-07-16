@@ -160,6 +160,12 @@ expect_output_workers \
     4
 
 expect_output_workers \
+    "parallel_plan_reduce_combine_cleanup_after_panic" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_reduce_combine_cleanup_after_panic.xr" \
+    $'caught\ntrue' \
+    4
+
+expect_output_workers \
     "parallel_plan_cleanup_after_panic" \
     "$PROJECT_DIR/tests/vm/parallel_plan_cleanup_after_panic.xr" \
     $'caught\ntrue' \

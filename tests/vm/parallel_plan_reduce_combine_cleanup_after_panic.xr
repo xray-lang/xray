@@ -1,0 +1,28 @@
+import { Options, Plan } from parallel
+
+var plan = Plan<int>(Options(4), lane -> lane)
+
+try {
+    var result = plan.reduce(
+        0..20000,
+        0,
+        (state, i) -> state + i,
+        (a, b) -> {
+            if (b >= 0) {
+                var zero = b - b
+                return a + (10 / zero)
+            }
+            return a + b
+        }
+    )
+    print(result)
+    print("miss")
+} catch panic (p) {
+    print("caught")
+}
+
+shared afterReduce = Atomic<int>(0)
+plan.forEach(0..4, (state, i) -> {
+    afterReduce.add(1, Ordering.Relaxed)
+})
+print(afterReduce.load(Ordering.Relaxed) == 4)

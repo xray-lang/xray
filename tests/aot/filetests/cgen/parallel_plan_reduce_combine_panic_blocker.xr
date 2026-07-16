@@ -1,0 +1,18 @@
+import { Options, Plan } from parallel
+
+var plan = Plan<int>(Options(4), lane -> lane)
+
+var result = plan.reduce(
+    0..20000,
+    0,
+    (state, i) -> state + i,
+    (a, b) -> {
+        if (b >= 0) {
+            var zero = b - b
+            return a + (10 / zero)
+        }
+        return a + b
+    }
+)
+
+print(result)
