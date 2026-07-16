@@ -3218,6 +3218,18 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         "    for (key, value in box) { throw key }\n"
         "  }\n"
         "}\n"
+        "fn mapKeyValueIteratorBothBindingsRethrow(flag: bool) {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    const box = #{e: e}\n"
+        "    for (key, value in box) { if (flag) { throw key } else { throw value } }\n"
+        "  }\n"
+        "}\n"
+        "fn mapKeyValueIteratorMixedKeyBothBindingsFallsBack(flag: bool) {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    const box = #{e: e, MapErr.Other: e}\n"
+        "    for (key, value in box) { if (flag) { throw key } else { throw value } }\n"
+        "  }\n"
+        "}\n"
         "fn mapKeysViewIteratorRethrowsCaughtKey() {\n"
         "  try { failMap() } catch (e: MapErr) {\n"
         "    const box = #{e: MapErr.Other}\n"
@@ -3458,6 +3470,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         analyzer_function_effect_summary(a, "mapKeyValueIteratorDoesNotAliasCaughtKeyToValue");
     const XaEffectSummary *kv_no_value_to_key =
         analyzer_function_effect_summary(a, "mapKeyValueIteratorDoesNotAliasCaughtValueToKey");
+    const XaEffectSummary *kv_both =
+        analyzer_function_effect_summary(a, "mapKeyValueIteratorBothBindingsRethrow");
+    const XaEffectSummary *kv_both_mixed_key =
+        analyzer_function_effect_summary(a, "mapKeyValueIteratorMixedKeyBothBindingsFallsBack");
     const XaEffectSummary *keys_view =
         analyzer_function_effect_summary(a, "mapKeysViewIteratorRethrowsCaughtKey");
     const XaEffectSummary *direct_keys_view =
@@ -3539,6 +3555,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(kv_caught_key != NULL);
     ASSERT(kv_no_key_to_value != NULL);
     ASSERT(kv_no_value_to_key != NULL);
+    ASSERT(kv_both != NULL);
+    ASSERT(kv_both_mixed_key != NULL);
     ASSERT(keys_view != NULL);
     ASSERT(direct_keys_view != NULL);
     ASSERT(direct_entries_key != NULL);
@@ -3610,6 +3628,9 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         effect_summary_enum_set_named(a, kv_no_key_to_value, "MapErr");
     const XaErrorTypeSet *kv_no_value_to_key_set =
         effect_summary_enum_set_named(a, kv_no_value_to_key, "MapErr");
+    const XaErrorTypeSet *kv_both_set = effect_summary_enum_set_named(a, kv_both, "MapErr");
+    const XaErrorTypeSet *kv_both_mixed_key_set =
+        effect_summary_enum_set_named(a, kv_both_mixed_key, "MapErr");
     const XaErrorTypeSet *keys_view_set = effect_summary_enum_set_named(a, keys_view, "MapErr");
     const XaErrorTypeSet *direct_keys_view_set =
         effect_summary_enum_set_named(a, direct_keys_view, "MapErr");
@@ -3687,6 +3708,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(kv_caught_key_set != NULL);
     ASSERT(kv_no_key_to_value_set != NULL);
     ASSERT(kv_no_value_to_key_set != NULL);
+    ASSERT(kv_both_set != NULL);
+    ASSERT(kv_both_mixed_key_set != NULL);
     ASSERT(keys_view_set != NULL);
     ASSERT(direct_keys_view_set != NULL);
     ASSERT(direct_entries_key_set != NULL);
@@ -3769,6 +3792,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!xa_bitset_test(&kv_caught_key_set->variants, 1));
     ASSERT(kv_no_key_to_value_set->all_variants);
     ASSERT(kv_no_value_to_key_set->all_variants);
+    ASSERT(!kv_both_set->all_variants);
+    ASSERT(xa_bitset_test(&kv_both_set->variants, 0));
+    ASSERT(!xa_bitset_test(&kv_both_set->variants, 1));
+    ASSERT(kv_both_mixed_key_set->all_variants);
     ASSERT(!keys_view_set->all_variants);
     ASSERT(xa_bitset_test(&keys_view_set->variants, 0));
     ASSERT(!xa_bitset_test(&keys_view_set->variants, 1));
