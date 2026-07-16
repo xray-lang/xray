@@ -1,0 +1,20 @@
+struct NestedParentReadLeaf {
+    x: int
+    y: int
+}
+
+struct NestedParentReadPair {
+    left: NestedParentReadLeaf
+    right: int
+}
+
+fn fill(value: out int, next: int) {
+    value = next
+}
+
+fn bad(pair: out NestedParentReadPair) {
+    fill(out pair.left.x, 3)
+    pair.left.y = 5
+    var left = pair.left
+    var total = left.x + left.y
+}
