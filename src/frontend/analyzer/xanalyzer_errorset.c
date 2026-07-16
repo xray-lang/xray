@@ -2670,6 +2670,55 @@ static void record_catch_alias_assignment(ErrorSetCtx *ctx, AssignmentNode *assi
         add_current_catch_alias(ctx, symbol_id, name);
 }
 
+static void record_catch_destructure_aliases(ErrorSetCtx *ctx, XrDestructurePattern *pattern,
+                                             AstNode *source) {
+    if (!ctx || !pattern || !source || !ctx->current_caught)
+        return;
+
+    switch (pattern->type) {
+        case PATTERN_IDENTIFIER:
+            if (pattern->as.identifier.symbol_id != 0 && pattern->as.identifier.name &&
+                is_current_caught_ref(ctx, source))
+                add_current_catch_alias(ctx, pattern->as.identifier.symbol_id,
+                                        pattern->as.identifier.name);
+            return;
+
+        case PATTERN_ARRAY:
+        case PATTERN_TUPLE:
+            for (int i = 0; i < pattern->as.array.element_count; i++) {
+                AstNode index = {0};
+                index.type = AST_LITERAL_INT;
+                index.as.literal.kind = LITERAL_KIND_INT;
+                index.as.literal.int_bits = (uint64_t) i;
+                index.as.literal.raw_value.int_val = i;
+
+                AstNode element = {0};
+                element.type = AST_INDEX_GET;
+                element.as.index_get.array = source;
+                element.as.index_get.index = &index;
+                record_catch_destructure_aliases(ctx, pattern->as.array.elements[i], &element);
+            }
+            return;
+
+        case PATTERN_OBJECT:
+            for (int i = 0; i < pattern->as.object.field_count; i++) {
+                const char *field =
+                    pattern->as.object.field_names ? pattern->as.object.field_names[i] : NULL;
+                if (!field)
+                    continue;
+                AstNode member = {0};
+                member.type = AST_MEMBER_ACCESS;
+                member.as.member_access.object = source;
+                member.as.member_access.name = (char *) field;
+                record_catch_destructure_aliases(ctx, pattern->as.object.patterns[i], &member);
+            }
+            return;
+
+        default:
+            return;
+    }
+}
+
 static void record_catch_aggregate_assignment(ErrorSetCtx *ctx, AssignmentNode *assign) {
     if (!ctx || !assign || !ctx->current_caught)
         return;
@@ -3450,6 +3499,11 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             maybe_record_catch_alias(ctx, node);
             maybe_record_catch_aggregate_alias(ctx, node);
             es_walk_expr(ctx, node->as.var_decl.initializer);
+            break;
+        case AST_DESTRUCTURE_DECL:
+            record_catch_destructure_aliases(ctx, node->as.destructure_decl.pattern,
+                                             node->as.destructure_decl.initializer);
+            es_walk_expr(ctx, node->as.destructure_decl.initializer);
             break;
         case AST_SHARED_DECL:
         case AST_OWNED_DECL:

@@ -3184,6 +3184,18 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         "    for (entry in box.entries()) { const value: MapErr = entry[1]; throw value }\n"
         "  }\n"
         "}\n"
+        "fn mapEntriesTupleDestructureKeyRethrows() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    const box = #{e: MapErr.Other}\n"
+        "    for ((key, value) in box.entries()) { throw key }\n"
+        "  }\n"
+        "}\n"
+        "fn mapEntriesTupleDestructureValueRethrows() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    const box = #{\"caught\": e}\n"
+        "    for ((key, value) in box.entries()) { throw value }\n"
+        "  }\n"
+        "}\n"
         "fn mapEntriesIteratorKeyRethrows() {\n"
         "  try { failMap() } catch (e: MapErr) {\n"
         "    const box = #{e: MapErr.Other}\n"
@@ -3370,6 +3382,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         analyzer_function_effect_summary(a, "mapDirectEntriesViewIteratorKeyRethrows");
     const XaEffectSummary *direct_entries_value =
         analyzer_function_effect_summary(a, "mapDirectEntriesViewIteratorValueRethrows");
+    const XaEffectSummary *tuple_entries_key =
+        analyzer_function_effect_summary(a, "mapEntriesTupleDestructureKeyRethrows");
+    const XaEffectSummary *tuple_entries_value =
+        analyzer_function_effect_summary(a, "mapEntriesTupleDestructureValueRethrows");
     const XaEffectSummary *entries_key =
         analyzer_function_effect_summary(a, "mapEntriesIteratorKeyRethrows");
     const XaEffectSummary *entries_key_mixed =
@@ -3435,6 +3451,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(direct_keys_view != NULL);
     ASSERT(direct_entries_key != NULL);
     ASSERT(direct_entries_value != NULL);
+    ASSERT(tuple_entries_key != NULL);
+    ASSERT(tuple_entries_value != NULL);
     ASSERT(entries_key != NULL);
     ASSERT(entries_key_mixed != NULL);
     ASSERT(var_key != NULL);
@@ -3498,6 +3516,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         effect_summary_enum_set_named(a, direct_entries_key, "MapErr");
     const XaErrorTypeSet *direct_entries_value_set =
         effect_summary_enum_set_named(a, direct_entries_value, "MapErr");
+    const XaErrorTypeSet *tuple_entries_key_set =
+        effect_summary_enum_set_named(a, tuple_entries_key, "MapErr");
+    const XaErrorTypeSet *tuple_entries_value_set =
+        effect_summary_enum_set_named(a, tuple_entries_value, "MapErr");
     const XaErrorTypeSet *entries_key_set = effect_summary_enum_set_named(a, entries_key, "MapErr");
     const XaErrorTypeSet *entries_key_mixed_set =
         effect_summary_enum_set_named(a, entries_key_mixed, "MapErr");
@@ -3559,6 +3581,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(direct_keys_view_set != NULL);
     ASSERT(direct_entries_key_set != NULL);
     ASSERT(direct_entries_value_set != NULL);
+    ASSERT(tuple_entries_key_set != NULL);
+    ASSERT(tuple_entries_value_set != NULL);
     ASSERT(entries_key_set != NULL);
     ASSERT(entries_key_mixed_set != NULL);
     ASSERT(var_key_set != NULL);
@@ -3639,6 +3663,12 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!direct_entries_value_set->all_variants);
     ASSERT(xa_bitset_test(&direct_entries_value_set->variants, 0));
     ASSERT(!xa_bitset_test(&direct_entries_value_set->variants, 1));
+    ASSERT(!tuple_entries_key_set->all_variants);
+    ASSERT(xa_bitset_test(&tuple_entries_key_set->variants, 0));
+    ASSERT(!xa_bitset_test(&tuple_entries_key_set->variants, 1));
+    ASSERT(!tuple_entries_value_set->all_variants);
+    ASSERT(xa_bitset_test(&tuple_entries_value_set->variants, 0));
+    ASSERT(!xa_bitset_test(&tuple_entries_value_set->variants, 1));
     ASSERT(!entries_key_set->all_variants);
     ASSERT(xa_bitset_test(&entries_key_set->variants, 0));
     ASSERT(!xa_bitset_test(&entries_key_set->variants, 1));
