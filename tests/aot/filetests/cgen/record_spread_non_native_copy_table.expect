@@ -1,0 +1,7 @@
+contains=xaot-plan v0
+regex=record-shape-plan [0-9]+ .*kind=spread action=spread_result
+regex=record-shape-plan [0-9]+ .*kind=patch action=patch_record
+regex=record-merge-plan [0-9]+ .*action=copy_with_overwrite .*base_fields=3 .*patch_fields=1 .*result_fields=3 .*overwrites=1 .*copy_table=[1-9][0-9]* .*reason=none
+c_regex=xrt_record_merge_copy_table\(v[0-9]+, v[0-9]+, 3, \(const uint16_t\[\]\)\{0, 0, 1, 1, 2, 2\}\)
+c_not_regex=xrt_record_merge\(v[0-9]+, v[0-9]+\)
+c_not_regex=xrt_json_merge\(v[0-9]+, v[0-9]+\)
