@@ -5734,6 +5734,18 @@ XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type) {
     }
 }
 
+static XaSymbol *xa_borrowed_param_root_symbol_in_list(XaInferContext *ctx, AstNode **nodes,
+                                                       int count) {
+    if (!nodes || count <= 0)
+        return NULL;
+    for (int i = 0; i < count; i++) {
+        XaSymbol *root = xa_borrowed_param_root_symbol(ctx, nodes[i]);
+        if (root)
+            return root;
+    }
+    return NULL;
+}
+
 XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *expr) {
     if (!ctx || !ctx->analyzer)
         return NULL;
@@ -5777,6 +5789,57 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
             case AST_AS_EXPR:
                 expr = expr->as.as_expr.expr;
                 break;
+            case AST_ARRAY_LITERAL: {
+                ArrayLiteralNode *arr = &expr->as.array_literal;
+                if (arr->is_repeat) {
+                    XaSymbol *root = xa_borrowed_param_root_symbol(ctx, arr->repeat_value);
+                    return root ? root : xa_borrowed_param_root_symbol(ctx, arr->repeat_count);
+                }
+                return xa_borrowed_param_root_symbol_in_list(ctx, arr->elements, arr->count);
+            }
+            case AST_TUPLE_LITERAL:
+                return xa_borrowed_param_root_symbol_in_list(ctx, expr->as.tuple_literal.elements,
+                                                             expr->as.tuple_literal.count);
+            case AST_SPREAD_EXPR:
+                expr = expr->as.spread_expr.expr;
+                break;
+            case AST_OBJECT_LITERAL: {
+                ObjectLiteralNode *obj = &expr->as.object_literal;
+                for (int i = 0; i < obj->count; i++) {
+                    if (obj->computed && obj->computed[i]) {
+                        XaSymbol *root = xa_borrowed_param_root_symbol(ctx, obj->keys[i]);
+                        if (root)
+                            return root;
+                    }
+                    XaSymbol *root = xa_borrowed_param_root_symbol(ctx, obj->values[i]);
+                    if (root)
+                        return root;
+                }
+                return NULL;
+            }
+            case AST_MAP_LITERAL: {
+                MapLiteralNode *map = &expr->as.map_literal;
+                for (int i = 0; i < map->count; i++) {
+                    XaSymbol *root = xa_borrowed_param_root_symbol(ctx, map->keys[i]);
+                    if (root)
+                        return root;
+                    root = xa_borrowed_param_root_symbol(ctx, map->values[i]);
+                    if (root)
+                        return root;
+                }
+                return NULL;
+            }
+            case AST_SET_LITERAL:
+                return xa_borrowed_param_root_symbol_in_list(ctx, expr->as.set_literal.elements,
+                                                             expr->as.set_literal.count);
+            case AST_STRUCT_LITERAL:
+                return xa_borrowed_param_root_symbol_in_list(
+                    ctx, expr->as.struct_literal.field_values, expr->as.struct_literal.field_count);
+            case AST_TERNARY: {
+                XaSymbol *root = xa_borrowed_param_root_symbol(ctx, expr->as.ternary.true_expr);
+                return root ? root
+                            : xa_borrowed_param_root_symbol(ctx, expr->as.ternary.false_expr);
+            }
             default:
                 return NULL;
         }
