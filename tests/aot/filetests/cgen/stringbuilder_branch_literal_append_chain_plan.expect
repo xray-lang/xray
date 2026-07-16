@@ -1,5 +1,6 @@
 regex=capacity-plan [0-9]+ .*kind=string_builder op=append action=reserve_once .*evidence=row\+receiver_type\+elem_type\+exact_count\+may_grow reason=none
 regex=capacity-plan [0-9]+ .*kind=string_builder op=to_string action=builder_finish .*reason=none
+regex=encoding-plan [0-9]+ .*op=bytes_to_string action=validate_once .*evidence=row\+validated_once\+scalar_boundary\+input_type\+output_type reason=none
 c_regex=xrt_strbuf_reserve_extra_exact\([^,]+, INT64_C\(9\)\);
 c_regex=xrt_strbuf_reserve_extra_exact\([^,]+, INT64_C\(11\)\);
 c_contains=xrt_strbuf_append_string_no_grow(

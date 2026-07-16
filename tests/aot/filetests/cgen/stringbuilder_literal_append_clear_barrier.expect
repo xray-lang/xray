@@ -1,4 +1,5 @@
 regex=capacity-plan [0-9]+ .*kind=string_builder op=clear action=clear_direct .*reason=none
+regex=encoding-plan [0-9]+ .*op=bytes_to_string action=validate_once .*evidence=row\+validated_once\+scalar_boundary\+input_type\+output_type reason=none
 c_contains=xrt_strbuf_reserve_extra_exact(v2, INT64_C(4));
 c_contains=xrt_strbuf_clear(v2)
 c_contains=xrt_strbuf_reserve_extra_exact(v2, INT64_C(7));
