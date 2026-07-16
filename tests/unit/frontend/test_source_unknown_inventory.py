@@ -17,6 +17,7 @@ from check_source_unknown_convergence import (  # noqa: E402
     classify_line,
     enforce_category_maxima,
     parse_category_max,
+    scan_file,
 )
 
 
@@ -84,6 +85,10 @@ class SourceUnknownInventoryTest(unittest.TestCase):
         )
         self.assertIn("TASK_ERASED_RESULT_RESIDUE", categories)
 
+    def test_sibling_inventory_regexes_are_not_task_erasure_residue(self) -> None:
+        hits = scan_file(ROOT, ROOT / "scripts/check_error_effect_convergence.py")
+        self.assertEqual([], hits)
+
     def test_category_maxima_accepts_current_or_lower_residue(self) -> None:
         inventory = {category: [] for category in CATEGORIES}
         inventory["TASK_ERASED_RESULT_RESIDUE"] = [object(), object()]
@@ -99,8 +104,8 @@ class SourceUnknownInventoryTest(unittest.TestCase):
 
     def test_parse_category_max_rejects_unknown_categories(self) -> None:
         self.assertEqual(
-            ("TASK_ERASED_RESULT_RESIDUE", 54),
-            parse_category_max("TASK_ERASED_RESULT_RESIDUE=54"),
+            ("TASK_ERASED_RESULT_RESIDUE", 52),
+            parse_category_max("TASK_ERASED_RESULT_RESIDUE=52"),
         )
         with self.assertRaises(argparse.ArgumentTypeError):
             parse_category_max("TASK_ERASED_RESULT_RESIDUE=-1")
