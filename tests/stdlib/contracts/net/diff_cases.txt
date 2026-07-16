@@ -1,0 +1,1 @@
+tests/regression/10_stdlib/1433_net_loopback.xr

@@ -1,0 +1,44 @@
+schema = 1
+module = "net"
+contract_revision = 1
+legacy_commit = "e1eed9fc7f5e44aaebb2e06fb9df877cbdfbcf7e"
+legacy_oracle = "regression_loopback"
+legacy_public_surface = [
+  "read",
+  "readInto",
+  "write",
+  "writeBytes",
+  "sendTo",
+  "recvFrom",
+  "copy",
+  "copyBidirectional"
+]
+intentional_semantic_changes = [
+  "future converged net.read returns Array<byte> instead of string storage for arbitrary bytes",
+  "future converged net.write and sendTo accept Slice<byte> rather than string or Array owner-only inputs",
+  "future readInto requires mutable byte storage provenance and must not accept readonly string bytes",
+  "native copy paths keep payloads in native byte buffers and must not route arbitrary bytes through string creators"
+]
+known_legacy_bugs = [
+  "legacy net.read exposes arbitrary socket bytes as string?",
+  "legacy net.writeBytes accepts Array<byte> owner input instead of Slice<byte>",
+  "legacy read/accept/dial/recv failure paths still use null or status sentinels instead of typed native errors"
+]
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/net/diff_cases.txt"
+benchmark_suite = "stdlib/net"
+
+[[legacy_behavior]]
+id = "loopback-string-status-sentinels"
+classification = "removed"
+new_behavior = "future converged read/write APIs use typed byte values and typed native errors instead of string? and status sentinels"
+
+[[legacy_behavior]]
+id = "high-byte-loopback"
+classification = "required"
+new_behavior = "socket loopback preserves high-byte octets exactly before and after the public byte API switch"
+
+[[legacy_behavior]]
+id = "native-copy-byte-boundary"
+classification = "required"
+new_behavior = "net.copy and copyBidirectional preserve payload bytes without exposing string-binary public API shortcuts"
