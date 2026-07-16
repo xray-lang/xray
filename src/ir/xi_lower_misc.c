@@ -57,6 +57,8 @@ static int prelude_enum_builtin_index(const char *enum_name) {
         return XR_GLOBAL_VAR_STRING_SLICE_ERROR;
     if (strcmp(enum_name, "CompressionError") == 0)
         return XR_GLOBAL_VAR_COMPRESSION_ERROR;
+    if (strcmp(enum_name, "CryptoError") == 0)
+        return XR_GLOBAL_VAR_CRYPTO_ERROR;
     return -1;
 }
 
