@@ -1,0 +1,20 @@
+fn stringbuilder_alias_append_barrier(dynamicPart: string) -> string {
+    var sb = StringBuilder()
+    var alias = sb
+    sb.append("abcd")
+    alias.append(dynamicPart)
+    sb.append("abcdefg")
+    return sb.toString()
+}
+
+fn stringbuilder_alias_clear_barrier() -> string {
+    var sb = StringBuilder()
+    var alias = sb
+    sb.append("wxyz")
+    alias.clear()
+    sb.append("mnopqrst")
+    return sb.toString()
+}
+
+print(stringbuilder_alias_append_barrier("-dynamic-"))
+print(stringbuilder_alias_clear_barrier())
