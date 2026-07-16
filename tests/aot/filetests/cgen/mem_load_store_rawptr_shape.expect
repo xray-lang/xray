@@ -1,0 +1,17 @@
+contains=xaot-plan v0
+regex=function [0-9]+ name=xray_mem_u32_roundtrip .* ret=uint32_t/scalar/u32
+regex=value v[0-9]+ op=ADD kind=ptr rep=rawptr c_type=void \*
+regex=value v[0-9]+ op=PTR_STORE kind=void rep=void c_type=void
+regex=value v[0-9]+ op=PTR_LOAD kind=scalar rep=u32 c_type=uint32_t
+regex=value v[0-9]+ op=PTR_LOAD kind=scalar rep=f32 c_type=float
+regex=value v[0-9]+ op=PTR_LOAD kind=ptr rep=rawptr c_type=const void \*
+c_regex=void \* v[0-9]+ = \(void \*\)\(\(uint8_t \*\)\(v[0-9]+\) \+ \(intptr_t\)\(v[0-9]+\)\);
+c_contains=xrt_ptr_store_int_unchecked_raw(
+c_contains=xrt_ptr_load_int_unchecked_raw(
+c_contains=xrt_ptr_store_float_unchecked_raw(
+c_contains=xrt_ptr_load_float_unchecked_raw(
+c_contains=xrt_ptr_store_pointer_unchecked_raw(
+c_contains=xrt_ptr_load_pointer_unchecked_raw(
+c_not_contains=xrt_add(
+c_not_contains=xrt_mem_load
+c_not_contains=xrt_mem_store
