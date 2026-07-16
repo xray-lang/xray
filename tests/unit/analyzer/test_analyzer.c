@@ -275,6 +275,15 @@ TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
     ASSERT(unknown_name != NULL);
     ASSERT(XR_TYPE_IS_ERROR(unknown_name));
 
+    XrType *unregistered_name = xa_builtin_parse_type_string(g_isolate, "NoSuchType");
+    ASSERT(unregistered_name != NULL);
+    ASSERT(XR_TYPE_IS_ERROR(unregistered_name));
+
+    XrType *nested_unregistered_name = xa_builtin_parse_type_string(g_isolate, "Array<NoSuchType>");
+    ASSERT(nested_unregistered_name != NULL);
+    ASSERT(XR_TYPE_IS_ARRAY(nested_unregistered_name));
+    ASSERT(XR_TYPE_IS_ERROR(nested_unregistered_name->container.element_type));
+
     XrType *missing = xa_builtin_parse_type_string(g_isolate, NULL);
     ASSERT(missing != NULL);
     ASSERT(XR_TYPE_IS_ERROR(missing));
@@ -300,6 +309,22 @@ TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
     ASSERT(XR_TYPE_IS_FUNCTION(bad_param));
     ASSERT(bad_param->function.param_count == 1);
     ASSERT(XR_TYPE_IS_ERROR(bad_param->function.params[0].type));
+
+    XrType *missing_signature = xa_builtin_parse_full_signature(g_isolate, NULL);
+    ASSERT(missing_signature != NULL);
+    ASSERT(XR_TYPE_IS_FUNCTION(missing_signature));
+    ASSERT(XR_TYPE_IS_ERROR(missing_signature->function.return_type));
+
+    XrType *missing_parens = xa_builtin_parse_full_signature(g_isolate, "value: int");
+    ASSERT(missing_parens != NULL);
+    ASSERT(XR_TYPE_IS_FUNCTION(missing_parens));
+    ASSERT(XR_TYPE_IS_ERROR(missing_parens->function.return_type));
+
+    XrType *bad_signature_param = xa_builtin_parse_full_signature(g_isolate, "(value): int");
+    ASSERT(bad_signature_param != NULL);
+    ASSERT(XR_TYPE_IS_FUNCTION(bad_signature_param));
+    ASSERT(bad_signature_param->function.param_count == 1);
+    ASSERT(XR_TYPE_IS_ERROR(bad_signature_param->function.params[0].type));
 }
 
 TEST(type_narrowing) {

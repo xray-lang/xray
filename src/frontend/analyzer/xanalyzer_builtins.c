@@ -1314,7 +1314,7 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
             }
         }
         if (!type)
-            type = xr_type_new_unknown(X);
+            type = xr_type_new_error(X);
     }
 
     if (type && nullable && !xr_type_intrinsically_includes_null(type)) {
@@ -1469,12 +1469,12 @@ static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
 // Returns a complete function type with parameter types
 XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
     if (!sig)
-        return xr_type_new_function(X, NULL, 0, xr_type_new_unknown(NULL), false);
+        return xr_type_new_function(X, NULL, 0, xr_type_new_error(X), false);
 
     // Find parameter section: between '(' and matching ')'
     const char *open = strchr(sig, '(');
     if (!open)
-        return xr_type_new_function(X, NULL, 0, xr_type_new_unknown(NULL), false);
+        return xr_type_new_function(X, NULL, 0, xr_type_new_error(X), false);
     open++;
 
     // Find matching close paren at depth 0 (handles nested fn(...) types)
@@ -1586,7 +1586,7 @@ XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
             while (p < close && *p != ',')
                 p++;
             param_optional[param_count] = false;
-            param_types[param_count] = xr_type_new_unknown(NULL);
+            param_types[param_count] = xr_type_new_error(X);
             if (!seen_optional)
                 min_params = param_count + 1;
             param_count++;
