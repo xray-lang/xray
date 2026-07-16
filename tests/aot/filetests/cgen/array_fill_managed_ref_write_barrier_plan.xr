@@ -1,0 +1,7 @@
+fn fillNames(names: Array<string>) -> string {
+    names.fill("zeta", 1, 3)
+    return names[1] + names[2]
+}
+
+var names: Array<string> = ["alpha", "beta", "gamma", "delta"]
+print(fillNames(names))
