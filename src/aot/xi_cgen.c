@@ -1998,6 +1998,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                            const char *prefix);
 static bool emit_thread_spawn_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                          const XiValue *v, const char *prefix, bool in_coro);
+static XrRep cg_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 #include "xi_cgen_abi_helpers.inc.c"
 
 static bool cg_shared_slot_has_reachable_get(XiCgenCtx *ctx, const XiModule *owner_mod, int slot);
