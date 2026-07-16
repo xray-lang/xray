@@ -1,0 +1,23 @@
+// FFI: scalar descriptor matrix cases must round-trip through the same
+// compact extern ABI metadata in the VM and AOT backends.
+extern "C" {
+    fn strlen(s: Ptr<byte>) -> uintsize
+    fn memcmp(left: Ptr<byte>, right: Ptr<byte>, n: uintsize) -> int32
+    fn llabs(x: int64) -> int64
+    fn labs(x: intsize) -> intsize
+}
+
+extern "C" dylib("m") {
+    fn fminf(x: float32, y: float32) -> float32
+    fn fmax(x: float64, y: float64) -> float64
+}
+
+const left = b"ABC"
+const right = b"ABD"
+
+print(unsafe { strlen(left.ptr()) })
+print(unsafe { memcmp(left.ptr(), right.ptr(), 3) < 0 })
+print(unsafe { llabs(-1234567890123) })
+print(unsafe { labs(-23) })
+print(unsafe { fminf(2.5, -1.5) == -1.5 })
+print(unsafe { fmax(2.5, -1.5) == 2.5 })
