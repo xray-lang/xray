@@ -1,0 +1,27 @@
+enum OutTryCatchMissingFieldErr {
+    Fail
+}
+
+struct OutTryCatchMissingFieldPair {
+    left: int
+    right: int
+}
+
+fn maybeFailMissingSibling(flag: bool) {
+    if (flag) {
+        throw OutTryCatchMissingFieldErr.Fail
+    }
+}
+
+fn bad(flag: bool, pair: out OutTryCatchMissingFieldPair) {
+    try {
+        maybeFailMissingSibling(flag)
+        pair.left = 1
+        pair.right = 2
+    } catch (e) {
+        pair.left = 3
+    }
+
+    var whole = pair
+    pair = OutTryCatchMissingFieldPair{left: whole.left, right: whole.right}
+}
