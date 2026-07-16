@@ -1,0 +1,6 @@
+const NUMS: Map<int, int> = #{1: 7, 2: 9}
+const SEEN: Set<int> = #[1, 2]
+
+print(NUMS[1])
+print(NUMS.get(2))
+print(SEEN.contains(1))

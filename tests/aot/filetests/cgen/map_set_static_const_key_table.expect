@@ -1,0 +1,20 @@
+args=--dump-xaot-plan
+regex=map-shape-plan [0-9]+ .* container=map source=static action=readonly_static_table .* literal_count=2 .*
+regex=map-shape-plan [0-9]+ .* container=set source=static action=readonly_static_table .* literal_count=2 .*
+regex=key-access-plan [0-9]+ .* container=map op=index_get .* action=prehashed_lookup .*
+regex=key-access-plan [0-9]+ .* container=map op=get .* action=prehashed_lookup .*
+regex=key-access-plan [0-9]+ .* container=set op=has .* action=prehashed_lookup .*
+c_contains=xrt_map_static_storage_init
+c_contains=xrt_set_static_storage_init
+c_contains=xrt_map_set_prehashed
+c_contains=xrt_map_index_get_prehashed_owned
+c_contains=xrt_map_get_prehashed_owned
+c_contains=xrt_set_add_prehashed
+c_contains=xrt_set_has_prehashed
+c_not_contains=xrt_map_new_typed(2, XR_ELEM_I64, XR_ELEM_I64)
+c_not_contains=xrt_set_new_typed(2, XR_ELEM_I64)
+c_not_contains=xrt_map_get_small_owned
+c_not_contains=xrt_set_has_small
+c_not_contains=xrt_map_get_dense_i64_owned
+c_not_contains=xrt_set_has_dense_i64
+c_not_contains=xrt_index_get(
