@@ -1,0 +1,24 @@
+enum OutFieldExceptionErr {
+    Fail
+}
+
+struct OutFieldExceptionPair {
+    left: int
+    right: int
+}
+
+fn failBeforeFieldAssign(value: out int) {
+    throw OutFieldExceptionErr.Fail
+}
+
+fn bad(pair: out OutFieldExceptionPair) {
+    try {
+        failBeforeFieldAssign(out pair.left)
+        pair.right = 2
+    } catch (e) {
+        pair.right = 3
+    }
+
+    var whole = pair
+    pair = OutFieldExceptionPair{left: whole.left, right: whole.right}
+}

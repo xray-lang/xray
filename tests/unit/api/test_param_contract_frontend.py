@@ -44,6 +44,7 @@ NEGATIVE_CASES = (
     "tests/compile_errors/ownership/161_in_destructure_param_mode_rejected.xr",
     "tests/compile_errors/ownership/162_out_param_try_call_may_throw_before_assignment.xr",
     "tests/compile_errors/ownership/163_out_param_projection_call_not_whole_init.xr",
+    "tests/compile_errors/ownership/174_out_param_try_call_field_da_exception_edge_rejected.xr",
     "tests/compile_errors/ffi/040_extern_in_param_mode_rejected.xr",
     "tests/compile_errors/ffi/041_extern_ref_param_mode_rejected.xr",
     "tests/compile_errors/ffi/042_extern_out_param_mode_rejected.xr",
