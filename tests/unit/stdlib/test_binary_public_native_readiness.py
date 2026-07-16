@@ -15,9 +15,11 @@ import check_binary_public_native_readiness as readiness  # noqa: E402
 from check_binary_public_native_readiness import (  # noqa: E402
     NATIVE_TYPED_ERROR_ABI_BLOCKERS,
     PRE_SWITCH_NATIVE_PUBLIC_SURFACE,
+    SINGLE_FUNCTION_PUBLIC_SURFACE_PROBES,
     check_boundary,
     check_dependency_markers,
     check_native_typed_error_abi_blockers,
+    check_single_function_public_surface_probes,
     check_single_function_native_typed_error_probes,
     load_boundary_modules,
 )
@@ -44,6 +46,27 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
         finally:
             readiness.load_boundary_modules = original_modules
             readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = original_probes
+
+    def run_fast_public_surface_probe(
+        self,
+        subject: str = "crypto.sha256",
+        modules: dict[str, dict[str, object]] | None = None,
+    ):
+        original_modules = readiness.load_boundary_modules
+        original_probes = readiness.SINGLE_FUNCTION_PUBLIC_SURFACE_PROBES
+        probe = dict(original_probes[subject])
+        probe["required"] = {}
+        if modules is not None:
+            readiness.load_boundary_modules = lambda root: modules
+        readiness.SINGLE_FUNCTION_PUBLIC_SURFACE_PROBES = {subject: probe}
+        try:
+            return {
+                result.subject: result
+                for result in check_single_function_public_surface_probes(ROOT)
+            }[subject]
+        finally:
+            readiness.load_boundary_modules = original_modules
+            readiness.SINGLE_FUNCTION_PUBLIC_SURFACE_PROBES = original_probes
 
     def test_typed_native_error_blockers_are_module_level(self) -> None:
         results = check_native_typed_error_abi_blockers(ROOT)
@@ -114,6 +137,33 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
             "task-198 full readiness marker must remain absent for this probe",
         )
 
+    def test_crypto_sha256_fixed_digest_surface_is_a_single_function_blocker(self) -> None:
+        spec = SINGLE_FUNCTION_PUBLIC_SURFACE_PROBES["crypto.sha256"]
+        module = load_boundary_modules(ROOT)["crypto"]
+        result = self.run_fast_public_surface_probe("crypto.sha256")
+
+        self.assertTrue(result.ok, result.detail)
+        self.assertEqual("PUBLIC_NATIVE_FUNCTION_SURFACE_BLOCKER", result.category)
+        self.assertIn("hex-string fixed-digest native path", result.detail)
+        self.assertIn("sha256", module["public_native"])
+        self.assertIsNot(module.get("def_migration_complete"), True)
+        for path_text, anchors in spec["required"].items():
+            with self.subTest(path=path_text):
+                text = (ROOT / path_text).read_text(encoding="utf-8")
+                for anchor in anchors:
+                    self.assertIn(anchor, text)
+
+        blocks = readiness.def_function_blocks(ROOT, spec["module"], spec["function"])
+        self.assertTrue(blocks)
+        for block in blocks:
+            self.assertNotIn("Slice<byte>", block)
+            self.assertNotIn("[byte;32]", block)
+            self.assertNotIn("encoding.hexEncode", block)
+
+        self.assertIn("[byte;32]", spec["detail"])
+        self.assertIn("Slice<byte>", spec["detail"])
+        self.assertIn("encoding.hexEncode", spec["detail"])
+
     def test_compress_gunzip_probe_fails_closed_on_partial_public_switch(self) -> None:
         modules = {
             name: dict(module)
@@ -139,6 +189,19 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertIn("crypto.randomBytes left pre-switch public_native", result.detail)
+
+    def test_crypto_sha256_probe_fails_closed_on_partial_public_switch(self) -> None:
+        modules = {
+            name: dict(module)
+            for name, module in load_boundary_modules(ROOT).items()
+        }
+        modules["crypto"] = dict(modules["crypto"])
+        modules["crypto"]["public_native"] = ["uuid"]
+
+        result = self.run_fast_public_surface_probe("crypto.sha256", modules)
+
+        self.assertFalse(result.ok)
+        self.assertIn("crypto.sha256 left pre-switch public_native", result.detail)
 
     def test_public_switch_markers_remain_absent(self) -> None:
         results = check_dependency_markers(ROOT)

@@ -411,6 +411,54 @@ SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = {
         ),
     },
 }
+SINGLE_FUNCTION_PUBLIC_SURFACE_PROBES = {
+    "crypto.sha256": {
+        "module": "crypto",
+        "function": "sha256",
+        "required": {
+            "tests/stdlib/contracts/crypto/contract.toml": (
+                "fixed digest APIs return fixed byte arrays and use encoding.hexEncode only for presentation",
+                "legacy hash and HMAC APIs conflate digest bytes with lowercase hex presentation",
+                "future converged digest APIs return fixed byte arrays; hex strings are produced by encoding.hexEncode at call sites",
+            ),
+            "stdlib/defs/core.def": (
+                "fn sha256 {",
+                'signature: "(data: string): string"',
+                'vm: "crypto_sha256"',
+                'aot: "xrt_crypto_sha256"',
+            ),
+            "stdlib/crypto/crypto.c": (
+                "static XrValue crypto_sha256",
+                "return crypto_hash_value(isolate, args, nargs, XR_CRYPTO_CORE_HASH_SHA256);",
+                "return crypto_hex_string_result(isolate, digest, digest_len);",
+            ),
+            "src/aot/xrt_crypto.h": (
+                "static inline XrValue xrt_crypto_sha256",
+                "return xrt_crypto_hash_string(data, len, XR_CRYPTO_CORE_HASH_SHA256);",
+                "return xrt_crypto_hex_result(digest, digest_len);",
+            ),
+            "tests/diff/fuzz_binary_native_stdlib.py": (
+                "hashlib.sha256(data).hexdigest()",
+                "print(crypto.sha256(text{index}))",
+            ),
+            "tests/regression/10_stdlib/1400_crypto_hash.xr": (
+                'var hash = crypto.sha256("hello")',
+                'assert_eq(hash, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")',
+                'assert_eq(len(crypto.sha256("test")), 64)',
+            ),
+        },
+        "forbidden_def_anchors": (
+            "Slice<byte>",
+            "[byte;32]",
+            "encoding.hexEncode",
+        ),
+        "detail": (
+            "crypto.sha256 remains a hex-string fixed-digest native path; future switch "
+            "must return [byte;32] from Slice<byte> input and move presentation to "
+            "encoding.hexEncode before task-200 public-native cutover"
+        ),
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -920,6 +968,52 @@ def check_single_function_native_typed_error_probes(root: Path) -> list[CheckRes
     return results
 
 
+def check_single_function_public_surface_probes(root: Path) -> list[CheckResult]:
+    modules = load_boundary_modules(root)
+    results: list[CheckResult] = []
+    for subject, spec in SINGLE_FUNCTION_PUBLIC_SURFACE_PROBES.items():
+        module_name = str(spec["module"])
+        function_name = str(spec["function"])
+        failures: list[str] = []
+
+        module = modules.get(module_name)
+        if module is None:
+            failures.append("missing stdlib boundary entry")
+        else:
+            public_native = module.get("public_native")
+            if not isinstance(public_native, list) or function_name not in public_native:
+                failures.append(f"{module_name}.{function_name} left pre-switch public_native")
+            if module.get("def_migration_complete") is True:
+                failures.append("def_migration_complete set before public surface closure")
+
+        required = spec["required"]
+        assert isinstance(required, dict)
+        for path_text, anchors in required.items():
+            missing = missing_anchors(root, str(path_text), anchors)
+            failures.extend(f"{path_text}: missing {anchor}" for anchor in missing)
+
+        function_blocks = def_function_blocks(root, module_name, function_name)
+        if not function_blocks:
+            failures.append(f"stdlib/defs/core.def: missing {subject} function block")
+        forbidden_def_anchors = tuple(str(anchor) for anchor in spec.get("forbidden_def_anchors", ()))
+        for function_block in function_blocks:
+            for anchor in forbidden_def_anchors:
+                if anchor in function_block:
+                    failures.append(
+                        f"stdlib/defs/core.def: {subject} mentions {anchor} before public switch"
+                    )
+
+        results.append(
+            CheckResult(
+                "PUBLIC_NATIVE_FUNCTION_SURFACE_BLOCKER",
+                subject,
+                not failures,
+                str(spec["detail"]) if not failures else "; ".join(failures),
+            )
+        )
+    return results
+
+
 def check_harness_anchors(root: Path) -> list[CheckResult]:
     anchors = {
         "tests/diff/fuzz_binary_stdlib.py": (
@@ -979,6 +1073,7 @@ def build_results(root: Path) -> list[CheckResult]:
     results.extend(check_partial_dependency_evidence(root))
     results.extend(check_native_typed_error_abi_blockers(root))
     results.extend(check_single_function_native_typed_error_probes(root))
+    results.extend(check_single_function_public_surface_probes(root))
     return results
 
 
