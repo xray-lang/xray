@@ -15,6 +15,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -320,10 +321,45 @@ def print_text_inventory(inventory: dict[str, list[Hit]], max_per_category: int)
             print(f"  ... {len(hits) - max_per_category} more")
 
 
+def parse_category_max(raw: str) -> tuple[str, int]:
+    if "=" not in raw:
+        raise argparse.ArgumentTypeError("expected CATEGORY=COUNT")
+    category, limit_text = raw.split("=", 1)
+    category = category.strip()
+    if category not in CATEGORIES:
+        raise argparse.ArgumentTypeError(f"unknown category '{category}'")
+    try:
+        limit = int(limit_text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid max count '{limit_text}'") from exc
+    if limit < 0:
+        raise argparse.ArgumentTypeError("max count must be non-negative")
+    return category, limit
+
+
+def enforce_category_maxima(
+    inventory: dict[str, list[Hit]], maxima: list[tuple[str, int]]
+) -> list[str]:
+    errors: list[str] = []
+    for category, limit in maxima:
+        count = len(inventory.get(category, []))
+        if count > limit:
+            errors.append(f"{category}: {count} exceeds max {limit}")
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".", help="repository root")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    parser.add_argument(
+        "--max-category",
+        action="append",
+        default=[],
+        metavar="CATEGORY=COUNT",
+        type=parse_category_max,
+        help="fail if a category count exceeds COUNT; may be repeated",
+    )
     parser.add_argument(
         "--max-per-category",
         type=int,
@@ -345,6 +381,12 @@ def main() -> int:
         )
     else:
         print_text_inventory(inventory, args.max_per_category)
+
+    errors = enforce_category_maxima(inventory, args.max_category)
+    if errors:
+        for error in errors:
+            print(f"error: {error}", file=sys.stderr)
+        return 1
     return 0
 
 
