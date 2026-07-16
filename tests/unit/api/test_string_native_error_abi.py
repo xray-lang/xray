@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = ROOT / "tests/aot/basic/string_utf8_conversion.xr"
 STRING_DECL = ROOT / "stdlib/types/string.xr"
 NATIVE_DEFS = ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c"
+VM_RUNTIME = ROOT / "src/runtime/object/xstring_methods.c"
+AOT_RUNTIME = ROOT / "src/aot/xrt_method.h"
 EXPECTED_OUTPUT = (
     "hi\n"
     "hé\n"
@@ -101,6 +103,30 @@ class StringNativeErrorAbiTest(unittest.TestCase):
             generated,
         )
         self.assertNotIn("fromUtf8(bytes: Slice<byte>) -> string?", generated)
+
+    def test_runtime_sources_route_failures_to_typed_error_channel(self) -> None:
+        vm_runtime = VM_RUNTIME.read_text(encoding="utf-8")
+        aot_runtime = AOT_RUNTIME.read_text(encoding="utf-8")
+
+        self.assertIn("xr_utf8_scan_strict(data, len)", vm_runtime)
+        self.assertIn(
+            "string_set_builtin_enum_error(iso, XR_GLOBAL_VAR_UTF8_ERROR, 0",
+            vm_runtime,
+        )
+        self.assertIn(
+            "string_set_builtin_enum_error(iso, XR_GLOBAL_VAR_STRING_SLICE_ERROR, 0",
+            vm_runtime,
+        )
+        self.assertIn("xr_utf8_core_scan_strict(data, len)", aot_runtime)
+        self.assertIn(
+            'xrt_set_builtin_enum_error("Utf8Error", "InvalidUtf8", 0);',
+            aot_runtime,
+        )
+        self.assertIn(
+            'xrt_set_builtin_enum_error("StringSliceError", "InvalidByteRange", 0);',
+            aot_runtime,
+        )
+        self.assertIn("xrt_pending_error = xrt_enum_aggregate_box(err);", aot_runtime)
 
     def test_vm_native_aot_typed_catch_parity(self) -> None:
         vm = self.run_checked([str(self.xray), str(FIXTURE)]).stdout
