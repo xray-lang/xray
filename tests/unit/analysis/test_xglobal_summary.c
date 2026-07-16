@@ -17427,6 +17427,57 @@ TEST(entry_plan_uses_only_reachable_effects_and_provider_contract) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(entry_plan_elides_unreachable_coroutine_capabilities) {
+    XgBuildKey key = {.source_hash = 0x195,
+                      .compiler_semver_hash = 2,
+                      .profile_hash = 3,
+                      .module_id = 1,
+                      .profile = XG_BUILD_NATIVE_RELEASE};
+    XgGlobalEvidence ev;
+    XgBodySummary entry = {
+        .func_id = 1, .module_id = 1, .kind = XG_BODY_MODULE_INIT, .body_hash = 0x195};
+    XgBodySummary unreachable = {.func_id = 2,
+                                 .module_id = 1,
+                                 .kind = XG_BODY_FUNCTION,
+                                 .effect_bits = XG_BODY_MAY_SPAWN | XG_BODY_MAY_SUSPEND,
+                                 .capability_bits = XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_TIMER,
+                                 .body_hash = 0x196};
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    XaotBundle bundle;
+
+    xg_global_evidence_init(&ev, key);
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &entry));
+    ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &unreachable));
+
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    init_func.xg_body_func_id = entry.func_id;
+    memset(&module, 0, sizeof(module));
+    module.path = "entry_unreachable_coro.xr";
+    module.name = "entry_unreachable_coro";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_FREESTANDING));
+    ASSERT_TRUE(bundle.has_entry_plan);
+    ASSERT_EQ_UINT(bundle.entry_plan.reachable_body_count, 1);
+    ASSERT_EQ_UINT(bundle.entry_plan.reachable_effect_bits, 0);
+    ASSERT_EQ_UINT(bundle.entry_plan.required_capability_bits, 0);
+    ASSERT_EQ_UINT(bundle.entry_plan.runtime_component_bits, 0);
+    ASSERT_EQ_UINT(bundle.entry_plan.provider_hook_bits, 0);
+    ASSERT_EQ_UINT(bundle.entry_plan.root_representation, XR_ROOT_ELIDED);
+    ASSERT_EQ_UINT(bundle.entry_plan.scheduler_mode, XR_SCHED_NONE);
+    ASSERT_EQ_UINT(bundle.entry_plan.unproven_reason, XR_ENTRY_PROVEN);
+    ASSERT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_COROUTINE));
+    ASSERT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_TASK));
+    ASSERT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_TIMER));
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+}
+
 TEST(storage_and_capture_plans_close_owner_actions) {
     XgBuildKey key = {.source_hash = 0x194,
                       .compiler_semver_hash = 2,
@@ -17981,6 +18032,7 @@ RUN_TEST(global_evidence_generic_code_size_policy_shares_large_body);
 RUN_TEST(xaot_verifier_rejects_stale_enum_scalar_plan);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
 RUN_TEST(entry_plan_uses_only_reachable_effects_and_provider_contract);
+RUN_TEST(entry_plan_elides_unreachable_coroutine_capabilities);
 RUN_TEST(storage_and_capture_plans_close_owner_actions);
 RUN_TEST(global_evidence_producer_records_storage_provenance);
 RUN_TEST(address_plan_rejects_owner_pointer_escape);
