@@ -2440,6 +2440,7 @@ typedef enum CatchAggregateMemberAction {
     CATCH_AGGREGATE_MEMBER_INVALIDATE,
     CATCH_AGGREGATE_MEMBER_PRESERVE,
     CATCH_AGGREGATE_MEMBER_SET_ADD_CAUGHT,
+    CATCH_AGGREGATE_MEMBER_SET_DELETE_CAUGHT,
     CATCH_AGGREGATE_MEMBER_SET_CLEAR,
     CATCH_AGGREGATE_MEMBER_MAP_SET_PRECISE,
     CATCH_AGGREGATE_MEMBER_MAP_DELETE_PRECISE,
@@ -2491,6 +2492,12 @@ static CatchAggregateMemberUpdate catch_aggregate_member_update(ErrorSetCtx *ctx
         bool set_has_caught_elements = current_catch_has_element_aggregate_container(ctx, id, name);
         if (call->arg_count == 0 && strcmp(ma->name, "clear") == 0) {
             update.action = CATCH_AGGREGATE_MEMBER_SET_CLEAR;
+            return update;
+        }
+        if (call->arg_count == 1 && strcmp(ma->name, "delete") == 0 &&
+            (set_has_caught_elements || set_is_known_empty) &&
+            is_current_caught_ref(ctx, call->arguments[0])) {
+            update.action = CATCH_AGGREGATE_MEMBER_SET_DELETE_CAUGHT;
             return update;
         }
         if ((call->arg_count == 1 && strcmp(ma->name, "contains") == 0) ||
@@ -2568,6 +2575,12 @@ static void apply_catch_aggregate_member_update(ErrorSetCtx *ctx,
                 ctx, update->container_id, update->container_name, CATCH_AGGREGATE_EMPTY);
             add_current_catch_aggregate_alias(ctx, update->container_id, update->container_name,
                                               CATCH_AGGREGATE_ELEMENT, -1, 0, NULL, NULL, NULL);
+            break;
+        case CATCH_AGGREGATE_MEMBER_SET_DELETE_CAUGHT:
+            remove_current_catch_aggregate_aliases_for_container(ctx, update->container_id,
+                                                                 update->container_name);
+            add_current_catch_aggregate_alias(ctx, update->container_id, update->container_name,
+                                              CATCH_AGGREGATE_EMPTY, -1, 0, NULL, NULL, NULL);
             break;
         case CATCH_AGGREGATE_MEMBER_SET_CLEAR:
             remove_current_catch_aggregate_aliases_for_container(ctx, update->container_id,
