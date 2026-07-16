@@ -101,6 +101,22 @@ ACTIVE_REMOVED_CATEGORIES = {
     "ACTIVE_REMOVED_BUFFER_PTR_UNCHECKED",
 }
 
+EXTERN_GATE_REQUIRED_FILES = {
+    Path("tests/diff/task190_extern_cases.txt"),
+    Path("tests/diff/cases/semantics/ffi/extern_no_arg_void_and_unused.xr"),
+    Path("tests/diff/cases/semantics/ffi/extern_pointer_float_prototypes.xr"),
+    Path("tests/diff/cases/semantics/ffi/extern_used_dylib_unused_symbol_isolation.xr"),
+    Path("tests/aot/filetests/link/ffi_no_arg_prototype.xr"),
+    Path("tests/aot/filetests/link/ffi_unused_dylib_pruned.xr"),
+    Path("tests/aot/filetests/link/ffi_used_dylib_unused_symbol_isolation.xr"),
+}
+
+EXTERN_GATE_REQUIRED_MANIFEST_ENTRIES = {
+    "tests/diff/cases/semantics/ffi/extern_no_arg_void_and_unused.xr",
+    "tests/diff/cases/semantics/ffi/extern_pointer_float_prototypes.xr",
+    "tests/diff/cases/semantics/ffi/extern_used_dylib_unused_symbol_isolation.xr",
+}
+
 LAYOUT_GATE_REQUIRED_FILES = {
     Path("tests/diff/task190_layout_cases.txt"),
     Path("tests/diff/cases/semantics/ffi/extern_layout_introspection.xr"),
@@ -211,23 +227,47 @@ def build_inventory(root: Path) -> dict[str, list[Hit]]:
     return dict(sorted(by_category.items()))
 
 
-def check_layout_gate(root: Path) -> list[str]:
-    """Validate the task-190 layout/flexible-tail focused fixture set."""
+def check_manifest_gate(
+    root: Path,
+    required_files: set[Path],
+    manifest_path: Path,
+    required_entries: set[str],
+) -> list[str]:
     missing = [
         str(path)
-        for path in sorted(LAYOUT_GATE_REQUIRED_FILES)
+        for path in sorted(required_files)
         if not (root / path).is_file()
     ]
-    manifest_path = root / "tests/diff/task190_layout_cases.txt"
-    if manifest_path.is_file():
+    full_manifest_path = root / manifest_path
+    if full_manifest_path.is_file():
         entries = {
             line.strip()
-            for line in manifest_path.read_text(encoding="utf-8").splitlines()
+            for line in full_manifest_path.read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.lstrip().startswith("#")
         }
-        for entry in sorted(LAYOUT_GATE_REQUIRED_MANIFEST_ENTRIES - entries):
-            missing.append(f"tests/diff/task190_layout_cases.txt entry: {entry}")
+        for entry in sorted(required_entries - entries):
+            missing.append(f"{manifest_path} entry: {entry}")
     return missing
+
+
+def check_extern_gate(root: Path) -> list[str]:
+    """Validate the task-190 extern descriptor/link-isolation fixture set."""
+    return check_manifest_gate(
+        root,
+        EXTERN_GATE_REQUIRED_FILES,
+        Path("tests/diff/task190_extern_cases.txt"),
+        EXTERN_GATE_REQUIRED_MANIFEST_ENTRIES,
+    )
+
+
+def check_layout_gate(root: Path) -> list[str]:
+    """Validate the task-190 layout/flexible-tail focused fixture set."""
+    return check_manifest_gate(
+        root,
+        LAYOUT_GATE_REQUIRED_FILES,
+        Path("tests/diff/task190_layout_cases.txt"),
+        LAYOUT_GATE_REQUIRED_MANIFEST_ENTRIES,
+    )
 
 
 def print_text_inventory(inventory: dict[str, list[Hit]], max_per_category: int) -> None:
@@ -269,6 +309,7 @@ def main() -> int:
                         category: [asdict(hit) for hit in hits]
                         for category, hits in inventory.items()
                     },
+                    "extern_gate_missing": check_extern_gate(root),
                     "layout_gate_missing": check_layout_gate(root),
                 },
                 indent=2,
@@ -277,6 +318,10 @@ def main() -> int:
         )
     else:
         print_text_inventory(inventory, args.max_per_category)
+        missing_extern_gate = check_extern_gate(root)
+        print(f"TASK190_EXTERN_DESCRIPTOR_GATE: {'FAIL' if missing_extern_gate else 'PASS'}")
+        for missing in missing_extern_gate:
+            print(f"  missing {missing}")
         missing_layout_gate = check_layout_gate(root)
         print(f"TASK190_LAYOUT_FLEX_GATE: {'FAIL' if missing_layout_gate else 'PASS'}")
         for missing in missing_layout_gate:
@@ -288,11 +333,17 @@ def main() -> int:
             for category, hits in inventory.items()
             if category in ACTIVE_REMOVED_CATEGORIES and hits
         }
+        missing_extern_gate = check_extern_gate(root)
         missing_layout_gate = check_layout_gate(root)
         if blocking:
             print("task-190 removed C interop surface gate failed:", file=sys.stderr)
             for category, hits in blocking.items():
                 print(f"  {category}: {len(hits)}", file=sys.stderr)
+            return 1
+        if missing_extern_gate:
+            print("task-190 extern descriptor/link-isolation focused gate failed:", file=sys.stderr)
+            for missing in missing_extern_gate:
+                print(f"  missing {missing}", file=sys.stderr)
             return 1
         if missing_layout_gate:
             print("task-190 layout/flexible-tail focused gate failed:", file=sys.stderr)
