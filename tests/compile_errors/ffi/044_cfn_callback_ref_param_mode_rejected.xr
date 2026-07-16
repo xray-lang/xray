@@ -1,0 +1,10 @@
+extern "C" {
+    fn call_cfn(cb: CFn<(ref int32) -> int32>, x: int32) -> int32
+}
+
+fn bump(x: ref int32) -> int32 {
+    x = x + 1
+    return x
+}
+
+print(unsafe { call_cfn(bump, 1) })

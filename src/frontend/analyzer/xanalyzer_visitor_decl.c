@@ -266,6 +266,29 @@ static bool xa_c_export_type_supported(XrType *type, bool is_return) {
     }
 }
 
+static void xa_validate_extern_cfn_callback_param_modes(XaInferContext *ctx, AstNode *node,
+                                                        const XrParamNode *param,
+                                                        const XrType *type) {
+    if (!ctx || !ctx->analyzer || !type || !XR_TYPE_IS_C_FUNCTION(type))
+        return;
+    for (int i = 0; i < type->function.param_count; i++) {
+        XrParamMode callback_mode = xr_type_function_param_mode(type, i);
+        if (callback_mode == XR_PARAM_VALUE)
+            continue;
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = param ? param->line : (node ? node->line : 0),
+                          .column = param ? param->column : (node ? node->column : 0)};
+        char msg[320];
+        snprintf(msg, sizeof(msg),
+                 "extern CFn parameter '%s' uses unsupported callback parameter mode '%s' at "
+                 "callback parameter %d before verified extern callback ABI wrapper contract",
+                 param && param->name ? param->name : "?", xr_param_mode_label(callback_mode),
+                 i + 1);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+}
+
 static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
                                             const FunctionDeclNode *fn, XrType **param_types,
                                             XrType *return_type) {
@@ -288,18 +311,20 @@ static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
                                        msg, &loc);
         }
         XrType *type = param_types ? param_types[i] : NULL;
-        if (!type || !XR_TYPE_IS_FUNCTION(type) || XR_TYPE_IS_C_FUNCTION(type))
-            continue;
-        XrLocation loc = {.file = ctx->file_path,
-                          .line = param ? param->line : (node ? node->line : 0),
-                          .column = param ? param->column : (node ? node->column : 0)};
-        char msg[256];
-        snprintf(msg, sizeof(msg),
-                 "extern function parameter '%s' uses Xray function type; use CFn<...> for C "
-                 "function pointers",
-                 param && param->name ? param->name : "?");
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
-                                   &loc);
+        if (type && XR_TYPE_IS_C_FUNCTION(type)) {
+            xa_validate_extern_cfn_callback_param_modes(ctx, node, param, type);
+        } else if (type && XR_TYPE_IS_FUNCTION(type)) {
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = param ? param->line : (node ? node->line : 0),
+                              .column = param ? param->column : (node ? node->column : 0)};
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "extern function parameter '%s' uses Xray function type; use CFn<...> for C "
+                     "function pointers",
+                     param && param->name ? param->name : "?");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        }
     }
     if (return_type && XR_TYPE_IS_FUNCTION(return_type) && !XR_TYPE_IS_C_FUNCTION(return_type)) {
         XrLocation loc = {.file = ctx->file_path,

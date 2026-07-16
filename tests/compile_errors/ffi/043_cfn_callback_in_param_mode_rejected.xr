@@ -1,0 +1,9 @@
+extern "C" {
+    fn call_cfn(cb: CFn<(in int32) -> int32>, x: int32) -> int32
+}
+
+fn view(x: in int32) -> int32 {
+    return x
+}
+
+print(unsafe { call_cfn(view, 1) })
