@@ -1092,8 +1092,11 @@ static XrValue crypto_decrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
 
     size_t raw_len = 0;
     size_t cipher_len = 0;
-    if (!xr_crypto_core_aead_decrypt_plan(cipher_hex_str->length, &raw_len, &cipher_len))
+    if (!xr_crypto_core_aead_decrypt_plan(cipher_hex_str->length, &raw_len, &cipher_len)) {
+        crypto_set_builtin_enum_error(isolate, XR_GLOBAL_VAR_CRYPTO_ERROR, 0,
+                                      "crypto.decrypt invalid ciphertext length");
         return xr_null();
+    }
 
     uint8_t stack_raw[4096];
     uint8_t *raw = (raw_len <= sizeof(stack_raw)) ? stack_raw : (uint8_t *) xr_malloc(raw_len);

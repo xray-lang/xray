@@ -15,7 +15,7 @@ print(crypto.decrypt("secret", cipher) == "hello world")
 var emptyCipher = crypto.encrypt("secret", "")
 print(len(emptyCipher) == 64)
 print(crypto.decrypt("secret", emptyCipher) == "")
-print(crypto.decrypt("secret", "xyz") == null)
+print(crypto.decrypt("wrong-key", cipher) == null)
 
 print(crypto.md5("abc"))
 print(crypto.sha1("abc"))

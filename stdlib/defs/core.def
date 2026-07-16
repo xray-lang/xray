@@ -945,6 +945,7 @@ module crypto {
   fn decrypt {
     signature: "(key: string, ciphertext: string): string?"
     doc: "AES-256-CBC decrypt"
+    effect: "CryptoError.InvalidLength"
     vm: "crypto_decrypt"
     aot: "xrt_crypto_decrypt"
     argc: 2

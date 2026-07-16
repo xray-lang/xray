@@ -2351,23 +2351,32 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
         xa_builtin_get_type_member_effect_contract(string_type, "sliceBytes", false);
     const XaEffectContract *gunzip_contract =
         xa_builtin_get_module_func_effect_contract("compress", "gunzip");
+    const XaEffectContract *decrypt_contract =
+        xa_builtin_get_module_func_effect_contract("crypto", "decrypt");
     ASSERT(from_utf8_contract != NULL);
     ASSERT(slice_bytes_contract != NULL);
     ASSERT(gunzip_contract != NULL);
+    ASSERT(decrypt_contract != NULL);
     ASSERT(from_utf8_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(slice_bytes_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(gunzip_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
+    ASSERT(decrypt_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(from_utf8_contract->error_count == 1);
     ASSERT(slice_bytes_contract->error_count == 1);
     ASSERT(gunzip_contract->error_count == 1);
+    ASSERT(decrypt_contract->error_count == 1);
     ASSERT(strcmp(from_utf8_contract->errors[0], "Utf8Error.InvalidUtf8") == 0);
     ASSERT(strcmp(slice_bytes_contract->errors[0], "StringSliceError.InvalidByteRange") == 0);
     ASSERT(strcmp(gunzip_contract->errors[0], "CompressionError.InvalidData") == 0);
+    ASSERT(strcmp(decrypt_contract->errors[0], "CryptoError.InvalidLength") == 0);
 
     XaAnalyzer *current = xa_analyzer_new(g_session);
     ASSERT(current != NULL);
-    const char *current_source = "fn currentStatic(bytes: Slice<byte>) { string.fromUtf8(bytes) }\n"
+    const char *current_source = "import crypto\n"
+                                 "fn currentStatic(bytes: Slice<byte>) { string.fromUtf8(bytes) }\n"
                                  "fn currentInstance(s: string) { s.sliceBytes(0, 1) }\n"
+                                 "fn currentDecrypt(ciphertext: string) { "
+                                 "crypto.decrypt(\"secret\", ciphertext) }\n"
                                  "fn currentLossy(bytes: Slice<byte>) { "
                                  "string.fromUtf8Lossy(bytes) }\n";
     AstNode *current_program = xr_parse(g_session, current_source);
@@ -2379,23 +2388,32 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
         analyzer_function_effect_summary(current, "currentStatic");
     const XaEffectSummary *current_instance =
         analyzer_function_effect_summary(current, "currentInstance");
+    const XaEffectSummary *current_decrypt =
+        analyzer_function_effect_summary(current, "currentDecrypt");
     const XaEffectSummary *current_lossy =
         analyzer_function_effect_summary(current, "currentLossy");
     ASSERT(current_static != NULL);
     ASSERT(current_instance != NULL);
+    ASSERT(current_decrypt != NULL);
     ASSERT(current_lossy != NULL);
     ASSERT(current_static->completeness == XA_EFFECT_COMPLETE);
     ASSERT(current_instance->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(current_decrypt->completeness == XA_EFFECT_COMPLETE);
     const XaErrorTypeSet *current_static_set =
         effect_summary_enum_set_named(current, current_static, "Utf8Error");
     const XaErrorTypeSet *current_instance_set =
         effect_summary_enum_set_named(current, current_instance, "StringSliceError");
+    const XaErrorTypeSet *current_decrypt_set =
+        effect_summary_enum_set_named(current, current_decrypt, "CryptoError");
     ASSERT(current_static_set != NULL);
     ASSERT(current_instance_set != NULL);
+    ASSERT(current_decrypt_set != NULL);
     ASSERT(!current_static_set->all_variants);
     ASSERT(!current_instance_set->all_variants);
+    ASSERT(!current_decrypt_set->all_variants);
     ASSERT(xa_bitset_test(&current_static_set->variants, 0));
     ASSERT(xa_bitset_test(&current_instance_set->variants, 0));
+    ASSERT(xa_bitset_test(&current_decrypt_set->variants, 0));
     ASSERT(xa_effect_summary_is_nothrow(current_lossy));
     xa_analyzer_free(current);
 

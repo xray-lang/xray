@@ -1,0 +1,20 @@
+import crypto
+
+fn invalidDecryptLengthError(ciphertext: string) -> string {
+    try {
+        crypto.decrypt("secret", ciphertext)
+        return "no-error"
+    } catch (e: CryptoError) {
+        if (e.toString() != "CryptoError.InvalidLength") {
+            return "wrong-error"
+        }
+        return e.toString()
+    }
+}
+
+var cipher = crypto.encrypt("secret", "ok")
+print(crypto.decrypt("secret", cipher) == "ok")
+print(invalidDecryptLengthError("xyz"))
+print(invalidDecryptLengthError(""))
+print(invalidDecryptLengthError("00"))
+print(crypto.decrypt("wrong-key", cipher) == null)
