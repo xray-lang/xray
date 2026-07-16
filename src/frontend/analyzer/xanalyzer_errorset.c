@@ -2355,16 +2355,19 @@ static void maybe_add_for_in_catch_alias(ErrorSetCtx *ctx, ForInStmtNode *fi) {
             add_current_catch_alias(ctx, fi->item_symbol_id, fi->item_name);
         return;
     }
+    bool added_entry_slot_alias = false;
     if (entry_key_is_caught) {
         add_current_catch_aggregate_alias(ctx, fi->item_symbol_id, fi->item_name,
                                           CATCH_AGGREGATE_INDEX, 0, 0, NULL, NULL, NULL);
-        return;
+        added_entry_slot_alias = true;
     }
     if (entry_value_is_caught) {
         add_current_catch_aggregate_alias(ctx, fi->item_symbol_id, fi->item_name,
                                           CATCH_AGGREGATE_INDEX, 1, 0, NULL, NULL, NULL);
-        return;
+        added_entry_slot_alias = true;
     }
+    if (added_entry_slot_alias)
+        return;
     add_current_catch_alias(ctx, fi->item_symbol_id, fi->item_name);
 }
 
