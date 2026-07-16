@@ -3998,6 +3998,21 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
                          "    for (item in box.values()) { throw item }\n"
                          "  }\n"
                          "}\n"
+                         "fn setDeleteCaughtIteratorRemoves() {\n"
+                         "  try { failSet() } catch (e: SetErr) {\n"
+                         "    var box: Set<SetErr> = #[e]\n"
+                         "    box.delete(e)\n"
+                         "    for (item in box) { throw item }\n"
+                         "  }\n"
+                         "}\n"
+                         "fn setDeleteCaughtThenAddCaughtIteratorRethrows() {\n"
+                         "  try { failSet() } catch (e: SetErr) {\n"
+                         "    var box: Set<SetErr> = #[e]\n"
+                         "    box.delete(e)\n"
+                         "    box.add(e)\n"
+                         "    for (item in box) { throw item }\n"
+                         "  }\n"
+                         "}\n"
                          "fn setClearIteratorInvalidates() {\n"
                          "  try { failSet() } catch (e: SetErr) {\n"
                          "    var box: Set<SetErr> = #[e]\n"
@@ -4047,6 +4062,10 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
         analyzer_function_effect_summary(a, "setDeleteIteratorPreserves");
     const XaEffectSummary *delete_values_preserves =
         analyzer_function_effect_summary(a, "setDeleteOtherValuesViewPreserves");
+    const XaEffectSummary *delete_caught =
+        analyzer_function_effect_summary(a, "setDeleteCaughtIteratorRemoves");
+    const XaEffectSummary *delete_caught_then_add =
+        analyzer_function_effect_summary(a, "setDeleteCaughtThenAddCaughtIteratorRethrows");
     const XaEffectSummary *clear_invalidates =
         analyzer_function_effect_summary(a, "setClearIteratorInvalidates");
     const XaEffectSummary *clear_then_add =
@@ -4066,6 +4085,7 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(bound_values_view != NULL);
     ASSERT(delete_preserves != NULL);
     ASSERT(delete_values_preserves != NULL);
+    ASSERT(delete_caught_then_add != NULL);
     ASSERT(clear_invalidates != NULL);
     ASSERT(clear_then_add != NULL);
     ASSERT(ordinary != NULL);
@@ -4090,6 +4110,10 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
         effect_summary_enum_set_named(a, delete_preserves, "SetErr");
     const XaErrorTypeSet *delete_values_preserves_set =
         effect_summary_enum_set_named(a, delete_values_preserves, "SetErr");
+    const XaErrorTypeSet *delete_caught_set =
+        effect_summary_enum_set_named(a, delete_caught, "SetErr");
+    const XaErrorTypeSet *delete_caught_then_add_set =
+        effect_summary_enum_set_named(a, delete_caught_then_add, "SetErr");
     const XaErrorTypeSet *clear_invalidates_set =
         effect_summary_enum_set_named(a, clear_invalidates, "SetErr");
     const XaErrorTypeSet *clear_then_add_set =
@@ -4109,6 +4133,8 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(bound_values_view_set != NULL);
     ASSERT(delete_preserves_set != NULL);
     ASSERT(delete_values_preserves_set != NULL);
+    ASSERT(delete_caught_set != NULL);
+    ASSERT(delete_caught_then_add_set != NULL);
     ASSERT(clear_invalidates_set != NULL);
     ASSERT(clear_then_add_set != NULL);
     ASSERT(ordinary_set != NULL);
@@ -4148,6 +4174,10 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(!delete_values_preserves_set->all_variants);
     ASSERT(xa_bitset_test(&delete_values_preserves_set->variants, 0));
     ASSERT(!xa_bitset_test(&delete_values_preserves_set->variants, 1));
+    ASSERT(delete_caught_set->all_variants);
+    ASSERT(!delete_caught_then_add_set->all_variants);
+    ASSERT(xa_bitset_test(&delete_caught_then_add_set->variants, 0));
+    ASSERT(!xa_bitset_test(&delete_caught_then_add_set->variants, 1));
     ASSERT(clear_invalidates_set->all_variants);
     ASSERT(!clear_then_add_set->all_variants);
     ASSERT(xa_bitset_test(&clear_then_add_set->variants, 0));
