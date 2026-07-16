@@ -114,6 +114,7 @@ CATEGORIES = (
 INVENTORY_SCRIPT_SELF_NOISE = {
     "scripts/check_source_unknown_convergence.py",
     "scripts/check_error_effect_convergence.py",
+    "scripts/README.md",
 }
 
 

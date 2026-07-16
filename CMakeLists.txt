@@ -1859,8 +1859,10 @@ if(BUILD_TESTS)
         NAME source_unknown_task_erased_result_readiness
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_source_unknown_convergence.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
-                --max-category TASK_ERASED_RESULT_RESIDUE=37
+                --max-category SOURCE_UNKNOWN_TYPE_SURFACE=25
+                --max-category TASK_ERASED_RESULT_RESIDUE=36
                 --max-category STDLIB_DYNAMIC_UNKNOWN_API=0
+                --max-category TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK=325
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(source_unknown_task_erased_result_readiness PROPERTIES
