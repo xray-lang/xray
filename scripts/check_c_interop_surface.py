@@ -5,6 +5,10 @@ The final public surface uses Ptr<T>/MutPtr<T>, mem.ptr/mem.mutPtr/mem.addr,
 and mem.load/mem.store.  Removed RawPtr/RawMut names, mem.fromAddress /
 mem.addressOf, raw-pointer loadLE/storeLE methods, and Buffer.ptrUnchecked must
 only survive as compile-error negative fixtures.
+
+The task-190/task-206 extern out/ref bridge is intentionally not implemented
+yet. Until a verified wrapper/call-plan contract lands, extern parameter modes
+must stay fail-closed and covered by focused compile-error fixtures.
 """
 
 from __future__ import annotations
@@ -142,6 +146,32 @@ LAYOUT_GATE_REQUIRED_MANIFEST_ENTRIES = {
     "tests/diff/cases/semantics/stdlib/mem_layout_introspection.xr",
 }
 
+EXTERN_OUT_REF_WRAPPER_REQUIRED_SNIPPETS = {
+    Path("tests/compile_errors/ffi/040_extern_in_param_mode_rejected.xr"): (
+        'extern "C"',
+        "value: in int32",
+    ),
+    Path("tests/compile_errors/ffi/040_extern_in_param_mode_rejected.xr.expected"): (
+        "extern function parameter 'value' uses unsupported parameter mode 'in' before verified extern ABI contract",
+    ),
+    Path("tests/compile_errors/ffi/041_extern_ref_param_mode_rejected.xr"): (
+        'extern "C"',
+        "value: ref int32",
+        "unsafe { bump_i32(ref x) }",
+    ),
+    Path("tests/compile_errors/ffi/041_extern_ref_param_mode_rejected.xr.expected"): (
+        "extern function parameter 'value' uses unsupported parameter mode 'ref' before verified extern ABI contract",
+    ),
+    Path("tests/compile_errors/ffi/042_extern_out_param_mode_rejected.xr"): (
+        'extern "C"',
+        "value: out int32",
+        "unsafe { fill_i32(out x) }",
+    ),
+    Path("tests/compile_errors/ffi/042_extern_out_param_mode_rejected.xr.expected"): (
+        "extern function parameter 'value' uses unsupported parameter mode 'out' before verified extern ABI contract",
+    ),
+}
+
 
 @dataclass(frozen=True)
 class Hit:
@@ -274,6 +304,25 @@ def check_layout_gate(root: Path) -> list[str]:
     )
 
 
+def check_file_snippets(root: Path, required_snippets: dict[Path, tuple[str, ...]]) -> list[str]:
+    missing: list[str] = []
+    for rel_path, snippets in sorted(required_snippets.items()):
+        path = root / rel_path
+        if not path.is_file():
+            missing.append(str(rel_path))
+            continue
+        text = path.read_text(encoding="utf-8")
+        for snippet in snippets:
+            if snippet not in text:
+                missing.append(f"{rel_path} snippet: {snippet}")
+    return missing
+
+
+def check_extern_out_ref_wrapper_gate(root: Path) -> list[str]:
+    """Validate the fail-closed extern in/ref/out wrapper readiness fixtures."""
+    return check_file_snippets(root, EXTERN_OUT_REF_WRAPPER_REQUIRED_SNIPPETS)
+
+
 def print_text_inventory(inventory: dict[str, list[Hit]], max_per_category: int) -> None:
     print("Task 190 C interop surface inventory")
     for category, hits in inventory.items():
@@ -315,6 +364,7 @@ def main() -> int:
                     },
                     "extern_gate_missing": check_extern_gate(root),
                     "layout_gate_missing": check_layout_gate(root),
+                    "extern_out_ref_wrapper_gate_missing": check_extern_out_ref_wrapper_gate(root),
                 },
                 indent=2,
                 sort_keys=True,
@@ -330,6 +380,13 @@ def main() -> int:
         print(f"TASK190_LAYOUT_FLEX_GATE: {'FAIL' if missing_layout_gate else 'PASS'}")
         for missing in missing_layout_gate:
             print(f"  missing {missing}")
+        missing_extern_out_ref_wrapper_gate = check_extern_out_ref_wrapper_gate(root)
+        print(
+            "TASK190_206_EXTERN_OUT_REF_WRAPPER_GATE: "
+            f"{'FAIL' if missing_extern_out_ref_wrapper_gate else 'PASS'}"
+        )
+        for missing in missing_extern_out_ref_wrapper_gate:
+            print(f"  missing {missing}")
 
     if args.fail_on_active_removed:
         blocking = {
@@ -339,6 +396,7 @@ def main() -> int:
         }
         missing_extern_gate = check_extern_gate(root)
         missing_layout_gate = check_layout_gate(root)
+        missing_extern_out_ref_wrapper_gate = check_extern_out_ref_wrapper_gate(root)
         if blocking:
             print("task-190 removed C interop surface gate failed:", file=sys.stderr)
             for category, hits in blocking.items():
@@ -352,6 +410,11 @@ def main() -> int:
         if missing_layout_gate:
             print("task-190 layout/flexible-tail focused gate failed:", file=sys.stderr)
             for missing in missing_layout_gate:
+                print(f"  missing {missing}", file=sys.stderr)
+            return 1
+        if missing_extern_out_ref_wrapper_gate:
+            print("task-190/task-206 extern out/ref wrapper readiness gate failed:", file=sys.stderr)
+            for missing in missing_extern_out_ref_wrapper_gate:
                 print(f"  missing {missing}", file=sys.stderr)
             return 1
     return 0
