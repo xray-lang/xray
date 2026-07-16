@@ -87,6 +87,13 @@ REQUIRED_TEXT = {
         "vm_par_map_dispatch(",
         "vm_par_reduce_dispatch(",
     ),
+    Path("src/vm/xvm_parallel_ops.c"): (
+        "XrParallelJoin join;",
+        "xr_parallel_join_init(&batch->join, lane_count);",
+        "xr_parallel_join_lane_done(&lane->batch->join);",
+        "xr_parallel_join_wait(&batch->join, batch->runtime);",
+        "xr_parallel_join_destroy(&batch->join);",
+    ),
     Path("src/ir/xi_emit_eh.c"): (
         "CREATE_ABC(OP_PAR_FOR",
         "CREATE_ABC(OP_PAR_MAP",
@@ -117,6 +124,14 @@ REQUIRED_TEXT = {
         "c_contains=XrParallelReduceCombineAggFn",
         "c_not_contains=xr_parallel_reduce_agg(",
         "c_not_contains=xr_parallel_reduce_state_i64(",
+    ),
+}
+
+FORBIDDEN_TEXT = {
+    Path("src/vm/xvm_parallel_ops.c"): (
+        "xcountdown_latch",
+        "XrCountdownLatch",
+        "xr_countdown_latch_",
     ),
 }
 
@@ -166,25 +181,45 @@ def check_required_text(root: Path) -> list[str]:
     return errors
 
 
+def check_forbidden_text(root: Path) -> list[str]:
+    errors: list[str] = []
+    for rel_path, snippets in FORBIDDEN_TEXT.items():
+        path = root / rel_path
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for snippet in snippets:
+            if snippet in text:
+                errors.append(
+                    f"{rel_path}: VM parallel batch must use XrParallelJoin, found forbidden "
+                    f"snippet: {snippet}"
+                )
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".", help="repository root")
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
-    errors = check_legacy_symbols(root) + check_required_text(root)
+    errors = check_legacy_symbols(root) + check_required_text(root) + check_forbidden_text(root)
     if errors:
         print("parallel backend ABI convergence gate failed:", file=sys.stderr)
         for error in errors:
             print(f"  {error}", file=sys.stderr)
         print(
             "\nUse VM OP_PAR_* dispatch and AOT xr_parallel_* runtime helpers only; "
-            "do not restore xr_aot_parallel*/XrAotPar*/XR_AOT_PAR* names.",
+            "do not restore xr_aot_parallel*/XrAotPar*/XR_AOT_PAR* names or VM-private "
+            "CountdownLatch batch joins.",
             file=sys.stderr,
         )
         return 1
 
-    print("OK: parallel backend ABI uses current VM OP_PAR_* and AOT xr_parallel_* names")
+    print(
+        "OK: parallel backend ABI uses current VM OP_PAR_*, shared VM/AOT join, and "
+        "AOT xr_parallel_* names"
+    )
     return 0
 
 
