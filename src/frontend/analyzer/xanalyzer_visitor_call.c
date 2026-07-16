@@ -2395,9 +2395,9 @@ static XrType *xa_call_direct_variable_type_without_read(XaInferContext *ctx, As
     return type;
 }
 
-static XrType *xa_call_member_access_type_without_root_read(XaInferContext *ctx, AstNode *arg_node,
-                                                            XaSymbol **root_out, char *path_out,
-                                                            size_t path_size, bool *precise_out) {
+static XrType *xa_call_projection_type_without_root_read(XaInferContext *ctx, AstNode *arg_node,
+                                                         XaSymbol **root_out, char *path_out,
+                                                         size_t path_size, bool *precise_out) {
     if (root_out)
         *root_out = NULL;
     if (precise_out)
@@ -2405,7 +2405,8 @@ static XrType *xa_call_member_access_type_without_root_read(XaInferContext *ctx,
     if (path_out && path_size > 0)
         path_out[0] = '\0';
     AstNode *place = xa_call_unwrap_grouping(arg_node);
-    if (!ctx || !ctx->analyzer || !place || place->type != AST_MEMBER_ACCESS)
+    if (!ctx || !ctx->analyzer || !place ||
+        (place->type != AST_MEMBER_ACCESS && place->type != AST_INDEX_GET))
         return NULL;
     bool precise = false;
     char path[XA_CALL_ALIAS_PATH_MAX];
@@ -2441,7 +2442,7 @@ static XrType *xa_visit_call_arg_for_param_mode(XaInferContext *ctx, AstNode *ar
         XrType *type = xa_call_direct_variable_type_without_read(ctx, arg_node);
         if (type)
             return type;
-        type = xa_call_member_access_type_without_root_read(ctx, arg_node, NULL, NULL, 0, NULL);
+        type = xa_call_projection_type_without_root_read(ctx, arg_node, NULL, NULL, 0, NULL);
         if (type)
             return type;
     }
@@ -2527,7 +2528,7 @@ static void xa_mark_out_call_arg_assigned(XaInferContext *ctx, AstNode *arg_node
     AstNode *place = xa_call_unwrap_grouping(arg_node);
     if (!ctx || !ctx->analyzer || !place)
         return;
-    if (place->type == AST_MEMBER_ACCESS) {
+    if (place->type == AST_MEMBER_ACCESS || place->type == AST_INDEX_GET) {
         bool precise = false;
         char path[XA_CALL_ALIAS_PATH_MAX];
         XaSymbol *root = xa_call_alias_path_symbol(ctx, place, path, sizeof(path), &precise);
@@ -2538,7 +2539,7 @@ static void xa_mark_out_call_arg_assigned(XaInferContext *ctx, AstNode *arg_node
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, root);
         if (links) {
             xa_symbol_links_mark_out_field_assigned(links, path);
-            if (place->as.member_access.object &&
+            if (place->type == AST_MEMBER_ACCESS && place->as.member_access.object &&
                 place->as.member_access.object->type == AST_MEMBER_ACCESS) {
                 char object_path[XA_CALL_ALIAS_PATH_MAX];
                 bool object_precise = false;
@@ -4451,7 +4452,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_call_direct_variable_type_without_read(ctx, arg))
             continue;
         if (access == XR_CALL_ARG_OUT && param_mode == XR_PARAM_OUT &&
-            xa_call_member_access_type_without_root_read(ctx, arg, NULL, NULL, 0, NULL))
+            xa_call_projection_type_without_root_read(ctx, arg, NULL, NULL, 0, NULL))
             continue;
         if (call->arguments[i])
             xa_visit_infer_expr(ctx, call->arguments[i]);
@@ -4583,7 +4584,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     xa_call_direct_variable_type_without_read(ctx, arg))
                     continue;
                 if (access == XR_CALL_ARG_OUT &&
-                    xa_call_member_access_type_without_root_read(ctx, arg, NULL, NULL, 0, NULL))
+                    xa_call_projection_type_without_root_read(ctx, arg, NULL, NULL, 0, NULL))
                     continue;
                 xa_visit_infer_expr(ctx, arg);
             }
@@ -4887,8 +4888,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             if (access != XR_CALL_ARG_VALUE) {
                 arg_type = xa_call_direct_variable_type_without_read(ctx, arg_node);
                 if (!arg_type && access == XR_CALL_ARG_OUT)
-                    arg_type = xa_call_member_access_type_without_root_read(ctx, arg_node, NULL,
-                                                                            NULL, 0, NULL);
+                    arg_type = xa_call_projection_type_without_root_read(ctx, arg_node, NULL, NULL,
+                                                                         0, NULL);
                 xa_report_arg_access_without_matching_contract(ctx, node, arg_node, access, slot);
             }
             if (!arg_type)
