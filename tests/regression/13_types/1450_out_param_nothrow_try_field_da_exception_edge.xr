@@ -1,0 +1,28 @@
+struct OutNoThrowTryPair {
+    left: int
+    right: int
+}
+
+fn fill_nothrow_try_field(value: out int, next: int) {
+    value = next
+}
+
+fn initialize_nothrow_try_fields(pair: out OutNoThrowTryPair) -> int {
+    try {
+        fill_nothrow_try_field(out pair.left, 11)
+        pair.right = 13
+    } catch (e) {
+    }
+
+    var whole = pair
+    return whole.left + whole.right
+}
+
+@test
+fn test_out_param_nothrow_try_field_da_exception_edge() {
+    var pair = OutNoThrowTryPair{left: 0, right: 0}
+    var total = initialize_nothrow_try_fields(out pair)
+    assert_eq(total, 24)
+    assert_eq(pair.left, 11)
+    assert_eq(pair.right, 13)
+}
