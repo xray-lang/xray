@@ -2349,14 +2349,20 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
         xa_builtin_get_type_member_effect_contract(string_type, "fromUtf8", true);
     const XaEffectContract *slice_bytes_contract =
         xa_builtin_get_type_member_effect_contract(string_type, "sliceBytes", false);
+    const XaEffectContract *gunzip_contract =
+        xa_builtin_get_module_func_effect_contract("compress", "gunzip");
     ASSERT(from_utf8_contract != NULL);
     ASSERT(slice_bytes_contract != NULL);
+    ASSERT(gunzip_contract != NULL);
     ASSERT(from_utf8_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(slice_bytes_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
+    ASSERT(gunzip_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(from_utf8_contract->error_count == 1);
     ASSERT(slice_bytes_contract->error_count == 1);
+    ASSERT(gunzip_contract->error_count == 1);
     ASSERT(strcmp(from_utf8_contract->errors[0], "Utf8Error.InvalidUtf8") == 0);
     ASSERT(strcmp(slice_bytes_contract->errors[0], "StringSliceError.InvalidByteRange") == 0);
+    ASSERT(strcmp(gunzip_contract->errors[0], "CompressionError.InvalidData") == 0);
 
     XaAnalyzer *current = xa_analyzer_new(g_session);
     ASSERT(current != NULL);

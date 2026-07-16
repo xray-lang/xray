@@ -79,14 +79,14 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
                 self.assertEqual("NATIVE_TYPED_ERROR_ABI_BLOCKER", result.category)
                 self.assertIn("typed native error ABI remains blocked", result.detail)
 
-    def test_compress_gunzip_typed_error_abi_is_a_single_function_blocker(self) -> None:
+    def test_compress_gunzip_typed_error_abi_is_a_focused_function_slice(self) -> None:
         spec = readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES["compress.gunzip"]
         module = load_boundary_modules(ROOT)["compress"]
         result = self.run_fast_single_function_probe()
 
         self.assertTrue(result.ok, result.detail)
         self.assertEqual("NATIVE_TYPED_ERROR_ABI_FUNCTION_BLOCKER", result.category)
-        self.assertIn("null-sentinel VM/AOT native path", result.detail)
+        self.assertIn("focused VM/native-AOT typed CompressionError ABI slice", result.detail)
         self.assertIn("gunzip", module["public_native"])
         self.assertIsNot(module.get("def_migration_complete"), True)
         for path_text, anchors in spec["required"].items():
@@ -99,10 +99,11 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
         self.assertTrue(blocks)
         for block in blocks:
             self.assertNotIn("@errors(", block)
-            self.assertNotIn("CompressionError", block)
+            self.assertIn('effect: "CompressionError.InvalidData"', block)
 
-        self.assertIn("null-sentinel VM/AOT native path", spec["detail"])
-        self.assertIn("CompressionError enum payloads", spec["detail"])
+        self.assertTrue(spec.get("allow_typed_error_before_full_marker"))
+        self.assertIn("focused VM/native-AOT typed CompressionError ABI slice", spec["detail"])
+        self.assertIn("full task-198 readiness remains blocked", spec["detail"])
         self.assertFalse(
             (ROOT / "tests" / "stdlib" / "contracts" / "TASK_198_TYPED_NATIVE_ERRORS_READY").exists(),
             "task-198 full readiness marker must remain absent for this probe",

@@ -348,28 +348,35 @@ SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = {
             ),
             "stdlib/defs/core.def": (
                 "fn gunzip {",
-                'signature: "(data: string): string?"',
+                'signature: "(data: string): string"',
+                'effect: "CompressionError.InvalidData"',
                 'vm: "compress_gunzip"',
                 'aot: "xrt_compress_gunzip"',
             ),
             "stdlib/compress/compress.c": (
                 "static XrValue compress_gunzip",
                 "uint8_t *output = xr_gunzip_alloc",
-                "if (!output)\n        return xr_null();",
+                "compress_set_builtin_enum_error(X, XR_GLOBAL_VAR_COMPRESSION_ERROR, 0",
             ),
             "src/aot/xrt_compress.h": (
                 "static inline XrValue xrt_compress_gunzip",
                 "uint8_t *buf = xr_compress_core_gunzip_alloc",
-                "if (!buf)\n        return XR_NULL_VAL;",
+                'xrt_compress_set_builtin_enum_error("CompressionError", "InvalidData", 0);',
             ),
             "src/shared/xr_compress_core.h": (
                 "XrCompressError err = fn(input, in_len, output, cap, out_len);",
                 "if (err != XR_COMPRESS_ERR_BUFFER)\n            return NULL;",
             ),
+            "tests/unit/api/test_compress_native_error_abi.py": (
+                "Focused task-198 compress.gunzip typed native error ABI gate.",
+                "def test_vm_native_aot_typed_catch_parity",
+                "CompressionError.InvalidData",
+            ),
         },
+        "allow_typed_error_before_full_marker": True,
         "detail": (
-            "compress.gunzip remains a null-sentinel VM/AOT native path; future switch "
-            "must emit CompressionError enum payloads before task-200 public-native cutover"
+            "compress.gunzip has a focused VM/native-AOT typed CompressionError ABI slice; "
+            "full task-198 readiness remains blocked by the rest of compress/crypto/io/net"
         ),
     },
     "crypto.randomBytes": {
@@ -945,7 +952,7 @@ def check_single_function_native_typed_error_probes(root: Path) -> list[CheckRes
             if "@errors(" in function_block:
                 failures.append(f"stdlib/defs/core.def: {subject} has @errors before readiness marker")
             typed_error = str(spec.get("typed_error", ""))
-            if typed_error and typed_error in function_block:
+            if (not spec.get("allow_typed_error_before_full_marker")) and typed_error and typed_error in function_block:
                 failures.append(
                     f"stdlib/defs/core.def: {subject} mentions {typed_error} before readiness marker"
                 )

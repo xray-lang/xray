@@ -149,6 +149,7 @@ static bool cg_coro_builtin_field_needs_xrt_bridge(const XiValue *builtin, const
         case XR_GLOBAL_VAR_TASK_STATUS:
         case XR_GLOBAL_VAR_UTF8_ERROR:
         case XR_GLOBAL_VAR_STRING_SLICE_ERROR:
+        case XR_GLOBAL_VAR_COMPRESSION_ERROR:
             return false;
         case XR_GLOBAL_VAR_RECV:
             return strcmp(field, "Value") == 0;

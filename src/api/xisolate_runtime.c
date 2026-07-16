@@ -63,6 +63,7 @@ void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
     char *task_status_members[] = {"Pending", "Running", "Success", "Failed", "Cancelled"};
     char *utf8_error_members[] = {"InvalidUtf8"};
     char *string_slice_error_members[] = {"InvalidByteRange"};
+    char *compression_error_members[] = {"InvalidData"};
     const int recv_payloads[] = {1, 0, 0, 0};
     const int task_result_payloads[] = {1, 1, 0, 0, 0};
 
@@ -81,6 +82,8 @@ void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
         runtime_register_prelude_enum(isolate, "Utf8Error", utf8_error_members, 1, NULL);
     XrEnumType *string_slice_error = runtime_register_prelude_enum(
         isolate, "StringSliceError", string_slice_error_members, 1, NULL);
+    XrEnumType *compression_error = runtime_register_prelude_enum(
+        isolate, "CompressionError", compression_error_members, 1, NULL);
 
     if (ordering)
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_ORDERING, XR_FROM_PTR(ordering));
@@ -99,6 +102,9 @@ void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
     if (string_slice_error)
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_STRING_SLICE_ERROR,
                              XR_FROM_PTR(string_slice_error));
+    if (compression_error)
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_COMPRESSION_ERROR,
+                             XR_FROM_PTR(compression_error));
 }
 
 static void isolate_register_vm_builtins(XrVMRuntime *isolate) {

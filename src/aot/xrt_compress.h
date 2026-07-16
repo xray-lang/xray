@@ -17,6 +17,16 @@
 #include "xrt_arc.h"
 #include "xrt_value.h"
 
+extern XR_THREAD_LOCAL XrValue xrt_pending_error;
+
+static inline void xrt_compress_set_builtin_enum_error(const char *enum_name,
+                                                       const char *member_name,
+                                                       uint32_t member_index) {
+    XrAotEnumAggregate err =
+        xrt_enum_aggregate_make(0, (int64_t) member_index, 0, enum_name, member_name, NULL);
+    xrt_pending_error = xrt_enum_aggregate_box(err);
+}
+
 static inline int xrt_compress_level_or_default(XrValue level) {
     bool has_level = XR_IS_INT(level);
     return xr_compress_core_level_or_default(has_level, has_level ? XR_TO_INT(level) : 0);
@@ -75,8 +85,10 @@ static inline XrValue xrt_compress_gunzip(const char *data, int64_t len) {
     uint8_t *buf = xr_compress_core_gunzip_alloc(
         input.data, input.len, xr_gzip_original_size(input.data, input.len), &out_len,
         xrt_compress_core_alloc, xrt_compress_core_free, NULL);
-    if (!buf)
+    if (!buf) {
+        xrt_compress_set_builtin_enum_error("CompressionError", "InvalidData", 0);
         return XR_NULL_VAL;
+    }
 
     XrValue out = xrt_compress_finish_string(buf, out_len);
     XRT_FREE(buf);

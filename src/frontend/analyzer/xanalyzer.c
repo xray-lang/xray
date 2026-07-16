@@ -260,6 +260,9 @@ static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
     static const char *string_slice_error_members[] = {"InvalidByteRange"};
     register_prelude_enum(analyzer, "StringSliceError", string_slice_error_members, 1, NULL, false);
 
+    static const char *compression_error_members[] = {"InvalidData"};
+    register_prelude_enum(analyzer, "CompressionError", compression_error_members, 1, NULL, false);
+
     static const char *recv_type_params[] = {"T"};
     static const char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
     static const int recv_payload_counts[] = {1, 0, 0, 0};

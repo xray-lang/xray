@@ -80,12 +80,16 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
 };
 #define GEN_CLUSTER_FUNCTION_COUNT 11
 
+static const char *g_gen_compress_gunzip_3_errors[] = {
+    "CompressionError.InvalidData",
+};
+
 // compress module functions
 static const XaBuiltinMember g_gen_compress_functions[] = {
     {"crc32", "(data: string): int", "Compute CRC-32 checksum", true, false, false, false, false},
     {"adler32", "(data: string): int", "Compute Adler-32 checksum", true, false, false, false, false},
     {"gzip", "(data: string, level?: int): string?", "Gzip compress", true, false, false, false, false},
-    {"gunzip", "(data: string): string?", "Gzip decompress", true, false, false, false, false},
+    {"gunzip", "(data: string): string", "Gzip decompress", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_compress_gunzip_3_errors, 1}},
     {"deflate", "(data: string, level?: int): string?", "Deflate compress", true, false, false, false, false},
     {"inflate", "(data: string): string?", "Inflate decompress", true, false, false, false, false},
     {"zlibCompress", "(data: string, level?: int): string?", "Zlib compress", true, false, false, false, false},

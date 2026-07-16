@@ -1049,6 +1049,8 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_enum(X, "Utf8Error");
     } else if (base_len == 16 && strncmp(s, "StringSliceError", 16) == 0) {
         type = xr_type_new_enum(X, "StringSliceError");
+    } else if (base_len == 16 && strncmp(s, "CompressionError", 16) == 0) {
+        type = xr_type_new_enum(X, "CompressionError");
     } else if (base_len == 5 && strncmp(s, "Regex", 5) == 0) {
         type = xr_type_new_instance(X, NULL);
         type->instance.class_name = "Regex";

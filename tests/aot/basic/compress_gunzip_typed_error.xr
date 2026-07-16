@@ -1,0 +1,15 @@
+import compress
+
+fn invalidGunzipError() -> string {
+    try {
+        compress.gunzip("not gzip")
+        return "no-error"
+    } catch (e: CompressionError) {
+        return e.toString()
+    }
+}
+
+var text = "typed native gzip error"
+var gz = compress.gzip(text)!
+print(compress.gunzip(gz) == text)
+print(invalidGunzipError())
