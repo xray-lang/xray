@@ -7,32 +7,60 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 
 
+PUBLIC_SURFACE_FORBIDDEN = [
+    (
+        "stdlib/types/string.xr",
+        "graphemes",
+        "stdlib/types/string.xr publishes graphemes before provenance integration",
+    ),
+    (
+        "src/frontend/analyzer/xnative_type_defs.inc.c",
+        "graphemes",
+        "native type snapshot publishes graphemes before provenance integration",
+    ),
+    (
+        "src/runtime/object/xstring_methods.c",
+        '"graphemes"',
+        "xstring_methods.c registers public graphemes before provenance integration",
+    ),
+    (
+        "src/aot/xrt_method.h",
+        "graphemes",
+        "xrt_method.h exposes graphemes before direct-loop lowering",
+    ),
+    (
+        "src/app/lsp/xlsp_stdlib_generated.inc",
+        "graphemes",
+        "LSP stdlib surface exposes graphemes before provenance integration",
+    ),
+    (
+        "src/app/mcp/xmcp_knowledge_generated.c",
+        "graphemes",
+        "MCP knowledge surface exposes graphemes before provenance integration",
+    ),
+]
+
+GENERIC_ITERATOR_FORBIDDEN = [
+    "src/runtime/object/xiterator.h",
+    "src/runtime/object/xiterator.c",
+]
+
+
 def main() -> int:
-    public_string = (ROOT / "stdlib" / "types" / "string.xr").read_text(encoding="utf-8")
-    native_type_snapshot = (
-        ROOT / "src" / "frontend" / "analyzer" / "xnative_type_defs.inc.c"
-    ).read_text(encoding="utf-8")
-    vm_methods = (ROOT / "src" / "runtime" / "object" / "xstring_methods.c").read_text(
-        encoding="utf-8"
-    )
-    aot_methods = (ROOT / "src" / "aot" / "xrt_method.h").read_text(encoding="utf-8")
-    generic_iterator_h = (ROOT / "src" / "runtime" / "object" / "xiterator.h").read_text(
-        encoding="utf-8"
-    )
-    generic_iterator_c = (ROOT / "src" / "runtime" / "object" / "xiterator.c").read_text(
-        encoding="utf-8"
-    )
     failures = []
-    if "graphemes" in public_string:
-        failures.append("stdlib/types/string.xr publishes graphemes before provenance integration")
-    if "graphemes" in native_type_snapshot:
-        failures.append("native type snapshot publishes graphemes before provenance integration")
-    if '"graphemes"' in vm_methods:
-        failures.append("xstring_methods.c registers public graphemes before provenance integration")
-    if "graphemes" in aot_methods:
-        failures.append("xrt_method.h exposes graphemes before direct-loop lowering")
-    if "grapheme" in generic_iterator_h or "grapheme" in generic_iterator_c:
+
+    for relpath, needle, message in PUBLIC_SURFACE_FORBIDDEN:
+        text = (ROOT / relpath).read_text(encoding="utf-8")
+        if needle in text:
+            failures.append(message)
+
+    generic_iterator_leaked = any(
+        "grapheme" in (ROOT / relpath).read_text(encoding="utf-8")
+        for relpath in GENERIC_ITERATOR_FORBIDDEN
+    )
+    if generic_iterator_leaked:
         failures.append("generic XrIterator contains grapheme fallback instead of stack cursor")
+
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}")
