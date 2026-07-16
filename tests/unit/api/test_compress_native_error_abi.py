@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused task-198 compress.gunzip typed native error ABI gate."""
+"""Focused task-198 compress decompressor typed native error ABI gate."""
 
 from __future__ import annotations
 
@@ -16,7 +16,10 @@ CORE_DEF = ROOT / "stdlib/defs/core.def"
 VM_RUNTIME = ROOT / "stdlib/compress/compress.c"
 AOT_RUNTIME = ROOT / "src/aot/xrt_compress.h"
 GENERATED = ROOT / "src/frontend/analyzer/xanalyzer_builtins_generated.h"
-EXPECTED_OUTPUT = b"true\nCompressionError.InvalidData\n"
+EXPECTED_OUTPUT = (
+    b"true\nCompressionError.InvalidData\n"
+    b"true\nCompressionError.InvalidData\n"
+)
 
 
 class CompressNativeErrorAbiTest(unittest.TestCase):
@@ -37,11 +40,17 @@ class CompressNativeErrorAbiTest(unittest.TestCase):
     def test_public_contract_is_typed_and_non_nullable(self) -> None:
         core_def = CORE_DEF.read_text(encoding="utf-8")
         generated = GENERATED.read_text(encoding="utf-8")
+        gunzip_def = core_def[core_def.index("fn gunzip {") : core_def.index("fn deflate {")]
+        inflate_def = core_def[core_def.index("fn inflate {") : core_def.index("fn zlibCompress {")]
 
-        self.assertIn('signature: "(data: string): string"', core_def)
-        self.assertIn('effect: "CompressionError.InvalidData"', core_def)
+        self.assertIn('fn gunzip {\n    signature: "(data: string): string"', core_def)
+        self.assertIn('fn inflate {\n    signature: "(data: string): string"', core_def)
+        self.assertIn('effect: "CompressionError.InvalidData"', gunzip_def)
+        self.assertIn('effect: "CompressionError.InvalidData"', inflate_def)
         self.assertNotIn('fn gunzip {\n    signature: "(data: string): string?"', core_def)
+        self.assertNotIn('fn inflate {\n    signature: "(data: string): string?"', core_def)
         self.assertIn('"gunzip", "(data: string): string"', generated)
+        self.assertIn('"inflate", "(data: string): string"', generated)
         self.assertIn("XA_EFFECT_CONTRACT_ERRORS", generated)
         self.assertIn('"CompressionError.InvalidData"', generated)
 
@@ -52,17 +61,30 @@ class CompressNativeErrorAbiTest(unittest.TestCase):
             vm_runtime.index("static XrValue compress_gunzip") :
             vm_runtime.index("static XrValue compress_deflate")
         ]
+        vm_inflate = vm_runtime[
+            vm_runtime.index("static XrValue compress_inflate") :
+            vm_runtime.index("static XrValue compress_zlib_compress")
+        ]
         aot_gunzip = aot_runtime[
             aot_runtime.index("static inline XrValue xrt_compress_gunzip") :
             aot_runtime.index("static inline XrValue xrt_compress_deflate")
         ]
+        aot_inflate = aot_runtime[
+            aot_runtime.index("static inline XrValue xrt_compress_inflate") :
+            aot_runtime.index("static inline XrValue xrt_compress_zlib_compress")
+        ]
 
         self.assertIn("XR_GLOBAL_VAR_COMPRESSION_ERROR", vm_gunzip)
         self.assertIn("compress_set_builtin_enum_error", vm_gunzip)
+        self.assertIn("XR_GLOBAL_VAR_COMPRESSION_ERROR", vm_inflate)
+        self.assertIn("compress_set_builtin_enum_error", vm_inflate)
         self.assertIn('"CompressionError", "InvalidData"', aot_gunzip)
+        self.assertIn('"CompressionError", "InvalidData"', aot_inflate)
         self.assertIn("xrt_pending_error = xrt_enum_aggregate_box(err);", aot_runtime)
         self.assertNotIn("if (!output)\n        return xr_null();", vm_gunzip)
+        self.assertNotIn("if (!output)\n        return xr_null();", vm_inflate)
         self.assertNotIn("if (!buf)\n        return XR_NULL_VAL;", aot_gunzip)
+        self.assertNotIn("if (!buf)\n        return XR_NULL_VAL;", aot_inflate)
 
     def test_vm_native_aot_typed_catch_parity(self) -> None:
         vm = self.run_checked([str(self.xray), str(FIXTURE)]).stdout

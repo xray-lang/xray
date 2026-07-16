@@ -9,7 +9,21 @@ fn invalidGunzipError() -> string {
     }
 }
 
+fn invalidInflateError() -> string {
+    try {
+        compress.inflate("not deflate")
+        return "no-error"
+    } catch (e: CompressionError) {
+        return e.toString()
+    }
+}
+
 var text = "typed native gzip error"
 var gz = compress.gzip(text)!
 print(compress.gunzip(gz) == text)
 print(invalidGunzipError())
+
+var raw = "typed native inflate error"
+var deflated = compress.deflate(raw)!
+print(compress.inflate(deflated) == raw)
+print(invalidInflateError())
