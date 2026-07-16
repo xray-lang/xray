@@ -1,0 +1,11 @@
+type User = { name: string, age: int }
+
+fn describeAssigned(user: User) -> string {
+    var localName = ""
+    var years = 0
+    { name: localName, age: years } = user
+    return localName + ":" + string(years)
+}
+
+var user: User = { name: "Ada", age: 7 }
+print(describeAssigned(user))
