@@ -1507,6 +1507,17 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME test_binary_public_native_readiness
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_binary_public_native_readiness.py
+    )
+    set_tests_properties(test_binary_public_native_readiness PROPERTIES
+        LABELS "stdlib;binary;task-198;task-200;unit"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME test_stdlib_module_merge_gate
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_stdlib_module_merge_gate.py
@@ -1620,6 +1631,18 @@ if(BUILD_TESTS)
     )
     set_tests_properties(binary_stdlib_surface_inventory PROPERTIES
         LABELS "stdlib;binary;metadata"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME binary_public_native_readiness
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_binary_public_native_readiness.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(binary_public_native_readiness PROPERTIES
+        LABELS "stdlib;binary;task-200;readiness"
         PROCESSORS 1
         TIMEOUT 30
     )
