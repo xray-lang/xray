@@ -3070,6 +3070,12 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         "    for (key in keys) { throw key }\n"
         "  }\n"
         "}\n"
+        "fn mapDirectKeysViewIteratorRethrowsCaughtKey() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    const box = #{e: MapErr.Other}\n"
+        "    for (key in box.keys()) { throw key }\n"
+        "  }\n"
+        "}\n"
         "fn mapEntriesIteratorKeyRethrows() {\n"
         "  try { failMap() } catch (e: MapErr) {\n"
         "    const box = #{e: MapErr.Other}\n"
@@ -3160,6 +3166,12 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         "    for (value in values) { throw value }\n"
         "  }\n"
         "}\n"
+        "fn mapDirectValuesViewIteratorRethrows() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    const box = #{\"caught\": e}\n"
+        "    for (value in box.values()) { throw value }\n"
+        "  }\n"
+        "}\n"
         "fn mapValuesMixedIteratorFallsBack() {\n"
         "  try { failMap() } catch (e: MapErr) {\n"
         "    const box = #{\"caught\": e, \"other\": MapErr.Other}\n"
@@ -3244,6 +3256,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         analyzer_function_effect_summary(a, "mapKeyValueIteratorRethrowsCaughtKey");
     const XaEffectSummary *keys_view =
         analyzer_function_effect_summary(a, "mapKeysViewIteratorRethrowsCaughtKey");
+    const XaEffectSummary *direct_keys_view =
+        analyzer_function_effect_summary(a, "mapDirectKeysViewIteratorRethrowsCaughtKey");
     const XaEffectSummary *entries_key =
         analyzer_function_effect_summary(a, "mapEntriesIteratorKeyRethrows");
     const XaEffectSummary *entries_key_mixed =
@@ -3270,6 +3284,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         analyzer_function_effect_summary(a, "mapClearKeysIteratorPreserves");
     const XaEffectSummary *values_iter =
         analyzer_function_effect_summary(a, "mapValuesIteratorRethrows");
+    const XaEffectSummary *direct_values_iter =
+        analyzer_function_effect_summary(a, "mapDirectValuesViewIteratorRethrows");
     const XaEffectSummary *values_mixed =
         analyzer_function_effect_summary(a, "mapValuesMixedIteratorFallsBack");
     const XaEffectSummary *entries_iter =
@@ -3304,6 +3320,7 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(single_caught_key != NULL);
     ASSERT(kv_caught_key != NULL);
     ASSERT(keys_view != NULL);
+    ASSERT(direct_keys_view != NULL);
     ASSERT(entries_key != NULL);
     ASSERT(entries_key_mixed != NULL);
     ASSERT(var_key != NULL);
@@ -3317,6 +3334,7 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(clear_values != NULL);
     ASSERT(clear_keys != NULL);
     ASSERT(values_iter != NULL);
+    ASSERT(direct_values_iter != NULL);
     ASSERT(values_mixed != NULL);
     ASSERT(entries_iter != NULL);
     ASSERT(entries_both_key != NULL);
@@ -3360,6 +3378,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     const XaErrorTypeSet *kv_caught_key_set =
         effect_summary_enum_set_named(a, kv_caught_key, "MapErr");
     const XaErrorTypeSet *keys_view_set = effect_summary_enum_set_named(a, keys_view, "MapErr");
+    const XaErrorTypeSet *direct_keys_view_set =
+        effect_summary_enum_set_named(a, direct_keys_view, "MapErr");
     const XaErrorTypeSet *entries_key_set = effect_summary_enum_set_named(a, entries_key, "MapErr");
     const XaErrorTypeSet *entries_key_mixed_set =
         effect_summary_enum_set_named(a, entries_key_mixed, "MapErr");
@@ -3382,6 +3402,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         effect_summary_enum_set_named(a, clear_values, "MapErr");
     const XaErrorTypeSet *clear_keys_set = effect_summary_enum_set_named(a, clear_keys, "MapErr");
     const XaErrorTypeSet *values_iter_set = effect_summary_enum_set_named(a, values_iter, "MapErr");
+    const XaErrorTypeSet *direct_values_iter_set =
+        effect_summary_enum_set_named(a, direct_values_iter, "MapErr");
     const XaErrorTypeSet *values_mixed_set =
         effect_summary_enum_set_named(a, values_mixed, "MapErr");
     const XaErrorTypeSet *entries_iter_set =
@@ -3416,6 +3438,7 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(single_caught_key_set != NULL);
     ASSERT(kv_caught_key_set != NULL);
     ASSERT(keys_view_set != NULL);
+    ASSERT(direct_keys_view_set != NULL);
     ASSERT(entries_key_set != NULL);
     ASSERT(entries_key_mixed_set != NULL);
     ASSERT(var_key_set != NULL);
@@ -3429,6 +3452,7 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(clear_values_set != NULL);
     ASSERT(clear_keys_set != NULL);
     ASSERT(values_iter_set != NULL);
+    ASSERT(direct_values_iter_set != NULL);
     ASSERT(values_mixed_set != NULL);
     ASSERT(entries_iter_set != NULL);
     ASSERT(entries_both_key_set != NULL);
@@ -3486,6 +3510,9 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!keys_view_set->all_variants);
     ASSERT(xa_bitset_test(&keys_view_set->variants, 0));
     ASSERT(!xa_bitset_test(&keys_view_set->variants, 1));
+    ASSERT(!direct_keys_view_set->all_variants);
+    ASSERT(xa_bitset_test(&direct_keys_view_set->variants, 0));
+    ASSERT(!xa_bitset_test(&direct_keys_view_set->variants, 1));
     ASSERT(!entries_key_set->all_variants);
     ASSERT(xa_bitset_test(&entries_key_set->variants, 0));
     ASSERT(!xa_bitset_test(&entries_key_set->variants, 1));
@@ -3513,6 +3540,9 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!values_iter_set->all_variants);
     ASSERT(xa_bitset_test(&values_iter_set->variants, 0));
     ASSERT(!xa_bitset_test(&values_iter_set->variants, 1));
+    ASSERT(!direct_values_iter_set->all_variants);
+    ASSERT(xa_bitset_test(&direct_values_iter_set->variants, 0));
+    ASSERT(!xa_bitset_test(&direct_values_iter_set->variants, 1));
     ASSERT(values_mixed_set->all_variants);
     ASSERT(!entries_iter_set->all_variants);
     ASSERT(xa_bitset_test(&entries_iter_set->variants, 0));
@@ -3597,6 +3627,19 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
                          "    for (item in box) { throw item }\n"
                          "  }\n"
                          "}\n"
+                         "fn setValuesViewIteratorRethrows() {\n"
+                         "  try { failSet() } catch (e: SetErr) {\n"
+                         "    const box: Set<SetErr> = #[e]\n"
+                         "    for (item in box.values()) { throw item }\n"
+                         "  }\n"
+                         "}\n"
+                         "fn setBoundValuesViewIteratorRethrows() {\n"
+                         "  try { failSet() } catch (e: SetErr) {\n"
+                         "    const box: Set<SetErr> = #[e]\n"
+                         "    const values = box.values()\n"
+                         "    for (item in values) { throw item }\n"
+                         "  }\n"
+                         "}\n"
                          "fn setDeleteIteratorPreserves() {\n"
                          "  try { failSet() } catch (e: SetErr) {\n"
                          "    var box: Set<SetErr> = #[e]\n"
@@ -3635,6 +3678,10 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
         analyzer_function_effect_summary(a, "setContainsIteratorPreserves");
     const XaEffectSummary *values =
         analyzer_function_effect_summary(a, "setValuesIteratorPreserves");
+    const XaEffectSummary *values_view =
+        analyzer_function_effect_summary(a, "setValuesViewIteratorRethrows");
+    const XaEffectSummary *bound_values_view =
+        analyzer_function_effect_summary(a, "setBoundValuesViewIteratorRethrows");
     const XaEffectSummary *delete_preserves =
         analyzer_function_effect_summary(a, "setDeleteIteratorPreserves");
     const XaEffectSummary *clear_preserves =
@@ -3650,6 +3697,8 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(add_caught_mixed != NULL);
     ASSERT(contains != NULL);
     ASSERT(values != NULL);
+    ASSERT(values_view != NULL);
+    ASSERT(bound_values_view != NULL);
     ASSERT(delete_preserves != NULL);
     ASSERT(clear_preserves != NULL);
     ASSERT(ordinary != NULL);
@@ -3665,6 +3714,9 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
         effect_summary_enum_set_named(a, add_caught_mixed, "SetErr");
     const XaErrorTypeSet *contains_set = effect_summary_enum_set_named(a, contains, "SetErr");
     const XaErrorTypeSet *values_set = effect_summary_enum_set_named(a, values, "SetErr");
+    const XaErrorTypeSet *values_view_set = effect_summary_enum_set_named(a, values_view, "SetErr");
+    const XaErrorTypeSet *bound_values_view_set =
+        effect_summary_enum_set_named(a, bound_values_view, "SetErr");
     const XaErrorTypeSet *delete_preserves_set =
         effect_summary_enum_set_named(a, delete_preserves, "SetErr");
     const XaErrorTypeSet *clear_preserves_set =
@@ -3679,6 +3731,8 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(add_caught_mixed_set != NULL);
     ASSERT(contains_set != NULL);
     ASSERT(values_set != NULL);
+    ASSERT(values_view_set != NULL);
+    ASSERT(bound_values_view_set != NULL);
     ASSERT(delete_preserves_set != NULL);
     ASSERT(clear_preserves_set != NULL);
     ASSERT(ordinary_set != NULL);
@@ -3703,6 +3757,12 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(!values_set->all_variants);
     ASSERT(xa_bitset_test(&values_set->variants, 0));
     ASSERT(!xa_bitset_test(&values_set->variants, 1));
+    ASSERT(!values_view_set->all_variants);
+    ASSERT(xa_bitset_test(&values_view_set->variants, 0));
+    ASSERT(!xa_bitset_test(&values_view_set->variants, 1));
+    ASSERT(!bound_values_view_set->all_variants);
+    ASSERT(xa_bitset_test(&bound_values_view_set->variants, 0));
+    ASSERT(!xa_bitset_test(&bound_values_view_set->variants, 1));
     ASSERT(!delete_preserves_set->all_variants);
     ASSERT(xa_bitset_test(&delete_preserves_set->variants, 0));
     ASSERT(!xa_bitset_test(&delete_preserves_set->variants, 1));

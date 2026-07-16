@@ -181,6 +181,13 @@ typedef struct CatchAggregateAlias {
     const char *field_name;
 } CatchAggregateAlias;
 
+typedef struct CatchCollectionViewAliases {
+    bool element;
+    bool key_element;
+    bool entry_key;
+    bool entry_value;
+} CatchCollectionViewAliases;
+
 typedef struct CatchAliasState {
     bool binding_is_caught;
     uint32_t alias_ids[64];
@@ -2009,6 +2016,62 @@ static bool current_catch_has_entry_value_aggregate_container(ErrorSetCtx *ctx, 
     return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
 }
 
+static bool catch_collection_view_aliases_from_call(ErrorSetCtx *ctx, AstNode *expr,
+                                                    CatchCollectionViewAliases *aliases) {
+    if (!aliases)
+        return false;
+    *aliases = (CatchCollectionViewAliases) {0};
+    expr = identity_source(expr);
+    if (!ctx || !expr || expr->type != AST_CALL_EXPR)
+        return false;
+
+    CallExprNode *call = &expr->as.call_expr;
+    if (!call->callee || call->arg_count != 0)
+        return false;
+    AstNode *callee = identity_source(call->callee);
+    if (!callee || callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !ma->object)
+        return false;
+
+    XrType *receiver_type = xa_analyzer_get_node_type(ctx->analyzer, ma->object);
+    if (!receiver_type || (!XR_TYPE_IS_MAP(receiver_type) && !XR_TYPE_IS_SET(receiver_type)))
+        return false;
+    uint32_t source_id = 0;
+    const char *source_name = NULL;
+    if (!variable_ref_symbol(ctx, ma->object, &source_id, &source_name))
+        return false;
+
+    if (XR_TYPE_IS_MAP(receiver_type)) {
+        if (strcmp(ma->name, "values") == 0) {
+            aliases->element =
+                current_catch_has_element_aggregate_container(ctx, source_id, source_name);
+            return true;
+        }
+        if (strcmp(ma->name, "keys") == 0) {
+            aliases->key_element =
+                current_catch_has_key_element_aggregate_container(ctx, source_id, source_name);
+            return true;
+        }
+        if (strcmp(ma->name, "entries") == 0) {
+            aliases->entry_key =
+                current_catch_has_key_element_aggregate_container(ctx, source_id, source_name);
+            aliases->entry_value =
+                current_catch_has_element_aggregate_container(ctx, source_id, source_name);
+            return true;
+        }
+        return false;
+    }
+
+    if (strcmp(ma->name, "values") == 0) {
+        aliases->element =
+            current_catch_has_element_aggregate_container(ctx, source_id, source_name);
+        return true;
+    }
+    return false;
+}
+
 static bool literal_i64_index(AstNode *expr, int64_t *out) {
     expr = identity_source(expr);
     if (!expr || expr->type != AST_LITERAL_INT || expr->as.literal.int_overflows_i64 ||
@@ -2262,40 +2325,23 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
             break;
 
         case AST_CALL_EXPR: {
-            CallExprNode *call = &initializer->as.call_expr;
-            if (!call->callee || call->arg_count != 0)
+            CatchCollectionViewAliases aliases;
+            if (!catch_collection_view_aliases_from_call(ctx, initializer, &aliases))
                 break;
-            AstNode *callee = identity_source(call->callee);
-            if (!callee || callee->type != AST_MEMBER_ACCESS)
-                break;
-            MemberAccessNode *ma = &callee->as.member_access;
-            if (!ma->name || !ma->object)
-                break;
-            XrType *receiver_type = xa_analyzer_get_node_type(ctx->analyzer, ma->object);
-            if (!receiver_type || !XR_TYPE_IS_MAP(receiver_type))
-                break;
-            uint32_t source_id = 0;
-            const char *source_name = NULL;
-            if (!variable_ref_symbol(ctx, ma->object, &source_id, &source_name))
-                break;
-            if (strcmp(ma->name, "values") == 0) {
-                if (!current_catch_has_element_aggregate_container(ctx, source_id, source_name))
-                    break;
+            if (aliases.element) {
                 add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_ELEMENT, -1,
                                                   0, NULL, NULL, NULL);
-            } else if (strcmp(ma->name, "keys") == 0) {
-                if (!current_catch_has_key_element_aggregate_container(ctx, source_id, source_name))
-                    break;
+            }
+            if (aliases.key_element) {
                 add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_KEY_ELEMENT,
                                                   -1, 0, NULL, NULL, NULL);
-            } else if (strcmp(ma->name, "entries") == 0) {
-                if (current_catch_has_key_element_aggregate_container(ctx, source_id, source_name))
-                    add_current_catch_aggregate_alias(
-                        ctx, symbol_id, name, CATCH_AGGREGATE_ENTRY_KEY, -1, 0, NULL, NULL, NULL);
-                if (current_catch_has_element_aggregate_container(ctx, source_id, source_name))
-                    add_current_catch_aggregate_alias(
-                        ctx, symbol_id, name, CATCH_AGGREGATE_ENTRY_VALUE, -1, 0, NULL, NULL, NULL);
             }
+            if (aliases.entry_key)
+                add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_ENTRY_KEY,
+                                                  -1, 0, NULL, NULL, NULL);
+            if (aliases.entry_value)
+                add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_ENTRY_VALUE,
+                                                  -1, 0, NULL, NULL, NULL);
             break;
         }
 
@@ -2304,35 +2350,30 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
     }
 }
 
-static bool current_catch_aggregate_element_for_collection(ErrorSetCtx *ctx, AstNode *collection) {
-    uint32_t container_id = 0;
-    const char *container_name = NULL;
-    if (!variable_ref_symbol(ctx, collection, &container_id, &container_name))
-        return false;
-    CatchAggregateAlias alias = {.container_id = container_id,
-                                 .container_name = container_name,
-                                 .kind = CATCH_AGGREGATE_ELEMENT,
-                                 .index = -1};
-    return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
-}
-
 static void maybe_add_for_in_catch_alias(ErrorSetCtx *ctx, ForInStmtNode *fi) {
     if (!ctx || !fi || !ctx->current_caught)
         return;
-    bool element_is_caught = current_catch_aggregate_element_for_collection(ctx, fi->collection);
+    CatchCollectionViewAliases aliases = {0};
     uint32_t collection_id = 0;
     const char *collection_name = NULL;
     bool has_collection_symbol =
         variable_ref_symbol(ctx, fi->collection, &collection_id, &collection_name);
-    bool key_element_is_caught =
-        has_collection_symbol &&
-        current_catch_has_key_element_aggregate_container(ctx, collection_id, collection_name);
-    bool entry_key_is_caught =
-        has_collection_symbol &&
-        current_catch_has_entry_key_aggregate_container(ctx, collection_id, collection_name);
-    bool entry_value_is_caught =
-        has_collection_symbol &&
-        current_catch_has_entry_value_aggregate_container(ctx, collection_id, collection_name);
+    if (has_collection_symbol) {
+        aliases.element =
+            current_catch_has_element_aggregate_container(ctx, collection_id, collection_name);
+        aliases.key_element =
+            current_catch_has_key_element_aggregate_container(ctx, collection_id, collection_name);
+        aliases.entry_key =
+            current_catch_has_entry_key_aggregate_container(ctx, collection_id, collection_name);
+        aliases.entry_value =
+            current_catch_has_entry_value_aggregate_container(ctx, collection_id, collection_name);
+    } else {
+        catch_collection_view_aliases_from_call(ctx, fi->collection, &aliases);
+    }
+    bool element_is_caught = aliases.element;
+    bool key_element_is_caught = aliases.key_element;
+    bool entry_key_is_caught = aliases.entry_key;
+    bool entry_value_is_caught = aliases.entry_value;
     if (!element_is_caught && !key_element_is_caught && !entry_key_is_caught &&
         !entry_value_is_caught)
         return;
