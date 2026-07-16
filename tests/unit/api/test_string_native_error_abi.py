@@ -41,6 +41,8 @@ EXPECTED_OUTPUT = (
     "é\n"
     "中\n"
     "true\n"
+    "true\n"
+    "true\n"
     "StringSliceError.InvalidByteRange\n"
     "true\n"
     "StringSliceError.InvalidByteRange\n"
