@@ -113,6 +113,43 @@ PARTIAL_DEPENDENCY_EVIDENCE = {
         "full_marker": "TASK_198_TYPED_NATIVE_ERRORS_READY",
         "detail": "analyzer/XRD typed-error evidence exists, but runtime/AOT typed native ABI is not marked ready",
     },
+    "TASK_198_STRING_RUNTIME_ONLY": {
+        "required": {
+            "tests/unit/api/test_string_native_error_abi.py": (
+                "Focused task-198 VM/native-AOT typed string error ABI gate.",
+                "def test_vm_native_aot_typed_catch_parity",
+                "Utf8Error.InvalidUtf8",
+                "StringSliceError.InvalidByteRange",
+                "self.assertEqual(vm, aot)",
+            ),
+            "tests/unit/CMakeLists.txt": (
+                "NAME test_string_native_error_abi",
+                'LABELS "vm;aot;frontend;task-198"',
+            ),
+            "stdlib/types/string.xr": (
+                "static fromUtf8(bytes: Slice<byte>) -> string @errors(Utf8Error.InvalidUtf8)",
+                "sliceBytes(start: int, end: int) -> string @errors(StringSliceError.InvalidByteRange)",
+            ),
+            "tests/aot/basic/string_utf8_conversion.xr": (
+                "catch (e: Utf8Error)",
+                "catch (e: StringSliceError)",
+                'print(invalid_utf8_error)',
+                'print(oob_error)',
+            ),
+            "src/runtime/object/xstring_methods.c": (
+                "string_set_builtin_enum_error(iso, XR_GLOBAL_VAR_UTF8_ERROR, 0,",
+                "string_set_builtin_enum_error(iso, XR_GLOBAL_VAR_STRING_SLICE_ERROR, 0,",
+                '{"fromUtf8", m_from_utf8, 1}',
+                '{"sliceBytes", m_slice_bytes, 2}',
+            ),
+            "src/aot/xrt_method.h": (
+                'xrt_set_builtin_enum_error("Utf8Error", "InvalidUtf8", 0);',
+                'xrt_set_builtin_enum_error("StringSliceError", "InvalidByteRange", 0);',
+            ),
+        },
+        "full_marker": "TASK_198_TYPED_NATIVE_ERRORS_READY",
+        "detail": "string VM/AOT typed-error runtime probe exists, but compress/crypto native typed-error ABI is not marked ready",
+    },
     "TASK_197_VERIFIER_ONLY": {
         "required": {
             "src/aot/xaot_storage_plan.c": (
