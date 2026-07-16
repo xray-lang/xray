@@ -372,6 +372,16 @@ set_tests_properties(test_param_contract_aot PROPERTIES
     LABELS "aot;frontend;task-206"
     TIMEOUT 60
 )
+add_test(
+    NAME test_string_native_error_abi
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_string_native_error_abi.py
+            --xray $<TARGET_FILE:xray>
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(test_string_native_error_abi PROPERTIES
+    LABELS "vm;aot;frontend;task-198"
+    TIMEOUT 120
+)
 
 # test_repl needs the isolate-profile factory (xr_isolate_profile_*)
 # in addition to xray_core, so build it like test_cli_spec with an
