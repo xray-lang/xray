@@ -29,8 +29,6 @@ typedef struct {
     int count;
 } XrArenaSegmentCache;
 
-static XR_THREAD_LOCAL XrArenaSegmentCache tls_cache = {NULL, 0};
-
 /* Thread-exit cleanup for the segment cache. Without it, every exiting
  * thread leaks up to XR_ARENA_MAX_CACHED_SEGMENTS * 64KB (512KB) of
  * cached segments — harmless for long-lived workers, but a steady leak
@@ -50,8 +48,6 @@ static void arena_cache_flush(XrArenaSegmentCache *cache) {
     cache->count = 0;
 }
 
-static XR_THREAD_LOCAL bool tls_cache_cleanup_registered = false;
-
 #if defined(XR_OS_WINDOWS)
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -63,8 +59,10 @@ static DWORD arena_cache_fls_index = FLS_OUT_OF_INDEXES;
 static INIT_ONCE arena_cache_once = INIT_ONCE_STATIC_INIT;
 
 static void WINAPI arena_cache_fls_destructor(void *data) {
-    if (data)
+    if (data) {
         arena_cache_flush((XrArenaSegmentCache *) data);
+        xr_free(data);
+    }
 }
 
 static BOOL CALLBACK arena_cache_once_init(PINIT_ONCE once, PVOID param, PVOID *ctx) {
@@ -75,13 +73,22 @@ static BOOL CALLBACK arena_cache_once_init(PINIT_ONCE once, PVOID param, PVOID *
     return TRUE;
 }
 
-static void arena_cache_register_cleanup(void) {
-    if (tls_cache_cleanup_registered)
-        return;
-    tls_cache_cleanup_registered = true;
-    InitOnceExecuteOnce(&arena_cache_once, arena_cache_once_init, NULL, NULL);
-    if (arena_cache_fls_index != FLS_OUT_OF_INDEXES)
-        FlsSetValue(arena_cache_fls_index, &tls_cache);
+static XrArenaSegmentCache *arena_cache_current(bool create) {
+    if (!InitOnceExecuteOnce(&arena_cache_once, arena_cache_once_init, NULL, NULL))
+        return NULL;
+    if (arena_cache_fls_index == FLS_OUT_OF_INDEXES)
+        return NULL;
+    XrArenaSegmentCache *cache = (XrArenaSegmentCache *) FlsGetValue(arena_cache_fls_index);
+    if (!cache && create) {
+        cache = (XrArenaSegmentCache *) xr_calloc(1, sizeof(*cache));
+        if (!cache)
+            return NULL;
+        if (!FlsSetValue(arena_cache_fls_index, cache)) {
+            xr_free(cache);
+            return NULL;
+        }
+    }
+    return cache;
 }
 
 #else  // POSIX
@@ -90,22 +97,34 @@ static void arena_cache_register_cleanup(void) {
 
 static pthread_key_t arena_cache_key;
 static pthread_once_t arena_cache_once = PTHREAD_ONCE_INIT;
+static bool arena_cache_key_ready = false;
 
 static void arena_cache_key_destructor(void *data) {
-    if (data)
+    if (data) {
         arena_cache_flush((XrArenaSegmentCache *) data);
+        xr_free(data);
+    }
 }
 
 static void arena_cache_key_init(void) {
-    (void) pthread_key_create(&arena_cache_key, arena_cache_key_destructor);
+    arena_cache_key_ready = pthread_key_create(&arena_cache_key, arena_cache_key_destructor) == 0;
 }
 
-static void arena_cache_register_cleanup(void) {
-    if (tls_cache_cleanup_registered)
-        return;
-    tls_cache_cleanup_registered = true;
+static XrArenaSegmentCache *arena_cache_current(bool create) {
     pthread_once(&arena_cache_once, arena_cache_key_init);
-    (void) pthread_setspecific(arena_cache_key, &tls_cache);
+    if (!arena_cache_key_ready)
+        return NULL;
+    XrArenaSegmentCache *cache = (XrArenaSegmentCache *) pthread_getspecific(arena_cache_key);
+    if (!cache && create) {
+        cache = (XrArenaSegmentCache *) xr_calloc(1, sizeof(*cache));
+        if (!cache)
+            return NULL;
+        if (pthread_setspecific(arena_cache_key, cache) != 0) {
+            xr_free(cache);
+            return NULL;
+        }
+    }
+    return cache;
 }
 
 #endif  // XR_OS_WINDOWS
@@ -125,10 +144,14 @@ static XrArenaSegment *cache_get_segment(size_t capacity) {
         return NULL;
     }
 
-    XrArenaSegment *seg = tls_cache.segments;
+    XrArenaSegmentCache *cache = arena_cache_current(false);
+    if (!cache)
+        return NULL;
+
+    XrArenaSegment *seg = cache->segments;
     if (seg) {
-        tls_cache.segments = seg->next;
-        tls_cache.count--;
+        cache->segments = seg->next;
+        cache->count--;
         seg->next = NULL;
         seg->size = 0;
     }
@@ -140,14 +163,17 @@ static bool cache_put_segment(XrArenaSegment *seg) {
         return false;
     }
 
-    if (tls_cache.count >= XR_ARENA_MAX_CACHED_SEGMENTS) {
+    XrArenaSegmentCache *cache = arena_cache_current(true);
+    if (!cache)
+        return false;
+
+    if (cache->count >= XR_ARENA_MAX_CACHED_SEGMENTS) {
         return false;
     }
-    arena_cache_register_cleanup();
-    seg->next = tls_cache.segments;
-    tls_cache.segments = seg;
-    tls_cache.count++;
-    XR_DCHECK(tls_cache.count <= XR_ARENA_MAX_CACHED_SEGMENTS, "arena cache: count > max");
+    seg->next = cache->segments;
+    cache->segments = seg;
+    cache->count++;
+    XR_DCHECK(cache->count <= XR_ARENA_MAX_CACHED_SEGMENTS, "arena cache: count > max");
     return true;
 }
 
