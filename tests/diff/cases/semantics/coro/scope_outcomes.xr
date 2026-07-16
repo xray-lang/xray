@@ -1,61 +1,32 @@
 enum DiffScopeErr { Msg(string) }
 
-fn ok() -> int {
+fn ok(ch: Channel<int>) -> int {
+    ch.send(1)
     return 11
 }
 
-fn fail() -> int {
+fn fail(ch: Channel<int>) -> int {
+    ch.send(10)
     throw DiffScopeErr.Msg("diff_fail")
     return 0
 }
 
-fn count_success(outcomes: Array<TaskOutcome>) -> int {
-    var count = 0
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Success(_) -> { count = count + 1 }
+fn recv_sum(ch: Channel<int>, count: int) -> int {
+    var sum = 0
+    for (var i = 0; i < count; i++) {
+        match (ch.recv()) {
+            Recv.Value(v) -> { sum = sum + v }
             _ -> {}
         }
     }
-    return count
+    return sum
 }
 
-fn count_failed(outcomes: Array<TaskOutcome>) -> int {
-    var count = 0
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Failed(_) -> { count = count + 1 }
-            _ -> {}
-        }
-    }
-    return count
+shared ch = Channel<int>(2)
+supervisor scope {
+    go ok(ch)
+    go fail(ch)
 }
 
-fn has_error(outcomes: Array<TaskOutcome>) -> bool {
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Failed(err) -> {
-                match (err) {
-                    DiffScopeErr.Msg(msg) -> {
-                        if (msg == "diff_fail") {
-                            return true
-                        }
-                    }
-                    _ -> {}
-                }
-            }
-            _ -> {}
-        }
-    }
-    return false
-}
-
-var outcomes = supervisor scope {
-    go ok()
-    go fail()
-}
-
-print(len(outcomes))
-print(count_success(outcomes))
-print(count_failed(outcomes))
-print(has_error(outcomes))
+print(recv_sum(ch, 2))
+ch.close()

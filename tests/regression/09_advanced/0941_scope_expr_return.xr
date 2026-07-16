@@ -1,136 +1,37 @@
-// Regression: supervisor scope used as expression must return Array<TaskOutcome>.
-// Bug: xi_lower_scope_block returned NULL instead of the exit value.
+// Regression: supervisor scope is statement-only and still waits for children.
 
-import time
+enum ScopeExprErr { Msg(string) }
 
-enum ScopeErr { Msg(string) }
-
-fn child_ok() -> int {
-    return 42
+fn send_value(ch: Channel<int>, n: int) {
+    ch.send(n)
 }
 
-fn child_fail(msg: string) -> int {
-    throw ScopeErr.Msg(msg)
+fn fail_after_send(ch: Channel<int>, n: int) -> int {
+    ch.send(n)
+    throw ScopeExprErr.Msg("scope")
     return 0
 }
 
-fn child_slow() -> int {
-    time.sleep(1000)
-    return 7
-}
-
-fn count_success(outcomes: Array<TaskOutcome>) -> int {
-    var count = 0
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Success(_) -> { count = count + 1 }
+fn recv_sum(ch: Channel<int>, count: int) -> int {
+    var sum = 0
+    for (var i = 0; i < count; i++) {
+        match (ch.recv()) {
+            Recv.Value(v) -> { sum = sum + v }
             _ -> {}
         }
     }
-    return count
-}
-
-fn count_failed(outcomes: Array<TaskOutcome>) -> int {
-    var count = 0
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Failed(_) -> { count = count + 1 }
-            _ -> {}
-        }
-    }
-    return count
-}
-
-fn count_cancelled(outcomes: Array<TaskOutcome>) -> int {
-    var count = 0
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Cancelled -> { count = count + 1 }
-            _ -> {}
-        }
-    }
-    return count
-}
-
-fn has_scope_error(outcomes: Array<TaskOutcome>, expected: string) -> bool {
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Failed(err) -> {
-                match (err) {
-                    ScopeErr.Msg(msg) -> {
-                        if (msg == expected) {
-                            return true
-                        }
-                    }
-                    _ -> {}
-                }
-            }
-            _ -> {}
-        }
-    }
-    return false
+    return sum
 }
 
 @test
-fn test_supervisor_scope_returns_outcomes() {
-    var outcomes = supervisor scope {
-        go child_fail("err_a")
-        go child_fail("err_b")
-    }
-    assert_eq(len(outcomes), 2)
-    assert_eq(count_failed(outcomes), 2)
-    assert(has_scope_error(outcomes, "err_a"), "failed outcome should preserve err_a")
-    assert(has_scope_error(outcomes, "err_b"), "failed outcome should preserve err_b")
-}
-
-@test
-fn test_supervisor_scope_all_success() {
-    var outcomes = supervisor scope {
-        go child_ok()
-        go child_ok()
-    }
-    assert_eq(len(outcomes), 2)
-    assert_eq(count_success(outcomes), 2)
-}
-
-@test
-fn test_supervisor_scope_mixed() {
-    var outcomes = supervisor scope {
-        go child_ok()
-        go child_fail("mixed_err")
-        go child_ok()
-    }
-    assert_eq(len(outcomes), 3)
-    assert_eq(count_success(outcomes), 2)
-    assert_eq(count_failed(outcomes), 1)
-    assert(has_scope_error(outcomes, "mixed_err"), "mixed failure should keep enum payload")
-}
-
-@test
-fn test_supervisor_scope_single_failure() {
-    var outcomes = supervisor scope {
-        go child_fail("single")
-    }
-    assert_eq(len(outcomes), 1)
-    assert_eq(count_failed(outcomes), 1)
-    assert(has_scope_error(outcomes, "single"), "single failure should keep enum payload")
-}
-
-@test
-fn test_supervisor_scope_cancelled() {
-    var outcomes = supervisor scope {
-        var task = go child_slow()
-        task.cancel()
-    }
-    assert_eq(len(outcomes), 1)
-    assert_eq(count_cancelled(outcomes), 1)
-}
-
-@test
-fn test_supervisor_scope_as_statement() {
+fn test_supervisor_scope_statement_waits_for_children() {
+    shared ch = Channel<int>(3)
     supervisor scope {
-        go child_ok()
-        go child_fail("ignored")
+        go send_value(ch, 1)
+        go fail_after_send(ch, 2)
+        go send_value(ch, 4)
     }
-    assert_eq(true, true)
+
+    assert_eq(recv_sum(ch, 3), 7)
+    ch.close()
 }

@@ -1,33 +1,7 @@
-// Cross-worker race regression for the structured-concurrency scope path.
+// Cross-worker stress for structured-concurrency scope paths.
 //
-// Targets the three races CORO-10 used to expose:
-//
-//   A. linked scope first_error: two failing children both see
-//      XR_IS_NULL(first_error) and both write — winner non-deterministic
-//      but must be a real child error string.
-//
-//   B. supervisor outcomes[] lazy-init lost update: two failing children
-//      both see scope->outcomes == NULL, both allocate, the second store
-//      overwrites the first — outcomes collected into the displaced array
-//      are silently lost.
-//
-//   C. supervisor outcomes[] concurrent push: two pushes interleave on
-//      length / data and corrupt the array.
-//
-// Eager-allocation of outcomes[] at scope entry plus moving
-// record_child_completion inside the scope spinlock closes B and C; A is
-// serialized as a side effect.
-//
-// This stress harness spawns many failing children per scope across
-// many iterations so cross-worker scheduling exercises the race
-// window. It is multicore-aware: `xray test` runs with auto-detected
-// num_workers > 1 on any host with multiple cores.
-//
-// Run mode: scripts/run_regression_tests.sh forces --no-jit for this
-// file because the JIT register allocator currently mis-assigns
-// overlapping live ranges on the try/catch + linked scope path used
-// by Test 3 (independent JIT bug; the scope race fix being verified
-// here is in the interpreter / runtime path, not in the JIT).
+// Supervisor scope is now statement-only. The test observes completion through
+// an explicit channel so no public heterogeneous result array is required.
 
 enum RaceErr { Msg(string) }
 
@@ -35,9 +9,6 @@ const ITERATIONS = 50
 const FAILING_PER_SCOPE = 200
 const SUCCEEDING_PER_SCOPE = 50
 
-// Each child does a bit of arithmetic before throwing so several
-// children overlap in flight on different workers — this widens the
-// race window for the wake_waiter scope-side bookkeeping.
 fn make_failing(id: int) -> int {
     var x = 0
     for (var k = 0; k < 50; k++) {
@@ -47,94 +18,77 @@ fn make_failing(id: int) -> int {
     return x
 }
 
-fn make_ok(id: int) -> int {
+fn make_failing_report(ch: Channel<int>, id: int) -> int {
     var x = 0
     for (var k = 0; k < 50; k++) {
         x = x + k
     }
+    ch.send(-1)
+    throw RaceErr.Msg("err_" + string(id))
+    return x
+}
+
+fn make_ok_report(ch: Channel<int>, id: int) -> int {
+    var x = 0
+    for (var k = 0; k < 50; k++) {
+        x = x + k
+    }
+    ch.send(1)
     return x + id
 }
 
-fn count_success(outcomes: Array<TaskOutcome>) -> int {
-    var count = 0
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Success(_) -> { count = count + 1 }
-            _ -> {}
-        }
-    }
-    return count
-}
-
-fn count_failed(outcomes: Array<TaskOutcome>) -> int {
-    var count = 0
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Failed(_) -> { count = count + 1 }
-            _ -> {}
-        }
-    }
-    return count
-}
-
-fn failed_payloads_valid(outcomes: Array<TaskOutcome>) -> bool {
-    for (var i = 0; i < len(outcomes); i++) {
-        match (outcomes[i]) {
-            TaskOutcome.Failed(err) -> {
-                match (err) {
-                    RaceErr.Msg(msg) -> {
-                        if (!msg.contains("err_")) {
-                            return false
-                        }
-                    }
-                    _ -> { return false }
+fn drain_counts(ch: Channel<int>, expected: int) -> Array<int> {
+    var counts: Array<int> = [0, 0]
+    for (var i = 0; i < expected; i++) {
+        match (ch.recv()) {
+            Recv.Value(v) -> {
+                if (v < 0) {
+                    counts[0] = counts[0] + 1
+                } else {
+                    counts[1] = counts[1] + 1
                 }
             }
-            _ -> { return false }
+            _ -> {}
         }
     }
-    return true
+    return counts
 }
 
-// Test 1 — supervisor: every child must produce one TaskOutcome; total
-// success/failure counts are deterministic across all iterations.
 @test
-fn test_supervisor_no_lost_updates() {
+fn test_supervisor_statement_no_lost_children() {
     for (var iter = 0; iter < ITERATIONS; iter++) {
-        var outcomes = supervisor scope {
+        shared ch = Channel<int>(FAILING_PER_SCOPE + SUCCEEDING_PER_SCOPE)
+        supervisor scope {
             for (var i = 0; i < FAILING_PER_SCOPE; i++) {
-                go make_failing(i)
+                go make_failing_report(ch, i)
             }
             for (var i = 0; i < SUCCEEDING_PER_SCOPE; i++) {
-                go make_ok(i)
+                go make_ok_report(ch, i)
             }
         }
-        assert_eq(len(outcomes), FAILING_PER_SCOPE + SUCCEEDING_PER_SCOPE)
-        assert_eq(count_failed(outcomes), FAILING_PER_SCOPE)
-        assert_eq(count_success(outcomes), SUCCEEDING_PER_SCOPE)
+        var counts = drain_counts(ch, FAILING_PER_SCOPE + SUCCEEDING_PER_SCOPE)
+        assert_eq(counts[0], FAILING_PER_SCOPE)
+        assert_eq(counts[1], SUCCEEDING_PER_SCOPE)
+        ch.close()
     }
 }
 
-// Test 2 — supervisor: every Failed payload must be the original enum
-// produced by some failing child, with no torn / NULL slots from a
-// concurrent xr_array_push.
 @test
-fn test_supervisor_no_torn_pushes() {
-    for (var iter = 0; iter < ITERATIONS; iter++) {
-        var outcomes = supervisor scope {
+fn test_supervisor_statement_all_success() {
+    for (var iter = 0; iter < 5; iter++) {
+        shared ch = Channel<int>(FAILING_PER_SCOPE)
+        supervisor scope {
             for (var i = 0; i < FAILING_PER_SCOPE; i++) {
-                go make_failing(i)
+                go make_ok_report(ch, i)
             }
         }
-        assert_eq(len(outcomes), FAILING_PER_SCOPE)
-        assert_eq(count_failed(outcomes), FAILING_PER_SCOPE)
-        assert(failed_payloads_valid(outcomes), "failed payloads must stay intact")
+        var counts = drain_counts(ch, FAILING_PER_SCOPE)
+        assert_eq(counts[0], 0)
+        assert_eq(counts[1], FAILING_PER_SCOPE)
+        ch.close()
     }
 }
 
-// Test 3 — linked scope: even with many concurrent failures the scope
-// must throw exactly one error (the latched first_error). The string
-// form must be a valid err_<n> from one of the children.
 @test
 fn test_linked_first_error_deterministic() {
     for (var iter = 0; iter < ITERATIONS; iter++) {
@@ -151,22 +105,6 @@ fn test_linked_first_error_deterministic() {
             msg = string(e)
         }
         assert(caught, "linked scope must propagate child error")
-        // Accept any err_<n>; we do not depend on a specific winner.
         assert(msg.contains("err_"), "first_error must be a child error")
-    }
-}
-
-// Test 4 — supervisor: all-success outcomes must stay deterministic under load.
-@test
-fn test_supervisor_all_success() {
-    for (var iter = 0; iter < 5; iter++) {
-        var outcomes = supervisor scope {
-            for (var i = 0; i < FAILING_PER_SCOPE; i++) {
-                go make_ok(i)
-            }
-        }
-        assert_eq(len(outcomes), FAILING_PER_SCOPE)
-        assert_eq(count_success(outcomes), FAILING_PER_SCOPE)
-        assert_eq(count_failed(outcomes), 0)
     }
 }
