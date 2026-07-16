@@ -3386,6 +3386,22 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         "    for (key in box) { throw key }\n"
         "  }\n"
         "}\n"
+        "fn mapDeleteSingletonThenSetCaughtValueIteratorRethrows() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{\"caught\": e}\n"
+        "    box.delete(\"caught\")\n"
+        "    box.set(\"again\", e)\n"
+        "    for (key, value in box) { throw value }\n"
+        "  }\n"
+        "}\n"
+        "fn mapDeleteSingletonCaughtKeyThenSetCaughtKeyIteratorRethrows() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{e: MapErr.Other}\n"
+        "    box.delete(e)\n"
+        "    box.set(e, MapErr.Other)\n"
+        "    for (key in box) { throw key }\n"
+        "  }\n"
+        "}\n"
         "fn mapValuesIteratorRethrows() {\n"
         "  try { failMap() } catch (e: MapErr) {\n"
         "    const box = #{\"caught\": e}\n"
@@ -3536,6 +3552,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         analyzer_function_effect_summary(a, "mapClearThenSetCaughtValueIteratorRethrows");
     const XaEffectSummary *clear_then_set_key =
         analyzer_function_effect_summary(a, "mapClearThenSetCaughtKeyIteratorRethrows");
+    const XaEffectSummary *delete_singleton_then_set_value =
+        analyzer_function_effect_summary(a, "mapDeleteSingletonThenSetCaughtValueIteratorRethrows");
+    const XaEffectSummary *delete_singleton_then_set_key = analyzer_function_effect_summary(
+        a, "mapDeleteSingletonCaughtKeyThenSetCaughtKeyIteratorRethrows");
     const XaEffectSummary *values_iter =
         analyzer_function_effect_summary(a, "mapValuesIteratorRethrows");
     const XaEffectSummary *direct_values_iter =
@@ -3600,6 +3620,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(clear_keys != NULL);
     ASSERT(clear_then_set_value != NULL);
     ASSERT(clear_then_set_key != NULL);
+    ASSERT(delete_singleton_then_set_value != NULL);
+    ASSERT(delete_singleton_then_set_key != NULL);
     ASSERT(values_iter != NULL);
     ASSERT(direct_values_iter != NULL);
     ASSERT(values_mixed != NULL);
@@ -3695,6 +3717,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         effect_summary_enum_set_named(a, clear_then_set_value, "MapErr");
     const XaErrorTypeSet *clear_then_set_key_set =
         effect_summary_enum_set_named(a, clear_then_set_key, "MapErr");
+    const XaErrorTypeSet *delete_singleton_then_set_value_set =
+        effect_summary_enum_set_named(a, delete_singleton_then_set_value, "MapErr");
+    const XaErrorTypeSet *delete_singleton_then_set_key_set =
+        effect_summary_enum_set_named(a, delete_singleton_then_set_key, "MapErr");
     const XaErrorTypeSet *values_iter_set = effect_summary_enum_set_named(a, values_iter, "MapErr");
     const XaErrorTypeSet *direct_values_iter_set =
         effect_summary_enum_set_named(a, direct_values_iter, "MapErr");
@@ -3759,6 +3785,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(clear_keys_set != NULL);
     ASSERT(clear_then_set_value_set != NULL);
     ASSERT(clear_then_set_key_set != NULL);
+    ASSERT(delete_singleton_then_set_value_set != NULL);
+    ASSERT(delete_singleton_then_set_key_set != NULL);
     ASSERT(values_iter_set != NULL);
     ASSERT(direct_values_iter_set != NULL);
     ASSERT(values_mixed_set != NULL);
@@ -3877,6 +3905,12 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!clear_then_set_key_set->all_variants);
     ASSERT(xa_bitset_test(&clear_then_set_key_set->variants, 0));
     ASSERT(!xa_bitset_test(&clear_then_set_key_set->variants, 1));
+    ASSERT(!delete_singleton_then_set_value_set->all_variants);
+    ASSERT(xa_bitset_test(&delete_singleton_then_set_value_set->variants, 0));
+    ASSERT(!xa_bitset_test(&delete_singleton_then_set_value_set->variants, 1));
+    ASSERT(!delete_singleton_then_set_key_set->all_variants);
+    ASSERT(xa_bitset_test(&delete_singleton_then_set_key_set->variants, 0));
+    ASSERT(!xa_bitset_test(&delete_singleton_then_set_key_set->variants, 1));
     ASSERT(!values_iter_set->all_variants);
     ASSERT(xa_bitset_test(&values_iter_set->variants, 0));
     ASSERT(!xa_bitset_test(&values_iter_set->variants, 1));

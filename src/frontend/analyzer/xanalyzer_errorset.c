@@ -162,6 +162,7 @@ typedef struct FunctionValueAliasState {
 
 typedef enum CatchAggregateAliasKind {
     CATCH_AGGREGATE_EMPTY,
+    CATCH_AGGREGATE_SINGLETON,
     CATCH_AGGREGATE_INDEX,
     CATCH_AGGREGATE_FIELD,
     CATCH_AGGREGATE_ELEMENT,
@@ -1757,9 +1758,9 @@ static bool catch_aggregate_alias_matches(const CatchAggregateAlias *a,
         !catch_symbol_matches(a->container_id, a->container_name, b->container_id,
                               b->container_name))
         return false;
-    if (a->kind == CATCH_AGGREGATE_EMPTY || a->kind == CATCH_AGGREGATE_ELEMENT ||
-        a->kind == CATCH_AGGREGATE_KEY_ELEMENT || a->kind == CATCH_AGGREGATE_ENTRY_KEY ||
-        a->kind == CATCH_AGGREGATE_ENTRY_VALUE)
+    if (a->kind == CATCH_AGGREGATE_EMPTY || a->kind == CATCH_AGGREGATE_SINGLETON ||
+        a->kind == CATCH_AGGREGATE_ELEMENT || a->kind == CATCH_AGGREGATE_KEY_ELEMENT ||
+        a->kind == CATCH_AGGREGATE_ENTRY_KEY || a->kind == CATCH_AGGREGATE_ENTRY_VALUE)
         return true;
     if (a->kind == CATCH_AGGREGATE_INDEX) {
         bool a_string = a->index_string != NULL;
@@ -1979,6 +1980,17 @@ static bool current_catch_has_element_aggregate_container(ErrorSetCtx *ctx, uint
     return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
 }
 
+static bool current_catch_has_singleton_aggregate_container(ErrorSetCtx *ctx, uint32_t symbol_id,
+                                                            const char *name) {
+    if (!ctx || (symbol_id == 0 && !name))
+        return false;
+    CatchAggregateAlias alias = {.container_id = symbol_id,
+                                 .container_name = name,
+                                 .kind = CATCH_AGGREGATE_SINGLETON,
+                                 .index = -1};
+    return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
+}
+
 static bool current_catch_has_empty_aggregate_container(ErrorSetCtx *ctx, uint32_t symbol_id,
                                                         const char *name) {
     if (!ctx || (symbol_id == 0 && !name))
@@ -1987,6 +1999,24 @@ static bool current_catch_has_empty_aggregate_container(ErrorSetCtx *ctx, uint32
                                  .container_name = name,
                                  .kind = CATCH_AGGREGATE_EMPTY,
                                  .index = -1};
+    return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
+}
+
+static bool current_catch_has_index_aggregate_container(ErrorSetCtx *ctx, uint32_t symbol_id,
+                                                        const char *name, int64_t index,
+                                                        uint32_t index_symbol_id,
+                                                        const char *index_symbol_name,
+                                                        const char *index_string) {
+    if (!ctx || (symbol_id == 0 && !name))
+        return false;
+    CatchAggregateAlias alias = {.container_id = symbol_id,
+                                 .container_name = name,
+                                 .kind = CATCH_AGGREGATE_INDEX,
+                                 .index = index,
+                                 .index_symbol_id = index_symbol_id,
+                                 .index_symbol_name = index_symbol_name,
+                                 .index_string = index_string,
+                                 .field_name = NULL};
     return current_catch_aggregate_alias_index(ctx, &alias) >= 0;
 }
 
@@ -2302,6 +2332,7 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
             }
             bool all_values_are_caught = true;
             bool all_keys_are_caught = true;
+            bool tracked_map_entry = false;
             for (int i = 0; i < initializer->as.map_literal.count; i++) {
                 if (!is_current_caught_ref(ctx, initializer->as.map_literal.values[i]))
                     all_values_are_caught = false;
@@ -2319,12 +2350,17 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
                 add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_INDEX,
                                                   index, index_symbol_id, index_symbol_name,
                                                   index_string, NULL);
+                tracked_map_entry = true;
             }
             if (initializer->as.map_literal.count > 0 && all_values_are_caught)
                 add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_ELEMENT, -1,
                                                   0, NULL, NULL, NULL);
             if (initializer->as.map_literal.count > 0 && all_keys_are_caught)
                 add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_KEY_ELEMENT,
+                                                  -1, 0, NULL, NULL, NULL);
+            if (initializer->as.map_literal.count == 1 &&
+                (tracked_map_entry || all_values_are_caught || all_keys_are_caught))
+                add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_SINGLETON,
                                                   -1, 0, NULL, NULL, NULL);
             break;
         }
@@ -2461,6 +2497,7 @@ typedef struct CatchAggregateMemberUpdate {
     bool key_set_starts_tracked_map;
     bool value_is_caught;
     bool value_set_starts_tracked_map;
+    bool map_delete_makes_empty;
 } CatchAggregateMemberUpdate;
 
 static CatchAggregateMemberUpdate catch_aggregate_member_update(ErrorSetCtx *ctx, AstNode *callee,
@@ -2557,6 +2594,18 @@ static CatchAggregateMemberUpdate catch_aggregate_member_update(ErrorSetCtx *ctx
         update.index_may_alias_other_slots =
             update.has_precise_index &&
             (update.index_symbol_id != 0 || update.index_symbol_name != NULL);
+        bool map_is_singleton = current_catch_has_singleton_aggregate_container(ctx, id, name);
+        if (map_is_singleton) {
+            bool deletes_tracked_index = update.has_precise_index &&
+                                         !update.index_may_alias_other_slots &&
+                                         current_catch_has_index_aggregate_container(
+                                             ctx, id, name, update.index, update.index_symbol_id,
+                                             update.index_symbol_name, update.index_string);
+            bool deletes_caught_key =
+                current_catch_has_key_element_aggregate_container(ctx, id, name) &&
+                is_current_caught_ref(ctx, call->arguments[0]);
+            update.map_delete_makes_empty = deletes_tracked_index || deletes_caught_key;
+        }
         update.action = CATCH_AGGREGATE_MEMBER_MAP_DELETE_PRECISE;
         return update;
     }
@@ -2591,6 +2640,8 @@ static void apply_catch_aggregate_member_update(ErrorSetCtx *ctx,
         case CATCH_AGGREGATE_MEMBER_MAP_SET_PRECISE:
             remove_current_catch_aggregate_aliases_for_kind(
                 ctx, update->container_id, update->container_name, CATCH_AGGREGATE_EMPTY);
+            remove_current_catch_aggregate_aliases_for_kind(
+                ctx, update->container_id, update->container_name, CATCH_AGGREGATE_SINGLETON);
             if (update->index_may_alias_other_slots)
                 remove_current_catch_aggregate_aliases_for_kind(
                     ctx, update->container_id, update->container_name, CATCH_AGGREGATE_INDEX);
@@ -2623,8 +2674,21 @@ static void apply_catch_aggregate_member_update(ErrorSetCtx *ctx,
                 remove_current_catch_aggregate_aliases_for_kind(
                     ctx, update->container_id, update->container_name, CATCH_AGGREGATE_KEY_ELEMENT);
             }
+            if (update->value_set_starts_tracked_map || update->key_set_starts_tracked_map)
+                add_current_catch_aggregate_alias(ctx, update->container_id, update->container_name,
+                                                  CATCH_AGGREGATE_SINGLETON, -1, 0, NULL, NULL,
+                                                  NULL);
             break;
         case CATCH_AGGREGATE_MEMBER_MAP_DELETE_PRECISE:
+            if (update->map_delete_makes_empty) {
+                remove_current_catch_aggregate_aliases_for_container(ctx, update->container_id,
+                                                                     update->container_name);
+                add_current_catch_aggregate_alias(ctx, update->container_id, update->container_name,
+                                                  CATCH_AGGREGATE_EMPTY, -1, 0, NULL, NULL, NULL);
+                break;
+            }
+            remove_current_catch_aggregate_aliases_for_kind(
+                ctx, update->container_id, update->container_name, CATCH_AGGREGATE_SINGLETON);
             if (update->index_may_alias_other_slots)
                 remove_current_catch_aggregate_aliases_for_kind(
                     ctx, update->container_id, update->container_name, CATCH_AGGREGATE_INDEX);
