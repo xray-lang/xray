@@ -61,7 +61,8 @@ SOURCE_UNKNOWN_TYPE_RE = re.compile(
 )
 REMOVED_UNKNOWN_DIAGNOSTIC_RE = re.compile(r"'unknown' type has been removed")
 UNKNOWN_IDENTIFIER_GUARD_RE = re.compile(
-    r"\b(?:var|const|let)\s+unknown\b|scan_single\(\"unknown\"\)"
+    r"\b(?:var|const|let)\s+unknown\b|scan_single\(\"unknown\"\)|"
+    r"\bassert_eq\s*\(\s*unknown\b"
 )
 ERROR_TYPE_RECOVERY_RE = re.compile(
     r"\b(?:XR_TREF_ERROR|xr_tref_error|XR_KIND_ERROR|xr_type_new_error)\b"
@@ -98,6 +99,8 @@ CATEGORIES = (
     "SOURCE_UNKNOWN_TYPE_SURFACE",
     "UNKNOWN_IDENTIFIER_ALLOWED_GUARD",
     "REMOVED_SOURCE_UNKNOWN_DIAGNOSTIC",
+    "ALLOWED_REMOVED_SOURCE_UNKNOWN_NEGATIVE_TEST",
+    "ALLOWED_RUNTIME_UNKNOWN_OUTPUT_FIXTURE",
     "ERROR_TYPE_RECOVERY",
     "RUNTIME_UNKNOWN_TYPE_SINGLETON_OR_FACTORY",
     "XR_TYPE_IS_UNKNOWN_CONSUMER",
@@ -115,6 +118,18 @@ INVENTORY_SCRIPT_SELF_NOISE = {
     "scripts/check_source_unknown_convergence.py",
     "scripts/check_error_effect_convergence.py",
     "scripts/README.md",
+}
+
+ALLOWED_REMOVED_SOURCE_UNKNOWN_NEGATIVE_TESTS = {
+    "tests/compile_errors/type/source_unknown_cast_removed.xr",
+    "tests/compile_errors/type/source_unknown_member_removed.xr",
+    "tests/compile_errors/type/source_unknown_param_removed.xr",
+    "tests/compile_errors/type/span_as_unknown_escape.xr",
+    "tests/compile_errors/type/span_unknown_return_escape.xr",
+}
+
+ALLOWED_RUNTIME_UNKNOWN_OUTPUT_FIXTURES = {
+    "tests/regression/11_coroutine/1123_channel_timeout.xr.expected",
 }
 
 
@@ -222,20 +237,32 @@ def classify_line(rel_path: str, line: str) -> list[str]:
         or "Failed(Json)" in line
     )
 
+    if has_unknown and rel_path in ALLOWED_REMOVED_SOURCE_UNKNOWN_NEGATIVE_TESTS:
+        categories.append("ALLOWED_REMOVED_SOURCE_UNKNOWN_NEGATIVE_TEST")
+        return categories
     if (
         has_unknown
-        and is_source_unknown_surface_path(rel_path)
-        and SOURCE_UNKNOWN_TYPE_RE.search(line)
+        and rel_path in ALLOWED_RUNTIME_UNKNOWN_OUTPUT_FIXTURES
+        and "<unknown>" in line
     ):
-        categories.append("SOURCE_UNKNOWN_TYPE_SURFACE")
+        categories.append("ALLOWED_RUNTIME_UNKNOWN_OUTPUT_FIXTURE")
+        return categories
+    if has_unknown and REMOVED_UNKNOWN_DIAGNOSTIC_RE.search(line):
+        categories.append("REMOVED_SOURCE_UNKNOWN_DIAGNOSTIC")
     if (
         has_unknown
         and is_unknown_identifier_guard_path(rel_path)
         and UNKNOWN_IDENTIFIER_GUARD_RE.search(line)
     ):
         categories.append("UNKNOWN_IDENTIFIER_ALLOWED_GUARD")
-    if has_unknown and REMOVED_UNKNOWN_DIAGNOSTIC_RE.search(line):
-        categories.append("REMOVED_SOURCE_UNKNOWN_DIAGNOSTIC")
+        return categories
+    if (
+        has_unknown
+        and is_source_unknown_surface_path(rel_path)
+        and SOURCE_UNKNOWN_TYPE_RE.search(line)
+        and "REMOVED_SOURCE_UNKNOWN_DIAGNOSTIC" not in categories
+    ):
+        categories.append("SOURCE_UNKNOWN_TYPE_SURFACE")
     if has_error and ERROR_TYPE_RECOVERY_RE.search(line):
         categories.append("ERROR_TYPE_RECOVERY")
     if has_unknown and RUNTIME_UNKNOWN_RE.search(line):

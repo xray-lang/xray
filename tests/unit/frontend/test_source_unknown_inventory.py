@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from check_source_unknown_convergence import (  # noqa: E402
     CATEGORIES,
+    build_inventory,
     classify_line,
     enforce_category_maxima,
     parse_category_max,
@@ -22,6 +23,62 @@ from check_source_unknown_convergence import (  # noqa: E402
 
 
 class SourceUnknownInventoryTest(unittest.TestCase):
+    def test_removed_source_unknown_negative_fixtures_are_not_live_surface(self) -> None:
+        for path, line in (
+            (
+                "tests/compile_errors/type/source_unknown_cast_removed.xr",
+                "var value = 1 as unknown",
+            ),
+            (
+                "tests/compile_errors/type/source_unknown_member_removed.xr",
+                "var erased: unknown = null",
+            ),
+            (
+                "tests/compile_errors/type/source_unknown_param_removed.xr",
+                "fn accept(value: unknown) {",
+            ),
+            (
+                "tests/compile_errors/type/span_as_unknown_escape.xr",
+                "var erased: unknown = null",
+            ),
+            (
+                "tests/compile_errors/type/span_unknown_return_escape.xr",
+                "var values = Array<unknown>()",
+            ),
+        ):
+            categories = classify_line(path, line)
+            self.assertIn("ALLOWED_REMOVED_SOURCE_UNKNOWN_NEGATIVE_TEST", categories)
+            self.assertNotIn("SOURCE_UNKNOWN_TYPE_SURFACE", categories)
+
+    def test_removed_source_unknown_diagnostic_is_not_live_surface(self) -> None:
+        diagnostic = "'unk" "nown' type has been removed"
+        categories = classify_line(
+            "tests/compile_errors/type/source_unknown_param_removed.xr.expected",
+            diagnostic,
+        )
+        self.assertIn("REMOVED_SOURCE_UNKNOWN_DIAGNOSTIC", categories)
+        self.assertNotIn("SOURCE_UNKNOWN_TYPE_SURFACE", categories)
+
+    def test_unknown_identifier_guard_is_not_live_source_type_surface(self) -> None:
+        categories = classify_line(
+            "tests/regression/02_variables/0210_unknown_identifier.xr",
+            "assert_eq(unk" "nown, 7)",
+        )
+        self.assertIn("UNKNOWN_IDENTIFIER_ALLOWED_GUARD", categories)
+        self.assertNotIn("SOURCE_UNKNOWN_TYPE_SURFACE", categories)
+
+    def test_runtime_unknown_output_fixture_is_not_live_source_type_surface(self) -> None:
+        categories = classify_line(
+            "tests/regression/11_coroutine/1123_channel_timeout.xr.expected",
+            "result: 42 ok: <unk" "nown>",
+        )
+        self.assertIn("ALLOWED_RUNTIME_UNKNOWN_OUTPUT_FIXTURE", categories)
+        self.assertNotIn("SOURCE_UNKNOWN_TYPE_SURFACE", categories)
+
+    def test_current_inventory_has_no_live_source_unknown_type_surface(self) -> None:
+        inventory = build_inventory(ROOT)
+        self.assertEqual([], inventory["SOURCE_UNKNOWN_TYPE_SURFACE"])
+
     def test_task_payload_registration_matches_typed_native_defs(self) -> None:
         analyzer_source = (ROOT / "src/frontend/analyzer/xanalyzer.c").read_text()
         native_defs = (ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text()
