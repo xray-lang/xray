@@ -1,0 +1,3 @@
+status=fail
+contains=parallel.reduce AOT supports only native int or native struct accumulators
+contains=accumulator type 'Box' is not native-reducible yet

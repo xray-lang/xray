@@ -1,0 +1,13 @@
+import { Plan, Options } from parallel
+
+class Box {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+var plan = Plan<int>(Options(2), lane -> lane + 1)
+var total = plan.reduce(0..8, Box(0), (state, i) -> Box(state + i), (a, b) -> Box(a.value + b.value))
+print(total.value)
