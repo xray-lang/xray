@@ -18,11 +18,29 @@ from check_binary_public_native_readiness import (  # noqa: E402
     check_boundary,
     check_dependency_markers,
     check_native_typed_error_abi_blockers,
+    check_single_function_native_typed_error_probes,
     load_boundary_modules,
 )
 
 
 class BinaryPublicNativeReadinessTest(unittest.TestCase):
+    def run_fast_single_function_probe(self, modules: dict[str, dict[str, object]] | None = None):
+        original_modules = readiness.load_boundary_modules
+        original_probes = readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES
+        probe = dict(original_probes["compress.gunzip"])
+        probe["required"] = {}
+        if modules is not None:
+            readiness.load_boundary_modules = lambda root: modules
+        readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = {"compress.gunzip": probe}
+        try:
+            return {
+                result.subject: result
+                for result in check_single_function_native_typed_error_probes(ROOT)
+            }["compress.gunzip"]
+        finally:
+            readiness.load_boundary_modules = original_modules
+            readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = original_probes
+
     def test_typed_native_error_blockers_are_module_level(self) -> None:
         results = check_native_typed_error_abi_blockers(ROOT)
         by_subject = {result.subject: result for result in results}
@@ -37,7 +55,11 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
     def test_compress_gunzip_typed_error_abi_is_a_single_function_blocker(self) -> None:
         spec = readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES["compress.gunzip"]
         module = load_boundary_modules(ROOT)["compress"]
+        result = self.run_fast_single_function_probe()
 
+        self.assertTrue(result.ok, result.detail)
+        self.assertEqual("NATIVE_TYPED_ERROR_ABI_FUNCTION_BLOCKER", result.category)
+        self.assertIn("null-sentinel VM/AOT native path", result.detail)
         self.assertIn("gunzip", module["public_native"])
         self.assertIsNot(module.get("def_migration_complete"), True)
         for path_text, anchors in spec["required"].items():
@@ -67,7 +89,10 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
         modules["compress"] = dict(modules["compress"])
         modules["compress"]["public_native"] = ["crc32"]
 
-        self.assertNotIn("gunzip", modules["compress"]["public_native"])
+        result = self.run_fast_single_function_probe(modules)
+
+        self.assertFalse(result.ok)
+        self.assertIn("compress.gunzip left pre-switch public_native", result.detail)
 
     def test_public_switch_markers_remain_absent(self) -> None:
         results = check_dependency_markers(ROOT)

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -419,6 +420,36 @@ def missing_anchors(root: Path, path_text: str, anchors: tuple[str, ...]) -> lis
     return [anchor for anchor in anchors if anchor not in text]
 
 
+def source_marker_hits(root: Path, marker: str) -> list[Path]:
+    proc = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "ls-files",
+            "-co",
+            "--exclude-standard",
+            "--",
+            marker,
+            f":(glob)**/{marker}",
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if proc.returncode == 0:
+        return [root / line for line in proc.stdout.splitlines() if line]
+
+    ignored_dirs = {".git", "build", "build-make", "build-ninja", "cmake-build-debug"}
+    hits: list[Path] = []
+    for path in root.rglob(marker):
+        if any(part in ignored_dirs for part in path.relative_to(root).parts):
+            continue
+        hits.append(path)
+    return hits
+
+
 def def_module_block(root: Path, module: str) -> str | None:
     text = read_text(root, "stdlib/defs/core.def")
     if text is None:
@@ -705,7 +736,7 @@ def check_dependency_markers(root: Path) -> list[CheckResult]:
     marker_dir = root / "tests" / "stdlib" / "contracts"
     results: list[CheckResult] = []
     for marker in DEPENDENCY_MARKERS:
-        hits = list(root.rglob(marker))
+        hits = source_marker_hits(root, marker)
         results.append(
             CheckResult(
                 "PUBLIC_SWITCH_DEPENDENCY_BLOCKER",
@@ -731,7 +762,7 @@ def check_partial_dependency_evidence(root: Path) -> list[CheckResult]:
         for path_text, anchors in required.items():
             missing.extend(missing_anchors(root, str(path_text), anchors))
         marker = str(spec["full_marker"])
-        marker_hits = list(root.rglob(marker))
+        marker_hits = source_marker_hits(root, marker)
         failures = list(missing)
         if marker_hits:
             failures.append(
@@ -826,7 +857,7 @@ def check_single_function_native_typed_error_probes(root: Path) -> list[CheckRes
                     f"stdlib/defs/core.def: {subject} mentions CompressionError before readiness marker"
                 )
 
-        marker_hits = list(root.rglob("TASK_198_TYPED_NATIVE_ERRORS_READY"))
+        marker_hits = source_marker_hits(root, "TASK_198_TYPED_NATIVE_ERRORS_READY")
         if marker_hits:
             failures.append(
                 "unexpected full-readiness marker present: "
