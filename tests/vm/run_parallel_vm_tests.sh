@@ -142,6 +142,12 @@ expect_output_workers \
     4
 
 expect_output_workers \
+    "parallel_plan_reduce_reference_accumulator" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_reduce_reference_accumulator.xr" \
+    $'40\n40' \
+    2
+
+expect_output_workers \
     "parallel_reduce_generic_failure_cleanup" \
     "$PROJECT_DIR/tests/vm/parallel_reduce_generic_failure_cleanup.xr" \
     $'true\ntrue\ntrue\n1000' \
