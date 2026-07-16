@@ -257,7 +257,7 @@ typedef struct Scanner {
     bool collect_trivia;           // whether to collect comments as trivia
     XrTrivia *pending_trivia;      // collected trivia for next token
     XrTrivia *trivia_tail;         // tail pointer for O(1) append
-    const char *pending_error;     // error detected during comment scanning (e.g. unterminated)
+    const char *pending_error;     // source/comment error to emit as the next TK_ERROR
 } Scanner;
 
 // Scanner functions

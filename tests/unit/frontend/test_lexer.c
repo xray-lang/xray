@@ -9,6 +9,7 @@
  */
 
 #include "../test_framework.h"
+#include "base/xutf8.h"
 #include "xlex.h"
 
 /* ========== Helper Functions ========== */
@@ -238,6 +239,45 @@ TEST(lexer_string_escapes) {
 
     t = scan_single("\"quote\\\"inside\"");
     assert_token(t, TK_LITERAL_STRING, "\"quote\\\"inside\"");
+}
+
+TEST(lexer_invalid_utf8_source_uses_shared_diagnostic_span) {
+    static const char source[] = {'v', 'a',         'r',         ' ',         's', '=',
+                                  '"', (char) 0xED, (char) 0xA0, (char) 0x80, '"', '\0'};
+    XrUtf8ScanResult scan = xr_utf8_scan_strict((const uint8_t *) source, sizeof(source) - 1);
+    ASSERT_EQ_INT(scan.error, XR_UTF8_SURROGATE);
+    ASSERT_EQ_UINT(scan.byte_offset, 7);
+    ASSERT_EQ_UINT(scan.invalid_length, 3);
+
+    Scanner scanner;
+    xr_scanner_init(&scanner, source);
+    Token t = xr_scanner_scan(&scanner);
+    ASSERT_EQ_INT(t.type, TK_ERROR);
+    ASSERT_TRUE(t.error_message != NULL);
+    ASSERT_TRUE(strcmp(t.error_message, "source must be valid UTF-8") == 0);
+    ASSERT_EQ_INT(t.line, 1);
+    ASSERT_EQ_INT(t.column, (int) scan.byte_offset + 1);
+    ASSERT_EQ_INT(t.length, (int) scan.invalid_length);
+    ASSERT_TRUE(memcmp(t.start, source + scan.byte_offset, scan.invalid_length) == 0);
+}
+
+TEST(lexer_invalid_utf8_source_reports_original_line_and_column) {
+    static const char source[] = {'v', 'a', 'r', ' ', 'a', '=', '1',         '\n', 'v',
+                                  'a', 'r', ' ', 'b', '=', ' ', (char) 0x80, '\0'};
+    XrUtf8ScanResult scan = xr_utf8_scan_strict((const uint8_t *) source, sizeof(source) - 1);
+    ASSERT_EQ_INT(scan.error, XR_UTF8_STRAY_CONTINUATION);
+    ASSERT_EQ_UINT(scan.byte_offset, 15);
+    ASSERT_EQ_UINT(scan.invalid_length, 1);
+
+    Scanner scanner;
+    xr_scanner_init(&scanner, source);
+    Token t = xr_scanner_scan(&scanner);
+    ASSERT_EQ_INT(t.type, TK_ERROR);
+    ASSERT_TRUE(t.error_message != NULL);
+    ASSERT_TRUE(strcmp(t.error_message, "source must be valid UTF-8") == 0);
+    ASSERT_EQ_INT(t.line, 2);
+    ASSERT_EQ_INT(t.column, 8);
+    ASSERT_EQ_INT(t.length, (int) scan.invalid_length);
 }
 
 /* ========== Identifier Tests ========== */
@@ -675,6 +715,8 @@ static void run_all_tests(void) {
     RUN_TEST_SUITE("String Literals");
     RUN_TEST(lexer_string_literals);
     RUN_TEST(lexer_string_escapes);
+    RUN_TEST(lexer_invalid_utf8_source_uses_shared_diagnostic_span);
+    RUN_TEST(lexer_invalid_utf8_source_reports_original_line_and_column);
 
     RUN_TEST_SUITE("Char Literals");
     RUN_TEST(lexer_rune_literals);
