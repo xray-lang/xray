@@ -1,0 +1,43 @@
+import parallel
+
+var plan = parallel.Plan<int>(parallel.Options(4), (lane) -> lane)
+shared touched = Atomic<int>(0)
+
+try {
+    var failed = plan.reduce(
+        0..20000,
+        "",
+        (state, i) -> {
+            touched.add(1, Ordering.Relaxed)
+            if (i == 10000) {
+                var zero = i - 10000
+                return string(10 / zero)
+            }
+            return "x"
+        },
+        (a, b) -> a + b
+    )
+    print(len(failed))
+    print("miss")
+} catch panic (p) {
+    print(p.code == 420)
+    print(p.message.contains("division by zero"))
+}
+
+print(touched.load(Ordering.Relaxed) > 0)
+
+var after = plan.reduce(
+    0..1000,
+    "",
+    (state, i) -> "a",
+    (a, b) -> a + b
+)
+
+print(len(after))
+
+shared reused = Atomic<int>(0)
+plan.forEach(0..4, (state, i) -> {
+    reused.add(1, Ordering.Relaxed)
+})
+
+print(reused.load(Ordering.Relaxed))
