@@ -6164,12 +6164,18 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 }
             }
 
+            bool collection_shared_provenance =
+                fi->collection && coll_type &&
+                xa_expr_yields_shared_provenance(ctx, fi->collection, coll_type);
+
             // Set item variable type
             if (fi->item_name) {
                 XaSymbol *item_sym = xa_scope_lookup(ctx->analyzer->current_scope, fi->item_name);
                 if (item_sym) {
                     if (fi->item_symbol_id == 0)
                         fi->item_symbol_id = item_sym->id;
+                    item_sym->is_shared_provenance = collection_shared_provenance &&
+                                                     xa_type_needs_borrow_escape_guard(item_type);
                     XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, item_sym);
                     if (item_links)
                         item_links->type = item_type;
@@ -6188,6 +6194,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 if (val_sym) {
                     if (fi->value_symbol_id == 0)
                         fi->value_symbol_id = val_sym->id;
+                    val_sym->is_shared_provenance = collection_shared_provenance &&
+                                                    xa_type_needs_borrow_escape_guard(value_type);
                     XaSymbolLinks *val_links = xa_analyzer_get_links(ctx->analyzer, val_sym);
                     if (val_links)
                         val_links->type = value_type;
