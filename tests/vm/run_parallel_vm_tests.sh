@@ -154,6 +154,12 @@ expect_output_workers \
     2
 
 expect_output_workers \
+    "parallel_plan_map_cleanup_after_panic" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_map_cleanup_after_panic.xr" \
+    $'true\ntrue\ntrue\ntrue\ntrue\ntrue' \
+    2
+
+expect_output_workers \
     "parallel_plan_close_during_dispatch" \
     "$PROJECT_DIR/tests/vm/parallel_plan_close_during_dispatch.xr" \
     $'true\nclosed\ndone' \

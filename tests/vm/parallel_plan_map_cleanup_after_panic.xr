@@ -1,0 +1,41 @@
+import parallel
+var plan = parallel.Plan<int>(parallel.Options(2), lane -> lane)
+try {
+    var mapped = plan.map(0..20000, (state, i) -> {
+        if (i == 10000) {
+            var zero = i - 10000
+            return 10 / zero
+        }
+        return state + i
+    })
+    print(len(mapped))
+    print("map-miss")
+} catch panic (p) {
+    print(p.code == 420)
+    print(p.message.contains("division by zero"))
+}
+shared afterMap = Atomic<int>(0)
+plan.forEach(0..4, (state, i) -> {
+    afterMap.add(1, Ordering.Relaxed)
+})
+print(afterMap.load(Ordering.Relaxed) == 4)
+var out: Array<int> = []
+try {
+    var returned = plan.mapInto(0..20000, out, (state, i) -> {
+        if (i == 10000) {
+            var zero = i - 10000
+            return 10 / zero
+        }
+        return state + i
+    })
+    print(len(returned))
+    print("mapinto-miss")
+} catch panic (p) {
+    print(p.code == 420)
+    print(p.message.contains("division by zero"))
+}
+shared afterMapInto = Atomic<int>(0)
+plan.forEach(0..4, (state, i) -> {
+    afterMapInto.add(1, Ordering.Relaxed)
+})
+print(afterMapInto.load(Ordering.Relaxed) == 4)
