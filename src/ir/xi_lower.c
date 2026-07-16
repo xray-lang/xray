@@ -68,7 +68,7 @@ XR_FUNC bool xi_lower_reject_error_type(XiLower *l, const struct XrType *type, c
 XR_FUNC struct XrType *xi_lower_type_or_any(XiLower *l, struct XrType *type, const char *context,
                                             int line) {
     if (xi_lower_reject_error_type(l, type, context, line))
-        return l ? l->type_any : NULL;
+        return type ? type : xr_type_new_error(l ? l->isolate : NULL);
     return type ? type : (l ? l->type_any : NULL);
 }
 
@@ -580,7 +580,8 @@ XR_FUNC void xi_lower_braun_seal(XiLower *l, XiBlock *blk) {
 /* ========== Type Helpers ========== */
 
 /* Get the XrType* for an AST node from the analyzer's side table.
- * Falls back to XR_KIND_UNKNOWN only as last resort. */
+ * Falls back to XR_KIND_UNKNOWN only for genuinely missing metadata; compiler
+ * recovery poison remains ErrorType and causes lowering to hard-fail. */
 XR_FUNC struct XrType *xi_lower_node_type(XiLower *l, AstNode *node) {
     struct XrType *t = xa_analyzer_get_node_type(l->analyzer, node);
     return xi_lower_type_or_any(l, t, "AST node type", node ? node->line : 0);
