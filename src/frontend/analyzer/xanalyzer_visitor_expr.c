@@ -220,6 +220,54 @@ static XrType *out_field_da_member_type_without_receiver_read(XaInferContext *ct
 static bool out_field_da_all_class_fields_assigned_in_analyzer(XaInferContext *ctx,
                                                                XaSymbolLinks *links,
                                                                const char *path_prefix,
+                                                               XrClassInfo *info, int depth);
+
+static XrClassInfo *out_field_da_class_info_for_type(XaInferContext *ctx, XrType *type) {
+    XrClassInfo *info = type && (XR_TYPE_IS_INSTANCE(type) || XR_TYPE_IS_CLASS(type))
+                            ? type->instance.class_ref
+                            : NULL;
+    if (!info && ctx && type && (XR_TYPE_IS_INSTANCE(type) || XR_TYPE_IS_CLASS(type)) &&
+        type->instance.class_name) {
+        XaSymbol *class_sym = xa_analyzer_lookup_deep(ctx->analyzer, type->instance.class_name);
+        XaSymbolLinks *class_links =
+            class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+        info = class_links ? class_links->class_info : NULL;
+    }
+    return info;
+}
+
+static bool out_field_da_path_assigned_in_analyzer(XaInferContext *ctx, XaSymbolLinks *links,
+                                                   const char *path, XrType *type, int depth) {
+    if (xa_symbol_links_out_field_assigned(links, path))
+        return true;
+    if (!ctx || !links || !path || path[0] == '\0' || !type || depth > 8)
+        return false;
+    if (type->kind == XR_KIND_FIXED_ARRAY) {
+        if (type->fixed_array.length <= 0 || !type->fixed_array.element_type)
+            return false;
+        for (int i = 0; i < type->fixed_array.length; i++) {
+            char child[256];
+            int n = snprintf(child, sizeof(child), "%s[%d]", path, i);
+            if (n <= 0 || (size_t) n >= sizeof(child) ||
+                !out_field_da_path_assigned_in_analyzer(ctx, links, child,
+                                                        type->fixed_array.element_type, depth + 1))
+                return false;
+        }
+        xa_symbol_links_mark_out_field_assigned(links, path);
+        return true;
+    }
+    XrClassInfo *info = out_field_da_class_info_for_type(ctx, type);
+    if (!info)
+        return false;
+    if (!out_field_da_all_class_fields_assigned_in_analyzer(ctx, links, path, info, depth + 1))
+        return false;
+    xa_symbol_links_mark_out_field_assigned(links, path);
+    return true;
+}
+
+static bool out_field_da_all_class_fields_assigned_in_analyzer(XaInferContext *ctx,
+                                                               XaSymbolLinks *links,
+                                                               const char *path_prefix,
                                                                XrClassInfo *info, int depth) {
     if (!ctx || !links || !path_prefix || path_prefix[0] == '\0' || !info || depth > 8)
         return false;
@@ -239,23 +287,8 @@ static bool out_field_da_all_class_fields_assigned_in_analyzer(XaInferContext *c
         XaSymbolLinks *field_links = xa_analyzer_get_links(ctx->analyzer, field);
         if (!field_type && field_links)
             field_type = field_links->type ? field_links->type : field_links->declared_type;
-        XrClassInfo *field_info =
-            field_type && (XR_TYPE_IS_INSTANCE(field_type) || XR_TYPE_IS_CLASS(field_type))
-                ? field_type->instance.class_ref
-                : NULL;
-        if (!field_info && field_type &&
-            (XR_TYPE_IS_INSTANCE(field_type) || XR_TYPE_IS_CLASS(field_type)) &&
-            field_type->instance.class_name) {
-            XaSymbol *class_sym =
-                xa_analyzer_lookup_deep(ctx->analyzer, field_type->instance.class_name);
-            XaSymbolLinks *class_links =
-                class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
-            field_info = class_links ? class_links->class_info : NULL;
-        }
-        if (!field_info || !out_field_da_all_class_fields_assigned_in_analyzer(
-                               ctx, links, child, field_info, depth + 1))
+        if (!out_field_da_path_assigned_in_analyzer(ctx, links, child, field_type, depth + 1))
             return false;
-        xa_symbol_links_mark_out_field_assigned(links, child);
     }
     return true;
 }

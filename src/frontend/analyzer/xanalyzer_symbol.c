@@ -335,8 +335,25 @@ static bool out_field_da_path_assigned_recursive(XaSymbolLinks *links, const cha
                                                  XrType *type, int depth) {
     if (xa_symbol_links_out_field_assigned(links, path))
         return true;
-    if (depth > 8 || !type || !type->is_value_type ||
-        (!XR_TYPE_IS_INSTANCE(type) && !XR_TYPE_IS_CLASS(type)) || !type->instance.class_ref)
+    if (depth > 8 || !type)
+        return false;
+    if (type->kind == XR_KIND_FIXED_ARRAY) {
+        if (type->fixed_array.length <= 0 || !type->fixed_array.element_type)
+            return false;
+        for (int i = 0; i < type->fixed_array.length; i++) {
+            char child[256];
+            int n = snprintf(child, sizeof(child), "%s[%d]", path, i);
+            if (n <= 0 || (size_t) n >= sizeof(child) ||
+                !out_field_da_path_assigned_recursive(links, child, type->fixed_array.element_type,
+                                                      depth + 1))
+                return false;
+        }
+        xa_symbol_links_mark_out_field_assigned(links, path);
+        return true;
+    }
+    if (!type->is_value_type)
+        return false;
+    if ((!XR_TYPE_IS_INSTANCE(type) && !XR_TYPE_IS_CLASS(type)) || !type->instance.class_ref)
         return false;
     XrClassInfo *info = type->instance.class_ref;
     if (!info || info->field_count <= 0 || !info->fields)
