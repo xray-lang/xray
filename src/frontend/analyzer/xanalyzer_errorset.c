@@ -186,6 +186,7 @@ typedef struct CatchAggregateAlias {
 } CatchAggregateAlias;
 
 typedef struct CatchCollectionViewAliases {
+    bool empty;
     bool element;
     bool key_element;
     bool entry_key;
@@ -2164,6 +2165,7 @@ static bool catch_collection_view_aliases_from_call(ErrorSetCtx *ctx, AstNode *e
     }
 
     if (strcmp(ma->name, "values") == 0) {
+        aliases->empty = current_catch_has_empty_aggregate_container(ctx, source_id, source_name);
         aliases->element =
             current_catch_has_element_aggregate_container(ctx, source_id, source_name);
         return true;
@@ -2652,6 +2654,20 @@ static void maybe_add_for_in_catch_alias(ErrorSetCtx *ctx, ForInStmtNode *fi) {
     if (added_entry_slot_alias)
         return;
     add_current_catch_alias(ctx, fi->item_symbol_id, fi->item_name);
+}
+
+static bool for_in_collection_is_known_empty_set(ErrorSetCtx *ctx, ForInStmtNode *fi) {
+    if (!ctx || !fi || !ctx->current_caught)
+        return false;
+    XrType *collection_type = xa_analyzer_get_node_type(ctx->analyzer, fi->collection);
+    if (collection_type && XR_TYPE_IS_SET(collection_type)) {
+        uint32_t collection_id = 0;
+        const char *collection_name = NULL;
+        return variable_ref_symbol(ctx, fi->collection, &collection_id, &collection_name) &&
+               current_catch_has_empty_aggregate_container(ctx, collection_id, collection_name);
+    }
+    CatchCollectionViewAliases aliases = {0};
+    return catch_collection_view_aliases_from_call(ctx, fi->collection, &aliases) && aliases.empty;
 }
 
 typedef enum CatchAggregateMemberAction {
@@ -4121,6 +4137,8 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
 
         case AST_FOR_IN_STMT:
             es_walk_expr(ctx, node->as.for_in_stmt.collection);
+            if (for_in_collection_is_known_empty_set(ctx, &node->as.for_in_stmt))
+                break;
             bool merge_for_in_catch_aliases =
                 ctx->current_caught && ctx->current_catch_alias_control_depth == 0;
             CatchAliasState for_in_catch_base_state;
