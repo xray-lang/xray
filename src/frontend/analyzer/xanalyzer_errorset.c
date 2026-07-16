@@ -2991,6 +2991,8 @@ static void record_catch_aggregate_index_set(ErrorSetCtx *ctx, IndexSetNode *set
     const char *container_name = NULL;
     if (!variable_ref_symbol(ctx, set->array, &container_id, &container_name))
         return;
+    XrType *container_type = xa_analyzer_get_node_type(ctx->analyzer, set->array);
+    bool is_map = container_type && XR_TYPE_IS_MAP(container_type);
     int64_t index = -1;
     uint32_t index_symbol_id = 0;
     const char *index_symbol_name = NULL;
@@ -2998,6 +3000,64 @@ static void record_catch_aggregate_index_set(ErrorSetCtx *ctx, IndexSetNode *set
     bool rhs_is_caught = is_current_caught_ref(ctx, set->value);
     bool has_precise_index = catch_aggregate_index_key(ctx, set->index, &index, &index_symbol_id,
                                                        &index_symbol_name, &index_string);
+    if (is_map) {
+        bool key_is_caught = is_current_caught_ref(ctx, set->index);
+        bool map_has_tracked_entries =
+            current_catch_has_aggregate_container(ctx, container_id, container_name);
+        bool map_is_known_empty =
+            current_catch_has_empty_aggregate_container(ctx, container_id, container_name);
+        bool key_set_starts_tracked_map = key_is_caught && map_is_known_empty;
+        bool value_set_starts_tracked_map = rhs_is_caught && map_is_known_empty;
+        bool index_may_alias_other_slots =
+            has_precise_index && (index_symbol_id != 0 || index_symbol_name != NULL);
+
+        if (!key_is_caught && !rhs_is_caught && !map_has_tracked_entries)
+            return;
+
+        remove_current_catch_aggregate_aliases_for_kind(ctx, container_id, container_name,
+                                                        CATCH_AGGREGATE_EMPTY);
+        remove_current_catch_aggregate_aliases_for_kind(ctx, container_id, container_name,
+                                                        CATCH_AGGREGATE_SINGLETON);
+        remove_current_catch_aggregate_aliases_for_kind(ctx, container_id, container_name,
+                                                        CATCH_AGGREGATE_KNOWN_COUNT);
+        remove_current_catch_aggregate_aliases_for_kind(ctx, container_id, container_name,
+                                                        CATCH_AGGREGATE_PRESENT_INDEX);
+        if (index_may_alias_other_slots) {
+            remove_current_catch_aggregate_aliases_for_kind(ctx, container_id, container_name,
+                                                            CATCH_AGGREGATE_INDEX);
+        } else if (has_precise_index) {
+            remove_current_catch_aggregate_alias_for_index(ctx, container_id, container_name, index,
+                                                           index_symbol_id, index_symbol_name,
+                                                           index_string);
+        } else {
+            remove_current_catch_aggregate_aliases_for_kind(ctx, container_id, container_name,
+                                                            CATCH_AGGREGATE_INDEX);
+        }
+
+        if (rhs_is_caught) {
+            if (has_precise_index)
+                add_current_catch_aggregate_alias(ctx, container_id, container_name,
+                                                  CATCH_AGGREGATE_INDEX, index, index_symbol_id,
+                                                  index_symbol_name, index_string, NULL);
+            if (value_set_starts_tracked_map)
+                add_current_catch_aggregate_alias(ctx, container_id, container_name,
+                                                  CATCH_AGGREGATE_ELEMENT, -1, 0, NULL, NULL, NULL);
+        } else {
+            remove_current_catch_aggregate_alias_for_element(ctx, container_id, container_name);
+        }
+
+        if (key_set_starts_tracked_map) {
+            add_current_catch_aggregate_alias(ctx, container_id, container_name,
+                                              CATCH_AGGREGATE_KEY_ELEMENT, -1, 0, NULL, NULL, NULL);
+        } else if (!key_is_caught) {
+            remove_current_catch_aggregate_aliases_for_kind(ctx, container_id, container_name,
+                                                            CATCH_AGGREGATE_KEY_ELEMENT);
+        }
+        if (value_set_starts_tracked_map || key_set_starts_tracked_map)
+            add_current_catch_aggregate_alias(ctx, container_id, container_name,
+                                              CATCH_AGGREGATE_SINGLETON, -1, 0, NULL, NULL, NULL);
+        return;
+    }
     if (!has_precise_index) {
         remove_current_catch_aggregate_aliases_for_container(ctx, container_id, container_name);
         return;
