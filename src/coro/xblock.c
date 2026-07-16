@@ -1157,14 +1157,6 @@ XrCoroBlockResult xr_coro_scope_enter(XrCoroutine *coro, uint8_t scope_mode) {
     atomic_init(&scope->child_lock, false);
     scope->first_error = xr_null();
     scope->first_error_is_value = false;
-    /* outcomes[] is a cross-coroutine collection point: child coroutines on other
-     * workers push into it under scope->child_lock. Allocate it on the shared
-     * heap so its growth/teardown carries no per-coroutine gc accounting (a
-     * per-coro array would underflow the owner's byte counter when a child grows
-     * it). */
-    scope->outcomes = (scope_mode == XR_SCOPE_SUPERVISOR && coro)
-                          ? xr_array_new_shared_core(coro->core, 4)
-                          : NULL;
     scope->first_child = NULL;
     scope->owner = coro;
     if (coro) {
@@ -1209,17 +1201,7 @@ XrCoroBlockResult xr_coro_scope_exit(XrCoroutine *coro, uint8_t scope_mode) {
         return block_result(XR_CORO_BLOCK_ERROR, err, err_is_value);
     }
 
-    XrValue supervisor_result = xr_null();
-    if (scope_mode == XR_SCOPE_SUPERVISOR) {
-        if (scope->outcomes) {
-            supervisor_result = xr_value_from_array(scope->outcomes);
-        } else {
-            XrArray *empty = xr_array_new(coro);
-            supervisor_result = empty ? xr_value_from_array(empty) : xr_null();
-        }
-    }
-
     atomic_store_explicit(&coro->current_scope, scope->parent, memory_order_release);
     xr_free(scope);
-    return block_result(XR_CORO_BLOCK_READY, supervisor_result, true);
+    return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
 }

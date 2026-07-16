@@ -93,7 +93,6 @@ PRELUDE_ENUMS = {
     "Recv": ["Value", "Empty", "Timeout", "Closed"],
     "SendResult": ["Sent", "Full", "Timeout", "Closed"],
     "TaskResult": ["Success", "Failed", "Cancelled", "Timeout", "Pending"],
-    "TaskOutcome": ["Success", "Failed", "Cancelled"],
     "TaskStatus": ["Pending", "Running", "Success", "Failed", "Cancelled"],
 }
 

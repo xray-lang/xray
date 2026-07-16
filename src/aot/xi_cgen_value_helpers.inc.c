@@ -391,11 +391,6 @@ static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
         {"Success", true},  {"Failed", true},   {"Cancelled", false},
         {"Timeout", false}, {"Pending", false},
     };
-    static const CgPreludeEnumMember task_outcome[] = {
-        {"Success", true},
-        {"Failed", true},
-        {"Cancelled", false},
-    };
     static const CgPreludeEnumMember task_status[] = {
         {"Pending", false}, {"Running", false},   {"Success", false},
         {"Failed", false},  {"Cancelled", false},
@@ -412,7 +407,6 @@ static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
         {XR_GLOBAL_VAR_RECV, "Recv", recv, 4},
         {XR_GLOBAL_VAR_SEND_RESULT, "SendResult", send_result, 4},
         {XR_GLOBAL_VAR_TASK_RESULT, "TaskResult", task_result, 5},
-        {XR_GLOBAL_VAR_TASK_OUTCOME, "TaskOutcome", task_outcome, 3},
         {XR_GLOBAL_VAR_TASK_STATUS, "TaskStatus", task_status, 5},
         {XR_GLOBAL_VAR_UTF8_ERROR, "Utf8Error", utf8_error, 1},
         {XR_GLOBAL_VAR_STRING_SLICE_ERROR, "StringSliceError", string_slice_error, 1},

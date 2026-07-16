@@ -159,7 +159,6 @@ static void aot_runtime_configure_core(XrAotRuntime *runtime, const XrAotRuntime
 }
 
 void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime) {
-    (void) xr_aot_runtime_builtin_lazy(runtime, XR_GLOBAL_VAR_TASK_OUTCOME);
     xr_scope_transfer_enable_core(xr_aot_runtime_core(runtime));
 }
 

@@ -821,13 +821,11 @@ static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
     char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
     char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
     char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout", "Pending"};
-    char *task_outcome_members[] = {"Success", "Failed", "Cancelled"};
     char *task_status_members[] = {"Pending", "Running", "Success", "Failed", "Cancelled"};
     char *utf8_error_members[] = {"InvalidUtf8"};
     char *string_slice_error_members[] = {"InvalidByteRange"};
     const int recv_payloads[] = {1, 0, 0, 0};
     const int task_result_payloads[] = {1, 1, 0, 0, 0};
-    const int task_outcome_payloads[] = {1, 1, 0};
 
     return aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_ORDERING, "Ordering",
                                              ordering_members, 5, NULL) &&
@@ -839,8 +837,6 @@ static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
                                              send_result_members, 4, NULL) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_RESULT, "TaskResult",
                                              task_result_members, 5, task_result_payloads) &&
-           aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_OUTCOME, "TaskOutcome",
-                                             task_outcome_members, 3, task_outcome_payloads) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_STATUS, "TaskStatus",
                                              task_status_members, 5, NULL) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_UTF8_ERROR, "Utf8Error",
@@ -869,9 +865,8 @@ static const char *aot_script_dir_bounds(const char *file, size_t *out_len) {
 static bool aot_builtin_index_is_prelude_enum(int32_t index) {
     return index == XR_GLOBAL_VAR_ORDERING || index == XR_GLOBAL_VAR_RECV ||
            index == XR_GLOBAL_VAR_ENDIAN || index == XR_GLOBAL_VAR_SEND_RESULT ||
-           index == XR_GLOBAL_VAR_TASK_RESULT || index == XR_GLOBAL_VAR_TASK_OUTCOME ||
-           index == XR_GLOBAL_VAR_TASK_STATUS || index == XR_GLOBAL_VAR_UTF8_ERROR ||
-           index == XR_GLOBAL_VAR_STRING_SLICE_ERROR;
+           index == XR_GLOBAL_VAR_TASK_RESULT || index == XR_GLOBAL_VAR_TASK_STATUS ||
+           index == XR_GLOBAL_VAR_UTF8_ERROR || index == XR_GLOBAL_VAR_STRING_SLICE_ERROR;
 }
 
 static XrValue aot_runtime_script_builtin_lazy(XrAotRuntime *runtime, int32_t index) {

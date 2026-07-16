@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xscope_transfer.c - Linked/supervisor scope result transfer implementation.
+ * xscope_transfer.c - Linked scope error transfer implementation.
  */
 
 #include "xscope_transfer.h"
@@ -13,11 +13,7 @@
 #include "xcoroutine.h"
 #include "xdeep_copy.h"
 #include "xtask.h"
-#include "../base/xglobal_indices.h"
-#include "../runtime/class/xenum.h"
 #include "../runtime/core/xr_runtime_core.h"
-#include "../runtime/object/xarray.h"
-#include "../runtime/xisolate_internal.h"
 
 static XrValue scope_child_error(const XrCoroutine *coro) {
     if (!coro)
@@ -28,72 +24,12 @@ static XrValue scope_child_error(const XrCoroutine *coro) {
     return err;
 }
 
-static XrValue scope_child_result(const XrCoroutine *coro) {
-    if (!coro)
-        return XR_NULL_VAL;
-    XrValue value = coro->result;
-    if (XR_IS_NULL(value) && coro->task)
-        value = coro->task->result;
-    return value;
-}
-
-static bool scope_child_cancelled(const XrCoroutine *coro) {
-    if (!coro)
-        return true;
-    if (xr_coro_flags_has((XrCoroutine *) coro, XR_CORO_FLG_CANCELLED))
-        return true;
-    if (!coro->task)
-        return false;
-    uint8_t state = atomic_load_explicit(&coro->task->state, memory_order_acquire);
-    return state == XR_TASK_CANCELLED || state == XR_TASK_CANCELLING;
-}
-
 static XrValue scope_copy_to_owner(XrCoroutine *coro, XrScopeContext *scope, XrValue value) {
     if (!coro || !scope || !scope->owner || XR_IS_NULL(value))
         return value;
     if (xr_value_needs_copy(value))
         return xr_deep_copy_to_coro_core(coro->core, value, scope->owner);
     return value;
-}
-
-static XrValue scope_copy_to_shared(XrCoroutine *coro, XrValue value) {
-    if (!coro || !coro->core || XR_IS_NULL(value))
-        return value;
-    if (xr_value_needs_copy(value))
-        return xr_deep_copy_core(coro->core, value, NULL);
-    return value;
-}
-
-static XrEnumType *scope_task_outcome_type(XrCoroutine *coro) {
-    if (!coro || !coro->core)
-        return NULL;
-
-    XrValue builtin = xr_runtime_core_builtin(coro->core, XR_GLOBAL_VAR_TASK_OUTCOME);
-    XrVMRuntime *iso = xr_runtime_core_vm_owner(coro->core);
-    if (XR_IS_NULL(builtin) && iso)
-        builtin = iso->vm.builtins[XR_GLOBAL_VAR_TASK_OUTCOME];
-    if (!XR_IS_PTR(builtin))
-        return NULL;
-    return XR_TO_ENUM_TYPE(builtin);
-}
-
-/* TaskOutcome is an ADT enum (Success/Failed carry payloads). Every variant,
- * including the non-payload Cancelled, must use the tagged-aggregate
- * representation so ordinal-based pattern matching works uniformly across VM
- * and AOT. */
-static XrValue scope_task_outcome_value(XrCoroutine *coro, XrCoroutine *owner,
-                                        uint32_t member_index, XrValue payload, bool has_payload) {
-    XrEnumType *enum_type = scope_task_outcome_type(coro);
-    if (!enum_type || member_index >= enum_type->member_count)
-        return has_payload ? payload : XR_NULL_VAL;
-
-    XrValue copied = has_payload ? scope_copy_to_shared(coro, payload) : XR_NULL_VAL;
-    XrValue args[1] = {copied};
-    XrEnumAggregateValue *value =
-        owner ? xr_enum_adt_construct_in(&owner->alloc_ctx, enum_type, member_index, args,
-                                         has_payload ? 1 : 0)
-              : NULL;
-    return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
 }
 
 static bool scope_transfer_record_child_completion_locked(XrCoroutine *coro,
@@ -108,19 +44,6 @@ static bool scope_transfer_record_child_completion_locked(XrCoroutine *coro,
         if (child_failed && XR_IS_NULL(scope->first_error)) {
             scope->first_error = scope_copy_to_owner(coro, scope, err);
             scope->first_error_is_value = coro->error_is_value;
-        }
-    } else if (scope->mode == XR_SCOPE_SUPERVISOR) {
-        if (scope->outcomes) {
-            XrValue outcome = XR_NULL_VAL;
-            if (child_failed) {
-                outcome = scope_task_outcome_value(coro, scope->owner, 1, err, true);
-            } else if (scope_child_cancelled(coro)) {
-                outcome = scope_task_outcome_value(coro, scope->owner, 2, XR_NULL_VAL, false);
-            } else {
-                outcome =
-                    scope_task_outcome_value(coro, scope->owner, 0, scope_child_result(coro), true);
-            }
-            xr_array_push(scope->outcomes, outcome);
         }
     }
 

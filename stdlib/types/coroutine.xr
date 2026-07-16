@@ -8,12 +8,6 @@ enum TaskResult<T> {
     Pending
 }
 
-enum TaskOutcome {
-    Success(PanicInfo)
-    Failed(PanicInfo)
-    Cancelled
-}
-
 enum TaskStatus {
     Pending
     Running
