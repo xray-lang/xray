@@ -6904,7 +6904,7 @@ static XgMapShapeId body_add_map_shape_for_literal(
     bool const_ids_heap = false;
     bool dense_enum_domain = false;
     bool all_entries_const = true;
-    bool all_keys_are_string_literals = true;
+    bool all_keys_have_static_prehash = true;
     if (out_receiver_type_key)
         *out_receiver_type_key = 0;
     if (out_key_type_key)
@@ -6945,8 +6945,8 @@ static XgMapShapeId body_add_map_shape_for_literal(
         const_ids[i] = body_const_expr_id(bc, keys ? keys[i] : NULL);
         if (const_ids[i] == 0 || (values && body_const_expr_id(bc, values[i]) == 0))
             all_entries_const = false;
-        if (!keys || !keys[i] || keys[i]->type != AST_LITERAL_STRING)
-            all_keys_are_string_literals = false;
+        if (body_map_const_prehash(keys ? keys[i] : NULL) == 0)
+            all_keys_have_static_prehash = false;
     }
     if (key_type_key == 0 || (container_kind == XG_MAP_CONTAINER_MAP && value_type_key == 0)) {
         if (const_ids_heap)
@@ -6961,7 +6961,7 @@ static XgMapShapeId body_add_map_shape_for_literal(
     shape.source_span_id = source_span_id;
     shape.container_kind = container_kind;
     if (readonly_static_candidate && count > 0 && all_entries_const &&
-        all_keys_are_string_literals) {
+        all_keys_have_static_prehash) {
         shape.source = XG_MAP_SHAPE_SRC_STATIC;
     } else {
         shape.source = XG_MAP_SHAPE_SRC_LITERAL;

@@ -16318,6 +16318,87 @@ TEST(global_evidence_producer_records_verified_readonly_static_map_set_tables) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_records_non_string_readonly_static_map_set_tables) {
+    setup_parser_session();
+    const char *source = "const NUMS: Map<int, int> = #{1: 7, 2: 9}\n"
+                         "const SEEN: Set<int> = #[1, 2]\n"
+                         "print(NUMS[1])\n"
+                         "print(NUMS.get(2))\n"
+                         "print(SEEN.contains(1))\n";
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(build_global_evidence_from_source(source, &ev));
+    ASSERT_EQ_UINT(ev.nmap_shapes, 2);
+    ASSERT_EQ_UINT(ev.nmap_entries, 4);
+    ASSERT_EQ_UINT(ev.nkey_accesses, 3);
+
+    uint32_t static_maps = 0;
+    uint32_t static_sets = 0;
+    for (uint32_t i = 0; i < ev.nmap_shapes; i++) {
+        const XgMapShapeSummary *shape = &ev.map_shapes[i];
+        ASSERT_EQ_UINT(shape->source, XG_MAP_SHAPE_SRC_STATIC);
+        ASSERT_EQ_UINT(shape->literal_count, 2);
+        ASSERT_EQ_UINT(shape->entry_count, 2);
+        ASSERT_TRUE((shape->flags & XG_MAP_SHAPE_LITERAL) != 0);
+        ASSERT_TRUE((shape->flags & XG_MAP_SHAPE_STATIC) != 0);
+        ASSERT_TRUE((shape->flags & XG_MAP_SHAPE_READONLY) != 0);
+        if (shape->container_kind == XG_MAP_CONTAINER_MAP)
+            static_maps++;
+        else if (shape->container_kind == XG_MAP_CONTAINER_SET)
+            static_sets++;
+        else
+            ASSERT_TRUE(false);
+
+        for (uint32_t ordinal = 0; ordinal < shape->entry_count; ordinal++) {
+            const XgMapEntrySummary *entry = &ev.map_entries[shape->entry_start - 1u + ordinal];
+            ASSERT_EQ_UINT(entry->shape_id, shape->shape_id);
+            ASSERT_EQ_UINT(entry->entry_ordinal, ordinal);
+            ASSERT_TRUE((entry->flags & XG_MAP_ENTRY_CONST_KEY) != 0);
+            ASSERT_TRUE((entry->flags & XG_MAP_ENTRY_INT_KEY) != 0);
+            ASSERT_TRUE(entry->key_i64 == 1 || entry->key_i64 == 2);
+            ASSERT_TRUE(entry->prehash != 0);
+            if (shape->container_kind == XG_MAP_CONTAINER_MAP)
+                ASSERT_TRUE((entry->flags & XG_MAP_ENTRY_CONST_VALUE) != 0);
+        }
+    }
+    ASSERT_EQ_UINT(static_maps, 1);
+    ASSERT_EQ_UINT(static_sets, 1);
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    for (uint32_t i = 0; i < ev.nmap_shapes; i++) {
+        const XaotMapShapePlan *shape_plan =
+            xaot_bundle_find_map_shape_plan(&bundle, ev.map_shapes[i].shape_id);
+        ASSERT_NOT_NULL(shape_plan);
+        ASSERT_EQ_UINT(shape_plan->action, XAOT_MAP_SHAPE_READONLY_STATIC_TABLE);
+    }
+    uint32_t index_gets = 0;
+    uint32_t map_gets = 0;
+    uint32_t set_has = 0;
+    for (uint32_t i = 0; i < ev.nkey_accesses; i++) {
+        const XgKeyAccessSummary *access = &ev.key_accesses[i];
+        const XaotKeyAccessPlan *access_plan =
+            xaot_bundle_find_key_access_plan(&bundle, access->access_id);
+        ASSERT_NOT_NULL(access_plan);
+        ASSERT_EQ_UINT(access_plan->action, XAOT_KEY_ACCESS_PREHASHED_LOOKUP);
+        ASSERT_TRUE((access_plan->evidence & XAOT_MAP_EV_CONST_KEY) != 0);
+        ASSERT_TRUE((access_plan->evidence & XAOT_MAP_EV_PREHASH) != 0);
+        if (access->container_kind == XG_MAP_CONTAINER_MAP && access->op == XG_KEY_ACCESS_INDEX_GET)
+            index_gets++;
+        else if (access->container_kind == XG_MAP_CONTAINER_MAP && access->op == XG_KEY_ACCESS_GET)
+            map_gets++;
+        else if (access->container_kind == XG_MAP_CONTAINER_SET && access->op == XG_KEY_ACCESS_HAS)
+            set_has++;
+    }
+    ASSERT_EQ_UINT(index_gets, 1);
+    ASSERT_EQ_UINT(map_gets, 1);
+    ASSERT_EQ_UINT(set_has, 1);
+
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_records_dense_int_map_set_lookup) {
     setup_parser_session();
     const char *source = "fn denseLookup() -> int {\n"
@@ -18017,6 +18098,7 @@ RUN_TEST(global_evidence_producer_propagates_record_shape_through_field_and_cont
 RUN_TEST(global_evidence_producer_records_record_shape_access);
 RUN_TEST(global_evidence_producer_records_map_literal_and_key_access);
 RUN_TEST(global_evidence_producer_records_verified_readonly_static_map_set_tables);
+RUN_TEST(global_evidence_producer_records_non_string_readonly_static_map_set_tables);
 RUN_TEST(global_evidence_producer_records_dense_int_map_set_lookup);
 RUN_TEST(global_evidence_producer_records_dense_enum_map_set_lookup);
 RUN_TEST(global_evidence_producer_records_bool_direct_map_shape);

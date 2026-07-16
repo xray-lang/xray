@@ -1675,6 +1675,16 @@ static bool cg_key_access_plan_is_prehashed_lookup(const XaotKeyAccessPlan *plan
     return plan && plan->action == XAOT_KEY_ACCESS_PREHASHED_LOOKUP && plan->key_prehash != 0;
 }
 
+static bool cg_key_access_receiver_is_readonly_static_table(XiCgenCtx *ctx,
+                                                            const XaotKeyAccessPlan *plan) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XaotMapShapePlan *shape_plan =
+        bundle && plan && plan->receiver_shape_id != XG_NO_ID
+            ? xaot_bundle_find_map_shape_plan(bundle, plan->receiver_shape_id)
+            : NULL;
+    return shape_plan && shape_plan->action == XAOT_MAP_SHAPE_READONLY_STATIC_TABLE;
+}
+
 static bool cg_key_access_plan_is_bool_direct_lookup(const XaotKeyAccessPlan *plan) {
     return plan && plan->action == XAOT_KEY_ACCESS_BOOL_DIRECT_LOOKUP;
 }
@@ -2348,6 +2358,9 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return true;
         if (!hash_helper)
             return false;
+        if (cg_key_access_plan_is_prehashed_lookup(key_plan) &&
+            cg_key_access_receiver_is_readonly_static_table(ctx, key_plan))
+            return false;
         const char *find_helper = cg_map_find_helper(&map_info);
         const char *value_helper = cg_map_value_helper(&map_info);
         if (cg_rep(v) == map_info.value.rep) {
@@ -2397,6 +2410,9 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return true;
         if (!hash_helper)
             return false;
+        if (cg_key_access_plan_is_prehashed_lookup(key_plan) &&
+            cg_key_access_receiver_is_readonly_static_table(ctx, key_plan))
+            return false;
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         if (cg_map_fusable_get_for_has(ctx, v)) {
             fprintf(out, "((_mf%u = %s(", v->id, cg_map_find_helper(&map_info));
@@ -2427,6 +2443,9 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return true;
         if (!hash_helper)
             return false;
+        if (cg_key_access_plan_is_prehashed_lookup(key_plan) &&
+            cg_key_access_receiver_is_readonly_static_table(ctx, key_plan))
+            return false;
         const char *helper = cg_map_direct_delete_helper(&map_info);
         if (!helper)
             return false;
@@ -2447,6 +2466,9 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
         if (!hash_helper)
+            return false;
+        if (cg_key_access_plan_is_prehashed_lookup(key_plan) &&
+            cg_key_access_receiver_is_readonly_static_table(ctx, key_plan))
             return false;
         const char *helper = cg_map_direct_set_helper(&map_info);
         if (!helper)
@@ -2993,6 +3015,9 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return true;
         if (!hash_helper)
             return false;
+        if (cg_key_access_plan_is_prehashed_lookup(key_plan) &&
+            cg_key_access_receiver_is_readonly_static_table(ctx, key_plan))
+            return false;
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         if (set_info.rep == XR_REP_I64) {
             fprintf(out, "(%s(",
@@ -3024,6 +3049,9 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
             return true;
         if (!hash_helper)
             return false;
+        if (cg_key_access_plan_is_prehashed_lookup(key_plan) &&
+            cg_key_access_receiver_is_readonly_static_table(ctx, key_plan))
+            return false;
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         if (set_info.rep == XR_REP_I64) {
             fprintf(out, "(int64_t)%s(",
@@ -3054,6 +3082,9 @@ static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         if (emit_key_access_abort_expr_if_needed(ctx, out))
             return true;
         if (!hash_helper)
+            return false;
+        if (cg_key_access_plan_is_prehashed_lookup(key_plan) &&
+            cg_key_access_receiver_is_readonly_static_table(ctx, key_plan))
             return false;
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         if (set_info.rep == XR_REP_I64) {
