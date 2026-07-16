@@ -3102,6 +3102,13 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         "    throw box[\"caught\"]\n"
         "  }\n"
         "}\n"
+        "fn mapLenPreserves() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{\"caught\": e}\n"
+        "    len(box)\n"
+        "    throw box[\"caught\"]\n"
+        "  }\n"
+        "}\n"
         "fn mapSetCaughtKeyPreserves() {\n"
         "  try { failMap() } catch (e: MapErr) {\n"
         "    var box: Map<string, MapErr> = #{}\n"
@@ -3367,6 +3374,7 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         analyzer_function_effect_summary(a, "mapContainsKeyPreserves");
     const XaEffectSummary *readonly_views =
         analyzer_function_effect_summary(a, "mapReadOnlyViewsPreserve");
+    const XaEffectSummary *len_preserve = analyzer_function_effect_summary(a, "mapLenPreserves");
     const XaEffectSummary *set_caught =
         analyzer_function_effect_summary(a, "mapSetCaughtKeyPreserves");
     const XaEffectSummary *set_other =
@@ -3507,6 +3515,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         effect_summary_enum_set_named(a, contains_key, "MapErr");
     const XaErrorTypeSet *readonly_views_set =
         effect_summary_enum_set_named(a, readonly_views, "MapErr");
+    const XaErrorTypeSet *len_preserve_set =
+        effect_summary_enum_set_named(a, len_preserve, "MapErr");
     const XaErrorTypeSet *set_caught_set = effect_summary_enum_set_named(a, set_caught, "MapErr");
     const XaErrorTypeSet *set_other_set = effect_summary_enum_set_named(a, set_other, "MapErr");
     const XaErrorTypeSet *set_invalidated_set =
@@ -3581,6 +3591,7 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(mismatch_set != NULL);
     ASSERT(contains_key_set != NULL);
     ASSERT(readonly_views_set != NULL);
+    ASSERT(len_preserve_set != NULL);
     ASSERT(set_caught_set != NULL);
     ASSERT(set_other_set != NULL);
     ASSERT(set_invalidated_set != NULL);
@@ -3643,6 +3654,9 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!readonly_views_set->all_variants);
     ASSERT(xa_bitset_test(&readonly_views_set->variants, 0));
     ASSERT(!xa_bitset_test(&readonly_views_set->variants, 1));
+    ASSERT(!len_preserve_set->all_variants);
+    ASSERT(xa_bitset_test(&len_preserve_set->variants, 0));
+    ASSERT(!xa_bitset_test(&len_preserve_set->variants, 1));
     ASSERT(!set_caught_set->all_variants);
     ASSERT(xa_bitset_test(&set_caught_set->variants, 0));
     ASSERT(!xa_bitset_test(&set_caught_set->variants, 1));
@@ -3730,6 +3744,37 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     setup_pool();
 }
 
+TEST(analyzer_error_effect_len_shadow_does_not_preserve_map_provenance) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum MapErr { Boom, Other }\n"
+                         "fn failMap() { throw MapErr.Boom }\n"
+                         "fn len(box: Map<string, MapErr>) -> int {\n"
+                         "  box.clear()\n"
+                         "  return 0\n"
+                         "}\n"
+                         "fn mapUserLenInvalidates() {\n"
+                         "  try { failMap() } catch (e: MapErr) {\n"
+                         "    var box = #{\"caught\": e}\n"
+                         "    len(box)\n"
+                         "    throw box[\"caught\"]\n"
+                         "  }\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_map_len_shadow_invalidates.xr", program);
+
+    const XaEffectSummary *summary = analyzer_function_effect_summary(a, "mapUserLenInvalidates");
+    ASSERT(summary != NULL);
+    const XaErrorTypeSet *set = effect_summary_enum_set_named(a, summary, "MapErr");
+    ASSERT(set != NULL);
+    ASSERT(set->all_variants);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -3798,6 +3843,13 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
                          "    for (item in box) { throw item }\n"
                          "  }\n"
                          "}\n"
+                         "fn setLenIteratorPreserves() {\n"
+                         "  try { failSet() } catch (e: SetErr) {\n"
+                         "    var box: Set<SetErr> = #[e]\n"
+                         "    len(box)\n"
+                         "    for (item in box) { throw item }\n"
+                         "  }\n"
+                         "}\n"
                          "fn setValuesViewIteratorRethrows() {\n"
                          "  try { failSet() } catch (e: SetErr) {\n"
                          "    const box: Set<SetErr> = #[e]\n"
@@ -3849,6 +3901,8 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
         analyzer_function_effect_summary(a, "setContainsIteratorPreserves");
     const XaEffectSummary *values =
         analyzer_function_effect_summary(a, "setValuesIteratorPreserves");
+    const XaEffectSummary *len_preserve =
+        analyzer_function_effect_summary(a, "setLenIteratorPreserves");
     const XaEffectSummary *values_view =
         analyzer_function_effect_summary(a, "setValuesViewIteratorRethrows");
     const XaEffectSummary *bound_values_view =
@@ -3885,6 +3939,8 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
         effect_summary_enum_set_named(a, add_caught_mixed, "SetErr");
     const XaErrorTypeSet *contains_set = effect_summary_enum_set_named(a, contains, "SetErr");
     const XaErrorTypeSet *values_set = effect_summary_enum_set_named(a, values, "SetErr");
+    const XaErrorTypeSet *len_preserve_set =
+        effect_summary_enum_set_named(a, len_preserve, "SetErr");
     const XaErrorTypeSet *values_view_set = effect_summary_enum_set_named(a, values_view, "SetErr");
     const XaErrorTypeSet *bound_values_view_set =
         effect_summary_enum_set_named(a, bound_values_view, "SetErr");
@@ -3902,6 +3958,7 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(add_caught_mixed_set != NULL);
     ASSERT(contains_set != NULL);
     ASSERT(values_set != NULL);
+    ASSERT(len_preserve_set != NULL);
     ASSERT(values_view_set != NULL);
     ASSERT(bound_values_view_set != NULL);
     ASSERT(delete_preserves_set != NULL);
@@ -3928,6 +3985,9 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(!values_set->all_variants);
     ASSERT(xa_bitset_test(&values_set->variants, 0));
     ASSERT(!xa_bitset_test(&values_set->variants, 1));
+    ASSERT(!len_preserve_set->all_variants);
+    ASSERT(xa_bitset_test(&len_preserve_set->variants, 0));
+    ASSERT(!xa_bitset_test(&len_preserve_set->variants, 1));
     ASSERT(!values_view_set->all_variants);
     ASSERT(xa_bitset_test(&values_view_set->variants, 0));
     ASSERT(!xa_bitset_test(&values_view_set->variants, 1));
@@ -4741,6 +4801,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_subtracts_typed_catches);
     RUN_TEST(analyzer_error_effect_marks_invalid_program_partial_facts);
     RUN_TEST(analyzer_error_effect_tracks_map_catch_aliases);
+    RUN_TEST(analyzer_error_effect_len_shadow_does_not_preserve_map_provenance);
     RUN_TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases);
     RUN_TEST(analyzer_error_effect_converges_recursive_components);
 

@@ -2167,6 +2167,23 @@ static void invalidate_catch_aggregate_container_ref(ErrorSetCtx *ctx, AstNode *
         remove_current_catch_aggregate_aliases_for_container(ctx, symbol_id, name);
 }
 
+static bool call_arg_preserves_catch_aggregate_ref(ErrorSetCtx *ctx, const CallExprNode *call,
+                                                   int arg_index) {
+    if (!ctx || !call || arg_index != 0 || call->arg_count != 1 || !call->callee ||
+        !call->arguments || !call->arguments[0])
+        return false;
+    AstNode *callee = identity_source(call->callee);
+    if (!callee || callee->type != AST_VARIABLE || !callee->as.variable.name ||
+        strcmp(callee->as.variable.name, "len") != 0)
+        return false;
+    XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, callee);
+    if (!sym || sym->kind != XA_SYM_FUNCTION || !sym->is_builtin || !sym->name ||
+        strcmp(sym->name, "len") != 0)
+        return false;
+    XrType *arg_type = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[0]);
+    return arg_type && (XR_TYPE_IS_MAP(arg_type) || XR_TYPE_IS_SET(arg_type));
+}
+
 static bool catch_alias_declared_in_block(ErrorSetCtx *ctx, uint32_t symbol_id, AstNode *block) {
     if (!ctx || !block || block->type != AST_BLOCK || symbol_id == 0)
         return true;
@@ -3001,7 +3018,8 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
             /* Walk arguments first */
             for (int i = 0; i < node->as.call_expr.arg_count; i++) {
                 es_walk_expr(ctx, node->as.call_expr.arguments[i]);
-                invalidate_catch_aggregate_container_ref(ctx, node->as.call_expr.arguments[i]);
+                if (!call_arg_preserves_catch_aggregate_ref(ctx, &node->as.call_expr, i))
+                    invalidate_catch_aggregate_container_ref(ctx, node->as.call_expr.arguments[i]);
             }
             es_walk_expr(ctx, node->as.call_expr.callee);
             AstNode *callee_source = identity_source(node->as.call_expr.callee);
