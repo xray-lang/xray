@@ -105,8 +105,11 @@ EXTERN_GATE_REQUIRED_FILES = {
     Path("tests/diff/task190_extern_cases.txt"),
     Path("tests/diff/cases/semantics/ffi/extern_no_arg_void_and_unused.xr"),
     Path("tests/diff/cases/semantics/ffi/extern_pointer_float_prototypes.xr"),
+    Path("tests/diff/cases/semantics/ffi/extern_scalar_descriptor_matrix.xr"),
     Path("tests/diff/cases/semantics/ffi/extern_used_dylib_unused_symbol_isolation.xr"),
     Path("tests/aot/filetests/link/ffi_no_arg_prototype.xr"),
+    Path("tests/aot/filetests/link/ffi_scalar_descriptor_matrix.expect"),
+    Path("tests/aot/filetests/link/ffi_scalar_descriptor_matrix.xr"),
     Path("tests/aot/filetests/link/ffi_unused_dylib_pruned.xr"),
     Path("tests/aot/filetests/link/ffi_used_dylib_unused_symbol_isolation.xr"),
 }
@@ -114,6 +117,7 @@ EXTERN_GATE_REQUIRED_FILES = {
 EXTERN_GATE_REQUIRED_MANIFEST_ENTRIES = {
     "tests/diff/cases/semantics/ffi/extern_no_arg_void_and_unused.xr",
     "tests/diff/cases/semantics/ffi/extern_pointer_float_prototypes.xr",
+    "tests/diff/cases/semantics/ffi/extern_scalar_descriptor_matrix.xr",
     "tests/diff/cases/semantics/ffi/extern_used_dylib_unused_symbol_isolation.xr",
 }
 

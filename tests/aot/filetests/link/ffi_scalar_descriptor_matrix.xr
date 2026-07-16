@@ -1,0 +1,49 @@
+extern "C" dylib("xrayffi_scalar_matrix") {
+    fn xrayffi_bool_flip(x: bool) -> bool
+    fn xrayffi_i8_add(x: int8, y: int8) -> int8
+    fn xrayffi_u8_add(x: uint8, y: uint8) -> uint8
+    fn xrayffi_i16_add(x: int16, y: int16) -> int16
+    fn xrayffi_u16_add(x: uint16, y: uint16) -> uint16
+    fn xrayffi_i32_add(x: int32, y: int32) -> int32
+    fn xrayffi_u32_add(x: uint32, y: uint32) -> uint32
+    fn xrayffi_i64_add(x: int64, y: int64) -> int64
+    fn xrayffi_u64_add(x: uint64, y: uint64) -> uint64
+    fn xrayffi_size_roundtrip(x: uintsize) -> uintsize
+    fn xrayffi_ssize_roundtrip(x: intsize) -> intsize
+    fn xrayffi_f32_add(x: float32, y: float32) -> float32
+    fn xrayffi_f64_add(x: float64, y: float64) -> float64
+    fn xrayffi_ptr_identity(p: Ptr<byte>) -> Ptr<byte>
+    fn xrayffi_void_sink(x: int32) -> ()
+}
+
+var i8a: int8 = -2
+var i8b: int8 = 5
+var u8a: uint8 = 2
+var u8b: uint8 = 5
+var i16a: int16 = -20
+var i16b: int16 = 7
+var u16a: uint16 = 20
+var u16b: uint16 = 7
+var u32a: uint32 = 20
+var u32b: uint32 = 7
+var u64a: uint64 = 20
+var u64b: uint64 = 7
+var usizeValue: uintsize = 9
+var ssizeValue: intsize = -9
+const bytes = b"X"
+
+unsafe { xrayffi_void_sink(1) }
+print(unsafe { xrayffi_bool_flip(false) })
+print(unsafe { xrayffi_i8_add(i8a, i8b) })
+print(unsafe { xrayffi_u8_add(u8a, u8b) })
+print(unsafe { xrayffi_i16_add(i16a, i16b) })
+print(unsafe { xrayffi_u16_add(u16a, u16b) })
+print(unsafe { xrayffi_i32_add(-20, 7) })
+print(unsafe { xrayffi_u32_add(u32a, u32b) })
+print(unsafe { xrayffi_i64_add(-20, 7) })
+print(unsafe { xrayffi_u64_add(u64a, u64b) })
+print(unsafe { xrayffi_size_roundtrip(usizeValue) })
+print(unsafe { xrayffi_ssize_roundtrip(ssizeValue) })
+print(unsafe { xrayffi_f32_add(1.0, 2.0) })
+print(unsafe { xrayffi_f64_add(1.0, 2.0) })
+print(unsafe { xrayffi_ptr_identity(bytes.ptr()).isNull() })
