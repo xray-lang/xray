@@ -34,6 +34,41 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
                 self.assertEqual("NATIVE_TYPED_ERROR_ABI_BLOCKER", result.category)
                 self.assertIn("typed native error ABI remains blocked", result.detail)
 
+    def test_compress_gunzip_typed_error_abi_is_a_single_function_blocker(self) -> None:
+        spec = readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES["compress.gunzip"]
+        module = load_boundary_modules(ROOT)["compress"]
+
+        self.assertIn("gunzip", module["public_native"])
+        self.assertIsNot(module.get("def_migration_complete"), True)
+        for path_text, anchors in spec["required"].items():
+            with self.subTest(path=path_text):
+                text = (ROOT / path_text).read_text(encoding="utf-8")
+                for anchor in anchors:
+                    self.assertIn(anchor, text)
+
+        blocks = readiness.def_function_blocks(ROOT, spec["module"], spec["function"])
+        self.assertTrue(blocks)
+        for block in blocks:
+            self.assertNotIn("@errors(", block)
+            self.assertNotIn("CompressionError", block)
+
+        self.assertIn("null-sentinel VM/AOT native path", spec["detail"])
+        self.assertIn("CompressionError enum payloads", spec["detail"])
+        self.assertFalse(
+            (ROOT / "tests" / "stdlib" / "contracts" / "TASK_198_TYPED_NATIVE_ERRORS_READY").exists(),
+            "task-198 full readiness marker must remain absent for this probe",
+        )
+
+    def test_compress_gunzip_probe_fails_closed_on_partial_public_switch(self) -> None:
+        modules = {
+            name: dict(module)
+            for name, module in load_boundary_modules(ROOT).items()
+        }
+        modules["compress"] = dict(modules["compress"])
+        modules["compress"]["public_native"] = ["crc32"]
+
+        self.assertNotIn("gunzip", modules["compress"]["public_native"])
+
     def test_public_switch_markers_remain_absent(self) -> None:
         results = check_dependency_markers(ROOT)
         blockers = {
