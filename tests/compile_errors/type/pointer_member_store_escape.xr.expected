@@ -1,0 +1,1 @@
+cannot store raw pointer borrow into a member; raw pointer is tied to owner 'buffer' and has only call-bound lifetime
