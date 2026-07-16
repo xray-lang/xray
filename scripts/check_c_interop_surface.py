@@ -146,6 +146,25 @@ LAYOUT_GATE_REQUIRED_MANIFEST_ENTRIES = {
     "tests/diff/cases/semantics/stdlib/mem_layout_introspection.xr",
 }
 
+MEM_GATE_REQUIRED_FILES = {
+    Path("tests/diff/task190_mem_cases.txt"),
+    Path("tests/diff/cases/semantics/stdlib/mem_load_store_scalar_shared_core.xr"),
+    Path("tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr"),
+    Path("tests/diff/cases/semantics/stdlib/fixed_array_ptr_shared_core.xr"),
+    Path("tests/diff/cases/semantics/stdlib/mem_from_address_shared_core.xr"),
+    Path("tests/diff/cases/semantics/stdlib/buffer_asbytes_write_rejected_shared_core.xr"),
+    Path("tests/aot/filetests/cgen/mem_load_store_rawptr_shape.xr"),
+    Path("tests/aot/filetests/cgen/mem_load_store_rawptr_shape.expect"),
+}
+
+MEM_GATE_REQUIRED_MANIFEST_ENTRIES = {
+    "tests/diff/cases/semantics/stdlib/mem_load_store_scalar_shared_core.xr",
+    "tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr",
+    "tests/diff/cases/semantics/stdlib/fixed_array_ptr_shared_core.xr",
+    "tests/diff/cases/semantics/stdlib/mem_from_address_shared_core.xr",
+    "tests/diff/cases/semantics/stdlib/buffer_asbytes_write_rejected_shared_core.xr",
+}
+
 EXTERN_OUT_REF_WRAPPER_REQUIRED_SNIPPETS = {
     Path("src/frontend/analyzer/xanalyzer_visitor_decl.c"): (
         "xa_validate_extern_function_abi",
@@ -310,6 +329,16 @@ def check_layout_gate(root: Path) -> list[str]:
     )
 
 
+def check_mem_gate(root: Path) -> list[str]:
+    """Validate the task-190 Ptr/MutPtr and mem.load/store focused fixture set."""
+    return check_manifest_gate(
+        root,
+        MEM_GATE_REQUIRED_FILES,
+        Path("tests/diff/task190_mem_cases.txt"),
+        MEM_GATE_REQUIRED_MANIFEST_ENTRIES,
+    )
+
+
 def check_file_snippets(root: Path, required_snippets: dict[Path, tuple[str, ...]]) -> list[str]:
     missing: list[str] = []
     for rel_path, snippets in sorted(required_snippets.items()):
@@ -370,6 +399,7 @@ def main() -> int:
                     },
                     "extern_gate_missing": check_extern_gate(root),
                     "layout_gate_missing": check_layout_gate(root),
+                    "mem_gate_missing": check_mem_gate(root),
                     "extern_out_ref_wrapper_gate_missing": check_extern_out_ref_wrapper_gate(root),
                 },
                 indent=2,
@@ -385,6 +415,10 @@ def main() -> int:
         missing_layout_gate = check_layout_gate(root)
         print(f"TASK190_LAYOUT_FLEX_GATE: {'FAIL' if missing_layout_gate else 'PASS'}")
         for missing in missing_layout_gate:
+            print(f"  missing {missing}")
+        missing_mem_gate = check_mem_gate(root)
+        print(f"TASK190_MEM_LOAD_STORE_GATE: {'FAIL' if missing_mem_gate else 'PASS'}")
+        for missing in missing_mem_gate:
             print(f"  missing {missing}")
         missing_extern_out_ref_wrapper_gate = check_extern_out_ref_wrapper_gate(root)
         print(
@@ -402,6 +436,7 @@ def main() -> int:
         }
         missing_extern_gate = check_extern_gate(root)
         missing_layout_gate = check_layout_gate(root)
+        missing_mem_gate = check_mem_gate(root)
         missing_extern_out_ref_wrapper_gate = check_extern_out_ref_wrapper_gate(root)
         if blocking:
             print("task-190 removed C interop surface gate failed:", file=sys.stderr)
@@ -416,6 +451,11 @@ def main() -> int:
         if missing_layout_gate:
             print("task-190 layout/flexible-tail focused gate failed:", file=sys.stderr)
             for missing in missing_layout_gate:
+                print(f"  missing {missing}", file=sys.stderr)
+            return 1
+        if missing_mem_gate:
+            print("task-190 Ptr/MutPtr mem.load/store focused gate failed:", file=sys.stderr)
+            for missing in missing_mem_gate:
                 print(f"  missing {missing}", file=sys.stderr)
             return 1
         if missing_extern_out_ref_wrapper_gate:
