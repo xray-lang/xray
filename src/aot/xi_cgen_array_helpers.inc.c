@@ -4154,7 +4154,8 @@ static bool emit_typed_array_index_get_expr_as_rep(XiCgenCtx *ctx, FILE *out, co
 
 static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                             const XiValue *v, const char *prefix) {
-    return emit_typed_array_index_get_expr_as_rep(ctx, out, f, v, prefix, cg_rep(v));
+    return emit_typed_array_index_get_expr_as_rep(ctx, out, f, v, prefix,
+                                                  cg_value_decl_storage_rep(ctx, f, v));
 }
 
 static void emit_span_ref_expr(FILE *out, const XiValue *value) {
