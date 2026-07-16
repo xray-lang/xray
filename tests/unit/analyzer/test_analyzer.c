@@ -4254,6 +4254,13 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
                          "    for (item in box) { throw item }\n"
                          "  }\n"
                          "}\n"
+                         "fn setDeleteMatchingEnumMemberFallsBack() {\n"
+                         "  try { failSet() } catch (e: SetErr) {\n"
+                         "    var box: Set<SetErr> = #[e]\n"
+                         "    box.delete(SetErr.Boom)\n"
+                         "    for (item in box) { throw item }\n"
+                         "  }\n"
+                         "}\n"
                          "fn setDeleteOtherValuesViewPreserves() {\n"
                          "  try { failSet() } catch (e: SetErr) {\n"
                          "    var box: Set<SetErr> = #[e]\n"
@@ -4323,6 +4330,8 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
         analyzer_function_effect_summary(a, "setBoundValuesViewIteratorRethrows");
     const XaEffectSummary *delete_preserves =
         analyzer_function_effect_summary(a, "setDeleteIteratorPreserves");
+    const XaEffectSummary *delete_matching_enum =
+        analyzer_function_effect_summary(a, "setDeleteMatchingEnumMemberFallsBack");
     const XaEffectSummary *delete_values_preserves =
         analyzer_function_effect_summary(a, "setDeleteOtherValuesViewPreserves");
     const XaEffectSummary *delete_caught =
@@ -4347,6 +4356,7 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(values_view != NULL);
     ASSERT(bound_values_view != NULL);
     ASSERT(delete_preserves != NULL);
+    ASSERT(delete_matching_enum != NULL);
     ASSERT(delete_values_preserves != NULL);
     ASSERT(delete_caught_then_add != NULL);
     ASSERT(clear_invalidates != NULL);
@@ -4371,6 +4381,8 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
         effect_summary_enum_set_named(a, bound_values_view, "SetErr");
     const XaErrorTypeSet *delete_preserves_set =
         effect_summary_enum_set_named(a, delete_preserves, "SetErr");
+    const XaErrorTypeSet *delete_matching_enum_set =
+        effect_summary_enum_set_named(a, delete_matching_enum, "SetErr");
     const XaErrorTypeSet *delete_values_preserves_set =
         effect_summary_enum_set_named(a, delete_values_preserves, "SetErr");
     const XaErrorTypeSet *delete_caught_set =
@@ -4395,6 +4407,7 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(values_view_set != NULL);
     ASSERT(bound_values_view_set != NULL);
     ASSERT(delete_preserves_set != NULL);
+    ASSERT(delete_matching_enum_set != NULL);
     ASSERT(delete_values_preserves_set != NULL);
     ASSERT(delete_caught_set != NULL);
     ASSERT(delete_caught_then_add_set != NULL);
@@ -4434,6 +4447,7 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
     ASSERT(!delete_preserves_set->all_variants);
     ASSERT(xa_bitset_test(&delete_preserves_set->variants, 0));
     ASSERT(!xa_bitset_test(&delete_preserves_set->variants, 1));
+    ASSERT(delete_matching_enum_set->all_variants);
     ASSERT(!delete_values_preserves_set->all_variants);
     ASSERT(xa_bitset_test(&delete_values_preserves_set->variants, 0));
     ASSERT(!xa_bitset_test(&delete_values_preserves_set->variants, 1));

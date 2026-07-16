@@ -2712,6 +2712,9 @@ static CatchAggregateMemberUpdate catch_aggregate_member_update(ErrorSetCtx *ctx
             return update;
         bool set_is_known_empty = current_catch_has_empty_aggregate_container(ctx, id, name);
         bool set_has_caught_elements = current_catch_has_element_aggregate_container(ctx, id, name);
+        bool set_delete_may_remove_caught =
+            call->arg_count == 1 && strcmp(ma->name, "delete") == 0 && set_has_caught_elements &&
+            current_caught_may_match_enum_member(ctx, call->arguments[0]);
         if (call->arg_count == 0 && strcmp(ma->name, "clear") == 0) {
             update.action = CATCH_AGGREGATE_MEMBER_SET_CLEAR;
             return update;
@@ -2725,7 +2728,7 @@ static CatchAggregateMemberUpdate catch_aggregate_member_update(ErrorSetCtx *ctx
         if ((call->arg_count == 1 && strcmp(ma->name, "contains") == 0) ||
             (call->arg_count == 0 && strcmp(ma->name, "values") == 0) ||
             (call->arg_count == 1 && strcmp(ma->name, "delete") == 0 &&
-             (set_has_caught_elements || set_is_known_empty))) {
+             (set_is_known_empty || (set_has_caught_elements && !set_delete_may_remove_caught)))) {
             update.action = CATCH_AGGREGATE_MEMBER_PRESERVE;
             return update;
         }
