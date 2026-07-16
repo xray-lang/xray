@@ -164,6 +164,72 @@ PARTIAL_DEPENDENCY_EVIDENCE = {
         "detail": "borrow/provenance verifier evidence exists, but full Slice public-switch provenance is not marked ready",
     },
 }
+NATIVE_TYPED_ERROR_ABI_BLOCKERS = {
+    "compress": {
+        "required": {
+            "tests/stdlib/contracts/compress/contract.toml": (
+                "decompression failures must become typed CompressionError values",
+                "legacy decompression failure is reported through nullable output",
+                "future converged decompression APIs throw CompressionError",
+            ),
+            "stdlib/defs/core.def": (
+                'signature: "(data: string, level?: int): string?"',
+                'signature: "(data: string): string?"',
+                "xrt_compress_gunzip",
+                "xrt_compress_zlib_decompress",
+            ),
+        },
+        "detail": "compress typed native error ABI remains blocked by nullable/string compression signatures",
+    },
+    "crypto": {
+        "required": {
+            "tests/stdlib/contracts/crypto/contract.toml": (
+                "randomBytes returns Array<byte> and reports native failures through a typed error",
+                "legacy randomBytes returns hex text rather than owned random bytes",
+            ),
+            "stdlib/defs/core.def": (
+                'signature: "(n: int): string"',
+                "crypto_random_bytes",
+                "xrt_crypto_random_bytes",
+            ),
+        },
+        "detail": "crypto typed native error ABI remains blocked by string randomBytes output",
+    },
+    "io": {
+        "required": {
+            "tests/stdlib/contracts/io/contract.toml": (
+                "readFileBytes and writeFileBytes preserve arbitrary byte values",
+                "future converged binary I/O must not add string fallbacks",
+            ),
+            "stdlib/defs/core.def": (
+                'signature: "(path: Path): Array<byte>?"',
+                'signature: "(path: Path, data: Array<byte>): bool"',
+                "io_readFileBytes",
+                "io_writeFileBytes",
+            ),
+        },
+        "detail": "io typed native error ABI remains blocked by nullable/bool file sentinels",
+    },
+    "net": {
+        "required": {
+            "stdlib/defs/core.def": (
+                'signature: "(host: string, port: int, timeout?: int): NetConn?"',
+                'signature: "(conn: NetConn, maxlen?: int): string?"',
+                'signature: "(handle: NetConn, data: string, host: string, port: int): int"',
+                'signature: "(handle: NetConn, maxlen?: int): UdpPacket?"',
+            ),
+            "stdlib/net/xneterror.h": (
+                "} XrNetError;",
+                "XR_NERR_",
+            ),
+            "tests/regression/10_stdlib/1433_net_loopback.xr": (
+                "test_loopback_binary_high_bytes",
+                "test_native_copy_loopback",
+            ),
+        },
+        "detail": "net typed native error ABI remains blocked by nullable/string/status sentinels",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -215,6 +281,18 @@ def missing_anchors(root: Path, path_text: str, anchors: tuple[str, ...]) -> lis
     if text is None:
         return [f"missing file {path_text}"]
     return [anchor for anchor in anchors if anchor not in text]
+
+
+def def_module_block(root: Path, module: str) -> str | None:
+    text = read_text(root, "stdlib/defs/core.def")
+    if text is None:
+        return None
+    marker = f"module {module} {{"
+    start = text.find(marker)
+    if start < 0:
+        return None
+    next_module = text.find("\nmodule ", start + len(marker))
+    return text[start:] if next_module < 0 else text[start:next_module]
 
 
 def check_boundary(root: Path) -> list[CheckResult]:
@@ -489,6 +567,48 @@ def check_partial_dependency_evidence(root: Path) -> list[CheckResult]:
     return results
 
 
+def check_native_typed_error_abi_blockers(root: Path) -> list[CheckResult]:
+    modules = load_boundary_modules(root)
+    results: list[CheckResult] = []
+    for name, spec in NATIVE_TYPED_ERROR_ABI_BLOCKERS.items():
+        failures: list[str] = []
+        module = modules.get(name)
+        if module is None:
+            failures.append("missing stdlib boundary entry")
+        else:
+            public_native = module.get("public_native")
+            if module.get("policy") != PRE_SWITCH_NATIVE_MODULES.get(name):
+                failures.append(
+                    f"policy={module.get('policy')!r}, expected {PRE_SWITCH_NATIVE_MODULES.get(name)}"
+                )
+            if not isinstance(public_native, list) or not public_native:
+                failures.append("public_native surface changed before typed native error ABI closure")
+            if module.get("def_migration_complete") is True:
+                failures.append("def_migration_complete set before typed native error ABI closure")
+
+        required = spec["required"]
+        assert isinstance(required, dict)
+        for path_text, anchors in required.items():
+            missing = missing_anchors(root, str(path_text), anchors)
+            failures.extend(f"{path_text}: missing {anchor}" for anchor in missing)
+
+        block = def_module_block(root, name)
+        if block is None:
+            failures.append(f"stdlib/defs/core.def: missing module {name}")
+        elif "@errors(" in block:
+            failures.append(f"stdlib/defs/core.def: module {name} has @errors before readiness marker")
+
+        results.append(
+            CheckResult(
+                "NATIVE_TYPED_ERROR_ABI_BLOCKER",
+                name,
+                not failures,
+                str(spec["detail"]) if not failures else "; ".join(failures),
+            )
+        )
+    return results
+
+
 def check_harness_anchors(root: Path) -> list[CheckResult]:
     anchors = {
         "tests/diff/fuzz_binary_stdlib.py": (
@@ -546,6 +666,7 @@ def build_results(root: Path) -> list[CheckResult]:
     results.extend(check_harness_anchors(root))
     results.extend(check_dependency_markers(root))
     results.extend(check_partial_dependency_evidence(root))
+    results.extend(check_native_typed_error_abi_blockers(root))
     return results
 
 
