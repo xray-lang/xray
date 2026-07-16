@@ -215,6 +215,11 @@ PARTIAL_DEPENDENCY_EVIDENCE = {
     },
     "TASK_198_STRING_RUNTIME_ONLY": {
         "required": {
+            "tests/stdlib/contracts/TASK_198_STRING_NATIVE_ERROR_ABI_READY": (
+                "scope: task-198 string native error ABI only",
+                "string.fromUtf8(Slice<byte>) -> string throws Utf8Error.InvalidUtf8",
+                "public-native switch remains blocked",
+            ),
             "tests/unit/api/test_string_native_error_abi.py": (
                 "Focused task-198 VM/native-AOT typed string error ABI gate.",
                 "def test_vm_native_aot_typed_catch_parity",
@@ -248,7 +253,7 @@ PARTIAL_DEPENDENCY_EVIDENCE = {
             ),
         },
         "full_marker": "TASK_198_TYPED_NATIVE_ERRORS_READY",
-        "detail": "string VM/AOT typed-error runtime probe exists, but compress/crypto native typed-error ABI is not marked ready",
+        "detail": "string VM/AOT typed-error runtime probe exists and scoped marker is present, but compress/crypto/io/net native typed-error ABI is not marked ready",
     },
     "TASK_197_VERIFIER_ONLY": {
         "required": {
