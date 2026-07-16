@@ -1,0 +1,29 @@
+struct SuperProjectionPair {
+    left: int
+    right: int
+}
+
+class SuperProjectionBase {
+    fill(value: out int, next: int) {
+        value = next
+    }
+}
+
+class SuperProjectionChild extends SuperProjectionBase {
+    initialize(pair: out SuperProjectionPair) -> int {
+        super.fill(out pair.left, 23)
+        pair.right = 29
+
+        var whole = pair
+        return whole.left + whole.right
+    }
+}
+
+@test
+fn test_super_out_param_projection_field_da() {
+    var child = SuperProjectionChild()
+    var pair = SuperProjectionPair{left: 0, right: 0}
+
+    var total = child.initialize(out pair)
+    assert_eq(total, 52)
+}

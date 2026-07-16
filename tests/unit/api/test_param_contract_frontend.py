@@ -82,6 +82,7 @@ POSITIVE_CASES = (
     "tests/regression/13_types/1443_out_param_sibling_field_bitset_branch_whole_read.xr",
     "tests/regression/13_types/1444_out_param_nested_parent_field_bitset_read.xr",
     "tests/regression/13_types/1445_out_param_nested_branch_field_bitset_whole_read.xr",
+    "tests/regression/13_types/1447_super_out_param_projection_field_da.xr",
 )
 
 
