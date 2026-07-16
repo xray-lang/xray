@@ -40,21 +40,18 @@ class SourceUnknownInventoryTest(unittest.TestCase):
         self.assertNotIn(f"task_outcome_success_payload[] = {{{unknown_ctor}", analyzer_source)
         self.assertNotIn(f"task_outcome_failed_payload[] = {{{unknown_ctor}", analyzer_source)
 
-    def test_typed_task_result_is_not_stdlib_dynamic_unknown_api(self) -> None:
+    def test_typed_task_result_is_not_erased_result_residue(self) -> None:
         task_result = "Task" "Result"
         for line in (
             f"enum {task_result}<T> {{",
             f"    poll() -> {task_result}<T>",
+            f"    {task_result}.Success(value) -> value",
+            f"    {task_result}.Pending -> false",
             f'XrEnumType *task_result_et = make_prelude_enum(X, "{task_result}", members, 5,',
         ):
-            self.assertNotIn(
-                "STDLIB_DYNAMIC_UNKNOWN_API",
-                classify_line("stdlib/types/coroutine.xr", line),
-            )
-            self.assertIn(
-                "TASK_ERASED_RESULT_RESIDUE",
-                classify_line("stdlib/types/coroutine.xr", line),
-            )
+            categories = classify_line("stdlib/types/coroutine.xr", line)
+            self.assertNotIn("TASK_ERASED_RESULT_RESIDUE", categories)
+            self.assertNotIn("STDLIB_DYNAMIC_UNKNOWN_API", categories)
 
     def test_task_outcome_payload_surface_is_not_json_unknown_api(self) -> None:
         task_outcome = "Task" "Outcome"
@@ -70,7 +67,16 @@ class SourceUnknownInventoryTest(unittest.TestCase):
     def test_legacy_failed_unknown_still_counts_as_stdlib_dynamic_unknown_api(self) -> None:
         failed_unknown = "Failed(" "unknown)"
         categories = classify_line("stdlib/types/coroutine.xr", f"    {failed_unknown}")
+        self.assertIn("TASK_ERASED_RESULT_RESIDUE", categories)
         self.assertIn("STDLIB_DYNAMIC_UNKNOWN_API", categories)
+
+    def test_task_result_unknown_payload_doc_still_counts_as_erasure_residue(self) -> None:
+        task_result = "Task" "Result"
+        categories = classify_line(
+            "LANGUAGE_SPEC.md",
+            f"{task_result}.Failed(error) preserves the original failure value as unknown.",
+        )
+        self.assertIn("TASK_ERASED_RESULT_RESIDUE", categories)
 
 
 if __name__ == "__main__":

@@ -85,7 +85,7 @@ FORMATTER_LSP_RE = re.compile(
     r"xfmt_write_str\([^,\n]*,\s*\"unknown\""
 )
 TASK_ERASURE_RE = re.compile(
-    r"\b(?:TaskOutcome|TaskResult|Task<[^>\n]*,\s*[^>\n]*>|Failed\(unknown\))\b"
+    r"\b(?:TaskOutcome|Failed\(unknown\)|TaskResult[^\n]*\bunknown\b)"
 )
 STDLIB_UNKNOWN_API_RE = re.compile(
     r"(?:\bfixed-shape Json/unknown\b|\bFailed\(unknown\)|\bunknown APIs\b|"
