@@ -302,6 +302,8 @@ XR_FUNC bool xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assign
     XaSymbolLinks *links, const char *root_name, XrClassInfo *info);
 XR_FUNC bool xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_type(
     XaSymbolLinks *links, const char *root_name, XrType *type);
+XR_FUNC bool xa_symbol_links_mark_out_field_assigned_if_all_direct_fields_assigned_for_class(
+    XaSymbolLinks *links, const char *path_prefix, XrClassInfo *info);
 XR_FUNC XaOutFieldDaPath *xa_symbol_links_clone_out_field_da_paths(XaSymbolLinks *links);
 XR_FUNC void xa_symbol_links_restore_out_field_da_paths(XaSymbolLinks *links,
                                                         XaOutFieldDaPath *paths);
