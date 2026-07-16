@@ -127,7 +127,7 @@ PRE_SWITCH_NATIVE_PUBLIC_SURFACE = {
     ),
 }
 PURE_BYTE_MODULES = ("base64", "encoding")
-REQUIRED_CONTRACT_MODULES = ("base64", "encoding", "compress", "crypto", "io", "http", "ws")
+REQUIRED_CONTRACT_MODULES = ("base64", "encoding", "compress", "crypto", "io", "net", "http", "ws")
 REQUIRED_SURFACE_CATEGORIES = (
     "PUBLIC_BINARY_STRING_SIGNATURE",
     "PUBLIC_ARBITRARY_STRING_CREATOR",
@@ -175,6 +175,10 @@ REQUIRED_ORACLE_CASES = {
         "filesystem-text-and-bytes": "tests/diff/cases/semantics/stdlib/io_system_direct.xr",
         "all-byte-file-boundary": "tests/diff/cases/semantics/stdlib/io_binary_file_boundary_direct.xr",
     },
+    "net": {
+        "high-byte-loopback": "tests/regression/10_stdlib/1433_net_loopback.xr",
+        "native-copy-byte-boundary": "tests/regression/10_stdlib/1433_net_loopback.xr",
+    },
     "http": {
         "request-body-framing": "tests/diff/cases/semantics/stdlib/http_request_message_pure_direct.xr",
         "response-body-framing": "tests/diff/cases/semantics/stdlib/http_response_text_pure_direct.xr",
@@ -186,8 +190,8 @@ REQUIRED_ORACLE_CASES = {
 REQUIRED_TEXT_ANCHORS = {
     "tests/regression/10_stdlib/1433_net_loopback.xr": (
         "test_loopback_binary_high_bytes",
-        "assert_eq(resp.bytes()[0]!.toUInt32(), 195)",
-        "assert_eq(resp.bytes()[4]!.toUInt32(), 172)",
+        "assert_eq(resp.bytes()[0]!, 195)",
+        "assert_eq(resp.bytes()[4]!, 172)",
         "test_native_copy_loopback",
     ),
     "tests/regression/10_stdlib/1181_binary_codec_properties.xr": (

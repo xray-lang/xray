@@ -325,6 +325,33 @@ BASELINES = (
         ),
     ),
     Baseline(
+        category="NET_BINARY_CONTRACT_CORPUS",
+        path="tests/stdlib/contracts/net/contract.toml",
+        contains=(
+            'module = "net"',
+            'id = "loopback-string-status-sentinels"',
+            'id = "high-byte-loopback"',
+            'id = "native-copy-byte-boundary"',
+            'diff_cases_manifest = "tests/stdlib/contracts/net/diff_cases.txt"',
+            "future converged net.read returns Array<byte>",
+            "future converged net.write and sendTo accept Slice<byte>",
+        ),
+    ),
+    Baseline(
+        category="NET_BINARY_DIFF_CORPUS",
+        path="tests/stdlib/contracts/net/diff_cases.txt",
+        contains=("tests/regression/10_stdlib/1433_net_loopback.xr",),
+    ),
+    Baseline(
+        category="NET_BINARY_CASE_ORACLE",
+        path="tests/stdlib/contracts/net/cases.jsonl",
+        contains=(
+            '"case":"high-byte-loopback"',
+            '"case":"native-copy-byte-boundary"',
+            '"probe":"tests/regression/10_stdlib/1433_net_loopback.xr"',
+        ),
+    ),
+    Baseline(
         category="WS_BINARY_CONTRACT_CORPUS",
         path="tests/stdlib/contracts/ws/contract.toml",
         contains=(

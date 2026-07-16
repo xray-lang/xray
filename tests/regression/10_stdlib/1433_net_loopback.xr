@@ -85,11 +85,11 @@ fn test_loopback_binary_high_bytes() {
 
     var resp = net.read(c)!
     assert_eq(len(resp.bytes()), 5)
-    assert_eq(resp.bytes()[0]!.toUInt32(), 195)
-    assert_eq(resp.bytes()[1]!.toUInt32(), 169)
-    assert_eq(resp.bytes()[2]!.toUInt32(), 226)
-    assert_eq(resp.bytes()[3]!.toUInt32(), 130)
-    assert_eq(resp.bytes()[4]!.toUInt32(), 172)
+    assert_eq(resp.bytes()[0]!, 195)
+    assert_eq(resp.bytes()[1]!, 169)
+    assert_eq(resp.bytes()[2]!, 226)
+    assert_eq(resp.bytes()[3]!, 130)
+    assert_eq(resp.bytes()[4]!, 172)
 
     net.close(c)
     net.close(lst)
