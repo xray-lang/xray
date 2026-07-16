@@ -35,6 +35,17 @@
 // Forward declarations now in xanalyzer_visitor_internal.h
 void xa_visit_collect(XaInferContext *ctx, AstNode *node);
 
+static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
+                                          XaSymbolLinks **out_links);
+static bool member_set_out_field_path_append(char *dst, size_t dst_size, const char *suffix);
+static XaSymbol *member_set_out_field_path_symbol(XaInferContext *ctx, AstNode *expr, char *path,
+                                                  size_t path_size);
+static XrType *member_set_out_field_type_from_object(XaInferContext *ctx, XrType *obj_type,
+                                                     const char *member_name);
+static XrType *member_set_out_field_object_type_without_receiver_read(XaInferContext *ctx,
+                                                                      AstNode *object,
+                                                                      const char *target_path);
+
 static const char *object_shape_type_label_local(XrType *type) {
     if (XR_TYPE_HAS_OBJECT_SHAPE(type) && type->object.type_name)
         return type->object.type_name;
@@ -1302,10 +1313,41 @@ static XrType *xa_super_out_direct_variable_type_without_read(XaInferContext *ct
     return type;
 }
 
+static XrType *xa_super_out_member_access_type_without_root_read(XaInferContext *ctx,
+                                                                 AstNode *arg_node) {
+    AstNode *place = unwrap_grouping(arg_node);
+    if (!ctx || !ctx->analyzer || !place || place->type != AST_MEMBER_ACCESS)
+        return NULL;
+
+    char path[256];
+    XaSymbol *root = member_set_out_field_path_symbol(ctx, place, path, sizeof(path));
+    if (!root || path[0] == '\0' || root->kind != XA_SYM_PARAMETER ||
+        root->passing_mode != XR_PARAM_OUT)
+        return NULL;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, root);
+    if (!links || links->is_definitely_assigned)
+        return NULL;
+
+    XrType *obj_type = member_set_out_field_object_type_without_receiver_read(
+        ctx, place->as.member_access.object, path);
+    if (!obj_type)
+        return NULL;
+
+    XrType *type =
+        member_set_out_field_type_from_object(ctx, obj_type, place->as.member_access.name);
+    if (type)
+        xa_analyzer_set_node_type(ctx->analyzer, place, type);
+    return type;
+}
+
 static XrType *xa_visit_super_arg_for_param_mode(XaInferContext *ctx, AstNode *arg_node,
                                                  XrCallArgAccess access, XrParamMode param_mode) {
     if (access == XR_CALL_ARG_OUT && param_mode == XR_PARAM_OUT) {
         XrType *type = xa_super_out_direct_variable_type_without_read(ctx, arg_node);
+        if (type)
+            return type;
+        type = xa_super_out_member_access_type_without_root_read(ctx, arg_node);
         if (type)
             return type;
     }
@@ -1317,7 +1359,46 @@ static void xa_mark_super_out_call_arg_assigned(XaInferContext *ctx, AstNode *ar
     if (access != XR_CALL_ARG_OUT || param_mode != XR_PARAM_OUT)
         return;
     AstNode *place = unwrap_grouping(arg_node);
-    if (!ctx || !ctx->analyzer || !place || place->type != AST_VARIABLE)
+    if (!ctx || !ctx->analyzer || !place)
+        return;
+    if (place->type == AST_MEMBER_ACCESS) {
+        char path[256];
+        XaSymbol *root = member_set_out_field_path_symbol(ctx, place, path, sizeof(path));
+        if (!root || path[0] == '\0' || root->kind != XA_SYM_PARAMETER ||
+            root->passing_mode != XR_PARAM_OUT)
+            return;
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, root);
+        if (!links || links->is_definitely_assigned)
+            return;
+
+        xa_symbol_links_mark_out_field_assigned(links, path);
+        if (place->as.member_access.object &&
+            place->as.member_access.object->type == AST_MEMBER_ACCESS) {
+            char object_path[256];
+            XaSymbol *object_root = member_set_out_field_path_symbol(
+                ctx, place->as.member_access.object, object_path, sizeof(object_path));
+            XrType *object_type =
+                xa_analyzer_get_node_type(ctx->analyzer, place->as.member_access.object);
+            if (!object_type && object_root == root && object_path[0] != '\0') {
+                object_type = member_set_out_field_object_type_without_receiver_read(
+                    ctx, place->as.member_access.object, path);
+            }
+            if (object_root == root && object_path[0] != '\0' && object_type) {
+                XaSymbolLinks *class_links = NULL;
+                XrClassInfo *object_info = member_set_class_info(ctx, object_type, &class_links);
+                (void) class_links;
+                xa_symbol_links_mark_out_field_assigned_if_all_direct_fields_assigned_for_class(
+                    links, object_path, object_info);
+            }
+        }
+        XrType *root_type = xa_analyzer_get_type(ctx->analyzer, root);
+        if (!root_type)
+            root_type = links->type ? links->type : links->declared_type;
+        xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_type(
+            links, root->name, root_type);
+        return;
+    }
+    if (place->type != AST_VARIABLE)
         return;
     XaSymbol *sym = xa_super_call_variable_symbol(ctx, place);
     if (!sym)
