@@ -22,7 +22,9 @@
 #include <string.h>
 
 #include "../base/xmalloc.h"
+#include "../os/os_thread.h"
 #include "../coro/xdeep_copy.h"
+#include "../coro/xcountdown_latch.h"
 #include "../coro/xparallel_executor.h"
 #include "../coro/xworker.h"
 #include "../coro/xyieldable.h"
@@ -64,8 +66,8 @@ typedef struct XrVmParLane {
 struct XrVmParBatch {
     XrRuntimeCore *core;
     XrRuntime *runtime;
-    XrParallelJoin join;
-    XrClosure *closure; /* Borrowed body closure; parent waits until join completion. */
+    XrCountdownLatch *latch;
+    XrClosure *closure; /* Borrowed body closure; parent blocks until latch completion. */
     XrClosure *combine; /* Borrowed reducer closure for per-lane partials. */
     XrArray *output;    /* Borrowed typed result/partial array; parent waits before use. */
     XrArray *states;    /* Borrowed Plan lane-state array; parent waits before reuse. */
@@ -155,6 +157,15 @@ static bool vm_par_value_fits_elem_type(XrValue value, XrArrayElemType elem_type
     }
 }
 
+static void vm_par_latch_release(XrVmParBatch *batch) {
+    if (!batch || !batch->latch)
+        return;
+    XrObjHeader *hdr = &batch->latch->hdr;
+    if (xr_shared_decref(hdr) == 0)
+        xr_shared_destroy_core(batch->core, hdr);
+    batch->latch = NULL;
+}
+
 static void vm_par_batch_free(XrVmParBatch *batch) {
     if (!batch)
         return;
@@ -162,7 +173,7 @@ static void vm_par_batch_free(XrVmParBatch *batch) {
         xr_chan_transit_release_core(batch->core, batch->first_error);
         batch->first_error = xr_null();
     }
-    xr_parallel_join_destroy(&batch->join);
+    vm_par_latch_release(batch);
     xr_free(batch->coros);
     xr_free(batch->lanes);
     xr_free(batch);
@@ -214,9 +225,9 @@ static void vm_par_batch_cancel_unspawned(XrVmParBatch *batch) {
 }
 
 static void vm_par_lane_done(XrVmParLane *lane) {
-    if (!lane || !lane->batch)
+    if (!lane || !lane->batch || !lane->batch->latch)
         return;
-    xr_parallel_join_lane_done(&lane->batch->join);
+    (void) xr_countdown_latch_done(lane->batch->latch, 1);
 }
 
 static bool vm_par_lane_store_partial(XrVmParLane *lane) {
@@ -411,8 +422,8 @@ static XrVmParBatch *vm_par_batch_new(XrVMRuntime *isolate, XrRuntime *runtime, 
 
     batch->lanes = (XrVmParLane *) xr_calloc((size_t) lane_count, sizeof(XrVmParLane));
     batch->coros = (XrCoroutine **) xr_calloc((size_t) lane_count, sizeof(XrCoroutine *));
-    xr_parallel_join_init(&batch->join, lane_count);
-    if (!batch->lanes || !batch->coros) {
+    batch->latch = xr_countdown_latch_new(core, runtime, lane_count);
+    if (!batch->lanes || !batch->coros || !batch->latch) {
         vm_par_batch_free(batch);
         return NULL;
     }
@@ -454,9 +465,30 @@ static XrDispatchAction vm_par_wait_for_batch(XrVMRuntime *isolate, XrVMContext 
                                               XrValue *handled_slot, XrValue *batch_slot,
                                               XrValue *materialized_output_slot,
                                               XrVmParBatch *batch, bool resume) {
-    (void) resume;
     XrCoroutine *current = vm_get_coro(vm_ctx);
-    xr_parallel_join_wait(&batch->join, batch->runtime);
+    bool ok = false;
+    XrCountdownLatchWaitStatus wait;
+    if (current) {
+        wait = resume ? xr_countdown_latch_wait_resume_for_coro(current, &ok)
+                      : xr_countdown_latch_wait_for_coro(batch->latch, current, &ok);
+    } else {
+        /* Direct entry roots have no coroutine to park. The batch still owns
+         * real scheduler lanes, so let workers run and synchronously join from
+         * the taskless root instead of silently degrading to one VM lane. */
+        while (!xr_countdown_latch_try_wait(batch->latch))
+            xr_thread_yield();
+        ok = true;
+        wait = XR_COUNTDOWN_LATCH_WAIT_DONE;
+    }
+    if (wait == XR_COUNTDOWN_LATCH_WAIT_BLOCKED) {
+        vm_suspend_replay_current(frame, pc);
+        return XR_DISP_BLOCKED;
+    }
+    if (wait != XR_COUNTDOWN_LATCH_WAIT_DONE || !ok) {
+        vm_par_batch_free(batch);
+        *batch_slot = xr_null();
+        VM_THROW(frame, pc, XR_ERR_RUNTIME, "parallel batch wait failed");
+    }
     bool failed = atomic_load_explicit(&batch->failed, memory_order_acquire);
     bool failed_with_value_error = failed && batch->first_error_is_value;
     XrValue lane_error = xr_null();
