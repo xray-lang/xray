@@ -2112,13 +2112,21 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
 
     char ok_path[256];
     char legacy_path[256];
+    char span_only_path[256];
+    char view_only_path[256];
     snprintf(ok_path, sizeof(ok_path), "%s/native_byte_effects.xrd", tmpdir);
     snprintf(legacy_path, sizeof(legacy_path), "%s/native_legacy_byte_effects.xrd", tmpdir);
+    snprintf(span_only_path, sizeof(span_only_path), "%s/native_legacy_bytespan_only.xrd", tmpdir);
+    snprintf(view_only_path, sizeof(view_only_path), "%s/native_legacy_byteview_only.xrd", tmpdir);
     ASSERT(write_text_file(ok_path, "export fn decode(input: Slice<byte>): Array<byte> "
                                     "@errors(NativeByteErr.BadInput)\n"));
     ASSERT(write_text_file(legacy_path, "export fn decodeOld(input: ByteSpan): Bytes "
                                         "@errors(NativeByteErr.BadInput)\n"
                                         "export fn viewOld(input: ByteView): int @nothrow\n"));
+    ASSERT(write_text_file(span_only_path, "export fn spanOnly(input: Byte"
+                                           "Span): int @nothrow\n"));
+    ASSERT(write_text_file(view_only_path, "export fn viewOnly(input: Byte"
+                                           "View): int @nothrow\n"));
 
     const char *old_typepath = getenv("XRAY_TYPEPATH");
     char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
@@ -2159,6 +2167,28 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     ASSERT(analyzer_diag_contains(legacy, "undefined type 'ByteView'"));
     xa_analyzer_free(legacy);
 
+    XaAnalyzer *span_only = xa_analyzer_new(g_session);
+    ASSERT(span_only != NULL);
+    const char *span_only_source = "import { spanOnly } from \"native_legacy_bytespan_only\"\n"
+                                   "fn viaSpan(input: Slice<byte>) { spanOnly(input) }\n";
+    AstNode *span_only_program = xr_parse(g_session, span_only_source);
+    ASSERT(span_only_program != NULL);
+    xa_analyzer_analyze(span_only, "effect_xrd_legacy_bytespan_only.xr", span_only_program);
+    ASSERT(analyzer_diag_contains(span_only, "invalid XRD descriptor"));
+    ASSERT(analyzer_diag_contains(span_only, "removed byte alias 'ByteSpan'"));
+    xa_analyzer_free(span_only);
+
+    XaAnalyzer *view_only = xa_analyzer_new(g_session);
+    ASSERT(view_only != NULL);
+    const char *view_only_source = "import { viewOnly } from \"native_legacy_byteview_only\"\n"
+                                   "fn viaViewOnly(input: Slice<byte>) { viewOnly(input) }\n";
+    AstNode *view_only_program = xr_parse(g_session, view_only_source);
+    ASSERT(view_only_program != NULL);
+    xa_analyzer_analyze(view_only, "effect_xrd_legacy_byteview_only.xr", view_only_program);
+    ASSERT(analyzer_diag_contains(view_only, "invalid XRD descriptor"));
+    ASSERT(analyzer_diag_contains(view_only, "removed byte alias 'ByteView'"));
+    xa_analyzer_free(view_only);
+
     xa_xrd_cleanup();
     if (old_typepath_copy) {
         ASSERT(setenv("XRAY_TYPEPATH", old_typepath_copy, 1) == 0);
@@ -2168,6 +2198,8 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     }
     unlink(ok_path);
     unlink(legacy_path);
+    unlink(span_only_path);
+    unlink(view_only_path);
     rmdir(tmpdir);
     setup_pool();
 }
