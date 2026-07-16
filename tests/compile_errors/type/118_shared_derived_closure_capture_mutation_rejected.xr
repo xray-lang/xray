@@ -1,0 +1,12 @@
+class Box {
+    items: Array<int> = Array<int>(2, 5)
+}
+
+fn main() {
+    shared box = Box()
+    var items = box.items
+    const overwrite = fn() {
+        items[0] = 9
+    }
+    overwrite()
+}
