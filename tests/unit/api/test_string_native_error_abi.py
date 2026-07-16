@@ -138,23 +138,20 @@ class StringNativeErrorAbiTest(unittest.TestCase):
         )
         self.assertIn("xrt_pending_error = xrt_enum_aggregate_box(err);", aot_runtime)
 
-    def test_uncaught_invalid_utf8_fails_instead_of_returning_null(self) -> None:
-        valid_source = "var valid: Array<uint8> = [111, 107]\nprint(string.fromUtf8(valid[:]))"
-        self.assertEqual(self.run_checked([str(self.xray), "-e", valid_source]).stdout, b"ok\n")
-
+    def assert_uncaught_pending_error(
+        self, source_text: str, native_stem: str, forbidden_fragments: list[bytes]
+    ) -> None:
         output_dir = ROOT / "build" / ".xray-test-tmp"
         output_dir.mkdir(parents=True, exist_ok=True)
-        source = output_dir / f"string_uncaught_invalid_utf8_{os.getpid()}.xr"
-        native = output_dir / f"string_uncaught_invalid_utf8_{os.getpid()}"
-        cache = ROOT / "build" / ".xray-test-cache" / "task-198-uncaught-invalid"
-        source.write_text(
-            "var invalid: Array<uint8> = [255]\nprint(string.fromUtf8(invalid[:]))\n",
-            encoding="utf-8",
-        )
+        source = output_dir / f"{native_stem}_{os.getpid()}.xr"
+        native = output_dir / f"{native_stem}_{os.getpid()}"
+        cache = ROOT / "build" / ".xray-test-cache" / native_stem
+        source.write_text(source_text, encoding="utf-8")
         try:
             vm = self.run_raw([str(self.xray), str(source)])
             self.assertNotEqual(vm.returncode, 0, vm.stdout.decode("utf-8", "replace"))
-            self.assertNotIn(b"null\n", vm.stdout)
+            for fragment in forbidden_fragments:
+                self.assertNotIn(fragment, vm.stdout)
 
             self.run_checked(
                 [
@@ -173,10 +170,28 @@ class StringNativeErrorAbiTest(unittest.TestCase):
             )
             aot = self.run_raw([str(native)])
             self.assertNotEqual(aot.returncode, 0, aot.stdout.decode("utf-8", "replace"))
-            self.assertNotIn(b"null\n", aot.stdout)
+            for fragment in forbidden_fragments:
+                self.assertNotIn(fragment, aot.stdout)
         finally:
             native.unlink(missing_ok=True)
             source.unlink(missing_ok=True)
+
+    def test_uncaught_invalid_utf8_fails_instead_of_returning_null(self) -> None:
+        valid_source = "var valid: Array<uint8> = [111, 107]\nprint(string.fromUtf8(valid[:]))"
+        self.assertEqual(self.run_checked([str(self.xray), "-e", valid_source]).stdout, b"ok\n")
+
+        self.assert_uncaught_pending_error(
+            "var invalid: Array<uint8> = [255]\nprint(string.fromUtf8(invalid[:]))\n",
+            "task-198-uncaught-invalid-utf8",
+            [b"null\n", b"string.fromUtf8 invalid UTF-8"],
+        )
+
+    def test_uncaught_invalid_slice_byte_range_fails_instead_of_returning_null(self) -> None:
+        self.assert_uncaught_pending_error(
+            'var s = "Aé中"\nprint(s.sliceBytes(2, 3))\n',
+            "task-198-uncaught-invalid-slice",
+            [b"null\n", b"string.sliceBytes invalid byte range"],
+        )
 
     def test_vm_native_aot_typed_catch_parity(self) -> None:
         vm = self.run_checked([str(self.xray), str(FIXTURE)]).stdout
