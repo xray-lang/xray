@@ -88,6 +88,10 @@ static const char *g_gen_compress_inflate_5_errors[] = {
     "CompressionError.InvalidData",
 };
 
+static const char *g_gen_compress_zlibdecompress_7_errors[] = {
+    "CompressionError.InvalidData",
+};
+
 // compress module functions
 static const XaBuiltinMember g_gen_compress_functions[] = {
     {"crc32", "(data: string): int", "Compute CRC-32 checksum", true, false, false, false, false},
@@ -97,7 +101,7 @@ static const XaBuiltinMember g_gen_compress_functions[] = {
     {"deflate", "(data: string, level?: int): string?", "Deflate compress", true, false, false, false, false},
     {"inflate", "(data: string): string", "Inflate decompress", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_compress_inflate_5_errors, 1}},
     {"zlibCompress", "(data: string, level?: int): string?", "Zlib compress", true, false, false, false, false},
-    {"zlibDecompress", "(data: string): string?", "Zlib decompress", true, false, false, false, false},
+    {"zlibDecompress", "(data: string): string", "Zlib decompress", true, false, false, false, false, {XA_EFFECT_CONTRACT_ERRORS, g_gen_compress_zlibdecompress_7_errors, 1}},
     {"isGzip", "(data: string): bool", "Check if gzip data", true, false, false, false, false},
     {"isZlib", "(data: string): bool", "Check if zlib data", true, false, false, false, false},
 };

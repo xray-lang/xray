@@ -19,6 +19,7 @@ GENERATED = ROOT / "src/frontend/analyzer/xanalyzer_builtins_generated.h"
 EXPECTED_OUTPUT = (
     b"true\nCompressionError.InvalidData\n"
     b"true\nCompressionError.InvalidData\n"
+    b"true\nCompressionError.InvalidData\n"
 )
 
 
@@ -42,15 +43,22 @@ class CompressNativeErrorAbiTest(unittest.TestCase):
         generated = GENERATED.read_text(encoding="utf-8")
         gunzip_def = core_def[core_def.index("fn gunzip {") : core_def.index("fn deflate {")]
         inflate_def = core_def[core_def.index("fn inflate {") : core_def.index("fn zlibCompress {")]
+        zlib_decompress_def = core_def[
+            core_def.index("fn zlibDecompress {") : core_def.index("fn isGzip {")
+        ]
 
         self.assertIn('fn gunzip {\n    signature: "(data: string): string"', core_def)
         self.assertIn('fn inflate {\n    signature: "(data: string): string"', core_def)
+        self.assertIn('fn zlibDecompress {\n    signature: "(data: string): string"', core_def)
         self.assertIn('effect: "CompressionError.InvalidData"', gunzip_def)
         self.assertIn('effect: "CompressionError.InvalidData"', inflate_def)
+        self.assertIn('effect: "CompressionError.InvalidData"', zlib_decompress_def)
         self.assertNotIn('fn gunzip {\n    signature: "(data: string): string?"', core_def)
         self.assertNotIn('fn inflate {\n    signature: "(data: string): string?"', core_def)
+        self.assertNotIn('fn zlibDecompress {\n    signature: "(data: string): string?"', core_def)
         self.assertIn('"gunzip", "(data: string): string"', generated)
         self.assertIn('"inflate", "(data: string): string"', generated)
+        self.assertIn('"zlibDecompress", "(data: string): string"', generated)
         self.assertIn("XA_EFFECT_CONTRACT_ERRORS", generated)
         self.assertIn('"CompressionError.InvalidData"', generated)
 
@@ -65,6 +73,10 @@ class CompressNativeErrorAbiTest(unittest.TestCase):
             vm_runtime.index("static XrValue compress_inflate") :
             vm_runtime.index("static XrValue compress_zlib_compress")
         ]
+        vm_zlib_decompress = vm_runtime[
+            vm_runtime.index("static XrValue compress_zlib_decompress") :
+            vm_runtime.index("static XrValue compress_is_gzip")
+        ]
         aot_gunzip = aot_runtime[
             aot_runtime.index("static inline XrValue xrt_compress_gunzip") :
             aot_runtime.index("static inline XrValue xrt_compress_deflate")
@@ -73,18 +85,27 @@ class CompressNativeErrorAbiTest(unittest.TestCase):
             aot_runtime.index("static inline XrValue xrt_compress_inflate") :
             aot_runtime.index("static inline XrValue xrt_compress_zlib_compress")
         ]
+        aot_zlib_decompress = aot_runtime[
+            aot_runtime.index("static inline XrValue xrt_compress_zlib_decompress") :
+            aot_runtime.index("static inline XrValue xrt_compress_is_gzip")
+        ]
 
         self.assertIn("XR_GLOBAL_VAR_COMPRESSION_ERROR", vm_gunzip)
         self.assertIn("compress_set_builtin_enum_error", vm_gunzip)
         self.assertIn("XR_GLOBAL_VAR_COMPRESSION_ERROR", vm_inflate)
         self.assertIn("compress_set_builtin_enum_error", vm_inflate)
+        self.assertIn("XR_GLOBAL_VAR_COMPRESSION_ERROR", vm_zlib_decompress)
+        self.assertIn("compress_set_builtin_enum_error", vm_zlib_decompress)
         self.assertIn('"CompressionError", "InvalidData"', aot_gunzip)
         self.assertIn('"CompressionError", "InvalidData"', aot_inflate)
+        self.assertIn('"CompressionError", "InvalidData"', aot_zlib_decompress)
         self.assertIn("xrt_pending_error = xrt_enum_aggregate_box(err);", aot_runtime)
         self.assertNotIn("if (!output)\n        return xr_null();", vm_gunzip)
         self.assertNotIn("if (!output)\n        return xr_null();", vm_inflate)
+        self.assertNotIn("if (!output)\n        return xr_null();", vm_zlib_decompress)
         self.assertNotIn("if (!buf)\n        return XR_NULL_VAL;", aot_gunzip)
         self.assertNotIn("if (!buf)\n        return XR_NULL_VAL;", aot_inflate)
+        self.assertNotIn("if (!buf)\n        return XR_NULL_VAL;", aot_zlib_decompress)
 
     def test_vm_native_aot_typed_catch_parity(self) -> None:
         vm = self.run_checked([str(self.xray), str(FIXTURE)]).stdout
