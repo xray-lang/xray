@@ -1,0 +1,49 @@
+struct OutNestedBranchLeaf {
+    x: int
+    y: int
+}
+
+struct OutNestedBranchPair {
+    left: OutNestedBranchLeaf
+    right: int
+}
+
+fn fill_nested_branch_field(value: out int, next: int) {
+    value = next
+}
+
+fn initialize_nested_branch(flag: bool, pair: out OutNestedBranchPair) -> int {
+    if (flag) {
+        fill_nested_branch_field(out pair.left.x, 31)
+    } else {
+        pair.left.x = 37
+    }
+
+    if (flag) {
+        pair.left.y = 41
+    } else {
+        fill_nested_branch_field(out pair.left.y, 43)
+    }
+
+    pair.right = 47
+    var left = pair.left
+    var whole = pair
+    return left.x + left.y + whole.left.x + whole.left.y + whole.right
+}
+
+@test
+fn test_out_param_nested_branch_field_bitset_whole_read() {
+    var first = OutNestedBranchPair{left: OutNestedBranchLeaf{x: 0, y: 0}, right: 0}
+    var first_total = initialize_nested_branch(true, out first)
+    assert_eq(first_total, 191)
+    assert_eq(first.left.x, 31)
+    assert_eq(first.left.y, 41)
+    assert_eq(first.right, 47)
+
+    var second = OutNestedBranchPair{left: OutNestedBranchLeaf{x: 0, y: 0}, right: 0}
+    var second_total = initialize_nested_branch(false, out second)
+    assert_eq(second_total, 207)
+    assert_eq(second.left.x, 37)
+    assert_eq(second.left.y, 43)
+    assert_eq(second.right, 47)
+}
