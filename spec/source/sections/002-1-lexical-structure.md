@@ -115,7 +115,7 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 `int` `int8` `int16` `int32` `int64` `byte` `uint16` `uint32` `uint64`
 `float` `float32` `float64` `bool` `string` `rune`
 
-`unknown` 在类型位置是内置擦除/未知值类型名（例如 `TaskOutcome.Success(unknown)`）；它不是词法关键字，表达式位置仍可作为普通标识符使用。
+类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `prelude` 自动引入的内置类型符号：
 > `Array` · `BigInt` · `Array<byte>` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
@@ -504,7 +504,7 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 `int` `int8` `int16` `int32` `int64` `byte` `uint16` `uint32` `uint64`
 `float` `float32` `float64` `bool` `string` `rune`
 
-In type position, `unknown` is the built-in erased/unknown-value type name (for example, `TaskOutcome.Success(unknown)`); it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
+Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
 > **Note**: the following names are **not** lexer keywords; they are built-in type symbols automatically introduced by the prelude:
 > `Array` · `BigInt` · `Array<byte>` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.

@@ -227,7 +227,7 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 
 ### 14.17 `Task<T>` 与 enum 值
 
-`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`；`TaskResult.Failed(error)` 以 `unknown` 保留原始失败值（业务 enum 错误或 `PanicInfo`），plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。enum 值保留冷路径属性 `name`、`ordinal` 与方法 `toString()`；用户可见 `EnumValue` / `EnumType` wrapper 类已删除。
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`；当前公开形状为 `Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。enum 值保留冷路径属性 `name`、`ordinal` 与方法 `toString()`；用户可见 `EnumValue` / `EnumType` wrapper 类已删除。
 
 ### 14.18 其他 prelude 类型（`Logger` / `NetConn` / `NetListener`）
 
@@ -477,7 +477,7 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.17 `Task<T>` and Enum Values
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>`; `TaskResult.Failed(error)` preserves the original failure value (business enum error or `PanicInfo`) as `unknown`, while plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. Enum values keep the cold-path `name`, `ordinal`, and `toString()` surface; user-visible `EnumValue` / `EnumType` wrapper classes have been removed.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` whose current public shape is `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, and `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. Enum values keep the cold-path `name`, `ordinal`, and `toString()` surface; user-visible `EnumValue` / `EnumType` wrapper classes have been removed.
 
 ### 14.18 Other Prelude Types (`Logger` / `NetConn` / `NetListener`)
 

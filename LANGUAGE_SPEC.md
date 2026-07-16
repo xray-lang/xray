@@ -220,7 +220,7 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 `int` `int8` `int16` `int32` `int64` `byte` `uint16` `uint32` `uint64`
 `float` `float32` `float64` `bool` `string` `rune`
 
-In type position, `unknown` is the built-in erased/unknown-value type name (for example, `TaskOutcome.Success(unknown)`); it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
+Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
 > **Note**: the following names are **not** lexer keywords; they are built-in type symbols automatically introduced by the prelude:
 > `Array` · `BigInt` · `Array<byte>` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
@@ -3910,7 +3910,7 @@ match t.poll() {
 }
 ```
 
-`TaskResult.Failed(err)` preserves the original failure value: business errors are enum values produced by `throw <enum>`, and runtime faults are `PanicInfo`. The payload type is `unknown`, so callers narrow it with `match` / `is` as needed; implementations must not wrap business enum errors into `PanicInfo`.
+The current public shape of `TaskResult<T>` is `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, and `Pending`. Runtime faults enter `Failed` as `PanicInfo`; business enum errors still use the language error channel, so plain `await task` propagates through the matching error path, and callers that need a status value keep an explicit task handle and call `awaitResult()` / `awaitTimeout(ms)`.
 
 **Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `Coro.yield()`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
 
@@ -4027,9 +4027,9 @@ select {
 2. **Structured concurrency** (semantic enhancement): coroutines started via `go` inside the block are **awaited automatically** before the block exits.
 
 ```ebnf
-ScopeStmt          ::= 'scope' Block
-LinkedScopeStmt    ::= 'linked' 'scope' Block          // sibling failure → cancel all + rethrow
-SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // collect every child result, return Array<TaskOutcome>
+ScopeStmt           ::= 'scope' Block
+LinkedScopeStmt     ::= 'linked' 'scope' Block          // sibling failure -> cancel all + rethrow
+SupervisorScopeStmt ::= 'supervisor' 'scope' Block      // wait for all children; statement form
 ```
 
 ```xray
@@ -4055,19 +4055,9 @@ scope {
 |---|---|---|
 | `scope { ... }` | Siblings are not cancelled; exceptions do not propagate outward (each task is independent) | none (statement form) |
 | `linked scope { ... }` | **Cancels all siblings** and **rethrows** the first exception outward | none |
-| `supervisor scope { ... }` | **Collects** every child coroutine's completion result; siblings do not affect each other | `Array<TaskOutcome>` (one outcome per child) |
+| `supervisor scope { ... }` | Waits for every child coroutine to finish; siblings do not affect each other | none (statement form) |
 
-`TaskOutcome` is a prelude enum:
-
-```xray
-enum TaskOutcome {
-    Success(unknown)    // child returned normally; payload is the return value
-    Failed(unknown)     // child threw; payload is the original error value, not a forced string
-    Cancelled           // child was cancelled
-}
-```
-
-`supervisor scope` waits for all child coroutines started by `go` inside the block and appends an outcome for each completion. It does not flatten failures into a legacy error-message list; format the error explicitly inside a `TaskOutcome.Failed(err)` branch when text is needed.
+`supervisor scope` waits for all child coroutines started by `go` inside the block, but it does not return an aggregate result. To observe a specific child status, keep an explicit task handle and call `awaitResult()` or `awaitTimeout(ms)`; using `supervisor scope` as an expression is rejected by the compiler.
 
 ```xray
 // linked scope: failure propagation
@@ -4810,7 +4800,7 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.17 `Task<T>` and Enum Values
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>`; `TaskResult.Failed(error)` preserves the original failure value (business enum error or `PanicInfo`) as `unknown`, while plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. Enum values keep the cold-path `name`, `ordinal`, and `toString()` surface; user-visible `EnumValue` / `EnumType` wrapper classes have been removed.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` whose current public shape is `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, and `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. Enum values keep the cold-path `name`, `ordinal`, and `toString()` surface; user-visible `EnumValue` / `EnumType` wrapper classes have been removed.
 
 ### 14.18 Other Prelude Types (`Logger` / `NetConn` / `NetListener`)
 
