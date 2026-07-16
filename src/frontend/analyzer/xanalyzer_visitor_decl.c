@@ -268,7 +268,7 @@ static bool xa_c_export_type_supported(XrType *type, bool is_return) {
 
 static void xa_validate_extern_cfn_callback_param_modes(XaInferContext *ctx, AstNode *node,
                                                         const XrParamNode *param,
-                                                        const XrType *type) {
+                                                        const XrType *type, bool is_return) {
     if (!ctx || !ctx->analyzer || !type || !XR_TYPE_IS_C_FUNCTION(type))
         return;
     for (int i = 0; i < type->function.param_count; i++) {
@@ -279,11 +279,18 @@ static void xa_validate_extern_cfn_callback_param_modes(XaInferContext *ctx, Ast
                           .line = param ? param->line : (node ? node->line : 0),
                           .column = param ? param->column : (node ? node->column : 0)};
         char msg[320];
-        snprintf(msg, sizeof(msg),
-                 "extern CFn parameter '%s' uses unsupported callback parameter mode '%s' at "
-                 "callback parameter %d before verified extern callback ABI wrapper contract",
-                 param && param->name ? param->name : "?", xr_param_mode_label(callback_mode),
-                 i + 1);
+        if (is_return) {
+            snprintf(msg, sizeof(msg),
+                     "extern CFn return uses unsupported callback parameter mode '%s' at callback "
+                     "parameter %d before verified extern callback ABI wrapper contract",
+                     xr_param_mode_label(callback_mode), i + 1);
+        } else {
+            snprintf(msg, sizeof(msg),
+                     "extern CFn parameter '%s' uses unsupported callback parameter mode '%s' at "
+                     "callback parameter %d before verified extern callback ABI wrapper contract",
+                     param && param->name ? param->name : "?", xr_param_mode_label(callback_mode),
+                     i + 1);
+        }
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
     }
@@ -312,7 +319,7 @@ static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
         }
         XrType *type = param_types ? param_types[i] : NULL;
         if (type && XR_TYPE_IS_C_FUNCTION(type)) {
-            xa_validate_extern_cfn_callback_param_modes(ctx, node, param, type);
+            xa_validate_extern_cfn_callback_param_modes(ctx, node, param, type, false);
         } else if (type && XR_TYPE_IS_FUNCTION(type)) {
             XrLocation loc = {.file = ctx->file_path,
                               .line = param ? param->line : (node ? node->line : 0),
@@ -326,6 +333,8 @@ static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
                                        msg, &loc);
         }
     }
+    if (return_type && XR_TYPE_IS_C_FUNCTION(return_type))
+        xa_validate_extern_cfn_callback_param_modes(ctx, node, NULL, return_type, true);
     if (return_type && XR_TYPE_IS_FUNCTION(return_type) && !XR_TYPE_IS_C_FUNCTION(return_type)) {
         XrLocation loc = {.file = ctx->file_path,
                           .line = node ? node->line : 0,

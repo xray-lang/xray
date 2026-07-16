@@ -1,0 +1,5 @@
+extern "C" {
+    fn make_cfn() -> CFn<(ref int32) -> int32>
+}
+
+print("ok")
