@@ -1,0 +1,9 @@
+fn worker() {
+    const answer = 42
+}
+
+fn unused_spawn() {
+    go worker()
+}
+
+const READY = 1

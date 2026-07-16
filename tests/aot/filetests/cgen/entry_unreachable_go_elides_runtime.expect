@@ -1,0 +1,9 @@
+contains=entry-plan
+contains=reachable=1
+contains=required=0x0
+contains=runtime=0x0 root=elided scheduler=none hooks=0x0
+c_not_contains=xr_aot_spawn(
+c_not_contains=xr_aot_root_descriptor_begin
+c_not_contains=xr_aot_root_descriptor_end
+c_not_contains=xr_aot_run_main(rt,
+c_not_regex=entry_unreachable_go_elides_runtime_.*___main__.*_aot_frame_new
