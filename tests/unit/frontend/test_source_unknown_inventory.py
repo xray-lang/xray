@@ -88,6 +88,10 @@ class SourceUnknownInventoryTest(unittest.TestCase):
         hits = scan_file(ROOT, ROOT / "scripts/check_error_effect_convergence.py")
         self.assertEqual([], hits)
 
+    def test_inventory_readme_is_not_counted_as_source_residue(self) -> None:
+        hits = scan_file(ROOT, ROOT / "scripts/README.md")
+        self.assertEqual([], hits)
+
     def test_category_maxima_accepts_current_or_lower_residue(self) -> None:
         inventory = {category: [] for category in CATEGORIES}
         inventory["TASK_ERASED_RESULT_RESIDUE"] = [object(), object()]
