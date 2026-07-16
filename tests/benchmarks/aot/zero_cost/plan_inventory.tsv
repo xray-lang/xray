@@ -124,6 +124,7 @@ derive_clone_backend_consumption|covered|_derived_clone(_boxed)?|tests/aot/filet
 sequence_access_plan|covered|sequence-access-plan|tests/aot/filetests/link|Sequence access summaries lower into verified sequence access plans.
 sequence_capacity_plan|covered|capacity-plan|tests/aot/filetests/link|Array<byte>/StringBuilder capacity operations lower into verified capacity plans.
 sequence_capacity_reserve_once|covered|capacity-plan .*action=reserve_once|tests/aot/filetests/link|Array push capacity evidence fixes the reserve-once action in plan output.
+sequence_capacity_branch_reserve_once|covered|span=11 .*action=reserve_once .*no_clobber|tests/aot/filetests/cgen/array_push_branch_counted_loop_plan.expect|Branch-local counted Array.push loops preserve exact-count/no-clobber reserve-once evidence through ordinary if/else control flow.
 sequence_capacity_alias_checked_grow|covered|reason=alias_or_clobber|tests/aot/filetests/cgen/array_push_alias_checked_grow_plan.expect|Aliased Array push counted-loop evidence falls back to checked_grow and keeps the grow guard when another local shares receiver storage.
 sequence_capacity_receiver_alias_checked_grow|covered|reason=alias_or_clobber|tests/aot/filetests/cgen/array_push_receiver_alias_checked_grow_plan.expect|Receiver-alias Array push counted-loop evidence falls back to checked_grow and keeps the grow guard when the mutating receiver is the alias.
 sequence_bulk_plan|covered|bulk-plan|tests/aot/filetests/link|Bulk copy/fill evidence lowers into verified bulk operation plans.

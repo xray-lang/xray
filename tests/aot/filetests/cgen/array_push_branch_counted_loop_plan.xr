@@ -1,0 +1,17 @@
+fn build(flag: bool, n: int) -> int {
+    if (flag) {
+        var xs: Array<int> = []
+        for (i in 0..n) {
+            xs.push(i)
+        }
+        return len(xs)
+    } else {
+        var ys: Array<int> = []
+        for (i in 0..n) {
+            ys.push(n)
+        }
+        return len(ys)
+    }
+}
+
+print(build(true, 8) + build(false, 5))
