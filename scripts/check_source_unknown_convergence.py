@@ -89,7 +89,7 @@ TASK_ERASURE_RE = re.compile(
 )
 STDLIB_UNKNOWN_API_RE = re.compile(
     r"(?:\bfixed-shape Json/unknown\b|\bFailed\(unknown\)|\bunknown APIs\b|"
-    r"\bArray<TaskOutcome>|\b(?:Success|Failed)\(Json\))"
+    r"\b(?:Success|Failed)\(Json\))"
 )
 
 SPEC_OR_DOC_PREFIXES = ("LANGUAGE_SPEC", "spec/")
@@ -211,7 +211,6 @@ def classify_line(rel_path: str, line: str) -> list[str]:
         "unknown APIs" in line
         or "Json/unknown" in line
         or "Failed(unknown)" in line
-        or "Array<TaskOutcome>" in line
         or "Success(Json)" in line
         or "Failed(Json)" in line
     )

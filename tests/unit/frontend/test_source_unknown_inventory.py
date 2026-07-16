@@ -64,7 +64,13 @@ class SourceUnknownInventoryTest(unittest.TestCase):
 
         for line in (f"fn collect() -> Array<{task_outcome}>",):
             categories = classify_line("stdlib/types/coroutine.xr", line)
-            self.assertIn("STDLIB_DYNAMIC_UNKNOWN_API", categories)
+            self.assertIn("TASK_ERASED_RESULT_RESIDUE", categories)
+            self.assertNotIn("STDLIB_DYNAMIC_UNKNOWN_API", categories)
+
+    def test_legacy_failed_unknown_still_counts_as_stdlib_dynamic_unknown_api(self) -> None:
+        failed_unknown = "Failed(" "unknown)"
+        categories = classify_line("stdlib/types/coroutine.xr", f"    {failed_unknown}")
+        self.assertIn("STDLIB_DYNAMIC_UNKNOWN_API", categories)
 
 
 if __name__ == "__main__":
