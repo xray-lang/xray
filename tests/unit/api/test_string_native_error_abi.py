@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import os
+import re
 import subprocess
 import unittest
 from pathlib import Path
@@ -13,10 +15,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = ROOT / "tests/aot/basic/string_utf8_conversion.xr"
 STRING_DECL = ROOT / "stdlib/types/string.xr"
+NATIVE_DEFS = ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c"
 EXPECTED_OUTPUT = (
     "hi\n"
     "hé\n"
     "true\n"
+    "Utf8Error.InvalidUtf8\n"
     "A�B\n"
     "��������A\n"
     "���A\n"
@@ -30,8 +34,19 @@ EXPECTED_OUTPUT = (
     "é\n"
     "中\n"
     "true\n"
+    "StringSliceError.InvalidByteRange\n"
     "true\n"
+    "StringSliceError.InvalidByteRange\n"
 ).encode()
+
+
+def embedded_native_def(name: str) -> str:
+    source = NATIVE_DEFS.read_text(encoding="utf-8")
+    pattern = rf"static const char xr_native_def_{re.escape(name)}\[\] =(?P<body>.*?);\n"
+    match = re.search(pattern, source, re.S)
+    if not match:
+        raise AssertionError(f"missing embedded native type definition: {name}")
+    return "".join(ast.literal_eval(part) for part in re.findall(r'"(?:\\.|[^"\\])*"', match["body"]))
 
 
 class StringNativeErrorAbiTest(unittest.TestCase):
@@ -51,6 +66,7 @@ class StringNativeErrorAbiTest(unittest.TestCase):
 
     def test_public_declaration_is_typed_and_non_nullable(self) -> None:
         declaration = STRING_DECL.read_text(encoding="utf-8")
+        generated = embedded_native_def("string")
         self.assertIn(
             "static fromUtf8(bytes: Slice<byte>) -> string "
             "@errors(Utf8Error.InvalidUtf8)",
@@ -62,6 +78,19 @@ class StringNativeErrorAbiTest(unittest.TestCase):
             declaration,
         )
         self.assertNotIn("fromUtf8(bytes: Slice<byte>) -> string?", declaration)
+        self.assertIn("@native\nenum Utf8Error", generated)
+        self.assertIn("@native\nenum StringSliceError", generated)
+        self.assertIn(
+            "static fromUtf8(bytes: Slice<byte>) -> string "
+            "@errors(Utf8Error.InvalidUtf8)",
+            generated,
+        )
+        self.assertIn(
+            "sliceBytes(start: int, end: int) -> string "
+            "@errors(StringSliceError.InvalidByteRange)",
+            generated,
+        )
+        self.assertNotIn("fromUtf8(bytes: Slice<byte>) -> string?", generated)
 
     def test_vm_native_aot_typed_catch_parity(self) -> None:
         vm = self.run_checked([str(self.xray), str(FIXTURE)]).stdout

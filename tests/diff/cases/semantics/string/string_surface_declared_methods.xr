@@ -45,12 +45,15 @@ var accented: Array<byte> = [104, 195, 169]
 print(string.fromUtf8(accented[:]))
 var invalid: Array<byte> = [255]
 var caught_invalid_utf8 = false
+var invalid_utf8_error = ""
 try {
     string.fromUtf8(invalid[:])
 } catch (e: Utf8Error) {
     caught_invalid_utf8 = true
+    invalid_utf8_error = e.toString()
 }
 print(caught_invalid_utf8)
+print(invalid_utf8_error)
 print(string.fromUtf8Lossy(invalid[:]))
 print(bin.toString())
 
@@ -65,12 +68,15 @@ print(sample.sliceBytes(0, 1))
 print(sample.sliceBytes(1, 3))
 print(sample.sliceBytes(3, 6))
 var caught_mid_scalar = false
+var mid_scalar_error = ""
 try {
     sample.sliceBytes(2, 3)
 } catch (e: StringSliceError) {
     caught_mid_scalar = true
+    mid_scalar_error = e.toString()
 }
 print(caught_mid_scalar)
+print(mid_scalar_error)
 
 // non-U8 arrays keep the formatter rendering
 var nums = [1, 2, 3]

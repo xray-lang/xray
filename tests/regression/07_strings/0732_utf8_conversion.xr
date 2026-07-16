@@ -7,12 +7,15 @@ fn test_utf8_conversion_surface() {
     assert_eq(string.fromUtf8(ascii[:]), "hi")
     assert_eq(string.fromUtf8(unicode[:]), "hé")
     var caught_invalid_utf8 = false
+    var invalid_utf8_error = ""
     try {
         string.fromUtf8(invalid[:])
     } catch (e: Utf8Error) {
         caught_invalid_utf8 = true
+        invalid_utf8_error = e.toString()
     }
     assert_eq(caught_invalid_utf8, true)
+    assert_eq(invalid_utf8_error, "Utf8Error.InvalidUtf8")
 
     var mixed: Array<byte> = [65, 255, 66]
     assert_eq(string.fromUtf8Lossy(mixed[:]), "A�B")
@@ -39,18 +42,24 @@ fn test_utf8_conversion_surface() {
     assert_eq(s.sliceBytes(3, 6), "中")
 
     var caught_mid_scalar = false
+    var mid_scalar_error = ""
     try {
         s.sliceBytes(2, 3)
     } catch (e: StringSliceError) {
         caught_mid_scalar = true
+        mid_scalar_error = e.toString()
     }
     assert_eq(caught_mid_scalar, true)
+    assert_eq(mid_scalar_error, "StringSliceError.InvalidByteRange")
 
     var caught_oob = false
+    var oob_error = ""
     try {
         s.sliceBytes(0, 7)
     } catch (e: StringSliceError) {
         caught_oob = true
+        oob_error = e.toString()
     }
     assert_eq(caught_oob, true)
+    assert_eq(oob_error, "StringSliceError.InvalidByteRange")
 }
