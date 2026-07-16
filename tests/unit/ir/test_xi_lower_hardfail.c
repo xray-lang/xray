@@ -143,6 +143,25 @@ TEST(error_expression_type_rejected) {
     assert(f == NULL && "lowerer must reject ErrorType expression metadata");
 }
 
+TEST(error_type_or_any_does_not_fallback_to_unknown) {
+    xr_compiler_session_install_analyzer_pool(g_session);
+
+    XiLower l;
+    xi_lower_init(&l, NULL, g_iso);
+
+    XrType *error_type = xr_type_new_error(NULL);
+    assert(error_type != NULL);
+    XrType *result = xi_lower_type_or_any(&l, error_type, "test recovery", 0);
+
+    if (result != error_type || result->kind != XR_KIND_ERROR || !xr_type_contains_error(result) ||
+        !l.had_error) {
+        fprintf(stderr, "ErrorType recovery fell back to a runtime/ABI fallback type\n");
+        abort();
+    }
+
+    xi_lower_cleanup(&l);
+}
+
 TEST(error_source_var_metadata_rejected) {
     xr_compiler_session_install_analyzer_pool(g_session);
 
@@ -220,6 +239,7 @@ int main(void) {
     run_error_return_type_rejected();
     run_error_parameter_type_rejected();
     run_error_expression_type_rejected();
+    run_error_type_or_any_does_not_fallback_to_unknown();
     run_error_source_var_metadata_rejected();
     run_error_capture_metadata_rejected();
     run_resolved_variable_accepted();
