@@ -3376,6 +3376,34 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         "    for (key in box) { throw key }\n"
         "  }\n"
         "}\n"
+        "fn mapClearValuesViewIteratorPreserves() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{\"caught\": e}\n"
+        "    box.clear()\n"
+        "    for (value in box.values()) { throw value }\n"
+        "  }\n"
+        "}\n"
+        "fn mapClearKeysViewIteratorPreserves() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{e: MapErr.Other}\n"
+        "    box.clear()\n"
+        "    for (key in box.keys()) { throw key }\n"
+        "  }\n"
+        "}\n"
+        "fn mapClearEntriesViewKeyIteratorPreserves() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{e: MapErr.Other}\n"
+        "    box.clear()\n"
+        "    for (entry in box.entries()) { const key: MapErr = entry[0]; throw key }\n"
+        "  }\n"
+        "}\n"
+        "fn mapClearEntriesViewValueIteratorPreserves() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{\"caught\": e}\n"
+        "    box.clear()\n"
+        "    for (entry in box.entries()) { const value: MapErr = entry[1]; throw value }\n"
+        "  }\n"
+        "}\n"
         "fn mapClearThenSetCaughtValueIteratorRethrows() {\n"
         "  try { failMap() } catch (e: MapErr) {\n"
         "    var box = #{\"other\": MapErr.Other}\n"
@@ -3554,6 +3582,14 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         analyzer_function_effect_summary(a, "mapClearValuesIteratorPreserves");
     const XaEffectSummary *clear_keys =
         analyzer_function_effect_summary(a, "mapClearKeysIteratorPreserves");
+    const XaEffectSummary *clear_values_view =
+        analyzer_function_effect_summary(a, "mapClearValuesViewIteratorPreserves");
+    const XaEffectSummary *clear_keys_view =
+        analyzer_function_effect_summary(a, "mapClearKeysViewIteratorPreserves");
+    const XaEffectSummary *clear_entries_key_view =
+        analyzer_function_effect_summary(a, "mapClearEntriesViewKeyIteratorPreserves");
+    const XaEffectSummary *clear_entries_value_view =
+        analyzer_function_effect_summary(a, "mapClearEntriesViewValueIteratorPreserves");
     const XaEffectSummary *clear_then_set_value =
         analyzer_function_effect_summary(a, "mapClearThenSetCaughtValueIteratorRethrows");
     const XaEffectSummary *clear_then_set_key =
@@ -3624,6 +3660,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(value_set_caught_mixed != NULL);
     ASSERT(clear_values != NULL);
     ASSERT(clear_keys != NULL);
+    ASSERT(clear_values_view != NULL);
+    ASSERT(clear_keys_view != NULL);
+    ASSERT(clear_entries_key_view != NULL);
+    ASSERT(clear_entries_value_view != NULL);
     ASSERT(clear_then_set_value != NULL);
     ASSERT(clear_then_set_key != NULL);
     ASSERT(delete_singleton_then_set_value != NULL);
@@ -3719,6 +3759,14 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     const XaErrorTypeSet *clear_values_set =
         effect_summary_enum_set_named(a, clear_values, "MapErr");
     const XaErrorTypeSet *clear_keys_set = effect_summary_enum_set_named(a, clear_keys, "MapErr");
+    const XaErrorTypeSet *clear_values_view_set =
+        effect_summary_enum_set_named(a, clear_values_view, "MapErr");
+    const XaErrorTypeSet *clear_keys_view_set =
+        effect_summary_enum_set_named(a, clear_keys_view, "MapErr");
+    const XaErrorTypeSet *clear_entries_key_view_set =
+        effect_summary_enum_set_named(a, clear_entries_key_view, "MapErr");
+    const XaErrorTypeSet *clear_entries_value_view_set =
+        effect_summary_enum_set_named(a, clear_entries_value_view, "MapErr");
     const XaErrorTypeSet *clear_then_set_value_set =
         effect_summary_enum_set_named(a, clear_then_set_value, "MapErr");
     const XaErrorTypeSet *clear_then_set_key_set =
@@ -3789,6 +3837,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(value_set_caught_mixed_set != NULL);
     ASSERT(clear_values_set != NULL);
     ASSERT(clear_keys_set != NULL);
+    ASSERT(clear_values_view_set != NULL);
+    ASSERT(clear_keys_view_set != NULL);
+    ASSERT(clear_entries_key_view_set != NULL);
+    ASSERT(clear_entries_value_view_set != NULL);
     ASSERT(clear_then_set_value_set != NULL);
     ASSERT(clear_then_set_key_set != NULL);
     ASSERT(delete_singleton_then_set_value_set != NULL);
@@ -3905,6 +3957,18 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!clear_keys_set->all_variants);
     ASSERT(xa_bitset_test(&clear_keys_set->variants, 0));
     ASSERT(!xa_bitset_test(&clear_keys_set->variants, 1));
+    ASSERT(!clear_values_view_set->all_variants);
+    ASSERT(xa_bitset_test(&clear_values_view_set->variants, 0));
+    ASSERT(!xa_bitset_test(&clear_values_view_set->variants, 1));
+    ASSERT(!clear_keys_view_set->all_variants);
+    ASSERT(xa_bitset_test(&clear_keys_view_set->variants, 0));
+    ASSERT(!xa_bitset_test(&clear_keys_view_set->variants, 1));
+    ASSERT(!clear_entries_key_view_set->all_variants);
+    ASSERT(xa_bitset_test(&clear_entries_key_view_set->variants, 0));
+    ASSERT(!xa_bitset_test(&clear_entries_key_view_set->variants, 1));
+    ASSERT(!clear_entries_value_view_set->all_variants);
+    ASSERT(xa_bitset_test(&clear_entries_value_view_set->variants, 0));
+    ASSERT(!xa_bitset_test(&clear_entries_value_view_set->variants, 1));
     ASSERT(!clear_then_set_value_set->all_variants);
     ASSERT(xa_bitset_test(&clear_then_set_value_set->variants, 0));
     ASSERT(!xa_bitset_test(&clear_then_set_value_set->variants, 1));
