@@ -2533,6 +2533,10 @@ static CatchAggregateMemberUpdate catch_aggregate_member_update(ErrorSetCtx *ctx
             update.action = CATCH_AGGREGATE_MEMBER_MAP_SET_PRECISE;
         return update;
     }
+    if (call->arg_count == 0 && strcmp(ma->name, "clear") == 0) {
+        update.action = CATCH_AGGREGATE_MEMBER_MAP_CLEAR;
+        return update;
+    }
     if (!current_catch_has_aggregate_container(ctx, id, name))
         return update;
     if (call->arg_count == 1 &&
@@ -2544,10 +2548,6 @@ static CatchAggregateMemberUpdate catch_aggregate_member_update(ErrorSetCtx *ctx
     if (call->arg_count == 0 && (strcmp(ma->name, "keys") == 0 || strcmp(ma->name, "values") == 0 ||
                                  strcmp(ma->name, "entries") == 0)) {
         update.action = CATCH_AGGREGATE_MEMBER_PRESERVE;
-        return update;
-    }
-    if (call->arg_count == 0 && strcmp(ma->name, "clear") == 0) {
-        update.action = CATCH_AGGREGATE_MEMBER_MAP_CLEAR;
         return update;
     }
     if (call->arg_count == 1 && strcmp(ma->name, "delete") == 0) {
