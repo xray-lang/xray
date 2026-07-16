@@ -60,13 +60,11 @@ void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
     char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
     char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
     char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout", "Pending"};
-    char *task_outcome_members[] = {"Success", "Failed", "Cancelled"};
     char *task_status_members[] = {"Pending", "Running", "Success", "Failed", "Cancelled"};
     char *utf8_error_members[] = {"InvalidUtf8"};
     char *string_slice_error_members[] = {"InvalidByteRange"};
     const int recv_payloads[] = {1, 0, 0, 0};
     const int task_result_payloads[] = {1, 1, 0, 0, 0};
-    const int task_outcome_payloads[] = {1, 1, 0};
 
     XrEnumType *ordering =
         runtime_register_prelude_enum(isolate, "Ordering", ordering_members, 5, NULL);
@@ -77,8 +75,6 @@ void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
         runtime_register_prelude_enum(isolate, "SendResult", send_result_members, 4, NULL);
     XrEnumType *task_result = runtime_register_prelude_enum(
         isolate, "TaskResult", task_result_members, 5, task_result_payloads);
-    XrEnumType *task_outcome = runtime_register_prelude_enum(
-        isolate, "TaskOutcome", task_outcome_members, 3, task_outcome_payloads);
     XrEnumType *task_status =
         runtime_register_prelude_enum(isolate, "TaskStatus", task_status_members, 5, NULL);
     XrEnumType *utf8_error =
@@ -96,8 +92,6 @@ void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_SEND_RESULT, XR_FROM_PTR(send_result));
     if (task_result)
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_TASK_RESULT, XR_FROM_PTR(task_result));
-    if (task_outcome)
-        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_TASK_OUTCOME, XR_FROM_PTR(task_outcome));
     if (task_status)
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_TASK_STATUS, XR_FROM_PTR(task_status));
     if (utf8_error)

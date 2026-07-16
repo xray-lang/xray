@@ -1043,8 +1043,6 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_enum(X, "SendResult");
     } else if (base_len == 10 && strncmp(s, "TaskResult", 10) == 0) {
         type = xr_type_new_enum(X, "TaskResult");
-    } else if (base_len == 11 && strncmp(s, "TaskOutcome", 11) == 0) {
-        type = xr_type_new_enum(X, "TaskOutcome");
     } else if (base_len == 10 && strncmp(s, "TaskStatus", 10) == 0) {
         type = xr_type_new_enum(X, "TaskStatus");
     } else if (base_len == 9 && strncmp(s, "Utf8Error", 9) == 0) {

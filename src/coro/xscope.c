@@ -131,9 +131,9 @@ static inline void scope_lock_release(XrScopeContext *scope) {
     atomic_store_explicit(&scope->child_lock, false, memory_order_release);
 }
 
-/* Record this child's terminal state and update scope->first_error /
- * scope->outcomes per policy mode.  Returns true when the child failed, so
- * linked scope can cancel siblings. Caller must hold scope->child_lock. */
+/* Record this child's terminal state and update scope->first_error for linked
+ * scopes. Returns true when the child failed, so linked scope can cancel
+ * siblings. Caller must hold scope->child_lock. */
 static bool wake_waiter_record_child_completion_locked(XrCoroutine *coro, XrScopeContext *scope) {
     if (scope->mode == XR_SCOPE_WAIT)
         return false;

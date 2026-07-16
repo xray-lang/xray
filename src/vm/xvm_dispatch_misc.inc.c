@@ -157,9 +157,8 @@ vmcase(OP_SCOPE_ENTER) {
 
 vmcase(OP_SCOPE_EXIT) {
     /* Exit structured concurrency scope.
-     * A = scope_mode, B = result_reg (supervisor: Array<TaskOutcome>) */
+     * A = scope_mode, B = unused result register */
     int scope_mode = GETARG_A(i);
-    int result_reg = GETARG_B(i);
     XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
 
     if (current) {
@@ -195,9 +194,6 @@ vmcase(OP_SCOPE_EXIT) {
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
-        if (scope_mode == XR_SCOPE_SUPERVISOR) {
-            base[result_reg] = scope_result.value;
-        }
     } else {
         // Main thread fallback
         XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
@@ -230,15 +226,6 @@ vmcase(OP_SCOPE_EXIT) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
-        }
-        if (scope_mode == XR_SCOPE_SUPERVISOR) {
-            // Main thread fallback: no child coroutine owner, but return the
-            // shared outcomes array when one was allocated.
-            if (scope->outcomes) {
-                base[result_reg] = xr_value_from_array(scope->outcomes);
-            } else {
-                base[result_reg] = xr_null();
-            }
         }
         sched->current_scope = scope->parent;
         xr_free(scope);

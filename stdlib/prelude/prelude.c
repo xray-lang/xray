@@ -173,13 +173,6 @@ static void xr_prelude_register_builtin_enums(XrVMRuntime *X) {
     if (task_result_et)
         bind_builtin_value(X, XR_GLOBAL_VAR_TASK_RESULT, XR_FROM_PTR(task_result_et));
 
-    static const char *task_outcome_members[] = {"Success", "Failed", "Cancelled"};
-    static const int task_outcome_payload_counts[] = {1, 1, 0};
-    XrEnumType *task_outcome_et = make_prelude_enum(X, "TaskOutcome", task_outcome_members, 3,
-                                                    task_outcome_payload_counts, true);
-    if (task_outcome_et)
-        bind_builtin_value(X, XR_GLOBAL_VAR_TASK_OUTCOME, XR_FROM_PTR(task_outcome_et));
-
     static const char *task_status_members[] = {"Pending", "Running", "Success", "Failed",
                                                 "Cancelled"};
     XrEnumType *task_status_et =

@@ -34,18 +34,21 @@ class SourceUnknownInventoryTest(unittest.TestCase):
         unknown_ctor = "xr_type_new_" "unknown"
         self.assertNotIn(f"task_failed_payload[] = {{{unknown_ctor}", analyzer_source)
 
-    def test_task_outcome_payload_registration_matches_typed_native_defs(self) -> None:
+    def test_task_outcome_public_surface_is_removed(self) -> None:
+        task_outcome = "Task" "Outcome"
+        task_outcome_global = "XR_GLOBAL_VAR_TASK_" "OUTCOME"
         analyzer_source = (ROOT / "src/frontend/analyzer/xanalyzer.c").read_text()
         native_defs = (ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text()
+        prelude_source = (ROOT / "stdlib/prelude/prelude.c").read_text()
+        coroutine_defs = (ROOT / "stdlib/types/coroutine.xr").read_text()
+        api_inventory = (ROOT / "scripts/gen_api_inventory.py").read_text()
 
-        self.assertIn("Success(PanicInfo)", native_defs)
-        self.assertIn("Failed(PanicInfo)", native_defs)
-        self.assertIn("task_outcome_success_payload[] = {", analyzer_source)
-        self.assertIn("task_outcome_failed_payload[] = {", analyzer_source)
-        self.assertIn('xr_type_new_named_instance(analyzer->isolate, "PanicInfo")', analyzer_source)
-        unknown_ctor = "xr_type_new_" "unknown"
-        self.assertNotIn(f"task_outcome_success_payload[] = {{{unknown_ctor}", analyzer_source)
-        self.assertNotIn(f"task_outcome_failed_payload[] = {{{unknown_ctor}", analyzer_source)
+        self.assertNotIn(task_outcome, analyzer_source)
+        self.assertNotIn(task_outcome, native_defs)
+        self.assertNotIn(task_outcome, prelude_source)
+        self.assertNotIn(task_outcome, coroutine_defs)
+        self.assertNotIn(task_outcome, api_inventory)
+        self.assertNotIn(task_outcome_global, analyzer_source)
 
     def test_typed_task_result_is_not_erased_result_residue(self) -> None:
         task_result = "Task" "Result"
@@ -60,13 +63,9 @@ class SourceUnknownInventoryTest(unittest.TestCase):
             self.assertNotIn("TASK_ERASED_RESULT_RESIDUE", categories)
             self.assertNotIn("STDLIB_DYNAMIC_UNKNOWN_API", categories)
 
-    def test_task_outcome_payload_surface_is_not_json_unknown_api(self) -> None:
+    def test_removed_task_outcome_surface_still_counts_as_erasure_residue(self) -> None:
         task_outcome = "Task" "Outcome"
-        for line in ("    Success(PanicInfo)", "    Failed(PanicInfo)"):
-            categories = classify_line("stdlib/types/coroutine.xr", line)
-            self.assertNotIn("STDLIB_DYNAMIC_UNKNOWN_API", categories)
-
-        for line in (f"fn collect() -> Array<{task_outcome}>",):
+        for line in (f"enum {task_outcome} {{", f"fn collect() -> Array<{task_outcome}>"):
             categories = classify_line("stdlib/types/coroutine.xr", line)
             self.assertIn("TASK_ERASED_RESULT_RESIDUE", categories)
             self.assertNotIn("STDLIB_DYNAMIC_UNKNOWN_API", categories)

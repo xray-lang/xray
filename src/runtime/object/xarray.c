@@ -361,8 +361,8 @@ void xr_array_init_inplace(XrArray *arr, int capacity, uint8_t elem_type) {
 
 /* Allocate an empty ANY-typed array directly on the shared (system) heap.
  *
- * Concurrency collection points — e.g. a supervisor scope's outcomes[] that the
- * owner creates but many child coroutines push into across workers — must not
+ * Concurrency collection points created by an owner and mutated by child
+ * coroutines across workers — must not
  * be per-coroutine arrays: growth is accounted to the pushing child's heap while
  * the array is freed by the owner's heap, underflowing the owner's byte counter
  * (and the data buffer would be reclaimed against the wrong heap). A shared
