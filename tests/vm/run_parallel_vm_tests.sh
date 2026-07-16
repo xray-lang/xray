@@ -172,6 +172,12 @@ expect_output_workers \
     2
 
 expect_output_workers \
+    "parallel_plan_for_each_close_after_panic_cleanup" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_for_each_close_after_panic_cleanup.xr" \
+    $'true\ntrue\ntrue\nclosed\ntrue' \
+    4
+
+expect_output_workers \
     "parallel_plan_map_cleanup_after_panic" \
     "$PROJECT_DIR/tests/vm/parallel_plan_map_cleanup_after_panic.xr" \
     $'true\ntrue\ntrue\ntrue\ntrue\ntrue' \
