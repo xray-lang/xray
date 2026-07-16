@@ -147,6 +147,12 @@ LAYOUT_GATE_REQUIRED_MANIFEST_ENTRIES = {
 }
 
 EXTERN_OUT_REF_WRAPPER_REQUIRED_SNIPPETS = {
+    Path("src/frontend/analyzer/xanalyzer_visitor_decl.c"): (
+        "xa_validate_extern_function_abi",
+        "Fail closed until task-190/task-206 define verified extern ParamMode ABI wrappers.",
+        "mode != XR_PARAM_VALUE",
+        "verified extern ABI contract",
+    ),
     Path("tests/compile_errors/ffi/040_extern_in_param_mode_rejected.xr"): (
         'extern "C"',
         "value: in int32",
