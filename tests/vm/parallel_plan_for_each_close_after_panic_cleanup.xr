@@ -1,0 +1,48 @@
+import { Options, ParallelError, Plan } from parallel
+
+var plan = Plan<int>(Options(4), lane -> lane)
+shared touched = Atomic<int>(0)
+
+fn closePlan() {
+    plan.close()
+}
+
+try {
+    plan.forEach(0..20000, (state, i) -> {
+        touched.add(1, Ordering.Relaxed)
+        if (i == 10000) {
+            closePlan()
+            var zero = i - 10000
+            var unreachable = 10 / zero
+            if (unreachable == 99) {
+                print("unreachable")
+            }
+        }
+    })
+    print("miss")
+} catch panic (p) {
+    print(p.code == 420)
+    print(p.message.contains("division by zero"))
+}
+
+print(touched.load(Ordering.Relaxed) > 0)
+
+try {
+    plan.forEach(0..1, (state, i) -> {
+        print(state + i)
+    })
+    print("reopen-miss")
+} catch (e) {
+    match (e) {
+        ParallelError.ClosedPlan -> print("closed")
+        ParallelError.ConcurrentDispatch -> print("active-leak")
+        _ -> print("other")
+    }
+}
+
+var fresh = Plan<int>(Options(4), lane -> lane)
+shared freshTouched = Atomic<int>(0)
+fresh.forEach(0..4, (state, i) -> {
+    freshTouched.add(1, Ordering.Relaxed)
+})
+print(freshTouched.load(Ordering.Relaxed) == 4)
