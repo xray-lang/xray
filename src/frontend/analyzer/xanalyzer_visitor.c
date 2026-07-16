@@ -5194,6 +5194,28 @@ static bool xa_generator_return_element(XaAnalyzer *analyzer, XrType *rt, XrType
     return xa_analyzer_is_iterator(analyzer, rt, out_elem);
 }
 
+static void xa_check_borrowed_yield_escape(XaInferContext *ctx, AstNode *yield_node, AstNode *value,
+                                           XrType *value_type) {
+    if (!ctx || !yield_node || !value || !xa_type_needs_borrow_escape_guard(value_type) ||
+        xa_type_contains_span_view(value_type))
+        return;
+
+    XaSymbol *root = xa_borrowed_param_root_symbol(ctx, value);
+    if (!root)
+        return;
+
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = value->line ? value->line : yield_node->line,
+                      .column = value->column ? value->column : yield_node->column};
+    const char *mode = root->passing_mode == XR_PARAM_REF ? "ref" : "in";
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "cannot yield borrowed '%s' parameter '%s'; yield an owned value or copy(%s)", mode,
+             root->name ? root->name : "?", root->name ? root->name : "?");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return;
@@ -6688,6 +6710,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &yloc);
             } else if (ys->value && val_type) {
+                xa_check_borrowed_yield_escape(ctx, node, ys->value, val_type);
                 xa_check_span_value_escape(ctx, ys->value, val_type,
                                            "yield Slice view from generator");
             }
