@@ -3062,6 +3062,26 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         "    for (entry in entries) { const key: MapErr = entry[0]; throw key }\n"
         "  }\n"
         "}\n"
+        "fn mapVarKeyIteratorRethrowsCaughtKey() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{e: MapErr.Other}\n"
+        "    for (key in box) { throw key }\n"
+        "  }\n"
+        "}\n"
+        "fn mapKeyIteratorSetOtherKeyFallsBack() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{e: MapErr.Other}\n"
+        "    box.set(MapErr.Other, MapErr.Boom)\n"
+        "    for (key in box) { throw key }\n"
+        "  }\n"
+        "}\n"
+        "fn mapKeyValueIteratorSetOtherKeyFallsBack() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{e: MapErr.Other}\n"
+        "    box.set(MapErr.Other, MapErr.Boom)\n"
+        "    for (key, value in box) { throw key }\n"
+        "  }\n"
+        "}\n"
         "fn mapKeyValueSetCaughtIteratorRethrows() {\n"
         "  try { failMap() } catch (e: MapErr) {\n"
         "    var box: Map<string, MapErr> = #{}\n"
@@ -3151,6 +3171,12 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         analyzer_function_effect_summary(a, "mapEntriesIteratorKeyRethrows");
     const XaEffectSummary *entries_key_mixed =
         analyzer_function_effect_summary(a, "mapEntriesMixedIteratorKeyFallsBack");
+    const XaEffectSummary *var_key =
+        analyzer_function_effect_summary(a, "mapVarKeyIteratorRethrowsCaughtKey");
+    const XaEffectSummary *key_set_other =
+        analyzer_function_effect_summary(a, "mapKeyIteratorSetOtherKeyFallsBack");
+    const XaEffectSummary *kv_key_set_other =
+        analyzer_function_effect_summary(a, "mapKeyValueIteratorSetOtherKeyFallsBack");
     const XaEffectSummary *kv_set_caught =
         analyzer_function_effect_summary(a, "mapKeyValueSetCaughtIteratorRethrows");
     const XaEffectSummary *kv_set_other =
@@ -3186,6 +3212,9 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(keys_view != NULL);
     ASSERT(entries_key != NULL);
     ASSERT(entries_key_mixed != NULL);
+    ASSERT(var_key != NULL);
+    ASSERT(key_set_other != NULL);
+    ASSERT(kv_key_set_other != NULL);
     ASSERT(kv_set_caught != NULL);
     ASSERT(kv_set_other != NULL);
     ASSERT(values_iter != NULL);
@@ -3227,6 +3256,11 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     const XaErrorTypeSet *entries_key_set = effect_summary_enum_set_named(a, entries_key, "MapErr");
     const XaErrorTypeSet *entries_key_mixed_set =
         effect_summary_enum_set_named(a, entries_key_mixed, "MapErr");
+    const XaErrorTypeSet *var_key_set = effect_summary_enum_set_named(a, var_key, "MapErr");
+    const XaErrorTypeSet *key_set_other_set =
+        effect_summary_enum_set_named(a, key_set_other, "MapErr");
+    const XaErrorTypeSet *kv_key_set_other_set =
+        effect_summary_enum_set_named(a, kv_key_set_other, "MapErr");
     const XaErrorTypeSet *kv_set_caught_set =
         effect_summary_enum_set_named(a, kv_set_caught, "MapErr");
     const XaErrorTypeSet *kv_set_other_set =
@@ -3261,6 +3295,9 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(keys_view_set != NULL);
     ASSERT(entries_key_set != NULL);
     ASSERT(entries_key_mixed_set != NULL);
+    ASSERT(var_key_set != NULL);
+    ASSERT(key_set_other_set != NULL);
+    ASSERT(kv_key_set_other_set != NULL);
     ASSERT(kv_set_caught_set != NULL);
     ASSERT(kv_set_other_set != NULL);
     ASSERT(values_iter_set != NULL);
@@ -3318,6 +3355,11 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(xa_bitset_test(&entries_key_set->variants, 0));
     ASSERT(!xa_bitset_test(&entries_key_set->variants, 1));
     ASSERT(entries_key_mixed_set->all_variants);
+    ASSERT(!var_key_set->all_variants);
+    ASSERT(xa_bitset_test(&var_key_set->variants, 0));
+    ASSERT(!xa_bitset_test(&var_key_set->variants, 1));
+    ASSERT(key_set_other_set->all_variants);
+    ASSERT(kv_key_set_other_set->all_variants);
     ASSERT(!kv_set_caught_set->all_variants);
     ASSERT(xa_bitset_test(&kv_set_caught_set->variants, 0));
     ASSERT(!xa_bitset_test(&kv_set_caught_set->variants, 1));
