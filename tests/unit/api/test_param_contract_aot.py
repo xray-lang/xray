@@ -16,6 +16,8 @@ POSITIVE_AOT_CASES = (
     "tests/aot/basic/ref_out_call_plan.xr",
     "tests/aot/basic/dynamic_function_value_ref_out_call_plan.xr",
     "tests/aot/basic/aggregate_ref_out_call_plan.xr",
+    "tests/aot/basic/interface_ref_out_call_plan.xr",
+    "tests/aot/basic/constructor_super_ref_out_call_plan.xr",
     "tests/aot/modules/import_param_contract.xr",
     "tests/aot/filetests/cgen/fixed_array_ref_param_abi.xr",
 )
@@ -24,6 +26,8 @@ EXPECTED_OUTPUTS = {
     "tests/aot/basic/ref_out_call_plan.xr": b"2\n2\n9\n9\n5\n5\n9\n9\n",
     "tests/aot/basic/dynamic_function_value_ref_out_call_plan.xr": b"2\n2\n4\n4\n10\n10\n20\n20\n",
     "tests/aot/basic/aggregate_ref_out_call_plan.xr": b"7\n3\n5\n2\n11\n22\n30\n40\n10\n50\n9\n40\n15\n",
+    "tests/aot/basic/interface_ref_out_call_plan.xr": b"7\n7\n14\n14\n40\n40\n",
+    "tests/aot/basic/constructor_super_ref_out_call_plan.xr": b"2\n2\n11\n11\n42\n7\n",
     "tests/aot/modules/import_param_contract.xr": b"2\n2\n9\n9\n4\n4\n9\n9\n6\n6\n11\n11\n7\n7\n11\n11\n",
     "tests/aot/filetests/cgen/fixed_array_ref_param_abi.xr": b"10\n",
 }
