@@ -128,8 +128,10 @@ static inline XrValue xrt_compress_inflate(const char *data, int64_t len) {
     size_t out_len = 0;
     uint8_t *buf = xr_compress_core_inflate_alloc(
         input.data, input.len, &out_len, xrt_compress_core_alloc, xrt_compress_core_free, NULL);
-    if (!buf)
+    if (!buf) {
+        xrt_compress_set_builtin_enum_error("CompressionError", "InvalidData", 0);
         return XR_NULL_VAL;
+    }
 
     XrValue out = xrt_compress_finish_string(buf, out_len);
     XRT_FREE(buf);

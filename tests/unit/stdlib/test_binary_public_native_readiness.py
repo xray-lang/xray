@@ -109,6 +109,36 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
             "task-198 full readiness marker must remain absent for this probe",
         )
 
+    def test_compress_inflate_typed_error_abi_is_a_focused_function_slice(self) -> None:
+        spec = readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES["compress.inflate"]
+        module = load_boundary_modules(ROOT)["compress"]
+        result = self.run_fast_single_function_probe("compress.inflate")
+
+        self.assertTrue(result.ok, result.detail)
+        self.assertEqual("NATIVE_TYPED_ERROR_ABI_FUNCTION_BLOCKER", result.category)
+        self.assertIn("focused VM/native-AOT typed CompressionError ABI slice", result.detail)
+        self.assertIn("inflate", module["public_native"])
+        self.assertIsNot(module.get("def_migration_complete"), True)
+        for path_text, anchors in spec["required"].items():
+            with self.subTest(path=path_text):
+                text = (ROOT / path_text).read_text(encoding="utf-8")
+                for anchor in anchors:
+                    self.assertIn(anchor, text)
+
+        blocks = readiness.def_function_blocks(ROOT, spec["module"], spec["function"])
+        self.assertTrue(blocks)
+        for block in blocks:
+            self.assertNotIn("@errors(", block)
+            self.assertIn('effect: "CompressionError.InvalidData"', block)
+
+        self.assertTrue(spec.get("allow_typed_error_before_full_marker"))
+        self.assertIn("focused VM/native-AOT typed CompressionError ABI slice", spec["detail"])
+        self.assertIn("full task-198 readiness remains blocked", spec["detail"])
+        self.assertFalse(
+            (ROOT / "tests" / "stdlib" / "contracts" / "TASK_198_TYPED_NATIVE_ERRORS_READY").exists(),
+            "task-198 full readiness marker must remain absent for this probe",
+        )
+
     def test_crypto_random_bytes_typed_error_abi_is_a_single_function_blocker(self) -> None:
         spec = readiness.SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES["crypto.randomBytes"]
         module = load_boundary_modules(ROOT)["crypto"]
@@ -177,6 +207,19 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertIn("compress.gunzip left pre-switch public_native", result.detail)
+
+    def test_compress_inflate_probe_fails_closed_on_partial_public_switch(self) -> None:
+        modules = {
+            name: dict(module)
+            for name, module in load_boundary_modules(ROOT).items()
+        }
+        modules["compress"] = dict(modules["compress"])
+        modules["compress"]["public_native"] = ["crc32"]
+
+        result = self.run_fast_single_function_probe("compress.inflate", modules)
+
+        self.assertFalse(result.ok)
+        self.assertIn("compress.inflate left pre-switch public_native", result.detail)
 
     def test_crypto_random_bytes_probe_fails_closed_on_partial_public_switch(self) -> None:
         modules = {
