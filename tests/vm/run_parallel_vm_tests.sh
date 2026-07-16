@@ -190,6 +190,12 @@ expect_output_workers \
     2
 
 expect_output_workers \
+    "parallel_plan_map_close_after_panic_cleanup" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_map_close_after_panic_cleanup.xr" \
+    $'true\ntrue\ntrue\nmap-closed\ntrue\ntrue\ntrue\nmapinto-closed\ntrue' \
+    2
+
+expect_output_workers \
     "parallel_plan_map_close_during_dispatch" \
     "$PROJECT_DIR/tests/vm/parallel_plan_map_close_during_dispatch.xr" \
     $'true\nmap-closed\ntrue\ntrue\nmapinto-closed\ndone' \

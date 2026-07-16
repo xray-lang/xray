@@ -1,0 +1,85 @@
+import { Options, ParallelError, Plan } from parallel
+
+var mapPlan = Plan<int>(Options(2), lane -> lane + 1)
+shared mapTouched = Atomic<int>(0)
+
+fn closeMapPlan() {
+    mapPlan.close()
+}
+
+try {
+    var mapped = mapPlan.map(0..20000, (state, i) -> {
+        mapTouched.add(1, Ordering.Relaxed)
+        if (i == 10000) {
+            closeMapPlan()
+            var zero = i - 10000
+            return 10 / zero
+        }
+        return state + i
+    })
+    print(len(mapped))
+    print("map-miss")
+} catch panic (p) {
+    print(p.code == 420)
+    print(p.message.contains("division by zero"))
+}
+
+print(mapTouched.load(Ordering.Relaxed) > 0)
+
+try {
+    mapPlan.forEach(0..1, (state, i) -> {
+        print(state + i)
+    })
+    print("map-reopen-miss")
+} catch (e) {
+    match (e) {
+        ParallelError.ClosedPlan -> print("map-closed")
+        ParallelError.ConcurrentDispatch -> print("map-active-leak")
+        _ -> print("map-other")
+    }
+}
+
+var intoPlan = Plan<int>(Options(2), lane -> lane + 3)
+shared intoTouched = Atomic<int>(0)
+
+fn closeIntoPlan() {
+    intoPlan.close()
+}
+
+var out: Array<int> = []
+try {
+    var returned = intoPlan.mapInto(0..20000, out, (state, i) -> {
+        intoTouched.add(1, Ordering.Relaxed)
+        if (i == 10000) {
+            closeIntoPlan()
+            var zero = i - 10000
+            return 10 / zero
+        }
+        return state + i
+    })
+    print(len(returned))
+    print("mapinto-miss")
+} catch panic (p) {
+    print(p.code == 420)
+    print(p.message.contains("division by zero"))
+}
+
+print(intoTouched.load(Ordering.Relaxed) > 0)
+
+try {
+    intoPlan.reduce(0..1, 0, (state, i) -> state + i, (a, b) -> a + b)
+    print("mapinto-reopen-miss")
+} catch (e) {
+    match (e) {
+        ParallelError.ClosedPlan -> print("mapinto-closed")
+        ParallelError.ConcurrentDispatch -> print("mapinto-active-leak")
+        _ -> print("mapinto-other")
+    }
+}
+
+var fresh = Plan<int>(Options(2), lane -> lane)
+shared freshTouched = Atomic<int>(0)
+fresh.forEach(0..4, (state, i) -> {
+    freshTouched.add(1, Ordering.Relaxed)
+})
+print(freshTouched.load(Ordering.Relaxed) == 4)
