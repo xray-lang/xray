@@ -79,6 +79,8 @@ POSITIVE_TESTS=(
 NEGATIVE_TESTS=(
     "tests/compile_errors/type/byte_array_append_from_rejects_in.xr"
     "tests/compile_errors/type/byte_slice_repeat_from_rejects_in.xr"
+    "tests/compile_errors/type/byte_method_union_matrix.xr"
+    "tests/compile_errors/type/byte_method_generic_union_matrix.xr"
     "tests/compile_errors/type/const_byte_slice_mutating_method.xr"
     "tests/compile_errors/type/const_byte_slice_index_store.xr"
     "tests/compile_errors/type/shared_byte_array_mutating_method.xr"
