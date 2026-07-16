@@ -214,6 +214,12 @@ expect_output_workers \
     2
 
 expect_output_workers \
+    "parallel_plan_close_after_typed_error_cleanup" \
+    "$PROJECT_DIR/tests/vm/parallel_plan_close_after_typed_error_cleanup.xr" \
+    $'closed-typed\ntrue\nclosed\ntrue' \
+    2
+
+expect_output_workers \
     "parallel_lane_panic_propagates_original" \
     "$PROJECT_DIR/tests/vm/parallel_lane_panic_propagates_original.xr" \
     $'true\ntrue\ntrue' \
