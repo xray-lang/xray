@@ -1,0 +1,23 @@
+@derive(Clone)
+class CollectionSnapshot {
+    scores: Map<string, int>
+    seen: Set<string>
+
+    constructor(scores: Map<string, int>, seen: Set<string>) {
+        this.scores = scores
+        this.seen = seen
+    }
+}
+
+var original = CollectionSnapshot(#{"ada": 1}, #["ada"])
+var cloned = copy(original)
+cloned.scores.set("ada", 9)
+cloned.seen.delete("ada")
+cloned.seen.add("grace")
+
+print(original.scores.get("ada"))
+print(original.seen.contains("ada"))
+print(original.seen.contains("grace"))
+print(cloned.scores.get("ada"))
+print(cloned.seen.contains("ada"))
+print(cloned.seen.contains("grace"))

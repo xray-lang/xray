@@ -4458,6 +4458,15 @@ static void emit_class_native_instance_base_ref(XiCgenCtx *ctx, FILE *out, const
         emit_class_shared_native_export_storage_name(out, exp);
         return;
     }
+    if (typed_ptr && cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED) {
+        fprintf(out, "(");
+        emit_class_native_type_name(out, cg_class_native_prefix_for_data(ctx, typed_ptr, NULL),
+                                    typed_ptr->class_name);
+        fprintf(out, "*)");
+        emit_vref(out, v);
+        fprintf(out, ".ptr");
+        return;
+    }
     const XiValue *origin = cg_class_native_instance_origin(ctx, f, v);
     emit_vref(out, origin ? origin : v);
 }

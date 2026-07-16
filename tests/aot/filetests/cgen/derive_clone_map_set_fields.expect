@@ -1,0 +1,6 @@
+args=--dump-xaot-plan
+regex=derived-clone-plan [0-9]+ .* action=deep_copy_plan .* reason=none
+c_regex=CollectionSnapshot_derived_clone\(.*CollectionSnapshot \*src\)
+c_contains=xrt_value_clone_for_coro(xr_mkptr((src)->f0, XR_TAG_MAP))
+c_contains=xrt_value_clone_for_coro(xr_mkptr((src)->f1, XR_TAG_SET))
+c_regex=CollectionSnapshot_derived_clone\(\(.*CollectionSnapshot\*\)v[0-9]+\.ptr\)
