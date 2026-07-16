@@ -4943,7 +4943,7 @@ static bool cg_ref_alias_user_noescape(XiCgenCtx *ctx, const XiFunc *f, const Xi
             CgStaticFunctionCall static_call =
                 cg_resolve_static_function_call(ctx, f, user->args[0]);
             if (!static_call.func || static_call.is_class_constructor) {
-                cg_ref_noescape_debug_fail(f, alias, user, "unknown direct callee");
+                cg_ref_noescape_debug_fail(f, alias, user, "unresolved direct callee");
                 return false;
             }
             if (!cg_direct_ref_param_noescape(ctx, static_call.func, (uint16_t) (arg_index - 1),
