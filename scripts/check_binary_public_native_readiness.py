@@ -339,6 +339,7 @@ SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = {
     "compress.gunzip": {
         "module": "compress",
         "function": "gunzip",
+        "typed_error": "CompressionError",
         "required": {
             "tests/stdlib/contracts/compress/contract.toml": (
                 "decompression failures must become typed CompressionError values",
@@ -369,6 +370,44 @@ SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = {
         "detail": (
             "compress.gunzip remains a null-sentinel VM/AOT native path; future switch "
             "must emit CompressionError enum payloads before task-200 public-native cutover"
+        ),
+    },
+    "crypto.randomBytes": {
+        "module": "crypto",
+        "function": "randomBytes",
+        "typed_error": "CryptoError",
+        "required": {
+            "tests/stdlib/contracts/crypto/contract.toml": (
+                "randomBytes returns Array<byte> and reports native failures through a typed error",
+                "legacy randomBytes returns hex text rather than owned random bytes",
+            ),
+            "stdlib/defs/core.def": (
+                "fn randomBytes {",
+                'signature: "(n: int): string"',
+                'vm: "crypto_random_bytes"',
+                'aot: "xrt_crypto_random_bytes"',
+            ),
+            "stdlib/crypto/crypto.c": (
+                "static XrValue crypto_random_bytes",
+                "char hex[2049];",
+                "return xr_string_value(xr_string_new(isolate, hex, len * 2));",
+            ),
+            "src/aot/xrt_crypto.h": (
+                "static inline XrValue xrt_crypto_random_bytes",
+                "char hex[2049];",
+                "XrValue result = xrt_str_alloc(len * 2);",
+                "memcpy(xr_str_buf(result), hex, len * 2);",
+            ),
+            "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr": (
+                "var r8 = crypto.randomBytes(8)",
+                "print(len(r8) == 16)",
+                "print(len(r16) == 32)",
+            ),
+        },
+        "detail": (
+            "crypto.randomBytes remains a hex-string VM/AOT native path; future switch "
+            "must return Array<byte> and emit CryptoError enum payloads before task-200 "
+            "public-native cutover"
         ),
     },
 }
@@ -857,9 +896,10 @@ def check_single_function_native_typed_error_probes(root: Path) -> list[CheckRes
         for function_block in function_blocks:
             if "@errors(" in function_block:
                 failures.append(f"stdlib/defs/core.def: {subject} has @errors before readiness marker")
-            if "CompressionError" in function_block:
+            typed_error = str(spec.get("typed_error", ""))
+            if typed_error and typed_error in function_block:
                 failures.append(
-                    f"stdlib/defs/core.def: {subject} mentions CompressionError before readiness marker"
+                    f"stdlib/defs/core.def: {subject} mentions {typed_error} before readiness marker"
                 )
 
         marker_hits = source_marker_hits(root, "TASK_198_TYPED_NATIVE_ERRORS_READY")
