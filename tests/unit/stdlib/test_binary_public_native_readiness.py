@@ -50,6 +50,19 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
                 self.assertTrue(result.ok, result.detail)
                 self.assertIn("public-native switch remains blocked", result.detail)
 
+    def test_task_197_slice_provenance_is_partial_evidence_only(self) -> None:
+        spec = readiness.PARTIAL_DEPENDENCY_EVIDENCE["TASK_197_VERIFIER_ONLY"]
+        for path_text, anchors in spec["required"].items():
+            with self.subTest(path=path_text):
+                text = (ROOT / path_text).read_text(encoding="utf-8")
+                for anchor in anchors:
+                    self.assertIn(anchor, text)
+
+        marker = spec["full_marker"]
+        self.assertFalse((ROOT / "tests" / "stdlib" / "contracts" / marker).exists())
+        self.assertIn("borrow/provenance verifier evidence exists", spec["detail"])
+        self.assertIn("full Slice public-switch provenance is not marked ready", spec["detail"])
+
     def test_pre_switch_native_surface_is_exact_until_dependencies_close(self) -> None:
         results = check_boundary(ROOT)
         exact = {
