@@ -3443,6 +3443,34 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         "    for (key in box) { throw key }\n"
         "  }\n"
         "}\n"
+        "fn mapIndexSetCaughtValueIteratorRethrows() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box: Map<string, MapErr> = #{}\n"
+        "    box[\"caught\"] = e\n"
+        "    for (key, value in box) { throw value }\n"
+        "  }\n"
+        "}\n"
+        "fn mapIndexSetOtherValueIteratorFallsBack() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{\"caught\": e}\n"
+        "    box[\"other\"] = MapErr.Other\n"
+        "    for (key, value in box) { throw value }\n"
+        "  }\n"
+        "}\n"
+        "fn mapIndexSetCaughtKeyIteratorRethrows() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box: Map<MapErr, MapErr> = #{}\n"
+        "    box[e] = MapErr.Other\n"
+        "    for (key in box) { throw key }\n"
+        "  }\n"
+        "}\n"
+        "fn mapIndexSetOtherKeyIteratorFallsBack() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{e: MapErr.Other}\n"
+        "    box[MapErr.Other] = MapErr.Boom\n"
+        "    for (key in box) { throw key }\n"
+        "  }\n"
+        "}\n"
         "fn mapValuesIteratorRethrows() {\n"
         "  try { failMap() } catch (e: MapErr) {\n"
         "    const box = #{\"caught\": e}\n"
@@ -3607,6 +3635,14 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         analyzer_function_effect_summary(a, "mapDeleteSingletonThenSetCaughtValueIteratorRethrows");
     const XaEffectSummary *delete_singleton_then_set_key = analyzer_function_effect_summary(
         a, "mapDeleteSingletonCaughtKeyThenSetCaughtKeyIteratorRethrows");
+    const XaEffectSummary *index_set_caught_value =
+        analyzer_function_effect_summary(a, "mapIndexSetCaughtValueIteratorRethrows");
+    const XaEffectSummary *index_set_other_value =
+        analyzer_function_effect_summary(a, "mapIndexSetOtherValueIteratorFallsBack");
+    const XaEffectSummary *index_set_caught_key =
+        analyzer_function_effect_summary(a, "mapIndexSetCaughtKeyIteratorRethrows");
+    const XaEffectSummary *index_set_other_key =
+        analyzer_function_effect_summary(a, "mapIndexSetOtherKeyIteratorFallsBack");
     const XaEffectSummary *values_iter =
         analyzer_function_effect_summary(a, "mapValuesIteratorRethrows");
     const XaEffectSummary *direct_values_iter =
@@ -3678,6 +3714,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(clear_then_set_key != NULL);
     ASSERT(delete_singleton_then_set_value != NULL);
     ASSERT(delete_singleton_then_set_key != NULL);
+    ASSERT(index_set_caught_value != NULL);
+    ASSERT(index_set_other_value != NULL);
+    ASSERT(index_set_caught_key != NULL);
+    ASSERT(index_set_other_key != NULL);
     ASSERT(values_iter != NULL);
     ASSERT(direct_values_iter != NULL);
     ASSERT(values_mixed != NULL);
@@ -3787,6 +3827,14 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         effect_summary_enum_set_named(a, delete_singleton_then_set_value, "MapErr");
     const XaErrorTypeSet *delete_singleton_then_set_key_set =
         effect_summary_enum_set_named(a, delete_singleton_then_set_key, "MapErr");
+    const XaErrorTypeSet *index_set_caught_value_set =
+        effect_summary_enum_set_named(a, index_set_caught_value, "MapErr");
+    const XaErrorTypeSet *index_set_other_value_set =
+        effect_summary_enum_set_named(a, index_set_other_value, "MapErr");
+    const XaErrorTypeSet *index_set_caught_key_set =
+        effect_summary_enum_set_named(a, index_set_caught_key, "MapErr");
+    const XaErrorTypeSet *index_set_other_key_set =
+        effect_summary_enum_set_named(a, index_set_other_key, "MapErr");
     const XaErrorTypeSet *values_iter_set = effect_summary_enum_set_named(a, values_iter, "MapErr");
     const XaErrorTypeSet *direct_values_iter_set =
         effect_summary_enum_set_named(a, direct_values_iter, "MapErr");
@@ -3858,6 +3906,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(clear_then_set_key_set != NULL);
     ASSERT(delete_singleton_then_set_value_set != NULL);
     ASSERT(delete_singleton_then_set_key_set != NULL);
+    ASSERT(index_set_caught_value_set != NULL);
+    ASSERT(index_set_other_value_set != NULL);
+    ASSERT(index_set_caught_key_set != NULL);
+    ASSERT(index_set_other_key_set != NULL);
     ASSERT(values_iter_set != NULL);
     ASSERT(direct_values_iter_set != NULL);
     ASSERT(values_mixed_set != NULL);
@@ -3997,6 +4049,14 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!delete_singleton_then_set_key_set->all_variants);
     ASSERT(xa_bitset_test(&delete_singleton_then_set_key_set->variants, 0));
     ASSERT(!xa_bitset_test(&delete_singleton_then_set_key_set->variants, 1));
+    ASSERT(!index_set_caught_value_set->all_variants);
+    ASSERT(xa_bitset_test(&index_set_caught_value_set->variants, 0));
+    ASSERT(!xa_bitset_test(&index_set_caught_value_set->variants, 1));
+    ASSERT(index_set_other_value_set->all_variants);
+    ASSERT(!index_set_caught_key_set->all_variants);
+    ASSERT(xa_bitset_test(&index_set_caught_key_set->variants, 0));
+    ASSERT(!xa_bitset_test(&index_set_caught_key_set->variants, 1));
+    ASSERT(index_set_other_key_set->all_variants);
     ASSERT(!values_iter_set->all_variants);
     ASSERT(xa_bitset_test(&values_iter_set->variants, 0));
     ASSERT(!xa_bitset_test(&values_iter_set->variants, 1));
