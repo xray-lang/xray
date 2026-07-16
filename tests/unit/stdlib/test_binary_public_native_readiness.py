@@ -407,6 +407,13 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
         self.assertIn("scoped marker is present", result.detail)
 
     def test_task_197_slice_provenance_is_partial_evidence_only(self) -> None:
+        result = {
+            item.subject: item for item in readiness.check_partial_dependency_evidence(ROOT)
+        }["TASK_197_VERIFIER_ONLY"]
+        self.assertTrue(result.ok, result.detail)
+        self.assertIn("borrow/provenance verifier evidence exists", result.detail)
+        self.assertIn("full Slice public-switch provenance is not marked ready", result.detail)
+
         spec = readiness.PARTIAL_DEPENDENCY_EVIDENCE["TASK_197_VERIFIER_ONLY"]
         for path_text, anchors in spec["required"].items():
             with self.subTest(path=path_text):
