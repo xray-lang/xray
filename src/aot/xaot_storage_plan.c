@@ -154,6 +154,37 @@ static bool add_captures_recursive(XaotBundle *bundle, const XiFunc *func) {
     return true;
 }
 
+static bool verify_captures_recursive(const XaotBundle *bundle, const XiFunc *func,
+                                      uint32_t *capture_index, char *errbuf, size_t errbuf_len) {
+    if (!bundle || !capture_index)
+        return false;
+    if (!func)
+        return true;
+    for (uint16_t i = 0; i < func->ncaptures; i++) {
+        const XaotCapturePlan *actual;
+        XaotCapturePlan expected;
+        if (*capture_index >= bundle->ncapture_plans) {
+            if (errbuf && errbuf_len)
+                snprintf(errbuf, errbuf_len, "AOT capture plan count is stale");
+            return false;
+        }
+        actual = &bundle->capture_plans[*capture_index];
+        expected = derive_capture(func, i);
+        if (memcmp(&expected, actual, sizeof(expected)) != 0) {
+            if (errbuf && errbuf_len)
+                snprintf(errbuf, errbuf_len, "AOT capture plan is stale");
+            return false;
+        }
+        (*capture_index)++;
+    }
+    for (uint16_t i = 0; i < func->nchildren; i++) {
+        if (!verify_captures_recursive(bundle, func->children[i], capture_index, errbuf,
+                                       errbuf_len))
+            return false;
+    }
+    return true;
+}
+
 static bool address_plan_for_value(const XaotBundle *bundle, const XiModule *module,
                                    const XiFunc *func, const XiValue *value, XaotAddressPlan *out) {
     const XaotStoragePlan *storage;
@@ -426,20 +457,17 @@ bool xaot_storage_capture_plans_verify(const XaotBundle *bundle, char *errbuf, s
             snprintf(errbuf, errbuf_len, "AOT storage plan count is stale");
         return false;
     }
-    for (uint32_t i = 0; i < bundle->ncapture_plans; i++) {
-        const XaotCapturePlan *actual = &bundle->capture_plans[i];
-        XaotCapturePlan expected;
-        if (!actual->func || actual->capture_index >= actual->func->ncaptures)
+    for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+        const XiModule *module = bundle->modules[mi];
+        if (!verify_captures_recursive(bundle, module ? module->init : NULL, &capture_index, errbuf,
+                                       errbuf_len))
             return false;
-        expected = derive_capture(actual->func, actual->capture_index);
-        if (memcmp(&expected, actual, sizeof(expected)) != 0) {
-            if (errbuf && errbuf_len)
-                snprintf(errbuf, errbuf_len, "AOT capture plan is stale");
-            return false;
-        }
-        capture_index++;
     }
-    (void) capture_index;
+    if (capture_index != bundle->ncapture_plans) {
+        if (errbuf && errbuf_len)
+            snprintf(errbuf, errbuf_len, "AOT capture plan count is stale");
+        return false;
+    }
     for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
         const XiModule *module = bundle->modules[mi];
         const XiFunc *stack[256];
