@@ -124,6 +124,7 @@ sequence_access_plan|covered|sequence-access-plan|tests/aot/filetests/link|Seque
 sequence_capacity_plan|covered|capacity-plan|tests/aot/filetests/link|Array<byte>/StringBuilder capacity operations lower into verified capacity plans.
 sequence_capacity_reserve_once|covered|capacity-plan .*action=reserve_once|tests/aot/filetests/link|Array push capacity evidence fixes the reserve-once action in plan output.
 sequence_bulk_plan|covered|bulk-plan|tests/aot/filetests/link|Bulk copy/fill evidence lowers into verified bulk operation plans.
+sequence_bulk_pod_nonzero_typed_loop|covered|evidence=row\+pod\+length_expr reason=none|tests/aot/filetests/cgen/array_fill_pod_nonzero_typed_loop_plan.expect|POD Array.fill with a nonzero non-byte-pattern value consumes the bulk plan as a typed loop instead of overreaching to memset or the generic helper.
 sequence_bulk_managed_ref_typed_loop|covered|xrt_retain\(_fill\)|tests/aot/filetests/container|Managed-reference Array.fill consumes write-barrier evidence through a direct retain/store/release loop instead of memcpy, memset, or the generic helper.
 sequence_bulk_managed_ref_benchmark|covered|sequence_managed_ref_fill|tests/benchmarks/aot/zero_cost/benchmarks.tsv|Managed-reference Array.fill has a registered zero-cost benchmark case paired with the write-barrier CGen gate.
 sequence_encoding_plan|covered|encoding-plan|tests/aot/filetests/link|String/byte-array encoding evidence lowers into verified encoding plans.

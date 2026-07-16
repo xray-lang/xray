@@ -1,0 +1,9 @@
+fn fillNonZero(a: Array<uint32>) -> int {
+    a.fill(7, 1, 7)
+    unsafe {
+        return int(a.get(1)) + int(a.get(4)) + int(a.get(6))
+    }
+}
+
+var a = Array<uint32>(8, 1)
+print(fillNonZero(a))

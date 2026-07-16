@@ -1,0 +1,8 @@
+contains=op=fill action=typed_loop
+contains=evidence=row+pod+length_expr reason=none
+c_contains=XrArrayCoreRange _r = xr_array_core_fill_range(
+c_contains=for (int64_t _i = 0; _i < _r.count; _i++)
+c_contains=((uint32_t*)_a->data)[_r.start + _i] = _fill
+c_not_contains=memset((uint8_t*)_a->data +
+c_not_contains=xrt_array_fill_value(
+c_not_contains=xrt_method_3(
