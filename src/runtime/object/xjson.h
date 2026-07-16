@@ -149,7 +149,7 @@ static inline XrJson *xr_value_to_json(XrValue v) {
 
 static inline XrValue xr_json_decode_record_with_class(XrVMRuntime *X, struct XrCoroutine *coro,
                                                        XrJson *src, XrClass *cls) {
-    if (!X || !coro || !src || !cls || cls->field_count == 0 || !cls->fields)
+    if (!X || !src || !cls || cls->field_count == 0 || !cls->fields)
         return xr_null();
     uint16_t field_count = cls->field_count;
     XrValue *decoded_values = (XrValue *) xr_malloc(sizeof(XrValue) * field_count);
