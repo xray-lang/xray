@@ -1420,6 +1420,19 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME parallel_plan_vm_scaling_gate
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_parallel_plan_scaling_gate.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(parallel_plan_vm_scaling_gate PROPERTIES
+        LABELS "vm;parallel;plan;scaling;task-193"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
+
+    add_test(
         NAME http_static_route_full_parse
         COMMAND bash
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_http_static_route_tests.sh
