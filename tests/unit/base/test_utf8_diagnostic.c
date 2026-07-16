@@ -57,6 +57,30 @@ TEST(utf8_diagnostic_truncated_prefixes) {
     assert_scan(bad_third, sizeof(bad_third), XR_UTF8_TRUNCATED, 0, 2, 0);
 }
 
+TEST(utf8_diagnostic_invalid_corpus_boundaries) {
+#define ASSERT_INVALID_CORPUS(error, offset, invalid_length, rune_count, ...)                      \
+    do {                                                                                           \
+        static const uint8_t bytes[] = {__VA_ARGS__};                                              \
+        assert_scan(bytes, sizeof(bytes), error, offset, invalid_length, rune_count);              \
+        ASSERT_FALSE(xr_utf8_validate((const char *) bytes, sizeof(bytes)));                       \
+    } while (0)
+
+    ASSERT_INVALID_CORPUS(XR_UTF8_OVERLONG, 0, 1, 0, 0xC0);
+    ASSERT_INVALID_CORPUS(XR_UTF8_OVERLONG, 0, 2, 0, 0xC0, 0x80);
+    ASSERT_INVALID_CORPUS(XR_UTF8_OVERLONG, 0, 3, 0, 0xE0, 0x9F, 0xBF);
+    ASSERT_INVALID_CORPUS(XR_UTF8_OVERLONG, 0, 4, 0, 0xF0, 0x8F, 0xBF, 0xBF);
+    ASSERT_INVALID_CORPUS(XR_UTF8_SURROGATE, 0, 3, 0, 0xED, 0xA0, 0x80);
+    ASSERT_INVALID_CORPUS(XR_UTF8_OUT_OF_RANGE, 0, 4, 0, 0xF4, 0x90, 0x80, 0x80);
+    ASSERT_INVALID_CORPUS(XR_UTF8_OUT_OF_RANGE, 0, 4, 0, 0xF5, 0x80, 0x80, 0x80);
+    ASSERT_INVALID_CORPUS(XR_UTF8_TRUNCATED, 0, 1, 0, 0xC2, 'A');
+    ASSERT_INVALID_CORPUS(XR_UTF8_TRUNCATED, 0, 3, 0, 0xF1, 0x80, 0x80, 'A');
+    ASSERT_INVALID_CORPUS(XR_UTF8_STRAY_CONTINUATION, 3, 1, 2, '$', 0xC2, 0xA2, 0x80);
+    ASSERT_INVALID_CORPUS(XR_UTF8_OUT_OF_RANGE, 4, 4, 2, 'A', 0xE2, 0x82, 0xAC, 0xF4, 0x90, 0x80,
+                          0x80);
+
+#undef ASSERT_INVALID_CORPUS
+}
+
 static void assert_steps(const uint8_t *data, size_t len, const size_t *consumed, size_t count) {
     size_t pos = 0;
     for (size_t i = 0; i < count; i++) {
@@ -107,10 +131,17 @@ static void assert_lossy(const uint8_t *data, size_t len, const char *expected,
 TEST(utf8_lossy_plan_and_write) {
     static const uint8_t valid[] = {'A', 0xC3, 0xA9, 0xE4, 0xB8, 0xAD};
     static const uint8_t mixed[] = {'A', 0xFF, 'B'};
+    static const uint8_t bad_continuation[] = {0xE2, 0x28, 0xA1};
+    static const uint8_t truncated_four[] = {0xF0, 0x90, 0x80};
+    static const uint8_t valid_then_out_of_range[] = {'A',  0xE2, 0x82, 0xAC, 0xF4,
+                                                      0x90, 0x80, 0x80, 'B'};
     static const uint8_t truncated[] = {0xE1, 0x80, 0xE2, 0xF0, 0x91, 0x92, 0xF1, 0xBF, 'A'};
 
     assert_lossy(valid, sizeof(valid), "Aé中", 3);
     assert_lossy(mixed, sizeof(mixed), "A�B", 3);
+    assert_lossy(bad_continuation, sizeof(bad_continuation), "�(�", 3);
+    assert_lossy(truncated_four, sizeof(truncated_four), "�", 1);
+    assert_lossy(valid_then_out_of_range, sizeof(valid_then_out_of_range), "A€����B", 7);
     assert_lossy(truncated, sizeof(truncated), "����A", 5);
 }
 
@@ -125,6 +156,7 @@ static void run_all_tests(void) {
     RUN_TEST(utf8_diagnostic_valid_and_count);
     RUN_TEST(utf8_diagnostic_error_payloads);
     RUN_TEST(utf8_diagnostic_truncated_prefixes);
+    RUN_TEST(utf8_diagnostic_invalid_corpus_boundaries);
     RUN_TEST(utf8_maximal_subpart_unicode_tables);
     RUN_TEST(utf8_lossy_plan_and_write);
     RUN_TEST(utf8_validate_uses_diagnostic_core);
