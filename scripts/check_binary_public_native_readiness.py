@@ -168,6 +168,7 @@ REQUIRED_ORACLE_CASES = {
     },
     "crypto": {
         "hash-hmac-aes-and-timing": "tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr",
+        "hex-digest-presentation": "tests/regression/10_stdlib/1403_crypto_sha512.xr",
         "random-shape": "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr",
         "seeded-cross-oracle-fuzz": "tests/diff/fuzz_binary_native_stdlib.py",
     },
@@ -558,6 +559,56 @@ SINGLE_FUNCTION_PUBLIC_SURFACE_PROBES = {
         "detail": (
             "crypto.sha256 remains a hex-string fixed-digest native path; future switch "
             "must return [byte;32] from Slice<byte> input and move presentation to "
+            "encoding.hexEncode before task-200 public-native cutover"
+        ),
+    },
+    "crypto.sha512": {
+        "module": "crypto",
+        "function": "sha512",
+        "required": {
+            "tests/stdlib/contracts/crypto/contract.toml": (
+                "fixed digest APIs return fixed byte arrays and use encoding.hexEncode only for presentation",
+                "legacy hash and HMAC APIs conflate digest bytes with lowercase hex presentation",
+                "future converged digest APIs return fixed byte arrays; hex strings are produced by encoding.hexEncode at call sites",
+            ),
+            "tests/stdlib/contracts/crypto/cases.jsonl": (
+                "hex-digest-presentation",
+                "SHA-512 KAT anchors the current 128-character lowercase hex presentation",
+            ),
+            "stdlib/defs/core.def": (
+                "fn sha512 {",
+                'signature: "(data: string): string"',
+                'vm: "crypto_sha512"',
+                'aot: "xrt_crypto_sha512"',
+            ),
+            "stdlib/crypto/crypto.c": (
+                "static XrValue crypto_sha512",
+                "return crypto_hash_value(isolate, args, nargs, XR_CRYPTO_CORE_HASH_SHA512);",
+                "return crypto_hex_string_result(isolate, digest, digest_len);",
+            ),
+            "src/aot/xrt_crypto.h": (
+                "static inline XrValue xrt_crypto_sha512",
+                "return xrt_crypto_hash_string(data, len, XR_CRYPTO_CORE_HASH_SHA512);",
+                "return xrt_crypto_hex_result(digest, digest_len);",
+            ),
+            "tests/diff/fuzz_binary_native_stdlib.py": (
+                "hashlib.sha512(data).hexdigest()",
+                "print(crypto.sha512(text{index}))",
+            ),
+            "tests/regression/10_stdlib/1403_crypto_sha512.xr": (
+                'var hash = crypto.sha512("hello")',
+                'assert_eq(hash, "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043")',
+                'assert_eq(len(crypto.sha512("test")), 128)',
+            ),
+        },
+        "forbidden_def_anchors": (
+            "Slice<byte>",
+            "[byte;64]",
+            "encoding.hexEncode",
+        ),
+        "detail": (
+            "crypto.sha512 remains a hex-string fixed-digest native path; future switch "
+            "must return [byte;64] from Slice<byte> input and move presentation to "
             "encoding.hexEncode before task-200 public-native cutover"
         ),
     },
