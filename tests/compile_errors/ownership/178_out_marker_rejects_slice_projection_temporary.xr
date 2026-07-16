@@ -1,0 +1,7 @@
+fn fill(view: out Slice<int>) {
+    var owner = [1, 2]
+    view = owner[:]
+}
+
+var values = [0, 0]
+fill(out values[:])
