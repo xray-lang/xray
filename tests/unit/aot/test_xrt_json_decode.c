@@ -178,6 +178,56 @@ static void test_decode_nested_record_field(void) {
     destroy_object(source);
 }
 
+static void test_decode_deep_nested_record_field(void) {
+    static const char *geo_names[] = {"lat", "verified"};
+    static const char *address_names[] = {"city", "geo"};
+    static const char *profile_names[] = {"name", "address"};
+    static const XrJsonDecodeFieldSpec geo_fields[] = {
+        {"lat", XR_JSON_VALUE_FLOAT, NULL, 0},
+        {"verified", XR_JSON_VALUE_BOOL, NULL, 0},
+    };
+    static const XrJsonDecodeFieldSpec address_fields[] = {
+        {"city", XR_JSON_VALUE_STRING, NULL, 0},
+        {"geo", XR_JSON_VALUE_RECORD, geo_fields, 2},
+    };
+    static const XrJsonDecodeFieldSpec profile_fields[] = {
+        {"name", XR_JSON_VALUE_STRING, NULL, 0},
+        {"address", XR_JSON_VALUE_RECORD, address_fields, 2},
+    };
+
+    XrValue geo = xrt_json_new_named(2, geo_names);
+    xrt_json_set_field(geo, 0, XR_FROM_FLOAT(30.25));
+    xrt_json_set_field(geo, 1, XR_TRUE_VAL);
+    XrValue address = xrt_json_new_named(2, address_names);
+    xrt_json_set_field(address, 0, xr_box_str("Hangzhou"));
+    xrt_json_set_field(address, 1, geo);
+    XrValue source = xrt_json_new_named(2, profile_names);
+    xrt_json_set_field(source, 0, xr_box_str("Dana"));
+    xrt_json_set_field(source, 1, address);
+
+    XrValue decoded = xrt_json_decode_record(source, 2, profile_fields);
+    ASSERT_TRUE(!XR_IS_NULL(decoded), "deep nested Record field should decode");
+    XrValue decoded_address = xrt_json_get_field(decoded, 1);
+    XrValue decoded_geo = xrt_json_get_field(decoded_address, 1);
+    ASSERT_TRUE(((xrt_json_t *) decoded_address.ptr)->object_kind == XRT_OBJECT_RECORD,
+                "second-level nested object should become a Record");
+    ASSERT_TRUE(((xrt_json_t *) decoded_geo.ptr)->object_kind == XRT_OBJECT_RECORD,
+                "third-level nested object should become a Record");
+    ASSERT_TRUE(XR_IS_BOOL(xrt_json_get_field(decoded_geo, 1)) &&
+                    XR_TO_BOOL(xrt_json_get_field(decoded_geo, 1)),
+                "deep nested bool field should be copied");
+    destroy_object(decoded_geo);
+    destroy_object(decoded_address);
+    destroy_object(decoded);
+
+    xrt_json_set_field(geo, 1, xr_box_str("bad"));
+    ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_record(source, 2, profile_fields)),
+                "deep nested validation should reject wrong leaf type");
+    destroy_object(geo);
+    destroy_object(address);
+    destroy_object(source);
+}
+
 static void test_decode_validates_array_json_field(void) {
     static const char *names[] = {"items"};
     static const XrJsonDecodeFieldSpec fields[] = {
@@ -254,6 +304,7 @@ int main(void) {
     test_decode_distinguishes_nullable_and_missing();
     test_decode_json_field_accepts_null();
     test_decode_nested_record_field();
+    test_decode_deep_nested_record_field();
     test_decode_validates_array_json_field();
     test_decode_mixed_nested_record_and_array_json_fields();
     printf("test_xrt_json_decode: %d passed, %d failed\n", g_passed, g_failed);

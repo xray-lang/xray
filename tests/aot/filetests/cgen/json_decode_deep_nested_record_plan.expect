@@ -1,0 +1,6 @@
+args=--dump-global-evidence
+regex=json-codec [0-9]+ .*kind=decode .*fields=2 .*record_shape=[1-9][0-9]*
+contains=xaot-plan v0
+regex=json-codec-plan [0-9]+ .*kind=decode action=decode_validate_copy .*fields=2 .*reason=none
+c_contains=xrt_json_decode_record
+c_contains=(const XrJsonDecodeFieldSpec[]){{"name", 5, NULL, 0}, {"address", 7, (const XrJsonDecodeFieldSpec[]){{"city", 5, NULL, 0}, {"geo", 7, (const XrJsonDecodeFieldSpec[]){{"lat", 4, NULL, 0}, {"verified", 2, NULL, 0}}, 2}}, 2}}
