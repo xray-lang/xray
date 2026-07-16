@@ -1,0 +1,14 @@
+struct PointerProjectionBox {
+    left: int
+    right: int
+}
+
+fn fill(value: out int) {
+    value = 1
+}
+
+fn bad(box: out PointerProjectionBox, ptr: MutPtr<PointerProjectionBox>) {
+    unsafe { fill(out ptr.deref().left) }
+    var whole = box
+    box = PointerProjectionBox{left: whole.left, right: whole.right}
+}
