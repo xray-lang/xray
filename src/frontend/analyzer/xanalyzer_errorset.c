@@ -165,6 +165,7 @@ typedef enum CatchAggregateAliasKind {
     CATCH_AGGREGATE_SINGLETON,
     CATCH_AGGREGATE_KNOWN_COUNT,
     CATCH_AGGREGATE_INDEX,
+    CATCH_AGGREGATE_KEY_INDEX,
     CATCH_AGGREGATE_PRESENT_INDEX,
     CATCH_AGGREGATE_FIELD,
     CATCH_AGGREGATE_ELEMENT,
@@ -1766,7 +1767,8 @@ static bool catch_aggregate_alias_matches(const CatchAggregateAlias *a,
         return true;
     if (a->kind == CATCH_AGGREGATE_KNOWN_COUNT)
         return a->index == b->index;
-    if (a->kind == CATCH_AGGREGATE_INDEX || a->kind == CATCH_AGGREGATE_PRESENT_INDEX) {
+    if (a->kind == CATCH_AGGREGATE_INDEX || a->kind == CATCH_AGGREGATE_KEY_INDEX ||
+        a->kind == CATCH_AGGREGATE_PRESENT_INDEX) {
         bool a_string = a->index_string != NULL;
         bool b_string = b->index_string != NULL;
         if (a_string || b_string)
@@ -2201,8 +2203,35 @@ static bool catch_aggregate_index_key(ErrorSetCtx *ctx, AstNode *expr, int64_t *
             *string_key = value;
         return value != NULL;
     }
+    const XaSelection *sel =
+        (ctx && ctx->analyzer) ? xa_analyzer_get_selection(ctx->analyzer, expr) : NULL;
+    if (sel && sel->kind == XA_SEL_ENUM_MEMBER) {
+        const char *value = NULL;
+        if (expr->type == AST_ENUM_ACCESS)
+            value = expr->as.enum_access.member_name;
+        else if (expr->type == AST_MEMBER_ACCESS)
+            value = expr->as.member_access.name;
+        if (string_key)
+            *string_key = value;
+        return value != NULL;
+    }
+    if (expr && expr->type == AST_ENUM_ACCESS) {
+        const char *value = expr->as.enum_access.member_name;
+        if (string_key)
+            *string_key = value;
+        return value != NULL;
+    }
     if (!ctx || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
         return false;
+    if (is_current_caught_ref(ctx, expr)) {
+        XaSymbol *caught_sym = lookup_variable_symbol(ctx->analyzer, expr);
+        if (symbol_id)
+            *symbol_id = caught_sym ? caught_sym->id : expr->as.variable.symbol_id;
+        if (symbol_name)
+            *symbol_name =
+                caught_sym && caught_sym->name ? caught_sym->name : expr->as.variable.name;
+        return (symbol_id && *symbol_id != 0) || (symbol_name && *symbol_name != NULL);
+    }
     XaSymbol *sym = lookup_variable_symbol(ctx->analyzer, expr);
     if (!sym || (sym->kind != XA_SYM_VARIABLE && sym->kind != XA_SYM_PARAMETER))
         return false;
@@ -2220,6 +2249,65 @@ static bool catch_aggregate_index_key(ErrorSetCtx *ctx, AstNode *expr, int64_t *
     if (symbol_name)
         *symbol_name = sym->name;
     return sym->id != 0 || sym->name != NULL;
+}
+
+static bool current_caught_may_match_enum_member(ErrorSetCtx *ctx, AstNode *expr) {
+    expr = identity_source(expr);
+    if (!ctx || !ctx->analyzer || !ctx->current_caught || !expr)
+        return false;
+    if (ctx->current_caught->completeness == XA_EFFECT_INCOMPLETE)
+        return true;
+
+    const char *member_name = NULL;
+    if (expr->type == AST_ENUM_ACCESS)
+        member_name = expr->as.enum_access.member_name;
+    else if (expr->type == AST_MEMBER_ACCESS)
+        member_name = expr->as.member_access.name;
+    else
+        return false;
+    if (!member_name)
+        return true;
+
+    const XaSelection *sel = xa_analyzer_get_selection(ctx->analyzer, expr);
+    XrType *enum_type = sel && sel->kind == XA_SEL_ENUM_MEMBER ? sel->result_type : NULL;
+    if ((!enum_type || !XR_TYPE_IS_ENUM(enum_type)) && sel && sel->target_symbol)
+        enum_type = sel->target_symbol->links.type;
+    if ((!enum_type || !XR_TYPE_IS_ENUM(enum_type)))
+        enum_type = xa_analyzer_get_node_type(ctx->analyzer, expr);
+    const char *enum_name = NULL;
+    if (expr->type == AST_ENUM_ACCESS)
+        enum_name = expr->as.enum_access.enum_name;
+    else if (expr->type == AST_MEMBER_ACCESS && expr->as.member_access.object &&
+             expr->as.member_access.object->type == AST_VARIABLE)
+        enum_name = expr->as.member_access.object->as.variable.name;
+    if ((!enum_type || !XR_TYPE_IS_ENUM(enum_type)) && enum_name) {
+        XaSymbol *sym = xa_analyzer_lookup(ctx->analyzer, enum_name);
+        if (!sym)
+            sym =
+                xa_analyzer_lookup_in_scope(ctx->analyzer, enum_name, ctx->analyzer->global_scope);
+        if (!sym)
+            sym = xa_analyzer_lookup_deep(ctx->analyzer, enum_name);
+        if (sym && sym->kind == XA_SYM_ENUM)
+            enum_type = sym->links.type;
+    }
+    if (!enum_type || !XR_TYPE_IS_ENUM(enum_type))
+        return true;
+    XaErrorTypeId type_id = xa_effect_db_register_error_enum(ctx->analyzer->effect_db, enum_type);
+    if (type_id == XA_ERROR_TYPE_NONE)
+        return true;
+    int variant = sel && sel->kind == XA_SEL_ENUM_MEMBER ? sel->field_index : -1;
+    if (variant < 0)
+        variant = enum_variant_index_for_name(ctx->analyzer, enum_type, member_name);
+    if (variant < 0)
+        return true;
+
+    for (uint32_t i = 0; i < ctx->current_caught->escaping.count; i++) {
+        const XaErrorTypeSet *type_set = &ctx->current_caught->escaping.types[i];
+        if (type_set->type_id != type_id)
+            continue;
+        return type_set->all_variants || xa_bitset_test(&type_set->variants, (uint32_t) variant);
+    }
+    return false;
 }
 
 static bool variable_ref_symbol(ErrorSetCtx *ctx, AstNode *expr, uint32_t *symbol_id,
@@ -2392,12 +2480,16 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
             }
             bool all_values_are_caught = true;
             bool all_keys_are_caught = true;
-            bool all_keys_have_known_literal_identity = true;
+            bool all_keys_have_known_present_identity = true;
             bool tracked_map_entry = false;
             for (int i = 0; i < initializer->as.map_literal.count; i++) {
-                if (!is_current_caught_ref(ctx, initializer->as.map_literal.values[i]))
+                bool value_is_caught =
+                    is_current_caught_ref(ctx, initializer->as.map_literal.values[i]);
+                bool key_is_caught =
+                    is_current_caught_ref(ctx, initializer->as.map_literal.keys[i]);
+                if (!value_is_caught)
                     all_values_are_caught = false;
-                if (!is_current_caught_ref(ctx, initializer->as.map_literal.keys[i]))
+                if (!key_is_caught)
                     all_keys_are_caught = false;
 
                 int64_t present_index = -1;
@@ -2407,21 +2499,27 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
                 bool has_present_index = catch_aggregate_index_key(
                     ctx, initializer->as.map_literal.keys[i], &present_index,
                     &present_index_symbol_id, &present_index_symbol_name, &present_index_string);
-                if (has_present_index && present_index_symbol_id == 0 &&
-                    present_index_symbol_name == NULL) {
+                if (has_present_index &&
+                    ((present_index_symbol_id == 0 && present_index_symbol_name == NULL) ||
+                     key_is_caught)) {
                     add_current_catch_aggregate_alias(
                         ctx, symbol_id, name, CATCH_AGGREGATE_PRESENT_INDEX, present_index,
                         present_index_symbol_id, present_index_symbol_name, present_index_string,
                         NULL);
                 } else {
-                    all_keys_have_known_literal_identity = false;
+                    all_keys_have_known_present_identity = false;
                 }
+                if (key_is_caught && has_present_index)
+                    add_current_catch_aggregate_alias(
+                        ctx, symbol_id, name, CATCH_AGGREGATE_KEY_INDEX, present_index,
+                        present_index_symbol_id, present_index_symbol_name, present_index_string,
+                        NULL);
 
                 int64_t index = -1;
                 uint32_t index_symbol_id = 0;
                 const char *index_symbol_name = NULL;
                 const char *index_string = NULL;
-                if (!is_current_caught_ref(ctx, initializer->as.map_literal.values[i]) ||
+                if (!value_is_caught ||
                     !catch_aggregate_index_key(ctx, initializer->as.map_literal.keys[i], &index,
                                                &index_symbol_id, &index_symbol_name, &index_string))
                     continue;
@@ -2438,7 +2536,7 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
                                                   -1, 0, NULL, NULL, NULL);
             int known_present_count = current_catch_aggregate_alias_count_for_kind(
                 ctx, symbol_id, name, CATCH_AGGREGATE_PRESENT_INDEX);
-            if (all_keys_have_known_literal_identity &&
+            if (all_keys_have_known_present_identity &&
                 known_present_count == initializer->as.map_literal.count)
                 add_current_catch_aggregate_alias(ctx, symbol_id, name, CATCH_AGGREGATE_KNOWN_COUNT,
                                                   known_present_count, 0, NULL, NULL, NULL);
@@ -2646,7 +2744,8 @@ static CatchAggregateMemberUpdate catch_aggregate_member_update(ErrorSetCtx *ctx
             &update.index_symbol_name, &update.index_string);
         update.index_may_alias_other_slots =
             update.has_precise_index &&
-            (update.index_symbol_id != 0 || update.index_symbol_name != NULL);
+            (update.index_symbol_id != 0 || update.index_symbol_name != NULL ||
+             current_caught_may_match_enum_member(ctx, call->arguments[0]));
         update.key_is_caught = is_current_caught_ref(ctx, call->arguments[0]);
         update.value_is_caught = is_current_caught_ref(ctx, call->arguments[1]);
         bool map_has_tracked_entries = current_catch_has_aggregate_container(ctx, id, name);
@@ -2680,7 +2779,8 @@ static CatchAggregateMemberUpdate catch_aggregate_member_update(ErrorSetCtx *ctx
             &update.index_symbol_name, &update.index_string);
         update.index_may_alias_other_slots =
             update.has_precise_index &&
-            (update.index_symbol_id != 0 || update.index_symbol_name != NULL);
+            (update.index_symbol_id != 0 || update.index_symbol_name != NULL ||
+             current_caught_may_match_enum_member(ctx, call->arguments[0]));
         update.has_known_count =
             current_catch_known_aggregate_count(ctx, id, name, &update.known_count);
         update.delete_known_present_index = update.has_precise_index &&
@@ -2815,6 +2915,17 @@ static void apply_catch_aggregate_member_update(ErrorSetCtx *ctx,
             else
                 remove_current_catch_aggregate_aliases_for_kind(
                     ctx, update->container_id, update->container_name, CATCH_AGGREGATE_INDEX);
+            if (update->index_may_alias_other_slots)
+                remove_current_catch_aggregate_aliases_for_kind(
+                    ctx, update->container_id, update->container_name, CATCH_AGGREGATE_KEY_INDEX);
+            else if (update->has_precise_index)
+                remove_current_catch_aggregate_alias_for_index_kind(
+                    ctx, update->container_id, update->container_name, CATCH_AGGREGATE_KEY_INDEX,
+                    update->index, update->index_symbol_id, update->index_symbol_name,
+                    update->index_string);
+            else
+                remove_current_catch_aggregate_aliases_for_kind(
+                    ctx, update->container_id, update->container_name, CATCH_AGGREGATE_KEY_INDEX);
             if (update->has_known_count && update->known_count > 0 &&
                 update->delete_known_present_index) {
                 int64_t remaining_count = update->known_count - 1;
@@ -2827,6 +2938,17 @@ static void apply_catch_aggregate_member_update(ErrorSetCtx *ctx,
                     add_current_catch_aggregate_alias(
                         ctx, update->container_id, update->container_name, CATCH_AGGREGATE_ELEMENT,
                         -1, 0, NULL, NULL, NULL);
+                    if (remaining_count == 1)
+                        add_current_catch_aggregate_alias(
+                            ctx, update->container_id, update->container_name,
+                            CATCH_AGGREGATE_SINGLETON, -1, 0, NULL, NULL, NULL);
+                }
+                if (remaining_count > 0 && current_catch_aggregate_alias_count_for_kind(
+                                               ctx, update->container_id, update->container_name,
+                                               CATCH_AGGREGATE_KEY_INDEX) == remaining_count) {
+                    add_current_catch_aggregate_alias(
+                        ctx, update->container_id, update->container_name,
+                        CATCH_AGGREGATE_KEY_ELEMENT, -1, 0, NULL, NULL, NULL);
                     if (remaining_count == 1)
                         add_current_catch_aggregate_alias(
                             ctx, update->container_id, update->container_name,
