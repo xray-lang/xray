@@ -1843,6 +1843,20 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME source_unknown_task_erased_result_readiness
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_source_unknown_convergence.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --max-category TASK_ERASED_RESULT_RESIDUE=94
+                --max-category STDLIB_DYNAMIC_UNKNOWN_API=0
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(source_unknown_task_erased_result_readiness PROPERTIES
+        LABELS "frontend;types;metadata"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME source_unknown_inventory_classification
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/frontend/test_source_unknown_inventory.py

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 import unittest
 from pathlib import Path
@@ -11,7 +12,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from check_source_unknown_convergence import classify_line  # noqa: E402
+from check_source_unknown_convergence import (  # noqa: E402
+    CATEGORIES,
+    classify_line,
+    enforce_category_maxima,
+    parse_category_max,
+)
 
 
 class SourceUnknownInventoryTest(unittest.TestCase):
@@ -77,6 +83,29 @@ class SourceUnknownInventoryTest(unittest.TestCase):
             f"{task_result}.Failed(error) preserves the original failure value as unknown.",
         )
         self.assertIn("TASK_ERASED_RESULT_RESIDUE", categories)
+
+    def test_category_maxima_accepts_current_or_lower_residue(self) -> None:
+        inventory = {category: [] for category in CATEGORIES}
+        inventory["TASK_ERASED_RESULT_RESIDUE"] = [object(), object()]
+
+        self.assertEqual(
+            [],
+            enforce_category_maxima(inventory, [("TASK_ERASED_RESULT_RESIDUE", 2)]),
+        )
+
+        errors = enforce_category_maxima(inventory, [("TASK_ERASED_RESULT_RESIDUE", 1)])
+        self.assertEqual(1, len(errors))
+        self.assertIn("TASK_ERASED_RESULT_RESIDUE: 2 exceeds max 1", errors[0])
+
+    def test_parse_category_max_rejects_unknown_categories(self) -> None:
+        self.assertEqual(
+            ("TASK_ERASED_RESULT_RESIDUE", 94),
+            parse_category_max("TASK_ERASED_RESULT_RESIDUE=94"),
+        )
+        with self.assertRaises(argparse.ArgumentTypeError):
+            parse_category_max("TASK_ERASED_RESULT_RESIDUE=-1")
+        with self.assertRaises(argparse.ArgumentTypeError):
+            parse_category_max("NOT_A_CATEGORY=1")
 
 
 if __name__ == "__main__":
