@@ -3370,6 +3370,22 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         "    for (key in box) { throw key }\n"
         "  }\n"
         "}\n"
+        "fn mapClearThenSetCaughtValueIteratorRethrows() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{\"other\": MapErr.Other}\n"
+        "    box.clear()\n"
+        "    box.set(\"caught\", e)\n"
+        "    for (key, value in box) { throw value }\n"
+        "  }\n"
+        "}\n"
+        "fn mapClearThenSetCaughtKeyIteratorRethrows() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{MapErr.Other: MapErr.Other}\n"
+        "    box.clear()\n"
+        "    box.set(e, MapErr.Other)\n"
+        "    for (key in box) { throw key }\n"
+        "  }\n"
+        "}\n"
         "fn mapValuesIteratorRethrows() {\n"
         "  try { failMap() } catch (e: MapErr) {\n"
         "    const box = #{\"caught\": e}\n"
@@ -3516,6 +3532,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         analyzer_function_effect_summary(a, "mapClearValuesIteratorPreserves");
     const XaEffectSummary *clear_keys =
         analyzer_function_effect_summary(a, "mapClearKeysIteratorPreserves");
+    const XaEffectSummary *clear_then_set_value =
+        analyzer_function_effect_summary(a, "mapClearThenSetCaughtValueIteratorRethrows");
+    const XaEffectSummary *clear_then_set_key =
+        analyzer_function_effect_summary(a, "mapClearThenSetCaughtKeyIteratorRethrows");
     const XaEffectSummary *values_iter =
         analyzer_function_effect_summary(a, "mapValuesIteratorRethrows");
     const XaEffectSummary *direct_values_iter =
@@ -3578,6 +3598,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(value_set_caught_mixed != NULL);
     ASSERT(clear_values != NULL);
     ASSERT(clear_keys != NULL);
+    ASSERT(clear_then_set_value != NULL);
+    ASSERT(clear_then_set_key != NULL);
     ASSERT(values_iter != NULL);
     ASSERT(direct_values_iter != NULL);
     ASSERT(values_mixed != NULL);
@@ -3669,6 +3691,10 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     const XaErrorTypeSet *clear_values_set =
         effect_summary_enum_set_named(a, clear_values, "MapErr");
     const XaErrorTypeSet *clear_keys_set = effect_summary_enum_set_named(a, clear_keys, "MapErr");
+    const XaErrorTypeSet *clear_then_set_value_set =
+        effect_summary_enum_set_named(a, clear_then_set_value, "MapErr");
+    const XaErrorTypeSet *clear_then_set_key_set =
+        effect_summary_enum_set_named(a, clear_then_set_key, "MapErr");
     const XaErrorTypeSet *values_iter_set = effect_summary_enum_set_named(a, values_iter, "MapErr");
     const XaErrorTypeSet *direct_values_iter_set =
         effect_summary_enum_set_named(a, direct_values_iter, "MapErr");
@@ -3731,6 +3757,8 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(value_set_caught_mixed_set != NULL);
     ASSERT(clear_values_set != NULL);
     ASSERT(clear_keys_set != NULL);
+    ASSERT(clear_then_set_value_set != NULL);
+    ASSERT(clear_then_set_key_set != NULL);
     ASSERT(values_iter_set != NULL);
     ASSERT(direct_values_iter_set != NULL);
     ASSERT(values_mixed_set != NULL);
@@ -3843,6 +3871,12 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!clear_keys_set->all_variants);
     ASSERT(xa_bitset_test(&clear_keys_set->variants, 0));
     ASSERT(!xa_bitset_test(&clear_keys_set->variants, 1));
+    ASSERT(!clear_then_set_value_set->all_variants);
+    ASSERT(xa_bitset_test(&clear_then_set_value_set->variants, 0));
+    ASSERT(!xa_bitset_test(&clear_then_set_value_set->variants, 1));
+    ASSERT(!clear_then_set_key_set->all_variants);
+    ASSERT(xa_bitset_test(&clear_then_set_key_set->variants, 0));
+    ASSERT(!xa_bitset_test(&clear_then_set_key_set->variants, 1));
     ASSERT(!values_iter_set->all_variants);
     ASSERT(xa_bitset_test(&values_iter_set->variants, 0));
     ASSERT(!xa_bitset_test(&values_iter_set->variants, 1));
