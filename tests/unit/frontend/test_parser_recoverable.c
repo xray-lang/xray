@@ -192,6 +192,27 @@ TEST(clean_source_no_errors) {
     teardown();
 }
 
+TEST(invalid_utf8_source_reports_lexer_diagnostic) {
+    setup();
+    static const char source[] = {'v', 'a', 'r', ' ', 'a', '=', '1',         '\n', 'v',
+                                  'a', 'r', ' ', 'b', '=', ' ', (char) 0x80, '\n', 'v',
+                                  'a', 'r', ' ', 'c', '=', '2', '\n',        '\0'};
+    Parser parser;
+    DiagSink sink;
+    XrArena *arena = NULL;
+    AstNode *ast = parse_recoverable(source, &parser, &sink, 1, &arena);
+
+    ASSERT_NOT_NULL(ast);
+    ASSERT_EQ_INT(parser.had_error, 1);
+    ASSERT_TRUE(parser.error_count >= 1);
+    ASSERT_TRUE(sink.count >= 1);
+    ASSERT_EQ_INT(sink.records[0].line, 2);
+    ASSERT_TRUE(strcmp(sink.records[0].message, "source must be valid UTF-8") == 0);
+
+    release_arena(arena);
+    teardown();
+}
+
 TEST(returns_partial_ast_on_error) {
     // The defining property of xr_parse_recoverable: even when the
     // source has a syntax error, the function MUST return an
@@ -515,6 +536,7 @@ TEST(null_parser_returns_null_safely) {
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xr_parse_recoverable contract");
 RUN_TEST(clean_source_no_errors);
+RUN_TEST(invalid_utf8_source_reports_lexer_diagnostic);
 RUN_TEST(returns_partial_ast_on_error);
 RUN_TEST(resync_after_error_keeps_following_decls);
 RUN_TEST(multiple_errors_collected);

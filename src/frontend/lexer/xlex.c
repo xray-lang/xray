@@ -15,6 +15,7 @@
 #include <string.h>
 #include "xlex.h"
 #include "../../base/xchecks.h"
+#include "../../base/xutf8.h"
 #include "../../base/xsimd.h"
 #include "../../base/xmalloc.h"
 
@@ -73,7 +74,8 @@ void xr_scanner_init_with_trivia(Scanner *scanner, const char *source, bool coll
     scanner->source = source;
     scanner->start = source;
     scanner->current = source;
-    scanner->end = source + strlen(source);
+    size_t source_len = strlen(source);
+    scanner->end = source + source_len;
     scanner->line = 1;
     scanner->line_start = source;
     scanner->start_line = 1;
@@ -83,6 +85,29 @@ void xr_scanner_init_with_trivia(Scanner *scanner, const char *source, bool coll
     scanner->pending_trivia = NULL;
     scanner->trivia_tail = NULL;
     scanner->pending_error = NULL;
+
+    XrUtf8ScanResult scan = xr_utf8_scan_strict((const uint8_t *) source, source_len);
+    if (scan.error != XR_UTF8_OK) {
+        const char *error_start = source + scan.byte_offset;
+        const char *line_start = source;
+        int line = 1;
+        for (const char *p = source; p < error_start; p++) {
+            if (*p == '\n') {
+                line++;
+                line_start = p + 1;
+            }
+        }
+        size_t invalid_length = scan.invalid_length ? scan.invalid_length : 1;
+        if (scan.byte_offset + invalid_length > source_len)
+            invalid_length = source_len - scan.byte_offset;
+        scanner->start = error_start;
+        scanner->current = error_start + invalid_length;
+        scanner->line = line;
+        scanner->line_start = line_start;
+        scanner->start_line = line;
+        scanner->start_line_start = line_start;
+        scanner->pending_error = "source must be valid UTF-8";
+    }
 }
 
 // Capture the start position of a new token. Must be called once per token,
@@ -864,6 +889,12 @@ Token xr_scanner_try_regex(Scanner *scanner) {
 
 // Scan next token
 Token xr_scanner_scan(Scanner *scanner) {
+    if (scanner->pending_error) {
+        const char *msg = scanner->pending_error;
+        scanner->pending_error = NULL;
+        return error_token(scanner, msg);
+    }
+
     scanner->had_leading_space = skip_whitespace(scanner);
     scanner_begin_token(scanner);
 
