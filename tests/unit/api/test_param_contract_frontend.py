@@ -47,6 +47,7 @@ NEGATIVE_CASES = (
     "tests/compile_errors/ownership/164_out_param_projection_field_da_sibling_rejected.xr",
     "tests/compile_errors/ownership/165_out_param_projection_field_da_whole_rejected.xr",
     "tests/compile_errors/ownership/166_out_param_projection_field_da_index_rejected.xr",
+    "tests/compile_errors/ownership/177_out_param_dynamic_index_field_da_rejected.xr",
     "tests/compile_errors/ownership/167_out_param_projection_field_da_slice_rejected.xr",
     "tests/compile_errors/ownership/168_out_param_nested_field_da_missing_leaf_rejected.xr",
     "tests/compile_errors/ownership/169_out_param_nested_field_da_sibling_rejected.xr",

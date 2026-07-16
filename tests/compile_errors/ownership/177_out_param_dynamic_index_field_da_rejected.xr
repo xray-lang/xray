@@ -1,0 +1,13 @@
+struct DynamicIndexDaBox {
+    slots: [int; 2]
+}
+
+fn fill(value: out int) {
+    value = 1
+}
+
+fn bad(box: out DynamicIndexDaBox, index: int) {
+    fill(out box.slots[index])
+    var whole = box
+    box = DynamicIndexDaBox{slots: whole.slots}
+}
