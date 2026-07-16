@@ -1676,9 +1676,14 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
         "applyReexported } from "
         "\"./effect_export_module\"\n";
     const char *star_source = "export * from \"./effect_export_module\"\n";
+    const char *callback_source = "enum CallbackErr { Foreign, Local }\n"
+                                  "export fn failForeignCallback() { throw CallbackErr.Foreign }\n"
+                                  "export { CallbackErr }\n";
     const char *entry_source = "import { failSelective, applyImported } from "
                                "\"./effect_export_module\"\n"
                                "import \"./effect_export_module\" as effects\n"
+                               "import { failForeignCallback, CallbackErr } from "
+                               "\"./effect_callback_module\"\n"
                                "import { failReexported, applyReexported } from "
                                "\"./effect_reexport_module\"\n"
                                "import \"./effect_reexport_module\" as facade\n"
@@ -1699,30 +1704,40 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
                                "applyReexported(failReexported) }\n"
                                "fn viaReexportedNamespaceHigherOrder() { "
                                "facade.applyReexported(failReexported) }\n"
-                               "fn viaStarHigherOrder() { applyStar(failStarNamespace) }\n";
+                               "fn viaStarHigherOrder() { applyStar(failStarNamespace) }\n"
+                               "fn localCallbackForImportedHof() { throw CallbackErr.Local }\n"
+                               "fn viaImportedHigherOrderLocalCallback() { "
+                               "applyImported(localCallbackForImportedHof) }\n"
+                               "fn viaImportedHigherOrderForeignCallback() { "
+                               "applyImported(failForeignCallback) }\n";
 
     char tmpdir[] = "/tmp/xray_effect_reexport_XXXXXX";
     ASSERT(mkdtemp(tmpdir) != NULL);
     char lib_path[512];
     char reexport_path[512];
     char star_path[512];
+    char callback_path[512];
     char entry_path[512];
     snprintf(lib_path, sizeof(lib_path), "%s/effect_export_module.xr", tmpdir);
     snprintf(reexport_path, sizeof(reexport_path), "%s/effect_reexport_module.xr", tmpdir);
     snprintf(star_path, sizeof(star_path), "%s/effect_star_module.xr", tmpdir);
+    snprintf(callback_path, sizeof(callback_path), "%s/effect_callback_module.xr", tmpdir);
     snprintf(entry_path, sizeof(entry_path), "%s/entry_effect_module.xr", tmpdir);
     ASSERT(write_text_file(lib_path, lib_source));
     ASSERT(write_text_file(reexport_path, reexport_source));
     ASSERT(write_text_file(star_path, star_source));
+    ASSERT(write_text_file(callback_path, callback_source));
     ASSERT(write_text_file(entry_path, entry_source));
 
     AstNode *lib_program = xr_parse(g_session, lib_source);
     AstNode *reexport_program = xr_parse(g_session, reexport_source);
     AstNode *star_program = xr_parse(g_session, star_source);
+    AstNode *callback_program = xr_parse(g_session, callback_source);
     AstNode *entry_program = xr_parse(g_session, entry_source);
     ASSERT(lib_program != NULL);
     ASSERT(reexport_program != NULL);
     ASSERT(star_program != NULL);
+    ASSERT(callback_program != NULL);
     ASSERT(entry_program != NULL);
 
     XrModuleResolverConfig cfg = {0};
@@ -1731,6 +1746,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     XrModuleId lib_id;
     XrModuleId reexport_id;
     XrModuleId star_id;
+    XrModuleId callback_id;
     char *resolve_err = NULL;
     ASSERT(xr_module_resolver_resolve(resolver, "./effect_export_module", false, entry_path,
                                       &lib_id, &resolve_err) == 0);
@@ -1743,10 +1759,14 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(xr_module_resolver_resolve(resolver, "./effect_star_module", false, entry_path, &star_id,
                                       &resolve_err) == 0);
     xr_free(resolve_err);
+    resolve_err = NULL;
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_callback_module", false, entry_path,
+                                      &callback_id, &resolve_err) == 0);
+    xr_free(resolve_err);
     char *entry_canonical = realpath(entry_path, NULL);
     ASSERT(entry_canonical != NULL);
 
-    XrModuleSpec specs[4] = {{.canonical = lib_id.canonical,
+    XrModuleSpec specs[5] = {{.canonical = lib_id.canonical,
                               .source_path = lib_id.source_path,
                               .ast = lib_program,
                               .status = XR_MODSPEC_RESOLVED,
@@ -1761,25 +1781,31 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
                               .ast = star_program,
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 2},
+                             {.canonical = callback_id.canonical,
+                              .source_path = callback_id.source_path,
+                              .ast = callback_program,
+                              .status = XR_MODSPEC_RESOLVED,
+                              .topo_index = 3},
                              {.canonical = entry_canonical,
                               .source_path = entry_canonical,
                               .ast = entry_program,
                               .status = XR_MODSPEC_RESOLVED,
-                              .topo_index = 3}};
-    int topo_order[4] = {0, 1, 2, 3};
+                              .topo_index = 4}};
+    int topo_order[5] = {0, 1, 2, 3, 4};
     XrHashMap *id_index = xr_hashmap_new();
     ASSERT(id_index != NULL);
     ASSERT(xr_hashmap_set(id_index, specs[0].canonical, (void *) (intptr_t) 1));
     ASSERT(xr_hashmap_set(id_index, specs[1].canonical, (void *) (intptr_t) 2));
     ASSERT(xr_hashmap_set(id_index, specs[2].canonical, (void *) (intptr_t) 3));
     ASSERT(xr_hashmap_set(id_index, specs[3].canonical, (void *) (intptr_t) 4));
+    ASSERT(xr_hashmap_set(id_index, specs[4].canonical, (void *) (intptr_t) 5));
     XrModuleGraph graph = {.specs = specs,
-                           .spec_count = 4,
+                           .spec_count = 5,
                            .id_index = id_index,
                            .topo_order = topo_order,
-                           .topo_count = 4,
+                           .topo_count = 5,
                            .resolver = resolver,
-                           .entry_index = 3};
+                           .entry_index = 4};
 
     xa_analyzer_set_graph(a, &graph);
     xa_analyzer_analyze(a, specs[0].source_path, lib_program);
@@ -1811,7 +1837,17 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     specs[2].export_symbols = star_exports;
     xa_analyzer_clear_diagnostics(a);
 
-    xa_analyzer_analyze(a, specs[3].source_path, entry_program);
+    xa_analyzer_analyze(a, specs[3].source_path, callback_program);
+    ASSERT(!analyzer_diag_contains(a, "error"));
+
+    XrHashMap *callback_exports = NULL;
+    ASSERT(xa_analyzer_collect_export_symbols_checked(a, (XrAstNode *) callback_program,
+                                                      &callback_exports));
+    ASSERT(callback_exports != NULL);
+    specs[3].export_symbols = callback_exports;
+    xa_analyzer_clear_diagnostics(a);
+
+    xa_analyzer_analyze(a, specs[4].source_path, entry_program);
     ASSERT(!analyzer_diag_contains(a, "error"));
 
     const XaEffectSummary *selective = analyzer_function_effect_summary(a, "viaSelective");
@@ -1831,6 +1867,10 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     const XaEffectSummary *reexported_namespace_hof =
         analyzer_function_effect_summary(a, "viaReexportedNamespaceHigherOrder");
     const XaEffectSummary *star_hof = analyzer_function_effect_summary(a, "viaStarHigherOrder");
+    const XaEffectSummary *local_callback_hof =
+        analyzer_function_effect_summary(a, "viaImportedHigherOrderLocalCallback");
+    const XaEffectSummary *foreign_callback_hof =
+        analyzer_function_effect_summary(a, "viaImportedHigherOrderForeignCallback");
     ASSERT(selective != NULL);
     ASSERT(ns != NULL);
     ASSERT(reexported != NULL);
@@ -1842,6 +1882,8 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(reexported_hof != NULL);
     ASSERT(reexported_namespace_hof != NULL);
     ASSERT(star_hof != NULL);
+    ASSERT(local_callback_hof != NULL);
+    ASSERT(foreign_callback_hof != NULL);
 
     ASSERT(selective->completeness == XA_EFFECT_COMPLETE);
     ASSERT(ns->completeness == XA_EFFECT_COMPLETE);
@@ -1854,6 +1896,8 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(reexported_hof->completeness == XA_EFFECT_COMPLETE);
     ASSERT(reexported_namespace_hof->completeness == XA_EFFECT_COMPLETE);
     ASSERT(star_hof->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(local_callback_hof->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(foreign_callback_hof->completeness == XA_EFFECT_COMPLETE);
     ASSERT((selective->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
     ASSERT((ns->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
     ASSERT((reexported->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
@@ -1865,11 +1909,15 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT((reexported_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
     ASSERT((reexported_namespace_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
     ASSERT((star_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((local_callback_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((foreign_callback_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
     ASSERT((imported_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT((namespace_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT((reexported_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT((reexported_namespace_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT((star_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((local_callback_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((foreign_callback_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 
     const XaErrorTypeSet *selective_set =
         effect_summary_enum_set_named(a, selective, "ImportedErr");
@@ -1891,6 +1939,10 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     const XaErrorTypeSet *reexported_namespace_hof_set =
         effect_summary_enum_set_named(a, reexported_namespace_hof, "ImportedErr");
     const XaErrorTypeSet *star_hof_set = effect_summary_enum_set_named(a, star_hof, "ImportedErr");
+    const XaErrorTypeSet *local_callback_hof_set =
+        effect_summary_enum_set_named(a, local_callback_hof, "CallbackErr");
+    const XaErrorTypeSet *foreign_callback_hof_set =
+        effect_summary_enum_set_named(a, foreign_callback_hof, "CallbackErr");
     ASSERT(selective_set != NULL);
     ASSERT(namespace_set != NULL);
     ASSERT(reexported_set != NULL);
@@ -1902,6 +1954,8 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(reexported_hof_set != NULL);
     ASSERT(reexported_namespace_hof_set != NULL);
     ASSERT(star_hof_set != NULL);
+    ASSERT(local_callback_hof_set != NULL);
+    ASSERT(foreign_callback_hof_set != NULL);
     ASSERT(!selective_set->all_variants);
     ASSERT(!namespace_set->all_variants);
     ASSERT(!reexported_set->all_variants);
@@ -1913,6 +1967,8 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(!reexported_hof_set->all_variants);
     ASSERT(!reexported_namespace_hof_set->all_variants);
     ASSERT(!star_hof_set->all_variants);
+    ASSERT(!local_callback_hof_set->all_variants);
+    ASSERT(!foreign_callback_hof_set->all_variants);
     ASSERT(xa_bitset_test(&selective_set->variants, 0));
     ASSERT(!xa_bitset_test(&selective_set->variants, 1));
     ASSERT(!xa_bitset_test(&namespace_set->variants, 0));
@@ -1935,6 +1991,10 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(!xa_bitset_test(&reexported_namespace_hof_set->variants, 1));
     ASSERT(!xa_bitset_test(&star_hof_set->variants, 0));
     ASSERT(xa_bitset_test(&star_hof_set->variants, 1));
+    ASSERT(!xa_bitset_test(&local_callback_hof_set->variants, 0));
+    ASSERT(xa_bitset_test(&local_callback_hof_set->variants, 1));
+    ASSERT(xa_bitset_test(&foreign_callback_hof_set->variants, 0));
+    ASSERT(!xa_bitset_test(&foreign_callback_hof_set->variants, 1));
 
     xr_hashmap_free(lib_exports);
     specs[0].export_symbols = NULL;
@@ -1942,15 +2002,19 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     specs[1].export_symbols = NULL;
     xr_hashmap_free(star_exports);
     specs[2].export_symbols = NULL;
+    xr_hashmap_free(callback_exports);
+    specs[3].export_symbols = NULL;
     xr_hashmap_free(id_index);
     xr_module_resolver_free(resolver);
     xr_module_id_cleanup(&lib_id);
     xr_module_id_cleanup(&reexport_id);
     xr_module_id_cleanup(&star_id);
+    xr_module_id_cleanup(&callback_id);
     free(entry_canonical);
     unlink(lib_path);
     unlink(reexport_path);
     unlink(star_path);
+    unlink(callback_path);
     unlink(entry_path);
     rmdir(tmpdir);
     xa_analyzer_free(a);
