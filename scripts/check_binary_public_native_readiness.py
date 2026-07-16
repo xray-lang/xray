@@ -516,6 +516,56 @@ SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = {
     },
 }
 SINGLE_FUNCTION_PUBLIC_SURFACE_PROBES = {
+    "crypto.sha1": {
+        "module": "crypto",
+        "function": "sha1",
+        "required": {
+            "tests/stdlib/contracts/crypto/contract.toml": (
+                "fixed digest APIs return fixed byte arrays and use encoding.hexEncode only for presentation",
+                "legacy hash and HMAC APIs conflate digest bytes with lowercase hex presentation",
+                "future converged digest APIs return fixed byte arrays; hex strings are produced by encoding.hexEncode at call sites",
+            ),
+            "tests/stdlib/contracts/crypto/cases.jsonl": (
+                "hash-hmac-aes-and-timing",
+                "published digest/HMAC vectors including RFC 4231",
+            ),
+            "stdlib/defs/core.def": (
+                "fn sha1 {",
+                'signature: "(data: string): string"',
+                'vm: "crypto_sha1"',
+                'aot: "xrt_crypto_sha1"',
+            ),
+            "stdlib/crypto/crypto.c": (
+                "static XrValue crypto_sha1",
+                "return crypto_hash_value(isolate, args, nargs, XR_CRYPTO_CORE_HASH_SHA1);",
+                "return crypto_hex_string_result(isolate, digest, digest_len);",
+            ),
+            "src/aot/xrt_crypto.h": (
+                "static inline XrValue xrt_crypto_sha1",
+                "return xrt_crypto_hash_string(data, len, XR_CRYPTO_CORE_HASH_SHA1);",
+                "return xrt_crypto_hex_result(digest, digest_len);",
+            ),
+            "tests/diff/fuzz_binary_native_stdlib.py": (
+                "hashlib.sha1(data).hexdigest()",
+                "print(crypto.sha1(text{index}))",
+            ),
+            "tests/regression/10_stdlib/1400_crypto_hash.xr": (
+                'var hash = crypto.sha1("hello")',
+                'assert_eq(hash, "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d")',
+                'assert_eq(len(crypto.sha1("test")), 40)',
+            ),
+        },
+        "forbidden_def_anchors": (
+            "Slice<byte>",
+            "[byte;20]",
+            "encoding.hexEncode",
+        ),
+        "detail": (
+            "crypto.sha1 remains a hex-string fixed-digest native path; future switch "
+            "must return [byte;20] from Slice<byte> input and move presentation to "
+            "encoding.hexEncode before task-200 public-native cutover"
+        ),
+    },
     "crypto.sha256": {
         "module": "crypto",
         "function": "sha256",
