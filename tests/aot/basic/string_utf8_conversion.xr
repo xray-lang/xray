@@ -7,6 +7,15 @@ fn caughtUtf8Invalid(bytes: Array<uint8>) -> bool {
     return false
 }
 
+fn caughtInvalidByteRange(s: string, start: int, end: int) -> bool {
+    try {
+        s.sliceBytes(start, end)
+    } catch (e: StringSliceError) {
+        return e.toString() == "StringSliceError.InvalidByteRange"
+    }
+    return false
+}
+
 var ascii: Array<uint8> = [104, 105]
 var unicode: Array<uint8> = [104, 195, 169]
 var invalid: Array<uint8> = [65, 255, 66]
@@ -51,6 +60,8 @@ var s = "Aé中"
 print(s.sliceBytes(0, 1))
 print(s.sliceBytes(1, 3))
 print(s.sliceBytes(3, 6))
+print(caughtInvalidByteRange(s, -1, 1))
+print(caughtInvalidByteRange(s, 3, 2))
 var caught_mid_scalar = false
 var mid_scalar_error = ""
 try {
