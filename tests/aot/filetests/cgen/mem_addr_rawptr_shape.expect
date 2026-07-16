@@ -1,0 +1,8 @@
+contains=xaot-plan v0
+regex=function [0-9]+ name=xray_mem_addr_roundtrip .* params=2 ret=int64_t/scalar/i64
+regex=param 0 class=ptr kind=ptr rep=rawptr c_type=void \*
+regex=param 1 class=ptr kind=ptr rep=rawptr c_type=const void \*
+regex=value v[0-9]+ op=CONVERT kind=scalar rep=i64 c_type=int64_t
+regex=value v[0-9]+ op=ADD kind=scalar rep=i64 c_type=int64_t
+c_contains=(int64_t)(uintptr_t)
+c_not_contains=xrt_mem_addr

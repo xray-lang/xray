@@ -153,6 +153,8 @@ MEM_GATE_REQUIRED_FILES = {
     Path("tests/diff/cases/semantics/stdlib/fixed_array_ptr_shared_core.xr"),
     Path("tests/diff/cases/semantics/stdlib/mem_from_address_shared_core.xr"),
     Path("tests/diff/cases/semantics/stdlib/buffer_asbytes_write_rejected_shared_core.xr"),
+    Path("tests/aot/filetests/cgen/mem_addr_rawptr_shape.xr"),
+    Path("tests/aot/filetests/cgen/mem_addr_rawptr_shape.expect"),
     Path("tests/aot/filetests/cgen/mem_load_store_rawptr_shape.xr"),
     Path("tests/aot/filetests/cgen/mem_load_store_rawptr_shape.expect"),
 }
