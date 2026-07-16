@@ -15,6 +15,17 @@ from check_source_unknown_convergence import classify_line  # noqa: E402
 
 
 class SourceUnknownInventoryTest(unittest.TestCase):
+    def test_task_payload_registration_matches_typed_native_defs(self) -> None:
+        analyzer_source = (ROOT / "src/frontend/analyzer/xanalyzer.c").read_text()
+        native_defs = (ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text()
+
+        self.assertIn("Failed(PanicInfo)", native_defs)
+        self.assertIn(
+            'XrType *task_failed_payload[] = {xr_type_new_named_instance(analyzer->isolate, "PanicInfo")};',
+            analyzer_source,
+        )
+        self.assertNotIn("task_failed_payload[] = {xr_type_new_unknown", analyzer_source)
+
     def test_typed_task_result_is_not_stdlib_dynamic_unknown_api(self) -> None:
         task_result = "Task" "Result"
         for line in (
