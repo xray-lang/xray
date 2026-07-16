@@ -807,8 +807,9 @@ module compress {
   }
 
   fn zlibDecompress {
-    signature: "(data: string): string?"
+    signature: "(data: string): string"
     doc: "Zlib decompress"
+    effect: "CompressionError.InvalidData"
     vm: "compress_zlib_decompress"
     aot: "xrt_compress_zlib_decompress"
     argc: 1

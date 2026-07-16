@@ -59,7 +59,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_compress_symbols[] = {
     {"deflate", XLSP_SYM_FUNCTION, "fn(data: string, level?: int): string?", "Deflate compress", NULL, 0},
     {"inflate", XLSP_SYM_FUNCTION, "fn(data: string): string", "Inflate decompress", NULL, 0},
     {"zlibCompress", XLSP_SYM_FUNCTION, "fn(data: string, level?: int): string?", "Zlib compress", NULL, 0},
-    {"zlibDecompress", XLSP_SYM_FUNCTION, "fn(data: string): string?", "Zlib decompress", NULL, 0},
+    {"zlibDecompress", XLSP_SYM_FUNCTION, "fn(data: string): string", "Zlib decompress", NULL, 0},
     {"isGzip", XLSP_SYM_FUNCTION, "fn(data: string): bool", "Check if gzip data", NULL, 0},
     {"isZlib", XLSP_SYM_FUNCTION, "fn(data: string): bool", "Check if zlib data", NULL, 0},
 };

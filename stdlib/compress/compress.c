@@ -1200,7 +1200,7 @@ static XrValue compress_zlib_compress(XrVMRuntime *X, XrValue *args, int nargs) 
     return result;
 }
 
-// compress.zlibDecompress(data) -> string
+// compress.zlibDecompress(data) -> string @errors(CompressionError.InvalidData)
 static XrValue compress_zlib_decompress(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
@@ -1213,8 +1213,11 @@ static XrValue compress_zlib_decompress(XrVMRuntime *X, XrValue *args, int nargs
     size_t out_len;
     uint8_t *output = xr_compress_core_zlib_decompress_alloc(
         (const uint8_t *) data, len, &out_len, compress_core_alloc, compress_core_free, NULL);
-    if (!output)
+    if (!output) {
+        compress_set_builtin_enum_error(X, XR_GLOBAL_VAR_COMPRESSION_ERROR, 0,
+                                        "compress.zlibDecompress invalid zlib data");
         return xr_null();
+    }
 
     XrValue result = make_string_n(X, (char *) output, out_len);
     xr_free(output);

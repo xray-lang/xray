@@ -283,7 +283,7 @@ NATIVE_TYPED_ERROR_ABI_BLOCKERS = {
             ),
             "stdlib/defs/core.def": (
                 'signature: "(data: string, level?: int): string?"',
-                'signature: "(data: string): string?"',
+                "xrt_compress_gzip_default",
                 "xrt_compress_gunzip",
                 "xrt_compress_zlib_decompress",
             ),
@@ -419,6 +419,46 @@ SINGLE_FUNCTION_NATIVE_TYPED_ERROR_PROBES = {
         "allow_typed_error_before_full_marker": True,
         "detail": (
             "compress.inflate has a focused VM/native-AOT typed CompressionError ABI slice; "
+            "full task-198 readiness remains blocked by the rest of compress/crypto/io/net"
+        ),
+    },
+    "compress.zlibDecompress": {
+        "module": "compress",
+        "function": "zlibDecompress",
+        "typed_error": "CompressionError",
+        "required": {
+            "tests/stdlib/contracts/compress/contract.toml": (
+                "decompression failures must become typed CompressionError values",
+                "nullable-decompression-failure",
+                "future converged decompression APIs throw CompressionError",
+            ),
+            "stdlib/defs/core.def": (
+                "fn zlibDecompress {",
+                'signature: "(data: string): string"',
+                'effect: "CompressionError.InvalidData"',
+                'vm: "compress_zlib_decompress"',
+                'aot: "xrt_compress_zlib_decompress"',
+            ),
+            "stdlib/compress/compress.c": (
+                "static XrValue compress_zlib_decompress",
+                "uint8_t *output = xr_compress_core_zlib_decompress_alloc",
+                "compress_set_builtin_enum_error(X, XR_GLOBAL_VAR_COMPRESSION_ERROR, 0",
+            ),
+            "src/aot/xrt_compress.h": (
+                "static inline XrValue xrt_compress_zlib_decompress",
+                "uint8_t *buf = xr_compress_core_zlib_decompress_alloc",
+                'xrt_compress_set_builtin_enum_error("CompressionError", "InvalidData", 0);',
+            ),
+            "tests/unit/api/test_compress_native_error_abi.py": (
+                "Focused task-198 compress decompressor typed native error ABI gate.",
+                "def test_vm_native_aot_typed_catch_parity",
+                "zlibDecompress",
+                "CompressionError.InvalidData",
+            ),
+        },
+        "allow_typed_error_before_full_marker": True,
+        "detail": (
+            "compress.zlibDecompress has a focused VM/native-AOT typed CompressionError ABI slice; "
             "full task-198 readiness remains blocked by the rest of compress/crypto/io/net"
         ),
     },

@@ -164,7 +164,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"compress", "inflate", "(data: string): string", "Inflate decompress", "compress_inflate", "normal", "", "xrt_compress_inflate", "s", "value", "compress.inflate", "", "alloc", "method", 1, true},
     {"compress", "zlibCompress", "(data: string, level?: int): string?", "Zlib compress", "compress_zlib_compress", "normal", "", "xrt_compress_zlib_compress_default", "s", "value", "compress.zlibCompress", "", "alloc", "method", 1, true},
     {"compress", "zlibCompress", "(data: string, level?: int): string?", "Zlib compress", "compress_zlib_compress", "normal", "", "xrt_compress_zlib_compress", "sv", "value", "compress.zlibCompress", "", "alloc", "method", 2, true},
-    {"compress", "zlibDecompress", "(data: string): string?", "Zlib decompress", "compress_zlib_decompress", "normal", "", "xrt_compress_zlib_decompress", "s", "value", "compress.zlibDecompress", "", "alloc", "method", 1, true},
+    {"compress", "zlibDecompress", "(data: string): string", "Zlib decompress", "compress_zlib_decompress", "normal", "", "xrt_compress_zlib_decompress", "s", "value", "compress.zlibDecompress", "", "alloc", "method", 1, true},
     {"compress", "isGzip", "(data: string): bool", "Check if gzip data", "compress_is_gzip", "normal", "", "xrt_compress_is_gzip", "s", "value", "compress.isGzip", "", "alloc", "method", 1, true},
     {"compress", "isZlib", "(data: string): bool", "Check if zlib data", "compress_is_zlib", "normal", "", "xrt_compress_is_zlib", "s", "value", "compress.isZlib", "", "alloc", "method", 1, true},
     {"crypto", "md5", "(data: string): string", "Compute MD5 hash", "crypto_md5", "normal", "", "xrt_crypto_md5", "s", "value", "crypto.md5", "", "core", "method", 1, true},
