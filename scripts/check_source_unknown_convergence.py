@@ -111,6 +111,11 @@ CATEGORIES = (
     "PUBLIC_SPEC_UNKNOWN_RESIDUE",
 )
 
+INVENTORY_SCRIPT_SELF_NOISE = {
+    "scripts/check_source_unknown_convergence.py",
+    "scripts/check_error_effect_convergence.py",
+}
+
 
 @dataclass(frozen=True)
 class Hit:
@@ -288,7 +293,7 @@ def classify_line(rel_path: str, line: str) -> list[str]:
 def scan_file(root: Path, path: Path) -> list[Hit]:
     hits: list[Hit] = []
     rel_path = str(rel(root, path))
-    if rel_path == "scripts/check_source_unknown_convergence.py":
+    if rel_path in INVENTORY_SCRIPT_SELF_NOISE:
         return hits
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
