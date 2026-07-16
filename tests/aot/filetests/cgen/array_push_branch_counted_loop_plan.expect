@@ -1,0 +1,7 @@
+regex=capacity-plan [0-9]+ .*span=5 .*kind=array op=push action=reserve_once .*evidence=row\+receiver_type\+elem_type\+exact_count\+loop_append\+may_grow\+no_clobber reason=none
+regex=capacity-plan [0-9]+ .*span=11 .*kind=array op=push action=reserve_once .*evidence=row\+receiver_type\+elem_type\+exact_count\+loop_append\+may_grow\+no_clobber reason=none
+c_contains=xrt_array_new_typed_uninit_ptr(
+c_contains=XR_AOT_HOT_REGION_BEGIN typed_array_raw_access
+c_not_contains=->length >=
+c_not_contains=xrt_array_data_grow(
+c_not_contains=xrt_method_1(
