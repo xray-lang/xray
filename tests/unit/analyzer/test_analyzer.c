@@ -3043,6 +3043,9 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     const char *source =
         "enum MapErr { Boom, Other }\n"
         "fn failMap() { throw MapErr.Boom }\n"
+        "fn failMapEither(flag: bool) {\n"
+        "  if (flag) { throw MapErr.Boom } else { throw MapErr.Other }\n"
+        "}\n"
         "fn mapLiteralRethrows() {\n"
         "  try { failMap() } catch (e: MapErr) {\n"
         "    const box = #{\"caught\": e, \"other\": MapErr.Other}\n"
@@ -3173,6 +3176,27 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         "    var box = #{\"caught\": e, \"other\": MapErr.Other}\n"
         "    box.delete(\"other\")\n"
         "    for (key, value in box) { throw value }\n"
+        "  }\n"
+        "}\n"
+        "fn mapDeleteOtherKeyKeysIteratorPreserves() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{e: MapErr.Other, MapErr.Other: MapErr.Boom}\n"
+        "    box.delete(MapErr.Other)\n"
+        "    for (key in box.keys()) { throw key }\n"
+        "  }\n"
+        "}\n"
+        "fn mapDeleteOtherKeyEntriesKeyIteratorPreserves() {\n"
+        "  try { failMap() } catch (e: MapErr) {\n"
+        "    var box = #{e: MapErr.Other, MapErr.Other: MapErr.Boom}\n"
+        "    box.delete(MapErr.Other)\n"
+        "    for (entry in box.entries()) { const key: MapErr = entry[0]; throw key }\n"
+        "  }\n"
+        "}\n"
+        "fn mapDeleteOtherKeyMayAliasCaughtKeyFallsBack(flag: bool) {\n"
+        "  try { failMapEither(flag) } catch (e: MapErr) {\n"
+        "    var box = #{e: MapErr.Other, MapErr.Other: MapErr.Boom}\n"
+        "    box.delete(MapErr.Other)\n"
+        "    for (key in box.keys()) { throw key }\n"
         "  }\n"
         "}\n"
         "fn mapDeleteCaughtKeyInvalidates() {\n"
@@ -3555,6 +3579,12 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         analyzer_function_effect_summary(a, "mapDeleteOtherKeyPreserves");
     const XaEffectSummary *delete_other_values_iter =
         analyzer_function_effect_summary(a, "mapDeleteOtherKeyValuesIteratorPreserves");
+    const XaEffectSummary *delete_other_keys_iter =
+        analyzer_function_effect_summary(a, "mapDeleteOtherKeyKeysIteratorPreserves");
+    const XaEffectSummary *delete_other_entries_key_iter =
+        analyzer_function_effect_summary(a, "mapDeleteOtherKeyEntriesKeyIteratorPreserves");
+    const XaEffectSummary *delete_other_may_alias_key =
+        analyzer_function_effect_summary(a, "mapDeleteOtherKeyMayAliasCaughtKeyFallsBack");
     const XaEffectSummary *delete_invalidated =
         analyzer_function_effect_summary(a, "mapDeleteCaughtKeyInvalidates");
     const XaEffectSummary *clear_invalidated =
@@ -3674,6 +3704,9 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(set_invalidated != NULL);
     ASSERT(delete_other != NULL);
     ASSERT(delete_other_values_iter != NULL);
+    ASSERT(delete_other_keys_iter != NULL);
+    ASSERT(delete_other_entries_key_iter != NULL);
+    ASSERT(delete_other_may_alias_key != NULL);
     ASSERT(delete_invalidated != NULL);
     ASSERT(clear_invalidated != NULL);
     ASSERT(kv_iter != NULL);
@@ -3755,6 +3788,12 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         effect_summary_enum_set_named(a, delete_other, "MapErr");
     const XaErrorTypeSet *delete_other_values_iter_set =
         effect_summary_enum_set_named(a, delete_other_values_iter, "MapErr");
+    const XaErrorTypeSet *delete_other_keys_iter_set =
+        effect_summary_enum_set_named(a, delete_other_keys_iter, "MapErr");
+    const XaErrorTypeSet *delete_other_entries_key_iter_set =
+        effect_summary_enum_set_named(a, delete_other_entries_key_iter, "MapErr");
+    const XaErrorTypeSet *delete_other_may_alias_key_set =
+        effect_summary_enum_set_named(a, delete_other_may_alias_key, "MapErr");
     const XaErrorTypeSet *delete_invalidated_set =
         effect_summary_enum_set_named(a, delete_invalidated, "MapErr");
     const XaErrorTypeSet *clear_invalidated_set =
@@ -3866,6 +3905,9 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(set_invalidated_set != NULL);
     ASSERT(delete_other_set != NULL);
     ASSERT(delete_other_values_iter_set != NULL);
+    ASSERT(delete_other_keys_iter_set != NULL);
+    ASSERT(delete_other_entries_key_iter_set != NULL);
+    ASSERT(delete_other_may_alias_key_set != NULL);
     ASSERT(delete_invalidated_set != NULL);
     ASSERT(clear_invalidated_set != NULL);
     ASSERT(kv_iter_set != NULL);
@@ -3959,6 +4001,13 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
     ASSERT(!delete_other_values_iter_set->all_variants);
     ASSERT(xa_bitset_test(&delete_other_values_iter_set->variants, 0));
     ASSERT(!xa_bitset_test(&delete_other_values_iter_set->variants, 1));
+    ASSERT(!delete_other_keys_iter_set->all_variants);
+    ASSERT(xa_bitset_test(&delete_other_keys_iter_set->variants, 0));
+    ASSERT(!xa_bitset_test(&delete_other_keys_iter_set->variants, 1));
+    ASSERT(!delete_other_entries_key_iter_set->all_variants);
+    ASSERT(xa_bitset_test(&delete_other_entries_key_iter_set->variants, 0));
+    ASSERT(!xa_bitset_test(&delete_other_entries_key_iter_set->variants, 1));
+    ASSERT(delete_other_may_alias_key_set->all_variants);
     ASSERT(delete_invalidated_set->all_variants);
     ASSERT(clear_invalidated_set->all_variants);
     ASSERT(!kv_iter_set->all_variants);
