@@ -302,13 +302,16 @@ bool xa_symbol_links_out_field_assigned(XaSymbolLinks *links, const char *path) 
     return false;
 }
 
-bool xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_class(
-    XaSymbolLinks *links, const char *root_name, XrClassInfo *info) {
-    if (!links || links->is_definitely_assigned || !root_name || root_name[0] == '\0')
+static bool out_field_da_path_assigned_recursive(XaSymbolLinks *links, const char *path,
+                                                 XrType *type, int depth);
+
+static bool out_field_da_all_direct_fields_assigned(XaSymbolLinks *links, const char *path_prefix,
+                                                    XrClassInfo *info, int depth) {
+    if (!links || !path_prefix || path_prefix[0] == '\0')
         return false;
     if (!info)
         return false;
-    if (!info->struct_layout || info->field_count <= 0 || !info->fields)
+    if (info->field_count <= 0 || !info->fields)
         return false;
 
     for (int i = 0; i < info->field_count; i++) {
@@ -316,11 +319,52 @@ bool xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_c
         if (!field || !field->name)
             return false;
         char path[256];
-        int n = snprintf(path, sizeof(path), "%s.%s", root_name, field->name);
+        int n = snprintf(path, sizeof(path), "%s.%s", path_prefix, field->name);
+        XaSymbolLinks *field_links = &field->links;
+        XrType *field_type =
+            field_links ? (field_links->type ? field_links->type : field_links->declared_type)
+                        : NULL;
         if (n <= 0 || (size_t) n >= sizeof(path) ||
-            !xa_symbol_links_out_field_assigned(links, path))
+            !out_field_da_path_assigned_recursive(links, path, field_type, depth + 1))
             return false;
     }
+    return true;
+}
+
+static bool out_field_da_path_assigned_recursive(XaSymbolLinks *links, const char *path,
+                                                 XrType *type, int depth) {
+    if (xa_symbol_links_out_field_assigned(links, path))
+        return true;
+    if (depth > 8 || !type || !type->is_value_type ||
+        (!XR_TYPE_IS_INSTANCE(type) && !XR_TYPE_IS_CLASS(type)) || !type->instance.class_ref)
+        return false;
+    XrClassInfo *info = type->instance.class_ref;
+    if (!info || info->field_count <= 0 || !info->fields)
+        return false;
+    for (int i = 0; i < info->field_count; i++) {
+        XaSymbol *field = info->fields[i];
+        if (!field || !field->name)
+            return false;
+        char child[256];
+        int n = snprintf(child, sizeof(child), "%s.%s", path, field->name);
+        XaSymbolLinks *field_links = &field->links;
+        XrType *field_type =
+            field_links ? (field_links->type ? field_links->type : field_links->declared_type)
+                        : NULL;
+        if (n <= 0 || (size_t) n >= sizeof(child) ||
+            !out_field_da_path_assigned_recursive(links, child, field_type, depth + 1))
+            return false;
+    }
+    xa_symbol_links_mark_out_field_assigned(links, path);
+    return true;
+}
+
+bool xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_class(
+    XaSymbolLinks *links, const char *root_name, XrClassInfo *info) {
+    if (!links || links->is_definitely_assigned)
+        return false;
+    if (!out_field_da_all_direct_fields_assigned(links, root_name, info, 0))
+        return false;
     links->is_definitely_assigned = true;
     return true;
 }
@@ -332,6 +376,16 @@ bool xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_t
         return false;
     return xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_class(
         links, root_name, type->instance.class_ref);
+}
+
+bool xa_symbol_links_mark_out_field_assigned_if_all_direct_fields_assigned_for_class(
+    XaSymbolLinks *links, const char *path_prefix, XrClassInfo *info) {
+    if (!links || !path_prefix || path_prefix[0] == '\0')
+        return false;
+    if (!out_field_da_all_direct_fields_assigned(links, path_prefix, info, 0))
+        return false;
+    xa_symbol_links_mark_out_field_assigned(links, path_prefix);
+    return true;
 }
 
 void xa_symbol_links_free_out_field_da_paths(XaOutFieldDaPath *paths) {

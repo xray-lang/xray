@@ -2538,6 +2538,77 @@ static void xa_mark_out_call_arg_assigned(XaInferContext *ctx, AstNode *arg_node
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, root);
         if (links) {
             xa_symbol_links_mark_out_field_assigned(links, path);
+            if (place->as.member_access.object &&
+                place->as.member_access.object->type == AST_MEMBER_ACCESS) {
+                char object_path[XA_CALL_ALIAS_PATH_MAX];
+                bool object_precise = false;
+                XaSymbol *object_root =
+                    xa_call_alias_path_symbol(ctx, place->as.member_access.object, object_path,
+                                              sizeof(object_path), &object_precise);
+                XrType *object_type =
+                    xa_analyzer_get_node_type(ctx->analyzer, place->as.member_access.object);
+                if (!object_type && object_root == root && object_precise && object_path[0]) {
+                    uint32_t saved_symbol_id = ctx->out_field_da_read_symbol_id;
+                    const char *saved_path = ctx->out_field_da_read_path;
+                    ctx->out_field_da_read_symbol_id = root->id;
+                    ctx->out_field_da_read_path = path;
+                    object_type = xa_visit_infer_expr(ctx, place->as.member_access.object);
+                    ctx->out_field_da_read_symbol_id = saved_symbol_id;
+                    ctx->out_field_da_read_path = saved_path;
+                }
+                XrClassInfo *object_info = object_type ? object_type->instance.class_ref : NULL;
+                if (!object_info && object_type && object_type->instance.class_name) {
+                    XaSymbol *class_sym =
+                        xa_analyzer_lookup_deep(ctx->analyzer, object_type->instance.class_name);
+                    XaSymbolLinks *class_links =
+                        class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+                    object_info = class_links ? class_links->class_info : NULL;
+                }
+                if (!object_info) {
+                    XrType *walk_type = xa_analyzer_get_type(ctx->analyzer, root);
+                    if (!walk_type)
+                        walk_type = links->type ? links->type : links->declared_type;
+                    const char *cursor = object_path;
+                    const char *root_name = root->name ? root->name : "";
+                    size_t root_len = strlen(root_name);
+                    if (cursor && strncmp(cursor, root_name, root_len) == 0)
+                        cursor += root_len;
+                    while (cursor && *cursor == '.' && walk_type) {
+                        cursor++;
+                        char segment[128];
+                        size_t len = 0;
+                        while (cursor[len] && cursor[len] != '.' && len + 1 < sizeof(segment)) {
+                            segment[len] = cursor[len];
+                            len++;
+                        }
+                        segment[len] = '\0';
+                        XrClassInfo *walk_info = walk_type->instance.class_ref;
+                        if (!walk_info && walk_type->instance.class_name) {
+                            XaSymbol *class_sym = xa_analyzer_lookup_deep(
+                                ctx->analyzer, walk_type->instance.class_name);
+                            XaSymbolLinks *class_links =
+                                class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+                            walk_info = class_links ? class_links->class_info : NULL;
+                        }
+                        if (!walk_info || segment[0] == '\0')
+                            break;
+                        object_info = walk_info;
+                        XaSymbol *field = xa_class_info_lookup_member(walk_info, segment);
+                        XaSymbolLinks *field_links =
+                            field ? xa_analyzer_get_links(ctx->analyzer, field) : NULL;
+                        walk_type = field ? xa_analyzer_get_type(ctx->analyzer, field) : NULL;
+                        if (!walk_type && field_links)
+                            walk_type =
+                                field_links->type ? field_links->type : field_links->declared_type;
+                        cursor += len;
+                    }
+                }
+                if (object_root == root && object_precise && object_path[0] != '\0' &&
+                    object_info) {
+                    xa_symbol_links_mark_out_field_assigned_if_all_direct_fields_assigned_for_class(
+                        links, object_path, object_info);
+                }
+            }
             XrType *root_type = xa_analyzer_get_type(ctx->analyzer, root);
             if (!root_type)
                 root_type = links->type ? links->type : links->declared_type;

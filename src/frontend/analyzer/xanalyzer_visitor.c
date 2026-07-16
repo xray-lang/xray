@@ -2054,6 +2054,129 @@ static int member_set_layout_field_index(const XrAggregateLayout *layout, const 
     return -1;
 }
 
+static bool member_set_out_field_path_copy(char *dst, size_t dst_size, const char *src) {
+    if (!dst || dst_size == 0 || !src)
+        return false;
+    int n = snprintf(dst, dst_size, "%s", src);
+    return n >= 0 && (size_t) n < dst_size;
+}
+
+static bool member_set_out_field_path_append(char *dst, size_t dst_size, const char *suffix) {
+    if (!dst || dst_size == 0 || !suffix)
+        return false;
+    size_t len = strlen(dst);
+    if (len >= dst_size)
+        return false;
+    int n = snprintf(dst + len, dst_size - len, "%s", suffix);
+    return n >= 0 && (size_t) n < dst_size - len;
+}
+
+static XaSymbol *member_set_out_field_path_symbol(XaInferContext *ctx, AstNode *expr, char *path,
+                                                  size_t path_size) {
+    if (!ctx || !ctx->analyzer || !expr || !path || path_size == 0)
+        return NULL;
+    while (expr && (expr->type == AST_GROUPING || expr->type == AST_FORCE_UNWRAP ||
+                    expr->type == AST_AS_EXPR)) {
+        if (expr->type == AST_GROUPING)
+            expr = expr->as.grouping;
+        else if (expr->type == AST_FORCE_UNWRAP)
+            expr = expr->as.unary.operand;
+        else
+            expr = expr->as.as_expr.expr;
+    }
+    if (!expr)
+        return NULL;
+    if (expr->type == AST_VARIABLE) {
+        XaSymbol *sym = xa_lookup_visible_symbol(ctx, expr->as.variable.name);
+        if (!sym || !sym->name || !member_set_out_field_path_copy(path, path_size, sym->name))
+            return NULL;
+        return sym;
+    }
+    if (expr->type != AST_MEMBER_ACCESS)
+        return NULL;
+    XaSymbol *root =
+        member_set_out_field_path_symbol(ctx, expr->as.member_access.object, path, path_size);
+    if (!root || !expr->as.member_access.name)
+        return NULL;
+    if (!member_set_out_field_path_append(path, path_size, ".") ||
+        !member_set_out_field_path_append(path, path_size, expr->as.member_access.name))
+        return NULL;
+    return root;
+}
+
+static bool member_set_out_field_path_is_same_or_nested(const char *path, const char *prefix) {
+    if (!path || !prefix || prefix[0] == '\0')
+        return false;
+    size_t n = strlen(prefix);
+    return strncmp(path, prefix, n) == 0 && (path[n] == '\0' || path[n] == '.');
+}
+
+static XrType *member_set_out_field_type_from_object(XaInferContext *ctx, XrType *obj_type,
+                                                     const char *member_name) {
+    if (!ctx || !obj_type || !member_name)
+        return NULL;
+    XaSymbolLinks *class_links = NULL;
+    XrClassInfo *class_info = member_set_class_info(ctx, obj_type, &class_links);
+    (void) class_links;
+    if (class_info) {
+        XaSymbol *field = xa_class_info_lookup_member(class_info, member_name);
+        XaSymbolLinks *links = field ? xa_analyzer_get_links(ctx->analyzer, field) : NULL;
+        XrType *field_type = field ? xa_analyzer_get_type(ctx->analyzer, field) : NULL;
+        if (!field_type && links)
+            field_type = links->type ? links->type : links->declared_type;
+        if (field_type)
+            return field_type;
+    }
+    if (XR_TYPE_HAS_OBJECT_SHAPE(obj_type) && obj_type->object.field_count > 0) {
+        int field_idx = object_shape_field_index_local(obj_type, member_name);
+        if (field_idx >= 0 && obj_type->object.field_types)
+            return obj_type->object.field_types[field_idx];
+    }
+    return NULL;
+}
+
+static XrType *member_set_out_field_object_type_without_receiver_read(XaInferContext *ctx,
+                                                                      AstNode *object,
+                                                                      const char *target_path) {
+    if (!ctx || !object)
+        return NULL;
+    if (object->type == AST_VARIABLE) {
+        char object_path[256];
+        XaSymbol *root =
+            member_set_out_field_path_symbol(ctx, object, object_path, sizeof(object_path));
+        XaSymbolLinks *links = root ? xa_analyzer_get_links(ctx->analyzer, root) : NULL;
+        if (!root || !links || links->is_definitely_assigned ||
+            !member_set_out_field_path_is_same_or_nested(target_path, object_path))
+            return NULL;
+        object->as.variable.symbol_id = root->id;
+        XrType *type = xa_analyzer_get_type(ctx->analyzer, root);
+        if (!type)
+            type = links->type ? links->type : links->declared_type;
+        if (type)
+            xa_analyzer_set_node_type(ctx->analyzer, object, type);
+        return type;
+    }
+    if (object->type == AST_MEMBER_ACCESS) {
+        char object_path[256];
+        XaSymbol *root =
+            member_set_out_field_path_symbol(ctx, object, object_path, sizeof(object_path));
+        XaSymbolLinks *links = root ? xa_analyzer_get_links(ctx->analyzer, root) : NULL;
+        if (!root || !links || links->is_definitely_assigned ||
+            !member_set_out_field_path_is_same_or_nested(target_path, object_path))
+            return NULL;
+        XrType *parent_type = member_set_out_field_object_type_without_receiver_read(
+            ctx, object->as.member_access.object, target_path);
+        if (!parent_type)
+            return NULL;
+        XrType *type =
+            member_set_out_field_type_from_object(ctx, parent_type, object->as.member_access.name);
+        if (type)
+            xa_analyzer_set_node_type(ctx->analyzer, object, type);
+        return type;
+    }
+    return NULL;
+}
+
 XR_FUNC XaSymbol *xa_in_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
     if (!ctx || !ctx->analyzer || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
         return NULL;
@@ -5206,19 +5329,21 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Infer types for member set expression
             MemberSetNode *ms = &node->as.member_set;
             XrType *obj_type = NULL;
-            if (ms->object && ms->object->type == AST_VARIABLE && ms->object->as.variable.name &&
-                ms->member) {
-                XaSymbol *root = xa_lookup_visible_symbol(ctx, ms->object->as.variable.name);
-                XaSymbolLinks *root_links =
-                    root ? xa_analyzer_get_links(ctx->analyzer, root) : NULL;
-                if (root && root->kind == XA_SYM_PARAMETER && root->passing_mode == XR_PARAM_OUT &&
-                    root_links && !root_links->is_definitely_assigned) {
-                    ms->object->as.variable.symbol_id = root->id;
-                    obj_type = xa_analyzer_get_type(ctx->analyzer, root);
-                    if (!obj_type)
-                        obj_type = root_links->type ? root_links->type : root_links->declared_type;
-                    if (obj_type)
-                        xa_analyzer_set_node_type(ctx->analyzer, ms->object, obj_type);
+            if (ms->object && ms->member) {
+                char target_path[256];
+                XaSymbol *root = member_set_out_field_path_symbol(ctx, ms->object, target_path,
+                                                                  sizeof(target_path));
+                if (root && target_path[0] != '\0' &&
+                    member_set_out_field_path_append(target_path, sizeof(target_path), ".") &&
+                    member_set_out_field_path_append(target_path, sizeof(target_path),
+                                                     ms->member)) {
+                    XaSymbolLinks *root_links = xa_analyzer_get_links(ctx->analyzer, root);
+                    if (root && root->kind == XA_SYM_PARAMETER &&
+                        root->passing_mode == XR_PARAM_OUT && root_links &&
+                        !root_links->is_definitely_assigned) {
+                        obj_type = member_set_out_field_object_type_without_receiver_read(
+                            ctx, ms->object, target_path);
+                    }
                 }
             }
             if (!obj_type)
@@ -5269,11 +5394,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Bidirectional inference: propagate field declared type to value
             XrType *saved_expected = ctx->expected_type;
             XrType *member_type = NULL;
-            XrClassInfo *member_class_info = NULL;
             if (ms->member) {
                 XaSymbolLinks *class_links = NULL;
                 XrClassInfo *class_info = member_set_class_info(ctx, obj_type, &class_links);
-                member_class_info = class_info;
                 if (class_info) {
                     XrClassInfo *field_owner = NULL;
                     XaSymbol *field =
@@ -5408,20 +5531,51 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 char path[256];
                 path[0] = '\0';
                 XaSymbol *root = NULL;
-                if (ms->object && ms->object->type == AST_VARIABLE &&
-                    ms->object->as.variable.name && ms->member) {
-                    int n = snprintf(path, sizeof(path), "%s.%s", ms->object->as.variable.name,
-                                     ms->member);
-                    if (n > 0 && (size_t) n < sizeof(path))
-                        root = xa_lookup_visible_symbol(ctx, ms->object->as.variable.name);
+                if (ms->object && ms->member) {
+                    root = member_set_out_field_path_symbol(ctx, ms->object, path, sizeof(path));
+                    if (root && path[0] != '\0' &&
+                        (!member_set_out_field_path_append(path, sizeof(path), ".") ||
+                         !member_set_out_field_path_append(path, sizeof(path), ms->member))) {
+                        root = NULL;
+                        path[0] = '\0';
+                    }
                 }
                 if (root && path[0] != '\0') {
                     XaSymbolLinks *root_links = xa_analyzer_get_links(ctx->analyzer, root);
                     if (root->kind == XA_SYM_PARAMETER && root->passing_mode == XR_PARAM_OUT &&
                         root_links && !root_links->is_definitely_assigned) {
                         xa_symbol_links_mark_out_field_assigned(root_links, path);
-                        xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_class(
-                            root_links, root->name, member_class_info);
+                        if (ms->object && ms->object->type == AST_MEMBER_ACCESS && obj_type) {
+                            char object_path[256];
+                            XaSymbol *object_root = member_set_out_field_path_symbol(
+                                ctx, ms->object, object_path, sizeof(object_path));
+                            if (object_root == root && object_path[0] != '\0') {
+                                XaSymbolLinks *class_links = NULL;
+                                XrClassInfo *object_info =
+                                    member_set_class_info(ctx, obj_type, &class_links);
+                                (void) class_links;
+                                xa_symbol_links_mark_out_field_assigned_if_all_direct_fields_assigned_for_class(
+                                    root_links, object_path, object_info);
+                            }
+                        }
+                        XrType *root_type = xa_analyzer_get_type(ctx->analyzer, root);
+                        if (!root_type)
+                            root_type =
+                                root_links->type ? root_links->type : root_links->declared_type;
+                        bool marked_whole =
+                            root_type
+                                ? xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_type(
+                                      root_links, root->name, root_type)
+                                : false;
+                        if (!marked_whole && ms->object && ms->object->type == AST_VARIABLE &&
+                            ms->object->as.variable.symbol_id == root->id) {
+                            XaSymbolLinks *class_links = NULL;
+                            XrClassInfo *root_info =
+                                member_set_class_info(ctx, obj_type, &class_links);
+                            (void) class_links;
+                            xa_symbol_links_mark_out_whole_assigned_if_all_direct_fields_assigned_for_class(
+                                root_links, root->name, root_info);
+                        }
                     }
                 }
             }
