@@ -26,6 +26,105 @@ PRE_SWITCH_NATIVE_MODULES = {
     "io": "native_primitive",
     "net": "native_primitive",
 }
+PRE_SWITCH_NATIVE_PUBLIC_SURFACE = {
+    "compress": (
+        "adler32",
+        "crc32",
+        "deflate",
+        "gunzip",
+        "gzip",
+        "inflate",
+        "isGzip",
+        "isZlib",
+        "zlibCompress",
+        "zlibDecompress",
+    ),
+    "crypto": (
+        "decrypt",
+        "encrypt",
+        "hmac",
+        "md5",
+        "randomBytes",
+        "sha1",
+        "sha256",
+        "sha512",
+        "timingSafeEqual",
+        "uuid",
+    ),
+    "io": (
+        "FileStat",
+        "appendFile",
+        "chdir",
+        "chmod",
+        "copyFile",
+        "cwd",
+        "exists",
+        "fileSize",
+        "isDir",
+        "isFile",
+        "isSymlink",
+        "mkdir",
+        "mkdirp",
+        "readDir",
+        "readDirRecursive",
+        "readFile",
+        "readFileBytes",
+        "readLines",
+        "readStdin",
+        "readlink",
+        "realpath",
+        "remove",
+        "removeAll",
+        "rename",
+        "stat",
+        "symlink",
+        "tempDir",
+        "tempFile",
+        "touch",
+        "writeFile",
+        "writeFileBytes",
+    ),
+    "net": (
+        "NetConn",
+        "NetConn.close",
+        "NetConn.fd",
+        "NetConn.isClosed",
+        "NetConn.isTLS",
+        "NetListener",
+        "NetListener.close",
+        "NetListener.fd",
+        "NetListener.isClosed",
+        "NetListener.port",
+        "UdpPacket",
+        "accept",
+        "close",
+        "copy",
+        "copyBidirectional",
+        "dial",
+        "dialTLS",
+        "fd",
+        "hasTLS",
+        "lastErrno",
+        "lastError",
+        "listen",
+        "lookup",
+        "read",
+        "readInto",
+        "recvFrom",
+        "sendTo",
+        "setAcceptDeadline",
+        "setDeadline",
+        "setReadDeadline",
+        "setWriteDeadline",
+        "shutdown",
+        "shutdownRead",
+        "shutdownWrite",
+        "udpBind",
+        "upgradeTLS",
+        "write",
+        "writeBytes",
+    ),
+}
 PURE_BYTE_MODULES = ("base64", "encoding")
 REQUIRED_CONTRACT_MODULES = ("base64", "encoding", "compress", "crypto", "io", "http", "ws")
 REQUIRED_SURFACE_CATEGORIES = (
@@ -359,6 +458,35 @@ def check_boundary(root: Path) -> list[CheckResult]:
                 name,
                 not failures,
                 "; ".join(failures) if failures else "native public surface still gated",
+            )
+        )
+
+    for name, expected in PRE_SWITCH_NATIVE_PUBLIC_SURFACE.items():
+        module = modules.get(name, {})
+        public_native = module.get("public_native", [])
+        failures: list[str] = []
+        if not isinstance(public_native, list):
+            failures.append("public_native must be a list")
+        else:
+            actual = tuple(str(item) for item in public_native)
+            if actual != expected:
+                missing = sorted(set(expected) - set(actual))
+                extra = sorted(set(actual) - set(expected))
+                if missing:
+                    failures.append("missing pre-switch entries: " + ", ".join(missing))
+                if extra:
+                    failures.append("unexpected pre-switch entries: " + ", ".join(extra))
+                if not missing and not extra:
+                    failures.append("pre-switch public_native order changed")
+
+        results.append(
+            CheckResult(
+                "PRE_SWITCH_NATIVE_EXACT_SURFACE",
+                name,
+                not failures,
+                "exact pre-switch public_native surface locked"
+                if not failures
+                else "; ".join(failures),
             )
         )
 
