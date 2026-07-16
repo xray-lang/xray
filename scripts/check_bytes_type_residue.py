@@ -39,6 +39,11 @@ INTERNAL_LEGACY_RE = re.compile(
     r"emit_bytes_[A-Za-z0-9_]+|cg_bytes_[A-Za-z0-9_]+|"
     r"XR_ERROR_CORE_BYTES_[A-Z0-9_]+)\b"
 )
+XRD_REMOVED_ALIAS_GUARD_RE = re.compile(
+    r"removed_byte_aliases|removed byte alias|decodeOld|viewOld|viaOld|viaView|"
+    r"NativeBox = \{ const payload: Bytes \}|"
+    r"undefined type '(?:ByteSpan|ByteView)'"
+)
 
 SCAN_DIRS = ("src", "stdlib", "tests", "spec", "demos", "tools", "scripts")
 TEXT_SUFFIXES = (
@@ -74,6 +79,10 @@ ALLOWED_REMOVED_TYPE_FILES = {
 ALLOWED_REMOVED_NAMESPACE_FILES = {
     Path("tests/compile_errors/type/bytes_public_namespace_removed.xr"),
     Path("tests/compile_errors/type/bytes_public_namespace_removed.xr.expected"),
+}
+ALLOWED_XRD_REMOVED_ALIAS_GUARD_FILES = {
+    Path("src/frontend/analyzer/xanalyzer_xrd.c"),
+    Path("tests/unit/analyzer/test_analyzer.c"),
 }
 SKIP_REMOVED_TYPE_SCAN_FILES = {
     Path("scripts/check_bytes_type_residue.py"),
@@ -134,6 +143,11 @@ def classify_removed_type(root: Path, path: Path, line: str) -> str | None:
         return "ALLOWED_REMOVED_TYPE_NEGATIVE_TEST"
     if rel_path in ALLOWED_REMOVED_NAMESPACE_FILES:
         return "ALLOWED_REMOVED_NAMESPACE_NEGATIVE_TEST"
+    if (
+        rel_path in ALLOWED_XRD_REMOVED_ALIAS_GUARD_FILES
+        and XRD_REMOVED_ALIAS_GUARD_RE.search(line)
+    ):
+        return "ALLOWED_XRD_REMOVED_ALIAS_FAIL_CLOSED_GUARD"
     if PRELUDE_RE.search(line) or (
         rel_path == Path("src/frontend/analyzer/xtype_ref_resolve.c")
         and REMOVED_TYPE_RE.search(line)

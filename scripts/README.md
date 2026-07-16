@@ -93,7 +93,8 @@ lowering/runtime 名，以及领域对象或 C layout 中合法出现的 `length
 扫描 `src/`、`stdlib/`、`tests/`、`spec/`、`demos/`、`tools/`、`scripts/`，把 204 旧 public binary 类型残余分为
 `PUBLIC_TYPE_BYTES*`、`PUBLIC_SIGNATURE_BYTES`、`PUBLIC_DIAGNOSTIC_BYTES`、
 `PRELUDE_OR_RESOLVER_ALIAS`、`CONSTRUCTOR_OPCODE_BYTES`、`METHOD_RECEIVER_BYTES`、
-`INTERNAL_LEGACY_BYTES_NAMING` 和允许保留的 compile-error 负例。默认模式只打印 inventory
+`INTERNAL_LEGACY_BYTES_NAMING`、允许保留的 compile-error 负例和 XRD removed-alias fail-closed guard。
+默认模式只打印 inventory
 并返回 0，便于 P0 固定基线；`--json` 输出机器可读结果；`--fail-on-public` 在 public 表面类目
 非空时返回 1；`--fail-on-internal-legacy` 在 internal legacy 命名非空时返回 1。CTest
 `bytes_type_residue` 同时打开这两个模式，阻止 public surface 与 internal helper 命名回流。
