@@ -3403,6 +3403,7 @@ static void body_add_generic_container_storage(XgBodyCollect *bc, const XrTypeRe
     XgGenericInstSummary inst;
     XgGenericStorageSummary storage;
     const char *container_name;
+    bool has_managed_ref = false;
     uint8_t storage_kind;
     uint8_t map_container_kind = 0;
     uint16_t type_arg_count;
@@ -3469,13 +3470,16 @@ static void body_add_generic_container_storage(XgBodyCollect *bc, const XrTypeRe
         (storage_kind == XG_GENERIC_STORAGE_SET && body_type_key_is_pod_array_lane(key_type_key))) {
         storage.flags = XG_GENERIC_STORAGE_TYPED_INLINE | XG_GENERIC_STORAGE_POD;
     } else {
-        storage.flags = XG_GENERIC_STORAGE_BOXED;
         for (uint16_t i = 0; i < type_arg_count; i++) {
             if (body_type_ref_is_managed_storage_ref(type_args[i])) {
-                storage.flags |= XG_GENERIC_STORAGE_MANAGED_REF;
+                has_managed_ref = true;
                 break;
             }
         }
+        if (has_managed_ref)
+            storage.flags = XG_GENERIC_STORAGE_REF_LANE | XG_GENERIC_STORAGE_MANAGED_REF;
+        else
+            storage.flags = XG_GENERIC_STORAGE_BOXED;
     }
     storage.storage_hash = body_generic_storage_hash(&storage);
     (void) xg_global_evidence_add_generic_storage(bc->evidence, &storage);

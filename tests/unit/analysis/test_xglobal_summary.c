@@ -16672,7 +16672,8 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     ASSERT_EQ_UINT(ev.hash_eqs[1].kind, XG_HASH_EQ_BUILTIN);
     ASSERT_EQ_UINT(ev.generic_storages[0].storage_kind, XG_GENERIC_STORAGE_MAP);
     ASSERT_EQ_UINT(ev.generic_storages[0].container_plan_id, ev.map_shapes[0].shape_id);
-    ASSERT_TRUE((ev.generic_storages[0].flags & XG_GENERIC_STORAGE_BOXED) != 0);
+    ASSERT_TRUE((ev.generic_storages[0].flags & XG_GENERIC_STORAGE_REF_LANE) != 0);
+    ASSERT_TRUE((ev.generic_storages[0].flags & XG_GENERIC_STORAGE_BOXED) == 0);
     ASSERT_TRUE((ev.generic_storages[0].flags & XG_GENERIC_STORAGE_MANAGED_REF) != 0);
     ASSERT_EQ_UINT(ev.generic_storages[1].storage_kind, XG_GENERIC_STORAGE_SET);
     ASSERT_EQ_UINT(ev.generic_storages[1].container_plan_id, ev.map_shapes[1].shape_id);
@@ -16694,7 +16695,7 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     ASSERT_NOT_NULL(set_plan);
     ASSERT_EQ_UINT(map_plan->action, XAOT_MAP_SHAPE_PREALLOC_HASH);
     ASSERT_EQ_UINT(set_plan->action, XAOT_MAP_SHAPE_PREALLOC_HASH);
-    ASSERT_EQ_UINT(bundle.generic_storage_plans[0].action, XAOT_GENERIC_STORAGE_BOXED);
+    ASSERT_EQ_UINT(bundle.generic_storage_plans[0].action, XAOT_GENERIC_STORAGE_REF_LANE);
     ASSERT_EQ_UINT(bundle.generic_storage_plans[1].action, XAOT_GENERIC_STORAGE_TYPED_INLINE);
     ASSERT_NOT_NULL(xaot_bundle_find_hash_eq_plan(&bundle, ev.map_shapes[0].key_type_key));
     ASSERT_NOT_NULL(xaot_bundle_find_hash_eq_plan(&bundle, ev.map_shapes[1].key_type_key));

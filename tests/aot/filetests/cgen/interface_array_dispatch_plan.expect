@@ -3,7 +3,8 @@ regex=method-dispatch [0-9]+ callsite=[0-9]+ span=23 kind=type_switch .*recv_cla
 regex=dispatch-target [0-9]+ callsite=[0-9]+ recv_class=[1-9][0-9]* method=[1-9][0-9]* owner_class=[1-9][0-9]* body=[1-9][0-9]* name=[1-9][0-9]* sig=[1-9][0-9]* root=[1-9][0-9]* depth=[0-9]+ evidence=0x51
 regex=interface-use [0-9]+ interface=[1-9][0-9]* implementor=[1-9][0-9]* use_site=0 reason=array\+param flags=iface_object\+itable object_use=[1-9][0-9]* owner=[1-9][0-9]* span=19 ordinal=1 type=[1-9][0-9]*
 regex=interface-abi [0-9]+ interface=[1-9][0-9]* callsites=1 implementors=2 slots=1 flags=iface_object\+itable\+type_switch_tag\+boxed_receiver data=boxed_value type=native_type_id itable=dispatch_slot tag=native_type_id evidence=callsite\+methods\+implementors\+dispatch\+object_use reason=none
-regex=generic-storage-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* kind=array action=boxed .*container_plan=[1-9][0-9]* evidence=row\+inst\+specialized_type\+container_plan reason=none
+regex=generic-storage-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* kind=array action=ref_lane .*container_plan=[1-9][0-9]* evidence=row\+inst\+specialized_type\+container_plan reason=none
+not_regex=generic-storage-plan .*kind=array action=boxed
 regex=sequence-access-plan [0-9]+ id=[1-9][0-9]* func=[1-9][0-9]* span=23 ordinal=1 kind=array access=index_get action=checked_index .*evidence=row\+receiver_type\+elem_type reason=computed_index
 regex=container [0-9]+ kind=array flags=0x5 elem=XR_ELEM_ANY/tagged/XrValue
 regex=array-storage [0-9]+ func=drawAll .*elem=XR_ELEM_ANY/tagged/XrValue
