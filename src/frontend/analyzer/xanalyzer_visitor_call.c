@@ -56,32 +56,6 @@ static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index);
 static bool xa_class_name_matches_mono_base(const char *class_name, const char *base);
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object, const char *module_name);
 
-static bool xa_path_char_is_sep(char ch) {
-    return ch == '/' || ch == '\\';
-}
-
-static bool xa_path_has_suffix(const char *path, const char *suffix) {
-    if (!path || !suffix)
-        return false;
-    size_t path_len = strlen(path);
-    size_t suffix_len = strlen(suffix);
-    if (path_len < suffix_len)
-        return false;
-    const char *tail = path + path_len - suffix_len;
-    for (size_t i = 0; i < suffix_len; i++) {
-        char expected = suffix[i];
-        char actual = tail[i];
-        if (xa_path_char_is_sep(expected)) {
-            if (!xa_path_char_is_sep(actual))
-                return false;
-            continue;
-        }
-        if (actual != expected)
-            return false;
-    }
-    return true;
-}
-
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
     if (!name)
         return false;
@@ -846,12 +820,10 @@ static bool xa_thread_spawn_call_is_coro_yield(CallExprNode *call) {
     const char *module_name = ma->object->as.variable.name;
     return module_name && strcmp(module_name, "Coro") == 0;
 }
-
 static bool xa_thread_spawn_path_is_sync_module(const char *path) {
-    return xa_path_has_suffix(path, "stdlib/sync/sync.xr") ||
-           xa_path_has_suffix(path, "<embedded stdlib>/sync/sync.xr");
+    return path && (strstr(path, "stdlib/sync/sync.xr") || strstr(path, "stdlib\\sync\\sync.xr") ||
+                    strstr(path, "<embedded stdlib>/sync/sync.xr"));
 }
-
 static bool xa_thread_spawn_sync_class_name(const char *class_name) {
     return class_name && (strcmp(class_name, "Mutex") == 0 || strcmp(class_name, "RwLock") == 0 ||
                           strcmp(class_name, "Once") == 0 || strcmp(class_name, "Barrier") == 0 ||
@@ -1347,9 +1319,12 @@ static AstNode *xa_threadlocal_current_body(XaInferContext *ctx) {
 static bool xa_path_is_sys_stdlib_module(const char *file) {
     if (!file)
         return false;
-    const char *suffixes[] = {"stdlib/sys/sys.xr", "<embedded stdlib>/sys/sys.xr"};
+    const char *suffixes[] = {"stdlib/sys/sys.xr", "stdlib\\sys\\sys.xr",
+                              "<embedded stdlib>/sys/sys.xr"};
     for (int i = 0; i < (int) (sizeof(suffixes) / sizeof(suffixes[0])); i++) {
-        if (xa_path_has_suffix(file, suffixes[i]))
+        size_t flen = strlen(file);
+        size_t slen = strlen(suffixes[i]);
+        if (flen >= slen && strcmp(file + flen - slen, suffixes[i]) == 0)
             return true;
     }
     return false;
@@ -1905,10 +1880,12 @@ static bool xa_parallel_intrinsic_member_name(const char *name) {
 static bool xa_path_is_parallel_stdlib_module(const char *file) {
     if (!file)
         return false;
-    const char *suffixes[] = {"stdlib/parallel/parallel.xr",
+    const char *suffixes[] = {"stdlib/parallel/parallel.xr", "stdlib\\parallel\\parallel.xr",
                               "<embedded stdlib>/parallel/parallel.xr"};
     for (int i = 0; i < (int) (sizeof(suffixes) / sizeof(suffixes[0])); i++) {
-        if (xa_path_has_suffix(file, suffixes[i]))
+        size_t flen = strlen(file);
+        size_t slen = strlen(suffixes[i]);
+        if (flen >= slen && strcmp(file + flen - slen, suffixes[i]) == 0)
             return true;
     }
     return false;

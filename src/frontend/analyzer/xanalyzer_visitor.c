@@ -32,9 +32,7 @@
 #include <stdio.h>
 #include <string.h>
 
-// Forward declarations now in xanalyzer_visitor_internal.h
 void xa_visit_collect(XaInferContext *ctx, AstNode *node);
-
 static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
                                           XaSymbolLinks **out_links);
 static bool member_set_out_field_path_append(char *dst, size_t dst_size, const char *suffix);
