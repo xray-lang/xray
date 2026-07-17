@@ -14,6 +14,7 @@ JOBS="${XRAY_TEST_JOBS:-8}"
 CTEST="${CTEST:-ctest}"
 DO_BUILD=1
 BOUNDARY_REPORT=1
+EXTRA_EXCLUDE_RE="${XRAY_RELEASE09_EXTRA_EXCLUDE_RE:-}"
 
 KNOWN_AOT_BOUNDARY_RE='^(aot_filetests|aot_link_command_manifest)$'
 
@@ -25,6 +26,7 @@ Options:
   --build-dir DIR          CMake build directory (default: build)
   --jobs N                 Parallel jobs for build/ctest (default: XRAY_TEST_JOBS or 8)
   --ctest PATH             ctest executable (default: ctest)
+  --extra-exclude-regex RE  Extra CTest exclusion regex for platform-specific CI debt
   --no-build               Skip cmake --build
   --skip-boundary-report   Do not run known open AOT boundary suites after the gate
   -h, --help               Show this help
@@ -50,6 +52,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --ctest)
             CTEST="$2"
+            shift 2
+            ;;
+        --extra-exclude-regex)
+            EXTRA_EXCLUDE_RE="$2"
             shift 2
             ;;
         --no-build)
@@ -90,6 +96,11 @@ echo "Project:   $PROJECT_DIR"
 echo "Build dir: $BUILD_DIR"
 echo "Jobs:      $JOBS"
 echo "Excluded known AOT boundary suites: $KNOWN_AOT_BOUNDARY_RE"
+GATE_EXCLUDE_RE="$KNOWN_AOT_BOUNDARY_RE"
+if [ -n "$EXTRA_EXCLUDE_RE" ]; then
+    GATE_EXCLUDE_RE="$GATE_EXCLUDE_RE|$EXTRA_EXCLUDE_RE"
+    echo "Extra platform exclusions: $EXTRA_EXCLUDE_RE"
+fi
 echo ""
 
 if [ "$DO_BUILD" -eq 1 ]; then
@@ -98,7 +109,7 @@ if [ "$DO_BUILD" -eq 1 ]; then
 fi
 
 "$CTEST" --test-dir "$BUILD_DIR" --output-on-failure -j "$JOBS" \
-    -E "$KNOWN_AOT_BOUNDARY_RE"
+    -E "$GATE_EXCLUDE_RE"
 
 if [ "$BOUNDARY_REPORT" -eq 1 ]; then
     echo ""
