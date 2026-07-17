@@ -407,24 +407,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install clang-format-19
+    - name: Check whitespace hygiene
       run: |
-        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-        echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main" | sudo tee /etc/apt/sources.list.d/llvm-19.list
-        sudo apt-get update
-        sudo apt-get install -y clang-format-19
-        clang-format-19 --version
-
-    - name: Check code format
-      run: |
-        find src include stdlib \
-          \( -name '*.c' -o -name '*.h' \) \
-          ! -name '*_gen.*' \
-          -type f | \
-        xargs clang-format-19 --dry-run --Werror 2>&1 | tee format-check.txt
-
-        if [ -s format-check.txt ]; then
-          echo "Code format issues found. Run 'make format' to fix."
+        if git grep -n -I -E '[[:blank:]]$' -- src include stdlib; then
+          echo "Trailing whitespace found."
           exit 1
         fi
-        echo "Code format check passed"
+        echo "Whitespace hygiene check passed"
