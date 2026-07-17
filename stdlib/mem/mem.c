@@ -43,6 +43,7 @@
 #include "../../src/os/os_mem.h"
 #include "../../src/base/xplatform.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/base/xmalloc.h"
 #include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -88,6 +89,7 @@ static inline void *mem_rawptr_arg(XrValue v) {
 typedef struct XrMemBufferBody {
     void *data;
     int64_t length;
+    size_t align;
     XrSpanView readonly_span_cache;
     XrSpanView mutable_span_cache;
 } XrMemBufferBody;
@@ -112,9 +114,13 @@ static void mem_buffer_body_destroy(void *body) {
     XrMemBufferBody *buf = (XrMemBufferBody *) body;
     if (!buf)
         return;
-    free(buf->data);
+    if (buf->align > 0)
+        xr_free_aligned(buf->data, buf->align);
+    else
+        free(buf->data);
     buf->data = NULL;
     buf->length = 0;
+    buf->align = 0;
 }
 
 static XrNativeBodyDesc g_mem_buffer_body_desc = {
@@ -143,6 +149,30 @@ static XrMemBufferBody *mem_buffer_body(XrVMRuntime *isolate, XrValue value) {
     return (XrMemBufferBody *) xr_instance_native_body(inst);
 }
 
+static void *mem_buffer_alloc_data(size_t n, bool zeroed, size_t align) {
+    void *data = NULL;
+    if (align > 0) {
+        if (align < sizeof(void *) || (align & (align - 1)) != 0)
+            XR_CHECK(false, "mem.allocAligned: align must be a power of two >= sizeof(void*)");
+        data = xr_malloc_aligned(n, align);
+        if (data && zeroed)
+            memset(data, 0, n);
+    } else {
+        data = zeroed ? calloc(1, n) : malloc(n);
+    }
+    return data;
+}
+
+static void mem_buffer_free_data(XrMemBufferBody *buf) {
+    if (!buf || !buf->data)
+        return;
+    if (buf->align > 0)
+        xr_free_aligned(buf->data, buf->align);
+    else
+        free(buf->data);
+    buf->data = NULL;
+}
+
 static XrValue mem_buffer_new(XrVMRuntime *isolate, int64_t length, bool zeroed, size_t align) {
     if (length < 0)
         length = 0;
@@ -150,20 +180,11 @@ static XrValue mem_buffer_new(XrVMRuntime *isolate, int64_t length, bool zeroed,
     XR_CHECK(inst != NULL, "mem.Buffer allocation failed");
     XrMemBufferBody *buf = (XrMemBufferBody *) xr_instance_native_body(inst);
     XR_CHECK(buf != NULL, "mem.Buffer native body missing");
+    buf->align = align;
 
     if (length > 0) {
         size_t n = (size_t) length;
-        void *data = NULL;
-        if (align > 0) {
-            if (align < sizeof(void *) || (align & (align - 1)) != 0)
-                XR_CHECK(false, "mem.allocAligned: align must be a power of two >= sizeof(void*)");
-            if (posix_memalign(&data, align, n) != 0)
-                data = NULL;
-            if (data && zeroed)
-                memset(data, 0, n);
-        } else {
-            data = zeroed ? calloc(1, n) : malloc(n);
-        }
+        void *data = mem_buffer_alloc_data(n, zeroed, align);
         XR_CHECK(data != NULL, "mem.alloc: out of memory");
         buf->data = data;
     }
@@ -310,14 +331,24 @@ static XrValue mem_buffer_resize(XrVMRuntime *isolate, XrValue self, XrValue *ar
     if (new_len < 0)
         return xr_bool(false);
     if (new_len == 0) {
-        free(buf->data);
-        buf->data = NULL;
+        mem_buffer_free_data(buf);
         buf->length = 0;
         return xr_bool(true);
     }
-    void *new_data = realloc(buf->data, (size_t) new_len);
+    void *new_data = NULL;
+    if (buf->align > 0) {
+        new_data = mem_buffer_alloc_data((size_t) new_len, false, buf->align);
+        if (new_data && buf->data) {
+            size_t old_len = buf->length > 0 ? (size_t) buf->length : 0;
+            memcpy(new_data, buf->data, old_len < (size_t) new_len ? old_len : (size_t) new_len);
+        }
+    } else {
+        new_data = realloc(buf->data, (size_t) new_len);
+    }
     if (!new_data)
         return xr_bool(false);
+    if (buf->align > 0)
+        mem_buffer_free_data(buf);
     buf->data = new_data;
     buf->length = new_len;
     return xr_bool(true);
