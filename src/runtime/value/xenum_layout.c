@@ -13,8 +13,9 @@
 #include "../../base/xmalloc.h"
 
 #include <stdalign.h>
+#include <stdatomic.h>
 
-static uint32_t xr_next_enum_layout_id = 1;
+static _Atomic uint32_t xr_next_enum_layout_id = 1;
 
 static uint32_t enum_align_up(uint32_t value, uint32_t align) {
     if (align <= 1)
@@ -83,7 +84,7 @@ XrEnumLayout *xr_enum_layout_new(const char *name, const char *const *variant_na
         return NULL;
     }
 
-    layout->layout_id = xr_next_enum_layout_id++;
+    layout->layout_id = atomic_fetch_add_explicit(&xr_next_enum_layout_id, 1, memory_order_relaxed);
     layout->name = name;
     layout->variant_count = variant_count;
     for (uint32_t i = 0; i < variant_count; i++) {

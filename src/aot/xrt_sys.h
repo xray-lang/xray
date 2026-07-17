@@ -1155,14 +1155,8 @@ typedef struct xrt_sys_signal_slot {
     XrValue handler;
 } xrt_sys_signal_slot_t;
 
-static xrt_sys_signal_slot_t xrt_sys_signal_term = {
-    .pending = ATOMIC_VAR_INIT(0),
-    .handler = {.tag = XR_TAG_NULL},
-};
-static xrt_sys_signal_slot_t xrt_sys_signal_int = {
-    .pending = ATOMIC_VAR_INIT(0),
-    .handler = {.tag = XR_TAG_NULL},
-};
+static xrt_sys_signal_slot_t xrt_sys_signal_term;
+static xrt_sys_signal_slot_t xrt_sys_signal_int;
 static atomic_flag xrt_sys_signal_lock = ATOMIC_FLAG_INIT;
 
 static inline xrt_sys_signal_slot_t *xrt_sys_signal_slot_for(int sig) {

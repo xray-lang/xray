@@ -27,6 +27,9 @@
 #include <inttypes.h>
 #include <stdarg.h>
 #include <math.h>
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 
 #include "../shared/xr_hash_core.h"
 #include "../shared/xr_float_fmt.h"
@@ -413,8 +416,13 @@ static inline uint32_t xrt_str_hash(XrValue v) {
     if (cached)
         return cached;
     uint32_t computed = xr_hash_core_str_hash_bytes(h->data, (size_t) h->len);
-    if (!(h->flags & XRT_STR_LITERAL))
+    if (!(h->flags & XRT_STR_LITERAL)) {
+#if defined(_MSC_VER)
+        _InterlockedExchange((volatile long *) &h->hash, (long) computed);
+#else
         __atomic_store_n(&h->hash, computed, __ATOMIC_RELAXED);
+#endif
+    }
     return computed;
 }
 

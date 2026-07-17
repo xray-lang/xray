@@ -1779,8 +1779,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     mono_roots = NULL;
     xr_module_graph_free(graph);
     graph = NULL;
-    xray_vm_delete(X);
-    X = NULL;
 
     /* --- Create codegen context (no global state) --- */
     XiCgenCtx *cg_ctx = xi_cgen_ctx_new();
@@ -1908,6 +1906,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     xr_free(ir_funcs);
     xa_analyzer_free(shared_analyzer);
     shared_analyzer = NULL;
+    xray_vm_delete(X);
+    X = NULL;
 
     printf("[xi-native] Generated %zu bytes of C (%d functions, %d modules in %d unit%s)\n",
            total_c_bytes, total_funcs, nmodules, n_sources, n_sources == 1 ? "" : "s");

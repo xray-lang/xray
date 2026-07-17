@@ -18,6 +18,7 @@
  */
 
 #include "../../base/xchecks.h"
+#include "../../os/os_thread.h"
 #include <stdlib.h>
 #include <string.h>
 #include "xanalyzer_builtin_interfaces.h"
@@ -381,6 +382,18 @@ static XaInterfaceDefinition builtin_interfaces[XA_IFACE_COUNT] = {
     [XA_IFACE_CLOSEABLE] = {"Closeable", closeable_methods, 1},
 };
 
+static xr_once_t builtin_interface_methods_once = XR_ONCE_INITIALIZER;
+
+static void init_builtin_interface_methods(void) {
+    static XrType *nth_params[1];
+    comparable_methods[0].return_type = xr_type_new_int(NULL);
+    hashable_methods[0].return_type = xr_type_new_int(NULL);
+    stringable_methods[0].return_type = xr_type_new_string(NULL);
+    iterator_methods[1].return_type = xr_type_new_bool(NULL);
+    nth_params[0] = xr_type_new_int(NULL);
+    iterator_methods[2].param_types = nth_params;
+}
+
 // ============================================================================
 // Built-in Type Implementation Matrix
 // ============================================================================
@@ -542,6 +555,8 @@ void xa_register_builtin_interfaces(XrVMRuntime *X, XaScope *global_scope) {
     if (!global_scope)
         return;
 
+    xr_once_call(&builtin_interface_methods_once, init_builtin_interface_methods);
+
     // Create per-isolate interface types and register as scope aliases.
     // Each isolate gets its own XrType* instances so no global mutable
     // state is shared between concurrent isolates.
@@ -552,13 +567,4 @@ void xa_register_builtin_interfaces(XrVMRuntime *X, XaScope *global_scope) {
             xa_scope_define_type_alias(global_scope, def->name, iface_type);
         }
     }
-
-    // Set specific return types (stateless singletons, safe to set repeatedly)
-    comparable_methods[0].return_type = xr_type_new_int(NULL);
-    hashable_methods[0].return_type = xr_type_new_int(NULL);
-    stringable_methods[0].return_type = xr_type_new_string(NULL);
-    iterator_methods[1].return_type = xr_type_new_bool(NULL);
-    static XrType *nth_params[1];
-    nth_params[0] = xr_type_new_int(NULL);
-    iterator_methods[2].param_types = nth_params;
 }

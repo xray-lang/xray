@@ -38,6 +38,7 @@
 #include "xi_opt_comptime.h"
 #include "xi_range.h"
 #include "xi_value_query.h"
+#include "../os/os_thread.h"
 #include "../shared/xr_int_arith.h"
 #include "xi_analysis.h"
 #include "xi_pass.h"
@@ -3167,13 +3168,8 @@ static const XiPassDesc xi_pass_table[] = {
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
 
-/* Validate pass table invariants at startup.  Called once. */
-static void validate_pass_table(void) {
-    static bool validated = false;
-    if (validated)
-        return;
-    validated = true;
-
+/* Validate pass table invariants at startup. */
+static void validate_pass_table_once(void) {
     for (size_t i = 0; i < XI_PASS_TABLE_SIZE; i++) {
         const XiPassDesc *d = &xi_pass_table[i];
         (void) d;
@@ -3209,6 +3205,20 @@ static void validate_pass_table(void) {
     XR_CHECK(xi_pass_order_check(), "xi pass order check failed");
 }
 
+static xr_once_t validate_pass_table_once_token = XR_ONCE_INITIALIZER;
+
+static void validate_pass_table(void) {
+    xr_once_call(&validate_pass_table_once_token, validate_pass_table_once);
+}
+
+static int xi_check_per_pass_enabled = 0;
+static xr_once_t xi_check_per_pass_once = XR_ONCE_INITIALIZER;
+
+static void init_xi_check_per_pass(void) {
+    const char *env = getenv("XRAY_XI_CHECK");
+    xi_check_per_pass_enabled = (env && env[0] == '1') ? 1 : 0;
+}
+
 /* ========== Pass Order Constraints ========== */
 
 /* Declarative ordering rules. Each entry says "before must appear
@@ -3233,6 +3243,89 @@ static int pass_index_by_name(const char *name) {
             return (int) i;
     }
     return -1;
+}
+
+static const char *xi_dump_func = NULL;
+static const char *xi_dump_pass = NULL;
+static char xi_dump_func_buf[64];
+static char xi_dump_pass_buf[64];
+static xr_once_t xi_dump_once = XR_ONCE_INITIALIZER;
+
+static void init_xi_dump_config(void) {
+    const char *dump_env = getenv("XRAY_XI_DUMP");
+    if (!dump_env || !dump_env[0])
+        return;
+
+    const char *colon = strchr(dump_env, ':');
+    if (!colon)
+        return;
+
+    size_t flen = (size_t) (colon - dump_env);
+    if (flen >= sizeof(xi_dump_func_buf))
+        flen = sizeof(xi_dump_func_buf) - 1;
+    memcpy(xi_dump_func_buf, dump_env, flen);
+    xi_dump_func_buf[flen] = '\0';
+    xi_dump_func = xi_dump_func_buf;
+    strncpy(xi_dump_pass_buf, colon + 1, sizeof(xi_dump_pass_buf) - 1);
+    xi_dump_pass_buf[sizeof(xi_dump_pass_buf) - 1] = '\0';
+    xi_dump_pass = xi_dump_pass_buf;
+}
+
+static int xi_shuffle_blocks_enabled = 0;
+static xr_once_t xi_shuffle_once = XR_ONCE_INITIALIZER;
+
+static void init_xi_shuffle_config(void) {
+    const char *env = getenv("XRAY_XI_SHUFFLE");
+    xi_shuffle_blocks_enabled = (env && env[0] == '1') ? 1 : 0;
+    if (!xi_shuffle_blocks_enabled)
+        return;
+
+    const char *seed_env = getenv("XRAY_XI_SHUFFLE_SEED");
+    unsigned seed = (seed_env && seed_env[0]) ? (unsigned) strtoul(seed_env, NULL, 10) : 0;
+    if (seed == 0)
+        seed = (unsigned) xr_time_monotonic_ns();
+    srand(seed);
+}
+
+typedef struct XiPassRuntimeConfig {
+    bool disable;
+    bool dump;
+} XiPassRuntimeConfig;
+
+static XiPassRuntimeConfig xi_pass_cfg[XI_PASS_TABLE_SIZE];
+static xr_once_t xi_pass_cfg_once = XR_ONCE_INITIALIZER;
+
+static void init_xi_pass_config(void) {
+    memset(xi_pass_cfg, 0, sizeof(xi_pass_cfg));
+    const char *env = getenv("XRAY_XI_PASS");
+    if (!env || !env[0])
+        return;
+
+    char buf[256];
+    strncpy(buf, env, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    char *tok = strtok(buf, ",");
+    while (tok) {
+        char *colon = strchr(tok, ':');
+        if (colon) {
+            *colon = '\0';
+            const char *pname = tok;
+            const char *kv = colon + 1;
+            int idx = pass_index_by_name(pname);
+            if (idx >= 0) {
+                if (strncmp(kv, "enable=0", 8) == 0)
+                    xi_pass_cfg[idx].disable = true;
+                else if (strncmp(kv, "dump=1", 6) == 0)
+                    xi_pass_cfg[idx].dump = true;
+            } else {
+                fprintf(stderr,
+                        "[xi_pass] warning: unknown pass '%s' "
+                        "in XRAY_XI_PASS\n",
+                        pname);
+            }
+        }
+        tok = strtok(NULL, ",");
+    }
 }
 
 XR_FUNC bool xi_pass_order_check(void) {
@@ -3512,102 +3605,26 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel leve
 
     /* XRAY_XI_CHECK=1 enables per-pass verification to pinpoint
      * the exact pass that breaks an invariant. */
-    static int check_per_pass = -1;
-    if (check_per_pass < 0) {
-        const char *env = getenv("XRAY_XI_CHECK");
-        check_per_pass = (env && env[0] == '1') ? 1 : 0;
-    }
+    xr_once_call(&xi_check_per_pass_once, init_xi_check_per_pass);
 
     /* XRAY_XI_DUMP=func:pass — dump IR after a specific pass for a
      * specific function.  Use "*" to match any func or pass name.
      * Examples: "main:dce", "*:constfold", "foo:*" */
-    static const char *dump_func = NULL;
-    static const char *dump_pass = NULL;
-    static bool dump_parsed = false;
-    if (!dump_parsed) {
-        dump_parsed = true;
-        const char *dump_env = getenv("XRAY_XI_DUMP");
-        if (dump_env && dump_env[0]) {
-            /* Find the colon separator */
-            const char *colon = strchr(dump_env, ':');
-            if (colon) {
-                static char dump_func_buf[64];
-                static char dump_pass_buf[64];
-                size_t flen = (size_t) (colon - dump_env);
-                if (flen >= sizeof(dump_func_buf))
-                    flen = sizeof(dump_func_buf) - 1;
-                memcpy(dump_func_buf, dump_env, flen);
-                dump_func_buf[flen] = '\0';
-                dump_func = dump_func_buf;
-                strncpy(dump_pass_buf, colon + 1, sizeof(dump_pass_buf) - 1);
-                dump_pass_buf[sizeof(dump_pass_buf) - 1] = '\0';
-                dump_pass = dump_pass_buf;
-            }
-        }
-    }
+    xr_once_call(&xi_dump_once, init_xi_dump_config);
 
     /* XRAY_XI_SHUFFLE=1: randomize block AND intra-block value iteration
      * order before each pass to detect implicit ordering dependencies.
      * Only active in debug builds. Values within a block are shuffled
      * using randomized topological sort that respects data dependencies
      * and side-effect ordering. */
-    static int shuffle_blocks = -1;
-    if (shuffle_blocks < 0) {
-        const char *env = getenv("XRAY_XI_SHUFFLE");
-        shuffle_blocks = (env && env[0] == '1') ? 1 : 0;
-        if (shuffle_blocks) {
-            /* XRAY_XI_SHUFFLE_SEED=N — deterministic shuffle for repro.
-             * Defaults to time-based seed when unset / 0. */
-            const char *seed_env = getenv("XRAY_XI_SHUFFLE_SEED");
-            unsigned seed = (seed_env && seed_env[0]) ? (unsigned) strtoul(seed_env, NULL, 10) : 0;
-            if (seed == 0)
-                seed = (unsigned) xr_time_monotonic_ns();
-            srand(seed);
-        }
-    }
+    xr_once_call(&xi_shuffle_once, init_xi_shuffle_config);
 
     /* XRAY_XI_PASS=pass:key=value[,pass:key=value,...]
      * Per-pass control flags:
      *   enable=0  — skip this pass entirely
      *   dump=1    — dump IR after this pass (all funcs)
      * Examples: "dce:enable=0", "gvn:dump=1,licm:enable=0" */
-    static bool pass_cfg_parsed = false;
-    static struct {
-        bool disable;
-        bool dump;
-    } pass_cfg[XI_PASS_TABLE_SIZE];
-    if (!pass_cfg_parsed) {
-        pass_cfg_parsed = true;
-        memset(pass_cfg, 0, sizeof(pass_cfg));
-        const char *env = getenv("XRAY_XI_PASS");
-        if (env && env[0]) {
-            char buf[256];
-            strncpy(buf, env, sizeof(buf) - 1);
-            buf[sizeof(buf) - 1] = '\0';
-            char *tok = strtok(buf, ",");
-            while (tok) {
-                char *colon = strchr(tok, ':');
-                if (colon) {
-                    *colon = '\0';
-                    const char *pname = tok;
-                    const char *kv = colon + 1;
-                    int idx = pass_index_by_name(pname);
-                    if (idx >= 0) {
-                        if (strncmp(kv, "enable=0", 8) == 0)
-                            pass_cfg[idx].disable = true;
-                        else if (strncmp(kv, "dump=1", 6) == 0)
-                            pass_cfg[idx].dump = true;
-                    } else {
-                        fprintf(stderr,
-                                "[xi_pass] warning: unknown pass '%s' "
-                                "in XRAY_XI_PASS\n",
-                                pname);
-                    }
-                }
-                tok = strtok(NULL, ",");
-            }
-        }
-    }
+    xr_once_call(&xi_pass_cfg_once, init_xi_pass_config);
 
     uint64_t pipeline_start = xr_time_monotonic_ns();
     XiPassChange total = xi_pass_no_change();
@@ -3623,7 +3640,7 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel leve
                 continue;
 
             /* XRAY_XI_PASS: skip disabled passes (unless required) */
-            if (pass_cfg[p].disable && !(desc->flags & XI_PASS_REQUIRED))
+            if (xi_pass_cfg[p].disable && !(desc->flags & XI_PASS_REQUIRED))
                 continue;
             if (pass_disabled_by_mask(desc, disabled_passes))
                 continue;
@@ -3658,7 +3675,7 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel leve
              * an array index).  After permuting the array we must
              * re-sync ids so the invariant holds, then bump cfg_version
              * so any cached RPO / dom / loop info recomputes. */
-            if (shuffle_blocks && f->nblocks > 2) {
+            if (xi_shuffle_blocks_enabled && f->nblocks > 2) {
                 for (uint32_t si = f->nblocks - 1; si > 1; si--) {
                     uint32_t sj = 1 + (uint32_t) (rand() % si);
                     XiBlock *tmp = f->blocks[si];
@@ -3697,12 +3714,12 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel leve
             }
 
             /* XRAY_XI_DUMP: targeted IR dump after matching pass */
-            if (dump_func && dump_pass) {
+            if (xi_dump_func && xi_dump_pass) {
                 const char *fn = f->name ? f->name : "<anonymous>";
-                bool func_match =
-                    (dump_func[0] == '*' && dump_func[1] == '\0') || strcmp(dump_func, fn) == 0;
-                bool pass_match = (dump_pass[0] == '*' && dump_pass[1] == '\0') ||
-                                  strcmp(dump_pass, desc->name) == 0;
+                bool func_match = (xi_dump_func[0] == '*' && xi_dump_func[1] == '\0') ||
+                                  strcmp(xi_dump_func, fn) == 0;
+                bool pass_match = (xi_dump_pass[0] == '*' && xi_dump_pass[1] == '\0') ||
+                                  strcmp(xi_dump_pass, desc->name) == 0;
                 if (func_match && pass_match) {
                     fprintf(stderr, "=== Xi IR after '%s' (func '%s', round %d) ===\n", desc->name,
                             fn, round);
@@ -3712,7 +3729,7 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel leve
             }
 
             /* XRAY_XI_PASS per-pass dump (unconditional on function name) */
-            if (pass_cfg[p].dump) {
+            if (xi_pass_cfg[p].dump) {
                 const char *fn = f->name ? f->name : "<anonymous>";
                 fprintf(stderr, "=== [XI_PASS dump] after '%s' (func '%s', round %d) ===\n",
                         desc->name, fn, round);
@@ -3739,7 +3756,7 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel leve
             /* XRAY_XI_CHECK=1: verify after every single pass.
              * Uses stage-aware verification so stage-specific invariants
              * are also checked as the function progresses. */
-            if (check_per_pass) {
+            if (xi_check_per_pass_enabled) {
                 char check_errbuf[512];
                 if (!xi_verify_stage(f, f->stage, check_errbuf, sizeof(check_errbuf))) {
                     fprintf(stderr,
@@ -3761,7 +3778,7 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel leve
 
 #ifndef NDEBUG
         /* Re-verify after each round in debug builds */
-        if (!check_per_pass) {
+        if (!xi_check_per_pass_enabled) {
             char errbuf[512];
             if (!xi_verify(f, errbuf, sizeof(errbuf))) {
                 fprintf(stderr, "[xi_pass] verify failed after round %d for '%s': %s\n", round,
