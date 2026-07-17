@@ -46,7 +46,7 @@ check_backend_diff() {
 }
 
 check_output "vm_path_empty_stdlib" "demo.xr" \
-    "$XRAY" -e 'import path; print(path.basename("/tmp/demo.xr"))'
+    "$XRAY" -e 'import path; print(path.basename(path.from("/tmp/demo.xr")))'
 check_output "vm_http_empty_stdlib" "fn router" \
     "$XRAY" -e $'import http\nprint(http.router)'
 check_output "vm_cluster_empty_stdlib" "true" \
