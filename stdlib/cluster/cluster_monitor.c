@@ -203,8 +203,7 @@ static void coro_monitor_fwd_loop(void *arg) {
     xr_free(ctx);
 }
 
-void cluster_monitor_handle_coro_request(XrCluster *c, XrClusterNode *node,
-                                         const char *coro_name) {
+void cluster_monitor_handle_coro_request(XrCluster *c, XrClusterNode *node, const char *coro_name) {
     // Remote node wants to monitor a local coroutine.
     // Register a local monitor; on exit, send CORO_EXIT frame back.
     if (!c || !c->isolate)

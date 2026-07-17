@@ -577,9 +577,8 @@ static const char *parse_response(const char *buf, const char *buf_end, int *min
 /* ========== Internal Parser API ========== */
 
 int http_parse_request_ex(const char *buf_start, size_t len, const char **method,
-                             size_t *method_len, const char **path, size_t *path_len,
-                             int *minor_ver, XrHttpHeader *headers, size_t *num_headers,
-                             size_t last_len) {
+                          size_t *method_len, const char **path, size_t *path_len, int *minor_ver,
+                          XrHttpHeader *headers, size_t *num_headers, size_t last_len) {
     const char *buf = buf_start;
     const char *buf_end = buf_start + len;
     size_t max_headers = *num_headers;
@@ -606,8 +605,8 @@ int http_parse_request_ex(const char *buf_start, size_t len, const char **method
 }
 
 int http_parse_response_ex(const char *buf_start, size_t len, int *minor_ver, int *status,
-                              const char **msg, size_t *msg_len, XrHttpHeader *headers,
-                              size_t *num_headers, size_t last_len) {
+                           const char **msg, size_t *msg_len, XrHttpHeader *headers,
+                           size_t *num_headers, size_t last_len) {
     const char *buf = buf_start;
     const char *buf_end = buf + len;
     size_t max_headers = *num_headers;
@@ -993,13 +992,13 @@ static void process_special_header_response(XrHttpResponse *resp, XrHttpHeader *
 
 /* ========== Simplified API ========== */
 
-XrHttpParseResult http_parse_response(XrHttpParser *parser, XrHttpResponse *resp,
-                                         const char *data, size_t len) {
+XrHttpParseResult http_parse_response(XrHttpParser *parser, XrHttpResponse *resp, const char *data,
+                                      size_t len) {
     // Use new API to parse
     size_t num_headers = XR_HTTP_MAX_HEADERS;
     int r = http_parse_response_ex(data, len, &resp->version_minor, &resp->status_code,
-                                      &resp->status_text, &resp->status_text_len, resp->headers,
-                                      &num_headers, 0);
+                                   &resp->status_text, &resp->status_text_len, resp->headers,
+                                   &num_headers, 0);
 
     if (r == -2) {
         return XR_HTTP_PARSE_INCOMPLETE;
