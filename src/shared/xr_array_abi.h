@@ -76,8 +76,8 @@ typedef struct XrArrayStorage {
     uint8_t elem_size;     /* cached bytes per element */                                          \
     uint8_t elem_tid;      /* XrTypeId for reified generics (0 = any) */                           \
     uint8_t contains_refs; /* monotonic: 1 once any object reference was stored */                 \
-    uint64_t content_version;         /* bumps when the visible element set changes */             \
-    uint64_t deferred_submit_version  /* last content_version submitted as deferred task batch */
+    uint64_t content_version;        /* bumps when the visible element set changes */              \
+    uint64_t deferred_submit_version /* last content_version submitted as deferred task batch */
 
 #define XR_ARRAY_CONTENT_VERSION_INIT 1u
 

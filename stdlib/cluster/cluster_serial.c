@@ -320,7 +320,8 @@ int cluster_encode(XrVMRuntime *X, XrValue value, XrSerialBuf *buf) {
 
 /* ========== Decode Helpers ========== */
 
-void cluster_serial_reader_init(XrSerialReader *r, XrVMRuntime *X, const uint8_t *data, size_t len) {
+void cluster_serial_reader_init(XrSerialReader *r, XrVMRuntime *X, const uint8_t *data,
+                                size_t len) {
     r->data = data;
     r->len = len;
     r->pos = 0;

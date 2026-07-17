@@ -132,8 +132,8 @@ static int dist_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
     payload[8] = name_len;
     memcpy(payload + 9, dc->name, name_len);
 
-    if (cluster_node_send_frame(dc->owner_node, XR_FRAME_CHANNEL_RECV_REQ, payload,
-                                   9 + name_len) != 0) {
+    if (cluster_node_send_frame(dc->owner_node, XR_FRAME_CHANNEL_RECV_REQ, payload, 9 + name_len) !=
+        0) {
         cluster_node_take_pending(dc->owner_node, saved_req_id);
         return XR_CHAN_CLOSED;
     }
@@ -293,8 +293,8 @@ void cluster_channel_uninstall_hooks(XrVMRuntime *X) {
  * Callers that only care about success/failure can keep treating
  * any non-zero return as an error.
  */
-int cluster_channel_handle_send(XrCluster *c, const char *channel_name,
-                                const uint8_t *value_data, uint32_t value_len) {
+int cluster_channel_handle_send(XrCluster *c, const char *channel_name, const uint8_t *value_data,
+                                uint32_t value_len) {
     if (!c)
         return -1;
 
@@ -415,8 +415,8 @@ void cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
         xr_free(frame);
 }
 
-int cluster_channel_handle_push(XrCluster *c, const char *channel_name,
-                                const uint8_t *value_data, uint32_t value_len) {
+int cluster_channel_handle_push(XrCluster *c, const char *channel_name, const uint8_t *value_data,
+                                uint32_t value_len) {
     if (!c)
         return -1;
 
