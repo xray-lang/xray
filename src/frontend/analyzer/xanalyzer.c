@@ -1224,6 +1224,54 @@ static void remove_file_symbols(XaScope *scope, const char *file, XaAnalyzer *an
     }
 }
 
+static bool xa_path_char_matches(char a, char b) {
+    if (a == b)
+        return true;
+    return (a == '/' || a == '\\') && (b == '/' || b == '\\');
+}
+
+static bool xa_path_has_suffix(const char *file, const char *suffix) {
+    if (!file || !suffix)
+        return false;
+    size_t flen = strlen(file);
+    size_t slen = strlen(suffix);
+    if (flen < slen)
+        return false;
+    const char *tail = file + flen - slen;
+    for (size_t i = 0; i < slen; i++) {
+        if (!xa_path_char_matches(tail[i], suffix[i]))
+            return false;
+    }
+    return true;
+}
+
+static const char *xa_path_find_stdlib_marker(const char *file) {
+    if (!file)
+        return NULL;
+    const char *embedded = strstr(file, "<embedded stdlib>/");
+    if (embedded)
+        return embedded + strlen("<embedded stdlib>/");
+    embedded = strstr(file, "<embedded stdlib>\\");
+    if (embedded)
+        return embedded + strlen("<embedded stdlib>\\");
+    const char *disk = strstr(file, "stdlib/");
+    if (disk)
+        return disk + strlen("stdlib/");
+    disk = strstr(file, "stdlib\\");
+    return disk ? disk + strlen("stdlib\\") : NULL;
+}
+
+static const char *xa_path_next_sep(const char *p) {
+    if (!p)
+        return NULL;
+    while (*p) {
+        if (*p == '/' || *p == '\\')
+            return p;
+        p++;
+    }
+    return NULL;
+}
+
 static bool xa_path_is_stdlib_module(const char *file, const char *module_name) {
     if (!file || !module_name)
         return false;
@@ -1231,16 +1279,13 @@ static bool xa_path_is_stdlib_module(const char *file, const char *module_name) 
     int n = snprintf(suffix, sizeof(suffix), "stdlib/%s/%s.xr", module_name, module_name);
     if (n < 0 || (size_t) n >= sizeof(suffix))
         return false;
-    size_t flen = strlen(file);
-    size_t slen = strlen(suffix);
-    if (flen >= slen && strcmp(file + flen - slen, suffix) == 0)
+    if (xa_path_has_suffix(file, suffix))
         return true;
 
     n = snprintf(suffix, sizeof(suffix), "<embedded stdlib>/%s/%s.xr", module_name, module_name);
     if (n < 0 || (size_t) n >= sizeof(suffix))
         return false;
-    slen = strlen(suffix);
-    return flen >= slen && strcmp(file + flen - slen, suffix) == 0;
+    return xa_path_has_suffix(file, suffix);
 }
 
 static bool xa_path_is_sync_stdlib_module(const char *file) {
@@ -1251,19 +1296,11 @@ static bool xa_stdlib_module_name_from_path(const char *file, char *out, size_t 
     if (!file || !out || out_cap == 0)
         return false;
 
-    const char *marker = "stdlib/";
-    const char *base = strstr(file, marker);
-    if (base) {
-        base += strlen(marker);
-    } else {
-        marker = "<embedded stdlib>/";
-        base = strstr(file, marker);
-        if (!base)
-            return false;
-        base += strlen(marker);
-    }
+    const char *base = xa_path_find_stdlib_marker(file);
+    if (!base)
+        return false;
 
-    const char *slash = strchr(base, '/');
+    const char *slash = xa_path_next_sep(base);
     if (!slash || slash == base)
         return false;
 

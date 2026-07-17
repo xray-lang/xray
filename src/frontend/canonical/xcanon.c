@@ -77,6 +77,15 @@ static bool is_simple_expr(const AstNode *node) {
     }
 }
 
+static XrType *canon_node_type(XrCanonCtx *ctx, AstNode *node) {
+    return (ctx && ctx->analyzer && node) ? xa_analyzer_get_node_type(ctx->analyzer, node) : NULL;
+}
+
+static void canon_set_node_type(XrCanonCtx *ctx, AstNode *node, XrType *type) {
+    if (ctx && ctx->analyzer && node && type)
+        xa_analyzer_set_node_type(ctx->analyzer, node, type);
+}
+
 static bool canon_type_is_eager_scalar(const XrType *type) {
     if (!type || type->is_nullable)
         return false;
@@ -232,16 +241,19 @@ static void canon_compound_var(XrCanonCtx *ctx, AstNode *node) {
     XrTokenType op = node->as.compound_assignment.op;
     AstNode *rhs = node->as.compound_assignment.value;
     int line = node->line;
+    XrType *target_type = canon_node_type(ctx, node);
 
     /* Build: variable(name) */
     AstNode *lhs_read = xr_ast_variable(ctx->session, name, line);
     XR_DCHECK(lhs_read != NULL, "canon_compound_var: failed to create variable ref");
     lhs_read->as.variable.symbol_id = sid;
+    canon_set_node_type(ctx, lhs_read, target_type);
 
     /* Build: variable(name) op rhs */
     AstNodeType bin_type = compound_op_to_binary(op);
     AstNode *bin = xr_ast_binary(ctx->session, bin_type, lhs_read, rhs, line);
     XR_DCHECK(bin != NULL, "canon_compound_var: failed to create binary");
+    canon_set_node_type(ctx, bin, target_type);
 
     /* Mutate in-place: AST_COMPOUND_ASSIGNMENT → AST_ASSIGNMENT */
     node->type = AST_ASSIGNMENT;
@@ -271,14 +283,17 @@ static void canon_compound_member(XrCanonCtx *ctx, AstNode *node) {
     AstNode *rhs = node->as.compound_assignment.value;
     int line = node->line;
     AstNodeType bin_type = compound_op_to_binary(op);
+    XrType *target_type = canon_node_type(ctx, node);
 
     if (is_simple_expr(obj)) {
         /* obj is cheap — safe to reference it twice.
          * Build: obj.field = obj.field + rhs */
         AstNode *load = xr_ast_member_access(ctx->session, obj, field, line);
         XR_DCHECK(load != NULL, "canon_compound_member: member_access alloc");
+        canon_set_node_type(ctx, load, target_type);
         AstNode *bin = xr_ast_binary(ctx->session, bin_type, load, rhs, line);
         XR_DCHECK(bin != NULL, "canon_compound_member: binary alloc");
+        canon_set_node_type(ctx, bin, target_type);
 
         /* Mutate in-place → AST_MEMBER_SET */
         node->type = AST_MEMBER_SET;
@@ -299,7 +314,9 @@ static void canon_compound_member(XrCanonCtx *ctx, AstNode *node) {
         AstNode *ref1 = xr_ast_variable(ctx->session, tmp, line);
         AstNode *ref2 = xr_ast_variable(ctx->session, tmp, line);
         AstNode *load = xr_ast_member_access(ctx->session, ref1, field, line);
+        canon_set_node_type(ctx, load, target_type);
         AstNode *bin = xr_ast_binary(ctx->session, bin_type, load, rhs, line);
+        canon_set_node_type(ctx, bin, target_type);
         AstNode *store = xr_ast_member_set(ctx->session, ref2, field, bin, line);
         XR_DCHECK(store != NULL, "canon_compound_member: member_set alloc");
 

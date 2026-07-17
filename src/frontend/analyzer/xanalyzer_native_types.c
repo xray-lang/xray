@@ -31,6 +31,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
+#include <stdatomic.h>
 
 /* ========== Embedded .xr sources ========== */
 
@@ -324,7 +325,7 @@ static bool class_name_is_generated_plain_class(const char *name) {
 /* Runtime-populated builtin type table (indexed by XrTypeId). */
 static XaBuiltinType native_builtin_types[XR_TID_COUNT];
 static xr_once_t native_types_once = XR_ONCE_INITIALIZER;
-static bool native_types_initialized = false;
+static atomic_bool native_types_initialized = false;
 
 /* Parse one .xr source; may contain multiple @native classes (e.g. enum.xr). */
 static void load_one_source(const char *source) {
@@ -426,7 +427,7 @@ static void xa_native_types_init_once(void) {
     native_builtin_types[XR_TID_BUFFER].member_count = GEN_BUFFER_MEMBER_COUNT;
 #endif
 
-    native_types_initialized = true;
+    atomic_store_explicit(&native_types_initialized, true, memory_order_release);
 }
 
 XR_FUNC void xa_native_types_init(void) {
@@ -434,14 +435,15 @@ XR_FUNC void xa_native_types_init(void) {
 }
 
 XR_FUNC bool xa_native_types_ready(void) {
-    return native_types_initialized;
+    return atomic_load_explicit(&native_types_initialized, memory_order_acquire);
 }
 
 /* ========== Query API (called by xanalyzer_builtins.c) ========== */
 
 /* Get the populated builtin type table.  Guaranteed non-NULL after init. */
 XR_FUNC const XaBuiltinType *xa_native_get_builtin_types(void) {
-    XR_DCHECK(native_types_initialized, "xa_native_get_builtin_types: not initialized");
+    XR_DCHECK(atomic_load_explicit(&native_types_initialized, memory_order_acquire),
+              "xa_native_get_builtin_types: not initialized");
     return native_builtin_types;
 }
 
@@ -562,8 +564,7 @@ static XrClass *xa_native_protocol_runtime_class(XrVMRuntime *X, XrTypeId tid,
 XR_FUNC int xa_native_verify_protocol(XrVMRuntime *X) {
     if (!X)
         return -1;
-    if (!native_types_initialized)
-        xa_native_types_init();
+    xa_native_types_init();
 
     int mismatches = 0;
 

@@ -56,6 +56,32 @@ static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index);
 static bool xa_class_name_matches_mono_base(const char *class_name, const char *base);
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object, const char *module_name);
 
+static bool xa_path_char_is_sep(char ch) {
+    return ch == '/' || ch == '\\';
+}
+
+static bool xa_path_has_suffix(const char *path, const char *suffix) {
+    if (!path || !suffix)
+        return false;
+    size_t path_len = strlen(path);
+    size_t suffix_len = strlen(suffix);
+    if (path_len < suffix_len)
+        return false;
+    const char *tail = path + path_len - suffix_len;
+    for (size_t i = 0; i < suffix_len; i++) {
+        char expected = suffix[i];
+        char actual = tail[i];
+        if (xa_path_char_is_sep(expected)) {
+            if (!xa_path_char_is_sep(actual))
+                return false;
+            continue;
+        }
+        if (actual != expected)
+            return false;
+    }
+    return true;
+}
+
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
     if (!name)
         return false;
@@ -822,7 +848,8 @@ static bool xa_thread_spawn_call_is_coro_yield(CallExprNode *call) {
 }
 
 static bool xa_thread_spawn_path_is_sync_module(const char *path) {
-    return path && strstr(path, "stdlib/sync/sync.xr") != NULL;
+    return xa_path_has_suffix(path, "stdlib/sync/sync.xr") ||
+           xa_path_has_suffix(path, "<embedded stdlib>/sync/sync.xr");
 }
 
 static bool xa_thread_spawn_sync_class_name(const char *class_name) {
@@ -1322,9 +1349,7 @@ static bool xa_path_is_sys_stdlib_module(const char *file) {
         return false;
     const char *suffixes[] = {"stdlib/sys/sys.xr", "<embedded stdlib>/sys/sys.xr"};
     for (int i = 0; i < (int) (sizeof(suffixes) / sizeof(suffixes[0])); i++) {
-        size_t flen = strlen(file);
-        size_t slen = strlen(suffixes[i]);
-        if (flen >= slen && strcmp(file + flen - slen, suffixes[i]) == 0)
+        if (xa_path_has_suffix(file, suffixes[i]))
             return true;
     }
     return false;
@@ -1883,9 +1908,7 @@ static bool xa_path_is_parallel_stdlib_module(const char *file) {
     const char *suffixes[] = {"stdlib/parallel/parallel.xr",
                               "<embedded stdlib>/parallel/parallel.xr"};
     for (int i = 0; i < (int) (sizeof(suffixes) / sizeof(suffixes[0])); i++) {
-        size_t flen = strlen(file);
-        size_t slen = strlen(suffixes[i]);
-        if (flen >= slen && strcmp(file + flen - slen, suffixes[i]) == 0)
+        if (xa_path_has_suffix(file, suffixes[i]))
             return true;
     }
     return false;
@@ -3093,7 +3116,7 @@ static bool xa_symbol_is_sync_runtime_class(XaInferContext *ctx, XaSymbol *sym, 
         return false;
     if (links->module_name && strcmp(links->module_name, "sync") == 0)
         return true;
-    return links->file_path && strstr(links->file_path, "stdlib/sync/sync.xr") != NULL;
+    return xa_thread_spawn_path_is_sync_module(links->file_path);
 }
 
 static XrType *xa_sync_runtime_construct_type(XaInferContext *ctx, const char *name,
