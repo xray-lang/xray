@@ -5683,6 +5683,24 @@ static void emit_default_return_stmt_for_abi(XiCgenCtx *ctx, FILE *out, const Xi
     fprintf(out, ";\n");
 }
 
+static bool cg_return_value_needs_owned_array_ref(const XiValue *value, XrRep ret_rep) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    return ret_rep == XR_REP_TAGGED && v && v->type && v->type->kind == XR_KIND_FIXED_ARRAY;
+}
+
+static void emit_return_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *value,
+                                         XrRep ret_rep) {
+    if (cg_return_value_needs_owned_array_ref(value, ret_rep)) {
+        fprintf(out, "({ XrValue _xrv = ");
+        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
+        fprintf(out,
+                "; (XR_IS_ARRAY_REF(_xrv) && (_xrv.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) == 0) "
+                "? xrt_array_ref_to_owned(_xrv) : _xrv; })");
+        return;
+    }
+    emit_value_as_rep_ctx(ctx, out, value, ret_rep);
+}
+
 static void emit_fallthrough_return(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                     const char *prefix) {
     emit_class_field_cache_flush(ctx, out);
@@ -7311,7 +7329,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                     fprintf(out, ";\n");
                 } else {
                     fprintf(out, "    return ");
-                    emit_value_as_rep_ctx(ctx, out, blk->control, ret_rep);
+                    emit_return_value_as_rep_ctx(ctx, out, blk->control, ret_rep);
                     fprintf(out, ";\n");
                 }
             } else {
