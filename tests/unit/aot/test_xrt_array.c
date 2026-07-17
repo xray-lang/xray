@@ -3,6 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <setjmp.h>
+#include "../test_win_compat.h"
+
+#if defined(_MSC_VER)
+#include <malloc.h>
+#endif
 
 #define XRT_DATA_ALIGN 32
 
@@ -36,17 +41,14 @@ static void test_free(void *ptr) {
 }
 
 static void *test_alloc_aligned(size_t size) {
-    void *ptr = NULL;
     g_aligned_alloc_count++;
-    if (posix_memalign(&ptr, XRT_DATA_ALIGN, size) != 0)
-        return NULL;
-    return ptr;
+    return xr_test_alloc_aligned(size, XRT_DATA_ALIGN);
 }
 
 static void test_free_aligned(void *ptr) {
     if (ptr)
         g_aligned_free_count++;
-    free(ptr);
+    xr_test_free_aligned(ptr);
 }
 
 #define XRT_MALLOC(sz) test_malloc(sz)
@@ -612,7 +614,18 @@ static void test_stack_closure_borrows_cell_upval(void) {
     XrValue cell = xrt_cell_new(XR_NULL_VAL);
     xrt_cell_set(cell, arr);
 
-    XrValue closure = xrt_closure_stack_new((void *) dummy_closure_body, 1);
+    int nupvals = 1;
+    size_t closure_size = xrt_closure_object_size(nupvals);
+#if defined(_MSC_VER)
+    XrObjHeader *hdr = (XrObjHeader *) _alloca(sizeof(XrObjHeader) + closure_size);
+#else
+    XrObjHeader *hdr = (XrObjHeader *) __builtin_alloca(sizeof(XrObjHeader) + closure_size);
+#endif
+    memset(hdr, 0, sizeof(XrObjHeader) + closure_size);
+    hdr->extra = XR_OBJ_STORAGE_STACK;
+    xrt_closure_t *stack_closure = (xrt_closure_t *) ((char *) hdr + sizeof(XrObjHeader));
+    xrt_closure_init(stack_closure, (void *) dummy_closure_body, nupvals);
+    XrValue closure = xr_mkptr(stack_closure, XR_TAG_CLOSURE);
     ((xrt_closure_t *) closure.ptr)->upvals[0] = cell;
     xrt_release(closure);
 

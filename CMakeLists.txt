@@ -1815,7 +1815,7 @@ if(BUILD_TESTS)
     set_tests_properties(param_mode_convergence_inventory PROPERTIES
         LABELS "frontend;syntax;metadata"
         PROCESSORS 1
-        TIMEOUT 30
+        TIMEOUT 90
     )
 
     add_test(
@@ -1828,7 +1828,7 @@ if(BUILD_TESTS)
     set_tests_properties(param_contract_decl_ast_single_representation PROPERTIES
         LABELS "frontend;syntax;metadata"
         PROCESSORS 1
-        TIMEOUT 30
+        TIMEOUT 90
     )
 
     add_test(

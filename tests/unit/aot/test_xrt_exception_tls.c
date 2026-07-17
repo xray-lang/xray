@@ -1,7 +1,13 @@
-#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "../test_win_compat.h"
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <pthread.h>
+#endif
 
 #define XRT_DATA_ALIGN 32
 
@@ -25,12 +31,11 @@ static void test_free(void *ptr) {
 }
 
 static void *test_alloc_aligned(size_t size) {
-    void *ptr = NULL;
-    return posix_memalign(&ptr, XRT_DATA_ALIGN, size) == 0 ? ptr : NULL;
+    return xr_test_alloc_aligned(size, XRT_DATA_ALIGN);
 }
 
 static void test_free_aligned(void *ptr) {
-    free(ptr);
+    xr_test_free_aligned(ptr);
 }
 
 #define XRT_MALLOC(sz) test_malloc(sz)
@@ -86,19 +91,38 @@ static void *worker_tls_probe(void *arg) {
     return NULL;
 }
 
+#ifdef _WIN32
+static unsigned __stdcall worker_tls_probe_win(void *arg) {
+    worker_tls_probe(arg);
+    return 0;
+}
+#endif
+
 static void test_aot_exception_defer_state_is_thread_local(void) {
     XrtExcFrame main_frame;
     XrtDeferScope main_scope;
     ThreadTlsSnapshot snapshot = {0};
+#ifdef _WIN32
+    uintptr_t thread;
+#else
     pthread_t thread;
+#endif
 
     xrt_pending_error = XR_FROM_INT(11);
     xrt_exc_top = &main_frame;
     xrt_defer_enter(&main_scope);
 
+#ifdef _WIN32
+    thread = _beginthreadex(NULL, 0, worker_tls_probe_win, &snapshot, 0, NULL);
+    ASSERT_TRUE(thread != 0, "worker thread should start");
+    ASSERT_TRUE(WaitForSingleObject((HANDLE) thread, INFINITE) == WAIT_OBJECT_0,
+                "worker thread should join");
+    CloseHandle((HANDLE) thread);
+#else
     ASSERT_TRUE(pthread_create(&thread, NULL, worker_tls_probe, &snapshot) == 0,
                 "worker thread should start");
     ASSERT_TRUE(pthread_join(thread, NULL) == 0, "worker thread should join");
+#endif
 
     ASSERT_TRUE(snapshot.pending_error_i == 22, "worker sees its own pending error");
     ASSERT_TRUE(snapshot.has_exc_top, "worker sees its own exception stack");

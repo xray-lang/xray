@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "../test_win_compat.h"
 
 #define XRT_DATA_ALIGN 32
 
@@ -27,12 +28,11 @@ static void test_free(void *ptr) {
 }
 
 static void *test_alloc_aligned(size_t size) {
-    void *ptr = NULL;
-    return posix_memalign(&ptr, XRT_DATA_ALIGN, size) == 0 ? ptr : NULL;
+    return xr_test_alloc_aligned(size, XRT_DATA_ALIGN);
 }
 
 static void test_free_aligned(void *ptr) {
-    free(ptr);
+    xr_test_free_aligned(ptr);
 }
 
 #define XRT_MALLOC(sz) test_malloc(sz)

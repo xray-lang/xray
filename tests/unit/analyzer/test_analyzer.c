@@ -6,7 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 // Only include analyzer headers (avoid GC type conflicts)
 #include "xtype.h"
@@ -1740,7 +1742,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
                                "effects.applyImported(callbacks.failForeignCallback) }\n";
 
     char tmpdir[] = "/tmp/xray_effect_reexport_XXXXXX";
-    ASSERT(mkdtemp(tmpdir) != NULL);
+    ASSERT(xr_test_mkdtemp(tmpdir) != NULL);
     char lib_path[512];
     char reexport_path[512];
     char star_path[512];
@@ -2051,19 +2053,19 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     xr_module_id_cleanup(&star_id);
     xr_module_id_cleanup(&callback_id);
     free(entry_canonical);
-    unlink(lib_path);
-    unlink(reexport_path);
-    unlink(star_path);
-    unlink(callback_path);
-    unlink(entry_path);
-    rmdir(tmpdir);
+    xr_test_unlink(lib_path);
+    xr_test_unlink(reexport_path);
+    xr_test_unlink(star_path);
+    xr_test_unlink(callback_path);
+    xr_test_unlink(entry_path);
+    xr_test_rmdir(tmpdir);
     xa_analyzer_free(a);
     setup_pool();
 }
 
 TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
     char tmpdir_template[] = "/tmp/xray_effect_xrd_XXXXXX";
-    char *tmpdir = mkdtemp(tmpdir_template);
+    char *tmpdir = xr_test_mkdtemp(tmpdir_template);
     ASSERT(tmpdir != NULL);
 
     char xrd_path[256];
@@ -2077,7 +2079,7 @@ TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
 
     const char *old_typepath = getenv("XRAY_TYPEPATH");
     char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
-    ASSERT(setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
+    ASSERT(xr_test_setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
     xa_xrd_cleanup();
 
     XaAnalyzer *a = xa_analyzer_new(g_session);
@@ -2135,19 +2137,19 @@ TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
     xa_analyzer_free(a);
     xa_xrd_cleanup();
     if (old_typepath_copy) {
-        ASSERT(setenv("XRAY_TYPEPATH", old_typepath_copy, 1) == 0);
+        ASSERT(xr_test_setenv("XRAY_TYPEPATH", old_typepath_copy, 1) == 0);
         free(old_typepath_copy);
     } else {
-        unsetenv("XRAY_TYPEPATH");
+        xr_test_unsetenv("XRAY_TYPEPATH");
     }
-    unlink(xrd_path);
-    rmdir(tmpdir);
+    xr_test_unlink(xrd_path);
+    xr_test_rmdir(tmpdir);
     setup_pool();
 }
 
 TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     char tmpdir_template[] = "/tmp/xray_effect_xrd_byte_XXXXXX";
-    char *tmpdir = mkdtemp(tmpdir_template);
+    char *tmpdir = xr_test_mkdtemp(tmpdir_template);
     ASSERT(tmpdir != NULL);
 
     char ok_path[256];
@@ -2170,7 +2172,7 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
 
     const char *old_typepath = getenv("XRAY_TYPEPATH");
     char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
-    ASSERT(setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
+    ASSERT(xr_test_setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
     xa_xrd_cleanup();
 
     XaAnalyzer *ok = xa_analyzer_new(g_session);
@@ -2231,22 +2233,22 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
 
     xa_xrd_cleanup();
     if (old_typepath_copy) {
-        ASSERT(setenv("XRAY_TYPEPATH", old_typepath_copy, 1) == 0);
+        ASSERT(xr_test_setenv("XRAY_TYPEPATH", old_typepath_copy, 1) == 0);
         free(old_typepath_copy);
     } else {
-        unsetenv("XRAY_TYPEPATH");
+        xr_test_unsetenv("XRAY_TYPEPATH");
     }
-    unlink(ok_path);
-    unlink(legacy_path);
-    unlink(span_only_path);
-    unlink(view_only_path);
-    rmdir(tmpdir);
+    xr_test_unlink(ok_path);
+    xr_test_unlink(legacy_path);
+    xr_test_unlink(span_only_path);
+    xr_test_unlink(view_only_path);
+    xr_test_rmdir(tmpdir);
     setup_pool();
 }
 
 TEST(analyzer_xrd_handle_fields_reject_legacy_byte_aliases) {
     char tmpdir_template[] = "/tmp/xray_xrd_handle_byte_XXXXXX";
-    char *tmpdir = mkdtemp(tmpdir_template);
+    char *tmpdir = xr_test_mkdtemp(tmpdir_template);
     ASSERT(tmpdir != NULL);
 
     char xrd_path[256];
@@ -2256,7 +2258,7 @@ TEST(analyzer_xrd_handle_fields_reject_legacy_byte_aliases) {
 
     const char *old_typepath = getenv("XRAY_TYPEPATH");
     char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
-    ASSERT(setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
+    ASSERT(xr_test_setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
     xa_xrd_cleanup();
 
     XaAnalyzer *a = xa_analyzer_new(g_session);
@@ -2272,19 +2274,19 @@ TEST(analyzer_xrd_handle_fields_reject_legacy_byte_aliases) {
 
     xa_xrd_cleanup();
     if (old_typepath_copy) {
-        ASSERT(setenv("XRAY_TYPEPATH", old_typepath_copy, 1) == 0);
+        ASSERT(xr_test_setenv("XRAY_TYPEPATH", old_typepath_copy, 1) == 0);
         free(old_typepath_copy);
     } else {
-        unsetenv("XRAY_TYPEPATH");
+        xr_test_unsetenv("XRAY_TYPEPATH");
     }
-    unlink(xrd_path);
-    rmdir(tmpdir);
+    xr_test_unlink(xrd_path);
+    xr_test_rmdir(tmpdir);
     setup_pool();
 }
 
 TEST(analyzer_xrd_namespace_reports_invalid_descriptor) {
     char tmpdir_template[] = "/tmp/xray_xrd_namespace_byte_XXXXXX";
-    char *tmpdir = mkdtemp(tmpdir_template);
+    char *tmpdir = xr_test_mkdtemp(tmpdir_template);
     ASSERT(tmpdir != NULL);
 
     char xrd_path[256];
@@ -2294,7 +2296,7 @@ TEST(analyzer_xrd_namespace_reports_invalid_descriptor) {
 
     const char *old_typepath = getenv("XRAY_TYPEPATH");
     char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
-    ASSERT(setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
+    ASSERT(xr_test_setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
     xa_xrd_cleanup();
 
     XaAnalyzer *a = xa_analyzer_new(g_session);
@@ -2310,13 +2312,13 @@ TEST(analyzer_xrd_namespace_reports_invalid_descriptor) {
 
     xa_xrd_cleanup();
     if (old_typepath_copy) {
-        ASSERT(setenv("XRAY_TYPEPATH", old_typepath_copy, 1) == 0);
+        ASSERT(xr_test_setenv("XRAY_TYPEPATH", old_typepath_copy, 1) == 0);
         free(old_typepath_copy);
     } else {
-        unsetenv("XRAY_TYPEPATH");
+        xr_test_unsetenv("XRAY_TYPEPATH");
     }
-    unlink(xrd_path);
-    rmdir(tmpdir);
+    xr_test_unlink(xrd_path);
+    xr_test_rmdir(tmpdir);
     setup_pool();
 }
 

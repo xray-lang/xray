@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "../test_win_compat.h"
 
 #define XRT_DATA_ALIGN 32
 
@@ -8,8 +9,7 @@ static int g_passed;
 static int g_failed;
 
 static void *test_alloc_aligned(size_t size) {
-    void *ptr = NULL;
-    return posix_memalign(&ptr, XRT_DATA_ALIGN, size) == 0 ? ptr : NULL;
+    return xr_test_alloc_aligned(size, XRT_DATA_ALIGN);
 }
 
 #define XRT_MALLOC(sz) malloc(sz)
@@ -17,7 +17,7 @@ static void *test_alloc_aligned(size_t size) {
 #define XRT_REALLOC(p, sz) realloc((p), (sz))
 #define XRT_FREE(p) free(p)
 #define XRT_ALLOC_ALIGNED(sz) test_alloc_aligned(sz)
-#define XRT_FREE_ALIGNED(p) free(p)
+#define XRT_FREE_ALIGNED(p) xr_test_free_aligned(p)
 
 #define XRT_IMPL
 #if defined(__clang__)

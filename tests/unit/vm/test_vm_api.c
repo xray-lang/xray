@@ -23,7 +23,9 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 /* ========== xr_vm_current_ctx contract ========== */
 
@@ -270,9 +272,9 @@ TEST(vm_vararg_entry) {
 
 TEST(vm_dofile_debug_null_out_proto_releases_proto) {
     char path[] = "/tmp/xray_vm_debug_null_XXXXXX";
-    int fd = mkstemp(path);
+    int fd = xr_test_mkstemp(path);
     ASSERT_TRUE(fd >= 0);
-    FILE *f = fdopen(fd, "w");
+    FILE *f = xr_test_fdopen(fd, "w");
     ASSERT_NOT_NULL(f);
     fputs("enum DebugErr { Bad(s: string) }\nvar answer = 40 + 2\nif (answer != 42) { throw "
           "DebugErr.Bad(\"bad\") }\n",
@@ -288,7 +290,7 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
     ASSERT_EQ_INT(rc, 0);
 
     xray_vm_delete(iso);
-    unlink(path);
+    xr_test_unlink(path);
 }
 
 /* ========== Main ========== */
