@@ -410,6 +410,14 @@ static XrAotRuntime *aot_test_parallel_runtime_new(void) {
     return xr_aot_runtime_new(&cfg);
 }
 
+static XrAotRuntime *aot_test_parallel_runtime_with_workers(int workers) {
+    XrAotRuntimeConfig cfg;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_PARALLEL;
+    cfg.scheduler_workers = workers;
+    return xr_aot_runtime_new(&cfg);
+}
+
 static XrAotContext aot_test_context_for_runtime(XrAotRuntime *runtime) {
     XrAotContext ctx;
     memset(&ctx, 0, sizeof(ctx));
@@ -1265,7 +1273,7 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
 }
 
 TEST(parallel_for_range_i64_runs_static_lanes) {
-    XrAotRuntime *runtime = aot_test_parallel_runtime_new();
+    XrAotRuntime *runtime = aot_test_parallel_runtime_with_workers(4);
     ASSERT_NOT_NULL(runtime);
     XrAotContext ctx = aot_test_context_for_runtime(runtime);
 
@@ -1301,8 +1309,14 @@ TEST(parallel_for_range_i64_runs_static_lanes) {
 }
 
 TEST(parallel_without_scheduler_runs_virtual_lanes_sequentially) {
-    XrAotContext ctx;
-    memset(&ctx, 0, sizeof(ctx));
+    XrAotRuntimeConfig cfg;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_NONE;
+    cfg.scheduler_workers = 0;
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+    ASSERT_NULL(xr_aot_runtime_scheduler(runtime));
+    XrAotContext ctx = aot_test_context_for_runtime(runtime);
 
     atomic_store_explicit(&aot_par_for_bad_worker_id, 0, memory_order_relaxed);
     atomic_store_explicit(&aot_par_for_sum, 0, memory_order_relaxed);
@@ -1311,6 +1325,7 @@ TEST(parallel_without_scheduler_runs_virtual_lanes_sequentially) {
     ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_sum, memory_order_relaxed), 120);
     ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_bad_worker_id, memory_order_relaxed), 0);
     ASSERT_EQ_INT(atomic_load_explicit(&aot_par_for_seen_mask, memory_order_relaxed), 15);
+    xr_aot_runtime_delete(runtime);
 }
 
 TEST(parallel_for_auto_workers_uses_scheduler_worker_count) {
