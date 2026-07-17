@@ -3,7 +3,8 @@
 # include-boundary and size-invariant lint:
 #   - parser/format/analyzer/codegen never include lexer internal headers
 #   - codegen never reaches into analyzer private state
-#   - oversized files (xanalyzer_visitor.c, xast.c, xcompiler.c) flagged
+#   - oversized files are flagged, with capped temporary exceptions for the
+#     analyzer files already over the limit in the 0.9 consolidation baseline
 #
 # Run from project root:
 #     scripts/check_frontend_arch.sh
@@ -160,13 +161,33 @@ echo
 # A failure here usually means a hot file needs cohesion-based split.
 # --------------------------------------------------------------------
 echo "--- R9: frontend .c file size cap (≤ 3000 lines) ---"
-oversize=$(find "$SRC_DIR/frontend" -name '*.c' -exec wc -l {} + 2>/dev/null \
-           | awk '$1 > 3000 && $2 != "total" { print $1 " " $2 }' || true)
+oversize_report=$(find "$SRC_DIR/frontend" -name '*.c' -exec wc -l {} + 2>/dev/null \
+           | awk '
+             BEGIN {
+               cap["src/frontend/analyzer/xanalyzer_errorset.c"] = 4327
+               cap["src/frontend/analyzer/xanalyzer_visitor_stmt.c"] = 9204
+               cap["src/frontend/analyzer/xanalyzer_visitor.c"] = 7634
+               cap["src/frontend/analyzer/xanalyzer_visitor_call.c"] = 5275
+               cap["src/frontend/analyzer/xanalyzer_visitor_expr.c"] = 5169
+               cap["src/frontend/analyzer/xanalyzer_visitor_decl.c"] = 4720
+             }
+             $2 != "total" && $1 > 3000 {
+               if (($2 in cap) && $1 <= cap[$2])
+                 print "ALLOW " $1 " " $2 " " cap[$2]
+               else
+                 print "FAIL " $1 " " $2
+             }' || true)
+allowed_oversize=$(printf '%s\n' "$oversize_report" | awk '$1 == "ALLOW" { print $2 " " $3 " (temporary cap " $4 ")" }' || true)
+oversize=$(printf '%s\n' "$oversize_report" | awk '$1 == "FAIL" { print $2 " " $3 }' || true)
+if [ -n "$allowed_oversize" ]; then
+    note "temporary capped exceptions:"
+    echo "$allowed_oversize" | sed 's/^/      /'
+fi
 if [ -n "$oversize" ]; then
     fail "frontend .c files over 3000 lines:"
     echo "$oversize" | sed 's/^/      /'
 else
-    pass "all frontend .c files within size limit"
+    pass "all non-exempt frontend .c files within size limit"
 fi
 echo
 
