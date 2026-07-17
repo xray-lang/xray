@@ -31,8 +31,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <errno.h>
 
 // Forward-declarations for the two xsocket entry points used by

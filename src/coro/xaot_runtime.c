@@ -552,12 +552,16 @@ typedef union XrAotFrameHeader {
         uintptr_t owner_token;
         uint32_t bucket;
     } h;
+#if defined(_MSC_VER)
+    __declspec(align(16)) unsigned char align[16];
+#else
     max_align_t align;
+#endif
 } XrAotFrameHeader;
 
-static _Thread_local XrAotFrameHeader *tls_aot_frame_cache[XR_AOT_FRAME_CACHE_BUCKETS];
-static _Thread_local uint16_t tls_aot_frame_cache_count[XR_AOT_FRAME_CACHE_BUCKETS];
-static _Thread_local unsigned char tls_aot_frame_owner_marker;
+static XR_THREAD_LOCAL XrAotFrameHeader *tls_aot_frame_cache[XR_AOT_FRAME_CACHE_BUCKETS];
+static XR_THREAD_LOCAL uint16_t tls_aot_frame_cache_count[XR_AOT_FRAME_CACHE_BUCKETS];
+static XR_THREAD_LOCAL unsigned char tls_aot_frame_owner_marker;
 
 static uintptr_t aot_frame_owner_token(void) {
     return (uintptr_t) &tls_aot_frame_owner_marker;

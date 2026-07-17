@@ -33,7 +33,50 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
+#include <limits.h>
 #include "../../src/os/os_thread.h"
+
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+
+static inline int xr_cluster_pipe(int fds[2]) {
+    return _pipe(fds, 4096, _O_BINARY);
+}
+
+static inline int xr_cluster_read(int fd, void *buf, size_t len) {
+    size_t capped = len > (size_t) UINT_MAX ? (size_t) UINT_MAX : len;
+    return _read(fd, buf, (unsigned int) capped);
+}
+
+static inline int xr_cluster_write(int fd, const void *buf, size_t len) {
+    size_t capped = len > (size_t) UINT_MAX ? (size_t) UINT_MAX : len;
+    return _write(fd, buf, (unsigned int) capped);
+}
+
+static inline int xr_cluster_fcntl_noop(int fd, int cmd, int flags) {
+    (void) fd;
+    (void) cmd;
+    (void) flags;
+    return 0;
+}
+
+#ifndef F_SETFL
+#define F_SETFL 0
+#endif
+#ifndef O_NONBLOCK
+#define O_NONBLOCK 0
+#endif
+
+#define pipe(fds) xr_cluster_pipe((fds))
+#define read(fd, buf, len) xr_cluster_read((fd), (buf), (len))
+#define write(fd, buf, len) xr_cluster_write((fd), (buf), (len))
+#define close(fd) _close((fd))
+#define fcntl(fd, cmd, flags) xr_cluster_fcntl_noop((fd), (cmd), (flags))
+#else
+#include <unistd.h>
+#include <fcntl.h>
+#endif
 
 /* ========== Forward Declarations ========== */
 
