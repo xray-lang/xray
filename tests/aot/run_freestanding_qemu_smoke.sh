@@ -87,7 +87,7 @@ const MULTIBOOT = comptime MultibootHeader{
 @c_export("xray_kernel_entry")
 fn kernel_entry() -> int32 {
     const vga = 0xb8000
-    mem.volatileStore(mem.mutPtr<byte>(vga), 'X' as int, 1)
+    mem.volatileStore(mem.mutPtr<byte>(vga), int('X'.toUInt32()), 1)
     mem.volatileStore(mem.mutPtr<byte>(vga + 1), 0x0f, 1)
     print("XR")
     while (true) {
