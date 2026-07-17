@@ -319,7 +319,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_compress[] = {
     },
     {
         .name = "gunzip",
-        .signature = "(data: string): string?",
+        .signature = "(data: string): string",
         .summary = "Gzip decompress",
     },
     {
@@ -329,7 +329,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_compress[] = {
     },
     {
         .name = "inflate",
-        .signature = "(data: string): string?",
+        .signature = "(data: string): string",
         .summary = "Inflate decompress",
     },
     {
@@ -349,7 +349,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_compress[] = {
     },
     {
         .name = "zlibDecompress",
-        .signature = "(data: string): string?",
+        .signature = "(data: string): string",
         .summary = "Zlib decompress",
     },
 };
@@ -5910,13 +5910,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `compress.adler32` | `(data: string): int` | Compute Adler-32 checksum |\n"
             "| `compress.crc32` | `(data: string): int` | Compute CRC-32 checksum |\n"
             "| `compress.deflate` | `(data: string, level?: int): string?` | Deflate compress |\n"
-            "| `compress.gunzip` | `(data: string): string?` | Gzip decompress |\n"
+            "| `compress.gunzip` | `(data: string): string` | Gzip decompress |\n"
             "| `compress.gzip` | `(data: string, level?: int): string?` | Gzip compress |\n"
-            "| `compress.inflate` | `(data: string): string?` | Inflate decompress |\n"
+            "| `compress.inflate` | `(data: string): string` | Inflate decompress |\n"
             "| `compress.isGzip` | `(data: string): bool` | Check if gzip data |\n"
             "| `compress.isZlib` | `(data: string): bool` | Check if zlib data |\n"
             "| `compress.zlibCompress` | `(data: string, level?: int): string?` | Zlib compress |\n"
-            "| `compress.zlibDecompress` | `(data: string): string?` | Zlib decompress |\n"
+            "| `compress.zlibDecompress` | `(data: string): string` | Zlib decompress |\n"
             "",
         .symbols = _symbols_compress,
         .symbol_count = (int)(sizeof(_symbols_compress) / sizeof(_symbols_compress[0])),
