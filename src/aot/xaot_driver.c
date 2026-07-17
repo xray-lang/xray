@@ -998,6 +998,13 @@ static bool add_stdlib_platform_system_lib_manifest_entries(XaotLinkManifest *ma
     return true;
 }
 
+static bool add_target_platform_system_lib_manifest_entries(XaotLinkManifest *manifest,
+                                                            const XaotTarget *target) {
+    if (target && target->os && strcmp(target->os, "windows") == 0)
+        return xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "ws2_32");
+    return true;
+}
+
 static bool extern_dylib_is_link_name(const char *dylib) {
     return dylib && dylib[0] && strchr(dylib, '/') == NULL && strstr(dylib, ".so") == NULL &&
            strstr(dylib, ".dylib") == NULL && strstr(dylib, ".dll") == NULL;
@@ -1233,6 +1240,8 @@ static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget
     if (!add_stdlib_manifest_entries(manifest, features->stdlib))
         goto done;
     if (!add_extern_dylib_manifest_entries(manifest, features))
+        goto done;
+    if (!add_target_platform_system_lib_manifest_entries(manifest, target))
         goto done;
     if (!add_stdlib_platform_system_lib_manifest_entries(manifest, features))
         goto done;
