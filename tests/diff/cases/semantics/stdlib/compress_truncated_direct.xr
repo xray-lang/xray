@@ -1,23 +1,33 @@
-// Legacy task-200 oracle: truncated compressed payloads currently report
-// decompression failure through null. The converged API should preserve this
-// failure classification as typed CompressionError.TruncatedInput.
+// Legacy task-200 oracle: truncated compressed payloads must report
+// decompression failure through the converged typed native error channel.
 import compress
 
-fn truncateTail(value: string) -> string {
+fn compressionInvalidData(body: () -> ()) -> bool {
+    try {
+        body()
+        return false
+    } catch (e: CompressionError) {
+        return match (e) {
+            CompressionError.InvalidData -> true
+        }
+    }
+}
+
+fn truncatePayload(value: string) -> string {
     if (len(value) <= 1) { return "" }
-    return value.slice(0, len(value) - 1)
+    return value.slice(0, 1)
 }
 
 var text = "Task 200 compress truncated input contract. Task 200 compress truncated input contract."
 
 var gz = compress.gzip(text) ?? ""
 print(len(gz) > 1)
-print(compress.gunzip(truncateTail(gz)) == null)
+print(compressionInvalidData(fn() { compress.gunzip(truncatePayload(gz)) }))
 
 var deflated = compress.deflate(text) ?? ""
 print(len(deflated) > 1)
-print(compress.inflate(truncateTail(deflated)) == null)
+print(compressionInvalidData(fn() { compress.inflate(truncatePayload(deflated)) }))
 
 var zlibbed = compress.zlibCompress(text) ?? ""
 print(len(zlibbed) > 1)
-print(compress.zlibDecompress(truncateTail(zlibbed)) == null)
+print(compressionInvalidData(fn() { compress.zlibDecompress(truncatePayload(zlibbed)) }))

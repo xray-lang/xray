@@ -2313,6 +2313,21 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_error(ctx->analyzer->isolate);
     }
 
+    if (xr_type_is_named_class(obj_type, "RegexMatch")) {
+        if (strcmp(ma->name, "start") == 0 || strcmp(ma->name, "end") == 0)
+            return xr_type_new_int(NULL);
+        if (strcmp(ma->name, "text") == 0)
+            return xr_type_new_string(NULL);
+        if (strcmp(ma->name, "groups") == 0)
+            return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_string(NULL));
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[160];
+        snprintf(msg, sizeof(msg), "RegexMatch has no member '%s'", ma->name ? ma->name : "");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
     if (XR_TYPE_IS_INSTANCE(obj_type) && obj_type->instance.class_ref) {
         XrClassInfo *class_info = obj_type->instance.class_ref;
         struct XrClassInfo *member_owner = NULL;

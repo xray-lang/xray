@@ -1,6 +1,17 @@
 // AOT direct-call compress helpers must match VM stdlib dispatch.
 import compress
 
+fn compressionInvalidData(body: () -> ()) -> bool {
+    try {
+        body()
+        return false
+    } catch (e: CompressionError) {
+        return match (e) {
+            CompressionError.InvalidData -> true
+        }
+    }
+}
+
 var data = "Hello, World! This is a test string for compression."
 
 var gz = compress.gzip(data) ?? ""
@@ -28,6 +39,6 @@ print(compress.zlibDecompress(zlib_hi) == data)
 
 print(compress.isGzip("not gzip"))
 print(compress.isZlib("not zlib"))
-print(compress.gunzip("not gzip") == null)
-print(compress.inflate("not deflate") == null)
-print(compress.zlibDecompress("not zlib") == null)
+print(compressionInvalidData(fn() { compress.gunzip("not gzip") }))
+print(compressionInvalidData(fn() { compress.inflate("not deflate") }))
+print(compressionInvalidData(fn() { compress.zlibDecompress("not zlib") }))
