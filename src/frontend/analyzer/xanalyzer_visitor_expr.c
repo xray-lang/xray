@@ -2390,7 +2390,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     single_type_arg = obj_type->container.element_type;
                 } else if ((xr_type_is_named_class(obj_type, "Task") ||
                             xr_type_is_named_class(obj_type, "WorkQueue") ||
-                            xr_type_is_named_class(obj_type, "Atomic")) &&
+                            xr_type_is_named_class(obj_type, "Atomic") ||
+                            xr_type_is_named_class(obj_type, "Thread")) &&
                            obj_type->instance.type_arg_count > 0 && obj_type->instance.type_args) {
                     single_type_arg = obj_type->instance.type_args[0];
                 }
