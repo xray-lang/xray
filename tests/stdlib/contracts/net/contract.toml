@@ -2,7 +2,7 @@ schema = 1
 module = "net"
 contract_revision = 1
 legacy_commit = "e1eed9fc7f5e44aaebb2e06fb9df877cbdfbcf7e"
-legacy_oracle = "regression_loopback"
+legacy_oracle = "classification_only"
 legacy_public_surface = [
   "read",
   "readInto",
