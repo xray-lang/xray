@@ -27,6 +27,32 @@ static bool xa_is_module_level_scope(const XaAnalyzer *analyzer) {
     return analyzer && analyzer->current_scope && analyzer->current_scope->kind == XA_SCOPE_GLOBAL;
 }
 
+static bool xa_path_char_is_sep(char ch) {
+    return ch == '/' || ch == '\\';
+}
+
+static bool xa_path_has_suffix(const char *path, const char *suffix) {
+    if (!path || !suffix)
+        return false;
+    size_t path_len = strlen(path);
+    size_t suffix_len = strlen(suffix);
+    if (path_len < suffix_len)
+        return false;
+    const char *tail = path + path_len - suffix_len;
+    for (size_t i = 0; i < suffix_len; i++) {
+        char expected = suffix[i];
+        char actual = tail[i];
+        if (xa_path_char_is_sep(expected)) {
+            if (!xa_path_char_is_sep(actual))
+                return false;
+            continue;
+        }
+        if (actual != expected)
+            return false;
+    }
+    return true;
+}
+
 static XrAttribute *xa_var_attr(const VarDeclNode *var, AttributeKind kind) {
     if (!var || !var->attributes)
         return NULL;
@@ -3036,7 +3062,7 @@ static bool xa_symbol_is_sys_resource_class(XaInferContext *ctx, XaSymbol *sym,
         return false;
     if (links && links->module_name && strcmp(links->module_name, "sys") == 0)
         return true;
-    return links && links->file_path && strstr(links->file_path, "sys/sys.xr") != NULL;
+    return links && xa_path_has_suffix(links->file_path, "sys/sys.xr");
 }
 
 static bool xa_expr_is_sys_resource_type_namespace(XaInferContext *ctx, AstNode *expr,

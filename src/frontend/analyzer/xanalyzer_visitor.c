@@ -5678,6 +5678,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     }
                 }
             }
+            if (ca_target_type)
+                xa_analyzer_set_node_type(ctx->analyzer, node, ca_target_type);
             if (ca->op == TK_MOD_ASSIGN && ca_target_type && ca_value_type &&
                 !XR_TYPE_IS_UNKNOWN(ca_target_type) && !XR_TYPE_IS_UNKNOWN(ca_value_type) &&
                 (xa_type_contains_float(ca_target_type) || xa_type_contains_float(ca_value_type))) {
