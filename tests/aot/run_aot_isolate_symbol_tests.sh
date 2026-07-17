@@ -45,10 +45,11 @@ EAGER_SCRIPT_BUILTIN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xr_string_intern_core|xr_str
 PURE_TINY_AOT_MAX_BYTES=70000
 PURE_CRYPTO_AOT_MAX_BYTES=96000
 # The coroutine runtime archive includes timer/coroutine scheduling plus the
-# generic AOT bridge and task/channel error paths. Keep this cap tight against
-# VM/toolchain-shaped drift, while allowing the deliberate runtime surface that
-# a yieldable program currently links.
-RUNTIME_TIME_SLEEP_MAX_BYTES=240000
+# generic AOT bridge, task/channel error paths, and typed TaskResult failure
+# metadata. Keep this cap tight against VM/toolchain-shaped drift, while
+# allowing the deliberate runtime surface that a yieldable program currently
+# links.
+RUNTIME_TIME_SLEEP_MAX_BYTES=512000
 
 cleanup() {
     rm -rf "$WORK"
