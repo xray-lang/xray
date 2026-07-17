@@ -20,6 +20,7 @@
 #include "../frontend/codegen/xcompiler_context.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xparse.h"
+#include "../os/os_thread.h"
 #include "../runtime/value/xchunk.h"
 #include "../toolchain/xcompiler_session.h"
 
@@ -32,8 +33,14 @@ static void free_xi_func_opaque(void *ptr) {
     xi_func_free((struct XiFunc *) ptr);
 }
 
-static void ensure_compiler_proto_hooks(void) {
+static xr_once_t compiler_proto_hooks_once = XR_ONCE_INITIALIZER;
+
+static void init_compiler_proto_hooks(void) {
     xr_vm_proto_set_ir_free_fn(free_xi_func_opaque);
+}
+
+static void ensure_compiler_proto_hooks(void) {
+    xr_once_call(&compiler_proto_hooks_once, init_compiler_proto_hooks);
 }
 
 static void restore_session_type_pool(XrCompilerSession *session) {

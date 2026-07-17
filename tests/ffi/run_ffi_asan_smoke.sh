@@ -158,7 +158,7 @@ declare -a CASE_NAMES=(
 declare -a CASE_SRCS=(
     "$PROJECT_DIR/tests/diff/cases/semantics/ffi/ptr_memory.xr"
     "$PROJECT_DIR/tests/diff/cases/semantics/ffi/cfn_bsearch.xr"
-    "$PROJECT_DIR/tests/diff/cases/semantics/oop/fixed_layout_struct.xr"
+    "$PROJECT_DIR/tests/diff/cases/semantics/oop/repr_c_struct.xr"
 )
 declare -a CASE_EXPECTED=(
     $'10\n20\n30\n40\n30\nfalse\nfalse'

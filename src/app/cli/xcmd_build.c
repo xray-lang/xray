@@ -258,7 +258,6 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
 #endif
 #if defined(XR_BUILD_UBSAN) && XR_BUILD_UBSAN
     spawn_argv[ai++] = "-fsanitize=undefined";
-    spawn_argv[ai++] = "-fno-sanitize=function";
 #endif
 #if defined(XR_BUILD_TSAN) && XR_BUILD_TSAN
     spawn_argv[ai++] = "-fsanitize=thread";
@@ -595,10 +594,8 @@ static bool xaot_cli_add_build_sanitizer_flags(XaotLinkManifest *manifest,
 #endif
 #if defined(XR_BUILD_UBSAN) && XR_BUILD_UBSAN
     if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fsanitize=undefined") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-sanitize=function") ||
         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-omit-frame-pointer") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-fsanitize=undefined") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-fno-sanitize=function")) {
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-fsanitize=undefined")) {
         snprintf(err, err_size, "failed to add UBSan flags to AOT link manifest");
         return false;
     }
