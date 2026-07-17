@@ -15,10 +15,12 @@
 #define XR_TEST_WIN_COMPAT_H
 
 #include <errno.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -34,8 +36,15 @@
 typedef SSIZE_T ssize_t;
 #define _SSIZE_T_DEFINED
 #endif
+
 #else
 #include <unistd.h>
+#endif
+
+#ifndef PATH_MAX
+#define XR_TEST_PATH_MAX 4096
+#else
+#define XR_TEST_PATH_MAX PATH_MAX
 #endif
 
 static inline void xr_test_suppress_dialogs(void) {
@@ -70,6 +79,36 @@ static inline int xr_test_rmdir(const char *path) {
     return _rmdir(path);
 #else
     return rmdir(path);
+#endif
+}
+
+static inline int xr_test_mkdir(const char *path) {
+#ifdef _WIN32
+    return _mkdir(path);
+#else
+    return mkdir(path, 0700);
+#endif
+}
+
+static inline char *xr_test_realpath_buf(const char *path, char *resolved, size_t resolved_size) {
+#ifdef _WIN32
+    if (!resolved || resolved_size == 0)
+        return NULL;
+    return _fullpath(resolved, path, resolved_size) ? resolved : NULL;
+#else
+    (void) resolved_size;
+    return realpath(path, resolved);
+#endif
+}
+
+static inline char *xr_test_realpath_alloc(const char *path) {
+#ifdef _WIN32
+    char resolved[XR_TEST_PATH_MAX];
+    if (!xr_test_realpath_buf(path, resolved, sizeof(resolved)))
+        return NULL;
+    return _strdup(resolved);
+#else
+    return realpath(path, NULL);
 #endif
 }
 
