@@ -3,9 +3,12 @@
  */
 
 #include "xanalyzer_xrd.h"
+#include "../test_win_compat.h"
 #include <stdio.h>
 #include <string.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -30,12 +33,12 @@ static int tests_failed = 0;
 
 static bool write_temp_xrd(char path[128], const char *source) {
     strcpy(path, "/tmp/xray_xrd_effect_XXXXXX.xrd");
-    int fd = mkstemps(path, 4);
+    int fd = xr_test_mkstemps(path, 4);
     if (fd < 0)
         return false;
     size_t size = strlen(source);
-    bool ok = write(fd, source, size) == (ssize_t) size;
-    close(fd);
+    bool ok = xr_test_write(fd, source, size) == (ssize_t) size;
+    xr_test_close(fd);
     return ok;
 }
 
@@ -89,7 +92,7 @@ TEST(parses_and_normalizes_effect_contracts) {
     ASSERT(strcmp(run->effect_contract.errors[0], "RunError.Failed") == 0);
 
     xa_xrd_cleanup();
-    unlink(path);
+    xr_test_unlink(path);
 }
 
 TEST(rejects_unknown_effect_metadata) {
@@ -97,7 +100,7 @@ TEST(rejects_unknown_effect_metadata) {
     ASSERT(write_temp_xrd(path, "export fn bad(): int @throws(IoError)\n"));
     ASSERT(xa_xrd_load_file(path) == NULL);
     ASSERT(strstr(xa_xrd_last_error(), "unknown effect metadata") != NULL);
-    unlink(path);
+    xr_test_unlink(path);
 }
 
 TEST(rejects_duplicate_error_entries) {
@@ -106,7 +109,7 @@ TEST(rejects_duplicate_error_entries) {
         write_temp_xrd(path, "export fn bad(): int @errors(IoError.NotFound, IoError.NotFound)\n"));
     ASSERT(xa_xrd_load_file(path) == NULL);
     ASSERT(strstr(xa_xrd_last_error(), "duplicate error") != NULL);
-    unlink(path);
+    xr_test_unlink(path);
 }
 
 int main(void) {

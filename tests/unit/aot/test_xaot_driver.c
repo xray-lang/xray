@@ -3,6 +3,7 @@
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/module/xmodule_resolver.h"
+#include "../test_win_compat.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -11,7 +12,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 static int passed;
 static int failed;
@@ -27,7 +30,7 @@ static int failed;
 
 static bool write_temp_source(char *path, size_t path_sz) {
     FILE *f;
-    int n = snprintf(path, path_sz, "/tmp/xray-xaot-driver-%ld.xr", (long) getpid());
+    int n = snprintf(path, path_sz, "/tmp/xray-xaot-driver-%ld.xr", (long) xr_test_getpid());
     if (n < 0 || (size_t) n >= path_sz)
         return false;
     f = fopen(path, "w");
@@ -35,11 +38,11 @@ static bool write_temp_source(char *path, size_t path_sz) {
         return false;
     if (fputs("fn value() -> int {\n    return 7\n}\n", f) < 0) {
         fclose(f);
-        unlink(path);
+        xr_test_unlink(path);
         return false;
     }
     if (fclose(f) != 0) {
-        unlink(path);
+        xr_test_unlink(path);
         return false;
     }
     return true;
@@ -347,10 +350,10 @@ static char *dup_env_value(const char *name) {
 
 static void restore_env_value(const char *name, char *value) {
     if (value) {
-        setenv(name, value, 1);
+        xr_test_setenv(name, value, 1);
         xr_free(value);
     } else {
-        unsetenv(name);
+        xr_test_unsetenv(name);
     }
 }
 
@@ -424,7 +427,7 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
     xaot_build_result_free(&result);
     xaot_target_free(&target);
     xr_free(payload);
-    unlink(source_path);
+    xr_test_unlink(source_path);
     passed++;
 }
 
@@ -472,7 +475,8 @@ static void test_driver_validates_freestanding_runtime_provider(void) {
         .target_metadata_hash = 0x197195,
     };
 
-    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-provider-%ld.xr", (long) getpid());
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-provider-%ld.xr",
+             (long) xr_test_getpid());
     ASSERT_TRUE(write_file_text(source_path, "fn worker() -> int {\n"
                                              "    return 1\n"
                                              "}\n"
@@ -503,7 +507,7 @@ static void test_driver_validates_freestanding_runtime_provider(void) {
     xaot_build_result_free(&result);
 
     xaot_target_free(&target);
-    unlink(source_path);
+    xr_test_unlink(source_path);
     passed++;
 }
 
@@ -521,7 +525,7 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     char *old_home;
 
     memset(&result, 0, sizeof(result));
-    snprintf(root, sizeof(root), "/tmp/xray-xaot-driver-auto-%ld", (long) getpid());
+    snprintf(root, sizeof(root), "/tmp/xray-xaot-driver-auto-%ld", (long) xr_test_getpid());
     snprintf(home_dir, sizeof(home_dir), "%s/home", root);
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
@@ -537,7 +541,7 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     payloads[0] = payload;
     ASSERT_TRUE(xg_imported_summary_hash_from_package_payloads(0, payloads, 1, &imported_hash));
     old_home = dup_env_value("HOME");
-    setenv("HOME", home_dir, 1);
+    xr_test_setenv("HOME", home_dir, 1);
 
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
@@ -553,7 +557,7 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     xaot_target_free(&target);
     restore_env_value("HOME", old_home);
     xr_free(payload);
-    unlink(entry_source);
+    xr_test_unlink(entry_source);
     passed++;
 }
 
@@ -572,7 +576,7 @@ static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
     char *old_home;
 
     memset(&result, 0, sizeof(result));
-    snprintf(root, sizeof(root), "/tmp/xray-xaot-driver-auto-multi-%ld", (long) getpid());
+    snprintf(root, sizeof(root), "/tmp/xray-xaot-driver-auto-multi-%ld", (long) xr_test_getpid());
     snprintf(home_dir, sizeof(home_dir), "%s/home", root);
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
@@ -595,7 +599,7 @@ static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
     payloads[1] = payload_b;
     ASSERT_TRUE(xg_imported_summary_hash_from_package_payloads(0, payloads, 2, &imported_hash));
     old_home = dup_env_value("HOME");
-    setenv("HOME", home_dir, 1);
+    xr_test_setenv("HOME", home_dir, 1);
 
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
@@ -611,7 +615,7 @@ static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
     restore_env_value("HOME", old_home);
     xr_free(payload_a);
     xr_free(payload_b);
-    unlink(entry_source);
+    xr_test_unlink(entry_source);
     passed++;
 }
 
@@ -634,7 +638,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
     char *old_home;
 
     memset(&result, 0, sizeof(result));
-    snprintf(root, sizeof(root), "/tmp/xray-xaot-driver-auto-graph-%ld", (long) getpid());
+    snprintf(root, sizeof(root), "/tmp/xray-xaot-driver-auto-graph-%ld", (long) xr_test_getpid());
     snprintf(home_dir, sizeof(home_dir), "%s/home", root);
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
@@ -664,7 +668,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
     payloads[0] = payload_ab;
     ASSERT_TRUE(xg_imported_summary_hash_from_package_payloads(0, payloads, 1, &imported_hash));
     old_home = dup_env_value("HOME");
-    setenv("HOME", home_dir, 1);
+    xr_test_setenv("HOME", home_dir, 1);
 
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
@@ -680,7 +684,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
     restore_env_value("HOME", old_home);
     xr_free(payload_ab);
     xr_free(payload_b);
-    unlink(entry_source);
+    xr_test_unlink(entry_source);
     passed++;
 }
 
