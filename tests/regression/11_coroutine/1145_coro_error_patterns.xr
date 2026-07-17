@@ -112,7 +112,7 @@ fn test_monitor_error() {
         throw CoroErr.Msg("worker crashed")
     }
 
-    var ch = Coro.monitor("err-worker")
+    shared ch = Coro.monitor("err-worker")
     var reason = match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> ""
