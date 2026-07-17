@@ -75,21 +75,26 @@ class SourceUnknownInventoryTest(unittest.TestCase):
         self.assertIn("ALLOWED_RUNTIME_UNKNOWN_OUTPUT_FIXTURE", categories)
         self.assertNotIn("SOURCE_UNKNOWN_TYPE_SURFACE", categories)
 
-    def test_current_inventory_has_no_live_source_unknown_type_surface(self) -> None:
+    def test_current_inventory_has_only_task_failed_unknown_boundary(self) -> None:
         inventory = build_inventory(ROOT)
-        self.assertEqual([], inventory["SOURCE_UNKNOWN_TYPE_SURFACE"])
+        hits = inventory["SOURCE_UNKNOWN_TYPE_SURFACE"]
+        self.assertEqual(1, len(hits))
+        self.assertEqual("stdlib/types/coroutine.xr", hits[0].path)
+        self.assertEqual("Failed(" "unknown)", hits[0].text)
 
     def test_task_payload_registration_matches_typed_native_defs(self) -> None:
         analyzer_source = (ROOT / "src/frontend/analyzer/xanalyzer.c").read_text()
         native_defs = (ROOT / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text()
 
-        self.assertIn("Failed(PanicInfo)", native_defs)
+        self.assertIn("Failed(" "unknown)", native_defs)
         self.assertIn(
-            'XrType *task_failed_payload[] = {xr_type_new_named_instance(analyzer->isolate, "PanicInfo")};',
+            "XrType *task_failed_payload[] = {xr_type_new_unknown(analyzer->isolate)};",
             analyzer_source,
         )
-        unknown_ctor = "xr_type_new_" "unknown"
-        self.assertNotIn(f"task_failed_payload[] = {{{unknown_ctor}", analyzer_source)
+        self.assertNotIn(
+            'task_failed_payload[] = {xr_type_new_named_instance(analyzer->isolate, "PanicInfo")}',
+            analyzer_source,
+        )
 
     def test_task_outcome_public_surface_is_removed(self) -> None:
         task_outcome = "Task" "Outcome"

@@ -17,7 +17,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "demonitor",
-        .signature = "(ch: Channel): ()",
+        .signature = "(ch: Channel<string>): ()",
         .summary = "Cancel coroutine monitor",
     },
     {
@@ -52,7 +52,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "monitor",
-        .signature = "(name: string): Channel",
+        .signature = "(name: string): Channel<string>",
         .summary = "Monitor named coroutine, returns Channel",
     },
     {
@@ -5780,14 +5780,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Coro.deadlocks` | `(): Array<Json>` | Detect deadlocked coroutines |\n"
-            "| `Coro.demonitor` | `(ch: Channel): ()` | Cancel coroutine monitor |\n"
+            "| `Coro.demonitor` | `(ch: Channel<string>): ()` | Cancel coroutine monitor |\n"
             "| `Coro.dump` | `(limit?: int): ()` | Dump coroutine state |\n"
             "| `Coro.getLocal` | `(key: string): Json` | Get coroutine-local storage |\n"
             "| `Coro.groupBy` | `(field: string): Json` | Group coroutines by field |\n"
             "| `Coro.kill` | `(name: string, reason?: string): bool` | Kill named coroutine |\n"
             "| `Coro.list` | `(limit?: int, state?: string): Array<Json>` | List coroutines |\n"
             "| `Coro.lockThread` | `(): ()` | Lock current thread |\n"
-            "| `Coro.monitor` | `(name: string): Channel` | Monitor named coroutine, returns Channel |\n"
+            "| `Coro.monitor` | `(name: string): Channel<string>` | Monitor named coroutine, returns Channel |\n"
             "| `Coro.self` | `(): string?` | Get current coroutine name |\n"
             "| `Coro.setLocal` | `(key: string, value: Json): ()` | Set coroutine-local storage |\n"
             "| `Coro.stalled` | `(timeout_ms?: int): Array<Json>` | Detect stalled coroutines |\n"
