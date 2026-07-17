@@ -545,8 +545,20 @@ if [ -x "$CALLER_BIN" ]; then
     fi
 fi
 
+CALLER_SHARED_SAN_FLAGS=""
+if grep -Fq -- "-fsanitize=address" "$SHARED_LOG"; then
+    if grep -Fq -- "-fsanitize=undefined" "$SHARED_LOG"; then
+        CALLER_SHARED_SAN_FLAGS="-fsanitize=address,undefined"
+    else
+        CALLER_SHARED_SAN_FLAGS="-fsanitize=address"
+    fi
+elif grep -Fq -- "-fsanitize=undefined" "$SHARED_LOG"; then
+    CALLER_SHARED_SAN_FLAGS="-fsanitize=undefined"
+fi
+
 if [ -f "$GEN_LIB" ] &&
-    cc -O2 -Wall -I "$WORK" "$CALLER_C" "$GEN_LIB" -Wl,-rpath,"$WORK" -lm \
+    cc -O2 -Wall -I "$WORK" ${CALLER_SHARED_SAN_FLAGS:+$CALLER_SHARED_SAN_FLAGS} "$CALLER_C" "$GEN_LIB" \
+        -Wl,-rpath,"$WORK" -lm \
         -o "$CALLER_SHARED_BIN" >"$SHARED_LINK_LOG" 2>&1; then
     record_pass "link C caller with shared library"
 else
