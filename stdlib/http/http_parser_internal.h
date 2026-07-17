@@ -20,6 +20,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include "../../src/base/xdefs.h"
 
 /* ========== Constants ========== */
 
