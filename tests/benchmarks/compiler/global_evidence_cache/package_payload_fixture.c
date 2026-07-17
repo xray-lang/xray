@@ -8,10 +8,34 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>
+#include <stdlib.h>
+#ifndef PATH_MAX
+#define PATH_MAX _MAX_PATH
+#endif
+#else
 #include <unistd.h>
+#endif
+
+static int fixture_mkdir(const char *path) {
+#ifdef _WIN32
+    return _mkdir(path);
+#else
+    return mkdir(path, 0700);
+#endif
+}
+
+static char *fixture_realpath(const char *path, char *resolved) {
+#ifdef _WIN32
+    return _fullpath(resolved, path, PATH_MAX);
+#else
+    return realpath(path, resolved);
+#endif
+}
 
 static bool mkdir_one(const char *path) {
-    if (mkdir(path, 0700) == 0)
+    if (fixture_mkdir(path) == 0)
         return true;
     return errno == EEXIST;
 }
@@ -26,11 +50,11 @@ static bool mkdir_p(const char *path) {
         return false;
     memcpy(buf, path, len + 1);
     for (char *p = buf + 1; *p; p++) {
-        if (*p == '/') {
+        if (*p == '/' || *p == '\\') {
             *p = '\0';
             if (!mkdir_one(buf))
                 return false;
-            *p = '/';
+            *p = path[p - buf];
         }
     }
     return mkdir_one(buf);
@@ -97,7 +121,7 @@ int main(int argc, char **argv) {
     cache_dir = argv[1];
     canonical = argv[2];
     source_path = argv[3];
-    if (!realpath(source_path, real_source)) {
+    if (!fixture_realpath(source_path, real_source)) {
         fprintf(stderr, "package_payload_fixture: cannot resolve source path: %s\n", source_path);
         return 1;
     }
