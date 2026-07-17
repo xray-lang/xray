@@ -183,13 +183,13 @@ static bool write_file_text(const char *path, const char *text) {
 }
 
 static bool mkdir_one(const char *path) {
-    if (mkdir(path, 0700) == 0)
+    if (xr_test_mkdir(path) == 0)
         return true;
     return errno == EEXIST;
 }
 
 static bool mkdir_p(const char *path) {
-    char buf[PATH_MAX];
+    char buf[XR_TEST_PATH_MAX];
     size_t len;
     if (!path)
         return false;
@@ -279,8 +279,8 @@ done:
 
 static bool write_global_payload_to_cache(const char *cache_dir, const char *payload) {
     XgEvidenceCachePayloadInfo info;
-    char phase_dir[PATH_MAX];
-    char payload_path[PATH_MAX];
+    char phase_dir[XR_TEST_PATH_MAX];
+    char payload_path[XR_TEST_PATH_MAX];
     int n;
     if (!cache_dir || !payload || !xg_evidence_cache_payload_parse(payload, &info))
         return false;
@@ -300,9 +300,9 @@ static bool write_package_source(const char *home_dir, const char *canonical,
                                  size_t out_real_path_size) {
     const char *slash;
     size_t owner_len;
-    char pkg_dir[PATH_MAX];
-    char pkg_source[PATH_MAX];
-    char real_pkg_source[PATH_MAX];
+    char pkg_dir[XR_TEST_PATH_MAX];
+    char pkg_source[XR_TEST_PATH_MAX];
+    char real_pkg_source[XR_TEST_PATH_MAX];
     int n;
     if (!home_dir || !canonical || !source_text || !out_real_path || out_real_path_size == 0)
         return false;
@@ -319,7 +319,7 @@ static bool write_package_source(const char *home_dir, const char *canonical,
     n = snprintf(pkg_source, sizeof(pkg_source), "%s/main.xr", pkg_dir);
     if (n < 0 || (size_t) n >= sizeof(pkg_source) || !write_file_text(pkg_source, source_text))
         return false;
-    if (!realpath(pkg_source, real_pkg_source))
+    if (!xr_test_realpath_buf(pkg_source, real_pkg_source, sizeof(real_pkg_source)))
         return false;
     n = snprintf(out_real_path, out_real_path_size, "%s", real_pkg_source);
     return n >= 0 && (size_t) n < out_real_path_size;
@@ -327,7 +327,7 @@ static bool write_package_source(const char *home_dir, const char *canonical,
 
 static char *install_package_payload(const char *home_dir, const char *cache_dir,
                                      const char *canonical, const char *source_text) {
-    char real_pkg_source[PATH_MAX];
+    char real_pkg_source[XR_TEST_PATH_MAX];
     char *payload;
     if (!home_dir || !cache_dir ||
         !write_package_source(home_dir, canonical, source_text, real_pkg_source,
@@ -512,10 +512,10 @@ static void test_driver_validates_freestanding_runtime_provider(void) {
 }
 
 static void test_driver_auto_discovers_package_summary_payloads(void) {
-    char root[PATH_MAX];
-    char home_dir[PATH_MAX];
-    char entry_source[PATH_MAX];
-    char cache_dir[PATH_MAX];
+    char root[XR_TEST_PATH_MAX];
+    char home_dir[XR_TEST_PATH_MAX];
+    char entry_source[XR_TEST_PATH_MAX];
+    char cache_dir[XR_TEST_PATH_MAX];
     XaotTarget target = {0};
     XaotBuildOptions options = {0};
     XaotBuildResult result;
@@ -562,10 +562,10 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
 }
 
 static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
-    char root[PATH_MAX];
-    char home_dir[PATH_MAX];
-    char entry_source[PATH_MAX];
-    char cache_dir[PATH_MAX];
+    char root[XR_TEST_PATH_MAX];
+    char home_dir[XR_TEST_PATH_MAX];
+    char entry_source[XR_TEST_PATH_MAX];
+    char cache_dir[XR_TEST_PATH_MAX];
     XaotTarget target = {0};
     XaotBuildOptions options = {0};
     XaotBuildResult result;
@@ -620,12 +620,12 @@ static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
 }
 
 static void test_driver_auto_discovers_package_dependency_summary_payload(void) {
-    char root[PATH_MAX];
-    char home_dir[PATH_MAX];
-    char entry_source[PATH_MAX];
-    char cache_dir[PATH_MAX];
-    char pkg_a_source[PATH_MAX];
-    char pkg_b_source[PATH_MAX];
+    char root[XR_TEST_PATH_MAX];
+    char home_dir[XR_TEST_PATH_MAX];
+    char entry_source[XR_TEST_PATH_MAX];
+    char cache_dir[XR_TEST_PATH_MAX];
+    char pkg_a_source[XR_TEST_PATH_MAX];
+    char pkg_b_source[XR_TEST_PATH_MAX];
     XaotTarget target = {0};
     XaotBuildOptions options = {0};
     XaotBuildResult result;

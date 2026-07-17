@@ -1793,7 +1793,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(xr_module_resolver_resolve(resolver, "./effect_callback_module", false, entry_path,
                                       &callback_id, &resolve_err) == 0);
     xr_free(resolve_err);
-    char *entry_canonical = realpath(entry_path, NULL);
+    char *entry_canonical = xr_test_realpath_alloc(entry_path);
     ASSERT(entry_canonical != NULL);
 
     XrModuleSpec specs[5] = {{.canonical = lib_id.canonical,
