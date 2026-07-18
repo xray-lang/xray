@@ -1767,9 +1767,10 @@ static bool lower_c_view_member_access(XiLower *l, AstNode *node, XiValue *obj,
         return true;
     }
 
-    uint8_t code = xr_ffi_type_from_xrtype(result_type, false);
-    if (code == XR_FFI_T_VOID || code > XR_FFI_T_PTR)
+    const XrAbiScalarDesc *scalar_desc = xr_abi_scalar_desc_for_native(field->native_type);
+    if (!scalar_desc || !scalar_desc->is_memory_scalar)
         return true;
+    uint8_t code = (uint8_t) scalar_desc->ffi_type;
     XiValue *endian = xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 2);
     if (!endian || !v)
@@ -1999,9 +2000,10 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
             address->args[0] = obj;
             address->args[1] = offset;
             address->line = (uint32_t) node->line;
-            uint8_t code = xr_ffi_type_from_xrtype(val->type, false);
-            if (code == XR_FFI_T_VOID || code > XR_FFI_T_PTR)
+            const XrAbiScalarDesc *scalar_desc = xr_abi_scalar_desc_for_native(field->native_type);
+            if (!scalar_desc || !scalar_desc->is_memory_scalar)
                 return NULL;
+            uint8_t code = (uint8_t) scalar_desc->ffi_type;
             XiValue *endian = xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_STORE, l->type_unit, 3);
             if (!endian || !v)
@@ -4469,7 +4471,7 @@ static XiValue *lower_mem_access_call(XiLower *l, AstNode *node, CallExprNode *c
                                  : xr_tref_resolve(l->isolate, call->type_args[0]);
     target = xi_lower_type_or_any(l, target, "mem access type argument", node->line);
     uint8_t code = xr_ffi_type_from_xrtype(target, false);
-    if (code == XR_FFI_T_VOID || code > XR_FFI_T_PTR)
+    if (!xr_ffi_type_is_memory_scalar(code))
         return NULL;
 
     XiValue *ptr = xi_lower_expr(l, call->arguments[0]);

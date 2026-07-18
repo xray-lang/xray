@@ -15,6 +15,43 @@
 
 #include <string.h>
 
+static const XrAbiScalarDesc xr_abi_scalar_descs[XR_FFI_T_COUNT] = {
+// clang-format off
+#define XR_ABI_SCALAR(name, code, native, bytes, width, sign, floating, pointer, memory, c_type)   \
+    [code] = {(XrFFIType) (code), native, bytes, width, sign, floating, pointer, memory, c_type},
+#include "xffi_scalar.def"
+#undef XR_ABI_SCALAR
+    // clang-format on
+};
+
+const XrAbiScalarDesc *xr_abi_scalar_desc(uint8_t ffi_type) {
+    if (ffi_type >= XR_FFI_T_COUNT)
+        return NULL;
+    return &xr_abi_scalar_descs[ffi_type];
+}
+
+const XrAbiScalarDesc *xr_abi_scalar_desc_for_native(uint8_t native_type) {
+    for (uint8_t i = 0; i < XR_FFI_T_COUNT; i++) {
+        const XrAbiScalarDesc *desc = &xr_abi_scalar_descs[i];
+        if (desc->is_memory_scalar && desc->native_type == native_type)
+            return desc;
+    }
+    return NULL;
+}
+
+uint8_t xr_abi_scalar_width(const XrAbiScalarDesc *desc, uint8_t pointer_width) {
+    if (!desc)
+        return 0;
+    if (desc->width_kind == XR_ABI_WIDTH_FIXED)
+        return desc->fixed_bytes;
+    return pointer_width == 4 || pointer_width == 8 ? pointer_width : 0;
+}
+
+bool xr_ffi_type_is_memory_scalar(uint8_t ffi_type) {
+    const XrAbiScalarDesc *desc = xr_abi_scalar_desc(ffi_type);
+    return desc && desc->is_memory_scalar;
+}
+
 static XrFFICallbackSig *xr_ffi_callback_sig_new(const uint8_t *params, uint8_t nparams,
                                                  uint8_t ret) {
     XrFFICallbackSig *cb = (XrFFICallbackSig *) xr_malloc(sizeof(XrFFICallbackSig));
@@ -139,32 +176,13 @@ uint8_t xr_ffi_type_from_xrtype(const struct XrType *t, bool is_return) {
         case XR_KIND_UNIT:
             return XR_FFI_T_VOID;
         case XR_KIND_BOOL:
-            return XR_FFI_T_BOOL;
         case XR_KIND_FLOAT:
-            return (t->native_width == XR_NATIVE_F32) ? XR_FFI_T_F32 : XR_FFI_T_F64;
-        case XR_KIND_INT:
-            switch (t->native_width) {
-                case XR_NATIVE_I8:
-                    return XR_FFI_T_I8;
-                case XR_NATIVE_U8:
-                    return XR_FFI_T_U8;
-                case XR_NATIVE_I16:
-                    return XR_FFI_T_I16;
-                case XR_NATIVE_U16:
-                    return XR_FFI_T_U16;
-                case XR_NATIVE_I32:
-                    return XR_FFI_T_I32;
-                case XR_NATIVE_U32:
-                    return XR_FFI_T_U32;
-                case XR_NATIVE_U64:
-                    return XR_FFI_T_U64;
-                case XR_NATIVE_USIZE:
-                    return XR_FFI_T_SIZE;
-                case XR_NATIVE_ISIZE:
-                    return XR_FFI_T_SSIZE;
-                default:
-                    return XR_FFI_T_I64;
-            }
+        case XR_KIND_INT: {
+            int native_type = xr_type_kind_to_native(t->kind, t->native_width);
+            const XrAbiScalarDesc *desc =
+                native_type >= 0 ? xr_abi_scalar_desc_for_native((uint8_t) native_type) : NULL;
+            return desc ? (uint8_t) desc->ffi_type : XR_FFI_T_I64;
+        }
         case XR_KIND_FUNCTION:
             return XR_FFI_T_PTR;
         default:

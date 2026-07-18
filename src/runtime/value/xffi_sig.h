@@ -7,18 +7,17 @@
  *
  * xffi_sig.h - Self-contained extern call signature carried by XrProto.
  *
- * The AOT backend emits direct C calls for extern functions and never needs
- * this. The bytecode VM, however, marshals extern calls through libffi at
- * runtime — and the bytecode that backs an embedded ("xray build") binary is
- * serialized without the compile-time Xi IR. This signature therefore lives on
- * the proto and round-trips through bytecode so the VM can resolve the symbol
- * and build an ffi_cif with no IR present.
+ * The descriptor table is shared by semantic analysis, Xi lowering, VM
+ * libffi/raw-memory execution, and AOT C generation. Extern signatures live on
+ * the proto and round-trip through bytecode so the VM can resolve symbols and
+ * build an ffi_cif with no compile-time Xi IR present.
  */
 
 #ifndef XR_FFI_SIG_H
 #define XR_FFI_SIG_H
 
 #include "../../base/xdefs.h"
+#include "../../shared/xr_native_type_core.h"
 #include <stdint.h>
 
 struct XrType;
@@ -30,22 +29,37 @@ struct XrType;
  * heap kind crossing the boundary is treated as an opaque pointer.
  */
 typedef enum XrFFIType {
-    XR_FFI_T_VOID = 0,
-    XR_FFI_T_BOOL = 1,
-    XR_FFI_T_I8 = 2,
-    XR_FFI_T_U8 = 3,
-    XR_FFI_T_I16 = 4,
-    XR_FFI_T_U16 = 5,
-    XR_FFI_T_I32 = 6,
-    XR_FFI_T_U32 = 7,
-    XR_FFI_T_I64 = 8,
-    XR_FFI_T_U64 = 9,
-    XR_FFI_T_F32 = 10,
-    XR_FFI_T_F64 = 11,
-    XR_FFI_T_PTR = 12,
-    XR_FFI_T_SIZE = 13,
-    XR_FFI_T_SSIZE = 14
+#define XR_ABI_SCALAR(name, code, native, bytes, width, sign, floating, pointer, memory, c_type)   \
+    XR_FFI_T_##name = code,
+#include "xffi_scalar.def"
+#undef XR_ABI_SCALAR
+    XR_FFI_T_COUNT = 15
 } XrFFIType;
+
+typedef enum XrAbiWidthKind {
+    XR_ABI_WIDTH_FIXED = 0,
+    XR_ABI_WIDTH_POINTER = 1,
+} XrAbiWidthKind;
+
+/* One authoritative description of every scalar that may cross the C ABI or
+ * be addressed by XI_PTR_LOAD/STORE. fixed_bytes is zero only for target
+ * pointer-width scalars. */
+typedef struct XrAbiScalarDesc {
+    XrFFIType ffi_type;
+    uint8_t native_type;
+    uint8_t fixed_bytes;
+    XrAbiWidthKind width_kind;
+    bool is_signed;
+    bool is_float;
+    bool is_pointer;
+    bool is_memory_scalar;
+    const char *c_type;
+} XrAbiScalarDesc;
+
+XR_FUNC const XrAbiScalarDesc *xr_abi_scalar_desc(uint8_t ffi_type);
+XR_FUNC const XrAbiScalarDesc *xr_abi_scalar_desc_for_native(uint8_t native_type);
+XR_FUNC uint8_t xr_abi_scalar_width(const XrAbiScalarDesc *desc, uint8_t pointer_width);
+XR_FUNC bool xr_ffi_type_is_memory_scalar(uint8_t ffi_type);
 
 #define XR_FFI_PTR_AUX_TYPE_MASK 0x1fu
 #define XR_FFI_PTR_AUX_UNALIGNED 0x80u

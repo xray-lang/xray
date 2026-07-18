@@ -1671,6 +1671,8 @@ static bool xa_type_is_supported_mem_access(XrType *type) {
         case XR_NATIVE_U32:
         case XR_NATIVE_I64:
         case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
             return true;
         default:
             return false;
@@ -1752,7 +1754,7 @@ static XrType *xa_mem_access_return_type(XaInferContext *ctx, AstNode *node, Cal
         char msg[256];
         snprintf(msg, sizeof(msg),
                  "%s supports T = int8, uint8, int16, uint16, int32, uint32, int64, uint64, "
-                 "float32, float64, Ptr<U> or MutPtr<U>",
+                 "intsize, uintsize, float32, float64, Ptr<U> or MutPtr<U>",
                  label);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
