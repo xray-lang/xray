@@ -211,7 +211,7 @@ static bool vm_rescue_array_ref_to_ret_arena(XrVMContext *vm_ctx, XrValue *slot)
 
     uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(*slot);
     uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(*slot);
-    uint8_t elem_size = xr_native_type_size(elem_type);
+    uint8_t elem_size = xr_native_type_size(xr_target_data_layout_host(), elem_type);
     if (elem_size == 0 || elem_count == 0)
         return false;
 
@@ -255,7 +255,7 @@ static bool vm_copy_array_ref_to_fixed_heap(XrVMRuntime *isolate, XrValue *slot)
 
     uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(*slot);
     uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(*slot);
-    uint8_t elem_size = xr_native_type_size(elem_type);
+    uint8_t elem_size = xr_native_type_size(xr_target_data_layout_host(), elem_type);
     if (elem_size == 0 || elem_count == 0)
         return false;
 

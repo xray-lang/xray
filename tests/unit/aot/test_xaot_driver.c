@@ -452,6 +452,46 @@ static void test_driver_rejects_invalid_imported_summary_payload_set(void) {
     passed++;
 }
 
+static void test_driver_analyzes_aggregate_layout_with_selected_target(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-target-layout-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(
+        source_path, "import mem\n"
+                     "extern \"C\" {\n"
+                     "    struct TargetPair {\n"
+                     "        ptr: Ptr<byte>\n"
+                     "        size: uintsize\n"
+                     "    }\n"
+                     "}\n"
+                     "comptime {\n"
+                     "    compile_assert(mem.sizeOf<TargetPair>() == 8)\n"
+                     "    compile_assert(mem.alignOf<TargetPair>() == 4)\n"
+                     "    compile_assert(mem.offsetOf<TargetPair>(\"size\") == 4)\n"
+                     "}\n"
+                     "@c_export(\"target_pair_size\")\n"
+                     "fn target_pair_size() -> int { return mem.sizeOf<TargetPair>() }\n"));
+    ASSERT_TRUE(xaot_target_init(&target, "riscv32imac-unknown-none-elf"));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_FREESTANDING;
+    options.emit_plan_dump = true;
+    memset(&result, 0, sizeof(result));
+
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.plan_dump != NULL);
+    ASSERT_TRUE(strstr(result.plan_dump, "target-data-layout pointer=4/4") != NULL);
+    ASSERT_TRUE(result.n_sources == 1);
+
+    xaot_build_result_free(&result);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
 static bool manifest_has_define(const XaotLinkManifest *manifest, const char *needle) {
     if (!manifest || !needle)
         return false;
@@ -691,6 +731,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
 int main(void) {
     test_driver_consumes_imported_summary_payload_set();
     test_driver_rejects_invalid_imported_summary_payload_set();
+    test_driver_analyzes_aggregate_layout_with_selected_target();
     test_driver_validates_freestanding_runtime_provider();
     test_driver_auto_discovers_package_summary_payloads();
     test_driver_auto_discovers_multiple_package_summary_payloads();

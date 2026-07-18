@@ -334,7 +334,7 @@ static bool xi_emit_fixed_array_type_info(EmitCtx *ctx, const XrType *type, uint
     if (elem->is_nullable || native == XR_NATIVE_STRING || native < 0)
         native = XR_NATIVE_VALUE;
 
-    uint32_t elem_size = xr_native_type_size((uint8_t) native);
+    uint32_t elem_size = xr_native_type_size(ctx->target_data_layout, (uint8_t) native);
     uint32_t count = (uint32_t) type->fixed_array.length;
     if (elem_size == 0 || count > UINT32_MAX / elem_size) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);

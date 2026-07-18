@@ -109,7 +109,7 @@ static bool ct_eval_mem_layout_call(XaAnalyzer *analyzer, const AstNode *expr, X
     XrType *target = xr_tref_resolve_in_analyzer(analyzer, call->type_args[0]);
     uint32_t size = 0;
     uint32_t align = 0;
-    if (!xr_type_has_static_layout(target, &size, &align))
+    if (!xr_type_has_static_layout(xa_analyzer_target_data_layout(analyzer), target, &size, &align))
         return ct_fail(err, "mem layout consteval requires a statically laid out type");
 
     uint32_t value = is_size ? size : align;
@@ -118,8 +118,8 @@ static bool ct_eval_mem_layout_call(XaAnalyzer *analyzer, const AstNode *expr, X
         if (!field_arg || field_arg->type != AST_LITERAL_STRING ||
             !field_arg->as.literal.raw_value.string_val)
             return ct_fail(err, "mem.offsetOf consteval requires a string literal field name");
-        if (!xr_type_has_static_field_offset(target, field_arg->as.literal.raw_value.string_val,
-                                             &value))
+        if (!xr_type_has_static_field_offset(xa_analyzer_target_data_layout(analyzer), target,
+                                             field_arg->as.literal.raw_value.string_val, &value))
             return ct_fail(err, "mem.offsetOf consteval could not resolve the field");
     }
 

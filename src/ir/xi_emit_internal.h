@@ -20,6 +20,7 @@
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../base/xtarget_data_layout.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/value/xtype.h"
@@ -101,6 +102,7 @@ typedef struct {
     XiFunc *func;
     XrProto *proto;
     struct XrVMRuntime *isolate; /* for string interning; may be NULL */
+    const XrTargetDataLayout *target_data_layout;
     XiEmitStatus status;
 
     /* Register allocation: value_id -> register number */

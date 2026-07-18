@@ -23,7 +23,7 @@ typedef struct XaotTarget {
     char *triple;
     uint16_t pointer_bits;
     char *endian;
-    XaotTargetDataLayout data_layout;
+    XrTargetDataLayout data_layout;
 } XaotTarget;
 
 typedef enum XaotLinkEntryKind {

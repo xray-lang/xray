@@ -11,7 +11,7 @@
 #ifndef XAOT_CLASS_LAYOUT_H
 #define XAOT_CLASS_LAYOUT_H
 
-#include "../base/xdefs.h"
+#include "../base/xtarget_data_layout.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -52,26 +52,6 @@ typedef enum XaotClassFieldRefKind {
     XAOT_CLASS_FIELD_REF_SET,
 } XaotClassFieldRefKind;
 
-typedef struct XaotTargetTypeLayout {
-    uint32_t size;
-    uint32_t align;
-} XaotTargetTypeLayout;
-
-/* Physical C ABI facts for the code-generation target.  These values must
- * come from the selected target profile, never from the compiler host. */
-typedef struct XaotTargetDataLayout {
-    XaotTargetTypeLayout i8;
-    XaotTargetTypeLayout i16;
-    XaotTargetTypeLayout i32;
-    XaotTargetTypeLayout i64;
-    XaotTargetTypeLayout f32;
-    XaotTargetTypeLayout f64;
-    XaotTargetTypeLayout pointer;
-    XaotTargetTypeLayout isize;
-    XaotTargetTypeLayout usize;
-    XaotTargetTypeLayout xr_value;
-} XaotTargetDataLayout;
-
 enum {
     XAOT_CLASS_FIELD_UNPROVEN_NONE = 0,
     XAOT_CLASS_FIELD_UNPROVEN_CLASS_LAYOUT = 1,
@@ -100,12 +80,7 @@ typedef struct XaotClassFieldPhysicalLayout {
     uint8_t unproven_reason;
 } XaotClassFieldPhysicalLayout;
 
-XR_FUNC bool xaot_target_data_layout_init_native(XaotTargetDataLayout *out_layout);
-XR_FUNC bool xaot_target_data_layout_init_ilp32(XaotTargetDataLayout *out_layout);
-XR_FUNC bool xaot_target_data_layout_init_lp64(XaotTargetDataLayout *out_layout);
-XR_FUNC bool xaot_target_data_layout_validate(const XaotTargetDataLayout *layout);
-
-XR_FUNC bool xaot_class_field_physical_layout(const XaotTargetDataLayout *target_layout,
+XR_FUNC bool xaot_class_field_physical_layout(const XrTargetDataLayout *target_layout,
                                               uint8_t semantic_kind,
                                               XaotClassFieldPhysicalLayout *out_layout);
 

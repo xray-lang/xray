@@ -3592,7 +3592,8 @@ skip_interfaces:
                         layout_valid = false;
                         break;
                     }
-                    uint32_t elem_size = xr_native_type_size((uint8_t) elem_native);
+                    uint32_t elem_size = xr_native_type_size(
+                        xa_analyzer_target_data_layout(ctx->analyzer), (uint8_t) elem_native);
                     uint64_t field_bytes = (uint64_t) ft->fixed_array.length * (uint64_t) elem_size;
                     if (elem_size == 0 || field_bytes > UINT16_MAX ||
                         (uint32_t) ft->fixed_array.length > UINT16_MAX) {
@@ -3691,8 +3692,16 @@ skip_interfaces:
         }
 
         if (layout_valid && info->field_count <= XR_MAX_AGG_FIELDS) {
-            xr_aggregate_layout_compute(layout);
-            if (layout->total_size > UINT16_MAX) {
+            if (!xr_aggregate_layout_compute(layout,
+                                             xa_analyzer_target_data_layout(ctx->analyzer))) {
+                XrLocation loc = {.file = ctx->file_path, .line = node->line};
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                           "Cannot compute aggregate layout for target ABI", &loc);
+                xr_free(layout->field_names);
+                xr_free(layout);
+                layout = NULL;
+            } else if (layout->total_size > UINT16_MAX) {
                 XrLocation loc = {.file = ctx->file_path, .line = node->line};
                 char msg[256];
                 snprintf(msg, sizeof(msg),

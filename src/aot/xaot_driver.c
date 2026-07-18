@@ -1322,7 +1322,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     XR_DCHECK(options != NULL, "xaot_build: NULL options");
     XR_DCHECK(result != NULL, "xaot_build: NULL result");
     if (!input_path || !options || !options->target ||
-        !xaot_target_data_layout_validate(&options->target->data_layout) || !result)
+        !xr_target_data_layout_validate(&options->target->data_layout) || !result)
         return 1;
     memset(result, 0, sizeof(*result));
     emit_plan_dump = options->emit_plan_dump;
@@ -1353,6 +1353,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         return 1;
     }
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+    if (!xr_compiler_session_set_target_data_layout(session, &options->target->data_layout)) {
+        fprintf(stderr, "Error: failed to install target data layout in compiler session\n");
+        xray_vm_delete(X);
+        return 1;
+    }
 
     xr_module_system_init_with_script(X, input_path);
     XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
@@ -1739,7 +1744,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     }
     aot_bundle_initialized = true;
-    if (!xaot_bundle_set_target_data_layout(&aot_bundle, &options->target->data_layout)) {
+    if (!xaot_bundle_set_target_data_layout(&aot_bundle,
+                                            xr_compiler_session_target_data_layout(session))) {
         fprintf(stderr, "Error: failed to set AOT target data layout\n");
         goto fail_free_ir;
     }

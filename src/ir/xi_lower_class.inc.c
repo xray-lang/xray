@@ -203,7 +203,8 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
         out_idx++;
     }
 
-    xr_aggregate_layout_compute(layout);
+    if (!xr_aggregate_layout_compute(layout, xi_lower_target_data_layout(l)))
+        return NULL;
     return layout;
 }
 

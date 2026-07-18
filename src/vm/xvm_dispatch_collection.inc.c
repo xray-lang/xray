@@ -483,7 +483,7 @@ vmcase(OP_ARRAY_GET) {
         int64_t idx = XR_TO_INT(R(c));
         if ((uint64_t) idx < (uint64_t) ecount) {
             uint8_t *bp = (uint8_t *) obj_val.ptr;
-            uint8_t es = xr_native_type_size(etype);
+            uint8_t es = xr_native_type_size(xr_target_data_layout_host(), etype);
             uint8_t *ep = bp + idx * es;
             switch (etype) {
                 case XR_NATIVE_I64:
@@ -587,7 +587,7 @@ vmcase(OP_ARRAY_GETC) {
         uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
         if ((unsigned) c < (unsigned) ecount) {
             uint8_t *base_ptr = (uint8_t *) obj_val.ptr;
-            uint8_t es = xr_native_type_size(etype);
+            uint8_t es = xr_native_type_size(xr_target_data_layout_host(), etype);
             uint8_t *ep = base_ptr + c * es;
             switch (etype) {
                 case XR_NATIVE_I64:
@@ -707,7 +707,7 @@ vmcase(OP_ARRAY_SET) {
         int64_t idx = XR_TO_INT(R(b));
         if ((uint64_t) idx < (uint64_t) ecount) {
             uint8_t *bp = (uint8_t *) obj_val.ptr;
-            uint8_t es = xr_native_type_size(etype);
+            uint8_t es = xr_native_type_size(xr_target_data_layout_host(), etype);
             uint8_t *ep = bp + idx * es;
             XrValue _av = R(c);
             switch (etype) {
@@ -822,7 +822,7 @@ vmcase(OP_ARRAY_SETC) {
         uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
         if ((unsigned) b < (unsigned) ecount) {
             uint8_t *bp = (uint8_t *) obj_val.ptr;
-            uint8_t es = xr_native_type_size(etype);
+            uint8_t es = xr_native_type_size(xr_target_data_layout_host(), etype);
             uint8_t *ep = bp + b * es;
             XrValue _acv = R(c);
             switch (etype) {
@@ -2105,7 +2105,7 @@ vmcase(OP_INDEX_GET) {
         int64_t idx = XR_TO_INT(key_val);
         if ((uint64_t) idx < (uint64_t) ecount) {
             uint8_t *base_ptr = (uint8_t *) obj_val.ptr;
-            uint8_t es = xr_native_type_size(etype);
+            uint8_t es = xr_native_type_size(xr_target_data_layout_host(), etype);
             uint8_t *ep = base_ptr + idx * es;
             switch (etype) {
                 case XR_NATIVE_I64:
@@ -2281,7 +2281,7 @@ vmcase(OP_INDEX_SET) {
         int64_t idx = XR_TO_INT(key_val);
         if ((uint64_t) idx < (uint64_t) ecount) {
             uint8_t *base_ptr = (uint8_t *) obj_val.ptr;
-            uint8_t es = xr_native_type_size(etype);
+            uint8_t es = xr_native_type_size(xr_target_data_layout_host(), etype);
             uint8_t *ep = base_ptr + idx * es;
             switch (etype) {
                 case XR_NATIVE_I64:
@@ -2471,7 +2471,7 @@ vmcase(OP_SLICE) {
         uint8_t native_type = XR_ARRAY_REF_ELEM_TYPE(source);
         uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(source);
         xr_array_normalize_slice(elem_count, &start, &end);
-        uint8_t elem_size = xr_native_type_size(native_type);
+        uint8_t elem_size = xr_native_type_size(xr_target_data_layout_host(), native_type);
         XrSpanView *span = VM_SPAN_SLOT(R(c + 2));
         span->data = (source.ptr && end > start)
                          ? (uint8_t *) source.ptr + (size_t) start * (size_t) elem_size

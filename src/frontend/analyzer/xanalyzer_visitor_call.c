@@ -2260,7 +2260,8 @@ static XrType *xa_mem_layout_return_type(XaInferContext *ctx, AstNode *node, Cal
         return xr_type_new_error(NULL);
     uint32_t size = 0;
     uint32_t align = 0;
-    if (!xr_type_has_static_layout(target, &size, &align)) {
+    if (!xr_type_has_static_layout(xa_analyzer_target_data_layout(ctx->analyzer), target, &size,
+                                   &align)) {
         char msg[256];
         snprintf(msg, sizeof(msg),
                  "mem.%s<T>() requires T to have a static C-compatible layout, got '%s'", member,
@@ -2281,7 +2282,8 @@ static XrType *xa_mem_layout_return_type(XaInferContext *ctx, AstNode *node, Cal
         }
         const char *field = field_arg->as.literal.raw_value.string_val;
         uint32_t offset = 0;
-        if (!xr_type_has_static_field_offset(target, field, &offset)) {
+        if (!xr_type_has_static_field_offset(xa_analyzer_target_data_layout(ctx->analyzer), target,
+                                             field, &offset)) {
             char msg[256];
             snprintf(msg, sizeof(msg), "mem.offsetOf<T>(): field '%s' not found in '%s'", field,
                      xr_type_to_string(target));

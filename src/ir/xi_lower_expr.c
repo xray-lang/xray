@@ -1519,7 +1519,7 @@ static XiValue *lower_mem_layout_call(XiLower *l, AstNode *node, CallExprNode *c
     target = xi_lower_type_or_any(l, target, "mem layout type argument", node->line);
     uint32_t size = 0;
     uint32_t align = 0;
-    if (!xr_type_has_static_layout(target, &size, &align))
+    if (!xr_type_has_static_layout(xi_lower_target_data_layout(l), target, &size, &align))
         return NULL;
 
     uint32_t value = 0;
@@ -1550,8 +1550,9 @@ static XiValue *lower_mem_layout_call(XiLower *l, AstNode *node, CallExprNode *c
             call->arguments[0]->type != AST_LITERAL_STRING ||
             !call->arguments[0]->as.literal.raw_value.string_val)
             return NULL;
-        if (!xr_type_has_static_field_offset(
-                target, call->arguments[0]->as.literal.raw_value.string_val, &value))
+        if (!xr_type_has_static_field_offset(xi_lower_target_data_layout(l), target,
+                                             call->arguments[0]->as.literal.raw_value.string_val,
+                                             &value))
             return NULL;
     }
 
@@ -2158,19 +2159,20 @@ static struct XrType *xi_lower_struct_field_type(XiLower *l, struct XrType *fall
 
 /* Byte size of a raw pointer's pointee, for scaling p[i] / p.offset(i). C
  * pointer arithmetic on Ptr<T> advances by sizeof(T), matching `T*`. */
-static int64_t xi_pointer_pointee_size(struct XrType *ptr_type) {
+static int64_t xi_pointer_pointee_size(XiLower *l, struct XrType *ptr_type) {
     if (!ptr_type || !XR_TYPE_IS_POINTER(ptr_type))
         return 1;
     struct XrType *pointee = ptr_type->container.element_type;
     if (!pointee)
         return 1;
     if (pointee->native_width != 0)
-        return (int64_t) xr_native_type_size(pointee->native_width);
+        return (int64_t) xr_native_type_size(xi_lower_target_data_layout(l), pointee->native_width);
     switch (pointee->kind) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
-        case XR_KIND_POINTER:
             return 8;
+        case XR_KIND_POINTER:
+            return (int64_t) xi_lower_target_data_layout(l)->pointer.size;
         case XR_KIND_BOOL:
             return 1;
         default:
@@ -2301,7 +2303,7 @@ static uint8_t xi_pointer_pointee_ffi(struct XrType *ptr_type) {
 static XiValue *xi_lower_ptr_scaled_addr(XiLower *l, AstNode *node, XiValue *ptr, XiValue *idx,
                                          struct XrType *ptr_type, struct XrType *addr_type) {
     XiValue *scaled = idx;
-    int64_t size = xi_pointer_pointee_size(ptr_type);
+    int64_t size = xi_pointer_pointee_size(l, ptr_type);
     if (size != 1) {
         XiValue *sz = xi_const_int(l->func, l->cur_block, size, l->type_int);
         XiValue *mul = xi_value_new(l->func, l->cur_block, XI_MUL, l->type_int, 2);
@@ -5391,7 +5393,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             }
             if (strcmp(ma->name, "copyFromNonOverlapping") == 0 && n == 2) {
                 XiValue *byte_count = arg_vals[1];
-                int64_t size = xi_pointer_pointee_size(recv->type);
+                int64_t size = xi_pointer_pointee_size(l, recv->type);
                 if (size != 1) {
                     XiValue *sz = xi_const_int(l->func, l->cur_block, size, l->type_int);
                     XiValue *mul = xi_value_new(l->func, l->cur_block, XI_MUL, l->type_int, 2);

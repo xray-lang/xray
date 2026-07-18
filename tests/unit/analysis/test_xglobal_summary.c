@@ -9041,14 +9041,14 @@ TEST(global_evidence_class_layout_uses_selected_target_abi) {
                                  .instance_slot = 0,
                                  .semantic_kind = XG_CLASS_FIELD_TYPE_ISIZE,
                                  .native_width = XR_NATIVE_ISIZE};
-    XaotTargetDataLayout ilp32;
-    XaotTargetDataLayout lp64;
+    XrTargetDataLayout ilp32;
+    XrTargetDataLayout lp64;
     XaotBundle bundle;
     const XaotClassFieldPlan *field_plan;
     const XaotClassLayoutPlan *class_plan;
 
-    ASSERT_TRUE(xaot_target_data_layout_init_ilp32(&ilp32));
-    ASSERT_TRUE(xaot_target_data_layout_init_lp64(&lp64));
+    ASSERT_TRUE(xr_target_data_layout_init_ilp32(&ilp32));
+    ASSERT_TRUE(xr_target_data_layout_init_lp64(&lp64));
     xg_global_evidence_init(&ev, key);
     ASSERT_NOT_NULL(xg_global_evidence_add_class(&ev, &cls));
     ASSERT_NOT_NULL(xg_global_evidence_add_class_field(&ev, &field));
