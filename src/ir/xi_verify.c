@@ -954,6 +954,42 @@ static XrCallArgAccess verify_expected_arg_access(XrParamMode mode) {
     }
 }
 
+static bool verify_call_plan_receiver(VerifyCtx *ctx, const XiFunc *f, const XiValue *call,
+                                      const XiCallArgPlan *receiver) {
+    XiValue *place = receiver->place;
+    bool receiver_mode =
+        receiver->param_mode == XR_PARAM_IN || receiver->param_mode == XR_PARAM_REF;
+    if (!receiver_mode || receiver->access != XR_CALL_ARG_VALUE || !receiver->addressable ||
+        receiver->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
+        receiver->escape != XI_PLACE_ESCAPE_NONE || !place || place != call->args[0] ||
+        !verify_is_call_bound_place(place)) {
+        verr(ctx, "func '%s': call v%u receiver is not a verified nonescaping call-bound place",
+             f->name, call->id);
+        return false;
+    }
+    if (place->op == XI_LOCAL_ADDR) {
+        if (place->nargs != 1 || !place->args[0] ||
+            (receiver->origin != XI_PLACE_ORIGIN_STACK_LOCAL &&
+             receiver->origin != XI_PLACE_ORIGIN_PROJECTION_TEMP)) {
+            verr(ctx, "func '%s': call v%u receiver has invalid local-place origin", f->name,
+                 call->id);
+            return false;
+        }
+        bool source_var = receiver->origin == XI_PLACE_ORIGIN_STACK_LOCAL;
+        if (source_var != xi_var_id_is_valid(receiver->origin_var_id) ||
+            (source_var && receiver->origin_var_id >= f->source_var_count)) {
+            verr(ctx, "func '%s': call v%u receiver has inconsistent local origin variable",
+                 f->name, call->id);
+            return false;
+        }
+    } else if (receiver->origin != XI_PLACE_ORIGIN_PARAM ||
+               !xi_var_id_is_valid(receiver->origin_var_id)) {
+        verr(ctx, "func '%s': call v%u receiver has invalid parameter origin", f->name, call->id);
+        return false;
+    }
+    return true;
+}
+
 static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -1004,42 +1040,8 @@ static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
             bool saw_place = false;
             if (plan->has_receiver) {
                 const XiCallArgPlan *receiver = &plan->receiver;
-                XiValue *place = receiver->place;
-                bool receiver_mode =
-                    receiver->param_mode == XR_PARAM_IN || receiver->param_mode == XR_PARAM_REF;
-                if (!receiver_mode || receiver->access != XR_CALL_ARG_VALUE ||
-                    !receiver->addressable || receiver->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
-                    receiver->escape != XI_PLACE_ESCAPE_NONE || !place || place != v->args[0] ||
-                    !verify_is_call_bound_place(place)) {
-                    verr(ctx,
-                         "func '%s': call v%u receiver is not a verified nonescaping "
-                         "call-bound place",
-                         f->name, v->id);
+                if (!verify_call_plan_receiver(ctx, f, v, receiver))
                     return;
-                }
-                if (place->op == XI_LOCAL_ADDR) {
-                    if (place->nargs != 1 || !place->args[0] ||
-                        (receiver->origin != XI_PLACE_ORIGIN_STACK_LOCAL &&
-                         receiver->origin != XI_PLACE_ORIGIN_PROJECTION_TEMP)) {
-                        verr(ctx, "func '%s': call v%u receiver has invalid local-place origin",
-                             f->name, v->id);
-                        return;
-                    }
-                    bool source_var = receiver->origin == XI_PLACE_ORIGIN_STACK_LOCAL;
-                    if (source_var != xi_var_id_is_valid(receiver->origin_var_id) ||
-                        (source_var && receiver->origin_var_id >= f->source_var_count)) {
-                        verr(ctx,
-                             "func '%s': call v%u receiver has inconsistent local origin "
-                             "variable",
-                             f->name, v->id);
-                        return;
-                    }
-                } else if (receiver->origin != XI_PLACE_ORIGIN_PARAM ||
-                           !xi_var_id_is_valid(receiver->origin_var_id)) {
-                    verr(ctx, "func '%s': call v%u receiver has invalid parameter origin", f->name,
-                         v->id);
-                    return;
-                }
                 saw_place = true;
             }
             for (uint16_t a = 0; a < plan->nargs; a++) {
