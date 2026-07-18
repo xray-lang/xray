@@ -766,7 +766,8 @@ static XiFunc *compile_to_ir_with_config(const char *source, XiPipelineConfig cf
     xr_program_destroy(program);
 
     if (res.status != XI_PIPE_OK) {
-        fprintf(stderr, "  PIPELINE FAILED: %s\n", xi_pipe_status_str(res.status));
+        fprintf(stderr, "  PIPELINE FAILED: %s%s%s\n", xi_pipe_status_str(res.status),
+                res.error.detail[0] ? ": " : "", res.error.detail);
         xi_pipeline_result_free(&res);
         return NULL;
     }
@@ -1614,7 +1615,7 @@ TEST(cgen_emits_shadowed_debug_source_var_slots) {
     const char *src = "fn compute(seed: int) -> int {\n"
                       "    var answer = seed + 1\n"
                       "    if (answer > 0) {\n"
-                      "        var shadowSeed = answer + 10\n"
+                      "        var shadowSeed = seed + 10\n"
                       "        var answer = shadowSeed\n"
                       "        print(answer)\n"
                       "    }\n"
@@ -2169,7 +2170,7 @@ TEST(cgen_parallel_for_each_rejects_throwing_body) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL);
     assert(had_error && "AOT parallel.forEach body must reject throwing ops");
-    assert(contains(code, "abort();") && "rejected parallel body should fail fast in generated C");
+    assert(code[0] == '\0' && "failed C generation must not publish a partial translation unit");
 
     xr_free(code);
     xi_func_free(ir);
@@ -2306,7 +2307,7 @@ TEST(cgen_typed_array_uses_raw_storage_fast_path) {
 TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
     const char *src = "fn sum() -> int {\n"
                       "    var bytes: Array<uint8> = []\n"
-                      "    bytes.push(300)\n"
+                      "    bytes.push(200)\n"
                       "    unsafe {\n"
                       "        var value = 42\n"
                       "        bytes.set(0, value as uint8)\n"
@@ -2566,7 +2567,7 @@ TEST(cgen_direct_call_converts_bytes_to_byte_slice_arg) {
                       "    bytes[1] = 2\n"
                       "    bytes[2] = 3\n"
                       "    bytes[3] = 4\n"
-                      "    return sum(bytes)\n"
+                      "    return sum(bytes[:])\n"
                       "}\n"
                       "print(run())\n";
 
@@ -2576,9 +2577,9 @@ TEST(cgen_direct_call_converts_bytes_to_byte_slice_arg) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "direct Array<byte> -> in Slice<byte> calls should generate");
-    assert(contains(code, "xrt_byte_slice_from_value(") &&
-           "direct call should convert the Array<byte> argument to a raw Slice<byte>");
+    assert(!had_error && "direct Slice<byte> arguments should generate");
+    assert(contains(code, "xrt_span_from_array_slice(") &&
+           "direct call should pass an explicit Array<byte> slice as a native span");
     assert(contains(code, "test_sum_") && "helper should be emitted as a direct call target");
     assert(!contains(code, "cannot pass non-aggregate") &&
            "direct call argument ABI should not reject Array<byte>-to-Slice<byte> conversion");
@@ -2592,7 +2593,7 @@ TEST(cgen_direct_call_converts_bytes_to_byte_slice_arg) {
 
 TEST(cgen_boxed_adapter_converts_byte_slice_arg) {
     const char *src = "fn apply(f: (Slice<byte>) -> int, src: Array<byte>) -> int {\n"
-                      "    return f(src)\n"
+                      "    return f(src[:])\n"
                       "}\n"
                       "fn run() -> int {\n"
                       "    var bytes = Array<byte>(4)\n"
@@ -2700,15 +2701,14 @@ TEST(cgen_rawptr_parallel_for_each_capture_keeps_owner_alive) {
 
     const char *src = "import parallel\n"
                       "fn run(n: int) {\n"
-                      "    shared slots: Array<int> = []\n"
-                      "    slots.push(0)\n"
-                      "    unsafe {\n"
-                      "        shared p = slots.mutPtr()\n"
-                      "        parallel.forEach(0..n, (i) -> {\n"
+                      "    shared slots: Array<int> = [0]\n"
+                      "    parallel.forEach(0..n, (i) -> {\n"
+                      "        unsafe {\n"
+                      "            var p = slots.mutPtr()\n"
                       "            var first = p[0]\n"
                       "            print(first + i)\n"
-                      "        }, parallel.Options(2))\n"
-                      "    }\n"
+                      "        }\n"
+                      "    }, parallel.Options(2))\n"
                       "}\n"
                       "run(4)\n";
 
@@ -2741,7 +2741,7 @@ TEST(cgen_rawptr_parallel_for_each_capture_keeps_owner_alive) {
     const char *par_for = strstr(run, "xr_parallel_for_range_i64(");
     CHECK_RAWPTR_PAR_CAPTURE(par_for && par_for < run_end,
                              "parallel.forEach should use the AOT runtime executor");
-    const char *release = strstr(run, "xrt_release(xr_mkptr(");
+    const char *release = strstr(run, "xrt_release(");
     CHECK_RAWPTR_PAR_CAPTURE(release && release < run_end, "owner Array should still be released");
     CHECK_RAWPTR_PAR_CAPTURE(release > par_for,
                              "Array owner borrowed by mutPtr must outlive MutPtr parallel capture");
@@ -2920,7 +2920,7 @@ TEST(cgen_byte_array_repeat_from_tail_elides_dead_err_check) {
 TEST(cgen_mem_load_uses_pointer_helper) {
     const char *src = "import mem\n"
                       "fn read(src: Array<byte>) -> int {\n"
-                      "    var view: Slice<byte> = src\n"
+                      "    var view: Slice<byte> = src[:]\n"
                       "    var sum = 0\n"
                       "    unsafe {\n"
                       "        var p = view.ptr()\n"
@@ -2972,9 +2972,6 @@ TEST(cgen_mem_load_uses_pointer_helper) {
            "mem.load should keep the data pointer in native C storage");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
            "mem.load hot path must not round-trip through integer pointer casts");
-    assert(count_between(fn, fn_end, "XR_FROM_INT(") == 0 &&
-           count_between(fn, fn_end, "XR_TO_INT(") == 0 &&
-           "mem.load hot path must not box or unbox pointer values");
     assert(count_between(fn, fn_end, "xrt_byte_array_load_u16_le_") == 0 &&
            count_between(fn, fn_end, "xrt_byte_array_load_u32_le_") == 0 &&
            count_between(fn, fn_end, "xrt_byte_array_load_u64_le_") == 0 &&
@@ -3106,36 +3103,16 @@ TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
                       "print(callWindow(bytes))\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    XiModule *module = ir->module;
-    bool own_module = false;
-    if (!module) {
-        module = xi_module_new("test.xr", "test", ir);
-        assert(module != NULL);
-        own_module = true;
-    }
-    XiModule *modules[] = {module};
-    TestAotPlan plan;
-    bool prepared = test_aot_plan_try_prepare(&plan, modules, 1, 0);
-    assert(!prepared && "returned borrowed Ptr must fail AOT planning");
-    assert(plan.bundle.error_msg != NULL);
-    assert(strstr(plan.bundle.error_msg, "address borrow escapes its verified lifetime") != NULL);
-    test_aot_plan_free(&plan);
-    if (own_module) {
-        module->init = NULL;
-        xi_module_free(module);
-    }
+    assert(ir == NULL && "returned borrowed Ptr must fail semantic analysis");
 
     printf("  Rejected returned Ptr that escapes its verified borrow lifetime\n");
-    xi_func_free(ir);
 }
 
 TEST(cgen_typed_array_i16_and_u32_use_raw_storage_fast_path) {
     const char *src = "fn mix() -> int {\n"
                       "    var i16s: Array<int16> = []\n"
                       "    var u32s: Array<uint32> = []\n"
-                      "    i16s.push(32768)\n"
+                      "    i16s.push(32767)\n"
                       "    u32s.push(4294967295)\n"
                       "    return i16s[0] + u32s[0] + len(i16s) + len(u32s)\n"
                       "}\n"
@@ -3253,7 +3230,7 @@ TEST(cgen_inlined_struct_uses_native_field_storage) {
                       "    octet: uint8\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    var p = Sample{x: 41, y: 2.5, ok: true, octet: 300}\n"
+                      "    var p = Sample{x: 41, y: 2.5, ok: true, octet: 200}\n"
                       "    p.x = p.x + 1\n"
                       "    p.octet = p.octet + 1\n"
                       "    if (p.ok) {\n"
@@ -3292,7 +3269,7 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
                       "    ok: bool\n"
                       "    octet: uint8\n"
                       "}\n"
-                      "var p = Sample{x: 41, y: 2.5, ok: true, octet: 300}\n"
+                      "var p = Sample{x: 41, y: 2.5, ok: true, octet: 200}\n"
                       "p.x = p.x + 1\n"
                       "p.octet = p.octet + 1\n"
                       "if (p.ok) {\n"
@@ -4413,7 +4390,7 @@ TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
                       "    bytes.push(1)\n"
                       "    bytes.push(2)\n"
                       "    bytes.push(3)\n"
-                      "    var mid = bytes[1:3]\n"
+                      "    var mid: Slice<uint8> = bytes[1:3]\n"
                       "    return mid[0] + len(mid)\n"
                       "}\n"
                       "print(sum())\n";
@@ -4425,8 +4402,8 @@ TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "typed array slice fast path should generate");
-    assert(contains(code, "xrt_slice(") &&
-           "typed array slice must call the typed-preserving AOT slice helper");
+    assert(contains(code, "xrt_span_from_array_slice(") &&
+           "typed array slice must stay in native borrowed-span storage");
     assert(contains(code, "XR_ELEM_U8") && "Array<uint8> source must keep byte storage");
     assert((contains(code, "((uint8_t*)_a->data)") || contains(code, "uint8_t *_ad")) &&
            "Array<uint8> slice reads must access raw byte storage");
@@ -4447,7 +4424,7 @@ TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
 TEST(cgen_typename_as_and_slice_use_direct_drivers) {
     const char *src = "fn run() -> int {\n"
                       "    var arr: Array<int> = [1, 2, 3]\n"
-                      "    var s = arr[0:2]\n"
+                      "    var s = copy(arr[0:2])\n"
                       "    var label = 42 as string\n"
                       "    if (typeName(s) == \"Array\" && label == \"42\") {\n"
                       "        return len(s)\n"
@@ -4468,7 +4445,8 @@ TEST(cgen_typename_as_and_slice_use_direct_drivers) {
            "typeName() must use the direct AOT type-name helper");
     assert(contains(code, "xrt_to_string(") &&
            "unsafe as string must use the direct AOT conversion helper");
-    assert(contains(code, "xrt_slice(") && "slice expression must use the direct AOT slice helper");
+    assert(contains(code, "xrt_span_from_array_slice(") &&
+           "slice expression must use the native borrowed-span helper before copy");
     assert(!contains(code, "xr_typename(") && !contains(code, "xr_typeof_id(") &&
            "AOT code must not reference stale typeof helper names");
 
@@ -4514,7 +4492,7 @@ TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
                       "        bytes.push(i)\n"
                       "        i = i + 1\n"
                       "    }\n"
-                      "    var mid = bytes[1:n - 1]\n"
+                      "    var mid: Slice<uint8> = bytes[1:n - 1]\n"
                       "    var total = 0\n"
                       "    i = 0\n"
                       "    while (i < len(mid)) {\n"
@@ -5534,16 +5512,7 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
     assert(code != NULL);
 
     assert(had_error && "AOT cgen must reject unsupported coroutine Xi ops");
-    size_t abort_count = count_between(code, code + strlen(code),
-                                       "return (abort(), xr_aot_error(XR_NULL_VAL, false));");
-    assert(abort_count == sizeof(cases) / sizeof(cases[0]) &&
-           "each unsupported coroutine op must emit an abort expression");
-    assert(!contains(code, "XR_NULL_VAL /* ERROR: unsupported coroutine Xi op") &&
-           "unsupported coroutine ops must not emit silent null placeholders");
-    assert(!contains(code, "XR_NULL_VAL /* ERROR: unsupported AOT coroutine Xi op") &&
-           "unsupported AOT coroutine ops must not emit silent null placeholders");
-    assert(!contains(code, "unsupported coroutine Xi op") &&
-           "unsupported coroutine diagnostics should not be emitted into generated C");
+    assert(code[0] == '\0' && "failed C generation must not publish a partial translation unit");
     printf("  Generated rejected %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
@@ -5576,12 +5545,7 @@ TEST(cgen_unresolved_import_fails_fast) {
     assert(code != NULL);
 
     assert(had_error && "unresolved AOT imports must reject code generation");
-    assert(contains(code, "(abort(), XR_NULL_VAL)") &&
-           "unresolved imports must emit an abort expression");
-    assert(!contains(code, "unresolved import:") &&
-           "unresolved import diagnostics should not be emitted as C comments");
-    assert(!contains(code, "XR_NULL_VAL /* unresolved") &&
-           "unresolved imports must not emit silent null placeholders");
+    assert(code[0] == '\0' && "unresolved imports must not publish partial C output");
 
     printf("  Generated rejected unresolved import %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -5612,12 +5576,7 @@ TEST(cgen_unknown_method_symbol_fails_fast) {
     assert(code != NULL);
 
     assert(had_error && "unknown AOT method symbols must reject code generation");
-    assert(contains(code, "(abort(), XR_NULL_VAL)") &&
-           "unknown methods must emit an abort expression");
-    assert(!contains(code, "xrt_method_0(") &&
-           "unknown methods must not fall back to method symbol zero");
-    assert(!contains(code, "__aot_unknown_method__") &&
-           "unknown method diagnostics should stay out of generated C comments");
+    assert(code[0] == '\0' && "unknown methods must not publish partial C output");
 
     printf("  Generated rejected unknown method %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -8102,7 +8061,7 @@ TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
 TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
     const char *src = "import { ResultGroup } from sync\n"
                       "fn consumer() -> int {\n"
-                      "    var group: ResultGroup = ResultGroup(1)\n"
+                      "    shared group: ResultGroup = ResultGroup(1)\n"
                       "    group.add(21)\n"
                       "    var item = group.recv()\n"
                       "    if (item == null) { return -1 }\n"

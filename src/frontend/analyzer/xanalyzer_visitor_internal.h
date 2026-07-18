@@ -50,6 +50,8 @@ XR_FUNC void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **stmts,
                                                        int count);
 XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, int line);
+XR_FUNC XaSymbol *xa_visit_bind_parameter_symbol(XaInferContext *ctx, XrParamNode *param,
+                                                 int fallback_line);
 XR_FUNC bool xa_propagate_receiver_mutations_for_ast(XaAnalyzer *analyzer, AstNode *node);
 XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_apply_param_storage_requirements_to_scope(XaInferContext *ctx,

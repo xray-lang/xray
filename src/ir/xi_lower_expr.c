@@ -2401,7 +2401,9 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
 
     /* FFI raw pointer subscript p[i] => XI_PTR_LOAD(p + i*sizeof(T)). */
     if (obj->type && XR_TYPE_IS_POINTER(obj->type)) {
-        struct XrType *result_type = xi_lower_node_type(l, node);
+        struct XrType *result_type = obj->type->container.element_type;
+        if (!result_type || XR_TYPE_IS_UNKNOWN(result_type))
+            result_type = xi_lower_node_type(l, node);
         XiValue *addr = xi_lower_ptr_scaled_addr(l, node, obj, idx, obj->type, obj->type);
         if (!addr)
             return NULL;
@@ -5513,7 +5515,14 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             ma->name && n == 0 &&
             (strcmp(ma->name, "ptr") == 0 ||
              (recv->type->kind != XR_KIND_FIXED_ARRAY && strcmp(ma->name, "mutPtr") == 0))) {
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_ARRAY_DATA_PTR, result_type, 1);
+            struct XrType *pointer_type = result_type;
+            if (!pointer_type || !XR_TYPE_IS_POINTER(pointer_type)) {
+                struct XrType *element_type = xi_get_container_elem_type(recv->type);
+                pointer_type = xr_type_new_pointer(
+                    l->isolate, element_type ? element_type : xr_type_new_unknown(l->isolate),
+                    strcmp(ma->name, "mutPtr") == 0);
+            }
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_ARRAY_DATA_PTR, pointer_type, 1);
             if (!v)
                 return NULL;
             v->args[0] = recv;
@@ -5524,9 +5533,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         /* FFI raw pointer methods: deref()/offset(i), copy, and isNull(). */
         if (recv->type && XR_TYPE_IS_POINTER(recv->type) && ma->name) {
             if (strcmp(ma->name, "deref") == 0 && n == 0) {
+                struct XrType *pointee_type = recv->type->container.element_type;
+                if (!pointee_type || XR_TYPE_IS_UNKNOWN(pointee_type))
+                    pointee_type = result_type;
                 XiValue *endian =
                     xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 2);
+                XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, pointee_type, 2);
                 if (!v)
                     return NULL;
                 v->args[0] = recv;

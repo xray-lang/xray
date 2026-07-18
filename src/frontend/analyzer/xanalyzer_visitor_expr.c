@@ -4565,10 +4565,9 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         for (int i = 0; i < fn->param_count; i++) {
             XrParamNode *p = fn->params[i];
             if (p && p->name) {
-                XaSymbol *param_sym = xa_symbol_new(p->name, XA_SYM_PARAMETER);
-                param_sym->location.line = p->line > 0 ? p->line : node->line;
-                xa_visit_add_symbol_checked(ctx, param_sym, 0);
-                p->symbol_id = param_sym->id;
+                XaSymbol *param_sym = xa_visit_bind_parameter_symbol(ctx, p, node->line);
+                if (!param_sym)
+                    continue;
                 XaSymbolLinks *pl = xa_analyzer_get_links(ctx->analyzer, param_sym);
                 pl->type = param_types ? param_types[i] : xr_type_new_unknown(NULL);
                 param_sym->passing_mode = param_modes ? param_modes[i] : p->passing_mode;
