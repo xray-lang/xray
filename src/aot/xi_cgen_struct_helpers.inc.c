@@ -2337,17 +2337,14 @@ static void emit_struct_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         const XaotValuePlan *load_plan = cg_value_plan(ctx, place_load);
         const char *c_type =
             load_plan && load_plan->rep.kind == XAOT_VALUE_AGGREGATE ? load_plan->rep.c_type : NULL;
-        char fallback_type[128];
-        if (!c_type) {
-            xaot_struct_c_type_name(fallback_type, sizeof(fallback_type), "abi", sl);
-            c_type = fallback_type;
+        if (c_type) {
+            char field_name[128];
+            cg_struct_field_c_name(sl, idx, field_name, sizeof(field_name));
+            fprintf(out, "(*(%s *)(", c_type);
+            emit_value_as_rep_ctx(ctx, out, place_load->args[0], XR_REP_RAWPTR);
+            fprintf(out, ")).%s", field_name);
+            return;
         }
-        char field_name[128];
-        cg_struct_field_c_name(sl, idx, field_name, sizeof(field_name));
-        fprintf(out, "(*(%s *)(", c_type);
-        emit_value_as_rep_ctx(ctx, out, place_load->args[0], XR_REP_RAWPTR);
-        fprintf(out, ")).%s", field_name);
-        return;
     }
     const XrAggregateLayout *static_layout = NULL;
     int64_t static_slot = -1;
