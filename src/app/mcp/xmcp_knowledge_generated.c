@@ -1655,82 +1655,82 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     },
     {
         .name = "Json.containsKey",
-        .signature = "(obj: Json, key: string): bool",
+        .signature = "(obj: Json, key: string): bool @no_alloc",
         .summary = "",
     },
     {
         .name = "Json.encode",
-        .signature = "(value: T): Json",
+        .signature = "(value: T): Json @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.entries",
-        .signature = "(): Array<(string, Json)>",
+        .signature = "(): Array<(string, Json)> @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.entries",
-        .signature = "(obj: Json): Array<(string, Json)>",
+        .signature = "(obj: Json): Array<(string, Json)> @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.entriesIterator",
-        .signature = "(): Iterator<(string, Json)>",
+        .signature = "(): Iterator<(string, Json)> @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.get",
-        .signature = "(obj: Json, key: string, default?: T): Json",
+        .signature = "(obj: Json, key: string, default?: T): Json @no_alloc",
         .summary = "",
     },
     {
         .name = "Json.isValid",
-        .signature = "(text: string, strict?: bool): bool",
+        .signature = "(text: string, strict?: bool): bool @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.iterator",
-        .signature = "(): Iterator<string>",
+        .signature = "(): Iterator<string> @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.keys",
-        .signature = "(): Array<string>",
+        .signature = "(): Array<string> @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.keys",
-        .signature = "(obj: Json): Array<string>",
+        .signature = "(obj: Json): Array<string> @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.parse",
-        .signature = "(text: string): Json",
+        .signature = "(text: string): Json @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.stringify",
-        .signature = "(value: T, indent?: int): string",
+        .signature = "(value: T, indent?: int): string @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.toString",
-        .signature = "(): string",
+        .signature = "(): string @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.tryParse",
-        .signature = "(text: string): Json",
+        .signature = "(text: string): Json @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.values",
-        .signature = "(): Array<Json>",
+        .signature = "(): Array<Json> @may_alloc",
         .summary = "",
     },
     {
         .name = "Json.values",
-        .signature = "(obj: Json): Array<Json>",
+        .signature = "(obj: Json): Array<Json> @may_alloc",
         .summary = "",
     },
 };
@@ -2854,37 +2854,37 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "Regex.find",
-        .signature = "(text: string): RegexMatch?",
+        .signature = "(text: string): RegexMatch? @may_alloc",
         .summary = "",
     },
     {
         .name = "Regex.findAll",
-        .signature = "(text: string, limit?: int): Array<RegexMatch>",
+        .signature = "(text: string, limit?: int): Array<RegexMatch> @may_alloc",
         .summary = "",
     },
     {
         .name = "Regex.findGroup",
-        .signature = "(text: string, index: int): string?",
+        .signature = "(text: string, index: int): string? @may_alloc",
         .summary = "",
     },
     {
         .name = "Regex.findText",
-        .signature = "(text: string): string?",
+        .signature = "(text: string): string? @may_alloc",
         .summary = "",
     },
     {
         .name = "Regex.replace",
-        .signature = "(text: string, replacement: string): string",
+        .signature = "(text: string, replacement: string): string @may_alloc",
         .summary = "",
     },
     {
         .name = "Regex.split",
-        .signature = "(text: string, limit?: int): Array<string>",
+        .signature = "(text: string, limit?: int): Array<string> @may_alloc",
         .summary = "",
     },
     {
         .name = "Regex.test",
-        .signature = "(text: string): bool",
+        .signature = "(text: string): bool @no_alloc",
         .summary = "",
     },
     {
@@ -6331,22 +6331,22 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Json` | `Json` |  |\n"
-            "| `Json.containsKey` | `(obj: Json, key: string): bool` |  |\n"
-            "| `Json.encode` | `(value: T): Json` |  |\n"
-            "| `Json.entries` | `(): Array<(string, Json)>` |  |\n"
-            "| `Json.entries` | `(obj: Json): Array<(string, Json)>` |  |\n"
-            "| `Json.entriesIterator` | `(): Iterator<(string, Json)>` |  |\n"
-            "| `Json.get` | `(obj: Json, key: string, default?: T): Json` |  |\n"
-            "| `Json.isValid` | `(text: string, strict?: bool): bool` |  |\n"
-            "| `Json.iterator` | `(): Iterator<string>` |  |\n"
-            "| `Json.keys` | `(): Array<string>` |  |\n"
-            "| `Json.keys` | `(obj: Json): Array<string>` |  |\n"
-            "| `Json.parse` | `(text: string): Json` |  |\n"
-            "| `Json.stringify` | `(value: T, indent?: int): string` |  |\n"
-            "| `Json.toString` | `(): string` |  |\n"
-            "| `Json.tryParse` | `(text: string): Json` |  |\n"
-            "| `Json.values` | `(): Array<Json>` |  |\n"
-            "| `Json.values` | `(obj: Json): Array<Json>` |  |\n"
+            "| `Json.containsKey` | `(obj: Json, key: string): bool @no_alloc` |  |\n"
+            "| `Json.encode` | `(value: T): Json @may_alloc` |  |\n"
+            "| `Json.entries` | `(): Array<(string, Json)> @may_alloc` |  |\n"
+            "| `Json.entries` | `(obj: Json): Array<(string, Json)> @may_alloc` |  |\n"
+            "| `Json.entriesIterator` | `(): Iterator<(string, Json)> @may_alloc` |  |\n"
+            "| `Json.get` | `(obj: Json, key: string, default?: T): Json @no_alloc` |  |\n"
+            "| `Json.isValid` | `(text: string, strict?: bool): bool @may_alloc` |  |\n"
+            "| `Json.iterator` | `(): Iterator<string> @may_alloc` |  |\n"
+            "| `Json.keys` | `(): Array<string> @may_alloc` |  |\n"
+            "| `Json.keys` | `(obj: Json): Array<string> @may_alloc` |  |\n"
+            "| `Json.parse` | `(text: string): Json @may_alloc` |  |\n"
+            "| `Json.stringify` | `(value: T, indent?: int): string @may_alloc` |  |\n"
+            "| `Json.toString` | `(): string @may_alloc` |  |\n"
+            "| `Json.tryParse` | `(text: string): Json @may_alloc` |  |\n"
+            "| `Json.values` | `(): Array<Json> @may_alloc` |  |\n"
+            "| `Json.values` | `(obj: Json): Array<Json> @may_alloc` |  |\n"
             "",
         .symbols = _symbols_json,
         .symbol_count = (int)(sizeof(_symbols_json) / sizeof(_symbols_json[0])),
@@ -6765,13 +6765,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Regex` | `Regex` |  |\n"
-            "| `Regex.find` | `(text: string): RegexMatch?` |  |\n"
-            "| `Regex.findAll` | `(text: string, limit?: int): Array<RegexMatch>` |  |\n"
-            "| `Regex.findGroup` | `(text: string, index: int): string?` |  |\n"
-            "| `Regex.findText` | `(text: string): string?` |  |\n"
-            "| `Regex.replace` | `(text: string, replacement: string): string` |  |\n"
-            "| `Regex.split` | `(text: string, limit?: int): Array<string>` |  |\n"
-            "| `Regex.test` | `(text: string): bool` |  |\n"
+            "| `Regex.find` | `(text: string): RegexMatch? @may_alloc` |  |\n"
+            "| `Regex.findAll` | `(text: string, limit?: int): Array<RegexMatch> @may_alloc` |  |\n"
+            "| `Regex.findGroup` | `(text: string, index: int): string? @may_alloc` |  |\n"
+            "| `Regex.findText` | `(text: string): string? @may_alloc` |  |\n"
+            "| `Regex.replace` | `(text: string, replacement: string): string @may_alloc` |  |\n"
+            "| `Regex.split` | `(text: string, limit?: int): Array<string> @may_alloc` |  |\n"
+            "| `Regex.test` | `(text: string): bool @no_alloc` |  |\n"
             "| `regex.compile` | `(pattern: string, flags?: string): Regex` | Compile regex pattern |\n"
             "| `regex.count` | `(pattern: Regex, s: string): int` | Count matches |\n"
             "| `regex.escape` | `(s: string): string` | Escape regex special chars |\n"

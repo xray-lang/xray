@@ -3578,8 +3578,9 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
     FREESTANDING_PRELUDE_ENUM_C="$(sed -n 's/^Kept C source: //p' \
         "$FREESTANDING_PRELUDE_ENUM_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_PRELUDE_ENUM_C" ]; then
-        expect_log_contains "$FREESTANDING_PRELUDE_ENUM_C" "freestanding prelude enum namespace" \
-            "freestanding-profile/prelude-enum: uses no-op namespace token"
+        expect_log_not_contains "$FREESTANDING_PRELUDE_ENUM_C" \
+            "freestanding prelude enum namespace" \
+            "freestanding-profile/prelude-enum: elides no-op namespace token"
         expect_log_contains "$FREESTANDING_PRELUDE_ENUM_C" "int64_t" \
             "freestanding-profile/prelude-enum: lowers variants to native ordinal"
         expect_log_not_contains "$FREESTANDING_PRELUDE_ENUM_C" "_ev_Endian" \
@@ -4106,7 +4107,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
     sed 's/^/      /' "$FREESTANDING_NO_ALLOC_HEAP_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_NO_ALLOC_HEAP_LOG" \
-        "@no_alloc function 'xray_no_alloc_heap_reject' allocates via stdlib 'mem.alloc'" \
+        "@no_alloc contract is not satisfied for 'xray_no_alloc_heap_reject': allocates via stdlib 'alloc'" \
         "freestanding-profile/no-alloc: rejects heap allocator use"
 fi
 
@@ -4120,7 +4121,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
     sed 's/^/      /' "$FREESTANDING_NO_ALLOC_RESIZE_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_NO_ALLOC_RESIZE_LOG" \
-        "@no_alloc function 'xray_no_alloc_buffer_resize_reject' allocates via method 'Buffer.resize'" \
+        "@no_alloc contract is not satisfied for 'xray_no_alloc_buffer_resize_reject': allocates via method 'resize'" \
         "freestanding-profile/no-alloc: rejects Buffer.resize allocation"
 fi
 
@@ -4134,7 +4135,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
     sed 's/^/      /' "$FREESTANDING_NO_ALLOC_CALL_LOG" | sed -n '1,120p'
 else
     expect_log_contains "$FREESTANDING_NO_ALLOC_CALL_LOG" \
-        "@no_alloc function 'xray_no_alloc_call_reject' allocates via call 'xray_no_alloc_helper_allocates'" \
+        "@no_alloc contract is not satisfied for 'xray_no_alloc_call_reject': allocates via call 'xray_no_alloc_helper_allocates'" \
         "freestanding-profile/no-alloc: rejects indirect allocator use"
 fi
 
