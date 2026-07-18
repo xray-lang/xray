@@ -1295,9 +1295,13 @@ typedef struct XiFunc {
     bool aot_naked;
     const char *aot_interrupt_abi;
 
-    /* AOT heap-allocation contract: functions marked @no_alloc may use fixed
-     * stack storage but must not emit runtime/heap allocation operations. */
-    bool no_alloc;
+    /* Analyzer-owned allocation proof. Backends consume and verify this
+     * publication; they never re-infer allocation semantics from Xi op names. */
+    uint8_t allocation_state; /* XaAllocState */
+    uint32_t allocation_reason_bits;
+    uint64_t allocation_fingerprint;
+    bool allocation_effect_complete;
+    bool has_no_alloc_contract;
 
     /* True when params[0] is a borrowed method receiver. */
     bool receiver_borrowed;

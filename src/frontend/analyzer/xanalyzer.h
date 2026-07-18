@@ -147,6 +147,10 @@ struct XaAnalyzer {
     // hold only non-owning XaEffectId values into this session-local store.
     XaEffectDatabase *effect_db;
 
+    // Canonical analyzer-owned allocation effects. Function symbols hold only
+    // non-owning XaAllocEffectId values into this session-local store.
+    XaAllocationDatabase *allocation_db;
+
     // Type inference/recovery telemetry. Unknown tracks legacy unresolved inference;
     // ErrorType tracks compiler recovery poison that must not reach executable IR.
     int unresolved_inference_count;

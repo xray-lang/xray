@@ -229,6 +229,13 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
 
         char *signature = dup_range(sig_start, sig_len);
         trim_trailing(signature);
+        XaAllocationContractKind allocation_contract;
+        if (!xa_allocation_contract_parse_suffix(signature, &allocation_contract)) {
+            const char *err = xa_xrd_last_error();
+            xr_free(signature);
+            XR_CHECK_FMT(false, "invalid @native class allocation contract for %s: %s",
+                         member_name ? member_name : "?", err ? err : "unknown error");
+        }
         XaEffectContract effect_contract;
         if (!xa_effect_contract_parse_suffix(signature, &effect_contract)) {
             const char *err = xa_xrd_last_error();
@@ -245,6 +252,7 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         members[count].is_lowered_only = next_member_lowered_only;
         members[count].is_yieldable = false;
         members[count].effect_contract = effect_contract;
+        members[count].allocation_contract = allocation_contract;
         next_member_lowered_only = false;
         count++;
 
@@ -317,7 +325,7 @@ static XrTypeId class_name_to_tid(const char *name, const char **out_display) {
 
 static bool class_name_is_generated_plain_class(const char *name) {
     XR_DCHECK(name != NULL, "class_name_is_generated_plain_class: NULL name");
-    return strcmp(name, "RegexMatch") == 0;
+    return strcmp(name, "RegexMatch") == 0 || strcmp(name, "PanicInfo") == 0;
 }
 
 /* ========== Initialization ========== */

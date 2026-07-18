@@ -2,12 +2,20 @@
 
 @native
 class Set<T: Hashable> {
-    add(value: T)
-    contains(value: T) -> bool
-    delete(value: T) -> bool
-    clear()
-    values() -> Array<T>
-    forEach(fn: (value: T) -> ())
+    add(value: T) @may_alloc
+    contains(value: T) -> bool @no_alloc
+    delete(value: T) -> bool @no_alloc
+    clear() @no_alloc
+    values() -> Array<T> @may_alloc
+    forEach(fn: (value: T) -> ()) @no_alloc
+    union(other: Set<T>) -> Set<T> @may_alloc
+    intersection(other: Set<T>) -> Set<T> @may_alloc
+    difference(other: Set<T>) -> Set<T> @may_alloc
+    symmetricDifference(other: Set<T>) -> Set<T> @may_alloc
+    isSubset(other: Set<T>) -> bool @no_alloc
+    isSuperset(other: Set<T>) -> bool @no_alloc
+    toArray() -> Array<T> @may_alloc
     // Iteration protocol — yields each element T (used by for-in).
-    iterator() -> Iterator<T>
+    iterator() -> Iterator<T> @may_alloc
+    toString() -> string @may_alloc
 }

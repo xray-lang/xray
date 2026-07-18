@@ -13,6 +13,7 @@
 #include "../base/xglobal_indices.h"
 #include "../base/xhash.h"
 #include "../frontend/parser/xtype_ref.h"
+#include "../frontend/analyzer/xa_alloc_effect.h"
 #include "../ir/xi_effect.h"
 #include "../ir/xi_escape.h"
 #include "../runtime/value/xstruct_layout.h"
@@ -114,10 +115,32 @@ static bool verify_link_dependency_name_shape(const XgLinkDependencySummary *dep
 static bool verify_func_has_plan_recursive(const XaotBundle *bundle, const XiFunc *func,
                                            char *errbuf, size_t errbuf_len) {
     uint16_t ci;
+    const XgBodySummary *body;
     if (!func)
         return set_error(errbuf, errbuf_len, "NULL Xi function in AOT bundle");
     if (!xaot_bundle_find_func_plan(bundle, func))
         return set_error(errbuf, errbuf_len, "Xi function has no AOT function plan");
+    body = verify_find_evidence_body_by_func(bundle->global_evidence_plan.evidence,
+                                             func->xg_body_func_id);
+    if (body && (func->has_no_alloc_contract || body->no_alloc_contract)) {
+        if (!func->has_no_alloc_contract || !body->no_alloc_contract)
+            return set_error(errbuf, errbuf_len, "AOT @no_alloc contract metadata is stale");
+        if (!func->allocation_effect_complete || !body->allocation_complete)
+            return set_error(errbuf, errbuf_len,
+                             "AOT @no_alloc contract has no complete allocation proof");
+        if (func->allocation_state != XA_ALLOC_PROVEN_NONE ||
+            body->allocation_state != XA_ALLOC_PROVEN_NONE)
+            return set_error(errbuf, errbuf_len,
+                             "AOT @no_alloc contract contradicts allocation proof");
+        if (func->allocation_fingerprint == 0 ||
+            func->allocation_fingerprint != body->allocation_fingerprint)
+            return set_error(errbuf, errbuf_len, "AOT @no_alloc allocation fingerprint is stale");
+    } else if (body && func->allocation_effect_complete && body->allocation_complete &&
+               (func->allocation_state != body->allocation_state ||
+                func->allocation_reason_bits != body->allocation_reason_bits ||
+                func->allocation_fingerprint != body->allocation_fingerprint)) {
+        return set_error(errbuf, errbuf_len, "AOT allocation effect metadata is stale");
+    }
     for (ci = 0; ci < func->nchildren; ci++) {
         if (!verify_func_has_plan_recursive(bundle, func->children[ci], errbuf, errbuf_len))
             return false;

@@ -9581,6 +9581,25 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     row.kind = pending->kind;
     row.body_hash = hash_ast_shape(pending->body, XR_FNV64_OFFSET_BASIS);
     row.effect_bits = bc.effect_bits;
+    if (pending->links) {
+        const XaAllocationSummary *allocation =
+            pending->links->alloc_effect_id != XA_ALLOC_EFFECT_NONE
+                ? xa_allocation_db_get(producer->analyzer->allocation_db,
+                                       pending->links->alloc_effect_id)
+                : NULL;
+        if (allocation) {
+            row.allocation_state = (uint8_t) allocation->state;
+            row.allocation_reason_bits = allocation->reason_bits;
+            row.allocation_fingerprint = allocation->stable_fingerprint;
+            row.allocation_complete = 1;
+        } else if (pending->links->alloc_effect_complete) {
+            row.allocation_state = (uint8_t) pending->links->alloc_state;
+            row.allocation_reason_bits = pending->links->alloc_reason_bits;
+            row.allocation_fingerprint = pending->links->alloc_fingerprint;
+            row.allocation_complete = 1;
+        }
+        row.no_alloc_contract = pending->links->has_no_alloc_contract ? 1 : 0;
+    }
     row.escape_bits = bc.escape_bits;
     row.capability_bits = bc.capability_bits;
     row.param_storage_key = hash_param_storage_requirements32(pending->links);

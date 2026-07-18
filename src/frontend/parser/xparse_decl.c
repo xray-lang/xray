@@ -160,7 +160,7 @@ static bool xr_derive_target_bit(Token token, uint32_t *bit_out) {
 }
 
 // Parse single attribute: @test, @test(skip), @test(timeout: 30), etc.
-static XrAttribute *xr_parse_single_attribute(Parser *parser) {
+XrAttribute *xr_parse_single_attribute(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_single_attribute: NULL parser");
     xr_parser_advance(parser);  // Consume @
 

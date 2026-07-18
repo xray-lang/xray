@@ -2,7 +2,7 @@
 
 @native
 class StringBuilder {
-    append(value: string | rune | int | float | bool | null) -> StringBuilder
-    toString() -> string
-    clear() -> StringBuilder
+    append(value: string | rune | int | float | bool | null) -> StringBuilder @may_alloc
+    toString() -> string @may_alloc
+    clear() -> StringBuilder @no_alloc
 }

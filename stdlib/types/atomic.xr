@@ -2,14 +2,14 @@
 
 @native
 class Atomic<T> {
-    load(ordering?: Ordering) -> T
-    store(value: T, ordering?: Ordering)
-    add(delta: T, ordering?: Ordering)
-    sub(delta: T, ordering?: Ordering)
-    fetchAdd(delta: T, ordering?: Ordering) -> T
-    fetchSub(delta: T, ordering?: Ordering) -> T
-    swap(value: T, ordering?: Ordering) -> T
-    compareExchange(expected: T, desired: T, ordering?: Ordering) -> (T, bool)
-    toggle(ordering?: Ordering) -> bool
-    toString() -> string
+    load(ordering?: Ordering) -> T @no_alloc
+    store(value: T, ordering?: Ordering) @no_alloc
+    add(delta: T, ordering?: Ordering) @no_alloc
+    sub(delta: T, ordering?: Ordering) @no_alloc
+    fetchAdd(delta: T, ordering?: Ordering) -> T @no_alloc
+    fetchSub(delta: T, ordering?: Ordering) -> T @no_alloc
+    swap(value: T, ordering?: Ordering) -> T @no_alloc
+    compareExchange(expected: T, desired: T, ordering?: Ordering) -> (T, bool) @no_alloc
+    toggle(ordering?: Ordering) -> bool @no_alloc
+    toString() -> string @may_alloc
 }

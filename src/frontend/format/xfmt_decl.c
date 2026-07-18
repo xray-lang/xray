@@ -521,6 +521,7 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             continue;
         }
 
+        xfmt_emit_attributes(ctx, m->attributes, m->attr_count);
         xfmt_write_indent(ctx);
         if (m->is_private)
             xfmt_write_str(ctx, "private ");
@@ -720,6 +721,48 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_char(ctx, ',');
         }
         xfmt_write_newline(ctx);
+    }
+
+    if (en->member_count > 0 && en->method_count > 0)
+        xfmt_write_newline(ctx);
+    for (int i = 0; i < en->method_count; i++) {
+        AstNode *method = en->methods[i];
+        MethodDeclNode *m = &method->as.method_decl;
+        if (method->leading_comments)
+            xfmt_write_leading_comments(ctx, method->leading_comments);
+        xfmt_emit_attributes(ctx, m->attributes, m->attr_count);
+        xfmt_write_indent(ctx);
+        if (m->is_static)
+            xfmt_write_str(ctx, "static ");
+        xfmt_write_str(ctx, "fn ");
+        xfmt_write_str(ctx, m->name);
+        if (m->type_param_count > 0) {
+            xfmt_write_char(ctx, '<');
+            for (int j = 0; j < m->type_param_count; j++) {
+                if (j > 0)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_write_str(ctx, m->type_param_names[j]);
+            }
+            xfmt_write_char(ctx, '>');
+        }
+        xfmt_write_char(ctx, '(');
+        for (int j = 0; j < m->param_count; j++) {
+            if (j > 0)
+                xfmt_write_str(ctx, ", ");
+            xfmt_emit_param(ctx, m->params[j]);
+        }
+        xfmt_write_char(ctx, ')');
+        if (m->return_type) {
+            xfmt_write_str(ctx, " -> ");
+            xfmt_emit_type(ctx, m->return_type);
+        }
+        xfmt_write_char(ctx, ' ');
+        xfmt_emit_block(ctx, m->body);
+        xfmt_write_newline(ctx);
+        if (method->trailing_comments)
+            xfmt_write_trailing_comment(ctx, method->trailing_comments);
+        if (i < en->method_count - 1)
+            xfmt_write_newline(ctx);
     }
 
     ctx->indent_level--;

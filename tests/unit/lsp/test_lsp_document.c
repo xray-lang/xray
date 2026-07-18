@@ -490,6 +490,44 @@ TEST(hover_u8_array_registry_method) {
     xlsp_server_free(server);
 }
 
+TEST(hover_noalloc_contract_and_violation) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "@no_alloc\n"
+                          "export fn scalar(x: int) -> int { return x + 1 }\n"
+                          "@no_alloc\n"
+                          "fn allocates() { var values = [1, 2, 3] }\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///hover_noalloc.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    int line = 0;
+    int col = 0;
+    ASSERT(content_position_of_nth(content, "scalar", 1, &line, &col));
+    XrLspPosition scalar_pos = {(uint32_t) line, (uint32_t) col};
+    XrJsonValue *scalar_hover = xlsp_analyze_hover(server, doc, scalar_pos);
+    ASSERT(scalar_hover != NULL);
+    const char *scalar_text = hover_markdown_value(scalar_hover);
+    ASSERT(scalar_text != NULL);
+    ASSERT(strstr(scalar_text, "@no_alloc\nfn scalar") != NULL);
+    ASSERT(strstr(scalar_text, "proven no heap allocation") != NULL);
+    xjson_free(scalar_hover);
+
+    ASSERT(content_position_of_nth(content, "allocates", 1, &line, &col));
+    XrLspPosition allocates_pos = {(uint32_t) line, (uint32_t) col};
+    XrJsonValue *allocates_hover = xlsp_analyze_hover(server, doc, allocates_pos);
+    ASSERT(allocates_hover != NULL);
+    const char *allocates_text = hover_markdown_value(allocates_hover);
+    ASSERT(allocates_text != NULL);
+    ASSERT(strstr(allocates_text, "@no_alloc\nfn allocates") != NULL);
+    ASSERT(strstr(allocates_text, "Allocation contract violation") != NULL);
+    ASSERT(strstr(allocates_text, "Array") != NULL);
+    xjson_free(allocates_hover);
+
+    xlsp_server_free(server);
+}
+
 TEST(signature_help_u8_array_registry_method) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
@@ -916,6 +954,7 @@ int main(int argc, char **argv) {
     RUN_TEST(completion_int_array_excludes_u8_registry_methods);
     RUN_TEST(completion_u8_slice_registry_methods);
     RUN_TEST(hover_u8_array_registry_method);
+    RUN_TEST(hover_noalloc_contract_and_violation);
     RUN_TEST(signature_help_u8_array_registry_method);
     RUN_TEST(builtin_generic_array_uses_error_placeholder);
     RUN_TEST(global_type_query_builtins_use_canonical_names);

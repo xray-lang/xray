@@ -2,25 +2,25 @@
 
 @native
 class int {
-    abs() -> int
-    toString() -> string
-    toBigInt() -> BigInt
-    toFloat() -> float
-    toHex() -> string
-    max(other: int) -> int
-    min(other: int) -> int
-    sqrt() -> float
-    pow(exp: float) -> float
-    checkedAdd(other: int) -> int?
-    checkedSub(other: int) -> int?
-    checkedMul(other: int) -> int?
-    saturatingAdd(other: int) -> int
-    saturatingSub(other: int) -> int
-    saturatingMul(other: int) -> int
-    wrappingAdd(other: int) -> int
-    wrappingSub(other: int) -> int
-    wrappingMul(other: int) -> int
-    addOverflows(other: int) -> bool
-    subOverflows(other: int) -> bool
-    mulOverflows(other: int) -> bool
+    abs() -> int @no_alloc
+    toString() -> string @may_alloc
+    toBigInt() -> BigInt @may_alloc
+    toFloat() -> float @no_alloc
+    toHex() -> string @may_alloc
+    max(other: int) -> int @no_alloc
+    min(other: int) -> int @no_alloc
+    sqrt() -> float @no_alloc
+    pow(exp: float) -> float @no_alloc
+    checkedAdd(other: int) -> int? @no_alloc
+    checkedSub(other: int) -> int? @no_alloc
+    checkedMul(other: int) -> int? @no_alloc
+    saturatingAdd(other: int) -> int @no_alloc
+    saturatingSub(other: int) -> int @no_alloc
+    saturatingMul(other: int) -> int @no_alloc
+    wrappingAdd(other: int) -> int @no_alloc
+    wrappingSub(other: int) -> int @no_alloc
+    wrappingMul(other: int) -> int @no_alloc
+    addOverflows(other: int) -> bool @no_alloc
+    subOverflows(other: int) -> bool @no_alloc
+    mulOverflows(other: int) -> bool @no_alloc
 }

@@ -364,6 +364,29 @@ TEST(attribute_visibility_modifier_order_roundtrip) {
     teardown();
 }
 
+TEST(method_no_alloc_attribute_roundtrip) {
+    setup();
+    const char *src = "export struct Word {\n"
+                      "  @no_alloc\n"
+                      "  rotate(n: int) -> uint32 { return 0 }\n"
+                      "}\n"
+                      "enum State {\n"
+                      "  Ready\n"
+                      "  @no_alloc\n"
+                      "  static fn initial() -> State { return State.Ready }\n"
+                      "}\n";
+    char *fmt1 = parse_and_format(src, "<test>");
+    ASSERT_NOT_NULL(fmt1);
+    ASSERT_TRUE(contains(fmt1, "@no_alloc\n    rotate"));
+    ASSERT_TRUE(contains(fmt1, "@no_alloc\n    static fn initial"));
+    char *fmt2 = parse_and_format(fmt1, "<test>");
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
+    teardown();
+}
+
 TEST(object_destructure_rename_roundtrip) {
     setup();
     const char *src = "var { name: localName, age } = user\n"
@@ -872,6 +895,7 @@ RUN_TEST(empty_string_roundtrip);
 
 RUN_TEST(arrow_return_type_emitted);
 RUN_TEST(attribute_visibility_modifier_order_roundtrip);
+RUN_TEST(method_no_alloc_attribute_roundtrip);
 RUN_TEST(object_destructure_rename_roundtrip);
 RUN_TEST(parameter_modes_roundtrip);
 RUN_TEST(extern_block_roundtrip);

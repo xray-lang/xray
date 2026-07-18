@@ -1,4 +1,4 @@
 status=fail
-contains=@no_alloc function 'xray_no_alloc_string_copy_bytes_reject' allocates via method 'string.copyBytes'
+contains=@no_alloc contract is not satisfied for 'xray_no_alloc_string_copy_bytes_reject'
 contains=xray_no_alloc_string_copy_bytes_reject
 not_contains=CRASH

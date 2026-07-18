@@ -22,6 +22,7 @@
 
 #include "xconsteval.h"
 #include "xa_effect_db.h"
+#include "xa_alloc_effect.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xenum_layout.h"
 #include "../../runtime/class/xclass_info.h"
@@ -150,6 +151,15 @@ struct XaSymbolLinks {
     bool is_c_export;  // @c_export AOT C ABI wrapper
     const char *c_export_symbol;
     XaEffectId effect_id;  // Canonical analyzer-owned effect summary id (0 = not inferred yet)
+    XaAllocEffectId alloc_effect_id;  // Canonical allocation summary (0 = not inferred yet)
+    /* Stable publication snapshot.  alloc_effect_id is local to one analyzer
+     * database; these fields survive symbol cloning/import metadata and are
+     * the cross-module contract surface. */
+    XaAllocState alloc_state;
+    XaAllocReasonSet alloc_reason_bits;
+    uint64_t alloc_fingerprint;
+    bool alloc_effect_complete;
+    bool has_no_alloc_contract;
 
     // Call-site inferred parameter types (for unannotated params)
     // Populated by xa_visit_call when callee has unannotated parameters.

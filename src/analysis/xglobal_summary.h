@@ -59,7 +59,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 28,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 29,
 };
 
 typedef enum XgBuildProfile {
@@ -795,6 +795,11 @@ typedef struct XgBodySummary {
     uint8_t kind;
     uint64_t body_hash;
     uint32_t effect_bits;
+    uint8_t allocation_state; /* XaAllocState */
+    uint8_t allocation_complete;
+    uint8_t no_alloc_contract;
+    uint32_t allocation_reason_bits;
+    uint64_t allocation_fingerprint;
     uint32_t escape_bits;
     uint32_t capability_bits;
     uint32_t param_storage_key;

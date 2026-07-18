@@ -518,6 +518,7 @@ def load_def_module_methods():
             'is_internal': entry.is_internal,
             'vm_binding': entry.vm_binding,
             'effect': getattr(entry, 'effect', ''),
+            'allocation': getattr(entry, 'allocation', ''),
         })
     return modules
 
@@ -593,6 +594,7 @@ def load_def_type_methods():
             'name': entry.name,
             'signature': entry.signature,
             'doc': entry.doc,
+            'allocation': getattr(entry, 'allocation', ''),
         })
     return types
 
@@ -756,6 +758,15 @@ def effect_error_refs(member):
     return [part.strip() for part in split_top_level_commas(raw) if part.strip()]
 
 
+def allocation_contract_init(member):
+    value = (member.get('allocation') or '').strip()
+    if value == 'no_heap':
+        return 'XA_ALLOCATION_CONTRACT_NO_HEAP'
+    if value == 'may_heap':
+        return 'XA_ALLOCATION_CONTRACT_MAY_HEAP'
+    return 'XA_ALLOCATION_CONTRACT_MISSING'
+
+
 def generate_header(type_results, module_results):
     """Generate the embedded header file content."""
     lines = [
@@ -787,9 +798,11 @@ def generate_header(type_results, module_results):
             lines.append(f"static const XaBuiltinMember g_gen_{type_name.lower()}_members[] = {{")
             for m in methods:
                 is_method = "true" if '(' in m['signature'] else "false"
+                allocation = allocation_contract_init(m)
                 lines.append(
                     f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
-                    f'"{c_string(m["doc"])}", {is_method}, false, false, false, false}},')
+                    f'"{c_string(m["doc"])}", {is_method}, false, false, false, false, '
+                    f'{{0}}, {allocation}}},')
             lines.append("};")
             lines.append(f"#define GEN_{type_name.upper()}_MEMBER_COUNT {len(methods)}")
             lines.append("")
@@ -855,23 +868,23 @@ def generate_header(type_results, module_results):
                     is_method = "true" if '(' in m['signature'] else "false"
                     is_yieldable = "true" if m.get("vm_binding") == "yieldable" else "false"
                     effect = method_effect_vars.get(idx)
-                    effect_init = ""
+                    effect_init = "{0}"
                     if effect:
                         var_name, errors = effect
-                        effect_init = (
-                            f", {{XA_EFFECT_CONTRACT_ERRORS, {var_name}, {len(errors)}}}"
-                        )
+                        effect_init = f"{{XA_EFFECT_CONTRACT_ERRORS, {var_name}, {len(errors)}}}"
+                    allocation = allocation_contract_init(m)
                     lines.append(
                         f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
                         f'"{c_string(m["doc"])}", {is_method}, false, '
                         f'{"true" if m.get("is_internal") else "false"}, false, '
-                        f'{is_yieldable}{effect_init}}},')
+                        f'{is_yieldable}, {effect_init}, {allocation}}},')
                 if constant_entries:
                     lines.append(f"    // Module constants (is_method=false)")
                     for c in constant_entries:
                         lines.append(
                             f'    {{"{c_string(c["name"])}", "{c_string(c["signature"])}", '
-                            f'"{c_string(c["doc"])}", false, false, false, false, false}},')
+                            f'"{c_string(c["doc"])}", false, false, false, false, false, '
+                            f'{{0}}, XA_ALLOCATION_CONTRACT_MISSING}},')
                 lines.append("};")
                 lines.append(f"#define GEN_{mod_name.upper()}_FUNCTION_COUNT {total}")
                 lines.append("")

@@ -176,6 +176,53 @@ static bool xrd_validate_signature_types(const char *signature) {
     return true;
 }
 
+static char *xrd_find_metadata_token(char *signature, const char *token) {
+    size_t token_len = strlen(token);
+    for (char *p = signature; (p = strstr(p, token)) != NULL; p += token_len) {
+        char after = p[token_len];
+        if ((p == signature || isspace((unsigned char) p[-1])) &&
+            (after == '\0' || isspace((unsigned char) after)))
+            return p;
+    }
+    return NULL;
+}
+
+bool xa_allocation_contract_parse_suffix(char *signature, XaAllocationContractKind *contract) {
+    if (!signature || !contract)
+        return false;
+    *contract = XA_ALLOCATION_CONTRACT_MISSING;
+    char *no_heap = xrd_find_metadata_token(signature, "@no_alloc");
+    char *may_heap = xrd_find_metadata_token(signature, "@may_alloc");
+    if (no_heap && may_heap) {
+        xrd_set_error("conflicting allocation metadata @no_alloc and @may_alloc");
+        return false;
+    }
+    char *metadata = no_heap ? no_heap : may_heap;
+    if (!metadata)
+        return true;
+    const char *token = no_heap ? "@no_alloc" : "@may_alloc";
+    if (xrd_find_metadata_token(metadata + strlen(token), token)) {
+        xrd_set_error("duplicate allocation metadata %s", token);
+        return false;
+    }
+    *contract = no_heap ? XA_ALLOCATION_CONTRACT_NO_HEAP : XA_ALLOCATION_CONTRACT_MAY_HEAP;
+
+    char *tail = metadata + strlen(token);
+    while (isspace((unsigned char) *tail))
+        tail++;
+    char *remove_start = metadata;
+    while (remove_start > signature && isspace((unsigned char) remove_start[-1]))
+        remove_start--;
+    if (*tail && remove_start > signature)
+        *remove_start++ = ' ';
+    memmove(remove_start, tail, strlen(tail) + 1u);
+
+    size_t len = strlen(signature);
+    while (len > 0 && isspace((unsigned char) signature[len - 1]))
+        signature[--len] = '\0';
+    return true;
+}
+
 bool xa_effect_contract_parse_suffix(char *signature, XaEffectContract *contract) {
     memset(contract, 0, sizeof(*contract));
     char *at = strchr(signature, '@');
@@ -473,6 +520,11 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
 
                 char sig[256];
                 read_to_eol(after_ident, sig, sizeof(sig));
+                XaAllocationContractKind allocation_contract;
+                if (!xa_allocation_contract_parse_suffix(sig, &allocation_contract)) {
+                    free_xrd_module(xrd);
+                    return NULL;
+                }
                 XaEffectContract effect_contract;
                 if (!xa_effect_contract_parse_suffix(sig, &effect_contract)) {
                     free_xrd_module(xrd);
@@ -518,6 +570,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                         methods[midx].is_lowered_only = false;
                         methods[midx].is_yieldable = false;
                         methods[midx].effect_contract = effect_contract;
+                        methods[midx].allocation_contract = allocation_contract;
                         h->method_count++;
                     } else {
                         xa_effect_contract_clear(&effect_contract);
@@ -546,6 +599,11 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
             // Rest of line is the signature
             char sig[256];
             p = read_to_eol(p, sig, sizeof(sig));
+            XaAllocationContractKind allocation_contract;
+            if (!xa_allocation_contract_parse_suffix(sig, &allocation_contract)) {
+                free_xrd_module(xrd);
+                return NULL;
+            }
             XaEffectContract effect_contract;
             if (!xa_effect_contract_parse_suffix(sig, &effect_contract)) {
                 free_xrd_module(xrd);
@@ -574,6 +632,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                 xrd->functions[idx].is_lowered_only = false;
                 xrd->functions[idx].is_yieldable = false;
                 xrd->functions[idx].effect_contract = effect_contract;
+                xrd->functions[idx].allocation_contract = allocation_contract;
                 xrd->module.function_count++;
             } else {
                 xa_effect_contract_clear(&effect_contract);

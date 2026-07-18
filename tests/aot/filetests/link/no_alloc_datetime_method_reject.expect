@@ -1,4 +1,4 @@
 status=fail
-contains=@no_alloc function 'xray_no_alloc_datetime_iso_reject' allocates via method 'DateTime.toISOString'
+contains=@no_alloc contract is not satisfied for 'xray_no_alloc_datetime_iso_reject'
 contains=xray_no_alloc_datetime_iso_reject
 not_contains=CRASH

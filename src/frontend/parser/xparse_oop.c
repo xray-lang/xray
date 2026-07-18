@@ -296,7 +296,8 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
         if (!xr_parser_check(parser, TK_NAME) && !xr_parser_check(parser, TK_PRIVATE) &&
             !xr_parser_check(parser, TK_PROTECTED) && !xr_parser_check(parser, TK_CONST) &&
             !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_CONSTRUCTOR) &&
-            !xr_parser_check(parser, TK_FINAL) && !xr_parser_check(parser, TK_OPERATOR)) {
+            !xr_parser_check(parser, TK_FINAL) && !xr_parser_check(parser, TK_OPERATOR) &&
+            !xr_parser_check(parser, TK_AT)) {
             xr_parser_error_expected_name(parser, "expected field or method name");
             xr_parser_advance(parser);
             continue;
@@ -520,7 +521,8 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
         // Skip unknown tokens
         if (!xr_parser_check(parser, TK_NAME) && !xr_parser_check(parser, TK_PRIVATE) &&
             !xr_parser_check(parser, TK_PROTECTED) && !xr_parser_check(parser, TK_CONST) &&
-            !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_OPERATOR)) {
+            !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_OPERATOR) &&
+            !xr_parser_check(parser, TK_AT)) {
             xr_parser_error_expected_name(parser, "expected field or method name in struct");
             xr_parser_advance(parser);
             continue;
@@ -699,6 +701,20 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     XR_DCHECK(parser != NULL, "parse_field_declaration: NULL parser");
     int line = parser->current.line;
 
+    XrAttribute **attributes = NULL;
+    int attr_count = 0;
+    int attr_capacity = 0;
+    while (xr_parser_check(parser, TK_AT)) {
+        XrAttribute *attribute = xr_parse_single_attribute(parser);
+        if (!attribute)
+            return NULL;
+        if (attribute->kind != ATTR_NO_ALLOC) {
+            xr_parser_error(parser, "only @no_alloc can annotate a method");
+            return NULL;
+        }
+        XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attribute);
+    }
+
     // Parse access modifiers (optional)
     bool is_private = false;
     bool is_protected = false;
@@ -758,6 +774,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
             *is_method_out = true;
             xr_parser_advance(parser);  // consume 'constructor'
             AstNode *method = xr_parse_static_constructor(parser, is_private);
+            if (attr_count > 0)
+                xr_parser_error(parser, "@no_alloc cannot annotate a static constructor");
             return method;
         }
     }
@@ -777,6 +795,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         AstNode *method = xr_parse_operator_method(parser, is_private, is_static);
         if (method) {
             method->as.method_decl.is_protected = is_protected;
+            method->as.method_decl.attributes = attributes;
+            method->as.method_decl.attr_count = attr_count;
         }
         return method;
     }
@@ -823,6 +843,12 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
                                                       is_private, is_static);
         if (method) {
             method->as.method_decl.is_protected = is_protected;
+            if (method->as.method_decl.is_constructor && attr_count > 0) {
+                xr_parser_error(parser, "@no_alloc cannot annotate a constructor");
+                return NULL;
+            }
+            method->as.method_decl.attributes = attributes;
+            method->as.method_decl.attr_count = attr_count;
         }
         return method;
     } else {
@@ -844,6 +870,10 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         if (xr_parser_check(parser, TK_LBRACE)) {
             // This is a property definition with getter/setter
             *is_method_out = true;
+            if (attr_count > 0) {
+                xr_parser_error(parser, "@no_alloc cannot annotate a property accessor block");
+                return NULL;
+            }
             return xr_parse_property_accessors(parser, name, field_type, is_private, is_static,
                                                line);
         }
@@ -858,6 +888,10 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
         AstNode *field = xr_ast_field_decl(parser->compiler_session, name, field_type, is_private,
                                            is_static, initializer, name_line);
+        if (attr_count > 0) {
+            xr_parser_error(parser, "@no_alloc can only annotate a function or method");
+            return NULL;
+        }
         if (field) {
             /* `flex` is contextual after a field colon, so it does not reserve
              * the identifier globally.  Preserve it on the field rather than
@@ -2102,7 +2136,8 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
 
     /* Variant phase: parse comma-separated variants until we hit a method or '}'. */
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF) &&
-           !xr_parser_check(parser, TK_FN) && !xr_parser_check(parser, TK_STATIC)) {
+           !xr_parser_check(parser, TK_AT) && !xr_parser_check(parser, TK_FN) &&
+           !xr_parser_check(parser, TK_STATIC)) {
         if (parser->panic_mode) {
             xr_parser_synchronize(parser);
             if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
@@ -2146,26 +2181,41 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
 
         /* Comma after variant: required between variants, optional before
          * '}', 'fn', or 'static fn'. */
-        if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_FN) &&
-            !xr_parser_check(parser, TK_STATIC)) {
+        if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_AT) &&
+            !xr_parser_check(parser, TK_FN) && !xr_parser_check(parser, TK_STATIC)) {
             if (!xr_parser_match(parser, TK_COMMA)) {
                 xr_parser_error(parser, "expected ',' between enum variants");
                 break;
             }
             /* Allow trailing comma before '}', 'fn', or 'static fn' */
-            if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_FN) ||
-                xr_parser_check(parser, TK_STATIC))
+            if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_AT) ||
+                xr_parser_check(parser, TK_FN) || xr_parser_check(parser, TK_STATIC))
                 break;
         }
     }
 
     /* Method phase: parse 'fn' and 'static fn' methods until '}'. */
-    while (xr_parser_check(parser, TK_FN) || xr_parser_check(parser, TK_STATIC)) {
+    while (xr_parser_check(parser, TK_AT) || xr_parser_check(parser, TK_FN) ||
+           xr_parser_check(parser, TK_STATIC)) {
         if (parser->panic_mode) {
             xr_parser_synchronize(parser);
             if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
                 break;
             continue;
+        }
+
+        XrAttribute **attributes = NULL;
+        int attr_count = 0;
+        int attr_capacity = 0;
+        while (xr_parser_check(parser, TK_AT)) {
+            XrAttribute *attribute = xr_parse_single_attribute(parser);
+            if (!attribute)
+                break;
+            if (attribute->kind != ATTR_NO_ALLOC) {
+                xr_parser_error(parser, "only @no_alloc can annotate an enum method");
+                break;
+            }
+            XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attribute);
         }
 
         bool is_static = false;
@@ -2181,6 +2231,8 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
 
         AstNode *method = parse_enum_method(parser, is_static);
         if (method) {
+            method->as.method_decl.attributes = attributes;
+            method->as.method_decl.attr_count = attr_count;
             XR_PARSE_PUSH(parser, methods, method_count, method_capacity, method);
         }
     }

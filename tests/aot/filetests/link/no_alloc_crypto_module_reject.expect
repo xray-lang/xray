@@ -1,4 +1,4 @@
 status=fail
-contains=@no_alloc function 'xray_no_alloc_crypto_md5_reject' allocates via stdlib 'crypto.md5'
+contains=@no_alloc contract cannot be proven for 'xray_no_alloc_crypto_md5_reject'
 contains=xray_no_alloc_crypto_md5_reject
 not_contains=CRASH

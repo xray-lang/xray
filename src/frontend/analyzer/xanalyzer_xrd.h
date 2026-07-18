@@ -50,6 +50,11 @@ XR_FUNC void xa_xrd_cleanup(void);
 // represented as XA_EFFECT_CONTRACT_MISSING.
 XR_FUNC bool xa_effect_contract_parse_suffix(char *signature, XaEffectContract *out_contract);
 
+// Parse and remove explicit native allocation metadata. Absence is preserved
+// as MISSING so analyzer contracts fail closed.
+XR_FUNC bool xa_allocation_contract_parse_suffix(char *signature,
+                                                 XaAllocationContractKind *out_contract);
+
 // Free heap owned by a parsed effect contract.
 XR_FUNC void xa_effect_contract_clear(XaEffectContract *contract);
 

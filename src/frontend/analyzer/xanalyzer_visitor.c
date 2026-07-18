@@ -17,6 +17,7 @@
 #include "xaddressability.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_errorset.h"
+#include "xanalyzer_allocation.h"
 #include "xanalyzer_xrd.h"
 #include "xconsteval.h"
 #include "xtype_ref_resolve.h"
@@ -7555,6 +7556,7 @@ static void xa_validate_freestanding_payload_error_catches(XaAnalyzer *analyzer,
  *   Pass 1.5 -> Class inheritance linking
  *   Pass 2   -> Type inference and checking
  *   Pass 3   -> Error set inference (value-return error system)
+ *   Pass 4   -> Allocation effect inference and @no_alloc validation
  * ========================================================================== */
 
 void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
@@ -7589,6 +7591,10 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
 
     // Pass 3: Infer error sets for functions (value-return error system)
     xa_infer_error_sets(analyzer, ast);
+
+    // Pass 4: Infer allocation effects from the typed, symbol-resolved AST.
+    // This runs for check, VM and AOT; backends only consume the result.
+    xa_infer_allocation_effects(analyzer, ast);
 
     xa_validate_freestanding_payload_error_catches(analyzer, ast);
 

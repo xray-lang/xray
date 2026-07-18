@@ -53,11 +53,11 @@ static const XaBuiltinMember *find_member(const XaBuiltinMember *members, int co
 
 TEST(parses_and_normalizes_effect_contracts) {
     const char *source = "export fn readText(path: string): string "
-                         "@errors(IoError.PermissionDenied, IoError.NotFound)\n"
-                         "export fn now(): int @nothrow\n"
+                         "@errors(IoError.PermissionDenied, IoError.NotFound) @may_alloc\n"
+                         "export fn now(): int @no_alloc @nothrow\n"
                          "export fn unknown(): int\n"
                          "type NativeBox = { const id: int }\n"
-                         "fn NativeBox.run(): int @errors(RunError.Failed)\n";
+                         "fn NativeBox.run(): int @errors(RunError.Failed) @no_alloc\n";
     char path[128];
     ASSERT(write_temp_xrd(path, source));
 
@@ -76,11 +76,14 @@ TEST(parses_and_normalizes_effect_contracts) {
     ASSERT(read_text->effect_contract.error_count == 2);
     ASSERT(strcmp(read_text->effect_contract.errors[0], "IoError.NotFound") == 0);
     ASSERT(strcmp(read_text->effect_contract.errors[1], "IoError.PermissionDenied") == 0);
+    ASSERT(read_text->allocation_contract == XA_ALLOCATION_CONTRACT_MAY_HEAP);
     ASSERT(now != NULL);
     ASSERT(strcmp(now->signature, "(): int") == 0);
     ASSERT(now->effect_contract.kind == XA_EFFECT_CONTRACT_NOTHROW);
+    ASSERT(now->allocation_contract == XA_ALLOCATION_CONTRACT_NO_HEAP);
     ASSERT(unknown != NULL);
     ASSERT(unknown->effect_contract.kind == XA_EFFECT_CONTRACT_MISSING);
+    ASSERT(unknown->allocation_contract == XA_ALLOCATION_CONTRACT_MISSING);
 
     ASSERT(module->handle_count == 1);
     const XaBuiltinMember *run =
@@ -90,6 +93,7 @@ TEST(parses_and_normalizes_effect_contracts) {
     ASSERT(run->effect_contract.kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(run->effect_contract.error_count == 1);
     ASSERT(strcmp(run->effect_contract.errors[0], "RunError.Failed") == 0);
+    ASSERT(run->allocation_contract == XA_ALLOCATION_CONTRACT_NO_HEAP);
 
     xa_xrd_cleanup();
     xr_test_unlink(path);
@@ -112,11 +116,20 @@ TEST(rejects_duplicate_error_entries) {
     xr_test_unlink(path);
 }
 
+TEST(rejects_conflicting_allocation_metadata) {
+    char path[128];
+    ASSERT(write_temp_xrd(path, "export fn bad(): int @no_alloc @may_alloc\n"));
+    ASSERT(xa_xrd_load_file(path) == NULL);
+    ASSERT(strstr(xa_xrd_last_error(), "conflicting allocation metadata") != NULL);
+    xr_test_unlink(path);
+}
+
 int main(void) {
     printf("Running .xrd effect metadata tests...\n");
     RUN_TEST(parses_and_normalizes_effect_contracts);
     RUN_TEST(rejects_unknown_effect_metadata);
     RUN_TEST(rejects_duplicate_error_entries);
+    RUN_TEST(rejects_conflicting_allocation_metadata);
 
     printf("\n%d tests passed, %d failed\n", tests_passed, tests_failed);
     return tests_failed ? 1 : 0;

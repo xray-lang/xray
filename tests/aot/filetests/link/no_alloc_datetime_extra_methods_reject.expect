@@ -1,7 +1,7 @@
 status=fail
-contains=@no_alloc function 'xray_no_alloc_datetime_tostring_reject' allocates via method 'DateTime.toString'
-contains=@no_alloc function 'xray_no_alloc_datetime_format_reject' allocates via method 'DateTime.format'
-contains=@no_alloc function 'xray_no_alloc_datetime_add_reject' allocates via method 'DateTime.add'
-contains=@no_alloc function 'xray_no_alloc_datetime_toutc_reject' allocates via method 'DateTime.toUTC'
-contains=@no_alloc function 'xray_no_alloc_datetime_tolocal_reject' allocates via method 'DateTime.toLocal'
+contains=@no_alloc contract is not satisfied for 'xray_no_alloc_datetime_tostring_reject'
+contains=@no_alloc contract is not satisfied for 'xray_no_alloc_datetime_format_reject'
+contains=@no_alloc contract cannot be proven for 'xray_no_alloc_datetime_add_reject'
+contains=@no_alloc contract cannot be proven for 'xray_no_alloc_datetime_toutc_reject'
+contains=@no_alloc contract cannot be proven for 'xray_no_alloc_datetime_tolocal_reject'
 not_contains=CRASH

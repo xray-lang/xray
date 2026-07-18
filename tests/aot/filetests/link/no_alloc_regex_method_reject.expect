@@ -1,4 +1,4 @@
 status=fail
-contains=@no_alloc function 'xray_no_alloc_regex_find_text_reject' allocates via method 'Regex.findText'
+contains=@no_alloc contract is not satisfied for 'xray_no_alloc_regex_find_text_reject'
 contains=xray_no_alloc_regex_find_text_reject
 not_contains=CRASH

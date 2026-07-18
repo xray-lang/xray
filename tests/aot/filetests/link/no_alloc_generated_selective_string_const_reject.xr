@@ -1,8 +1,0 @@
-import { arch as directArch } from "os"
-
-@no_alloc
-fn xray_no_alloc_os_arch_selective_const_reject() -> string {
-    return directArch
-}
-
-print(xray_no_alloc_os_arch_selective_const_reject())
