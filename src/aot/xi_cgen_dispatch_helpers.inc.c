@@ -7908,7 +7908,7 @@ static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             return;
         }
         if (field && field->native_type == XR_NATIVE_ARRAY) {
-            fprintf(out, "(xrt_fixed_array_copy(&");
+            fprintf(out, "(memmove(&");
             if (!xicgen_emit_struct_place_field_lvalue(ctx, out, v->args[0], sl, v->aux_int)) {
                 ctx->error = true;
                 emit_codegen_abort_expr(out);
@@ -7916,8 +7916,13 @@ static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             }
             fprintf(out, "[0], ");
             emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-            fprintf(out, ", %u, %u), ", (unsigned) field->elem_native_type,
-                    (unsigned) field->elem_count);
+            fprintf(out, ".ptr, sizeof(");
+            if (!xicgen_emit_struct_place_field_lvalue(ctx, out, v->args[0], sl, v->aux_int)) {
+                ctx->error = true;
+                emit_codegen_abort_expr(out);
+                return;
+            }
+            fprintf(out, ")), ");
             emit_struct_set_result_value(ctx, out, v->args[1]);
             fprintf(out, ")");
             return;

@@ -3483,8 +3483,10 @@ TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
 
     assert(contains(code, "uint8_t data[4]") &&
            "fixed array field must be embedded in the native heap layout");
-    assert(contains(code, "xrt_fixed_array_copy") &&
-           "fixed array field initialization must copy into embedded storage");
+    assert(contains(code, "memmove(") &&
+           "fixed array field initialization must copy directly into embedded storage");
+    assert(!contains(code, "xrt_fixed_array_copy(") &&
+           "fixed array field initialization must not use the generic runtime helper");
     assert(count_between(fn_body, fn_end, "data[") > 0 &&
            "fixed array hot path must use direct C array indexing");
     assert(count_between(fn_body, fn_end, "\n    XrValue v") == 0 &&

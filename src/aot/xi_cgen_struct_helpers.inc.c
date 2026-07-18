@@ -2161,12 +2161,13 @@ static void emit_struct_inline_field_set_expr(XiCgenCtx *ctx, FILE *out,
         return;
     }
     if (field && field->native_type == XR_NATIVE_ARRAY) {
-        fprintf(out, "(xrt_fixed_array_copy(&");
+        fprintf(out, "(memmove(&");
         emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, "[0], ");
         emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
-        fprintf(out, ", %u, %u), ", (unsigned) field->elem_native_type,
-                (unsigned) field->elem_count);
+        fprintf(out, ".ptr, sizeof(");
+        emit_struct_field_ref(out, sl, origin, idx);
+        fprintf(out, ")), ");
         emit_struct_set_result_value(ctx, out, value);
         fprintf(out, ")");
         return;
@@ -2523,12 +2524,13 @@ static bool emit_struct_heap_field_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
         return true;
     }
     if (field && field->native_type == XR_NATIVE_ARRAY) {
-        fprintf(out, "(xrt_fixed_array_copy(&");
+        fprintf(out, "(memmove(&");
         emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, "[0], ");
         emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
-        fprintf(out, ", %u, %u), ", (unsigned) field->elem_native_type,
-                (unsigned) field->elem_count);
+        fprintf(out, ".ptr, sizeof(");
+        emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+        fprintf(out, ")), ");
         emit_struct_set_result_value(ctx, out, value);
         fprintf(out, ")");
         return true;
