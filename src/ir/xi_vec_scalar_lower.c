@@ -112,6 +112,10 @@ static bool expand_vec_to_scalars(XiFunc *f, XiBlock *blk, XiValue *vec, XiValue
 static bool lower_vec_store(XiFunc *f, XiBlock *blk, XiValue *store) {
     if (!store || store->op != XI_VEC_STORE)
         return false;
+    /* Explicit portable-SIMD ops are legal AOT backend operations.  Only the
+     * legacy SLP form (aux_int is a bare VF) is scalar-expanded here. */
+    if (xi_vec_shape_is_explicit(store->aux_int))
+        return false;
     uint32_t vf = (uint32_t) store->aux_int;
     if (vf == 0 || vf > 16 || store->nargs < 2 || !store->args[0] || !store->args[1])
         return false;

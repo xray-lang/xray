@@ -33,6 +33,24 @@
     X(BIT_CTZ, "xi.bit.ctz", xicgen_exact_bit) \
     X(NOT, "xi.not", xicgen_not) \
     X(SELECT, "xi.select", xicgen_select) \
+    X(VEC_LOAD, "xi.vec.load", xicgen_vec) \
+    X(VEC_STORE, "xi.vec.store", xicgen_vec) \
+    X(VEC_SPLAT, "xi.vec.splat", xicgen_vec) \
+    X(VEC_EXTRACT, "xi.vec.extract", xicgen_vec) \
+    X(VEC_REPLACE, "xi.vec.replace", xicgen_vec) \
+    X(VEC_ADD, "xi.vec.add", xicgen_vec) \
+    X(VEC_SUB, "xi.vec.sub", xicgen_vec) \
+    X(VEC_MUL, "xi.vec.mul", xicgen_vec) \
+    X(VEC_BIT_AND, "xi.vec.bit.and", xicgen_vec) \
+    X(VEC_BIT_OR, "xi.vec.bit.or", xicgen_vec) \
+    X(VEC_BIT_XOR, "xi.vec.bit.xor", xicgen_vec) \
+    X(VEC_BIT_NOT, "xi.vec.bit.not", xicgen_vec) \
+    X(VEC_SHL, "xi.vec.shl", xicgen_vec) \
+    X(VEC_SHR, "xi.vec.shr", xicgen_vec) \
+    X(VEC_REINTERPRET, "xi.vec.reinterpret", xicgen_vec) \
+    X(VEC_SHUFFLE, "xi.vec.shuffle", xicgen_vec) \
+    X(VEC_WIDEN_MUL, "xi.vec.widen.mul", xicgen_vec) \
+    X(VEC_REDUCE_ADD, "xi.vec.reduce.add", xicgen_vec) \
     X(GET_SHARED, "xi.get.shared", xicgen_get_shared) \
     X(SET_SHARED, "xi.set.shared", xicgen_set_shared) \
     X(IMPORT_REF, "xi.import.ref", xicgen_import_ref) \

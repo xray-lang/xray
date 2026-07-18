@@ -29,6 +29,7 @@
  * then freed.  No file-scope globals. */
 typedef struct XiCgenCtx XiCgenCtx;
 typedef struct XaotBundle XaotBundle;
+typedef struct XaotTarget XaotTarget;
 
 typedef struct XiCgenCoroFrameStats {
     uint32_t coroutine_count;
@@ -61,6 +62,7 @@ typedef enum XiCgenTypeNameProfile {
 XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
 XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle);
+XR_FUNC void xi_cgen_ctx_set_target(XiCgenCtx *ctx, const XaotTarget *target, bool simd_active);
 XR_FUNC void xi_cgen_ctx_set_emit_main(XiCgenCtx *ctx, bool emit_main);
 XR_FUNC void xi_cgen_ctx_set_freestanding_profile(XiCgenCtx *ctx, bool freestanding);
 XR_FUNC void xi_cgen_ctx_set_type_name_profile(XiCgenCtx *ctx, XiCgenTypeNameProfile profile);

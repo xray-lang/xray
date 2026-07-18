@@ -45,6 +45,7 @@
 #include "xaot_link.h"
 #include "xaot_prepare.h"
 #include "xaot_verify.h"
+#include "xi_simd_lower.h"
 #include "../analysis/xglobal_producer.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/analyzer/xanalyzer.h"
@@ -1779,6 +1780,18 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     if (!reject_profile_static_data_plans(&aot_bundle))
         goto fail_free_ir;
+    /* Imported portable SIMD calls acquire their exact aggregate ABI only in
+     * xaot_prepare.  Rewrite them after that plan has been verified, retaining
+     * the prepared value/ABI sidecars for typed Xi C lowering. */
+    uint32_t simd_lowered = 0;
+    {
+        if (!xi_simd_lower_bundle(&aot_bundle, &simd_lowered)) {
+            fprintf(stderr, "Error: portable SIMD Xi lowering failed\n");
+            goto fail_free_ir;
+        }
+        if (simd_lowered > 0 && getenv("XRAY_XI_SIMD_DUMP"))
+            fprintf(stderr, "[xi-simd] lowered %u portable vector calls\n", simd_lowered);
+    }
     /* The plan dump is O(functions x values) diagnostics; only build it when
      * the caller actually wants it (--dump-xaot-plan). */
     if (emit_plan_dump) {
@@ -1803,6 +1816,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     }
     xi_cgen_ctx_set_aot_bundle(cg_ctx, &aot_bundle);
+    xi_cgen_ctx_set_target(cg_ctx, options->target, simd_lowered > 0);
     xi_cgen_ctx_set_emit_main(cg_ctx, emit_program_main);
     xi_cgen_ctx_set_freestanding_profile(cg_ctx, profile == XAOT_BUILD_PROFILE_FREESTANDING);
     xi_cgen_ctx_set_type_name_profile(cg_ctx, type_name_profile);

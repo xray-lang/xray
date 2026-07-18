@@ -1207,11 +1207,11 @@ static int cmd_build_bytecode(const char *input, const char *output, const char 
                               const char *opt_flag, bool c_only, bool strip, bool debug_symbols,
                               const char *sysroot);
 static int cmd_build_native(const char *input, const char *output, const char *cc,
-                            const char *opt_flag, const char *cpu, bool c_only, bool strip,
-                            bool debug_symbols, bool shared_library, XrCliBuildProfile profile,
-                            XiCgenTypeNameProfile type_name_profile, const char *sysroot,
-                            const char *linker_script, bool verbose, bool dump_xaot_plan,
-                            bool dump_global_evidence, bool dump_link_manifest,
+                            const char *opt_flag, const char *cpu, XaotSimdMode simd_mode,
+                            bool c_only, bool strip, bool debug_symbols, bool shared_library,
+                            XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
+                            const char *sysroot, const char *linker_script, bool verbose,
+                            bool dump_xaot_plan, bool dump_global_evidence, bool dump_link_manifest,
                             bool dump_link_command, bool dry_run_link, const char *c_header,
                             bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto,
                             const XrCliBuildTarget *target,
@@ -1229,6 +1229,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     const char *opt_level = xr_cli_opt_string(&inv->options, "opt", NULL);
     const char *target_arg = xr_cli_opt_string(&inv->options, "target", "native");
     const char *cpu = xr_cli_opt_string(&inv->options, "cpu", NULL);
+    const char *simd_arg = xr_cli_opt_string(&inv->options, "simd", "auto");
+    XaotSimdMode simd_mode = XAOT_SIMD_AUTO;
     const char *type_names_arg = xr_cli_opt_string(&inv->options, "type-names", NULL);
     bool c_only = xr_cli_opt_bool(&inv->options, "c-only");
     bool strip_symbols = xr_cli_opt_bool(&inv->options, "strip");
@@ -1428,6 +1430,17 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: --cpu requires --native\n");
         CMD_BUILD_RETURN(2);
     }
+    if (xr_cli_opt_present(&inv->options, "simd") && !native_mode) {
+        fprintf(stderr, "Error: --simd requires --native\n");
+        CMD_BUILD_RETURN(2);
+    }
+    if (!xaot_simd_mode_parse(simd_arg, &simd_mode)) {
+        fprintf(stderr,
+                "Error: invalid --simd mode '%s' (expected auto, scalar, native, neon, sse2, "
+                "or avx2)\n",
+                simd_arg ? simd_arg : "");
+        CMD_BUILD_RETURN(2);
+    }
     if (debug_symbols && !native_mode) {
         fprintf(stderr, "Error: --debug requires --native\n");
         CMD_BUILD_RETURN(2);
@@ -1466,8 +1479,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     }
 
     if (native_mode) {
-        rc = cmd_build_native(input_file, output_file, cc, opt_flag, effective_cpu, c_only,
-                              strip_symbols, debug_symbols, shared_library, profile,
+        rc = cmd_build_native(input_file, output_file, cc, opt_flag, effective_cpu, simd_mode,
+                              c_only, strip_symbols, debug_symbols, shared_library, profile,
                               type_name_profile, sysroot, linker_script, verbose, dump_xaot_plan,
                               dump_global_evidence, dump_link_manifest, dump_link_command,
                               dry_run_link, c_header, keep_c, cache_dir_arg, rebuild, effective_lto,
@@ -2403,11 +2416,11 @@ static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
 }
 
 static int cmd_build_native(const char *input, const char *output, const char *cc,
-                            const char *opt_flag, const char *cpu, bool c_only, bool strip,
-                            bool debug_symbols, bool shared_library, XrCliBuildProfile profile,
-                            XiCgenTypeNameProfile type_name_profile, const char *sysroot,
-                            const char *linker_script, bool verbose, bool dump_xaot_plan,
-                            bool dump_global_evidence, bool dump_link_manifest,
+                            const char *opt_flag, const char *cpu, XaotSimdMode simd_mode,
+                            bool c_only, bool strip, bool debug_symbols, bool shared_library,
+                            XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
+                            const char *sysroot, const char *linker_script, bool verbose,
+                            bool dump_xaot_plan, bool dump_global_evidence, bool dump_link_manifest,
                             bool dump_link_command, bool dry_run_link, const char *c_header,
                             bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto,
                             const XrCliBuildTarget *target,
@@ -2434,6 +2447,15 @@ static int cmd_build_native(const char *input, const char *output, const char *c
     if (!xaot_target_init(&build_target, target && target->name ? target->name : "native-c90")) {
         fprintf(stderr, "Error: failed to initialize AOT build target\n");
         return 1;
+    }
+    {
+        char simd_err[192];
+        if (!xaot_target_configure_simd(&build_target, simd_mode, cpu, simd_err,
+                                        sizeof(simd_err))) {
+            fprintf(stderr, "Error: %s\n", simd_err);
+            xaot_target_free(&build_target);
+            return 2;
+        }
     }
     memset(&build_options, 0, sizeof(build_options));
     {
@@ -2532,6 +2554,12 @@ static int cmd_build_native(const char *input, const char *output, const char *c
             xaot_build_result_free(&aot_result);
             return 1;
         }
+    }
+    if ((aot_result.link_manifest.target.simd_features & XAOT_SIMD_FEATURE_AVX2) != 0 &&
+        !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG, "-mavx2")) {
+        fprintf(stderr, "Error: failed to record AVX2 target flag in AOT link manifest\n");
+        xaot_build_result_free(&aot_result);
+        return 1;
     }
     if (shared_library && xaot_link_manifest_needs_runtime(&aot_result.link_manifest)) {
         fprintf(stderr, "Error: --shared does not support runtime-backed features yet; export "

@@ -397,6 +397,45 @@ static bool dump_contains_imported_package_link_dep(const char *dump) {
     return dump && strstr(dump, "link-dep") && strstr(dump, "name=math.abs");
 }
 
+static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
+    XaotTarget x86 = {0};
+    XaotTarget arm = {0};
+    XaotLinkManifest manifest = {0};
+    XaotSimdMode parsed = XAOT_SIMD_AUTO;
+    char err[192];
+
+    ASSERT_TRUE(xaot_simd_mode_parse("scalar", &parsed));
+    ASSERT_TRUE(parsed == XAOT_SIMD_SCALAR);
+    ASSERT_TRUE(!xaot_simd_mode_parse("host-macros", &parsed));
+
+    ASSERT_TRUE(xaot_target_init(&x86, "x86_64-linux-musl"));
+    ASSERT_TRUE(x86.simd_mode == XAOT_SIMD_AUTO);
+    ASSERT_TRUE(x86.simd_features == XAOT_SIMD_FEATURE_SSE2);
+    ASSERT_TRUE(xaot_target_configure_simd(&x86, XAOT_SIMD_AVX2, "haswell", err, sizeof(err)));
+    ASSERT_TRUE(x86.simd_features == (XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2));
+    ASSERT_TRUE(strcmp(x86.cpu, "haswell") == 0);
+    ASSERT_TRUE(!xaot_target_configure_simd(&x86, XAOT_SIMD_NEON, NULL, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "AArch64") != NULL);
+
+    ASSERT_TRUE(xaot_target_init(&arm, "aarch64-linux-musl"));
+    ASSERT_TRUE(arm.simd_features == XAOT_SIMD_FEATURE_NEON);
+    ASSERT_TRUE(!xaot_target_configure_simd(&arm, XAOT_SIMD_AVX2, NULL, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "x86_64") != NULL);
+    ASSERT_TRUE(xaot_target_configure_simd(&arm, XAOT_SIMD_SCALAR, NULL, err, sizeof(err)));
+    ASSERT_TRUE(arm.simd_features == 0);
+
+    ASSERT_TRUE(xaot_link_manifest_init(&manifest, &x86));
+    char *json = xaot_link_manifest_dump_json(&manifest);
+    ASSERT_TRUE(json != NULL);
+    ASSERT_TRUE(strstr(json, "\"simd_mode\": \"avx2\"") != NULL);
+    ASSERT_TRUE(strstr(json, "\"simd_features\": 6") != NULL);
+    xr_free(json);
+    xaot_link_manifest_free(&manifest);
+    xaot_target_free(&arm);
+    xaot_target_free(&x86);
+    passed++;
+}
+
 static void test_driver_consumes_imported_summary_payload_set(void) {
     char source_path[256];
     XaotTarget target = {0};
@@ -729,6 +768,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
 }
 
 int main(void) {
+    test_target_simd_plan_is_explicit_and_fail_closed();
     test_driver_consumes_imported_summary_payload_set();
     test_driver_rejects_invalid_imported_summary_payload_set();
     test_driver_analyzes_aggregate_layout_with_selected_target();

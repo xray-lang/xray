@@ -23,14 +23,14 @@ typedef enum {
     XI_LOWER_TEMPLATE_WIDEN = 5,
 } XiLowerTemplateKind;
 
-enum { XI_LOWERING_ENTRY_COUNT = 170 };
+enum { XI_LOWERING_ENTRY_COUNT = 188 };
 enum { XI_LOWERING_PATTERNED_ENTRY_COUNT = 33 };
-enum { XI_LOWERING_CUSTOM_ENTRY_COUNT = 137 };
+enum { XI_LOWERING_CUSTOM_ENTRY_COUNT = 155 };
 enum { XI_LOWERING_MAIN_BACKEND_ENTRY_COUNT = 134 };
 enum { XI_LOWERING_MAIN_BACKEND_PATTERNED_ENTRY_COUNT = 33 };
 enum { XI_LOWERING_REJECTED_TARGET_COUNT = 0 };
 enum { XI_LOWERING_REJECTED_ENTRY_COUNT = 0 };
-enum { XI_LOWERING_AOT_C_ENTRY_COUNT = 136 };
+enum { XI_LOWERING_AOT_C_ENTRY_COUNT = 154 };
 enum { XI_LOWERING_AOT_C_PATTERNED_ENTRY_COUNT = 33 };
 enum { XI_LOWERING_AOT_C_STMT_ENTRY_COUNT = 9 };
 enum { XI_LOWERING_AOT_C_STMT_PATTERNED_ENTRY_COUNT = 0 };
@@ -64,6 +64,24 @@ enum { XI_LOWERING_VM_BYTECODE_PATTERNED_ENTRY_COUNT = 33 };
     X(BIT_CTZ, "xi.bit.ctz", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0) \
     X(NOT, "xi.not", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0) \
     X(SELECT, "xi.select", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_LOAD, "xi.vec.load", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_STORE, "xi.vec.store", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_SPLAT, "xi.vec.splat", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_EXTRACT, "xi.vec.extract", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_REPLACE, "xi.vec.replace", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_ADD, "xi.vec.add", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_SUB, "xi.vec.sub", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_MUL, "xi.vec.mul", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_BIT_AND, "xi.vec.bit.and", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_BIT_OR, "xi.vec.bit.or", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_BIT_XOR, "xi.vec.bit.xor", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_BIT_NOT, "xi.vec.bit.not", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_SHL, "xi.vec.shl", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_SHR, "xi.vec.shr", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_REINTERPRET, "xi.vec.reinterpret", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_SHUFFLE, "xi.vec.shuffle", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_WIDEN_MUL, "xi.vec.widen.mul", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
+    X(VEC_REDUCE_ADD, "xi.vec.reduce.add", XI_LOWER_TARGET_AOT_C, XI_LOWER_TARGET_AOT_C, 0) \
     X(GET_SHARED, "xi.get.shared", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0) \
     X(SET_SHARED, "xi.set.shared", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0) \
     X(IMPORT_REF, "xi.import.ref", XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE, XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C, 0) \
@@ -238,6 +256,24 @@ static inline uint32_t xi_lowering_generated_targets(uint16_t op) {
         case XI_BIT_CTZ: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE;
         case XI_NOT: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE;
         case XI_SELECT: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE;
+        case XI_VEC_LOAD: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_STORE: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_SPLAT: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_EXTRACT: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_REPLACE: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_ADD: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_SUB: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_MUL: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_BIT_AND: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_BIT_OR: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_BIT_XOR: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_BIT_NOT: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_SHL: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_SHR: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_REINTERPRET: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_SHUFFLE: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_WIDEN_MUL: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_REDUCE_ADD: return XI_LOWER_TARGET_AOT_C;
         case XI_GET_SHARED: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE;
         case XI_SET_SHARED: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE;
         case XI_IMPORT_REF: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE;
@@ -416,6 +452,24 @@ static inline uint32_t xi_lowering_required_targets(uint16_t op) {
         case XI_BIT_CTZ: return XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C;
         case XI_NOT: return XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C;
         case XI_SELECT: return XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_LOAD: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_STORE: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_SPLAT: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_EXTRACT: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_REPLACE: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_ADD: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_SUB: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_MUL: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_BIT_AND: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_BIT_OR: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_BIT_XOR: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_BIT_NOT: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_SHL: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_SHR: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_REINTERPRET: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_SHUFFLE: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_WIDEN_MUL: return XI_LOWER_TARGET_AOT_C;
+        case XI_VEC_REDUCE_ADD: return XI_LOWER_TARGET_AOT_C;
         case XI_GET_SHARED: return XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C;
         case XI_SET_SHARED: return XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C;
         case XI_IMPORT_REF: return XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C;
@@ -594,6 +648,24 @@ static inline uint32_t xi_lowering_rejected_targets(uint16_t op) {
         case XI_BIT_CTZ: return 0;
         case XI_NOT: return 0;
         case XI_SELECT: return 0;
+        case XI_VEC_LOAD: return 0;
+        case XI_VEC_STORE: return 0;
+        case XI_VEC_SPLAT: return 0;
+        case XI_VEC_EXTRACT: return 0;
+        case XI_VEC_REPLACE: return 0;
+        case XI_VEC_ADD: return 0;
+        case XI_VEC_SUB: return 0;
+        case XI_VEC_MUL: return 0;
+        case XI_VEC_BIT_AND: return 0;
+        case XI_VEC_BIT_OR: return 0;
+        case XI_VEC_BIT_XOR: return 0;
+        case XI_VEC_BIT_NOT: return 0;
+        case XI_VEC_SHL: return 0;
+        case XI_VEC_SHR: return 0;
+        case XI_VEC_REINTERPRET: return 0;
+        case XI_VEC_SHUFFLE: return 0;
+        case XI_VEC_WIDEN_MUL: return 0;
+        case XI_VEC_REDUCE_ADD: return 0;
         case XI_GET_SHARED: return 0;
         case XI_SET_SHARED: return 0;
         case XI_IMPORT_REF: return 0;
@@ -772,6 +844,24 @@ static inline XiLowerTemplateKind xi_lowering_template_kind(uint16_t op) {
         case XI_BIT_CTZ: return XI_LOWER_TEMPLATE_CUSTOM;
         case XI_NOT: return XI_LOWER_TEMPLATE_VALUE_UNARY;
         case XI_SELECT: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_LOAD: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_STORE: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_SPLAT: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_EXTRACT: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_REPLACE: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_ADD: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_SUB: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_MUL: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_BIT_AND: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_BIT_OR: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_BIT_XOR: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_BIT_NOT: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_SHL: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_SHR: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_REINTERPRET: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_SHUFFLE: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_WIDEN_MUL: return XI_LOWER_TEMPLATE_CUSTOM;
+        case XI_VEC_REDUCE_ADD: return XI_LOWER_TEMPLATE_CUSTOM;
         case XI_GET_SHARED: return XI_LOWER_TEMPLATE_CUSTOM;
         case XI_SET_SHARED: return XI_LOWER_TEMPLATE_CUSTOM;
         case XI_IMPORT_REF: return XI_LOWER_TEMPLATE_CUSTOM;

@@ -90,6 +90,8 @@ static const XrCliOptionSpec build_options[] = {
     {"debug", 'g', XR_CLI_VALUE_NONE, false, false, NULL, "Emit native debug information"},
     {"cpu", 0, XR_CLI_VALUE_STRING, false, false, "CPU",
      "Tune for CPU via -march (e.g. native); host --native builds only"},
+    {"simd", 0, XR_CLI_VALUE_STRING, false, false, "MODE",
+     "Portable SIMD lowering: auto, scalar, native, neon, sse2, or avx2"},
     {"sysroot", 'r', XR_CLI_VALUE_STRING, false, false, "DIR", "System root directory"},
     {"strip", 'S', XR_CLI_VALUE_NONE, false, false, NULL, "Strip debug symbols"},
     {"native", 'N', XR_CLI_VALUE_NONE, false, false, NULL, "Use AOT native backend"},

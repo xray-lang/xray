@@ -1239,6 +1239,24 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
 
     // Record reference location for Find References
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    /* A graph module may be collected after the importing file's declaration
+     * pass, so a selective import can initially carry only an unknown value
+     * type. Resolve its exported semantic metadata lazily on first use. This
+     * is especially important for imported value classes: the identifier is a
+     * class namespace at the call site, not a dynamically typed value. */
+    if (sym->kind == XA_SYM_IMPORT && links && links->module_name && links->import_member_name &&
+        (!links->type || XR_TYPE_IS_UNKNOWN(links->type))) {
+        const char *module_name = links->module_name;
+        const char *member_name = links->import_member_name;
+        bool is_quoted = module_name[0] == '.' || module_name[0] == '/';
+        XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name, is_quoted);
+        XaSymbol *export_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
+        if (export_sym) {
+            xa_symbol_links_copy_export_metadata(links, &export_sym->links);
+            links->module_name = module_name;
+            links->import_member_name = member_name;
+        }
+    }
     if (links) {
         uint32_t end_col = node->column + (name ? strlen(name) : 0);
         xa_symbol_add_ref(links, node->line, node->column, end_col, false);
