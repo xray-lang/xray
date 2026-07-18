@@ -565,7 +565,6 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     }
 
     emit_class_native_typedefs(ctx, types, module, prefix);
-    emit_class_native_clone_helpers(ctx, types, module, prefix);
     emit_class_shared_native_storage_decls(ctx, types, prefix);
     emit_struct_native_typedefs(types, main_func, prefix);
     emit_enum_native_typedefs(ctx, types, module);
@@ -584,6 +583,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     cg_emit_freestanding_static_struct_defs(ctx, statics, module, prefix);
     cg_emit_freestanding_imported_static_const_decls(ctx, statics, module);
 
+    emit_class_native_clone_helpers(ctx, body, module, prefix);
     xi_cgen_func(ctx, body, main_func, prefix);
 
     if (ctx->emit_main) {
@@ -800,6 +800,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     cg_emit_freestanding_static_fixed_tuple_array_defs(ctx, statics, module);
     cg_emit_freestanding_static_tuple_defs(ctx, statics, module);
     cg_emit_freestanding_static_struct_defs(ctx, statics, module, prefix);
+    emit_class_native_clone_helpers(ctx, body, module, prefix);
     xi_cgen_func(ctx, body, module->init, prefix);
 
     if (is_entry) {
@@ -845,7 +846,6 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_TYPES)) {
         emit_imported_class_native_typedefs(ctx, unit);
         emit_class_native_typedefs(ctx, unit, module, prefix);
-        emit_class_native_clone_helpers(ctx, unit, module, prefix);
         emit_class_shared_native_storage_decls(ctx, unit, prefix);
         emit_imported_class_shared_native_storage_decls(ctx, unit);
         emit_struct_native_typedefs(unit, module->init, prefix);
