@@ -21,7 +21,10 @@
 #include "runtime/symbol/xsymbol_table.h"
 #include "runtime/value/xchunk.h"
 #include "runtime/value/xffi_sig.h"
+#include "runtime/value/xstruct_layout.h"
 #include "xray_vm.h"
+
+#include <string.h>
 
 static XrVMRuntime *new_test_isolate(void) {
     XrVMConfig params;
@@ -31,6 +34,105 @@ static XrVMRuntime *new_test_isolate(void) {
 
 static uint16_t read_le16(const uint8_t *p) {
     return (uint16_t) p[0] | (uint16_t) ((uint16_t) p[1] << 8);
+}
+
+static uint32_t read_le32(const uint8_t *p) {
+    return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) |
+           ((uint32_t) p[3] << 24);
+}
+
+static uint64_t read_le64(const uint8_t *p) {
+    uint64_t value = 0;
+    for (uint32_t i = 0; i < 8; i++)
+        value |= (uint64_t) p[i] << (i * 8u);
+    return value;
+}
+
+static void write_le16(uint8_t *p, uint16_t value) {
+    p[0] = (uint8_t) value;
+    p[1] = (uint8_t) (value >> 8);
+}
+
+static void write_le32(uint8_t *p, uint32_t value) {
+    for (uint32_t i = 0; i < 4; i++)
+        p[i] = (uint8_t) (value >> (i * 8u));
+}
+
+static void write_le64(uint8_t *p, uint64_t value) {
+    for (uint32_t i = 0; i < 8; i++)
+        p[i] = (uint8_t) (value >> (i * 8u));
+}
+
+static XrAggregateLayout test_layout(uint8_t kind, uint16_t field_count) {
+    XrAggregateLayout layout;
+    memset(&layout, 0, sizeof(layout));
+    layout.kind = kind;
+    layout.is_extern_layout = true;
+    layout.field_count = field_count;
+    return layout;
+}
+
+static XrClassDescriptor test_layout_descriptor(const char *name, XrAggregateLayout *layout) {
+    XrClassDescriptor desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.class_name = name;
+    desc.descriptor_version = XR_CLASS_DESCRIPTOR_VERSION;
+    desc.clinit_proto_index = -1;
+    desc.super_global_index = -1;
+    desc.struct_layout = layout;
+    return desc;
+}
+
+static void free_minimal_roundtrip_descriptor(XrClassDescriptor *desc) {
+    if (!desc)
+        return;
+    xr_free((void *) desc->class_name);
+    xr_free((void *) desc->super_name);
+    xr_free((void *) desc->generic_origin_name);
+    xr_free((void *) desc->display_name);
+    xr_free(desc);
+}
+
+/* Locate the first nested-layout key in the stable v21 layout table.  Keeping
+ * this parser in the test makes corruption checks independent of qsort order. */
+static bool find_nested_key_offset(const uint8_t *bytes, size_t size, size_t *out_offset,
+                                   uint64_t *out_owner_key) {
+    if (!bytes || size < 24)
+        return false;
+    uint32_t count = read_le32(bytes + 20);
+    size_t pos = 24;
+    for (uint32_t li = 0; li < count; li++) {
+        if (pos > size || size - pos < 36)
+            return false;
+        uint64_t owner_key = read_le64(bytes + pos + 4);
+        uint16_t field_count = read_le16(bytes + pos + 34);
+        pos += 36;
+        for (uint16_t fi = 0; fi < field_count; fi++) {
+            if (pos >= size)
+                return false;
+            uint8_t has_name = bytes[pos++];
+            if (has_name == 1) {
+                if (pos > size || size - pos < 4)
+                    return false;
+                uint32_t length = read_le32(bytes + pos);
+                pos += 4;
+                if (pos > size || length > size - pos)
+                    return false;
+                pos += length;
+            } else if (has_name != 0) {
+                return false;
+            }
+            if (pos > size || size - pos < 23)
+                return false;
+            if (bytes[pos + 8] == XR_NATIVE_NESTED_AGGREGATE) {
+                *out_offset = pos + 14;
+                *out_owner_key = owner_key;
+                return true;
+            }
+            pos += 23;
+        }
+    }
+    return false;
 }
 
 static XrProto *make_minimal_proto(void) {
@@ -53,7 +155,7 @@ TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction) {
     ASSERT_NOT_NULL(proto);
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
     ASSERT_GT(size, 16);
     ASSERT_EQ_UINT(read_le16(bytes + 4), XR_BC_VERSION);
@@ -90,7 +192,7 @@ TEST(bytecode_roundtrips_reachable_entry_plan) {
     ASSERT_EQ_INT(xr_vm_proto_add_proto(root, child), 0);
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(iso, root, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(iso, root, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -120,7 +222,7 @@ TEST(bytecode_roundtrips_struct_area_size) {
     proto->struct_area_size = 48;
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -152,7 +254,7 @@ TEST(bytecode_roundtrips_exact_string_constant_lengths) {
     ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, xr_string_value(binary)), 1);
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -189,7 +291,7 @@ TEST(bytecode_roundtrips_rune_constants) {
     ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, xr_rune(0x1F642)), 0);
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -220,7 +322,7 @@ TEST(bytecode_reader_assigns_unique_proto_ids) {
     ASSERT_EQ_INT(xr_vm_proto_add_proto(proto, child), 0);
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -248,7 +350,7 @@ TEST(bytecode_reader_rejects_previous_layout_version) {
     ASSERT_NOT_NULL(proto);
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
     ASSERT_GT(size, 16);
 
@@ -288,7 +390,7 @@ TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates) {
     xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -343,7 +445,7 @@ TEST(bytecode_roundtrips_typed_record_decode_shape) {
     xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -405,7 +507,7 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -446,6 +548,266 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     xray_vm_delete(writer);
 }
 
+TEST(bytecode_roundtrips_canonical_extern_layout_matrix_deterministically) {
+    XrVMRuntime *writer = new_test_isolate();
+    ASSERT_NOT_NULL(writer);
+    XrVMRuntime *reader = new_test_isolate();
+    ASSERT_NOT_NULL(reader);
+    const XrTargetDataLayout *target = xr_target_data_layout_host();
+    ASSERT_NOT_NULL(target);
+
+    const char *child_names[] = {"tag", "payload"};
+    XrAggregateLayout child = test_layout(XR_AGG_LAYOUT_PACKED_STRUCT, 2);
+    child.field_names = child_names;
+    child.fields[0].native_type = XR_NATIVE_U8;
+    child.fields[1].native_type = XR_NATIVE_POINTER;
+    ASSERT_TRUE(xr_aggregate_layout_compute(&child, target));
+
+    const char *outer_names[] = {"header", "words", "count", "tail"};
+    XrAggregateLayout outer = test_layout(XR_AGG_LAYOUT_STRUCT, 4);
+    outer.field_names = outer_names;
+    outer.fields[0].native_type = XR_NATIVE_NESTED_AGGREGATE;
+    outer.fields[0].sub_layout = &child;
+    outer.fields[1].native_type = XR_NATIVE_ARRAY;
+    outer.fields[1].elem_native_type = XR_NATIVE_U16;
+    outer.fields[1].elem_count = 3;
+    outer.fields[2].native_type = XR_NATIVE_USIZE;
+    outer.fields[3].native_type = XR_NATIVE_ARRAY;
+    outer.fields[3].elem_native_type = XR_NATIVE_U8;
+    outer.fields[3].is_flexible = true;
+    ASSERT_TRUE(xr_aggregate_layout_compute(&outer, target));
+
+    /* A separately allocated but semantically equal graph must serialize once
+     * and resolve to the same canonical runtime pointer. */
+    XrAggregateLayout child_copy = test_layout(XR_AGG_LAYOUT_PACKED_STRUCT, 2);
+    child_copy.field_names = child_names;
+    child_copy.fields[0].native_type = XR_NATIVE_U8;
+    child_copy.fields[1].native_type = XR_NATIVE_POINTER;
+    ASSERT_TRUE(xr_aggregate_layout_compute(&child_copy, target));
+    XrAggregateLayout outer_copy = test_layout(XR_AGG_LAYOUT_STRUCT, 4);
+    outer_copy.field_names = outer_names;
+    outer_copy.fields[0].native_type = XR_NATIVE_NESTED_AGGREGATE;
+    outer_copy.fields[0].sub_layout = &child_copy;
+    outer_copy.fields[1].native_type = XR_NATIVE_ARRAY;
+    outer_copy.fields[1].elem_native_type = XR_NATIVE_U16;
+    outer_copy.fields[1].elem_count = 3;
+    outer_copy.fields[2].native_type = XR_NATIVE_USIZE;
+    outer_copy.fields[3].native_type = XR_NATIVE_ARRAY;
+    outer_copy.fields[3].elem_native_type = XR_NATIVE_U8;
+    outer_copy.fields[3].is_flexible = true;
+    ASSERT_TRUE(xr_aggregate_layout_compute(&outer_copy, target));
+    ASSERT_TRUE(xr_aggregate_layout_semantically_equal(&outer, &outer_copy));
+
+    const char *union_names[] = {"bits", "number"};
+    XrAggregateLayout variant = test_layout(XR_AGG_LAYOUT_UNION, 2);
+    variant.field_names = union_names;
+    variant.explicit_align = 16;
+    variant.fields[0].native_type = XR_NATIVE_U64;
+    variant.fields[1].native_type = XR_NATIVE_F64;
+    ASSERT_TRUE(xr_aggregate_layout_compute(&variant, target));
+
+    XrClassDescriptor desc_outer = test_layout_descriptor("Outer", &outer);
+    XrClassDescriptor desc_copy = test_layout_descriptor("OuterAlias", &outer_copy);
+    XrClassDescriptor desc_union = test_layout_descriptor("Variant", &variant);
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc_outer)), 0);
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc_copy)), 1);
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc_union)), 2);
+    proto->code.count = 0;
+    proto->lineinfo.count = 0;
+    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
+    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 1), 1);
+    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 2), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+
+    size_t size_a = 0;
+    size_t size_b = 0;
+    XrBcError write_error = XR_BC_OK;
+    uint8_t *bytes_a = xr_bytecode_write(writer, proto, 0, &size_a, &write_error);
+    ASSERT_NOT_NULL(bytes_a);
+    ASSERT_EQ_INT(write_error, XR_BC_OK);
+    uint8_t *bytes_b = xr_bytecode_write(writer, proto, 0, &size_b, &write_error);
+    ASSERT_NOT_NULL(bytes_b);
+    ASSERT_EQ_UINT(size_a, size_b);
+    ASSERT_MEM_EQ(bytes_a, bytes_b, size_a);
+    ASSERT_EQ_UINT(read_le32(bytes_a + 20), 3);
+
+    XrBcError read_error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(reader, bytes_a, size_a, &read_error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(read_error, XR_BC_OK);
+    XrClassDescriptor *read_outer = XR_TO_PTR(PROTO_CONSTANT(roundtrip, 0));
+    XrClassDescriptor *read_copy = XR_TO_PTR(PROTO_CONSTANT(roundtrip, 1));
+    XrClassDescriptor *read_union = XR_TO_PTR(PROTO_CONSTANT(roundtrip, 2));
+    ASSERT_NOT_NULL(read_outer);
+    ASSERT_NOT_NULL(read_copy);
+    ASSERT_NOT_NULL(read_union);
+    ASSERT_EQ_PTR(read_outer->struct_layout, read_copy->struct_layout);
+    ASSERT_EQ_UINT(read_outer->struct_layout->target_abi_hash, target->stable_hash);
+    ASSERT_EQ_UINT(read_outer->struct_layout->kind, XR_AGG_LAYOUT_STRUCT);
+    ASSERT_EQ_UINT(read_outer->struct_layout->field_count, 4);
+    ASSERT_STR_EQ(read_outer->struct_layout->field_names[0], "header");
+    ASSERT_EQ_UINT(read_outer->struct_layout->fields[1].native_type, XR_NATIVE_ARRAY);
+    ASSERT_EQ_UINT(read_outer->struct_layout->fields[1].elem_count, 3);
+    ASSERT_TRUE(read_outer->struct_layout->fields[3].is_flexible);
+    ASSERT_NOT_NULL(read_outer->struct_layout->fields[0].sub_layout);
+    ASSERT_EQ_UINT(read_outer->struct_layout->fields[0].sub_layout->kind,
+                   XR_AGG_LAYOUT_PACKED_STRUCT);
+    ASSERT_EQ_UINT(read_outer->struct_layout->fields[0].sub_layout->alignment, 1);
+    ASSERT_EQ_UINT(read_union->struct_layout->kind, XR_AGG_LAYOUT_UNION);
+    ASSERT_EQ_UINT(read_union->struct_layout->alignment, 16);
+    ASSERT_EQ_UINT(read_union->struct_layout->fields[0].offset, 0);
+    ASSERT_EQ_UINT(read_union->struct_layout->fields[1].offset, 0);
+    ASSERT_TRUE(read_outer->struct_layout->layout_id != 0);
+
+    free_minimal_roundtrip_descriptor(read_outer);
+    free_minimal_roundtrip_descriptor(read_copy);
+    free_minimal_roundtrip_descriptor(read_union);
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes_b);
+    xr_free(bytes_a);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(reader);
+    xray_vm_delete(writer);
+}
+
+TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corruption) {
+    XrVMRuntime *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+    const XrTargetDataLayout *target = xr_target_data_layout_host();
+    ASSERT_NOT_NULL(target);
+
+    XrAggregateLayout scalar = test_layout(XR_AGG_LAYOUT_STRUCT, 1);
+    scalar.fields[0].native_type = XR_NATIVE_I32;
+    ASSERT_TRUE(xr_aggregate_layout_compute(&scalar, target));
+    XrClassDescriptor desc = test_layout_descriptor("Scalar", &scalar);
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc)), 0);
+    proto->code.count = 0;
+    proto->lineinfo.count = 0;
+    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
+    ASSERT_NOT_NULL(bytes);
+    ASSERT_GT(size, 84);
+    ASSERT_EQ_UINT(read_le32(bytes + 20), 1);
+
+    XrBcError error = XR_BC_OK;
+    bytes[36] ^= 1u;
+    ASSERT_NULL(xr_bytecode_read(iso, bytes, size, &error));
+    ASSERT_EQ_INT(error, XR_BC_ERR_TARGET_ABI);
+    bytes[36] ^= 1u;
+
+    write_le16(bytes + 58, XR_MAX_AGG_FIELDS + 1);
+    ASSERT_NULL(xr_bytecode_read(iso, bytes, size, &error));
+    ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
+    write_le16(bytes + 58, 1);
+
+    write_le32(bytes + 61, 1);
+    ASSERT_NULL(xr_bytecode_read(iso, bytes, size, &error));
+    ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
+    write_le32(bytes + 61, 0);
+
+    ASSERT_NULL(xr_bytecode_read(iso, bytes, 61, &error));
+    ASSERT_EQ_INT(error, XR_BC_ERR_TRUNCATED);
+    ASSERT_NULL(xr_bytecode_read(iso, bytes, 3, &error));
+    ASSERT_EQ_INT(error, XR_BC_ERR_TRUNCATED);
+    uint8_t *with_trailing_byte = xr_malloc(size + 1);
+    ASSERT_NOT_NULL(with_trailing_byte);
+    memcpy(with_trailing_byte, bytes, size);
+    with_trailing_byte[size] = 0;
+    ASSERT_NULL(xr_bytecode_read(iso, with_trailing_byte, size + 1, &error));
+    ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
+    xr_free(with_trailing_byte);
+    ASSERT_STR_EQ(xr_bytecode_error_string(XR_BC_ERR_TARGET_ABI),
+                  "bytecode aggregate layout target ABI mismatch");
+    ASSERT_STR_EQ(xr_bytecode_error_string(XR_BC_ERR_CORRUPT), "corrupt bytecode metadata");
+
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+
+    XrAggregateLayout child = test_layout(XR_AGG_LAYOUT_STRUCT, 1);
+    child.fields[0].native_type = XR_NATIVE_U8;
+    ASSERT_TRUE(xr_aggregate_layout_compute(&child, target));
+    XrAggregateLayout outer = test_layout(XR_AGG_LAYOUT_STRUCT, 1);
+    outer.fields[0].native_type = XR_NATIVE_NESTED_AGGREGATE;
+    outer.fields[0].sub_layout = &child;
+    ASSERT_TRUE(xr_aggregate_layout_compute(&outer, target));
+    XrClassDescriptor nested_desc = test_layout_descriptor("Nested", &outer);
+    proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&nested_desc)), 0);
+    proto->code.count = 0;
+    proto->lineinfo.count = 0;
+    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
+    ASSERT_NOT_NULL(bytes);
+    size_t nested_key_offset = 0;
+    uint64_t owner_key = 0;
+    ASSERT_TRUE(find_nested_key_offset(bytes, size, &nested_key_offset, &owner_key));
+    write_le64(bytes + nested_key_offset, owner_key);
+    ASSERT_NULL(xr_bytecode_read(iso, bytes, size, &error));
+    ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
+
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(iso);
+}
+
+TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth) {
+    XrVMRuntime *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+    const XrTargetDataLayout *target = xr_target_data_layout_host();
+    ASSERT_NOT_NULL(target);
+
+    XrAggregateLayout wrong_target = test_layout(XR_AGG_LAYOUT_STRUCT, 1);
+    wrong_target.fields[0].native_type = XR_NATIVE_POINTER;
+    ASSERT_TRUE(xr_aggregate_layout_compute(&wrong_target, target));
+    wrong_target.target_abi_hash ^= UINT64_C(1);
+    XrClassDescriptor desc = test_layout_descriptor("WrongTarget", &wrong_target);
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc)), 0);
+    proto->code.count = 0;
+    proto->lineinfo.count = 0;
+    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    size_t size = 0;
+    XrBcError error = XR_BC_OK;
+    ASSERT_NULL(xr_bytecode_write(iso, proto, 0, &size, &error));
+    ASSERT_EQ_INT(error, XR_BC_ERR_TARGET_ABI);
+    xr_vm_proto_free(proto);
+
+    XrAggregateLayout chain[18];
+    for (uint32_t i = 0; i < 18; i++)
+        chain[i] = test_layout(XR_AGG_LAYOUT_STRUCT, 1);
+    chain[17].fields[0].native_type = XR_NATIVE_U8;
+    ASSERT_TRUE(xr_aggregate_layout_compute(&chain[17], target));
+    for (int i = 16; i >= 0; i--) {
+        chain[i].fields[0].native_type = XR_NATIVE_NESTED_AGGREGATE;
+        chain[i].fields[0].sub_layout = &chain[i + 1];
+        ASSERT_TRUE(xr_aggregate_layout_compute(&chain[i], target));
+    }
+    desc = test_layout_descriptor("TooDeep", &chain[0]);
+    proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc)), 0);
+    proto->code.count = 0;
+    proto->lineinfo.count = 0;
+    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+    ASSERT_NULL(xr_bytecode_write(iso, proto, 0, &size, &error));
+    ASSERT_EQ_INT(error, XR_BC_ERR_METADATA);
+
+    xr_vm_proto_free(proto);
+    xray_vm_delete(iso);
+}
+
 TEST(bytecode_roundtrips_enum_type_constants) {
     XrVMRuntime *writer = new_test_isolate();
     ASSERT_NOT_NULL(writer);
@@ -471,7 +833,7 @@ TEST(bytecode_roundtrips_enum_type_constants) {
     xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -515,7 +877,7 @@ TEST(bytecode_roundtrips_u16_upvalue_index) {
         xr_vm_proto_add_upvalue(proto, 300, 0, 1, 0, UPVAL_SRC_REG, XR_CAPTURE_DEEP_COPY, NULL), 0);
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
     ASSERT_GT(size, 16);
 
@@ -546,7 +908,7 @@ TEST(bytecode_roundtrips_declared_shared_count) {
     proto->shared_count = 4;
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -590,7 +952,7 @@ TEST(bytecode_roundtrips_symbol_index_above_255) {
     xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 1, 2, 0), 1);
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -630,7 +992,7 @@ TEST(bytecode_roundtrips_extern_ffi_signature) {
     proto->ffi_sig = sig;
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -668,7 +1030,7 @@ TEST(bytecode_roundtrips_extern_default_library) {
     proto->ffi_sig = sig;
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -702,7 +1064,7 @@ TEST(bytecode_roundtrips_extern_cfn_callback_signature) {
     proto->ffi_sig = sig;
 
     size_t size = 0;
-    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
     ASSERT_NOT_NULL(bytes);
 
     XrBcError error = XR_BC_OK;
@@ -738,6 +1100,9 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);
     RUN_TEST(bytecode_roundtrips_typed_record_decode_shape);
     RUN_TEST(bytecode_roundtrips_class_descriptor_constants);
+    RUN_TEST(bytecode_roundtrips_canonical_extern_layout_matrix_deterministically);
+    RUN_TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corruption);
+    RUN_TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth);
     RUN_TEST(bytecode_roundtrips_enum_type_constants);
     RUN_TEST(bytecode_roundtrips_u16_upvalue_index);
     RUN_TEST(bytecode_roundtrips_declared_shared_count);

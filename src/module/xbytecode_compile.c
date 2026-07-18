@@ -47,10 +47,12 @@ bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
 
     // Serialize
     size_t bc_size;
-    uint8_t *bc = xr_bytecode_write(X, proto, flags, &bc_size);
+    XrBcError bc_error = XR_BC_OK;
+    uint8_t *bc = xr_bytecode_write(X, proto, flags, &bc_size, &bc_error);
     if (!bc) {
         xr_vm_proto_free(proto);
-        xr_log_warning("compile", "serialization failed");
+        xr_log_warning("compile", "bytecode serialization failed: %s",
+                       xr_bytecode_error_string(bc_error));
         return false;
     }
 

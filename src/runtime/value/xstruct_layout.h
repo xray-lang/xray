@@ -106,6 +106,11 @@ XR_FUNC bool xr_aggregate_layout_compute(XrAggregateLayout *layout,
 /* Stable semantic identity for cache keys, AOT names and bytecode layout
  * tables.  It contains no pointer identity or process-local layout_id. */
 XR_FUNC uint64_t xr_aggregate_layout_stable_key(const XrAggregateLayout *layout);
+XR_FUNC bool xr_aggregate_layout_semantically_equal(const XrAggregateLayout *left,
+                                                    const XrAggregateLayout *right);
+/* Release one heap-materialized serialized layout. Nested layouts are interned
+ * separately and are therefore not recursively released here. */
+XR_FUNC void xr_aggregate_layout_free_owned(XrAggregateLayout *layout);
 
 /*
  * Static layout query for C-porting surfaces.

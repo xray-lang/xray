@@ -185,7 +185,8 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                                     xr_compile_ast_with_source(ctx->session, ast, mid.source_path);
                                 if (proto) {
                                     size_t bc_size;
-                                    uint8_t *bc = xr_bytecode_write(ctx->X, proto, 0, &bc_size);
+                                    uint8_t *bc =
+                                        xr_bytecode_write(ctx->X, proto, 0, &bc_size, NULL);
                                     if (bc) {
                                         bundle_add_entry(ctx->bundle, mid.source_path, bc, bc_size);
                                         xr_free(bc);
@@ -224,7 +225,7 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                                 xr_compile_ast_with_source(ctx->session, ast, mid.source_path);
                             if (proto) {
                                 size_t bc_size;
-                                uint8_t *bc = xr_bytecode_write(ctx->X, proto, 0, &bc_size);
+                                uint8_t *bc = xr_bytecode_write(ctx->X, proto, 0, &bc_size, NULL);
                                 if (bc) {
                                     bundle_add_entry(ctx->bundle, mid.source_path, bc, bc_size);
                                     xr_free(bc);
@@ -472,7 +473,7 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFl
     XrProto *proto = xr_compile_ast_with_source(session, ast, abs_path);
     if (proto) {
         size_t bc_size;
-        uint8_t *bc = xr_bytecode_write(X, proto, 0, &bc_size);
+        uint8_t *bc = xr_bytecode_write(X, proto, 0, &bc_size, NULL);
         if (bc) {
             bundle_add_entry(bundle, abs_path, bc, bc_size);
             xr_free(bc);

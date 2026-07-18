@@ -10,6 +10,7 @@
 
 #include "xstruct_layout.h"
 #include "xtype.h"
+#include "../../base/xmalloc.h"
 #include "../class/xclass_info.h"
 
 #include <stddef.h>
@@ -184,6 +185,49 @@ static uint64_t aggregate_layout_stable_key_depth(const XrAggregateLayout *layou
 
 uint64_t xr_aggregate_layout_stable_key(const XrAggregateLayout *layout) {
     return aggregate_layout_stable_key_depth(layout, 0);
+}
+
+static bool aggregate_layout_equal_depth(const XrAggregateLayout *left,
+                                         const XrAggregateLayout *right, uint32_t depth) {
+    if (left == right)
+        return true;
+    if (!left || !right || depth > 16 || left->target_abi_hash != right->target_abi_hash ||
+        left->kind != right->kind || left->is_extern_layout != right->is_extern_layout ||
+        left->explicit_align != right->explicit_align || left->total_size != right->total_size ||
+        left->alignment != right->alignment || left->field_count != right->field_count ||
+        left->field_count > XR_MAX_AGG_FIELDS)
+        return false;
+    for (uint16_t i = 0; i < left->field_count; i++) {
+        const XrAggregateFieldLayout *lf = &left->fields[i];
+        const XrAggregateFieldLayout *rf = &right->fields[i];
+        const char *ln = left->field_names ? left->field_names[i] : NULL;
+        const char *rn = right->field_names ? right->field_names[i] : NULL;
+        if ((ln == NULL) != (rn == NULL) || (ln && strcmp(ln, rn) != 0) ||
+            lf->offset != rf->offset || lf->native_type != rf->native_type ||
+            lf->size != rf->size || lf->elem_native_type != rf->elem_native_type ||
+            lf->elem_count != rf->elem_count || lf->is_flexible != rf->is_flexible)
+            return false;
+        if (lf->native_type == XR_NATIVE_NESTED_AGGREGATE &&
+            !aggregate_layout_equal_depth(lf->sub_layout, rf->sub_layout, depth + 1))
+            return false;
+    }
+    return true;
+}
+
+bool xr_aggregate_layout_semantically_equal(const XrAggregateLayout *left,
+                                            const XrAggregateLayout *right) {
+    return aggregate_layout_equal_depth(left, right, 0);
+}
+
+void xr_aggregate_layout_free_owned(XrAggregateLayout *layout) {
+    if (!layout)
+        return;
+    if (layout->field_names) {
+        for (uint16_t i = 0; i < layout->field_count; i++)
+            xr_free((void *) layout->field_names[i]);
+        xr_free(layout->field_names);
+    }
+    xr_free(layout);
 }
 
 static const XrAggregateLayout *static_layout_struct_from_type(const XrType *type) {
