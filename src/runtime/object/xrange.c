@@ -89,7 +89,7 @@ XrValue xr_range_to_array(struct XrVMRuntime *iso, XrRange *r) {
 
     /* Plan the materialization through the runtime-neutral core so the VM and the
      * AOT (src/aot/xrt_range_methods.inc.c) agree on the cap and length exactly. */
-    XrRangeCore core = xr_range_core_make(r->start, r->end, r->step);
+    XrRangeCore core = xr_range_core_make_with_bound(r->start, r->end, r->step, r->inclusive_end);
     XrRangeCoreMaterializePlan plan = xr_range_core_materialize_plan(core);
 
     XrCoroutine *coro = NULL;
