@@ -604,6 +604,20 @@ TEST(e2e_slice) {
     xr_vm_proto_free(p);
 }
 
+TEST(e2e_generator_completion_has_no_normal_return_value) {
+    XrProto *p = compile_source("fn counter(n: int) -> Iterator<int> {\n"
+                                "  yield n\n"
+                                "}\n"
+                                "for (x in counter(1)) {\n"
+                                "  print(x)\n"
+                                "}",
+                                NULL);
+    assert(p != NULL);
+    assert(PROTO_PROTO_COUNT(p) >= 1);
+    assert(has_opcode(PROTO_PROTO(p, 0), OP_GEN_YIELD));
+    xr_vm_proto_free(p);
+}
+
 /* ========== Closure (nested function) ========== */
 
 TEST(e2e_closure) {
@@ -947,6 +961,9 @@ int main(void) {
 
     /* Slice */
     run_e2e_slice();
+
+    /* Generator completion */
+    run_e2e_generator_completion_has_no_normal_return_value();
 
     /* Closure (nested function) */
     run_e2e_closure();
