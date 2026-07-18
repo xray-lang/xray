@@ -1,0 +1,17 @@
+export struct ByteState {
+    data: [byte; 4]
+    total: int
+
+    static init(seed: int) -> ByteState {
+        return ByteState{data: [0; 4], total: seed}
+    }
+
+    update(value: byte) {
+        this.data[0] = value
+        this.total = this.total + int(value)
+    }
+
+    digest() -> int {
+        return this.total + int(this.data[0])
+    }
+}

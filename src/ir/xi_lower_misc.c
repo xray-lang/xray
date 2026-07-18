@@ -102,7 +102,7 @@ static void lower_enum_methods(XiLower *l, EnumDeclNode *ed) {
         XaSymbolLinks *method_links = xa_analyzer_get_links(l->analyzer, method_sym);
         struct XrType *receiver_type =
             md->is_static ? NULL : xr_type_new_enum(l->isolate, ed->name);
-        XiFunc *mf = xi_lower_method_as_func(l, md, !md->is_static, NULL, receiver_type,
+        XiFunc *mf = xi_lower_method_as_func(l, md, !md->is_static, NULL, false, receiver_type,
                                              xi_lower_source_node_id(l, method));
         if (!mf) {
             l->had_error = true;

@@ -173,8 +173,10 @@ typedef struct XiCallArgPlan {
 } XiCallArgPlan;
 
 typedef struct XiCallPlan {
+    XiCallArgPlan receiver;
     XiCallArgPlan *args;
     uint16_t nargs;
+    bool has_receiver;
     bool verified;
 } XiCallPlan;
 

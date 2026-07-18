@@ -799,8 +799,15 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
             return ")";
         }
         if (!xaot_value_reps_equal(target_rep, call_plan->rep)) {
-            fprintf(stderr, "[xi_cgen] ERROR: aggregate direct-call return ABI mismatch at v%u\n",
-                    call ? call->id : 0);
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: aggregate direct-call return ABI mismatch at v%u "
+                    "target=%s target_type=%s call_type=%s target_flags=0x%x call_flags=0x%x "
+                    "receiver_op=%s\n",
+                    call ? call->id : 0, target && target->name ? target->name : "?",
+                    target_rep.c_type ? target_rep.c_type : "?",
+                    call_plan->rep.c_type ? call_plan->rep.c_type : "?",
+                    (unsigned) target_rep.flags, (unsigned) call_plan->rep.flags,
+                    call && call->nargs > 0 && call->args[0] ? xi_op_name(call->args[0]->op) : "?");
             ctx->error = true;
         }
         return NULL;

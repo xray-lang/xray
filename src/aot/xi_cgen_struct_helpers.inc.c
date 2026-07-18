@@ -154,7 +154,8 @@ static bool cg_struct_layout_same_shape(const XrAggregateLayout *a, const XrAggr
 
 static void cg_struct_heap_type_name(char *buf, size_t buflen, const char *prefix,
                                      const XrAggregateLayout *sl) {
-    xaot_struct_c_type_name(buf, buflen, prefix, sl);
+    (void) prefix;
+    xaot_struct_c_type_name(buf, buflen, "abi", sl);
 }
 
 static const XrAggregateFieldLayout *cg_struct_field(const XrAggregateLayout *sl, int64_t idx);
@@ -251,6 +252,12 @@ static void cg_collect_struct_layouts_from_func(const XiFunc *f, const XrAggrega
                                                 uint64_t *hashes, int *count) {
     if (!f)
         return;
+    cg_collect_struct_layout(cg_type_struct_layout(f->return_type), layouts, hashes, count);
+    for (uint16_t pi = 0; pi < f->nparams; pi++) {
+        const XiValue *param = f->params ? f->params[pi] : NULL;
+        cg_collect_struct_layout(cg_type_struct_layout(param ? param->type : NULL), layouts, hashes,
+                                 count);
+    }
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         if (!blk)
@@ -259,6 +266,7 @@ static void cg_collect_struct_layouts_from_func(const XiFunc *f, const XrAggrega
             const XiValue *v = blk->values[vi];
             if (!v)
                 continue;
+            cg_collect_struct_layout(cg_type_struct_layout(v->type), layouts, hashes, count);
             if (v->op == XI_AGG_NEW || v->op == XI_AGG_GET || v->op == XI_AGG_SET)
                 cg_collect_struct_layout((const XrAggregateLayout *) v->aux, layouts, hashes,
                                          count);
@@ -2321,6 +2329,26 @@ static void emit_struct_heap_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFun
 static void emit_struct_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                      const XrAggregateLayout *sl, int64_t idx,
                                      const XiValue *object, const char *prefix) {
+    const XiValue *place_load = object;
+    while (place_load && cg_is_identity_copy_or_move(place_load) && place_load->nargs >= 1)
+        place_load = place_load->args[0];
+    if (place_load && place_load->op == XI_PLACE_LOAD && place_load->nargs == 1 &&
+        place_load->args[0]) {
+        const XaotValuePlan *load_plan = cg_value_plan(ctx, place_load);
+        const char *c_type =
+            load_plan && load_plan->rep.kind == XAOT_VALUE_AGGREGATE ? load_plan->rep.c_type : NULL;
+        char fallback_type[128];
+        if (!c_type) {
+            xaot_struct_c_type_name(fallback_type, sizeof(fallback_type), "abi", sl);
+            c_type = fallback_type;
+        }
+        char field_name[128];
+        cg_struct_field_c_name(sl, idx, field_name, sizeof(field_name));
+        fprintf(out, "(*(%s *)(", c_type);
+        emit_value_as_rep_ctx(ctx, out, place_load->args[0], XR_REP_RAWPTR);
+        fprintf(out, ")).%s", field_name);
+        return;
+    }
     const XrAggregateLayout *static_layout = NULL;
     int64_t static_slot = -1;
     const XiModule *static_module = NULL;

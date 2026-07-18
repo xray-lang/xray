@@ -59,7 +59,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 27,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 28,
 };
 
 typedef enum XgBuildProfile {
@@ -1299,6 +1299,9 @@ XR_FUNC uint64_t xg_json_shape_hash_add_field(uint64_t hash, uint8_t shape_kind,
                                               uint32_t type_key);
 XR_FUNC const char *xg_build_profile_name(uint32_t profile);
 XR_FUNC const char *xg_decl_kind_name(uint8_t kind);
+XR_FUNC bool xg_decl_kind_supports_methods(uint8_t kind);
+XR_FUNC bool xg_decl_kind_is_runtime_class(uint8_t kind);
+XR_FUNC bool xg_decl_kind_is_value_aggregate(uint8_t kind);
 XR_FUNC const char *xg_callsite_kind_name(uint8_t kind);
 XR_FUNC const char *xg_link_dependency_kind_name(uint8_t kind);
 XR_FUNC const char *xg_generic_inst_kind_name(uint8_t kind);

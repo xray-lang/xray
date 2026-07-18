@@ -2816,12 +2816,12 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         }
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
-            if (arg_idx == 0 && sr_is_typed_array_native_receiver_method(user))
-                return sr_type_native_boundary_rep(user->args[0]->type);
-            if (arg_idx > 0 && arg_idx < user->nargs && user->args[arg_idx] &&
+            if (arg_idx < user->nargs && user->args[arg_idx] &&
                 (user->args[arg_idx]->op == XI_LOCAL_ADDR ||
                  sr_param_is_call_bound_place(user->args[arg_idx])))
                 return XR_REP_RAWPTR;
+            if (arg_idx == 0 && sr_is_typed_array_native_receiver_method(user))
+                return sr_type_native_boundary_rep(user->args[0]->type);
             if (arg_idx > 0 && policy && policy->prefer_call_args_native && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
                 return sr_type_native_boundary_rep(user->args[arg_idx]->type);

@@ -2323,6 +2323,40 @@ TEST(struct_field_store_narrows_native_width) {
     xi_func_free(f);
 }
 
+TEST(struct_method_receivers_use_call_bound_places) {
+    XiFunc *f = lower_source("struct Counter {\n"
+                             "    value: int\n"
+                             "    bump(delta: int) {\n"
+                             "        this.value = this.value + delta\n"
+                             "    }\n"
+                             "    read() -> int {\n"
+                             "        return this.value\n"
+                             "    }\n"
+                             "}\n"
+                             "fn exercise() -> int {\n"
+                             "    var counter = Counter{value: 1}\n"
+                             "    counter.bump(2)\n"
+                             "    return counter.read()\n"
+                             "}\n"
+                             "print(exercise())\n");
+    assert(f != NULL);
+
+    XiValue *bump = func_tree_find_method(f, "bump");
+    XiValue *read = func_tree_find_method(f, "read");
+    assert(bump != NULL && read != NULL && "struct calls should remain method calls in Xi");
+    assert(bump->call_plan && bump->call_plan->verified && bump->call_plan->has_receiver &&
+           "mutating struct receiver should carry a verified place plan");
+    assert(bump->call_plan->receiver.param_mode == XR_PARAM_REF &&
+           bump->call_plan->receiver.place == bump->args[0] && bump->args[0]->op == XI_LOCAL_ADDR &&
+           "mutating struct receiver should use a ref call-bound local place");
+    assert(read->call_plan && read->call_plan->verified && read->call_plan->has_receiver &&
+           read->call_plan->receiver.param_mode == XR_PARAM_IN &&
+           read->call_plan->receiver.place == read->args[0] && read->args[0]->op == XI_LOCAL_ADDR &&
+           "readonly struct receiver should use an in call-bound local place");
+
+    xi_func_free(f);
+}
+
 TEST(as_to_native_width_int_lowers_to_narrow) {
     XiFunc *f = lower_source("fn run(i: int) -> int {\n"
                              "    var v = i as uint16\n"
@@ -2514,6 +2548,7 @@ int main(void) {
     run_struct_literal_inside_function();
     run_unresolved_struct_literal_does_not_lower_to_json();
     run_struct_field_store_narrows_native_width();
+    run_struct_method_receivers_use_call_bound_places();
     run_as_to_native_width_int_lowers_to_narrow();
     run_force_unwrap();
     run_destructure_decl();

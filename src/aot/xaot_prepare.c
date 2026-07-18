@@ -3451,6 +3451,113 @@ static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncP
     return true;
 }
 
+static bool prepare_seed_direct_call_aggregate_returns(XaotBundle *bundle, XiFunc *func) {
+    if (!bundle || !func)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *blk = func->blocks ? func->blocks[bi] : NULL;
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *call = blk->values ? blk->values[vi] : NULL;
+            const XiFunc *target;
+            const XaotFuncPlan *target_plan;
+            XaotValuePlan *call_plan;
+            XaotValueRep ret_rep;
+            if (!call || (call->op != XI_CALL && call->op != XI_CALL_METHOD &&
+                          call->op != XI_CALL_METHOD_DIRECT))
+                continue;
+            target = xaot_boundary_resolve_direct_call_target(bundle, func, call, NULL);
+            target_plan = target ? xaot_bundle_find_func_plan(bundle, target) : NULL;
+            if (!target_plan)
+                continue;
+            ret_rep = xaot_abi_slot_value_rep(&target_plan->abi.ret);
+            if (ret_rep.kind != XAOT_VALUE_AGGREGATE)
+                continue;
+            call_plan = xaot_bundle_find_value_plan_mut(bundle, call);
+            if (!call_plan) {
+                bundle->error_msg = "AOT aggregate direct call result has no value plan";
+                return false;
+            }
+            call_plan->rep = ret_rep;
+        }
+    }
+    return true;
+}
+
+static bool prepare_seed_direct_call_aggregate_places(XaotBundle *bundle, XiFunc *func) {
+    if (!bundle || !func)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *blk = func->blocks ? func->blocks[bi] : NULL;
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *call = blk->values ? blk->values[vi] : NULL;
+            uint16_t first_arg = 0;
+            if (!call || (call->op != XI_CALL && call->op != XI_CALL_METHOD &&
+                          call->op != XI_CALL_METHOD_DIRECT))
+                continue;
+            const XiFunc *target =
+                xaot_boundary_resolve_direct_call_target(bundle, func, call, &first_arg);
+            const XaotFuncPlan *target_plan =
+                target ? xaot_bundle_find_func_plan(bundle, target) : NULL;
+            if (!target_plan || !target_plan->abi.params)
+                continue;
+            for (uint16_t a = first_arg; a < call->nargs; a++) {
+                uint16_t param_idx = (uint16_t) (a - first_arg);
+                if (param_idx >= target_plan->abi.nparams)
+                    break;
+                const XaotAbiSlot *slot = &target_plan->abi.params[param_idx];
+                XiValue *place = call->args[a];
+                if ((slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) == 0 ||
+                    !value_rep_is_struct_aggregate(slot->pointee_rep) || !place ||
+                    place->op != XI_LOCAL_ADDR || place->nargs != 1 || !place->args[0])
+                    continue;
+                bool changed = false;
+                prepare_mark_aggregate_value_rep(bundle, place->args[0], slot->pointee_rep,
+                                                 &changed, 0);
+            }
+        }
+    }
+    return true;
+}
+
+static bool prepare_seed_place_load_aggregate_reps(XaotBundle *bundle, XiFunc *func) {
+    if (!bundle || !func)
+        return false;
+    const XaotFuncPlan *func_plan = xaot_bundle_find_func_plan(bundle, func);
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *blk = func->blocks ? func->blocks[bi] : NULL;
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *load = blk->values ? blk->values[vi] : NULL;
+            if (!load || load->op != XI_PLACE_LOAD || load->nargs != 1 || !load->args[0])
+                continue;
+            XiValue *place = load->args[0];
+            XaotValueRep pointee;
+            memset(&pointee, 0, sizeof(pointee));
+            if (place->op == XI_PARAM && place->aux_int >= 0 && func_plan &&
+                func_plan->abi.params && place->aux_int < func_plan->abi.nparams) {
+                const XaotAbiSlot *slot = &func_plan->abi.params[place->aux_int];
+                if ((slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) != 0)
+                    pointee = slot->pointee_rep;
+            } else if (place->op == XI_LOCAL_ADDR && place->nargs == 1 && place->args[0]) {
+                const XaotValuePlan *source = xaot_bundle_find_value_plan(bundle, place->args[0]);
+                if (source)
+                    pointee = source->rep;
+            }
+            if (!value_rep_is_struct_aggregate(pointee))
+                continue;
+            XaotValuePlan *load_plan = xaot_bundle_find_value_plan_mut(bundle, load);
+            if (load_plan)
+                load_plan->rep = pointee;
+        }
+    }
+    return true;
+}
+
 static bool prepare_direct_call_boundaries(XaotBundle *bundle, const XaotFuncPlan *caller_plan,
                                            const XiValue *call) {
     const XiFunc *target;
@@ -3828,6 +3935,32 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
     if (!xaot_bundle_sync_transfer_capability_plans(bundle)) {
         bundle->error_msg = "failed to sync AOT transfer capability plan";
         return false;
+    }
+    /* Cross-module value-aggregate calls can only be resolved after every
+     * module/function ABI plan exists. Seed their result representation first,
+     * then rerun the local aggregate propagation so copies and method receiver
+     * arguments inherit the exact target ABI instead of remaining tagged. */
+    for (mi = 0; mi < bundle->nfunc_plans; mi++) {
+        XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
+        if (!prepare_seed_direct_call_aggregate_returns(bundle, func))
+            return false;
+        if (!prepare_seed_direct_call_aggregate_places(bundle, func))
+            return false;
+    }
+    for (mi = 0; mi < bundle->nfunc_plans; mi++) {
+        XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
+        if (!prepare_apply_aggregate_value_plans(bundle, func))
+            return false;
+    }
+    for (mi = 0; mi < bundle->nfunc_plans; mi++) {
+        XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
+        if (!prepare_seed_place_load_aggregate_reps(bundle, func))
+            return false;
+    }
+    for (mi = 0; mi < bundle->nfunc_plans; mi++) {
+        XiFunc *func = (XiFunc *) bundle->func_plans[mi].func;
+        if (!prepare_apply_aggregate_value_plans(bundle, func))
+            return false;
     }
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
         if (!prepare_func_boundary_steps(bundle, &bundle->func_plans[mi]))

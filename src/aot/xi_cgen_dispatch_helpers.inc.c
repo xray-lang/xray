@@ -7666,12 +7666,44 @@ static void xicgen_struct_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
 }
 
+static const XiValue *xicgen_struct_place_load(const XiValue *object) {
+    const XiValue *value = object;
+    while (value && cg_is_identity_copy_or_move(value) && value->nargs >= 1)
+        value = value->args[0];
+    return value && value->op == XI_PLACE_LOAD && value->nargs == 1 ? value : NULL;
+}
+
+static bool xicgen_emit_struct_place_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiValue *object,
+                                                  const XrAggregateLayout *layout,
+                                                  int64_t field_index) {
+    const XiValue *load = xicgen_struct_place_load(object);
+    if (!load || !load->args[0] || !layout)
+        return false;
+    const XaotValuePlan *load_plan = cg_value_plan(ctx, load);
+    const char *c_type =
+        load_plan && load_plan->rep.kind == XAOT_VALUE_AGGREGATE ? load_plan->rep.c_type : NULL;
+    char fallback_type[128];
+    if (!c_type) {
+        xaot_struct_c_type_name(fallback_type, sizeof(fallback_type), "abi", layout);
+        c_type = fallback_type;
+    }
+    char field_name[128];
+    cg_struct_field_c_name(layout, field_index, field_name, sizeof(field_name));
+    fprintf(out, "(*(%s *)(", c_type);
+    emit_value_as_rep_ctx(ctx, out, load->args[0], XR_REP_RAWPTR);
+    fprintf(out, ")).%s", field_name);
+    return true;
+}
+
 static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_struct_get: need struct arg");
     if (emit_static_fixed_struct_array_field_get_expr(ctx, out, v))
         return;
     if (emit_static_struct_field_get_expr(ctx, out, v))
+        return;
+    if (xicgen_emit_struct_place_field_lvalue(ctx, out, v->args[0], (XrAggregateLayout *) v->aux,
+                                              v->aux_int))
         return;
     if (cg_value_plan_is_struct_aggregate(ctx, v->args[0])) {
         char fname[128];
@@ -7695,8 +7727,20 @@ static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_struct_set: need struct + value");
+    XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
+    if (xicgen_struct_place_load(v->args[0])) {
+        fprintf(out, "(");
+        if (!xicgen_emit_struct_place_field_lvalue(ctx, out, v->args[0], sl, v->aux_int)) {
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, " = ");
+        emit_struct_field_store_value(ctx, out, sl, v->aux_int, v->args[1]);
+        fprintf(out, ")");
+        return;
+    }
     if (cg_value_plan_is_struct_aggregate(ctx, v->args[0])) {
-        XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         if (emit_struct_heap_field_set_expr(ctx, out, f, sl, v->aux_int, v->args[0], v->args[1],
                                             prefix))
             return;

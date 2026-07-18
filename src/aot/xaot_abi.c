@@ -207,33 +207,6 @@ static bool type_can_use_compact_adt_return(const XaotBundle *bundle, const XrTy
     return adt_enum_plan_for_type(bundle, type) != NULL;
 }
 
-static bool func_tree_contains(const XiFunc *root, const XiFunc *target) {
-    if (!root || !target)
-        return false;
-    if (root == target)
-        return true;
-    for (uint16_t i = 0; i < root->nchildren; i++) {
-        if (func_tree_contains(root->children ? root->children[i] : NULL, target))
-            return true;
-    }
-    return false;
-}
-
-static const char *func_module_prefix(const XaotBundle *bundle, const XiFunc *func) {
-    for (const XiFunc *cur = func; cur; cur = cur->parent_func) {
-        if (cur->module && cur->module->name && cur->module->name[0])
-            return cur->module->name;
-    }
-    if (bundle) {
-        for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
-            const XiModule *mod = bundle->modules ? bundle->modules[mi] : NULL;
-            if (mod && mod->name && mod->name[0] && func_tree_contains(mod->init, func))
-                return mod->name;
-        }
-    }
-    return "mod";
-}
-
 static const XrAggregateLayout *struct_layout_for_type(const XaotBundle *bundle,
                                                        const XrType *type) {
     const char *name;
@@ -347,7 +320,9 @@ static bool struct_layout_can_use_value_abi_depth(const XrAggregateLayout *sl, i
 static char *struct_c_type_for_func(const XaotBundle *bundle, const XiFunc *func,
                                     const XrAggregateLayout *sl) {
     char buf[128];
-    xaot_struct_c_type_name(buf, sizeof(buf), func_module_prefix(bundle, func), sl);
+    (void) bundle;
+    (void) func;
+    xaot_struct_c_type_name(buf, sizeof(buf), "abi", sl);
     return xr_strdup(buf);
 }
 
@@ -440,10 +415,10 @@ static XaotAbiSlot borrowed_place_slot(const XrType *type, XaotAbiSlot value_slo
 
 static XaotAbiSlot place_value_slot_for_type(const XaotBundle *bundle, const XiFunc *func,
                                              const XrType *type, const XiValue *value) {
-    /* Native class pointers and by-value struct aggregates are valid value
-     * ABIs, but a ref/out place must match the addressable caller slot.  Their
-     * stable call-bound storage is the tagged XrValue slot; scalar, pointer,
-     * fixed-array and span places remain native below. */
+    /* A call-bound place points at the canonical storage representation of its
+     * value. Value aggregates therefore use their concrete layout type rather
+     * than falling back to an XrValue box; language nominality is checked by
+     * the analyzer, while this ABI is structural and layout-keyed. */
     if (type && !type->is_nullable) {
         switch (type->kind) {
             case XR_KIND_INT:
@@ -454,6 +429,8 @@ static XaotAbiSlot place_value_slot_for_type(const XaotBundle *bundle, const XiF
             case XR_KIND_SPAN:
                 return native_value_slot_for_type(bundle, func, type, value, false);
             default:
+                if (struct_layout_for_slot(bundle, func, type, value, false))
+                    return native_value_slot_for_type(bundle, func, type, value, false);
                 break;
         }
     }

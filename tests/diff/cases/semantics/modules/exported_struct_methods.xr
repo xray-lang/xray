@@ -1,0 +1,20 @@
+// Exported struct methods must remain direct value-aggregate calls in both VM
+// and AOT. Copies own independent inline storage and mutable state.
+import { ByteState } from "./_exported_struct_methods_lib"
+import "./_exported_struct_methods_lib" as state_lib
+
+fn exercise_struct_methods() {
+    var first = ByteState.init(10)
+    first.update(7)
+    var copied = first
+    copied.update(3)
+
+    print(first.digest())
+    print(copied.digest())
+
+    var namespaced = state_lib.ByteState.init(20)
+    namespaced.update(5)
+    print(namespaced.digest())
+}
+
+exercise_struct_methods()

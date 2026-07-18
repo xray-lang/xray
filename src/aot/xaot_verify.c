@@ -712,10 +712,6 @@ static bool verify_transfer_plan(const XaotBundle *bundle, const XaotTransferPla
     return true;
 }
 
-static bool xg_verify_class_is_runtime_class(const XgClassSummary *cls) {
-    return cls && (cls->decl_kind == 0 || cls->decl_kind == XG_DECL_CLASS);
-}
-
 static const XgClassSummary *verify_find_evidence_class(const XgGlobalEvidence *ev,
                                                         XgClassId class_id);
 
@@ -724,7 +720,7 @@ static bool xg_verify_class_has_subclass(const XgGlobalEvidence *ev, XgClassId c
         return false;
     for (uint32_t i = 0; i < ev->nclasses; i++) {
         const XgClassSummary *candidate = &ev->classes[i];
-        if (!xg_verify_class_is_runtime_class(candidate))
+        if (!xg_decl_kind_is_runtime_class(candidate->decl_kind))
             continue;
         if (candidate->parent_class_id == class_id)
             return true;
@@ -3011,7 +3007,8 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                 if (!owner_decl)
                     return set_error(errbuf, errbuf_len,
                                      "AOT global evidence method body owner decl is missing");
-                if (owner_decl->kind != XG_DECL_CLASS || owner_decl->module_id != body->module_id)
+                if (!xg_decl_kind_supports_methods(owner_decl->kind) ||
+                    owner_decl->module_id != body->module_id)
                     return set_error(
                         errbuf, errbuf_len,
                         "AOT global evidence method body owner decl does not re-derive");
@@ -3024,7 +3021,9 @@ static bool verify_body_summary_ranges(const XgGlobalEvidence *ev, char *errbuf,
                         return set_error(errbuf, errbuf_len,
                                          "AOT global evidence method body owner class is missing");
                     if (owner_class->decl_id != body->owner_decl_id ||
-                        owner_class->module_id != body->module_id)
+                        owner_class->module_id != body->module_id ||
+                        owner_class->decl_kind != owner_decl->kind ||
+                        owner_class->name_id != owner_decl->name_id)
                         return set_error(
                             errbuf, errbuf_len,
                             "AOT global evidence method body owner class does not re-derive");
@@ -3210,7 +3209,7 @@ static bool verify_dispatch_vtable_targets_rederive(
         const XgClassSummary *candidate = &ev->classes[i];
         const XgMethodSummary *target_method;
         const XaotDispatchTargetCase *target;
-        if (!xg_verify_class_is_runtime_class(candidate))
+        if (!xg_decl_kind_is_runtime_class(candidate->decl_kind))
             continue;
         if (!xg_verify_class_is_descendant_or_self(ev, candidate->class_id,
                                                    call->receiver_static_class_id))
@@ -6172,7 +6171,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         bool actual_has_subclass;
         bool flag_has_subclass;
         bool expected_inferred_final;
-        if (!xg_verify_class_is_runtime_class(cls))
+        if (!xg_decl_kind_is_runtime_class(cls->decl_kind))
             continue;
         runtime_class_count++;
         runtime_class_field_count += cls->field_count;
