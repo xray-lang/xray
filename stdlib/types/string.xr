@@ -20,26 +20,26 @@ enum StringSliceError {
 
 @native
 class string {
-    static fromUtf8(bytes: Slice<byte>) -> string @errors(Utf8Error.InvalidUtf8)
-    static fromUtf8Lossy(bytes: Slice<byte>) -> string @nothrow
-    static fromRune(value: rune) -> string
-    static join(parts: Array<string>, separator?: string) -> string
-    contains(search: string) -> bool
-    indexOf(search: string, start?: int) -> int
-    lastIndexOf(search: string) -> int
-    slice(start: int, end?: int) -> string
-    sliceBytes(start: int, end: int) -> string @errors(StringSliceError.InvalidByteRange)
-    toString() -> string
-    split(separator: string, limit?: int) -> Array<string>
-    replace(search: string, replacement: string) -> string
-    replaceAll(search: string, replacement: string) -> string
-    repeat(count: int) -> string
-    startsWith(search: string) -> bool
-    endsWith(search: string) -> bool
+    static fromUtf8(bytes: Slice<byte>) -> string @errors(Utf8Error.InvalidUtf8) @may_alloc
+    static fromUtf8Lossy(bytes: Slice<byte>) -> string @nothrow @may_alloc
+    static fromRune(value: rune) -> string @may_alloc
+    static join(parts: Array<string>, separator?: string) -> string @may_alloc
+    contains(search: string) -> bool @no_alloc
+    indexOf(search: string, start?: int) -> int @no_alloc
+    lastIndexOf(search: string) -> int @no_alloc
+    slice(start: int, end?: int) -> string @may_alloc
+    sliceBytes(start: int, end: int) -> string @errors(StringSliceError.InvalidByteRange) @may_alloc
+    toString() -> string @no_alloc
+    split(separator: string, limit?: int) -> Array<string> @may_alloc
+    replace(search: string, replacement: string) -> string @may_alloc
+    replaceAll(search: string, replacement: string) -> string @may_alloc
+    repeat(count: int) -> string @may_alloc
+    startsWith(search: string) -> bool @no_alloc
+    endsWith(search: string) -> bool @no_alloc
     // Owned UTF-8 byte bridge.
-    copyBytes() -> Array<byte>
+    copyBytes() -> Array<byte> @may_alloc
     // Borrowed UTF-8 bytes; readonly because strings are immutable.
     // @lowered
-    bytes() -> Slice<byte>
-    runes() -> Iterator<rune>
+    bytes() -> Slice<byte> @no_alloc
+    runes() -> Iterator<rune> @may_alloc
 }

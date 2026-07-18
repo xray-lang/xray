@@ -2,6 +2,7 @@
 
 @native
 class Array<T> {
+    static withCapacity(capacity: int) -> Array<T> @may_alloc
     capacity: int
     push(value: T)
     // @lowered

@@ -2,43 +2,46 @@
 
 static const char xr_native_def_array[] =
     "// Built-in Array<T> type — implementation in "
-    "src/runtime/object/xarray_methods.c\n\n@native\nclass Array<T> {\n    capacity: int\n    "
-    "push(value: T)\n    // @lowered\n    get(index: int) -> T\n    // @lowered\n    set(index: "
-    "int, value: T)\n    // @lowered\n    ptr() -> Ptr<T>\n    // @lowered\n    mutPtr() -> "
-    "MutPtr<T>\n    pop() -> T?\n    shift() -> T?\n    unshift(value: T)\n    clear()\n    "
-    "reserve(capacity: int) -> Array<T>\n    resize(length: int, fill: T) -> Array<T>\n    "
-    "concat(...arrays: Array<T>) -> Array<T>\n    indexOf(value: T) -> int\n    contains(value: T) "
-    "-> bool\n    join(separator?: string) -> string\n    reverse() -> Array<T>\n    "
-    "sort(compareFn?: (a: T, b: T) -> int) -> Array<T>\n    map(fn: (item: T, index: int) -> U) -> "
-    "Array<U>\n    filter(fn: (item: T, index: int) -> bool) -> Array<T>\n    reduce(fn: (acc: U, "
-    "item: T) -> U, initial: U) -> U\n    forEach(fn: (item: T, index: int) -> ())\n    find(fn: "
-    "(item: T) -> bool) -> T?\n    findIndex(fn: (item: T) -> bool) -> int\n    every(fn: (item: "
-    "T) -> bool) -> bool\n    some(fn: (item: T) -> bool) -> bool\n    fill(value: T, start?: int, "
-    "end?: int) -> Array<T>\n    // All arrays, including Array<byte>, render the \"[a, b]\" "
-    "container form.\n    // Decode UTF-8 byte arrays explicitly with string.fromUtf8().\n    "
-    "toString() -> string\n    // Iteration protocol — used by for-in lowering. Users can also\n   "
-    " // call them directly; iterator()/next() yields elements, while\n    // "
-    "entriesIterator()/next() yields (index, element) tuples.\n    iterator() -> Iterator<T>\n    "
-    "entriesIterator() -> Iterator<(int, T)>\n    entries() -> Array<(int, T)>\n}\n";
+    "src/runtime/object/xarray_methods.c\n\n@native\nclass Array<T> {\n    static "
+    "withCapacity(capacity: int) -> Array<T> @may_alloc\n    capacity: int\n    push(value: T)\n   "
+    " // @lowered\n    get(index: int) -> T\n    // @lowered\n    set(index: int, value: T)\n    "
+    "// @lowered\n    ptr() -> Ptr<T>\n    // @lowered\n    mutPtr() -> MutPtr<T>\n    pop() -> "
+    "T?\n    shift() -> T?\n    unshift(value: T)\n    clear()\n    reserve(capacity: int) -> "
+    "Array<T>\n    resize(length: int, fill: T) -> Array<T>\n    concat(...arrays: Array<T>) -> "
+    "Array<T>\n    indexOf(value: T) -> int\n    contains(value: T) -> bool\n    join(separator?: "
+    "string) -> string\n    reverse() -> Array<T>\n    sort(compareFn?: (a: T, b: T) -> int) -> "
+    "Array<T>\n    map(fn: (item: T, index: int) -> U) -> Array<U>\n    filter(fn: (item: T, "
+    "index: int) -> bool) -> Array<T>\n    reduce(fn: (acc: U, item: T) -> U, initial: U) -> U\n   "
+    " forEach(fn: (item: T, index: int) -> ())\n    find(fn: (item: T) -> bool) -> T?\n    "
+    "findIndex(fn: (item: T) -> bool) -> int\n    every(fn: (item: T) -> bool) -> bool\n    "
+    "some(fn: (item: T) -> bool) -> bool\n    fill(value: T, start?: int, end?: int) -> Array<T>\n "
+    "   // All arrays, including Array<byte>, render the \"[a, b]\" container form.\n    // Decode "
+    "UTF-8 byte arrays explicitly with string.fromUtf8().\n    toString() -> string\n    // "
+    "Iteration protocol — used by for-in lowering. Users can also\n    // call them directly; "
+    "iterator()/next() yields elements, while\n    // entriesIterator()/next() yields (index, "
+    "element) tuples.\n    iterator() -> Iterator<T>\n    entriesIterator() -> Iterator<(int, "
+    "T)>\n    entries() -> Array<(int, T)>\n}\n";
 
 static const char xr_native_def_atomic[] =
     "// Built-in Atomic<T> type; implemented by the runtime.\n\n@native\nclass Atomic<T> {\n    "
-    "load(ordering?: Ordering) -> T\n    store(value: T, ordering?: Ordering)\n    add(delta: T, "
-    "ordering?: Ordering)\n    sub(delta: T, ordering?: Ordering)\n    fetchAdd(delta: T, "
-    "ordering?: Ordering) -> T\n    fetchSub(delta: T, ordering?: Ordering) -> T\n    swap(value: "
-    "T, ordering?: Ordering) -> T\n    compareExchange(expected: T, desired: T, ordering?: "
-    "Ordering) -> (T, bool)\n    toggle(ordering?: Ordering) -> bool\n    toString() -> "
-    "string\n}\n";
+    "load(ordering?: Ordering) -> T @no_alloc\n    store(value: T, ordering?: Ordering) "
+    "@no_alloc\n    add(delta: T, ordering?: Ordering) @no_alloc\n    sub(delta: T, ordering?: "
+    "Ordering) @no_alloc\n    fetchAdd(delta: T, ordering?: Ordering) -> T @no_alloc\n    "
+    "fetchSub(delta: T, ordering?: Ordering) -> T @no_alloc\n    swap(value: T, ordering?: "
+    "Ordering) -> T @no_alloc\n    compareExchange(expected: T, desired: T, ordering?: Ordering) "
+    "-> (T, bool) @no_alloc\n    toggle(ordering?: Ordering) -> bool @no_alloc\n    toString() -> "
+    "string @may_alloc\n}\n";
 
 static const char xr_native_def_bigint[] =
     "// Built-in BigInt type — implementation in "
-    "src/runtime/object/xbigint_methods.c\n\n@native\nclass BigInt {\n    abs() -> BigInt\n    "
-    "toString() -> string\n    sign() -> int\n    isZero() -> bool\n    isNegative() -> bool\n    "
-    "isPositive() -> bool\n    toInt() -> int?\n    toFloat() -> float\n}\n";
+    "src/runtime/object/xbigint_methods.c\n\n@native\nclass BigInt {\n    abs() -> BigInt "
+    "@may_alloc\n    toString() -> string @may_alloc\n    sign() -> int @no_alloc\n    isZero() -> "
+    "bool @no_alloc\n    isNegative() -> bool @no_alloc\n    isPositive() -> bool @no_alloc\n    "
+    "toInt() -> int? @no_alloc\n    toFloat() -> float @no_alloc\n}\n";
 
 static const char xr_native_def_bool[] =
     "// Built-in bool type — implementation in src/runtime/value/xbool_methods.c\n\n@native\nclass "
-    "bool {\n    toString() -> string\n}\n";
+    "bool {\n    toString() -> string @may_alloc\n}\n";
 
 static const char xr_native_def_channel[] =
     "// Built-in Channel<T> type — implementation in src/runtime/coro/xchannel_methods.c\n\nenum "
@@ -69,46 +72,52 @@ static const char xr_native_def_eventcount[] =
 
 static const char xr_native_def_float[] =
     "// Built-in float type — implementation in "
-    "src/runtime/value/xfloat_methods.c\n\n@native\nclass float {\n    abs() -> float\n    "
-    "toString() -> string\n    toFixed(decimals?: int) -> string\n    toInt() -> int\n    floor() "
-    "-> int\n    ceil() -> int\n    round() -> int\n    sqrt() -> float\n    pow(exp: float) -> "
-    "float\n    isNaN() -> bool\n}\n";
+    "src/runtime/value/xfloat_methods.c\n\n@native\nclass float {\n    abs() -> float @no_alloc\n  "
+    "  toString() -> string @may_alloc\n    toFixed(decimals?: int) -> string @may_alloc\n    "
+    "toInt() -> int @no_alloc\n    floor() -> int @no_alloc\n    ceil() -> int @no_alloc\n    "
+    "round() -> int @no_alloc\n    sqrt() -> float @no_alloc\n    pow(exp: float) -> float "
+    "@no_alloc\n    isNaN() -> bool @no_alloc\n}\n";
 
 static const char xr_native_def_int[] =
     "// Built-in int type — implementation in src/runtime/value/xint_methods.c\n\n@native\nclass "
-    "int {\n    abs() -> int\n    toString() -> string\n    toBigInt() -> BigInt\n    toFloat() -> "
-    "float\n    toHex() -> string\n    max(other: int) -> int\n    min(other: int) -> int\n    "
-    "sqrt() -> float\n    pow(exp: float) -> float\n    checkedAdd(other: int) -> int?\n    "
-    "checkedSub(other: int) -> int?\n    checkedMul(other: int) -> int?\n    saturatingAdd(other: "
-    "int) -> int\n    saturatingSub(other: int) -> int\n    saturatingMul(other: int) -> int\n    "
-    "wrappingAdd(other: int) -> int\n    wrappingSub(other: int) -> int\n    wrappingMul(other: "
-    "int) -> int\n    addOverflows(other: int) -> bool\n    subOverflows(other: int) -> bool\n    "
-    "mulOverflows(other: int) -> bool\n}\n";
+    "int {\n    abs() -> int @no_alloc\n    toString() -> string @may_alloc\n    toBigInt() -> "
+    "BigInt @may_alloc\n    toFloat() -> float @no_alloc\n    toHex() -> string @may_alloc\n    "
+    "max(other: int) -> int @no_alloc\n    min(other: int) -> int @no_alloc\n    sqrt() -> float "
+    "@no_alloc\n    pow(exp: float) -> float @no_alloc\n    checkedAdd(other: int) -> int? "
+    "@no_alloc\n    checkedSub(other: int) -> int? @no_alloc\n    checkedMul(other: int) -> int? "
+    "@no_alloc\n    saturatingAdd(other: int) -> int @no_alloc\n    saturatingSub(other: int) -> "
+    "int @no_alloc\n    saturatingMul(other: int) -> int @no_alloc\n    wrappingAdd(other: int) -> "
+    "int @no_alloc\n    wrappingSub(other: int) -> int @no_alloc\n    wrappingMul(other: int) -> "
+    "int @no_alloc\n    addOverflows(other: int) -> bool @no_alloc\n    subOverflows(other: int) "
+    "-> bool @no_alloc\n    mulOverflows(other: int) -> bool @no_alloc\n}\n";
 
 static const char xr_native_def_json[] =
     "// Built-in Json type — implementation in "
     "src/runtime/object/xjson_methods.c\n\n@native\nclass Json {\n    static parse(text: string) "
-    "-> Json\n    static stringify<T>(value: T, indent?: int) -> string\n    static "
-    "encode<T>(value: T) -> Json\n    static isValid(text: string, strict?: bool) -> bool\n    "
-    "static tryParse(text: string) -> Json\n    static keys(obj: Json) -> Array<string>\n    "
-    "static values(obj: Json) -> Array<Json>\n    static entries(obj: Json) -> Array<(string, "
-    "Json)>\n    static containsKey(obj: Json, key: string) -> bool\n    static get<T>(obj: Json, "
-    "key: string, default?: T) -> Json\n\n    keys() -> Array<string>\n    values() -> "
-    "Array<Json>\n    entries() -> Array<(string, Json)>\n    // Iteration protocol — iterator() "
-    "yields each field name (used by\n    // single-variable `for (k in jsonObj)`); "
-    "entriesIterator() yields\n    // (fieldName, value) tuples (used by `for (k, v in "
-    "jsonObj)`).\n    iterator() -> Iterator<string>\n    entriesIterator() -> Iterator<(string, "
-    "Json)>\n    toString() -> string\n}\n";
+    "-> Json @may_alloc\n    static stringify<T>(value: T, indent?: int) -> string @may_alloc\n    "
+    "static encode<T>(value: T) -> Json @may_alloc\n    static isValid(text: string, strict?: "
+    "bool) -> bool @may_alloc\n    static tryParse(text: string) -> Json @may_alloc\n    static "
+    "keys(obj: Json) -> Array<string> @may_alloc\n    static values(obj: Json) -> Array<Json> "
+    "@may_alloc\n    static entries(obj: Json) -> Array<(string, Json)> @may_alloc\n    static "
+    "containsKey(obj: Json, key: string) -> bool @no_alloc\n    static get<T>(obj: Json, key: "
+    "string, default?: T) -> Json @no_alloc\n\n    keys() -> Array<string> @may_alloc\n    "
+    "values() -> Array<Json> @may_alloc\n    entries() -> Array<(string, Json)> @may_alloc\n    // "
+    "Iteration protocol — iterator() yields each field name (used by\n    // single-variable `for "
+    "(k in jsonObj)`); entriesIterator() yields\n    // (fieldName, value) tuples (used by `for "
+    "(k, v in jsonObj)`).\n    iterator() -> Iterator<string> @may_alloc\n    entriesIterator() -> "
+    "Iterator<(string, Json)> @may_alloc\n    toString() -> string @may_alloc\n}\n";
 
 static const char xr_native_def_map[] =
     "// Built-in Map<K, V> type — implementation in "
     "src/runtime/object/xmap_methods.c\n\n@native\nclass Map<K: Hashable, V> {\n    get(key: K) -> "
-    "V?\n    set(key: K, value: V)\n    containsKey(key: K) -> bool\n    containsValue(value: V) "
-    "-> bool\n    delete(key: K) -> bool\n    clear()\n    keys() -> Array<K>\n    values() -> "
-    "Array<V>\n    entries() -> Array<(K, V)>\n    forEach(fn: (key: K, value: V) -> ())\n    // "
-    "Iteration protocol — iterator() yields each key K (used by\n    // single-variable `for (k in "
-    "m)`); entriesIterator() yields each\n    // (key, value) tuple (used by `for (k, v in m)`).\n "
-    "   iterator() -> Iterator<K>\n    entriesIterator() -> Iterator<(K, V)>\n}\n";
+    "V? @no_alloc\n    set(key: K, value: V) @may_alloc\n    containsKey(key: K) -> bool "
+    "@no_alloc\n    containsValue(value: V) -> bool @no_alloc\n    delete(key: K) -> bool "
+    "@no_alloc\n    clear() @no_alloc\n    keys() -> Array<K> @may_alloc\n    values() -> Array<V> "
+    "@may_alloc\n    entries() -> Array<(K, V)> @may_alloc\n    forEach(fn: (key: K, value: V) -> "
+    "()) @no_alloc\n    // Iteration protocol — iterator() yields each key K (used by\n    // "
+    "single-variable `for (k in m)`); entriesIterator() yields each\n    // (key, value) tuple "
+    "(used by `for (k, v in m)`).\n    iterator() -> Iterator<K> @may_alloc\n    entriesIterator() "
+    "-> Iterator<(K, V)> @may_alloc\n    toString() -> string @may_alloc\n}\n";
 
 static const char xr_native_def_panic_info[] =
     "// Built-in PanicInfo class — the runtime panic diagnostic payload.\n//\n// PanicInfo belongs "
@@ -118,18 +127,20 @@ static const char xr_native_def_panic_info[] =
     "matches xclass_system.h\n// PANIC_INFO_FIELD_* indices and the XrClass built by\n// "
     "xr_register_panic_info_class in xclass_system.c; the constructor and toString\n// bodies are "
     "PRIMITIVE on the C side. This declaration exists for analyzer / LSP\n// awareness so the "
-    "fields are visible from any module.\n\nclass PanicInfo {\n    message: string\n    stack: "
-    "Array<string>\n    cause: PanicInfo?\n    code: int\n    data: Json\n    constructor(message: "
-    "string = \"\", cause: PanicInfo? = null)\n    toString() -> string\n}\n";
+    "fields are visible from any module.\n\n@native\nclass PanicInfo {\n    message: string\n    "
+    "stack: Array<string>\n    cause: PanicInfo?\n    code: int\n    data: Json\n    "
+    "constructor(message: string = \"\", cause: PanicInfo? = null)\n    toString() -> string "
+    "@may_alloc\n}\n";
 
 static const char xr_native_def_regex[] =
     "// Built-in Regex type — implementation in stdlib/regex/xregex_binding.c\n\n@native\nclass "
     "RegexMatch {\n    start: int\n    end: int\n    text: string\n    groups: "
-    "Array<string>\n}\n\n@native\nclass Regex {\n    test(text: string) -> bool\n    find(text: "
-    "string) -> RegexMatch?\n    findText(text: string) -> string?\n    findGroup(text: string, "
-    "index: int) -> string?\n    findAll(text: string, limit?: int) -> Array<RegexMatch>\n    "
-    "replace(text: string, replacement: string) -> string\n    split(text: string, limit?: int) -> "
-    "Array<string>\n}\n";
+    "Array<string>\n}\n\n@native\nclass Regex {\n    test(text: string) -> bool @no_alloc\n    "
+    "find(text: string) -> RegexMatch? @may_alloc\n    findText(text: string) -> string? "
+    "@may_alloc\n    findGroup(text: string, index: int) -> string? @may_alloc\n    findAll(text: "
+    "string, limit?: int) -> Array<RegexMatch> @may_alloc\n    replace(text: string, replacement: "
+    "string) -> string @may_alloc\n    split(text: string, limit?: int) -> Array<string> "
+    "@may_alloc\n}\n";
 
 static const char xr_native_def_resultgroup[] =
     "// Built-in ResultGroup type; implemented by the runtime.\n// First VM prototype supports "
@@ -140,9 +151,9 @@ static const char xr_native_def_resultgroup[] =
 
 static const char xr_native_def_rune[] =
     "// Built-in Unicode scalar type. A rune is always a valid Unicode scalar "
-    "value.\n\n@native\nclass rune {\n    toUInt32() -> uint32\n    toString() -> string\n    "
-    "isLetter() -> bool\n    isNumber() -> bool\n    isAlphanumeric() -> bool\n    isWhitespace() "
-    "-> bool\n}\n";
+    "value.\n\n@native\nclass rune {\n    toUInt32() -> uint32 @no_alloc\n    toString() -> string "
+    "@may_alloc\n    isLetter() -> bool @no_alloc\n    isNumber() -> bool @no_alloc\n    "
+    "isAlphanumeric() -> bool @no_alloc\n    isWhitespace() -> bool @no_alloc\n}\n";
 
 static const char xr_native_def_semaphore[] =
     "// Built-in Semaphore type; implemented by the runtime.\n\n@native\nclass Semaphore {\n    "
@@ -151,10 +162,15 @@ static const char xr_native_def_semaphore[] =
 
 static const char xr_native_def_set[] =
     "// Built-in Set<T> type — implementation in "
-    "src/runtime/object/xset_methods.c\n\n@native\nclass Set<T: Hashable> {\n    add(value: T)\n   "
-    " contains(value: T) -> bool\n    delete(value: T) -> bool\n    clear()\n    values() -> "
-    "Array<T>\n    forEach(fn: (value: T) -> ())\n    // Iteration protocol — yields each element "
-    "T (used by for-in).\n    iterator() -> Iterator<T>\n}\n";
+    "src/runtime/object/xset_methods.c\n\n@native\nclass Set<T: Hashable> {\n    add(value: T) "
+    "@may_alloc\n    contains(value: T) -> bool @no_alloc\n    delete(value: T) -> bool "
+    "@no_alloc\n    clear() @no_alloc\n    values() -> Array<T> @may_alloc\n    forEach(fn: "
+    "(value: T) -> ()) @no_alloc\n    union(other: Set<T>) -> Set<T> @may_alloc\n    "
+    "intersection(other: Set<T>) -> Set<T> @may_alloc\n    difference(other: Set<T>) -> Set<T> "
+    "@may_alloc\n    symmetricDifference(other: Set<T>) -> Set<T> @may_alloc\n    isSubset(other: "
+    "Set<T>) -> bool @no_alloc\n    isSuperset(other: Set<T>) -> bool @no_alloc\n    toArray() -> "
+    "Array<T> @may_alloc\n    // Iteration protocol — yields each element T (used by for-in).\n    "
+    "iterator() -> Iterator<T> @may_alloc\n    toString() -> string @may_alloc\n}\n";
 
 static const char xr_native_def_string[] =
     "// Built-in string type — implementation in src/runtime/object/xstring_methods.c\n//\n// Most "
@@ -165,25 +181,26 @@ static const char xr_native_def_string[] =
     "VM-only methods fail AOT codegen with an explicit \"unsupported AOT method\"\n// error (never "
     "a silent null).\n\n@native\nenum Utf8Error {\n    InvalidUtf8\n}\n\n@native\nenum "
     "StringSliceError {\n    InvalidByteRange\n}\n\n@native\nclass string {\n    static "
-    "fromUtf8(bytes: Slice<byte>) -> string @errors(Utf8Error.InvalidUtf8)\n    static "
-    "fromUtf8Lossy(bytes: Slice<byte>) -> string @nothrow\n    static fromRune(value: rune) -> "
-    "string\n    static join(parts: Array<string>, separator?: string) -> string\n    "
-    "contains(search: string) -> bool\n    indexOf(search: string, start?: int) -> int\n    "
-    "lastIndexOf(search: string) -> int\n    slice(start: int, end?: int) -> string\n    "
-    "sliceBytes(start: int, end: int) -> string @errors(StringSliceError.InvalidByteRange)\n    "
-    "toString() -> string\n    split(separator: "
-    "string, limit?: int) -> Array<string>\n    replace(search: string, replacement: string) -> "
-    "string\n    replaceAll(search: string, replacement: string) -> string\n    repeat(count: int) "
-    "-> string\n    startsWith(search: string) -> bool\n    endsWith(search: string) -> bool\n    "
-    "// Owned UTF-8 byte bridge.\n    copyBytes() -> Array<byte>\n    // Borrowed UTF-8 bytes; "
-    "readonly because strings are immutable.\n    // @lowered\n    bytes() -> Slice<byte>\n    "
-    "runes() -> Iterator<rune>\n}\n";
+    "fromUtf8(bytes: Slice<byte>) -> string @errors(Utf8Error.InvalidUtf8) @may_alloc\n    static "
+    "fromUtf8Lossy(bytes: Slice<byte>) -> string @nothrow @may_alloc\n    static fromRune(value: "
+    "rune) -> string @may_alloc\n    static join(parts: Array<string>, separator?: string) -> "
+    "string @may_alloc\n    contains(search: string) -> bool @no_alloc\n    indexOf(search: "
+    "string, start?: int) -> int @no_alloc\n    lastIndexOf(search: string) -> int @no_alloc\n    "
+    "slice(start: int, end?: int) -> string @may_alloc\n    sliceBytes(start: int, end: int) -> "
+    "string @errors(StringSliceError.InvalidByteRange) @may_alloc\n    toString() -> string "
+    "@no_alloc\n    split(separator: string, limit?: int) -> Array<string> @may_alloc\n    "
+    "replace(search: string, replacement: string) -> string @may_alloc\n    replaceAll(search: "
+    "string, replacement: string) -> string @may_alloc\n    repeat(count: int) -> string "
+    "@may_alloc\n    startsWith(search: string) -> bool @no_alloc\n    endsWith(search: string) -> "
+    "bool @no_alloc\n    // Owned UTF-8 byte bridge.\n    copyBytes() -> Array<byte> @may_alloc\n  "
+    "  // Borrowed UTF-8 bytes; readonly because strings are immutable.\n    // @lowered\n    "
+    "bytes() -> Slice<byte> @no_alloc\n    runes() -> Iterator<rune> @may_alloc\n}\n";
 
 static const char xr_native_def_stringbuilder[] =
     "// Built-in StringBuilder type — implementation in "
     "src/runtime/object/xstringbuilder_builtins.c\n\n@native\nclass StringBuilder {\n    "
-    "append(value: string | rune | int | float | bool | null) -> StringBuilder\n    toString() -> "
-    "string\n    clear() -> StringBuilder\n}\n";
+    "append(value: string | rune | int | float | bool | null) -> StringBuilder @may_alloc\n    "
+    "toString() -> string @may_alloc\n    clear() -> StringBuilder @no_alloc\n}\n";
 
 static const char xr_native_def_thread[] =
     "// sys.Thread.spawn is compiler-defined, not a native constructor surface.\n//\n// Task 147 "

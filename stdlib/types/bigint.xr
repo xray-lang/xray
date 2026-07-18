@@ -2,12 +2,12 @@
 
 @native
 class BigInt {
-    abs() -> BigInt
-    toString() -> string
-    sign() -> int
-    isZero() -> bool
-    isNegative() -> bool
-    isPositive() -> bool
-    toInt() -> int?
-    toFloat() -> float
+    abs() -> BigInt @may_alloc
+    toString() -> string @may_alloc
+    sign() -> int @no_alloc
+    isZero() -> bool @no_alloc
+    isNegative() -> bool @no_alloc
+    isPositive() -> bool @no_alloc
+    toInt() -> int? @no_alloc
+    toFloat() -> float @no_alloc
 }

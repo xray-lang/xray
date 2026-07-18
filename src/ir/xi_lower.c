@@ -38,6 +38,41 @@
 /* Forward declarations */
 static void finalize_capture_metadata(XiFunc *f);
 
+static XaSymbol *xi_lower_function_symbol(XaAnalyzer *analyzer, AstNode *node) {
+    if (!analyzer || !node || !analyzer->global_scope)
+        return NULL;
+    if (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR) {
+        uint32_t symbol_id = node->as.function_decl.symbol_id;
+        if (symbol_id)
+            return xa_scope_lookup_by_id(analyzer->global_scope, symbol_id);
+    }
+    XaScope *scope = xa_scope_find_by_node(analyzer->global_scope, node);
+    return scope ? scope->function_symbol : NULL;
+}
+
+XR_FUNC void xi_lower_publish_allocation_effect(XiFunc *func, XaAnalyzer *analyzer,
+                                                XaSymbol *symbol) {
+    if (!func || !analyzer || !symbol)
+        return;
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, symbol);
+    const XaAllocationSummary *summary =
+        links && links->alloc_effect_id != XA_ALLOC_EFFECT_NONE
+            ? xa_allocation_db_get(analyzer->allocation_db, links->alloc_effect_id)
+            : NULL;
+    if (summary) {
+        func->allocation_state = (uint8_t) summary->state;
+        func->allocation_reason_bits = summary->reason_bits;
+        func->allocation_fingerprint = summary->stable_fingerprint;
+        func->allocation_effect_complete = true;
+    } else if (links && links->alloc_effect_complete) {
+        func->allocation_state = (uint8_t) links->alloc_state;
+        func->allocation_reason_bits = links->alloc_reason_bits;
+        func->allocation_fingerprint = links->alloc_fingerprint;
+        func->allocation_effect_complete = true;
+    }
+    func->has_no_alloc_contract = links && links->has_no_alloc_contract;
+}
+
 static bool xi_lower_is_builtin_call(const XiValue *v, const char *name) {
     return v && v->op == XI_CALL_BUILTIN && v->aux && name &&
            strcmp((const char *) v->aux, name) == 0;
@@ -1437,6 +1472,8 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     }
     l.func->parent_func = parent_ctx ? parent_ctx->func : NULL;
     l.func->analyzer = analyzer;
+    xi_lower_publish_allocation_effect(l.func, analyzer,
+                                       xi_lower_function_symbol(analyzer, func_node));
     xi_lower_bind_function_body_id(&l,
                                    xi_lower_function_evidence_source_node_id(&l, func_node, fdecl));
 
@@ -1470,8 +1507,6 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
                 l.func->aot_naked = true;
             } else if (a->kind == ATTR_INTERRUPT) {
                 l.func->aot_interrupt_abi = a->str_arg;
-            } else if (a->kind == ATTR_NO_ALLOC) {
-                l.func->no_alloc = true;
             }
         }
     }

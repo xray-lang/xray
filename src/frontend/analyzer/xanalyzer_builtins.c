@@ -183,12 +183,61 @@ xa_builtin_get_type_member_effect_contract(XrType *type, const char *member_name
     return m ? &m->effect_contract : NULL;
 }
 
+XaAllocationContractKind xa_builtin_get_type_member_allocation_contract(XrType *type,
+                                                                        const char *member_name,
+                                                                        bool is_static) {
+    const XaBuiltinType *bt = xa_builtin_get_type_info(type);
+    if (!bt || !member_name)
+        return XA_ALLOCATION_CONTRACT_MISSING;
+    if (!is_static && !xa_builtin_member_available_for_type(type, member_name))
+        return XA_ALLOCATION_CONTRACT_MISSING;
+    const XaBuiltinMember *m = xa_builtin_find_named_type_member(bt, member_name, is_static);
+    return m ? m->allocation_contract : XA_ALLOCATION_CONTRACT_MISSING;
+}
+
 const XaEffectContract *xa_builtin_get_named_type_member_effect_contract(const char *type_name,
                                                                          const char *member_name,
                                                                          bool is_static) {
     const XaBuiltinType *bt = xa_builtin_get_by_name(type_name);
     const XaBuiltinMember *m = xa_builtin_find_named_type_member(bt, member_name, is_static);
     return m ? &m->effect_contract : NULL;
+}
+
+XaAllocationContractKind
+xa_builtin_get_named_type_member_allocation_contract(const char *type_name, const char *member_name,
+                                                     bool is_static) {
+    const XaBuiltinType *bt = xa_builtin_get_by_name(type_name);
+    const XaBuiltinMember *m = xa_builtin_find_named_type_member(bt, member_name, is_static);
+    if (m)
+        return m->allocation_contract;
+
+    /* Compiler-defined nominal value types do not occupy a native runtime
+     * type-table slot, but their allocation behavior is still an explicit
+     * language contract. Keep those contracts next to the builtin registry
+     * instead of teaching the allocation analysis method-name heuristics. */
+    typedef struct XaCompilerTypeAllocationContract {
+        const char *type_name;
+        const char *member_name;
+        bool is_static;
+        XaAllocationContractKind allocation;
+    } XaCompilerTypeAllocationContract;
+    static const XaCompilerTypeAllocationContract compiler_type_contracts[] = {
+        {"Range", "count", false, XA_ALLOCATION_CONTRACT_NO_HEAP},
+        {"Range", "contains", false, XA_ALLOCATION_CONTRACT_NO_HEAP},
+        {"Range", "toArray", false, XA_ALLOCATION_CONTRACT_MAY_HEAP},
+        {"Range", "toString", false, XA_ALLOCATION_CONTRACT_MAY_HEAP},
+        {"Range", "iterator", false, XA_ALLOCATION_CONTRACT_MAY_HEAP},
+        {"<enum>", "toString", false, XA_ALLOCATION_CONTRACT_MAY_HEAP},
+        {"<null>", "toString", false, XA_ALLOCATION_CONTRACT_MAY_HEAP},
+    };
+    for (size_t i = 0; i < sizeof(compiler_type_contracts) / sizeof(compiler_type_contracts[0]);
+         i++) {
+        const XaCompilerTypeAllocationContract *contract = &compiler_type_contracts[i];
+        if (contract->is_static == is_static && strcmp(contract->type_name, type_name) == 0 &&
+            strcmp(contract->member_name, member_name) == 0)
+            return contract->allocation;
+    }
+    return XA_ALLOCATION_CONTRACT_MISSING;
 }
 
 // Get member documentation
@@ -794,6 +843,12 @@ const XaEffectContract *xa_builtin_get_module_func_effect_contract(const char *m
     return member ? &member->effect_contract : NULL;
 }
 
+XaAllocationContractKind xa_builtin_get_module_func_allocation_contract(const char *module_name,
+                                                                        const char *func_name) {
+    const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, true);
+    return member ? member->allocation_contract : XA_ALLOCATION_CONTRACT_MISSING;
+}
+
 bool xa_builtin_module_func_is_yieldable(const char *module_name, const char *func_name) {
     const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, false);
     return member && member->is_method && member->is_yieldable;
@@ -840,6 +895,19 @@ const XaEffectContract *xa_builtin_get_handle_method_effect_contract(const char 
             return &method->effect_contract;
     }
     return NULL;
+}
+
+XaAllocationContractKind xa_builtin_get_handle_method_allocation_contract(const char *handle_name,
+                                                                          const char *method_name) {
+    const XaBuiltinHandle *handle = xa_builtin_find_handle_by_name(handle_name);
+    if (!handle || !method_name)
+        return XA_ALLOCATION_CONTRACT_MISSING;
+    for (int i = 0; i < handle->method_count; i++) {
+        const XaBuiltinMember *method = &handle->methods[i];
+        if (method->is_method && method->name && strcmp(method->name, method_name) == 0)
+            return method->allocation_contract;
+    }
+    return XA_ALLOCATION_CONTRACT_MISSING;
 }
 
 const char *xa_builtin_find_handle_module(const char *handle_name) {

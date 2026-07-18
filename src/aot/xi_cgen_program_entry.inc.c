@@ -512,7 +512,6 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     ctx->all_modules = single_module;
     ctx->all_nmodules = 1;
     cg_reachability_cache_clear(ctx);
-    cg_no_alloc_summaries_invalidate(ctx);
     ctx->nshared_native_exports = 0;
     if (ctx->shared_native_exports)
         memset(ctx->shared_native_exports, 0,
@@ -523,8 +522,6 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     cg_init_from_module(ctx, module);
     ctx->shared_name = "xrt_shared";
     cg_collect_shared_native_instances(ctx);
-    if (!cg_check_no_alloc_func_tree(ctx, main_func))
-        return;
     if (!cg_mandatory_plans_preflight_func_tree(ctx, main_func))
         return;
 
@@ -724,7 +721,6 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     ctx->all_modules = modules;
     ctx->all_nmodules = nmodules;
     cg_reachability_cache_clear(ctx);
-    cg_no_alloc_summaries_invalidate(ctx);
     ctx->extern_linkage = true;
     /* Internal (non-exported) functions take a per-module ordinal suffix, so
      * adding or removing a function in one module never renumbers another's
@@ -752,11 +748,6 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     snprintf(shared_buf, sizeof(shared_buf), "xrt_shared_%s", prefix);
     ctx->shared_name = shared_buf;
     cg_collect_shared_native_instances(ctx);
-    if (!cg_check_no_alloc_func_tree(ctx, module->init)) {
-        ctx->shared_name = "xrt_shared";
-        ctx->extern_linkage = false;
-        return;
-    }
     if (!cg_mandatory_plans_preflight_func_tree(ctx, module->init)) {
         ctx->shared_name = "xrt_shared";
         ctx->extern_linkage = false;

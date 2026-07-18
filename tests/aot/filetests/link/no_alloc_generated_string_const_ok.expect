@@ -1,0 +1,4 @@
+status=pass
+contains=xray_no_alloc_os_platform_const_ok
+not_contains=@no_alloc contract is not satisfied
+not_contains=@no_alloc contract cannot be proven

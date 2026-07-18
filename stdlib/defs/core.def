@@ -1546,6 +1546,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn compile {
@@ -1559,6 +1560,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn test {
@@ -1572,6 +1574,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "no_heap"
   }
 
   fn count {
@@ -1585,6 +1588,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "no_heap"
   }
 
   fn findText {
@@ -1598,6 +1602,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn findGroup {
@@ -1611,6 +1616,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn find {
@@ -1624,6 +1630,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn find {
@@ -1637,6 +1644,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn fullFind {
@@ -1650,6 +1658,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn findAll {
@@ -1663,6 +1672,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn findAll {
@@ -1676,6 +1686,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn replace {
@@ -1689,6 +1700,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn replaceAll {
@@ -1702,6 +1714,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn split {
@@ -1715,6 +1728,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn split {
@@ -1728,6 +1742,7 @@ module regex {
     link_object: true
     define: "XRT_ENABLE_REGEX"
     layer: "alloc"
+    allocation: "may_heap"
   }
 
   fn escape {
@@ -2756,6 +2771,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "may_heap"
   }
 
   fn allocZeroed {
@@ -2768,6 +2784,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "may_heap"
   }
 
   fn allocAligned {
@@ -2780,11 +2797,13 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "may_heap"
   }
 
   fn pageAlloc {
     signature: "(bytes: int, prot?: int): MutPtr<byte>"
     doc: "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree"
+    allocation: "may_heap"
     vm: "mem_page_alloc"
     aot: "xrt_mem_page_alloc_default"
     argc: 1
@@ -2797,6 +2816,7 @@ module mem {
   fn pageAlloc {
     signature: "(bytes: int, prot?: int): MutPtr<byte>"
     doc: "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree"
+    allocation: "may_heap"
     vm: "mem_page_alloc"
     aot: "xrt_mem_page_alloc"
     argc: 2
@@ -2840,6 +2860,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn mutPtr {
@@ -2852,6 +2873,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn addr {
@@ -2864,6 +2886,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn load {
@@ -2875,6 +2898,7 @@ module mem {
     aot_direct: false
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn store {
@@ -2886,11 +2910,13 @@ module mem {
     aot_direct: false
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn copy {
     signature: "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()"
     doc: "Copy n bytes from src to dst (non-overlapping; memcpy)"
+    allocation: "no_heap"
     vm: "mem_copy"
     aot: "xrt_mem_copy"
     argc: 3
@@ -2910,6 +2936,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn set {
@@ -2922,6 +2949,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn compare {
@@ -2964,24 +2992,28 @@ module mem {
     signature: "(): Slice<byte>"
     receiver: "Buffer"
     doc: "Borrow this buffer as a readonly Slice<byte> view"
+    allocation: "no_heap"
   }
 
   type_method Buffer.asMutBytes {
     signature: "(): Slice<byte>"
     receiver: "Buffer"
     doc: "Borrow this buffer as a mutable Slice<byte> view"
+    allocation: "no_heap"
   }
 
   type_method Buffer.borrowPtr {
     signature: "(): MutPtr<byte>"
     receiver: "Buffer"
     doc: "Borrow the underlying mutable pointer; requires unsafe at the call site"
+    allocation: "no_heap"
   }
 
   type_method Buffer.resize {
     signature: "(n: int): bool"
     receiver: "Buffer"
     doc: "Resize this buffer; returns false on allocation failure"
+    allocation: "may_heap"
   }
 
 }

@@ -2,14 +2,14 @@
 
 @native
 class float {
-    abs() -> float
-    toString() -> string
-    toFixed(decimals?: int) -> string
-    toInt() -> int
-    floor() -> int
-    ceil() -> int
-    round() -> int
-    sqrt() -> float
-    pow(exp: float) -> float
-    isNaN() -> bool
+    abs() -> float @no_alloc
+    toString() -> string @may_alloc
+    toFixed(decimals?: int) -> string @may_alloc
+    toInt() -> int @no_alloc
+    floor() -> int @no_alloc
+    ceil() -> int @no_alloc
+    round() -> int @no_alloc
+    sqrt() -> float @no_alloc
+    pow(exp: float) -> float @no_alloc
+    isNaN() -> bool @no_alloc
 }

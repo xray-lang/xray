@@ -1,4 +1,4 @@
 status=fail
-contains=@no_alloc function 'xray_no_alloc_io_cwd_reject' allocates via stdlib 'io.cwd'
+contains=@no_alloc contract cannot be proven for 'xray_no_alloc_io_cwd_reject'
 contains=xray_no_alloc_io_cwd_reject
 not_contains=CRASH

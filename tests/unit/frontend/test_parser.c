@@ -585,6 +585,21 @@ TEST(parser_direct_visibility_owns_declaration) {
     teardown();
 }
 
+TEST(parser_method_no_alloc_attribute) {
+    setup();
+    AstNode *program = parse_ok("struct Word {\n"
+                                "  @no_alloc\n"
+                                "  rotate(n: int) -> uint32 { return 0 }\n"
+                                "}\n");
+    AstNode *st = program->as.program.statements[0];
+    ASSERT_EQ_INT(st->type, AST_STRUCT_DECL);
+    ASSERT_EQ_INT(st->as.struct_decl.method_count, 1);
+    MethodDeclNode *method = &st->as.struct_decl.methods[0]->as.method_decl;
+    ASSERT_EQ_INT(method->attr_count, 1);
+    ASSERT_EQ_INT(method->attributes[0]->kind, ATTR_NO_ALLOC);
+    teardown();
+}
+
 TEST(parser_rejects_posthoc_local_export) {
     setup();
     AstNode *program =
@@ -598,6 +613,7 @@ TEST(parser_enum_static_method) {
     AstNode *stmt = parse_first("enum Color {\n"
                                 "  Red,\n"
                                 "  Green\n"
+                                "  @no_alloc\n"
                                 "  static fn fromInt(v: int) -> Color {\n"
                                 "    return Color.Red\n"
                                 "  }\n"
@@ -614,6 +630,8 @@ TEST(parser_enum_static_method) {
     ASSERT_EQ_INT(factory->type, AST_METHOD_DECL);
     ASSERT(factory->as.method_decl.is_static);
     ASSERT_STR_EQ(factory->as.method_decl.name, "fromInt");
+    ASSERT_EQ_INT(factory->as.method_decl.attr_count, 1);
+    ASSERT_EQ_INT(factory->as.method_decl.attributes[0]->kind, ATTR_NO_ALLOC);
     ASSERT_EQ_INT(label->type, AST_METHOD_DECL);
     ASSERT(!label->as.method_decl.is_static);
     ASSERT_STR_EQ(label->as.method_decl.name, "label");
@@ -1060,6 +1078,7 @@ int main(void) {
     // Classes
     RUN_TEST(parser_class_decl);
     RUN_TEST(parser_direct_visibility_owns_declaration);
+    RUN_TEST(parser_method_no_alloc_attribute);
     RUN_TEST(parser_rejects_posthoc_local_export);
     RUN_TEST(parser_enum_static_method);
 

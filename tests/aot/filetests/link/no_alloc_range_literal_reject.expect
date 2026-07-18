@@ -1,4 +1,4 @@
 status=fail
-contains=@no_alloc function 'xray_no_alloc_range_literal_reject' allocates via op 'RANGE'
+contains=@no_alloc contract is not satisfied for 'xray_no_alloc_range_literal_reject'
 contains=xray_no_alloc_range_literal_reject
 not_contains=CRASH

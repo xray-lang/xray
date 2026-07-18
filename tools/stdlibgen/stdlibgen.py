@@ -90,6 +90,7 @@ class StdlibEntry:
     layer: str
     visibility: str
     effect: str
+    allocation: str
     caps: tuple[str, ...]
 
     @property
@@ -149,6 +150,7 @@ class StdlibTypeMethodEntry:
     name: str
     signature: str
     doc: str
+    allocation: str
 
     @property
     def symbol(self) -> str:
@@ -368,6 +370,12 @@ def parse_def_metadata(
                     f"{path}:{line_no}: unsupported visibility for "
                     f"{current_module}.{current_name}: {visibility}"
                 )
+            allocation = str(props.get("allocation", ""))
+            if allocation not in {"", "no_heap", "may_heap"}:
+                raise SystemExit(
+                    f"{path}:{line_no}: unsupported allocation contract for "
+                    f"{current_module}.{current_name}: {allocation}"
+                )
 
             entries.append(
                 StdlibEntry(
@@ -389,6 +397,7 @@ def parse_def_metadata(
                     layer=str(props.get("layer", "")),
                     visibility=visibility,
                     effect=str(props.get("effect", "")),
+                    allocation=allocation,
                     caps=caps,
                 )
             )
@@ -456,6 +465,12 @@ def parse_def_metadata(
                 names = ", ".join(missing)
                 raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name} missing {names}")
             type_name, method_name = str(current_name).split(".", 1)
+            allocation = str(props.get("allocation", ""))
+            if allocation not in {"", "no_heap", "may_heap"}:
+                raise SystemExit(
+                    f"{path}:{line_no}: unsupported allocation contract for "
+                    f"{current_module}.{current_name}: {allocation}"
+                )
             type_methods.append(
                 StdlibTypeMethodEntry(
                     module=current_module,
@@ -463,6 +478,7 @@ def parse_def_metadata(
                     name=method_name,
                     signature=str(props["signature"]),
                     doc=str(props["doc"]),
+                    allocation=allocation,
                 )
             )
         elif current_kind == "native_class":

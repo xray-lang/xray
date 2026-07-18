@@ -807,7 +807,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=28 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=29 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1194,15 +1194,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=28 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=28 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=28 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=28 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=29 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=29 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=29 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=29 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=28 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=28 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=28 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=28 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=29 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=29 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=29 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=29 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -17036,6 +17036,56 @@ TEST(global_evidence_producer_marks_static_data_reachability) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_publishes_allocation_contracts) {
+    setup_parser_session();
+    const char *source = "@no_alloc\n"
+                         "export fn scalar(x: int) -> int { return x + 1 }\n"
+                         "fn allocates() { var values = [1, 2, 3] }\n"
+                         "fn unknown(cb: () -> ()) { cb() }\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    ASSERT_NOT_NULL(analyzer);
+    xa_analyzer_set_graph(analyzer, &graph);
+    xa_analyzer_analyze(analyzer, "allocation_evidence.xr", ast);
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+        &ev, &graph, XG_BUILD_NATIVE_RELEASE, 0, NULL, 0, analyzer));
+    const XgBodySummary *scalar = evidence_find_body_by_name(&ev, "scalar");
+    const XgBodySummary *allocates = evidence_find_body_by_name(&ev, "allocates");
+    const XgBodySummary *unknown = evidence_find_body_by_name(&ev, "unknown");
+    ASSERT_NOT_NULL(scalar);
+    ASSERT_NOT_NULL(allocates);
+    ASSERT_NOT_NULL(unknown);
+    ASSERT_EQ_UINT(scalar->allocation_state, XA_ALLOC_PROVEN_NONE);
+    ASSERT_EQ_UINT(scalar->allocation_complete, 1);
+    ASSERT_EQ_UINT(scalar->no_alloc_contract, 1);
+    ASSERT_NE(scalar->allocation_fingerprint, 0);
+    ASSERT_EQ_UINT(allocates->allocation_state, XA_ALLOC_MAY);
+    ASSERT_TRUE((allocates->allocation_reason_bits & XA_ALLOC_REASON_CONTAINER) != 0);
+    ASSERT_EQ_UINT(allocates->no_alloc_contract, 0);
+    ASSERT_EQ_UINT(unknown->allocation_state, XA_ALLOC_UNKNOWN);
+    ASSERT_TRUE((unknown->allocation_reason_bits & XA_ALLOC_REASON_DYNAMIC_CALL) != 0);
+
+    xg_global_evidence_free(&ev);
+    xa_analyzer_free(analyzer);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_static_data_runtime_init) {
     setup_parser_session();
     const char *source = "fn useDynamicStatic() -> int {\n"
@@ -18127,6 +18177,7 @@ RUN_TEST(global_evidence_producer_records_empty_typed_map_set_literals);
 RUN_TEST(global_evidence_producer_records_map_set_method_key_access);
 RUN_TEST(global_evidence_producer_propagates_map_set_shape_through_closure_capture);
 RUN_TEST(global_evidence_producer_marks_static_data_reachability);
+RUN_TEST(global_evidence_publishes_allocation_contracts);
 RUN_TEST(global_evidence_producer_marks_static_data_runtime_init);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
 RUN_TEST(global_evidence_producer_marks_sys_thread_spawn_capability);

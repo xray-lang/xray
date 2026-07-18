@@ -866,6 +866,106 @@ static const XaEffectSummary *analyzer_function_effect_summary(XaAnalyzer *analy
     return xa_effect_db_get(analyzer->effect_db, sym->links.effect_id);
 }
 
+static const XaAllocationSummary *analyzer_function_allocation_summary(XaAnalyzer *analyzer,
+                                                                       const char *name) {
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, name);
+    if (!sym)
+        sym = xa_analyzer_lookup_in_scope(analyzer, name, analyzer->global_scope);
+    if (!sym)
+        sym = xa_analyzer_lookup_deep(analyzer, name);
+    if (!sym || sym->links.alloc_effect_id == XA_ALLOC_EFFECT_NONE)
+        return NULL;
+    return xa_allocation_db_get(analyzer->allocation_db, sym->links.alloc_effect_id);
+}
+
+TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
+    XaAllocationSummary fingerprint_a = {
+        .state = XA_ALLOC_MAY,
+        .reason_bits = XA_ALLOC_REASON_CONTAINER,
+        .first_site_node_id = 7,
+        .first_callee_symbol_id = 11,
+        .line = 42,
+        .column = 3,
+        .callee_effect_id = 5,
+        .cause_kind = "literal",
+        .cause_detail = "Array",
+        .callee_name = "allocateLeaf",
+    };
+    XaAllocationSummary fingerprint_b = fingerprint_a;
+    fingerprint_b.first_site_node_id = 7001;
+    fingerprint_b.first_callee_symbol_id = 9001;
+    fingerprint_b.callee_effect_id = 81;
+    ASSERT(xa_allocation_summary_fingerprint(&fingerprint_a) ==
+           xa_allocation_summary_fingerprint(&fingerprint_b));
+    fingerprint_b.line++;
+    ASSERT(xa_allocation_summary_fingerprint(&fingerprint_a) !=
+           xa_allocation_summary_fingerprint(&fingerprint_b));
+
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "@no_alloc\n"
+                         "fn scalar(x: int) -> int { return x + 1 }\n"
+                         "fn cycleA(n: int) -> int {\n"
+                         "  if (n <= 0) { return 0 }\n"
+                         "  return cycleB(n - 1)\n"
+                         "}\n"
+                         "fn cycleB(n: int) -> int {\n"
+                         "  if (n <= 0) { return 0 }\n"
+                         "  return cycleA(n - 1)\n"
+                         "}\n"
+                         "@no_alloc\n"
+                         "fn cycleEntry(n: int) -> int { return cycleA(n) }\n"
+                         "fn allocateLeaf() { var values = [1, 2, 3] }\n"
+                         "@no_alloc\n"
+                         "fn twoHop() { allocateLeaf() }\n"
+                         "@no_alloc\n"
+                         "fn unknownCall(cb: () -> ()) { cb() }\n"
+                         "@no_alloc\n"
+                         "fn callbackOk(xs: Array<int>) {\n"
+                         "  xs.forEach(fn(value: int, index: int) { var sum = value + index })\n"
+                         "}\n"
+                         "@no_alloc\n"
+                         "fn callbackBad(xs: Array<int>) {\n"
+                         "  xs.forEach(fn(value: int, index: int) { var copy = [value, index] })\n"
+                         "}\n"
+                         "struct Counter {\n"
+                         "  value: int\n"
+                         "  @no_alloc\n"
+                         "  read() -> int { return this.value }\n"
+                         "  @no_alloc\n"
+                         "  bad() { var copy = [this.value] }\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "allocation_effect_contracts.xr", program);
+
+    const XaAllocationSummary *scalar = analyzer_function_allocation_summary(a, "scalar");
+    const XaAllocationSummary *cycle_entry = analyzer_function_allocation_summary(a, "cycleEntry");
+    const XaAllocationSummary *leaf = analyzer_function_allocation_summary(a, "allocateLeaf");
+    const XaAllocationSummary *two_hop = analyzer_function_allocation_summary(a, "twoHop");
+    const XaAllocationSummary *unknown = analyzer_function_allocation_summary(a, "unknownCall");
+    const XaAllocationSummary *callback_ok = analyzer_function_allocation_summary(a, "callbackOk");
+    const XaAllocationSummary *callback_bad =
+        analyzer_function_allocation_summary(a, "callbackBad");
+    ASSERT(scalar && scalar->state == XA_ALLOC_PROVEN_NONE);
+    ASSERT(cycle_entry && cycle_entry->state == XA_ALLOC_PROVEN_NONE);
+    ASSERT(leaf && leaf->state == XA_ALLOC_MAY);
+    ASSERT(two_hop && two_hop->state == XA_ALLOC_MAY);
+    ASSERT(unknown && unknown->state == XA_ALLOC_UNKNOWN);
+    ASSERT(callback_ok && callback_ok->state == XA_ALLOC_PROVEN_NONE);
+    ASSERT(callback_bad && callback_bad->state == XA_ALLOC_MAY);
+    ASSERT(scalar->stable_fingerprint != 0);
+    ASSERT(analyzer_diag_contains(a, "allocates via call 'allocateLeaf'"));
+    ASSERT(analyzer_diag_contains(a, "'allocateLeaf' allocates via literal 'Array'"));
+    ASSERT(analyzer_diag_contains(a, "indirect callback target is unknown"));
+    ASSERT(analyzer_diag_contains(a, "callbackBad"));
+    ASSERT(analyzer_diag_contains(a, "bad"));
+    ASSERT(!analyzer_diag_contains(a, "cannot be proven for 'callbackOk'"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 static bool effect_summary_has_enum_named(XaAnalyzer *analyzer, const XaEffectSummary *summary,
                                           const char *name) {
     if (!analyzer || !summary || !name)
@@ -1696,7 +1796,10 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     const char *lib_source = "export enum ImportedErr { Selective, Namespace }\n"
                              "export fn failSelective() { throw ImportedErr.Selective }\n"
                              "export fn failNamespace() { throw ImportedErr.Namespace }\n"
-                             "export fn applyImported(cb: () -> ()) { cb() }\n";
+                             "export fn applyImported(cb: () -> ()) { cb() }\n"
+                             "@no_alloc\n"
+                             "export fn importedScalar(x: int) -> int { return x + 1 }\n"
+                             "export fn importedAlloc() { var values = [1, 2, 3] }\n";
     const char *reexport_source =
         "export { failSelective as failReexported, failNamespace, applyImported as "
         "applyReexported } from "
@@ -1705,6 +1808,8 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     const char *callback_source = "export enum CallbackErr { Foreign, Local }\n"
                                   "export fn failForeignCallback() { throw CallbackErr.Foreign }\n";
     const char *entry_source = "import { failSelective, applyImported } from "
+                               "\"./effect_export_module\"\n"
+                               "import { importedScalar, importedAlloc } from "
                                "\"./effect_export_module\"\n"
                                "import \"./effect_export_module\" as effects\n"
                                "import { failForeignCallback, CallbackErr } from "
@@ -1737,7 +1842,10 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
                                "fn viaImportedHigherOrderForeignCallback() { "
                                "applyImported(failForeignCallback) }\n"
                                "fn viaImportedHigherOrderNamespaceCallback() { "
-                               "effects.applyImported(callbacks.failForeignCallback) }\n";
+                               "effects.applyImported(callbacks.failForeignCallback) }\n"
+                               "@no_alloc\n"
+                               "fn viaImportedNoAlloc() { importedScalar(1) }\n"
+                               "fn viaImportedAlloc() { importedAlloc() }\n";
 
     char tmpdir[] = "/tmp/xray_effect_reexport_XXXXXX";
     ASSERT(xr_test_mkdtemp(tmpdir) != NULL);
@@ -1901,6 +2009,10 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
         analyzer_function_effect_summary(a, "viaImportedHigherOrderForeignCallback");
     const XaEffectSummary *namespace_callback_hof =
         analyzer_function_effect_summary(a, "viaImportedHigherOrderNamespaceCallback");
+    const XaAllocationSummary *imported_noalloc =
+        analyzer_function_allocation_summary(a, "viaImportedNoAlloc");
+    const XaAllocationSummary *imported_alloc =
+        analyzer_function_allocation_summary(a, "viaImportedAlloc");
     ASSERT(selective != NULL);
     ASSERT(ns != NULL);
     ASSERT(reexported != NULL);
@@ -1915,6 +2027,8 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(local_callback_hof != NULL);
     ASSERT(foreign_callback_hof != NULL);
     ASSERT(namespace_callback_hof != NULL);
+    ASSERT(imported_noalloc && imported_noalloc->state == XA_ALLOC_PROVEN_NONE);
+    ASSERT(imported_alloc && imported_alloc->state == XA_ALLOC_MAY);
 
     ASSERT(selective->completeness == XA_EFFECT_COMPLETE);
     ASSERT(ns->completeness == XA_EFFECT_COMPLETE);
@@ -2068,12 +2182,13 @@ TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
 
     char xrd_path[256];
     snprintf(xrd_path, sizeof(xrd_path), "%s/native_effects.xrd", tmpdir);
-    ASSERT(write_text_file(xrd_path, "export fn failNative(): int @errors(NativeErr.Boom)\n"
-                                     "export fn noThrowNative(): int @nothrow\n"
-                                     "export fn missingNative(): int\n"
-                                     "export fn makeBox(): NativeBox @nothrow\n"
-                                     "type NativeBox = { const id: int }\n"
-                                     "fn NativeBox.failMethod(): int @errors(NativeErr.Other)\n"));
+    ASSERT(write_text_file(xrd_path,
+                           "export fn failNative(): int @errors(NativeErr.Boom) @may_alloc\n"
+                           "export fn noThrowNative(): int @nothrow @no_alloc\n"
+                           "export fn missingNative(): int\n"
+                           "export fn makeBox(): NativeBox @nothrow @may_alloc\n"
+                           "type NativeBox = { const id: int }\n"
+                           "fn NativeBox.failMethod(): int @errors(NativeErr.Other) @no_alloc\n"));
 
     const char *old_typepath = getenv("XRAY_TYPEPATH");
     char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
@@ -2090,11 +2205,16 @@ TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
                          "fn viaSelective() { failNative() }\n"
                          "fn viaNoThrow() { noThrowNative() }\n"
                          "fn viaMissing() { missingNative() }\n"
-                         "fn viaHandle() { native_effects.makeBox().failMethod() }\n";
+                         "fn viaHandle() { native_effects.makeBox().failMethod() }\n"
+                         "@no_alloc\n"
+                         "fn allocNativeOk() { noThrowNative() }\n"
+                         "@no_alloc\n"
+                         "fn allocNativeBad() { native_effects.makeBox() }\n"
+                         "@no_alloc\n"
+                         "fn allocNativeUnknown() { missingNative() }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_xrd_native_contracts.xr", program);
-    ASSERT(!analyzer_diag_contains(a, "error"));
 
     const XaEffectSummary *namespace_call = analyzer_function_effect_summary(a, "viaNamespace");
     const XaEffectSummary *selective_call = analyzer_function_effect_summary(a, "viaSelective");
@@ -2131,6 +2251,18 @@ TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
     ASSERT(!xa_bitset_test(&selective_set->variants, 1));
     ASSERT(!xa_bitset_test(&handle_set->variants, 0));
     ASSERT(xa_bitset_test(&handle_set->variants, 1));
+
+    const XaAllocationSummary *alloc_ok = analyzer_function_allocation_summary(a, "allocNativeOk");
+    const XaAllocationSummary *alloc_bad =
+        analyzer_function_allocation_summary(a, "allocNativeBad");
+    const XaAllocationSummary *alloc_unknown =
+        analyzer_function_allocation_summary(a, "allocNativeUnknown");
+    ASSERT(alloc_ok && alloc_ok->state == XA_ALLOC_PROVEN_NONE);
+    ASSERT(alloc_bad && alloc_bad->state == XA_ALLOC_MAY);
+    ASSERT(alloc_unknown && alloc_unknown->state == XA_ALLOC_UNKNOWN);
+    ASSERT(analyzer_diag_contains(a, "contract is not satisfied for 'allocNativeBad'"));
+    ASSERT(analyzer_diag_contains(a, "contract cannot be proven for 'allocNativeUnknown'"));
+    ASSERT(analyzer_diag_contains(a, "native or extern callee has no allocation contract"));
 
     xa_analyzer_free(a);
     xa_xrd_cleanup();
@@ -5275,6 +5407,7 @@ int main(void) {
     RUN_TEST(analyzer_diagnostics);
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
+    RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_error_effect_propagates_const_function_value_aliases);
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);

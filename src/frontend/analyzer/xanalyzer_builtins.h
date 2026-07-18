@@ -31,6 +31,7 @@ typedef struct XaBuiltinMember {
     bool is_lowered_only;              // true = compiler/VM lowering surface, not an XrClass method
     bool is_yieldable;                 // true = VM binding may suspend/resume the current coroutine
     XaEffectContract effect_contract;  // bodyless error contract; zero means missing/incomplete
+    XaAllocationContractKind allocation_contract;  // explicit bodyless allocation contract
 } XaBuiltinMember;
 
 // Built-in type info
@@ -85,11 +86,15 @@ XR_FUNC const char *xa_builtin_get_member_signature(XrType *type, const char *me
 // for receiver calls such as s.sliceBytes(...).
 XR_FUNC const XaEffectContract *
 xa_builtin_get_type_member_effect_contract(XrType *type, const char *member_name, bool is_static);
+XR_FUNC XaAllocationContractKind xa_builtin_get_type_member_allocation_contract(
+    XrType *type, const char *member_name, bool is_static);
 
 // Same as above, but starts from a built-in type namespace name.
 XR_FUNC const XaEffectContract *
 xa_builtin_get_named_type_member_effect_contract(const char *type_name, const char *member_name,
                                                  bool is_static);
+XR_FUNC XaAllocationContractKind xa_builtin_get_named_type_member_allocation_contract(
+    const char *type_name, const char *member_name, bool is_static);
 
 // Get member documentation
 XR_FUNC const char *xa_builtin_get_member_doc(XrType *type, const char *member_name);
@@ -134,6 +139,8 @@ XR_FUNC const char *xa_builtin_get_module_func_doc(const char *module_name, cons
 // Get module function error-effect contract.
 XR_FUNC const XaEffectContract *xa_builtin_get_module_func_effect_contract(const char *module_name,
                                                                            const char *func_name);
+XR_FUNC XaAllocationContractKind
+xa_builtin_get_module_func_allocation_contract(const char *module_name, const char *func_name);
 
 // Check if a module function is registered as yieldable in stdlib metadata.
 XR_FUNC bool xa_builtin_module_func_is_yieldable(const char *module_name, const char *func_name);
@@ -148,6 +155,8 @@ XR_FUNC const XaBuiltinHandle *xa_builtin_find_handle_by_name(const char *handle
 // Get a handle method error-effect contract by handle and method name.
 XR_FUNC const XaEffectContract *
 xa_builtin_get_handle_method_effect_contract(const char *handle_name, const char *method_name);
+XR_FUNC XaAllocationContractKind
+xa_builtin_get_handle_method_allocation_contract(const char *handle_name, const char *method_name);
 
 // Owning builtin module name for a handle type, or NULL if no builtin module
 // declares one with this name (used for user-class name-collision diagnostics)

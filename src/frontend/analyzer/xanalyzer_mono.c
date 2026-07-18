@@ -843,6 +843,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->is_getter = src->is_getter;
             dst->is_setter = src->is_setter;
             dst->is_static_constructor = src->is_static_constructor;
+            dst->attributes = src->attributes;
+            dst->attr_count = src->attr_count;
             dst->is_operator = src->is_operator;
             dst->op_type = src->op_type;
             dst->base_arg_count = src->base_arg_count;
