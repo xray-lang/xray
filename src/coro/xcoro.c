@@ -41,9 +41,10 @@
 
 // Note: blocked queue moved to XrRuntime, see xworker.c
 
-// ========== GC Safepoint ==========
+// ========== Scheduling / Cancellation Safepoint ==========
 
-// GC safepoint: runs a GC step and checks for cancellation.
+// Legacy-named safepoint helper: resets the scheduling reduction budget and
+// checks cancellation. Tracing GC has been retired; no collection runs here.
 // Returns 0 to continue, non-zero to request the coroutine to stop.
 int xr_coro_heap_safepoint(XrCoroutine *coro) {
     if (!coro)

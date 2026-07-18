@@ -39,10 +39,10 @@
  *   work-stealing. Only channel_wake_coro uses affinity_p to choose
  *   the target Worker for waking a blocked coroutine.
  *
- *   INVARIANT 6 (GC isolation): Each coroutine has its own GC heap
+ *   INVARIANT 6 (Heap isolation): Each coroutine has its own RC/Region heap
  *   (XrCoroHeap). Cross-coroutine object transfer requires deep copy
- *   or shared storage (reference counted). A coroutine's GC never
- *   touches another coroutine's heap objects.
+ *   or shared storage (atomically reference counted). Cycle collection
+ *   traverses only eligible references in the owning coroutine's heap.
  *
  * COROUTINE STATE MACHINE:
  *
@@ -186,9 +186,9 @@ struct XrCoroutine {
     void *backend_state;
 
     /* ================================================================
-     * WARM ZONE — GC/result hot fields and backend-owned cold state
+     * WARM ZONE — heap/result hot fields and backend-owned cold state
      * ================================================================ */
-    struct XrCoroHeap *heap;      // GC safepoint: checked every loop back-edge
+    struct XrCoroHeap *heap;      // per-coroutine RC/Region heap
     struct XrRuntimeCore *core;   // VM-neutral runtime resources for this coroutine
     struct XrRuntime *scheduler;  // owning scheduler runtime, NULL before multicore attach
     /* A physical coroutine owns its execution and allocation identity.  The
@@ -458,7 +458,7 @@ static inline bool xr_coro_should_yield(XrCoroutine *coro) {
     return xr_coro_reds(coro) <= 0;
 }
 
-// Request yield at next safepoint (preempt, GC, cancel)
+// Request yield at next scheduling/cancellation safepoint.
 // Forces reductions to 0 so the single-check safepoint triggers
 static inline void xr_coro_request_yield(XrCoroutine *coro) {
     xr_coro_set_reds(coro, 0);

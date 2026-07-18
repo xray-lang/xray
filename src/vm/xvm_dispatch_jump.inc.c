@@ -31,7 +31,7 @@ vmcase(OP_JMP) {
     /* Reductions check on backward jumps to prevent
     ** infinite loops from starving other coroutines.
     ** Performance impact < 3%, enables fair scheduling.
-    ** Also serves as GC safe point for per-coroutine GC. */
+    ** Also serves as a scheduling/cancellation safepoint. */
     if (offset < 0) {
         /* Host-supplied wall-clock deadline. Checked here (back-edge) so a
         ** tight infinite loop cannot wedge either a coroutine or a taskless
@@ -46,8 +46,8 @@ vmcase(OP_JMP) {
             XrCoroutine *coro = (XrCoroutine *) vm_ctx->current_coro;
             xr_worker_bump_heartbeat(vm_worker);
 
-            /* GC safe point: check and trigger GC at loop back-edge.
-            ** Stack is consistent here (between instructions). */
+            /* Legacy tracing-GC hook; currently a no-op. Scheduling and
+            ** cancellation are handled by the reduction check below. */
             VM_GC_SAFEPOINT();
 
             if (xr_coro_consume_reds(coro, 1) <= 0) {
