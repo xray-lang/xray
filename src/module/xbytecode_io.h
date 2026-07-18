@@ -11,18 +11,21 @@
  *   Serializes XrProto to portable bytecode format and loads it back.
  *   Supports stripping debug info and embedding as C source.
  *
- * FILE FORMAT (.xrc):
+ * FILE FORMAT (.xrc), all integers little-endian:
  *   +----------------------------------------+
- *   | Header (16 bytes)                      |
+ *   | Header (20 bytes)                      |
  *   |   Magic: "XRAY" (4)                    |
  *   |   Version: u16                         |
  *   |   Flags: u16                           |
  *   |   Proto Count: u32                     |
- *   |   Reserved: u32                        |
+ *   |   Max Symbol ID: u32                   |
+ *   |   Shared Count: u32                    |
  *   +----------------------------------------+
- *   | String Table                           |
+ *   | Canonical Aggregate Layout Table       |
  *   |   Count: u32                           |
- *   |   Strings: [len:u32, data:bytes]...    |
+ *   |   Records sorted by stable semantic ID |
+ *   +----------------------------------------+
+ *   | Symbol Table                           |
  *   +----------------------------------------+
  *   | Proto Section                          |
  *   |   [Proto]*                             |
@@ -42,7 +45,7 @@ struct XrCompilerSession;
 struct XrProto;
 
 #define XR_BC_MAGIC 0x59415258  // "XRAY" (little-endian)
-#define XR_BC_VERSION 20        // v20: serializes nested typed Record decode metadata
+#define XR_BC_VERSION 21        // v21: canonical target-bound aggregate layout table
 
 // Serialization flags
 #define XR_BC_STRIP_DEBUG (1 << 0)   // Remove debug info (line numbers, var names)
@@ -55,13 +58,17 @@ typedef enum {
     XR_BC_ERR_TRUNCATED,
     XR_BC_ERR_CORRUPT,
     XR_BC_ERR_ALLOC,
+    XR_BC_ERR_METADATA,
+    XR_BC_ERR_TARGET_ABI,
 } XrBcError;
+
+XR_FUNC const char *xr_bytecode_error_string(XrBcError error);
 
 /* ========== Serialization API ========== */
 
 // Serialize XrProto to byte array, caller must free
 XR_FUNC uint8_t *xr_bytecode_write(struct XrVMRuntime *X, struct XrProto *proto, int flags,
-                                   size_t *out_size);
+                                   size_t *out_size, XrBcError *error);
 
 // Deserialize XrProto from byte array
 XR_FUNC struct XrProto *xr_bytecode_read(struct XrVMRuntime *X, const uint8_t *data, size_t size,

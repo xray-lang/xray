@@ -19,9 +19,11 @@
 #include "xray.h"
 #include "xray_vm.h"
 #include "../../runtime/xisolate_api.h"
-#include "../../frontend/parser/xparse.h"
-#include "../../frontend/parser/xast_api.h"
+#include "../../frontend/analyzer/xanalyzer.h"
 #include "../../module/xbytecode_io.h"
+#include "../../module/xmodule.h"
+#include "../../module/xmodule_graph.h"
+#include "../../module/xmodule_resolver.h"
 #include "../../runtime/value/xchunk.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
@@ -70,6 +72,84 @@ static XrOutputFormat parse_format(const char *fmt) {
     return XR_OUTPUT_AUTO;
 }
 
+static bool prepare_compile_graph(XrVMRuntime *X, XrCompilerSession *session,
+                                  const char *input_file, XrModuleGraph **out_graph,
+                                  XaAnalyzer **out_analyzer) {
+    *out_graph = NULL;
+    *out_analyzer = NULL;
+    XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
+    XrModuleResolver *resolver = registry ? xr_module_registry_get_resolver(registry) : NULL;
+    if (!resolver) {
+        xr_cli_error("compile", "cannot create module resolver");
+        return false;
+    }
+
+    XrModuleGraph *graph = xr_module_graph_new(session, resolver);
+    if (!graph) {
+        xr_cli_error("compile", "cannot create module graph");
+        return false;
+    }
+    char *graph_error = NULL;
+    if (xr_module_graph_build(graph, input_file, &graph_error) != 0) {
+        xr_cli_error("compile", "%s", graph_error ? graph_error : "module graph build failed");
+        xr_free(graph_error);
+        xr_module_graph_free(graph);
+        return false;
+    }
+    xr_free(graph_error);
+    if (xr_module_graph_topological_sort(graph) != 0 || graph->has_cycle) {
+        xr_cli_error("compile", "%s",
+                     graph->cycle_desc ? graph->cycle_desc : "circular dependency detected");
+        xr_module_graph_free(graph);
+        return false;
+    }
+
+    if (graph->topo_count > 1) {
+        XaAnalyzer *analyzer = xa_analyzer_new(session);
+        if (!analyzer) {
+            xr_cli_error("compile", "cannot create analyzer for module graph");
+            xr_module_graph_free(graph);
+            return false;
+        }
+        xa_analyzer_set_graph(analyzer, graph);
+        int error_count = 0;
+        for (int ti = 0; ti < graph->topo_count; ti++) {
+            int index = graph->topo_order[ti];
+            if (index == graph->entry_index)
+                continue;
+            XrModuleSpec *spec = &graph->specs[index];
+            if (!spec->ast || !spec->source_path)
+                continue;
+            xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
+            spec->export_symbols =
+                xa_analyzer_collect_export_symbols(analyzer, (XrAstNode *) spec->ast);
+            int diagnostic_count = 0;
+            XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(analyzer, &diagnostic_count);
+            for (XaDiagnostic *diag = diagnostics; diag; diag = diag->next) {
+                if (diag->severity != XR_DIAG_SEV_ERROR)
+                    continue;
+                error_count++;
+                fprintf(stderr, "%s:%d:%d: error: %s\n", spec->source_path, diag->location.line,
+                        diag->location.column, diag->message);
+            }
+            xa_analyzer_clear_diagnostics(analyzer);
+        }
+        if (error_count > 0) {
+            xr_cli_error("compile", "module graph analysis failed with %d error%s", error_count,
+                         error_count == 1 ? "" : "s");
+            xa_analyzer_set_graph(analyzer, NULL);
+            xa_analyzer_free(analyzer);
+            xr_module_graph_free(graph);
+            return false;
+        }
+        *out_analyzer = analyzer;
+    }
+
+    xr_compiler_session_set_module_graph(session, graph);
+    *out_graph = graph;
+    return true;
+}
+
 XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     XR_DCHECK(inv != NULL, "inv is NULL");
     XR_DCHECK(inv->positional_count == 1, "compile expects exactly 1 positional");
@@ -114,7 +194,9 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     char *gen_var_name = NULL;
     XrVMRuntime *X = NULL;
     char *source = NULL;
-    AstNode *ast = NULL;
+    XrProto *proto = NULL;
+    XrModuleGraph *graph = NULL;
+    XaAnalyzer *graph_analyzer = NULL;
 
     /* Generate variable name */
     if (!var_name && (format == XR_OUTPUT_C_SOURCE || format == XR_OUTPUT_C_HEADER)) {
@@ -129,24 +211,19 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
         result = XR_CLI_EXIT_INTERNAL;
         goto cleanup;
     }
+    xr_module_system_init_with_script(X, input_file);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+    if (!prepare_compile_graph(X, session, input_file, &graph, &graph_analyzer))
+        goto cleanup;
 
-    /* Read source file */
+    /* Graph analysis annotates its owned ASTs. Compile from a fresh parse so
+     * analyzer-owned links from the preflight cannot leak into codegen. */
     source = xr_cli_read_file(input_file);
     if (!source) {
         xr_cli_error("compile", "cannot open '%s'", input_file);
         goto cleanup;
     }
-
-    /* Parse */
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
-    ast = xr_parse_with_source(session, source, input_file);
-    if (!ast) {
-        xr_cli_error("compile", "parsing failed");
-        goto cleanup;
-    }
-
-    /* Compile */
-    XrProto *proto = xr_compile_ast_with_source(session, ast, input_file);
+    proto = xr_compile_source_with_path(session, source, input_file);
     if (!proto) {
         xr_cli_error("compile", "compilation failed");
         goto cleanup;
@@ -154,20 +231,35 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
 
     /* Output */
     bool success = false;
+    bool output_error_reported = false;
 
     switch (format) {
         case XR_OUTPUT_BYTECODE: {
             size_t bc_size;
-            uint8_t *bc = xr_bytecode_write(X, proto, flags, &bc_size);
+            XrBcError bc_error = XR_BC_OK;
+            uint8_t *bc = xr_bytecode_write(X, proto, flags, &bc_size, &bc_error);
             if (bc) {
                 FILE *out = fopen(output_file, "wb");
                 if (out) {
-                    fwrite(bc, 1, bc_size, out);
-                    fclose(out);
-                    success = true;
-                    printf("Compiled: %s (%zu bytes)\n", output_file, bc_size);
+                    bool wrote_all = fwrite(bc, 1, bc_size, out) == bc_size;
+                    bool closed = fclose(out) == 0;
+                    success = wrote_all && closed;
+                    if (success)
+                        printf("Compiled: %s (%zu bytes)\n", output_file, bc_size);
+                    else {
+                        xr_cli_error("compile", "failed to write bytecode output '%s'",
+                                     output_file);
+                        output_error_reported = true;
+                    }
+                } else {
+                    xr_cli_error("compile", "cannot create bytecode output '%s'", output_file);
+                    output_error_reported = true;
                 }
                 xr_free(bc);
+            } else {
+                xr_cli_error("compile", "bytecode serialization failed: %s",
+                             xr_bytecode_error_string(bc_error));
+                output_error_reported = true;
             }
             break;
         }
@@ -185,17 +277,26 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
             break;
     }
 
-    if (!success) {
+    if (!success && !output_error_reported) {
         xr_cli_error("compile", "cannot write to '%s'", output_file);
     }
 
     result = success ? XR_CLI_EXIT_OK : XR_CLI_EXIT_FAIL;
 
 cleanup:
-    if (ast) {
-        xr_program_destroy(ast);
-    }
+    if (proto)
+        xr_vm_proto_free(proto);
     xr_free(source);
+    if (X) {
+        XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+        xr_compiler_session_set_module_graph(session, NULL);
+    }
+    if (graph_analyzer) {
+        xa_analyzer_set_graph(graph_analyzer, NULL);
+        xa_analyzer_free(graph_analyzer);
+    }
+    if (graph)
+        xr_module_graph_free(graph);
     if (X)
         xray_vm_delete(X);
     xr_free(gen_var_name);

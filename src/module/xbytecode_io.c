@@ -18,10 +18,12 @@
 #include "../base/xlog.h"
 #include "xray_vm.h"
 #include "../runtime/xisolate_api.h"
+#include "../runtime/xexec_state.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xffi_sig.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/value/xstruct_layout.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/class/xclass.h"
@@ -37,12 +39,31 @@
 
 /* ========== Writer Helper ========== */
 
+typedef struct BcWriteLayoutEntry {
+    const XrAggregateLayout *layout;
+    uint64_t key;
+} BcWriteLayoutEntry;
+
+typedef struct BcReadLayoutEntry {
+    XrAggregateLayout *layout;
+    uint64_t key;
+    uint64_t *nested_keys;
+    uint16_t *expected_offsets;
+    uint16_t *expected_sizes;
+    uint8_t state;
+    bool transferred;
+} BcReadLayoutEntry;
+
 typedef struct {
     uint8_t *buf;
     size_t size;
     size_t capacity;
     XrVMRuntime *X;
     int flags;
+    XrBcError error;
+    BcWriteLayoutEntry *layouts;
+    uint32_t layout_count;
+    uint32_t layout_capacity;
 } BcWriter;
 
 static void bc_writer_init(BcWriter *w, XrVMRuntime *X, int flags) {
@@ -52,19 +73,38 @@ static void bc_writer_init(BcWriter *w, XrVMRuntime *X, int flags) {
     w->capacity = 0;
     w->X = X;
     w->flags = flags;
+    w->error = XR_BC_OK;
+    w->layouts = NULL;
+    w->layout_count = 0;
+    w->layout_capacity = 0;
 }
 
 static bool bc_writer_ensure(BcWriter *w, size_t need) {
-    if (w->size + need <= w->capacity)
+    if (w->size <= w->capacity && need <= w->capacity - w->size)
         return true;
 
+    if (need > SIZE_MAX - w->size) {
+        w->error = XR_BC_ERR_ALLOC;
+        return false;
+    }
+    size_t required = w->size + need;
+
     size_t new_cap = w->capacity ? w->capacity * 2 : 4096;
-    while (new_cap < w->size + need)
+    if (new_cap < w->capacity)
+        new_cap = required;
+    while (new_cap < required) {
+        if (new_cap > SIZE_MAX / 2) {
+            new_cap = required;
+            break;
+        }
         new_cap *= 2;
+    }
 
     uint8_t *new_buf = xr_realloc(w->buf, new_cap);
-    if (!new_buf)
+    if (!new_buf) {
+        w->error = XR_BC_ERR_ALLOC;
         return false;
+    }
 
     w->buf = new_buf;
     w->capacity = new_cap;
@@ -138,7 +178,12 @@ static bool bc_put_string_data(BcWriter *w, const char *str, uint32_t len) {
 }
 
 static bool bc_put_string(BcWriter *w, const char *str) {
-    return bc_put_string_data(w, str ? str : "", str ? (uint32_t) strlen(str) : 0);
+    size_t len = str ? strlen(str) : 0;
+    if (len > UINT32_MAX) {
+        w->error = XR_BC_ERR_METADATA;
+        return false;
+    }
+    return bc_put_string_data(w, str ? str : "", (uint32_t) len);
 }
 
 /* ========== Reader Helper ========== */
@@ -149,6 +194,8 @@ typedef struct {
     size_t pos;
     XrVMRuntime *X;
     XrBcError error;
+    BcReadLayoutEntry *layouts;
+    uint32_t layout_count;
 } BcReader;
 
 static void bc_reader_init(BcReader *r, XrVMRuntime *X, const uint8_t *buf, size_t size) {
@@ -160,10 +207,12 @@ static void bc_reader_init(BcReader *r, XrVMRuntime *X, const uint8_t *buf, size
     r->pos = 0;
     r->X = X;
     r->error = XR_BC_OK;
+    r->layouts = NULL;
+    r->layout_count = 0;
 }
 
 static bool bc_has_bytes(BcReader *r, size_t n) {
-    return r->pos + n <= r->size;
+    return r->pos <= r->size && n <= r->size - r->pos;
 }
 
 static uint8_t bc_get_u8(BcReader *r) {
@@ -229,7 +278,11 @@ static char *bc_get_string_data(BcReader *r, uint32_t *out_len) {
         return NULL;
     }
 
-    char *str = xr_malloc(len + 1);
+    if ((size_t) len > SIZE_MAX - 1u) {
+        r->error = XR_BC_ERR_CORRUPT;
+        return NULL;
+    }
+    char *str = xr_malloc((size_t) len + 1u);
     if (!str) {
         r->error = XR_BC_ERR_ALLOC;
         return NULL;
@@ -245,6 +298,362 @@ static char *bc_get_string_data(BcReader *r, uint32_t *out_len) {
 
 static char *bc_get_string(BcReader *r) {
     return bc_get_string_data(r, NULL);
+}
+
+static bool bc_put_optional_string(BcWriter *w, const char *str);
+static char *bc_read_optional_string(BcReader *r);
+
+/* ========== Canonical Aggregate Layout Table ========== */
+
+#define BC_LAYOUT_FORMAT_VERSION 1u
+#define BC_MAX_LAYOUTS 4096u
+#define BC_MAX_LAYOUT_DEPTH 16u
+
+static bool bc_writer_add_layout(BcWriter *w, const XrAggregateLayout *layout, uint32_t depth) {
+    if (!w || !layout || depth > BC_MAX_LAYOUT_DEPTH || layout->field_count > XR_MAX_AGG_FIELDS) {
+        if (w)
+            w->error = XR_BC_ERR_METADATA;
+        return false;
+    }
+    const XrTargetDataLayout *target = xr_target_data_layout_host();
+    if (!target || layout->target_abi_hash != target->stable_hash) {
+        w->error = XR_BC_ERR_TARGET_ABI;
+        return false;
+    }
+    uint64_t key = xr_aggregate_layout_stable_key(layout);
+    if (key == 0) {
+        w->error = XR_BC_ERR_METADATA;
+        return false;
+    }
+    for (uint32_t i = 0; i < w->layout_count; i++) {
+        if (w->layouts[i].key != key)
+            continue;
+        if (!xr_aggregate_layout_semantically_equal(w->layouts[i].layout, layout)) {
+            w->error = XR_BC_ERR_METADATA;
+            return false;
+        }
+        return true;
+    }
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const XrAggregateFieldLayout *field = &layout->fields[i];
+        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE &&
+            !bc_writer_add_layout(w, field->sub_layout, depth + 1))
+            return false;
+    }
+    XrAggregateLayout computed = *layout;
+    if (!xr_aggregate_layout_compute(&computed, target) ||
+        computed.total_size != layout->total_size || computed.alignment != layout->alignment) {
+        w->error = XR_BC_ERR_METADATA;
+        return false;
+    }
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        if (computed.fields[i].offset != layout->fields[i].offset ||
+            computed.fields[i].size != layout->fields[i].size) {
+            w->error = XR_BC_ERR_METADATA;
+            return false;
+        }
+    }
+    if (w->layout_count == BC_MAX_LAYOUTS) {
+        w->error = XR_BC_ERR_METADATA;
+        return false;
+    }
+    if (w->layout_count == w->layout_capacity) {
+        uint32_t next = w->layout_capacity ? w->layout_capacity * 2u : 16u;
+        if (next > BC_MAX_LAYOUTS)
+            next = BC_MAX_LAYOUTS;
+        BcWriteLayoutEntry *entries =
+            (BcWriteLayoutEntry *) xr_realloc(w->layouts, (size_t) next * sizeof(*entries));
+        if (!entries) {
+            w->error = XR_BC_ERR_ALLOC;
+            return false;
+        }
+        w->layouts = entries;
+        w->layout_capacity = next;
+    }
+    w->layouts[w->layout_count++] = (BcWriteLayoutEntry) {.layout = layout, .key = key};
+    return true;
+}
+
+static int bc_layout_entry_compare(const void *left, const void *right) {
+    const BcWriteLayoutEntry *a = (const BcWriteLayoutEntry *) left;
+    const BcWriteLayoutEntry *b = (const BcWriteLayoutEntry *) right;
+    return a->key < b->key ? -1 : a->key > b->key ? 1 : 0;
+}
+
+static uint64_t bc_writer_layout_key(BcWriter *w, const XrAggregateLayout *layout) {
+    if (!layout)
+        return 0;
+    uint64_t key = xr_aggregate_layout_stable_key(layout);
+    for (uint32_t i = 0; i < w->layout_count; i++) {
+        if (w->layouts[i].key == key &&
+            xr_aggregate_layout_semantically_equal(w->layouts[i].layout, layout))
+            return key;
+    }
+    w->error = XR_BC_ERR_METADATA;
+    return 0;
+}
+
+static bool bc_write_layout_table(BcWriter *w) {
+    if (!bc_put_u32(w, w->layout_count))
+        return false;
+    for (uint32_t li = 0; li < w->layout_count; li++) {
+        const BcWriteLayoutEntry *entry = &w->layouts[li];
+        const XrAggregateLayout *layout = entry->layout;
+        if (!bc_put_u32(w, BC_LAYOUT_FORMAT_VERSION) || !bc_put_u64(w, entry->key) ||
+            !bc_put_u64(w, layout->target_abi_hash) || !bc_put_u8(w, layout->kind) ||
+            !bc_put_u8(w, layout->is_extern_layout ? 1 : 0) || !bc_put_u32(w, layout->total_size) ||
+            !bc_put_u32(w, layout->alignment) || !bc_put_u32(w, layout->explicit_align) ||
+            !bc_put_u16(w, layout->field_count))
+            return false;
+        for (uint16_t fi = 0; fi < layout->field_count; fi++) {
+            const XrAggregateFieldLayout *field = &layout->fields[fi];
+            const char *name = layout->field_names ? layout->field_names[fi] : NULL;
+            uint64_t nested_key = 0;
+            if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+                nested_key = bc_writer_layout_key(w, field->sub_layout);
+                if (nested_key == 0)
+                    return false;
+            }
+            if (!bc_put_optional_string(w, name) || !bc_put_u32(w, field->offset) ||
+                !bc_put_u32(w, field->size) || !bc_put_u8(w, field->native_type) ||
+                !bc_put_u32(w, field->elem_count) || !bc_put_u8(w, field->elem_native_type) ||
+                !bc_put_u64(w, nested_key) || !bc_put_u8(w, field->is_flexible ? 1 : 0))
+                return false;
+        }
+    }
+    return true;
+}
+
+static int bc_reader_layout_index(const BcReader *r, uint64_t key) {
+    uint32_t lo = 0;
+    uint32_t hi = r ? r->layout_count : 0;
+    while (lo < hi) {
+        uint32_t mid = lo + (hi - lo) / 2u;
+        uint64_t candidate = r->layouts[mid].key;
+        if (candidate < key)
+            lo = mid + 1u;
+        else
+            hi = mid;
+    }
+    return r && lo < r->layout_count && r->layouts[lo].key == key ? (int) lo : -1;
+}
+
+static XrAggregateLayout *bc_reader_layout(BcReader *r, uint64_t key) {
+    if (key == 0)
+        return NULL;
+    int index = bc_reader_layout_index(r, key);
+    if (index < 0) {
+        r->error = XR_BC_ERR_CORRUPT;
+        return NULL;
+    }
+    return r->layouts[index].layout;
+}
+
+static void bc_reader_layout_table_dispose(BcReader *r) {
+    if (!r || !r->layouts)
+        return;
+    for (uint32_t i = 0; i < r->layout_count; i++) {
+        BcReadLayoutEntry *entry = &r->layouts[i];
+        if (!entry->transferred)
+            xr_aggregate_layout_free_owned(entry->layout);
+        xr_free(entry->nested_keys);
+        xr_free(entry->expected_offsets);
+        xr_free(entry->expected_sizes);
+    }
+    xr_free(r->layouts);
+    r->layouts = NULL;
+    r->layout_count = 0;
+}
+
+static bool bc_reader_validate_layout(BcReader *r, uint32_t index, uint32_t depth) {
+    if (!r || index >= r->layout_count || depth > BC_MAX_LAYOUT_DEPTH) {
+        if (r)
+            r->error = XR_BC_ERR_CORRUPT;
+        return false;
+    }
+    BcReadLayoutEntry *entry = &r->layouts[index];
+    if (entry->state == 2)
+        return true;
+    if (entry->state == 1) {
+        r->error = XR_BC_ERR_CORRUPT;
+        return false;
+    }
+    entry->state = 1;
+    XrAggregateLayout *layout = entry->layout;
+    uint16_t expected_total = layout->total_size;
+    uint32_t expected_align = layout->alignment;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        XrAggregateFieldLayout *field = &layout->fields[i];
+        uint64_t nested_key = entry->nested_keys[i];
+        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+            int child = bc_reader_layout_index(r, nested_key);
+            if (nested_key == 0 || child < 0) {
+                r->error = XR_BC_ERR_CORRUPT;
+                return false;
+            }
+            if (!bc_reader_validate_layout(r, (uint32_t) child, depth + 1))
+                return false;
+            field->sub_layout = r->layouts[child].layout;
+        } else if (nested_key != 0) {
+            r->error = XR_BC_ERR_CORRUPT;
+            return false;
+        }
+    }
+    const XrTargetDataLayout *target = xr_target_data_layout_host();
+    if (!xr_aggregate_layout_compute(layout, target) || layout->total_size != expected_total ||
+        layout->alignment != expected_align) {
+        r->error = XR_BC_ERR_CORRUPT;
+        return false;
+    }
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        if (layout->fields[i].offset != entry->expected_offsets[i] ||
+            layout->fields[i].size != entry->expected_sizes[i]) {
+            r->error = XR_BC_ERR_CORRUPT;
+            return false;
+        }
+    }
+    if (xr_aggregate_layout_stable_key(layout) != entry->key) {
+        r->error = XR_BC_ERR_CORRUPT;
+        return false;
+    }
+    entry->state = 2;
+    return true;
+}
+
+static bool bc_reader_intern_layout(BcReader *r, uint32_t index) {
+    BcReadLayoutEntry *entry = &r->layouts[index];
+    if (entry->transferred)
+        return true;
+    for (uint16_t i = 0; i < entry->layout->field_count; i++) {
+        if (entry->layout->fields[i].native_type != XR_NATIVE_NESTED_AGGREGATE)
+            continue;
+        int child = bc_reader_layout_index(r, entry->nested_keys[i]);
+        if (child < 0 || !bc_reader_intern_layout(r, (uint32_t) child))
+            return false;
+        entry->layout->fields[i].sub_layout = r->layouts[child].layout;
+    }
+    XrAggregateLayout *canonical =
+        xr_vm_struct_layout_intern_owned(xr_isolate_get_vm_state(r->X), entry->layout);
+    if (!canonical) {
+        r->error = XR_BC_ERR_ALLOC;
+        return false;
+    }
+    entry->layout = canonical;
+    entry->transferred = true;
+    return true;
+}
+
+static bool bc_read_layout_table(BcReader *r) {
+    uint32_t count = bc_get_u32(r);
+    if (r->error != XR_BC_OK)
+        return false;
+    if (count > BC_MAX_LAYOUTS) {
+        r->error = XR_BC_ERR_CORRUPT;
+        return false;
+    }
+    if (count == 0)
+        return true;
+    r->layouts = (BcReadLayoutEntry *) xr_calloc(count, sizeof(*r->layouts));
+    if (!r->layouts) {
+        r->error = XR_BC_ERR_ALLOC;
+        return false;
+    }
+    r->layout_count = count;
+    const XrTargetDataLayout *target = xr_target_data_layout_host();
+    if (!target) {
+        r->error = XR_BC_ERR_TARGET_ABI;
+        return false;
+    }
+    uint64_t previous_key = 0;
+    for (uint32_t li = 0; li < count; li++) {
+        BcReadLayoutEntry *entry = &r->layouts[li];
+        uint32_t format = bc_get_u32(r);
+        entry->key = bc_get_u64(r);
+        uint64_t target_hash = bc_get_u64(r);
+        uint8_t kind = bc_get_u8(r);
+        uint8_t is_extern = bc_get_u8(r);
+        uint32_t total_size = bc_get_u32(r);
+        uint32_t alignment = bc_get_u32(r);
+        uint32_t explicit_align = bc_get_u32(r);
+        uint16_t field_count = bc_get_u16(r);
+        if (r->error != XR_BC_OK)
+            return false;
+        if (format != BC_LAYOUT_FORMAT_VERSION || entry->key == 0 ||
+            (li > 0 && entry->key <= previous_key) || kind > XR_AGG_LAYOUT_UNION || is_extern > 1 ||
+            total_size > UINT16_MAX || alignment == 0 || alignment > UINT16_MAX ||
+            field_count > XR_MAX_AGG_FIELDS) {
+            r->error = XR_BC_ERR_CORRUPT;
+            return false;
+        }
+        if (target_hash != target->stable_hash) {
+            r->error = XR_BC_ERR_TARGET_ABI;
+            return false;
+        }
+        previous_key = entry->key;
+        XrAggregateLayout *layout = (XrAggregateLayout *) xr_calloc(1, sizeof(*layout));
+        if (!layout) {
+            r->error = XR_BC_ERR_ALLOC;
+            return false;
+        }
+        entry->layout = layout;
+        layout->target_abi_hash = target_hash;
+        layout->kind = kind;
+        layout->is_extern_layout = is_extern != 0;
+        layout->total_size = (uint16_t) total_size;
+        layout->alignment = alignment;
+        layout->explicit_align = explicit_align;
+        layout->field_count = field_count;
+        if (field_count > 0) {
+            layout->field_names = (const char **) xr_calloc(field_count, sizeof(char *));
+            entry->nested_keys = (uint64_t *) xr_calloc(field_count, sizeof(uint64_t));
+            entry->expected_offsets = (uint16_t *) xr_calloc(field_count, sizeof(uint16_t));
+            entry->expected_sizes = (uint16_t *) xr_calloc(field_count, sizeof(uint16_t));
+            if (!layout->field_names || !entry->nested_keys || !entry->expected_offsets ||
+                !entry->expected_sizes) {
+                r->error = XR_BC_ERR_ALLOC;
+                return false;
+            }
+        }
+        for (uint16_t fi = 0; fi < field_count; fi++) {
+            char *name = bc_read_optional_string(r);
+            uint32_t offset = bc_get_u32(r);
+            uint32_t size = bc_get_u32(r);
+            uint8_t native_type = bc_get_u8(r);
+            uint32_t elem_count = bc_get_u32(r);
+            uint8_t elem_type = bc_get_u8(r);
+            uint64_t nested_key = bc_get_u64(r);
+            uint8_t flexible = bc_get_u8(r);
+            if (r->error != XR_BC_OK) {
+                xr_free(name);
+                return false;
+            }
+            if (offset > UINT16_MAX || size > UINT16_MAX || elem_count > UINT16_MAX ||
+                native_type > XR_NATIVE_POINTER || elem_type > XR_NATIVE_POINTER || flexible > 1) {
+                xr_free(name);
+                r->error = XR_BC_ERR_CORRUPT;
+                return false;
+            }
+            layout->field_names[fi] = name;
+            layout->fields[fi].offset = (uint16_t) offset;
+            layout->fields[fi].size = (uint16_t) size;
+            layout->fields[fi].native_type = native_type;
+            layout->fields[fi].elem_count = (uint16_t) elem_count;
+            layout->fields[fi].elem_native_type = elem_type;
+            layout->fields[fi].is_flexible = flexible != 0;
+            entry->nested_keys[fi] = nested_key;
+            entry->expected_offsets[fi] = (uint16_t) offset;
+            entry->expected_sizes[fi] = (uint16_t) size;
+        }
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        if (!bc_reader_validate_layout(r, i, 0))
+            return false;
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        if (!bc_reader_intern_layout(r, i))
+            return false;
+    }
+    return true;
 }
 
 /* ========== Value Serialization ========== */
@@ -354,10 +763,6 @@ static bool bc_write_class_descriptor(BcWriter *w, XrValue val) {
         return false;
 
     const XrClassDescriptor *desc = (const XrClassDescriptor *) XR_TO_PTR(val);
-    if (desc->struct_layout) {
-        // Struct/native body layouts are not portable bytecode metadata yet.
-        return false;
-    }
 
     if (!bc_put_u8(w, BC_VAL_CLASS_DESCRIPTOR))
         return false;
@@ -425,7 +830,12 @@ static bool bc_write_class_descriptor(BcWriter *w, XrValue val) {
         return false;
     if (!bc_put_u32(w, desc->descriptor_version))
         return false;
-    return bc_put_u32(w, desc->checksum);
+    if (!bc_put_u32(w, desc->checksum))
+        return false;
+    uint64_t layout_key = bc_writer_layout_key(w, desc->struct_layout);
+    if (desc->struct_layout && layout_key == 0)
+        return false;
+    return bc_put_u64(w, layout_key);
 }
 
 static bool bc_write_enum_type(BcWriter *w, XrValue val) {
@@ -657,8 +1067,14 @@ static XrValue bc_read_class_descriptor(BcReader *r) {
     desc->clinit_proto_index = (int32_t) bc_get_u32(r);
     desc->descriptor_version = bc_get_u32(r);
     desc->checksum = bc_get_u32(r);
+    uint64_t layout_key = bc_get_u64(r);
     if (r->error != XR_BC_OK)
         return xr_null();
+    if (layout_key != 0) {
+        desc->struct_layout = bc_reader_layout(r, layout_key);
+        if (!desc->struct_layout)
+            return xr_null();
+    }
 
     XrValue val = {0};
     val.tag = XR_TAG_PTR;
@@ -1013,6 +1429,41 @@ static bool *bc_collect_class_descriptor_constants(XrProto *proto, uint32_t cons
             class_consts[kidx] = true;
     }
     return class_consts;
+}
+
+static bool bc_collect_layouts_from_proto(BcWriter *w, XrProto *proto, uint32_t depth) {
+    if (!w || !proto || depth > BC_MAX_NESTING_DEPTH) {
+        if (w)
+            w->error = XR_BC_ERR_METADATA;
+        return false;
+    }
+    uint32_t const_count = (uint32_t) PROTO_CONST_COUNT(proto);
+    bool *class_consts = bc_collect_class_descriptor_constants(proto, const_count);
+    if (const_count > 0 && !class_consts) {
+        w->error = XR_BC_ERR_ALLOC;
+        return false;
+    }
+    for (uint32_t i = 0; i < const_count; i++) {
+        if (!class_consts[i])
+            continue;
+        XrValue value = PROTO_CONSTANT(proto, i);
+        if (!XR_IS_PTR(value) || !XR_TO_PTR(value)) {
+            xr_free(class_consts);
+            w->error = XR_BC_ERR_METADATA;
+            return false;
+        }
+        const XrClassDescriptor *desc = (const XrClassDescriptor *) XR_TO_PTR(value);
+        if (desc->struct_layout && !bc_writer_add_layout(w, desc->struct_layout, 0)) {
+            xr_free(class_consts);
+            return false;
+        }
+    }
+    xr_free(class_consts);
+    for (uint32_t i = 0; i < (uint32_t) PROTO_PROTO_COUNT(proto); i++) {
+        if (!bc_collect_layouts_from_proto(w, PROTO_PROTO(proto, i), depth + 1))
+            return false;
+    }
+    return true;
 }
 
 static bool bc_write_proto(BcWriter *w, XrProto *proto) {
@@ -1403,14 +1854,52 @@ fail:
 
 /* ========== Public API ========== */
 
-uint8_t *xr_bytecode_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *out_size) {
-    if (!X || !proto || !out_size)
+const char *xr_bytecode_error_string(XrBcError error) {
+    switch (error) {
+        case XR_BC_OK:
+            return "ok";
+        case XR_BC_ERR_MAGIC:
+            return "invalid bytecode magic";
+        case XR_BC_ERR_VERSION:
+            return "unsupported bytecode version";
+        case XR_BC_ERR_TRUNCATED:
+            return "truncated bytecode payload";
+        case XR_BC_ERR_CORRUPT:
+            return "corrupt bytecode metadata";
+        case XR_BC_ERR_ALLOC:
+            return "out of memory";
+        case XR_BC_ERR_METADATA:
+            return "unsupported or inconsistent bytecode metadata";
+        case XR_BC_ERR_TARGET_ABI:
+            return "bytecode aggregate layout target ABI mismatch";
+        default:
+            return "unknown bytecode error";
+    }
+}
+
+uint8_t *xr_bytecode_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *out_size,
+                           XrBcError *error) {
+    if (error)
+        *error = XR_BC_OK;
+    if (!X || !proto || !out_size) {
+        if (error)
+            *error = XR_BC_ERR_METADATA;
         return NULL;
-    if (!xr_vm_entry_plan_validate(proto) && !xr_vm_entry_plan_derive(proto))
+    }
+    *out_size = 0;
+    if (!xr_vm_entry_plan_validate(proto) && !xr_vm_entry_plan_derive(proto)) {
+        if (error)
+            *error = XR_BC_ERR_METADATA;
         return NULL;
+    }
 
     BcWriter w;
     bc_writer_init(&w, X, flags);
+
+    if (!bc_collect_layouts_from_proto(&w, proto, 0))
+        goto fail;
+    if (w.layout_count > 1)
+        qsort(w.layouts, w.layout_count, sizeof(*w.layouts), bc_layout_entry_compare);
 
     // Collect symbols (symbol ID starts from 1, returns max ID + 1)
     int max_symbol_id = collect_symbols_from_proto(proto, 0);
@@ -1432,6 +1921,8 @@ uint8_t *xr_bytecode_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *ou
         goto fail;  // max symbol id
     if (!bc_put_u32(&w, (uint32_t) shared_count))
         goto fail;  // shared count
+    if (!bc_write_layout_table(&w))
+        goto fail;
 
     // Write symbol table (symbol ID starts from 1)
     for (int i = 1; i <= max_symbol_id; i++) {
@@ -1445,11 +1936,16 @@ uint8_t *xr_bytecode_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *ou
         goto fail;
 
     *out_size = w.size;
+    xr_free(w.layouts);
+    if (error)
+        *error = XR_BC_OK;
     return w.buf;
 
 fail:
     xr_free(w.buf);
-    *out_size = 0;
+    xr_free(w.layouts);
+    if (error)
+        *error = w.error == XR_BC_OK ? XR_BC_ERR_METADATA : w.error;
     return NULL;
 }
 
@@ -1465,6 +1961,11 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
 
     // Read header
     uint32_t magic = bc_get_u32(&r);
+    if (r.error != XR_BC_OK) {
+        if (error)
+            *error = r.error;
+        return NULL;
+    }
     if (magic != XR_BC_MAGIC) {
         if (error)
             *error = XR_BC_ERR_MAGIC;
@@ -1472,6 +1973,11 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
     }
 
     uint16_t version = bc_get_u16(&r);
+    if (r.error != XR_BC_OK) {
+        if (error)
+            *error = r.error;
+        return NULL;
+    }
     if (version != XR_BC_VERSION) {
         if (error)
             *error = XR_BC_ERR_VERSION;
@@ -1479,7 +1985,7 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
     }
 
     bc_get_u16(&r);                           // flags
-    bc_get_u32(&r);                           // proto count
+    uint32_t proto_count = bc_get_u32(&r);    // proto count
     uint32_t max_symbol_id = bc_get_u32(&r);  // max symbol id
     uint32_t shared_count = bc_get_u32(&r);   // shared count
 
@@ -1489,9 +1995,17 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
         return NULL;
     }
 
-    if (shared_count > (uint32_t) INT_MAX) {
+    if (proto_count != 1 || shared_count > (uint32_t) INT_MAX ||
+        max_symbol_id >= (uint32_t) INT_MAX) {
         if (error)
             *error = XR_BC_ERR_CORRUPT;
+        return NULL;
+    }
+
+    if (!bc_read_layout_table(&r)) {
+        if (error)
+            *error = r.error;
+        bc_reader_layout_table_dispose(&r);
         return NULL;
     }
 
@@ -1503,6 +2017,7 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
         if (!id_map) {
             if (error)
                 *error = XR_BC_ERR_ALLOC;
+            bc_reader_layout_table_dispose(&r);
             return NULL;
         }
         memset(id_map, -1, map_size * sizeof(int));
@@ -1513,6 +2028,7 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
                 xr_free(id_map);
                 if (error)
                     *error = r.error;
+                bc_reader_layout_table_dispose(&r);
                 return NULL;
             }
             if (name && name[0]) {
@@ -1527,6 +2043,8 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
 
     // Read Proto
     XrProto *proto = bc_read_proto_depth(&r, 0);
+    if (!proto && r.error == XR_BC_OK)
+        r.error = XR_BC_ERR_CORRUPT;
 
     // Remap symbol IDs
     if (proto && id_map) {
@@ -1539,8 +2057,14 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
         proto = NULL;
         r.error = XR_BC_ERR_CORRUPT;
     }
+    if (proto && r.pos != r.size) {
+        xr_vm_proto_free(proto);
+        proto = NULL;
+        r.error = XR_BC_ERR_CORRUPT;
+    }
 
     xr_free(id_map);
+    bc_reader_layout_table_dispose(&r);
     if (error)
         *error = r.error;
     return proto;
@@ -1552,7 +2076,7 @@ int xr_eval_bytecode(XrVMRuntime *X, const uint8_t *data, size_t size) {
     XrBcError error;
     XrProto *proto = xr_bytecode_read(X, data, size, &error);
     if (!proto) {
-        xr_log_warning("bytecode", "failed to load: error=%d", error);
+        xr_log_warning("bytecode", "failed to load: %s", xr_bytecode_error_string(error));
         return -1;
     }
 
@@ -1570,7 +2094,7 @@ XrProto *xr_bytecode_load(XrVMRuntime *X, const uint8_t *data, size_t size) {
     XrBcError error;
     XrProto *proto = xr_bytecode_read(X, data, size, &error);
     if (!proto) {
-        xr_log_warning("bytecode", "failed to load: error=%d", error);
+        xr_log_warning("bytecode", "failed to load: %s", xr_bytecode_error_string(error));
         return NULL;
     }
     return proto;
@@ -1660,7 +2184,7 @@ bool xr_output_c_source(XrVMRuntime *X, XrProto *proto, const char *output_file,
                         const char *var_name, int flags) {
     // Serialize
     size_t bc_size;
-    uint8_t *bc = xr_bytecode_write(X, proto, flags, &bc_size);
+    uint8_t *bc = xr_bytecode_write(X, proto, flags, &bc_size, NULL);
     if (!bc)
         return false;
 

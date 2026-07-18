@@ -190,7 +190,8 @@ static const XrCliCommandSpec toolchain_subcommands[] = {
 
 static XrCliCommandSpec cli_commands[] = {
     /* Execution commands */
-    {"run", "Run script or project", NULL, run_options, 0, -1, true, false, NULL, NULL, 0},
+    {"run", "Run source, bytecode, or project", NULL, run_options, 0, -1, true, false, NULL, NULL,
+     0},
     {"eval", "Execute code string", NULL, eval_options, 1, 1, false, false, NULL, NULL, 0},
     {"repl", "Interactive environment", NULL, repl_options, 0, 0, false, false, NULL, NULL, 0},
     {"test", "Run tests", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},

@@ -18,6 +18,7 @@
 #include "../../api/xisolate_profile.h"
 
 #include "xray.h"
+#include "../../module/xbytecode_io.h"
 #include "../../module/xmodule.h"
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_resolver.h"
@@ -29,6 +30,20 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+
+static bool file_is_xray_bytecode(const char *path) {
+    FILE *file = fopen(path, "rb");
+    if (!file)
+        return false;
+    uint8_t header[4];
+    bool read_header = fread(header, 1, sizeof(header), file) == sizeof(header);
+    fclose(file);
+    if (!read_header)
+        return false;
+    uint32_t magic = (uint32_t) header[0] | ((uint32_t) header[1] << 8) |
+                     ((uint32_t) header[2] << 16) | ((uint32_t) header[3] << 24);
+    return magic == XR_BC_MAGIC;
+}
 
 // Run options collected from CLI flags
 typedef struct {
@@ -118,6 +133,17 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
 
     /* Set script info (for args/__file__/__dir__) */
     xray_vm_set_script_info(iso, file, script_argc, script_argv);
+
+    /* Bytecode is identified by its stable magic, not by an extension. This
+     * keeps renamed artifacts executable and never misclassifies text merely
+     * because it happens to end in .xrc. */
+    if (file_is_xray_bytecode(file)) {
+        xr_module_system_init_with_script(iso, file);
+        int result = xr_run_bytecode_file(iso, file);
+        xray_vm_multicore_destroy(iso);
+        xray_vm_delete(iso);
+        return result == 0 ? XR_CLI_EXIT_OK : XR_CLI_EXIT_FAIL;
+    }
 
     /* Re-initialize module system (with script path) */
     xr_module_system_init_with_script(iso, file);

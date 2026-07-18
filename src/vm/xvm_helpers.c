@@ -24,22 +24,48 @@
 
 /* ========== Struct Layout Registry ========== */
 
-static void xr_vm_struct_layout_register_children(XrVMState *vm, XrAggregateLayout *layout) {
+static bool xr_vm_struct_layout_register_children(XrVMState *vm, XrAggregateLayout *layout) {
     if (!vm || !layout)
-        return;
+        return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {
         XrAggregateFieldLayout *field = &layout->fields[i];
         if (field->native_type == XR_NATIVE_NESTED_AGGREGATE && field->sub_layout) {
             field->sub_layout_id = xr_vm_struct_layout_register(vm, field->sub_layout);
+            if (field->sub_layout_id == 0)
+                return false;
         }
     }
+    return true;
+}
+
+static bool xr_vm_struct_layout_reserve(XrVMState *vm, uint16_t capacity) {
+    if (!vm || capacity == 0)
+        return false;
+    XrAggregateLayout **layouts = (XrAggregateLayout **) xr_calloc(capacity, sizeof(*layouts));
+    bool *owned = (bool *) xr_calloc(capacity, sizeof(*owned));
+    if (!layouts || !owned) {
+        xr_free(layouts);
+        xr_free(owned);
+        return false;
+    }
+    if (vm->struct_layout_count > 0) {
+        memcpy(layouts, vm->struct_layouts, (size_t) vm->struct_layout_count * sizeof(*layouts));
+        memcpy(owned, vm->struct_layout_owned, (size_t) vm->struct_layout_count * sizeof(*owned));
+    }
+    xr_free(vm->struct_layouts);
+    xr_free(vm->struct_layout_owned);
+    vm->struct_layouts = layouts;
+    vm->struct_layout_owned = owned;
+    vm->struct_layout_capacity = capacity;
+    return true;
 }
 
 uint16_t xr_vm_struct_layout_register(XrVMState *vm, XrAggregateLayout *layout) {
     if (!vm || !layout)
         return 0;
 
-    xr_vm_struct_layout_register_children(vm, layout);
+    if (!xr_vm_struct_layout_register_children(vm, layout))
+        return 0;
 
     if (layout->layout_id != 0) {
         XrAggregateLayout *registered = xr_vm_struct_layout_lookup(vm, layout->layout_id);
@@ -59,27 +85,39 @@ uint16_t xr_vm_struct_layout_register(XrVMState *vm, XrAggregateLayout *layout) 
 
     if (vm->struct_layout_capacity == 0) {
         uint16_t cap = 16;
-        vm->struct_layouts = (XrAggregateLayout **) xr_calloc(cap, sizeof(*vm->struct_layouts));
-        if (!vm->struct_layouts)
+        if (!xr_vm_struct_layout_reserve(vm, cap))
             return 0;
-        vm->struct_layout_capacity = cap;
         vm->struct_layout_count = 1;
     } else if (vm->struct_layout_count >= vm->struct_layout_capacity) {
         uint16_t old_cap = vm->struct_layout_capacity;
         uint16_t new_cap = (old_cap <= UINT16_MAX / 2) ? (uint16_t) (old_cap * 2) : UINT16_MAX;
-        XrAggregateLayout **new_layouts = (XrAggregateLayout **) xr_realloc(
-            vm->struct_layouts, (size_t) new_cap * sizeof(*new_layouts));
-        if (!new_layouts)
+        if (!xr_vm_struct_layout_reserve(vm, new_cap))
             return 0;
-        memset(new_layouts + old_cap, 0, (size_t) (new_cap - old_cap) * sizeof(*new_layouts));
-        vm->struct_layouts = new_layouts;
-        vm->struct_layout_capacity = new_cap;
     }
 
     uint16_t id = vm->struct_layout_count++;
     vm->struct_layouts[id] = layout;
     layout->layout_id = id;
     return id;
+}
+
+XrAggregateLayout *xr_vm_struct_layout_intern_owned(XrVMState *vm, XrAggregateLayout *layout) {
+    if (!vm || !layout)
+        return NULL;
+    uint64_t key = xr_aggregate_layout_stable_key(layout);
+    for (uint16_t i = 1; i < vm->struct_layout_count; i++) {
+        XrAggregateLayout *existing = vm->struct_layouts ? vm->struct_layouts[i] : NULL;
+        if (existing && xr_aggregate_layout_stable_key(existing) == key &&
+            xr_aggregate_layout_semantically_equal(existing, layout)) {
+            xr_aggregate_layout_free_owned(layout);
+            return existing;
+        }
+    }
+    uint16_t id = xr_vm_struct_layout_register(vm, layout);
+    if (id == 0)
+        return NULL;
+    vm->struct_layout_owned[id] = true;
+    return layout;
 }
 
 XrAggregateLayout *xr_vm_struct_layout_lookup(XrVMState *vm, uint16_t layout_id) {
@@ -679,6 +717,12 @@ void xr_vm_vm_free(XrVMRuntime *isolate) {
         isolate->vm.strings_map = NULL;
     }
 
+    for (uint16_t i = 1; i < isolate->vm.struct_layout_count; i++) {
+        if (isolate->vm.struct_layout_owned && isolate->vm.struct_layout_owned[i])
+            xr_aggregate_layout_free_owned(isolate->vm.struct_layouts[i]);
+    }
+    xr_free(isolate->vm.struct_layout_owned);
+    isolate->vm.struct_layout_owned = NULL;
     xr_free(isolate->vm.struct_layouts);
     isolate->vm.struct_layouts = NULL;
     isolate->vm.struct_layout_count = 0;
