@@ -64,18 +64,14 @@ jobs:
     - name: Build
       run: cmake --build build --config Release
 
-    # Note: ctest is run in ci.yml under Debug mode (where assertions
-    # are active and Release-only regressions don't mask failures).
-    # Release builds historically have a couple of unit-test SEGFAULTs
-    # that need separate investigation; running them here would block
-    # all releases. Regression tests below are full e2e validation.
-    - name: Regression Tests (Unix)
+    # The full 0.9 consolidation gate runs in main CI before release. The
+    # packaging workflow verifies the release binary can start and execute a
+    # stable smoke fixture on every Unix target.
+    - name: Release Smoke (Unix)
       if: runner.os != 'Windows'
       run: |
-        chmod +x ./scripts/run_regression_tests.sh
-        ./scripts/run_regression_tests.sh
-      env:
-        XRAY_PATH: ./build/xray
+        ./build/xray --version
+        ./build/xray test -q tests/regression/01_literals/0100_int_basic.xr
 
     - name: Package (Unix)
       if: runner.os != 'Windows'
