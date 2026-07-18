@@ -60,6 +60,12 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
             /* Emitted only by xfmt_emit_function_decl as canonical extern
              * block syntax.  They are internal AST metadata, not attributes. */
             break;
+        case ATTR_LINK_NAME:
+            xfmt_write_str(ctx, "@link_name(");
+            xfmt_emit_string(ctx, attr->str_arg ? attr->str_arg : "",
+                             attr->str_arg ? (int) strlen(attr->str_arg) : 0);
+            xfmt_write_char(ctx, ')');
+            break;
         case ATTR_C_EXPORT:
             xfmt_write_str(ctx, "@c_export(");
             xfmt_emit_string(ctx, attr->str_arg ? attr->str_arg : "",

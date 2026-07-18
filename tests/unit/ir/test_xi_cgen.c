@@ -124,6 +124,75 @@ TEST(aot_type_fingerprint_separates_error_recovery) {
                  "nested ErrorType fingerprint differs from nested unknown");
 }
 
+static XiFunc *make_manual_extern_func(const char *source_name, const char *link_symbol,
+                                       XrType *param_type, XrType *return_type) {
+    XiFunc *func = xi_func_new(source_name, return_type);
+    TEST_REQUIRE(func != NULL, "manual extern function allocated");
+    func->is_extern = true;
+    func->extern_symbol = link_symbol;
+    if (param_type) {
+        func->nparams = 1;
+        func->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+        TEST_REQUIRE(func->params != NULL, "manual extern parameter array allocated");
+        XiBlock *entry = xi_block_new(func);
+        TEST_REQUIRE(entry != NULL, "manual extern entry block allocated");
+        func->params[0] = xi_param(func, entry, 0, param_type);
+        TEST_REQUIRE(func->params[0] != NULL, "manual extern parameter allocated");
+    }
+    return func;
+}
+
+TEST(aot_extern_registry_deduplicates_and_rejects_conflicts) {
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 120, .frozen = true};
+    XrType int32_type = {
+        .kind = XR_KIND_INT, .id = 121, .native_width = XR_NATIVE_I32, .frozen = true};
+    XrType float32_type = {
+        .kind = XR_KIND_FLOAT, .id = 122, .native_width = XR_NATIVE_F32, .frozen = true};
+    XiFunc *init = xi_func_new("<module-init>", &unit_type);
+    XiFunc *first =
+        make_manual_extern_func("first_alias", "task208_same_symbol", &int32_type, &int32_type);
+    XiFunc *duplicate =
+        make_manual_extern_func("second_alias", "task208_same_symbol", &int32_type, &int32_type);
+    XiFunc *conflict =
+        make_manual_extern_func("bad_alias", "task208_same_symbol", &int32_type, &float32_type);
+    XiFunc *unused =
+        make_manual_extern_func("unused", "task208_unused_symbol", &int32_type, &int32_type);
+    XiModule module = {.init = init, .name = "extern_registry_test"};
+    XiModule *modules[] = {&module};
+    XaotBundle bundle;
+    TEST_REQUIRE(xaot_bundle_init(&bundle, modules, 1, 0), "extern registry bundle initialized");
+
+    XiFunc *funcs[] = {first, duplicate, conflict, unused};
+    for (uint32_t i = 0; i < sizeof(funcs) / sizeof(funcs[0]); i++) {
+        XaotFuncPlan *plan = xaot_bundle_add_func_plan(&bundle, funcs[i], 0, 1);
+        TEST_REQUIRE(plan != NULL, "manual extern function plan allocated");
+        TEST_REQUIRE(xaot_abi_build_func(&plan->abi, &bundle, funcs[i], false),
+                     "manual extern ABI built");
+    }
+
+    TEST_REQUIRE(xaot_bundle_register_extern_decl(&bundle, first, 11),
+                 "first extern declaration registered");
+    TEST_REQUIRE(xaot_bundle_register_extern_decl(&bundle, duplicate, 22),
+                 "identical extern declaration deduplicated");
+    TEST_REQUIRE(bundle.nextern_decls == 1, "identical link contracts share one registry row");
+    TEST_REQUIRE(xaot_bundle_find_extern_decl_for_func(&bundle, first) ==
+                     xaot_bundle_find_extern_decl_for_func(&bundle, duplicate),
+                 "duplicate Xi functions map to the same stable declaration");
+    TEST_REQUIRE(xaot_bundle_find_extern_decl_for_func(&bundle, unused) == NULL,
+                 "unused extern declaration is absent from the registry");
+    TEST_REQUIRE(!xaot_bundle_register_extern_decl(&bundle, conflict, 33),
+                 "same link symbol with a different ABI is rejected");
+    TEST_REQUIRE(bundle.error_msg && strstr(bundle.error_msg, "conflicting extern declarations"),
+                 "extern conflict has a stable prepare diagnostic");
+
+    xaot_bundle_free(&bundle);
+    xi_func_free(first);
+    xi_func_free(duplicate);
+    xi_func_free(conflict);
+    xi_func_free(unused);
+    xi_func_free(init);
+}
+
 /* CGen fixtures bypass the global producer, so synthesize strong body anchors for strict plans. */
 typedef struct TestAotEvidenceIds {
     XgFuncId next_func_id;
@@ -8184,6 +8253,7 @@ int main(void) {
 
     run_aot_type_fingerprint_includes_param_modes();
     run_aot_type_fingerprint_separates_error_recovery();
+    run_aot_extern_registry_deduplicates_and_rejects_conflicts();
     run_cgen_json_codec_plan_preflight_rejects_missing_stale_kind_and_action();
     run_cgen_simple_arith();
     run_cgen_skips_unused_process_builtin_init();

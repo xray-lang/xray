@@ -6936,6 +6936,98 @@ static bool verify_abi_plan(const XaotFuncPlan *plan, char *errbuf, size_t errbu
     return true;
 }
 
+static bool verify_extern_registry(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
+    if (!bundle)
+        return set_error(errbuf, errbuf_len, "NULL AOT bundle for extern registry");
+    for (uint32_t i = 0; i < bundle->nextern_decls; i++) {
+        const XaotExternDecl *decl = &bundle->extern_decls[i];
+        const XaotFuncPlan *representative_plan =
+            xaot_bundle_find_func_plan(bundle, decl->representative_func);
+        if (decl->stable_id != i + 1 || !decl->link_symbol || !decl->link_symbol[0] ||
+            decl->signature_hash == 0 || decl->call_conv != XAOT_CALL_CONV_C ||
+            !decl->representative_func || !decl->representative_func->is_extern ||
+            !representative_plan || representative_plan->extern_decl_id != decl->stable_id)
+            return set_error(errbuf, errbuf_len, "invalid canonical AOT extern declaration");
+        if (decl->nparams != decl->representative_func->nparams ||
+            (decl->nparams > 0 && (!decl->params || !decl->param_types)))
+            return set_error(errbuf, errbuf_len, "AOT extern declaration signature is incomplete");
+        if (decl->ret.cls != XAOT_ARG_VOID && !decl->ret.c_type)
+            return set_error(errbuf, errbuf_len, "AOT extern return slot has no C type");
+        for (uint16_t pi = 0; pi < decl->nparams; pi++) {
+            if (!decl->params[pi].c_type)
+                return set_error(errbuf, errbuf_len, "AOT extern parameter slot has no C type");
+        }
+        for (uint32_t j = 0; j < i; j++) {
+            if (strcmp(bundle->extern_decls[j].link_symbol, decl->link_symbol) == 0)
+                return set_error(errbuf, errbuf_len,
+                                 "duplicate link symbol in canonical AOT extern registry");
+        }
+    }
+    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+        const XaotFuncPlan *plan = &bundle->func_plans[fi];
+        const XaotExternDecl *decl;
+        if (plan->extern_decl_id == 0)
+            continue;
+        decl = xaot_bundle_find_extern_decl(bundle, plan->extern_decl_id);
+        if (!plan->func || !plan->func->is_extern || !decl ||
+            strcmp(decl->link_symbol, plan->func->extern_symbol
+                                          ? plan->func->extern_symbol
+                                          : (plan->func->name ? plan->func->name : "")) != 0 ||
+            decl->nparams != plan->func->nparams || decl->nparams != plan->abi.nparams)
+            return set_error(errbuf, errbuf_len,
+                             "AOT extern function-to-declaration identity is stale");
+    }
+    return true;
+}
+
+static bool verify_func_extern_calls(const XaotBundle *bundle, const XiFunc *func, char *errbuf,
+                                     size_t errbuf_len) {
+    if (!func)
+        return true;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks ? func->blocks[bi] : NULL;
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *call = block->values ? block->values[vi] : NULL;
+            uint16_t first_arg = 0;
+            const XiFunc *target;
+            const XaotExternDecl *decl;
+            if (!call)
+                continue;
+            if ((call->op == XI_CLOSURE_NEW ||
+                 (call->op == XI_STACK_ALLOC && call->aux_int == XI_CLOSURE_NEW)) &&
+                call->aux && ((const XiFunc *) call->aux)->is_extern) {
+                target = (const XiFunc *) call->aux;
+                decl = xaot_bundle_find_extern_decl_for_func(bundle, target);
+                if (xaot_bundle_extern_closure_is_used(bundle, func, call) && !decl)
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT extern function value has no canonical declaration");
+                continue;
+            }
+            if (call->op != XI_CALL && call->op != XI_CALL_METHOD &&
+                call->op != XI_CALL_METHOD_DIRECT)
+                continue;
+            target = xaot_boundary_resolve_direct_call_target(bundle, func, call, &first_arg);
+            (void) first_arg;
+            if (!target || !target->is_extern)
+                continue;
+            decl = xaot_bundle_find_extern_decl_for_func(bundle, target);
+            if (!decl)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT extern callsite has no canonical declaration");
+            if (decl->nparams != target->nparams)
+                return set_error(errbuf, errbuf_len,
+                                 "AOT extern callsite declaration ABI is stale");
+        }
+    }
+    for (uint16_t ci = 0; ci < func->nchildren; ci++) {
+        if (!verify_func_extern_calls(bundle, func->children[ci], errbuf, errbuf_len))
+            return false;
+    }
+    return true;
+}
+
 static bool storage_reps_equal(XaotValueRep a, XaotValueRep b) {
     return xaot_value_reps_equal(a, b);
 }
@@ -7309,6 +7401,8 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
         return set_error(errbuf, errbuf_len, "AOT bundle has no function plans");
     if (!verify_global_evidence_plan(bundle, errbuf, errbuf_len))
         return false;
+    if (!verify_extern_registry(bundle, errbuf, errbuf_len))
+        return false;
 
     for (mi = 0; mi < bundle->nmodules; mi++) {
         const XiModule *mod = bundle->modules[mi];
@@ -7328,6 +7422,8 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
             return false;
         if (!verify_func_transfer_plans_recursive(bundle, mod->init, &transfer_count, errbuf,
                                                   errbuf_len))
+            return false;
+        if (!verify_func_extern_calls(bundle, mod->init, errbuf, errbuf_len))
             return false;
     }
     if (allocation_count != bundle->nallocation_plans)

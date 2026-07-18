@@ -1,0 +1,5 @@
+contains=extern-decl 0 id=1 source=task208LabsFirst symbol=labs
+c_count=1:extern ptrdiff_t xr_ffi_labs(ptrdiff_t) __asm__(XR_FFI_ASMNAME("labs"));
+c_contains=xr_ffi_labs(
+c_not_contains=xr_ffi_task208LabsFirst
+c_not_contains=xr_ffi_task208LabsSecond

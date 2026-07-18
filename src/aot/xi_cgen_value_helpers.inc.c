@@ -1134,13 +1134,19 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
                                   const char *prefix, const XiValue *v) {
     if (v->aux) {
         XiFunc *child = (XiFunc *) v->aux;
-        /* FFI: an extern function has no Xray closure entry (its body is the
-         * foreign C symbol). Calls to it resolve statically to a direct C call,
-         * so the closure value itself is never invoked — emit a NULL so the
-         * shared-slot store is well-formed without referencing a missing
-         * boxed entry. */
+        /* Foreign functions remain first-class Xray function values.  The
+         * boxed entry is derived from the canonical declaration registry;
+         * statically resolved calls still use the zero-overhead C ABI path. */
         if (child->is_extern) {
-            fprintf(out, "XR_NULL_VAL");
+            const XaotExternDecl *decl = NULL;
+            if (!cg_mark_extern_decl_adapter_used(ctx, child, &decl)) {
+                emit_codegen_abort_expr(out);
+                return;
+            }
+            fprintf(out,
+                    "({ xrt_closure_t *_c = (xrt_closure_t*)xrt_closure_new((void*)"
+                    "xr_ffi_closure_%u, 0).ptr; xr_mkptr(_c, XR_TAG_CLOSURE); })",
+                    decl->stable_id);
             return;
         }
         if (cg_closure_new_value_can_emit_null_for_unreachable_body(ctx, current, v, child, 0)) {

@@ -265,7 +265,7 @@ check_expect() {
         value="${line#*=}"
         if [ "$key" = "$line" ]; then
             echo "FAIL (bad expect directive: $(rel_path "$expect"):$line_no)"
-            echo "    expected args=, status=, contains=, not_contains=, regex=, not_regex=, c_contains=, c_regex=, or skip="
+            echo "    expected args=, status=, contains=, not_contains=, regex=, not_regex=, c_contains=, c_count=, c_regex=, c_syntax=, or skip="
             FAIL=$((FAIL + 1))
             return 1
         fi
@@ -336,6 +336,24 @@ check_expect() {
                     return 1
                 fi
                 ;;
+            c_count)
+                checks=$((checks + 1))
+                local expected_count="${value%%:*}"
+                local needle="${value#*:}"
+                local actual_count
+                if [ "$expected_count" = "$value" ] || ! is_uint "$expected_count"; then
+                    echo "FAIL (bad c_count directive: $value)"
+                    FAIL=$((FAIL + 1))
+                    return 1
+                fi
+                actual_count="$(grep -Foc -- "$needle" "$c_out" 2>/dev/null || true)"
+                if [ "$actual_count" -ne "$expected_count" ]; then
+                    echo "FAIL (generated C count: expected $expected_count, got $actual_count: $needle)"
+                    show_excerpt "$c_out"
+                    FAIL=$((FAIL + 1))
+                    return 1
+                fi
+                ;;
             c_regex)
                 checks=$((checks + 1))
                 if ! grep -Eq -- "$value" "$c_out"; then
@@ -350,6 +368,14 @@ check_expect() {
                 if grep -Eq -- "$value" "$c_out"; then
                     echo "FAIL (unexpected generated C regex: $value)"
                     show_excerpt "$c_out"
+                    FAIL=$((FAIL + 1))
+                    return 1
+                fi
+                ;;
+            c_syntax)
+                checks=$((checks + 1))
+                if [ "$value" != "pass" ]; then
+                    echo "FAIL (unsupported c_syntax result: $value)"
                     FAIL=$((FAIL + 1))
                     return 1
                 fi
@@ -371,6 +397,30 @@ check_expect() {
 
     echo "PASS"
     PASS=$((PASS + 1))
+    return 0
+}
+
+check_c_syntax() {
+    local expect="$1"
+    local c_out="$2"
+    local compiler="${CC:-cc}"
+    local syntax_log="$3"
+
+    if ! grep -Fqx 'c_syntax=pass' "$expect" 2>/dev/null; then
+        return 0
+    fi
+    if ! command -v "$compiler" >/dev/null 2>&1; then
+        echo "FAIL (C compiler not found for c_syntax: $compiler)"
+        FAIL=$((FAIL + 1))
+        return 1
+    fi
+    if ! "$compiler" -fsyntax-only -I"$PROJECT_DIR/src/aot" -I"$PROJECT_DIR/src" \
+            "$c_out" >"$syntax_log" 2>&1; then
+        echo "FAIL (generated C syntax check failed)"
+        show_excerpt "$syntax_log"
+        FAIL=$((FAIL + 1))
+        return 1
+    fi
     return 0
 }
 
@@ -502,6 +552,9 @@ run_one() {
     if [ "$mode" = "link" ] && [ -f "$c_out" ]; then
         c_check="$WORK/${mode}_${base}.expect.c"
         normalize_link_c_for_expect "$c_out" "$c_check"
+    fi
+    if ! check_c_syntax "$expect" "$c_out" "$WORK/${mode}_${base}.syntax.log"; then
+        return 1
     fi
     check_expect "$expect" "$dump" "$c_check"
 }

@@ -1,0 +1,40 @@
+// task-208: every supported extern ABI shape is materialized through one
+// canonical prepare registry; two source aliases intentionally share labs.
+extern "C" {
+    fn strlen(s: Ptr<byte>) -> uintsize
+    fn memchr(s: Ptr<byte>, c: int32, n: uintsize) -> Ptr<byte>
+    fn sinf(x: float32) -> float32
+    fn srand(seed: uint32) -> ()
+    fn bsearch(key: Ptr<byte>, base: Ptr<byte>, count: uintsize, size: uintsize, cmp: CFn<(Ptr<byte>, Ptr<byte>) -> int32>) -> Ptr<byte>
+
+    @link_name("labs")
+    fn task208LabsA(x: intsize) -> intsize
+
+    @link_name("labs")
+    fn task208LabsB(x: intsize) -> intsize
+}
+
+extern "C" dylib("task208_unused_extern_registry") {
+    fn task208NeverLinked(x: float64) -> float64
+}
+
+fn zeroCompare(left: Ptr<byte>, right: Ptr<byte>) -> int32 {
+    return 0
+}
+
+fn callNativeSize(f: (Ptr<byte>) -> uintsize, bytes: Ptr<byte>) -> uintsize {
+    return f(bytes)
+}
+
+const text = b"registry"
+var strlenIndirect = strlen
+print(unsafe { callNativeSize(strlenIndirect, text.ptr()) })
+var found = unsafe { memchr(text.ptr(), 103, 8) }
+print(unsafe { found.deref() })
+print(unsafe { task208LabsA(-11) + task208LabsB(-31) })
+print(unsafe { sinf(0.0) == 0.0 })
+
+unsafe {
+    srand(1)
+    print(bsearch(text.ptr(), text.ptr(), 1, 1, zeroCompare).isNull())
+}

@@ -396,6 +396,17 @@ vmcase(OP_CALL_KEEP) {
     XrClosure *closure = xr_value_to_closure(func_val);
     XrProto *proto = closure->proto;
 
+    /* OP_CALL_KEEP preserves the callable in R[A], but extern closures still
+     * use exactly the same libffi path as OP_CALL.  Entering the synthesized
+     * proto body would execute its verifier-only zero stub and silently turn
+     * every higher-order foreign call into zero/null. */
+    if (XR_UNLIKELY(proto->is_extern)) {
+        XrValue result = xr_ffi_call_proto(isolate, proto, &R(a + 1), nargs);
+        VM_REBIND_AFTER_NATIVE_CALL();
+        R(result_reg) = result;
+        vmbreak;
+    }
+
     // Argument count: silently truncate extra args
     int effective_nargs = nargs;
     if (!proto->is_vararg && nargs > proto->numparams) {
@@ -649,6 +660,16 @@ vmcase(OP_TAILCALL) {
     }
 
     XrClosure *new_closure = xr_value_to_closure(func_val);
+
+    /* A tail-called extern has no VM frame to enter.  Invoke the foreign ABI
+     * now; the bytecode return immediately following OP_TAILCALL propagates
+     * R[A] through the current frame just like the C-function fast path. */
+    if (XR_UNLIKELY(new_closure->proto->is_extern)) {
+        XrValue result = xr_ffi_call_proto(isolate, new_closure->proto, &R(a + 1), nargs);
+        VM_REBIND_AFTER_NATIVE_CALL();
+        R(a) = result;
+        vmbreak;
+    }
 
     // Argument count check
     if (XR_UNLIKELY(nargs != new_closure->proto->numparams)) {
