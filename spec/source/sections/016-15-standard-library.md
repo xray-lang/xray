@@ -12,17 +12,17 @@ order: 016
 > MCP knowledge 和 API inventory 使用 source-derived inventory；`xray builtin-dump` 只作为运行时 builtin 视图输入之一。
 > 详见 [附录 D stdlib 模块索引](#d-stdlib-模块索引)。
 
-> **真实 stdlib 模块清单**（25 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
+> **真实 stdlib 模块清单**（28 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
 >
-> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`runtime`、`sync`、`sys`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
+> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`http`、`io`、`log`、`math`、`mem`、`net`、`os`、`parallel`、`path`、`regex`、`runtime`、`strconv`、`sync`、`sys`、`text`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
-> 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Array<byte>` `BigInt` `StringBuilder` `PanicInfo` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
+> 不需要 import 的 prelude 类型为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`Json`、`Map`、`OsMutex`、`NetConn`、`NetListener`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<byte>` 是 `Array` 的具体化；`DateTime`、`Logger` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
 
 ### 15.1 文件 IO 与系统
 
 | 模块 | 主题 | 关键 API |
 |--|--|--|
-| `io` | 文件 IO + 文件系统 | `readFile` `writeFile` `exists` `mkdir` `remove` `readdir` `stat` `stdin` `stdout` `stderr` |
+| `io` | 文件 IO + 文件系统 | `readFile` `writeFile` `readFileBytes` `writeFileBytes` `exists` `mkdir` `mkdirp` `remove` `readDir` `stat` `readStdin` |
 | `path` | 路径操作 | `join` `dirname` `basename` `extname` `normalize` `isAbsolute` `resolve` `relative` `parse` `format` |
 | `os` | 操作系统接口 | `getenv` `setenv` `environ` `exit` `getpid` `getcwd` `chdir` `hostname` `tmpdir` `homedir` `cpuCount` `sleep` `exec`；常量 `platform` `arch` `sep` `eol` |
 
@@ -34,7 +34,7 @@ order: 016
 | 模块 | 主题 | 关键 API |
 |--|--|--|
 | `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
-| `http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `request` `h2Request` `route` `listen` `ws` `router` `requestText` `responseText` `parseResponseText` |
+| `http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `request` `h2Request` `listen` `router` `routeHandler` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
 | `url` | URL 解析与构造 | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
 
@@ -73,7 +73,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 | 模块 | 关键 API |
 |--|--|
-| `crypto` | `md5` `sha1` `sha256` `sha512` `hmac` `aes` `rsa` 等；详细 API 详见 stdlib 源码 |
+| `crypto` | `md5` `sha1` `sha256` `sha512` `hmac` `encrypt` `decrypt` `randomBytes` `timingSafeEqual` `uuid` |
 
 > stdlib **没有**独立的 `random` 模块；如需伪随机数请使用 `crypto` 模块的随机源或 `math` 模块的工具函数。
 
@@ -87,8 +87,8 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 | 模块 | 关键 API |
 |--|--|
-| `time` | `now()` `monotonic()` `sleep(ms)` `Duration` |
-| `datetime` | `DateTime` / `Date` / `Time` 解析、格式化（详见 §14.12） |
+| `time` | `now()` `monotonic()` `clock()` `micros()` `nanos()` `sleep(ms)` `localOffset()` `localOffsetAt()` |
+| `datetime` | `DateTime` 及 `now()` `utc()` `create()` `createUTC()` `fromTimestamp()` `parse()` 等工厂（详见 §14.13） |
 
 ### 15.7 数学
 
@@ -100,9 +100,11 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 | 模块 | 关键 API |
 |--|--|
-| `regex` | `compile(pattern)` 返回 `Regex`；详见 §14.13。也支持 `/pattern/flags` 字面量 |
+| `regex` | `compile(pattern)` 返回 `Regex`；详见 §14.14。也支持 `/pattern/flags` 字面量 |
+| `text` | `lower` `upper` `trim` `trimStart` `trimEnd` `padStart` `padEnd` `reverseRunes` `translate` |
+| `strconv` | `parseInt` `parseFloat` |
 
-> stdlib **没有** `strconv` 模块；字符串 ↔ 数值转换使用内置函数 `int(s)` / `float(s)` / `string(n)`（见 §13.2）。
+内置转换 `int(s)` / `float(s)` / `string(n)` 仍可用于普通转换；需要带 radix / default 的解析接口时使用 `strconv`。
 
 ### 15.9 日志与诊断
 
@@ -112,23 +114,27 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | `runtime` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
 | `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
 | `sync` | 协程域同步：`Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync` |
-| `sys` | OS / 线程域：`Thread.spawn()`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、`cpuCount()`、`sleepMs()` 等，需显式 `import sys` |
+| `sys` | OS / 线程底层接口：编译器定义的 `sys.Thread.spawn(...)` 与 `ThreadOptions`，以及 `ThreadLocal`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、process/dylib/pipe handle、`cpuCount()`、`sleepMs()`、`threadYield()`、`pinToCpu()`、`onSignal()` |
 
-### 15.10 分布式
+### 15.10 并行
+
+`parallel` 导出 `forEach` 以及 `Plan` 抽象，用于结构化 CPU 并行工作；语言关键字表中没有 `parallel` 关键字，需显式导入模块。
+
+### 15.11 分布式
 
 | 模块 | 主题 |
 |--|--|
 | `cluster` | 节点发现、健康检查、Topic 消息总线（见 stdlib/cluster/）|
 
-### 15.11 测试
+### 15.12 测试
 
 `@test` 注解 + 全局 `assert*` 函数即可，**不需要**额外的 `test` 模块（见 §12）。
 
-### 15.12 已**不存在**的模块
+### 15.13 已**不存在**的模块
 
 文档中可能引用过、但当前 stdlib 中**确实没有**的模块（避免误导）：
 
-`fs` · `process` · `dns` · `random` · `strconv` · `json`
+`fs` · `process` · `dns` · `random` · `json`
 
 这些功能或者归入其他模块（见上面各小节注），或者尚未实现。
 
@@ -144,17 +150,17 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 > MCP knowledge and the API inventory use the source-derived inventory; `xray builtin-dump` is only one runtime builtin-view input.
 > See [Appendix D — stdlib module index](#d-stdlib-module-index).
 
-> **Authoritative stdlib module list** (25 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
+> **Authoritative stdlib module list** (28 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
 >
-> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `runtime`, `sync`, `sys`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
+> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `http`, `io`, `log`, `math`, `mem`, `net`, `os`, `parallel`, `path`, `regex`, `runtime`, `strconv`, `sync`, `sys`, `text`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
-> Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Array<byte>`, `BigInt`, `StringBuilder`, `PanicInfo`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
+> The exact prelude type set is: `Array`, `Atomic`, `OsBarrier`, `BigInt`, `Channel`, `OsCondvar`, `PanicInfo`, `Json`, `Map`, `OsMutex`, `NetConn`, `NetListener`, `OsOnce`, `Path`, `Range`, `Regex`, `OsRwLock`, `Set`, `StringBuilder`, and `Thread`. `Array<byte>` is an `Array` specialization; module types such as `DateTime` and `Logger` must be imported. See §1.5.6 / §2.2.
 
 ### 15.1 File I/O and System
 
 | Module | Topic | Key APIs |
 |--|--|--|
-| `io` | file I/O + filesystem | `readFile` `writeFile` `exists` `mkdir` `remove` `readdir` `stat` `stdin` `stdout` `stderr` |
+| `io` | file I/O + filesystem | `readFile` `writeFile` `readFileBytes` `writeFileBytes` `exists` `mkdir` `mkdirp` `remove` `readDir` `stat` `readStdin` |
 | `path` | path manipulation | `join` `dirname` `basename` `extname` `normalize` `isAbsolute` `resolve` `relative` `parse` `format` |
 | `os` | OS interface | `getenv` `setenv` `environ` `exit` `getpid` `getcwd` `chdir` `hostname` `tmpdir` `homedir` `cpuCount` `sleep` `exec`; constants `platform` `arch` `sep` `eol` |
 
@@ -166,7 +172,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | Module | Topic | Key APIs |
 |--|--|--|
 | `net` | TCP / UDP / TLS sockets + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
-| `http` | HTTP / HTTPS client + server + HTTP/2 | `request` `h2Request` `route` `listen` `ws` `router` `requestText` `responseText` `parseResponseText` |
+| `http` | HTTP / HTTPS client + server + HTTP/2 | `request` `h2Request` `listen` `router` `routeHandler` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
 | `url` | URL parsing and construction | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
 
@@ -205,7 +211,7 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 
 | Module | Key APIs |
 |--|--|
-| `crypto` | `md5` `sha1` `sha256` `sha512` `hmac` `aes` `rsa` etc.; full API in stdlib source |
+| `crypto` | `md5` `sha1` `sha256` `sha512` `hmac` `encrypt` `decrypt` `randomBytes` `timingSafeEqual` `uuid` |
 
 > stdlib has **no** standalone `random` module; for pseudo-random numbers use `crypto`'s random source or `math` utilities.
 
@@ -219,8 +225,8 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 
 | Module | Key APIs |
 |--|--|
-| `time` | `now()` `monotonic()` `sleep(ms)` `Duration` |
-| `datetime` | `DateTime` / `Date` / `Time` parsing and formatting (see §14.12) |
+| `time` | `now()` `monotonic()` `clock()` `micros()` `nanos()` `sleep(ms)` `localOffset()` `localOffsetAt()` |
+| `datetime` | `DateTime` plus factories such as `now()` `utc()` `create()` `createUTC()` `fromTimestamp()` and `parse()` (see §14.13) |
 
 ### 15.7 Math
 
@@ -232,9 +238,11 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 
 | Module | Key APIs |
 |--|--|
-| `regex` | `compile(pattern)` returns `Regex`; see §14.13. The `/pattern/flags` literal form is also supported |
+| `regex` | `compile(pattern)` returns `Regex`; see §14.14. The `/pattern/flags` literal form is also supported |
+| `text` | `lower` `upper` `trim` `trimStart` `trimEnd` `padStart` `padEnd` `reverseRunes` `translate` |
+| `strconv` | `parseInt` `parseFloat` |
 
-> stdlib has **no** `strconv` module; for string ↔ numeric conversions use the built-ins `int(s)` / `float(s)` / `string(n)` (see §13.2).
+The built-ins `int(s)` / `float(s)` / `string(n)` remain available for ordinary conversions; use `strconv` when radix/default parsing controls are needed.
 
 ### 15.9 Logging and Diagnostics
 
@@ -244,23 +252,27 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 | `runtime` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
 | `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` return managed `Buffer`; `pageAlloc()` / `pageFree()`; `copy()` / `move()` / `set()` / `compare()`; `volatileLoad()` / `volatileStore()`; `fence()` |
 | `sync` | coroutine-domain synchronization: `Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()`, with explicit `import sync` |
-| `sys` | OS / thread domain: `Thread.spawn()`, `OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`, `cpuCount()`, `sleepMs()`, with explicit `import sys` |
+| `sys` | low-level OS/thread surface: compiler-defined `sys.Thread.spawn(...)` with `ThreadOptions`, plus `ThreadLocal`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, `cpuCount()`, `sleepMs()`, `threadYield()`, `pinToCpu()`, and `onSignal()` |
 
-### 15.10 Distributed
+### 15.10 Parallelism
+
+`parallel` exports `forEach` and the `Plan` abstraction for structured CPU-parallel work. `parallel` is not a language keyword; import the module explicitly.
+
+### 15.11 Distributed
 
 | Module | Topic |
 |--|--|
 | `cluster` | node discovery, health checks, topic-based message bus (see `stdlib/cluster/`) |
 
-### 15.11 Testing
+### 15.12 Testing
 
 The `@test` attribute together with the global `assert*` family is enough; **no** separate `test` module is needed (see §12).
 
-### 15.12 Modules That **Do Not Exist**
+### 15.13 Modules That **Do Not Exist**
 
 Modules that may have been referenced historically but are **not** part of the current stdlib (to avoid confusion):
 
-`fs` · `process` · `dns` · `random` · `strconv` · `json`
+`fs` · `process` · `dns` · `random` · `json`
 
 Their functionality has either moved into other modules (see the per-section notes above) or has not yet been implemented.
 

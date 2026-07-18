@@ -6,7 +6,7 @@ order: 000
 <!-- xr-spec:cn -->
 # Xray 语言参考手册
 
-> 版本：基于 `xray` v0.7.1 源码（截止 2026-05-21）
+> 版本：基于 `xray` v0.9.0 源码（校对日期 2026-07-18）
 > 性质：语言规范与参考手册。本文档是描述 xray 语言**实际行为**的真值源。
 > 实现：所有语义以 `xray` 当前主仓代码为准；本文档与代码不一致以代码为准并视为本文档需更新。
 > 受众：xray 编写者、IDE / AI 工具实现者、编译器内部贡献者。
@@ -31,7 +31,7 @@ order: 000
 - [15. 标准库概览 (Standard Library)](#15-标准库概览-standard-library)
 - [16. 运行时模型 (Runtime Model)](#16-运行时模型-runtime-model)
 - [17. 编译流水线 (Compilation Pipeline)](#17-编译流水线-compilation-pipeline)
-- [18. 错误码参考 (Error Code Reference)](#18-错误码参考-error-code-reference)
+- [18. 错误码 (Error Codes)](#18-错误码-error-codes)
 - [附录 A. EBNF 语法](#附录-a-ebnf-语法)
 - [附录 B. 关键字索引](#附录-b-关键字索引)
 - [附录 C. 操作符索引](#附录-c-操作符索引)
@@ -43,7 +43,7 @@ order: 000
 <!-- xr-spec:en -->
 # Xray Language Reference
 
-> Version: based on the `xray` source tree version v0.7.1 (audited on 2026-05-21).
+> Version: based on the `xray` source tree version v0.9.0 (audited on 2026-07-18).
 > Status: this is a reference manual for the implemented language. When this document and the implementation disagree, the implementation is authoritative and this document must be updated.
 > Chinese version: [`LANGUAGE_SPEC_CN.md`](LANGUAGE_SPEC_CN.md).
 

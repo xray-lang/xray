@@ -110,7 +110,7 @@ for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
 for (ch in "hello") { print(ch) }             // 字符串字符（按 Unicode scalar）
 for (key in someMap) { print(key) }           // Map 单变量 → key
 for (key in someJson) { print(key) }          // Json 单变量 → key
-for (day in Color) { print(day.name) }        // 枚举迭代（按声明顺序）
+// for (day in Color) { ... }                 // 编译错误：enum 类型本身不可迭代
 for (_ in 0..n) { count++ }                   // 占位符忽略
 ```
 
@@ -143,12 +143,12 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 | `Json` | key (string) | (key, value) |
 | `string` | `rune` | (index, rune) |
 | `Range`（`a..b`） | int | — |
-| Enum 类型 | 具体 enum 值 | — |
+| Enum 类型 | **不可迭代**；需要编译器生成或用户提供的显式 case 表 | — |
 | 自定义 `Iterator<T>` | T | — |
 
 #### 自定义迭代器
 
-实现 `iterator()` 方法返回 `Iterator<T>` 协议对象（含 `hasNext()` 和 `next()`）即可在 `for-in` 中使用。详见 §14.15。
+实现 `iterator()` 方法返回 `Iterator<T>` 协议对象（含 `hasNext()` 和 `next()`）即可在 `for-in` 中使用。详见 §5.3.6。
 
 ### 4.5 `match` 语句
 
@@ -422,7 +422,7 @@ for (i in 0..n) { print(i) }                  // range iteration (half-open)
 for (ch in "hello") { print(ch) }             // string characters (by Unicode scalar)
 for (key in someMap) { print(key) }           // single variable over Map → key
 for (key in someJson) { print(key) }          // single variable over Json → key
-for (day in Color) { print(day.name) }        // enum iteration (declaration order)
+// for (day in Color) { ... }                 // compile error: an enum type is not iterable
 for (_ in 0..n) { count++ }                   // discard with placeholder
 ```
 
@@ -455,12 +455,12 @@ Iteration source / yield mapping:
 | `Json` | key (string) | (key, value) |
 | `string` | `rune` | (index, rune) |
 | `Range` (`a..b`) | int | — |
-| Enum type | concrete enum value | — |
+| Enum type | **not iterable**; use an explicitly generated or user-provided case table | — |
 | Custom `Iterator<T>` | T | — |
 
 #### Custom iterators
 
-Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §14.15.
+Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §5.3.6.
 
 ### 4.5 `match` Statement
 

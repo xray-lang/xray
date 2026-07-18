@@ -8,7 +8,7 @@ order: 021
 
 ## 附录 B. 关键字索引
 
-完整 65 个关键字按字母排序见 [§1.5](#15-关键字)。
+以下 **66 个**关键字与 `src/frontend/lexer/xkeywords.def` 一一对应并按源码顺序（ASCII 字典序）排列。`move`、`ref`、`out`、`linked`、`supervisor`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
 
 | 关键字 | 节 |
 |--|--|
@@ -16,8 +16,8 @@ order: 021
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
+| `byte` | §2.3.1 |
 | `catch` | §8 |
-| `rune` | §2.3.5 |
 | `class` | §5.3 |
 | `comptime` | §3.2 |
 | `const` | §5.1 |
@@ -26,30 +26,37 @@ order: 021
 | `defer` | §4.9 |
 | `else` | §4.2 |
 | `enum` | §5.6 |
-| `export` | §5.8 |
+| `export` | §11 |
 | `extends` | §5.3 |
 | `false` | §1.6.4 |
 | `final` | §5.3 |
-| `float` `float32` `float64` | §2.3.2 |
+| `float` | §2.3.2 |
+| `float32` | §2.3.2 |
+| `float64` | §2.3.2 |
 | `fn` | §5.2 |
 | `for` | §4.4 |
 | `go` | §10.2 |
 | `if` | §4.2 |
 | `implements` | §5.5 |
-| `import` | §5.8 |
+| `import` | §11 |
 | `in` | §4.4 |
-| `int` `int8`..`int64` | §2.3.1 |
+| `int` | §2.3.1 |
+| `int16` | §2.3.1 |
+| `int32` | §2.3.1 |
+| `int64` | §2.3.1 |
+| `int8` | §2.3.1 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `packed` | §5.4 |
-| `parallel` | §10 |
+| `owned` | §5.1 |
+| `packed` | §5.2.9 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
 | `return` | §4.7 |
+| `rune` | §2.3.5 |
 | `scope` | §10.7 |
 | `select` | §10.6 |
 | `shared` | §5.1 / §10.11 |
@@ -62,9 +69,12 @@ order: 021
 | `true` | §1.6.4 |
 | `try` | §8 |
 | `type` | §5.7 |
-| `byte`..`uint64` | §2.3.1 |
-| `union` | §5.4 |
-| `unsafe` | §3.2 |
+| `uint16` | §2.3.1 |
+| `uint32` | §2.3.1 |
+| `uint64` | §2.3.1 |
+| `uint8` | §2.3.1 |
+| `union` | §5.2.9 |
+| `unsafe` | §3.2 / §5.2 |
 | `var` | §5.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
@@ -75,7 +85,7 @@ order: 021
 
 ## Appendix B. Keyword Index
 
-The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
+These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.def` and follow its ASCII lexical order. `move`, `ref`, `out`, `linked`, `supervisor`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
 
 | Keyword | Section |
 |--|--|
@@ -83,8 +93,8 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
+| `byte` | §2.3.1 |
 | `catch` | §8 |
-| `rune` | §2.3.5 |
 | `class` | §5.3 |
 | `comptime` | §3.2 |
 | `const` | §5.1 |
@@ -93,30 +103,37 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `defer` | §4.9 |
 | `else` | §4.2 |
 | `enum` | §5.6 |
-| `export` | §5.8 |
+| `export` | §11 |
 | `extends` | §5.3 |
 | `false` | §1.6.4 |
 | `final` | §5.3 |
-| `float` `float32` `float64` | §2.3.2 |
+| `float` | §2.3.2 |
+| `float32` | §2.3.2 |
+| `float64` | §2.3.2 |
 | `fn` | §5.2 |
 | `for` | §4.4 |
 | `go` | §10.2 |
 | `if` | §4.2 |
 | `implements` | §5.5 |
-| `import` | §5.8 |
+| `import` | §11 |
 | `in` | §4.4 |
-| `int` `int8`..`int64` | §2.3.1 |
+| `int` | §2.3.1 |
+| `int16` | §2.3.1 |
+| `int32` | §2.3.1 |
+| `int64` | §2.3.1 |
+| `int8` | §2.3.1 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `packed` | §5.4 |
-| `parallel` | §10 |
+| `owned` | §5.1 |
+| `packed` | §5.2.9 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
 | `return` | §4.7 |
+| `rune` | §2.3.5 |
 | `scope` | §10.7 |
 | `select` | §10.6 |
 | `shared` | §5.1 / §10.11 |
@@ -129,9 +146,12 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `true` | §1.6.4 |
 | `try` | §8 |
 | `type` | §5.7 |
-| `byte`..`uint64` | §2.3.1 |
-| `union` | §5.4 |
-| `unsafe` | §3.2 |
+| `uint16` | §2.3.1 |
+| `uint32` | §2.3.1 |
+| `uint64` | §2.3.1 |
+| `uint8` | §2.3.1 |
+| `union` | §5.2.9 |
+| `unsafe` | §3.2 / §5.2 |
 | `var` | §5.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |

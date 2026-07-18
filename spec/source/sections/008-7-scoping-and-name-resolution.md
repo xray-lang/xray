@@ -8,7 +8,7 @@ order: 008
 
 ## 7. 作用域与名字解析 (Scoping)
 
-> 真值源：`src/frontend/analyzer/xanalyzer_scope.c`、`src/frontend/analyzer/xanalyzer_capture.c`。
+> 真值源：`src/frontend/analyzer/xanalyzer_symbol.c`、`xanalyzer_escape.c`、`xaddressability.c`、`xanalyzer_visitor_stmt.c` 与 `src/analysis/xglobal_producer.c` 的 capture/storage plan。
 
 ### 7.1 词法作用域与提升
 
@@ -18,7 +18,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 
 | 作用域 | 触发 | 示例 |
 |--|--|--|
-| 模块 | 每个 `.xr` 文件 | 顶层 `var` `const` `shared` `fn` `class` |
+| 模块 | 每个 `.xr` 文件 | 顶层 `var` `const` `shared` `fn` `class`（模块级 `owned` 被拒绝） |
 | 函数 / 闭包 | `fn` / 箭头函数进入 | 参数 + 函数体 |
 | 块 | `{...}` | `if` `while` `for` `match` 分支体 |
 | `scope` 块 | `scope { ... }` 关键字 | 显式词法作用域 + 结构化并发（见 §10.7） |
@@ -29,7 +29,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 **提升规则**：
 
 - 顶层 `fn` `class` `struct` `interface` `enum` `type` **提升**至当前作用域顶部——可在定义前引用。
-- `var` / `const` / `shared` **不提升**——必须在定义后使用。
+- `var` / `const` / `shared` / 局部 `owned` **不提升**——必须在定义后使用。
 - 同名重复声明：同作用域内 2 个同名变量 → 编译错误（嵌套作用域可 shadow）。
 
 ```xray
@@ -76,7 +76,7 @@ print(c())      // 2
 ```
 
 - 闭包与原变量**共享**。
-- 外层作用域退出后，被闭包引用的变量会被 GC 保活（提升到堆）。
+- 外层作用域退出后，被捕获变量由闭包 cell / upvalue 与相应引用计数继续保活。
 
 #### 闭包优化
 
@@ -103,11 +103,12 @@ var t2 = go fn(b: Array<byte>) -> int {
 print(len(big_buffer))    // 编译错误：move 后访问
 ```
 
-**move 使用场景**：`move` 作为**实参前缀**出现在调用位置（参见 §10.8）：
+**move 使用场景**：`move` 是一元所有权转移表达式，常见于实参、初始化器与返回值（参见 §5.1.4 / §10.8）：
 
 - `go f(move x)`、`go fn(...){...}(move x)`：把所有权转给协程。
 - `ch.send(move data)`：跨协程发送时转移所有权（避免拷贝）。
 - 普通函数调用 `f(move x)`：把所有权传入函数（被调函数独占）。
+- `owned dst = move src` / `shared dst = move src` / `return move src`：把局部 `var` 或 `owned` 身份转给新的 owner 或调用方。
 
 ### 7.4 协程数据传递规则（避免数据竞争）
 
@@ -119,7 +120,7 @@ print(len(big_buffer))    // 编译错误：move 后访问
 |---|---|---|
 | inline value | 标量、不可变小值 | 直接复制位表示 |
 | deep copy | 显式 `copy(x)` 的 owned graph | 在目标 execution owner 中物化独立图 |
-| move | 显式 `move x` 的可转移局部 `var` | 转移所有权并静态废弃源绑定 |
+| move | 显式 `move x` 的可转移局部 `var` 或 `owned` | 转移所有权并静态废弃源绑定 |
 | module readonly | 已冻结并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
 | shared ref | `shared`、Channel、Task、Atomic 等稳定共享身份 | 保留 shared/system owner 的引用 |
 | reject | execution-local graph、可变 module state、悬垂 slice/pointer/upvalue | 编译错误并报告 owner/provenance 与所需显式动作 |
@@ -166,7 +167,7 @@ var t4 = go fn(c: Channel<int>) -> int {
 ch.send(42)
 ```
 
-### 7.5 GC 与对象生命周期
+### 7.5 内存管理与对象生命周期
 
 Xray 采用多层内存管理：
 
@@ -174,17 +175,17 @@ Xray 采用多层内存管理：
 |--|--|--|
 | 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 freeze + publish | 模块卸载 |
 | 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
-| 共享存储（`shared`） | shared/system owner + refcount | 最后共享引用释放 |
-| execution-local heap（一般局部对象） | execution owner + 引用计数 + 循环引用回收 | execution 结束或最后引用释放；强引用环由 cycle collector 回收 |
-| 栈（`struct` 值、本地） | RAII | 作用域退出 |
+| 共享存储（`shared`） | shared/system owner + 原子引用计数 | 最后共享引用释放 |
+| coroutine-local heap（一般局部对象） | per-coroutine heap + 编译器插入的引用计数 + Bacon–Rajan cycle collector | 最后强引用释放时立即回收；强引用环由 cycle collector 回收；coroutine 结束时批量释放剩余 Region 块和大对象 |
+| 栈（`struct` 值、本地） | 词法存储期 | 作用域退出；语言没有用户可见的确定性析构 / `Drop` hook |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
 
 **内存观察点**：
-- 默认以引用计数立即释放对象。
-- 强引用环由 cycle collector 在安全点或显式 `runtime.collectCycles()` 时处理。
-- 指令列表中成为内存安全点的点包括函数调用、后向跳转、显式 `runtime.collectCycles()`。
+- 普通局部对象由编译器插入 retain/drop；最后一个强引用释放时进入 RC 销毁路径。
+- 编译器只把可能形成引用环的类型标为 cycle candidate；相应对象在 RC 降低但仍存活时进入候选根集合。
+- cycle collector 由显式 `runtime.collectCycles()` 或候选根数量达到自适应阈值触发。
+- cycle collector 只遍历 coroutine-local RC 边，并跳过 shared/atomic、runtime-managed 和 Region 对象；它不是并发 tracing GC。
 
-循环引用回收与堆布局设计：见 `src/runtime/mem/`。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -192,7 +193,7 @@ Xray 采用多层内存管理：
 
 ## 7. Scoping and Name Resolution
 
-> Source of truth: `src/frontend/analyzer/xanalyzer_scope.c`, `src/frontend/analyzer/xanalyzer_capture.c`.
+> Source of truth: `src/frontend/analyzer/xanalyzer_symbol.c`, `xanalyzer_escape.c`, `xaddressability.c`, `xanalyzer_visitor_stmt.c`, and the capture/storage plans produced by `src/analysis/xglobal_producer.c`.
 
 ### 7.1 Lexical Scoping and Hoisting
 
@@ -202,7 +203,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 
 | Scope | Triggered by | Example |
 |--|--|--|
-| Module | Each `.xr` file | top-level `var` `const` `shared` `fn` `class` |
+| Module | Each `.xr` file | top-level `var` `const` `shared` `fn` `class` (module-level `owned` is rejected) |
 | Function / closure | Entering `fn` / arrow function | parameters + function body |
 | Block | `{...}` | `if` `while` `for` `match` arm body |
 | `scope` block | `scope { ... }` keyword | explicit lexical scope + structured concurrency (see §10.7) |
@@ -213,7 +214,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 **Hoisting rules**:
 
 - Top-level `fn` `class` `struct` `interface` `enum` `type` are **hoisted** to the top of the current scope — they may be referenced before their textual definition.
-- `var` / `const` / `shared` are **not hoisted** — they must appear before any use.
+- `var` / `const` / `shared` / local `owned` are **not hoisted** — they must appear before any use.
 - Duplicate names: declaring two same-named variables in the same scope is a compile error (nested scopes may shadow).
 
 ```xray
@@ -260,7 +261,7 @@ print(c())      // 2
 ```
 
 - The closure and the original variable **share state**.
-- After the outer scope exits, variables referenced by the closure are kept alive by the GC (promoted to the heap).
+- After the outer scope exits, a captured variable remains alive through its closure cell/upvalue and the corresponding reference counts.
 
 #### Closure optimization
 
@@ -287,11 +288,12 @@ var t2 = go fn(b: Array<byte>) -> int {
 print(len(big_buffer))    // compile error: accessed after move
 ```
 
-**`move` usage**: `move` appears as an **argument prefix** at call sites (see §10.8):
+**`move` usage**: `move` is a unary ownership-transfer expression commonly used in arguments, initializers, and returns (see §5.1.4 / §10.8):
 
 - `go f(move x)`, `go fn(...){...}(move x)`: transfer ownership to the coroutine.
 - `ch.send(move data)`: transfer ownership when sending across coroutines (avoiding a copy).
 - Plain function call `f(move x)`: transfer ownership into the function (which becomes the sole owner).
+- `owned dst = move src` / `shared dst = move src` / `return move src`: transfer a local `var` or `owned` identity to a new owner or to the caller.
 
 ### 7.4 Cross-Coroutine Data Transfer Rules (Race Avoidance)
 
@@ -303,7 +305,7 @@ Every cross-execution boundary (`go` closure, `go` argument, Channel send, defer
 |---|---|---|
 | inline value | scalars and small immutable values | copy the bits directly |
 | deep copy | owned graph under explicit `copy(x)` | materialize an independent graph in the destination execution owner |
-| move | transferable local `var` under explicit `move x` | transfer ownership and statically invalidate the source binding |
+| move | transferable local `var` or `owned` under explicit `move x` | transfer ownership and statically invalidate the source binding |
 | module readonly | frozen and published module values | retain the module-readonly owner; do not copy into a root/task heap |
 | shared ref | `shared`, Channel, Task, Atomic, and other stable shared identities | retain a reference owned by the shared/system owner |
 | reject | execution-local graphs, mutable module state, dangling slices/pointers/upvalues | compile error reporting the owner/provenance and required explicit action |
@@ -350,7 +352,7 @@ var t4 = go fn(c: Channel<int>) -> int {
 ch.send(42)
 ```
 
-### 7.5 GC and Object Lifetimes
+### 7.5 Memory Management and Object Lifetimes
 
 Xray uses a layered memory management strategy:
 
@@ -358,15 +360,15 @@ Xray uses a layered memory management strategy:
 |--|--|--|
 | Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by freeze + publish | at module unload |
 | Module-mutable storage (top-level `var`) | module owner; not concurrency-safe by default | at module unload |
-| Shared storage (`shared`) | shared/system owner + reference counting | when the last shared reference is released |
-| Execution-local heap (ordinary local objects) | execution owner + reference counting + cycle collection | when the execution ends or the last reference is released; strong cycles are reclaimed by the cycle collector |
-| Stack (`struct` values, locals) | RAII | when scope exits |
+| Shared storage (`shared`) | shared/system owner + atomic reference counting | when the last shared reference is released |
+| Coroutine-local heap (ordinary local objects) | per-coroutine heap + compiler-inserted reference counting + Bacon–Rajan cycle collector | immediately when the last strong reference is released; strong cycles are reclaimed by the cycle collector; remaining Region blocks and large objects are freed in bulk when the coroutine ends |
+| Stack (`struct` values, locals) | lexical storage duration | scope exit; the language exposes no deterministic destructor / `Drop` hook |
 | Arena (low-level temporary allocations) | bulk free | at arena end |
 
 **Memory observation points**:
-- Default reclamation is reference-counted.
-- Strong reference cycles are handled by the cycle collector at safepoints or explicit `runtime.collectCycles()`.
-- Memory safepoints in the instruction stream include function calls, backward branches, and explicit `runtime.collectCycles()`.
+- The compiler inserts retain/drop operations for ordinary local objects; releasing the last strong reference enters the RC destruction path.
+- The compiler marks only types that may form reference cycles as cycle candidates; their objects become potential roots when an RC decrement leaves them alive.
+- The cycle collector runs on explicit `runtime.collectCycles()` or automatically when the potential-root count reaches an adaptive threshold.
+- The collector traverses only coroutine-local RC edges and skips shared/atomic, runtime-managed, and Region objects; it is not a concurrent tracing GC.
 
-Cycle collection and heap-layout design: see `src/runtime/mem/`.
 <!-- /xr-spec:en -->

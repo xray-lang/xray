@@ -8,7 +8,7 @@ order: 007
 
 ## 6. 模式 (Patterns)
 
-> 真值源：`src/frontend/parser/xparse_match.c`、`src/runtime/value/x_value_match.c`。
+> 真值源：`src/frontend/parser/xparse_match.c`、`src/frontend/analyzer/xanalyzer_visitor_pattern.c`、`src/ir/xi_lower_expr.c` / `xi_lower_stmt.c` 与 VM/AOT 的 match lowering。
 
 模式出现在 `match` 表达式/语句与 `var` / `const` 解构中。
 
@@ -204,7 +204,7 @@ match (p) {
 
 ## 6. Patterns
 
-> Source of truth: `src/frontend/parser/xparse_match.c`, `src/runtime/value/x_value_match.c`.
+> Source of truth: `src/frontend/parser/xparse_match.c`, `src/frontend/analyzer/xanalyzer_visitor_pattern.c`, `src/ir/xi_lower_expr.c` / `xi_lower_stmt.c`, and the VM/AOT match lowerings.
 
 Patterns appear in `match` expressions/statements and in `var` / `const` destructuring.
 

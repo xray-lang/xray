@@ -8,17 +8,17 @@ order: 002
 
 ## 1. 词法结构 (Lexical Structure)
 
-> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，63 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
+> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，66 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
 
 ### 1.1 字符编码
 
-xray 源文件**必须**是 UTF-8 编码。所有源码处理（包括字符串字面量、标识符、注释）按 UTF-8 字节序列进行；非 ASCII 字符仅在字符串字面量、注释、原始字符串内部允许（标识符暂只支持 ASCII，见 §1.4）。
+xray 源文件**必须**是合法 UTF-8。scanner 在产生首个 token 前对整个输入做严格 UTF-8 校验；字符串、注释和标识符都可包含非 ASCII 字符（标识符规则见 §1.4）。
 
 文件可选 UTF-8 BOM（`EF BB BF`）；扫描器跳过开头的 BOM。
 
 ### 1.2 行结尾与空白
 
-行结尾识别 `\n`（Unix）与 `\r\n`（Windows）。`\r` 单独出现视为非法字符。
+行结尾以 `\n` 计数；Windows `\r\n` 因 `\r` 被当作横向空白而正常工作。单独的 `\r` 也会被跳过，但**不会**增加行号或触发智能分号，因此不应当作源码换行使用。
 
 **空白字符**：空格 (`U+0020`)、水平制表符 (`U+0009`)、行结尾。空白用于分隔 token，不传递语义（**异常**：泛型语境下连续 `>>` 的拆分依赖空白上下文）。
 
@@ -33,7 +33,7 @@ xray 支持两种注释：行注释不嵌套，块注释支持嵌套：
    支持 /* 嵌套 */ 到任意合理深度 */
 ```
 
-注释可出现在任何空白能出现的地方。注释会被收集为 **trivia**，供 formatter 与 LSP 使用（见 `src/frontend/parser/xtrivia.*`），但不参与语法分析。
+注释可出现在任何空白能出现的地方。formatter 与 LSP 可以读取注释 trivia；trivia 不参与语法分析。
 
 文档注释（与普通注释无语法差异）：约定以 `///` 或 `/** */` 开头，用于工具识别。当前编译器不强制此约定。
 
@@ -41,11 +41,11 @@ xray 支持两种注释：行注释不嵌套，块注释支持嵌套：
 
 ```ebnf
 Identifier ::= IdentStart IdentCont*
-IdentStart ::= 'a'..'z' | 'A'..'Z' | '_'
+IdentStart ::= 'a'..'z' | 'A'..'Z' | '_' | Utf8NonAsciiByteSequence
 IdentCont  ::= IdentStart | '0'..'9'
 ```
 
-仅 ASCII。最大长度受编译器限制（约 255 字节）。
+输入先经过严格 UTF-8 校验；随后 scanner 把非 ASCII UTF-8 字节序列作为标识符的一部分。因此 `中文`、`café` 都是合法标识符。当前 scanner 不做 Unicode XID 分类或 NFC 规范化，视觉等价但编码不同的名字仍是不同标识符。
 
 **保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`default`、`ref`、`move`、`linked`、`supervisor`、`after` 可作为普通标识符）。
 
@@ -59,7 +59,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 ### 1.5 关键字
 
-xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
+xray 共 **66 个保留关键字**，按用途分组如下：
 
 #### 1.5.1 声明与流程控制
 
@@ -68,6 +68,7 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `var` | 可变变量声明 |
 | `const` | 不可变变量声明 |
 | `shared` | 共享身份绑定（由 shared/system owner 持有，词法作用域照常） |
+| `owned` | 唯一的 system-owned 可变身份绑定；转移使用 `move` |
 | `comptime` | 强制编译期求值的表达式前缀 |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
@@ -83,11 +84,12 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | 关键字 | 用途 |
 |--|--|
 | `class` `struct` | 类/结构体声明 |
+| `packed` `union` | FFI 布局声明 |
 | `extends` | 类继承 |
 | `interface` `implements` | 接口声明/实现 |
 | `enum` | 枚举声明 |
 | `type` | 类型别名 |
-| `new` | 已移除——仍保留为关键字仅用于迁移期报错（构造写 `T(...)`，见 §3.14） |
+| `new` | 保留字；对象构造统一写 `T(...)`（见 §3.14） |
 | `this` `super` | 自我/父类引用 |
 | `constructor` | 构造器 |
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
@@ -96,7 +98,7 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `operator` | 运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
 
-`abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。class/member 修饰符位置若出现这些旧拼写，parser 会报告已移除语法；接口与自动覆写替代这些标注。
+`abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。类的抽象约束通过接口表达，同名同签名方法自动覆写，不需要成员修饰符。
 
 #### 1.5.3 错误处理
 
@@ -108,18 +110,20 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 
 #### 1.5.5 协程与并发
 
-`go` `await` `select` `defer` `scope` `unsafe` `parallel`
+`go` `await` `select` `defer` `scope` `unsafe`
+
+`parallel` 是需要显式 import 的标准库模块名，不是词法关键字。
 
 #### 1.5.6 类型名（保留）
 
-`int` `int8` `int16` `int32` `int64` `byte` `uint16` `uint32` `uint64`
+`int` `int8` `int16` `int32` `int64` `byte` `uint8` `uint16` `uint32` `uint64`
 `float` `float32` `float64` `bool` `string` `rune`
 
 类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
-> **注意**：以下名字**不是**词法关键字，而是 `prelude` 自动引入的内置类型符号：
-> `Array` · `BigInt` · `Array<byte>` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
-> 它们可被用户类同名覆盖（局部 shadow），但通常无须 import 即可使用。
+> **注意**：以下名字**不是**词法关键字，而是 `stdlib/prelude/prelude_types.def` 自动引入的类型符号：
+> `Array` · `Atomic` · `BigInt` · `Channel` · `Json` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `StringBuilder` · `Thread`。
+> `Array<byte>` 是 `Array` 的特化而不是独立名字。`DateTime`、`Logger` 等模块类型必须从对应模块显式 import。
 
 #### 1.5.7 字面量关键字
 
@@ -253,7 +257,7 @@ RawChar ::= 任何非双引号字符（包括 `\`，不做转义处理）
 - **不**处理任何转义（`\n`、`\t` 等保持原样）。
 - 仍然支持 `${...}` 插值。
 - 标识符 `r` 单独使用时仍为普通标识符（`TK_NAME`），仅当后紧接双引号才识别为原始字符串前缀。
-- `r'...'` 已移除；单引号不参与 raw string。
+- raw string 使用 `r"..."`；单引号字符串仍按普通转义规则解析。
 
 ```xray
 r"C:\path\to\file"          // 字面量包含两个反斜杠
@@ -279,9 +283,9 @@ var zh: rune = '中'
 var smile: rune = '\u{1F600}'
 ```
 
-##### 反引号字符串（非法）
+##### 字符串插值
 
-源码 lexer 显式拒绝反引号字符串。如需模板，使用普通双引号 + `${...}`。
+字符串模板使用普通双引号和 `${...}` 插值。
 
 #### 1.6.7 正则字面量
 
@@ -296,7 +300,6 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 ```
 
 - flags：`g`（全局）、`i`（忽略大小写）、`m`（多行）、`s`（dot 匹配换行）。
-- 实现：见 `stdlib/regex`。
 - **歧义消解**：当 `/` 出现在能接受一元 `/` 的位置（如紧跟 `=`、`,`、`(`、操作符），扫描器识别为正则；其他位置识别为除法。
 
 ### 1.7 操作符与 Token
@@ -397,17 +400,17 @@ var primes = #[2, 3, 5, 7]
 
 ## 1. Lexical Structure
 
-> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 63 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
+> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 66 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
 
 ### 1.1 Character Encoding
 
-Xray source files **must** be encoded as UTF-8. All source processing (string literals, identifiers, comments) treats input as a UTF-8 byte sequence; non-ASCII characters are allowed only inside string literals, comments, and raw strings (identifiers are currently ASCII-only; see §1.4).
+Xray source files **must** be valid UTF-8. Before producing the first token, the scanner strictly validates the entire input. Strings, comments, and identifiers may all contain non-ASCII characters (see §1.4 for identifier rules).
 
 A UTF-8 BOM (`EF BB BF`) is optional; the scanner skips a leading BOM.
 
 ### 1.2 Line Endings and Whitespace
 
-Line endings recognize `\n` (Unix) and `\r\n` (Windows). A standalone `\r` is treated as an illegal character.
+Line numbers advance on `\n`. Windows `\r\n` works because `\r` is skipped as horizontal whitespace. A standalone `\r` is also skipped, but it does **not** advance the line counter or trigger smart-semicolon behavior and therefore should not be used as a source line break.
 
 **Whitespace**: space (`U+0020`), horizontal tab (`U+0009`), and line terminators. Whitespace separates tokens and carries no semantics (**exception**: in generic contexts, splitting consecutive `>>` depends on whitespace context).
 
@@ -422,7 +425,7 @@ Xray supports two kinds of comments: line comments do not nest; block comments n
    supports /* nested */ layers to any reasonable depth */
 ```
 
-Comments may appear wherever whitespace is allowed. They are collected as **trivia** for formatters and LSP (see `src/frontend/parser/xtrivia.*`), but do not participate in syntactic analysis.
+Comments may appear wherever whitespace is allowed. Formatters and language servers may read comment trivia; trivia does not participate in parsing.
 
 Doc comments (no syntactic difference from ordinary comments): conventionally `///` or `/** */` for tooling. The compiler does not currently enforce this convention.
 
@@ -430,11 +433,11 @@ Doc comments (no syntactic difference from ordinary comments): conventionally `/
 
 ```ebnf
 Identifier ::= IdentStart IdentCont*
-IdentStart ::= 'a'..'z' | 'A'..'Z' | '_'
+IdentStart ::= 'a'..'z' | 'A'..'Z' | '_' | Utf8NonAsciiByteSequence
 IdentCont  ::= IdentStart | '0'..'9'
 ```
 
-ASCII only. The maximum length is bounded by the compiler (about 255 bytes).
+After strict input validation, the scanner accepts non-ASCII UTF-8 byte sequences as identifier content, so `中文` and `café` are valid identifiers. The current scanner does not apply Unicode XID classification or NFC normalization; visually equivalent but differently encoded names remain distinct.
 
 **Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `default`, `ref`, `move`, `linked`, `supervisor`, `after`).
 
@@ -448,7 +451,7 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 ### 1.5 Keywords
 
-Xray has **65 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
+Xray has **66 reserved keywords** in total, grouped by purpose below:
 
 #### 1.5.1 Declarations and Control Flow
 
@@ -457,6 +460,7 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 | `var` | mutable variable declaration |
 | `const` | immutable variable declaration |
 | `shared` | shared identity binding (owned by the shared/system owner, ordinary lexical scope) |
+| `owned` | unique system-owned mutable identity binding; transfer with `move` |
 | `comptime` | expression prefix that forces compile-time evaluation |
 | `fn` | function declaration |
 | `return` | function return |
@@ -472,11 +476,12 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 | Keyword | Purpose |
 |--|--|
 | `class` `struct` | class / struct declaration |
+| `packed` `union` | FFI layout declarations |
 | `extends` | class inheritance |
 | `interface` `implements` | interface declaration / implementation |
 | `enum` | enum declaration |
 | `type` | type alias |
-| `new` | removed—kept as a keyword only for migration errors (construct with `T(...)`, see §3.14) |
+| `new` | reserved; construct objects with `T(...)` (see §3.14) |
 | `this` `super` | self / parent reference |
 | `constructor` | constructor |
 | `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
@@ -485,7 +490,7 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |
 
-`abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. In class/member modifier position, these legacy spellings are diagnosed as removed syntax; interfaces and automatic overrides replace the annotations.
+`abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. Interfaces express abstract contracts, and methods with the same name and signature override automatically without member modifiers.
 
 #### 1.5.3 Error Handling
 
@@ -497,18 +502,20 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 
 #### 1.5.5 Coroutines and Concurrency
 
-`go` `await` `select` `defer` `scope` `unsafe` `parallel`
+`go` `await` `select` `defer` `scope` `unsafe`
+
+`parallel` is an explicitly imported standard-library module name, not a lexical keyword.
 
 #### 1.5.6 Type Names (reserved)
 
-`int` `int8` `int16` `int32` `int64` `byte` `uint16` `uint32` `uint64`
+`int` `int8` `int16` `int32` `int64` `byte` `uint8` `uint16` `uint32` `uint64`
 `float` `float32` `float64` `bool` `string` `rune`
 
 Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
-> **Note**: the following names are **not** lexer keywords; they are built-in type symbols automatically introduced by the prelude:
-> `Array` · `BigInt` · `Array<byte>` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
-> They may be locally shadowed by user types of the same name, but typically need no import.
+> **Note**: the following names are **not** lexer keywords; `stdlib/prelude/prelude_types.def` introduces them automatically:
+> `Array` · `Atomic` · `BigInt` · `Channel` · `Json` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `StringBuilder` · `Thread`.
+> `Array<byte>` is an `Array` specialization, not a separate name. Module-owned types such as `DateTime` and `Logger` require explicit imports from their modules.
 
 #### 1.5.7 Literal Keywords
 
@@ -642,7 +649,7 @@ RawChar ::= any character except double quote (including `\`, which is not proce
 - **No** escape processing (`\n`, `\t`, etc. are kept as-is).
 - `${...}` interpolation is still supported.
 - The identifier `r` standing alone is still a regular identifier (`TK_NAME`); it is recognized as a raw-string prefix only when immediately followed by a double quote.
-- `r'...'` has been removed; single quotes do not participate in raw strings.
+- Raw strings use `r"..."`; single-quoted strings continue to use the ordinary escape rules.
 
 ```xray
 r"C:\path\to\file"          // literal contains two backslashes
@@ -668,9 +675,9 @@ var zh: rune = '中'
 var smile: rune = '\u{1F600}'
 ```
 
-##### Backtick strings (illegal)
+##### String interpolation
 
-The lexer explicitly rejects backtick strings. For templates, use plain double quotes plus `${...}`.
+String templates use ordinary double quotes with `${...}` interpolation.
 
 #### 1.6.7 Regex Literals
 
@@ -685,7 +692,6 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 ```
 
 - Flags: `g` (global), `i` (case-insensitive), `m` (multi-line), `s` (dot matches newline).
-- Implementation: see `stdlib/regex`.
 - **Disambiguation**: when `/` appears in a position that can accept a unary `/` (e.g., right after `=`, `,`, `(`, an operator), the scanner treats it as a regex; elsewhere it is division.
 
 ### 1.7 Operators and Tokens

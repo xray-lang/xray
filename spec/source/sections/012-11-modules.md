@@ -14,13 +14,13 @@ order: 012
 
 - 每个 `.xr` 文件是一个模块。
 - 模块名 = 文件名（去除 `.xr` 后缀）。
-- 模块路径反映目录结构：`src/utils/string.xr` → `utils.string`。
+- 文件模块的规范身份由 resolver 归一化后的路径决定；源码中通常通过相对路径或包路径 import，不应依赖把目录分隔符展示成点号的推导规则。
 
 ### 11.2 项目结构
 
 ```
 my_project/
-├── xray.toml              # 包清单（包名、依赖、入口）
+├── xray.toml              # 包清单（包名、依赖、main）
 ├── src/
 │   ├── main.xr            # 入口
 │   ├── utils.xr
@@ -37,14 +37,10 @@ my_project/
 [package]
 name = "my_project"
 version = "0.1.0"
-entry = "src/main.xr"
+main = "src/main.xr"
 
 [dependencies]
-http = "1.0"
-json = "0.2"
-
-[dev-dependencies]
-test = "1.0"
+local_utils = { path = "../local_utils" }
 ```
 
 ### 11.3 `import` 语法
@@ -187,13 +183,13 @@ time.sleep(100)
 
 - Each `.xr` file is one module.
 - Module name = file name (with the `.xr` suffix removed).
-- Module path mirrors directory structure: `src/utils/string.xr` → `utils.string`.
+- A file module's canonical identity comes from its resolver-normalized path. Source normally imports it through a relative or package path; code should not depend on a display-only dotted-directory derivation.
 
 ### 11.2 Project Layout
 
 ```
 my_project/
-├── xray.toml              # package manifest (name, dependencies, entry)
+├── xray.toml              # package manifest (name, dependencies, main)
 ├── src/
 │   ├── main.xr            # entry
 │   ├── utils.xr
@@ -210,14 +206,10 @@ my_project/
 [package]
 name = "my_project"
 version = "0.1.0"
-entry = "src/main.xr"
+main = "src/main.xr"
 
 [dependencies]
-http = "1.0"
-json = "0.2"
-
-[dev-dependencies]
-test = "1.0"
+local_utils = { path = "../local_utils" }
 ```
 
 ### 11.3 `import` Syntax

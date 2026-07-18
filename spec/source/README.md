@@ -19,7 +19,7 @@ python3 scripts/gen_language_docs.py --root .
 ## 目录结构
 
 ```text
-docs/spec/source/
+spec/source/
   sections/*.md            # 中英文语言参考手册章节源
   cards/topics/*.json      # MCP topic 结构化投影源
   cards/stdlib/*.json      # stdlib 模块说明源；API 表后续自动注入

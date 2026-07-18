@@ -27,7 +27,7 @@ Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用
 | `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Array<byte>` | `XR_TAG_PTR` + bytes heap object |
+| `Array<byte>` | `XR_TAG_PTR` + `XR_TARRAY`，元素布局为 byte |
 | 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
 
 Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `XR_ELEM_RUNE`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_RUNE`，store 时拒绝非 `rune` 值，因此不会与 `Array<uint32>` 混淆。
@@ -39,17 +39,17 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 | **系统 owner** | runtime/native 数据结构；hosted 可使用 C allocator，freestanding 由 target hooks 提供 |
 | **模块只读 owner** | consteval rodata，或 module allocator 初始化后 freeze + publish 的顶层 `const` |
 | **模块可变 owner** | 顶层 `var`；生命周期属于模块，默认不提供并发安全性 |
-| **shared/system owner** | `shared` 稳定共享身份与显式并发句柄，引用计数 |
-| **execution owner** | root、task 或直接入口的局部 RC 对象图；不要求存在物理 coroutine identity |
+| **shared/system owner** | `shared` 稳定共享身份与显式并发句柄，原子引用计数 |
+| **coroutine owner** | 普通局部对象；由当前 coroutine 的 `XrCoroHeap` 分配并执行引用计数回收 |
 | **栈** | `struct` 值、局部 immediate、函数帧 |
 | **Arena** | parser 临时分配、frame allocation |
 
 ### 16.3 内存模型
 
-- 默认 **per-execution reference counting**。AllocationContext 显式选择 module、shared/system 或 execution owner；普通分配不以 `current_coro` 作为唯一入口。最后一个强引用释放时，对象进入对应 owner 的释放路径。
-- **循环引用回收**：强引用环由 cycle collector 处理；显式入口是 `runtime.collectCycles()`。
-- **内存安全点**：函数调用、后向跳转、显式 `runtime.collectCycles()`。
-- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 ExecutionContext 的 live memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
+- 默认由编译器插入的 **per-coroutine reference counting** 回收普通局部对象；最后一个强引用释放时立即进入 RC 销毁路径。共享对象使用 atomic RC，模块/运行时对象按各自 owner 的生命周期管理。
+- **循环引用回收**：编译器标记可能形成环的类型；Bacon–Rajan trial-deletion collector 处理相应的 coroutine-local 强引用环。显式入口是 `runtime.collectCycles()`，候选根数量达到自适应阈值时也会自动触发。
+- **collector 边界**：cycle collector 跳过 shared/atomic、runtime-managed 和 Region 对象。函数调用与后向跳转处保留的 tracing-GC hook 当前为空操作；Xray 没有并发 tracing GC。
+- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 coroutine heap（无当前 coroutine 时回退到 main coroutine）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 
 详见 `src/runtime/mem/`。
 
@@ -59,9 +59,9 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 - **work-stealing**：空闲 worker 从其他 worker 队列偷任务。
 - **协作式抢占**：协程在 safepoint 让出（非强制抢占）。
 - **公平性**：单一 runnable 队列配合本地 run-next、全局注入队列和 work-stealing；调度顺序不暴露用户级优先级。
-- **栈管理**：segmented stack 按需扩展。
+- **栈管理**：VM 的 register/frame stack 在需要时扩容，扩容可能搬迁底层存储；运行时以 slot offset 重建指针。
 
-详见 `src/runtime/coro/`。
+详见 `src/coro/` 与 `src/vm/xvm_coro_backend.c`。
 
 ### 16.5 进程级全局访问
 
@@ -112,7 +112,7 @@ class PanicInfo {
 }
 ```
 
-用户级可恢复错误不使用 `PanicInfo`：`throw` 表达式只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
+用户级可恢复错误不使用 `PanicInfo`：`throw` 语句只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
 
 栈展开（仅 panic 通道）：VM `xvm_unwind_stack()` 按 try-table 查找 `catch panic` handler，逐帧释放局部、执行 defer，到达 handler 后跳转。可恢复错误走值返回通道，不展开栈。详见 §8。
 
@@ -156,7 +156,7 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 | `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Array<byte>` | `XR_TAG_PTR` + bytes heap object |
+| `Array<byte>` | `XR_TAG_PTR` + `XR_TARRAY`, with byte element layout |
 | Other objects | `XR_TAG_PTR` + heap type + heap pointer |
 
 Typed-array element layout is part of the container metadata. `Array<rune>` uses `XR_ELEM_RUNE`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_RUNE`, and stores reject non-`rune` values, so it cannot be confused with `Array<uint32>`.
@@ -168,17 +168,17 @@ Typed-array element layout is part of the container metadata. `Array<rune>` uses
 | **System owner** | runtime/native data structures; hosted targets may use the C allocator, while freestanding targets supply hooks |
 | **Module-readonly owner** | consteval rodata, or top-level `const` initialized by the module allocator and then frozen + published |
 | **Module-mutable owner** | top-level `var`; module lifetime, not concurrency-safe by default |
-| **Shared/system owner** | stable `shared` identities and explicit concurrency handles, reference-counted |
-| **Execution owner** | local RC object graphs of a root, task, or direct entry; no physical coroutine identity is required |
+| **Shared/system owner** | stable `shared` identities and explicit concurrency handles, atomically reference-counted |
+| **Coroutine owner** | ordinary local objects, allocated and reference-counted by the current coroutine's `XrCoroHeap` |
 | **Stack** | `struct` values, local immediates, function frames |
 | **Arena** | parser temporary allocation, frame allocation |
 
 ### 16.3 Memory Model
 
-- Default reclamation is **per-execution reference counting**. AllocationContext explicitly selects the module, shared/system, or execution owner; ordinary allocation does not require `current_coro` as its sole entry. Objects enter their owner's reclamation path when the last strong reference is released.
-- **Cycle collection** handles strong reference cycles; the explicit user entrypoint is `runtime.collectCycles()`.
-- **Memory safepoints**: function calls, backward branches, explicit `runtime.collectCycles()`.
-- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current ExecutionContext's live-memory view (`import runtime`; the `mem` module carries raw-memory capabilities only).
+- Ordinary local objects use compiler-inserted **per-coroutine reference counting** and enter the RC destruction path as soon as their last strong reference is released. Shared objects use atomic RC; module and runtime objects follow their respective owners' lifetimes.
+- **Cycle collection**: the compiler marks types that may form cycles, and a Bacon–Rajan trial-deletion collector handles the corresponding coroutine-local strong-reference cycles. The explicit entrypoint is `runtime.collectCycles()`; collection also starts automatically when the potential-root count reaches an adaptive threshold.
+- **Collector boundary**: the cycle collector skips shared/atomic, runtime-managed, and Region objects. The former tracing-GC hooks at function calls and backward branches are currently no-ops; Xray has no concurrent tracing GC.
+- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view, falling back to the main coroutine when no coroutine is current (`import runtime`; the `mem` module carries raw-memory capabilities only).
 
 See `src/runtime/mem/` for details.
 
@@ -188,9 +188,9 @@ See `src/runtime/mem/` for details.
 - **work-stealing**: idle workers steal tasks from other workers' queues.
 - **Cooperative preemption**: coroutines yield at safepoints (no forced preemption).
 - **Fairness**: a single runnable queue works with local run-next, global injection, and work-stealing; scheduling order does not expose user-level priorities.
-- **Stack management**: segmented stacks grow on demand.
+- **Stack management**: VM register/frame stacks grow on demand and may relocate their backing storage; the runtime re-derives pointers from slot offsets.
 
-See `src/runtime/coro/` for details.
+See `src/coro/` and `src/vm/xvm_coro_backend.c` for details.
 
 ### 16.5 Process-Level Global Access
 
@@ -241,7 +241,7 @@ class PanicInfo {
 }
 ```
 
-Recoverable user-level errors do not use `PanicInfo`: a `throw` expression accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
+Recoverable user-level errors do not use `PanicInfo`: a `throw` statement accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
 
 Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers, releasing locals frame by frame and running `defer` along the way before jumping to the handler. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
 

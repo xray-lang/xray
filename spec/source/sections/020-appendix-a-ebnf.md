@@ -19,8 +19,9 @@ Comment ::= '//' [^\n]*
          |  '/*' .* '*/'
 
 Identifier ::= IdStart IdContinue*
-IdStart    ::= 'a'..'z' | 'A'..'Z' | '_'
+IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
 IdContinue ::= IdStart | '0'..'9'
+// 源文件先整体校验为 UTF-8；lexer 将任意非 ASCII UTF-8 字节视为 identifier 字节，当前不做 XID/NFC 归一化。
 
 IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
 DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
@@ -32,13 +33,14 @@ FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
               |  DecimalInt Exponent
 Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 
-BigIntLiteral ::= DecimalInt 'n'
+BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
 
 StringLiteral ::= '"' StringChar* '"'
 RawStringLiteral ::= 'r' '"' [^"]* '"'
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
-RegexLiteral ::= '/' RegexBody '/' RegexFlags?
+RegexLiteral ::= '/' RegexBody '/' RegexFlag*
+RegexFlag ::= 'i' | 'm' | 's' | 'g' | 'u'
 
 BoolLiteral ::= 'true' | 'false'
 NullLiteral ::= 'null'
@@ -73,21 +75,19 @@ AssignExpr ::= TernaryExpr (AssignOp Expression)?
 AssignOp   ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
             |  '&=' | '|=' | '^=' | '<<=' | '>>='
 
-TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
+TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
+NullCoalesceExpr ::= LogicOrExpr ('??' LogicOrExpr)*
 LogicOrExpr ::= LogicAndExpr ('||' LogicAndExpr)*
-            |   NullCoalesce
 LogicAndExpr ::= BitOrExpr ('&&' BitOrExpr)*
-NullCoalesce ::= LogicAndExpr ('??' LogicAndExpr)*
 BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
 BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
 EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
-RelationalExpr ::= ShiftExpr (('<' | '<=' | '>' | '>=') ShiftExpr)*
+RelationalExpr ::= ShiftExpr ((('<' | '<=' | '>' | '>=') ShiftExpr) | (('as' | 'is') Type))*
 ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
-MultiplicativeExpr ::= TypeOpExpr (('*' | '/' | '%') TypeOpExpr)*
-TypeOpExpr  ::= UnaryExpr (('as' | 'is') Type)*           // 安全转换写为 `x as T?`，T? 是可空类型
-RangeExpr   ::= AdditiveExpr ('..' AdditiveExpr)?
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%' | '..' | '..=') UnaryExpr)*
+// parser 中 range 与乘除同一 precedence；安全转换写为 `x as T?`，T? 是可空类型。
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
@@ -136,9 +136,12 @@ ComptimeExpr ::= 'comptime' (Expression | Block)
 MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
 
-ThrowExpr   ::= 'throw' Expression                // operand 静态类型必须是 enum 变体
-
-ArgList ::= Expression (',' Expression)* ','?
+ArgList ::= CallArg (',' CallArg)* ','?
+CallArg ::= ('ref' | 'out') Expression
+          | '...' Expression
+          | Identifier '->' (Expression | Block)
+          | '_'
+          | Expression
 ```
 
 ### A.4 模式
@@ -153,7 +156,7 @@ Pattern ::= LiteralPattern
          |  MultiPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
-RangePattern    ::= Expression '..' Expression
+RangePattern    ::= Expression ('..' | '..=') Expression
 EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload 解构
 VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
 TypePattern     ::= 'is' Type Identifier?
@@ -168,6 +171,9 @@ MultiPattern    ::= Pattern (',' Pattern)+
 Statement ::= ExprStmt
            |  IncDecStmt
            |  VarDecl
+           |  ConstDecl
+           |  SharedDecl
+           |  OwnedDecl
            |  FnDecl
            |  ExternBlock
            |  ClassDecl
@@ -222,7 +228,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 // go 是表达式，返回 Task<T>。不作为独立语句类别出现（封装在 ExprStmt 中）。
 
-ScopeStmt ::= 'scope' Block            // 词法作用域 + 结构化并发
+ScopeStmt ::= ('linked' | 'supervisor')? 'scope' Block
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // 接收
@@ -239,6 +245,7 @@ YieldStmt ::= 'yield' Expression
 VarDecl ::= 'var' Binding
 ConstDecl ::= 'const' Binding
 SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
+OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
@@ -289,12 +296,9 @@ EnumDecl       ::= 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
-                |  Identifier '=' BackingValue                  // 简单枚举（无 payload）
 EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
-BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
-
 TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
 
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
@@ -334,8 +338,9 @@ Comment ::= '//' [^\n]*
          |  '/*' .* '*/'
 
 Identifier ::= IdStart IdContinue*
-IdStart    ::= 'a'..'z' | 'A'..'Z' | '_'
+IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
 IdContinue ::= IdStart | '0'..'9'
+// The source is first validated as UTF-8. The lexer accepts every non-ASCII UTF-8 byte in identifiers; it does not currently apply XID/NFC normalization.
 
 IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
 DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
@@ -347,13 +352,14 @@ FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
               |  DecimalInt Exponent
 Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 
-BigIntLiteral ::= DecimalInt 'n'
+BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
 
 StringLiteral ::= '"' StringChar* '"'
 RawStringLiteral ::= 'r' '"' [^"]* '"'
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
-RegexLiteral ::= '/' RegexBody '/' RegexFlags?
+RegexLiteral ::= '/' RegexBody '/' RegexFlag*
+RegexFlag ::= 'i' | 'm' | 's' | 'g' | 'u'
 
 BoolLiteral ::= 'true' | 'false'
 NullLiteral ::= 'null'
@@ -388,21 +394,19 @@ AssignExpr ::= TernaryExpr (AssignOp Expression)?
 AssignOp   ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
             |  '&=' | '|=' | '^=' | '<<=' | '>>='
 
-TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
+TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
+NullCoalesceExpr ::= LogicOrExpr ('??' LogicOrExpr)*
 LogicOrExpr ::= LogicAndExpr ('||' LogicAndExpr)*
-            |   NullCoalesce
 LogicAndExpr ::= BitOrExpr ('&&' BitOrExpr)*
-NullCoalesce ::= LogicAndExpr ('??' LogicAndExpr)*
 BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
 BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
 EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
-RelationalExpr ::= ShiftExpr (('<' | '<=' | '>' | '>=') ShiftExpr)*
+RelationalExpr ::= ShiftExpr ((('<' | '<=' | '>' | '>=') ShiftExpr) | (('as' | 'is') Type))*
 ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
-MultiplicativeExpr ::= TypeOpExpr (('*' | '/' | '%') TypeOpExpr)*
-TypeOpExpr  ::= UnaryExpr (('as' | 'is') Type)*           // safe cast is `x as T?` where T? is a nullable type
-RangeExpr   ::= AdditiveExpr ('..' AdditiveExpr)?
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%' | '..' | '..=') UnaryExpr)*
+// The parser gives range the same precedence as multiply/divide. A safe cast is `x as T?`, where T? is nullable.
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
@@ -451,9 +455,12 @@ ComptimeExpr ::= 'comptime' (Expression | Block)
 MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
 
-ThrowExpr   ::= 'throw' Expression                // operand's static type must be an enum variant
-
-ArgList ::= Expression (',' Expression)* ','?
+ArgList ::= CallArg (',' CallArg)* ','?
+CallArg ::= ('ref' | 'out') Expression
+          | '...' Expression
+          | Identifier '->' (Expression | Block)
+          | '_'
+          | Expression
 ```
 
 ### A.4 Patterns
@@ -468,7 +475,7 @@ Pattern ::= LiteralPattern
          |  MultiPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
-RangePattern    ::= Expression '..' Expression
+RangePattern    ::= Expression ('..' | '..=') Expression
 EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload destructuring
 VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
 TypePattern     ::= 'is' Type Identifier?
@@ -483,6 +490,9 @@ MultiPattern    ::= Pattern (',' Pattern)+
 Statement ::= ExprStmt
            |  IncDecStmt
            |  VarDecl
+           |  ConstDecl
+           |  SharedDecl
+           |  OwnedDecl
            |  FnDecl
            |  ExternBlock
            |  ClassDecl
@@ -537,7 +547,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 // go is an expression returning Task<T>. It is not a separate statement category (it appears wrapped in ExprStmt).
 
-ScopeStmt ::= 'scope' Block            // lexical scope + structured concurrency
+ScopeStmt ::= ('linked' | 'supervisor')? 'scope' Block
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // receive
@@ -554,6 +564,7 @@ YieldStmt ::= 'yield' Expression
 VarDecl ::= 'var' Binding
 ConstDecl ::= 'const' Binding
 SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
+OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
@@ -604,12 +615,9 @@ EnumDecl       ::= 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
-                |  Identifier '=' BackingValue                  // simple enum (no payload)
 EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
-BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
-
 TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
 
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule

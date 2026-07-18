@@ -35,17 +35,16 @@ order: 004
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 右 | 赋值与复合赋值 |
 | 0 | `,`（仅 `match` 多值、参数列表等特定位置）| — | 不是真正运算符 |
 
-实现：`src/frontend/parser/xparse_expr.c` 的 Pratt-parser 风格。
 
 ### 3.2 一元表达式
 
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'move' UnaryExpr
-            | 'await' ('all' | 'any')? UnaryExpr
+            | 'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
             | 'go' (Block | PostfixExpr)
             | 'unsafe' Block
-            | 'comptime' Expression
+            | 'comptime' (Expression | Block)
             | PostfixExpr
 ```
 
@@ -77,16 +76,28 @@ unsafe {
 
 `unsafe` 不改变表达式的结果类型；多语句块的最后一个表达式语句产生块值，否则结果为 `()`。`unsafe` 也不关闭普通类型检查：`Ptr<T>` 仍不可写，`MutPtr<T>` 才能写入；空指针、越界、生命周期和对齐由调用方负责。
 
-#### `comptime expr`
+#### `comptime expr` / `comptime { ... }`
 
-`comptime` 是表达式前缀，用来要求操作数在分析/编译阶段求值；求值失败时直接报编译错误，而不是退回运行期。当前已实现的保证范围是**整数常量表达式**：整数字面量、`const` 整数标识符、括号、整数一元/二元算术与位运算，可用于固定数组长度、repeat 初始化长度等静态整数位置。
+`comptime` 要求表达式或块在分析阶段求值；失败是编译错误，不会退回运行期。常量表达式不限于整数：当前支持标量常量、TypeId、定长数组、tuple、struct 聚合及其成员/索引访问，以及可求值的一元/二元运算。固定数组长度等静态整数位置仍要求最终值是正整数。
 
 ```xray
 const SCALE = comptime 8 * 4
 var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
-`comptime { ... }` 块语法已被 parser 预留，但当前分析期会拒绝；完整 consteval 块、泛型 `ct_value` 和可求值函数体属于后续阶段。
+`comptime { ... }` 已实现受限解释执行。块支持局部 `const`/`var`、局部变量赋值和复合赋值、`if`/`while`、C 风格 `for`、定长数组 `for-in`、循环内带标签或不带标签的 `break`/`continue`、`compile_assert(...)` 与 `compile_error(...)`。块只产生编译期副作用并在运行时被擦除；需要把值带出块时使用 `return <consteval-expression>`。当前函数调用不属于 consteval-safe 表达式，unsupported 语句会在分析期拒绝。
+
+```xray
+const TABLE_SIZE = comptime 4 * 8
+
+comptime {
+    var sum = comptime 0
+    for (var i = 0; i < 4; i += 1) {
+        sum += i
+    }
+    compile_assert(sum == 6, "comptime loop")
+}
+```
 
 ### 3.3 二元表达式
 
@@ -388,10 +399,12 @@ shared ch: Channel<int> = Channel<int>(10)
 
 ```ebnf
 CallExpr ::= Primary '(' ArgList? ')'
-ArgList ::= Expr (',' Expr)* ','?
+ArgList ::= CallArg (',' CallArg)* ','?
+CallArg ::= ('ref' | 'out')? Expr
 ```
 
 - 参数按位置传递；不支持命名参数。
+- `ref` / `out` 参数必须在调用点重复写同名 marker，并传入可寻址 place；普通 `in`/值参数不写调用点 marker。
 - rest 参数收集多余参数到数组。
 - 参数计数不匹配 → 编译错误 `E0307` / `E0450`。
 
@@ -529,7 +542,7 @@ var result = match (x) {
 ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```
 
-构造与普通函数调用同形：`TypeName(args)`。没有 `new` 关键字——写出 `new`（如 `new Point(...)`）是编译错误，提示删除 `new`。
+构造与普通函数调用同形：`TypeName(args)`。`new` 是保留字，不构成合法表达式。
 
 ```xray @id=expr-new
 var p = Point(1.0, 2.0)
@@ -570,7 +583,7 @@ yield expr                  // 生成器产出一个值并挂起
 
 `yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
-协作让出 CPU 不再使用裸 `yield`；使用 `Coro.yield()`（见 §10.10）。裸 `yield` 是语法错误。
+协作让出 CPU 使用 `Coro.yield()`（见 §10.10）；裸 `yield` 不是表达式。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -605,17 +618,16 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
 | 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
 
-Implementation: Pratt-parser style in `src/frontend/parser/xparse_expr.c`.
 
 ### 3.2 Unary Expressions
 
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'move' UnaryExpr
-            | 'await' ('all' | 'any')? UnaryExpr
+            | 'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
             | 'go' (Block | PostfixExpr)
             | 'unsafe' Block
-            | 'comptime' Expression
+            | 'comptime' (Expression | Block)
             | PostfixExpr
 ```
 
@@ -647,16 +659,28 @@ unsafe {
 
 `unsafe` does not change the expression's result type; in a multi-statement block, the trailing expression statement yields the block value, otherwise the result is `()`. `unsafe` also does not disable ordinary type checking: `Ptr<T>` is still read-only, and writes require `MutPtr<T>`; null pointers, bounds, lifetimes, and alignment remain the caller's responsibility.
 
-#### `comptime expr`
+#### `comptime expr` / `comptime { ... }`
 
-`comptime` is an expression prefix that requires its operand to be evaluated during analysis/compilation. If evaluation fails, compilation fails instead of falling back to runtime. The implemented guarantee is currently limited to **integer constant expressions**: integer literals, `const` integer identifiers, grouping, integer unary/binary arithmetic, and bitwise operators. These values may feed static integer positions such as fixed-array lengths and repeat-initializer lengths.
+`comptime` requires an expression or block to evaluate during analysis; failure is a compile error and never falls back to runtime. Constant expressions are not limited to integers: the current evaluator supports scalar constants, TypeIds, fixed arrays, tuples, struct aggregates and their member/index accesses, plus const-evaluable unary and binary operations. Static integer positions such as fixed-array lengths still require a positive integer result.
 
 ```xray
 const SCALE = comptime 8 * 4
 var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
-The parser reserves `comptime { ... }` block syntax, but analysis rejects it for now; full consteval blocks, generic `ct_value`, and evaluable function bodies are future phases.
+`comptime { ... }` has a restricted interpreter. A block supports local `const`/`var` declarations, local assignments and compound assignments, `if`/`while`, C-style `for`, fixed-array `for-in`, labeled or unlabeled `break`/`continue` inside loops, `compile_assert(...)`, and `compile_error(...)`. A statement block is erased from runtime; use `return <consteval-expression>` when the block must produce a value. Function calls are not currently consteval-safe, and unsupported statements are rejected during analysis.
+
+```xray
+const TABLE_SIZE = comptime 4 * 8
+
+comptime {
+    var sum = comptime 0
+    for (var i = 0; i < 4; i += 1) {
+        sum += i
+    }
+    compile_assert(sum == 6, "comptime loop")
+}
+```
 
 ### 3.3 Binary Expressions
 
@@ -958,10 +982,12 @@ See §10.5.
 
 ```ebnf
 CallExpr ::= Primary '(' ArgList? ')'
-ArgList ::= Expr (',' Expr)* ','?
+ArgList ::= CallArg (',' CallArg)* ','?
+CallArg ::= ('ref' | 'out')? Expr
 ```
 
 - Arguments are passed positionally; named arguments are not supported.
+- A `ref` or `out` parameter repeats the same marker at the call site and must receive an addressable place; ordinary `in`/value parameters have no call-site marker.
 - A rest parameter collects extra arguments into an array.
 - Argument-count mismatch → compile error `E0307` / `E0450`.
 
@@ -1099,7 +1125,7 @@ var result = match (x) {
 ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```
 
-Construction looks just like a function call: `TypeName(args)`. There is no `new` keyword—writing `new` (e.g. `new Point(...)`) is a compile error that tells you to delete it.
+Construction has the same form as a function call: `TypeName(args)`. `new` is reserved and does not form an expression.
 
 ```xray @id=expr-new
 var p = Point(1.0, 2.0)
@@ -1140,5 +1166,5 @@ yield expr                  // produce one generator value and suspend
 
 `yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>`. `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
 
-Cooperative CPU yielding no longer uses bare `yield`; use `Coro.yield()` (see §10.10). Bare `yield` is a syntax error.
+Cooperative CPU yielding uses `Coro.yield()` (see §10.10); bare `yield` is not an expression.
 <!-- /xr-spec:en -->

@@ -8,72 +8,42 @@ order: 018
 
 ## 17. 编译流水线 (Compilation Pipeline)
 
-> 真值源：`src/frontend/`、`src/vm/`、`src/jit/`、`src/aot/`、`docs/rules/architecture.md`。
+> 真值源：`src/frontend/`、`src/ir/`、`src/vm/`、`src/aot/`、`src/toolchain/`、`src/app/cli/xcmd_build.c`、`src/app/cli/xcmd_compile.c`。
 
-### 17.1 阶段总览
+### 17.1 两条执行路径
 
 ```
-源码 (.xr)
-    ↓ lexer
-Token Stream
-    ↓ parser
-AST
-    ↓ analyzer (语义分析、类型检查、scope/capture/generic)
-Typed AST
-    ↓ ssa-gen
-SSA IR
-    ↓ optimize（const fold、DCE、inline、TCO、escape analysis）
-Optimized SSA
-    ↓ codegen
-Bytecode  →  AOT (machine code)
-    ↓ VM
-    ↓ Profiler → JIT (machine code)
-执行
+源码 (.xr) -> lexer -> AST -> analyzer / canonical evidence
+                                  |-> bytecode compiler -> XrProto -> VM
+                                  `-> Xi IR -> optimization -> C source -> host/cross C toolchain -> native binary
 ```
 
-### 17.2 词法分析 (Lexer)
+Xray 当前没有 JIT。默认 `xray run` 和默认 `xray build` 使用字节码/VM 路径；`xray build --native` 才选择 AOT 路径。两条路径共享 parser、analyzer、模块图与运行时语义，但输出表示和后端优化并不相同。
 
-- 真值源：`src/frontend/lexer/xlexer.c`。
-- 输出 `XrToken` 流，每个 token 含 `kind`、`value`、`pos(line, col)`。
-- 处理：字符串插值（产生 `${...}` 拼接序列）、原始字符串、正则字面量。
+### 17.2 前端
 
-### 17.3 语法分析 (Parser)
+- lexer：`src/frontend/lexer/xlex.c` / `xlex.h`，关键字表为 `xkeywords.def`；输入必须是合法 UTF-8。
+- parser：`src/frontend/parser/xparse*.c`，手写递归下降与优先级表达式解析，输出 `AstNode` 模块树。
+- analyzer：`src/frontend/analyzer/`，执行名称解析、类型/泛型/可见性/所有权/捕获/错误集检查。
+- canonical evidence：`src/frontend/canonical/` 与 module/toolchain 层把跨模块事实收敛成供后端消费的稳定证据。
 
-- 真值源：`src/frontend/parser/`（分文件：expr、stmt、decl、match）。
-- 风格：手写 Pratt parser（表达式）+ 递归下降（声明 / 语句）。
-- 错误恢复：遇到错误后跳到下一同步点（`;` `}` `)`），尽量继续解析。
-- 输出：`XrAstNode*` 根（即 module）。
+### 17.3 字节码与 VM
 
-### 17.4 语义分析 (Analyzer)
+`src/frontend/codegen/xcompiler.c` 将已分析 AST 编译成 `XrProto` 字节码。opcode 的唯一清单是 `src/runtime/value/xopcode_def.h`，VM 实现在 `src/vm/`。VM 使用寄存器式指令布局，并包含属性/调用快路径以及 coroutine、错误通道、tail-call 等专用 opcode。
 
-- 真值源：`src/frontend/analyzer/xanalyzer_*.c`（按主题拆分）。
-- **作用域**：嵌套符号表、变量解析、shadowing 检查。
-- **类型检查**：双向类型推断、union 收窄、Json 结构匹配。
-- **泛型**：构建期 monomorphization、约束检查、调用点重写；跨模块泛型在 whole-program / LTO 阶段展开，泛型库必须提供可分析 IR/AST。
-- **闭包分析**：upvalue 标记、`go` 闭包捕获禁令。
-- **错误码**：`XR_ERR_ANALYZE_*` 系列。
+`xray compile file.xr` 默认生成 `.xrc`；`--format bytecode|c|header` 可显式选择序列化字节码或把字节码嵌入 C 源/头文件。这里的 `--format c` 是**字节码容器的 C 表示**，不是 native AOT C 后端。
 
-### 17.5 SSA 与优化
+字节码必须以确定性顺序序列化 extern 聚合布局及目标 ABI 指纹。加载器必须在执行前校验布局深度、递归环、字段范围、总大小、尾随数据和 ABI 一致性；任何损坏或目标不匹配都必须拒绝加载，不能回退到宿主机布局。
 
-- 真值源：`src/ir/xi_opt*.c`、`src/ir/xi_pass.h`、`src/jit/`。
-- **常量折叠**：编译期求值。
-- **DCE**（dead-code elimination）：删除未使用代码。
-- **inlining**：小函数内联。
-- **TCO**（tail-call optimization）：accumulator 风格尾递归转循环。
-- **escape analysis**：栈分配 vs 堆分配决策。
+### 17.4 Xi IR 与优化
 
-### 17.6 字节码与 VM
+native 路径将程序 lowering 为 `src/ir/` 中的 Xi IR。优化流水线由 `xi_pipeline.c` / `xi_pass.h` 组织，当前实现包括 SCCP、DCE/CFG 简化、内联、devirtualization、tail-call、escape/ownership、循环优化、GVN/PRE、边界检查消除和向量化等 passes；具体启用集合由优化等级、目标和合法性检查决定，不能把某个 pass 的存在理解为每个程序都保证发生该优化。
 
-- 真值源：`src/vm/`、`include/xray_opcodes.h`。
-- 寄存器栈混合 VM。
-- IC（inline cache）加速属性访问与方法分派。
-- 字节码必须以确定性顺序序列化 extern 聚合布局及目标 ABI 指纹。加载器必须在执行前校验布局深度、递归环、字段范围、总大小、尾随数据和 ABI 一致性；任何损坏或目标不匹配都必须拒绝加载，不能回退到宿主机布局。
+### 17.5 Native AOT
 
-### 17.7 JIT 与 AOT
+`xray build --native file.xr` 经 `src/aot/` 的 prepare/verify/representation/container/link plan，把 Xi IR 生成 C，再调用 host、Clang 或 Zig C toolchain 编译链接。hosted native 仍链接 Xray runtime；`--profile freestanding` 使用受限的 freestanding capability 集。`--target`、`--toolchain`、`--cpu`、`--lto` 等选项以 `xray build --help` 为准。
 
-- **JIT**（运行时）：热函数被 profiler 选中后 → 编译为本地机器码。源码：`src/jit/`。
-- **AOT**（提前）：`xray build --aot` → 整个模块编译为 native binary。源码：`src/aot/`。
-- 共享 SSA IR；后端选择不同（解释 / JIT / AOT）。
+native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码由所选 C toolchain 产生。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -81,70 +51,40 @@ Bytecode  →  AOT (machine code)
 
 ## 17. Compilation Pipeline
 
-> Source of truth: `src/frontend/`, `src/vm/`, `src/jit/`, `src/aot/`, `docs/rules/architecture.md`.
+> Sources of truth: `src/frontend/`, `src/ir/`, `src/vm/`, `src/aot/`, `src/toolchain/`, `src/app/cli/xcmd_build.c`, and `src/app/cli/xcmd_compile.c`.
 
-### 17.1 Pipeline Overview
+### 17.1 Two Execution Paths
 
 ```
-Source (.xr)
-    ↓ lexer
-Token stream
-    ↓ parser
-AST
-    ↓ analyzer (semantic analysis, type checking, scope/capture/generic)
-Typed AST
-    ↓ ssa-gen
-SSA IR
-    ↓ optimize (const fold, DCE, inline, TCO, escape analysis)
-Optimized SSA
-    ↓ codegen
-Bytecode  →  AOT (machine code)
-    ↓ VM
-    ↓ Profiler → JIT (machine code)
-Execution
+source (.xr) -> lexer -> AST -> analyzer / canonical evidence
+                                  |-> bytecode compiler -> XrProto -> VM
+                                  `-> Xi IR -> optimization -> C source -> host/cross C toolchain -> native binary
 ```
 
-### 17.2 Lexical Analysis (Lexer)
+Xray currently has no JIT. `xray run` and default `xray build` use the bytecode/VM path; `xray build --native` selects AOT. Both paths share the parser, analyzer, module graph, and runtime semantics, but their output representations and backend optimizations differ.
 
-- Source of truth: `src/frontend/lexer/xlexer.c`.
-- Outputs an `XrToken` stream; each token carries `kind`, `value`, `pos(line, col)`.
-- Handles: string interpolation (producing `${...}` concatenation sequences), raw strings, regex literals.
+### 17.2 Frontend
 
-### 17.3 Syntax Analysis (Parser)
+- Lexer: `src/frontend/lexer/xlex.c` / `xlex.h`, with `xkeywords.def` as the keyword table; input must be valid UTF-8.
+- Parser: handwritten recursive-descent and precedence expression parsing in `src/frontend/parser/xparse*.c`, producing an `AstNode` module tree.
+- Analyzer: `src/frontend/analyzer/` performs name, type, generic, visibility, ownership, capture, and error-set checks.
+- Canonical evidence: `src/frontend/canonical/` plus the module/toolchain layer stabilize cross-module facts for backend consumers.
 
-- Source of truth: `src/frontend/parser/` (split by file: expr, stmt, decl, match).
-- Style: hand-written Pratt parser (expressions) + recursive descent (declarations / statements).
-- Error recovery: after an error, jumps to the next synchronization point (`;` `}` `)`) and tries to keep parsing.
-- Output: an `XrAstNode*` root (i.e., the module).
+### 17.3 Bytecode and VM
 
-### 17.4 Semantic Analysis (Analyzer)
+`src/frontend/codegen/xcompiler.c` compiles analyzed AST into an `XrProto`. The single opcode list is `src/runtime/value/xopcode_def.h`; the VM lives in `src/vm/`. Its register-oriented instruction set includes property/call fast paths and dedicated coroutine, error-channel, and tail-call operations.
 
-- Source of truth: `src/frontend/analyzer/xanalyzer_*.c` (split by topic).
-- **Scoping**: nested symbol tables, name resolution, shadowing checks.
-- **Type checking**: bidirectional type inference, union narrowing, Json structural matching.
-- **Generics**: build-time monomorphization, constraint checking, call-site rewriting; cross-module generics are expanded during whole-program / LTO analysis, so generic libraries must provide analyzable IR/AST.
-- **Closure analysis**: upvalue tagging, `go` closure capture restrictions.
-- **Error codes**: the `XR_ERR_ANALYZE_*` family.
+`xray compile file.xr` emits `.xrc` by default. `--format bytecode|c|header` selects serialized bytecode or a C source/header representation that embeds the bytecode. `--format c` here is **not** the native AOT C backend.
 
-### 17.5 SSA and Optimization
+Bytecode must serialize extern aggregate layouts and the target ABI fingerprint in deterministic order. Before execution, the loader must validate layout depth, recursion cycles, field bounds, total size, trailing data, and ABI compatibility; corrupt or target-mismatched input is rejected rather than falling back to host layout.
 
-- Source of truth: `src/ir/xi_opt*.c`, `src/ir/xi_pass.h`, `src/jit/`.
-- **Constant folding**: compile-time evaluation.
-- **DCE** (dead-code elimination): removes unused code.
-- **Inlining**: small-function inlining.
-- **TCO** (tail-call optimization): converts accumulator-style tail recursion into loops.
-- **Escape analysis**: stack-vs-heap allocation decisions.
+### 17.4 Xi IR and Optimization
 
-### 17.6 Bytecode and VM
+The native path lowers the program to Xi IR in `src/ir/`. `xi_pipeline.c` / `xi_pass.h` organize passes including SCCP, DCE/CFG simplification, inlining, devirtualization, tail-call rewriting, escape/ownership processing, loop transforms, GVN/PRE, bounds-check elimination, and vectorization. The enabled set depends on optimization level, target, and legality; the existence of a pass does not guarantee that every program is transformed by it.
 
-- Source of truth: `src/vm/`, `include/xray_opcodes.h`.
-- A hybrid register/stack VM.
-- IC (inline cache) accelerates property access and method dispatch.
-- Bytecode must serialize extern aggregate layouts and the target ABI fingerprint in deterministic order. Before execution, the loader must validate layout depth, recursion cycles, field bounds, total size, trailing data, and ABI compatibility; corrupt or target-mismatched input is rejected rather than falling back to host layout.
+### 17.5 Native AOT
 
-### 17.7 JIT and AOT
+`xray build --native file.xr` uses the prepare/verify/representation/container/link plans in `src/aot/`, generates C from Xi IR, and invokes a host, Clang, or Zig C toolchain. Hosted native binaries still link the Xray runtime; `--profile freestanding` uses a restricted freestanding capability set. Consult `xray build --help` for current `--target`, `--toolchain`, `--cpu`, `--lto`, and related options.
 
-- **JIT** (runtime): once a hot function is selected by the profiler → it is compiled into native machine code. Source: `src/jit/`.
-- **AOT** (ahead-of-time): `xray build --aot` → the entire module is compiled into a native binary. Source: `src/aot/`.
-- They share the same SSA IR; only the back-end differs (interpret / JIT / AOT).
+Native AOT does not emit machine code directly from SSA and is not a JIT; the selected C toolchain produces the final machine code.
 <!-- /xr-spec:en -->
