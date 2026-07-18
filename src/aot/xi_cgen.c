@@ -2036,6 +2036,8 @@ static void emit_vref(FILE *out, const XiValue *v) {
 static void emit_codegen_abort_expr(FILE *out);
 static bool emit_struct_aggregate_box_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XiValue *value, const char *prefix);
+static bool emit_struct_aggregate_box_c_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                             const char *value_expr, const char *prefix);
 static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix);
 static bool emit_thread_spawn_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -8639,23 +8641,35 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
             fprintf(out, ") {\n");
             bool ret_is_aggregate = cg_func_return_abi_is_aggregate(ctx, f);
             XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
+            bool ret_is_struct_aggregate =
+                ret_is_aggregate && cg_func_return_abi_is_struct_aggregate(ctx, f);
+            if (ret_is_struct_aggregate) {
+                fprintf(out, "    %s _ret = ", cg_func_return_abi_c_type(ctx, f));
+                emit_fname(ctx, out, prefix, f);
+                fprintf(out, "(_cl");
+                for (uint16_t i = 0; i < boxed_total; i++) {
+                    fprintf(out, ", ");
+                    char param_expr[32];
+                    snprintf(param_expr, sizeof(param_expr), "p%u", i);
+                    emit_boxed_value_as_func_param_abi(ctx, out, f, i, param_expr);
+                }
+                fprintf(out, ");\n    return ");
+                if (!emit_struct_aggregate_box_c_expr(ctx, out, f, "_ret", prefix)) {
+                    fprintf(stderr, "[xi_cgen] ERROR: cannot box struct aggregate return '%s'\n",
+                            f->name ? f->name : "?");
+                    ctx->error = true;
+                    fprintf(out, "XR_NULL_VAL");
+                }
+                fprintf(out, ";\n}\n\n");
+                goto boxed_adapter_done;
+            }
             if (ret_rep == XR_REP_VOID) {
                 fprintf(out, "    ");
             } else {
                 fprintf(out, "    return ");
             }
             const char *conv_suffix = NULL;
-            if (ret_is_aggregate && cg_func_return_abi_is_struct_aggregate(ctx, f)) {
-                fprintf(stderr,
-                        "[xi_cgen] ERROR: boxed adapter for struct aggregate return '%s' needs "
-                        "the planned value-struct boxing bridge\n",
-                        f->name ? f->name : "?");
-                ctx->error = true;
-                fprintf(out, "XR_NULL_VAL /* unsupported struct aggregate adapter */");
-                fprintf(out, ";\n");
-                fprintf(out, "}\n\n");
-                return;
-            } else if (ret_is_aggregate) {
+            if (ret_is_aggregate) {
                 fprintf(out, "xrt_enum_aggregate_box(");
                 XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
                 if (cg_value_rep_is_typed_adt_aggregate(ret_value_rep))
@@ -8685,6 +8699,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
         }
     }
 
+boxed_adapter_done:
     if (cg_func_needs_sync_go_wrapper_ctx(ctx, f)) {
         ctx->stats.sync_go_wrappers++;
         emit_sync_go_wrapper(ctx, out, f, prefix);

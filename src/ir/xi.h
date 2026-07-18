@@ -1237,6 +1237,7 @@ typedef struct XiFunc {
     /* Re-export table populated during lowering and emitted by emit_reexports. */
     XiReexportEntry *reexports; /* arena-allocated array */
     uint16_t reexport_count;
+    uint16_t reexport_capacity;
 
     /* IR stage, monotonically non-decreasing across pipeline passes. */
     XiStage stage;
