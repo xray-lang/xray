@@ -16,6 +16,8 @@
 #include "xi_lower.h"
 #include "xi.h"
 #include "../base/xdefs.h"
+#include "../base/xtarget_data_layout.h"
+#include "../toolchain/xcompiler_session.h"
 
 #include <string.h>
 
@@ -23,6 +25,15 @@ struct AstNode;
 struct XrType;
 typedef struct MethodDeclNode MethodDeclNode;
 typedef struct ClassDeclNode ClassDeclNode;
+
+static inline const XrTargetDataLayout *xi_lower_target_data_layout(const XiLower *l) {
+    XrCompilerSession *session = l ? xr_compiler_session_current_for_isolate(l->isolate) : NULL;
+    const XrTargetDataLayout *layout =
+        session ? xr_compiler_session_target_data_layout(session) : NULL;
+    /* Standalone Xi unit tests have no compiler session and model the VM
+     * backend, whose target is explicitly the host ABI. */
+    return layout ? layout : xr_target_data_layout_host();
+}
 
 /* Copy a string into the XiFunc arena so it survives AST destruction. */
 static inline const char *arena_strdup(XiFunc *f, const char *s) {

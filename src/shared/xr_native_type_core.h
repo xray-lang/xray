@@ -11,6 +11,7 @@
 #ifndef XR_NATIVE_TYPE_CORE_H
 #define XR_NATIVE_TYPE_CORE_H
 
+#include "../base/xtarget_data_layout.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -39,57 +40,94 @@ typedef enum {
     XR_NATIVE_POINTER = 20,           // raw C pointer (void *, target pointer width)
 } XrNativeType;
 
-static inline uint8_t xr_native_type_size(uint8_t native_type) {
+static inline uint8_t xr_native_type_size(const XrTargetDataLayout *layout, uint8_t native_type) {
+    if (!layout)
+        return 0;
     switch (native_type) {
         case XR_NATIVE_I64:
+            return (uint8_t) layout->i64.size;
         case XR_NATIVE_U64:
+            return (uint8_t) layout->u64.size;
         case XR_NATIVE_F64:
+            return (uint8_t) layout->f64.size;
         case XR_NATIVE_STRING:
-            return 8;
-        case XR_NATIVE_ISIZE:
-            return (uint8_t) sizeof(ptrdiff_t);
-        case XR_NATIVE_USIZE:
-            return (uint8_t) sizeof(size_t);
         case XR_NATIVE_POINTER:
-            return (uint8_t) sizeof(void *);
+            return (uint8_t) layout->pointer.size;
+        case XR_NATIVE_ISIZE:
+            return (uint8_t) layout->isize.size;
+        case XR_NATIVE_USIZE:
+            return (uint8_t) layout->usize.size;
         case XR_NATIVE_ARRAY_REF:
         case XR_NATIVE_MAP_REF:
         case XR_NATIVE_SET_REF:
         case XR_NATIVE_VALUE:
-            return 16;
+            return (uint8_t) layout->xr_value.size;
         case XR_NATIVE_I32:
+            return (uint8_t) layout->i32.size;
         case XR_NATIVE_U32:
+            return (uint8_t) layout->u32.size;
         case XR_NATIVE_F32:
-            return 4;
+            return (uint8_t) layout->f32.size;
         case XR_NATIVE_I16:
+            return (uint8_t) layout->i16.size;
         case XR_NATIVE_U16:
-            return 2;
+            return (uint8_t) layout->u16.size;
         case XR_NATIVE_I8:
+            return (uint8_t) layout->i8.size;
         case XR_NATIVE_U8:
+            return (uint8_t) layout->u8.size;
         case XR_NATIVE_BOOL:
-            return 1;
+            return (uint8_t) layout->boolean.size;
+        case XR_NATIVE_NESTED_AGGREGATE:
         case XR_NATIVE_ARRAY:
             return 0;
         default:
-            return 8;
+            return 0;
     }
 }
 
-static inline uint8_t xr_native_type_align(uint8_t native_type) {
+static inline uint8_t xr_native_type_align(const XrTargetDataLayout *layout, uint8_t native_type) {
+    if (!layout)
+        return 0;
     switch (native_type) {
         case XR_NATIVE_ARRAY_REF:
         case XR_NATIVE_MAP_REF:
         case XR_NATIVE_SET_REF:
         case XR_NATIVE_VALUE:
-            return 8;
-        case XR_NATIVE_ISIZE:
-            return (uint8_t) _Alignof(ptrdiff_t);
-        case XR_NATIVE_USIZE:
-            return (uint8_t) _Alignof(size_t);
+            return (uint8_t) layout->xr_value.align;
+        case XR_NATIVE_I64:
+            return (uint8_t) layout->i64.align;
+        case XR_NATIVE_U64:
+            return (uint8_t) layout->u64.align;
+        case XR_NATIVE_F64:
+            return (uint8_t) layout->f64.align;
+        case XR_NATIVE_STRING:
         case XR_NATIVE_POINTER:
-            return (uint8_t) _Alignof(void *);
+            return (uint8_t) layout->pointer.align;
+        case XR_NATIVE_ISIZE:
+            return (uint8_t) layout->isize.align;
+        case XR_NATIVE_USIZE:
+            return (uint8_t) layout->usize.align;
+        case XR_NATIVE_I32:
+            return (uint8_t) layout->i32.align;
+        case XR_NATIVE_U32:
+            return (uint8_t) layout->u32.align;
+        case XR_NATIVE_F32:
+            return (uint8_t) layout->f32.align;
+        case XR_NATIVE_I16:
+            return (uint8_t) layout->i16.align;
+        case XR_NATIVE_U16:
+            return (uint8_t) layout->u16.align;
+        case XR_NATIVE_I8:
+            return (uint8_t) layout->i8.align;
+        case XR_NATIVE_U8:
+            return (uint8_t) layout->u8.align;
+        case XR_NATIVE_BOOL:
+            return (uint8_t) layout->boolean.align;
+        case XR_NATIVE_NESTED_AGGREGATE:
+        case XR_NATIVE_ARRAY:
         default:
-            return xr_native_type_size(native_type);
+            return 0;
     }
 }
 

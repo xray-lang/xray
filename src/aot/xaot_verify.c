@@ -5825,7 +5825,7 @@ static bool verify_class_field_native_width(uint8_t semantic_kind, uint8_t nativ
 }
 
 static bool verify_class_field_rows(const XgGlobalEvidence *ev,
-                                    const XaotTargetDataLayout *target_layout, char *errbuf,
+                                    const XrTargetDataLayout *target_layout, char *errbuf,
                                     size_t errbuf_len) {
     const uint32_t allowed_flags = XG_CLASS_FIELD_STATIC | XG_CLASS_FIELD_CONST |
                                    XG_CLASS_FIELD_PRIVATE | XG_CLASS_FIELD_PROTECTED |
@@ -6137,7 +6137,7 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         return false;
     if (!verify_interface_object_use_rows(ev, errbuf, errbuf_len))
         return false;
-    if (!xaot_target_data_layout_validate(&bundle->target_data_layout))
+    if (!xr_target_data_layout_validate(&bundle->target_data_layout))
         return set_error(errbuf, errbuf_len, "AOT target data layout is invalid");
     if (!verify_class_field_rows(ev, &bundle->target_data_layout, errbuf, errbuf_len))
         return false;

@@ -10163,7 +10163,7 @@ static bool cg_ffi_code_is_ptr(uint8_t code) {
 static uint8_t cg_ffi_code_width(XiCgenCtx *ctx, uint8_t code) {
     const XrAbiScalarDesc *desc = cg_ffi_scalar_desc(code);
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
-    if (!desc || !bundle || !xaot_target_data_layout_validate(&bundle->target_data_layout)) {
+    if (!desc || !bundle || !xr_target_data_layout_validate(&bundle->target_data_layout)) {
         cg_ctx_set_error(ctx);
         return 0;
     }

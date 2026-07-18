@@ -371,9 +371,13 @@ XR_FUNC bool xaot_target_init_ex(XaotTarget *target, const char *name, const cha
     target->triple = xr_strdup(triple ? triple : (name ? name : "native"));
     target->pointer_bits = pointer_bits;
     target->endian = xr_strdup(endian ? endian : "unknown");
-    if (!((pointer_bits == 32 && xaot_target_data_layout_init_ilp32(&target->data_layout)) ||
-          (pointer_bits == 64 && xaot_target_data_layout_init_lp64(&target->data_layout)) ||
-          (pointer_bits == 0 && xaot_target_data_layout_init_native(&target->data_layout)))) {
+    XrTargetEndian target_endian =
+        endian && strcmp(endian, "big") == 0 ? XR_TARGET_ENDIAN_BIG : XR_TARGET_ENDIAN_LITTLE;
+    if (!((pointer_bits == 32 &&
+           xr_target_data_layout_init(&target->data_layout, 4, target_endian)) ||
+          (pointer_bits == 64 &&
+           xr_target_data_layout_init(&target->data_layout, 8, target_endian)) ||
+          (pointer_bits == 0 && xr_target_data_layout_init_native(&target->data_layout)))) {
         xaot_target_free(target);
         return false;
     }
@@ -403,7 +407,7 @@ static bool xaot_target_copy_init(XaotTarget *out, const XaotTarget *target) {
     bool ok;
     if (!target)
         return xaot_target_init(out, NULL);
-    if (!xaot_target_data_layout_validate(&target->data_layout))
+    if (!xr_target_data_layout_validate(&target->data_layout))
         return false;
     ok = xaot_target_init_ex(out, target->name, target->arch, target->os, target->abi,
                              target->object_format, target->triple, target->pointer_bits,

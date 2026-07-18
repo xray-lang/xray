@@ -790,7 +790,7 @@ static XrValue xr_deep_copy_array_ref_with_ctx(XrCopyContext *ctx, XrValue value
 
     uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(value);
     uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(value);
-    uint8_t elem_size = xr_native_type_size(elem_type);
+    uint8_t elem_size = xr_native_type_size(xr_target_data_layout_host(), elem_type);
     if (elem_size == 0 || elem_count == 0)
         return value;
     size_t byte_count = (size_t) elem_size * (size_t) elem_count;

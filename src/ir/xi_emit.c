@@ -28,6 +28,7 @@
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/symbol/xsymbol_table.h"
+#include "../toolchain/xcompiler_session.h"
 
 #include <math.h>
 
@@ -522,11 +523,13 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 }
 
 static void xi_emit_target_sizeof(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_i64_const_reg(ctx, dst, (int64_t) xr_native_type_size((uint8_t) v->aux_int));
+    emit_i64_const_reg(
+        ctx, dst, (int64_t) xr_native_type_size(ctx->target_data_layout, (uint8_t) v->aux_int));
 }
 
 static void xi_emit_target_alignof(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_i64_const_reg(ctx, dst, (int64_t) xr_native_type_align((uint8_t) v->aux_int));
+    emit_i64_const_reg(
+        ctx, dst, (int64_t) xr_native_type_align(ctx->target_data_layout, (uint8_t) v->aux_int));
 }
 
 static void emit_param(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
@@ -839,6 +842,14 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     memset(&ctx, 0, sizeof(ctx));
     ctx.func = f;
     ctx.isolate = isolate;
+    XrCompilerSession *compiler_session = xr_compiler_session_current_for_isolate(isolate);
+    ctx.target_data_layout = compiler_session
+                                 ? xr_compiler_session_target_data_layout(compiler_session)
+                                 : xr_target_data_layout_host();
+    if (!ctx.target_data_layout) {
+        xr_free(rpo_order);
+        return XI_EMIT_ERR_INTERNAL;
+    }
     ctx.proto = xr_vm_proto_new();
     if (!ctx.proto) {
         xr_free(rpo_order);

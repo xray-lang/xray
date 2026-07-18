@@ -237,7 +237,8 @@ vmcase(OP_FIXED_ARRAY_NEW) {
               "OP_FIXED_ARRAY_NEW requires allocated struct_area");
 
     uint8_t *array_ptr = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + (uint16_t) b * 16u;
-    uint32_t bytes = (uint32_t) elem_count * (uint32_t) xr_native_type_size(elem_native_type);
+    uint32_t bytes = (uint32_t) elem_count *
+                     (uint32_t) xr_native_type_size(xr_target_data_layout_host(), elem_native_type);
     memset(array_ptr, 0, bytes);
     R(a) = xr_array_ref(array_ptr, elem_native_type, elem_count);
     vmbreak;

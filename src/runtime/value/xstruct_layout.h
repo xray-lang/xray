@@ -75,6 +75,7 @@ typedef struct XrAggregateLayout {
     uint8_t kind;              // XrAggregateLayoutKind
     bool is_extern_layout;     // layout is a native C interop contract
     uint32_t explicit_align;   // align(N), 0 = natural
+    uint64_t target_abi_hash;  // XrTargetDataLayout identity used to compute this descriptor
     const char **field_names;  // [field_count] parallel to fields[], NULL-able
     XrAggregateFieldLayout fields[XR_MAX_AGG_FIELDS];
 } XrAggregateLayout;
@@ -100,7 +101,11 @@ static inline uint32_t xr_aggregate_layout_storage_size(const XrAggregateLayout 
  * Caller must have set fields[i].native_type and fields[i].size for
  * nested structs before calling. For non-STRUCT fields, size is
  * auto-computed from native_type. */
-XR_FUNC void xr_aggregate_layout_compute(XrAggregateLayout *layout);
+XR_FUNC bool xr_aggregate_layout_compute(XrAggregateLayout *layout,
+                                         const XrTargetDataLayout *target_layout);
+/* Stable semantic identity for cache keys, AOT names and bytecode layout
+ * tables.  It contains no pointer identity or process-local layout_id. */
+XR_FUNC uint64_t xr_aggregate_layout_stable_key(const XrAggregateLayout *layout);
 
 /*
  * Static layout query for C-porting surfaces.
@@ -111,8 +116,10 @@ XR_FUNC void xr_aggregate_layout_compute(XrAggregateLayout *layout);
  * intentionally rejected for C ABI contracts even when they have a known
  * storage lane inside Xray aggregates.
  */
-XR_FUNC bool xr_type_has_static_layout(const XrType *type, uint32_t *out_size, uint32_t *out_align);
-XR_FUNC bool xr_type_has_static_field_offset(const XrType *type, const char *field_name,
+XR_FUNC bool xr_type_has_static_layout(const XrTargetDataLayout *target_layout, const XrType *type,
+                                       uint32_t *out_size, uint32_t *out_align);
+XR_FUNC bool xr_type_has_static_field_offset(const XrTargetDataLayout *target_layout,
+                                             const XrType *type, const char *field_name,
                                              uint32_t *out_offset);
 
 /*

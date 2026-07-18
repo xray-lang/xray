@@ -29,6 +29,7 @@ struct XrCompilerSession {
     const char *source_file;
     bool repl_mode;
     bool emit_aot;
+    XrTargetDataLayout target_data_layout;
 
     struct XrArena *current_arena;
     struct XrCompileStringPool *compile_string_pool;
@@ -50,12 +51,21 @@ XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
     XrCompilerSession *session = (XrCompilerSession *) xr_calloc(1, sizeof(XrCompilerSession));
     if (!session)
         return NULL;
+    if (!xr_target_data_layout_init_native(&session->target_data_layout)) {
+        xr_free(session);
+        return NULL;
+    }
     if (cfg) {
         session->vm_host = cfg->vm_host;
         session->project_root = cfg->project_root;
         session->source_file = cfg->source_file;
         session->repl_mode = cfg->repl_mode;
         session->emit_aot = cfg->emit_aot;
+        if (cfg->target_data_layout &&
+            !xr_compiler_session_set_target_data_layout(session, cfg->target_data_layout)) {
+            xr_free(session);
+            return NULL;
+        }
     }
     return session;
 }
@@ -90,6 +100,20 @@ void xr_compiler_session_delete(XrCompilerSession *session) {
 
 XrVMRuntime *xr_compiler_session_vm_host(const XrCompilerSession *session) {
     return session ? session->vm_host : NULL;
+}
+
+const XrTargetDataLayout *xr_compiler_session_target_data_layout(const XrCompilerSession *session) {
+    return session && xr_target_data_layout_validate(&session->target_data_layout)
+               ? &session->target_data_layout
+               : NULL;
+}
+
+bool xr_compiler_session_set_target_data_layout(XrCompilerSession *session,
+                                                const XrTargetDataLayout *layout) {
+    if (!session || !xr_target_data_layout_validate(layout))
+        return false;
+    session->target_data_layout = *layout;
+    return true;
 }
 
 XrCompilerSession *xr_compiler_session_current_for_isolate(XrVMRuntime *isolate) {

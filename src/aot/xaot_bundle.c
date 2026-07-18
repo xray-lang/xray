@@ -433,7 +433,7 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
     if (!bundle || !modules || nmodules == 0 || entry_module >= nmodules)
         return false;
     memset(bundle, 0, sizeof(*bundle));
-    if (!xaot_target_data_layout_init_native(&bundle->target_data_layout))
+    if (!xr_target_data_layout_init_native(&bundle->target_data_layout))
         return false;
     bundle->modules = modules;
     bundle->nmodules = nmodules;
@@ -4241,8 +4241,8 @@ XR_FUNC bool xaot_bundle_set_global_evidence(XaotBundle *bundle, const XgGlobalE
     const char *error_msg;
     if (!bundle || !evidence)
         return false;
-    if (!xaot_target_data_layout_validate(&bundle->target_data_layout) &&
-        !xaot_target_data_layout_init_native(&bundle->target_data_layout))
+    if (!xr_target_data_layout_validate(&bundle->target_data_layout) &&
+        !xr_target_data_layout_init_native(&bundle->target_data_layout))
         return false;
     xaot_bundle_clear_global_lowered_plans(bundle);
     bundle->error_msg = NULL;
@@ -4260,8 +4260,8 @@ XR_FUNC bool xaot_bundle_set_global_evidence(XaotBundle *bundle, const XgGlobalE
 }
 
 XR_FUNC bool xaot_bundle_set_target_data_layout(XaotBundle *bundle,
-                                                const XaotTargetDataLayout *target_layout) {
-    if (!bundle || !xaot_target_data_layout_validate(target_layout) ||
+                                                const XrTargetDataLayout *target_layout) {
+    if (!bundle || !xr_target_data_layout_validate(target_layout) ||
         bundle->global_evidence_plan.evidence)
         return false;
     bundle->target_data_layout = *target_layout;
@@ -7545,11 +7545,15 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
             ap->provenance.address_identity, xaot_pointer_origin_name(ap->provenance.origin),
             xaot_pointer_escape_name(ap->provenance.escape), ap->evidence);
     }
-    fprintf(out, "target-data-layout pointer=%u/%u isize=%u/%u usize=%u/%u xr_value=%u/%u\n",
+    fprintf(out,
+            "target-data-layout pointer=%u/%u isize=%u/%u usize=%u/%u xr_value=%u/%u "
+            "endian=%s abi=%08x hash=%016" PRIx64 "\n",
             bundle->target_data_layout.pointer.size, bundle->target_data_layout.pointer.align,
             bundle->target_data_layout.isize.size, bundle->target_data_layout.isize.align,
             bundle->target_data_layout.usize.size, bundle->target_data_layout.usize.align,
-            bundle->target_data_layout.xr_value.size, bundle->target_data_layout.xr_value.align);
+            bundle->target_data_layout.xr_value.size, bundle->target_data_layout.xr_value.align,
+            bundle->target_data_layout.endian == XR_TARGET_ENDIAN_LITTLE ? "little" : "big",
+            bundle->target_data_layout.abi_id, bundle->target_data_layout.stable_hash);
     if (bundle->global_evidence_plan.evidence) {
         const XgGlobalEvidence *ev = bundle->global_evidence_plan.evidence;
         fprintf(out,

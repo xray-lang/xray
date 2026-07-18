@@ -23,6 +23,7 @@
 #define XANALYZER_H
 
 #include "../../runtime/value/xtype.h"
+#include "../../base/xtarget_data_layout.h"
 #include "xanalyzer_symbol.h"
 #include "xa_parallel_call_plan.h"
 #include "../../runtime/value/xtype_pool.h"
@@ -36,6 +37,10 @@ typedef struct AstNode XrAstNode;
 typedef struct XrArena XrArena;
 typedef struct XrCompilerSession XrCompilerSession;
 typedef struct XrVMRuntime XrVMRuntime;
+
+/* The analyzer consumes the compiler session's target ABI.  Semantic layout
+ * queries must never infer ABI facts from the machine running the compiler. */
+XR_FUNC const XrTargetDataLayout *xa_analyzer_target_data_layout(const XaAnalyzer *analyzer);
 
 // Diagnostic severity (matches LSP XrLspDiagnosticSeverity values)
 typedef enum XrDiagSeverity {

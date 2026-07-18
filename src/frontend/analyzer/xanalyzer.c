@@ -31,6 +31,10 @@
 #include <string.h>
 #include <stdio.h>
 
+const XrTargetDataLayout *xa_analyzer_target_data_layout(const XaAnalyzer *analyzer) {
+    return analyzer ? xr_compiler_session_target_data_layout(analyzer->compiler_session) : NULL;
+}
+
 // Register a builtin function symbol in analyzer scope
 static void register_builtin_func(XaAnalyzer *analyzer, const char *name, XrType *type) {
     XR_DCHECK(analyzer != NULL, "register_builtin_func: NULL analyzer");

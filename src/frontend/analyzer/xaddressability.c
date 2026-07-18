@@ -363,9 +363,10 @@ static XrType *address_expr_type(XaInferContext *ctx, AstNode *expr) {
     return type ? type : xa_visit_infer_expr(ctx, expr);
 }
 
-static bool address_type_has_native_layout(XrType *type) {
+static bool address_type_has_native_layout(XaInferContext *ctx, XrType *type) {
     return xa_type_supports_const_static_data_object(type) ||
-           xr_type_has_static_layout(type, NULL, NULL);
+           xr_type_has_static_layout(xa_analyzer_target_data_layout(ctx->analyzer), type, NULL,
+                                     NULL);
 }
 
 static XaAddressability address_none(XaAddressRejectReason rejection) {
@@ -384,7 +385,7 @@ static XaAddressability classify_variable(XaInferContext *ctx, AstNode *expr, bo
     result.pointee_type = xa_analyzer_get_type(ctx->analyzer, symbol);
     if (!result.pointee_type)
         result.pointee_type = address_expr_type(ctx, expr);
-    result.native_layout_ok = address_type_has_native_layout(result.pointee_type);
+    result.native_layout_ok = address_type_has_native_layout(ctx, result.pointee_type);
     result.mutable_ok = !symbol->is_const && !symbol->is_readonly_binding;
     result.is_imported = symbol->is_imported;
     result.is_shared = symbol->is_shared;
@@ -426,14 +427,15 @@ static XaAddressability classify_member(XaInferContext *ctx, AstNode *expr, bool
     XaAddressability result = base;
     result.kind = XA_ADDRESS_FIELD;
     result.pointee_type = address_expr_type(ctx, expr);
-    result.native_layout_ok = address_type_has_native_layout(result.pointee_type);
+    result.native_layout_ok = address_type_has_native_layout(ctx, result.pointee_type);
     if (!result.native_layout_ok) {
         result.rejection = XA_ADDRESS_REJECT_NO_NATIVE_LAYOUT;
         return result;
     }
     XrType *base_type = address_expr_type(ctx, member->object);
     if (!base_type ||
-        !xr_type_has_static_field_offset(base_type, member->name, &result.field_offset)) {
+        !xr_type_has_static_field_offset(xa_analyzer_target_data_layout(ctx->analyzer), base_type,
+                                         member->name, &result.field_offset)) {
         result.rejection = XA_ADDRESS_REJECT_STORAGE_MAY_MOVE;
         return result;
     }
@@ -454,7 +456,7 @@ static XaAddressability classify_index(XaInferContext *ctx, AstNode *expr, bool 
     XaAddressability result = base;
     XrType *owner_type = address_expr_type(ctx, index->array);
     result.pointee_type = address_expr_type(ctx, expr);
-    result.native_layout_ok = address_type_has_native_layout(result.pointee_type);
+    result.native_layout_ok = address_type_has_native_layout(ctx, result.pointee_type);
     if (owner_type && owner_type->kind == XR_KIND_FIXED_ARRAY) {
         result.kind = XA_ADDRESS_FIXED_ARRAY_ELEMENT;
         if (!result.native_layout_ok)

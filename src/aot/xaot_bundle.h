@@ -1607,7 +1607,7 @@ typedef struct XaotBundle {
     XaotAddressPlan *address_plans;
     uint32_t naddress_plans;
     uint32_t address_plan_cap;
-    XaotTargetDataLayout target_data_layout;
+    XrTargetDataLayout target_data_layout;
     XaotFuncPlan *func_plans;
     uint32_t nfunc_plans;
     uint32_t func_plan_cap;
@@ -1775,7 +1775,7 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
                               uint32_t entry_module);
 XR_FUNC void xaot_bundle_free(XaotBundle *bundle);
 XR_FUNC bool xaot_bundle_set_target_data_layout(XaotBundle *bundle,
-                                                const XaotTargetDataLayout *target_layout);
+                                                const XrTargetDataLayout *target_layout);
 XR_FUNC bool xaot_bundle_set_capability_provider(XaotBundle *bundle,
                                                  const XaotTargetCapabilityProvider *provider);
 XR_FUNC bool xaot_bundle_set_global_evidence(XaotBundle *bundle, const XgGlobalEvidence *evidence,

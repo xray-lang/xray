@@ -136,7 +136,7 @@ static bool xr_vm_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst
 
 static bool xr_vm_struct_write_array_bytes(uint8_t *fp, const XrAggregateFieldLayout *field,
                                            XrValue src) {
-    uint8_t es = xr_native_type_size(field->elem_native_type);
+    uint8_t es = xr_native_type_size(xr_target_data_layout_host(), field->elem_native_type);
     if (XR_IS_ARRAY(src)) {
         XrArray *arr = (XrArray *) src.ptr;
         int count = arr->length < field->elem_count ? arr->length : field->elem_count;
