@@ -638,8 +638,8 @@ Xray's C FFI uses explicit boundary types so ordinary xray objects are not impli
 
 | Type | C ABI meaning | Notes |
 |--|--|--|
-| `uintsize` | `size_t` | `uint64` on the currently supported targets |
-| `intsize` | `ptrdiff_t` / platform signed width | `int64` on the currently supported targets |
+| `uintsize` | `size_t` | width comes from the compilation target; it must not be substituted with the host's `uint64` |
+| `intsize` | `ptrdiff_t` / platform signed width | width comes from the compilation target; it must not be substituted with the host's `int64` |
 | `Ptr<T>` | `const void *` boundary value | read-only raw pointer; `T` gives the xray-side dereference/index width |
 | `MutPtr<T>` | `void *` boundary value | mutable raw pointer; assignable where `Ptr<T>` is expected |
 | `CFn<(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `extern "C"` function |
@@ -661,6 +661,8 @@ unsafe {
 ```
 
 `Ptr<T>` is read-only; writes require `MutPtr<T>`. `unsafe` does not bypass that type rule. Raw pointer access performs no null or bounds checks, so the caller must guarantee address validity, lifetime, alignment, and aliasing correctness.
+
+`uintsize` / `intsize` use one target-ABI scalar descriptor across FFI calls, `mem.load/store<T>`, extern-layout fields, and generated C. The VM, AOT backend, and layout introspection must use the compilation target's width and alignment; cross-compilation never derives language semantics from the build host's `sizeof(size_t)`.
 
 `CFn<(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and extern functions themselves cannot be used as `CFn` callback arguments.
 
@@ -2195,6 +2197,14 @@ print(mem.alignOf<CHeader>())
 print(mem.offsetOf<CHeader>("next"))
 ```
 
+Inside `unsafe`, an external address can be projected with `mem.view<T>(ptr)` as a typed C-layout view. The projection allocates and copies nothing and does not create an xray object; field reads and writes directly access foreign storage while preserving the readonly/mutable distinction of `Ptr` and `MutPtr`:
+
+```xray
+var header = unsafe { mem.view<CHeader>(rawHeader) }
+print(header.count)
+unsafe { header.count = 4 }
+```
+
 Rules:
 - The ABI string is mandatory; `"C"` is currently the only supported value.
 - `dylib("name-or-path")` selects a dynamic library, while `link("name")` selects an AOT system link name. Both feed the same typed FFI descriptor; without either, resolution uses the default process/system lookup path.
@@ -2203,6 +2213,8 @@ Rules:
 - Extern layouts cannot have generics, interfaces, methods, field modifiers, or field initializers. Any aggregate nested by value must itself be declared as an extern layout.
 - `flex T` is a real C flexible array member. It may appear only as the last field of an extern struct and requires at least one preceding fixed field; extern unions and ordinary xray structs reject `flex`. `sizeOf` returns the header size padded to the struct alignment, while `offsetOf` can query the flexible tail's starting offset. The tail carries no implicit length.
 - An extern layout cannot be constructed as an xray value with `T(...)` or a struct literal; it only describes native storage owned outside xray. `mem.sizeOf<T>()`, `mem.alignOf<T>()`, and `mem.offsetOf<T>(field)` consume the native layout table.
+- Each compilation target has one canonical target data layout. The analyzer, VM, AOT backend, `mem.view`, and layout introspection share the same size/alignment/field-offset results; nested, packed, union, fixed-array, and flexible-tail layouts are never re-derived by individual backends.
+- Extern layouts are serialized deterministically with bytecode and bound to a target-ABI fingerprint. The loader rejects ABI mismatches and truncated, out-of-range, cyclic, or trailing-garbage layout payloads; it never falls back to host layout.
 - Boundary types that are aligned across the VM/AOT backends include `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
 - C callback parameters must use `CFn<(A, B) -> R>`, not the ordinary xray function type `(A, B) -> R`.
 - A current `CFn` argument must be a module-level, noncapturing xray function with an exact signature match; anonymous functions, capturing closures, and extern functions themselves are rejected.
@@ -5145,6 +5157,7 @@ Execution
 - Source of truth: `src/vm/`, `include/xray_opcodes.h`.
 - A hybrid register/stack VM.
 - IC (inline cache) accelerates property access and method dispatch.
+- Bytecode must serialize extern aggregate layouts and the target ABI fingerprint in deterministic order. Before execution, the loader must validate layout depth, recursion cycles, field bounds, total size, trailing data, and ABI compatibility; corrupt or target-mismatched input is rejected rather than falling back to host layout.
 
 ### 17.7 JIT and AOT
 

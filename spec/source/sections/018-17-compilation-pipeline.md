@@ -67,6 +67,7 @@ Bytecode  →  AOT (machine code)
 - 真值源：`src/vm/`、`include/xray_opcodes.h`。
 - 寄存器栈混合 VM。
 - IC（inline cache）加速属性访问与方法分派。
+- 字节码必须以确定性顺序序列化 extern 聚合布局及目标 ABI 指纹。加载器必须在执行前校验布局深度、递归环、字段范围、总大小、尾随数据和 ABI 一致性；任何损坏或目标不匹配都必须拒绝加载，不能回退到宿主机布局。
 
 ### 17.7 JIT 与 AOT
 
@@ -139,6 +140,7 @@ Execution
 - Source of truth: `src/vm/`, `include/xray_opcodes.h`.
 - A hybrid register/stack VM.
 - IC (inline cache) accelerates property access and method dispatch.
+- Bytecode must serialize extern aggregate layouts and the target ABI fingerprint in deterministic order. Before execution, the loader must validate layout depth, recursion cycles, field bounds, total size, trailing data, and ABI compatibility; corrupt or target-mismatched input is rejected rather than falling back to host layout.
 
 ### 17.7 JIT and AOT
 
