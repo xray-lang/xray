@@ -610,6 +610,7 @@ file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
     "stdlib/runtime/*.c"
     "stdlib/sync/*.c"
     "stdlib/parallel/*.c"
+    "stdlib/simd/*.c"
     "stdlib/sys/*.c"
     "stdlib/regex/*.c"
     "stdlib/path/*.c"

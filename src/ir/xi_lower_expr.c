@@ -4168,8 +4168,20 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
 static bool lower_method_receiver_mode(XiLower *l, const XaSelection *selection, XiValue *receiver,
                                        XrParamMode *out_mode) {
     if (!l || !selection || !selection->target_symbol || !receiver || !out_mode ||
-        selection->target_symbol->kind != XA_SYM_METHOD || selection->target_symbol->is_static ||
-        !xi_lower_type_needs_value_clone(l, receiver->type))
+        selection->target_symbol->kind != XA_SYM_METHOD || selection->target_symbol->is_static)
+        return false;
+    /* Selective imports from an embedded stdlib module can carry a nominal
+     * receiver view whose value-type bit is not the same allocation as the
+     * declaration-owned type.  The selected method's owner is the canonical
+     * declaration identity, so its fixed aggregate layout is the authoritative
+     * proof that the receiver uses the call-bound-place ABI. */
+    bool value_receiver = xi_lower_type_needs_value_clone(l, receiver->type);
+    XaSymbol *owner = selection->target_symbol->parent;
+    XaSymbolLinks *owner_links = owner ? xa_analyzer_get_links(l->analyzer, owner) : NULL;
+    if (owner_links && ((owner_links->type && owner_links->type->is_value_type) ||
+                        (owner_links->class_info && owner_links->class_info->struct_layout)))
+        value_receiver = true;
+    if (!value_receiver)
         return false;
     *out_mode = selection->target_symbol->mutates_receiver ? XR_PARAM_REF : XR_PARAM_IN;
     return true;

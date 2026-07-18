@@ -1,0 +1,42 @@
+import { U8x16, U32x4, U64x2 } from simd
+
+fn run() {
+    var bytes = Array<byte>(32)
+    for (i in 0..32) {
+        bytes[i] = (i * 17 + 3) & 255
+    }
+    var byteView: Slice<byte> = bytes[:]
+    var b = U8x16.load(byteView, 3)
+    assert_eq(b.extract(0), bytes[3])
+    assert_eq(b.extract(15), bytes[18])
+    assert_eq(b.bitXor(U8x16.splat(255)).extract(4), (~bytes[7]) as byte)
+    var words = Array<uint32>([1, 2, 3, 4, 5, 6])
+    var wordView: Slice<uint32> = words[:]
+    var a32 = U32x4.load(wordView, 1)
+    var b32 = U32x4.splat(7)
+    assert_eq(a32.add(b32).extract(0), 9)
+    assert_eq(a32.mul(b32).extract(3), 35)
+    assert_eq(a32.shiftLeft(3).shiftRight(3).extract(2), 4)
+    assert_eq(a32.shuffle(3, 2, 1, 0).extract(0), 5)
+    var wide = a32.widenMulEven(b32)
+    assert_eq(wide.extract(0), 14)
+    assert_eq(wide.extract(1), 28)
+    assert_eq(a32.widenMulOdd(b32).reduceAdd(), 56)
+    var lanes64: [uint64; 2] = [18446744073709551615, 9]
+    var a64 = U64x2.fromLanes(lanes64)
+    assert_eq(a64.add(U64x2.splat(1)).extract(0), 0)
+    assert_eq(a64.swapLanes().extract(0), 9)
+    assert_eq(a64.replace(1, 21).extract(1), 21)
+    assert_eq(a64.reinterpretU32().extract(0), 4294967295)
+    var roundTrip = b.reinterpretU32().reinterpretU8()
+    for (i in 0..16) {
+        assert_eq(roundTrip.extract(i), b.extract(i))
+    }
+    var out = Array<uint64>(4)
+    a64.store(out, 1)
+    assert_eq(out[1], lanes64[0])
+    assert_eq(out[2], lanes64[1])
+    print("OK simd portable integer vectors")
+}
+
+run()
