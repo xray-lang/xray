@@ -189,6 +189,7 @@ static void emit_struct_native_typedef(FILE *out, const XrAggregateLayout *sl, c
     char tname[128];
     cg_struct_heap_type_name(tname, sizeof(tname), prefix, sl);
     bool is_union = sl && sl->kind == XR_AGG_LAYOUT_UNION;
+    fprintf(out, "#ifndef XRT_TYPEDEF_%s\n#define XRT_TYPEDEF_%s 1\n", tname, tname);
     fprintf(out, "typedef %s", is_union ? "union" : "struct");
     emit_aggregate_layout_c_attributes(out, sl);
     fprintf(out, " %s { ", tname);
@@ -200,7 +201,7 @@ static void emit_struct_native_typedef(FILE *out, const XrAggregateLayout *sl, c
         emit_struct_field_decl(out, sl, i, fname, prefix);
         fprintf(out, "; ");
     }
-    fprintf(out, "} %s;\n", tname);
+    fprintf(out, "} %s;\n#endif\n", tname);
 }
 
 static void emit_aggregate_layout_c_attributes(FILE *out, const XrAggregateLayout *sl) {

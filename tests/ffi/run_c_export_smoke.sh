@@ -84,6 +84,14 @@ SHARED_LINK_LOG="$WORK/shared_link.log"
 SHARED_RUN_LOG="$WORK/shared_run.log"
 MAIN_SRC="$WORK/c_export_main.xr"
 MAIN_LIB_LOG="$WORK/c_export_main_shared.log"
+AMALGAM_HELPER="$WORK/c_export_amalgam_helper.xr"
+AMALGAM_SRC="$WORK/c_export_amalgam.xr"
+AMALGAM_C="$WORK/c_export_amalgam.c"
+AMALGAM_OBJ="$WORK/c_export_amalgam.o"
+AMALGAM_LOG="$WORK/c_export_amalgam.log"
+AMALGAM_CROSS_C="$WORK/c_export_amalgam_x86_64.c"
+AMALGAM_CROSS_OBJ="$WORK/c_export_amalgam_x86_64.o"
+AMALGAM_CROSS_LOG="$WORK/c_export_amalgam_x86_64.log"
 case "$(uname -s)" in
     Darwin)
         GEN_LIB="$WORK/libxray_c_export.dylib"
@@ -605,6 +613,53 @@ if "$XRAY" build --native --shared -o "$MAIN_LIB" "$MAIN_SRC" >"$MAIN_LIB_LOG" 2
 else
     record_fail "shared library permits exported main symbol"
     sed 's/^/      /' "$MAIN_LIB_LOG" | sed -n '1,160p'
+fi
+
+cat >"$AMALGAM_HELPER" <<'XR'
+export struct AmalgamPair {
+    left: int32
+    right: int32
+}
+
+export fn makeAmalgamPair(left: int32, right: int32) -> AmalgamPair {
+    return AmalgamPair{left: left, right: right}
+}
+XR
+
+cat >"$AMALGAM_SRC" <<'XR'
+import { AmalgamPair, makeAmalgamPair } from "./c_export_amalgam_helper"
+
+@c_export("xr_amalgam_sum")
+fn amalgamSum(left: int32, right: int32) -> int32 {
+    const pair: AmalgamPair = makeAmalgamPair(left, right)
+    return pair.left + pair.right
+}
+XR
+
+if "$XRAY" build --native --shared --c-only -o "$AMALGAM_C" "$AMALGAM_SRC" \
+        >"$AMALGAM_LOG" 2>&1 &&
+    cc -O2 -fPIC -I "$PROJECT_DIR/src/aot" -I "$PROJECT_DIR/src/runtime" \
+        -c "$AMALGAM_C" -o "$AMALGAM_OBJ" >>"$AMALGAM_LOG" 2>&1; then
+    record_pass "multi-module shared C-only output is a compilable amalgamation"
+else
+    record_fail "multi-module shared C-only output is a compilable amalgamation"
+    sed 's/^/      /' "$AMALGAM_LOG" | sed -n '1,160p'
+fi
+
+if command -v zig >/dev/null 2>&1; then
+    if "$XRAY" build --native --shared --c-only --target x86_64-linux-musl \
+            --toolchain zig -o "$AMALGAM_CROSS_C" "$AMALGAM_SRC" \
+            >"$AMALGAM_CROSS_LOG" 2>&1 &&
+        zig cc -target x86_64-linux-musl -O2 -fPIC -I "$PROJECT_DIR/src/aot" \
+            -I "$PROJECT_DIR/src/runtime" -c "$AMALGAM_CROSS_C" \
+            -o "$AMALGAM_CROSS_OBJ" >>"$AMALGAM_CROSS_LOG" 2>&1; then
+        record_pass "cross-target shared C-only amalgamation compiles with Zig"
+    else
+        record_fail "cross-target shared C-only amalgamation compiles with Zig"
+        sed 's/^/      /' "$AMALGAM_CROSS_LOG" | sed -n '1,160p'
+    fi
+else
+    echo "  SKIP: cross-target shared C-only amalgamation (zig unavailable)"
 fi
 
 echo ""
