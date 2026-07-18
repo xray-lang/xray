@@ -25,8 +25,12 @@ export fn groupTwoC() -> int {
 export struct ReexportPair {
     low: int
     high: int
+
+    static init(low: int, high: int) -> ReexportPair {
+        return ReexportPair{low: low, high: high}
+    }
 }
 
 export fn makeReexportPair(low: int, high: int) -> ReexportPair {
-    return ReexportPair{low: low, high: high}
+    return ReexportPair.init(low, high)
 }

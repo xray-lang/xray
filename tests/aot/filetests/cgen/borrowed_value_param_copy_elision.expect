@@ -2,5 +2,8 @@ contains=xaot-plan v0
 contains=function 1 name=sum module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
 regex=  value v[0-9]+ op=AGG_GET kind=scalar rep=i64 c_type=int64_t
 c_not_regex=XrValue v[0-9]+ = xrt_value_clone_for_coro\(v[0-9]+\);
+c_regex=int64_t [A-Za-z0-9_]+sum[A-Za-z0-9_]*\(xrt_closure_t \*_cl, xrt_struct_abi_[0-9a-f]+ \* p0\)
+c_not_regex=int64_t [A-Za-z0-9_]+sum[A-Za-z0-9_]*\(xrt_closure_t \*_cl, XrValue \* p0\)
+c_regex=\(xrt_struct_abi_[0-9a-f]+ \*\)\(\*\(XrValue \*\)\(uintptr_t\)XR_TO_INT\(p0\)\)\.ptr
 c_not_contains=xrt_getprop_name(
 c_not_contains=xrt_setprop_name(

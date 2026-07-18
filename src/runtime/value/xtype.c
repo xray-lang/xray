@@ -631,16 +631,21 @@ XrType *xr_type_new_stringbuilder(XrVMRuntime *X) {
 }
 
 XrType *xr_type_new_named_instance(XrVMRuntime *X, const char *name) {
+    X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
-    if (type)
-        type->instance.class_name = name;
+    if (type && name) {
+        XrTypePool *pool = resolve_type_pool(X);
+        type->instance.class_name = xr_pool_strdup(pool, name);
+    }
     return type;
 }
 
 XrType *xr_type_new_enum(XrVMRuntime *X, const char *enum_name) {
+    X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_ENUM);
     if (type && enum_name) {
-        type->enum_type.enum_name = enum_name;
+        XrTypePool *pool = resolve_type_pool(X);
+        type->enum_type.enum_name = xr_pool_strdup(pool, enum_name);
         type->enum_type.layout_id = 0;
         type->enum_type.layout = NULL;
     }

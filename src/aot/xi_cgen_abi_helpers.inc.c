@@ -587,8 +587,21 @@ static bool cg_func_param_abi_is_byte_slice_aggregate(XiCgenCtx *ctx, const XiFu
 static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                uint16_t param_idx, const char *boxed_expr) {
     const XrType *param_type = cg_func_param_type(f, param_idx);
+    const XaotFuncPlan *func_plan = cg_func_plan(ctx, f);
+    const XaotAbiSlot *slot =
+        func_plan && func_plan->abi.params && param_idx < func_plan->abi.nparams
+            ? &func_plan->abi.params[param_idx]
+            : NULL;
     if (cg_func_param_abi_is_byte_slice_aggregate(ctx, f, param_idx)) {
         fprintf(out, "xrt_byte_slice_from_value(%s, XR_ERROR_CORE_BYTE_SLICE_ARG_EXPECTS_MSG)",
+                boxed_expr ? boxed_expr : "XR_NULL_VAL");
+        return;
+    }
+    if (slot && (slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) != 0 &&
+        slot->pointee_rep.kind == XAOT_VALUE_AGGREGATE &&
+        cg_value_rep_is_struct_aggregate(slot->pointee_rep)) {
+        fprintf(out, "(%s *)(*(XrValue *)(uintptr_t)XR_TO_INT(%s)).ptr",
+                slot->pointee_rep.c_type ? slot->pointee_rep.c_type : "void",
                 boxed_expr ? boxed_expr : "XR_NULL_VAL");
         return;
     }

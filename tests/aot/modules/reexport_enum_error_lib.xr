@@ -1,0 +1,7 @@
+export enum ReexportError {
+    Invalid(int, int)
+}
+
+export fn failReexportError() {
+    throw ReexportError.Invalid(17, 23)
+}
