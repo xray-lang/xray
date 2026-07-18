@@ -2262,6 +2262,7 @@ Rules:
 - The ABI string is mandatory; `"C"` is currently the only supported value.
 - `dylib("name-or-path")` selects a dynamic library, while `link("name")` selects an AOT system link name. Both feed the same typed FFI descriptor; without either, resolution uses the default process/system lookup path.
 - Functions inside an extern block may only declare signatures and cannot have `{ }` bodies; ordinary functions require block bodies.
+- An external function or layout published by the module must use direct visibility inside the extern block: `export fn`, `export struct`, `export union`, or `export packed struct`. The removed same-module post-hoc `export { Name }` form cannot publish it afterward.
 - An extern block may declare `struct`, `union`, and `packed struct` layouts. Layout fields may contain only C ABI scalars, `Ptr<T>` / `MutPtr<T>`, fixed arrays of scalars, or another extern layout. Ordinary xray structs, classes, `string`, nullable types, and other managed types are rejected.
 - Extern layouts cannot have generics, interfaces, methods, field modifiers, or field initializers. Any aggregate nested by value must itself be declared as an extern layout.
 - `flex T` is a real C flexible array member. It may appear only as the last field of an extern struct and requires at least one preceding fixed field; extern unions and ordinary xray structs reject `flex`. `sizeOf` returns the header size padded to the struct alignment, while `offsetOf` can query the flexible tail's starting offset. The tail carries no implicit length.
