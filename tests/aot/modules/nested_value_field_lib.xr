@@ -1,0 +1,16 @@
+export struct InnerValue {
+    value: uint64
+    other: uint64
+}
+
+export struct OuterValue {
+    inner: InnerValue
+    marker: uint64
+}
+
+export fn makeOuter(value: uint64) -> OuterValue {
+    return OuterValue{
+        inner: InnerValue{value: value, other: value + 1},
+        marker: value + 2,
+    }
+}
