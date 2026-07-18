@@ -1,0 +1,17 @@
+fn score() -> int {
+    var a0: Array<int> = [1, 2, 3]
+    var a1 = a0
+    var a2 = a1
+    var a3 = a2
+    var a4 = a3
+    var a5 = a4
+    var a6 = a5
+    var a7 = a6
+
+    // The ninth typed local grows the global-evidence local table. Source
+    // sequence metadata must remain stable across that growth.
+    var a8 = a7
+    return a8[0] + a8[1] + a8[2]
+}
+
+print(score())

@@ -1489,16 +1489,17 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
             if (a->kind == ATTR_EXTERN) {
                 l.func->is_extern = true;
                 if (!l.func->extern_symbol)
-                    l.func->extern_symbol = fdecl->name;
+                    l.func->extern_symbol = l.func->name;
             } else if (a->kind == ATTR_LINK_NAME) {
-                l.func->extern_symbol = a->str_arg;
+                l.func->extern_symbol = arena_strdup(l.func, a->str_arg);
             } else if (a->kind == ATTR_DYLIB || a->kind == ATTR_LINK) {
-                l.func->extern_dylib = a->str_arg;
+                l.func->extern_dylib = arena_strdup(l.func, a->str_arg);
             } else if (a->kind == ATTR_C_EXPORT) {
                 l.func->c_export = true;
-                l.func->c_export_symbol = a->str_arg ? a->str_arg : fdecl->name;
+                l.func->c_export_symbol =
+                    arena_strdup(l.func, a->str_arg ? a->str_arg : fdecl->name);
             } else if (a->kind == ATTR_SECTION) {
-                l.func->aot_section = a->str_arg;
+                l.func->aot_section = arena_strdup(l.func, a->str_arg);
             } else if (a->kind == ATTR_WEAK) {
                 l.func->aot_weak = true;
             } else if (a->kind == ATTR_USED) {
@@ -1506,7 +1507,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
             } else if (a->kind == ATTR_NAKED) {
                 l.func->aot_naked = true;
             } else if (a->kind == ATTR_INTERRUPT) {
-                l.func->aot_interrupt_abi = a->str_arg;
+                l.func->aot_interrupt_abi = arena_strdup(l.func, a->str_arg);
             }
         }
     }
