@@ -3085,6 +3085,7 @@ static void xa_visit_precollect_const_decl(XaInferContext *ctx, AstNode *node) {
     XaSymbol *sym = xa_symbol_new(var->name, XA_SYM_VARIABLE);
     sym->location.line = node->line;
     sym->is_const = true;
+    sym->is_exported = node->is_exported;
     sym->is_readonly_binding = true;
     sym->is_rebindable = false;
     xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
@@ -3111,6 +3112,7 @@ static XaSymbol *xa_visit_predeclare_type_alias(XaInferContext *ctx, AstNode *no
         if (existing->kind == XA_SYM_TYPE_ALIAS) {
             ta->symbol_id = existing->id;
             existing->type_alias_node = node;
+            existing->is_exported = node->is_exported;
             XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, existing);
             if (links && !links->file_path)
                 links->file_path = ctx->file_path;
@@ -3125,6 +3127,7 @@ static XaSymbol *xa_visit_predeclare_type_alias(XaInferContext *ctx, AstNode *no
     sym->location.line = node->line;
     sym->location.column = node->column;
     sym->is_const = true;
+    sym->is_exported = node->is_exported;
     sym->type_alias_node = node;
     xa_visit_add_symbol_checked(ctx, sym, 0);
     ta->symbol_id = sym->id;
@@ -3165,6 +3168,7 @@ static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
 
     XaSymbol *sym = xa_symbol_new(cls->name, XA_SYM_CLASS);
     sym->location.line = node->line;
+    sym->is_exported = node->is_exported;
     xa_visit_add_symbol_checked(ctx, sym, 0);
     cls->symbol_id = sym->id;
 
@@ -3194,6 +3198,7 @@ static void xa_visit_predeclare_enum_decl(XaInferContext *ctx, AstNode *node) {
     XaSymbol *sym = xa_symbol_new(edecl->name, XA_SYM_ENUM);
     sym->location.line = node->line;
     sym->is_const = true;
+    sym->is_exported = node->is_exported;
     xa_visit_add_symbol_checked(ctx, sym, 0);
     edecl->symbol_id = sym->id;
 
@@ -3238,9 +3243,6 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
             continue;
         if (stmt->type == AST_INTERFACE_DECL) {
             xa_visit_collect_interface(ctx, stmt);
-        } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
-                   stmt->as.export_stmt.declaration->type == AST_INTERFACE_DECL) {
-            xa_visit_collect_interface(ctx, stmt->as.export_stmt.declaration);
         }
     }
 
@@ -3252,9 +3254,6 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
             continue;
         if (stmt->type == AST_CONST_DECL) {
             xa_visit_precollect_const_decl(ctx, stmt);
-        } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
-                   stmt->as.export_stmt.declaration->type == AST_CONST_DECL) {
-            xa_visit_precollect_const_decl(ctx, stmt->as.export_stmt.declaration);
         }
     }
 
@@ -3268,18 +3267,9 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
         if (stmt->type == AST_CLASS_DECL || stmt->type == AST_STRUCT_DECL ||
             stmt->type == AST_UNION_DECL) {
             xa_visit_predeclare_class_decl(ctx, stmt);
-        } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration) {
-            AstNode *decl = stmt->as.export_stmt.declaration;
-            if (decl->type == AST_CLASS_DECL || decl->type == AST_STRUCT_DECL ||
-                decl->type == AST_UNION_DECL) {
-                xa_visit_predeclare_class_decl(ctx, decl);
-            }
         }
         if (stmt->type == AST_ENUM_DECL) {
             xa_visit_predeclare_enum_decl(ctx, stmt);
-        } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
-                   stmt->as.export_stmt.declaration->type == AST_ENUM_DECL) {
-            xa_visit_predeclare_enum_decl(ctx, stmt->as.export_stmt.declaration);
         }
     }
 
@@ -3292,9 +3282,6 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
             continue;
         if (stmt->type == AST_TYPE_ALIAS) {
             xa_visit_predeclare_type_alias(ctx, stmt);
-        } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
-                   stmt->as.export_stmt.declaration->type == AST_TYPE_ALIAS) {
-            xa_visit_predeclare_type_alias(ctx, stmt->as.export_stmt.declaration);
         }
     }
 
@@ -3310,16 +3297,6 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
             xa_visit_collect_class(ctx, stmt);
         } else if (stmt->type == AST_ENUM_DECL) {
             xa_visit_collect(ctx, stmt);
-        } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration) {
-            AstNode *decl = stmt->as.export_stmt.declaration;
-            if (decl->type == AST_FUNCTION_DECL) {
-                xa_visit_collect_function_decl_only(ctx, decl);
-            } else if (decl->type == AST_CLASS_DECL || decl->type == AST_STRUCT_DECL ||
-                       decl->type == AST_UNION_DECL) {
-                xa_visit_collect_class(ctx, decl);
-            } else if (decl->type == AST_ENUM_DECL) {
-                xa_visit_collect(ctx, decl);
-            }
         }
     }
 
@@ -3330,18 +3307,9 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
             continue;
         if (stmt->type == AST_FUNCTION_DECL) {
             xa_visit_collect_function_body(ctx, stmt);
-        } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration) {
-            AstNode *decl = stmt->as.export_stmt.declaration;
-            if (decl->type == AST_FUNCTION_DECL) {
-                xa_visit_collect_function_body(ctx, decl);
-            } else if (decl->type != AST_IMPORT_STMT && decl->type != AST_CLASS_DECL &&
-                       decl->type != AST_STRUCT_DECL && decl->type != AST_UNION_DECL &&
-                       decl->type != AST_ENUM_DECL) {
-                xa_visit_collect(ctx, decl);
-            }
         } else if (stmt->type != AST_IMPORT_STMT && stmt->type != AST_CLASS_DECL &&
                    stmt->type != AST_STRUCT_DECL && stmt->type != AST_UNION_DECL &&
-                   stmt->type != AST_ENUM_DECL) {
+                   stmt->type != AST_ENUM_DECL && stmt->type != AST_EXPORT_STMT) {
             /* Bare block statements need a scope so inner var/const
              * declarations get distinct symbol_ids from outer variables
              * with the same name (variable shadowing).  Matches Pass 2's
@@ -6236,10 +6204,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_EXPORT_STMT:
-            // Recurse into the exported declaration
-            if (node->as.export_stmt.declaration) {
-                xa_visit_infer_stmt(ctx, node->as.export_stmt.declaration);
-            }
+            /* Re-exports have no local declaration body to infer. */
             break;
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:
@@ -7122,8 +7087,6 @@ static AstNode *xa_find_function_decl_by_name(AstNode *node, const char *name) {
     if (node->type == AST_FUNCTION_DECL && node->as.function_decl.name &&
         strcmp(node->as.function_decl.name, name) == 0)
         return node;
-    if (node->type == AST_EXPORT_STMT)
-        return xa_find_function_decl_by_name(node->as.export_stmt.declaration, name);
     if (node->type == AST_PROGRAM) {
         for (int i = 0; i < node->as.program.count; i++) {
             AstNode *found = xa_find_function_decl_by_name(node->as.program.statements[i], name);
@@ -7567,8 +7530,7 @@ static void xa_validate_freestanding_payload_error_catches_node(XaAnalyzer *anal
                     analyzer, node->as.struct_decl.methods[i]);
             break;
         case AST_EXPORT_STMT:
-            xa_validate_freestanding_payload_error_catches_node(analyzer,
-                                                                node->as.export_stmt.declaration);
+            /* Re-exports contain no executable subtree. */
             break;
         default:
             break;

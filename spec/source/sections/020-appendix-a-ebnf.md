@@ -242,9 +242,10 @@ YieldStmt ::= 'yield' Expression
 ### A.6 声明
 
 ```ebnf
+Visibility ::= 'export'
 VarDecl ::= 'var' Binding
-ConstDecl ::= 'const' Binding
-SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
+ConstDecl ::= AttrList? Visibility? 'const' Binding
+SharedDecl ::= Visibility? 'shared' Identifier (':' Type)? '=' Expression
 OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
@@ -253,7 +254,7 @@ BindingPattern ::= Identifier
                 |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
 ObjectBinding ::= Identifier (':' Identifier)?
 
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternDecl+ '}'
 ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
 ExternDecl ::= ExternFnDecl | ExternLayoutDecl
@@ -273,7 +274,7 @@ TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // 约束用 ':' ，多约束用 '&'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
-ClassDecl ::= 'final'? 'class' Identifier TypeParams?
+ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
@@ -283,29 +284,31 @@ MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block
 
-StructDecl ::= 'struct' Identifier TypeParams?
+StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
 
-InterfaceDecl ::= 'interface' Identifier TypeParams?
+InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
 InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?
 
-EnumDecl       ::= 'enum' Identifier TypeParams?
+EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
 EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
-TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
+
+TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
 
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
-ExportDecl ::= 'export' Declaration                                         // 直接导出声明
-            |  'export' Identifier                                          // 导出已声明标识符
-            |  'export' '*' 'from' StringLiteral                            // 转发导出
+ExportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* ','? '}' 'from' StringLiteral
+            |  'export' '*' 'from' StringLiteral
+ExportSpec ::= Identifier ('as' Identifier)?
 ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
@@ -561,9 +564,10 @@ YieldStmt ::= 'yield' Expression
 ### A.6 Declarations
 
 ```ebnf
+Visibility ::= 'export'
 VarDecl ::= 'var' Binding
-ConstDecl ::= 'const' Binding
-SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
+ConstDecl ::= AttrList? Visibility? 'const' Binding
+SharedDecl ::= Visibility? 'shared' Identifier (':' Type)? '=' Expression
 OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
@@ -572,7 +576,7 @@ BindingPattern ::= Identifier
                 |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
 ObjectBinding ::= Identifier (':' Identifier)?
 
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternDecl+ '}'
 ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
 ExternDecl ::= ExternFnDecl | ExternLayoutDecl
@@ -592,7 +596,7 @@ TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
-ClassDecl ::= 'final'? 'class' Identifier TypeParams?
+ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
@@ -602,29 +606,31 @@ MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block
 
-StructDecl ::= 'struct' Identifier TypeParams?
+StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
 
-InterfaceDecl ::= 'interface' Identifier TypeParams?
+InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
 InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?
 
-EnumDecl       ::= 'enum' Identifier TypeParams?
+EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
 EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
-TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
+
+TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
 
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
-ExportDecl ::= 'export' Declaration                                         // export the declaration directly
-            |  'export' Identifier                                          // export an already-declared identifier
-            |  'export' '*' 'from' StringLiteral                            // forwarding export
+ExportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* ','? '}' 'from' StringLiteral
+            |  'export' '*' 'from' StringLiteral
+ExportSpec ::= Identifier ('as' Identifier)?
 ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?

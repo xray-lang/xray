@@ -45,9 +45,10 @@ struct AstNode {
     AstNodeType type;
     uint32_t node_id;  // stable monotonic ID, unique per compilation unit
     int line;
-    int column;      // 1-indexed column number (for LSP)
-    int end_line;    // 1-indexed end line, 0 = unset
-    int end_column;  // 1-indexed exclusive end column, 0 = unset
+    int column;        // 1-indexed column number (for LSP)
+    int end_line;      // 1-indexed end line, 0 = unset
+    int end_column;    // 1-indexed exclusive end column, 0 = unset
+    bool is_exported;  // Direct declaration visibility; false for re-export statements.
     // The inline compile_type field has been
     // removed. Inferred types live in XaAnalyzer's side table; access
     // via xa_analyzer_get_node_type(analyzer, node). Type-alias-

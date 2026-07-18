@@ -110,22 +110,31 @@ HANDLE_FIELD_PATTERN = re.compile(
     r'([A-Za-z_][A-Za-z0-9_]*(?:<[^,{}]+>)?\??)'
 )
 
-PURE_EXPORT_PATTERN = re.compile(r'export\s*\{(?P<body>.*?)\}', re.S)
+PURE_EXPORT_PATTERN = re.compile(
+    r'^(?:export)\s+(?:(?:final|packed)\s+)?'
+    r'(?:fn|class|struct|union|interface|enum|type|const|shared)\s+'
+    r'(?P<name>[A-Za-z_][A-Za-z0-9_]*)',
+    re.M,
+)
 PURE_DOC_PATTERN = re.compile(
     r'^\s*//\s*([A-Za-z_][A-Za-z0-9_]*)(?:<[^>]+>)?\s*(?:-|—|:)\s*(.+)$',
     re.M,
 )
 PURE_FN_PATTERN = re.compile(
-    r'^fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*(\([^)]*\))\s*'
+    r'^(?:@[A-Za-z_][^\n]*\n)*(?:export\s+)?fn\s+'
+    r'([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*(\([^)]*\))\s*'
     r'(?:->\s*([^{\n]+))?\s*\{',
     re.M,
 )
 PURE_CLASS_PATTERN = re.compile(
-    r'^class\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\{',
+    r'^(?:@[A-Za-z_][^\n]*\n)*(?:export\s+)?'
+    r'(?:(?:final\s+)?class|(?:packed\s+)?struct|union)\s+'
+    r'([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?[^\n{]*\{',
     re.M,
 )
 PURE_ENUM_PATTERN = re.compile(
-    r'^enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{',
+    r'^(?:@[A-Za-z_][^\n]*\n)*(?:export\s+)?enum\s+'
+    r'([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\{',
     re.M,
 )
 PURE_CLASS_FIELD_PATTERN = re.compile(
@@ -133,7 +142,8 @@ PURE_CLASS_FIELD_PATTERN = re.compile(
     re.M,
 )
 PURE_CONST_PATTERN = re.compile(
-    r'^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([^=\n]+))?\s*=\s*([^\n]+)',
+    r'^(?:@[A-Za-z_][^\n]*\n)*(?:export\s+)?const\s+'
+    r'([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([^=\n]+))?\s*=\s*([^\n]+)',
     re.M,
 )
 
@@ -225,16 +235,7 @@ def infer_pure_const_type(annotation, value):
 
 
 def exported_names_from_xray(content):
-    match = PURE_EXPORT_PATTERN.search(content)
-    if not match:
-        return []
-    body = re.sub(r'//.*', '', match.group('body'))
-    names = []
-    for part in split_top_level_commas(body):
-        name = part.strip()
-        if name:
-            names.append(name)
-    return names
+    return [match.group('name') for match in PURE_EXPORT_PATTERN.finditer(content)]
 
 
 def doc_map_from_xray(content):

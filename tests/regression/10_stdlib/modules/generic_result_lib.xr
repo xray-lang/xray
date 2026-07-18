@@ -3,7 +3,7 @@
 ** 用于验证跨模块导出的泛型 ADT enum 会保留 payload 元数据。
 */
 
-enum Result<T> {
+export enum Result<T> {
     Ok(T),
     Err(int),
 }
@@ -12,5 +12,3 @@ export fn makeByteArray() -> Result<Array<byte>> {
     var bytes: Array<byte> = [65, 66]
     return Result.Ok(bytes)
 }
-
-export { Result }

@@ -18,13 +18,13 @@
 
 // CachePadded<T> — cache-line aligned wrapper for counters/flags that should
 // not share a line with adjacent values.
-struct CachePadded<T> align(64) {
+export struct CachePadded<T> align(64) {
     value: T
 }
 
 // Mutex<T> — data guarded by a coroutine-aware lock; closure-scoped access
 // guarantees paired lock/unlock even on early return or panic.
-class Mutex<T> {
+export class Mutex<T> {
     _sem: Semaphore
     value: T
 
@@ -59,7 +59,7 @@ class Mutex<T> {
 // a writer could slip in and a later reader could enter the body while the
 // writer still holds the gate. The reader count is guarded by a short
 // `Atomic<bool>` spinlock so the defer-side cleanup stays non-suspendable.
-class RwLock<T> {
+export class RwLock<T> {
     _entry: Semaphore
     _gate: Semaphore
     _rflag: Atomic<bool>
@@ -118,7 +118,7 @@ class RwLock<T> {
 }
 
 // Once — run a body exactly once across repeated calls, even under contention.
-class Once {
+export class Once {
     _sem: Semaphore
     _done: bool
 
@@ -138,7 +138,7 @@ class Once {
 }
 
 // Barrier — N parties rendezvous; every party blocks until all have arrived.
-class Barrier {
+export class Barrier {
     _latch: CountdownLatch
 
     constructor(parties: int) {
@@ -157,7 +157,7 @@ class Barrier {
 // signal that races ahead of the matching `wait()` and so closes the classic
 // lost-wakeup window. Deliberately avoids `EventCount` (a worker-pool epoch
 // primitive that traps at VM shutdown when used as a general condvar).
-class Condvar {
+export class Condvar {
     _mutex: Semaphore
     _wlock: Atomic<bool>
     _waiters: int
@@ -213,21 +213,6 @@ class Condvar {
 // `.value`, which needs an enum instance).
 import mem
 
-fn fence(order: Ordering) {
+export fn fence(order: Ordering) {
     mem.fence(order as int)
-}
-
-export {
-    CachePadded,
-    Mutex,
-    RwLock,
-    Once,
-    Barrier,
-    Condvar,
-    fence,
-    Semaphore,
-    CountdownLatch,
-    EventCount,
-    WorkQueue,
-    ResultGroup
 }

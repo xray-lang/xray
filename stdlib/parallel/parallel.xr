@@ -5,13 +5,13 @@
 // the intrinsic pass is enabled; the bodies below intentionally stay simple so
 // stdlib bootstrap, module export scans, and type checking have a source truth.
 
-enum ParallelError {
+export enum ParallelError {
     NegativeWorkers,
     ClosedPlan,
     ConcurrentDispatch
 }
 
-class Options {
+export class Options {
     workers: int
 
     constructor(workers: int = 0) {
@@ -33,14 +33,14 @@ fn _referenceLaneCount(options: Options) -> int {
     return 1
 }
 
-fn forEach(range: Range, body: (int) -> (), options: Options = Options()) {
+export fn forEach(range: Range, body: (int) -> (), options: Options = Options()) {
     _checkOptions(options)
     for (offset in 0..range.count()) {
         body(range[offset])
     }
 }
 
-fn map<T>(range: Range, body: (int) -> T, options: Options = Options()) -> Array<T> {
+export fn map<T>(range: Range, body: (int) -> T, options: Options = Options()) -> Array<T> {
     _checkOptions(options)
     var out: Array<T> = []
     for (offset in 0..range.count()) {
@@ -49,7 +49,7 @@ fn map<T>(range: Range, body: (int) -> T, options: Options = Options()) -> Array
     return out
 }
 
-fn mapInto<T>(
+export fn mapInto<T>(
     range: Range,
     output: Array<T>,
     body: (int) -> T,
@@ -63,7 +63,7 @@ fn mapInto<T>(
     return output
 }
 
-fn reduce<A>(
+export fn reduce<A>(
     range: Range,
     initial: A,
     body: (int) -> A,
@@ -78,7 +78,7 @@ fn reduce<A>(
     return acc
 }
 
-class Plan<S> {
+export class Plan<S> {
     options: Options
     private _states: Array<S>
     private _closed: bool
@@ -171,5 +171,3 @@ class Plan<S> {
         }
     }
 }
-
-export { Options, Plan, ParallelError, forEach, map, mapInto, reduce }

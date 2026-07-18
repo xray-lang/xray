@@ -330,7 +330,7 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
             break;
 
         case AST_EXPORT_STMT:
-            visit_node(ctx, node->as.export_stmt.declaration, current_dir);
+            /* Re-exports have no local subtree to bundle. */
             break;
 
         case AST_EXPR_STMT:

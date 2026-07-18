@@ -2852,7 +2852,6 @@ import { publicFn } from "./modules/mod_a.xr"
 // 导出
 export fn publicFn() -> string { return "hi" }
 export const VERSION = "1.0"
-export publicFn, VERSION                    // 后置 export 已声明标识符列表
 export { name1, name2 as alias } from "./other"
 export * from "./other"
 ```
@@ -4358,40 +4357,36 @@ import { publicFn } from "./modules/mod_a"
 
 ### 11.4 `export` 与可见性
 
-`export` 声明**只能出现在模块顶层**。xray 支持三种 export 形式：
+`export` 可见性**只能出现在模块顶层声明上**。跨模块重导出仍是独立声明：
 
 ```ebnf
-ExportStmt ::= 'export' Declaration                              // 直接 export 声明
-            |  'export' '{' Identifier (',' Identifier)* '}'     // export 已声明的标识符
-            |  'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
-            |  'export' '*' 'from' StringLiteral
+Declaration ::= Attribute* Visibility? Modifier* DeclarationBody
+Visibility  ::= 'export'
+ReexportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
+              | 'export' '*' 'from' StringLiteral
 ExportSpec ::= Identifier ('as' Identifier)?
-Declaration ::= FnDecl | ClassDecl | StructDecl | ConstDecl | TypeAlias
 ```
 
 ```xray
-// 1. 直接 export 声明
+// 1. 声明自身携带 export 可见性
+@no_alloc
 export fn helper() { return }
-export class MyClass {
+export final class MyClass {
     value: int
     constructor() { this.value = 1 }
 }
 export const VERSION = "1.0"
 
-// 2. export 已声明的标识符（用于内部先声明、最后统一暴露）
-fn _helper() -> string { return "..." }
-fn publicFn() -> string { return _helper() }
-export { publicFn }
-
-// 3. 重导出（带可选重命名）
+// 2. 重导出（带可选重命名）
 export { getUser, getUserAge as getAge } from "./user"
 
-// 4. 通配重导出（把另一个模块的全部 export 转出）
+// 3. 通配重导出（把另一个模块的全部 export 转出）
 export * from "./product"
 ```
 
 **限制**：
 - 未标 `export` 的声明仅模块内可见（**私有**）。
+- 同模块事后 `export { LocalName }` 已删除；在声明处写 `export`。
 - `export var` 不被支持。可变绑定不能跨模块共享，使用 `export const` 代替。
 - 模块的内部状态在不同模块中互不冲突，即使同名。
 - 重导出与通配重导出常用于 `index.xr` 聚合子模块的公开 API。
@@ -5603,9 +5598,10 @@ YieldStmt ::= 'yield' Expression
 ### A.6 声明
 
 ```ebnf
+Visibility ::= 'export'
 VarDecl ::= 'var' Binding
-ConstDecl ::= 'const' Binding
-SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
+ConstDecl ::= AttrList? Visibility? 'const' Binding
+SharedDecl ::= Visibility? 'shared' Identifier (':' Type)? '=' Expression
 OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
@@ -5614,7 +5610,7 @@ BindingPattern ::= Identifier
                 |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
 ObjectBinding ::= Identifier (':' Identifier)?
 
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternDecl+ '}'
 ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
 ExternDecl ::= ExternFnDecl | ExternLayoutDecl
@@ -5634,7 +5630,7 @@ TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // 约束用 ':' ，多约束用 '&'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
-ClassDecl ::= 'final'? 'class' Identifier TypeParams?
+ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
@@ -5644,29 +5640,31 @@ MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block
 
-StructDecl ::= 'struct' Identifier TypeParams?
+StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
 
-InterfaceDecl ::= 'interface' Identifier TypeParams?
+InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
 InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?
 
-EnumDecl       ::= 'enum' Identifier TypeParams?
+EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
 EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
-TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
+
+TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
 
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
-ExportDecl ::= 'export' Declaration                                         // 直接导出声明
-            |  'export' Identifier                                          // 导出已声明标识符
-            |  'export' '*' 'from' StringLiteral                            // 转发导出
+ExportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* ','? '}' 'from' StringLiteral
+            |  'export' '*' 'from' StringLiteral
+ExportSpec ::= Identifier ('as' Identifier)?
 ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?

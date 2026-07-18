@@ -94,40 +94,36 @@ import { publicFn } from "./modules/mod_a"
 
 ### 11.4 `export` 与可见性
 
-`export` 声明**只能出现在模块顶层**。xray 支持三种 export 形式：
+`export` 可见性**只能出现在模块顶层声明上**。跨模块重导出仍是独立声明：
 
 ```ebnf
-ExportStmt ::= 'export' Declaration                              // 直接 export 声明
-            |  'export' '{' Identifier (',' Identifier)* '}'     // export 已声明的标识符
-            |  'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
-            |  'export' '*' 'from' StringLiteral
+Declaration ::= Attribute* Visibility? Modifier* DeclarationBody
+Visibility  ::= 'export'
+ReexportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
+              | 'export' '*' 'from' StringLiteral
 ExportSpec ::= Identifier ('as' Identifier)?
-Declaration ::= FnDecl | ClassDecl | StructDecl | ConstDecl | TypeAlias
 ```
 
 ```xray @id=modules-export
-// 1. 直接 export 声明
+// 1. 声明自身携带 export 可见性
+@no_alloc
 export fn helper() { return }
-export class MyClass {
+export final class MyClass {
     value: int
     constructor() { this.value = 1 }
 }
 export const VERSION = "1.0"
 
-// 2. export 已声明的标识符（用于内部先声明、最后统一暴露）
-fn _helper() -> string { return "..." }
-fn publicFn() -> string { return _helper() }
-export { publicFn }
-
-// 3. 重导出（带可选重命名）
+// 2. 重导出（带可选重命名）
 export { getUser, getUserAge as getAge } from "./user"
 
-// 4. 通配重导出（把另一个模块的全部 export 转出）
+// 3. 通配重导出（把另一个模块的全部 export 转出）
 export * from "./product"
 ```
 
 **限制**：
 - 未标 `export` 的声明仅模块内可见（**私有**）。
+- 同模块事后 `export { LocalName }` 已删除；在声明处写 `export`。
 - `export var` 不被支持。可变绑定不能跨模块共享，使用 `export const` 代替。
 - 模块的内部状态在不同模块中互不冲突，即使同名。
 - 重导出与通配重导出常用于 `index.xr` 聚合子模块的公开 API。
@@ -263,40 +259,36 @@ import { publicFn } from "./modules/mod_a"
 
 ### 11.4 `export` and Visibility
 
-`export` declarations **must appear at the module top level**. Xray supports three export forms:
+`export` visibility **must appear on a module-level declaration**. Cross-module re-exports remain declarations of their own:
 
 ```ebnf
-ExportStmt ::= 'export' Declaration                              // export the declaration directly
-            |  'export' '{' Identifier (',' Identifier)* '}'     // export already-declared identifiers
-            |  'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
-            |  'export' '*' 'from' StringLiteral
+Declaration ::= Attribute* Visibility? Modifier* DeclarationBody
+Visibility  ::= 'export'
+ReexportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
+              | 'export' '*' 'from' StringLiteral
 ExportSpec ::= Identifier ('as' Identifier)?
-Declaration ::= FnDecl | ClassDecl | StructDecl | ConstDecl | TypeAlias
 ```
 
 ```xray @id=modules-export
-// 1. export a declaration directly
+// 1. visibility belongs to the declaration
+@no_alloc
 export fn helper() { return }
-export class MyClass {
+export final class MyClass {
     value: int
     constructor() { this.value = 1 }
 }
 export const VERSION = "1.0"
 
-// 2. export already-declared identifiers (declare internally first, expose at the end)
-fn _helper() -> string { return "..." }
-fn publicFn() -> string { return _helper() }
-export { publicFn }
-
-// 3. re-export (with optional renaming)
+// 2. re-export (with optional renaming)
 export { getUser, getUserAge as getAge } from "./user"
 
-// 4. wildcard re-export (forward all exports of another module)
+// 3. wildcard re-export (forward all exports of another module)
 export * from "./product"
 ```
 
 **Restrictions**:
 - Declarations not marked `export` are **private** to the module.
+- Post-hoc local `export { LocalName }` is removed; put `export` on the declaration.
 - `export var` is not supported. Mutable bindings cannot be shared across modules; use `export const` instead.
 - Internal state does not collide across modules even with the same name.
 - Re-exports and wildcard re-exports are commonly used in `index.xr` to aggregate public APIs of submodules.

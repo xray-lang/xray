@@ -32,12 +32,11 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             (module_dir / "modes.xr").write_text(
                 "\n".join(
                     [
-                        "export { borrow, Box }",
-                        "fn borrow(view: in Slice<byte>, sink: ref Array<byte>, outLen: out int) -> int {",
+                        "export fn borrow(view: in Slice<byte>, sink: ref Array<byte>, outLen: out int) -> int {",
                         "    outLen = 0",
                         "    return outLen",
                         "}",
-                        "class Box {",
+                        "export class Box {",
                         "    touch(value: in int, place: ref int, filled: out int) -> ()",
                         "}",
                         "",
@@ -69,8 +68,7 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             (module_dir / "process.xr").write_text(
                 "\n".join(
                     [
-                        "export { Process }",
-                        "class Process {",
+                        "export class Process {",
                         "    static spawn(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null) -> Process? {",
                         "        return null",
                         "    }",

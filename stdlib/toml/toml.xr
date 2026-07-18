@@ -12,7 +12,7 @@ import io
 
 const TOML_MAX_DEPTH = 256
 
-class TomlDateTime {
+export class TomlDateTime {
     raw: string
 
     constructor(raw: string) {
@@ -34,7 +34,7 @@ class TomlDateTime {
     }
 }
 
-class TomlFloat {
+export class TomlFloat {
     value: float
     text: string
 
@@ -54,7 +54,7 @@ class TomlFloat {
     }
 }
 
-class TomlArray {
+export class TomlArray {
     values: Array<TomlValue>
 
     constructor() {
@@ -75,7 +75,7 @@ class TomlArray {
     }
 }
 
-class TomlTable {
+export class TomlTable {
     values: Map<string, TomlValue>
 
     constructor() {
@@ -99,7 +99,7 @@ class TomlTable {
     }
 }
 
-class TomlValue {
+export class TomlValue {
     kind: string
     boolValue: bool
     intValue: int
@@ -218,7 +218,7 @@ class TomlValue {
     }
 }
 
-class TomlParseReport {
+export class TomlParseReport {
     data: TomlValue
     errors: Array<Json>
     lines: int
@@ -874,11 +874,11 @@ fn _parseWithDetails(data: string) -> TomlParser {
     return parser
 }
 
-fn parse(data: string) -> TomlValue {
+export fn parse(data: string) -> TomlValue {
     return _parseWithDetails(data).root
 }
 
-fn parseReport(data: string) -> TomlParseReport {
+export fn parseReport(data: string) -> TomlParseReport {
     var parser = _parseWithDetails(data)
     return TomlParseReport(parser.root, parser.errors, parser.line, parser.keyCount)
 }
@@ -1008,12 +1008,12 @@ fn _tableText(obj: TomlValue, prefix: string, depth: int = 0) -> string {
     return out.toString()
 }
 
-fn stringify(value: TomlValue) -> string {
+export fn stringify(value: TomlValue) -> string {
     if (value.kind == "table") { return _tableText(value, "") }
     return _valueText(value)
 }
 
-fn parseFile(path: Path) -> TomlValue {
+export fn parseFile(path: Path) -> TomlValue {
     var content = io.readFile(path)
     if (content == null) {
         var empty = TomlTable()
@@ -1022,94 +1022,86 @@ fn parseFile(path: Path) -> TomlValue {
     return parse(content!)
 }
 
-fn writeFile(path: Path, value: TomlValue) -> bool {
+export fn writeFile(path: Path, value: TomlValue) -> bool {
     return io.writeFile(path, stringify(value))
 }
 
-fn newTable() -> TomlTable {
+export fn newTable() -> TomlTable {
     return TomlTable()
 }
 
-fn newArray() -> TomlArray {
+export fn newArray() -> TomlArray {
     return TomlArray()
 }
 
-fn tableSet(table: TomlTable, key: string, value: TomlValue) {
+export fn tableSet(table: TomlTable, key: string, value: TomlValue) {
     table.set(key, value)
 }
 
-fn arrayPush(array: TomlArray, value: TomlValue) {
+export fn arrayPush(array: TomlArray, value: TomlValue) {
     array.push(value)
 }
 
-fn boolValue(value: bool) -> TomlValue {
+export fn boolValue(value: bool) -> TomlValue {
     return TomlValue.Bool(value)
 }
 
-fn intValue(value: int) -> TomlValue {
+export fn intValue(value: int) -> TomlValue {
     return TomlValue.Int(value)
 }
 
-fn floatValue(value: float) -> TomlValue {
+export fn floatValue(value: float) -> TomlValue {
     return TomlValue.Float(TomlFloat(value))
 }
 
-fn stringValue(value: string) -> TomlValue {
+export fn stringValue(value: string) -> TomlValue {
     return TomlValue.String(value)
 }
 
-fn dateTimeValue(value: string) -> TomlValue {
+export fn dateTimeValue(value: string) -> TomlValue {
     return TomlValue.DateTime(TomlDateTime(value))
 }
 
-fn arrayValue(value: TomlArray) -> TomlValue {
+export fn arrayValue(value: TomlArray) -> TomlValue {
     return TomlValue.Array(value)
 }
 
-fn tableValue(value: TomlTable) -> TomlValue {
+export fn tableValue(value: TomlTable) -> TomlValue {
     return TomlValue.Table(value)
 }
 
-fn get(value: TomlValue, key: string) -> TomlValue? {
+export fn get(value: TomlValue, key: string) -> TomlValue? {
     return value.get(key)
 }
 
-fn at(value: TomlValue, index: int) -> TomlValue? {
+export fn at(value: TomlValue, index: int) -> TomlValue? {
     return value.at(index)
 }
 
-fn length(value: TomlValue) -> int {
+export fn length(value: TomlValue) -> int {
     return value.len()
 }
 
-fn asBool(value: TomlValue) -> bool? {
+export fn asBool(value: TomlValue) -> bool? {
     return value.asBool()
 }
 
-fn asInt(value: TomlValue) -> int? {
+export fn asInt(value: TomlValue) -> int? {
     return value.asInt()
 }
 
-fn asFloat(value: TomlValue) -> float? {
+export fn asFloat(value: TomlValue) -> float? {
     return value.asFloat()
 }
 
-fn asString(value: TomlValue) -> string? {
+export fn asString(value: TomlValue) -> string? {
     return value.asString()
 }
 
-fn asDateTime(value: TomlValue) -> TomlDateTime? {
+export fn asDateTime(value: TomlValue) -> TomlDateTime? {
     return value.asDateTime()
 }
 
-fn isTable(value: TomlValue) -> bool {
+export fn isTable(value: TomlValue) -> bool {
     return value.kind == "table"
-}
-
-export {
-    TomlArray, TomlDateTime, TomlFloat, TomlTable, TomlValue, TomlParseReport,
-    parse, parseReport, stringify, parseFile, writeFile,
-    newTable, newArray, tableSet, arrayPush,
-    boolValue, intValue, floatValue, stringValue, dateTimeValue, arrayValue, tableValue,
-    get, at, length, asBool, asInt, asFloat, asString, asDateTime, isTable
 }

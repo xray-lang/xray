@@ -5,24 +5,24 @@ import text
 // CSV's wire domain is textual rows. Application-specific conversion belongs
 // in an explicit schema/decode layer, never in the tokenizer.
 
-enum CsvDelimiter {
+export enum CsvDelimiter {
     Exact(rune),
     Auto
 }
 
-enum CsvHeader {
+export enum CsvHeader {
     None,
     FirstRow,
     Explicit(Array<string>)
 }
 
-enum CsvErrorKind {
+export enum CsvErrorKind {
     UnterminatedQuote,
     InvalidEscape,
     FieldCountMismatch
 }
 
-class CsvDiagnostic {
+export class CsvDiagnostic {
     kind: CsvErrorKind
     byteOffset: int
     line: int
@@ -41,7 +41,7 @@ class CsvDiagnostic {
     }
 }
 
-enum CsvError {
+export enum CsvError {
     InvalidOption(string),
     InputLimitExceeded(int),
     FieldLimitExceeded(int),
@@ -51,7 +51,7 @@ enum CsvError {
     FieldCountMismatch(int, int, int, int, string)
 }
 
-type CsvParseOptions = {
+export type CsvParseOptions = {
     delimiter: CsvDelimiter,
     quoteChar: rune,
     escapeChar: rune,
@@ -66,14 +66,14 @@ type CsvParseOptions = {
     maxColumns: int
 }
 
-type CsvWriteOptions = {
+export type CsvWriteOptions = {
     delimiter: rune,
     quoteChar: rune,
     escapeChar: rune,
     linebreak: string
 }
 
-fn defaultParseOptions() -> CsvParseOptions {
+export fn defaultParseOptions() -> CsvParseOptions {
     var options: CsvParseOptions = {
         delimiter: CsvDelimiter.Exact(','),
         quoteChar: '"',
@@ -91,7 +91,7 @@ fn defaultParseOptions() -> CsvParseOptions {
     return options
 }
 
-fn defaultWriteOptions() -> CsvWriteOptions {
+export fn defaultWriteOptions() -> CsvWriteOptions {
     var options: CsvWriteOptions = {
         delimiter: ',',
         quoteChar: '"',
@@ -111,7 +111,7 @@ fn _writeOptions(options: CsvWriteOptions?) -> CsvWriteOptions {
     return options!
 }
 
-class CsvDocument {
+export class CsvDocument {
     headers: Array<string>
     rows: Array<Array<string>>
 
@@ -121,7 +121,7 @@ class CsvDocument {
     }
 }
 
-class CsvParseReport {
+export class CsvParseReport {
     document: CsvDocument
     diagnostics: Array<CsvDiagnostic>
     delimiter: rune
@@ -515,7 +515,7 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
 
 // parseReport explicitly opts into recovery and returns any partial document
 // together with typed diagnostics.
-fn parseReport(data: string, options: CsvParseOptions? = null) -> CsvParseReport {
+export fn parseReport(data: string, options: CsvParseOptions? = null) -> CsvParseReport {
     return _parseImpl(data, _parseOptions(options))
 }
 
@@ -540,7 +540,7 @@ fn _throwDiagnostic(diagnostic: CsvDiagnostic) {
 
 // parse is strict: the first recoverable syntax diagnostic enters the enum
 // value error channel.
-fn parse(data: string, options: CsvParseOptions? = null) -> CsvDocument {
+export fn parse(data: string, options: CsvParseOptions? = null) -> CsvDocument {
     var report = _parseImpl(data, _parseOptions(options))
     if (len(report.diagnostics) > 0) {
         _throwDiagnostic(report.diagnostics[0])
@@ -594,7 +594,7 @@ fn _writeRow(out: StringBuilder, row: Array<string>, options: CsvWriteOptions) {
 
 // stringify accepts only CsvDocument and never guesses how arbitrary values
 // should be coerced.
-fn stringify(document: CsvDocument, options: CsvWriteOptions? = null) -> string {
+export fn stringify(document: CsvDocument, options: CsvWriteOptions? = null) -> string {
     var resolved = _writeOptions(options)
     _validateWriteOptions(resolved)
     var out = StringBuilder()
@@ -605,21 +605,4 @@ fn stringify(document: CsvDocument, options: CsvWriteOptions? = null) -> string 
         _writeRow(out, row, resolved)
     }
     return out.toString()
-}
-
-export {
-    CsvDelimiter,
-    CsvHeader,
-    CsvErrorKind,
-    CsvDiagnostic,
-    CsvError,
-    CsvParseOptions,
-    CsvWriteOptions,
-    defaultParseOptions,
-    defaultWriteOptions,
-    CsvDocument,
-    CsvParseReport,
-    parseReport,
-    parse,
-    stringify
 }

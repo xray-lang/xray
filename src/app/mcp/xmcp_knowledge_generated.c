@@ -1408,6 +1408,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "route",
+        .signature = "(method: string, path: string, value: T): ()",
+        .summary = "",
+    },
+    {
         .name = "routeHandler",
         .signature = "(method: string, path: string, handler: (Json): Json)",
         .summary = "",
@@ -2694,6 +2699,21 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     {
         .name = "forEach",
         .signature = "(range: Range, body: (int): (), options: Options = Options())",
+        .summary = "",
+    },
+    {
+        .name = "map",
+        .signature = "(range: Range, body: (int): T, options: Options = Options()) -> Array<T>",
+        .summary = "",
+    },
+    {
+        .name = "mapInto",
+        .signature = "(range: Range, output: Array<T>, body: (int): T,",
+        .summary = "",
+    },
+    {
+        .name = "reduce",
+        .signature = "(range: Range, initial: A, body: (int): A,",
         .summary = "",
     },
 };
@@ -5363,23 +5383,19 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Exports\n"
             "```xray\n"
-            "// 1. export a declaration directly\n"
+            "// 1. visibility belongs to the declaration\n"
+            "@no_alloc\n"
             "export fn helper() { return }\n"
-            "export class MyClass {\n"
+            "export final class MyClass {\n"
             "    value: int\n"
             "    constructor() { this.value = 1 }\n"
             "}\n"
             "export const VERSION = \"1.0\"\n"
             "\n"
-            "// 2. export already-declared identifiers (declare internally first, expose at the end)\n"
-            "fn _helper() -> string { return \"...\" }\n"
-            "fn publicFn() -> string { return _helper() }\n"
-            "export { publicFn }\n"
-            "\n"
-            "// 3. re-export (with optional renaming)\n"
+            "// 2. re-export (with optional renaming)\n"
             "export { getUser, getUserAge as getAge } from \"./user\"\n"
             "\n"
-            "// 4. wildcard re-export (forward all exports of another module)\n"
+            "// 3. wildcard re-export (forward all exports of another module)\n"
             "export * from \"./product\"\n"
             "```\n"
             "\n"
@@ -6222,6 +6238,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.request` | `(options: Json): HttpResponse` |  |\n"
             "| `http.requestText` | `(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
             "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
+            "| `http.route` | `(method: string, path: string, value: T): ()` |  |\n"
             "| `http.routeHandler` | `(method: string, path: string, handler: (Json): Json)` |  |\n"
             "| `http.router` | `(): Router` |  |\n"
             "| `http.stopServer` | `(): ()` |  |\n"
@@ -6683,6 +6700,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Plan.options` | `: Options` |  |\n"
             "| `Plan.reduce` | `(range: Range, initial: A, body: (S, int): A, combine: (A, A) -> A) -> A` |  |\n"
             "| `parallel.forEach` | `(range: Range, body: (int): (), options: Options = Options())` |  |\n"
+            "| `parallel.map` | `(range: Range, body: (int): T, options: Options = Options()) -> Array<T>` |  |\n"
+            "| `parallel.mapInto` | `(range: Range, output: Array<T>, body: (int): T,` |  |\n"
+            "| `parallel.reduce` | `(range: Range, initial: A, body: (int): A,` |  |\n"
             "",
         .symbols = _symbols_parallel,
         .symbol_count = (int)(sizeof(_symbols_parallel) / sizeof(_symbols_parallel[0])),
@@ -7576,23 +7596,19 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "import { publicFn } from \"./modules/mod_a\"\n"
     "```\n"
     "```xray\n"
-    "// 1. export a declaration directly\n"
+    "// 1. visibility belongs to the declaration\n"
+    "@no_alloc\n"
     "export fn helper() { return }\n"
-    "export class MyClass {\n"
+    "export final class MyClass {\n"
     "    value: int\n"
     "    constructor() { this.value = 1 }\n"
     "}\n"
     "export const VERSION = \"1.0\"\n"
     "\n"
-    "// 2. export already-declared identifiers (declare internally first, expose at the end)\n"
-    "fn _helper() -> string { return \"...\" }\n"
-    "fn publicFn() -> string { return _helper() }\n"
-    "export { publicFn }\n"
-    "\n"
-    "// 3. re-export (with optional renaming)\n"
+    "// 2. re-export (with optional renaming)\n"
     "export { getUser, getUserAge as getAge } from \"./user\"\n"
     "\n"
-    "// 4. wildcard re-export (forward all exports of another module)\n"
+    "// 3. wildcard re-export (forward all exports of another module)\n"
     "export * from \"./product\"\n"
     "```\n"
     "\n"

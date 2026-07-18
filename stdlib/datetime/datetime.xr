@@ -40,7 +40,7 @@ class DateTimeParts {
     }
 }
 
-class DateTime {
+export class DateTime {
     _timestamp: int
     _millisecond: int
     _tzOffset: int
@@ -227,35 +227,35 @@ class DateTime {
     }
 }
 
-fn now() -> DateTime {
+export fn now() -> DateTime {
     return fromTimestampMs(time.now()).toLocal()
 }
 
-fn utc() -> DateTime {
+export fn utc() -> DateTime {
     return fromTimestampMs(time.now())
 }
 
-fn create(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0,
+export fn create(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0,
           second: int = 0) -> DateTime {
     var wall = _timeFromCivil(year, month, day, hour, minute, second)
     var off = time.localOffsetAt(wall)
     return DateTime(wall - off * 60, 0, off, false)
 }
 
-fn createUTC(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0,
+export fn createUTC(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0,
              second: int = 0) -> DateTime {
     return DateTime(_timeFromCivil(year, month, day, hour, minute, second), 0, 0, true)
 }
 
-fn fromTimestamp(ts: int) -> DateTime {
+export fn fromTimestamp(ts: int) -> DateTime {
     return DateTime(ts, 0, 0, true)
 }
 
-fn fromTimestampMs(ts: int) -> DateTime {
+export fn fromTimestampMs(ts: int) -> DateTime {
     return _fromTotalMilliseconds(ts, 0, true)
 }
 
-fn parse(s: string, format: string = "ISO8601") -> DateTime? {
+export fn parse(s: string, format: string = "ISO8601") -> DateTime? {
     var year = 0
     var month = 1
     var day = 1
@@ -323,7 +323,7 @@ fn parse(s: string, format: string = "ISO8601") -> DateTime? {
     return DateTime(t - off * 60, ms, off, false)
 }
 
-fn offset() -> int {
+export fn offset() -> int {
     return time.localOffset()
 }
 
@@ -537,16 +537,4 @@ fn _parseTimezoneOffset(s: string, start: int) -> int? {
         m = mm!
     }
     return sign * (h! * 60 + m)
-}
-
-export {
-    DateTime,
-    now,
-    utc,
-    create,
-    createUTC,
-    fromTimestamp,
-    fromTimestampMs,
-    parse,
-    offset
 }

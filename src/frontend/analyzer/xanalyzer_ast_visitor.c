@@ -424,7 +424,7 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             break;
 
         case AST_EXPORT_STMT:
-            visit_node(node->as.export_stmt.declaration, v);
+            /* Re-exports have no local AST child. */
             break;
         case AST_GLOBAL_ASM:
             break;

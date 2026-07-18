@@ -18,7 +18,7 @@ const _OP_CLOSE = 8
 const _OP_PING = 9
 const _OP_PONG = 10
 
-class ParsedFrame {
+export class ParsedFrame {
     fin: bool
     rsv1: bool
     opcode: int
@@ -43,7 +43,7 @@ class ParsedFrame {
     }
 }
 
-class WsUrl {
+export class WsUrl {
     secure: bool
     host: string
     port: int
@@ -57,7 +57,7 @@ class WsUrl {
     }
 }
 
-class ClosePayload {
+export class ClosePayload {
     code: int
     reason: string
 
@@ -67,7 +67,7 @@ class ClosePayload {
     }
 }
 
-class ParsedUpgradeResponse {
+export class ParsedUpgradeResponse {
     statusCode: int
     protocol: string?
     deflate: bool
@@ -79,7 +79,7 @@ class ParsedUpgradeResponse {
     }
 }
 
-class ParsedUpgradeRequest {
+export class ParsedUpgradeRequest {
     target: string
     secKey: string
     protocol: string?
@@ -385,13 +385,13 @@ fn _hostHeader(url: WsUrl) -> string {
     return host
 }
 
-fn acceptKey(secKey: string) -> string {
+export fn acceptKey(secKey: string) -> string {
     var digestBytes = _hexBytes(crypto.sha1(secKey + _GUID))
     if (len(digestBytes) != 20) { return "" }
     return _base64Encode(digestBytes)
 }
 
-fn randomKey() -> string {
+export fn randomKey() -> string {
     var bytes = _randomBytes(16)
     return _base64Encode(bytes)
 }
@@ -407,7 +407,7 @@ fn _pickSubprotocol(headers: string, serverProtocols: Array<string>) -> string? 
     return null
 }
 
-fn parseUpgradeRequest(
+export fn parseUpgradeRequest(
     request: string,
     serverProtocols: Array<string>? = null,
     allowDeflate: bool = true,
@@ -447,7 +447,7 @@ fn parseUpgradeRequest(
     return ParsedUpgradeRequest(target, secKey!, protocol, deflate, origin)
 }
 
-fn upgradeResponse(secKey: string, protocol: string? = null, deflate: bool = false) -> string {
+export fn upgradeResponse(secKey: string, protocol: string? = null, deflate: bool = false) -> string {
     var out = StringBuilder()
     out.append("HTTP/1.1 101 Switching Protocols\r\n")
     out.append("Upgrade: websocket\r\n")
@@ -467,7 +467,7 @@ fn upgradeResponse(secKey: string, protocol: string? = null, deflate: bool = fal
     return out.toString()
 }
 
-fn clientHandshakeRequest(
+export fn clientHandshakeRequest(
     url: WsUrl,
     secKey: string,
     protocols: Array<string>? = null,
@@ -510,7 +510,7 @@ fn clientHandshakeRequest(
     return out.toString()
 }
 
-fn parseUpgradeResponse(
+export fn parseUpgradeResponse(
     response: string,
     secKey: string,
     protocols: Array<string>? = null,
@@ -547,7 +547,7 @@ fn parseUpgradeResponse(
     return ParsedUpgradeResponse(statusCode, protocol, deflate)
 }
 
-fn parseUrl(url: string) -> WsUrl? {
+export fn parseUrl(url: string) -> WsUrl? {
     if (_indexOfFrom(url, "#", 0) >= 0) { return null }
 
     var secure = false
@@ -611,13 +611,13 @@ fn parseUrl(url: string) -> WsUrl? {
     return WsUrl(secure, host, port, path)
 }
 
-fn isValidCloseCode(code: int) -> bool {
+export fn isValidCloseCode(code: int) -> bool {
     return code == 1000 || code == 1001 || code == 1002 || code == 1003 ||
         code == 1007 || code == 1008 || code == 1009 || code == 1010 ||
         code == 1011 || (code >= 3000 && code <= 4999)
 }
 
-fn parseClosePayload(payload: Array<byte>) -> ClosePayload? {
+export fn parseClosePayload(payload: Array<byte>) -> ClosePayload? {
     if (len(payload) > 125 || len(payload) == 1) { return null }
     if (len(payload) == 0) { return ClosePayload(1005, "") }
 
@@ -641,7 +641,7 @@ fn _validOpcode(opcode: int) -> bool {
         opcode == _OP_CLOSE || opcode == _OP_PING || opcode == _OP_PONG
 }
 
-fn maskPayload(payload: Array<byte>, key: Array<byte>) -> Array<byte> {
+export fn maskPayload(payload: Array<byte>, key: Array<byte>) -> Array<byte> {
     var out = Array<byte>(len(payload))
     if (len(key) < 4) { return out }
     for (var i = 0; i < len(payload); i++) {
@@ -650,7 +650,7 @@ fn maskPayload(payload: Array<byte>, key: Array<byte>) -> Array<byte> {
     return out
 }
 
-fn parseFrame(
+export fn parseFrame(
     raw: Array<byte>,
     expectMasked: bool = false,
     enforceMask: bool = false,
@@ -720,7 +720,7 @@ fn parseFrame(
     return ParsedFrame(fin, rsv1, opcode, maskMode == 1, payload, offset + payloadLen)
 }
 
-fn frame(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true) -> Array<byte> {
+export fn frame(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true) -> Array<byte> {
     var ext = 0
     if (len(payload) > 65535) { ext = 8 }
     else if (len(payload) > 125) { ext = 2 }
@@ -753,15 +753,15 @@ fn frame(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true) -> Arr
     return out
 }
 
-fn textFrame(data: string, mask: bool = true) -> Array<byte> {
+export fn textFrame(data: string, mask: bool = true) -> Array<byte> {
     return frame(data.copyBytes(), _OP_TEXT, mask)
 }
 
-fn binaryFrame(data: Array<byte>, mask: bool = true) -> Array<byte> {
+export fn binaryFrame(data: Array<byte>, mask: bool = true) -> Array<byte> {
     return frame(data, _OP_BINARY, mask)
 }
 
-fn closeFrame(code: int = 1000, reason: string = "", mask: bool = true) -> Array<byte> {
+export fn closeFrame(code: int = 1000, reason: string = "", mask: bool = true) -> Array<byte> {
     var reasonBytes = reason.copyBytes()
     var payload = Array<byte>(2 + len(reasonBytes))
     payload[0] = (code >> 8) & 255
@@ -770,37 +770,12 @@ fn closeFrame(code: int = 1000, reason: string = "", mask: bool = true) -> Array
     return frame(payload, _OP_CLOSE, mask)
 }
 
-fn pingFrame(data: Array<byte>? = null, mask: bool = true) -> Array<byte> {
+export fn pingFrame(data: Array<byte>? = null, mask: bool = true) -> Array<byte> {
     var payload = data != null ? data! : Array<byte>(0)
     return frame(payload, _OP_PING, mask)
 }
 
-fn pongFrame(data: Array<byte>? = null, mask: bool = true) -> Array<byte> {
+export fn pongFrame(data: Array<byte>? = null, mask: bool = true) -> Array<byte> {
     var payload = data != null ? data! : Array<byte>(0)
     return frame(payload, _OP_PONG, mask)
-}
-
-export {
-    ParsedFrame,
-    WsUrl,
-    ClosePayload,
-    ParsedUpgradeResponse,
-    ParsedUpgradeRequest,
-    acceptKey,
-    randomKey,
-    parseUpgradeRequest,
-    upgradeResponse,
-    clientHandshakeRequest,
-    parseUpgradeResponse,
-    parseUrl,
-    isValidCloseCode,
-    parseClosePayload,
-    maskPayload,
-    parseFrame,
-    frame,
-    textFrame,
-    binaryFrame,
-    closeFrame,
-    pingFrame,
-    pongFrame
 }

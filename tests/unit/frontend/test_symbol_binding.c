@@ -331,7 +331,6 @@ static int count_unresolved_vars(AstNode *node) {
             count += count_unresolved_vars(node->as.destructure_assign.value);
             break;
         case AST_EXPORT_STMT:
-            count += count_unresolved_vars(node->as.export_stmt.declaration);
             break;
         /* Leaf nodes with no variable children */
         case AST_VARIABLE:

@@ -6,7 +6,7 @@
 // capability fields; stdio redirection reuses Pipe rather than splitting
 // reader/writer endpoint classes prematurely.
 
-enum Signal {
+export enum Signal {
     TERM,
     KILL,
     INT
@@ -20,11 +20,11 @@ fn _signalCode(signal: Signal) -> int {
     }
 }
 
-fn onSignal(signal: Signal, handler: () -> ()) -> bool {
+export fn onSignal(signal: Signal, handler: () -> ()) -> bool {
     return __onSignal(_signalCode(signal), handler)
 }
 
-class Pipe {
+export class Pipe {
     _readHandle: int
     _writeHandle: int
     _readOpen: bool
@@ -78,7 +78,7 @@ class Pipe {
     }
 }
 
-class ProcessOptions {
+export class ProcessOptions {
     cwd: string?
     env: Map<string, string>?
     stdin: int?
@@ -97,7 +97,7 @@ class ProcessOptions {
     }
 }
 
-class Process {
+export class Process {
     _id: int
     _open: bool
 
@@ -188,7 +188,7 @@ fn _threadLocalPruneDeadFlags(values: Map<int, bool>) {
     }
 }
 
-class ThreadLocal<T> {
+export class ThreadLocal<T> {
     _lock: OsMutex
     _values: Map<int, T>
     _initializing: Map<int, bool>
@@ -257,7 +257,7 @@ class ThreadLocal<T> {
     }
 }
 
-class Dylib {
+export class Dylib {
     _handle: int
     _open: bool
 
@@ -289,5 +289,3 @@ class Dylib {
         return __dylibLastError()
     }
 }
-
-export { Process, ProcessOptions, Signal, Pipe, ThreadLocal, Dylib, onSignal }

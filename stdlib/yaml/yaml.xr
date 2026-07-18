@@ -705,12 +705,12 @@ fn _parseOne(data: string) -> YamlParser {
     return parser
 }
 
-fn parse(data: string, options: Json = null) -> Json {
+export fn parse(data: string, options: Json = null) -> Json {
     var parser = YamlParser(data)
     return parser.parseDocument()
 }
 
-fn parseStrict(data: string) -> Json {
+export fn parseStrict(data: string) -> Json {
     var parser = YamlParser(data)
     var value = parser.parseDocument()
     return {
@@ -724,7 +724,7 @@ fn parseStrict(data: string) -> Json {
     }
 }
 
-fn parseAll(data: string) -> Array<Json> {
+export fn parseAll(data: string) -> Array<Json> {
     var docs: Array<Json> = []
     var lines = _lines(data)
     var current: Array<string> = []
@@ -844,7 +844,7 @@ fn _emitValue(value: Json, level: int, indent: int) -> string {
     return _scalarText(value)
 }
 
-fn stringify(value: Json, options: Json = null) -> string {
+export fn stringify(value: Json, options: Json = null) -> string {
     var indent = 2
     var opts = Json.encode(options)
     if (typeName(opts) == "Json") {
@@ -858,14 +858,12 @@ fn stringify(value: Json, options: Json = null) -> string {
     return _emitValue(encoded, 0, indent)
 }
 
-fn parseFile(path: Path) -> Json {
+export fn parseFile(path: Path) -> Json {
     var content = io.readFile(path)
     if (content == null) { return null }
     return parse(content!)
 }
 
-fn writeFile(path: Path, value: Json) -> bool {
+export fn writeFile(path: Path, value: Json) -> bool {
     return io.writeFile(path, stringify(value))
 }
-
-export { parse, parseStrict, parseAll, stringify, parseFile, writeFile }

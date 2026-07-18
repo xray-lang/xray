@@ -436,10 +436,7 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "export ");
             ExportStmtNode *exp = &node->as.export_stmt;
 
-            if (exp->declaration) {
-                ctx->line_start = 0;
-                xfmt_emit_statement(ctx, exp->declaration);
-            } else if (exp->from_path) {
+            if (exp->from_path) {
                 // Re-export: export { a, b as c } from "./file"
                 //        or: export * from "./file"
                 if (exp->is_reexport_all) {
@@ -461,15 +458,6 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
                     xfmt_write_str(ctx, exp->from_path);
                     xfmt_write_char(ctx, '"');
                 }
-                xfmt_write_newline(ctx);
-            } else if (exp->export_count > 0) {
-                xfmt_write_str(ctx, "{ ");
-                for (int i = 0; i < exp->export_count; i++) {
-                    if (i > 0)
-                        xfmt_write_str(ctx, ", ");
-                    xfmt_write_str(ctx, exp->export_names[i]);
-                }
-                xfmt_write_str(ctx, " }");
                 xfmt_write_newline(ctx);
             }
             break;

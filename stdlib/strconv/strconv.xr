@@ -2,7 +2,7 @@
 
 import text
 
-fn parseInt(value: string) -> int? {
+export fn parseInt(value: string) -> int? {
     var s = text.trim(value)
     if (len(s) == 0) { return null }
     var start = 0
@@ -23,7 +23,7 @@ fn parseInt(value: string) -> int? {
     return sign * result
 }
 
-fn parseFloat(value: string) -> float? {
+export fn parseFloat(value: string) -> float? {
     var s = text.trim(value)
     if (len(s) == 0) { return null }
     var digits = 0
@@ -70,5 +70,3 @@ fn parseFloat(value: string) -> float? {
     if (exponentSign < 0) { scale = 1.0 / scale }
     return float(sign) * whole * scale
 }
-
-export { parseInt, parseFloat }

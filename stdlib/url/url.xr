@@ -6,14 +6,14 @@
 
 const HEX = "0123456789ABCDEF"
 
-enum UrlError {
+export enum UrlError {
     InvalidPercentEncoding(int)
 }
 
 // QueryParams preserves insertion order, duplicate names, empty names, and
 // empty values. Names are case-sensitive; form encoding is applied only at
 // parse/encode boundaries.
-class QueryParams {
+export class QueryParams {
     private names: Array<string>
     private values: Array<string>
 
@@ -85,7 +85,7 @@ class QueryParams {
 }
 
 // URL - Parsed URL handle with normalized host, origin, and href components.
-class URL {
+export class URL {
     protocol: string
     hostname: string
     port: string
@@ -281,7 +281,7 @@ fn portIsValid(port: string) -> bool {
 }
 
 // parse - Parse URL text into a URL handle.
-fn parse(url: string) -> URL {
+export fn parse(url: string) -> URL {
     var n = len(url)
     var protocol = ""
     var username = ""
@@ -367,7 +367,7 @@ fn parse(url: string) -> URL {
 }
 
 // format - Build URL text from a URL handle.
-fn format(obj: URL) -> string {
+export fn format(obj: URL) -> string {
     var out = ""
     if (len(obj.protocol) > 0) {
         out = out + obj.protocol + "//"
@@ -383,27 +383,27 @@ fn format(obj: URL) -> string {
 }
 
 // encode - RFC 3986 percent-encode a string.
-fn encode(s: string) -> string {
+export fn encode(s: string) -> string {
     return encodeImpl(s, false)
 }
 
 // decode - RFC 3986 percent-decode a string.
-fn decode(s: string) -> string {
+export fn decode(s: string) -> string {
     return decodeImpl(s, false)
 }
 
 // encodeForm - Form URL encode a string, using plus for spaces.
-fn encodeForm(s: string) -> string {
+export fn encodeForm(s: string) -> string {
     return encodeImpl(s, true)
 }
 
 // decodeForm - Form URL decode a string, treating plus as space.
-fn decodeForm(s: string) -> string {
+export fn decodeForm(s: string) -> string {
     return decodeImpl(s, true)
 }
 
 // parseQuery - Parse a form-encoded query while preserving order and duplicates.
-fn parseQuery(qs: string) -> QueryParams {
+export fn parseQuery(qs: string) -> QueryParams {
     var out = QueryParams()
     var start = 0
     if (len(qs) > 0 && qs.runes().nth(0) == '?') { start = 1 }
@@ -503,7 +503,7 @@ fn dirnamePrefix(path: string) -> string {
 }
 
 // resolve - Resolve a relative URL reference against a base URL.
-fn resolve(base: string, relative: string) -> string {
+export fn resolve(base: string, relative: string) -> string {
     var colon = findChar(relative, ':', 0, len(relative))
     if (colon >= 0 && startsWithAt(relative, colon, "://")) {
         return relative
@@ -544,7 +544,7 @@ fn resolve(base: string, relative: string) -> string {
 }
 
 // join - Join URL path segments.
-fn join(...parts: string) -> string {
+export fn join(...parts: string) -> string {
     var out = ""
     for (var i = 0; i < len(parts); i++) {
         var seg = parts[i]
@@ -559,10 +559,4 @@ fn join(...parts: string) -> string {
         out = out + seg
     }
     return out
-}
-
-export {
-    URL, UrlError, QueryParams,
-    encode, decode, encodeForm, decodeForm,
-    parse, format, parseQuery, resolve, join
 }

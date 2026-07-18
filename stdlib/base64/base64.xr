@@ -6,25 +6,25 @@
 const STD = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 const URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
-enum Base64Alphabet {
+export enum Base64Alphabet {
     Standard,
     UrlSafe
 }
 
-enum Base64PaddingPolicy {
+export enum Base64PaddingPolicy {
     Required,
     Optional,
     Forbidden
 }
 
-enum Base64Error {
+export enum Base64Error {
     InvalidLength(length: int),
     InvalidByte(byteOffset: int, value: byte),
     InvalidPadding(byteOffset: int),
     NonCanonicalTrailingBits(byteOffset: int)
 }
 
-class Base64EncodeOptions {
+export class Base64EncodeOptions {
     alphabet: Base64Alphabet
     padding: bool
 
@@ -34,7 +34,7 @@ class Base64EncodeOptions {
     }
 }
 
-class Base64DecodeOptions {
+export class Base64DecodeOptions {
     alphabet: Base64Alphabet
     padding: Base64PaddingPolicy
 
@@ -205,26 +205,15 @@ fn _decodeImpl(text: string, options: Base64DecodeOptions) -> Array<byte> {
     return _decodeValidated(src, scan.3, scan.4, scan.5, options)
 }
 
-fn encode(data: Slice<byte>, options: Base64EncodeOptions? = null) -> string {
+export fn encode(data: Slice<byte>, options: Base64EncodeOptions? = null) -> string {
     var resolved = _encodeOptions(options)
     return _encodeAlpha(data, _alphabet(resolved.alphabet), resolved.padding)
 }
 
-fn decode(text: string, options: Base64DecodeOptions? = null) -> Array<byte> {
+export fn decode(text: string, options: Base64DecodeOptions? = null) -> Array<byte> {
     return _decodeImpl(text, _decodeOptions(options))
 }
 
-fn isValid(text: string, options: Base64DecodeOptions? = null) -> bool {
+export fn isValid(text: string, options: Base64DecodeOptions? = null) -> bool {
     return _scan(text, _decodeOptions(options)).0 == 0
-}
-
-export {
-    Base64Alphabet,
-    Base64PaddingPolicy,
-    Base64Error,
-    Base64EncodeOptions,
-    Base64DecodeOptions,
-    encode,
-    decode,
-    isValid
 }

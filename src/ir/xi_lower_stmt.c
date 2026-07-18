@@ -3761,19 +3761,13 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
  * dispatch switch. Returns false when `node` is not one of them. */
 static bool lower_module_or_type_decl_stmt(XiLower *l, AstNode *node) {
     switch (node->type) {
-        /* Module system: import creates XI_IMPORT_REF for selective imports.
-         * Export unwraps to lower the inner declaration. */
+        /* Module system: imports bind locally; export statements are re-exports. */
         case AST_IMPORT_STMT:
             lower_import_stmt(l, node);
             return true;
         case AST_EXPORT_STMT:
-            if (node->as.export_stmt.declaration) {
-                xi_lower_stmt(l, node->as.export_stmt.declaration);
-            } else if (node->as.export_stmt.from_path) {
+            if (node->as.export_stmt.from_path)
                 lower_reexport_stmt(l, node);
-            }
-            /* export-list form (export a, b) is handled purely via
-             * prescan_shared_vars export_flags → emit_module_exports. */
             return true;
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:

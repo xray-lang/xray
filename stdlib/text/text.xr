@@ -1,6 +1,6 @@
 // text - explicit Unicode-text operations for always-valid UTF-8 strings.
 
-fn lower(value: string) -> string {
+export fn lower(value: string) -> string {
     var out = StringBuilder()
     var iter = value.runes()
     while (iter.hasNext()) {
@@ -15,7 +15,7 @@ fn lower(value: string) -> string {
     return out.toString()
 }
 
-fn upper(value: string) -> string {
+export fn upper(value: string) -> string {
     var out = StringBuilder()
     var iter = value.runes()
     while (iter.hasNext()) {
@@ -30,7 +30,7 @@ fn upper(value: string) -> string {
     return out.toString()
 }
 
-fn trimStart(value: string) -> string {
+export fn trimStart(value: string) -> string {
     var start = 0
     var iter = value.runes()
     while (iter.hasNext()) {
@@ -40,23 +40,23 @@ fn trimStart(value: string) -> string {
     return value.slice(start, len(value))
 }
 
-fn trimEnd(value: string) -> string {
+export fn trimEnd(value: string) -> string {
     var end = len(value)
     while (end > 0 && value.runes().nth(end - 1).isWhitespace()) { end = end - 1 }
     return value.slice(0, end)
 }
 
-fn trim(value: string) -> string {
+export fn trim(value: string) -> string {
     return trimEnd(trimStart(value))
 }
 
-fn reverseRunes(value: string) -> string {
+export fn reverseRunes(value: string) -> string {
     var out = StringBuilder()
     for (var i = len(value); i > 0; i--) { out.append(value.runes().nth(i - 1)) }
     return out.toString()
 }
 
-fn padStart(value: string, targetLength: int, padding: string = " ") -> string {
+export fn padStart(value: string, targetLength: int, padding: string = " ") -> string {
     if (targetLength <= len(value) || len(padding) == 0) { return value }
     var out = StringBuilder()
     var needed = targetLength - len(value)
@@ -65,7 +65,7 @@ fn padStart(value: string, targetLength: int, padding: string = " ") -> string {
     return out.toString()
 }
 
-fn padEnd(value: string, targetLength: int, padding: string = " ") -> string {
+export fn padEnd(value: string, targetLength: int, padding: string = " ") -> string {
     if (targetLength <= len(value) || len(padding) == 0) { return value }
     var out = StringBuilder()
     out.append(value)
@@ -74,7 +74,7 @@ fn padEnd(value: string, targetLength: int, padding: string = " ") -> string {
     return out.toString()
 }
 
-fn translate(value: string, table: Map<string, string>) -> string {
+export fn translate(value: string, table: Map<string, string>) -> string {
     var out = StringBuilder()
     var iter = value.runes()
     while (iter.hasNext()) {
@@ -91,5 +91,3 @@ fn translate(value: string, table: Map<string, string>) -> string {
     }
     return out.toString()
 }
-
-export { lower, upper, trim, trimStart, trimEnd, reverseRunes, padStart, padEnd, translate }
