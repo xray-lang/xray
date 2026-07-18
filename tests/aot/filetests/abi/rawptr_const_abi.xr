@@ -1,11 +1,14 @@
+@c_export("xray_raw_const")
 fn raw_const(p: Ptr<byte>) -> Ptr<byte> {
     return p
 }
 
+@c_export("xray_raw_mut")
 fn raw_mut(p: MutPtr<byte>) -> MutPtr<byte> {
     return p
 }
 
+@c_export("xray_raw_const_from_mut")
 fn raw_const_from_mut(p: MutPtr<byte>) -> Ptr<byte> {
     return p
 }

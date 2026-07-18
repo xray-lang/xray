@@ -10,7 +10,8 @@ c_contains=xrt_has_pending_error()
 c_contains=xrt_pending_error = XR_NULL_VAL
 c_contains=xrt_pending_error = XR_FROM_INT(
 c_contains=int64_t v7 = XR_TO_INT(xrt_pending_error)
-c_contains=uint8_t v10 = v7 == v9
+c_regex=int64_t v[0-9]+ = v[0-9]+;
+c_regex=uint8_t v[0-9]+ = v[0-9]+ == v[0-9]+
 c_not_contains=_xenum_
 c_not_contains=XR_TAG_ENUM
 c_not_contains=xrt_enum_box_ordinal

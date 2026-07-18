@@ -403,10 +403,11 @@ static void emit_xrt_runtime_builtin_sync(FILE *out, const CgBuiltinInitPlan *pl
 }
 
 static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint32_t runtime_caps,
-                                  const char *source_path) {
+                                  const char *source_path, bool has_value_ops) {
     fprintf(out, "    XrAotRuntimeConfig runtime_cfg;\n");
     fprintf(out, "    xr_aot_runtime_config_init(&runtime_cfg);\n");
-    fprintf(out, "    runtime_cfg.value_ops = &xrt_runtime_value_ops;\n");
+    if (has_value_ops)
+        fprintf(out, "    runtime_cfg.value_ops = &xrt_runtime_value_ops;\n");
     if (cg_runtime_caps_need_destroy_config(runtime_caps))
         fprintf(out, "    runtime_cfg.configure_core = xrt_configure_runtime_core;\n");
     fprintf(out, "    runtime_cfg.caps = ");
@@ -477,8 +478,11 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
         entry_is_coro || entry_has_descriptor || cg_runtime_caps_need_runtime(runtime_caps);
     const char *entry_source_path = cg_entry_source_path(ctx, modules, n, entry_index);
 
-    if (entry_needs_runtime) {
+    bool has_runtime_value_ops = !ctx->freestanding_profile;
+    if (entry_needs_runtime && has_runtime_value_ops) {
         emit_xrt_runtime_value_ops(out);
+    }
+    if (entry_needs_runtime) {
         emit_xrt_runtime_core_configure_fn(out, runtime_caps);
     }
 
@@ -489,7 +493,8 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     emit_xrt_builtin_init(out, &builtin_plan, entry_source_path, "argc > 1 ? argc - 1 : 0",
                           "argc > 1 ? argv + 1 : NULL");
     if (entry_needs_runtime) {
-        emit_xrt_runtime_init(out, &builtin_plan, runtime_caps, entry_source_path);
+        emit_xrt_runtime_init(out, &builtin_plan, runtime_caps, entry_source_path,
+                              has_runtime_value_ops);
     } else {
         fprintf(out, "    (void) argc;\n");
         fprintf(out, "    (void) argv;\n");
@@ -637,8 +642,11 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
             runtime_caps |= XR_AOT_CAP_CORO;
         bool entry_needs_runtime =
             entry_is_coro || entry_has_descriptor || cg_runtime_caps_need_runtime(runtime_caps);
-        if (entry_needs_runtime) {
+        bool has_runtime_value_ops = !ctx->freestanding_profile;
+        if (entry_needs_runtime && has_runtime_value_ops) {
             emit_xrt_runtime_value_ops(body);
+        }
+        if (entry_needs_runtime) {
             emit_xrt_runtime_core_configure_fn(body, runtime_caps);
         }
 
@@ -647,7 +655,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         emit_xrt_builtin_init(body, &builtin_plan, entry_source_path, "argc > 1 ? argc - 1 : 0",
                               "argc > 1 ? argv + 1 : NULL");
         if (entry_needs_runtime) {
-            emit_xrt_runtime_init(body, &builtin_plan, runtime_caps, entry_source_path);
+            emit_xrt_runtime_init(body, &builtin_plan, runtime_caps, entry_source_path,
+                                  has_runtime_value_ops);
         }
         if (entry_has_descriptor)
             fprintf(body, "    if (!xr_aot_root_descriptor_begin(rt)) { xr_aot_runtime_delete(rt); "

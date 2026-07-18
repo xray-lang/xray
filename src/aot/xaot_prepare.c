@@ -3324,6 +3324,39 @@ static bool prepare_apply_error_channel_aggregate_rep(XaotBundle *bundle, XiValu
     return false;
 }
 
+/* A typed catch is lowered as ERR_CATCH(any) -> IS(T) -> AS(T).  In the
+ * freestanding profile, payload enums live in the separate aggregate error
+ * channel and zero-payload enums use a native ordinal.  Propagate the typed
+ * AS representation back to ERR_CATCH so codegen consumes the correct
+ * channel without boxing or an invalid tagged/native assignment. */
+static bool prepare_apply_freestanding_typed_catch_rep(XaotBundle *bundle, XiValue *value,
+                                                       bool *changed) {
+    if (!prepare_bundle_is_freestanding(bundle) || !value || value->op != XI_AS ||
+        value->nargs < 1 || !value->args[0] || value->args[0]->op != XI_ERR_CATCH)
+        return false;
+
+    XaotValueRep rep;
+    if (!prepare_compact_adt_value_rep_for_type(bundle, value->type, &rep)) {
+        if (!prepare_type_is_freestanding_ordinal_enum(bundle, value->type))
+            return false;
+        rep = prepare_enum_ordinal_value_rep(value->type);
+    }
+
+    XaotValuePlan *narrow_plan = xaot_bundle_find_value_plan_mut(bundle, value);
+    XaotValuePlan *catch_plan = xaot_bundle_find_value_plan_mut(bundle, value->args[0]);
+    if (!narrow_plan || !catch_plan)
+        return false;
+    if (!value_reps_equal(narrow_plan->rep, rep)) {
+        narrow_plan->rep = rep;
+        *changed = true;
+    }
+    if (!value_reps_equal(catch_plan->rep, rep)) {
+        catch_plan->rep = rep;
+        *changed = true;
+    }
+    return true;
+}
+
 static bool prepare_apply_aggregate_value_plans_once(XaotBundle *bundle, XiFunc *func,
                                                      bool *changed) {
     if (!bundle || !func || !changed)
@@ -3344,6 +3377,8 @@ static bool prepare_apply_aggregate_value_plans_once(XaotBundle *bundle, XiFunc 
             XaotValueRep rep;
             memset(&rep, 0, sizeof(rep));
             if (!value || !vp)
+                continue;
+            if (prepare_apply_freestanding_typed_catch_rep(bundle, value, changed))
                 continue;
             if (value_rep_is_propagating_aggregate(vp->rep)) {
                 prepare_mark_aggregate_value_rep(bundle, value, vp->rep, changed, 0);

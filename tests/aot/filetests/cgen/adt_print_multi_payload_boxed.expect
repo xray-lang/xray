@@ -1,10 +1,10 @@
 contains=enum 0 name=PairResult
 contains=layout_id=
-contains=c_type=xrt_enum_adt_print_multi_payload_boxed_PairResult_
+regex=c_type=xrt_enum_adt_print_multi_payload_boxed_[0-9a-f]+_PairResult_[0-9a-f]+
 c_contains=PairResult
-c_contains=typedef struct xrt_enum_adt_print_multi_payload_boxed_PairResult_
+c_regex=typedef struct xrt_enum_adt_print_multi_payload_boxed_[0-9a-f]+_PairResult_[0-9a-f]+
 c_contains=union { struct { XrValue f0; XrValue f1; } v0_Pair; struct { uint8_t _empty; } v1_Empty; XrValue raw[2]; }
-c_contains=static xrt_enum_adt_print_multi_payload_boxed_PairResult_
+c_regex=static xrt_enum_adt_print_multi_payload_boxed_[0-9a-f]+_PairResult_[0-9a-f]+
 c_contains=xrt_enum_aggregate_check_layout(value.layout_id
 c_contains=xrt_enum_aggregate_check_payload_count(value.layout_id, value.payload_count, 2
 c_contains=xrt_enum_aggregate_check_payload_type(value.layout_id, XR_IS_INT(value.payloads[0]), "PairResult")

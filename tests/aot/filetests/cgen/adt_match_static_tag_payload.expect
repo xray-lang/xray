@@ -1,11 +1,11 @@
 contains=enum 0 name=FastResult
 regex=enum-scalar-plan [0-9]+ enum=[0-9]+ action=compact_aggregate evidence=0x[0-9a-f]+ payload_cap=16
 contains=layout_id=
-contains=c_type=xrt_enum_adt_match_static_tag_payload_FastResult_
+regex=c_type=xrt_enum_adt_match_static_tag_payload_[0-9a-f]+_FastResult_[0-9a-f]+
 c_contains=FastResult
-c_contains=typedef struct xrt_enum_adt_match_static_tag_payload_FastResult_
+c_regex=typedef struct xrt_enum_adt_match_static_tag_payload_[0-9a-f]+_FastResult_[0-9a-f]+
 c_contains=union { struct { XrValue f0; } v0_Ok; struct { XrValue f0; } v1_Err; XrValue raw[1]; }
-c_contains=static xrt_enum_adt_match_static_tag_payload_FastResult_
+c_regex=static xrt_enum_adt_match_static_tag_payload_[0-9a-f]+_FastResult_[0-9a-f]+
 c_contains=xrt_enum_aggregate_check_layout(value.layout_id
 c_contains=xrt_enum_aggregate_check_payload_count(value.layout_id, value.payload_count, 1
 c_contains=xrt_enum_aggregate_check_payload_type(value.layout_id, XR_IS_INT(value.payloads[0]), "FastResult")

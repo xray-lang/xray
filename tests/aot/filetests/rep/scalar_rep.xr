@@ -1,3 +1,4 @@
+@c_export("xray_narrow")
 fn narrow(x: byte) -> byte {
     return x + 1
 }

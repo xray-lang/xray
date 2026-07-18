@@ -9,10 +9,12 @@ fn choose(flag: bool, value: int) -> int {
     return 0
 }
 
+@used
 fn echo_text(text: string) -> string {
     return text
 }
 
+@used
 fn same_items(items: Array<int>) -> Array<int> {
     return items
 }

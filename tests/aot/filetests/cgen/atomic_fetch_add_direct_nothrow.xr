@@ -1,3 +1,7 @@
+shared counter: Atomic<int> = Atomic<int>(0)
+
 fn bump(counter: Atomic<int>) -> int {
     return counter.fetchAdd(1, Ordering.Relaxed)
 }
+
+print(bump(counter))

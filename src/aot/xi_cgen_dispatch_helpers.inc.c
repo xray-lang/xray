@@ -3799,10 +3799,18 @@ static void xicgen_str_concat(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 
 static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                       const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_as: need arg");
+
+    const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *arg_plan = cg_value_plan(ctx, v->args[0]);
+    if (v->args[0] && v->args[0]->op == XI_ERR_CATCH && value_plan && arg_plan &&
+        (value_plan->rep.flags & XAOT_VALUE_FLAG_ENUM) != 0 &&
+        xaot_value_reps_equal(value_plan->rep, arg_plan->rep)) {
+        emit_vref(out, v->args[0]);
+        return;
+    }
 
     bool is_safe = (v->aux_int & 1) != 0;
     int32_t tid = (int32_t) (v->aux_int >> 1);
@@ -8205,6 +8213,15 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     struct XrType *target = (struct XrType *) v->aux;
     uint32_t enum_layout_id = 0;
     if (xicgen_is_enum_evidence(ctx, f, v, target, &enum_layout_id)) {
+        const XaotValuePlan *input_plan = cg_value_plan(ctx, v->args[0]);
+        if (ctx && ctx->freestanding_profile && v->args[0] && v->args[0]->op == XI_ERR_CATCH &&
+            input_plan && (input_plan->rep.flags & XAOT_VALUE_FLAG_ENUM) != 0) {
+            uint32_t input_layout_id = cg_enum_layout_id_for_type(ctx, input_plan->rep.type);
+            fprintf(out, "%d",
+                    input_layout_id == 0 || enum_layout_id == 0 ||
+                        input_layout_id == enum_layout_id);
+            return;
+        }
         xicgen_emit_enum_is_predicate(out, v->args[0], enum_layout_id);
         return;
     }

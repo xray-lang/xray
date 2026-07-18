@@ -1681,18 +1681,18 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         "$FREESTANDING_SHARED_AGG_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_SHARED_AGG_C" ]; then
         expect_log_contains "$FREESTANDING_SHARED_AGG_C" \
-            "const struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _xctstruct_freestanding_shared_aggregate_static_" \
+            "const struct { int64_t left; int64_t right; } _xctstruct_freestanding_shared_aggregate_static_" \
             "freestanding-profile/shared-aggregate-static: materializes shared struct as static data"
         expect_log_contains "$FREESTANDING_SHARED_AGG_C" \
-            "const struct { union { int32_t f0; uint32_t f1; int32_t f2; uint32_t f3; } f0; int64_t f1; union { int32_t f0; uint32_t f1; int32_t f2; uint32_t f3; } f2; int64_t f3; } _xctstruct_freestanding_shared_aggregate_static_" \
+            "const struct { union { int32_t i; uint32_t u; } bits; int64_t base; } _xctstruct_freestanding_shared_aggregate_static_" \
             "freestanding-profile/shared-aggregate-static: materializes nested union as static data"
         expect_log_contains "$FREESTANDING_SHARED_AGG_C" "_xctstruct_freestanding_shared_aggregate_static_" \
             "freestanding-profile/shared-aggregate-static: reads left field directly"
-        expect_log_contains "$FREESTANDING_SHARED_AGG_C" ".f1" \
+        expect_log_contains "$FREESTANDING_SHARED_AGG_C" ".right" \
             "freestanding-profile/shared-aggregate-static: reads right field directly"
-        expect_log_contains "$FREESTANDING_SHARED_AGG_C" ".f0.f1" \
+        expect_log_contains "$FREESTANDING_SHARED_AGG_C" ".bits.u" \
             "freestanding-profile/shared-aggregate-static: reads union lane directly"
-        expect_log_contains "$FREESTANDING_SHARED_AGG_C" ".f1" \
+        expect_log_contains "$FREESTANDING_SHARED_AGG_C" ".base" \
             "freestanding-profile/shared-aggregate-static: reads sibling field directly"
         expect_log_not_contains "$FREESTANDING_SHARED_AGG_C" "xrt_shared[0] =" \
             "freestanding-profile/shared-aggregate-static: elides first aggregate slot write"
@@ -1915,19 +1915,19 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         "$FREESTANDING_TOP_VAR_AGG_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_TOP_VAR_AGG_C" ]; then
         expect_log_contains "$FREESTANDING_TOP_VAR_AGG_C" \
-            "static struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _xctstruct_freestanding_top_var_aggregate_static_" \
+            "static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_static_" \
             "freestanding-profile/top-var-aggregate-static: materializes mutable struct as static data"
         expect_log_contains "$FREESTANDING_TOP_VAR_AGG_C" \
-            "static struct { union { int32_t f0; uint32_t f1; int32_t f2; uint32_t f3; } f0; int64_t f1; union { int32_t f0; uint32_t f1; int32_t f2; uint32_t f3; } f2; int64_t f3; } _xctstruct_freestanding_top_var_aggregate_static_" \
+            "static struct { union { int32_t i; uint32_t u; } bits; int64_t count; } _xctstruct_freestanding_top_var_aggregate_static_" \
             "freestanding-profile/top-var-aggregate-static: materializes nested union as mutable static data"
-        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_C" ".f0 =" \
+        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_C" ".value =" \
             "freestanding-profile/top-var-aggregate-static: writes struct field directly"
-        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_C" ".f1 =" \
+        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_C" ".count =" \
             "freestanding-profile/top-var-aggregate-static: writes sibling field directly"
-        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_C" ".f0.f1" \
+        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_C" ".bits.u" \
             "freestanding-profile/top-var-aggregate-static: reads union lane directly"
         expect_log_not_contains "$FREESTANDING_TOP_VAR_AGG_C" \
-            "const struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _xctstruct_freestanding_top_var_aggregate_static_" \
+            "const struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_static_" \
             "freestanding-profile/top-var-aggregate-static: keeps mutable struct storage non-const"
         expect_log_not_contains "$FREESTANDING_TOP_VAR_AGG_C" "xrt_shared[0] =" \
             "freestanding-profile/top-var-aggregate-static: elides first aggregate slot write"
@@ -1975,10 +1975,10 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         "$FREESTANDING_TOP_VAR_AGG_REASSIGN_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_TOP_VAR_AGG_REASSIGN_C" ]; then
         expect_log_contains "$FREESTANDING_TOP_VAR_AGG_REASSIGN_C" \
-            "static struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _xctstruct_freestanding_top_var_aggregate_reassign_" \
+            "static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_reassign_" \
             "freestanding-profile/top-var-aggregate-reassign: materializes mutable struct as static data"
         expect_log_contains "$FREESTANDING_TOP_VAR_AGG_REASSIGN_C" \
-            "struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _st" \
+            "struct { int64_t value; int64_t limit; } _st" \
             "freestanding-profile/top-var-aggregate-reassign: initializes local replacement struct"
         expect_log_contains "$FREESTANDING_TOP_VAR_AGG_REASSIGN_C" \
             "memcpy(&_xctstruct_freestanding_top_var_aggregate_reassign_" \
@@ -2023,12 +2023,12 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         "$FREESTANDING_TOP_VAR_AGG_ATTRS_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" ]; then
         expect_log_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" \
-            "static struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } _xctstruct_freestanding_top_var_aggregate_attrs_" \
+            "static struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_attrs_" \
             "freestanding-profile/top-var-aggregate-attrs: materializes mutable struct as static data"
         expect_log_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" \
             "XRT_ATTR_SECTION(\"__DATA,.xr_state\") XRT_ATTR_USED" \
             "freestanding-profile/top-var-aggregate-attrs: emits section/used attrs on mutable data"
-        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" ".f0 =" \
+        expect_log_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" ".value =" \
             "freestanding-profile/top-var-aggregate-attrs: writes struct field directly"
         expect_log_not_contains "$FREESTANDING_TOP_VAR_AGG_ATTRS_C" \
             "const struct { int64_t value; int64_t limit; } _xctstruct_freestanding_top_var_aggregate_attrs_" \
@@ -2358,13 +2358,13 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/top-const-aggregate: preserves aligned static struct layout"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const union" \
             "freestanding-profile/top-const-aggregate: materializes union as static data"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0 = (int32_t)INT64_C(-1)" \
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".i = (int32_t)INT64_C(-1)" \
             "freestanding-profile/top-const-aggregate: initializes active union integer field"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0 = (uint32_t)INT64_C(16909060)" \
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".u = (uint32_t)INT64_C(16909060)" \
             "freestanding-profile/top-const-aggregate: initializes active union word field"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "xray_const_freestanding_top_const_aggregate_HEADER.f0" \
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "xray_const_freestanding_top_const_aggregate_HEADER.magic" \
             "freestanding-profile/top-const-aggregate: reads static struct magic field"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "xray_const_freestanding_top_const_aggregate_HEADER.f1" \
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "xray_const_freestanding_top_const_aggregate_HEADER.flags" \
             "freestanding-profile/top-const-aggregate: reads static struct flags field"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "_xctstruct_freestanding_top_const_aggregate_" \
             "freestanding-profile/top-const-aggregate: reads packed static struct tag field"
@@ -2372,23 +2372,23 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/top-const-aggregate: reads packed/aligned static struct value field"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f1" \
             "freestanding-profile/top-const-aggregate: reads static union integer lane directly"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f1[" \
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".b[" \
             "freestanding-profile/top-const-aggregate: reads static union fixed-array lane directly"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0[" \
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".bytes[" \
             "freestanding-profile/top-const-aggregate: reads static struct fixed-array field"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0" \
             "freestanding-profile/top-const-aggregate: materializes nested static struct field"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0.f0" \
             "freestanding-profile/top-const-aggregate: reads nested static struct scalar field"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XrValue f0; int64_t f1; XrValue f2; int64_t f3" \
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XrValue label; int64_t code" \
             "freestanding-profile/top-const-aggregate: materializes string struct field as XrValue"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0 = (XrValue){.tag = XR_TAG_STR" \
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".label = (XrValue){.tag = XR_TAG_STR" \
             "freestanding-profile/top-const-aggregate: initializes string struct field statically"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XrValue f0[2]" \
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "XrValue labels[2]" \
             "freestanding-profile/top-const-aggregate: materializes string fixed-array struct field as XrValue lanes"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0 = {(XrValue){.tag = XR_TAG_STR" \
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".labels = {(XrValue){.tag = XR_TAG_STR" \
             "freestanding-profile/top-const-aggregate: initializes string fixed-array struct field statically"
-        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".f0[" \
+        expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" ".labels[" \
             "freestanding-profile/top-const-aggregate: reads static string fixed-array struct field directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "_xcttuple_" \
             "freestanding-profile/top-const-aggregate: names scalar tuple static data"
@@ -2407,55 +2407,55 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "static const XrValue _xctarr_" \
             "freestanding-profile/top-const-aggregate: materializes string fixed-array as static data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "const struct { int64_t f0; uint8_t f1; int64_t f2; uint8_t f3; } xray_const_freestanding_top_const_aggregate_ENTRIES[2]" \
+            "const struct { int64_t code; uint8_t flag; } xray_const_freestanding_top_const_aggregate_ENTRIES[2]" \
             "freestanding-profile/top-const-aggregate: materializes struct fixed-array as static data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
             "xray_const_freestanding_top_const_aggregate_ENTRIES[2] XRT_ATTR_SECTION(\"__DATA,.xray_entries\") XRT_ATTR_WEAK XRT_ATTR_USED" \
             "freestanding-profile/top-const-aggregate: emits attrs on struct fixed-array data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "xray_const_freestanding_top_const_aggregate_ENTRIES[_idx].f0" \
+            "xray_const_freestanding_top_const_aggregate_ENTRIES[_idx].code" \
             "freestanding-profile/top-const-aggregate: reads struct fixed-array integer field directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "xray_const_freestanding_top_const_aggregate_ENTRIES[_idx].f1" \
+            "xray_const_freestanding_top_const_aggregate_ENTRIES[_idx].flag" \
             "freestanding-profile/top-const-aggregate: reads struct fixed-array bool field directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "const struct { uint8_t f0[4]; int64_t f1; uint8_t f2[4]; int64_t f3; } xray_const_freestanding_top_const_aggregate_ROWS[2]" \
+            "const struct { uint8_t samples[4]; int64_t weight; } xray_const_freestanding_top_const_aggregate_ROWS[2]" \
             "freestanding-profile/top-const-aggregate: materializes struct-array fixed-field data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
             "xray_const_freestanding_top_const_aggregate_ROWS[2] XRT_ATTR_SECTION(\"__DATA,.xray_rows\") XRT_ATTR_WEAK XRT_ATTR_USED" \
             "freestanding-profile/top-const-aggregate: emits attrs on struct-array fixed-field data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "xray_const_freestanding_top_const_aggregate_ROWS[_outer_idx].f0[_idx]" \
+            "xray_const_freestanding_top_const_aggregate_ROWS[_outer_idx].samples[_idx]" \
             "freestanding-profile/top-const-aggregate: reads struct-array fixed-array field directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "xray_const_freestanding_top_const_aggregate_ROWS[_idx].f1" \
+            "xray_const_freestanding_top_const_aggregate_ROWS[_idx].weight" \
             "freestanding-profile/top-const-aggregate: still reads sibling struct-array scalar field directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "const struct { struct { int64_t f0; uint8_t f1; int64_t f2; uint8_t f3; } f0; int64_t f1; struct { int64_t f0; uint8_t f1; int64_t f2; uint8_t f3; } f2; int64_t f3; } xray_const_freestanding_top_const_aggregate_GROUPS[2]" \
+            "const struct { struct { int64_t code; uint8_t flag; } inner; int64_t base; } xray_const_freestanding_top_const_aggregate_GROUPS[2]" \
             "freestanding-profile/top-const-aggregate: materializes struct-array nested data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
             "xray_const_freestanding_top_const_aggregate_GROUPS[2] XRT_ATTR_SECTION(\"__DATA,.xray_groups\") XRT_ATTR_WEAK XRT_ATTR_USED" \
             "freestanding-profile/top-const-aggregate: emits attrs on struct-array nested data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "xray_const_freestanding_top_const_aggregate_GROUPS[_idx].f0.f0" \
+            "xray_const_freestanding_top_const_aggregate_GROUPS[_idx].inner.code" \
             "freestanding-profile/top-const-aggregate: reads struct-array nested scalar field directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "xray_const_freestanding_top_const_aggregate_GROUPS[_idx].f1" \
+            "xray_const_freestanding_top_const_aggregate_GROUPS[_idx].base" \
             "freestanding-profile/top-const-aggregate: reads struct-array nested sibling field directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "const struct { struct { XrValue f0; int64_t f1; XrValue f2; int64_t f3; } f0; int64_t f1; struct { XrValue f0; int64_t f1; XrValue f2; int64_t f3; } f2; int64_t f3; } xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[2]" \
+            "const struct { struct { XrValue label; int64_t code; } inner; int64_t base; } xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[2]" \
             "freestanding-profile/top-const-aggregate: materializes struct-array nested string data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
             "xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[2] XRT_ATTR_SECTION(\"__DATA,.xray_lgroups\") XRT_ATTR_WEAK XRT_ATTR_USED" \
             "freestanding-profile/top-const-aggregate: emits attrs on struct-array nested string data"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[_idx].f0.f0" \
+            "xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[_idx].inner.label" \
             "freestanding-profile/top-const-aggregate: reads struct-array nested string field directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[_idx].f0.f1" \
+            "xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[_idx].inner.code" \
             "freestanding-profile/top-const-aggregate: reads struct-array nested string sibling scalar directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" \
-            "xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[_idx].f1" \
+            "xray_const_freestanding_top_const_aggregate_LABEL_GROUPS[_idx].base" \
             "freestanding-profile/top-const-aggregate: reads struct-array nested string base directly"
         expect_log_contains "$FREESTANDING_TOP_CONST_AGG_C" "xr_str_lit(&_xstr_" \
             "freestanding-profile/top-const-aggregate: reads string const through literal header"
@@ -2623,7 +2623,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'xray_const__freestanding_static_data_lib_LABEL_GROUPS[2] XRT_ATTR_SECTION("__DATA,.xr_ilgrp") XRT_ATTR_WEAK XRT_ATTR_USED' \
             "freestanding-profile/static-import: exporter keeps struct-array nested string section/weak/used attrs"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
-            'const struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } xray_const__freestanding_static_data_lib_PLAIN_HEADER' \
+            'const struct { int64_t magic; int64_t flags; } xray_const__freestanding_static_data_lib_PLAIN_HEADER' \
             "freestanding-profile/static-import: exporter materializes plain aggregate const"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
             'const struct { int64_t f0; int64_t f1; } xray_const__freestanding_static_data_lib_PLAIN_PAIR' \
@@ -2638,10 +2638,10 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'const int64_t xray_const__freestanding_static_data_lib_PLAIN_CUBE[2][2][2]' \
             "freestanding-profile/static-import: exporter materializes plain fixed-array cube const"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
-            'const union { int32_t f0; uint32_t f1; int32_t f2; uint32_t f3; } xray_const__freestanding_static_data_lib_PLAIN_BITS' \
+            'const union { int32_t i; uint32_t u; } xray_const__freestanding_static_data_lib_PLAIN_BITS' \
             "freestanding-profile/static-import: exporter materializes plain union const"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
-            'const union { uint32_t f0; uint8_t f1[4]; uint32_t f2; uint8_t f3[4]; } xray_const__freestanding_static_data_lib_PLAIN_WORD' \
+            'const union { uint32_t u; uint8_t b[4]; } xray_const__freestanding_static_data_lib_PLAIN_WORD' \
             "freestanding-profile/static-import: exporter materializes plain union fixed-array const"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
             'const xrt_str_t xray_const__freestanding_static_data_lib_PLAIN_LABEL' \
@@ -2650,10 +2650,10 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'const struct { XrValue f0; int64_t f1; } xray_const__freestanding_static_data_lib_PLAIN_LABELED' \
             "freestanding-profile/static-import: exporter materializes plain string tuple const"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
-            'const struct { XrValue f0; int64_t f1; XrValue f2; int64_t f3; } xray_const__freestanding_static_data_lib_PLAIN_NAMED' \
+            'const struct { XrValue label; int64_t code; } xray_const__freestanding_static_data_lib_PLAIN_NAMED' \
             "freestanding-profile/static-import: exporter materializes plain string aggregate const"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
-            'const struct { XrValue f0; int64_t f1; XrValue f2; int64_t f3; } xray_const__freestanding_static_data_lib_PLAIN_NAMED_ROWS[2]' \
+            'const struct { XrValue label; int64_t code; } xray_const__freestanding_static_data_lib_PLAIN_NAMED_ROWS[2]' \
             "freestanding-profile/static-import: exporter materializes plain string aggregate fixed-array const"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_EXPORT_C" \
             'const XrValue xray_const__freestanding_static_data_lib_PLAIN_LABELS[2]' \
@@ -2686,25 +2686,25 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'extern const struct { struct { int64_t f0; XrValue f1; } f0; struct { XrValue f0; int64_t f1; } f1; } xray_const__freestanding_static_data_lib_NESTED_LABEL' \
             "freestanding-profile/static-import: importer declares nested tuple string extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'extern const struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } xray_const__freestanding_static_data_lib_HEADER' \
+            'extern const struct { int64_t magic; int64_t flags; } xray_const__freestanding_static_data_lib_HEADER' \
             "freestanding-profile/static-import: importer declares struct extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'extern const struct __attribute__((packed, aligned(16))) { uint8_t f0; uint32_t f1; uint8_t f2; uint32_t f3; } xray_const__freestanding_static_data_lib_PACKED_ALIGNED' \
+            'extern const struct __attribute__((packed, aligned(16))) { uint8_t tag; uint32_t value; } xray_const__freestanding_static_data_lib_PACKED_ALIGNED' \
             "freestanding-profile/static-import: importer preserves packed/aligned extern layout"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'extern const struct { int64_t f0; uint8_t f1; int64_t f2; uint8_t f3; } xray_const__freestanding_static_data_lib_ENTRIES[2]' \
+            'extern const struct { int64_t code; uint8_t flag; } xray_const__freestanding_static_data_lib_ENTRIES[2]' \
             "freestanding-profile/static-import: importer declares struct-array extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'extern const struct { uint8_t f0[4]; int64_t f1; uint8_t f2[4]; int64_t f3; } xray_const__freestanding_static_data_lib_ROWS[2]' \
+            'extern const struct { uint8_t samples[4]; int64_t weight; } xray_const__freestanding_static_data_lib_ROWS[2]' \
             "freestanding-profile/static-import: importer declares struct-array fixed-field extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'extern const struct { struct { int64_t f0; int64_t f1; } f0; int64_t f1; struct { int64_t f0; int64_t f1; } f2; int64_t f3; } xray_const__freestanding_static_data_lib_GROUPS[2]' \
+            'extern const struct { struct { int64_t code; } inner; int64_t base; } xray_const__freestanding_static_data_lib_GROUPS[2]' \
             "freestanding-profile/static-import: importer declares struct-array nested extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'extern const struct { struct { XrValue f0; int64_t f1; XrValue f2; int64_t f3; } f0; int64_t f1; struct { XrValue f0; int64_t f1; XrValue f2; int64_t f3; } f2; int64_t f3; } xray_const__freestanding_static_data_lib_LABEL_GROUPS[2]' \
+            'extern const struct { struct { XrValue label; int64_t code; } inner; int64_t base; } xray_const__freestanding_static_data_lib_LABEL_GROUPS[2]' \
             "freestanding-profile/static-import: importer declares struct-array nested string extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'extern const struct { int64_t f0; int64_t f1; int64_t f2; int64_t f3; } xray_const__freestanding_static_data_lib_PLAIN_HEADER' \
+            'extern const struct { int64_t magic; int64_t flags; } xray_const__freestanding_static_data_lib_PLAIN_HEADER' \
             "freestanding-profile/static-import: importer declares plain aggregate const extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'extern const struct { int64_t f0; int64_t f1; } xray_const__freestanding_static_data_lib_PLAIN_PAIR' \
@@ -2719,10 +2719,10 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'extern const int64_t xray_const__freestanding_static_data_lib_PLAIN_CUBE[2][2][2]' \
             "freestanding-profile/static-import: importer declares plain fixed-array cube const extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'extern const union { int32_t f0; uint32_t f1; int32_t f2; uint32_t f3; } xray_const__freestanding_static_data_lib_PLAIN_BITS' \
+            'extern const union { int32_t i; uint32_t u; } xray_const__freestanding_static_data_lib_PLAIN_BITS' \
             "freestanding-profile/static-import: importer declares plain union const extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'extern const union { uint32_t f0; uint8_t f1[4]; uint32_t f2; uint8_t f3[4]; } xray_const__freestanding_static_data_lib_PLAIN_WORD' \
+            'extern const union { uint32_t u; uint8_t b[4]; } xray_const__freestanding_static_data_lib_PLAIN_WORD' \
             "freestanding-profile/static-import: importer declares plain union fixed-array const extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'extern const xrt_str_t xray_const__freestanding_static_data_lib_PLAIN_LABEL' \
@@ -2731,10 +2731,10 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'extern const struct { XrValue f0; int64_t f1; } xray_const__freestanding_static_data_lib_PLAIN_LABELED' \
             "freestanding-profile/static-import: importer declares plain string tuple const extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'extern const struct { XrValue f0; int64_t f1; XrValue f2; int64_t f3; } xray_const__freestanding_static_data_lib_PLAIN_NAMED' \
+            'extern const struct { XrValue label; int64_t code; } xray_const__freestanding_static_data_lib_PLAIN_NAMED' \
             "freestanding-profile/static-import: importer declares plain string aggregate const extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'extern const struct { XrValue f0; int64_t f1; XrValue f2; int64_t f3; } xray_const__freestanding_static_data_lib_PLAIN_NAMED_ROWS[2]' \
+            'extern const struct { XrValue label; int64_t code; } xray_const__freestanding_static_data_lib_PLAIN_NAMED_ROWS[2]' \
             "freestanding-profile/static-import: importer declares plain string aggregate fixed-array const extern"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'extern const XrValue xray_const__freestanding_static_data_lib_PLAIN_LABELS[2]' \
@@ -2767,34 +2767,34 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             'xray_const__freestanding_static_data_lib_NESTED_LABEL.f1.f1' \
             "freestanding-profile/static-import: importer reads nested tuple second scalar lane directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_ENTRIES[_idx].f0' \
+            'xray_const__freestanding_static_data_lib_ENTRIES[_idx].code' \
             "freestanding-profile/static-import: importer reads struct-array integer field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_ENTRIES[_idx].f1' \
+            'xray_const__freestanding_static_data_lib_ENTRIES[_idx].flag' \
             "freestanding-profile/static-import: importer reads struct-array bool field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_ROWS[_outer_idx].f0[_idx]' \
+            'xray_const__freestanding_static_data_lib_ROWS[_outer_idx].samples[_idx]' \
             "freestanding-profile/static-import: importer reads struct-array fixed-array field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_ROWS[_idx].f1' \
+            'xray_const__freestanding_static_data_lib_ROWS[_idx].weight' \
             "freestanding-profile/static-import: importer reads struct-array sibling scalar field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_GROUPS[_idx].f0.f0' \
+            'xray_const__freestanding_static_data_lib_GROUPS[_idx].inner.code' \
             "freestanding-profile/static-import: importer reads struct-array nested scalar field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_GROUPS[_idx].f1' \
+            'xray_const__freestanding_static_data_lib_GROUPS[_idx].base' \
             "freestanding-profile/static-import: importer reads struct-array nested sibling field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_LABEL_GROUPS[_idx].f0.f0' \
+            'xray_const__freestanding_static_data_lib_LABEL_GROUPS[_idx].inner.label' \
             "freestanding-profile/static-import: importer reads struct-array nested string field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_LABEL_GROUPS[_idx].f0.f1' \
+            'xray_const__freestanding_static_data_lib_LABEL_GROUPS[_idx].inner.code' \
             "freestanding-profile/static-import: importer reads struct-array nested string sibling scalar directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_LABEL_GROUPS[_idx].f1' \
+            'xray_const__freestanding_static_data_lib_LABEL_GROUPS[_idx].base' \
             "freestanding-profile/static-import: importer reads struct-array nested string base field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_PLAIN_HEADER.f0' \
+            'xray_const__freestanding_static_data_lib_PLAIN_HEADER.magic' \
             "freestanding-profile/static-import: importer reads plain aggregate const field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_PLAIN_PAIR.f0' \
@@ -2808,23 +2808,23 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_PLAIN_CUBE[_outer_idx][_middle_idx][_idx]' \
             "freestanding-profile/static-import: importer reads plain fixed-array cube element directly"
-        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             '&xray_const__freestanding_static_data_lib_PLAIN_PAIR' \
-            "freestanding-profile/static-import: importer takes plain tuple const address directly"
-        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            "freestanding-profile/static-import: importer avoids plain tuple address materialization"
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             '&xray_const__freestanding_static_data_lib_PLAIN_BYTES' \
-            "freestanding-profile/static-import: importer takes plain fixed-array const address directly"
-        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            "freestanding-profile/static-import: importer avoids plain fixed-array address materialization"
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             '&xray_const__freestanding_static_data_lib_PLAIN_MATRIX' \
-            "freestanding-profile/static-import: importer takes plain fixed-array matrix const address directly"
-        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            "freestanding-profile/static-import: importer avoids plain matrix address materialization"
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             '&xray_const__freestanding_static_data_lib_PLAIN_CUBE' \
-            "freestanding-profile/static-import: importer takes plain fixed-array cube const address directly"
+            "freestanding-profile/static-import: importer avoids plain cube address materialization"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_PLAIN_BITS.f1' \
+            'xray_const__freestanding_static_data_lib_PLAIN_BITS.u' \
             "freestanding-profile/static-import: importer reads plain union const field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_PLAIN_WORD.f1[_idx]' \
+            'xray_const__freestanding_static_data_lib_PLAIN_WORD.b[_idx]' \
             "freestanding-profile/static-import: importer reads plain union fixed-array const element directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xr_str_lit(&xray_const__freestanding_static_data_lib_PLAIN_LABEL)' \
@@ -2838,14 +2838,14 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             '&xray_const__freestanding_static_data_lib_PLAIN_LABEL' \
             "freestanding-profile/static-import: importer takes plain string const address directly"
-        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             '&xray_const__freestanding_static_data_lib_PLAIN_LABELED' \
-            "freestanding-profile/static-import: importer takes plain string tuple const address directly"
+            "freestanding-profile/static-import: importer avoids plain string tuple address materialization"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_PLAIN_NAMED.f0' \
+            'xray_const__freestanding_static_data_lib_PLAIN_NAMED.label' \
             "freestanding-profile/static-import: importer reads plain string aggregate field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
-            'xray_const__freestanding_static_data_lib_PLAIN_NAMED_ROWS[_idx].f0' \
+            'xray_const__freestanding_static_data_lib_PLAIN_NAMED_ROWS[_idx].label' \
             "freestanding-profile/static-import: importer reads plain string aggregate fixed-array field directly"
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_PLAIN_LABELS[_idx]' \
@@ -2856,15 +2856,15 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             'xray_const__freestanding_static_data_lib_PLAIN_LABEL_CUBE[_outer_idx][_middle_idx][_idx]' \
             "freestanding-profile/static-import: importer reads plain string fixed-array cube element directly"
-        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             '&xray_const__freestanding_static_data_lib_PLAIN_LABELS' \
-            "freestanding-profile/static-import: importer takes plain string fixed-array const address directly"
-        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            "freestanding-profile/static-import: importer avoids plain string array address materialization"
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             '&xray_const__freestanding_static_data_lib_PLAIN_LABEL_MATRIX' \
-            "freestanding-profile/static-import: importer takes plain string fixed-array matrix const address directly"
-        expect_log_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
+            "freestanding-profile/static-import: importer avoids plain string matrix address materialization"
+        expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" \
             '&xray_const__freestanding_static_data_lib_PLAIN_LABEL_CUBE' \
-            "freestanding-profile/static-import: importer takes plain string fixed-array cube const address directly"
+            "freestanding-profile/static-import: importer avoids plain string cube address materialization"
         expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xrt_getprop_name" \
             "freestanding-profile/static-import: avoids dynamic property helper"
         expect_log_not_contains "$FREESTANDING_STATIC_IMPORT_ENTRY_C" "xr_array_ref" \
@@ -3134,7 +3134,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         "$FREESTANDING_TOP_VAR_WEAK_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_TOP_VAR_WEAK_C" ]; then
         expect_log_matches "$FREESTANDING_TOP_VAR_WEAK_C" \
-            "struct \\{ int64_t f0; int64_t f1; int64_t f2; int64_t f3; \\} xray_var_freestanding_top_var_weak_static_[[:xdigit:]]+_STATE" \
+            "struct \\{ int64_t value; int64_t limit; \\} xray_var_freestanding_top_var_weak_static_[[:xdigit:]]+_STATE" \
             "freestanding-profile/top-var-weak: emits stable weak aggregate data symbol"
         expect_log_matches "$FREESTANDING_TOP_VAR_WEAK_C" \
             "int64_t xray_var_freestanding_top_var_weak_static_[[:xdigit:]]+_TICKS" \
@@ -3143,7 +3143,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "XRT_ATTR_SECTION(\"__DATA,.xr_weak_state\") XRT_ATTR_WEAK XRT_ATTR_USED" \
             "freestanding-profile/top-var-weak: preserves section/weak/used attrs"
         expect_log_matches "$FREESTANDING_TOP_VAR_WEAK_C" \
-            "xray_var_freestanding_top_var_weak_static_[[:xdigit:]]+_STATE.f0 =" \
+            "xray_var_freestanding_top_var_weak_static_[[:xdigit:]]+_STATE.value =" \
             "freestanding-profile/top-var-weak: writes weak aggregate directly"
         expect_log_matches "$FREESTANDING_TOP_VAR_WEAK_C" \
             "xray_var_freestanding_top_var_weak_static_[[:xdigit:]]+_TICKS =" \
@@ -3640,7 +3640,8 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/enum-error: stores ordinal in tagged pending slot"
         expect_log_contains "$FREESTANDING_ENUM_ERR_C" "int64_t v7 = XR_TO_INT(xrt_pending_error)" \
             "freestanding-profile/enum-error: typed catch unboxes pending ordinal"
-        expect_log_contains "$FREESTANDING_ENUM_ERR_C" "uint8_t v10 = v7 == v9" \
+        expect_log_matches "$FREESTANDING_ENUM_ERR_C" \
+            "uint8_t v[0-9]+ = v[0-9]+ == v[0-9]+" \
             "freestanding-profile/enum-error: typed catch compares native ordinal"
         expect_log_not_contains "$FREESTANDING_ENUM_ERR_C" "_xenum_" \
             "freestanding-profile/enum-error: avoids static enum boxes"
