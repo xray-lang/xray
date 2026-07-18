@@ -934,8 +934,11 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
             fprintf(out, ")");
             return;
         }
-        fprintf(stderr, "[xi_cgen] ERROR: cannot pass aggregate v%u to non-tagged ABI slot\n",
-                arg ? arg->id : 0);
+        fprintf(stderr,
+                "[xi_cgen] ERROR: cannot pass aggregate v%u from '%s' to non-tagged ABI "
+                "slot %u of '%s'\n",
+                arg ? arg->id : 0, f && f->name ? f->name : "?", (unsigned) arg_index,
+                target && target->name ? target->name : "?");
         ctx->error = true;
         emit_codegen_abort_expr(out);
         return;

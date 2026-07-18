@@ -7886,6 +7886,42 @@ static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     const XaotValuePlan *place_load_plan = place_load ? cg_value_plan(ctx, place_load) : NULL;
     if (place_load_plan && place_load_plan->rep.kind == XAOT_VALUE_AGGREGATE &&
         place_load_plan->rep.c_type) {
+        const XrAggregateFieldLayout *field = cg_struct_field(sl, v->aux_int);
+        if (field && field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+            fprintf(out, "(memcpy(&");
+            if (!xicgen_emit_struct_place_field_lvalue(ctx, out, v->args[0], sl, v->aux_int)) {
+                ctx->error = true;
+                emit_codegen_abort_expr(out);
+                return;
+            }
+            fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+            fprintf(out, ".ptr, sizeof(");
+            if (!xicgen_emit_struct_place_field_lvalue(ctx, out, v->args[0], sl, v->aux_int)) {
+                ctx->error = true;
+                emit_codegen_abort_expr(out);
+                return;
+            }
+            fprintf(out, ")), ");
+            emit_struct_set_result_value(ctx, out, v->args[1]);
+            fprintf(out, ")");
+            return;
+        }
+        if (field && field->native_type == XR_NATIVE_ARRAY) {
+            fprintf(out, "(xrt_fixed_array_copy(&");
+            if (!xicgen_emit_struct_place_field_lvalue(ctx, out, v->args[0], sl, v->aux_int)) {
+                ctx->error = true;
+                emit_codegen_abort_expr(out);
+                return;
+            }
+            fprintf(out, "[0], ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+            fprintf(out, ", %u, %u), ", (unsigned) field->elem_native_type,
+                    (unsigned) field->elem_count);
+            emit_struct_set_result_value(ctx, out, v->args[1]);
+            fprintf(out, ")");
+            return;
+        }
         fprintf(out, "(");
         if (!xicgen_emit_struct_place_field_lvalue(ctx, out, v->args[0], sl, v->aux_int)) {
             ctx->error = true;

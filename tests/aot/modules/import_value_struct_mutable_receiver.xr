@@ -1,0 +1,12 @@
+import { WideValueState } from "./value_struct_mutable_receiver_lib"
+
+fn run() {
+    var state = WideValueState.init()
+    state.update(9)
+    print(state.digest())
+    state.reset(7)
+    state.update(3)
+    print(state.digest())
+}
+
+run()

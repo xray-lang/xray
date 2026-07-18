@@ -431,10 +431,15 @@ static XaotAbiSlot place_value_slot_for_type(const XaotBundle *bundle, const XiF
             case XR_KIND_POINTER:
             case XR_KIND_SPAN:
                 return native_value_slot_for_type(bundle, func, type, value, false);
-            default:
-                if (mode == XR_PARAM_IN && struct_layout_for_slot(bundle, func, type, value, false))
+            default: {
+                bool native_aggregate_borrow =
+                    mode == XR_PARAM_IN || (func && func->receiver_borrowed && func->nparams > 0 &&
+                                            func->params && func->params[0] == value);
+                if (native_aggregate_borrow &&
+                    struct_layout_for_slot(bundle, func, type, value, false))
                     return native_value_slot_for_type(bundle, func, type, value, false);
                 break;
+            }
         }
     }
     return tagged_slot(type);
