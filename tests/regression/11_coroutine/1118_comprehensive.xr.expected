@@ -1,19 +1,19 @@
-=== 基本 go/await ===
+=== go/await ===
 task1 result: 42
-=== 状态检查 ===
-before await - done: true
-after await - done: true
+=== status ===
+done: true
+status: TaskStatus.Success
 result: 100
-=== 取消协程 ===
-cancelled: false
-cancelled result: 200
-=== Channel 通信 ===
+=== cancel ===
+cancelled: true
+cancelled status: TaskStatus.Cancelled
+=== channel ===
 recv: 1 2 3
-=== defer 清理 ===
+=== defer ===
 working...
 cleanup!
-=== await.all ===
+=== await all ===
 all results: [1, 2, 3]
-=== await.any ===
-first result: first
-=== 完成 ===
+=== await any ===
+first result: winner
+=== done ===

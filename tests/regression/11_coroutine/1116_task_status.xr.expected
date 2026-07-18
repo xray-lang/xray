@@ -1,12 +1,14 @@
-before await:
-  done: true
-  cancelled: false
+before send:
+  done: false
+  status: TaskStatus.Running
 after await:
   done: true
-  result: 42
+  result: 21
 after cancel:
   done: true
-  cancelled: false
-  result: 20
-final:
+  status: TaskStatus.Cancelled
+  cancelled result: true
+completed:
   done: true
+  status: TaskStatus.Success
+  result: 42

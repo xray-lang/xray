@@ -20,6 +20,7 @@ struct XrAotRuntime {
     struct XrRuntimeCore *core;
     struct XrRuntime *scheduler;
     struct XrScopeContext *root_scope;
+    const XrAotValueOps *value_ops;
     XrValue builtins[XR_USER_GLOBALS_START];
 };
 

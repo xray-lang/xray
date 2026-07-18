@@ -133,8 +133,10 @@ static bool stack_alloc_closure_uses_are_synchronous_callbacks(const XiFunc *f,
 
 static bool stack_alloc_closure_uses_are_scoped_par_for_callbacks(const XiFunc *f,
                                                                   const XiValue *target) {
-    if (!f || !target || target->op != XI_STACK_ALLOC || target->aux_int != XI_CLOSURE_NEW ||
-        !target->aux)
+    if (!f || !target || !target->aux)
+        return false;
+    if (target->op != XI_CLOSURE_NEW &&
+        !(target->op == XI_STACK_ALLOC && target->aux_int == XI_CLOSURE_NEW))
         return false;
     bool saw_use = false;
     for (uint32_t b = 0; b < f->nblocks; b++) {
@@ -166,6 +168,17 @@ static bool stack_alloc_closure_uses_are_scoped_par_for_callbacks(const XiFunc *
 }
 
 static bool stack_alloc_can_preserve_semantics(const XiFunc *f, const XiValue *v) {
+    /* A resumable function does not retain its native C stack between
+     * suspension points.  Until stack-allocation liveness is partitioned by
+     * resume region, ordinary local allocations must stay on the heap even
+     * when escape analysis proves they do not leave the function.  Scoped
+     * parallel callbacks are the sole exception: CGen materializes their
+     * environment inside the synchronous parallel boundary instead of with
+     * alloca in the resumable frame. */
+    if (f && (f->effect_summary & XI_FLAG_MAY_SUSPEND) != 0) {
+        return v && v->op == XI_CLOSURE_NEW &&
+               stack_alloc_closure_uses_are_scoped_par_for_callbacks(f, v);
+    }
     if (!v || !stack_alloc_has_const_capacity(v))
         return v && v->op == XI_CLOSURE_NEW && v->aux &&
                stack_alloc_closure_uses_are_synchronous_callbacks(f, v);

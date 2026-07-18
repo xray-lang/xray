@@ -74,3 +74,5 @@ fn test_scope_basic() {
 
     print("嵌套 scope 结果数量:", outer_results.load())
 }
+
+test_scope_basic()

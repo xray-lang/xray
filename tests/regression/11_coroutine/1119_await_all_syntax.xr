@@ -41,3 +41,4 @@ fn test_await_all_syntax() {
     print("  r1:", results2[1])
 }
 
+test_await_all_syntax()

@@ -30,3 +30,5 @@ fn test_coro_dump() {
     print("test5: final dump")
     Coro.dump(10)
 }
+
+test_coro_dump()

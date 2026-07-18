@@ -1504,6 +1504,40 @@ TEST(channel_waiter_cancel_unlinks_channel_and_worker_queues) {
     close_fixture_cleanup(&f);
 }
 
+TEST(channel_cancel_requested_waiter_never_enters_queue) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
+    ASSERT_NOT_NULL(ch);
+
+    XrCoroutine receiver;
+    XrCoroExt receiver_ext;
+    memset(&receiver, 0, sizeof(receiver));
+    memset(&receiver_ext, 0, sizeof(receiver_ext));
+    receiver.id = 304;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
+    receiver.ext = &receiver_ext;
+    atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING | XR_CORO_FLG_CANCEL_REQUESTED);
+    atomic_store(&receiver.resume_status, XR_RESUME_OK);
+    atomic_store(&receiver.affinity_p, 0);
+
+    XrValue received = xr_null();
+    XrChanResult result = xr_channel_recv(ch, &received, &receiver, -1);
+    ASSERT_EQ_INT((int) result, (int) XR_CHAN_NO_CORO);
+    ASSERT_NULL(ch->recvq.first);
+    ASSERT_NULL(ch->recvq.last);
+    ASSERT_NULL(atomic_load(&receiver_ext.wait_channel));
+    ASSERT_FALSE(xr_coro_flags_has(&receiver, XR_CORO_FLG_BLOCKED));
+
+    xr_channel_close(ch);
+    ASSERT_NULL(xr_worker_pop(&f.worker));
+
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    close_fixture_cleanup(&f);
+}
+
 TEST(channel_waiter_cancel_routes_foreign_owner_detach) {
     WakeRouteFixture f;
     ASSERT_TRUE(wake_route_fixture_init(&f));
@@ -2257,6 +2291,7 @@ RUN_TEST(channel_timed_wait_cancels_timer_on_channel_wake);
 RUN_TEST(channel_notify_send_without_current_worker_routes_to_inbox);
 RUN_TEST(channel_waiter_wake_claims_ready_once);
 RUN_TEST(channel_waiter_cancel_unlinks_channel_and_worker_queues);
+RUN_TEST(channel_cancel_requested_waiter_never_enters_queue);
 RUN_TEST(channel_waiter_cancel_routes_foreign_owner_detach);
 RUN_TEST(select_waiter_cancel_routes_foreign_owner_detach);
 RUN_TEST(await_wait_token_tracks_register_resolve_and_resume);

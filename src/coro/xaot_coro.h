@@ -39,6 +39,7 @@ struct XrTask;
 struct xrt_closure;
 
 typedef struct XrAotRuntime XrAotRuntime;
+typedef struct XrAotValueOps XrAotValueOps;
 typedef void (*XrAotRuntimeConfigureCoreFn)(struct XrRuntimeCore *core, uint32_t caps,
                                             void *userdata);
 
@@ -76,6 +77,9 @@ typedef struct XrAotRuntimeConfig {
     const char *file;
     void *userdata;
     XrAotRuntimeConfigureCoreFn configure_core;
+    /* Standalone AOT collection/string ABI.  The scheduler runtime must not
+     * construct VM-layout objects and hand them to generated AOT code. */
+    const XrAotValueOps *value_ops;
 } XrAotRuntimeConfig;
 
 typedef enum {
@@ -120,6 +124,19 @@ typedef struct XrAotVmHostOps {
     bool (*is_exception)(void *host, XrValue value);
     XrValue (*exception_from_value)(void *host, XrValue value);
 } XrAotVmHostOps;
+
+/* Backend-neutral owned-value constructors used by runtime services such as
+ * Coro.stats/list/top.  Generated AOT code supplies operations for its compact
+ * xrt layouts; VM-hosted execution continues to use XrAotVmHostOps. */
+struct XrAotValueOps {
+    XrValue (*string_new)(const char *data, size_t len);
+    const char *(*string_data)(XrValue value);
+    XrValue (*map_new)(int64_t capacity);
+    void (*map_set)(XrValue map, XrValue key, XrValue value);
+    XrValue (*map_get)(XrValue map, XrValue key, bool *found);
+    XrValue (*array_new)(int64_t length);
+    void (*array_push)(XrValue array, XrValue value);
+};
 
 typedef struct XrAotContext {
     XrAotRuntime *runtime;

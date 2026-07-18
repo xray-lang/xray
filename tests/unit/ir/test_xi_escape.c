@@ -607,6 +607,42 @@ static void test_stack_alloc_direct_closure(void) {
     xi_func_free(f);
 }
 
+static void test_stack_alloc_direct_closure_in_resumable_function_stays_heap(void) {
+    XiFunc *f = make_func("resumable_stack_closure", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiFunc *child = make_func("child", &t_int);
+    child->parent_func = f;
+    XiValue *one = xi_const_int(child, child->entry, 1, &t_int);
+    xi_block_set_return(child->entry, one);
+
+    f->children = (XiFunc **) xr_calloc(1, sizeof(XiFunc *));
+    XR_CHECK(f->children != NULL, "test_stack_alloc_direct_closure_in_resumable_function_stays_"
+                                  "heap: child allocation failed");
+    f->children[0] = child;
+    f->children_cap = 1;
+    f->nchildren = 1;
+
+    XiValue *closure = xi_value_new(f, b0, XI_CLOSURE_NEW, &t_func, 0);
+    closure->aux = child;
+    (void) xi_value_new(f, b0, XI_YIELD, &t_any, 0);
+    XiValue *call = xi_value_new(f, b0, XI_CALL, &t_int, 1);
+    call->args[0] = closure;
+    xi_block_set_return(b0, call);
+
+    xi_func_compute_effects(f);
+    xi_escape_analyze(f);
+    ASSERT_EQ(closure->escape, XI_ESC_NONE,
+              "direct-call closure remains non-escaping in a resumable function");
+    xi_stack_alloc_rewrite(f);
+    ASSERT_EQ(closure->op, XI_CLOSURE_NEW,
+              "resumable function closure must keep heap lifetime across suspension");
+    ASSERT_EQ(closure->escape, XI_ESC_ARG,
+              "closure rejected from stack allocation must re-enter ARC");
+
+    xi_func_free(f);
+}
+
 static void test_stack_alloc_escaping_stays(void) {
     /* Returned array (ARG_ESCAPE) should NOT be rewritten */
     XiFunc *f = make_func("stack_esc", &t_array);
@@ -644,6 +680,7 @@ int main(void) {
     test_stack_alloc_local_plain_map_set();
     test_stack_alloc_skips_metadata_or_dynamic_capacity();
     test_stack_alloc_direct_closure();
+    test_stack_alloc_direct_closure_in_resumable_function_stays_heap();
     test_stack_alloc_escaping_stays();
 
     printf("\n=== test_xi_escape: %d passed, %d failed ===\n", g_passed, g_failed);

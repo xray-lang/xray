@@ -28,3 +28,5 @@ fn test_go_block() {
 // 200
 // 300
 // done
+
+test_go_block()

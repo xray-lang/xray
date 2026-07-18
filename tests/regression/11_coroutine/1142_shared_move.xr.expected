@@ -15,4 +15,3 @@ coro result: 4
 stage1: 1
 stage2: 2
 final step: 2
-=== All tests passed ===

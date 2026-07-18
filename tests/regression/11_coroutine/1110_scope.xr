@@ -24,3 +24,5 @@ fn test_scope() {
 // 20
 // 1
 // done
+
+test_scope()

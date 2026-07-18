@@ -45,3 +45,5 @@ fn test_cancel() {
 // t2 success: true
 // t2 result: 42
 // done
+
+test_cancel()
