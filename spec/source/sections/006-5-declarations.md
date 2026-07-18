@@ -10,12 +10,13 @@ order: 006
 
 > 真值源：`src/frontend/parser/xparse_decl.c`、`src/frontend/parser/xast_nodes_decl.h`、`src/frontend/analyzer/xanalyzer_visitor.c`。
 
-### 5.1 `var` / `const` / `shared`
+### 5.1 `var` / `const` / `shared` / `owned`
 
 ```ebnf
 VarDecl ::= 'var' Binding
 ConstDecl ::= 'const' Binding
 SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
+OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -49,7 +50,7 @@ const MAX_LEN: int = 1024
 - **必须**有初值。
 - 不能重新赋值（编译错误 `E0303`）。
 - 类型可推断或显式标注。
-- `const` 和 `var` 一样是单绑定声明；逗号并列声明已移除。需要多个名字时写多条声明，或使用解构：`const (a, b) = pair`。
+- `const` 和 `var` 一样，每条声明绑定一个名字或解构模式。多个独立名字使用多条声明；相关值可用 `const (a, b) = pair` 解构。
 
 #### 5.1.3 `shared` — 共享身份绑定
 
@@ -66,7 +67,23 @@ shared counter = Atomic(0)
 
 详见 [§10.11](#1011-并发安全模型)。
 
-#### 5.1.4 解构绑定
+#### 5.1.4 `owned` — 唯一所有身份绑定
+
+```xray @id=decl-owned
+owned buffer = Array<byte>(1024)
+
+var source = [1, 2, 3]
+owned moved = move source       // 转移现有引用图
+owned cloned = copy(moved)      // 或显式深拷贝
+```
+
+- `owned` 只能声明局部单名绑定，必须带初始化器；模块级 `owned` 和解构 `owned` 均被拒绝。
+- 绑定由 system owner 记录为唯一可变身份；绑定名本身不可重新赋值，但所拥有对象可以按类型规则原地修改。
+- 新构造的引用值可直接初始化。来自已有引用绑定的值必须显式写 `move source` 或 `copy(source)`，避免产生未声明的别名。
+- 所有权可通过 `move` 转给另一个 `owned`/`shared` 绑定、协程边界或返回值；移动后原绑定不可再使用。切片、裸指针等借用必须在移动前结束。
+- `owned` 是存储声明，不是类型修饰符，也不能带声明 attribute。
+
+#### 5.1.5 解构绑定
 
 ```xray @id=decl-destructuring
 // 数组解构
@@ -156,7 +173,7 @@ var result = divmod(10, 3)        // result 类型 (int, int)
 
 #### 5.2.4 参数模式
 
-参数模式写在冒号之后、类型之前：`name: in T`、`name: ref T`、`name: out T`。旧的前缀写法 `ref name: T` 已删除。
+参数模式写在冒号之后、类型之前：`name: in T`、`name: ref T`、`name: out T`。
 
 ```xray @id=decl-fn-param-modes
 fn length_sq(v: in Vec2) -> float {
@@ -207,7 +224,7 @@ fn main() { ... }
 
 #### 5.2.7 尾递归优化
 
-编译器自动识别 accumulator 风格的尾递归并转为循环（避免栈溢出）。详见 [§17](#17-编译流水线-compilation-pipeline)。
+Xi 优化器会把可证明的自尾调用改写为循环；VM 也有常量栈空间的 tail-call opcode。不要把这一点理解为所有后端、所有间接/互递归调用的通用常量栈保证：构造调用和无法证明安全的调用仍按普通调用执行。详见 [§17](#17-编译流水线-compilation-pipeline)。
 
 ```xray
 fn factorial(n: int, acc: int = 1) -> int {
@@ -229,7 +246,7 @@ greet()                   // 必须显式调用
 
 - `fn main()` 没有任何特殊含义；如需手动调用，写 `main()`。
 - 顶层不允许 `return`（编译错误 `E0306`）。
-- 多文件项目的入口由 `xray.toml` 的 `entry` 字段指定，对应文件按上述脚本规则执行。
+- 多文件项目的入口由 `xray.toml` 的 `[project]`（或 package manifest 的 `[package]`）中的 `main` 字段指定，例如 `main = "src/main.xr"`；对应文件按上述脚本规则执行。
 
 #### 5.2.9 `extern "C"` C FFI 声明块
 
@@ -677,7 +694,7 @@ enum HttpStatus {
 }
 ```
 
-显式 backing value 已删除：不支持 `enum E : int`，也不支持 `Variant = 200` / `"N"` / `true` / `3.14`。协议数值、字符串符号等应通过 `const`、方法或显式转换函数表达。
+enum variant 使用声明顺序形成稳定的 `ordinal`，不声明额外 backing value。协议数值、字符串符号等外部表示通过 `const`、方法或显式转换函数表达。
 
 #### 5.6.2 Payload enum
 
@@ -740,7 +757,7 @@ Color.Red.ordinal     // 0              声明顺序 tag (int，从 0)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
 ```
 
-`.value`、`memberCount`、`getMember`、用户可见 `EnumValue` / `EnumType` 已删除。若需要遍历所有 case，后续使用显式生成 metadata 的 `CaseIterable` 风格能力，而不是默认 runtime enum object。
+enum 值提供 `name`、`ordinal` 与 `toString()`。需要遍历全部 case 时，应使用显式生成 metadata 的 `CaseIterable` 风格能力。
 
 #### 5.6.5 遍历
 
@@ -849,7 +866,7 @@ AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
 ```xray
 type Outcome = int | string                          // union 别名
-type Mapper = fn(int) -> int                            // 函数类型别名
+type Mapper = (int) -> int                              // 函数类型别名
 type Point = { x: float, y: float }                  // 结构化对象别名（sealed）
 type Pair<T> = { first: T, second: T }                // 泛型别名
 ```
@@ -903,12 +920,13 @@ export * from "./other"
 
 > Source of truth: `src/frontend/parser/xparse_decl.c`, `src/frontend/parser/xast_nodes_decl.h`, `src/frontend/analyzer/xanalyzer_visitor.c`.
 
-### 5.1 `var` / `const` / `shared`
+### 5.1 `var` / `const` / `shared` / `owned`
 
 ```ebnf
 VarDecl ::= 'var' Binding
 ConstDecl ::= 'const' Binding
 SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
+OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -942,7 +960,7 @@ const MAX_LEN: int = 1024
 - Initializer is **required**.
 - Cannot be reassigned (compile error `E0303`).
 - The type may be inferred or annotated explicitly.
-- Like `var`, `const` is a single-binding declaration. Comma-separated declarations are removed; use separate declarations or destructure with `const (a, b) = pair`.
+- Like `var`, each `const` declaration binds one name or destructuring pattern. Use separate declarations for independent names, or destructure related values with `const (a, b) = pair`.
 
 #### 5.1.3 `shared` — shared identity binding
 
@@ -959,7 +977,23 @@ shared counter = Atomic(0)
 
 See [§10.11](#1011-concurrency-safety-model).
 
-#### 5.1.4 Destructuring bindings
+#### 5.1.4 `owned` — unique-ownership identity binding
+
+```xray @id=decl-owned
+owned buffer = Array<byte>(1024)
+
+var source = [1, 2, 3]
+owned moved = move source       // transfer an existing reference graph
+owned cloned = copy(moved)      // or make an explicit deep copy
+```
+
+- `owned` is a local, single-name declaration and requires an initializer; module-level and destructuring `owned` declarations are rejected.
+- The system owner records the binding as a unique mutable identity. The name itself is not reassignable, while the owned object may be mutated according to its type.
+- A freshly constructed reference value may initialize it directly. A value taken from an existing reference binding must be written as `move source` or `copy(source)` so that no undeclared alias is created.
+- Ownership may be transferred with `move` to another `owned`/`shared` binding, across an execution boundary, or through a return value. The source cannot be used after the move, and borrows such as slices/raw pointers must have ended first.
+- `owned` is a storage declaration, not a type modifier, and it cannot carry declaration attributes.
+
+#### 5.1.5 Destructuring bindings
 
 ```xray @id=decl-destructuring
 // array destructuring
@@ -1049,7 +1083,7 @@ var result = divmod(10, 3)        // result has type (int, int)
 
 #### 5.2.4 Parameter modes
 
-Parameter modes are written after the colon and before the type: `name: in T`, `name: ref T`, `name: out T`. The old prefix spelling `ref name: T` has been removed.
+Parameter modes are written after the colon and before the type: `name: in T`, `name: ref T`, `name: out T`.
 
 ```xray @id=decl-fn-param-modes
 fn length_sq(v: in Vec2) -> float {
@@ -1100,7 +1134,7 @@ fn main() { ... }
 
 #### 5.2.7 Tail-call optimization
 
-The compiler recognises accumulator-style tail recursion and rewrites it into a loop (avoiding stack overflow). See [§17](#17-compilation-pipeline).
+The Xi optimizer rewrites proven self-tail calls into loops, and the VM also has constant-stack tail-call opcodes. This is not a blanket constant-stack guarantee for every back end or every indirect/mutually-recursive call: constructors and calls that cannot be proven safe remain ordinary calls. See [§17](#17-compilation-pipeline).
 
 ```xray
 fn factorial(n: int, acc: int = 1) -> int {
@@ -1122,7 +1156,7 @@ greet()                   // must be called explicitly
 
 - `fn main()` has no special meaning; call `main()` explicitly if desired.
 - Top-level `return` is forbidden (compile error `E0306`).
-- Multi-file projects specify the entry via the `entry` field of `xray.toml`; the corresponding file follows the script execution rules above.
+- Multi-file projects specify the entry with the `main` field under `[project]` (or `[package]` for a package manifest), for example `main = "src/main.xr"`; that file follows the script execution rules above.
 
 #### 5.2.9 `extern "C"` C FFI Declaration Blocks
 
@@ -1253,7 +1287,7 @@ Modifier ::= 'private' | 'protected' | 'static' | 'const'
 > - Public is the **default visibility**—every field/method without `private` / `protected` is public; the language has no `public` modifier.
 > - Visibility is **compile-time enforced**: accessing a `private` / `protected` member from outside the class, or a `protected` member from a non-subclass, reports `E0377`.
 > - Overrides are inferred by the compiler: a subclass instance method overrides a non-private parent-chain instance method when name and signature match exactly.
-> - User-written `override`, `abstract`, and `final method` modifiers are removed; same-name different-signature methods, field/method hiding, and static method hiding are compile errors.
+> - Interfaces express abstract contracts, same-name same-signature methods override automatically, and same-name different-signature methods or member hiding are compile errors.
 >
 > The standard library and the regression tests consistently use the "omit the default modifier" style.
 
@@ -1570,7 +1604,7 @@ enum HttpStatus {
 }
 ```
 
-Explicit backing values have been removed: `enum E : int` is not supported, and neither is `Variant = 200` / `"N"` / `true` / `3.14`. Protocol numbers, string symbols, and similar external values should be expressed with `const`, methods, or explicit conversion functions.
+Enum variants use declaration order for their stable `ordinal` and do not declare a separate backing value. Express protocol numbers, string symbols, and similar external representations with `const`, methods, or explicit conversion functions.
 
 #### 5.6.2 Payload enum
 
@@ -1633,7 +1667,7 @@ Color.Red.ordinal     // 0              declaration-order tag (int, zero-based)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
 ```
 
-`.value`, `memberCount`, `getMember`, and the user-visible `EnumValue` / `EnumType` wrapper classes have been removed. If code needs to iterate all cases, it should use an explicit generated-metadata capability in the style of `CaseIterable`, not a default runtime enum object.
+Enum values provide `name`, `ordinal`, and `toString()`. Code that needs to iterate all cases should use an explicit generated-metadata capability in the style of `CaseIterable`.
 
 #### 5.6.5 Iteration
 
@@ -1742,7 +1776,7 @@ AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
 ```xray
 type Outcome = int | string                          // union alias
-type Mapper = fn(int) -> int                         // function-type alias
+type Mapper = (int) -> int                           // function-type alias
 type Point = { x: float, y: float }                  // structural object alias (sealed)
 type Pair<T> = { first: T, second: T }                // generic alias
 ```

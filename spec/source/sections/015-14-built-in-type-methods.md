@@ -11,7 +11,7 @@ order: 015
 > 真值源：prelude / analyzer / runtime 中的内置类型注册与方法定义。
 > MCP knowledge 只消费生成后的 analyzer metadata，不独立维护内置类型方法签名。
 
-本节给出每种类型的**方法索引**（按主题分组）。具体签名、参数说明、行为细节以实现代码为准。
+本节按主题汇总每种内置类型的方法、签名和行为。
 
 ### 14.1 `int` 方法
 
@@ -23,7 +23,6 @@ order: 015
 | `toFloat()` | `() -> float` | 转 float |
 | `toHex()` | `() -> string` | 十六进制字符串 |
 | `max(other)` / `min(other)` | `(int) -> int` | 双值最值 |
-| `floor()` / `ceil()` / `round()` | `() -> int` | 对 int 返回自身 |
 | `sqrt()` | `() -> float` | 平方根 |
 | `pow(exp)` | `(float) -> float` | 幂运算 |
 | `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | 溢出返回 `null` |
@@ -35,7 +34,7 @@ order: 015
 | `byteswap()` | `() -> int` | 反转字节序 |
 | `rotateLeft(n)` / `rotateRight(n)` | `(int) -> int` | 循环移位（`n` 按模 64） |
 
-`abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词的语义源是 `src/shared/xr_bits_core.h` / `xr_arith_core.h`，VM 与 AOT 共享同一实现。
+`abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词在 VM 与 AOT 中具有相同语义。
 
 ### 14.2 `float` 方法
 
@@ -87,11 +86,14 @@ order: 015
 | `len(s)` | O(1) Unicode scalar 数量 |
 | `bytes()` / `copyBytes()` | 借用的 `Slice<byte>` / 独立的 `Array<byte>` |
 | `runes()` | `Iterator<rune>`；裸 `for (r in s)` 使用相同语义 |
-| `string.fromUtf8(bytes)` | 复制并严格验证 `Slice<byte>`；非法 UTF-8 返回 `null` |
+| `string.fromRune(r)` | 从一个 Unicode scalar 构造字符串 |
+| `string.fromUtf8(bytes)` | 复制并严格验证 `Slice<byte>`；非法 UTF-8 抛 `Utf8Error.InvalidUtf8` |
 | `string.fromUtf8Lossy(bytes)` | 复制 `Slice<byte>`，非法序列替换为 U+FFFD |
+| `string.join(parts, separator?)` | 拼接 `Array<string>` |
 | `contains(s)` | 是否包含子串 |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | 返回 rune ordinal |
 | `slice(start, end?)` | 按 rune ordinal 取得 owned string；范围必须合法 |
+| `sliceBytes(start, end)` | 按 byte offset 切片；边界非法时抛 `StringSliceError.InvalidByteRange` |
 | `split(sep, limit?)` | 分割为 `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | 替换 |
 | `repeat(n)` | 重复 |
@@ -102,28 +104,29 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 
 ### 14.6 `Array<byte>`
 
-`Array<byte>` 是 prelude 类型，构造由 `Array<byte>(n)` / `Array<byte>(n, fill)` 等内置路径处理。它的 `toString()` 与所有 Array 一样返回容器格式；文本解码必须显式使用 `string.fromUtf8(bytes[:])` 或 `string.fromUtf8Lossy(bytes[:])`。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要假设存在完整 Array 同构 API。
+`Array<byte>` 是可直接使用的 `Array` 具体化，构造由 `Array<byte>(n)` / `Array<byte>(n, fill)` 等内置路径处理。它的 `toString()` 与所有 Array 一样返回容器格式；文本解码必须显式使用 `string.fromUtf8(bytes[:])` 或 `string.fromUtf8Lossy(bytes[:])`。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要把它当成另一套与 Array 同构的独立 API。
 
 ### 14.7 `Array<T>` 方法
 
 | 成员 | 类型/说明 |
 |--|--|
 | `len(arr)` | `int` 全局查询 |
-| `arr[i]` / `arr[i] = v` | 下标读写 |
+| `capacity` / `arr[i]` / `arr[i] = v` | 容量属性与下标读写；也可使用 `get(i)` / `set(i, v)` |
 | `push(x)` / `pop()` | 尾部增删 |
 | `shift()` / `unshift(x)` | 头部增删 |
-| `slice(start?, end?)` | 切片 |
-| `splice(start, deleteCount, ...items)` | 原地增删 |
 | `concat(...arrays)` | 拼接 |
 | `indexOf(x)` / `contains(x)` | 查找 |
 | `join(sep?)` | 拼接为字符串 |
 | `reverse()` / `sort(cmp?)` | 原地重排 |
 | `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 函数式处理 |
 | `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 遍历与谓词 |
-| `flat(depth?)` / `fill(v, start?, end?)` / `copyWithin(target, start, end?)` | 数组工具 |
+| `fill(v, start?, end?)` / `clear()` | 填充或清空 |
+| `reserve(capacity)` / `resize(length, fill)` | 容量与长度管理 |
+| `ptr()` / `mutPtr()` | 显式底层指针视图 |
+| `toString()` | 容器字符串表示 |
 | `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
 
-`slice(start?, end?)` 使用与切片表达式相同的半开区间和负索引规则；返回独立数组，原数组不变。
+Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守借用生命周期；需要独立 owned 数据时使用 `copy(arr[start:end])`。
 
 ### 14.8 `Map<K, V>` 方法
 
@@ -131,13 +134,15 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 |--|--|
 | `len(m)` | `int` 全局查询 |
 | `m[k]` / `m[k] = v` | 下标读写 |
-| `get(k)` / `set(k, v)` | 读取/写入 |
+| `get(k)` / `set(k, v)` | `get` 在缺失时返回 `null`；`set` 写入 |
 | `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | 查询与删除 |
 | `keys()` / `values()` / `entries()` | 返回键、值、键值对 |
 | `forEach(fn)` | 遍历 |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
 **Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于 Record/Json 对象字面量。
+
+`m[k]` 要求键存在；缺失键触发运行时错误 `E0431`。需要可选读取时使用 `m.get(k)`。
 
 ### 14.9 `Set<T>` 方法
 
@@ -158,12 +163,13 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 |--|--|
 | `send(v)` | 阻塞发送；channel 已关闭时抛异常 |
 | `recv()` | 阻塞接收，返回 `Recv<T>`；关闭且缓冲为空时为 `Recv.Closed` |
+| `recvOr(default)` | 接收 payload；没有值时返回给定默认值 |
 | `trySend(v)` | 非阻塞发送，返回 `SendResult` |
 | `tryRecv()` | 非阻塞接收，返回 `Recv<T>`；空时为 `Recv.Empty` |
 | `sendTimeout(v, ms)` | 带超时发送，返回 `SendResult`；超时为 `SendResult.Timeout` |
 | `recvTimeout(ms)` | 带超时接收，返回 `Recv<T>`；超时为 `Recv.Timeout` |
 | `close()` | 关闭 channel |
-| `isClosed` / `isClosed()` | 关闭状态；运行时属性和方法均支持 |
+| `capacity` / `isClosed` | 容量和关闭状态属性 |
 
 `Recv.Value(v)` 中的 `v` 就是 channel payload，因此 `Channel<int?>` 可以区分真实的 `Recv.Value(null)` 和 `Recv.Closed`。
 
@@ -185,11 +191,31 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 
 ### 14.12 `Range`
 
-`a..b` 是半开区间 `[a, b)`，用于表达式和 `for-in`。常见成员为 `start`、`end`、`contains(x)`、`toArray()`、`toString()`；元素数量使用 `len(range)`。
+`a..b` 是半开区间 `[a, b)`，`a..=b` 是闭区间 `[a, b]`；两种范围都可用于表达式、`for-in` 和 `match` 范围模式。
+
+| 成员 | 说明 |
+|--|--|
+| `start` / `end` | 起点与声明的终点 |
+| `contains(x)` | 按半开或闭区间语义判断 `x` 是否在范围内 |
+| `toArray()` | 按迭代顺序生成独立的 `Array<int>` |
+| `toString()` | 返回 `a..b` 或 `a..=b` 形式的字符串 |
+| `len(range)` | 返回范围中的元素数量 |
+
+```xray @id=range-members
+var pages = 1..=3
+print(pages.start)          // 1
+print(pages.end)            // 3
+print(pages.contains(3))    // true
+print(len(pages))           // 3
+print(pages.toArray())      // [1, 2, 3]
+
+var empty = 5..5
+print(len(empty))           // 0
+```
 
 ### 14.13 `DateTime`
 
-通过 `import datetime` 获得工厂函数：`now`、`utc`、`create`、`createUTC`、`fromTimestamp`、`fromTimestampMs`、`parse`、`offset`。`DateTime` 实例由 prelude 注册，无需 import 类型名。
+通过 `import datetime` 获得工厂函数：`now`、`utc`、`create`、`createUTC`、`fromTimestamp`、`fromTimestampMs`、`parse`、`offset`。`DateTime` 不是 prelude 类型；需要类型名时使用 `import { DateTime } from datetime`。
 
 | 成员 | 类型/说明 |
 |--|--|
@@ -209,8 +235,9 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 | `test(s)` | 是否匹配 |
 | `find(s)` | 首个匹配 |
 | `findAll(s)` | 所有匹配 |
+| `findText(s)` / `findGroup(s, index)` | 首个匹配文本 / 捕获组文本 |
 | `replace(s, replacement)` | 替换 |
-| `split(s)` | 分割 |
+| `split(s, limit?)` | 分割 |
 
 ### 14.15 `StringBuilder`
 
@@ -227,11 +254,11 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 
 ### 14.17 `Task<T>` 与 enum 值
 
-`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`；当前公开形状为 `Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。enum 值保留冷路径属性 `name`、`ordinal` 与方法 `toString()`；用户可见 `EnumValue` / `EnumType` wrapper 类已删除。
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`：`Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
 
-### 14.18 其他 prelude 类型（`Logger` / `NetConn` / `NetListener`）
+### 14.18 线程与同步 handle
 
-这些类型由 prelude 注册，实例由 `log` / `net` 等模块工厂函数构造。完整运行时能力以对应 stdlib 模块为准。
+`Thread<T>` 是 prelude handle 类型，公开 `done` 属性以及 `join()`、`detach()` 方法。导入 `sys` 后，使用 `sys.Thread.spawn(body)` 或 `sys.Thread.spawn(ThreadOptions{...}, body)` 创建 OS 线程，并对返回的 handle 调用 `join()` 或 `detach()`。`CountdownLatch`、`EventCount`、`ResultGroup`、`Semaphore`、`WorkQueue` 等类型从 `sync` 模块导入；`Logger` 从 `log` 模块导入；连接与监听器类型从 `net` 模块导入。
 
 ### 14.19 `Atomic<T>` 方法
 
@@ -261,7 +288,7 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 > Source of truth: prelude / analyzer / runtime built-in type registration and method definitions.
 > MCP knowledge only consumes the generated analyzer metadata; it does not maintain its own copy of built-in method signatures.
 
-This section is a **method index** for each type (grouped by topic). Concrete signatures, parameter descriptions, and behavioral details are governed by the implementation source.
+This section summarizes the methods, signatures, and behavior of each built-in type by topic.
 
 ### 14.1 `int` Methods
 
@@ -273,7 +300,6 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `toFloat()` | `() -> float` | convert to float |
 | `toHex()` | `() -> string` | hexadecimal string |
 | `max(other)` / `min(other)` | `(int) -> int` | binary max/min |
-| `floor()` / `ceil()` / `round()` | `() -> int` | for `int`, returns self |
 | `sqrt()` | `() -> float` | square root |
 | `pow(exp)` | `(float) -> float` | power |
 | `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | returns `null` on overflow |
@@ -285,7 +311,7 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `byteswap()` | `() -> int` | reverses the byte order |
 | `rotateLeft(n)` / `rotateRight(n)` | `(int) -> int` | bit rotation (`n` taken modulo 64) |
 
-`abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. The bit-manipulation methods and overflow predicates share a single semantic source (`src/shared/xr_bits_core.h` / `xr_arith_core.h`) between VM and AOT.
+`abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. Bit-manipulation methods and overflow predicates have the same semantics in VM and AOT builds.
 
 ### 14.2 `float` Methods
 
@@ -337,11 +363,14 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `len(s)` | O(1) Unicode scalar count |
 | `bytes()` / `copyBytes()` | borrowed `Slice<byte>` / owned `Array<byte>` |
 | `runes()` | `Iterator<rune>`; bare `for (r in s)` has the same semantics |
-| `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<byte>`; invalid UTF-8 returns `null` |
+| `string.fromRune(r)` | constructs a string from one Unicode scalar |
+| `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<byte>`; invalid UTF-8 throws `Utf8Error.InvalidUtf8` |
 | `string.fromUtf8Lossy(bytes)` | copies a `Slice<byte>`, replacing invalid sequences with U+FFFD |
+| `string.join(parts, separator?)` | joins an `Array<string>` |
 | `contains(s)` | substring containment test |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | return rune ordinals |
 | `slice(start, end?)` | owned rune-ordinal slice; the range must be valid |
+| `sliceBytes(start, end)` | slice by byte offset; invalid boundaries throw `StringSliceError.InvalidByteRange` |
 | `split(sep, limit?)` | split into `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | replacement |
 | `repeat(n)` | repeat |
@@ -352,28 +381,29 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 
 ### 14.6 `Array<byte>`
 
-`Array<byte>` is a prelude type; construction is handled via builtin paths such as `Array<byte>(n)` / `Array<byte>(n, fill)`. Its `toString()` uses the same container formatting as every Array; decode text explicitly with `string.fromUtf8(bytes[:])` or `string.fromUtf8Lossy(bytes[:])`. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not assume a complete Array-isomorphic API.
+`Array<byte>` is a directly available specialization of `Array`; construction is handled via builtin paths such as `Array<byte>(n)` / `Array<byte>(n, fill)`. Its `toString()` uses the same container formatting as every Array; decode text explicitly with `string.fromUtf8(bytes[:])` or `string.fromUtf8Lossy(bytes[:])`. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not treat it as a second, Array-isomorphic API surface.
 
 ### 14.7 `Array<T>` Methods
 
 | Member | Type / Description |
 |--|--|
 | `len(arr)` | global `int` query |
-| `arr[i]` / `arr[i] = v` | indexed read/write |
+| `capacity` / `arr[i]` / `arr[i] = v` | capacity field and indexed read/write; `get(i)` / `set(i, v)` are also available |
 | `push(x)` / `pop()` | tail insert/remove |
 | `shift()` / `unshift(x)` | head insert/remove |
-| `slice(start?, end?)` | slicing |
-| `splice(start, deleteCount, ...items)` | in-place insert/remove |
 | `concat(...arrays)` | concatenation |
 | `indexOf(x)` / `contains(x)` | search |
 | `join(sep?)` | concatenate into a string |
 | `reverse()` / `sort(cmp?)` | in-place reorder |
 | `map(fn)` / `filter(fn)` / `reduce(fn, init)` | functional helpers |
 | `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | traversal and predicates |
-| `flat(depth?)` / `fill(v, start?, end?)` / `copyWithin(target, start, end?)` | array utilities |
+| `fill(v, start?, end?)` / `clear()` | fill or clear |
+| `reserve(capacity)` / `resize(length, fill)` | capacity and length management |
+| `ptr()` / `mutPtr()` | explicit low-level pointer views |
+| `toString()` | container representation |
 | `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
 
-`slice(start?, end?)` uses the same half-open range and negative-index rules as slice expressions; it returns an independent array and leaves the original array unchanged.
+Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow; use `copy(arr[start:end])` for independent owned data.
 
 ### 14.8 `Map<K, V>` Methods
 
@@ -381,13 +411,15 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 |--|--|
 | `len(m)` | global `int` query |
 | `m[k]` / `m[k] = v` | indexed read/write |
-| `get(k)` / `set(k, v)` | read/write |
+| `get(k)` / `set(k, v)` | `get` returns `null` when absent; `set` writes |
 | `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | query and remove |
 | `keys()` / `values()` / `entries()` | keys, values, key/value pairs |
 | `forEach(fn)` | traversal |
 | `iterator()` / `entriesIterator()` | iteration protocol |
 
 **Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from Record/Json object literals by the `#` prefix.
+
+`m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
 
 ### 14.9 `Set<T>` Methods
 
@@ -408,12 +440,13 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 |--|--|
 | `send(v)` | blocking send; throws if the channel is closed |
 | `recv()` | blocking receive, returns `Recv<T>`; closed and drained is `Recv.Closed` |
+| `recvOr(default)` | receives a payload, or returns the supplied default when none is available |
 | `trySend(v)` | non-blocking send, returns `SendResult` |
 | `tryRecv()` | non-blocking receive, returns `Recv<T>`; empty is `Recv.Empty` |
 | `sendTimeout(v, ms)` | timed send, returns `SendResult`; timeout is `SendResult.Timeout` |
 | `recvTimeout(ms)` | timed receive, returns `Recv<T>`; timeout is `Recv.Timeout` |
 | `close()` | close the channel |
-| `isClosed` / `isClosed()` | closed state; both runtime property and method are supported |
+| `capacity` / `isClosed` | capacity and closed-state fields |
 
 `Recv.Value(v)` carries the channel payload, so `Channel<int?>` can distinguish a real `Recv.Value(null)` from `Recv.Closed`.
 
@@ -435,11 +468,31 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 
 ### 14.12 `Range`
 
-`a..b` is the half-open interval `[a, b)`, used in expressions and `for-in`. Common members are `start`, `end`, `contains(x)`, `toArray()`, and `toString()`; use `len(range)` for its element count.
+`a..b` is the half-open interval `[a, b)`, while `a..=b` is the inclusive interval `[a, b]`. Both forms work in expressions, `for-in`, and range patterns in `match`.
+
+| Member | Description |
+|--|--|
+| `start` / `end` | The start and the declared endpoint |
+| `contains(x)` | Tests membership using the range's half-open or inclusive semantics |
+| `toArray()` | Produces an independent `Array<int>` in iteration order |
+| `toString()` | Returns an `a..b` or `a..=b` string |
+| `len(range)` | Returns the number of elements in the range |
+
+```xray @id=range-members-en
+var pages = 1..=3
+print(pages.start)          // 1
+print(pages.end)            // 3
+print(pages.contains(3))    // true
+print(len(pages))           // 3
+print(pages.toArray())      // [1, 2, 3]
+
+var empty = 5..5
+print(len(empty))           // 0
+```
 
 ### 14.13 `DateTime`
 
-The `import datetime` module provides factory functions: `now`, `utc`, `create`, `createUTC`, `fromTimestamp`, `fromTimestampMs`, `parse`, `offset`. `DateTime` instances are registered by the prelude, so the type name need not be imported.
+The `datetime` module provides factory functions through `import datetime`: `now`, `utc`, `create`, `createUTC`, `fromTimestamp`, `fromTimestampMs`, `parse`, and `offset`. `DateTime` is not a prelude type; import it explicitly with `import { DateTime } from datetime` when the name is used as a type.
 
 | Member | Type / Description |
 |--|--|
@@ -459,8 +512,9 @@ The `import datetime` module provides factory functions: `now`, `utc`, `create`,
 | `test(s)` | match predicate |
 | `find(s)` | first match |
 | `findAll(s)` | all matches |
+| `findText(s)` / `findGroup(s, index)` | first matched text / capture-group text |
 | `replace(s, replacement)` | replacement |
-| `split(s)` | split |
+| `split(s, limit?)` | split |
 
 ### 14.15 `StringBuilder`
 
@@ -477,11 +531,11 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.17 `Task<T>` and Enum Values
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` whose current public shape is `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, and `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. Enum values keep the cold-path `name`, `ordinal`, and `toString()` surface; user-visible `EnumValue` / `EnumType` wrapper classes have been removed.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` as `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, or `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
 
-### 14.18 Other Prelude Types (`Logger` / `NetConn` / `NetListener`)
+### 14.18 Thread and Synchronization Handles
 
-These types are registered by the prelude; instances are constructed by factory functions in modules such as `log` / `net`. The complete runtime capability follows the corresponding stdlib module.
+`Thread<T>` is a prelude handle type with the `done` field and the `join()` / `detach()` methods. After importing `sys`, create an OS thread with `sys.Thread.spawn(body)` or `sys.Thread.spawn(ThreadOptions{...}, body)`, then call `join()` or `detach()` on the returned handle. Import `CountdownLatch`, `EventCount`, `ResultGroup`, `Semaphore`, and `WorkQueue` from `sync`; import `Logger` from `log`; and import connection and listener types from `net`.
 
 ### 14.19 `Atomic<T>` Methods
 

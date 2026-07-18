@@ -8,7 +8,7 @@ order: 013
 
 ## 12. 测试系统 (Testing)
 
-> 真值源：`src/app/cli/xcli_test.c`、`stdlib/xray/test.xr`、`docs/testing-spec.md`。
+> 真值源：`src/app/cli/xcmd_test.c`、`src/api/xtest_runner.c`、`src/frontend/parser/xparse_decl.c` 与 analyzer 的全局 assertion builtin 表。
 
 ### 12.1 测试声明：`@test` 注解
 
@@ -36,20 +36,19 @@ fn test_with_assertions() {
 - `@test` 标注的函数会被 `xray test` 自动发现并运行；普通函数不会。
 - 测试函数命名约定：`test_xxx`（snake_case），描述性命名。
 - 测试函数无参数无返回值；通过 assert 系列函数表达预期。
-- 同一文件可包含**任意数量**的 `@test` 函数；它们按声明顺序运行。
+- 同一文件可包含**任意数量**的 `@test` 函数；单文件内按声明顺序运行。多个文件可用 `-j N` 并行，每个文件使用独立 isolate。
 
 ### 12.2 测试入口
 
-测试文件约定：
-- 与被测代码同目录或 `tests/regression/` 目录下。
-- 文件名形如 `XXXX_topic.xr`（四位数字编号 + 主题）。
+`xray test` 不强制测试目录或文件名；目录输入会递归收集所有 `.xr` 文件，并按路径排序。仓库自己的 regression suite 使用 `tests/regression/XXXX_topic.xr` 只是项目约定。
 
 运行：
 
 ```bash
-xray test                                  # 运行所有测试
+xray test tests/                           # 必须显式给出至少一个文件或目录
 xray test tests/regression/01_literals/    # 整个分组
 xray test tests/regression/01_literals/0100_int_basic.xr   # 单文件
+xray test -j 4 tests/                      # 文件级并行
 ```
 
 ### 12.3 断言 API
@@ -81,13 +80,15 @@ fn test_async_fetch() {
 
 ### 12.5 注解（Attributes）总览
 
-xray 的注解前缀为 `@`，紧接标识符。当前 parser 仅识别**三种**注解（源码：`xparse_decl.c:xr_parse_single_attribute`）：
+xray 的注解前缀为 `@`，真值表在 `xparse_decl.c:xr_parse_single_attribute`。测试 runner 识别以下测试注解：
 
-| 注解 | 适用 | 说明 |
-|---|---|---|
-| `@test` | 函数 | 标记为测试函数；接受可选参数：`@test(skip)` 跳过、`@test(timeout: 30)` 超时设置 |
-| `@native` | class / struct / fn | 声明 native 实现，方法体由 C 提供；用于 stdlib 类型声明 |
-| `@deprecated` | 任意声明 | 弃用警告；可选消息：`@deprecated("use X instead")` |
+| 注解 | 说明 |
+|---|---|
+| `@test` / `@test(skip)` / `@test(timeout: N)` | 测试、跳过测试、单测试超时秒数 |
+| `@before_all` / `@after_all` | 单文件 suite 前后各执行一次 |
+| `@before_each` / `@after_each` | 每个未跳过测试前后执行 |
+
+其它注解包括：`@deprecated("...")`；内置声明专用的 `@native`；AOT/C ABI 的 `@c_export("sym")`、`@section("name")`、`@weak`、`@used`、`@naked`、`@interrupt("abi")`、`@no_alloc`；以及 `@derive(Inspect, Json, Eq, Hash, Clone)`（其中 `Hash` 要求同时 `Eq`）。外部 C 声明使用 `extern "C" ... {}` 块。
 
 ```xray @id=testing-attributes
 @test                                 // 标记测试
@@ -96,18 +97,14 @@ fn test_basic() { return }
 @test(skip)                           // 跳过此测试
 fn test_wip() { return }
 
-@native                               // C 实现
-class Array<T> {
-    length: int
-    push(v: T)
-    // 无方法体——由 src/runtime/object/xarray_methods.c 提供
-}
+@before_each
+fn reset_fixture() { resetState() }
 
 @deprecated("use newAPI() instead")
 fn oldAPI() { return }
 ```
 
-> 不存在的注解（用户代码不要使用）：`@before_each` / `@after_all` / `@async` / `@override` 等——这些会触发"unknown attribute name"错误。
+> `@async`、`@override`、`@beforeEach` 等不在当前表中，会触发 `unknown attribute name`。异步能力直接在测试体内使用 `go` / `await`。
 
 ### 12.6 `xray run` / `xray test` / `xray repl`
 
@@ -116,7 +113,7 @@ fn oldAPI() { return }
 | `xray run main.xr` | 执行主程序 |
 | `xray test` | 运行测试套件 |
 | `xray repl` | 启动 REPL |
-| `xray build --aot` | AOT 编译 |
+| `xray build --native main.xr` | AOT native 编译 |
 | `xray fmt` | 格式化 |
 <!-- /xr-spec:cn -->
 
@@ -125,7 +122,7 @@ fn oldAPI() { return }
 
 ## 12. Testing
 
-> Source of truth: `src/app/cli/xcli_test.c`, `stdlib/xray/test.xr`, `docs/testing-spec.md`.
+> Source of truth: `src/app/cli/xcmd_test.c`, `src/api/xtest_runner.c`, `src/frontend/parser/xparse_decl.c`, and the analyzer's global assertion-builtin table.
 
 ### 12.1 Declaring Tests: the `@test` Attribute
 
@@ -153,20 +150,19 @@ fn test_with_assertions() {
 - Functions annotated with `@test` are auto-discovered and run by `xray test`; ordinary functions are not.
 - Test naming convention: `test_xxx` (snake_case), descriptive.
 - Test functions take no parameters and return nothing; expectations are expressed via the `assert*` family.
-- A file may contain **any number** of `@test` functions; they run in declaration order.
+- A file may contain **any number** of `@test` functions; they run in declaration order within that file. Multiple files may run in parallel with `-j N`, each in its own isolate.
 
 ### 12.2 Test Entry Points
 
-Test file convention:
-- Either co-located with the code under test or under `tests/regression/`.
-- File name format: `XXXX_topic.xr` (four-digit number + topic).
+`xray test` enforces no directory or filename convention. A directory argument is scanned recursively for every `.xr` file, sorted by path. This repository's `tests/regression/XXXX_topic.xr` form is only a project convention.
 
 Run:
 
 ```bash
-xray test                                  # run all tests
+xray test tests/                           # at least one file or directory is required
 xray test tests/regression/01_literals/    # run a whole group
 xray test tests/regression/01_literals/0100_int_basic.xr   # single file
+xray test -j 4 tests/                      # file-level parallelism
 ```
 
 ### 12.3 Assertion API
@@ -198,13 +194,15 @@ fn test_async_fetch() {
 
 ### 12.5 Attribute Overview
 
-Xray attributes are prefixed with `@` followed by an identifier. The current parser only recognizes **three** attributes (source: `xparse_decl.c:xr_parse_single_attribute`):
+Xray attributes begin with `@`; the source table is `xparse_decl.c:xr_parse_single_attribute`. The test runner recognizes:
 
-| Attribute | Applies to | Description |
-|---|---|---|
-| `@test` | function | mark as a test function; accepts optional arguments: `@test(skip)` to skip, `@test(timeout: 30)` to set a timeout |
-| `@native` | class / struct / fn | declare a native implementation; method bodies are provided by C (used in stdlib type declarations) |
-| `@deprecated` | any declaration | deprecation warning; optional message: `@deprecated("use X instead")` |
+| Attribute | Description |
+|---|---|
+| `@test` / `@test(skip)` / `@test(timeout: N)` | test, skipped test, or per-test timeout in seconds |
+| `@before_all` / `@after_all` | run once before/after the file's suite |
+| `@before_each` / `@after_each` | run before/after every non-skipped test |
+
+Other attributes include `@deprecated("...")`; builtin-declaration-only `@native`; AOT/C ABI attributes `@c_export("sym")`, `@section("name")`, `@weak`, `@used`, `@naked`, `@interrupt("abi")`, and `@no_alloc`; plus `@derive(Inspect, Json, Eq, Hash, Clone)` (`Hash` requires `Eq`). External C declarations use an `extern "C" ... {}` block.
 
 ```xray @id=testing-attributes
 @test                                 // mark as a test
@@ -213,18 +211,14 @@ fn test_basic() { return }
 @test(skip)                           // skip this test
 fn test_wip() { return }
 
-@native                               // C implementation
-class Array<T> {
-    length: int
-    push(v: T)
-    // no method bodies — provided by src/runtime/object/xarray_methods.c
-}
+@before_each
+fn reset_fixture() { resetState() }
 
 @deprecated("use newAPI() instead")
 fn oldAPI() { return }
 ```
 
-> Attributes that do not exist (do not use them in user code): `@before_each` / `@after_all` / `@async` / `@override` etc. — these trigger an "unknown attribute name" error.
+> `@async`, `@override`, and camel-case spellings such as `@beforeEach` are not in the current table and trigger `unknown attribute name`. Use `go` / `await` directly in an async test body.
 
 ### 12.6 `xray run` / `xray test` / `xray repl`
 
@@ -233,6 +227,6 @@ fn oldAPI() { return }
 | `xray run main.xr` | run the main program |
 | `xray test` | run the test suite |
 | `xray repl` | start the REPL |
-| `xray build --aot` | AOT compile |
+| `xray build --native main.xr` | AOT native compile |
 | `xray fmt` | format code |
 <!-- /xr-spec:en -->

@@ -6,411 +6,319 @@ order: 019
 <!-- xr-spec:cn -->
 ---
 
-## 18. 错误码参考 (Error Code Reference)
+## 18. 错误码 (Error Codes)
 
-> 真值源：`src/runtime/xerror_codes.h`、`src/runtime/xerror.h`。
+> 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `int`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
 
-> xray 有**两套错误码系统**：
->
-> - 数值码（`xerror_codes.h` 中的 `#define`）：lexer / parser / VM 运行时使用，按区间分布。
-> - 枚举码（`xerror.h` 中的 `XrErrorCode` 枚举）：分析器（type/binding/closure）使用，按区间分布。
->
-> 下表列出**主要**错误码；详细的全列表与触发条件以源码为准。错误抛出时携带的 `error.name` 字段与下表"名称"列对应。
+### 18.1 Lexer 与 parser
 
-### 错误码分类（数值码）
-
-| 范围 | 类别 |
-|--|--|
-| `E0101`-`E0199` | 词法错误 (Lexer) |
-| `E0201`-`E0299` | 语法错误 (Syntax) |
-| `E0301`-`E0399` | 编译错误 (Compile) |
-| `E0401`-`E0499` | 运行时错误 (Runtime) |
-| `E0501`-`E0599` | 模块错误 (Module) |
-| `E0801`-`E0899` | 禁止写法 (Rejected Syntax) |
-
-### 18.1 词法错误
-
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
 | `E0101` | `XR_ERR_LEX_INVALID_CHAR` | 非法字符 |
-| `E0102` | `XR_ERR_LEX_UNTERMINATED_STR` | 字符串未闭合 |
-| `E0103` | `XR_ERR_LEX_INVALID_NUMBER` | 数字字面量格式错误 |
-| `E0104` | `XR_ERR_LEX_INVALID_ESCAPE` | 非法转义序列 |
+| `E0102` | `XR_ERR_LEX_UNTERMINATED_STR` | 字符串未终止 |
+| `E0103` | `XR_ERR_LEX_INVALID_NUMBER` | 非法数字字面量 |
+| `E0104` | `XR_ERR_LEX_INVALID_ESCAPE` | 非法转义 |
 
-### 18.2 语法错误 (Syntax)
+#### Parser
 
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
-| `E0201` | `XR_ERR_SYN_UNEXPECTED_TOKEN` | 未预期的 token |
+| `E0201` | `XR_ERR_SYN_UNEXPECTED_TOKEN` | 意外 token |
 | `E0202` | `XR_ERR_SYN_EXPECTED_EXPR` | 缺少表达式 |
 | `E0203` | `XR_ERR_SYN_EXPECTED_STMT` | 缺少语句 |
-| `E0204` | `XR_ERR_SYN_UNCLOSED_PAREN` | 未闭合 `(` |
-| `E0205` | `XR_ERR_SYN_UNCLOSED_BRACE` | 未闭合 `{` |
-| `E0206` | `XR_ERR_SYN_UNCLOSED_BRACKET` | 未闭合 `[` |
-| `E0207` | `XR_ERR_SYN_INVALID_ASSIGN` | 非法赋值目标（如赋值给字面量） |
+| `E0204` | `XR_ERR_SYN_UNCLOSED_PAREN` | 圆括号未闭合 |
+| `E0205` | `XR_ERR_SYN_UNCLOSED_BRACE` | 花括号未闭合 |
+| `E0206` | `XR_ERR_SYN_UNCLOSED_BRACKET` | 方括号未闭合 |
+| `E0207` | `XR_ERR_SYN_INVALID_ASSIGN` | 非法赋值目标或形式 |
 
-### 18.3 编译期 / 名字解析错误
+### 18.2 编译与静态分析
 
-数值码（基础）：
-
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
-| `E0301` | `XR_ERR_CMP_UNDEFINED_VAR` | 未定义名字 |
-| `E0302` | `XR_ERR_CMP_REDEFINED_VAR` | 重复声明 |
-| `E0303` | `XR_ERR_CMP_CONST_ASSIGN` | 赋值给 `const` |
-| `E0304` | `XR_ERR_CMP_INVALID_BREAK` | `break` 不在循环内 |
-| `E0305` | `XR_ERR_CMP_INVALID_CONTINUE` | `continue` 不在循环内 |
-| `E0306` | `XR_ERR_CMP_INVALID_RETURN` | `return` 不在函数内 |
-| `E0307` | `XR_ERR_CMP_TOO_MANY_PARAMS` | 参数数量超过限制 |
-| `E0308` | `XR_ERR_CMP_TOO_MANY_LOCALS` | 局部变量数量超过限制 |
+| `E0301` | `XR_ERR_CMP_UNDEFINED_VAR` | 编译器阶段未定义变量 |
+| `E0302` | `XR_ERR_CMP_REDEFINED_VAR` | 重复定义变量 |
+| `E0303` | `XR_ERR_CMP_CONST_ASSIGN` | 给常量赋值 |
+| `E0304` | `XR_ERR_CMP_INVALID_BREAK` | 非法 `break` |
+| `E0305` | `XR_ERR_CMP_INVALID_CONTINUE` | 非法 `continue` |
+| `E0306` | `XR_ERR_CMP_INVALID_RETURN` | 非法 `return` |
+| `E0307` | `XR_ERR_CMP_TOO_MANY_PARAMS` | 参数过多 |
+| `E0308` | `XR_ERR_CMP_TOO_MANY_LOCALS` | 局部变量过多 |
+| `E0309` | `XR_ERR_CMP_TOO_MANY_CONSTANTS` | 常量过多 |
+| `E0310` | `XR_ERR_CMP_TOO_MANY_UPVALUES` | upvalue 过多 |
+| `E0311` | `XR_ERR_CMP_JUMP_TOO_LARGE` | 跳转偏移超限 |
+| `E0321` | `XR_ERR_TYPE_NOT_CALLABLE` | 静态类型不可调用 |
+| `E0322` | `XR_ERR_TYPE_NOT_INDEXABLE` | 静态类型不可下标 |
+| `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | 静态类型不可迭代 |
+| `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | 操作数类型非法 |
 
-分析器枚举码（`XrErrorCode`，定义在 `xerror.h` 350+ 段）：
+#### Analyzer
 
-| 枚举名 | 描述 |
-|--|--|
-| `XR_ERR_ANALYZE_UNDEFINED_VAR` | 未声明变量 |
-| `XR_ERR_ANALYZE_TYPE_MISMATCH` | 类型不可赋值 |
-| `XR_ERR_ANALYZE_CONST_ASSIGN` | 不能给 `const` 赋值 |
-| `XR_ERR_ANALYZE_NOT_CALLABLE` | 值不可调用 |
-| `XR_ERR_ANALYZE_WRONG_ARG_COUNT` | 参数数量不匹配 |
-| `XR_ERR_ANALYZE_ARG_TYPE` | 参数类型不匹配 |
-| `XR_ERR_ANALYZE_GENERIC_COUNT` | 类型参数数量错误 |
-| `XR_ERR_ANALYZE_GENERIC_CONSTRAINT` | 类型实参不满足约束 |
-| `XR_ERR_ANALYZE_SUPER_FIRST` | 派生类构造器首行不是 `super(...)` |
-| `XR_ERR_ANALYZE_SUPER_THIS` | `super(...)` 之前访问 `this` |
-| `XR_ERR_ANALYZE_SUPER_REQUIRED` | 派生类未调 `super()` |
-| `XR_ERR_ANALYZE_SUPER_INVALID` | 非派生类使用 `super()` |
-| `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | 协程闭包捕获了不安全变量 |
-| `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` 操作数不是 `Task` |
-| `XR_ERR_ANALYZE_MISSING_TYPE` | 变量需要类型注解或初始化器 |
-| `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 类未实现声明的接口 |
-| `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | 用非数字 key 访问 tuple |
-| `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段下标越界 |
-| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | 自动覆写与父类链的方法签名、可见性或默认参数契约不一致 |
-| `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | 类型用作 Map 键 / Set 元素时缺少 `operator==` / `hash` 契约 |
-| `XR_ERR_ANALYZE_CONDITION_TYPE` | 条件表达式不是 `bool` 或 nullable 存在性（`T?`, `T != bool`） |
-
-### 18.4 运行时错误 (Runtime)
-
-#### 类型与方法 (E040x-E041x)
-
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
-| `E0401` | `XR_ERR_TYPE_NO_PROPERTY` | 类型上不存在该属性 |
-| `E0402` | `XR_ERR_TYPE_NO_INDEX` | 类型不可索引 |
+| `E0350` | `XR_ERR_ANALYZE` | 通用 analyzer 错误 |
+| `E0351` | `XR_ERR_ANALYZE_UNDEFINED_VAR` | 名称未定义 |
+| `E0352` | `XR_ERR_ANALYZE_TYPE_MISMATCH` | 类型不匹配 |
+| `E0353` | `XR_ERR_ANALYZE_CONST_ASSIGN` | 静态检查发现常量赋值 |
+| `E0354` | `XR_ERR_ANALYZE_NOT_CALLABLE` | 被调用值不可调用 |
+| `E0355` | `XR_ERR_ANALYZE_WRONG_ARG_COUNT` | 实参数量错误 |
+| `E0356` | `XR_ERR_ANALYZE_ARG_TYPE` | 实参类型错误 |
+| `E0357` | `XR_ERR_ANALYZE_GENERIC_COUNT` | 泛型实参数量错误 |
+| `E0358` | `XR_ERR_ANALYZE_GENERIC_CONSTRAINT` | 泛型约束不满足 |
+| `E0359` | `XR_ERR_ANALYZE_SUPER_FIRST` | `super(...)` 不是首个构造动作 |
+| `E0360` | `XR_ERR_ANALYZE_SUPER_THIS` | `super(...)` 前访问 `this` |
+| `E0361` | `XR_ERR_ANALYZE_SUPER_REQUIRED` | 派生构造函数缺少 `super(...)` |
+| `E0362` | `XR_ERR_ANALYZE_SUPER_INVALID` | 非派生类非法使用 `super` |
+| `E0363` | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | 闭包捕获不安全 |
+| `E0364` | `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` 操作数类型非法 |
+| `E0365` | `XR_ERR_ANALYZE_MISSING_TYPE` | 缺少可推断的类型或初始化器 |
+| `E0367` | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 未完整实现 interface |
+| `E0368` | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple 字段名非法 |
+| `E0369` | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段越界 |
+| `E0370` | `XR_ERR_ANALYZE_THROW_NON_EXCEPTION` | `throw` 操作数不是允许的 enum 错误值 |
+| `E0371` | `XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE` | `match` 不穷尽 |
+| `E0372` | `XR_ERR_ANALYZE_USED_BEFORE_ASSIGN` | 赋值前使用 |
+| `E0373` | `XR_ERR_ANALYZE_TUPLE_IMMUTABLE` | 修改不可变 tuple |
+| `E0374` | `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | override 契约不匹配 |
+| `E0375` | `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | Map/Set 元素缺少 hash/equality 契约 |
+| `E0376` | `XR_ERR_ANALYZE_CONDITION_TYPE` | 条件类型非法 |
+| `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | 可见性违规 |
+| `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | 修改 const 字段 |
+| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用 |
+
+### 18.3 运行时
+
+| 代码 | C 名称 | 含义 |
+|--|--|--|
+| `E0400` | `XR_ERR_RUNTIME` | 通用运行时错误 |
+| `E0401` | `XR_ERR_TYPE_NO_PROPERTY` | 类型没有该属性 |
+| `E0402` | `XR_ERR_TYPE_NO_INDEX` | 值不可下标 |
 | `E0403` | `XR_ERR_TYPE_NO_CALL` | 值不可调用 |
-| `E0404` | `XR_ERR_TYPE_MISMATCH` | 类型不匹配 |
-| `E0405` | `XR_ERR_TYPE_NO_METHOD` | 类型上不存在该方法 |
+| `E0404` | `XR_ERR_TYPE_MISMATCH` | 运行时类型不匹配 |
+| `E0405` | `XR_ERR_TYPE_NO_METHOD` | 类型没有该方法 |
 | `E0406` | `XR_ERR_TYPE_NO_OPERATOR` | 类型不支持该运算符 |
 
-#### Null 相关 (E041x)
+#### Null、算术与容器
 
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
-| `E0410` | `XR_ERR_NULL_PROPERTY` | 对 null 访问属性 |
-| `E0411` | `XR_ERR_NULL_INDEX` | 对 null 索引 |
-| `E0412` | `XR_ERR_NULL_CALL` | 对 null 调用 |
-
-#### 算术 (E042x)
-
-| 码 | 名称 | 描述 |
-|--|--|--|
-| `E0420` | `XR_ERR_DIV_BY_ZERO` | 除零（整数或浮点） |
-| `E0421` | `XR_ERR_MOD_BY_ZERO` | 整数求模零 |
-| `E0422` | `XR_ERR_OVERFLOW` | 整数溢出 |
-
-#### 索引/键 (E043x)
-
-| 码 | 名称 | 描述 |
-|--|--|--|
-| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 数组 / 字符串 / Array<byte> 越界 |
+| `E0410` | `XR_ERR_NULL_PROPERTY` | 对 null 取属性 |
+| `E0411` | `XR_ERR_NULL_INDEX` | 对 null 下标 |
+| `E0412` | `XR_ERR_NULL_CALL` | 调用 null |
+| `E0413` | `XR_ERR_NULL_UNWRAP` | 强制解包 null |
+| `E0420` | `XR_ERR_DIV_BY_ZERO` | 除零 |
+| `E0421` | `XR_ERR_MOD_BY_ZERO` | 模零 |
+| `E0422` | `XR_ERR_OVERFLOW` | 算术溢出 |
+| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 下标越界 |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
 
-#### 内存与栈 (E044x)
+#### 系统、调用、coroutine 与 stdlib
 
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
 | `E0440` | `XR_ERR_STACK_OVERFLOW` | 栈溢出 |
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | 内存不足 |
+| `E0442` | `XR_ERR_MATCH_FAILURE` | 运行时 match 失败 |
+| `E0450` | `XR_ERR_WRONG_ARG_COUNT` | 运行时实参数量错误 |
+| `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 运行时实参类型错误 |
+| `E0460` | `XR_ERR_CORO_DEAD` | 操作已结束 coroutine |
+| `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine 已取消 |
+| `E0470` | `XR_ERR_JSON_PARSE` | JSON 解析失败 |
+| `E0471` | `XR_ERR_JSON_INVALID` | JSON 值或操作非法 |
+| `E0475` | `XR_ERR_REGEX_COMPILE` | regex 编译失败 |
+| `E0476` | `XR_ERR_REGEX_PATTERN` | regex pattern 非法 |
+| `E0480` | `XR_ERR_TLS_UNAVAILABLE` | TLS 能力不可用 |
 
-#### 调用参数 (E045x)
+### 18.4 模块、IO 与 coroutine
 
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
-| `E0450` | `XR_ERR_WRONG_ARG_COUNT` | 实参数量不匹配 |
-| `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 实参类型不匹配 |
+| `E0501` | `XR_ERR_MOD_NOT_FOUND` | 模块不存在 |
+| `E0502` | `XR_ERR_MOD_LOAD_FAILED` | 模块加载失败 |
+| `E0503` | `XR_ERR_MOD_NO_EXPORT` | 名称未导出 |
+| `E0504` | `XR_ERR_MOD_CIRCULAR` | 循环模块依赖 |
+| `E0601` | `XR_ERR_IO_FILE_NOT_FOUND` | 文件不存在 |
+| `E0602` | `XR_ERR_IO_READ_FAILED` | 读取失败 |
+| `E0603` | `XR_ERR_IO_WRITE_FAILED` | 写入失败 |
+| `E0604` | `XR_ERR_IO_PERMISSION_DENIED` | IO 权限不足 |
+| `E0701` | `XR_ERR_CORO_DEADLOCK` | coroutine 死锁 |
+| `E0702` | `XR_ERR_CORO_CHANNEL_CLOSED` | channel 已关闭 |
+| `E0703` | `XR_ERR_CORO_LIMIT_EXCEEDED` | coroutine 限额超出 |
 
-#### 协程 (E046x)
+### 18.5 语法引导与内部错误
 
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 被拒形式 / 含义 |
 |--|--|--|
-| `E0460` | `XR_ERR_CORO_DEAD` | 在已死的协程上操作 |
-| `E0461` | `XR_ERR_CORO_CANCELLED` | 协程被取消 |
+| `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` 无效；元组返回写作 `return (a, b)` |
+| `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | 裸 key/value `for` 形式无效 |
+| `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` 无效；无返回值写作 `-> ()` 或省略 |
+| `E0805` | `XR_ERR_SYN_PARAM_MODE_PREFIX_REMOVED` | 参数 mode 必须写在冒号与类型之间 |
+| `E0806` | `XR_ERR_SYN_PARAM_MOVE_MODE_REMOVED` | `move` 是实参转移表达式，不是参数 mode |
+| `E0807` | `XR_ERR_SYN_PARAM_MODE_COMBINED_REMOVED` | 非法组合参数 mode |
+| `E0808` | `XR_ERR_SYN_PARAM_MODE_POSTFIX_REMOVED` | 参数 mode 不能写在类型之后 |
+| `E0809` | `XR_ERR_SYN_CALL_IN_MARKER_REMOVED` | call-site `in` marker；普通 `in` 参数调用不写 marker |
+| `E0900` | `XR_ERR_INTERNAL` | 内部错误 |
+| `E0901` | `XR_ERR_NOT_IMPLEMENTED` | 尚未实现 |
+| `E0999` | `XR_ERR_UNKNOWN` | 未知错误 |
 
-### 18.5 模块错误 (Module)
-
-| 码 | 名称 | 描述 |
-|--|--|--|
-| `E0501` | `XR_ERR_MOD_NOT_FOUND` | 找不到模块 |
-| `E0502` | `XR_ERR_MOD_LOAD_FAILED` | 模块加载失败（IO / 解析错误） |
-| `E0503` | `XR_ERR_MOD_NO_EXPORT` | import 的名字未被 export |
-| `E0504` | `XR_ERR_MOD_CIRCULAR` | 模块依赖图包含循环依赖 |
-
-### 18.6 禁止写法 (Rejected Syntax)
-
-> parser 遇到下列写法时直接报错，并给出正确替代方案。
-
-| 码 | 名称 | 禁止写法 | 正确写法 |
-|--|--|--|--|
-| `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` | `return (a, b)` |
-| `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | `for k, v in m`（裸 KV） | `for (k, v in m)` |
-| `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` | `-> ()` 或省略返回类型 |
-
-### 18.7 错误处理 (E082x)
-
-| 码 | 名称 | 描述 |
-|--|--|--|
-| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | 历史名称保留以免重复分配；当前 `throw` 非 enum 错误统一由 `E0370` 表达（见 §8.1.1） |
-| `E0821` | `XR_ERR_TRY_BANG_BAD_OPERAND` | 已废弃（`try!` 已移除）；代码仅保留以免重复分配 |
-| `E0822` | `XR_ERR_TRY_BANG_NON_EXCEPTION_ERR` | 已废弃（`try!` 已移除）；代码仅保留以免重复分配 |
-| `E0823` | `XR_ERR_MATCH_NOT_EXHAUSTIVE` | 已合并到 `E0371`（见 §6.3.3）；代码仅保留以免重复分配 |
-| `E0824` | `XR_ERR_UNWRAP_NON_EXCEPTION_ERR` | 已废弃（`Result` 已移除）；代码仅保留以免重复分配 |
-
-### 18.8 Panic 错误对象结构
-
-panic 通道的运行时故障使用 prelude `PanicInfo` 类（声明：`stdlib/types/panic_info.xr`）：
-
-```xray
-@native
-class PanicInfo {
-    message: string             // 人类可读消息，含错误码与上下文
-    stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
-    cause: PanicInfo?           // 链式 cause
-    code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
-    data: Json                  // 运行时故障的结构化附加数据；无数据时为 JSON null
-
-    constructor(message: string = "", cause: PanicInfo? = null)
-    fn toString() -> string
-}
-```
-
-用户级 `throw` 操作数**必须**是 enum 变体值（见 §8.1.1 / `E0370`）。结构化业务错误使用 ADT enum，而不是继承 `PanicInfo`：
-
-```xray
-enum HttpErr {
-    NotFound(string),
-    ServerError(int, string),
-    Timeout,
-}
-
-throw HttpErr.ServerError(500, "upstream failed")
-```
-
-`PanicInfo` 只表示 panic 通道的运行时故障；业务错误通过 `throw <enum>` / `catch` 的值返回通道传播（见 §8.1）。
+运行时 panic 通道使用 prelude `PanicInfo`；用户级 `throw <enum>` 走值返回错误通道。二者的语义见 §8 与 §16，不应仅凭错误码区段推断传播机制。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
 ---
 
-## 18. Error Code Reference
+## 18. Error Codes
 
-> Source of truth: `src/runtime/xerror_codes.h`, `src/runtime/xerror.h`.
+> The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `int` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
 
-> Xray has **two error-code systems**:
->
-> - Numeric codes (`#define`s in `xerror_codes.h`): used by lexer / parser / VM runtime, allocated in ranges.
-> - Enum codes (the `XrErrorCode` enum in `xerror.h`): used by the analyzer (type / binding / closure), allocated in ranges.
->
-> The tables below cover the **principal** error codes; the full list and triggering conditions are governed by the source. The `error.name` field on a thrown error matches the "Name" column.
+### 18.1 Lexer and Parser
 
-### Error-code categories (numeric)
-
-| Range | Category |
-|--|--|
-| `E0101`-`E0199` | Lexical errors |
-| `E0201`-`E0299` | Syntax errors |
-| `E0301`-`E0399` | Compile errors |
-| `E0401`-`E0499` | Runtime errors |
-| `E0501`-`E0599` | Module errors |
-| `E0801`-`E0899` | Rejected syntax |
-
-### 18.1 Lexical Errors
-
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
 | `E0101` | `XR_ERR_LEX_INVALID_CHAR` | invalid character |
 | `E0102` | `XR_ERR_LEX_UNTERMINATED_STR` | unterminated string |
-| `E0103` | `XR_ERR_LEX_INVALID_NUMBER` | malformed numeric literal |
-| `E0104` | `XR_ERR_LEX_INVALID_ESCAPE` | invalid escape sequence |
+| `E0103` | `XR_ERR_LEX_INVALID_NUMBER` | invalid numeric literal |
+| `E0104` | `XR_ERR_LEX_INVALID_ESCAPE` | invalid escape |
 
-### 18.2 Syntax Errors
+#### Parser
 
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
 | `E0201` | `XR_ERR_SYN_UNEXPECTED_TOKEN` | unexpected token |
-| `E0202` | `XR_ERR_SYN_EXPECTED_EXPR` | expected expression |
-| `E0203` | `XR_ERR_SYN_EXPECTED_STMT` | expected statement |
-| `E0204` | `XR_ERR_SYN_UNCLOSED_PAREN` | unclosed `(` |
-| `E0205` | `XR_ERR_SYN_UNCLOSED_BRACE` | unclosed `{` |
-| `E0206` | `XR_ERR_SYN_UNCLOSED_BRACKET` | unclosed `[` |
-| `E0207` | `XR_ERR_SYN_INVALID_ASSIGN` | illegal assignment target (e.g., assigning to a literal) |
+| `E0202` | `XR_ERR_SYN_EXPECTED_EXPR` | expression expected |
+| `E0203` | `XR_ERR_SYN_EXPECTED_STMT` | statement expected |
+| `E0204` | `XR_ERR_SYN_UNCLOSED_PAREN` | unclosed parenthesis |
+| `E0205` | `XR_ERR_SYN_UNCLOSED_BRACE` | unclosed brace |
+| `E0206` | `XR_ERR_SYN_UNCLOSED_BRACKET` | unclosed bracket |
+| `E0207` | `XR_ERR_SYN_INVALID_ASSIGN` | invalid assignment target or form |
 
-### 18.3 Compile-time / Name-resolution Errors
+### 18.2 Compilation and Static Analysis
 
-Numeric codes (basic):
-
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
-| `E0301` | `XR_ERR_CMP_UNDEFINED_VAR` | undefined name |
-| `E0302` | `XR_ERR_CMP_REDEFINED_VAR` | redeclaration |
-| `E0303` | `XR_ERR_CMP_CONST_ASSIGN` | assignment to `const` |
-| `E0304` | `XR_ERR_CMP_INVALID_BREAK` | `break` outside a loop |
-| `E0305` | `XR_ERR_CMP_INVALID_CONTINUE` | `continue` outside a loop |
-| `E0306` | `XR_ERR_CMP_INVALID_RETURN` | `return` outside a function |
-| `E0307` | `XR_ERR_CMP_TOO_MANY_PARAMS` | parameter count exceeds limit |
-| `E0308` | `XR_ERR_CMP_TOO_MANY_LOCALS` | local-variable count exceeds limit |
+| `E0301` | `XR_ERR_CMP_UNDEFINED_VAR` | undefined variable at compiler stage |
+| `E0302` | `XR_ERR_CMP_REDEFINED_VAR` | redefined variable |
+| `E0303` | `XR_ERR_CMP_CONST_ASSIGN` | assignment to a constant |
+| `E0304` | `XR_ERR_CMP_INVALID_BREAK` | invalid `break` |
+| `E0305` | `XR_ERR_CMP_INVALID_CONTINUE` | invalid `continue` |
+| `E0306` | `XR_ERR_CMP_INVALID_RETURN` | invalid `return` |
+| `E0307` | `XR_ERR_CMP_TOO_MANY_PARAMS` | too many parameters |
+| `E0308` | `XR_ERR_CMP_TOO_MANY_LOCALS` | too many locals |
+| `E0309` | `XR_ERR_CMP_TOO_MANY_CONSTANTS` | too many constants |
+| `E0310` | `XR_ERR_CMP_TOO_MANY_UPVALUES` | too many upvalues |
+| `E0311` | `XR_ERR_CMP_JUMP_TOO_LARGE` | jump offset too large |
+| `E0321` | `XR_ERR_TYPE_NOT_CALLABLE` | static type is not callable |
+| `E0322` | `XR_ERR_TYPE_NOT_INDEXABLE` | static type is not indexable |
+| `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | static type is not iterable |
+| `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | invalid operand type |
 
-Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
+#### Analyzer
 
-| Enum | Description |
-|--|--|
-| `XR_ERR_ANALYZE_UNDEFINED_VAR` | undeclared variable |
-| `XR_ERR_ANALYZE_TYPE_MISMATCH` | type not assignable |
-| `XR_ERR_ANALYZE_CONST_ASSIGN` | cannot assign to `const` |
-| `XR_ERR_ANALYZE_NOT_CALLABLE` | value is not callable |
-| `XR_ERR_ANALYZE_WRONG_ARG_COUNT` | argument count mismatch |
-| `XR_ERR_ANALYZE_ARG_TYPE` | argument type mismatch |
-| `XR_ERR_ANALYZE_GENERIC_COUNT` | wrong number of type arguments |
-| `XR_ERR_ANALYZE_GENERIC_CONSTRAINT` | type argument violates constraint |
-| `XR_ERR_ANALYZE_SUPER_FIRST` | derived constructor's first line is not `super(...)` |
-| `XR_ERR_ANALYZE_SUPER_THIS` | accessed `this` before `super(...)` |
-| `XR_ERR_ANALYZE_SUPER_REQUIRED` | derived class did not call `super()` |
-| `XR_ERR_ANALYZE_SUPER_INVALID` | non-derived class used `super()` |
-| `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | coroutine closure captured an unsafe variable |
-| `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` operand is not a `Task` |
-| `XR_ERR_ANALYZE_MISSING_TYPE` | variable requires a type annotation or initializer |
-| `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | class does not implement a declared interface |
-| `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple accessed with a non-numeric key |
-| `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field index out of range |
-| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | automatic override conflicts with the parent-chain method signature, visibility, or default-argument contract |
-| `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | type used as Map key / Set element lacks `operator==` / `hash` contract |
-| `XR_ERR_ANALYZE_CONDITION_TYPE` | condition is not `bool` or nullable presence (`T?`, `T != bool`) |
-
-### 18.4 Runtime Errors
-
-#### Types and methods (E040x-E041x)
-
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
-| `E0401` | `XR_ERR_TYPE_NO_PROPERTY` | property does not exist on the type |
-| `E0402` | `XR_ERR_TYPE_NO_INDEX` | type is not indexable |
+| `E0350` | `XR_ERR_ANALYZE` | generic analyzer error |
+| `E0351` | `XR_ERR_ANALYZE_UNDEFINED_VAR` | undefined name |
+| `E0352` | `XR_ERR_ANALYZE_TYPE_MISMATCH` | type mismatch |
+| `E0353` | `XR_ERR_ANALYZE_CONST_ASSIGN` | analyzer-detected const assignment |
+| `E0354` | `XR_ERR_ANALYZE_NOT_CALLABLE` | called value is not callable |
+| `E0355` | `XR_ERR_ANALYZE_WRONG_ARG_COUNT` | wrong argument count |
+| `E0356` | `XR_ERR_ANALYZE_ARG_TYPE` | wrong argument type |
+| `E0357` | `XR_ERR_ANALYZE_GENERIC_COUNT` | wrong generic argument count |
+| `E0358` | `XR_ERR_ANALYZE_GENERIC_CONSTRAINT` | generic constraint not satisfied |
+| `E0359` | `XR_ERR_ANALYZE_SUPER_FIRST` | `super(...)` is not the first construction action |
+| `E0360` | `XR_ERR_ANALYZE_SUPER_THIS` | `this` accessed before `super(...)` |
+| `E0361` | `XR_ERR_ANALYZE_SUPER_REQUIRED` | derived constructor omits `super(...)` |
+| `E0362` | `XR_ERR_ANALYZE_SUPER_INVALID` | invalid `super` in a non-derived class |
+| `E0363` | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | unsafe closure capture |
+| `E0364` | `XR_ERR_ANALYZE_AWAIT_TYPE` | invalid `await` operand type |
+| `E0365` | `XR_ERR_ANALYZE_MISSING_TYPE` | no inferable type or initializer |
+| `E0367` | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | incomplete interface implementation |
+| `E0368` | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | invalid tuple field name |
+| `E0369` | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field out of range |
+| `E0370` | `XR_ERR_ANALYZE_THROW_NON_EXCEPTION` | `throw` operand is not an allowed enum error value |
+| `E0371` | `XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE` | non-exhaustive `match` |
+| `E0372` | `XR_ERR_ANALYZE_USED_BEFORE_ASSIGN` | use before assignment |
+| `E0373` | `XR_ERR_ANALYZE_TUPLE_IMMUTABLE` | mutation of an immutable tuple |
+| `E0374` | `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | override contract mismatch |
+| `E0375` | `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | Map/Set element lacks hash/equality contract |
+| `E0376` | `XR_ERR_ANALYZE_CONDITION_TYPE` | invalid condition type |
+| `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | visibility violation |
+| `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | mutation of a const field |
+| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value |
+
+### 18.3 Runtime
+
+| Code | C name | Meaning |
+|--|--|--|
+| `E0400` | `XR_ERR_RUNTIME` | generic runtime error |
+| `E0401` | `XR_ERR_TYPE_NO_PROPERTY` | property absent on type |
+| `E0402` | `XR_ERR_TYPE_NO_INDEX` | value is not indexable |
 | `E0403` | `XR_ERR_TYPE_NO_CALL` | value is not callable |
-| `E0404` | `XR_ERR_TYPE_MISMATCH` | type mismatch |
-| `E0405` | `XR_ERR_TYPE_NO_METHOD` | method does not exist on the type |
-| `E0406` | `XR_ERR_TYPE_NO_OPERATOR` | type does not support the operator |
+| `E0404` | `XR_ERR_TYPE_MISMATCH` | runtime type mismatch |
+| `E0405` | `XR_ERR_TYPE_NO_METHOD` | method absent on type |
+| `E0406` | `XR_ERR_TYPE_NO_OPERATOR` | operator unsupported by type |
 
-#### Null-related (E041x)
+#### Null, Arithmetic, and Containers
 
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
 | `E0410` | `XR_ERR_NULL_PROPERTY` | property access on null |
-| `E0411` | `XR_ERR_NULL_INDEX` | indexing into null |
+| `E0411` | `XR_ERR_NULL_INDEX` | index on null |
 | `E0412` | `XR_ERR_NULL_CALL` | call on null |
+| `E0413` | `XR_ERR_NULL_UNWRAP` | force-unwrapping null |
+| `E0420` | `XR_ERR_DIV_BY_ZERO` | division by zero |
+| `E0421` | `XR_ERR_MOD_BY_ZERO` | modulo by zero |
+| `E0422` | `XR_ERR_OVERFLOW` | arithmetic overflow |
+| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | index out of bounds |
+| `E0431` | `XR_ERR_KEY_NOT_FOUND` | missing Map key |
 
-#### Arithmetic (E042x)
+#### System, Calls, Coroutines, and Stdlib
 
-| Code | Name | Description |
-|--|--|--|
-| `E0420` | `XR_ERR_DIV_BY_ZERO` | integer division by zero |
-| `E0421` | `XR_ERR_MOD_BY_ZERO` | integer modulo by zero |
-| `E0422` | `XR_ERR_OVERFLOW` | integer overflow |
-
-#### Indexing/keys (E043x)
-
-| Code | Name | Description |
-|--|--|--|
-| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | array / string / Array<byte> out of bounds |
-| `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map key not found |
-
-#### Memory and stack (E044x)
-
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
 | `E0440` | `XR_ERR_STACK_OVERFLOW` | stack overflow |
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | out of memory |
-
-#### Call arguments (E045x)
-
-| Code | Name | Description |
-|--|--|--|
-| `E0450` | `XR_ERR_WRONG_ARG_COUNT` | actual argument count mismatch |
-| `E0451` | `XR_ERR_INVALID_ARG_TYPE` | actual argument type mismatch |
-
-#### Coroutines (E046x)
-
-| Code | Name | Description |
-|--|--|--|
+| `E0442` | `XR_ERR_MATCH_FAILURE` | runtime match failure |
+| `E0450` | `XR_ERR_WRONG_ARG_COUNT` | runtime argument-count mismatch |
+| `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |
 | `E0460` | `XR_ERR_CORO_DEAD` | operation on a dead coroutine |
-| `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine was cancelled |
+| `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine cancelled |
+| `E0470` | `XR_ERR_JSON_PARSE` | JSON parse failure |
+| `E0471` | `XR_ERR_JSON_INVALID` | invalid JSON value or operation |
+| `E0475` | `XR_ERR_REGEX_COMPILE` | regex compilation failure |
+| `E0476` | `XR_ERR_REGEX_PATTERN` | invalid regex pattern |
+| `E0480` | `XR_ERR_TLS_UNAVAILABLE` | TLS capability unavailable |
 
-### 18.5 Module Errors
+### 18.4 Modules, I/O, and Coroutines
 
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
 | `E0501` | `XR_ERR_MOD_NOT_FOUND` | module not found |
-| `E0502` | `XR_ERR_MOD_LOAD_FAILED` | module load failed (I/O / parsing error) |
-| `E0503` | `XR_ERR_MOD_NO_EXPORT` | imported name is not exported |
-| `E0504` | `XR_ERR_MOD_CIRCULAR` | module dependency graph contains a circular dependency |
+| `E0502` | `XR_ERR_MOD_LOAD_FAILED` | module load failed |
+| `E0503` | `XR_ERR_MOD_NO_EXPORT` | name is not exported |
+| `E0504` | `XR_ERR_MOD_CIRCULAR` | circular module dependency |
+| `E0601` | `XR_ERR_IO_FILE_NOT_FOUND` | file not found |
+| `E0602` | `XR_ERR_IO_READ_FAILED` | read failed |
+| `E0603` | `XR_ERR_IO_WRITE_FAILED` | write failed |
+| `E0604` | `XR_ERR_IO_PERMISSION_DENIED` | I/O permission denied |
+| `E0701` | `XR_ERR_CORO_DEADLOCK` | coroutine deadlock |
+| `E0702` | `XR_ERR_CORO_CHANNEL_CLOSED` | channel closed |
+| `E0703` | `XR_ERR_CORO_LIMIT_EXCEEDED` | coroutine limit exceeded |
 
-### 18.6 Rejected Syntax
+### 18.5 Syntax Guidance and Internal Errors
 
-> The parser rejects the following forms outright and reports the correct replacement.
-
-| Code | Name | Rejected form | Correct form |
-|--|--|--|--|
-| `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` | `return (a, b)` |
-| `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | `for k, v in m` (bare KV) | `for (k, v in m)` |
-| `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` | `-> ()` or omit the return type |
-
-### 18.7 Error Handling (E082x)
-
-| Code | Name | Description |
+| Code | C name | Rejected form / meaning |
 |--|--|--|
-| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | historical name preserved to avoid reuse; non-enum `throw` operands are now reported as `E0370` (see §8.1.1) |
-| `E0821` | `XR_ERR_TRY_BANG_BAD_OPERAND` | deprecated (`try!` removed); code preserved to avoid reuse |
-| `E0822` | `XR_ERR_TRY_BANG_NON_EXCEPTION_ERR` | deprecated (`try!` removed); code preserved to avoid reuse |
-| `E0823` | `XR_ERR_MATCH_NOT_EXHAUSTIVE` | merged into `E0371` (see §6.3.3); code preserved to avoid reuse |
-| `E0824` | `XR_ERR_UNWRAP_NON_EXCEPTION_ERR` | deprecated (`Result` removed); code preserved to avoid reuse |
+| `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` is invalid; return a tuple with `return (a, b)` |
+| `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | bare key/value `for` form is invalid |
+| `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` is invalid; use `-> ()` or omit the return type |
+| `E0805` | `XR_ERR_SYN_PARAM_MODE_PREFIX_REMOVED` | parameter modes belong between the colon and the type |
+| `E0806` | `XR_ERR_SYN_PARAM_MOVE_MODE_REMOVED` | `move` is an argument transfer expression, not a parameter mode |
+| `E0807` | `XR_ERR_SYN_PARAM_MODE_COMBINED_REMOVED` | invalid combined parameter modes |
+| `E0808` | `XR_ERR_SYN_PARAM_MODE_POSTFIX_REMOVED` | parameter modes cannot follow the type |
+| `E0809` | `XR_ERR_SYN_CALL_IN_MARKER_REMOVED` | call-site `in` marker; ordinary `in` calls have no marker |
+| `E0900` | `XR_ERR_INTERNAL` | internal error |
+| `E0901` | `XR_ERR_NOT_IMPLEMENTED` | not implemented |
+| `E0999` | `XR_ERR_UNKNOWN` | unknown error |
 
-### 18.8 Panic Error-Object Layout
-
-Runtime faults in the panic channel use the prelude `PanicInfo` class (declared in `stdlib/types/panic_info.xr`):
-
-```xray
-@native
-class PanicInfo {
-    message: string             // human-readable message including error code and context
-    stack: Array<string>        // auto-captured call stack, one formatted line per frame
-    cause: PanicInfo?           // chained cause
-    code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
-    data: Json                  // structured data for a runtime fault; JSON null when absent
-
-    constructor(message: string = "", cause: PanicInfo? = null)
-    fn toString() -> string
-}
-```
-
-The static type of a user-level `throw` operand **must** be an enum variant value (see §8.1.1 / `E0370`). Structured business errors use ADT enums rather than `PanicInfo` inheritance:
-
-```xray
-enum HttpErr {
-    NotFound(string),
-    ServerError(int, string),
-    Timeout,
-}
-
-throw HttpErr.ServerError(500, "upstream failed")
-```
-
-`PanicInfo` represents panic-channel runtime faults only; business errors propagate through the `throw <enum>` / `catch` value-return channel (see §8.1).
+The runtime panic channel uses the prelude `PanicInfo`; user-level `throw <enum>` uses the value-return error channel. See §8 and §16 for propagation semantics; the numeric range alone does not determine the channel.
 <!-- /xr-spec:en -->

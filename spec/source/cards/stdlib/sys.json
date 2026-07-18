@@ -1,5 +1,5 @@
 {
   "module": "sys",
   "summary": "OS-thread-domain system primitives",
-  "lead": "OS-thread-domain system primitives, including `Thread.spawn`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, CPU/thread helpers, and blocking sleep/yield operations. Use `sys.Os*` primitives for `sys.Thread` code and other blocking OS-thread contexts."
+  "lead": "Low-level OS-thread primitives: `sys.Thread.spawn(...)`, `ThreadOptions`, `ThreadLocal<T>`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, CPU/thread helpers, signal hooks, and blocking sleep/yield operations. `sys.Thread.spawn` is compiler-defined; it returns the prelude `Thread<T>` handle with `join`, `detach`, and `done`."
 }

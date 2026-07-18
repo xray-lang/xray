@@ -10,7 +10,7 @@ order: 025
 
 | 术语 | 定义 |
 |--|--|
-| **AOT** | Ahead-of-Time 编译：构建时预编译为机器码 |
+| **AOT** | Ahead-of-Time 编译：Xi IR 生成 C，并由所选 C toolchain 在构建时产生 native binary |
 | **AST** | Abstract Syntax Tree：源码解析后的中间表示 |
 | **Arena** | 批量分配器：所有分配同时释放 |
 | **Array<byte>** | 字节缓冲类型（见 §2.4.5） |
@@ -20,13 +20,13 @@ order: 025
 | **coroutine** | 协程：用户态可暂停/恢复的执行流 |
 | **defer** | 延迟执行：函数退出前执行（见 §4.9） |
 | **enum** | 枚举类型（见 §5.6） |
-| **GC** | Garbage Collector：垃圾回收 |
-| **GC-safepoint** | GC 安全点：可安全开始 GC 的指令位置 |
+| **GC** | Garbage Collection 的泛称；Xray 没有 tracing GC，而以引用计数为主，并用 Bacon–Rajan cycle collector 回收 coroutine-local 强引用环 |
+| **safepoint** | 调度器可检查抢占、取消或挂起状态的安全位置；当前 cycle collector 不由函数调用或后向跳转 safepoint 驱动 |
 | **goroutine** | xray 中称作协程 (coroutine)，启动语法 `go {...}` |
 | **hoisting** | 提升：声明在使用前被隐式定义 |
 | **IC** | Inline Cache：内联缓存（属性访问/方法分派优化） |
 | **interface** | 接口（见 §5.5） |
-| **JIT** | Just-In-Time 编译：运行时编译热路径 |
+| **JIT** | Just-In-Time 编译；Xray 当前未实现 JIT |
 | **lvalue / rvalue** | 左值（可赋值）/ 右值（仅值） |
 | **monomorphization** | 单态化：泛型在构建期按具体类型/表示生成专门版本；函数泛型可按 I64 / F64 / PTR / BOOL 表示共享，class / struct 泛型按具体类型完整单态化 |
 | **move** | 所有权转移：跨协程时强制（见 §7.3） |
@@ -54,7 +54,7 @@ order: 025
 
 | Term | Definition |
 |--|--|
-| **AOT** | Ahead-of-Time compilation: precompiles to machine code at build time |
+| **AOT** | Ahead-of-Time compilation: Xi IR generates C and the selected C toolchain produces a native binary at build time |
 | **AST** | Abstract Syntax Tree: intermediate representation produced by the parser |
 | **Arena** | Bulk allocator: every allocation is freed together |
 | **Array<byte>** | Byte buffer type (see §2.4.5) |
@@ -64,13 +64,13 @@ order: 025
 | **coroutine** | User-space, suspendable/resumable execution flow |
 | **defer** | Deferred execution: runs before function exit (see §4.9) |
 | **enum** | Enumeration type (see §5.6) |
-| **GC** | Garbage Collector |
-| **GC-safepoint** | Instruction location at which the GC may safely begin |
+| **GC** | Generic term for garbage collection; Xray has no tracing GC and primarily uses reference counting plus a Bacon–Rajan cycle collector for coroutine-local strong-reference cycles |
+| **safepoint** | Safe location where the scheduler can observe preemption, cancellation, or suspension state; the current cycle collector is not driven by function-call or back-edge safepoints |
 | **goroutine** | Equivalent of xray coroutine; launched via `go {...}` |
 | **hoisting** | Implicit declaration of a name before its first use |
 | **IC** | Inline Cache: optimization of property/method dispatch |
 | **interface** | Interface type (see §5.5) |
-| **JIT** | Just-In-Time compilation: compiles hot paths at runtime |
+| **JIT** | Just-In-Time compilation; Xray does not currently implement a JIT |
 | **lvalue / rvalue** | Assignable left-hand-side value vs. value-only right-hand-side |
 | **monomorphization** | Build-time specialization of generics into concrete type/representation versions; generic functions may share I64 / F64 / PTR / BOOL representation versions, while generic classes / structs are fully specialized by concrete type |
 | **move** | Ownership transfer: enforced when crossing coroutine boundaries (see §7.3) |

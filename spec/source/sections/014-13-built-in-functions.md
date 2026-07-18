@@ -10,7 +10,7 @@ order: 014
 
 > 真值源：`src/ir/xi_lower_expr.c`、`src/vm/xvm_dispatch_*.inc.c`、`src/runtime/object/builtins/`、`src/frontend/analyzer/xanalyzer_builtins.c`。
 
-不需要 `import` 即可使用的全局函数和内置构造/静态函数。下列表格中的 `value` 表示“任意运行时值”，不是一个可写的 `any` 类型；Xray 源码中已没有 `any` 类型。
+不需要 `import` 即可使用的全局函数和内置构造/静态函数。下列表格中的 `value` 表示“任意运行时值”，只是文档占位符，不是源码中的类型名。
 
 ### 13.1 I/O 与调试
 
@@ -18,6 +18,7 @@ order: 014
 |--|--|--|
 | `print` | `(...values) -> ()` | 输出到 stdout，自动追加换行；多参以空格分隔 |
 | `dump` | `(value, indent?) -> ()` | 结构化调试输出 |
+| `len` | `(value) -> int` | 查询实现 `Lengthable` 的 string、容器、Range、Slice、Json 等长度；不读取 `.length` |
 
 ### 13.2 类型转换
 
@@ -29,7 +30,7 @@ order: 014
 | `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
 | `rune(n)` | `(int) -> rune` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
 | `chr(n)` | `(int) -> string` | Unicode 码点转单 scalar 字符串 |
-| `copy(x)` | `(T) -> T` | 深拷贝，保留运行时类型 |
+| `copy(x)` | `(value) -> owned value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
 
 ### 13.3 类型检查
 
@@ -37,7 +38,12 @@ order: 014
 |---|---|---|
 | `typeOf(x)` | `(value) -> Type` | 返回稳定 TypeId / `Type.xxx` 值 |
 | `typeName(x)` | `(value) -> string` | 返回调试/日志用类型名字符串 |
+| `typeName<T>()` | `() -> string` | 返回静态类型 `T` 的名称 |
 | `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
+
+分支提示 `likely(cond)` / `unlikely(cond)` 接受并原样返回 `bool`；它们只向优化器提供概率提示，不改变求值或短路语义。
+
+全局只读环境值不是函数：`process`（入口参数/文件/目录信息）、`__file__`、`__dir__`。它们由真实文件/项目入口初始化；纯 `eval` 场景中 `process` 可为 `null`。
 
 ```xray @id=builtin-typeOf-is
 var x = 42
@@ -87,7 +93,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 
 > Source of truth: `src/ir/xi_lower_expr.c`, `src/vm/xvm_dispatch_*.inc.c`, `src/runtime/object/builtins/`, `src/frontend/analyzer/xanalyzer_builtins.c`.
 
-These global functions and built-in constructor/static functions are usable without any `import`. In the tables below, `value` denotes "any runtime value" — it is **not** a writable `any` type; xray no longer has an `any` type in the source language.
+These global functions and built-in constructor/static functions are usable without any `import`. In the tables below, `value` denotes "any runtime value"; it is a documentation placeholder rather than a writable source-language type.
 
 ### 13.1 I/O and Debugging
 
@@ -95,6 +101,7 @@ These global functions and built-in constructor/static functions are usable with
 |--|--|--|
 | `print` | `(...values) -> ()` | print to stdout, automatically appending a newline; multiple arguments are separated by spaces |
 | `dump` | `(value, indent?) -> ()` | structured debug output |
+| `len` | `(value) -> int` | length of strings, containers, Range, Slice, Json, and other `Lengthable` values; do not read `.length` |
 
 ### 13.2 Type Conversion
 
@@ -106,7 +113,7 @@ These global functions and built-in constructor/static functions are usable with
 | `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
 | `rune(n)` | `(int) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
 | `chr(n)` | `(int) -> string` | Unicode code point → one-scalar string |
-| `copy(x)` | `(T) -> T` | deep copy, preserving runtime type |
+| `copy(x)` | `(value) -> owned value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
 
 ### 13.3 Type Checking
 
@@ -114,7 +121,12 @@ These global functions and built-in constructor/static functions are usable with
 |---|---|---|
 | `typeOf(x)` | `(value) -> Type` | returns a stable TypeId / `Type.xxx` value |
 | `typeName(x)` | `(value) -> string` | returns the debug/logging type-name string |
+| `typeName<T>()` | `() -> string` | returns the name of static type `T` |
 | `x is T` | expression | runtime type check; the analyzer may narrow types |
+
+The branch hints `likely(cond)` and `unlikely(cond)` accept and return the same `bool`; they inform optimization probability only and do not change evaluation or short-circuit semantics.
+
+The global read-only environment values are not functions: `process` (entry arguments/file/directory), `__file__`, and `__dir__`. They are initialized for a real file/project entry; `process` may be `null` in a pure `eval` context.
 
 ```xray @id=builtin-typeOf-is
 var x = 42

@@ -1,6 +1,6 @@
 # Xray 语言参考手册
 
-> 版本：基于 `xray` v0.7.1 源码（截止 2026-05-21）
+> 版本：基于 `xray` v0.9.0 源码（校对日期 2026-07-18）
 > 性质：语言规范与参考手册。本文档是描述 xray 语言**实际行为**的真值源。
 > 实现：所有语义以 `xray` 当前主仓代码为准；本文档与代码不一致以代码为准并视为本文档需更新。
 > 受众：xray 编写者、IDE / AI 工具实现者、编译器内部贡献者。
@@ -25,7 +25,7 @@
 - [15. 标准库概览 (Standard Library)](#15-标准库概览-standard-library)
 - [16. 运行时模型 (Runtime Model)](#16-运行时模型-runtime-model)
 - [17. 编译流水线 (Compilation Pipeline)](#17-编译流水线-compilation-pipeline)
-- [18. 错误码参考 (Error Code Reference)](#18-错误码参考-error-code-reference)
+- [18. 错误码 (Error Codes)](#18-错误码-error-codes)
 - [附录 A. EBNF 语法](#附录-a-ebnf-语法)
 - [附录 B. 关键字索引](#附录-b-关键字索引)
 - [附录 C. 操作符索引](#附录-c-操作符索引)
@@ -61,7 +61,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 |--|--|
 | **类型** | 静态类型 + 类型推断；变量声明几乎不需要写类型标注，但类型系统在编译期完全可见 |
 | **并发** | 内置 M:N 协程（go / await / Channel / scope / select），并发安全在编译期由"显式共享"规则保证 |
-| **运行模式** | VM 解释 / JIT / AOT 三档，对开发者透明；语义在三种模式下严格一致 |
+| **运行模式** | 字节码 VM 与 `xray build --native` AOT 两条路径；当前没有 JIT，跨后端语义由差分测试守门 |
 | **错误处理** | 值返回错误通道（throw / try / catch + enum 错误）+ panic 边界（catch panic）+ 可空类型（T?）+ defer 资源管理 |
 | **元编程** | 注解（`@test` / `@native` / `@deprecated`）+ 编译期/derive 元数据 + 泛型单态化 |
 | **互操作** | C ABI 内置；stdlib 模块可由 C 编写并通过 `XR_DEFINE_BUILTIN` 暴露 |
@@ -114,17 +114,17 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 
 ## 1. 词法结构 (Lexical Structure)
 
-> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，63 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
+> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，66 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
 
 ### 1.1 字符编码
 
-xray 源文件**必须**是 UTF-8 编码。所有源码处理（包括字符串字面量、标识符、注释）按 UTF-8 字节序列进行；非 ASCII 字符仅在字符串字面量、注释、原始字符串内部允许（标识符暂只支持 ASCII，见 §1.4）。
+xray 源文件**必须**是合法 UTF-8。scanner 在产生首个 token 前对整个输入做严格 UTF-8 校验；字符串、注释和标识符都可包含非 ASCII 字符（标识符规则见 §1.4）。
 
 文件可选 UTF-8 BOM（`EF BB BF`）；扫描器跳过开头的 BOM。
 
 ### 1.2 行结尾与空白
 
-行结尾识别 `\n`（Unix）与 `\r\n`（Windows）。`\r` 单独出现视为非法字符。
+行结尾以 `\n` 计数；Windows `\r\n` 因 `\r` 被当作横向空白而正常工作。单独的 `\r` 也会被跳过，但**不会**增加行号或触发智能分号，因此不应当作源码换行使用。
 
 **空白字符**：空格 (`U+0020`)、水平制表符 (`U+0009`)、行结尾。空白用于分隔 token，不传递语义（**异常**：泛型语境下连续 `>>` 的拆分依赖空白上下文）。
 
@@ -139,7 +139,7 @@ xray 支持两种注释：行注释不嵌套，块注释支持嵌套：
    支持 /* 嵌套 */ 到任意合理深度 */
 ```
 
-注释可出现在任何空白能出现的地方。注释会被收集为 **trivia**，供 formatter 与 LSP 使用（见 `src/frontend/parser/xtrivia.*`），但不参与语法分析。
+注释可出现在任何空白能出现的地方。formatter 与 LSP 可以读取注释 trivia；trivia 不参与语法分析。
 
 文档注释（与普通注释无语法差异）：约定以 `///` 或 `/** */` 开头，用于工具识别。当前编译器不强制此约定。
 
@@ -147,11 +147,11 @@ xray 支持两种注释：行注释不嵌套，块注释支持嵌套：
 
 ```ebnf
 Identifier ::= IdentStart IdentCont*
-IdentStart ::= 'a'..'z' | 'A'..'Z' | '_'
+IdentStart ::= 'a'..'z' | 'A'..'Z' | '_' | Utf8NonAsciiByteSequence
 IdentCont  ::= IdentStart | '0'..'9'
 ```
 
-仅 ASCII。最大长度受编译器限制（约 255 字节）。
+输入先经过严格 UTF-8 校验；随后 scanner 把非 ASCII UTF-8 字节序列作为标识符的一部分。因此 `中文`、`café` 都是合法标识符。当前 scanner 不做 Unicode XID 分类或 NFC 规范化，视觉等价但编码不同的名字仍是不同标识符。
 
 **保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`default`、`ref`、`move`、`linked`、`supervisor`、`after` 可作为普通标识符）。
 
@@ -165,7 +165,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 ### 1.5 关键字
 
-xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
+xray 共 **66 个保留关键字**，按用途分组如下：
 
 #### 1.5.1 声明与流程控制
 
@@ -174,6 +174,7 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `var` | 可变变量声明 |
 | `const` | 不可变变量声明 |
 | `shared` | 共享身份绑定（由 shared/system owner 持有，词法作用域照常） |
+| `owned` | 唯一的 system-owned 可变身份绑定；转移使用 `move` |
 | `comptime` | 强制编译期求值的表达式前缀 |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
@@ -189,11 +190,12 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | 关键字 | 用途 |
 |--|--|
 | `class` `struct` | 类/结构体声明 |
+| `packed` `union` | FFI 布局声明 |
 | `extends` | 类继承 |
 | `interface` `implements` | 接口声明/实现 |
 | `enum` | 枚举声明 |
 | `type` | 类型别名 |
-| `new` | 已移除——仍保留为关键字仅用于迁移期报错（构造写 `T(...)`，见 §3.14） |
+| `new` | 保留字；对象构造统一写 `T(...)`（见 §3.14） |
 | `this` `super` | 自我/父类引用 |
 | `constructor` | 构造器 |
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
@@ -202,7 +204,7 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `operator` | 运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
 
-`abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。class/member 修饰符位置若出现这些旧拼写，parser 会报告已移除语法；接口与自动覆写替代这些标注。
+`abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。类的抽象约束通过接口表达，同名同签名方法自动覆写，不需要成员修饰符。
 
 #### 1.5.3 错误处理
 
@@ -214,18 +216,20 @@ xray 共 **65 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 
 #### 1.5.5 协程与并发
 
-`go` `await` `select` `defer` `scope` `unsafe` `parallel`
+`go` `await` `select` `defer` `scope` `unsafe`
+
+`parallel` 是需要显式 import 的标准库模块名，不是词法关键字。
 
 #### 1.5.6 类型名（保留）
 
-`int` `int8` `int16` `int32` `int64` `byte` `uint16` `uint32` `uint64`
+`int` `int8` `int16` `int32` `int64` `byte` `uint8` `uint16` `uint32` `uint64`
 `float` `float32` `float64` `bool` `string` `rune`
 
 类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
-> **注意**：以下名字**不是**词法关键字，而是 `prelude` 自动引入的内置类型符号：
-> `Array` · `BigInt` · `Array<byte>` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
-> 它们可被用户类同名覆盖（局部 shadow），但通常无须 import 即可使用。
+> **注意**：以下名字**不是**词法关键字，而是 `stdlib/prelude/prelude_types.def` 自动引入的类型符号：
+> `Array` · `Atomic` · `BigInt` · `Channel` · `Json` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `StringBuilder` · `Thread`。
+> `Array<byte>` 是 `Array` 的特化而不是独立名字。`DateTime`、`Logger` 等模块类型必须从对应模块显式 import。
 
 #### 1.5.7 字面量关键字
 
@@ -359,7 +363,7 @@ RawChar ::= 任何非双引号字符（包括 `\`，不做转义处理）
 - **不**处理任何转义（`\n`、`\t` 等保持原样）。
 - 仍然支持 `${...}` 插值。
 - 标识符 `r` 单独使用时仍为普通标识符（`TK_NAME`），仅当后紧接双引号才识别为原始字符串前缀。
-- `r'...'` 已移除；单引号不参与 raw string。
+- raw string 使用 `r"..."`；单引号字符串仍按普通转义规则解析。
 
 ```xray
 r"C:\path\to\file"          // 字面量包含两个反斜杠
@@ -385,9 +389,9 @@ var zh: rune = '中'
 var smile: rune = '\u{1F600}'
 ```
 
-##### 反引号字符串（非法）
+##### 字符串插值
 
-源码 lexer 显式拒绝反引号字符串。如需模板，使用普通双引号 + `${...}`。
+字符串模板使用普通双引号和 `${...}` 插值。
 
 #### 1.6.7 正则字面量
 
@@ -402,7 +406,6 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 ```
 
 - flags：`g`（全局）、`i`（忽略大小写）、`m`（多行）、`s`（dot 匹配换行）。
-- 实现：见 `stdlib/regex`。
 - **歧义消解**：当 `/` 出现在能接受一元 `/` 的位置（如紧跟 `=`、`,`、`(`、操作符），扫描器识别为正则；其他位置识别为除法。
 
 ### 1.7 操作符与 Token
@@ -521,9 +524,10 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Primitive | `int`、`float`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
 | 精确整数 | `int8`、`int16`、`int32`、`int64`、`byte`..`uint64` |
 | 精确浮点 | `float32`、`float64` |
-| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`、`Array<byte>`（即 `Array<byte>`） |
+| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<byte>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
-| 特殊 | `Json`、`BigInt`、`Range`、`DateTime`、`Regex`、`StringBuilder`、`Logger`、`NetConn`、`NetListener` |
+| Prelude 特殊类型 | `Json`、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
+| 模块导出类型 | `DateTime`、`Logger`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
 | 弱引用容器 | `WeakMap`、`WeakSet` |
 | Nullable | `T?` |
@@ -671,7 +675,7 @@ unsafe {
 
 #### 2.4.1 `Array<T>`
 
-有序可变数组。详见 §14.1。
+有序可变数组。详见 §14.7。
 
 ```xray
 var a: Array<int> = [1, 2, 3]
@@ -681,13 +685,13 @@ var c: Array<string> = []         // 显式空数组
 
 `Array<T>` 的 `T` 必须能在编译期确定。空 `[]` 在无类型标注时是编译错误：`Empty array '[]' requires a type annotation`。
 
-`Array<rune>` 保留 `rune` 元素身份，读出时得到 `rune`，写入时只接受 `rune`。实现使用紧凑的 Unicode scalar 存储（`XR_ELEM_RUNE` / `uint32_t[]`），不会退化成 `Array<uint32>`。
+`Array<rune>` 保留 `rune` 元素身份：读出时得到 `rune`，写入时只接受 `rune`。
 
 #### 2.4.1.1 定长数组 `[T; N]`
 
 `[T; N]` 是定长布局数组类型，表示 `N` 个 `T` 元素。`N` 是类型的一部分，必须能在分析期求值为正的编译期整数表达式；当前支持整数字面量、`const` 整数标识符、括号、一元 `-`/`~`，以及整数算术/位运算。当前后端编码上限为 65535 个元素。
 
-当前实现支持 struct inline 字段和局部栈上定长数组。标量元素（`int`、`float`、`bool`、精确整数/浮点等）使用紧凑 native lane；`string`、struct、嵌套定长数组和引用容器等非标量元素使用 tagged `XrValue` lane，因此可以递归组合：
+定长数组可用于 struct inline 字段和局部变量，并支持 struct、嵌套定长数组和引用容器等元素类型，因此可以递归组合：
 
 ```xray
 var bytes: [byte; 4] = [1, 2, 3, 4]
@@ -730,7 +734,7 @@ fn first(packet: Packet) -> byte {
 
 #### 2.4.2 `Map<K, V>`
 
-哈希字典，**保持插入顺序**。详见 §14.7。
+哈希字典，**保持插入顺序**。详见 §14.8。
 
 **Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`（与 Record / Json 对象一致，靠 `#` 前缀消歧）：
 
@@ -740,7 +744,8 @@ var m2 = #{"a": 1, "b": 2}
 var empty = #{}                                     // 空 Map
 
 m["c"] = 3                                          // 添加/修改
-var v = m["a"]                                      // 取值；不存在返回 null
+var v = m["a"]                                      // 取值；键不存在时 panic E0431
+var maybe = m.get("missing")                        // 安全查询；不存在返回 null
 ```
 
 | 字面量形式 | 类型 | 用途 |
@@ -755,7 +760,7 @@ var v = m["a"]                                      // 取值；不存在返回 
 
 #### 2.4.3 `Set<T>`
 
-去重集合。详见 §14.4。
+去重集合。详见 §14.9。
 
 ```xray
 var s: Set<int> = #[1, 2, 3]
@@ -833,15 +838,33 @@ j.extra = "x"        // OK（Json 是动态的）
 
 #### 2.4.8 `Range`
 
-由 `..` 运算符产生。见 §3.12。
+`Range` 表示整数区间，由 `a..b` 或 `a..=b` 产生：
+
+- `a..b` 是半开区间 `[a, b)`，不包含终点 `b`。
+- `a..=b` 是闭区间 `[a, b]`，包含终点 `b`。
+
+```xray
+var halfOpen = 1..4       // 1, 2, 3
+var inclusive = 1..=4     // 1, 2, 3, 4
+
+print(len(halfOpen))              // 3
+print(inclusive.contains(4))      // true
+print(inclusive.toArray())        // [1, 2, 3, 4]
+
+for (i in 3..=5) {
+    print(i)
+}
+```
+
+范围可用于 `for-in`、`match` 范围模式以及集合查询。完整表达式语义见 §3.9，成员见 §14.12。
 
 #### 2.4.9 `DateTime` / `Regex` / `StringBuilder`
 
-详见 §14。
+`Regex` 与 `StringBuilder` 是 prelude 类型。`DateTime` 不是 prelude 名字，必须通过 `import { DateTime } from datetime`（或其它显式 import）进入当前作用域。成员索引见 §14。
 
 #### 2.4.10 `WeakMap` / `WeakSet`
 
-`WeakMap` 的键、`WeakSet` 的元素必须是堆对象；弱引用不阻止 GC 回收。弱集合不提供会长期持有元素的遍历回调。
+`WeakMap` 的键、`WeakSet` 的元素必须是堆对象；弱引用不会延长对象的生命周期。弱集合不提供会长期持有元素的遍历回调。
 
 ### 2.5 可空类型
 
@@ -1026,7 +1049,7 @@ typeName(value)   // 返回类型名字符串
 `Type.Array`、`Type.Map`、`Type.Set`、`Type.Channel`、`Type.Json`、
 `Type.function`、`Type.class`、`Type.struct`、`Type.enum`、`Type.module`、`Type.bigint`、...
 
-完整列表见 `src/runtime/value/xtype_names.h` 中的 `XrTypeId`。
+使用 `typeName(value)` 可以取得具体值的调试类型名。
 
 ### 2.12 元数据与类型身份边界
 
@@ -1037,7 +1060,7 @@ Xray 默认只保留最小类型身份层：
 - 名义类型判断使用 `x is T` / `x as T`，不要通过字符串比较类型名。
 - 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
-`Reflect` 全局模块以及用户可见的 `Type` / `Field` / `Method` / `Constructor` / `Parameter` wrapper 类已删除，不提供兼容层。
+运行时类型查询使用 `typeOf(value)`、`typeName(value)` 和 `TypeId`。反射元数据不会暴露为可遍历、可调用的对象图。
 
 ---
 
@@ -1070,17 +1093,16 @@ Xray 默认只保留最小类型身份层：
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 右 | 赋值与复合赋值 |
 | 0 | `,`（仅 `match` 多值、参数列表等特定位置）| — | 不是真正运算符 |
 
-实现：`src/frontend/parser/xparse_expr.c` 的 Pratt-parser 风格。
 
 ### 3.2 一元表达式
 
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'move' UnaryExpr
-            | 'await' ('all' | 'any')? UnaryExpr
+            | 'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
             | 'go' (Block | PostfixExpr)
             | 'unsafe' Block
-            | 'comptime' Expression
+            | 'comptime' (Expression | Block)
             | PostfixExpr
 ```
 
@@ -1112,16 +1134,28 @@ unsafe {
 
 `unsafe` 不改变表达式的结果类型；多语句块的最后一个表达式语句产生块值，否则结果为 `()`。`unsafe` 也不关闭普通类型检查：`Ptr<T>` 仍不可写，`MutPtr<T>` 才能写入；空指针、越界、生命周期和对齐由调用方负责。
 
-#### `comptime expr`
+#### `comptime expr` / `comptime { ... }`
 
-`comptime` 是表达式前缀，用来要求操作数在分析/编译阶段求值；求值失败时直接报编译错误，而不是退回运行期。当前已实现的保证范围是**整数常量表达式**：整数字面量、`const` 整数标识符、括号、整数一元/二元算术与位运算，可用于固定数组长度、repeat 初始化长度等静态整数位置。
+`comptime` 要求表达式或块在分析阶段求值；失败是编译错误，不会退回运行期。常量表达式不限于整数：当前支持标量常量、TypeId、定长数组、tuple、struct 聚合及其成员/索引访问，以及可求值的一元/二元运算。固定数组长度等静态整数位置仍要求最终值是正整数。
 
 ```xray
 const SCALE = comptime 8 * 4
 var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
-`comptime { ... }` 块语法已被 parser 预留，但当前分析期会拒绝；完整 consteval 块、泛型 `ct_value` 和可求值函数体属于后续阶段。
+`comptime { ... }` 已实现受限解释执行。块支持局部 `const`/`var`、局部变量赋值和复合赋值、`if`/`while`、C 风格 `for`、定长数组 `for-in`、循环内带标签或不带标签的 `break`/`continue`、`compile_assert(...)` 与 `compile_error(...)`。块只产生编译期副作用并在运行时被擦除；需要把值带出块时使用 `return <consteval-expression>`。当前函数调用不属于 consteval-safe 表达式，unsupported 语句会在分析期拒绝。
+
+```xray
+const TABLE_SIZE = comptime 4 * 8
+
+comptime {
+    var sum = comptime 0
+    for (var i = 0; i < 4; i += 1) {
+        sum += i
+    }
+    compile_assert(sum == 6, "comptime loop")
+}
+```
 
 ### 3.3 二元表达式
 
@@ -1423,10 +1457,12 @@ shared ch: Channel<int> = Channel<int>(10)
 
 ```ebnf
 CallExpr ::= Primary '(' ArgList? ')'
-ArgList ::= Expr (',' Expr)* ','?
+ArgList ::= CallArg (',' CallArg)* ','?
+CallArg ::= ('ref' | 'out')? Expr
 ```
 
 - 参数按位置传递；不支持命名参数。
+- `ref` / `out` 参数必须在调用点重复写同名 marker，并传入可寻址 place；普通 `in`/值参数不写调用点 marker。
 - rest 参数收集多余参数到数组。
 - 参数计数不匹配 → 编译错误 `E0307` / `E0450`。
 
@@ -1564,7 +1600,7 @@ var result = match (x) {
 ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```
 
-构造与普通函数调用同形：`TypeName(args)`。没有 `new` 关键字——写出 `new`（如 `new Point(...)`）是编译错误，提示删除 `new`。
+构造与普通函数调用同形：`TypeName(args)`。`new` 是保留字，不构成合法表达式。
 
 ```xray
 var p = Point(1.0, 2.0)
@@ -1605,7 +1641,7 @@ yield expr                  // 生成器产出一个值并挂起
 
 `yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
-协作让出 CPU 不再使用裸 `yield`；使用 `Coro.yield()`（见 §10.10）。裸 `yield` 是语法错误。
+协作让出 CPU 使用 `Coro.yield()`（见 §10.10）；裸 `yield` 不是表达式。
 
 ---
 
@@ -1713,7 +1749,7 @@ for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
 for (ch in "hello") { print(ch) }             // 字符串字符（按 Unicode scalar）
 for (key in someMap) { print(key) }           // Map 单变量 → key
 for (key in someJson) { print(key) }          // Json 单变量 → key
-for (day in Color) { print(day.name) }        // 枚举迭代（按声明顺序）
+// for (day in Color) { ... }                 // 编译错误：enum 类型本身不可迭代
 for (_ in 0..n) { count++ }                   // 占位符忽略
 ```
 
@@ -1746,12 +1782,12 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 | `Json` | key (string) | (key, value) |
 | `string` | `rune` | (index, rune) |
 | `Range`（`a..b`） | int | — |
-| Enum 类型 | 具体 enum 值 | — |
+| Enum 类型 | **不可迭代**；需要编译器生成或用户提供的显式 case 表 | — |
 | 自定义 `Iterator<T>` | T | — |
 
 #### 自定义迭代器
 
-实现 `iterator()` 方法返回 `Iterator<T>` 协议对象（含 `hasNext()` 和 `next()`）即可在 `for-in` 中使用。详见 §14.15。
+实现 `iterator()` 方法返回 `Iterator<T>` 协议对象（含 `hasNext()` 和 `next()`）即可在 `for-in` 中使用。详见 §5.3.6。
 
 ### 4.5 `match` 语句
 
@@ -1923,12 +1959,13 @@ dump(some_obj)                 // 调试输出，含类型信息与结构布局
 
 > 真值源：`src/frontend/parser/xparse_decl.c`、`src/frontend/parser/xast_nodes_decl.h`、`src/frontend/analyzer/xanalyzer_visitor.c`。
 
-### 5.1 `var` / `const` / `shared`
+### 5.1 `var` / `const` / `shared` / `owned`
 
 ```ebnf
 VarDecl ::= 'var' Binding
 ConstDecl ::= 'const' Binding
 SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
+OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -1962,7 +1999,7 @@ const MAX_LEN: int = 1024
 - **必须**有初值。
 - 不能重新赋值（编译错误 `E0303`）。
 - 类型可推断或显式标注。
-- `const` 和 `var` 一样是单绑定声明；逗号并列声明已移除。需要多个名字时写多条声明，或使用解构：`const (a, b) = pair`。
+- `const` 和 `var` 一样，每条声明绑定一个名字或解构模式。多个独立名字使用多条声明；相关值可用 `const (a, b) = pair` 解构。
 
 #### 5.1.3 `shared` — 共享身份绑定
 
@@ -1979,7 +2016,23 @@ shared counter = Atomic(0)
 
 详见 [§10.11](#1011-并发安全模型)。
 
-#### 5.1.4 解构绑定
+#### 5.1.4 `owned` — 唯一所有身份绑定
+
+```xray
+owned buffer = Array<byte>(1024)
+
+var source = [1, 2, 3]
+owned moved = move source       // 转移现有引用图
+owned cloned = copy(moved)      // 或显式深拷贝
+```
+
+- `owned` 只能声明局部单名绑定，必须带初始化器；模块级 `owned` 和解构 `owned` 均被拒绝。
+- 绑定由 system owner 记录为唯一可变身份；绑定名本身不可重新赋值，但所拥有对象可以按类型规则原地修改。
+- 新构造的引用值可直接初始化。来自已有引用绑定的值必须显式写 `move source` 或 `copy(source)`，避免产生未声明的别名。
+- 所有权可通过 `move` 转给另一个 `owned`/`shared` 绑定、协程边界或返回值；移动后原绑定不可再使用。切片、裸指针等借用必须在移动前结束。
+- `owned` 是存储声明，不是类型修饰符，也不能带声明 attribute。
+
+#### 5.1.5 解构绑定
 
 ```xray
 // 数组解构
@@ -2069,7 +2122,7 @@ var result = divmod(10, 3)        // result 类型 (int, int)
 
 #### 5.2.4 参数模式
 
-参数模式写在冒号之后、类型之前：`name: in T`、`name: ref T`、`name: out T`。旧的前缀写法 `ref name: T` 已删除。
+参数模式写在冒号之后、类型之前：`name: in T`、`name: ref T`、`name: out T`。
 
 ```xray
 fn length_sq(v: in Vec2) -> float {
@@ -2120,7 +2173,7 @@ fn main() { ... }
 
 #### 5.2.7 尾递归优化
 
-编译器自动识别 accumulator 风格的尾递归并转为循环（避免栈溢出）。详见 [§17](#17-编译流水线-compilation-pipeline)。
+Xi 优化器会把可证明的自尾调用改写为循环；VM 也有常量栈空间的 tail-call opcode。不要把这一点理解为所有后端、所有间接/互递归调用的通用常量栈保证：构造调用和无法证明安全的调用仍按普通调用执行。详见 [§17](#17-编译流水线-compilation-pipeline)。
 
 ```xray
 fn factorial(n: int, acc: int = 1) -> int {
@@ -2142,7 +2195,7 @@ greet()                   // 必须显式调用
 
 - `fn main()` 没有任何特殊含义；如需手动调用，写 `main()`。
 - 顶层不允许 `return`（编译错误 `E0306`）。
-- 多文件项目的入口由 `xray.toml` 的 `entry` 字段指定，对应文件按上述脚本规则执行。
+- 多文件项目的入口由 `xray.toml` 的 `[project]`（或 package manifest 的 `[package]`）中的 `main` 字段指定，例如 `main = "src/main.xr"`；对应文件按上述脚本规则执行。
 
 #### 5.2.9 `extern "C"` C FFI 声明块
 
@@ -2590,7 +2643,7 @@ enum HttpStatus {
 }
 ```
 
-显式 backing value 已删除：不支持 `enum E : int`，也不支持 `Variant = 200` / `"N"` / `true` / `3.14`。协议数值、字符串符号等应通过 `const`、方法或显式转换函数表达。
+enum variant 使用声明顺序形成稳定的 `ordinal`，不声明额外 backing value。协议数值、字符串符号等外部表示通过 `const`、方法或显式转换函数表达。
 
 #### 5.6.2 Payload enum
 
@@ -2653,7 +2706,7 @@ Color.Red.ordinal     // 0              声明顺序 tag (int，从 0)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
 ```
 
-`.value`、`memberCount`、`getMember`、用户可见 `EnumValue` / `EnumType` 已删除。若需要遍历所有 case，后续使用显式生成 metadata 的 `CaseIterable` 风格能力，而不是默认 runtime enum object。
+enum 值提供 `name`、`ordinal` 与 `toString()`。需要遍历全部 case 时，应使用显式生成 metadata 的 `CaseIterable` 风格能力。
 
 #### 5.6.5 遍历
 
@@ -2762,7 +2815,7 @@ AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
 ```xray
 type Outcome = int | string                          // union 别名
-type Mapper = fn(int) -> int                            // 函数类型别名
+type Mapper = (int) -> int                              // 函数类型别名
 type Point = { x: float, y: float }                  // 结构化对象别名（sealed）
 type Pair<T> = { first: T, second: T }                // 泛型别名
 ```
@@ -2812,7 +2865,7 @@ export * from "./other"
 
 ## 6. 模式 (Patterns)
 
-> 真值源：`src/frontend/parser/xparse_match.c`、`src/runtime/value/x_value_match.c`。
+> 真值源：`src/frontend/parser/xparse_match.c`、`src/frontend/analyzer/xanalyzer_visitor_pattern.c`、`src/ir/xi_lower_expr.c` / `xi_lower_stmt.c` 与 VM/AOT 的 match lowering。
 
 模式出现在 `match` 表达式/语句与 `var` / `const` 解构中。
 
@@ -3006,7 +3059,7 @@ match (p) {
 
 ## 7. 作用域与名字解析 (Scoping)
 
-> 真值源：`src/frontend/analyzer/xanalyzer_scope.c`、`src/frontend/analyzer/xanalyzer_capture.c`。
+> 真值源：`src/frontend/analyzer/xanalyzer_symbol.c`、`xanalyzer_escape.c`、`xaddressability.c`、`xanalyzer_visitor_stmt.c` 与 `src/analysis/xglobal_producer.c` 的 capture/storage plan。
 
 ### 7.1 词法作用域与提升
 
@@ -3016,7 +3069,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 
 | 作用域 | 触发 | 示例 |
 |--|--|--|
-| 模块 | 每个 `.xr` 文件 | 顶层 `var` `const` `shared` `fn` `class` |
+| 模块 | 每个 `.xr` 文件 | 顶层 `var` `const` `shared` `fn` `class`（模块级 `owned` 被拒绝） |
 | 函数 / 闭包 | `fn` / 箭头函数进入 | 参数 + 函数体 |
 | 块 | `{...}` | `if` `while` `for` `match` 分支体 |
 | `scope` 块 | `scope { ... }` 关键字 | 显式词法作用域 + 结构化并发（见 §10.7） |
@@ -3027,7 +3080,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 **提升规则**：
 
 - 顶层 `fn` `class` `struct` `interface` `enum` `type` **提升**至当前作用域顶部——可在定义前引用。
-- `var` / `const` / `shared` **不提升**——必须在定义后使用。
+- `var` / `const` / `shared` / 局部 `owned` **不提升**——必须在定义后使用。
 - 同名重复声明：同作用域内 2 个同名变量 → 编译错误（嵌套作用域可 shadow）。
 
 ```xray
@@ -3074,7 +3127,7 @@ print(c())      // 2
 ```
 
 - 闭包与原变量**共享**。
-- 外层作用域退出后，被闭包引用的变量会被 GC 保活（提升到堆）。
+- 外层作用域退出后，被捕获变量由闭包 cell / upvalue 与相应引用计数继续保活。
 
 #### 闭包优化
 
@@ -3101,11 +3154,12 @@ var t2 = go fn(b: Array<byte>) -> int {
 print(len(big_buffer))    // 编译错误：move 后访问
 ```
 
-**move 使用场景**：`move` 作为**实参前缀**出现在调用位置（参见 §10.8）：
+**move 使用场景**：`move` 是一元所有权转移表达式，常见于实参、初始化器与返回值（参见 §5.1.4 / §10.8）：
 
 - `go f(move x)`、`go fn(...){...}(move x)`：把所有权转给协程。
 - `ch.send(move data)`：跨协程发送时转移所有权（避免拷贝）。
 - 普通函数调用 `f(move x)`：把所有权传入函数（被调函数独占）。
+- `owned dst = move src` / `shared dst = move src` / `return move src`：把局部 `var` 或 `owned` 身份转给新的 owner 或调用方。
 
 ### 7.4 协程数据传递规则（避免数据竞争）
 
@@ -3117,7 +3171,7 @@ print(len(big_buffer))    // 编译错误：move 后访问
 |---|---|---|
 | inline value | 标量、不可变小值 | 直接复制位表示 |
 | deep copy | 显式 `copy(x)` 的 owned graph | 在目标 execution owner 中物化独立图 |
-| move | 显式 `move x` 的可转移局部 `var` | 转移所有权并静态废弃源绑定 |
+| move | 显式 `move x` 的可转移局部 `var` 或 `owned` | 转移所有权并静态废弃源绑定 |
 | module readonly | 已冻结并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
 | shared ref | `shared`、Channel、Task、Atomic 等稳定共享身份 | 保留 shared/system owner 的引用 |
 | reject | execution-local graph、可变 module state、悬垂 slice/pointer/upvalue | 编译错误并报告 owner/provenance 与所需显式动作 |
@@ -3164,7 +3218,7 @@ var t4 = go fn(c: Channel<int>) -> int {
 ch.send(42)
 ```
 
-### 7.5 GC 与对象生命周期
+### 7.5 内存管理与对象生命周期
 
 Xray 采用多层内存管理：
 
@@ -3172,23 +3226,22 @@ Xray 采用多层内存管理：
 |--|--|--|
 | 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 freeze + publish | 模块卸载 |
 | 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
-| 共享存储（`shared`） | shared/system owner + refcount | 最后共享引用释放 |
-| execution-local heap（一般局部对象） | execution owner + 引用计数 + 循环引用回收 | execution 结束或最后引用释放；强引用环由 cycle collector 回收 |
-| 栈（`struct` 值、本地） | RAII | 作用域退出 |
+| 共享存储（`shared`） | shared/system owner + 原子引用计数 | 最后共享引用释放 |
+| coroutine-local heap（一般局部对象） | per-coroutine heap + 编译器插入的引用计数 + Bacon–Rajan cycle collector | 最后强引用释放时立即回收；强引用环由 cycle collector 回收；coroutine 结束时批量释放剩余 Region 块和大对象 |
+| 栈（`struct` 值、本地） | 词法存储期 | 作用域退出；语言没有用户可见的确定性析构 / `Drop` hook |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
 
 **内存观察点**：
-- 默认以引用计数立即释放对象。
-- 强引用环由 cycle collector 在安全点或显式 `runtime.collectCycles()` 时处理。
-- 指令列表中成为内存安全点的点包括函数调用、后向跳转、显式 `runtime.collectCycles()`。
-
-循环引用回收与堆布局设计：见 `src/runtime/mem/`。
+- 普通局部对象由编译器插入 retain/drop；最后一个强引用释放时进入 RC 销毁路径。
+- 编译器只把可能形成引用环的类型标为 cycle candidate；相应对象在 RC 降低但仍存活时进入候选根集合。
+- cycle collector 由显式 `runtime.collectCycles()` 或候选根数量达到自适应阈值触发。
+- cycle collector 只遍历 coroutine-local RC 边，并跳过 shared/atomic、runtime-managed 和 Region 对象；它不是并发 tracing GC。
 
 ---
 
 ## 8. 错误处理 (Error Handling)
 
-> 真值源：`src/vm/xvm_dispatch_exception.inc.c`、`src/vm/xvm_dispatch_misc.inc.c`、`src/runtime/object/xexception.c`、`stdlib/prelude/prelude.c`。
+> 真值源：`src/frontend/analyzer/xanalyzer_errorset.c`、`src/ir/xi_lower_stmt.c`、`src/vm/xvm_dispatch_exception.inc.c`、`src/runtime/object/xpanic_info.c`、`stdlib/types/panic_info.xr`。
 
 ### 8.0 设计哲学：值返回 + panic 边界
 
@@ -3208,7 +3261,7 @@ Xray 的错误处理分为两个严格分离的通道：
 
 ### 8.1 值返回错误通道
 
-#### 8.1.1 `throw` 表达式
+#### 8.1.1 `throw` 语句
 
 `throw expr` 抛出一个枚举错误值。`expr` 必须是枚举类型的变体值：
 
@@ -3578,7 +3631,7 @@ fn safeDivide(a: int, b: int) -> string {
 
 ## 9. 泛型 (Generics)
 
-> 真值源：`src/frontend/analyzer/xanalyzer_generic.c`、`src/frontend/analyzer/xanalyzer_subtype.c`。
+> 真值源：`src/frontend/analyzer/xtype_ref_resolve.c`、`xanalyzer_mono.c`、`xanalyzer_builtin_interfaces.c` 与 `src/runtime/value/xtype_generic.c`。
 
 ### 9.1 类型参数语法 `<T>`
 
@@ -3657,7 +3710,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | `Comparable` | 可用 `<` `<=` `>` `>=` 比较；int/float/string/Comparable 实现者 |
 | `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `int` / `float` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==(other: Self) -> bool` 与 `hash() -> int` |
 | `Stringable` | 可调 `.toString()`；几乎所有内置类型默认实现 |
-| `Iterable<T>` | 可被 `for-in` 遍历；Array、Map、Json、string、Range、enum、自定义 `iterator()` |
+| `Iterable<T>` | 可被 `for-in` 遍历；Array、Map、Json、string、Range 与自定义 `iterator()`；enum 类型本身不可迭代 |
 
 `Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==(other: Self) -> bool` 与 `hash() -> int`。只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, int>)`。
 
@@ -3772,7 +3825,7 @@ print(typeName(c))             // "Container<int>" when type names are enabled
 
 ## 10. 并发与协程 (Concurrency)
 
-> 真值源：`src/runtime/coro/xcoro_*.c`、`src/runtime/sync/xchannel.c`、`src/runtime/sync/xscope.c`、`docs/rules/design-principles.md`。
+> 真值源：`src/coro/xcoro*.c`、`src/coro/xtask*.c`、`src/coro/xchannel.c`、`src/coro/xscope*.c`、`src/frontend/analyzer/xanalyzer_escape.c` 与 `docs/rules/design-principles.md`。
 
 xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设计目标：写 `go { ... }` 就和写普通函数一样简单，但**编译期保证不发生数据竞争**。
 
@@ -3781,7 +3834,7 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 | 维度 | 选择 |
 |--|--|
 | 调度模型 | M:N（用户态协程 + 多 OS 线程） |
-| 调度策略 | 协作式（GC-safepoint）+ work-stealing |
+| 调度策略 | 协作式（后向跳转、Channel、`await`、`Coro.yield()` 等调度/挂起点）+ work-stealing |
 | 栈模型 | Stackless（每协程独立 VM 值栈 + 帧数组，按需增长，无原生 C 栈） |
 | 创建开销 | ~微秒级（初始 VM 值栈约 64 槽 + 4 帧，非原生栈） |
 | 上下文切换 | VM 上下文切换（保存/恢复 VM 帧），无原生栈切换、无 syscall |
@@ -3839,7 +3892,7 @@ var task = go fn(x: int) -> int {
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
-- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared`，**裸传是编译错误**；标量、`string`、`shared`、Channel / Task / Atomic 等可直接传。`move` 只适用于可重新绑定的局部 `var` 值，`shared` 绑定不能被 move。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，正常路径不再有隐式边界深拷贝。
+- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared`，**裸传是编译错误**；标量、`string`、`shared`、Channel / Task / Atomic 等可直接传。`move` 只适用于可重新绑定的局部 `var` 值，`shared` 绑定不能被 move。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，每次边界传递都能从源码看出复制、转移或共享语义。
 - `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
 
 ### 10.3 `await` — 等待结果
@@ -3913,9 +3966,9 @@ match t.poll() {
 
 `TaskResult<T>` 的当前公开形状为 `Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。运行时故障通过 `PanicInfo` 进入 `Failed`；业务 enum 错误仍走语言的错误通道，plain `await task` 会按对应错误路径传播，调用方需要状态值时使用显式 task handle 与 `awaitResult()` / `awaitTimeout(ms)`。
 
-**取消语义**：`cancel()` 设置取消标志；协程在下一个 safepoint（GC 检查点、Channel 操作、`await`、`Coro.yield()`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
+**取消语义**：`cancel()` 设置取消标志；协程在下一个调度/挂起检查点（后向跳转、Channel 操作、`await`、`Coro.yield()`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
 
-**看门狗策略**：运行时监控线程（sysmon）会观察 RUNNING 协程的心跳。纯 Xray 循环在后向跳转 safepoint 推进心跳，因此会被观测为持续进展；sysmon 主要用于发现长时间 native/FFI 或无 safepoint 区域卡住。如果心跳长时间冻结，默认行为是 **warn-only**：约 100ms 后打印一次 stuck warning，但不静默取消协程。强制取消是显式 opt-in：设置环境变量 `XRAY_SYSMON_CANCEL_MS=N`（`N > 0`，单位毫秒）后，心跳冻结超过该阈值的协程会被标记取消；未设置或设为 `0` 时保持仅告警。纯 CPU 长循环仍可在循环内插入 `Coro.yield()` 改善调度公平性和取消响应性，但不再是避免默认看门狗强杀的必要条件。
+**看门狗策略**：运行时监控线程（sysmon）会观察 RUNNING 协程的心跳。纯 Xray 循环在后向跳转 safepoint 推进心跳，因此会被观测为持续进展；sysmon 主要用于发现长时间 native/FFI 或无 safepoint 区域卡住。如果心跳长时间冻结，默认行为是 **warn-only**：约 100ms 后打印一次 stuck warning，但不静默取消协程。强制取消是显式 opt-in：设置环境变量 `XRAY_SYSMON_CANCEL_MS=N`（`N > 0`，单位毫秒）后，心跳冻结超过该阈值的协程会被标记取消；未设置或设为 `0` 时保持仅告警。纯 CPU 长循环可在循环内插入 `Coro.yield()`，以改善调度公平性和取消响应性。
 
 ### 10.5 Channel
 
@@ -4225,13 +4278,13 @@ Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。F
 
 - 每个 `.xr` 文件是一个模块。
 - 模块名 = 文件名（去除 `.xr` 后缀）。
-- 模块路径反映目录结构：`src/utils/string.xr` → `utils.string`。
+- 文件模块的规范身份由 resolver 归一化后的路径决定；源码中通常通过相对路径或包路径 import，不应依赖把目录分隔符展示成点号的推导规则。
 
 ### 11.2 项目结构
 
 ```
 my_project/
-├── xray.toml              # 包清单（包名、依赖、入口）
+├── xray.toml              # 包清单（包名、依赖、main）
 ├── src/
 │   ├── main.xr            # 入口
 │   ├── utils.xr
@@ -4248,14 +4301,10 @@ my_project/
 [package]
 name = "my_project"
 version = "0.1.0"
-entry = "src/main.xr"
+main = "src/main.xr"
 
 [dependencies]
-http = "1.0"
-json = "0.2"
-
-[dev-dependencies]
-test = "1.0"
+local_utils = { path = "../local_utils" }
 ```
 
 ### 11.3 `import` 语法
@@ -4390,7 +4439,7 @@ time.sleep(100)
 
 ## 12. 测试系统 (Testing)
 
-> 真值源：`src/app/cli/xcli_test.c`、`stdlib/xray/test.xr`、`docs/testing-spec.md`。
+> 真值源：`src/app/cli/xcmd_test.c`、`src/api/xtest_runner.c`、`src/frontend/parser/xparse_decl.c` 与 analyzer 的全局 assertion builtin 表。
 
 ### 12.1 测试声明：`@test` 注解
 
@@ -4418,20 +4467,19 @@ fn test_with_assertions() {
 - `@test` 标注的函数会被 `xray test` 自动发现并运行；普通函数不会。
 - 测试函数命名约定：`test_xxx`（snake_case），描述性命名。
 - 测试函数无参数无返回值；通过 assert 系列函数表达预期。
-- 同一文件可包含**任意数量**的 `@test` 函数；它们按声明顺序运行。
+- 同一文件可包含**任意数量**的 `@test` 函数；单文件内按声明顺序运行。多个文件可用 `-j N` 并行，每个文件使用独立 isolate。
 
 ### 12.2 测试入口
 
-测试文件约定：
-- 与被测代码同目录或 `tests/regression/` 目录下。
-- 文件名形如 `XXXX_topic.xr`（四位数字编号 + 主题）。
+`xray test` 不强制测试目录或文件名；目录输入会递归收集所有 `.xr` 文件，并按路径排序。仓库自己的 regression suite 使用 `tests/regression/XXXX_topic.xr` 只是项目约定。
 
 运行：
 
 ```bash
-xray test                                  # 运行所有测试
+xray test tests/                           # 必须显式给出至少一个文件或目录
 xray test tests/regression/01_literals/    # 整个分组
 xray test tests/regression/01_literals/0100_int_basic.xr   # 单文件
+xray test -j 4 tests/                      # 文件级并行
 ```
 
 ### 12.3 断言 API
@@ -4463,13 +4511,15 @@ fn test_async_fetch() {
 
 ### 12.5 注解（Attributes）总览
 
-xray 的注解前缀为 `@`，紧接标识符。当前 parser 仅识别**三种**注解（源码：`xparse_decl.c:xr_parse_single_attribute`）：
+xray 的注解前缀为 `@`，真值表在 `xparse_decl.c:xr_parse_single_attribute`。测试 runner 识别以下测试注解：
 
-| 注解 | 适用 | 说明 |
-|---|---|---|
-| `@test` | 函数 | 标记为测试函数；接受可选参数：`@test(skip)` 跳过、`@test(timeout: 30)` 超时设置 |
-| `@native` | class / struct / fn | 声明 native 实现，方法体由 C 提供；用于 stdlib 类型声明 |
-| `@deprecated` | 任意声明 | 弃用警告；可选消息：`@deprecated("use X instead")` |
+| 注解 | 说明 |
+|---|---|
+| `@test` / `@test(skip)` / `@test(timeout: N)` | 测试、跳过测试、单测试超时秒数 |
+| `@before_all` / `@after_all` | 单文件 suite 前后各执行一次 |
+| `@before_each` / `@after_each` | 每个未跳过测试前后执行 |
+
+其它注解包括：`@deprecated("...")`；内置声明专用的 `@native`；AOT/C ABI 的 `@c_export("sym")`、`@section("name")`、`@weak`、`@used`、`@naked`、`@interrupt("abi")`、`@no_alloc`；以及 `@derive(Inspect, Json, Eq, Hash, Clone)`（其中 `Hash` 要求同时 `Eq`）。外部 C 声明使用 `extern "C" ... {}` 块。
 
 ```xray
 @test                                 // 标记测试
@@ -4478,18 +4528,14 @@ fn test_basic() { return }
 @test(skip)                           // 跳过此测试
 fn test_wip() { return }
 
-@native                               // C 实现
-class Array<T> {
-    length: int
-    push(v: T)
-    // 无方法体——由 src/runtime/object/xarray_methods.c 提供
-}
+@before_each
+fn reset_fixture() { resetState() }
 
 @deprecated("use newAPI() instead")
 fn oldAPI() { return }
 ```
 
-> 不存在的注解（用户代码不要使用）：`@before_each` / `@after_all` / `@async` / `@override` 等——这些会触发"unknown attribute name"错误。
+> `@async`、`@override`、`@beforeEach` 等不在当前表中，会触发 `unknown attribute name`。异步能力直接在测试体内使用 `go` / `await`。
 
 ### 12.6 `xray run` / `xray test` / `xray repl`
 
@@ -4498,7 +4544,7 @@ fn oldAPI() { return }
 | `xray run main.xr` | 执行主程序 |
 | `xray test` | 运行测试套件 |
 | `xray repl` | 启动 REPL |
-| `xray build --aot` | AOT 编译 |
+| `xray build --native main.xr` | AOT native 编译 |
 | `xray fmt` | 格式化 |
 
 ---
@@ -4507,7 +4553,7 @@ fn oldAPI() { return }
 
 > 真值源：`src/ir/xi_lower_expr.c`、`src/vm/xvm_dispatch_*.inc.c`、`src/runtime/object/builtins/`、`src/frontend/analyzer/xanalyzer_builtins.c`。
 
-不需要 `import` 即可使用的全局函数和内置构造/静态函数。下列表格中的 `value` 表示“任意运行时值”，不是一个可写的 `any` 类型；Xray 源码中已没有 `any` 类型。
+不需要 `import` 即可使用的全局函数和内置构造/静态函数。下列表格中的 `value` 表示“任意运行时值”，只是文档占位符，不是源码中的类型名。
 
 ### 13.1 I/O 与调试
 
@@ -4515,6 +4561,7 @@ fn oldAPI() { return }
 |--|--|--|
 | `print` | `(...values) -> ()` | 输出到 stdout，自动追加换行；多参以空格分隔 |
 | `dump` | `(value, indent?) -> ()` | 结构化调试输出 |
+| `len` | `(value) -> int` | 查询实现 `Lengthable` 的 string、容器、Range、Slice、Json 等长度；不读取 `.length` |
 
 ### 13.2 类型转换
 
@@ -4526,7 +4573,7 @@ fn oldAPI() { return }
 | `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
 | `rune(n)` | `(int) -> rune` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
 | `chr(n)` | `(int) -> string` | Unicode 码点转单 scalar 字符串 |
-| `copy(x)` | `(T) -> T` | 深拷贝，保留运行时类型 |
+| `copy(x)` | `(value) -> owned value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
 
 ### 13.3 类型检查
 
@@ -4534,7 +4581,12 @@ fn oldAPI() { return }
 |---|---|---|
 | `typeOf(x)` | `(value) -> Type` | 返回稳定 TypeId / `Type.xxx` 值 |
 | `typeName(x)` | `(value) -> string` | 返回调试/日志用类型名字符串 |
+| `typeName<T>()` | `() -> string` | 返回静态类型 `T` 的名称 |
 | `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
+
+分支提示 `likely(cond)` / `unlikely(cond)` 接受并原样返回 `bool`；它们只向优化器提供概率提示，不改变求值或短路语义。
+
+全局只读环境值不是函数：`process`（入口参数/文件/目录信息）、`__file__`、`__dir__`。它们由真实文件/项目入口初始化；纯 `eval` 场景中 `process` 可为 `null`。
 
 ```xray
 var x = 42
@@ -4583,7 +4635,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 > 真值源：prelude / analyzer / runtime 中的内置类型注册与方法定义。
 > MCP knowledge 只消费生成后的 analyzer metadata，不独立维护内置类型方法签名。
 
-本节给出每种类型的**方法索引**（按主题分组）。具体签名、参数说明、行为细节以实现代码为准。
+本节按主题汇总每种内置类型的方法、签名和行为。
 
 ### 14.1 `int` 方法
 
@@ -4595,7 +4647,6 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `toFloat()` | `() -> float` | 转 float |
 | `toHex()` | `() -> string` | 十六进制字符串 |
 | `max(other)` / `min(other)` | `(int) -> int` | 双值最值 |
-| `floor()` / `ceil()` / `round()` | `() -> int` | 对 int 返回自身 |
 | `sqrt()` | `() -> float` | 平方根 |
 | `pow(exp)` | `(float) -> float` | 幂运算 |
 | `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | 溢出返回 `null` |
@@ -4607,7 +4658,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `byteswap()` | `() -> int` | 反转字节序 |
 | `rotateLeft(n)` / `rotateRight(n)` | `(int) -> int` | 循环移位（`n` 按模 64） |
 
-`abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词的语义源是 `src/shared/xr_bits_core.h` / `xr_arith_core.h`，VM 与 AOT 共享同一实现。
+`abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词在 VM 与 AOT 中具有相同语义。
 
 ### 14.2 `float` 方法
 
@@ -4659,11 +4710,14 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `len(s)` | O(1) Unicode scalar 数量 |
 | `bytes()` / `copyBytes()` | 借用的 `Slice<byte>` / 独立的 `Array<byte>` |
 | `runes()` | `Iterator<rune>`；裸 `for (r in s)` 使用相同语义 |
-| `string.fromUtf8(bytes)` | 复制并严格验证 `Slice<byte>`；非法 UTF-8 返回 `null` |
+| `string.fromRune(r)` | 从一个 Unicode scalar 构造字符串 |
+| `string.fromUtf8(bytes)` | 复制并严格验证 `Slice<byte>`；非法 UTF-8 抛 `Utf8Error.InvalidUtf8` |
 | `string.fromUtf8Lossy(bytes)` | 复制 `Slice<byte>`，非法序列替换为 U+FFFD |
+| `string.join(parts, separator?)` | 拼接 `Array<string>` |
 | `contains(s)` | 是否包含子串 |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | 返回 rune ordinal |
 | `slice(start, end?)` | 按 rune ordinal 取得 owned string；范围必须合法 |
+| `sliceBytes(start, end)` | 按 byte offset 切片；边界非法时抛 `StringSliceError.InvalidByteRange` |
 | `split(sep, limit?)` | 分割为 `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | 替换 |
 | `repeat(n)` | 重复 |
@@ -4674,28 +4728,29 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 
 ### 14.6 `Array<byte>`
 
-`Array<byte>` 是 prelude 类型，构造由 `Array<byte>(n)` / `Array<byte>(n, fill)` 等内置路径处理。它的 `toString()` 与所有 Array 一样返回容器格式；文本解码必须显式使用 `string.fromUtf8(bytes[:])` 或 `string.fromUtf8Lossy(bytes[:])`。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要假设存在完整 Array 同构 API。
+`Array<byte>` 是可直接使用的 `Array` 具体化，构造由 `Array<byte>(n)` / `Array<byte>(n, fill)` 等内置路径处理。它的 `toString()` 与所有 Array 一样返回容器格式；文本解码必须显式使用 `string.fromUtf8(bytes[:])` 或 `string.fromUtf8Lossy(bytes[:])`。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要把它当成另一套与 Array 同构的独立 API。
 
 ### 14.7 `Array<T>` 方法
 
 | 成员 | 类型/说明 |
 |--|--|
 | `len(arr)` | `int` 全局查询 |
-| `arr[i]` / `arr[i] = v` | 下标读写 |
+| `capacity` / `arr[i]` / `arr[i] = v` | 容量属性与下标读写；也可使用 `get(i)` / `set(i, v)` |
 | `push(x)` / `pop()` | 尾部增删 |
 | `shift()` / `unshift(x)` | 头部增删 |
-| `slice(start?, end?)` | 切片 |
-| `splice(start, deleteCount, ...items)` | 原地增删 |
 | `concat(...arrays)` | 拼接 |
 | `indexOf(x)` / `contains(x)` | 查找 |
 | `join(sep?)` | 拼接为字符串 |
 | `reverse()` / `sort(cmp?)` | 原地重排 |
 | `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 函数式处理 |
 | `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 遍历与谓词 |
-| `flat(depth?)` / `fill(v, start?, end?)` / `copyWithin(target, start, end?)` | 数组工具 |
+| `fill(v, start?, end?)` / `clear()` | 填充或清空 |
+| `reserve(capacity)` / `resize(length, fill)` | 容量与长度管理 |
+| `ptr()` / `mutPtr()` | 显式底层指针视图 |
+| `toString()` | 容器字符串表示 |
 | `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
 
-`slice(start?, end?)` 使用与切片表达式相同的半开区间和负索引规则；返回独立数组，原数组不变。
+Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守借用生命周期；需要独立 owned 数据时使用 `copy(arr[start:end])`。
 
 ### 14.8 `Map<K, V>` 方法
 
@@ -4703,13 +4758,15 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 |--|--|
 | `len(m)` | `int` 全局查询 |
 | `m[k]` / `m[k] = v` | 下标读写 |
-| `get(k)` / `set(k, v)` | 读取/写入 |
+| `get(k)` / `set(k, v)` | `get` 在缺失时返回 `null`；`set` 写入 |
 | `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | 查询与删除 |
 | `keys()` / `values()` / `entries()` | 返回键、值、键值对 |
 | `forEach(fn)` | 遍历 |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
 **Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于 Record/Json 对象字面量。
+
+`m[k]` 要求键存在；缺失键触发运行时错误 `E0431`。需要可选读取时使用 `m.get(k)`。
 
 ### 14.9 `Set<T>` 方法
 
@@ -4730,12 +4787,13 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 |--|--|
 | `send(v)` | 阻塞发送；channel 已关闭时抛异常 |
 | `recv()` | 阻塞接收，返回 `Recv<T>`；关闭且缓冲为空时为 `Recv.Closed` |
+| `recvOr(default)` | 接收 payload；没有值时返回给定默认值 |
 | `trySend(v)` | 非阻塞发送，返回 `SendResult` |
 | `tryRecv()` | 非阻塞接收，返回 `Recv<T>`；空时为 `Recv.Empty` |
 | `sendTimeout(v, ms)` | 带超时发送，返回 `SendResult`；超时为 `SendResult.Timeout` |
 | `recvTimeout(ms)` | 带超时接收，返回 `Recv<T>`；超时为 `Recv.Timeout` |
 | `close()` | 关闭 channel |
-| `isClosed` / `isClosed()` | 关闭状态；运行时属性和方法均支持 |
+| `capacity` / `isClosed` | 容量和关闭状态属性 |
 
 `Recv.Value(v)` 中的 `v` 就是 channel payload，因此 `Channel<int?>` 可以区分真实的 `Recv.Value(null)` 和 `Recv.Closed`。
 
@@ -4757,11 +4815,31 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 
 ### 14.12 `Range`
 
-`a..b` 是半开区间 `[a, b)`，用于表达式和 `for-in`。常见成员为 `start`、`end`、`contains(x)`、`toArray()`、`toString()`；元素数量使用 `len(range)`。
+`a..b` 是半开区间 `[a, b)`，`a..=b` 是闭区间 `[a, b]`；两种范围都可用于表达式、`for-in` 和 `match` 范围模式。
+
+| 成员 | 说明 |
+|--|--|
+| `start` / `end` | 起点与声明的终点 |
+| `contains(x)` | 按半开或闭区间语义判断 `x` 是否在范围内 |
+| `toArray()` | 按迭代顺序生成独立的 `Array<int>` |
+| `toString()` | 返回 `a..b` 或 `a..=b` 形式的字符串 |
+| `len(range)` | 返回范围中的元素数量 |
+
+```xray
+var pages = 1..=3
+print(pages.start)          // 1
+print(pages.end)            // 3
+print(pages.contains(3))    // true
+print(len(pages))           // 3
+print(pages.toArray())      // [1, 2, 3]
+
+var empty = 5..5
+print(len(empty))           // 0
+```
 
 ### 14.13 `DateTime`
 
-通过 `import datetime` 获得工厂函数：`now`、`utc`、`create`、`createUTC`、`fromTimestamp`、`fromTimestampMs`、`parse`、`offset`。`DateTime` 实例由 prelude 注册，无需 import 类型名。
+通过 `import datetime` 获得工厂函数：`now`、`utc`、`create`、`createUTC`、`fromTimestamp`、`fromTimestampMs`、`parse`、`offset`。`DateTime` 不是 prelude 类型；需要类型名时使用 `import { DateTime } from datetime`。
 
 | 成员 | 类型/说明 |
 |--|--|
@@ -4781,8 +4859,9 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 | `test(s)` | 是否匹配 |
 | `find(s)` | 首个匹配 |
 | `findAll(s)` | 所有匹配 |
+| `findText(s)` / `findGroup(s, index)` | 首个匹配文本 / 捕获组文本 |
 | `replace(s, replacement)` | 替换 |
-| `split(s)` | 分割 |
+| `split(s, limit?)` | 分割 |
 
 ### 14.15 `StringBuilder`
 
@@ -4799,11 +4878,11 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 
 ### 14.17 `Task<T>` 与 enum 值
 
-`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`；当前公开形状为 `Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。enum 值保留冷路径属性 `name`、`ordinal` 与方法 `toString()`；用户可见 `EnumValue` / `EnumType` wrapper 类已删除。
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`：`Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
 
-### 14.18 其他 prelude 类型（`Logger` / `NetConn` / `NetListener`）
+### 14.18 线程与同步 handle
 
-这些类型由 prelude 注册，实例由 `log` / `net` 等模块工厂函数构造。完整运行时能力以对应 stdlib 模块为准。
+`Thread<T>` 是 prelude handle 类型，公开 `done` 属性以及 `join()`、`detach()` 方法。导入 `sys` 后，使用 `sys.Thread.spawn(body)` 或 `sys.Thread.spawn(ThreadOptions{...}, body)` 创建 OS 线程，并对返回的 handle 调用 `join()` 或 `detach()`。`CountdownLatch`、`EventCount`、`ResultGroup`、`Semaphore`、`WorkQueue` 等类型从 `sync` 模块导入；`Logger` 从 `log` 模块导入；连接与监听器类型从 `net` 模块导入。
 
 ### 14.19 `Atomic<T>` 方法
 
@@ -4832,17 +4911,17 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 > MCP knowledge 和 API inventory 使用 source-derived inventory；`xray builtin-dump` 只作为运行时 builtin 视图输入之一。
 > 详见 [附录 D stdlib 模块索引](#d-stdlib-模块索引)。
 
-> **真实 stdlib 模块清单**（25 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
+> **真实 stdlib 模块清单**（28 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
 >
-> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`runtime`、`sync`、`sys`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
+> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`http`、`io`、`log`、`math`、`mem`、`net`、`os`、`parallel`、`path`、`regex`、`runtime`、`strconv`、`sync`、`sys`、`text`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
-> 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Array<byte>` `BigInt` `StringBuilder` `PanicInfo` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
+> 不需要 import 的 prelude 类型为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`Json`、`Map`、`OsMutex`、`NetConn`、`NetListener`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<byte>` 是 `Array` 的具体化；`DateTime`、`Logger` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
 
 ### 15.1 文件 IO 与系统
 
 | 模块 | 主题 | 关键 API |
 |--|--|--|
-| `io` | 文件 IO + 文件系统 | `readFile` `writeFile` `exists` `mkdir` `remove` `readdir` `stat` `stdin` `stdout` `stderr` |
+| `io` | 文件 IO + 文件系统 | `readFile` `writeFile` `readFileBytes` `writeFileBytes` `exists` `mkdir` `mkdirp` `remove` `readDir` `stat` `readStdin` |
 | `path` | 路径操作 | `join` `dirname` `basename` `extname` `normalize` `isAbsolute` `resolve` `relative` `parse` `format` |
 | `os` | 操作系统接口 | `getenv` `setenv` `environ` `exit` `getpid` `getcwd` `chdir` `hostname` `tmpdir` `homedir` `cpuCount` `sleep` `exec`；常量 `platform` `arch` `sep` `eol` |
 
@@ -4854,7 +4933,7 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 | 模块 | 主题 | 关键 API |
 |--|--|--|
 | `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
-| `http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `request` `h2Request` `route` `listen` `ws` `router` `requestText` `responseText` `parseResponseText` |
+| `http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `request` `h2Request` `listen` `router` `routeHandler` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
 | `url` | URL 解析与构造 | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
 
@@ -4893,7 +4972,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 | 模块 | 关键 API |
 |--|--|
-| `crypto` | `md5` `sha1` `sha256` `sha512` `hmac` `aes` `rsa` 等；详细 API 详见 stdlib 源码 |
+| `crypto` | `md5` `sha1` `sha256` `sha512` `hmac` `encrypt` `decrypt` `randomBytes` `timingSafeEqual` `uuid` |
 
 > stdlib **没有**独立的 `random` 模块；如需伪随机数请使用 `crypto` 模块的随机源或 `math` 模块的工具函数。
 
@@ -4907,8 +4986,8 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 | 模块 | 关键 API |
 |--|--|
-| `time` | `now()` `monotonic()` `sleep(ms)` `Duration` |
-| `datetime` | `DateTime` / `Date` / `Time` 解析、格式化（详见 §14.12） |
+| `time` | `now()` `monotonic()` `clock()` `micros()` `nanos()` `sleep(ms)` `localOffset()` `localOffsetAt()` |
+| `datetime` | `DateTime` 及 `now()` `utc()` `create()` `createUTC()` `fromTimestamp()` `parse()` 等工厂（详见 §14.13） |
 
 ### 15.7 数学
 
@@ -4920,9 +4999,11 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 | 模块 | 关键 API |
 |--|--|
-| `regex` | `compile(pattern)` 返回 `Regex`；详见 §14.13。也支持 `/pattern/flags` 字面量 |
+| `regex` | `compile(pattern)` 返回 `Regex`；详见 §14.14。也支持 `/pattern/flags` 字面量 |
+| `text` | `lower` `upper` `trim` `trimStart` `trimEnd` `padStart` `padEnd` `reverseRunes` `translate` |
+| `strconv` | `parseInt` `parseFloat` |
 
-> stdlib **没有** `strconv` 模块；字符串 ↔ 数值转换使用内置函数 `int(s)` / `float(s)` / `string(n)`（见 §13.2）。
+内置转换 `int(s)` / `float(s)` / `string(n)` 仍可用于普通转换；需要带 radix / default 的解析接口时使用 `strconv`。
 
 ### 15.9 日志与诊断
 
@@ -4932,23 +5013,27 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | `runtime` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
 | `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
 | `sync` | 协程域同步：`Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync` |
-| `sys` | OS / 线程域：`Thread.spawn()`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、`cpuCount()`、`sleepMs()` 等，需显式 `import sys` |
+| `sys` | OS / 线程底层接口：编译器定义的 `sys.Thread.spawn(...)` 与 `ThreadOptions`，以及 `ThreadLocal`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、process/dylib/pipe handle、`cpuCount()`、`sleepMs()`、`threadYield()`、`pinToCpu()`、`onSignal()` |
 
-### 15.10 分布式
+### 15.10 并行
+
+`parallel` 导出 `forEach` 以及 `Plan` 抽象，用于结构化 CPU 并行工作；语言关键字表中没有 `parallel` 关键字，需显式导入模块。
+
+### 15.11 分布式
 
 | 模块 | 主题 |
 |--|--|
 | `cluster` | 节点发现、健康检查、Topic 消息总线（见 stdlib/cluster/）|
 
-### 15.11 测试
+### 15.12 测试
 
 `@test` 注解 + 全局 `assert*` 函数即可，**不需要**额外的 `test` 模块（见 §12）。
 
-### 15.12 已**不存在**的模块
+### 15.13 已**不存在**的模块
 
 文档中可能引用过、但当前 stdlib 中**确实没有**的模块（避免误导）：
 
-`fs` · `process` · `dns` · `random` · `strconv` · `json`
+`fs` · `process` · `dns` · `random` · `json`
 
 这些功能或者归入其他模块（见上面各小节注），或者尚未实现。
 
@@ -4977,7 +5062,7 @@ Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用
 | `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Array<byte>` | `XR_TAG_PTR` + bytes heap object |
+| `Array<byte>` | `XR_TAG_PTR` + `XR_TARRAY`，元素布局为 byte |
 | 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
 
 Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `XR_ELEM_RUNE`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_RUNE`，store 时拒绝非 `rune` 值，因此不会与 `Array<uint32>` 混淆。
@@ -4989,17 +5074,17 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 | **系统 owner** | runtime/native 数据结构；hosted 可使用 C allocator，freestanding 由 target hooks 提供 |
 | **模块只读 owner** | consteval rodata，或 module allocator 初始化后 freeze + publish 的顶层 `const` |
 | **模块可变 owner** | 顶层 `var`；生命周期属于模块，默认不提供并发安全性 |
-| **shared/system owner** | `shared` 稳定共享身份与显式并发句柄，引用计数 |
-| **execution owner** | root、task 或直接入口的局部 RC 对象图；不要求存在物理 coroutine identity |
+| **shared/system owner** | `shared` 稳定共享身份与显式并发句柄，原子引用计数 |
+| **coroutine owner** | 普通局部对象；由当前 coroutine 的 `XrCoroHeap` 分配并执行引用计数回收 |
 | **栈** | `struct` 值、局部 immediate、函数帧 |
 | **Arena** | parser 临时分配、frame allocation |
 
 ### 16.3 内存模型
 
-- 默认 **per-execution reference counting**。AllocationContext 显式选择 module、shared/system 或 execution owner；普通分配不以 `current_coro` 作为唯一入口。最后一个强引用释放时，对象进入对应 owner 的释放路径。
-- **循环引用回收**：强引用环由 cycle collector 处理；显式入口是 `runtime.collectCycles()`。
-- **内存安全点**：函数调用、后向跳转、显式 `runtime.collectCycles()`。
-- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 ExecutionContext 的 live memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
+- 默认由编译器插入的 **per-coroutine reference counting** 回收普通局部对象；最后一个强引用释放时立即进入 RC 销毁路径。共享对象使用 atomic RC，模块/运行时对象按各自 owner 的生命周期管理。
+- **循环引用回收**：编译器标记可能形成环的类型；Bacon–Rajan trial-deletion collector 处理相应的 coroutine-local 强引用环。显式入口是 `runtime.collectCycles()`，候选根数量达到自适应阈值时也会自动触发。
+- **collector 边界**：cycle collector 跳过 shared/atomic、runtime-managed 和 Region 对象。函数调用与后向跳转处保留的 tracing-GC hook 当前为空操作；Xray 没有并发 tracing GC。
+- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 coroutine heap（无当前 coroutine 时回退到 main coroutine）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 
 详见 `src/runtime/mem/`。
 
@@ -5009,9 +5094,9 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 - **work-stealing**：空闲 worker 从其他 worker 队列偷任务。
 - **协作式抢占**：协程在 safepoint 让出（非强制抢占）。
 - **公平性**：单一 runnable 队列配合本地 run-next、全局注入队列和 work-stealing；调度顺序不暴露用户级优先级。
-- **栈管理**：segmented stack 按需扩展。
+- **栈管理**：VM 的 register/frame stack 在需要时扩容，扩容可能搬迁底层存储；运行时以 slot offset 重建指针。
 
-详见 `src/runtime/coro/`。
+详见 `src/coro/` 与 `src/vm/xvm_coro_backend.c`。
 
 ### 16.5 进程级全局访问
 
@@ -5062,7 +5147,7 @@ class PanicInfo {
 }
 ```
 
-用户级可恢复错误不使用 `PanicInfo`：`throw` 表达式只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
+用户级可恢复错误不使用 `PanicInfo`：`throw` 语句只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
 
 栈展开（仅 panic 通道）：VM `xvm_unwind_stack()` 按 try-table 查找 `catch panic` handler，逐帧释放局部、执行 defer，到达 handler 后跳转。可恢复错误走值返回通道，不展开栈。详见 §8。
 
@@ -5085,276 +5170,200 @@ xray **当前不提供用户可见的确定性析构（destructor / finalizer / 
 
 ## 17. 编译流水线 (Compilation Pipeline)
 
-> 真值源：`src/frontend/`、`src/vm/`、`src/jit/`、`src/aot/`、`docs/rules/architecture.md`。
+> 真值源：`src/frontend/`、`src/ir/`、`src/vm/`、`src/aot/`、`src/toolchain/`、`src/app/cli/xcmd_build.c`、`src/app/cli/xcmd_compile.c`。
 
-### 17.1 阶段总览
+### 17.1 两条执行路径
 
 ```
-源码 (.xr)
-    ↓ lexer
-Token Stream
-    ↓ parser
-AST
-    ↓ analyzer (语义分析、类型检查、scope/capture/generic)
-Typed AST
-    ↓ ssa-gen
-SSA IR
-    ↓ optimize（const fold、DCE、inline、TCO、escape analysis）
-Optimized SSA
-    ↓ codegen
-Bytecode  →  AOT (machine code)
-    ↓ VM
-    ↓ Profiler → JIT (machine code)
-执行
+源码 (.xr) -> lexer -> AST -> analyzer / canonical evidence
+                                  |-> bytecode compiler -> XrProto -> VM
+                                  `-> Xi IR -> optimization -> C source -> host/cross C toolchain -> native binary
 ```
 
-### 17.2 词法分析 (Lexer)
+Xray 当前没有 JIT。默认 `xray run` 和默认 `xray build` 使用字节码/VM 路径；`xray build --native` 才选择 AOT 路径。两条路径共享 parser、analyzer、模块图与运行时语义，但输出表示和后端优化并不相同。
 
-- 真值源：`src/frontend/lexer/xlexer.c`。
-- 输出 `XrToken` 流，每个 token 含 `kind`、`value`、`pos(line, col)`。
-- 处理：字符串插值（产生 `${...}` 拼接序列）、原始字符串、正则字面量。
+### 17.2 前端
 
-### 17.3 语法分析 (Parser)
+- lexer：`src/frontend/lexer/xlex.c` / `xlex.h`，关键字表为 `xkeywords.def`；输入必须是合法 UTF-8。
+- parser：`src/frontend/parser/xparse*.c`，手写递归下降与优先级表达式解析，输出 `AstNode` 模块树。
+- analyzer：`src/frontend/analyzer/`，执行名称解析、类型/泛型/可见性/所有权/捕获/错误集检查。
+- canonical evidence：`src/frontend/canonical/` 与 module/toolchain 层把跨模块事实收敛成供后端消费的稳定证据。
 
-- 真值源：`src/frontend/parser/`（分文件：expr、stmt、decl、match）。
-- 风格：手写 Pratt parser（表达式）+ 递归下降（声明 / 语句）。
-- 错误恢复：遇到错误后跳到下一同步点（`;` `}` `)`），尽量继续解析。
-- 输出：`XrAstNode*` 根（即 module）。
+### 17.3 字节码与 VM
 
-### 17.4 语义分析 (Analyzer)
+`src/frontend/codegen/xcompiler.c` 将已分析 AST 编译成 `XrProto` 字节码。opcode 的唯一清单是 `src/runtime/value/xopcode_def.h`，VM 实现在 `src/vm/`。VM 使用寄存器式指令布局，并包含属性/调用快路径以及 coroutine、错误通道、tail-call 等专用 opcode。
 
-- 真值源：`src/frontend/analyzer/xanalyzer_*.c`（按主题拆分）。
-- **作用域**：嵌套符号表、变量解析、shadowing 检查。
-- **类型检查**：双向类型推断、union 收窄、Json 结构匹配。
-- **泛型**：构建期 monomorphization、约束检查、调用点重写；跨模块泛型在 whole-program / LTO 阶段展开，泛型库必须提供可分析 IR/AST。
-- **闭包分析**：upvalue 标记、`go` 闭包捕获禁令。
-- **错误码**：`XR_ERR_ANALYZE_*` 系列。
+`xray compile file.xr` 默认生成 `.xrc`；`--format bytecode|c|header` 可显式选择序列化字节码或把字节码嵌入 C 源/头文件。这里的 `--format c` 是**字节码容器的 C 表示**，不是 native AOT C 后端。
 
-### 17.5 SSA 与优化
+字节码必须以确定性顺序序列化 extern 聚合布局及目标 ABI 指纹。加载器必须在执行前校验布局深度、递归环、字段范围、总大小、尾随数据和 ABI 一致性；任何损坏或目标不匹配都必须拒绝加载，不能回退到宿主机布局。
 
-- 真值源：`src/ir/xi_opt*.c`、`src/ir/xi_pass.h`、`src/jit/`。
-- **常量折叠**：编译期求值。
-- **DCE**（dead-code elimination）：删除未使用代码。
-- **inlining**：小函数内联。
-- **TCO**（tail-call optimization）：accumulator 风格尾递归转循环。
-- **escape analysis**：栈分配 vs 堆分配决策。
+### 17.4 Xi IR 与优化
 
-### 17.6 字节码与 VM
+native 路径将程序 lowering 为 `src/ir/` 中的 Xi IR。优化流水线由 `xi_pipeline.c` / `xi_pass.h` 组织，当前实现包括 SCCP、DCE/CFG 简化、内联、devirtualization、tail-call、escape/ownership、循环优化、GVN/PRE、边界检查消除和向量化等 passes；具体启用集合由优化等级、目标和合法性检查决定，不能把某个 pass 的存在理解为每个程序都保证发生该优化。
 
-- 真值源：`src/vm/`、`include/xray_opcodes.h`。
-- 寄存器栈混合 VM。
-- IC（inline cache）加速属性访问与方法分派。
-- 字节码必须以确定性顺序序列化 extern 聚合布局及目标 ABI 指纹。加载器必须在执行前校验布局深度、递归环、字段范围、总大小、尾随数据和 ABI 一致性；任何损坏或目标不匹配都必须拒绝加载，不能回退到宿主机布局。
+### 17.5 Native AOT
 
-### 17.7 JIT 与 AOT
+`xray build --native file.xr` 经 `src/aot/` 的 prepare/verify/representation/container/link plan，把 Xi IR 生成 C，再调用 host、Clang 或 Zig C toolchain 编译链接。hosted native 仍链接 Xray runtime；`--profile freestanding` 使用受限的 freestanding capability 集。`--target`、`--toolchain`、`--cpu`、`--lto` 等选项以 `xray build --help` 为准。
 
-- **JIT**（运行时）：热函数被 profiler 选中后 → 编译为本地机器码。源码：`src/jit/`。
-- **AOT**（提前）：`xray build --aot` → 整个模块编译为 native binary。源码：`src/aot/`。
-- 共享 SSA IR；后端选择不同（解释 / JIT / AOT）。
+native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码由所选 C toolchain 产生。
 
 ---
 
-## 18. 错误码参考 (Error Code Reference)
+## 18. 错误码 (Error Codes)
 
-> 真值源：`src/runtime/xerror_codes.h`、`src/runtime/xerror.h`。
+> 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `int`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
 
-> xray 有**两套错误码系统**：
->
-> - 数值码（`xerror_codes.h` 中的 `#define`）：lexer / parser / VM 运行时使用，按区间分布。
-> - 枚举码（`xerror.h` 中的 `XrErrorCode` 枚举）：分析器（type/binding/closure）使用，按区间分布。
->
-> 下表列出**主要**错误码；详细的全列表与触发条件以源码为准。错误抛出时携带的 `error.name` 字段与下表"名称"列对应。
+### 18.1 Lexer 与 parser
 
-### 错误码分类（数值码）
-
-| 范围 | 类别 |
-|--|--|
-| `E0101`-`E0199` | 词法错误 (Lexer) |
-| `E0201`-`E0299` | 语法错误 (Syntax) |
-| `E0301`-`E0399` | 编译错误 (Compile) |
-| `E0401`-`E0499` | 运行时错误 (Runtime) |
-| `E0501`-`E0599` | 模块错误 (Module) |
-| `E0801`-`E0899` | 禁止写法 (Rejected Syntax) |
-
-### 18.1 词法错误
-
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
 | `E0101` | `XR_ERR_LEX_INVALID_CHAR` | 非法字符 |
-| `E0102` | `XR_ERR_LEX_UNTERMINATED_STR` | 字符串未闭合 |
-| `E0103` | `XR_ERR_LEX_INVALID_NUMBER` | 数字字面量格式错误 |
-| `E0104` | `XR_ERR_LEX_INVALID_ESCAPE` | 非法转义序列 |
+| `E0102` | `XR_ERR_LEX_UNTERMINATED_STR` | 字符串未终止 |
+| `E0103` | `XR_ERR_LEX_INVALID_NUMBER` | 非法数字字面量 |
+| `E0104` | `XR_ERR_LEX_INVALID_ESCAPE` | 非法转义 |
 
-### 18.2 语法错误 (Syntax)
+#### Parser
 
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
-| `E0201` | `XR_ERR_SYN_UNEXPECTED_TOKEN` | 未预期的 token |
+| `E0201` | `XR_ERR_SYN_UNEXPECTED_TOKEN` | 意外 token |
 | `E0202` | `XR_ERR_SYN_EXPECTED_EXPR` | 缺少表达式 |
 | `E0203` | `XR_ERR_SYN_EXPECTED_STMT` | 缺少语句 |
-| `E0204` | `XR_ERR_SYN_UNCLOSED_PAREN` | 未闭合 `(` |
-| `E0205` | `XR_ERR_SYN_UNCLOSED_BRACE` | 未闭合 `{` |
-| `E0206` | `XR_ERR_SYN_UNCLOSED_BRACKET` | 未闭合 `[` |
-| `E0207` | `XR_ERR_SYN_INVALID_ASSIGN` | 非法赋值目标（如赋值给字面量） |
+| `E0204` | `XR_ERR_SYN_UNCLOSED_PAREN` | 圆括号未闭合 |
+| `E0205` | `XR_ERR_SYN_UNCLOSED_BRACE` | 花括号未闭合 |
+| `E0206` | `XR_ERR_SYN_UNCLOSED_BRACKET` | 方括号未闭合 |
+| `E0207` | `XR_ERR_SYN_INVALID_ASSIGN` | 非法赋值目标或形式 |
 
-### 18.3 编译期 / 名字解析错误
+### 18.2 编译与静态分析
 
-数值码（基础）：
-
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
-| `E0301` | `XR_ERR_CMP_UNDEFINED_VAR` | 未定义名字 |
-| `E0302` | `XR_ERR_CMP_REDEFINED_VAR` | 重复声明 |
-| `E0303` | `XR_ERR_CMP_CONST_ASSIGN` | 赋值给 `const` |
-| `E0304` | `XR_ERR_CMP_INVALID_BREAK` | `break` 不在循环内 |
-| `E0305` | `XR_ERR_CMP_INVALID_CONTINUE` | `continue` 不在循环内 |
-| `E0306` | `XR_ERR_CMP_INVALID_RETURN` | `return` 不在函数内 |
-| `E0307` | `XR_ERR_CMP_TOO_MANY_PARAMS` | 参数数量超过限制 |
-| `E0308` | `XR_ERR_CMP_TOO_MANY_LOCALS` | 局部变量数量超过限制 |
+| `E0301` | `XR_ERR_CMP_UNDEFINED_VAR` | 编译器阶段未定义变量 |
+| `E0302` | `XR_ERR_CMP_REDEFINED_VAR` | 重复定义变量 |
+| `E0303` | `XR_ERR_CMP_CONST_ASSIGN` | 给常量赋值 |
+| `E0304` | `XR_ERR_CMP_INVALID_BREAK` | 非法 `break` |
+| `E0305` | `XR_ERR_CMP_INVALID_CONTINUE` | 非法 `continue` |
+| `E0306` | `XR_ERR_CMP_INVALID_RETURN` | 非法 `return` |
+| `E0307` | `XR_ERR_CMP_TOO_MANY_PARAMS` | 参数过多 |
+| `E0308` | `XR_ERR_CMP_TOO_MANY_LOCALS` | 局部变量过多 |
+| `E0309` | `XR_ERR_CMP_TOO_MANY_CONSTANTS` | 常量过多 |
+| `E0310` | `XR_ERR_CMP_TOO_MANY_UPVALUES` | upvalue 过多 |
+| `E0311` | `XR_ERR_CMP_JUMP_TOO_LARGE` | 跳转偏移超限 |
+| `E0321` | `XR_ERR_TYPE_NOT_CALLABLE` | 静态类型不可调用 |
+| `E0322` | `XR_ERR_TYPE_NOT_INDEXABLE` | 静态类型不可下标 |
+| `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | 静态类型不可迭代 |
+| `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | 操作数类型非法 |
 
-分析器枚举码（`XrErrorCode`，定义在 `xerror.h` 350+ 段）：
+#### Analyzer
 
-| 枚举名 | 描述 |
-|--|--|
-| `XR_ERR_ANALYZE_UNDEFINED_VAR` | 未声明变量 |
-| `XR_ERR_ANALYZE_TYPE_MISMATCH` | 类型不可赋值 |
-| `XR_ERR_ANALYZE_CONST_ASSIGN` | 不能给 `const` 赋值 |
-| `XR_ERR_ANALYZE_NOT_CALLABLE` | 值不可调用 |
-| `XR_ERR_ANALYZE_WRONG_ARG_COUNT` | 参数数量不匹配 |
-| `XR_ERR_ANALYZE_ARG_TYPE` | 参数类型不匹配 |
-| `XR_ERR_ANALYZE_GENERIC_COUNT` | 类型参数数量错误 |
-| `XR_ERR_ANALYZE_GENERIC_CONSTRAINT` | 类型实参不满足约束 |
-| `XR_ERR_ANALYZE_SUPER_FIRST` | 派生类构造器首行不是 `super(...)` |
-| `XR_ERR_ANALYZE_SUPER_THIS` | `super(...)` 之前访问 `this` |
-| `XR_ERR_ANALYZE_SUPER_REQUIRED` | 派生类未调 `super()` |
-| `XR_ERR_ANALYZE_SUPER_INVALID` | 非派生类使用 `super()` |
-| `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | 协程闭包捕获了不安全变量 |
-| `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` 操作数不是 `Task` |
-| `XR_ERR_ANALYZE_MISSING_TYPE` | 变量需要类型注解或初始化器 |
-| `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 类未实现声明的接口 |
-| `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | 用非数字 key 访问 tuple |
-| `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段下标越界 |
-| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | 自动覆写与父类链的方法签名、可见性或默认参数契约不一致 |
-| `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | 类型用作 Map 键 / Set 元素时缺少 `operator==` / `hash` 契约 |
-| `XR_ERR_ANALYZE_CONDITION_TYPE` | 条件表达式不是 `bool` 或 nullable 存在性（`T?`, `T != bool`） |
-
-### 18.4 运行时错误 (Runtime)
-
-#### 类型与方法 (E040x-E041x)
-
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
-| `E0401` | `XR_ERR_TYPE_NO_PROPERTY` | 类型上不存在该属性 |
-| `E0402` | `XR_ERR_TYPE_NO_INDEX` | 类型不可索引 |
+| `E0350` | `XR_ERR_ANALYZE` | 通用 analyzer 错误 |
+| `E0351` | `XR_ERR_ANALYZE_UNDEFINED_VAR` | 名称未定义 |
+| `E0352` | `XR_ERR_ANALYZE_TYPE_MISMATCH` | 类型不匹配 |
+| `E0353` | `XR_ERR_ANALYZE_CONST_ASSIGN` | 静态检查发现常量赋值 |
+| `E0354` | `XR_ERR_ANALYZE_NOT_CALLABLE` | 被调用值不可调用 |
+| `E0355` | `XR_ERR_ANALYZE_WRONG_ARG_COUNT` | 实参数量错误 |
+| `E0356` | `XR_ERR_ANALYZE_ARG_TYPE` | 实参类型错误 |
+| `E0357` | `XR_ERR_ANALYZE_GENERIC_COUNT` | 泛型实参数量错误 |
+| `E0358` | `XR_ERR_ANALYZE_GENERIC_CONSTRAINT` | 泛型约束不满足 |
+| `E0359` | `XR_ERR_ANALYZE_SUPER_FIRST` | `super(...)` 不是首个构造动作 |
+| `E0360` | `XR_ERR_ANALYZE_SUPER_THIS` | `super(...)` 前访问 `this` |
+| `E0361` | `XR_ERR_ANALYZE_SUPER_REQUIRED` | 派生构造函数缺少 `super(...)` |
+| `E0362` | `XR_ERR_ANALYZE_SUPER_INVALID` | 非派生类非法使用 `super` |
+| `E0363` | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | 闭包捕获不安全 |
+| `E0364` | `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` 操作数类型非法 |
+| `E0365` | `XR_ERR_ANALYZE_MISSING_TYPE` | 缺少可推断的类型或初始化器 |
+| `E0367` | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 未完整实现 interface |
+| `E0368` | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple 字段名非法 |
+| `E0369` | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段越界 |
+| `E0370` | `XR_ERR_ANALYZE_THROW_NON_EXCEPTION` | `throw` 操作数不是允许的 enum 错误值 |
+| `E0371` | `XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE` | `match` 不穷尽 |
+| `E0372` | `XR_ERR_ANALYZE_USED_BEFORE_ASSIGN` | 赋值前使用 |
+| `E0373` | `XR_ERR_ANALYZE_TUPLE_IMMUTABLE` | 修改不可变 tuple |
+| `E0374` | `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | override 契约不匹配 |
+| `E0375` | `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | Map/Set 元素缺少 hash/equality 契约 |
+| `E0376` | `XR_ERR_ANALYZE_CONDITION_TYPE` | 条件类型非法 |
+| `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | 可见性违规 |
+| `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | 修改 const 字段 |
+| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用 |
+
+### 18.3 运行时
+
+| 代码 | C 名称 | 含义 |
+|--|--|--|
+| `E0400` | `XR_ERR_RUNTIME` | 通用运行时错误 |
+| `E0401` | `XR_ERR_TYPE_NO_PROPERTY` | 类型没有该属性 |
+| `E0402` | `XR_ERR_TYPE_NO_INDEX` | 值不可下标 |
 | `E0403` | `XR_ERR_TYPE_NO_CALL` | 值不可调用 |
-| `E0404` | `XR_ERR_TYPE_MISMATCH` | 类型不匹配 |
-| `E0405` | `XR_ERR_TYPE_NO_METHOD` | 类型上不存在该方法 |
+| `E0404` | `XR_ERR_TYPE_MISMATCH` | 运行时类型不匹配 |
+| `E0405` | `XR_ERR_TYPE_NO_METHOD` | 类型没有该方法 |
 | `E0406` | `XR_ERR_TYPE_NO_OPERATOR` | 类型不支持该运算符 |
 
-#### Null 相关 (E041x)
+#### Null、算术与容器
 
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
-| `E0410` | `XR_ERR_NULL_PROPERTY` | 对 null 访问属性 |
-| `E0411` | `XR_ERR_NULL_INDEX` | 对 null 索引 |
-| `E0412` | `XR_ERR_NULL_CALL` | 对 null 调用 |
-
-#### 算术 (E042x)
-
-| 码 | 名称 | 描述 |
-|--|--|--|
-| `E0420` | `XR_ERR_DIV_BY_ZERO` | 除零（整数或浮点） |
-| `E0421` | `XR_ERR_MOD_BY_ZERO` | 整数求模零 |
-| `E0422` | `XR_ERR_OVERFLOW` | 整数溢出 |
-
-#### 索引/键 (E043x)
-
-| 码 | 名称 | 描述 |
-|--|--|--|
-| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 数组 / 字符串 / Array<byte> 越界 |
+| `E0410` | `XR_ERR_NULL_PROPERTY` | 对 null 取属性 |
+| `E0411` | `XR_ERR_NULL_INDEX` | 对 null 下标 |
+| `E0412` | `XR_ERR_NULL_CALL` | 调用 null |
+| `E0413` | `XR_ERR_NULL_UNWRAP` | 强制解包 null |
+| `E0420` | `XR_ERR_DIV_BY_ZERO` | 除零 |
+| `E0421` | `XR_ERR_MOD_BY_ZERO` | 模零 |
+| `E0422` | `XR_ERR_OVERFLOW` | 算术溢出 |
+| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 下标越界 |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
 
-#### 内存与栈 (E044x)
+#### 系统、调用、coroutine 与 stdlib
 
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
 | `E0440` | `XR_ERR_STACK_OVERFLOW` | 栈溢出 |
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | 内存不足 |
+| `E0442` | `XR_ERR_MATCH_FAILURE` | 运行时 match 失败 |
+| `E0450` | `XR_ERR_WRONG_ARG_COUNT` | 运行时实参数量错误 |
+| `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 运行时实参类型错误 |
+| `E0460` | `XR_ERR_CORO_DEAD` | 操作已结束 coroutine |
+| `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine 已取消 |
+| `E0470` | `XR_ERR_JSON_PARSE` | JSON 解析失败 |
+| `E0471` | `XR_ERR_JSON_INVALID` | JSON 值或操作非法 |
+| `E0475` | `XR_ERR_REGEX_COMPILE` | regex 编译失败 |
+| `E0476` | `XR_ERR_REGEX_PATTERN` | regex pattern 非法 |
+| `E0480` | `XR_ERR_TLS_UNAVAILABLE` | TLS 能力不可用 |
 
-#### 调用参数 (E045x)
+### 18.4 模块、IO 与 coroutine
 
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 含义 |
 |--|--|--|
-| `E0450` | `XR_ERR_WRONG_ARG_COUNT` | 实参数量不匹配 |
-| `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 实参类型不匹配 |
+| `E0501` | `XR_ERR_MOD_NOT_FOUND` | 模块不存在 |
+| `E0502` | `XR_ERR_MOD_LOAD_FAILED` | 模块加载失败 |
+| `E0503` | `XR_ERR_MOD_NO_EXPORT` | 名称未导出 |
+| `E0504` | `XR_ERR_MOD_CIRCULAR` | 循环模块依赖 |
+| `E0601` | `XR_ERR_IO_FILE_NOT_FOUND` | 文件不存在 |
+| `E0602` | `XR_ERR_IO_READ_FAILED` | 读取失败 |
+| `E0603` | `XR_ERR_IO_WRITE_FAILED` | 写入失败 |
+| `E0604` | `XR_ERR_IO_PERMISSION_DENIED` | IO 权限不足 |
+| `E0701` | `XR_ERR_CORO_DEADLOCK` | coroutine 死锁 |
+| `E0702` | `XR_ERR_CORO_CHANNEL_CLOSED` | channel 已关闭 |
+| `E0703` | `XR_ERR_CORO_LIMIT_EXCEEDED` | coroutine 限额超出 |
 
-#### 协程 (E046x)
+### 18.5 语法引导与内部错误
 
-| 码 | 名称 | 描述 |
+| 代码 | C 名称 | 被拒形式 / 含义 |
 |--|--|--|
-| `E0460` | `XR_ERR_CORO_DEAD` | 在已死的协程上操作 |
-| `E0461` | `XR_ERR_CORO_CANCELLED` | 协程被取消 |
+| `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` 无效；元组返回写作 `return (a, b)` |
+| `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | 裸 key/value `for` 形式无效 |
+| `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` 无效；无返回值写作 `-> ()` 或省略 |
+| `E0805` | `XR_ERR_SYN_PARAM_MODE_PREFIX_REMOVED` | 参数 mode 必须写在冒号与类型之间 |
+| `E0806` | `XR_ERR_SYN_PARAM_MOVE_MODE_REMOVED` | `move` 是实参转移表达式，不是参数 mode |
+| `E0807` | `XR_ERR_SYN_PARAM_MODE_COMBINED_REMOVED` | 非法组合参数 mode |
+| `E0808` | `XR_ERR_SYN_PARAM_MODE_POSTFIX_REMOVED` | 参数 mode 不能写在类型之后 |
+| `E0809` | `XR_ERR_SYN_CALL_IN_MARKER_REMOVED` | call-site `in` marker；普通 `in` 参数调用不写 marker |
+| `E0900` | `XR_ERR_INTERNAL` | 内部错误 |
+| `E0901` | `XR_ERR_NOT_IMPLEMENTED` | 尚未实现 |
+| `E0999` | `XR_ERR_UNKNOWN` | 未知错误 |
 
-### 18.5 模块错误 (Module)
-
-| 码 | 名称 | 描述 |
-|--|--|--|
-| `E0501` | `XR_ERR_MOD_NOT_FOUND` | 找不到模块 |
-| `E0502` | `XR_ERR_MOD_LOAD_FAILED` | 模块加载失败（IO / 解析错误） |
-| `E0503` | `XR_ERR_MOD_NO_EXPORT` | import 的名字未被 export |
-| `E0504` | `XR_ERR_MOD_CIRCULAR` | 模块依赖图包含循环依赖 |
-
-### 18.6 禁止写法 (Rejected Syntax)
-
-> parser 遇到下列写法时直接报错，并给出正确替代方案。
-
-| 码 | 名称 | 禁止写法 | 正确写法 |
-|--|--|--|--|
-| `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` | `return (a, b)` |
-| `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | `for k, v in m`（裸 KV） | `for (k, v in m)` |
-| `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` | `-> ()` 或省略返回类型 |
-
-### 18.7 错误处理 (E082x)
-
-| 码 | 名称 | 描述 |
-|--|--|--|
-| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | 历史名称保留以免重复分配；当前 `throw` 非 enum 错误统一由 `E0370` 表达（见 §8.1.1） |
-| `E0821` | `XR_ERR_TRY_BANG_BAD_OPERAND` | 已废弃（`try!` 已移除）；代码仅保留以免重复分配 |
-| `E0822` | `XR_ERR_TRY_BANG_NON_EXCEPTION_ERR` | 已废弃（`try!` 已移除）；代码仅保留以免重复分配 |
-| `E0823` | `XR_ERR_MATCH_NOT_EXHAUSTIVE` | 已合并到 `E0371`（见 §6.3.3）；代码仅保留以免重复分配 |
-| `E0824` | `XR_ERR_UNWRAP_NON_EXCEPTION_ERR` | 已废弃（`Result` 已移除）；代码仅保留以免重复分配 |
-
-### 18.8 Panic 错误对象结构
-
-panic 通道的运行时故障使用 prelude `PanicInfo` 类（声明：`stdlib/types/panic_info.xr`）：
-
-```xray
-@native
-class PanicInfo {
-    message: string             // 人类可读消息，含错误码与上下文
-    stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
-    cause: PanicInfo?           // 链式 cause
-    code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
-    data: Json                  // 运行时故障的结构化附加数据；无数据时为 JSON null
-
-    constructor(message: string = "", cause: PanicInfo? = null)
-    fn toString() -> string
-}
-```
-
-用户级 `throw` 操作数**必须**是 enum 变体值（见 §8.1.1 / `E0370`）。结构化业务错误使用 ADT enum，而不是继承 `PanicInfo`：
-
-```xray
-enum HttpErr {
-    NotFound(string),
-    ServerError(int, string),
-    Timeout,
-}
-
-throw HttpErr.ServerError(500, "upstream failed")
-```
-
-`PanicInfo` 只表示 panic 通道的运行时故障；业务错误通过 `throw <enum>` / `catch` 的值返回通道传播（见 §8.1）。
+运行时 panic 通道使用 prelude `PanicInfo`；用户级 `throw <enum>` 走值返回错误通道。二者的语义见 §8 与 §16，不应仅凭错误码区段推断传播机制。
 
 ---
 
@@ -5371,8 +5380,9 @@ Comment ::= '//' [^\n]*
          |  '/*' .* '*/'
 
 Identifier ::= IdStart IdContinue*
-IdStart    ::= 'a'..'z' | 'A'..'Z' | '_'
+IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
 IdContinue ::= IdStart | '0'..'9'
+// 源文件先整体校验为 UTF-8；lexer 将任意非 ASCII UTF-8 字节视为 identifier 字节，当前不做 XID/NFC 归一化。
 
 IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
 DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
@@ -5384,13 +5394,14 @@ FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
               |  DecimalInt Exponent
 Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 
-BigIntLiteral ::= DecimalInt 'n'
+BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
 
 StringLiteral ::= '"' StringChar* '"'
 RawStringLiteral ::= 'r' '"' [^"]* '"'
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
-RegexLiteral ::= '/' RegexBody '/' RegexFlags?
+RegexLiteral ::= '/' RegexBody '/' RegexFlag*
+RegexFlag ::= 'i' | 'm' | 's' | 'g' | 'u'
 
 BoolLiteral ::= 'true' | 'false'
 NullLiteral ::= 'null'
@@ -5425,21 +5436,19 @@ AssignExpr ::= TernaryExpr (AssignOp Expression)?
 AssignOp   ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
             |  '&=' | '|=' | '^=' | '<<=' | '>>='
 
-TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
+TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
+NullCoalesceExpr ::= LogicOrExpr ('??' LogicOrExpr)*
 LogicOrExpr ::= LogicAndExpr ('||' LogicAndExpr)*
-            |   NullCoalesce
 LogicAndExpr ::= BitOrExpr ('&&' BitOrExpr)*
-NullCoalesce ::= LogicAndExpr ('??' LogicAndExpr)*
 BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
 BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
 EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
-RelationalExpr ::= ShiftExpr (('<' | '<=' | '>' | '>=') ShiftExpr)*
+RelationalExpr ::= ShiftExpr ((('<' | '<=' | '>' | '>=') ShiftExpr) | (('as' | 'is') Type))*
 ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
-MultiplicativeExpr ::= TypeOpExpr (('*' | '/' | '%') TypeOpExpr)*
-TypeOpExpr  ::= UnaryExpr (('as' | 'is') Type)*           // 安全转换写为 `x as T?`，T? 是可空类型
-RangeExpr   ::= AdditiveExpr ('..' AdditiveExpr)?
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%' | '..' | '..=') UnaryExpr)*
+// parser 中 range 与乘除同一 precedence；安全转换写为 `x as T?`，T? 是可空类型。
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
@@ -5488,9 +5497,12 @@ ComptimeExpr ::= 'comptime' (Expression | Block)
 MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
 
-ThrowExpr   ::= 'throw' Expression                // operand 静态类型必须是 enum 变体
-
-ArgList ::= Expression (',' Expression)* ','?
+ArgList ::= CallArg (',' CallArg)* ','?
+CallArg ::= ('ref' | 'out') Expression
+          | '...' Expression
+          | Identifier '->' (Expression | Block)
+          | '_'
+          | Expression
 ```
 
 ### A.4 模式
@@ -5505,7 +5517,7 @@ Pattern ::= LiteralPattern
          |  MultiPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
-RangePattern    ::= Expression '..' Expression
+RangePattern    ::= Expression ('..' | '..=') Expression
 EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload 解构
 VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
 TypePattern     ::= 'is' Type Identifier?
@@ -5520,6 +5532,9 @@ MultiPattern    ::= Pattern (',' Pattern)+
 Statement ::= ExprStmt
            |  IncDecStmt
            |  VarDecl
+           |  ConstDecl
+           |  SharedDecl
+           |  OwnedDecl
            |  FnDecl
            |  ExternBlock
            |  ClassDecl
@@ -5574,7 +5589,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 // go 是表达式，返回 Task<T>。不作为独立语句类别出现（封装在 ExprStmt 中）。
 
-ScopeStmt ::= 'scope' Block            // 词法作用域 + 结构化并发
+ScopeStmt ::= ('linked' | 'supervisor')? 'scope' Block
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // 接收
@@ -5591,6 +5606,7 @@ YieldStmt ::= 'yield' Expression
 VarDecl ::= 'var' Binding
 ConstDecl ::= 'const' Binding
 SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
+OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
@@ -5641,12 +5657,9 @@ EnumDecl       ::= 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
-                |  Identifier '=' BackingValue                  // 简单枚举（无 payload）
 EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
-BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
-
 TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
 
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
@@ -5673,7 +5686,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-完整 65 个关键字按字母排序见 [§1.5](#15-关键字)。
+以下 **66 个**关键字与 `src/frontend/lexer/xkeywords.def` 一一对应并按源码顺序（ASCII 字典序）排列。`move`、`ref`、`out`、`linked`、`supervisor`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
 
 | 关键字 | 节 |
 |--|--|
@@ -5681,8 +5694,8 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
+| `byte` | §2.3.1 |
 | `catch` | §8 |
-| `rune` | §2.3.5 |
 | `class` | §5.3 |
 | `comptime` | §3.2 |
 | `const` | §5.1 |
@@ -5691,30 +5704,37 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `defer` | §4.9 |
 | `else` | §4.2 |
 | `enum` | §5.6 |
-| `export` | §5.8 |
+| `export` | §11 |
 | `extends` | §5.3 |
 | `false` | §1.6.4 |
 | `final` | §5.3 |
-| `float` `float32` `float64` | §2.3.2 |
+| `float` | §2.3.2 |
+| `float32` | §2.3.2 |
+| `float64` | §2.3.2 |
 | `fn` | §5.2 |
 | `for` | §4.4 |
 | `go` | §10.2 |
 | `if` | §4.2 |
 | `implements` | §5.5 |
-| `import` | §5.8 |
+| `import` | §11 |
 | `in` | §4.4 |
-| `int` `int8`..`int64` | §2.3.1 |
+| `int` | §2.3.1 |
+| `int16` | §2.3.1 |
+| `int32` | §2.3.1 |
+| `int64` | §2.3.1 |
+| `int8` | §2.3.1 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `packed` | §5.4 |
-| `parallel` | §10 |
+| `owned` | §5.1 |
+| `packed` | §5.2.9 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
 | `return` | §4.7 |
+| `rune` | §2.3.5 |
 | `scope` | §10.7 |
 | `select` | §10.6 |
 | `shared` | §5.1 / §10.11 |
@@ -5727,9 +5747,12 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `true` | §1.6.4 |
 | `try` | §8 |
 | `type` | §5.7 |
-| `byte`..`uint64` | §2.3.1 |
-| `union` | §5.4 |
-| `unsafe` | §3.2 |
+| `uint16` | §2.3.1 |
+| `uint32` | §2.3.1 |
+| `uint64` | §2.3.1 |
+| `uint8` | §2.3.1 |
+| `union` | §5.2.9 |
+| `unsafe` | §3.2 / §5.2 |
 | `var` | §5.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
@@ -5748,13 +5771,13 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | 逻辑 | `&&` `\|\|` `!` |
 | 赋值 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
 | 语句 | `++` `--` |
-| 其他 | `..` `..=` `??` `?.` `?[` `!` `->` |
+| 类型、范围与展开 | `?` `??` `?.` `?[` `!` `\|` `->` `...` `..` `..=` `is` `as` |
 
 ---
 
 ## 附录 D. 标准库模块索引
 
-完整 22 个 native 模块见 [§15](#15-标准库概览-standard-library)。
+完整 28 个标准库模块（native、纯 Xray 或混合实现）见 [§15](#15-标准库概览-standard-library)。
 
 | 模块 | 用途 |
 |--|--|
@@ -5765,15 +5788,21 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `csv` | CSV 解析/序列化 |
 | `datetime` | 日期时间 |
 | `encoding` | 字符编码转换 |
-| `mem` | 内存与循环引用回收 |
 | `http` | HTTP/REST |
 | `io` | 文件 I/O |
 | `log` | 结构化日志 |
 | `math` | 数学函数 |
+| `mem` | 裸内存与 managed Buffer |
 | `net` | TCP/UDP/TLS |
 | `os` | 操作系统 |
+| `parallel` | 结构化 CPU 并行 |
 | `path` | 路径操作 |
 | `regex` | 正则 |
+| `runtime` | 运行时信息与 cycle collection |
+| `strconv` | 字符串数值解析 |
+| `sync` | 协程同步原语 |
+| `sys` | OS 线程与底层同步接口 |
+| `text` | Unicode 文本变换 |
 | `time` | 时间/计时器/sleep |
 | `toml` | TOML 解析 |
 | `url` | URL 解析/构造 |
@@ -5793,10 +5822,10 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 |--|--|--|
 | 静态类型 | TS 可选 | **强制**（除 `Json` 是动态） |
 | 数值 | 仅 `number`（双精度） | `int` `float` `BigInt` 严格区分 |
-| 真值转换 | truthy / falsy | truthy / falsy（与 JS 相近）但 `bool` 类型本身不接受 int/null 隐式赋值 |
+| 条件 | truthy / falsy | 条件必须是 `bool`，或使用 nullable `T?` 的存在性；int/string 不做 truthy 转换 |
 | 相等比较 | `===` 强、`==` 弱（string↔number 自动转） | 仅 `==`/`!=`；值相等只做数值 int↔float 提升，不提供 `===`/`!==` |
 | 闭包捕获 | 引用 | 引用（默认）；`go` 闭包严格受限 |
-| 对象 | 动态字段 | 默认动态；带 `type T = {...}` 注解后 sealed |
+| 对象 | 动态字段 | `{...}` 默认形成 sealed Record；动态对象需显式 `Json` 边界 |
 | import | ES Module | 自有 import 语法（含 stdlib 无引号形式） |
 | 并发 | 异步/Promise | 协程 + Channel |
 
@@ -5810,20 +5839,20 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 等待结果 | 无直接等价（通过 channel/WaitGroup） | `await t`、`await all [...]`、`await any [...]` |
 | Channel | 内置 `chan T`，`<-` 操作符 | `Channel<T>` 类，方法 `send`/`recv`/`trySend`/`tryRecv` |
 | select 分支 | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
-| GC | 三色并发 | per-coroutine Mark-Sweep / Immix |
+| 内存管理 | 三色并发 tracing GC | coroutine-local 引用计数 + Bacon–Rajan cycle collector；shared/system 对象使用原子引用计数 |
 | 类与继承 | 无（仅 struct + interface） | class 支持继承 |
-| 泛型 | 1.18+ 有 | 有，monomorphization + 运行时 reified |
+| 泛型 | 1.18+ 有 | 有；按具体类型或后端表示单态化 |
 
 ### E.3 vs Rust
 
 | 维度 | Rust | xray |
 |--|--|--|
-| 内存安全 | borrow checker 全面 | 仅跨协程用 `move`；其他用 GC |
+| 内存安全 | borrow checker 全面 | owned/shared/move 约束跨执行边界；`Slice` 等借用视图受静态生命周期限制 |
 | 错误 | `Result<T, E>` | 值返回错误通道（`throw` / `catch`）|
 | 类型推断 | Hindley-Milner 强 | 双向推断 |
 | trait | 完整 | 类似 `interface`，少功能 |
-| 性能 | 接近 C | VM/JIT，热路径接近 native |
-| 编译期 | macro / const | 简单常量折叠 |
+| 性能 | 接近 C | 字节码 VM，或通过 C toolchain 的 native AOT |
+| 编译期 | macro / const | `comptime` 受限求值子集 + optimizer 常量折叠 |
 
 ### E.4 vs Python
 
@@ -5834,7 +5863,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 字符串 | unicode str | utf-8 string |
 | 缩进 | 强制 | 自由（用 `{}`） |
 | 类 | 动态属性 | 静态字段 |
-| 性能 | CPython 慢 | JIT 后接近 V8/JVM |
+| 性能 | CPython 慢 | 字节码 VM；性能关键程序可用 `xray build --native` |
 
 ### E.5 vs Swift
 
@@ -5853,7 +5882,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 
 | 术语 | 定义 |
 |--|--|
-| **AOT** | Ahead-of-Time 编译：构建时预编译为机器码 |
+| **AOT** | Ahead-of-Time 编译：Xi IR 生成 C，并由所选 C toolchain 在构建时产生 native binary |
 | **AST** | Abstract Syntax Tree：源码解析后的中间表示 |
 | **Arena** | 批量分配器：所有分配同时释放 |
 | **Array<byte>** | 字节缓冲类型（见 §2.4.5） |
@@ -5863,13 +5892,13 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **coroutine** | 协程：用户态可暂停/恢复的执行流 |
 | **defer** | 延迟执行：函数退出前执行（见 §4.9） |
 | **enum** | 枚举类型（见 §5.6） |
-| **GC** | Garbage Collector：垃圾回收 |
-| **GC-safepoint** | GC 安全点：可安全开始 GC 的指令位置 |
+| **GC** | Garbage Collection 的泛称；Xray 没有 tracing GC，而以引用计数为主，并用 Bacon–Rajan cycle collector 回收 coroutine-local 强引用环 |
+| **safepoint** | 调度器可检查抢占、取消或挂起状态的安全位置；当前 cycle collector 不由函数调用或后向跳转 safepoint 驱动 |
 | **goroutine** | xray 中称作协程 (coroutine)，启动语法 `go {...}` |
 | **hoisting** | 提升：声明在使用前被隐式定义 |
 | **IC** | Inline Cache：内联缓存（属性访问/方法分派优化） |
 | **interface** | 接口（见 §5.5） |
-| **JIT** | Just-In-Time 编译：运行时编译热路径 |
+| **JIT** | Just-In-Time 编译；Xray 当前未实现 JIT |
 | **lvalue / rvalue** | 左值（可赋值）/ 右值（仅值） |
 | **monomorphization** | 单态化：泛型在构建期按具体类型/表示生成专门版本；函数泛型可按 I64 / F64 / PTR / BOOL 表示共享，class / struct 泛型按具体类型完整单态化 |
 | **move** | 所有权转移：跨协程时强制（见 §7.3） |

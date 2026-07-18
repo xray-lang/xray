@@ -8,7 +8,7 @@ order: 010
 
 ## 9. 泛型 (Generics)
 
-> 真值源：`src/frontend/analyzer/xanalyzer_generic.c`、`src/frontend/analyzer/xanalyzer_subtype.c`。
+> 真值源：`src/frontend/analyzer/xtype_ref_resolve.c`、`xanalyzer_mono.c`、`xanalyzer_builtin_interfaces.c` 与 `src/runtime/value/xtype_generic.c`。
 
 ### 9.1 类型参数语法 `<T>`
 
@@ -87,7 +87,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | `Comparable` | 可用 `<` `<=` `>` `>=` 比较；int/float/string/Comparable 实现者 |
 | `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `int` / `float` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==(other: Self) -> bool` 与 `hash() -> int` |
 | `Stringable` | 可调 `.toString()`；几乎所有内置类型默认实现 |
-| `Iterable<T>` | 可被 `for-in` 遍历；Array、Map、Json、string、Range、enum、自定义 `iterator()` |
+| `Iterable<T>` | 可被 `for-in` 遍历；Array、Map、Json、string、Range 与自定义 `iterator()`；enum 类型本身不可迭代 |
 
 `Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==(other: Self) -> bool` 与 `hash() -> int`。只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, int>)`。
 
@@ -204,7 +204,7 @@ print(typeName(c))             // "Container<int>" when type names are enabled
 
 ## 9. Generics
 
-> Source of truth: `src/frontend/analyzer/xanalyzer_generic.c`, `src/frontend/analyzer/xanalyzer_subtype.c`.
+> Source of truth: `src/frontend/analyzer/xtype_ref_resolve.c`, `xanalyzer_mono.c`, `xanalyzer_builtin_interfaces.c`, and `src/runtime/value/xtype_generic.c`.
 
 ### 9.1 Type Parameter Syntax `<T>`
 
@@ -287,9 +287,9 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | `Comparable` | usable with `<` `<=` `>` `>=`; int/float/string and types implementing `Comparable` |
 | `Hashable` | usable as a `Map` key or `Set` element; built-in `int` / `float` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==(other: Self) -> bool` and `hash() -> int` |
 | `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
-| `Iterable<T>` | usable in `for-in`; Array, Map, Json, string, Range, enum, types with custom `iterator()` |
+| `Iterable<T>` | usable in `for-in`; Array, Map, Json, string, Range, and types with a custom `iterator()`; enum types themselves are not iterable |
 
-`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==(other: Self) -> bool` and `hash() -> int`. Legacy `hashCode()` does not satisfy the contract, and providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
+`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==(other: Self) -> bool` and `hash() -> int`. Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
 
 **Current limitations**:
 - Constraints may only follow type parameters; there is no `where` clause.

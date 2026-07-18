@@ -8,7 +8,7 @@ order: 023
 
 ## 附录 D. 标准库模块索引
 
-完整 22 个 native 模块见 [§15](#15-标准库概览-standard-library)。
+完整 28 个标准库模块（native、纯 Xray 或混合实现）见 [§15](#15-标准库概览-standard-library)。
 
 | 模块 | 用途 |
 |--|--|
@@ -19,15 +19,21 @@ order: 023
 | `csv` | CSV 解析/序列化 |
 | `datetime` | 日期时间 |
 | `encoding` | 字符编码转换 |
-| `mem` | 内存与循环引用回收 |
 | `http` | HTTP/REST |
 | `io` | 文件 I/O |
 | `log` | 结构化日志 |
 | `math` | 数学函数 |
+| `mem` | 裸内存与 managed Buffer |
 | `net` | TCP/UDP/TLS |
 | `os` | 操作系统 |
+| `parallel` | 结构化 CPU 并行 |
 | `path` | 路径操作 |
 | `regex` | 正则 |
+| `runtime` | 运行时信息与 cycle collection |
+| `strconv` | 字符串数值解析 |
+| `sync` | 协程同步原语 |
+| `sys` | OS 线程与底层同步接口 |
+| `text` | Unicode 文本变换 |
 | `time` | 时间/计时器/sleep |
 | `toml` | TOML 解析 |
 | `url` | URL 解析/构造 |
@@ -41,7 +47,7 @@ order: 023
 
 ## Appendix D. Standard Library Module Index
 
-The full set of 22 native modules is documented in [§15](#15-standard-library-overview).
+The full set of 28 stdlib modules (native, pure Xray, or mixed) is documented in [§15](#15-standard-library-overview).
 
 | Module | Purpose |
 |--|--|
@@ -52,15 +58,21 @@ The full set of 22 native modules is documented in [§15](#15-standard-library-o
 | `csv` | CSV parsing/serialization |
 | `datetime` | date and time |
 | `encoding` | character encoding conversion |
-| `mem` | memory and cycle-collection introspection |
 | `http` | HTTP/REST |
 | `io` | file I/O |
 | `log` | structured logging |
 | `math` | math functions |
+| `mem` | raw memory and managed Buffer |
 | `net` | TCP/UDP/TLS |
 | `os` | operating system |
+| `parallel` | structured CPU parallelism |
 | `path` | path manipulation |
 | `regex` | regular expressions |
+| `runtime` | runtime information and cycle collection |
+| `strconv` | numeric string parsing |
+| `sync` | coroutine synchronization primitives |
+| `sys` | OS-thread and low-level synchronization surface |
+| `text` | Unicode text transforms |
 | `time` | time / timer / sleep |
 | `toml` | TOML parsing |
 | `url` | URL parsing/construction |

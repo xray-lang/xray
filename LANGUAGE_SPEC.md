@@ -1,6 +1,6 @@
 # Xray Language Reference
 
-> Version: based on the `xray` source tree version v0.7.1 (audited on 2026-05-21).
+> Version: based on the `xray` source tree version v0.9.0 (audited on 2026-07-18).
 > Status: this is a reference manual for the implemented language. When this document and the implementation disagree, the implementation is authoritative and this document must be updated.
 > Chinese version: [`LANGUAGE_SPEC_CN.md`](LANGUAGE_SPEC_CN.md).
 
@@ -60,7 +60,7 @@ Xray is a **lightweight statically typed scripting language with native concurre
 |--|--|
 | **Types** | Static typing + type inference; declarations rarely require explicit type annotations, but the type system is fully visible at compile time |
 | **Concurrency** | Built-in M:N coroutines (go / await / Channel / scope / select); concurrency safety is enforced at compile time by the "explicit sharing" rules |
-| **Execution** | VM interpreter / JIT / AOT — all transparent to the developer; semantics are strictly identical across modes |
+| **Execution** | Bytecode VM and the `xray build --native` AOT path; there is currently no JIT, and differential tests guard cross-backend semantics |
 | **Error handling** | Value-return error channel (throw / try / catch + enum errors) + panic boundary (catch panic) + nullable types (T?) + `defer`-based resource management |
 | **Metaprogramming** | Attributes (`@test` / `@native` / `@deprecated`) + compile-time/derive metadata + monomorphized generics |
 | **Interop** | C ABI is built-in; stdlib modules can be authored in C and exposed via `XR_DEFINE_BUILTIN` |
@@ -113,17 +113,17 @@ Error codes use the `E0xxx` format (e.g., `E0101`); the full list is in [Chapter
 
 ## 1. Lexical Structure
 
-> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 63 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
+> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 66 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
 
 ### 1.1 Character Encoding
 
-Xray source files **must** be encoded as UTF-8. All source processing (string literals, identifiers, comments) treats input as a UTF-8 byte sequence; non-ASCII characters are allowed only inside string literals, comments, and raw strings (identifiers are currently ASCII-only; see §1.4).
+Xray source files **must** be valid UTF-8. Before producing the first token, the scanner strictly validates the entire input. Strings, comments, and identifiers may all contain non-ASCII characters (see §1.4 for identifier rules).
 
 A UTF-8 BOM (`EF BB BF`) is optional; the scanner skips a leading BOM.
 
 ### 1.2 Line Endings and Whitespace
 
-Line endings recognize `\n` (Unix) and `\r\n` (Windows). A standalone `\r` is treated as an illegal character.
+Line numbers advance on `\n`. Windows `\r\n` works because `\r` is skipped as horizontal whitespace. A standalone `\r` is also skipped, but it does **not** advance the line counter or trigger smart-semicolon behavior and therefore should not be used as a source line break.
 
 **Whitespace**: space (`U+0020`), horizontal tab (`U+0009`), and line terminators. Whitespace separates tokens and carries no semantics (**exception**: in generic contexts, splitting consecutive `>>` depends on whitespace context).
 
@@ -138,7 +138,7 @@ Xray supports two kinds of comments: line comments do not nest; block comments n
    supports /* nested */ layers to any reasonable depth */
 ```
 
-Comments may appear wherever whitespace is allowed. They are collected as **trivia** for formatters and LSP (see `src/frontend/parser/xtrivia.*`), but do not participate in syntactic analysis.
+Comments may appear wherever whitespace is allowed. Formatters and language servers may read comment trivia; trivia does not participate in parsing.
 
 Doc comments (no syntactic difference from ordinary comments): conventionally `///` or `/** */` for tooling. The compiler does not currently enforce this convention.
 
@@ -146,11 +146,11 @@ Doc comments (no syntactic difference from ordinary comments): conventionally `/
 
 ```ebnf
 Identifier ::= IdentStart IdentCont*
-IdentStart ::= 'a'..'z' | 'A'..'Z' | '_'
+IdentStart ::= 'a'..'z' | 'A'..'Z' | '_' | Utf8NonAsciiByteSequence
 IdentCont  ::= IdentStart | '0'..'9'
 ```
 
-ASCII only. The maximum length is bounded by the compiler (about 255 bytes).
+After strict input validation, the scanner accepts non-ASCII UTF-8 byte sequences as identifier content, so `中文` and `café` are valid identifiers. The current scanner does not apply Unicode XID classification or NFC normalization; visually equivalent but differently encoded names remain distinct.
 
 **Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `default`, `ref`, `move`, `linked`, `supervisor`, `after`).
 
@@ -164,7 +164,7 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 ### 1.5 Keywords
 
-Xray has **65 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
+Xray has **66 reserved keywords** in total, grouped by purpose below:
 
 #### 1.5.1 Declarations and Control Flow
 
@@ -173,6 +173,7 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 | `var` | mutable variable declaration |
 | `const` | immutable variable declaration |
 | `shared` | shared identity binding (owned by the shared/system owner, ordinary lexical scope) |
+| `owned` | unique system-owned mutable identity binding; transfer with `move` |
 | `comptime` | expression prefix that forces compile-time evaluation |
 | `fn` | function declaration |
 | `return` | function return |
@@ -188,11 +189,12 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 | Keyword | Purpose |
 |--|--|
 | `class` `struct` | class / struct declaration |
+| `packed` `union` | FFI layout declarations |
 | `extends` | class inheritance |
 | `interface` `implements` | interface declaration / implementation |
 | `enum` | enum declaration |
 | `type` | type alias |
-| `new` | removed—kept as a keyword only for migration errors (construct with `T(...)`, see §3.14) |
+| `new` | reserved; construct objects with `T(...)` (see §3.14) |
 | `this` `super` | self / parent reference |
 | `constructor` | constructor |
 | `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
@@ -201,7 +203,7 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |
 
-`abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. In class/member modifier position, these legacy spellings are diagnosed as removed syntax; interfaces and automatic overrides replace the annotations.
+`abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. Interfaces express abstract contracts, and methods with the same name and signature override automatically without member modifiers.
 
 #### 1.5.3 Error Handling
 
@@ -213,18 +215,20 @@ Xray has **65 reserved keywords** in total; the authoritative source-of-truth ta
 
 #### 1.5.5 Coroutines and Concurrency
 
-`go` `await` `select` `defer` `scope` `unsafe` `parallel`
+`go` `await` `select` `defer` `scope` `unsafe`
+
+`parallel` is an explicitly imported standard-library module name, not a lexical keyword.
 
 #### 1.5.6 Type Names (reserved)
 
-`int` `int8` `int16` `int32` `int64` `byte` `uint16` `uint32` `uint64`
+`int` `int8` `int16` `int32` `int64` `byte` `uint8` `uint16` `uint32` `uint64`
 `float` `float32` `float64` `bool` `string` `rune`
 
 Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
-> **Note**: the following names are **not** lexer keywords; they are built-in type symbols automatically introduced by the prelude:
-> `Array` · `BigInt` · `Array<byte>` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
-> They may be locally shadowed by user types of the same name, but typically need no import.
+> **Note**: the following names are **not** lexer keywords; `stdlib/prelude/prelude_types.def` introduces them automatically:
+> `Array` · `Atomic` · `BigInt` · `Channel` · `Json` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `StringBuilder` · `Thread`.
+> `Array<byte>` is an `Array` specialization, not a separate name. Module-owned types such as `DateTime` and `Logger` require explicit imports from their modules.
 
 #### 1.5.7 Literal Keywords
 
@@ -358,7 +362,7 @@ RawChar ::= any character except double quote (including `\`, which is not proce
 - **No** escape processing (`\n`, `\t`, etc. are kept as-is).
 - `${...}` interpolation is still supported.
 - The identifier `r` standing alone is still a regular identifier (`TK_NAME`); it is recognized as a raw-string prefix only when immediately followed by a double quote.
-- `r'...'` has been removed; single quotes do not participate in raw strings.
+- Raw strings use `r"..."`; single-quoted strings continue to use the ordinary escape rules.
 
 ```xray
 r"C:\path\to\file"          // literal contains two backslashes
@@ -384,9 +388,9 @@ var zh: rune = '中'
 var smile: rune = '\u{1F600}'
 ```
 
-##### Backtick strings (illegal)
+##### String interpolation
 
-The lexer explicitly rejects backtick strings. For templates, use plain double quotes plus `${...}`.
+String templates use ordinary double quotes with `${...}` interpolation.
 
 #### 1.6.7 Regex Literals
 
@@ -401,7 +405,6 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 ```
 
 - Flags: `g` (global), `i` (case-insensitive), `m` (multi-line), `s` (dot matches newline).
-- Implementation: see `stdlib/regex`.
 - **Disambiguation**: when `/` appears in a position that can accept a unary `/` (e.g., right after `=`, `,`, `(`, an operator), the scanner treats it as a regex; elsewhere it is division.
 
 ### 1.7 Operators and Tokens
@@ -520,9 +523,10 @@ Xray is statically typed; every expression has a determined type at compile time
 | Primitive | `int`, `float`, `bool`, `string`, `rune`, `()` (Unit, no return value) |
 | Sized integers | `int8`, `int16`, `int32`, `int64`, `byte`..`uint64` |
 | Sized floats | `float32`, `float64` |
-| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Array<byte>` (equivalent to `Array<byte>`) |
+| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<byte>` is the contiguous-byte specialization of `Array` |
 | Fixed layout | `[T; N]` |
-| Special | `Json`, `BigInt`, `Range`, `DateTime`, `Regex`, `StringBuilder`, `Logger`, `NetConn`, `NetListener` |
+| Special prelude types | `Json`, `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
+| Module-exported types | `DateTime`, `Logger`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
 | Error-handling prelude | `PanicInfo` (see §8) |
 | Weak containers | `WeakMap`, `WeakSet` |
 | Nullable | `T?` |
@@ -670,7 +674,7 @@ unsafe {
 
 #### 2.4.1 `Array<T>`
 
-Ordered mutable array. See §14.1.
+Ordered mutable array. See §14.7.
 
 ```xray
 var a: Array<int> = [1, 2, 3]
@@ -680,13 +684,13 @@ var c: Array<string> = []         // explicit empty array
 
 The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
 
-`Array<rune>` preserves the `rune` element identity: reads return `rune`, and writes accept only `rune`. The implementation uses compact Unicode-scalar storage (`XR_ELEM_RUNE` / `uint32_t[]`) and does not degrade to `Array<uint32>`.
+`Array<rune>` preserves the `rune` element identity: reads return `rune`, and writes accept only `rune`.
 
 #### 2.4.1.1 Fixed Arrays `[T; N]`
 
 `[T; N]` is a fixed-layout array type for `N` elements of type `T`. `N` is part of the type and must evaluate during analysis to a positive compile-time integer expression. The current expression subset includes integer literals, `const` integer identifiers, grouping, unary `-`/`~`, and integer arithmetic/bitwise operators. The current backend encoding limit is 65535 elements.
 
-The current implementation supports inline struct fields and stack-local fixed arrays. Scalar elements (`int`, `float`, `bool`, sized integers/floats, and similar primitives) use compact native lanes; `string`, struct, nested fixed arrays, and reference-container elements use tagged `XrValue` lanes, so fixed arrays compose recursively:
+Fixed arrays work as inline struct fields and local variables. They support struct, nested fixed-array, and reference-container element types, so fixed arrays compose recursively:
 
 ```xray
 var bytes: [byte; 4] = [1, 2, 3, 4]
@@ -729,7 +733,7 @@ The old `[N]T` syntax is not part of the Xray language.
 
 #### 2.4.2 `Map<K, V>`
 
-Hash table that **preserves insertion order**. See §14.7.
+Hash table that **preserves insertion order**. See §14.8.
 
 **Map literals** must use the `#{ ... }` prefix with `:` separators (consistent with Json; disambiguated by the `#` prefix):
 
@@ -739,7 +743,8 @@ var m2 = #{"a": 1, "b": 2}
 var empty = #{}                                     // empty Map
 
 m["c"] = 3                                          // insert / update
-var v = m["a"]                                      // lookup; returns null if absent
+var v = m["a"]                                      // lookup; a missing key panics with E0431
+var maybe = m.get("missing")                        // safe lookup; returns null if absent
 ```
 
 | Literal form | Type | Purpose |
@@ -754,7 +759,7 @@ var v = m["a"]                                      // lookup; returns null if a
 
 #### 2.4.3 `Set<T>`
 
-Deduplicated collection. See §14.4.
+Deduplicated collection. See §14.9.
 
 ```xray
 var s: Set<int> = #[1, 2, 3]
@@ -832,15 +837,33 @@ Arbitrary-precision integer. See §14.8.
 
 #### 2.4.8 `Range`
 
-Produced by the `..` operator. See §3.12.
+`Range` represents an integer interval and is produced by `a..b` or `a..=b`:
+
+- `a..b` is the half-open interval `[a, b)` and excludes `b`.
+- `a..=b` is the inclusive interval `[a, b]` and includes `b`.
+
+```xray
+var halfOpen = 1..4       // 1, 2, 3
+var inclusive = 1..=4     // 1, 2, 3, 4
+
+print(len(halfOpen))              // 3
+print(inclusive.contains(4))      // true
+print(inclusive.toArray())        // [1, 2, 3, 4]
+
+for (i in 3..=5) {
+    print(i)
+}
+```
+
+Ranges work with `for-in`, range patterns in `match`, and collection queries. See §3.9 for expression semantics and §14.12 for members.
 
 #### 2.4.9 `DateTime` / `Regex` / `StringBuilder`
 
-See §14 for details.
+`Regex` and `StringBuilder` are prelude types. `DateTime` is not a prelude name; bring it into scope with `import { DateTime } from datetime` (or another explicit import). See §14 for the member index.
 
 #### 2.4.10 `WeakMap` / `WeakSet`
 
-Keys of `WeakMap` and elements of `WeakSet` must be heap objects; weak references do not prevent GC reclamation. Weak collections do not provide long-lived traversal callbacks that would retain elements.
+Keys of `WeakMap` and elements of `WeakSet` must be heap objects; weak references do not extend object lifetimes. Weak collections do not provide long-lived traversal callbacks that would retain elements.
 
 ### 2.5 Nullable Types
 
@@ -1031,7 +1054,7 @@ typeName(value)   // returns the type name as a string
 `Type.Array`, `Type.Map`, `Type.Set`, `Type.Channel`, `Type.Json`,
 `Type.function`, `Type.class`, `Type.struct`, `Type.enum`, `Type.module`, `Type.bigint`, ...
 
-Full list: see `XrTypeId` in `src/runtime/value/xtype_names.h`.
+Use `typeName(value)` to obtain the concrete debug name of a value's type.
 
 ### 2.12 Metadata and Type Identity Boundary
 
@@ -1042,7 +1065,7 @@ Xray keeps only the minimal type identity layer by default:
 - Nominal type checks use `x is T` / `x as T`; do not compare type-name strings.
 - Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 
-The global `Reflect` module and the user-visible `Type` / `Field` / `Method` / `Constructor` / `Parameter` wrapper classes have been removed without a compatibility layer.
+Runtime type queries use `typeOf(value)`, `typeName(value)`, and `TypeId`. Reflection metadata is not exposed as a traversable or callable object graph.
 
 ---
 
@@ -1075,17 +1098,16 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
 | 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
 
-Implementation: Pratt-parser style in `src/frontend/parser/xparse_expr.c`.
 
 ### 3.2 Unary Expressions
 
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'move' UnaryExpr
-            | 'await' ('all' | 'any')? UnaryExpr
+            | 'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
             | 'go' (Block | PostfixExpr)
             | 'unsafe' Block
-            | 'comptime' Expression
+            | 'comptime' (Expression | Block)
             | PostfixExpr
 ```
 
@@ -1117,16 +1139,28 @@ unsafe {
 
 `unsafe` does not change the expression's result type; in a multi-statement block, the trailing expression statement yields the block value, otherwise the result is `()`. `unsafe` also does not disable ordinary type checking: `Ptr<T>` is still read-only, and writes require `MutPtr<T>`; null pointers, bounds, lifetimes, and alignment remain the caller's responsibility.
 
-#### `comptime expr`
+#### `comptime expr` / `comptime { ... }`
 
-`comptime` is an expression prefix that requires its operand to be evaluated during analysis/compilation. If evaluation fails, compilation fails instead of falling back to runtime. The implemented guarantee is currently limited to **integer constant expressions**: integer literals, `const` integer identifiers, grouping, integer unary/binary arithmetic, and bitwise operators. These values may feed static integer positions such as fixed-array lengths and repeat-initializer lengths.
+`comptime` requires an expression or block to evaluate during analysis; failure is a compile error and never falls back to runtime. Constant expressions are not limited to integers: the current evaluator supports scalar constants, TypeIds, fixed arrays, tuples, struct aggregates and their member/index accesses, plus const-evaluable unary and binary operations. Static integer positions such as fixed-array lengths still require a positive integer result.
 
 ```xray
 const SCALE = comptime 8 * 4
 var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
-The parser reserves `comptime { ... }` block syntax, but analysis rejects it for now; full consteval blocks, generic `ct_value`, and evaluable function bodies are future phases.
+`comptime { ... }` has a restricted interpreter. A block supports local `const`/`var` declarations, local assignments and compound assignments, `if`/`while`, C-style `for`, fixed-array `for-in`, labeled or unlabeled `break`/`continue` inside loops, `compile_assert(...)`, and `compile_error(...)`. A statement block is erased from runtime; use `return <consteval-expression>` when the block must produce a value. Function calls are not currently consteval-safe, and unsupported statements are rejected during analysis.
+
+```xray
+const TABLE_SIZE = comptime 4 * 8
+
+comptime {
+    var sum = comptime 0
+    for (var i = 0; i < 4; i += 1) {
+        sum += i
+    }
+    compile_assert(sum == 6, "comptime loop")
+}
+```
 
 ### 3.3 Binary Expressions
 
@@ -1428,10 +1462,12 @@ See §10.5.
 
 ```ebnf
 CallExpr ::= Primary '(' ArgList? ')'
-ArgList ::= Expr (',' Expr)* ','?
+ArgList ::= CallArg (',' CallArg)* ','?
+CallArg ::= ('ref' | 'out')? Expr
 ```
 
 - Arguments are passed positionally; named arguments are not supported.
+- A `ref` or `out` parameter repeats the same marker at the call site and must receive an addressable place; ordinary `in`/value parameters have no call-site marker.
 - A rest parameter collects extra arguments into an array.
 - Argument-count mismatch → compile error `E0307` / `E0450`.
 
@@ -1569,7 +1605,7 @@ var result = match (x) {
 ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```
 
-Construction looks just like a function call: `TypeName(args)`. There is no `new` keyword—writing `new` (e.g. `new Point(...)`) is a compile error that tells you to delete it.
+Construction has the same form as a function call: `TypeName(args)`. `new` is reserved and does not form an expression.
 
 ```xray
 var p = Point(1.0, 2.0)
@@ -1610,7 +1646,7 @@ yield expr                  // produce one generator value and suspend
 
 `yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>`. `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
 
-Cooperative CPU yielding no longer uses bare `yield`; use `Coro.yield()` (see §10.10). Bare `yield` is a syntax error.
+Cooperative CPU yielding uses `Coro.yield()` (see §10.10); bare `yield` is not an expression.
 
 ---
 
@@ -1718,7 +1754,7 @@ for (i in 0..n) { print(i) }                  // range iteration (half-open)
 for (ch in "hello") { print(ch) }             // string characters (by Unicode scalar)
 for (key in someMap) { print(key) }           // single variable over Map → key
 for (key in someJson) { print(key) }          // single variable over Json → key
-for (day in Color) { print(day.name) }        // enum iteration (declaration order)
+// for (day in Color) { ... }                 // compile error: an enum type is not iterable
 for (_ in 0..n) { count++ }                   // discard with placeholder
 ```
 
@@ -1751,12 +1787,12 @@ Iteration source / yield mapping:
 | `Json` | key (string) | (key, value) |
 | `string` | `rune` | (index, rune) |
 | `Range` (`a..b`) | int | — |
-| Enum type | concrete enum value | — |
+| Enum type | **not iterable**; use an explicitly generated or user-provided case table | — |
 | Custom `Iterator<T>` | T | — |
 
 #### Custom iterators
 
-Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §14.15.
+Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §5.3.6.
 
 ### 4.5 `match` Statement
 
@@ -1930,12 +1966,13 @@ dump(some_obj)                 // debug output, with type info and structure
 
 > Source of truth: `src/frontend/parser/xparse_decl.c`, `src/frontend/parser/xast_nodes_decl.h`, `src/frontend/analyzer/xanalyzer_visitor.c`.
 
-### 5.1 `var` / `const` / `shared`
+### 5.1 `var` / `const` / `shared` / `owned`
 
 ```ebnf
 VarDecl ::= 'var' Binding
 ConstDecl ::= 'const' Binding
 SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
+OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -1969,7 +2006,7 @@ const MAX_LEN: int = 1024
 - Initializer is **required**.
 - Cannot be reassigned (compile error `E0303`).
 - The type may be inferred or annotated explicitly.
-- Like `var`, `const` is a single-binding declaration. Comma-separated declarations are removed; use separate declarations or destructure with `const (a, b) = pair`.
+- Like `var`, each `const` declaration binds one name or destructuring pattern. Use separate declarations for independent names, or destructure related values with `const (a, b) = pair`.
 
 #### 5.1.3 `shared` — shared identity binding
 
@@ -1986,7 +2023,23 @@ shared counter = Atomic(0)
 
 See [§10.11](#1011-concurrency-safety-model).
 
-#### 5.1.4 Destructuring bindings
+#### 5.1.4 `owned` — unique-ownership identity binding
+
+```xray
+owned buffer = Array<byte>(1024)
+
+var source = [1, 2, 3]
+owned moved = move source       // transfer an existing reference graph
+owned cloned = copy(moved)      // or make an explicit deep copy
+```
+
+- `owned` is a local, single-name declaration and requires an initializer; module-level and destructuring `owned` declarations are rejected.
+- The system owner records the binding as a unique mutable identity. The name itself is not reassignable, while the owned object may be mutated according to its type.
+- A freshly constructed reference value may initialize it directly. A value taken from an existing reference binding must be written as `move source` or `copy(source)` so that no undeclared alias is created.
+- Ownership may be transferred with `move` to another `owned`/`shared` binding, across an execution boundary, or through a return value. The source cannot be used after the move, and borrows such as slices/raw pointers must have ended first.
+- `owned` is a storage declaration, not a type modifier, and it cannot carry declaration attributes.
+
+#### 5.1.5 Destructuring bindings
 
 ```xray
 // array destructuring
@@ -2076,7 +2129,7 @@ var result = divmod(10, 3)        // result has type (int, int)
 
 #### 5.2.4 Parameter modes
 
-Parameter modes are written after the colon and before the type: `name: in T`, `name: ref T`, `name: out T`. The old prefix spelling `ref name: T` has been removed.
+Parameter modes are written after the colon and before the type: `name: in T`, `name: ref T`, `name: out T`.
 
 ```xray
 fn length_sq(v: in Vec2) -> float {
@@ -2127,7 +2180,7 @@ fn main() { ... }
 
 #### 5.2.7 Tail-call optimization
 
-The compiler recognises accumulator-style tail recursion and rewrites it into a loop (avoiding stack overflow). See [§17](#17-compilation-pipeline).
+The Xi optimizer rewrites proven self-tail calls into loops, and the VM also has constant-stack tail-call opcodes. This is not a blanket constant-stack guarantee for every back end or every indirect/mutually-recursive call: constructors and calls that cannot be proven safe remain ordinary calls. See [§17](#17-compilation-pipeline).
 
 ```xray
 fn factorial(n: int, acc: int = 1) -> int {
@@ -2149,7 +2202,7 @@ greet()                   // must be called explicitly
 
 - `fn main()` has no special meaning; call `main()` explicitly if desired.
 - Top-level `return` is forbidden (compile error `E0306`).
-- Multi-file projects specify the entry via the `entry` field of `xray.toml`; the corresponding file follows the script execution rules above.
+- Multi-file projects specify the entry with the `main` field under `[project]` (or `[package]` for a package manifest), for example `main = "src/main.xr"`; that file follows the script execution rules above.
 
 #### 5.2.9 `extern "C"` C FFI Declaration Blocks
 
@@ -2280,7 +2333,7 @@ Modifier ::= 'private' | 'protected' | 'static' | 'const'
 > - Public is the **default visibility**—every field/method without `private` / `protected` is public; the language has no `public` modifier.
 > - Visibility is **compile-time enforced**: accessing a `private` / `protected` member from outside the class, or a `protected` member from a non-subclass, reports `E0377`.
 > - Overrides are inferred by the compiler: a subclass instance method overrides a non-private parent-chain instance method when name and signature match exactly.
-> - User-written `override`, `abstract`, and `final method` modifiers are removed; same-name different-signature methods, field/method hiding, and static method hiding are compile errors.
+> - Interfaces express abstract contracts, same-name same-signature methods override automatically, and same-name different-signature methods or member hiding are compile errors.
 >
 > The standard library and the regression tests consistently use the "omit the default modifier" style.
 
@@ -2597,7 +2650,7 @@ enum HttpStatus {
 }
 ```
 
-Explicit backing values have been removed: `enum E : int` is not supported, and neither is `Variant = 200` / `"N"` / `true` / `3.14`. Protocol numbers, string symbols, and similar external values should be expressed with `const`, methods, or explicit conversion functions.
+Enum variants use declaration order for their stable `ordinal` and do not declare a separate backing value. Express protocol numbers, string symbols, and similar external representations with `const`, methods, or explicit conversion functions.
 
 #### 5.6.2 Payload enum
 
@@ -2660,7 +2713,7 @@ Color.Red.ordinal     // 0              declaration-order tag (int, zero-based)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
 ```
 
-`.value`, `memberCount`, `getMember`, and the user-visible `EnumValue` / `EnumType` wrapper classes have been removed. If code needs to iterate all cases, it should use an explicit generated-metadata capability in the style of `CaseIterable`, not a default runtime enum object.
+Enum values provide `name`, `ordinal`, and `toString()`. Code that needs to iterate all cases should use an explicit generated-metadata capability in the style of `CaseIterable`.
 
 #### 5.6.5 Iteration
 
@@ -2769,7 +2822,7 @@ AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
 ```xray
 type Outcome = int | string                          // union alias
-type Mapper = fn(int) -> int                         // function-type alias
+type Mapper = (int) -> int                           // function-type alias
 type Point = { x: float, y: float }                  // structural object alias (sealed)
 type Pair<T> = { first: T, second: T }                // generic alias
 ```
@@ -2819,7 +2872,7 @@ For full rules, path resolution, and visibility details see [§11 Modules](#11-m
 
 ## 6. Patterns
 
-> Source of truth: `src/frontend/parser/xparse_match.c`, `src/runtime/value/x_value_match.c`.
+> Source of truth: `src/frontend/parser/xparse_match.c`, `src/frontend/analyzer/xanalyzer_visitor_pattern.c`, `src/ir/xi_lower_expr.c` / `xi_lower_stmt.c`, and the VM/AOT match lowerings.
 
 Patterns appear in `match` expressions/statements and in `var` / `const` destructuring.
 
@@ -3013,7 +3066,7 @@ match (p) {
 
 ## 7. Scoping and Name Resolution
 
-> Source of truth: `src/frontend/analyzer/xanalyzer_scope.c`, `src/frontend/analyzer/xanalyzer_capture.c`.
+> Source of truth: `src/frontend/analyzer/xanalyzer_symbol.c`, `xanalyzer_escape.c`, `xaddressability.c`, `xanalyzer_visitor_stmt.c`, and the capture/storage plans produced by `src/analysis/xglobal_producer.c`.
 
 ### 7.1 Lexical Scoping and Hoisting
 
@@ -3023,7 +3076,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 
 | Scope | Triggered by | Example |
 |--|--|--|
-| Module | Each `.xr` file | top-level `var` `const` `shared` `fn` `class` |
+| Module | Each `.xr` file | top-level `var` `const` `shared` `fn` `class` (module-level `owned` is rejected) |
 | Function / closure | Entering `fn` / arrow function | parameters + function body |
 | Block | `{...}` | `if` `while` `for` `match` arm body |
 | `scope` block | `scope { ... }` keyword | explicit lexical scope + structured concurrency (see §10.7) |
@@ -3034,7 +3087,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 **Hoisting rules**:
 
 - Top-level `fn` `class` `struct` `interface` `enum` `type` are **hoisted** to the top of the current scope — they may be referenced before their textual definition.
-- `var` / `const` / `shared` are **not hoisted** — they must appear before any use.
+- `var` / `const` / `shared` / local `owned` are **not hoisted** — they must appear before any use.
 - Duplicate names: declaring two same-named variables in the same scope is a compile error (nested scopes may shadow).
 
 ```xray
@@ -3081,7 +3134,7 @@ print(c())      // 2
 ```
 
 - The closure and the original variable **share state**.
-- After the outer scope exits, variables referenced by the closure are kept alive by the GC (promoted to the heap).
+- After the outer scope exits, a captured variable remains alive through its closure cell/upvalue and the corresponding reference counts.
 
 #### Closure optimization
 
@@ -3108,11 +3161,12 @@ var t2 = go fn(b: Array<byte>) -> int {
 print(len(big_buffer))    // compile error: accessed after move
 ```
 
-**`move` usage**: `move` appears as an **argument prefix** at call sites (see §10.8):
+**`move` usage**: `move` is a unary ownership-transfer expression commonly used in arguments, initializers, and returns (see §5.1.4 / §10.8):
 
 - `go f(move x)`, `go fn(...){...}(move x)`: transfer ownership to the coroutine.
 - `ch.send(move data)`: transfer ownership when sending across coroutines (avoiding a copy).
 - Plain function call `f(move x)`: transfer ownership into the function (which becomes the sole owner).
+- `owned dst = move src` / `shared dst = move src` / `return move src`: transfer a local `var` or `owned` identity to a new owner or to the caller.
 
 ### 7.4 Cross-Coroutine Data Transfer Rules (Race Avoidance)
 
@@ -3124,7 +3178,7 @@ Every cross-execution boundary (`go` closure, `go` argument, Channel send, defer
 |---|---|---|
 | inline value | scalars and small immutable values | copy the bits directly |
 | deep copy | owned graph under explicit `copy(x)` | materialize an independent graph in the destination execution owner |
-| move | transferable local `var` under explicit `move x` | transfer ownership and statically invalidate the source binding |
+| move | transferable local `var` or `owned` under explicit `move x` | transfer ownership and statically invalidate the source binding |
 | module readonly | frozen and published module values | retain the module-readonly owner; do not copy into a root/task heap |
 | shared ref | `shared`, Channel, Task, Atomic, and other stable shared identities | retain a reference owned by the shared/system owner |
 | reject | execution-local graphs, mutable module state, dangling slices/pointers/upvalues | compile error reporting the owner/provenance and required explicit action |
@@ -3171,7 +3225,7 @@ var t4 = go fn(c: Channel<int>) -> int {
 ch.send(42)
 ```
 
-### 7.5 GC and Object Lifetimes
+### 7.5 Memory Management and Object Lifetimes
 
 Xray uses a layered memory management strategy:
 
@@ -3179,23 +3233,22 @@ Xray uses a layered memory management strategy:
 |--|--|--|
 | Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by freeze + publish | at module unload |
 | Module-mutable storage (top-level `var`) | module owner; not concurrency-safe by default | at module unload |
-| Shared storage (`shared`) | shared/system owner + reference counting | when the last shared reference is released |
-| Execution-local heap (ordinary local objects) | execution owner + reference counting + cycle collection | when the execution ends or the last reference is released; strong cycles are reclaimed by the cycle collector |
-| Stack (`struct` values, locals) | RAII | when scope exits |
+| Shared storage (`shared`) | shared/system owner + atomic reference counting | when the last shared reference is released |
+| Coroutine-local heap (ordinary local objects) | per-coroutine heap + compiler-inserted reference counting + Bacon–Rajan cycle collector | immediately when the last strong reference is released; strong cycles are reclaimed by the cycle collector; remaining Region blocks and large objects are freed in bulk when the coroutine ends |
+| Stack (`struct` values, locals) | lexical storage duration | scope exit; the language exposes no deterministic destructor / `Drop` hook |
 | Arena (low-level temporary allocations) | bulk free | at arena end |
 
 **Memory observation points**:
-- Default reclamation is reference-counted.
-- Strong reference cycles are handled by the cycle collector at safepoints or explicit `runtime.collectCycles()`.
-- Memory safepoints in the instruction stream include function calls, backward branches, and explicit `runtime.collectCycles()`.
-
-Cycle collection and heap-layout design: see `src/runtime/mem/`.
+- The compiler inserts retain/drop operations for ordinary local objects; releasing the last strong reference enters the RC destruction path.
+- The compiler marks only types that may form reference cycles as cycle candidates; their objects become potential roots when an RC decrement leaves them alive.
+- The cycle collector runs on explicit `runtime.collectCycles()` or automatically when the potential-root count reaches an adaptive threshold.
+- The collector traverses only coroutine-local RC edges and skips shared/atomic, runtime-managed, and Region objects; it is not a concurrent tracing GC.
 
 ---
 
 ## 8. Error Handling
 
-> Source of truth: `src/vm/xvm_dispatch_exception.inc.c`, `src/vm/xvm_dispatch_misc.inc.c`, `src/runtime/object/xexception.c`, `stdlib/prelude/prelude.c`.
+> Source of truth: `src/frontend/analyzer/xanalyzer_errorset.c`, `src/ir/xi_lower_stmt.c`, `src/vm/xvm_dispatch_exception.inc.c`, `src/runtime/object/xpanic_info.c`, and `stdlib/types/panic_info.xr`.
 
 ### 8.0 Design philosophy: value-return + panic boundary
 
@@ -3215,7 +3268,7 @@ Design principles:
 
 ### 8.1 Value-return error channel
 
-#### 8.1.1 `throw` expression
+#### 8.1.1 `throw` statement
 
 `throw expr` raises an enum error value. `expr` must be a variant of an enum type:
 
@@ -3585,7 +3638,7 @@ fn safeDivide(a: int, b: int) -> string {
 
 ## 9. Generics
 
-> Source of truth: `src/frontend/analyzer/xanalyzer_generic.c`, `src/frontend/analyzer/xanalyzer_subtype.c`.
+> Source of truth: `src/frontend/analyzer/xtype_ref_resolve.c`, `xanalyzer_mono.c`, `xanalyzer_builtin_interfaces.c`, and `src/runtime/value/xtype_generic.c`.
 
 ### 9.1 Type Parameter Syntax `<T>`
 
@@ -3668,9 +3721,9 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | `Comparable` | usable with `<` `<=` `>` `>=`; int/float/string and types implementing `Comparable` |
 | `Hashable` | usable as a `Map` key or `Set` element; built-in `int` / `float` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==(other: Self) -> bool` and `hash() -> int` |
 | `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
-| `Iterable<T>` | usable in `for-in`; Array, Map, Json, string, Range, enum, types with custom `iterator()` |
+| `Iterable<T>` | usable in `for-in`; Array, Map, Json, string, Range, and types with a custom `iterator()`; enum types themselves are not iterable |
 
-`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==(other: Self) -> bool` and `hash() -> int`. Legacy `hashCode()` does not satisfy the contract, and providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
+`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==(other: Self) -> bool` and `hash() -> int`. Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
 
 **Current limitations**:
 - Constraints may only follow type parameters; there is no `where` clause.
@@ -3783,7 +3836,7 @@ Structured field/method metadata is not provided automatically by the default ru
 
 ## 10. Concurrency and Coroutines
 
-> Source of truth: `src/runtime/coro/xcoro_*.c`, `src/runtime/sync/xchannel.c`, `src/runtime/sync/xscope.c`, `docs/rules/design-principles.md`.
+> Source of truth: `src/coro/xcoro*.c`, `src/coro/xtask*.c`, `src/coro/xchannel.c`, `src/coro/xscope*.c`, `src/frontend/analyzer/xanalyzer_escape.c`, and `docs/rules/design-principles.md`.
 
 xray's concurrency model is **goroutine-style coroutines + channels + strong static guarantees**. Design goal: writing `go { ... }` is as simple as writing an ordinary function call, while the **compiler guarantees no data race**.
 
@@ -3792,7 +3845,7 @@ xray's concurrency model is **goroutine-style coroutines + channels + strong sta
 | Dimension | Choice |
 |--|--|
 | Scheduling model | M:N (user-space coroutines on multiple OS threads) |
-| Scheduling policy | Cooperative (GC safepoints) + work stealing |
+| Scheduling policy | Cooperative (back edges, channels, `await`, `Coro.yield()`, and similar scheduling/suspension points) + work stealing |
 | Stack model | Stackless (per-coroutine VM value stack + frame array, grows on demand, no native C stack) |
 | Creation cost | ~microsecond (initial VM value stack ~64 slots + 4 frames, not a native stack) |
 | Context switch | VM context switch (save/restore VM frames), no native stack switch, no syscall |
@@ -3850,7 +3903,7 @@ var task = go fn(x: int) -> int {
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
-- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared`; **passing them bare is a compile error**. Scalars, `string`, `shared`, and Channel / Task / Atomic pass directly. `move` only applies to rebindable local `var` values; `shared` bindings cannot be moved. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, and the normal path no longer performs an implicit boundary deep copy.
+- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared`; **passing them bare is a compile error**. Scalars, `string`, `shared`, and Channel / Task / Atomic pass directly. `move` only applies to rebindable local `var` values; `shared` bindings cannot be moved. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or shared.
 - The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
 
 ### 10.3 `await` — wait for a result
@@ -3924,9 +3977,9 @@ match t.poll() {
 
 The current public shape of `TaskResult<T>` is `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, and `Pending`. Runtime faults enter `Failed` as `PanicInfo`; business enum errors still use the language error channel, so plain `await task` propagates through the matching error path, and callers that need a status value keep an explicit task handle and call `awaitResult()` / `awaitTimeout(ms)`.
 
-**Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `Coro.yield()`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
+**Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next scheduling/suspension point (back edge, channel operation, `await`, `Coro.yield()`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
 
-**Watchdog policy**: the runtime monitor thread (sysmon) observes the heartbeat of RUNNING coroutines. Pure Xray loops advance the heartbeat at back-edge safepoints, so they are observed as making progress; sysmon is mainly for long native/FFI calls or no-safepoint regions that stop progressing. If a heartbeat stays frozen for too long, the default behavior is **warn-only**: a stuck warning is printed after roughly 100ms, but the coroutine is not silently cancelled. Forced cancellation is explicit opt-in: set `XRAY_SYSMON_CANCEL_MS=N` (`N > 0`, milliseconds) to mark a coroutine for cancellation after its heartbeat remains frozen past that threshold; unset or `0` keeps warn-only behavior. Long pure-CPU loops may still insert `Coro.yield()` for scheduling fairness and cancellation responsiveness, but it is no longer required to avoid default watchdog cancellation.
+**Watchdog policy**: the runtime monitor thread (sysmon) observes the heartbeat of RUNNING coroutines. Pure Xray loops advance the heartbeat at back-edge safepoints, so they are observed as making progress; sysmon is mainly for long native/FFI calls or no-safepoint regions that stop progressing. If a heartbeat stays frozen for too long, the default behavior is **warn-only**: a stuck warning is printed after roughly 100ms, but the coroutine is not silently cancelled. Forced cancellation is explicit opt-in: set `XRAY_SYSMON_CANCEL_MS=N` (`N > 0`, milliseconds) to mark a coroutine for cancellation after its heartbeat remains frozen past that threshold; unset or `0` keeps warn-only behavior. Long pure-CPU loops may insert `Coro.yield()` to improve scheduling fairness and cancellation responsiveness.
 
 ### 10.5 Channel
 
@@ -4236,13 +4289,13 @@ A hosted target selects a NONE / SINGLE / MULTI scheduler from the verified entr
 
 - Each `.xr` file is one module.
 - Module name = file name (with the `.xr` suffix removed).
-- Module path mirrors directory structure: `src/utils/string.xr` → `utils.string`.
+- A file module's canonical identity comes from its resolver-normalized path. Source normally imports it through a relative or package path; code should not depend on a display-only dotted-directory derivation.
 
 ### 11.2 Project Layout
 
 ```
 my_project/
-├── xray.toml              # package manifest (name, dependencies, entry)
+├── xray.toml              # package manifest (name, dependencies, main)
 ├── src/
 │   ├── main.xr            # entry
 │   ├── utils.xr
@@ -4259,14 +4312,10 @@ my_project/
 [package]
 name = "my_project"
 version = "0.1.0"
-entry = "src/main.xr"
+main = "src/main.xr"
 
 [dependencies]
-http = "1.0"
-json = "0.2"
-
-[dev-dependencies]
-test = "1.0"
+local_utils = { path = "../local_utils" }
 ```
 
 ### 11.3 `import` Syntax
@@ -4403,7 +4452,7 @@ time.sleep(100)
 
 ## 12. Testing
 
-> Source of truth: `src/app/cli/xcli_test.c`, `stdlib/xray/test.xr`, `docs/testing-spec.md`.
+> Source of truth: `src/app/cli/xcmd_test.c`, `src/api/xtest_runner.c`, `src/frontend/parser/xparse_decl.c`, and the analyzer's global assertion-builtin table.
 
 ### 12.1 Declaring Tests: the `@test` Attribute
 
@@ -4431,20 +4480,19 @@ fn test_with_assertions() {
 - Functions annotated with `@test` are auto-discovered and run by `xray test`; ordinary functions are not.
 - Test naming convention: `test_xxx` (snake_case), descriptive.
 - Test functions take no parameters and return nothing; expectations are expressed via the `assert*` family.
-- A file may contain **any number** of `@test` functions; they run in declaration order.
+- A file may contain **any number** of `@test` functions; they run in declaration order within that file. Multiple files may run in parallel with `-j N`, each in its own isolate.
 
 ### 12.2 Test Entry Points
 
-Test file convention:
-- Either co-located with the code under test or under `tests/regression/`.
-- File name format: `XXXX_topic.xr` (four-digit number + topic).
+`xray test` enforces no directory or filename convention. A directory argument is scanned recursively for every `.xr` file, sorted by path. This repository's `tests/regression/XXXX_topic.xr` form is only a project convention.
 
 Run:
 
 ```bash
-xray test                                  # run all tests
+xray test tests/                           # at least one file or directory is required
 xray test tests/regression/01_literals/    # run a whole group
 xray test tests/regression/01_literals/0100_int_basic.xr   # single file
+xray test -j 4 tests/                      # file-level parallelism
 ```
 
 ### 12.3 Assertion API
@@ -4476,13 +4524,15 @@ fn test_async_fetch() {
 
 ### 12.5 Attribute Overview
 
-Xray attributes are prefixed with `@` followed by an identifier. The current parser only recognizes **three** attributes (source: `xparse_decl.c:xr_parse_single_attribute`):
+Xray attributes begin with `@`; the source table is `xparse_decl.c:xr_parse_single_attribute`. The test runner recognizes:
 
-| Attribute | Applies to | Description |
-|---|---|---|
-| `@test` | function | mark as a test function; accepts optional arguments: `@test(skip)` to skip, `@test(timeout: 30)` to set a timeout |
-| `@native` | class / struct / fn | declare a native implementation; method bodies are provided by C (used in stdlib type declarations) |
-| `@deprecated` | any declaration | deprecation warning; optional message: `@deprecated("use X instead")` |
+| Attribute | Description |
+|---|---|
+| `@test` / `@test(skip)` / `@test(timeout: N)` | test, skipped test, or per-test timeout in seconds |
+| `@before_all` / `@after_all` | run once before/after the file's suite |
+| `@before_each` / `@after_each` | run before/after every non-skipped test |
+
+Other attributes include `@deprecated("...")`; builtin-declaration-only `@native`; AOT/C ABI attributes `@c_export("sym")`, `@section("name")`, `@weak`, `@used`, `@naked`, `@interrupt("abi")`, and `@no_alloc`; plus `@derive(Inspect, Json, Eq, Hash, Clone)` (`Hash` requires `Eq`). External C declarations use an `extern "C" ... {}` block.
 
 ```xray
 @test                                 // mark as a test
@@ -4491,18 +4541,14 @@ fn test_basic() { return }
 @test(skip)                           // skip this test
 fn test_wip() { return }
 
-@native                               // C implementation
-class Array<T> {
-    length: int
-    push(v: T)
-    // no method bodies — provided by src/runtime/object/xarray_methods.c
-}
+@before_each
+fn reset_fixture() { resetState() }
 
 @deprecated("use newAPI() instead")
 fn oldAPI() { return }
 ```
 
-> Attributes that do not exist (do not use them in user code): `@before_each` / `@after_all` / `@async` / `@override` etc. — these trigger an "unknown attribute name" error.
+> `@async`, `@override`, and camel-case spellings such as `@beforeEach` are not in the current table and trigger `unknown attribute name`. Use `go` / `await` directly in an async test body.
 
 ### 12.6 `xray run` / `xray test` / `xray repl`
 
@@ -4511,7 +4557,7 @@ fn oldAPI() { return }
 | `xray run main.xr` | run the main program |
 | `xray test` | run the test suite |
 | `xray repl` | start the REPL |
-| `xray build --aot` | AOT compile |
+| `xray build --native main.xr` | AOT native compile |
 | `xray fmt` | format code |
 
 ---
@@ -4520,7 +4566,7 @@ fn oldAPI() { return }
 
 > Source of truth: `src/ir/xi_lower_expr.c`, `src/vm/xvm_dispatch_*.inc.c`, `src/runtime/object/builtins/`, `src/frontend/analyzer/xanalyzer_builtins.c`.
 
-These global functions and built-in constructor/static functions are usable without any `import`. In the tables below, `value` denotes "any runtime value" — it is **not** a writable `any` type; xray no longer has an `any` type in the source language.
+These global functions and built-in constructor/static functions are usable without any `import`. In the tables below, `value` denotes "any runtime value"; it is a documentation placeholder rather than a writable source-language type.
 
 ### 13.1 I/O and Debugging
 
@@ -4528,6 +4574,7 @@ These global functions and built-in constructor/static functions are usable with
 |--|--|--|
 | `print` | `(...values) -> ()` | print to stdout, automatically appending a newline; multiple arguments are separated by spaces |
 | `dump` | `(value, indent?) -> ()` | structured debug output |
+| `len` | `(value) -> int` | length of strings, containers, Range, Slice, Json, and other `Lengthable` values; do not read `.length` |
 
 ### 13.2 Type Conversion
 
@@ -4539,7 +4586,7 @@ These global functions and built-in constructor/static functions are usable with
 | `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
 | `rune(n)` | `(int) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
 | `chr(n)` | `(int) -> string` | Unicode code point → one-scalar string |
-| `copy(x)` | `(T) -> T` | deep copy, preserving runtime type |
+| `copy(x)` | `(value) -> owned value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
 
 ### 13.3 Type Checking
 
@@ -4547,7 +4594,12 @@ These global functions and built-in constructor/static functions are usable with
 |---|---|---|
 | `typeOf(x)` | `(value) -> Type` | returns a stable TypeId / `Type.xxx` value |
 | `typeName(x)` | `(value) -> string` | returns the debug/logging type-name string |
+| `typeName<T>()` | `() -> string` | returns the name of static type `T` |
 | `x is T` | expression | runtime type check; the analyzer may narrow types |
+
+The branch hints `likely(cond)` and `unlikely(cond)` accept and return the same `bool`; they inform optimization probability only and do not change evaluation or short-circuit semantics.
+
+The global read-only environment values are not functions: `process` (entry arguments/file/directory), `__file__`, and `__dir__`. They are initialized for a real file/project entry; `process` may be `null` in a pure `eval` context.
 
 ```xray
 var x = 42
@@ -4596,7 +4648,7 @@ BigInt uses the `123n` literal or `int.toBigInt()`; Json uses `Json.parse` / `Js
 > Source of truth: prelude / analyzer / runtime built-in type registration and method definitions.
 > MCP knowledge only consumes the generated analyzer metadata; it does not maintain its own copy of built-in method signatures.
 
-This section is a **method index** for each type (grouped by topic). Concrete signatures, parameter descriptions, and behavioral details are governed by the implementation source.
+This section summarizes the methods, signatures, and behavior of each built-in type by topic.
 
 ### 14.1 `int` Methods
 
@@ -4608,7 +4660,6 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `toFloat()` | `() -> float` | convert to float |
 | `toHex()` | `() -> string` | hexadecimal string |
 | `max(other)` / `min(other)` | `(int) -> int` | binary max/min |
-| `floor()` / `ceil()` / `round()` | `() -> int` | for `int`, returns self |
 | `sqrt()` | `() -> float` | square root |
 | `pow(exp)` | `(float) -> float` | power |
 | `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | returns `null` on overflow |
@@ -4620,7 +4671,7 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `byteswap()` | `() -> int` | reverses the byte order |
 | `rotateLeft(n)` / `rotateRight(n)` | `(int) -> int` | bit rotation (`n` taken modulo 64) |
 
-`abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. The bit-manipulation methods and overflow predicates share a single semantic source (`src/shared/xr_bits_core.h` / `xr_arith_core.h`) between VM and AOT.
+`abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. Bit-manipulation methods and overflow predicates have the same semantics in VM and AOT builds.
 
 ### 14.2 `float` Methods
 
@@ -4672,11 +4723,14 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `len(s)` | O(1) Unicode scalar count |
 | `bytes()` / `copyBytes()` | borrowed `Slice<byte>` / owned `Array<byte>` |
 | `runes()` | `Iterator<rune>`; bare `for (r in s)` has the same semantics |
-| `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<byte>`; invalid UTF-8 returns `null` |
+| `string.fromRune(r)` | constructs a string from one Unicode scalar |
+| `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<byte>`; invalid UTF-8 throws `Utf8Error.InvalidUtf8` |
 | `string.fromUtf8Lossy(bytes)` | copies a `Slice<byte>`, replacing invalid sequences with U+FFFD |
+| `string.join(parts, separator?)` | joins an `Array<string>` |
 | `contains(s)` | substring containment test |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | return rune ordinals |
 | `slice(start, end?)` | owned rune-ordinal slice; the range must be valid |
+| `sliceBytes(start, end)` | slice by byte offset; invalid boundaries throw `StringSliceError.InvalidByteRange` |
 | `split(sep, limit?)` | split into `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | replacement |
 | `repeat(n)` | repeat |
@@ -4687,28 +4741,29 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 
 ### 14.6 `Array<byte>`
 
-`Array<byte>` is a prelude type; construction is handled via builtin paths such as `Array<byte>(n)` / `Array<byte>(n, fill)`. Its `toString()` uses the same container formatting as every Array; decode text explicitly with `string.fromUtf8(bytes[:])` or `string.fromUtf8Lossy(bytes[:])`. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not assume a complete Array-isomorphic API.
+`Array<byte>` is a directly available specialization of `Array`; construction is handled via builtin paths such as `Array<byte>(n)` / `Array<byte>(n, fill)`. Its `toString()` uses the same container formatting as every Array; decode text explicitly with `string.fromUtf8(bytes[:])` or `string.fromUtf8Lossy(bytes[:])`. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not treat it as a second, Array-isomorphic API surface.
 
 ### 14.7 `Array<T>` Methods
 
 | Member | Type / Description |
 |--|--|
 | `len(arr)` | global `int` query |
-| `arr[i]` / `arr[i] = v` | indexed read/write |
+| `capacity` / `arr[i]` / `arr[i] = v` | capacity field and indexed read/write; `get(i)` / `set(i, v)` are also available |
 | `push(x)` / `pop()` | tail insert/remove |
 | `shift()` / `unshift(x)` | head insert/remove |
-| `slice(start?, end?)` | slicing |
-| `splice(start, deleteCount, ...items)` | in-place insert/remove |
 | `concat(...arrays)` | concatenation |
 | `indexOf(x)` / `contains(x)` | search |
 | `join(sep?)` | concatenate into a string |
 | `reverse()` / `sort(cmp?)` | in-place reorder |
 | `map(fn)` / `filter(fn)` / `reduce(fn, init)` | functional helpers |
 | `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | traversal and predicates |
-| `flat(depth?)` / `fill(v, start?, end?)` / `copyWithin(target, start, end?)` | array utilities |
+| `fill(v, start?, end?)` / `clear()` | fill or clear |
+| `reserve(capacity)` / `resize(length, fill)` | capacity and length management |
+| `ptr()` / `mutPtr()` | explicit low-level pointer views |
+| `toString()` | container representation |
 | `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
 
-`slice(start?, end?)` uses the same half-open range and negative-index rules as slice expressions; it returns an independent array and leaves the original array unchanged.
+Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow; use `copy(arr[start:end])` for independent owned data.
 
 ### 14.8 `Map<K, V>` Methods
 
@@ -4716,13 +4771,15 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 |--|--|
 | `len(m)` | global `int` query |
 | `m[k]` / `m[k] = v` | indexed read/write |
-| `get(k)` / `set(k, v)` | read/write |
+| `get(k)` / `set(k, v)` | `get` returns `null` when absent; `set` writes |
 | `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | query and remove |
 | `keys()` / `values()` / `entries()` | keys, values, key/value pairs |
 | `forEach(fn)` | traversal |
 | `iterator()` / `entriesIterator()` | iteration protocol |
 
 **Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from Record/Json object literals by the `#` prefix.
+
+`m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
 
 ### 14.9 `Set<T>` Methods
 
@@ -4743,12 +4800,13 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 |--|--|
 | `send(v)` | blocking send; throws if the channel is closed |
 | `recv()` | blocking receive, returns `Recv<T>`; closed and drained is `Recv.Closed` |
+| `recvOr(default)` | receives a payload, or returns the supplied default when none is available |
 | `trySend(v)` | non-blocking send, returns `SendResult` |
 | `tryRecv()` | non-blocking receive, returns `Recv<T>`; empty is `Recv.Empty` |
 | `sendTimeout(v, ms)` | timed send, returns `SendResult`; timeout is `SendResult.Timeout` |
 | `recvTimeout(ms)` | timed receive, returns `Recv<T>`; timeout is `Recv.Timeout` |
 | `close()` | close the channel |
-| `isClosed` / `isClosed()` | closed state; both runtime property and method are supported |
+| `capacity` / `isClosed` | capacity and closed-state fields |
 
 `Recv.Value(v)` carries the channel payload, so `Channel<int?>` can distinguish a real `Recv.Value(null)` from `Recv.Closed`.
 
@@ -4770,11 +4828,31 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 
 ### 14.12 `Range`
 
-`a..b` is the half-open interval `[a, b)`, used in expressions and `for-in`. Common members are `start`, `end`, `contains(x)`, `toArray()`, and `toString()`; use `len(range)` for its element count.
+`a..b` is the half-open interval `[a, b)`, while `a..=b` is the inclusive interval `[a, b]`. Both forms work in expressions, `for-in`, and range patterns in `match`.
+
+| Member | Description |
+|--|--|
+| `start` / `end` | The start and the declared endpoint |
+| `contains(x)` | Tests membership using the range's half-open or inclusive semantics |
+| `toArray()` | Produces an independent `Array<int>` in iteration order |
+| `toString()` | Returns an `a..b` or `a..=b` string |
+| `len(range)` | Returns the number of elements in the range |
+
+```xray
+var pages = 1..=3
+print(pages.start)          // 1
+print(pages.end)            // 3
+print(pages.contains(3))    // true
+print(len(pages))           // 3
+print(pages.toArray())      // [1, 2, 3]
+
+var empty = 5..5
+print(len(empty))           // 0
+```
 
 ### 14.13 `DateTime`
 
-The `import datetime` module provides factory functions: `now`, `utc`, `create`, `createUTC`, `fromTimestamp`, `fromTimestampMs`, `parse`, `offset`. `DateTime` instances are registered by the prelude, so the type name need not be imported.
+The `datetime` module provides factory functions through `import datetime`: `now`, `utc`, `create`, `createUTC`, `fromTimestamp`, `fromTimestampMs`, `parse`, and `offset`. `DateTime` is not a prelude type; import it explicitly with `import { DateTime } from datetime` when the name is used as a type.
 
 | Member | Type / Description |
 |--|--|
@@ -4794,8 +4872,9 @@ The `import datetime` module provides factory functions: `now`, `utc`, `create`,
 | `test(s)` | match predicate |
 | `find(s)` | first match |
 | `findAll(s)` | all matches |
+| `findText(s)` / `findGroup(s, index)` | first matched text / capture-group text |
 | `replace(s, replacement)` | replacement |
-| `split(s)` | split |
+| `split(s, limit?)` | split |
 
 ### 14.15 `StringBuilder`
 
@@ -4812,11 +4891,11 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.17 `Task<T>` and Enum Values
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` whose current public shape is `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, and `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. Enum values keep the cold-path `name`, `ordinal`, and `toString()` surface; user-visible `EnumValue` / `EnumType` wrapper classes have been removed.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` as `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, or `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
 
-### 14.18 Other Prelude Types (`Logger` / `NetConn` / `NetListener`)
+### 14.18 Thread and Synchronization Handles
 
-These types are registered by the prelude; instances are constructed by factory functions in modules such as `log` / `net`. The complete runtime capability follows the corresponding stdlib module.
+`Thread<T>` is a prelude handle type with the `done` field and the `join()` / `detach()` methods. After importing `sys`, create an OS thread with `sys.Thread.spawn(body)` or `sys.Thread.spawn(ThreadOptions{...}, body)`, then call `join()` or `detach()` on the returned handle. Import `CountdownLatch`, `EventCount`, `ResultGroup`, `Semaphore`, and `WorkQueue` from `sync`; import `Logger` from `log`; and import connection and listener types from `net`.
 
 ### 14.19 `Atomic<T>` Methods
 
@@ -4845,17 +4924,17 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 > MCP knowledge and the API inventory use the source-derived inventory; `xray builtin-dump` is only one runtime builtin-view input.
 > See [Appendix D — stdlib module index](#d-stdlib-module-index).
 
-> **Authoritative stdlib module list** (25 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
+> **Authoritative stdlib module list** (28 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
 >
-> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `runtime`, `sync`, `sys`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
+> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `http`, `io`, `log`, `math`, `mem`, `net`, `os`, `parallel`, `path`, `regex`, `runtime`, `strconv`, `sync`, `sys`, `text`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
-> Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Array<byte>`, `BigInt`, `StringBuilder`, `PanicInfo`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
+> The exact prelude type set is: `Array`, `Atomic`, `OsBarrier`, `BigInt`, `Channel`, `OsCondvar`, `PanicInfo`, `Json`, `Map`, `OsMutex`, `NetConn`, `NetListener`, `OsOnce`, `Path`, `Range`, `Regex`, `OsRwLock`, `Set`, `StringBuilder`, and `Thread`. `Array<byte>` is an `Array` specialization; module types such as `DateTime` and `Logger` must be imported. See §1.5.6 / §2.2.
 
 ### 15.1 File I/O and System
 
 | Module | Topic | Key APIs |
 |--|--|--|
-| `io` | file I/O + filesystem | `readFile` `writeFile` `exists` `mkdir` `remove` `readdir` `stat` `stdin` `stdout` `stderr` |
+| `io` | file I/O + filesystem | `readFile` `writeFile` `readFileBytes` `writeFileBytes` `exists` `mkdir` `mkdirp` `remove` `readDir` `stat` `readStdin` |
 | `path` | path manipulation | `join` `dirname` `basename` `extname` `normalize` `isAbsolute` `resolve` `relative` `parse` `format` |
 | `os` | OS interface | `getenv` `setenv` `environ` `exit` `getpid` `getcwd` `chdir` `hostname` `tmpdir` `homedir` `cpuCount` `sleep` `exec`; constants `platform` `arch` `sep` `eol` |
 
@@ -4867,7 +4946,7 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 | Module | Topic | Key APIs |
 |--|--|--|
 | `net` | TCP / UDP / TLS sockets + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
-| `http` | HTTP / HTTPS client + server + HTTP/2 | `request` `h2Request` `route` `listen` `ws` `router` `requestText` `responseText` `parseResponseText` |
+| `http` | HTTP / HTTPS client + server + HTTP/2 | `request` `h2Request` `listen` `router` `routeHandler` `requestText` `responseText` `parseResponseText` |
 | `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
 | `url` | URL parsing and construction | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
 
@@ -4906,7 +4985,7 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 
 | Module | Key APIs |
 |--|--|
-| `crypto` | `md5` `sha1` `sha256` `sha512` `hmac` `aes` `rsa` etc.; full API in stdlib source |
+| `crypto` | `md5` `sha1` `sha256` `sha512` `hmac` `encrypt` `decrypt` `randomBytes` `timingSafeEqual` `uuid` |
 
 > stdlib has **no** standalone `random` module; for pseudo-random numbers use `crypto`'s random source or `math` utilities.
 
@@ -4920,8 +4999,8 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 
 | Module | Key APIs |
 |--|--|
-| `time` | `now()` `monotonic()` `sleep(ms)` `Duration` |
-| `datetime` | `DateTime` / `Date` / `Time` parsing and formatting (see §14.12) |
+| `time` | `now()` `monotonic()` `clock()` `micros()` `nanos()` `sleep(ms)` `localOffset()` `localOffsetAt()` |
+| `datetime` | `DateTime` plus factories such as `now()` `utc()` `create()` `createUTC()` `fromTimestamp()` and `parse()` (see §14.13) |
 
 ### 15.7 Math
 
@@ -4933,9 +5012,11 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 
 | Module | Key APIs |
 |--|--|
-| `regex` | `compile(pattern)` returns `Regex`; see §14.13. The `/pattern/flags` literal form is also supported |
+| `regex` | `compile(pattern)` returns `Regex`; see §14.14. The `/pattern/flags` literal form is also supported |
+| `text` | `lower` `upper` `trim` `trimStart` `trimEnd` `padStart` `padEnd` `reverseRunes` `translate` |
+| `strconv` | `parseInt` `parseFloat` |
 
-> stdlib has **no** `strconv` module; for string ↔ numeric conversions use the built-ins `int(s)` / `float(s)` / `string(n)` (see §13.2).
+The built-ins `int(s)` / `float(s)` / `string(n)` remain available for ordinary conversions; use `strconv` when radix/default parsing controls are needed.
 
 ### 15.9 Logging and Diagnostics
 
@@ -4945,23 +5026,27 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 | `runtime` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
 | `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` return managed `Buffer`; `pageAlloc()` / `pageFree()`; `copy()` / `move()` / `set()` / `compare()`; `volatileLoad()` / `volatileStore()`; `fence()` |
 | `sync` | coroutine-domain synchronization: `Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()`, with explicit `import sync` |
-| `sys` | OS / thread domain: `Thread.spawn()`, `OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`, `cpuCount()`, `sleepMs()`, with explicit `import sys` |
+| `sys` | low-level OS/thread surface: compiler-defined `sys.Thread.spawn(...)` with `ThreadOptions`, plus `ThreadLocal`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, `cpuCount()`, `sleepMs()`, `threadYield()`, `pinToCpu()`, and `onSignal()` |
 
-### 15.10 Distributed
+### 15.10 Parallelism
+
+`parallel` exports `forEach` and the `Plan` abstraction for structured CPU-parallel work. `parallel` is not a language keyword; import the module explicitly.
+
+### 15.11 Distributed
 
 | Module | Topic |
 |--|--|
 | `cluster` | node discovery, health checks, topic-based message bus (see `stdlib/cluster/`) |
 
-### 15.11 Testing
+### 15.12 Testing
 
 The `@test` attribute together with the global `assert*` family is enough; **no** separate `test` module is needed (see §12).
 
-### 15.12 Modules That **Do Not Exist**
+### 15.13 Modules That **Do Not Exist**
 
 Modules that may have been referenced historically but are **not** part of the current stdlib (to avoid confusion):
 
-`fs` · `process` · `dns` · `random` · `strconv` · `json`
+`fs` · `process` · `dns` · `random` · `json`
 
 Their functionality has either moved into other modules (see the per-section notes above) or has not yet been implemented.
 
@@ -4990,7 +5075,7 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 | `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Array<byte>` | `XR_TAG_PTR` + bytes heap object |
+| `Array<byte>` | `XR_TAG_PTR` + `XR_TARRAY`, with byte element layout |
 | Other objects | `XR_TAG_PTR` + heap type + heap pointer |
 
 Typed-array element layout is part of the container metadata. `Array<rune>` uses `XR_ELEM_RUNE`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_RUNE`, and stores reject non-`rune` values, so it cannot be confused with `Array<uint32>`.
@@ -5002,17 +5087,17 @@ Typed-array element layout is part of the container metadata. `Array<rune>` uses
 | **System owner** | runtime/native data structures; hosted targets may use the C allocator, while freestanding targets supply hooks |
 | **Module-readonly owner** | consteval rodata, or top-level `const` initialized by the module allocator and then frozen + published |
 | **Module-mutable owner** | top-level `var`; module lifetime, not concurrency-safe by default |
-| **Shared/system owner** | stable `shared` identities and explicit concurrency handles, reference-counted |
-| **Execution owner** | local RC object graphs of a root, task, or direct entry; no physical coroutine identity is required |
+| **Shared/system owner** | stable `shared` identities and explicit concurrency handles, atomically reference-counted |
+| **Coroutine owner** | ordinary local objects, allocated and reference-counted by the current coroutine's `XrCoroHeap` |
 | **Stack** | `struct` values, local immediates, function frames |
 | **Arena** | parser temporary allocation, frame allocation |
 
 ### 16.3 Memory Model
 
-- Default reclamation is **per-execution reference counting**. AllocationContext explicitly selects the module, shared/system, or execution owner; ordinary allocation does not require `current_coro` as its sole entry. Objects enter their owner's reclamation path when the last strong reference is released.
-- **Cycle collection** handles strong reference cycles; the explicit user entrypoint is `runtime.collectCycles()`.
-- **Memory safepoints**: function calls, backward branches, explicit `runtime.collectCycles()`.
-- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current ExecutionContext's live-memory view (`import runtime`; the `mem` module carries raw-memory capabilities only).
+- Ordinary local objects use compiler-inserted **per-coroutine reference counting** and enter the RC destruction path as soon as their last strong reference is released. Shared objects use atomic RC; module and runtime objects follow their respective owners' lifetimes.
+- **Cycle collection**: the compiler marks types that may form cycles, and a Bacon–Rajan trial-deletion collector handles the corresponding coroutine-local strong-reference cycles. The explicit entrypoint is `runtime.collectCycles()`; collection also starts automatically when the potential-root count reaches an adaptive threshold.
+- **Collector boundary**: the cycle collector skips shared/atomic, runtime-managed, and Region objects. The former tracing-GC hooks at function calls and backward branches are currently no-ops; Xray has no concurrent tracing GC.
+- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view, falling back to the main coroutine when no coroutine is current (`import runtime`; the `mem` module carries raw-memory capabilities only).
 
 See `src/runtime/mem/` for details.
 
@@ -5022,9 +5107,9 @@ See `src/runtime/mem/` for details.
 - **work-stealing**: idle workers steal tasks from other workers' queues.
 - **Cooperative preemption**: coroutines yield at safepoints (no forced preemption).
 - **Fairness**: a single runnable queue works with local run-next, global injection, and work-stealing; scheduling order does not expose user-level priorities.
-- **Stack management**: segmented stacks grow on demand.
+- **Stack management**: VM register/frame stacks grow on demand and may relocate their backing storage; the runtime re-derives pointers from slot offsets.
 
-See `src/runtime/coro/` for details.
+See `src/coro/` and `src/vm/xvm_coro_backend.c` for details.
 
 ### 16.5 Process-Level Global Access
 
@@ -5075,7 +5160,7 @@ class PanicInfo {
 }
 ```
 
-Recoverable user-level errors do not use `PanicInfo`: a `throw` expression accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
+Recoverable user-level errors do not use `PanicInfo`: a `throw` statement accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
 
 Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers, releasing locals frame by frame and running `defer` along the way before jumping to the handler. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
 
@@ -5098,276 +5183,200 @@ The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is
 
 ## 17. Compilation Pipeline
 
-> Source of truth: `src/frontend/`, `src/vm/`, `src/jit/`, `src/aot/`, `docs/rules/architecture.md`.
+> Sources of truth: `src/frontend/`, `src/ir/`, `src/vm/`, `src/aot/`, `src/toolchain/`, `src/app/cli/xcmd_build.c`, and `src/app/cli/xcmd_compile.c`.
 
-### 17.1 Pipeline Overview
+### 17.1 Two Execution Paths
 
 ```
-Source (.xr)
-    ↓ lexer
-Token stream
-    ↓ parser
-AST
-    ↓ analyzer (semantic analysis, type checking, scope/capture/generic)
-Typed AST
-    ↓ ssa-gen
-SSA IR
-    ↓ optimize (const fold, DCE, inline, TCO, escape analysis)
-Optimized SSA
-    ↓ codegen
-Bytecode  →  AOT (machine code)
-    ↓ VM
-    ↓ Profiler → JIT (machine code)
-Execution
+source (.xr) -> lexer -> AST -> analyzer / canonical evidence
+                                  |-> bytecode compiler -> XrProto -> VM
+                                  `-> Xi IR -> optimization -> C source -> host/cross C toolchain -> native binary
 ```
 
-### 17.2 Lexical Analysis (Lexer)
+Xray currently has no JIT. `xray run` and default `xray build` use the bytecode/VM path; `xray build --native` selects AOT. Both paths share the parser, analyzer, module graph, and runtime semantics, but their output representations and backend optimizations differ.
 
-- Source of truth: `src/frontend/lexer/xlexer.c`.
-- Outputs an `XrToken` stream; each token carries `kind`, `value`, `pos(line, col)`.
-- Handles: string interpolation (producing `${...}` concatenation sequences), raw strings, regex literals.
+### 17.2 Frontend
 
-### 17.3 Syntax Analysis (Parser)
+- Lexer: `src/frontend/lexer/xlex.c` / `xlex.h`, with `xkeywords.def` as the keyword table; input must be valid UTF-8.
+- Parser: handwritten recursive-descent and precedence expression parsing in `src/frontend/parser/xparse*.c`, producing an `AstNode` module tree.
+- Analyzer: `src/frontend/analyzer/` performs name, type, generic, visibility, ownership, capture, and error-set checks.
+- Canonical evidence: `src/frontend/canonical/` plus the module/toolchain layer stabilize cross-module facts for backend consumers.
 
-- Source of truth: `src/frontend/parser/` (split by file: expr, stmt, decl, match).
-- Style: hand-written Pratt parser (expressions) + recursive descent (declarations / statements).
-- Error recovery: after an error, jumps to the next synchronization point (`;` `}` `)`) and tries to keep parsing.
-- Output: an `XrAstNode*` root (i.e., the module).
+### 17.3 Bytecode and VM
 
-### 17.4 Semantic Analysis (Analyzer)
+`src/frontend/codegen/xcompiler.c` compiles analyzed AST into an `XrProto`. The single opcode list is `src/runtime/value/xopcode_def.h`; the VM lives in `src/vm/`. Its register-oriented instruction set includes property/call fast paths and dedicated coroutine, error-channel, and tail-call operations.
 
-- Source of truth: `src/frontend/analyzer/xanalyzer_*.c` (split by topic).
-- **Scoping**: nested symbol tables, name resolution, shadowing checks.
-- **Type checking**: bidirectional type inference, union narrowing, Json structural matching.
-- **Generics**: build-time monomorphization, constraint checking, call-site rewriting; cross-module generics are expanded during whole-program / LTO analysis, so generic libraries must provide analyzable IR/AST.
-- **Closure analysis**: upvalue tagging, `go` closure capture restrictions.
-- **Error codes**: the `XR_ERR_ANALYZE_*` family.
+`xray compile file.xr` emits `.xrc` by default. `--format bytecode|c|header` selects serialized bytecode or a C source/header representation that embeds the bytecode. `--format c` here is **not** the native AOT C backend.
 
-### 17.5 SSA and Optimization
+Bytecode must serialize extern aggregate layouts and the target ABI fingerprint in deterministic order. Before execution, the loader must validate layout depth, recursion cycles, field bounds, total size, trailing data, and ABI compatibility; corrupt or target-mismatched input is rejected rather than falling back to host layout.
 
-- Source of truth: `src/ir/xi_opt*.c`, `src/ir/xi_pass.h`, `src/jit/`.
-- **Constant folding**: compile-time evaluation.
-- **DCE** (dead-code elimination): removes unused code.
-- **Inlining**: small-function inlining.
-- **TCO** (tail-call optimization): converts accumulator-style tail recursion into loops.
-- **Escape analysis**: stack-vs-heap allocation decisions.
+### 17.4 Xi IR and Optimization
 
-### 17.6 Bytecode and VM
+The native path lowers the program to Xi IR in `src/ir/`. `xi_pipeline.c` / `xi_pass.h` organize passes including SCCP, DCE/CFG simplification, inlining, devirtualization, tail-call rewriting, escape/ownership processing, loop transforms, GVN/PRE, bounds-check elimination, and vectorization. The enabled set depends on optimization level, target, and legality; the existence of a pass does not guarantee that every program is transformed by it.
 
-- Source of truth: `src/vm/`, `include/xray_opcodes.h`.
-- A hybrid register/stack VM.
-- IC (inline cache) accelerates property access and method dispatch.
-- Bytecode must serialize extern aggregate layouts and the target ABI fingerprint in deterministic order. Before execution, the loader must validate layout depth, recursion cycles, field bounds, total size, trailing data, and ABI compatibility; corrupt or target-mismatched input is rejected rather than falling back to host layout.
+### 17.5 Native AOT
 
-### 17.7 JIT and AOT
+`xray build --native file.xr` uses the prepare/verify/representation/container/link plans in `src/aot/`, generates C from Xi IR, and invokes a host, Clang, or Zig C toolchain. Hosted native binaries still link the Xray runtime; `--profile freestanding` uses a restricted freestanding capability set. Consult `xray build --help` for current `--target`, `--toolchain`, `--cpu`, `--lto`, and related options.
 
-- **JIT** (runtime): once a hot function is selected by the profiler → it is compiled into native machine code. Source: `src/jit/`.
-- **AOT** (ahead-of-time): `xray build --aot` → the entire module is compiled into a native binary. Source: `src/aot/`.
-- They share the same SSA IR; only the back-end differs (interpret / JIT / AOT).
+Native AOT does not emit machine code directly from SSA and is not a JIT; the selected C toolchain produces the final machine code.
 
 ---
 
-## 18. Error Code Reference
+## 18. Error Codes
 
-> Source of truth: `src/runtime/xerror_codes.h`, `src/runtime/xerror.h`.
+> The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `int` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
 
-> Xray has **two error-code systems**:
->
-> - Numeric codes (`#define`s in `xerror_codes.h`): used by lexer / parser / VM runtime, allocated in ranges.
-> - Enum codes (the `XrErrorCode` enum in `xerror.h`): used by the analyzer (type / binding / closure), allocated in ranges.
->
-> The tables below cover the **principal** error codes; the full list and triggering conditions are governed by the source. The `error.name` field on a thrown error matches the "Name" column.
+### 18.1 Lexer and Parser
 
-### Error-code categories (numeric)
-
-| Range | Category |
-|--|--|
-| `E0101`-`E0199` | Lexical errors |
-| `E0201`-`E0299` | Syntax errors |
-| `E0301`-`E0399` | Compile errors |
-| `E0401`-`E0499` | Runtime errors |
-| `E0501`-`E0599` | Module errors |
-| `E0801`-`E0899` | Rejected syntax |
-
-### 18.1 Lexical Errors
-
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
 | `E0101` | `XR_ERR_LEX_INVALID_CHAR` | invalid character |
 | `E0102` | `XR_ERR_LEX_UNTERMINATED_STR` | unterminated string |
-| `E0103` | `XR_ERR_LEX_INVALID_NUMBER` | malformed numeric literal |
-| `E0104` | `XR_ERR_LEX_INVALID_ESCAPE` | invalid escape sequence |
+| `E0103` | `XR_ERR_LEX_INVALID_NUMBER` | invalid numeric literal |
+| `E0104` | `XR_ERR_LEX_INVALID_ESCAPE` | invalid escape |
 
-### 18.2 Syntax Errors
+#### Parser
 
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
 | `E0201` | `XR_ERR_SYN_UNEXPECTED_TOKEN` | unexpected token |
-| `E0202` | `XR_ERR_SYN_EXPECTED_EXPR` | expected expression |
-| `E0203` | `XR_ERR_SYN_EXPECTED_STMT` | expected statement |
-| `E0204` | `XR_ERR_SYN_UNCLOSED_PAREN` | unclosed `(` |
-| `E0205` | `XR_ERR_SYN_UNCLOSED_BRACE` | unclosed `{` |
-| `E0206` | `XR_ERR_SYN_UNCLOSED_BRACKET` | unclosed `[` |
-| `E0207` | `XR_ERR_SYN_INVALID_ASSIGN` | illegal assignment target (e.g., assigning to a literal) |
+| `E0202` | `XR_ERR_SYN_EXPECTED_EXPR` | expression expected |
+| `E0203` | `XR_ERR_SYN_EXPECTED_STMT` | statement expected |
+| `E0204` | `XR_ERR_SYN_UNCLOSED_PAREN` | unclosed parenthesis |
+| `E0205` | `XR_ERR_SYN_UNCLOSED_BRACE` | unclosed brace |
+| `E0206` | `XR_ERR_SYN_UNCLOSED_BRACKET` | unclosed bracket |
+| `E0207` | `XR_ERR_SYN_INVALID_ASSIGN` | invalid assignment target or form |
 
-### 18.3 Compile-time / Name-resolution Errors
+### 18.2 Compilation and Static Analysis
 
-Numeric codes (basic):
-
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
-| `E0301` | `XR_ERR_CMP_UNDEFINED_VAR` | undefined name |
-| `E0302` | `XR_ERR_CMP_REDEFINED_VAR` | redeclaration |
-| `E0303` | `XR_ERR_CMP_CONST_ASSIGN` | assignment to `const` |
-| `E0304` | `XR_ERR_CMP_INVALID_BREAK` | `break` outside a loop |
-| `E0305` | `XR_ERR_CMP_INVALID_CONTINUE` | `continue` outside a loop |
-| `E0306` | `XR_ERR_CMP_INVALID_RETURN` | `return` outside a function |
-| `E0307` | `XR_ERR_CMP_TOO_MANY_PARAMS` | parameter count exceeds limit |
-| `E0308` | `XR_ERR_CMP_TOO_MANY_LOCALS` | local-variable count exceeds limit |
+| `E0301` | `XR_ERR_CMP_UNDEFINED_VAR` | undefined variable at compiler stage |
+| `E0302` | `XR_ERR_CMP_REDEFINED_VAR` | redefined variable |
+| `E0303` | `XR_ERR_CMP_CONST_ASSIGN` | assignment to a constant |
+| `E0304` | `XR_ERR_CMP_INVALID_BREAK` | invalid `break` |
+| `E0305` | `XR_ERR_CMP_INVALID_CONTINUE` | invalid `continue` |
+| `E0306` | `XR_ERR_CMP_INVALID_RETURN` | invalid `return` |
+| `E0307` | `XR_ERR_CMP_TOO_MANY_PARAMS` | too many parameters |
+| `E0308` | `XR_ERR_CMP_TOO_MANY_LOCALS` | too many locals |
+| `E0309` | `XR_ERR_CMP_TOO_MANY_CONSTANTS` | too many constants |
+| `E0310` | `XR_ERR_CMP_TOO_MANY_UPVALUES` | too many upvalues |
+| `E0311` | `XR_ERR_CMP_JUMP_TOO_LARGE` | jump offset too large |
+| `E0321` | `XR_ERR_TYPE_NOT_CALLABLE` | static type is not callable |
+| `E0322` | `XR_ERR_TYPE_NOT_INDEXABLE` | static type is not indexable |
+| `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | static type is not iterable |
+| `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | invalid operand type |
 
-Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
+#### Analyzer
 
-| Enum | Description |
-|--|--|
-| `XR_ERR_ANALYZE_UNDEFINED_VAR` | undeclared variable |
-| `XR_ERR_ANALYZE_TYPE_MISMATCH` | type not assignable |
-| `XR_ERR_ANALYZE_CONST_ASSIGN` | cannot assign to `const` |
-| `XR_ERR_ANALYZE_NOT_CALLABLE` | value is not callable |
-| `XR_ERR_ANALYZE_WRONG_ARG_COUNT` | argument count mismatch |
-| `XR_ERR_ANALYZE_ARG_TYPE` | argument type mismatch |
-| `XR_ERR_ANALYZE_GENERIC_COUNT` | wrong number of type arguments |
-| `XR_ERR_ANALYZE_GENERIC_CONSTRAINT` | type argument violates constraint |
-| `XR_ERR_ANALYZE_SUPER_FIRST` | derived constructor's first line is not `super(...)` |
-| `XR_ERR_ANALYZE_SUPER_THIS` | accessed `this` before `super(...)` |
-| `XR_ERR_ANALYZE_SUPER_REQUIRED` | derived class did not call `super()` |
-| `XR_ERR_ANALYZE_SUPER_INVALID` | non-derived class used `super()` |
-| `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | coroutine closure captured an unsafe variable |
-| `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` operand is not a `Task` |
-| `XR_ERR_ANALYZE_MISSING_TYPE` | variable requires a type annotation or initializer |
-| `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | class does not implement a declared interface |
-| `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple accessed with a non-numeric key |
-| `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field index out of range |
-| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | automatic override conflicts with the parent-chain method signature, visibility, or default-argument contract |
-| `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | type used as Map key / Set element lacks `operator==` / `hash` contract |
-| `XR_ERR_ANALYZE_CONDITION_TYPE` | condition is not `bool` or nullable presence (`T?`, `T != bool`) |
-
-### 18.4 Runtime Errors
-
-#### Types and methods (E040x-E041x)
-
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
-| `E0401` | `XR_ERR_TYPE_NO_PROPERTY` | property does not exist on the type |
-| `E0402` | `XR_ERR_TYPE_NO_INDEX` | type is not indexable |
+| `E0350` | `XR_ERR_ANALYZE` | generic analyzer error |
+| `E0351` | `XR_ERR_ANALYZE_UNDEFINED_VAR` | undefined name |
+| `E0352` | `XR_ERR_ANALYZE_TYPE_MISMATCH` | type mismatch |
+| `E0353` | `XR_ERR_ANALYZE_CONST_ASSIGN` | analyzer-detected const assignment |
+| `E0354` | `XR_ERR_ANALYZE_NOT_CALLABLE` | called value is not callable |
+| `E0355` | `XR_ERR_ANALYZE_WRONG_ARG_COUNT` | wrong argument count |
+| `E0356` | `XR_ERR_ANALYZE_ARG_TYPE` | wrong argument type |
+| `E0357` | `XR_ERR_ANALYZE_GENERIC_COUNT` | wrong generic argument count |
+| `E0358` | `XR_ERR_ANALYZE_GENERIC_CONSTRAINT` | generic constraint not satisfied |
+| `E0359` | `XR_ERR_ANALYZE_SUPER_FIRST` | `super(...)` is not the first construction action |
+| `E0360` | `XR_ERR_ANALYZE_SUPER_THIS` | `this` accessed before `super(...)` |
+| `E0361` | `XR_ERR_ANALYZE_SUPER_REQUIRED` | derived constructor omits `super(...)` |
+| `E0362` | `XR_ERR_ANALYZE_SUPER_INVALID` | invalid `super` in a non-derived class |
+| `E0363` | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | unsafe closure capture |
+| `E0364` | `XR_ERR_ANALYZE_AWAIT_TYPE` | invalid `await` operand type |
+| `E0365` | `XR_ERR_ANALYZE_MISSING_TYPE` | no inferable type or initializer |
+| `E0367` | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | incomplete interface implementation |
+| `E0368` | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | invalid tuple field name |
+| `E0369` | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field out of range |
+| `E0370` | `XR_ERR_ANALYZE_THROW_NON_EXCEPTION` | `throw` operand is not an allowed enum error value |
+| `E0371` | `XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE` | non-exhaustive `match` |
+| `E0372` | `XR_ERR_ANALYZE_USED_BEFORE_ASSIGN` | use before assignment |
+| `E0373` | `XR_ERR_ANALYZE_TUPLE_IMMUTABLE` | mutation of an immutable tuple |
+| `E0374` | `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | override contract mismatch |
+| `E0375` | `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | Map/Set element lacks hash/equality contract |
+| `E0376` | `XR_ERR_ANALYZE_CONDITION_TYPE` | invalid condition type |
+| `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | visibility violation |
+| `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | mutation of a const field |
+| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value |
+
+### 18.3 Runtime
+
+| Code | C name | Meaning |
+|--|--|--|
+| `E0400` | `XR_ERR_RUNTIME` | generic runtime error |
+| `E0401` | `XR_ERR_TYPE_NO_PROPERTY` | property absent on type |
+| `E0402` | `XR_ERR_TYPE_NO_INDEX` | value is not indexable |
 | `E0403` | `XR_ERR_TYPE_NO_CALL` | value is not callable |
-| `E0404` | `XR_ERR_TYPE_MISMATCH` | type mismatch |
-| `E0405` | `XR_ERR_TYPE_NO_METHOD` | method does not exist on the type |
-| `E0406` | `XR_ERR_TYPE_NO_OPERATOR` | type does not support the operator |
+| `E0404` | `XR_ERR_TYPE_MISMATCH` | runtime type mismatch |
+| `E0405` | `XR_ERR_TYPE_NO_METHOD` | method absent on type |
+| `E0406` | `XR_ERR_TYPE_NO_OPERATOR` | operator unsupported by type |
 
-#### Null-related (E041x)
+#### Null, Arithmetic, and Containers
 
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
 | `E0410` | `XR_ERR_NULL_PROPERTY` | property access on null |
-| `E0411` | `XR_ERR_NULL_INDEX` | indexing into null |
+| `E0411` | `XR_ERR_NULL_INDEX` | index on null |
 | `E0412` | `XR_ERR_NULL_CALL` | call on null |
+| `E0413` | `XR_ERR_NULL_UNWRAP` | force-unwrapping null |
+| `E0420` | `XR_ERR_DIV_BY_ZERO` | division by zero |
+| `E0421` | `XR_ERR_MOD_BY_ZERO` | modulo by zero |
+| `E0422` | `XR_ERR_OVERFLOW` | arithmetic overflow |
+| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | index out of bounds |
+| `E0431` | `XR_ERR_KEY_NOT_FOUND` | missing Map key |
 
-#### Arithmetic (E042x)
+#### System, Calls, Coroutines, and Stdlib
 
-| Code | Name | Description |
-|--|--|--|
-| `E0420` | `XR_ERR_DIV_BY_ZERO` | integer division by zero |
-| `E0421` | `XR_ERR_MOD_BY_ZERO` | integer modulo by zero |
-| `E0422` | `XR_ERR_OVERFLOW` | integer overflow |
-
-#### Indexing/keys (E043x)
-
-| Code | Name | Description |
-|--|--|--|
-| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | array / string / Array<byte> out of bounds |
-| `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map key not found |
-
-#### Memory and stack (E044x)
-
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
 | `E0440` | `XR_ERR_STACK_OVERFLOW` | stack overflow |
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | out of memory |
-
-#### Call arguments (E045x)
-
-| Code | Name | Description |
-|--|--|--|
-| `E0450` | `XR_ERR_WRONG_ARG_COUNT` | actual argument count mismatch |
-| `E0451` | `XR_ERR_INVALID_ARG_TYPE` | actual argument type mismatch |
-
-#### Coroutines (E046x)
-
-| Code | Name | Description |
-|--|--|--|
+| `E0442` | `XR_ERR_MATCH_FAILURE` | runtime match failure |
+| `E0450` | `XR_ERR_WRONG_ARG_COUNT` | runtime argument-count mismatch |
+| `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |
 | `E0460` | `XR_ERR_CORO_DEAD` | operation on a dead coroutine |
-| `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine was cancelled |
+| `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine cancelled |
+| `E0470` | `XR_ERR_JSON_PARSE` | JSON parse failure |
+| `E0471` | `XR_ERR_JSON_INVALID` | invalid JSON value or operation |
+| `E0475` | `XR_ERR_REGEX_COMPILE` | regex compilation failure |
+| `E0476` | `XR_ERR_REGEX_PATTERN` | invalid regex pattern |
+| `E0480` | `XR_ERR_TLS_UNAVAILABLE` | TLS capability unavailable |
 
-### 18.5 Module Errors
+### 18.4 Modules, I/O, and Coroutines
 
-| Code | Name | Description |
+| Code | C name | Meaning |
 |--|--|--|
 | `E0501` | `XR_ERR_MOD_NOT_FOUND` | module not found |
-| `E0502` | `XR_ERR_MOD_LOAD_FAILED` | module load failed (I/O / parsing error) |
-| `E0503` | `XR_ERR_MOD_NO_EXPORT` | imported name is not exported |
-| `E0504` | `XR_ERR_MOD_CIRCULAR` | module dependency graph contains a circular dependency |
+| `E0502` | `XR_ERR_MOD_LOAD_FAILED` | module load failed |
+| `E0503` | `XR_ERR_MOD_NO_EXPORT` | name is not exported |
+| `E0504` | `XR_ERR_MOD_CIRCULAR` | circular module dependency |
+| `E0601` | `XR_ERR_IO_FILE_NOT_FOUND` | file not found |
+| `E0602` | `XR_ERR_IO_READ_FAILED` | read failed |
+| `E0603` | `XR_ERR_IO_WRITE_FAILED` | write failed |
+| `E0604` | `XR_ERR_IO_PERMISSION_DENIED` | I/O permission denied |
+| `E0701` | `XR_ERR_CORO_DEADLOCK` | coroutine deadlock |
+| `E0702` | `XR_ERR_CORO_CHANNEL_CLOSED` | channel closed |
+| `E0703` | `XR_ERR_CORO_LIMIT_EXCEEDED` | coroutine limit exceeded |
 
-### 18.6 Rejected Syntax
+### 18.5 Syntax Guidance and Internal Errors
 
-> The parser rejects the following forms outright and reports the correct replacement.
-
-| Code | Name | Rejected form | Correct form |
-|--|--|--|--|
-| `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` | `return (a, b)` |
-| `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | `for k, v in m` (bare KV) | `for (k, v in m)` |
-| `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` | `-> ()` or omit the return type |
-
-### 18.7 Error Handling (E082x)
-
-| Code | Name | Description |
+| Code | C name | Rejected form / meaning |
 |--|--|--|
-| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | historical name preserved to avoid reuse; non-enum `throw` operands are now reported as `E0370` (see §8.1.1) |
-| `E0821` | `XR_ERR_TRY_BANG_BAD_OPERAND` | deprecated (`try!` removed); code preserved to avoid reuse |
-| `E0822` | `XR_ERR_TRY_BANG_NON_EXCEPTION_ERR` | deprecated (`try!` removed); code preserved to avoid reuse |
-| `E0823` | `XR_ERR_MATCH_NOT_EXHAUSTIVE` | merged into `E0371` (see §6.3.3); code preserved to avoid reuse |
-| `E0824` | `XR_ERR_UNWRAP_NON_EXCEPTION_ERR` | deprecated (`Result` removed); code preserved to avoid reuse |
+| `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` is invalid; return a tuple with `return (a, b)` |
+| `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | bare key/value `for` form is invalid |
+| `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` is invalid; use `-> ()` or omit the return type |
+| `E0805` | `XR_ERR_SYN_PARAM_MODE_PREFIX_REMOVED` | parameter modes belong between the colon and the type |
+| `E0806` | `XR_ERR_SYN_PARAM_MOVE_MODE_REMOVED` | `move` is an argument transfer expression, not a parameter mode |
+| `E0807` | `XR_ERR_SYN_PARAM_MODE_COMBINED_REMOVED` | invalid combined parameter modes |
+| `E0808` | `XR_ERR_SYN_PARAM_MODE_POSTFIX_REMOVED` | parameter modes cannot follow the type |
+| `E0809` | `XR_ERR_SYN_CALL_IN_MARKER_REMOVED` | call-site `in` marker; ordinary `in` calls have no marker |
+| `E0900` | `XR_ERR_INTERNAL` | internal error |
+| `E0901` | `XR_ERR_NOT_IMPLEMENTED` | not implemented |
+| `E0999` | `XR_ERR_UNKNOWN` | unknown error |
 
-### 18.8 Panic Error-Object Layout
-
-Runtime faults in the panic channel use the prelude `PanicInfo` class (declared in `stdlib/types/panic_info.xr`):
-
-```xray
-@native
-class PanicInfo {
-    message: string             // human-readable message including error code and context
-    stack: Array<string>        // auto-captured call stack, one formatted line per frame
-    cause: PanicInfo?           // chained cause
-    code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
-    data: Json                  // structured data for a runtime fault; JSON null when absent
-
-    constructor(message: string = "", cause: PanicInfo? = null)
-    fn toString() -> string
-}
-```
-
-The static type of a user-level `throw` operand **must** be an enum variant value (see §8.1.1 / `E0370`). Structured business errors use ADT enums rather than `PanicInfo` inheritance:
-
-```xray
-enum HttpErr {
-    NotFound(string),
-    ServerError(int, string),
-    Timeout,
-}
-
-throw HttpErr.ServerError(500, "upstream failed")
-```
-
-`PanicInfo` represents panic-channel runtime faults only; business errors propagate through the `throw <enum>` / `catch` value-return channel (see §8.1).
+The runtime panic channel uses the prelude `PanicInfo`; user-level `throw <enum>` uses the value-return error channel. See §8 and §16 for propagation semantics; the numeric range alone does not determine the channel.
 
 ---
 
@@ -5384,8 +5393,9 @@ Comment ::= '//' [^\n]*
          |  '/*' .* '*/'
 
 Identifier ::= IdStart IdContinue*
-IdStart    ::= 'a'..'z' | 'A'..'Z' | '_'
+IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
 IdContinue ::= IdStart | '0'..'9'
+// The source is first validated as UTF-8. The lexer accepts every non-ASCII UTF-8 byte in identifiers; it does not currently apply XID/NFC normalization.
 
 IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
 DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
@@ -5397,13 +5407,14 @@ FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
               |  DecimalInt Exponent
 Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 
-BigIntLiteral ::= DecimalInt 'n'
+BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
 
 StringLiteral ::= '"' StringChar* '"'
 RawStringLiteral ::= 'r' '"' [^"]* '"'
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
-RegexLiteral ::= '/' RegexBody '/' RegexFlags?
+RegexLiteral ::= '/' RegexBody '/' RegexFlag*
+RegexFlag ::= 'i' | 'm' | 's' | 'g' | 'u'
 
 BoolLiteral ::= 'true' | 'false'
 NullLiteral ::= 'null'
@@ -5438,21 +5449,19 @@ AssignExpr ::= TernaryExpr (AssignOp Expression)?
 AssignOp   ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
             |  '&=' | '|=' | '^=' | '<<=' | '>>='
 
-TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
+TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
+NullCoalesceExpr ::= LogicOrExpr ('??' LogicOrExpr)*
 LogicOrExpr ::= LogicAndExpr ('||' LogicAndExpr)*
-            |   NullCoalesce
 LogicAndExpr ::= BitOrExpr ('&&' BitOrExpr)*
-NullCoalesce ::= LogicAndExpr ('??' LogicAndExpr)*
 BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
 BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
 EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
-RelationalExpr ::= ShiftExpr (('<' | '<=' | '>' | '>=') ShiftExpr)*
+RelationalExpr ::= ShiftExpr ((('<' | '<=' | '>' | '>=') ShiftExpr) | (('as' | 'is') Type))*
 ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
-MultiplicativeExpr ::= TypeOpExpr (('*' | '/' | '%') TypeOpExpr)*
-TypeOpExpr  ::= UnaryExpr (('as' | 'is') Type)*           // safe cast is `x as T?` where T? is a nullable type
-RangeExpr   ::= AdditiveExpr ('..' AdditiveExpr)?
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%' | '..' | '..=') UnaryExpr)*
+// The parser gives range the same precedence as multiply/divide. A safe cast is `x as T?`, where T? is nullable.
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'move' UnaryExpr
@@ -5501,9 +5510,12 @@ ComptimeExpr ::= 'comptime' (Expression | Block)
 MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
 
-ThrowExpr   ::= 'throw' Expression                // operand's static type must be an enum variant
-
-ArgList ::= Expression (',' Expression)* ','?
+ArgList ::= CallArg (',' CallArg)* ','?
+CallArg ::= ('ref' | 'out') Expression
+          | '...' Expression
+          | Identifier '->' (Expression | Block)
+          | '_'
+          | Expression
 ```
 
 ### A.4 Patterns
@@ -5518,7 +5530,7 @@ Pattern ::= LiteralPattern
          |  MultiPattern
 
 LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
-RangePattern    ::= Expression '..' Expression
+RangePattern    ::= Expression ('..' | '..=') Expression
 EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload destructuring
 VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
 TypePattern     ::= 'is' Type Identifier?
@@ -5533,6 +5545,9 @@ MultiPattern    ::= Pattern (',' Pattern)+
 Statement ::= ExprStmt
            |  IncDecStmt
            |  VarDecl
+           |  ConstDecl
+           |  SharedDecl
+           |  OwnedDecl
            |  FnDecl
            |  ExternBlock
            |  ClassDecl
@@ -5587,7 +5602,7 @@ DeferStmt ::= 'defer' (Expression | Block)
 
 // go is an expression returning Task<T>. It is not a separate statement category (it appears wrapped in ExprStmt).
 
-ScopeStmt ::= 'scope' Block            // lexical scope + structured concurrency
+ScopeStmt ::= ('linked' | 'supervisor')? 'scope' Block
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // receive
@@ -5604,6 +5619,7 @@ YieldStmt ::= 'yield' Expression
 VarDecl ::= 'var' Binding
 ConstDecl ::= 'const' Binding
 SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
+OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
@@ -5654,12 +5670,9 @@ EnumDecl       ::= 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
-                |  Identifier '=' BackingValue                  // simple enum (no payload)
 EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
-BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
-
 TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
 
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
@@ -5686,7 +5699,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## Appendix B. Keyword Index
 
-The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
+These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.def` and follow its ASCII lexical order. `move`, `ref`, `out`, `linked`, `supervisor`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
 
 | Keyword | Section |
 |--|--|
@@ -5694,8 +5707,8 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
+| `byte` | §2.3.1 |
 | `catch` | §8 |
-| `rune` | §2.3.5 |
 | `class` | §5.3 |
 | `comptime` | §3.2 |
 | `const` | §5.1 |
@@ -5704,30 +5717,37 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `defer` | §4.9 |
 | `else` | §4.2 |
 | `enum` | §5.6 |
-| `export` | §5.8 |
+| `export` | §11 |
 | `extends` | §5.3 |
 | `false` | §1.6.4 |
 | `final` | §5.3 |
-| `float` `float32` `float64` | §2.3.2 |
+| `float` | §2.3.2 |
+| `float32` | §2.3.2 |
+| `float64` | §2.3.2 |
 | `fn` | §5.2 |
 | `for` | §4.4 |
 | `go` | §10.2 |
 | `if` | §4.2 |
 | `implements` | §5.5 |
-| `import` | §5.8 |
+| `import` | §11 |
 | `in` | §4.4 |
-| `int` `int8`..`int64` | §2.3.1 |
+| `int` | §2.3.1 |
+| `int16` | §2.3.1 |
+| `int32` | §2.3.1 |
+| `int64` | §2.3.1 |
+| `int8` | §2.3.1 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `packed` | §5.4 |
-| `parallel` | §10 |
+| `owned` | §5.1 |
+| `packed` | §5.2.9 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
 | `return` | §4.7 |
+| `rune` | §2.3.5 |
 | `scope` | §10.7 |
 | `select` | §10.6 |
 | `shared` | §5.1 / §10.11 |
@@ -5740,9 +5760,12 @@ The full set of 65 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `true` | §1.6.4 |
 | `try` | §8 |
 | `type` | §5.7 |
-| `byte`..`uint64` | §2.3.1 |
-| `union` | §5.4 |
-| `unsafe` | §3.2 |
+| `uint16` | §2.3.1 |
+| `uint32` | §2.3.1 |
+| `uint64` | §2.3.1 |
+| `uint8` | §2.3.1 |
+| `union` | §5.2.9 |
+| `unsafe` | §3.2 / §5.2 |
 | `var` | §5.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
@@ -5761,13 +5784,13 @@ The complete operator listing organized by purpose is in [§1.7](#17-operators-a
 | Logical | `&&` `\|\|` `!` |
 | Assignment | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
 | Statements | `++` `--` |
-| Other | `..` `..=` `??` `?.` `?[` `!` `->` |
+| Types, ranges, and spread | `?` `??` `?.` `?[` `!` `\|` `->` `...` `..` `..=` `is` `as` |
 
 ---
 
 ## Appendix D. Standard Library Module Index
 
-The full set of 22 native modules is documented in [§15](#15-standard-library-overview).
+The full set of 28 stdlib modules (native, pure Xray, or mixed) is documented in [§15](#15-standard-library-overview).
 
 | Module | Purpose |
 |--|--|
@@ -5778,15 +5801,21 @@ The full set of 22 native modules is documented in [§15](#15-standard-library-o
 | `csv` | CSV parsing/serialization |
 | `datetime` | date and time |
 | `encoding` | character encoding conversion |
-| `mem` | memory and cycle-collection introspection |
 | `http` | HTTP/REST |
 | `io` | file I/O |
 | `log` | structured logging |
 | `math` | math functions |
+| `mem` | raw memory and managed Buffer |
 | `net` | TCP/UDP/TLS |
 | `os` | operating system |
+| `parallel` | structured CPU parallelism |
 | `path` | path manipulation |
 | `regex` | regular expressions |
+| `runtime` | runtime information and cycle collection |
+| `strconv` | numeric string parsing |
+| `sync` | coroutine synchronization primitives |
+| `sys` | OS-thread and low-level synchronization surface |
+| `text` | Unicode text transforms |
 | `time` | time / timer / sleep |
 | `toml` | TOML parsing |
 | `url` | URL parsing/construction |
@@ -5806,10 +5835,10 @@ Xray draws inspiration from many existing languages but has notable differences 
 |--|--|--|
 | Static typing | Optional in TS | **Mandatory** (`Json` is the only dynamic type) |
 | Numerics | Single `number` (double) | `int`, `float`, `BigInt` strictly distinguished |
-| Truthiness | truthy / falsy | truthy / falsy (similar to JS), but `bool` itself rejects implicit assignment from int/null |
+| Conditions | truthy / falsy | conditions must be `bool`, or nullable `T?` presence; int/string have no truthy conversion |
 | Equality | `===` is strict, `==` is weak (string↔number coercion) | Only `==`/`!=`; value equality only promotes numeric int↔float, and `===`/`!==` are not operators |
 | Closure capture | by reference | by reference (default); `go` closures are strictly restricted |
-| Objects | dynamic fields | dynamic by default; sealed once annotated `type T = {...}` |
+| Objects | dynamic fields | `{...}` creates a sealed Record by default; dynamic objects require an explicit `Json` boundary |
 | import | ES Modules | xray-specific syntax (stdlib uses unquoted form) |
 | Concurrency | async / Promise | coroutines + channels |
 
@@ -5823,20 +5852,20 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Awaiting | no direct equivalent (channels/WaitGroup) | `await t`, `await all [...]`, `await any [...]` |
 | Channels | built-in `chan T`, `<-` operator | `Channel<T>` class with `send`/`recv`/`trySend`/`tryRecv` methods |
 | `select` arms | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
-| GC | concurrent tri-color | per-coroutine Mark-Sweep / Immix |
+| Memory management | concurrent tri-color tracing GC | coroutine-local reference counting + Bacon–Rajan cycle collector; shared/system objects use atomic reference counting |
 | Classes / inheritance | none (struct + interface only) | classes with inheritance |
-| Generics | since 1.18 | yes, monomorphization + runtime reified |
+| Generics | since 1.18 | yes; monomorphized by concrete type or backend representation |
 
 ### E.3 vs Rust
 
 | Dimension | Rust | xray |
 |--|--|--|
-| Memory safety | full borrow checker | only `move` across coroutines; otherwise GC |
+| Memory safety | full borrow checker | owned/shared/move rules across execution boundaries; borrowed views such as `Slice` have static lifetime restrictions |
 | Errors | `Result<T, E>` | value-return error channel (`throw` / `catch`) |
 | Type inference | strong Hindley-Milner | bidirectional inference |
 | Traits | full | similar to `interface`, fewer features |
-| Performance | near C | VM/JIT, hot paths near native |
-| Compile-time | macros / const | simple constant folding |
+| Performance | near C | bytecode VM, or native AOT through a C toolchain |
+| Compile-time | macros / const | restricted `comptime` evaluator plus optimizer constant folding |
 
 ### E.4 vs Python
 
@@ -5847,7 +5876,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Strings | unicode str | utf-8 string |
 | Indentation | mandatory | free-form (`{}`) |
 | Classes | dynamic attributes | static fields |
-| Performance | CPython slow | JIT close to V8/JVM |
+| Performance | CPython slow | bytecode VM; performance-sensitive programs may use `xray build --native` |
 
 ### E.5 vs Swift
 
@@ -5866,7 +5895,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 
 | Term | Definition |
 |--|--|
-| **AOT** | Ahead-of-Time compilation: precompiles to machine code at build time |
+| **AOT** | Ahead-of-Time compilation: Xi IR generates C and the selected C toolchain produces a native binary at build time |
 | **AST** | Abstract Syntax Tree: intermediate representation produced by the parser |
 | **Arena** | Bulk allocator: every allocation is freed together |
 | **Array<byte>** | Byte buffer type (see §2.4.5) |
@@ -5876,13 +5905,13 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **coroutine** | User-space, suspendable/resumable execution flow |
 | **defer** | Deferred execution: runs before function exit (see §4.9) |
 | **enum** | Enumeration type (see §5.6) |
-| **GC** | Garbage Collector |
-| **GC-safepoint** | Instruction location at which the GC may safely begin |
+| **GC** | Generic term for garbage collection; Xray has no tracing GC and primarily uses reference counting plus a Bacon–Rajan cycle collector for coroutine-local strong-reference cycles |
+| **safepoint** | Safe location where the scheduler can observe preemption, cancellation, or suspension state; the current cycle collector is not driven by function-call or back-edge safepoints |
 | **goroutine** | Equivalent of xray coroutine; launched via `go {...}` |
 | **hoisting** | Implicit declaration of a name before its first use |
 | **IC** | Inline Cache: optimization of property/method dispatch |
 | **interface** | Interface type (see §5.5) |
-| **JIT** | Just-In-Time compilation: compiles hot paths at runtime |
+| **JIT** | Just-In-Time compilation; Xray does not currently implement a JIT |
 | **lvalue / rvalue** | Assignable left-hand-side value vs. value-only right-hand-side |
 | **monomorphization** | Build-time specialization of generics into concrete type/representation versions; generic functions may share I64 / F64 / PTR / BOOL representation versions, while generic classes / structs are fully specialized by concrete type |
 | **move** | Ownership transfer: enforced when crossing coroutine boundaries (see §7.3) |

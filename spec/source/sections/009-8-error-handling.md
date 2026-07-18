@@ -8,7 +8,7 @@ order: 009
 
 ## 8. 错误处理 (Error Handling)
 
-> 真值源：`src/vm/xvm_dispatch_exception.inc.c`、`src/vm/xvm_dispatch_misc.inc.c`、`src/runtime/object/xexception.c`、`stdlib/prelude/prelude.c`。
+> 真值源：`src/frontend/analyzer/xanalyzer_errorset.c`、`src/ir/xi_lower_stmt.c`、`src/vm/xvm_dispatch_exception.inc.c`、`src/runtime/object/xpanic_info.c`、`stdlib/types/panic_info.xr`。
 
 ### 8.0 设计哲学：值返回 + panic 边界
 
@@ -28,7 +28,7 @@ Xray 的错误处理分为两个严格分离的通道：
 
 ### 8.1 值返回错误通道
 
-#### 8.1.1 `throw` 表达式
+#### 8.1.1 `throw` 语句
 
 `throw expr` 抛出一个枚举错误值。`expr` 必须是枚举类型的变体值：
 
@@ -400,7 +400,7 @@ fn safeDivide(a: int, b: int) -> string {
 
 ## 8. Error Handling
 
-> Source of truth: `src/vm/xvm_dispatch_exception.inc.c`, `src/vm/xvm_dispatch_misc.inc.c`, `src/runtime/object/xexception.c`, `stdlib/prelude/prelude.c`.
+> Source of truth: `src/frontend/analyzer/xanalyzer_errorset.c`, `src/ir/xi_lower_stmt.c`, `src/vm/xvm_dispatch_exception.inc.c`, `src/runtime/object/xpanic_info.c`, and `stdlib/types/panic_info.xr`.
 
 ### 8.0 Design philosophy: value-return + panic boundary
 
@@ -420,7 +420,7 @@ Design principles:
 
 ### 8.1 Value-return error channel
 
-#### 8.1.1 `throw` expression
+#### 8.1.1 `throw` statement
 
 `throw expr` raises an enum error value. `expr` must be a variant of an enum type:
 

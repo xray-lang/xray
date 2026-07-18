@@ -4,10 +4,10 @@
 `xray mcp-server`，生成 `xray_syntax_lookup`、`xray_stdlib_search`、
 `xray_definition` 和 `xray://...` resource URI 返回给 AI 客户端的内容。
 
-请不要直接编辑 `docs/knowledge`。所有人工维护内容位于 `docs/spec/source`：
+请不要直接编辑 `docs/knowledge`。所有人工维护内容位于 `spec/source`：
 
 ```
-docs/spec/source/
+spec/source/
   sections/*.md           # 中英文语言参考手册的结构化源
   cards/topics/*.json     # MCP topic 结构化投影源
   cards/stdlib/*.json     # stdlib 模块说明源；API 表由源码 inventory 注入
@@ -24,14 +24,14 @@ docs/spec/source/
 | 层级 | 责任 | 维护规则 |
 |--|--|--|
 | 实现代码 | 语言语义的最终事实 | parser / analyzer / runtime 与文档冲突时，必须修正代码或文档 |
-| `docs/spec/source/sections/*.md` | 人类可读语言参考手册的唯一手写源 | 同时维护中文、英文正文；必须保持当前文档质量不降级 |
+| `spec/source/sections/*.md` | 人类可读语言参考手册的唯一手写源 | 同时维护中文、英文正文；必须保持当前文档质量不降级 |
 | `LANGUAGE_SPEC_CN.md` / `LANGUAGE_SPEC.md` | 生成出来的人类可读语言参考手册 | 不手写；由结构化 spec source 生成 |
 | source-derived API inventory | 标准库 API 签名事实和覆盖门禁 | 由 analyzer builtin 表、纯 Xray 导出、native type 声明等源码入口合成，不在 Markdown 手写复制 |
-| `docs/spec/source/cards` | MCP 面向 AI 的结构化投影源 | 只写 aliases、短说明、示例引用和 gotchas；必须链接到生成后的语言参考手册 anchor |
+| `spec/source/cards` | MCP 面向 AI 的结构化投影源 | 只写 aliases、短说明、示例引用和 gotchas；必须链接到生成后的语言参考手册 anchor |
 | `docs/knowledge` | MCP knowledge 生成输出 | 不手写；由结构化 spec source 生成 |
 | `xmcp_knowledge_generated.c` | 生成产物 | 不手写；由 generator 覆盖 |
 
-因此，`docs/spec/source/cards/topics/*.json` 不能定义和语言参考手册冲突的新语义。它只负责把
+因此，`spec/source/cards/topics/*.json` 不能定义和语言参考手册冲突的新语义。它只负责把
 参考手册中的知识压缩成适合 MCP 检索和 LLM 使用的知识卡片。示例代码应通过
 `fences` 引用 `sections/*.md` 中带 `@id` 的代码块，避免复制漂移。
 
@@ -49,7 +49,7 @@ docs/spec/source/
 ## 目录结构
 
 ```
-docs/spec/source/cards/
+spec/source/cards/
   topics/<id>.json       # 每个语言主题一份 MCP 知识卡片
   stdlib/<module>.json   # 每个标准库模块一份人工说明
   resources/<id>.json    # 长文本资源，如 cheatsheet / concurrency / stdlib_list
@@ -115,9 +115,9 @@ source-derived API inventory，并在生成时自动注入 `## API` 表格，避
 ### 语言语法或语义变更
 
 1. 修改实现代码与回归测试。
-2. 更新 `docs/spec/source/sections/*.md` 的中文和英文正文。
+2. 更新 `spec/source/sections/*.md` 的中文和英文正文。
 3. 给需要复用到 MCP knowledge 的 Xray 示例添加稳定的 `@id`。
-4. 更新对应 `docs/spec/source/cards/topics/*.json` 的摘要、aliases、示例引用和 `spec_anchor`。
+4. 更新对应 `spec/source/cards/topics/*.json` 的摘要、aliases、示例引用和 `spec_anchor`。
 5. 重新生成语言参考手册和 MCP knowledge。
 
 ### 标准库 API 变更
@@ -167,7 +167,7 @@ cmake --build build --target api-inventory
 `tests/mcp/test_knowledge_generation.py` 会检查：
 
 * `LANGUAGE_SPEC_CN.md` / `LANGUAGE_SPEC.md` 和 `docs/knowledge` 必须由
-  `docs/spec/source` 生成且保持最新。
+  `spec/source` 生成且保持最新。
 * 生成后的 SPEC 必须满足质量门禁，防止章节、示例、表格和 EBNF 内容意外减少。
 * `topics/*.json` 的 `spec_anchor` 必须存在于语言参考手册。
 * 所有 `xray` code fence 必须能被 parser 接受。
@@ -180,6 +180,6 @@ cmake --build build --target api-inventory
 
 * 禁止手写修改 `LANGUAGE_SPEC_CN.md` / `LANGUAGE_SPEC.md` / `docs/knowledge` /
   `xmcp_knowledge_generated.c`。
-* 禁止在 `docs/spec/source/cards/stdlib/*.json` 手写 API signature 副本。
+* 禁止在 `spec/source/cards/stdlib/*.json` 手写 API signature 副本。
 * 禁止让 MCP knowledge 成为和语言参考手册并列竞争的语义说明。
 * 禁止修改语言语法后只更新 MCP knowledge 而不更新结构化语言参考源。

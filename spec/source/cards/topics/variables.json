@@ -1,12 +1,13 @@
 {
   "id": "variables",
   "title": "Variables",
-  "spec_anchor": "#51-var-const-shared",
+  "spec_anchor": "#51-var-const-shared-owned",
   "aliases": [
     "var",
     "const",
     "binding",
     "shared",
+    "owned",
     "declaration"
   ],
   "sections": [
@@ -26,6 +27,12 @@
       "heading": "shared",
       "fences": [
         "decl-shared"
+      ]
+    },
+    {
+      "heading": "owned",
+      "fences": [
+        "decl-owned"
       ]
     },
     {

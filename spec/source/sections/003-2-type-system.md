@@ -28,9 +28,10 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Primitive | `int`、`float`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
 | 精确整数 | `int8`、`int16`、`int32`、`int64`、`byte`..`uint64` |
 | 精确浮点 | `float32`、`float64` |
-| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`、`Array<byte>`（即 `Array<byte>`） |
+| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<byte>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
-| 特殊 | `Json`、`BigInt`、`Range`、`DateTime`、`Regex`、`StringBuilder`、`Logger`、`NetConn`、`NetListener` |
+| Prelude 特殊类型 | `Json`、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
+| 模块导出类型 | `DateTime`、`Logger`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
 | 弱引用容器 | `WeakMap`、`WeakSet` |
 | Nullable | `T?` |
@@ -178,7 +179,7 @@ unsafe {
 
 #### 2.4.1 `Array<T>`
 
-有序可变数组。详见 §14.1。
+有序可变数组。详见 §14.7。
 
 ```xray @id=types-array
 var a: Array<int> = [1, 2, 3]
@@ -188,13 +189,13 @@ var c: Array<string> = []         // 显式空数组
 
 `Array<T>` 的 `T` 必须能在编译期确定。空 `[]` 在无类型标注时是编译错误：`Empty array '[]' requires a type annotation`。
 
-`Array<rune>` 保留 `rune` 元素身份，读出时得到 `rune`，写入时只接受 `rune`。实现使用紧凑的 Unicode scalar 存储（`XR_ELEM_RUNE` / `uint32_t[]`），不会退化成 `Array<uint32>`。
+`Array<rune>` 保留 `rune` 元素身份：读出时得到 `rune`，写入时只接受 `rune`。
 
 #### 2.4.1.1 定长数组 `[T; N]`
 
 `[T; N]` 是定长布局数组类型，表示 `N` 个 `T` 元素。`N` 是类型的一部分，必须能在分析期求值为正的编译期整数表达式；当前支持整数字面量、`const` 整数标识符、括号、一元 `-`/`~`，以及整数算术/位运算。当前后端编码上限为 65535 个元素。
 
-当前实现支持 struct inline 字段和局部栈上定长数组。标量元素（`int`、`float`、`bool`、精确整数/浮点等）使用紧凑 native lane；`string`、struct、嵌套定长数组和引用容器等非标量元素使用 tagged `XrValue` lane，因此可以递归组合：
+定长数组可用于 struct inline 字段和局部变量，并支持 struct、嵌套定长数组和引用容器等元素类型，因此可以递归组合：
 
 ```xray
 var bytes: [byte; 4] = [1, 2, 3, 4]
@@ -237,7 +238,7 @@ fn first(packet: Packet) -> byte {
 
 #### 2.4.2 `Map<K, V>`
 
-哈希字典，**保持插入顺序**。详见 §14.7。
+哈希字典，**保持插入顺序**。详见 §14.8。
 
 **Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`（与 Record / Json 对象一致，靠 `#` 前缀消歧）：
 
@@ -247,7 +248,8 @@ var m2 = #{"a": 1, "b": 2}
 var empty = #{}                                     // 空 Map
 
 m["c"] = 3                                          // 添加/修改
-var v = m["a"]                                      // 取值；不存在返回 null
+var v = m["a"]                                      // 取值；键不存在时 panic E0431
+var maybe = m.get("missing")                        // 安全查询；不存在返回 null
 ```
 
 | 字面量形式 | 类型 | 用途 |
@@ -262,7 +264,7 @@ var v = m["a"]                                      // 取值；不存在返回 
 
 #### 2.4.3 `Set<T>`
 
-去重集合。详见 §14.4。
+去重集合。详见 §14.9。
 
 ```xray @id=types-set
 var s: Set<int> = #[1, 2, 3]
@@ -340,15 +342,33 @@ j.extra = "x"        // OK（Json 是动态的）
 
 #### 2.4.8 `Range`
 
-由 `..` 运算符产生。见 §3.12。
+`Range` 表示整数区间，由 `a..b` 或 `a..=b` 产生：
+
+- `a..b` 是半开区间 `[a, b)`，不包含终点 `b`。
+- `a..=b` 是闭区间 `[a, b]`，包含终点 `b`。
+
+```xray @id=types-range
+var halfOpen = 1..4       // 1, 2, 3
+var inclusive = 1..=4     // 1, 2, 3, 4
+
+print(len(halfOpen))              // 3
+print(inclusive.contains(4))      // true
+print(inclusive.toArray())        // [1, 2, 3, 4]
+
+for (i in 3..=5) {
+    print(i)
+}
+```
+
+范围可用于 `for-in`、`match` 范围模式以及集合查询。完整表达式语义见 §3.9，成员见 §14.12。
 
 #### 2.4.9 `DateTime` / `Regex` / `StringBuilder`
 
-详见 §14。
+`Regex` 与 `StringBuilder` 是 prelude 类型。`DateTime` 不是 prelude 名字，必须通过 `import { DateTime } from datetime`（或其它显式 import）进入当前作用域。成员索引见 §14。
 
 #### 2.4.10 `WeakMap` / `WeakSet`
 
-`WeakMap` 的键、`WeakSet` 的元素必须是堆对象；弱引用不阻止 GC 回收。弱集合不提供会长期持有元素的遍历回调。
+`WeakMap` 的键、`WeakSet` 的元素必须是堆对象；弱引用不会延长对象的生命周期。弱集合不提供会长期持有元素的遍历回调。
 
 ### 2.5 可空类型
 
@@ -533,7 +553,7 @@ typeName(value)   // 返回类型名字符串
 `Type.Array`、`Type.Map`、`Type.Set`、`Type.Channel`、`Type.Json`、
 `Type.function`、`Type.class`、`Type.struct`、`Type.enum`、`Type.module`、`Type.bigint`、...
 
-完整列表见 `src/runtime/value/xtype_names.h` 中的 `XrTypeId`。
+使用 `typeName(value)` 可以取得具体值的调试类型名。
 
 ### 2.12 元数据与类型身份边界
 
@@ -544,7 +564,7 @@ Xray 默认只保留最小类型身份层：
 - 名义类型判断使用 `x is T` / `x as T`，不要通过字符串比较类型名。
 - 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
-`Reflect` 全局模块以及用户可见的 `Type` / `Field` / `Method` / `Constructor` / `Parameter` wrapper 类已删除，不提供兼容层。
+运行时类型查询使用 `typeOf(value)`、`typeName(value)` 和 `TypeId`。反射元数据不会暴露为可遍历、可调用的对象图。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -572,9 +592,10 @@ Xray is statically typed; every expression has a determined type at compile time
 | Primitive | `int`, `float`, `bool`, `string`, `rune`, `()` (Unit, no return value) |
 | Sized integers | `int8`, `int16`, `int32`, `int64`, `byte`..`uint64` |
 | Sized floats | `float32`, `float64` |
-| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Array<byte>` (equivalent to `Array<byte>`) |
+| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<byte>` is the contiguous-byte specialization of `Array` |
 | Fixed layout | `[T; N]` |
-| Special | `Json`, `BigInt`, `Range`, `DateTime`, `Regex`, `StringBuilder`, `Logger`, `NetConn`, `NetListener` |
+| Special prelude types | `Json`, `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
+| Module-exported types | `DateTime`, `Logger`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
 | Error-handling prelude | `PanicInfo` (see §8) |
 | Weak containers | `WeakMap`, `WeakSet` |
 | Nullable | `T?` |
@@ -722,7 +743,7 @@ unsafe {
 
 #### 2.4.1 `Array<T>`
 
-Ordered mutable array. See §14.1.
+Ordered mutable array. See §14.7.
 
 ```xray @id=types-array
 var a: Array<int> = [1, 2, 3]
@@ -732,13 +753,13 @@ var c: Array<string> = []         // explicit empty array
 
 The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
 
-`Array<rune>` preserves the `rune` element identity: reads return `rune`, and writes accept only `rune`. The implementation uses compact Unicode-scalar storage (`XR_ELEM_RUNE` / `uint32_t[]`) and does not degrade to `Array<uint32>`.
+`Array<rune>` preserves the `rune` element identity: reads return `rune`, and writes accept only `rune`.
 
 #### 2.4.1.1 Fixed Arrays `[T; N]`
 
 `[T; N]` is a fixed-layout array type for `N` elements of type `T`. `N` is part of the type and must evaluate during analysis to a positive compile-time integer expression. The current expression subset includes integer literals, `const` integer identifiers, grouping, unary `-`/`~`, and integer arithmetic/bitwise operators. The current backend encoding limit is 65535 elements.
 
-The current implementation supports inline struct fields and stack-local fixed arrays. Scalar elements (`int`, `float`, `bool`, sized integers/floats, and similar primitives) use compact native lanes; `string`, struct, nested fixed arrays, and reference-container elements use tagged `XrValue` lanes, so fixed arrays compose recursively:
+Fixed arrays work as inline struct fields and local variables. They support struct, nested fixed-array, and reference-container element types, so fixed arrays compose recursively:
 
 ```xray
 var bytes: [byte; 4] = [1, 2, 3, 4]
@@ -781,7 +802,7 @@ The old `[N]T` syntax is not part of the Xray language.
 
 #### 2.4.2 `Map<K, V>`
 
-Hash table that **preserves insertion order**. See §14.7.
+Hash table that **preserves insertion order**. See §14.8.
 
 **Map literals** must use the `#{ ... }` prefix with `:` separators (consistent with Json; disambiguated by the `#` prefix):
 
@@ -791,7 +812,8 @@ var m2 = #{"a": 1, "b": 2}
 var empty = #{}                                     // empty Map
 
 m["c"] = 3                                          // insert / update
-var v = m["a"]                                      // lookup; returns null if absent
+var v = m["a"]                                      // lookup; a missing key panics with E0431
+var maybe = m.get("missing")                        // safe lookup; returns null if absent
 ```
 
 | Literal form | Type | Purpose |
@@ -806,7 +828,7 @@ var v = m["a"]                                      // lookup; returns null if a
 
 #### 2.4.3 `Set<T>`
 
-Deduplicated collection. See §14.4.
+Deduplicated collection. See §14.9.
 
 ```xray @id=types-set
 var s: Set<int> = #[1, 2, 3]
@@ -884,15 +906,33 @@ Arbitrary-precision integer. See §14.8.
 
 #### 2.4.8 `Range`
 
-Produced by the `..` operator. See §3.12.
+`Range` represents an integer interval and is produced by `a..b` or `a..=b`:
+
+- `a..b` is the half-open interval `[a, b)` and excludes `b`.
+- `a..=b` is the inclusive interval `[a, b]` and includes `b`.
+
+```xray @id=types-range-en
+var halfOpen = 1..4       // 1, 2, 3
+var inclusive = 1..=4     // 1, 2, 3, 4
+
+print(len(halfOpen))              // 3
+print(inclusive.contains(4))      // true
+print(inclusive.toArray())        // [1, 2, 3, 4]
+
+for (i in 3..=5) {
+    print(i)
+}
+```
+
+Ranges work with `for-in`, range patterns in `match`, and collection queries. See §3.9 for expression semantics and §14.12 for members.
 
 #### 2.4.9 `DateTime` / `Regex` / `StringBuilder`
 
-See §14 for details.
+`Regex` and `StringBuilder` are prelude types. `DateTime` is not a prelude name; bring it into scope with `import { DateTime } from datetime` (or another explicit import). See §14 for the member index.
 
 #### 2.4.10 `WeakMap` / `WeakSet`
 
-Keys of `WeakMap` and elements of `WeakSet` must be heap objects; weak references do not prevent GC reclamation. Weak collections do not provide long-lived traversal callbacks that would retain elements.
+Keys of `WeakMap` and elements of `WeakSet` must be heap objects; weak references do not extend object lifetimes. Weak collections do not provide long-lived traversal callbacks that would retain elements.
 
 ### 2.5 Nullable Types
 
@@ -1083,7 +1123,7 @@ typeName(value)   // returns the type name as a string
 `Type.Array`, `Type.Map`, `Type.Set`, `Type.Channel`, `Type.Json`,
 `Type.function`, `Type.class`, `Type.struct`, `Type.enum`, `Type.module`, `Type.bigint`, ...
 
-Full list: see `XrTypeId` in `src/runtime/value/xtype_names.h`.
+Use `typeName(value)` to obtain the concrete debug name of a value's type.
 
 ### 2.12 Metadata and Type Identity Boundary
 
@@ -1094,5 +1134,5 @@ Xray keeps only the minimal type identity layer by default:
 - Nominal type checks use `x is T` / `x as T`; do not compare type-name strings.
 - Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 
-The global `Reflect` module and the user-visible `Type` / `Field` / `Method` / `Constructor` / `Parameter` wrapper classes have been removed without a compatibility layer.
+Runtime type queries use `typeOf(value)`, `typeName(value)`, and `TypeId`. Reflection metadata is not exposed as a traversable or callable object graph.
 <!-- /xr-spec:en -->
