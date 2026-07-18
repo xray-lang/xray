@@ -18,7 +18,7 @@
 // xray language keywords (defined in xlsp_keywords.c)
 extern const char *xr_keywords[];
 
-// Builtin functions (defined in xlsp_keywords.c)
+// Builtin and prelude symbols (defined in xlsp_keywords.c)
 extern const char *xr_builtins[];
 
 #endif  // XLSP_KEYWORDS_H

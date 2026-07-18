@@ -30,7 +30,7 @@
  */
 
 /* Entries are sorted by `name` for human readability; lookup itself is a
- * linear scan over a small (< 16) table. */
+ * linear scan over a small (currently 20-entry) table. */
 
 /*           name             native_type        kind           */
 XR_PRELUDE_TYPE("Array",         XR_TARRAY,         GENERIC_1)

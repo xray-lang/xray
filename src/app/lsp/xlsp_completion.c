@@ -430,7 +430,7 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
     }
 
     for (int i = 0; xr_builtins[i]; i++) {
-        XrJsonValue *item = make_completion_item(xr_builtins[i], 3, "builtin function");
+        XrJsonValue *item = make_completion_item(xr_builtins[i], 3, "builtin or prelude symbol");
         xjson_object_set(item, "sortText", xjson_new_string("1"));
         xjson_array_push(items, item);
     }
