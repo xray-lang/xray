@@ -7829,11 +7829,8 @@ static bool xicgen_emit_struct_place_field_lvalue(XiCgenCtx *ctx, FILE *out, con
     const XaotValuePlan *load_plan = cg_value_plan(ctx, load);
     const char *c_type =
         load_plan && load_plan->rep.kind == XAOT_VALUE_AGGREGATE ? load_plan->rep.c_type : NULL;
-    char fallback_type[128];
-    if (!c_type) {
-        xaot_struct_c_type_name(fallback_type, sizeof(fallback_type), "abi", layout);
-        c_type = fallback_type;
-    }
+    if (!c_type)
+        return false;
     char field_name[128];
     cg_struct_field_c_name(layout, field_index, field_name, sizeof(field_name));
     fprintf(out, "(*(%s *)(", c_type);
@@ -7875,7 +7872,10 @@ static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_struct_set: need struct + value");
     XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
-    if (xicgen_struct_place_load(v->args[0])) {
+    const XiValue *place_load = xicgen_struct_place_load(v->args[0]);
+    const XaotValuePlan *place_load_plan = place_load ? cg_value_plan(ctx, place_load) : NULL;
+    if (place_load_plan && place_load_plan->rep.kind == XAOT_VALUE_AGGREGATE &&
+        place_load_plan->rep.c_type) {
         fprintf(out, "(");
         if (!xicgen_emit_struct_place_field_lvalue(ctx, out, v->args[0], sl, v->aux_int)) {
             ctx->error = true;

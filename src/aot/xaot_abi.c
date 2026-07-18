@@ -415,10 +415,10 @@ static XaotAbiSlot borrowed_place_slot(const XrType *type, XaotAbiSlot value_slo
 
 static XaotAbiSlot place_value_slot_for_type(const XaotBundle *bundle, const XiFunc *func,
                                              const XrType *type, const XiValue *value) {
-    /* A call-bound place points at the canonical storage representation of its
-     * value. Value aggregates therefore use their concrete layout type rather
-     * than falling back to an XrValue box; language nominality is checked by
-     * the analyzer, while this ABI is structural and layout-keyed. */
+    /* Only a borrowed value-struct receiver is guaranteed to have concrete
+     * aggregate storage at every direct method boundary. General ref/out
+     * arguments can cross the boxed closure ABI, so their stable place remains
+     * an XrValue slot until that indirect ABI publishes an aggregate pointee. */
     if (type && !type->is_nullable) {
         switch (type->kind) {
             case XR_KIND_INT:
@@ -429,7 +429,9 @@ static XaotAbiSlot place_value_slot_for_type(const XaotBundle *bundle, const XiF
             case XR_KIND_SPAN:
                 return native_value_slot_for_type(bundle, func, type, value, false);
             default:
-                if (struct_layout_for_slot(bundle, func, type, value, false))
+                if (func && func->receiver_borrowed && func->nparams > 0 && func->params &&
+                    func->params[0] == value &&
+                    struct_layout_for_slot(bundle, func, type, value, false))
                     return native_value_slot_for_type(bundle, func, type, value, false);
                 break;
         }
