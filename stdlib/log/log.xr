@@ -8,11 +8,11 @@ import text
 import io
 import os
 
-const DEBUG = 10
-const INFO = 20
-const WARN = 30
-const ERROR = 40
-const FATAL = 50
+export const DEBUG = 10
+export const INFO = 20
+export const WARN = 30
+export const ERROR = 40
+export const FATAL = 50
 
 const _QUEUE_LIMIT = 256
 
@@ -220,7 +220,7 @@ fn _makeChild(parent: Logger, fields: Array<Json>) -> Logger {
     )
 }
 
-class Logger {
+export class Logger {
     level: int
     format: string
     output: Path?
@@ -274,33 +274,33 @@ class Logger {
     }
 }
 
-fn debug(...args: Json) {
+export fn debug(...args: Json) {
     _logAt(_rootLogger(), DEBUG, args)
 }
 
-fn info(...args: Json) {
+export fn info(...args: Json) {
     _logAt(_rootLogger(), INFO, args)
 }
 
-fn warn(...args: Json) {
+export fn warn(...args: Json) {
     _logAt(_rootLogger(), WARN, args)
 }
 
-fn error(...args: Json) {
+export fn error(...args: Json) {
     _logAt(_rootLogger(), ERROR, args)
 }
 
-fn fatal(...args: Json) {
+export fn fatal(...args: Json) {
     _logAt(_rootLogger(), FATAL, args)
     flush()
     os.exit(1)
 }
 
-fn setLevel(level: Json) {
+export fn setLevel(level: Json) {
     _level = _parseLevel(level)
 }
 
-fn setFormat(format: string) {
+export fn setFormat(format: string) {
     var f = text.lower(format)
     if (f == "json") {
         _format = "json"
@@ -309,25 +309,25 @@ fn setFormat(format: string) {
     }
 }
 
-fn setOutput(path: Path) {
+export fn setOutput(path: Path) {
     flush()
     _output = path
 }
 
-fn isEnabled(level: int) -> bool {
+export fn isEnabled(level: int) -> bool {
     return level >= _level
 }
 
-fn enableSource(enabled: bool = true) {
+export fn enableSource(enabled: bool = true) {
     _source = enabled
 }
 
-fn enableAsync(enabled: bool = true) {
+export fn enableAsync(enabled: bool = true) {
     if (!enabled && _async) { flush() }
     _async = enabled
 }
 
-fn flush() {
+export fn flush() {
     while (len(_asyncQueue) > 0) {
         var line = _asyncQueue.shift() ?? ""
         _writeRaw(_output, line)
@@ -338,28 +338,6 @@ fn flush() {
     }
 }
 
-fn child(...fields: Json) -> Logger {
+export fn child(...fields: Json) -> Logger {
     return _makeChild(_rootLogger(), fields)
-}
-
-export {
-    DEBUG,
-    INFO,
-    WARN,
-    ERROR,
-    FATAL,
-    Logger,
-    debug,
-    info,
-    warn,
-    error,
-    fatal,
-    setLevel,
-    setFormat,
-    setOutput,
-    isEnabled,
-    enableSource,
-    enableAsync,
-    flush,
-    child
 }

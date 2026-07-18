@@ -489,7 +489,6 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
             break;
 
         case AST_EXPORT_STMT:
-            check_node(ctx, node->as.export_stmt.declaration);
             break;
 
         case AST_IMPORT_STMT:

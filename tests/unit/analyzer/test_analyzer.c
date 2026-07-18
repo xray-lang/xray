@@ -1693,19 +1693,17 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    const char *lib_source = "enum ImportedErr { Selective, Namespace }\n"
+    const char *lib_source = "export enum ImportedErr { Selective, Namespace }\n"
                              "export fn failSelective() { throw ImportedErr.Selective }\n"
                              "export fn failNamespace() { throw ImportedErr.Namespace }\n"
-                             "export fn applyImported(cb: () -> ()) { cb() }\n"
-                             "export { ImportedErr }\n";
+                             "export fn applyImported(cb: () -> ()) { cb() }\n";
     const char *reexport_source =
         "export { failSelective as failReexported, failNamespace, applyImported as "
         "applyReexported } from "
         "\"./effect_export_module\"\n";
     const char *star_source = "export * from \"./effect_export_module\"\n";
-    const char *callback_source = "enum CallbackErr { Foreign, Local }\n"
-                                  "export fn failForeignCallback() { throw CallbackErr.Foreign }\n"
-                                  "export { CallbackErr }\n";
+    const char *callback_source = "export enum CallbackErr { Foreign, Local }\n"
+                                  "export fn failForeignCallback() { throw CallbackErr.Foreign }\n";
     const char *entry_source = "import { failSelective, applyImported } from "
                                "\"./effect_export_module\"\n"
                                "import \"./effect_export_module\" as effects\n"

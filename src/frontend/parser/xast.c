@@ -2053,49 +2053,12 @@ AstNode *xr_ast_import_stmt_ex(XrCompilerSession *session, const char *module_na
     return node;
 }
 
-// Create export statement node
-// export fn add() {}
-// export const PI = 3.14
-// export class User {}
-AstNode *xr_ast_export_stmt(XrCompilerSession *session, AstNode *declaration,
-                            const char *export_name, int line) {
-    AstNode *node = alloc_node(session, AST_EXPORT_STMT, line);
-    node->as.export_stmt.declaration = declaration;
-    node->as.export_stmt.export_name = export_name ? ast_strdup(session, export_name) : NULL;
-    node->as.export_stmt.export_names = NULL;
-    node->as.export_stmt.export_count = 0;
-    node->as.export_stmt.from_path = NULL;
-    node->as.export_stmt.reexport_members = NULL;
-    node->as.export_stmt.reexport_count = 0;
-    node->as.export_stmt.is_reexport_all = false;
-    return node;
-}
-
-// Create export list statement node
-// export a, b, c
-AstNode *xr_ast_export_list(XrCompilerSession *session, char **names, int count, int line) {
-    AstNode *node = alloc_node(session, AST_EXPORT_STMT, line);
-    node->as.export_stmt.declaration = NULL;
-    node->as.export_stmt.export_name = NULL;
-    node->as.export_stmt.export_names = names;
-    node->as.export_stmt.export_count = count;
-    node->as.export_stmt.from_path = NULL;
-    node->as.export_stmt.reexport_members = NULL;
-    node->as.export_stmt.reexport_count = 0;
-    node->as.export_stmt.is_reexport_all = false;
-    return node;
-}
-
 // Create re-export statement node
 // export { a, b as c } from "./file"
 // export * from "./file"
 AstNode *xr_ast_export_reexport(XrCompilerSession *session, const char *from_path,
                                 ReexportMember *members, int count, bool is_all, int line) {
     AstNode *node = alloc_node(session, AST_EXPORT_STMT, line);
-    node->as.export_stmt.declaration = NULL;
-    node->as.export_stmt.export_name = NULL;
-    node->as.export_stmt.export_names = NULL;
-    node->as.export_stmt.export_count = 0;
     node->as.export_stmt.from_path = from_path ? ast_strdup(session, from_path) : NULL;
     node->as.export_stmt.reexport_members = members;
     node->as.export_stmt.reexport_count = count;

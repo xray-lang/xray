@@ -2387,7 +2387,6 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
             xa_thread_lint_scan_stmt(states, stmt->as.scope_block.body, can_escape);
             return;
         case AST_EXPORT_STMT:
-            xa_thread_lint_scan_stmt(states, stmt->as.export_stmt.declaration, can_escape);
             return;
         default:
             xa_thread_lint_scan_expr(states, stmt, false, can_escape);
@@ -5040,7 +5039,6 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
             xa_os_resource_lint_scan_stmt(states, stmt->as.scope_block.body, can_escape);
             return;
         case AST_EXPORT_STMT:
-            xa_os_resource_lint_scan_stmt(states, stmt->as.export_stmt.declaration, can_escape);
             return;
         default:
             xa_os_resource_lint_scan_expr(states, stmt, false, can_escape);
@@ -6584,7 +6582,7 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
         case AST_THROW_STMT:
             return xa_node_uses_symbol_name(node->as.throw_stmt.expression, name);
         case AST_EXPORT_STMT:
-            return xa_node_uses_symbol_name(node->as.export_stmt.declaration, name);
+            return false;
         case AST_GLOBAL_ASM:
             return false;
 

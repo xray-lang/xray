@@ -1803,8 +1803,7 @@ XR_FUNC bool xa_propagate_receiver_mutations_for_ast(XaAnalyzer *analyzer, AstNo
             }
             return changed;
         case AST_EXPORT_STMT:
-            return xa_propagate_receiver_mutations_for_ast(analyzer,
-                                                           node->as.export_stmt.declaration);
+            return false;
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL: {
             ClassDeclNode *cls =
@@ -1898,8 +1897,7 @@ XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, As
             }
             return changed;
         case AST_EXPORT_STMT:
-            return xa_propagate_param_escape_summaries_for_ast(ctx,
-                                                               node->as.export_stmt.declaration);
+            return false;
         case AST_FUNCTION_DECL:
             return xa_propagate_function_param_escape_summary(ctx, node);
         case AST_CLASS_DECL:
@@ -2104,6 +2102,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     XaSymbol *sym = xa_symbol_new(fn->name, XA_SYM_FUNCTION);
     sym->location.line = node->line;
     sym->is_const = true;
+    sym->is_exported = node->is_exported;
     XaScope *signature_scope = ctx->analyzer ? ctx->analyzer->current_scope : NULL;
     XaSymbol *saved_signature_function = signature_scope ? signature_scope->function_symbol : NULL;
     if (fn->type_param_count > 0 && fn->type_params) {
@@ -2873,6 +2872,7 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
 
     XaSymbol *sym = xa_symbol_new(iface->name, XA_SYM_CLASS);
     sym->location.line = node->line;
+    sym->is_exported = node->is_exported;
     xa_visit_add_symbol_checked(ctx, sym, 0);
 
     XrClassInfo *info = xa_class_info_new(iface->name);
@@ -3184,9 +3184,11 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     if (!sym) {
         sym = xa_symbol_new(cls->name, XA_SYM_CLASS);
         sym->location.line = node->line;
+        sym->is_exported = node->is_exported;
         xa_visit_add_symbol_checked(ctx, sym, 0);
         cls->symbol_id = sym->id;
     }
+    sym->is_exported = node->is_exported;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     XrClassInfo *info = links ? links->class_info : NULL;
@@ -4037,6 +4039,7 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
         sym = xa_symbol_new(var->name, XA_SYM_VARIABLE);
         sym->location.line = node->line;
         sym->is_const = is_const;
+        sym->is_exported = node->is_exported;
         sym->is_readonly_binding = is_const;
         sym->is_shared = is_shared;
         sym->is_shared_provenance = false;
@@ -4050,6 +4053,7 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
         var->symbol_id = sym->id;
     } else {
         sym->is_const = is_const;
+        sym->is_exported = node->is_exported;
         sym->is_readonly_binding = is_const;
         sym->is_shared = is_shared;
         sym->is_shared_provenance = false;

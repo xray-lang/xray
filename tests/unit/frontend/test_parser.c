@@ -560,6 +560,39 @@ TEST(parser_class_decl) {
     teardown();
 }
 
+TEST(parser_direct_visibility_owns_declaration) {
+    setup();
+    AstNode *program = parse_ok("@no_alloc\n"
+                                "export fn hash() -> int { return 1 }\n"
+                                "export final class FinalBox {}\n"
+                                "export struct Word { value: uint32 }\n");
+    ASSERT_EQ_INT(program->as.program.count, 3);
+
+    AstNode *fn = program->as.program.statements[0];
+    ASSERT_EQ_INT(fn->type, AST_FUNCTION_DECL);
+    ASSERT_TRUE(fn->is_exported);
+    ASSERT_EQ_INT(fn->as.function_decl.attr_count, 1);
+    ASSERT_EQ_INT(fn->as.function_decl.attributes[0]->kind, ATTR_NO_ALLOC);
+
+    AstNode *cls = program->as.program.statements[1];
+    ASSERT_EQ_INT(cls->type, AST_CLASS_DECL);
+    ASSERT_TRUE(cls->is_exported);
+    ASSERT_TRUE(cls->as.class_decl.explicit_final);
+
+    AstNode *st = program->as.program.statements[2];
+    ASSERT_EQ_INT(st->type, AST_STRUCT_DECL);
+    ASSERT_TRUE(st->is_exported);
+    teardown();
+}
+
+TEST(parser_rejects_posthoc_local_export) {
+    setup();
+    AstNode *program =
+        xr_parse(xr_compiler_session_current_for_isolate(X), "fn local() {}\nexport { local }\n");
+    ASSERT_NULL(program);
+    teardown();
+}
+
 TEST(parser_enum_static_method) {
     setup();
     AstNode *stmt = parse_first("enum Color {\n"
@@ -1026,6 +1059,8 @@ int main(void) {
 
     // Classes
     RUN_TEST(parser_class_decl);
+    RUN_TEST(parser_direct_visibility_owns_declaration);
+    RUN_TEST(parser_rejects_posthoc_local_export);
     RUN_TEST(parser_enum_static_method);
 
     // Calls

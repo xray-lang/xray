@@ -903,7 +903,6 @@ import { publicFn } from "./modules/mod_a.xr"
 // 导出
 export fn publicFn() -> string { return "hi" }
 export const VERSION = "1.0"
-export publicFn, VERSION                    // 后置 export 已声明标识符列表
 export { name1, name2 as alias } from "./other"
 export * from "./other"
 ```
@@ -1813,7 +1812,6 @@ import { publicFn } from "./modules/mod_a.xr"
 // Exports
 export fn publicFn() -> string { return "hi" }
 export const VERSION = "1.0"
-export publicFn, VERSION                    // post-export of already-declared identifiers
 export { name1, name2 as alias } from "./other"
 export * from "./other"
 ```

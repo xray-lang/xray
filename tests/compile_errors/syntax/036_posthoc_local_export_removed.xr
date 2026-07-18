@@ -1,0 +1,7 @@
+// Expected: local visibility must be written on the declaration.
+
+fn localHelper() -> int {
+    return 1
+}
+
+export { localHelper }

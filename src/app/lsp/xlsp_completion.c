@@ -93,13 +93,6 @@ static AstNode *find_enum_in_ast(AstNode *ast, const char *name) {
             strcmp(stmt->as.enum_decl.name, name) == 0) {
             return stmt;
         }
-        // Exported enum: export wraps enum_decl
-        if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
-            stmt->as.export_stmt.declaration->type == AST_ENUM_DECL &&
-            stmt->as.export_stmt.declaration->as.enum_decl.name &&
-            strcmp(stmt->as.export_stmt.declaration->as.enum_decl.name, name) == 0) {
-            return stmt->as.export_stmt.declaration;
-        }
     }
     return NULL;
 }
@@ -453,9 +446,6 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             AstNode *enum_node = NULL;
             if (stmt->type == AST_ENUM_DECL) {
                 enum_node = stmt;
-            } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
-                       stmt->as.export_stmt.declaration->type == AST_ENUM_DECL) {
-                enum_node = stmt->as.export_stmt.declaration;
             }
             if (enum_node && enum_node->as.enum_decl.name) {
                 snprintf(detail_buf2, sizeof(detail_buf2), "enum %s { %d members }",

@@ -864,9 +864,8 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             canon_node(ctx, node->as.destructure_assign.value);
             break;
 
-        /* ---- Export (walk inner declaration) ---- */
+        /* ---- Re-export (no local declaration child) ---- */
         case AST_EXPORT_STMT:
-            canon_node(ctx, node->as.export_stmt.declaration);
             break;
 
         /* ---- Class / struct (walk fields and methods) ---- */

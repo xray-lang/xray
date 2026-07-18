@@ -289,6 +289,9 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
     n->node_id = clone_node_id(node, clone_ctx);
     n->line = node->line;
     n->column = node->column;
+    n->end_line = node->end_line;
+    n->end_column = node->end_column;
+    n->is_exported = node->is_exported;
     n->leading_comments = NULL;   // Comments not needed for mono clones
     n->trailing_comments = NULL;  // (L-06)
     // AstNode no longer carries an inline type — the post-mono
@@ -1122,21 +1125,6 @@ static XaGenericDecl *registry_find(XaGenericRegistry *r, const char *name) {
     return NULL;
 }
 
-static const char *mono_decl_name(AstNode *decl) {
-    if (!decl)
-        return NULL;
-    switch (decl->type) {
-        case AST_FUNCTION_DECL:
-            return decl->as.function_decl.name;
-        case AST_CLASS_DECL:
-            return decl->as.class_decl.name;
-        case AST_STRUCT_DECL:
-            return decl->as.struct_decl.name;
-        default:
-            return NULL;
-    }
-}
-
 // External modules contribute generic value-struct templates to the using
 // module, and generic class/function names for namespace-call rewriting. Class
 // and function bodies are injected only into their defining module by scanning
@@ -1173,27 +1161,6 @@ static void collect_external_generic_decls(AstNode *root, XaGenericRegistry *reg
                                       stmt->as.struct_decl.type_param_count, true, false);
             }
             continue;
-        }
-        if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration) {
-            AstNode *decl = stmt->as.export_stmt.declaration;
-            if (decl->type == AST_FUNCTION_DECL && decl->as.function_decl.type_param_count > 0 &&
-                !registry_find(registry, decl->as.function_decl.name)) {
-                registry_add_external(registry, decl->as.function_decl.name, decl,
-                                      decl->as.function_decl.type_params,
-                                      decl->as.function_decl.type_param_count, false, true);
-            }
-            if (decl->type == AST_CLASS_DECL && decl->as.class_decl.type_param_count > 0 &&
-                !registry_find(registry, decl->as.class_decl.name)) {
-                registry_add_external(registry, decl->as.class_decl.name, decl,
-                                      decl->as.class_decl.type_params,
-                                      decl->as.class_decl.type_param_count, false, true);
-            }
-            if (decl->type == AST_STRUCT_DECL && decl->as.struct_decl.type_param_count > 0 &&
-                !registry_find(registry, decl->as.struct_decl.name)) {
-                registry_add_external(registry, decl->as.struct_decl.name, decl,
-                                      decl->as.struct_decl.type_params,
-                                      decl->as.struct_decl.type_param_count, true, false);
-            }
         }
     }
 }
@@ -1306,26 +1273,6 @@ static void collect_generic_decls(AstNode *root, XaGenericRegistry *registry) {
                 registry_add_local(registry, stmt->as.struct_decl.name, stmt,
                                    stmt->as.struct_decl.type_params,
                                    stmt->as.struct_decl.type_param_count);
-            }
-            // Export wrapping: export fn/class ...
-            if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration) {
-                AstNode *decl = stmt->as.export_stmt.declaration;
-                if (decl->type == AST_FUNCTION_DECL &&
-                    decl->as.function_decl.type_param_count > 0) {
-                    registry_add_local(registry, decl->as.function_decl.name, decl,
-                                       decl->as.function_decl.type_params,
-                                       decl->as.function_decl.type_param_count);
-                }
-                if (decl->type == AST_CLASS_DECL && decl->as.class_decl.type_param_count > 0) {
-                    registry_add_local(registry, decl->as.class_decl.name, decl,
-                                       decl->as.class_decl.type_params,
-                                       decl->as.class_decl.type_param_count);
-                }
-                if (decl->type == AST_STRUCT_DECL && decl->as.struct_decl.type_param_count > 0) {
-                    registry_add_local(registry, decl->as.struct_decl.name, decl,
-                                       decl->as.struct_decl.type_params,
-                                       decl->as.struct_decl.type_param_count);
-                }
             }
         }
     }
@@ -1586,8 +1533,7 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
                                         import_aliases, local_only);
             break;
         case AST_EXPORT_STMT:
-            collect_instantiation_sites(node->as.export_stmt.declaration, registry, collector,
-                                        import_aliases, local_only);
+            /* Re-exports contain no local generic body. */
             break;
         case AST_MATCH_EXPR:
             collect_instantiation_sites(node->as.match_expr.expr, registry, collector,
@@ -1838,8 +1784,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             rewrite_call_sites(node->as.throw_stmt.expression, registry, collector, import_aliases);
             break;
         case AST_EXPORT_STMT:
-            rewrite_call_sites(node->as.export_stmt.declaration, registry, collector,
-                               import_aliases);
+            /* Re-exports contain no local calls. */
             break;
         case AST_MATCH_EXPR:
             rewrite_call_sites(node->as.match_expr.expr, registry, collector, import_aliases);
@@ -1875,77 +1820,6 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         default:
             break;
-    }
-}
-
-static bool mono_export_stmt_exports_name(ExportStmtNode *exp, AstNode *origin_decl,
-                                          const char *origin_name) {
-    if (!exp || !origin_name)
-        return false;
-    if (exp->declaration == origin_decl)
-        return true;
-    if (exp->export_name && strcmp(exp->export_name, origin_name) == 0)
-        return true;
-    if (exp->declaration) {
-        const char *decl_name = mono_decl_name(exp->declaration);
-        if (decl_name && strcmp(decl_name, origin_name) == 0)
-            return true;
-    }
-    for (int i = 0; i < exp->export_count; i++) {
-        const char *name = exp->export_names ? exp->export_names[i] : NULL;
-        if (name && strcmp(name, origin_name) == 0)
-            return true;
-    }
-    return false;
-}
-
-static bool mono_export_stmt_has_name(ExportStmtNode *exp, const char *name) {
-    if (!exp || !name)
-        return false;
-    if (exp->export_name && strcmp(exp->export_name, name) == 0)
-        return true;
-    if (exp->declaration) {
-        const char *decl_name = mono_decl_name(exp->declaration);
-        if (decl_name && strcmp(decl_name, name) == 0)
-            return true;
-    }
-    for (int i = 0; i < exp->export_count; i++) {
-        const char *export_name = exp->export_names ? exp->export_names[i] : NULL;
-        if (export_name && strcmp(export_name, name) == 0)
-            return true;
-    }
-    return false;
-}
-
-static void mono_append_export_name(ExportStmtNode *exp, const char *name) {
-    if (!exp || !name || mono_export_stmt_has_name(exp, name))
-        return;
-    int new_count = exp->export_count + 1;
-    char **new_names = (char **) xr_malloc((size_t) new_count * sizeof(char *));
-    if (!new_names)
-        return;
-    for (int i = 0; i < exp->export_count; i++)
-        new_names[i] = exp->export_names ? exp->export_names[i] : NULL;
-    new_names[exp->export_count] = xr_strdup(name);
-    exp->export_names = new_names;
-    exp->export_count = new_count;
-}
-
-static void export_mono_clone_if_origin_exported(AstNode *root, AstNode *origin_decl,
-                                                 const char *origin_name,
-                                                 const char *mangled_name) {
-    if (!root || root->type != AST_PROGRAM || !origin_name || !mangled_name)
-        return;
-    ProgramNode *prog = &root->as.program;
-    for (int i = 0; i < prog->count; i++) {
-        AstNode *stmt = prog->statements[i];
-        if (!stmt || stmt->type != AST_EXPORT_STMT)
-            continue;
-        ExportStmtNode *exp = &stmt->as.export_stmt;
-        if (mono_export_stmt_exports_name(exp, origin_decl, origin_name)) {
-            mono_append_export_name(exp, mangled_name);
-            return;
-        }
     }
 }
 
@@ -2050,9 +1924,6 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             AstNode *sj = prog->statements[j];
             if (!sj)
                 continue;
-            // Unwrap export wrapper
-            if (sj->type == AST_EXPORT_STMT && sj->as.export_stmt.declaration)
-                sj = sj->as.export_stmt.declaration;
             if (sj == decl->node) {
                 insert_pos = j + 1;
                 break;
@@ -2083,8 +1954,6 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         }
         prog->statements[insert_pos] = cloned;
         prog->count++;
-        export_mono_clone_if_origin_exported(root, decl->node, inst->generic_name,
-                                             inst->mangled_name);
     }
 }
 

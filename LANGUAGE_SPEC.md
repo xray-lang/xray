@@ -2859,7 +2859,6 @@ import { publicFn } from "./modules/mod_a.xr"
 // Exports
 export fn publicFn() -> string { return "hi" }
 export const VERSION = "1.0"
-export publicFn, VERSION                    // post-export of already-declared identifiers
 export { name1, name2 as alias } from "./other"
 export * from "./other"
 ```
@@ -4369,40 +4368,36 @@ import { publicFn } from "./modules/mod_a"
 
 ### 11.4 `export` and Visibility
 
-`export` declarations **must appear at the module top level**. Xray supports three export forms:
+`export` visibility **must appear on a module-level declaration**. Cross-module re-exports remain declarations of their own:
 
 ```ebnf
-ExportStmt ::= 'export' Declaration                              // export the declaration directly
-            |  'export' '{' Identifier (',' Identifier)* '}'     // export already-declared identifiers
-            |  'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
-            |  'export' '*' 'from' StringLiteral
+Declaration ::= Attribute* Visibility? Modifier* DeclarationBody
+Visibility  ::= 'export'
+ReexportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
+              | 'export' '*' 'from' StringLiteral
 ExportSpec ::= Identifier ('as' Identifier)?
-Declaration ::= FnDecl | ClassDecl | StructDecl | ConstDecl | TypeAlias
 ```
 
 ```xray
-// 1. export a declaration directly
+// 1. visibility belongs to the declaration
+@no_alloc
 export fn helper() { return }
-export class MyClass {
+export final class MyClass {
     value: int
     constructor() { this.value = 1 }
 }
 export const VERSION = "1.0"
 
-// 2. export already-declared identifiers (declare internally first, expose at the end)
-fn _helper() -> string { return "..." }
-fn publicFn() -> string { return _helper() }
-export { publicFn }
-
-// 3. re-export (with optional renaming)
+// 2. re-export (with optional renaming)
 export { getUser, getUserAge as getAge } from "./user"
 
-// 4. wildcard re-export (forward all exports of another module)
+// 3. wildcard re-export (forward all exports of another module)
 export * from "./product"
 ```
 
 **Restrictions**:
 - Declarations not marked `export` are **private** to the module.
+- Post-hoc local `export { LocalName }` is removed; put `export` on the declaration.
 - `export var` is not supported. Mutable bindings cannot be shared across modules; use `export const` instead.
 - Internal state does not collide across modules even with the same name.
 - Re-exports and wildcard re-exports are commonly used in `index.xr` to aggregate public APIs of submodules.
@@ -5616,9 +5611,10 @@ YieldStmt ::= 'yield' Expression
 ### A.6 Declarations
 
 ```ebnf
+Visibility ::= 'export'
 VarDecl ::= 'var' Binding
-ConstDecl ::= 'const' Binding
-SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
+ConstDecl ::= AttrList? Visibility? 'const' Binding
+SharedDecl ::= Visibility? 'shared' Identifier (':' Type)? '=' Expression
 OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
@@ -5627,7 +5623,7 @@ BindingPattern ::= Identifier
                 |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
 ObjectBinding ::= Identifier (':' Identifier)?
 
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 ExternBlock ::= 'extern' StringLiteral ExternLibrary? '{' ExternDecl+ '}'
 ExternLibrary ::= ('dylib' | 'link') '(' StringLiteral ')'
 ExternDecl ::= ExternFnDecl | ExternLayoutDecl
@@ -5647,7 +5643,7 @@ TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
-ClassDecl ::= 'final'? 'class' Identifier TypeParams?
+ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
@@ -5657,29 +5653,31 @@ MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block
 
-StructDecl ::= 'struct' Identifier TypeParams?
+StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
 
-InterfaceDecl ::= 'interface' Identifier TypeParams?
+InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
 InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?
 
-EnumDecl       ::= 'enum' Identifier TypeParams?
+EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
 EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
-TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
+
+TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
 
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
-ExportDecl ::= 'export' Declaration                                         // export the declaration directly
-            |  'export' Identifier                                          // export an already-declared identifier
-            |  'export' '*' 'from' StringLiteral                            // forwarding export
+ExportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* ','? '}' 'from' StringLiteral
+            |  'export' '*' 'from' StringLiteral
+ExportSpec ::= Identifier ('as' Identifier)?
 ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?

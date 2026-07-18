@@ -163,6 +163,9 @@ void xfmt_emit_var_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_emit_attributes(ctx, decl->attributes, decl->attr_count);
     xfmt_write_indent(ctx);
 
+    if (node->is_exported)
+        xfmt_write_str(ctx, "export ");
+
     if (node->type == AST_SHARED_DECL) {
         xfmt_write_str(ctx, "shared ");
     } else if (node->type == AST_OWNED_DECL) {
@@ -237,6 +240,9 @@ void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
     }
     xfmt_write_indent(ctx);
 
+    if (node->is_exported)
+        xfmt_write_str(ctx, "export ");
+
     xfmt_write_str(ctx, "fn ");
     xfmt_write_str(ctx, fn->name);
     xfmt_emit_generic_params(ctx, fn->type_params, fn->type_param_count);
@@ -283,6 +289,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_emit_attributes(ctx, cls->attributes, cls->attr_count);
     xfmt_write_indent(ctx);
 
+    if (node->is_exported)
+        xfmt_write_str(ctx, "export ");
     if (!is_struct && !is_union && cls->explicit_final)
         xfmt_write_str(ctx, "final ");
     if (is_struct && cls->is_packed)
@@ -581,6 +589,8 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     InterfaceDeclNode *iface = &node->as.interface_decl;
 
+    if (node->is_exported)
+        xfmt_write_str(ctx, "export ");
     xfmt_write_str(ctx, "interface ");
     xfmt_write_str(ctx, iface->name);
     xfmt_emit_generic_params(ctx, iface->type_params, iface->type_param_count);
@@ -678,6 +688,8 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_emit_attributes(ctx, en->attributes, en->attr_count);
     xfmt_write_indent(ctx);
 
+    if (node->is_exported)
+        xfmt_write_str(ctx, "export ");
     xfmt_write_str(ctx, "enum ");
     xfmt_write_str(ctx, en->name);
     xfmt_write_str(ctx, " {");
@@ -720,6 +732,8 @@ void xfmt_emit_type_alias(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     TypeAliasNode *ta = &node->as.type_alias;
 
+    if (node->is_exported)
+        xfmt_write_str(ctx, "export ");
     xfmt_write_str(ctx, "type ");
     xfmt_write_str(ctx, ta->name);
     xfmt_emit_generic_params(ctx, ta->type_params, ta->type_param_count);

@@ -630,6 +630,21 @@ static void xa_reexport_all_symbol_cb(const char *key, void *value, void *userda
         ctx->invalid = true;
 }
 
+typedef struct XaNativeExportCtx {
+    XaAnalyzer *analyzer;
+    XrHashMap **exports;
+    bool invalid;
+} XaNativeExportCtx;
+
+static void xa_collect_native_export_cb(const char *key, void *value, void *userdata) {
+    XaNativeExportCtx *ctx = (XaNativeExportCtx *) userdata;
+    XaSymbol *sym = (XaSymbol *) value;
+    if (!ctx || !ctx->exports || !sym || !sym->is_builtin || !sym->is_exported)
+        return;
+    if (!xa_export_map_try_set_symbol(ctx->analyzer, ctx->exports, key, sym, NULL))
+        ctx->invalid = true;
+}
+
 bool xa_analyzer_collect_export_symbols_checked(XaAnalyzer *analyzer, XrAstNode *ast,
                                                 XrHashMap **out_exports) {
     if (out_exports)
@@ -643,38 +658,38 @@ bool xa_analyzer_collect_export_symbols_checked(XaAnalyzer *analyzer, XrAstNode 
     if (owner)
         owner->export_symbols_invalid = false;
 
+    /* Hybrid native/script modules publish runtime-backed declarations through
+     * analyzer-owned native symbols, not synthetic source declarations. */
+    XaNativeExportCtx native_ctx = {.analyzer = analyzer, .exports = &exports, .invalid = false};
+    XaScope *export_scope =
+        analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
+    if (export_scope && export_scope->symbols)
+        xr_hashmap_foreach((XrHashMap *) export_scope->symbols, xa_collect_native_export_cb,
+                           &native_ctx);
+    if (native_ctx.invalid)
+        goto invalid;
+
     for (int i = 0; i < prog->count; i++) {
         AstNode *stmt = prog->statements[i];
-        if (!stmt || stmt->type != AST_EXPORT_STMT)
+        if (!stmt)
             continue;
 
-        ExportStmtNode *exp = &stmt->as.export_stmt;
-
-        /* Case 1: export fn/class/var/const ... */
-        if (exp->declaration) {
-            const char *name = get_export_decl_name(exp->declaration);
+        /* Direct visibility belongs to the declaration itself. */
+        if (stmt->is_exported) {
+            const char *name = get_export_decl_name(stmt);
             if (name) {
-                XaScope *export_scope =
-                    analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
                 XaSymbol *sym = xa_scope_lookup(export_scope, name);
-                if (!xa_export_map_try_set_symbol(analyzer, &exports, name, sym, exp->declaration))
+                if (!xa_export_map_try_set_symbol(analyzer, &exports, name, sym, stmt))
                     goto invalid;
             }
         }
 
-        /* Case 2: export a, b, c (export_names list) */
-        for (int j = 0; j < exp->export_count; j++) {
-            const char *name = exp->export_names[j];
-            if (!name)
-                continue;
-            XaScope *export_scope =
-                analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
-            XaSymbol *sym = xa_scope_lookup(export_scope, name);
-            if (!xa_export_map_try_set_symbol(analyzer, &exports, name, sym, stmt))
-                goto invalid;
-        }
+        if (stmt->type != AST_EXPORT_STMT)
+            continue;
 
-        /* Case 3: export { a, b as c } from "./file" / export * from "./file" */
+        ExportStmtNode *exp = &stmt->as.export_stmt;
+
+        /* Re-exports remain statements because they do not declare a local name. */
         if (exp->from_path) {
             bool source_invalid = false;
             XrHashMap *source_exports =

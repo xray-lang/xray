@@ -310,11 +310,18 @@ def infer_const_type(value: str, annotation: str | None) -> str:
 
 
 def parse_exported_names(text: str) -> list[str]:
-    match = re.search(r"export\s*\{(?P<body>.*?)\}", text, re.S)
-    if not match:
-        return []
-    body = re.sub(r"//.*", "", match.group("body"))
-    return [part.strip() for part in split_top_level_commas(body) if part.strip()]
+    """Return names whose own top-level declaration carries `export`.
+
+    Selective re-exports intentionally do not enter the source inventory for
+    the defining module, and the removed local `export { name }` form is not
+    recognized.
+    """
+    pattern = re.compile(
+        r"(?m)^export\s+(?:(?:final|packed)\s+)?"
+        r"(?:fn|class|struct|union|interface|enum|type|const|shared)\s+"
+        r"([A-Za-z_][A-Za-z0-9_]*)"
+    )
+    return [match.group(1) for match in pattern.finditer(text)]
 
 
 def decode_c_string(raw: str) -> str:
@@ -324,12 +331,17 @@ def decode_c_string(raw: str) -> str:
         return raw
 
 
-CLASS_RE = re.compile(r"(?m)^(?:@native\s*\n)?class\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\{")
+CLASS_RE = re.compile(
+    r"(?m)^(?:@[A-Za-z_][^\n]*\n)*(?:export\s+)?(?:final\s+)?"
+    r"class\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\{"
+)
 TOP_FN_RE = re.compile(
-    r"(?m)^fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((?P<params>[^)]*)\)\s*(?:->\s*(?P<ret>[^{\n]+))?"
+    r"(?m)^(?:export\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*"
+    r"(?:<[^>{]+>)?\((?P<params>[^)]*)\)\s*(?:->\s*(?P<ret>[^{\n]+))?"
 )
 TOP_CONST_RE = re.compile(
-    r"(?m)^const\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([^=\n]+))?\s*=\s*([^\n]+)"
+    r"(?m)^(?:export\s+)?const\s+([A-Za-z_][A-Za-z0-9_]*)\s*"
+    r"(?::\s*([^=\n]+))?\s*=\s*([^\n]+)"
 )
 MEMBER_METHOD_RE = re.compile(
     r"^\s*(static\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\((?P<params>[^)]*)\)\s*(?:->\s*(?P<ret>[^/{\n]+))?"

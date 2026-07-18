@@ -395,6 +395,12 @@ static bool attrs_are_static_data_attrs(XrAttribute **attrs, int count) {
     return true;
 }
 
+static AstNode *mark_direct_visibility(AstNode *declaration, bool is_exported) {
+    if (declaration)
+        declaration->is_exported = is_exported;
+    return declaration;
+}
+
 // Parse attributed declaration: @test fn ..., @native class ..., etc.
 static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     XrAttribute **attributes = NULL;
@@ -406,6 +412,12 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         if (!attr)
             return NULL;
         XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attr);
+    }
+
+    bool is_exported = xr_parser_match(parser, TK_EXPORT);
+    if (is_exported && parser->scope_depth > 0) {
+        xr_parser_error(parser, "'export' must appear at module top level");
+        return NULL;
     }
 
     bool is_native = attrs_has(attributes, attr_count, ATTR_NATIVE);
@@ -476,7 +488,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         cls->as.class_decl.attributes = attributes;
         cls->as.class_decl.attr_count = attr_count;
         validate_decl_derive_contract(parser, derive_flags);
-        return cls;
+        return mark_direct_visibility(cls, is_exported);
     }
 
     // @native struct / @native packed struct
@@ -504,7 +516,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         st->as.class_decl.attributes = attributes;
         st->as.class_decl.attr_count = attr_count;
         validate_decl_derive_contract(parser, derive_flags);
-        return st;
+        return mark_direct_visibility(st, is_exported);
     }
 
     if (xr_parser_match(parser, TK_UNION)) {
@@ -526,7 +538,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         un->as.union_decl.is_native = is_native;
         un->as.union_decl.attributes = attributes;
         un->as.union_decl.attr_count = attr_count;
-        return un;
+        return mark_direct_visibility(un, is_exported);
     }
 
     if (xr_parser_match(parser, TK_ENUM)) {
@@ -548,7 +560,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         en->as.enum_decl.attributes = attributes;
         en->as.enum_decl.attr_count = attr_count;
         validate_decl_derive_contract(parser, derive_flags);
-        return en;
+        return mark_direct_visibility(en, is_exported);
     }
 
     if (xr_parser_match(parser, TK_CONST)) {
@@ -569,10 +581,14 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
             return NULL;
         decl->as.var_decl.attributes = attributes;
         decl->as.var_decl.attr_count = attr_count;
-        return decl;
+        return mark_direct_visibility(decl, is_exported);
     }
 
     if (xr_parser_match(parser, TK_VAR)) {
+        if (is_exported) {
+            xr_parser_error(parser, "mutable export is not supported; use 'export const' instead");
+            return NULL;
+        }
         if (!attrs_are_static_data_attrs(attributes, attr_count)) {
             xr_parser_error(
                 parser,
@@ -590,10 +606,14 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
             return NULL;
         decl->as.var_decl.attributes = attributes;
         decl->as.var_decl.attr_count = attr_count;
-        return decl;
+        return mark_direct_visibility(decl, false);
     }
 
     if (xr_parser_check(parser, TK_SHARED)) {
+        if (is_exported) {
+            xr_parser_error(parser, "attributes cannot annotate exported shared module storage");
+            return NULL;
+        }
         xr_parser_error(parser,
                         "attributes cannot annotate shared module storage; use const data or a "
                         "freestanding aggregate var static object");
@@ -620,7 +640,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
             return NULL;
         func->as.function_decl.attributes = attributes;
         func->as.function_decl.attr_count = attr_count;
-        return func;
+        return mark_direct_visibility(func, is_exported);
     }
 
     xr_parser_error_at_current(

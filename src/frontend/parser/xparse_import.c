@@ -407,7 +407,7 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
             return NULL;
         }
 
-        /* Decide: re-export (has 'from') or post-hoc export list (no 'from') */
+        /* A braced export is exclusively a cross-module re-export. */
         if (xr_parser_check_name(parser, "from")) {
             /* Re-export: export { a, b as c } from "..." */
             xr_parser_advance(parser);
@@ -425,107 +425,42 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
             return node;
         }
 
-        /* Post-hoc export list: export { a, b, c } */
-        for (int i = 0; i < count; i++) {
-            if (members[i].alias) {
-                xr_parser_error(parser, "'as' alias in 'export { }' requires 'from' "
-                                        "(re-export); for post-hoc export, use the original name");
-                free_reexport_members(members, count);
-                return NULL;
-            }
-        }
-        char **names =
-            (char **) ast_alloc_array(parser->compiler_session, sizeof(char *), (size_t) count);
-        for (int i = 0; i < count; i++)
-            names[i] = members[i].name;
-        return xr_ast_export_list(parser->compiler_session, names, count, line);
+        xr_parser_error(parser,
+                        "post-hoc export was removed; put 'export' on the declaration or add "
+                        "'from' for a re-export");
+        return NULL;
     }
 
-    // Parse exported declaration
-    AstNode *declaration = NULL;
-    char *export_name = NULL;
-
-    if (xr_parser_match(parser, TK_FN)) {
-        // export fn add() {}
-        declaration = xr_parse_function_declaration(parser);
-
-        // Extract function name from declaration
-        if (declaration && declaration->type == AST_FUNCTION_DECL) {
-            export_name = declaration->as.function_decl.name;
-        }
-    } else if (xr_parser_match(parser, TK_CLASS)) {
-        // export class MyClass {}
-        declaration = xr_parse_class_declaration(parser);
-
-        // Extract class name from declaration
-        if (declaration && declaration->type == AST_CLASS_DECL) {
-            export_name = declaration->as.class_decl.name;
-        }
-    } else if (xr_parser_match(parser, TK_PACKED)) {
-        // export packed struct Header {}
-        xr_parser_consume(parser, TK_STRUCT, "expected 'struct' after 'packed'");
-        declaration = xr_parse_struct_declaration(parser);
-
-        if (declaration && declaration->type == AST_STRUCT_DECL) {
-            declaration->as.struct_decl.is_packed = true;
-            export_name = declaration->as.struct_decl.name;
-        }
-    } else if (xr_parser_match(parser, TK_STRUCT)) {
-        // export struct Point {}
-        declaration = xr_parse_struct_declaration(parser);
-
-        if (declaration && declaration->type == AST_STRUCT_DECL) {
-            export_name = declaration->as.struct_decl.name;
-        }
-    } else if (xr_parser_match(parser, TK_UNION)) {
-        // export union U {}
-        declaration = xr_parse_union_declaration(parser);
-
-        if (declaration && declaration->type == AST_UNION_DECL) {
-            export_name = declaration->as.union_decl.name;
-        }
-    } else if (xr_parser_check(parser, TK_VAR)) {
+    if (xr_parser_check(parser, TK_VAR)) {
         xr_parser_error(parser, "mutable export is not supported; use 'export const' instead");
         return NULL;
-    } else if (xr_parser_match(parser, TK_CONST)) {
-        // export const PI = 3.14
-        declaration = xr_parse_single_var_declaration(parser, 1);
-
-        // Extract variable name from constant declaration
-        if (declaration && declaration->type == AST_CONST_DECL) {
-            export_name = declaration->as.var_decl.name;
-        }
-    } else if (xr_parser_match(parser, TK_SHARED)) {
-        // export shared counter = Atomic<int>(0)
-        declaration = xr_parse_shared_declaration(parser);
-
-        if (declaration && declaration->type == AST_SHARED_DECL) {
-            export_name = declaration->as.var_decl.name;
-        }
-    } else if (xr_parser_check(parser, TK_OWNED)) {
+    }
+    if (xr_parser_check(parser, TK_OWNED)) {
         xr_parser_error(parser, "module owned declaration is not supported");
         return NULL;
-    } else if (xr_parser_match(parser, TK_TYPE_ALIAS)) {
-        // export type Point = { x: float, y: float }
-        declaration = xr_parse_type_alias_declaration(parser);
-
-        if (declaration && declaration->type == AST_TYPE_ALIAS) {
-            export_name = declaration->as.type_alias.name;
-        }
-    } else if (xr_parser_check(parser, TK_NAME)) {
-        xr_parser_error(parser, "bare 'export name' is not supported; "
-                                "use 'export { name1, name2 }' with braces");
-        return NULL;
-    } else {
-        xr_parser_error_expected_name(
-            parser, "expected fn, class, var, const, shared or variable name after 'export'");
-        return NULL;
+    }
+    switch (parser->current.type) {
+        case TK_FN:
+        case TK_CLASS:
+        case TK_FINAL:
+        case TK_PACKED:
+        case TK_STRUCT:
+        case TK_UNION:
+        case TK_INTERFACE:
+        case TK_ENUM:
+        case TK_CONST:
+        case TK_SHARED:
+        case TK_TYPE_ALIAS:
+            break;
+        default:
+            xr_parser_error_at_current(
+                parser, "expected a function, type, const, or shared declaration after 'export'");
+            return NULL;
     }
 
-    if (!declaration) {
-        xr_parser_error(parser, "failed to parse export declaration");
+    AstNode *declaration = xr_parse_declaration(parser);
+    if (!declaration)
         return NULL;
-    }
-
-    return xr_ast_export_stmt(parser->compiler_session, declaration, export_name, line);
+    declaration->is_exported = true;
+    return declaration;
 }

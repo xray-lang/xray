@@ -1129,9 +1129,7 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
         }
 
         case AST_EXPORT_STMT:
-            if (node->as.export_stmt.declaration) {
-                build_nested_symbols(node->as.export_stmt.declaration, symbols);
-            }
+            /* Re-exports do not introduce a local declaration symbol. */
             break;
 
         default:

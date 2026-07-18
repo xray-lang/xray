@@ -8,7 +8,7 @@ const HEX = "0123456789abcdef"
 
 // ---- hex ----
 
-enum HexError {
+export enum HexError {
     OddLength(length: int),
     InvalidDigit(byteOffset: int, value: byte)
 }
@@ -21,7 +21,7 @@ fn _hexVal(c: int) -> int {
     return -1
 }
 
-fn hexEncode(data: Slice<byte>) -> string {
+export fn hexEncode(data: Slice<byte>) -> string {
     var src = data
     var out = StringBuilder()
     for (var i = 0; i < len(src); i++) {
@@ -32,7 +32,7 @@ fn hexEncode(data: Slice<byte>) -> string {
     return out.toString()
 }
 
-fn hexDecode(hex: string) -> Array<byte> {
+export fn hexDecode(hex: string) -> Array<byte> {
     var src: Slice<byte> = hex.bytes()
     var n = len(src)
     if (n % 2 != 0) { throw HexError.OddLength(n) }
@@ -51,7 +51,7 @@ fn hexDecode(hex: string) -> Array<byte> {
     return out
 }
 
-fn hexValid(hex: string) -> bool {
+export fn hexValid(hex: string) -> bool {
     var src: Slice<byte> = hex.bytes()
     if (len(src) % 2 != 0) { return false }
     for (var i = 0; i < len(src); i++) {
@@ -67,7 +67,7 @@ fn _utf8Cont(b: int) -> bool {
 }
 
 // Validate that arbitrary bytes form strict, shortest-form UTF-8.
-fn utf8Valid(data: Slice<byte>) -> bool {
+export fn utf8Valid(data: Slice<byte>) -> bool {
     var src = data
     var n = len(src)
     var i = 0
@@ -121,14 +121,14 @@ fn utf8Valid(data: Slice<byte>) -> bool {
 
 // ---- UTF-16 ----
 
-enum Utf16Error {
+export enum Utf16Error {
     OddByteLength(length: int),
     UnexpectedLowSurrogate(byteOffset: int, value: int),
     MissingLowSurrogate(byteOffset: int, value: int),
     InvalidLowSurrogate(byteOffset: int, value: int)
 }
 
-class Utf16DecodeOptions {
+export class Utf16DecodeOptions {
     order: Endian
     consumeBom: bool
 
@@ -138,7 +138,7 @@ class Utf16DecodeOptions {
     }
 }
 
-class Utf16EncodeOptions {
+export class Utf16EncodeOptions {
     order: Endian
 
     constructor() {
@@ -179,7 +179,7 @@ fn getU16(src: Slice<byte>, i: int, order: Endian) -> int {
     return (hi << 8) | lo
 }
 
-fn utf16Encode(data: string, options: Utf16EncodeOptions? = null) -> Array<byte> {
+export fn utf16Encode(data: string, options: Utf16EncodeOptions? = null) -> Array<byte> {
     var opts = _utf16EncodeOptions(options)
     var order = opts.order
     var cpCount = len(data)
@@ -238,7 +238,7 @@ fn putUtf8(out: Array<byte>, oi: int, cp: int) -> int {
 
 // Decode UTF-16 bytes to a string. Auto-detects a leading BOM (FE FF = BE,
 // FF FE = LE); without a BOM the options byte order selects byte order.
-fn utf16Decode(data: Slice<byte>, options: Utf16DecodeOptions? = null) -> string {
+export fn utf16Decode(data: Slice<byte>, options: Utf16DecodeOptions? = null) -> string {
     var n = len(data)
     if (n % 2 != 0) { throw Utf16Error.OddByteLength(n) }
 
@@ -287,11 +287,4 @@ fn utf16Decode(data: Slice<byte>, options: Utf16DecodeOptions? = null) -> string
     var oi = 0
     for (var k = 0; k < len(cps); k++) { oi = putUtf8(out, oi, cps[k]) }
     return string.fromUtf8(out[:])!
-}
-
-export {
-    HexError, Utf16Error, Utf16EncodeOptions, Utf16DecodeOptions,
-    hexEncode, hexDecode, hexValid,
-    utf8Valid,
-    utf16Encode, utf16Decode
 }

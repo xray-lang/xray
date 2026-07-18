@@ -15,10 +15,10 @@
 import os
 
 // Platform surface. POSIX values; see the module note above.
-const sep = "/"
-const delimiter = ":"
+export const sep = "/"
+export const delimiter = ":"
 
-class Path {
+export class Path {
     raw: string
 
     constructor(raw: string) {
@@ -33,7 +33,7 @@ class Path {
 // PathInfo — the structured result of `parse`: a typed class so
 // `.root`/`.dir`/`.base`/`.name`/`.ext` are checked fields rather than dynamic
 // map lookups.
-class PathInfo {
+export class PathInfo {
     root: string
     dir: Path
     base: string
@@ -274,7 +274,7 @@ fn _formatRaw(info: PathInfo) -> string {
     return out + base
 }
 
-fn from(raw: string) -> Path {
+export fn from(raw: string) -> Path {
     return Path(raw)
 }
 
@@ -290,48 +290,46 @@ fn _pathRawArray(parts: Array<Path>) -> Array<string> {
     return out
 }
 
-fn isAbsolute(p: Path) -> bool {
+export fn isAbsolute(p: Path) -> bool {
     return _isAbsoluteRaw(_pathRaw(p))
 }
 
-fn joinAll(parts: Array<Path>) -> Path {
+export fn joinAll(parts: Array<Path>) -> Path {
     return Path(_joinAllRaw(_pathRawArray(parts)))
 }
 
-fn join(...parts: Path) -> Path {
+export fn join(...parts: Path) -> Path {
     return joinAll(parts)
 }
 
-fn dirname(p: Path) -> Path {
+export fn dirname(p: Path) -> Path {
     return Path(_dirnameRaw(_pathRaw(p)))
 }
 
-fn basename(p: Path) -> string {
+export fn basename(p: Path) -> string {
     return _basenameRaw(_pathRaw(p))
 }
 
-fn extname(p: Path) -> string {
+export fn extname(p: Path) -> string {
     return _extnameRaw(_pathRaw(p))
 }
 
-fn normalize(p: Path) -> Path {
+export fn normalize(p: Path) -> Path {
     return Path(_normalizeRaw(_pathRaw(p)))
 }
 
-fn relative(fromPath: Path, toPath: Path) -> Path {
+export fn relative(fromPath: Path, toPath: Path) -> Path {
     return Path(_relativeRaw(_pathRaw(fromPath), _pathRaw(toPath)))
 }
 
-fn resolve(...parts: Path) -> Path {
+export fn resolve(...parts: Path) -> Path {
     return Path(_resolveRawArray(_pathRawArray(parts)))
 }
 
-fn parse(p: Path) -> PathInfo {
+export fn parse(p: Path) -> PathInfo {
     return _parseRaw(_pathRaw(p))
 }
 
-fn format(info: PathInfo) -> Path {
+export fn format(info: PathInfo) -> Path {
     return Path(_formatRaw(info))
 }
-
-export { sep, delimiter, Path, PathInfo, from, isAbsolute, joinAll, join, dirname, basename, extname, normalize, relative, resolve, parse, format }

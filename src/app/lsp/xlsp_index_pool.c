@@ -83,6 +83,7 @@ static void add_symbol_to_result(XrLspIndexResult *result, XrLspIndexSymbol *sym
 static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_export) {
     if (!node)
         return;
+    in_export = in_export || node->is_exported;
 
     switch (node->type) {
         case AST_PROGRAM: {
@@ -94,11 +95,7 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
         }
 
         case AST_EXPORT_STMT: {
-            // Mark nested declarations as exported
-            AstNode *decl = node->as.export_stmt.declaration;
-            if (decl) {
-                extract_symbols(result, decl, true);
-            }
+            /* Re-exports have no local declaration symbol. */
             break;
         }
 

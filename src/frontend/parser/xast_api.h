@@ -298,13 +298,6 @@ XR_FUNC AstNode *xr_ast_import_stmt_ex(XrCompilerSession *session, const char *m
                                        const char *alias, bool is_quoted, ImportMember *members,
                                        int member_count, int line);
 
-// Create export statement node
-XR_FUNC AstNode *xr_ast_export_stmt(XrCompilerSession *session, AstNode *declaration,
-                                    const char *export_name, int line);
-
-// Create export list statement node
-XR_FUNC AstNode *xr_ast_export_list(XrCompilerSession *session, char **names, int count, int line);
-
 // Create re-export statement node
 XR_FUNC AstNode *xr_ast_export_reexport(XrCompilerSession *session, const char *from_path,
                                         ReexportMember *members, int count, bool is_all, int line);

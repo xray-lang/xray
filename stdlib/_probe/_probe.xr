@@ -10,20 +10,20 @@
 //   * static methods and generic class methods with closure-taking bodies
 // Keep it tiny: it ships in every binary as the permanent compiler gate.
 
-var probeSeed = 148
+export const probeSeed = 148
 
 // --- module-level functions (gap B: slot_funcs direct call) ---
 
-fn probeAdd(a: int, b: int) -> int {
+export fn probeAdd(a: int, b: int) -> int {
     return a + b
 }
 
-fn probeConcat(a: string, b: string) -> string {
+export fn probeConcat(a: string, b: string) -> string {
     return a + "|" + b
 }
 
 // --- variadic function (gap A: rest-parameter ABI) ---
-fn probeSum(...nums: int) -> int {
+export fn probeSum(...nums: int) -> int {
     var total = 0
     for (var i = 0; i < len(nums); i++) {
         total = total + nums[i]
@@ -33,7 +33,7 @@ fn probeSum(...nums: int) -> int {
 
 // --- closure + defer in exported module functions (T3.4 permanent guard) ---
 
-fn probeDeferValue(base: int) -> int {
+export fn probeDeferValue(base: int) -> int {
     var total = base
     {
         defer { total = total + 7 }
@@ -42,19 +42,19 @@ fn probeDeferValue(base: int) -> int {
     return total
 }
 
-fn probeMakeAdder(base: int) -> (int) -> int {
+export fn probeMakeAdder(base: int) -> (int) -> int {
     return fn(v: int) -> int {
         return base + v
     }
 }
 
-fn probeApply(value: int, body: (int) -> int) -> int {
+export fn probeApply(value: int, body: (int) -> int) -> int {
     return body(value)
 }
 
 // --- class + functions using it (gap C: intra-module class/function mix) ---
 
-class ProbeBox {
+export class ProbeBox {
     label: string
     count: int
 
@@ -72,17 +72,17 @@ class ProbeBox {
     }
 }
 
-fn probeMakeBox(label: string, count: int) -> ProbeBox {
+export fn probeMakeBox(label: string, count: int) -> ProbeBox {
     return ProbeBox(label, count)
 }
 
-fn probeReadBox(box: ProbeBox) -> string {
+export fn probeReadBox(box: ProbeBox) -> string {
     return box.describe()
 }
 
 // --- generic class with closure-taking method (sync-shape regression) ---
 
-class ProbeCell<T> {
+export class ProbeCell<T> {
     value: T
 
     constructor(v: T) {
@@ -94,7 +94,7 @@ class ProbeCell<T> {
     }
 }
 
-class ProbeBag {
+export class ProbeBag {
     boxes: Array<ProbeBox>
 
     constructor(boxes: Array<ProbeBox>) {
@@ -110,22 +110,6 @@ class ProbeBag {
     }
 }
 
-fn probeMakeBag() -> ProbeBag {
+export fn probeMakeBag() -> ProbeBag {
     return ProbeBag([ProbeBox("a", 1), ProbeBox.tagged("b", 2)])
-}
-
-export {
-    probeSeed,
-    probeAdd,
-    probeConcat,
-    probeSum,
-    probeDeferValue,
-    probeMakeAdder,
-    probeApply,
-    ProbeBox,
-    probeMakeBox,
-    probeReadBox,
-    ProbeCell,
-    ProbeBag,
-    probeMakeBag
 }

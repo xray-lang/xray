@@ -204,7 +204,7 @@ fn _cookieNow(nowSeconds: int) -> int {
     return time.now() / 1000
 }
 
-class Cookie {
+export class Cookie {
     name: string
     value: string
     domain: string
@@ -258,7 +258,7 @@ class Cookie {
     }
 }
 
-class CookieJar {
+export class CookieJar {
     cookies: Array<Cookie>
     maxCookies: int
 
@@ -340,7 +340,7 @@ class CookieJar {
     }
 }
 
-fn parseSetCookie(header: string, requestDomain: string = "", requestPath: string = "/",
+export fn parseSetCookie(header: string, requestDomain: string = "", requestPath: string = "/",
                   nowSeconds: int = 0) -> Cookie? {
     var now = _cookieNow(nowSeconds)
     if (len(header) == 0 || len(header.bytes()) > COOKIE_MAX_INPUT_LEN) { return null }
@@ -404,7 +404,7 @@ fn parseSetCookie(header: string, requestDomain: string = "", requestPath: strin
     return Cookie(name, value, domain, path, expires, secure, httpOnly, sameSite, hostOnly)
 }
 
-fn cookieJar(maxCookies: int = 300) -> CookieJar {
+export fn cookieJar(maxCookies: int = 300) -> CookieJar {
     return CookieJar(maxCookies)
 }
 
@@ -598,7 +598,7 @@ fn _matchRoutePath(pattern: string, path: string) -> Json {
     return params
 }
 
-class RouteMatch {
+export class RouteMatch {
     value: Json
     params: Json
 
@@ -620,7 +620,7 @@ class _RouteEntry {
     }
 }
 
-class Router {
+export class Router {
     private routes: Array<_RouteEntry>
 
     constructor() {
@@ -661,7 +661,7 @@ class Router {
     }
 }
 
-fn router() -> Router {
+export fn router() -> Router {
     return Router()
 }
 
@@ -758,11 +758,11 @@ var _serverRouter = _ServerRouter()
 var _serverRunning = false
 var _serverListener: NetListener? = null
 
-fn route<T>(method: string, path: string, value: T) {
+export fn route<T>(method: string, path: string, value: T) {
     _serverRouter.add(method, path, value)
 }
 
-fn routeHandler(method: string, path: string, handler: (Json) -> Json) {
+export fn routeHandler(method: string, path: string, handler: (Json) -> Json) {
     _serverRouter.addHandler(method, path, handler)
 }
 
@@ -966,7 +966,7 @@ fn _serveHttpConnection(conn: NetConn) {
     net.close(conn)
 }
 
-fn listen(port: int) -> bool {
+export fn listen(port: int) -> bool {
     if (_serverRunning) { return false }
     var listener = net.listen(port, HTTP_SERVER_BACKLOG)
     if (listener == null) { return false }
@@ -992,7 +992,7 @@ fn listen(port: int) -> bool {
     return true
 }
 
-fn stopServer() {
+export fn stopServer() {
     _serverRunning = false
     if (_serverListener != null) {
         net.close(_serverListener!)
@@ -1001,7 +1001,7 @@ fn stopServer() {
 }
 
 // MultipartBody - Built multipart/form-data payload and matching Content-Type.
-class MultipartBody {
+export class MultipartBody {
     body: string
     contentType: string
 
@@ -1012,7 +1012,7 @@ class MultipartBody {
 }
 
 // FormData - Explicit multipart/form-data builder.
-class FormData {
+export class FormData {
     boundary: string
     fields: Array<_FormField>
     totalSize: int
@@ -1093,7 +1093,7 @@ class FormData {
 }
 
 // formData - Create an explicit multipart/form-data builder.
-fn formData(
+export fn formData(
     maxTotalSize: int = 67108864,
     maxFileSize: int = 33554432
 ) -> FormData {
@@ -1137,7 +1137,7 @@ fn _headerValueValid(value: string) -> bool {
     return true
 }
 
-enum HttpError {
+export enum HttpError {
     InvalidHeaderName(string),
     InvalidHeaderValue(string)
 }
@@ -1145,7 +1145,7 @@ enum HttpError {
 // Headers is an ordered, duplicate-preserving HTTP field collection. Lookup
 // is ASCII case-insensitive while original name casing and insertion order are
 // retained for serialization and diagnostics.
-class Headers {
+export class Headers {
     private names: Array<string>
     private values: Array<string>
 
@@ -1464,7 +1464,7 @@ class _HttpRequestUrl {
     }
 }
 
-class HttpResponse {
+export class HttpResponse {
     status: int
     statusText: string
     headers: Headers
@@ -1712,7 +1712,7 @@ fn _singleRequest(url: _HttpRequestUrl, method: string, headers: Headers, body: 
     return _httpResponse(msg!.head.status, msg!.head.reason, msg!.head.headers as Headers, msg!.body, null)
 }
 
-fn request(options: Json) -> HttpResponse {
+export fn request(options: Json) -> HttpResponse {
     var rawUrl = Json.get(options, "url", null)
     if (rawUrl == null) { return _httpError("URL parse error") }
     var current = _parseHttpRequestUrl(string(rawUrl))
@@ -1755,7 +1755,7 @@ fn request(options: Json) -> HttpResponse {
 }
 
 // ResponseHead - Parsed HTTP/1.x response status line and headers.
-class ResponseHead {
+export class ResponseHead {
     version: string
     status: int
     reason: string
@@ -1795,7 +1795,7 @@ class ResponseHead {
 }
 
 // RedirectDecision - Pure redirect control-plane result for the HTTP client.
-class RedirectDecision {
+export class RedirectDecision {
     url: string
     method: string
     stripSensitiveHeaders: bool
@@ -1810,7 +1810,7 @@ class RedirectDecision {
 }
 
 // ChunkedBody - Decoded Transfer-Encoding: chunked body and parsed trailers.
-class ChunkedBody {
+export class ChunkedBody {
     body: string
     trailers: Headers
     consumedBytes: int
@@ -1835,7 +1835,7 @@ class ChunkedBody {
 }
 
 // RequestHead - Parsed HTTP/1.x request line and headers.
-class RequestHead {
+export class RequestHead {
     method: string
     target: string
     version: string
@@ -1875,7 +1875,7 @@ class RequestHead {
 }
 
 // RequestMessage - Parsed HTTP/1.x request head and decoded body.
-class RequestMessage {
+export class RequestMessage {
     head: RequestHead
     body: string
     trailers: Headers
@@ -1907,7 +1907,7 @@ class RequestMessage {
 }
 
 // ResponseMessage - Parsed HTTP/1.x response head and decoded body.
-class ResponseMessage {
+export class ResponseMessage {
     head: ResponseHead
     body: string
     trailers: Headers
@@ -1939,7 +1939,7 @@ class ResponseMessage {
 }
 
 // parseChunkedBody - Decode a complete Transfer-Encoding: chunked body.
-fn parseChunkedBody(
+export fn parseChunkedBody(
     raw: string,
     maxBodyBytes: int = 67108864,
     maxTrailerHeaders: int = 50
@@ -1992,14 +1992,14 @@ fn parseChunkedBody(
 }
 
 // decodeChunkedBody - Decode a chunked body and discard trailers.
-fn decodeChunkedBody(raw: string, maxBodyBytes: int = 67108864) -> string? {
+export fn decodeChunkedBody(raw: string, maxBodyBytes: int = 67108864) -> string? {
     var parsed = parseChunkedBody(raw, maxBodyBytes)
     if (parsed == null) { return null }
     return parsed!.body
 }
 
 // parseRequestHead - Parse an HTTP/1.x request head without reading sockets.
-fn parseRequestHead(raw: string, maxHeaders: int = 100) -> RequestHead? {
+export fn parseRequestHead(raw: string, maxHeaders: int = 100) -> RequestHead? {
     var end = _responseHeadEnd(raw)
     if (end < 0) { return null }
     var lines = raw.slice(0, end).split("\n")
@@ -2045,7 +2045,7 @@ fn parseRequestHead(raw: string, maxHeaders: int = 100) -> RequestHead? {
 }
 
 // parseRequestText - Parse a complete HTTP/1.x request text.
-fn parseRequestText(
+export fn parseRequestText(
     raw: string,
     maxBodyBytes: int = 67108864,
     maxHeaders: int = 100,
@@ -2087,7 +2087,7 @@ fn parseRequestText(
 }
 
 // parseResponseText - Parse a complete HTTP/1.x response text.
-fn parseResponseText(
+export fn parseResponseText(
     raw: string,
     maxBodyBytes: int = 67108864,
     maxHeaders: int = 100,
@@ -2136,7 +2136,7 @@ fn parseResponseText(
 }
 
 // parseResponseHead - Parse an HTTP/1.x response head without reading sockets.
-fn parseResponseHead(raw: string, maxHeaders: int = 100) -> ResponseHead? {
+export fn parseResponseHead(raw: string, maxHeaders: int = 100) -> ResponseHead? {
     var end = _responseHeadEnd(raw)
     if (end < 0) { return null }
     var lines = raw.slice(0, end).split("\n")
@@ -2190,13 +2190,13 @@ fn parseResponseHead(raw: string, maxHeaders: int = 100) -> ResponseHead? {
 }
 
 // isRedirectStatus - True for HTTP redirect codes that carry Location.
-fn isRedirectStatus(status: int) -> bool {
+export fn isRedirectStatus(status: int) -> bool {
     return status == 301 || status == 302 || status == 303 ||
            status == 307 || status == 308
 }
 
 // redirectTarget - Resolve a Location value against the current URL.
-fn redirectTarget(currentUrl: string, location: string) -> string? {
+export fn redirectTarget(currentUrl: string, location: string) -> string? {
     var loc = text.trim(location)
     if (len(loc) == 0 || !_headerValueValid(loc)) { return null }
     if (!_httpUrlOk(currentUrl)) { return null }
@@ -2206,7 +2206,7 @@ fn redirectTarget(currentUrl: string, location: string) -> string? {
 }
 
 // redirectDecision - Compute the next URL/method and credential stripping rule.
-fn redirectDecision(
+export fn redirectDecision(
     status: int,
     currentUrl: string,
     location: string,
@@ -2230,7 +2230,7 @@ fn redirectDecision(
 }
 
 // requestText - Format a complete HTTP/1.1 request string without performing I/O.
-fn requestText(
+export fn requestText(
     method: string,
     path: string,
     headers: Headers? = null,
@@ -2359,18 +2359,18 @@ fn _statusReason(status: int) -> string {
 // urlEncode - Percent-encode using the HTTP module's historical URL helper
 // semantics: unreserved RFC 3986 bytes pass through, every other UTF-8 byte
 // becomes %XX, and spaces become %20 rather than +.
-fn urlEncode(s: string) -> string {
+export fn urlEncode(s: string) -> string {
     return encode(s)
 }
 
 // urlDecode - Percent-decode and treat + as a space, matching the former HTTP
 // helper semantics for form-style query fragments.
-fn urlDecode(s: string) -> string {
+export fn urlDecode(s: string) -> string {
     return decodeForm(s)
 }
 
 // responseText - Format a complete HTTP/1.1 response with explicit headers.
-fn responseText(
+export fn responseText(
     status: int,
     body: string = "",
     contentType: string = "text/plain; charset=utf-8",
@@ -2409,44 +2409,4 @@ fn responseText(
     out.append("\r\n")
     out.append(body)
     return out.toString()
-}
-
-export {
-    HttpError,
-    Headers,
-    Cookie,
-    CookieJar,
-    parseSetCookie,
-    cookieJar,
-    Router,
-    RouteMatch,
-    HttpResponse,
-    ResponseHead,
-    RedirectDecision,
-    ChunkedBody,
-    RequestHead,
-    RequestMessage,
-    ResponseMessage,
-    router,
-    route,
-    routeHandler,
-    listen,
-    stopServer,
-    urlEncode,
-    urlDecode,
-    responseText,
-    request,
-    requestText,
-    parseResponseHead,
-    parseRequestHead,
-    parseRequestText,
-    parseResponseText,
-    parseChunkedBody,
-    decodeChunkedBody,
-    isRedirectStatus,
-    redirectTarget,
-    redirectDecision,
-    formData,
-    MultipartBody,
-    FormData
 }

@@ -5,19 +5,19 @@
 // and topic-pattern matching live here so the cluster control-plane rules have a
 // visible Xray semantic source.
 
-const HANDSHAKE_VERSION = 5
-const TOPIC_DEFAULT_HOP_LIMIT = 3
-const NODE_NAME_MAX = 63
-const CHANNEL_NAME_MAX = 127
-const TOPIC_PATTERN_MAX = 127
+export const HANDSHAKE_VERSION = 5
+export const TOPIC_DEFAULT_HOP_LIMIT = 3
+export const NODE_NAME_MAX = 63
+export const CHANNEL_NAME_MAX = 127
+export const TOPIC_PATTERN_MAX = 127
 
-enum AddressError {
+export enum AddressError {
     MissingPort(string),
     InvalidHost(string),
     InvalidPort(string)
 }
 
-class NodeAddress {
+export class NodeAddress {
     host: string
     port: int
 
@@ -39,11 +39,11 @@ fn _validName(s: string, maxLen: int) -> bool {
     return len(s) > 0 && len(s) <= maxLen && _asciiPrintable(s)
 }
 
-fn validNodeName(name: string) -> bool {
+export fn validNodeName(name: string) -> bool {
     return _validName(name, NODE_NAME_MAX)
 }
 
-fn validChannelName(name: string) -> bool {
+export fn validChannelName(name: string) -> bool {
     return _validName(name, CHANNEL_NAME_MAX)
 }
 
@@ -66,7 +66,7 @@ fn _stripIpv6Brackets(host: string) -> string {
     return host
 }
 
-fn parseAddress(addr: string) -> NodeAddress {
+export fn parseAddress(addr: string) -> NodeAddress {
     var colon = addr.lastIndexOf(":")
     if (colon <= 0 || colon + 1 >= len(addr)) { throw AddressError.MissingPort(addr) }
     var rawHost = addr.slice(0, colon)
@@ -89,12 +89,12 @@ fn _hasEmptyTopicSegment(s: string) -> bool {
     return false
 }
 
-fn validTopicName(topic: string) -> bool {
+export fn validTopicName(topic: string) -> bool {
     if (len(topic) > TOPIC_PATTERN_MAX || _hasEmptyTopicSegment(topic)) { return false }
     return topic.indexOf("*") < 0 && topic.indexOf(">") < 0
 }
 
-fn validTopicPattern(pattern: string) -> bool {
+export fn validTopicPattern(pattern: string) -> bool {
     if (len(pattern) > TOPIC_PATTERN_MAX || _hasEmptyTopicSegment(pattern)) { return false }
     var parts = pattern.split(".")
     for (var i = 0; i < len(parts); i++) {
@@ -106,7 +106,7 @@ fn validTopicPattern(pattern: string) -> bool {
     return true
 }
 
-fn topicMatches(pattern: string, topic: string) -> bool {
+export fn topicMatches(pattern: string, topic: string) -> bool {
     if (!validTopicPattern(pattern) || !validTopicName(topic)) { return false }
 
     var p = pattern.split(".")
@@ -124,20 +124,4 @@ fn topicMatches(pattern: string, topic: string) -> bool {
         ti = ti + 1
     }
     return ti == len(t)
-}
-
-export {
-    HANDSHAKE_VERSION,
-    TOPIC_DEFAULT_HOP_LIMIT,
-    NODE_NAME_MAX,
-    CHANNEL_NAME_MAX,
-    TOPIC_PATTERN_MAX,
-    AddressError,
-    NodeAddress,
-    validNodeName,
-    validChannelName,
-    parseAddress,
-    validTopicName,
-    validTopicPattern,
-    topicMatches
 }

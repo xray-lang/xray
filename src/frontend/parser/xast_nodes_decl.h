@@ -262,17 +262,8 @@ typedef struct ReexportMember {
     char *alias;
 } ReexportMember;
 
-// Export statement node — three forms:
-//   1. export var/const/fn/class ...
-//   2. export a, b, c
-//   3. export { a, b as c } from "./file"
+// Re-export declaration. Direct declaration visibility lives on AstNode.
 typedef struct ExportStmtNode {
-    AstNode *declaration;  // Declaration export (export var x = 1)
-    char *export_name;     // Single export name (declaration style)
-    char **export_names;   // Export name list (list style: export a, b)
-    int export_count;
-
-    // Re-export support
     char *from_path;  // Source module path (e.g. "./user")
     ReexportMember *reexport_members;
     int reexport_count;

@@ -170,7 +170,7 @@ typedef enum {
 
     // Module system
     AST_IMPORT_STMT,  // import
-    AST_EXPORT_STMT,  // export
+    AST_EXPORT_STMT,  // export { ... } from / export * from
     AST_GLOBAL_ASM,   // asm { "..." }
 
     // Destructuring

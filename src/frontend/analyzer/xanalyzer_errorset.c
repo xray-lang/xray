@@ -4282,9 +4282,6 @@ static void collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **o
         for (int i = 0; i < node->as.class_decl.method_count; i++)
             collect_functions(analyzer, node->as.class_decl.methods[i], out, count, cap);
     }
-
-    if (node->type == AST_EXPORT_STMT)
-        collect_functions(analyzer, node->as.export_stmt.declaration, out, count, cap);
 }
 
 /* ========== Public Entry Point ========== */

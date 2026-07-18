@@ -83,8 +83,14 @@ def check_semantic_owners(root: Path) -> list[str]:
         if module["policy"] == "xray_semantic":
             if source.suffix != ".xr":
                 errors.append(f"module {name}: xray_semantic owner must be an .xr source")
-            elif not re.search(r"(?m)^export\s*\{", source.read_text(encoding="utf-8")):
-                errors.append(f"module {name}: xray_semantic source has no export block")
+            elif not re.search(
+                r"(?m)^export\s+(?:(?:final|packed)\s+)?"
+                r"(?:fn|class|struct|union|interface|enum|type|const|shared)\b",
+                source.read_text(encoding="utf-8"),
+            ):
+                errors.append(
+                    f"module {name}: xray_semantic source has no directly exported declaration"
+                )
         declared = set(module.get("public_native", ()))
         manual = set(module.get("manual_public_native", ()))
         actual = def_symbols.get(name, set()) | manual

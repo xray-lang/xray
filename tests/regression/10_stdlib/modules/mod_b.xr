@@ -18,8 +18,6 @@ fn _helper() -> string {
 }
 
 /* 导出函数 */
-fn publicFn() -> string {
+export fn publicFn() -> string {
     return _helper() + "-" + _VERSION
 }
-
-export { publicFn }

@@ -1,6 +1,6 @@
 // AOT module test library: exported generic enum aggregate result.
 
-enum FastResult<T> {
+export enum FastResult<T> {
     Ok(T),
     Err(int)
 }
@@ -11,5 +11,3 @@ export fn pick(ok: bool) -> FastResult<int> {
     }
     return FastResult.Err(9)
 }
-
-export { FastResult }

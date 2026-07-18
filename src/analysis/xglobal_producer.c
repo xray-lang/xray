@@ -9984,8 +9984,6 @@ static bool add_type_alias_record_shape(XgProducer *p, XgModuleId module_id, con
 static bool module_stmt_has_runtime_body(const AstNode *stmt) {
     if (!stmt)
         return false;
-    if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration)
-        return module_stmt_has_runtime_body(stmt->as.export_stmt.declaration);
     switch (stmt->type) {
         case AST_FUNCTION_DECL:
         case AST_CLASS_DECL:
@@ -10007,8 +10005,6 @@ static bool add_module_storage_decl(XgProducer *p, XgModuleId module_id, const A
     const char *name = NULL;
     if (!stmt)
         return true;
-    if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration)
-        return add_module_storage_decl(p, module_id, stmt->as.export_stmt.declaration);
     if (stmt->type == AST_IMPORT_STMT) {
         if (stmt->as.import_stmt.member_count == 0) {
             name = stmt->as.import_stmt.alias ? stmt->as.import_stmt.alias
@@ -10074,8 +10070,6 @@ static bool add_module_decl_stmt(XgProducer *p, XgModuleId module_id, const AstN
         *handled = true;
     if (!stmt)
         return true;
-    if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration)
-        return add_module_decl_stmt(p, module_id, stmt->as.export_stmt.declaration, handled);
     switch (stmt->type) {
         case AST_FUNCTION_DECL:
             return add_function_decl(p, module_id, stmt);
