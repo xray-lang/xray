@@ -89,3 +89,7 @@ fn test_select() {
 //
 // 期望输出 test_select：
 // 100
+
+test_producer_consumer()
+test_defer()
+test_select()

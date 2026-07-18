@@ -8222,6 +8222,30 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
     xi_func_free(ir);
 }
 
+TEST(cgen_json_field_named_like_builtin_property_uses_json_lookup) {
+    const char *src = "fn read_count(data: Json) -> int {\n"
+                      "    return int(data.count)\n"
+                      "}\n"
+                      "var data: Json = {count: 10}\n"
+                      "print(read_count(data))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "Json field access should generate");
+    assert((contains(code, "xrt_json_get_shape_guard_owned(") ||
+            contains(code, "xrt_json_get_name_owned(")) &&
+           "Json fields must use Json lookup even when their name is a builtin symbol");
+    assert(!contains(code, "xrt_getprop(v0, 234)") &&
+           "Json.count must not lower as the builtin count property");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -8403,6 +8427,7 @@ int main(void) {
     run_cgen_coro_result_group_recv_i64_optional_uses_typed_abi();
     run_cgen_work_queue_native_methods_use_aot_helpers();
     run_cgen_coro_task_status_uses_native_enum_status();
+    run_cgen_json_field_named_like_builtin_property_uses_json_lookup();
 
     teardown();
 

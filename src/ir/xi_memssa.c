@@ -86,12 +86,21 @@ static XiMemPhi *make_mem_phi(XiMemSSA *mssa, XiBlock *blk, uint16_t npreds) {
     return phi;
 }
 
-/* Returns true if the op defines new memory state (store or call). */
-static bool is_mem_def(uint16_t op) {
-    if (xi_is_memory_store(op))
+/* Returns true if the value defines a new observable memory state.
+ *
+ * Suspending is a full memory barrier even when the instruction does not
+ * perform a write itself: another task may run before execution resumes and
+ * mutate any reachable state.  Loads on opposite sides of that scheduling
+ * boundary must therefore consume different memory versions. */
+static bool is_mem_def(const XiValue *v) {
+    if (!v)
+        return false;
+    if (xi_is_memory_store(v->op))
+        return true;
+    if ((v->flags & XI_FLAG_MAY_SUSPEND) != 0)
         return true;
     /* Calls may write arbitrary memory. */
-    switch (op) {
+    switch (v->op) {
         case XI_CALL:
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
@@ -256,10 +265,10 @@ XR_FUNC XiMemSSA *xi_memssa_build(XiFunc *f) {
                 continue;
 
             /* Skip non-memory ops. */
-            if (v->mem_group == XI_MEM_NONE && !is_mem_def(v->op))
+            if (v->mem_group == XI_MEM_NONE && !is_mem_def(v))
                 continue;
 
-            if (is_mem_def(v->op)) {
+            if (is_mem_def(v)) {
                 /* Store/call: consumes current version, defines new one. */
                 XiMemVer new_ver = alloc_ver(mssa);
                 make_access(mssa, v, live_ver, new_ver);

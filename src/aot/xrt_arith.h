@@ -342,6 +342,53 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
             return;
         }
         case XR_TAG_PTR: {
+            if (xrt_is_json_object_value(v)) {
+                xrt_json_t *j = (xrt_json_t *) v.ptr;
+                int64_t emitted = 0;
+                int64_t total = 0;
+                xrt_fmt_char(sb, '{');
+                for (int64_t i = 0; i < j->field_count; i++) {
+                    const char *name = j->field_names ? j->field_names[i] : NULL;
+                    if (!name)
+                        continue;
+                    total++;
+                    if (emitted >= XRT_FORMAT_MAX_ELEMENTS)
+                        continue;
+                    if (emitted > 0)
+                        xrt_fmt_cstr(sb, ", ");
+                    xrt_fmt_cstr(sb, name);
+                    xrt_fmt_cstr(sb, ": ");
+                    xrt_format_value(j->fields[i], sb, depth + 1);
+                    emitted++;
+                }
+                xrt_map_t *dynamic = j->dynamic_fields;
+                int64_t n_slots = dynamic ? (int64_t) dynamic->nentries : 0;
+                for (int64_t i = 0; i < n_slots; i++) {
+                    if (!xrt_map_slot_is_full(dynamic, i))
+                        continue;
+                    total++;
+                    if (emitted >= XRT_FORMAT_MAX_ELEMENTS)
+                        continue;
+                    if (emitted > 0)
+                        xrt_fmt_cstr(sb, ", ");
+                    XrValue key = xrt_map_slot_key(dynamic, i);
+                    if (XR_IS_STR(key))
+                        xrt_fmt_puts(sb, xr_str_data(key), (size_t) xr_str_len(key));
+                    else
+                        xrt_format_value(key, sb, 0);
+                    xrt_fmt_cstr(sb, ": ");
+                    xrt_format_value(xrt_map_slot_value(dynamic, i), sb, depth + 1);
+                    emitted++;
+                }
+                if (total > emitted) {
+                    char more[48];
+                    int n = snprintf(more, sizeof(more), ", ...(%lld more)",
+                                     (long long) (total - emitted));
+                    xrt_fmt_puts(sb, more, (size_t) n);
+                }
+                xrt_fmt_char(sb, '}');
+                return;
+            }
             if (v.heap_type != XR_TINSTANCE || !v.ptr)
                 break;
             XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);

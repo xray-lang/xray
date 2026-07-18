@@ -659,6 +659,7 @@ XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
     if (!runtime)
         return NULL;
     runtime->caps = local_cfg.caps;
+    runtime->value_ops = local_cfg.value_ops;
     for (int i = 0; i < XR_USER_GLOBALS_START; i++)
         runtime->builtins[i] = XR_NULL_VAL;
 
@@ -791,9 +792,15 @@ XrCoroutine *xr_coro_create_aot(XrAotRuntime *runtime, const XrAotCoroDesc *desc
 }
 
 XrValue xr_aot_run_main(XrAotRuntime *runtime, const XrAotCoroDesc *desc, void *frame) {
-    XrCoroutine *main_coro = xr_coro_create_aot(runtime, desc, frame, desc ? desc->name : "main");
+    XrCoroutine *main_coro = xr_coro_create_aot(runtime, desc, frame, "main");
     if (!main_coro)
         return XR_NULL_VAL;
+    /* The language-level main coroutine has the stable cross-backend identity
+     * 0.  Runtime-created children start at 1 in both VM and standalone AOT. */
+    main_coro->id = 0;
+    if (runtime->scheduler)
+        atomic_store_explicit(&runtime->scheduler->next_coro_id, 1, memory_order_relaxed);
+    (void) xr_coro_set_source(main_coro, runtime->core ? runtime->core->script_info.file : NULL, 0);
     xr_runtime_main_thread_run(xr_aot_runtime_scheduler(runtime), main_coro);
     XrValue result = main_coro->result;
     xr_coro_destroy(main_coro);

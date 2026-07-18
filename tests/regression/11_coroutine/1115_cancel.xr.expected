@@ -1,1 +1,5 @@
-cancel failed, got: 42
+t1 cancelled: true
+t1 status: TaskStatus.Cancelled
+t2 success: true
+t2 result: 42
+done

@@ -221,6 +221,11 @@ static bool has_aliasing_store_between(const XiFunc *f, const XiValue *leader,
         if (!past_leader)
             continue;
 
+        /* A suspension lets another task mutate arbitrary reachable state,
+         * so it invalidates every load regardless of its TBAA group. */
+        if ((v->flags & XI_FLAG_MAY_SUSPEND) != 0)
+            return true;
+
         /* Check if this instruction is a store that may alias current. */
         if (xi_is_memory_store(v->op) || xi_is_memory_clobber(v->op)) {
             if (xi_tbaa_may_alias(v, current))

@@ -57,3 +57,5 @@ fn test_await_timeout() {
     })
     await task4
 }
+
+test_await_timeout()

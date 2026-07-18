@@ -8572,9 +8572,10 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     bool map_backed_class_field =
         field && xicgen_load_field_receiver_is_map_backed_class(ctx, v->args[0]);
+    bool json_receiver = cg_value_type_is_json(v->args[0]);
     int sym = cg_method_sym(field);
     const XiValue *receiver = xicgen_getprop_receiver_value(ctx, v->args[0]);
-    if (sym >= 0 && !map_backed_class_field) {
+    if (sym >= 0 && !map_backed_class_field && !json_receiver) {
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "xrt_getprop(");
@@ -8582,7 +8583,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         fprintf(out, ", %d)", sym);
         emit_conversion_suffix(out, conv_suffix);
     } else {
-        if (cg_value_type_is_json(v->args[0])) {
+        if (json_receiver) {
             const XaotJsonAccessPlan *json_plan = xicgen_json_shape_guard_plan(
                 ctx, v, XG_JSON_ACCESS_FIELD_GET, XG_JSON_ACCESS_INDEX_GET);
             if (ctx && ctx->error) {
@@ -8597,7 +8598,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         }
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        if (cg_value_type_is_json(v->args[0])) {
+        if (json_receiver) {
             fprintf(out, "xrt_json_get_name_owned(");
             emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
             fprintf(out, ", ");
@@ -10795,8 +10796,7 @@ static void xicgen_ptr_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             fprintf(out, "(double)xr_raw_f32_from_bits(");
         else
             fprintf(out, "xr_raw_f64_from_bits(");
-        xicgen_emit_raw_load_bits(ctx, out, v->args[0], width, v->args[1], constant_endian,
-                                  endian);
+        xicgen_emit_raw_load_bits(ctx, out, v->args[0], width, v->args[1], constant_endian, endian);
         fprintf(out, ")");
     } else {
         fprintf(out, "(int64_t)(%s)(", cg_ffi_pointee_c_type(ctx, code));
@@ -10836,8 +10836,7 @@ static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         fprintf(out, "xr_raw_store_u%u_unaligned(", (unsigned) width * 8u);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
         fprintf(out, ", ");
-        xicgen_emit_raw_store_bits(ctx, out, v->args[1], code, v->args[2], constant_endian,
-                                   endian);
+        xicgen_emit_raw_store_bits(ctx, out, v->args[1], code, v->args[2], constant_endian, endian);
         fprintf(out, ")");
     }
 }

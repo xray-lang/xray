@@ -351,6 +351,47 @@ static void emit_xrt_runtime_core_configure_fn(FILE *out, uint32_t caps) {
     fprintf(out, "}\n\n");
 }
 
+static void emit_xrt_runtime_value_ops(FILE *out) {
+    fprintf(
+        out,
+        "static XrValue xrt_runtime_string_new(const char *data, size_t len) {\n"
+        "    XrValue value = xrt_str_alloc(len);\n"
+        "    if (len > 0 && data) memcpy(xr_str_buf(value), data, len);\n"
+        "    return value;\n"
+        "}\n"
+        "static const char *xrt_runtime_string_data(XrValue value) {\n"
+        "    return XR_IS_STR(value) ? xr_str_data(value) : NULL;\n"
+        "}\n"
+        "static XrValue xrt_runtime_map_new(int64_t capacity) {\n"
+        "    return xrt_map_new(capacity);\n"
+        "}\n"
+        "static void xrt_runtime_map_set(XrValue map, XrValue key, XrValue value) {\n"
+        "    if (XR_IS_MAP(map) && map.ptr) xrt_map_set((xrt_map_t *)map.ptr, key, value);\n"
+        "}\n"
+        "static XrValue xrt_runtime_map_get(XrValue map, XrValue key, bool *found) {\n"
+        "    if (!XR_IS_MAP(map) || !map.ptr) { if (found) *found = false; return XR_NULL_VAL; }\n"
+        "    xrt_map_t *m = (xrt_map_t *)map.ptr;\n"
+        "    if (found) *found = xrt_map_has(m, key) != 0;\n"
+        "    return xrt_map_get(m, key);\n"
+        "}\n"
+        "static XrValue xrt_runtime_array_new(int64_t length) {\n"
+        "    return xrt_array_new(length);\n"
+        "}\n"
+        "#define xrt_runtime_array_append xrt_array_push\n"
+        "static void xrt_runtime_array_push(XrValue array, XrValue value) {\n"
+        "    if (XR_IS_ARRAY(array) && array.ptr) xrt_runtime_array_append(array, value);\n"
+        "}\n"
+        "static const XrAotValueOps xrt_runtime_value_ops = {\n"
+        "    .string_new = xrt_runtime_string_new,\n"
+        "    .string_data = xrt_runtime_string_data,\n"
+        "    .map_new = xrt_runtime_map_new,\n"
+        "    .map_set = xrt_runtime_map_set,\n"
+        "    .map_get = xrt_runtime_map_get,\n"
+        "    .array_new = xrt_runtime_array_new,\n"
+        "    .array_push = xrt_runtime_array_push,\n"
+        "};\n\n");
+}
+
 static void emit_xrt_runtime_builtin_sync(FILE *out, const CgBuiltinInitPlan *plan,
                                           const char *runtime_var) {
     if (!plan)
@@ -365,6 +406,7 @@ static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint
                                   const char *source_path) {
     fprintf(out, "    XrAotRuntimeConfig runtime_cfg;\n");
     fprintf(out, "    xr_aot_runtime_config_init(&runtime_cfg);\n");
+    fprintf(out, "    runtime_cfg.value_ops = &xrt_runtime_value_ops;\n");
     if (cg_runtime_caps_need_destroy_config(runtime_caps))
         fprintf(out, "    runtime_cfg.configure_core = xrt_configure_runtime_core;\n");
     fprintf(out, "    runtime_cfg.caps = ");
@@ -435,8 +477,10 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
         entry_is_coro || entry_has_descriptor || cg_runtime_caps_need_runtime(runtime_caps);
     const char *entry_source_path = cg_entry_source_path(ctx, modules, n, entry_index);
 
-    if (entry_needs_runtime)
+    if (entry_needs_runtime) {
+        emit_xrt_runtime_value_ops(out);
         emit_xrt_runtime_core_configure_fn(out, runtime_caps);
+    }
 
     fprintf(out, "int main(int argc, char **argv) {\n");
     fprintf(out, "    xrt_arc_init();\n");
@@ -593,8 +637,10 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
             runtime_caps |= XR_AOT_CAP_CORO;
         bool entry_needs_runtime =
             entry_is_coro || entry_has_descriptor || cg_runtime_caps_need_runtime(runtime_caps);
-        if (entry_needs_runtime)
+        if (entry_needs_runtime) {
+            emit_xrt_runtime_value_ops(body);
             emit_xrt_runtime_core_configure_fn(body, runtime_caps);
+        }
 
         fprintf(body, "int main(int argc, char **argv) {\n");
         fprintf(body, "    xrt_arc_init();\n");

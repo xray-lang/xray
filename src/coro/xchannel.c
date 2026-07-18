@@ -1068,6 +1068,31 @@ static void channel_clear_drained_direction_masks(XrChannel *ch, bool send_drain
     channel_refresh_any_waiter_mask(ch);
 }
 
+/* Cancellation may race a running coroutine immediately before it publishes
+ * a channel wait.  Once wait_channel is visible, cancellation serializes on
+ * ch->lock; if cancellation won just before that publication, the terminal
+ * marks are already visible here.  Such a coroutine must never enter the
+ * channel queue or be transitioned back to BLOCKED. */
+static bool channel_wait_publish_is_cancelled(const XrCoroutine *coro) {
+    return coro &&
+           xr_coro_flags_has((XrCoroutine *) coro, XR_CORO_FLG_CANCEL_REQUESTED |
+                                                       XR_CORO_FLG_CANCELLED | XR_CORO_FLG_DONE);
+}
+
+static void channel_abort_cancelled_wait_publish(XrCoroutine *coro) {
+    XR_DCHECK(coro && coro->ext, "cancelled channel wait missing coroutine state");
+    XrCoroExt *ext = coro->ext;
+    xr_channel_wait_token_cancel(&ext->chan_wait_token);
+    atomic_store_explicit(&ext->wait_channel, NULL, memory_order_release);
+    ext->wait_send = false;
+    ext->send_value = xr_null();
+    ext->recv_slot = NULL;
+    ext->recv_slot_ref = xr_slot_none();
+    ext->chan_ok_slot_ref = xr_slot_none();
+    ext->chan_resume_delivered = false;
+    xr_coro_flags_clear(coro, XR_CORO_WAIT_MASK);
+}
+
 // Direct transfer: hand value to a blocked receiver and wake it.
 // Returns true on success (lock released, wake dispatched).
 static inline bool chan_direct_send(XrChannel *ch, XrValue v, XrCoroutine *producer) {
@@ -1613,6 +1638,11 @@ send_locked:
     coro->ext->send_value = value;  // Save value to send
     xr_coro_resume_store(coro, XR_RESUME_OK);
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_CHANNEL_SEND >> XR_CORO_WAIT_SHIFT);
+    if (channel_wait_publish_is_cancelled(coro)) {
+        channel_abort_cancelled_wait_publish(coro);
+        xr_amutex_unlock(&ch->lock);
+        return XR_CHAN_NO_CORO;
+    }
     (void) xr_coro_publish_wait_block(coro);
     // Set affinity_p for cross-Worker wake + waiter mask for routing
     XrWorker *w = xr_current_worker();
@@ -1701,18 +1731,23 @@ recv_locked:
     // Set blocked state and join recvq.
     // chan_ok_slot_ref is the delivery capability; chan_resume_delivered is
     // the per-wake outcome and is only ever set by the waker.
-    coro->ext->recv_slot = xr_slot_value_address(recv_slot);
-    coro->ext->recv_slot_ref = recv_slot;
-    coro->ext->chan_ok_slot_ref = deliver ? ok_slot : xr_slot_none();
-    coro->ext->chan_resume_delivered = false;
     xr_channel_wait_token_prepare(&coro->ext->chan_wait_token, ch, false);
     channel_note_participant_locked(ch, coro, false);
     channel_record_logical_block_metric(channel_stats_runtime(ch),
                                         xr_channel_logical_kind_snapshot(ch), false);
     atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
+    coro->ext->recv_slot = xr_slot_value_address(recv_slot);
+    coro->ext->recv_slot_ref = recv_slot;
+    coro->ext->chan_ok_slot_ref = deliver ? ok_slot : xr_slot_none();
+    coro->ext->chan_resume_delivered = false;
     coro->ext->wait_send = false;
     xr_coro_resume_store(coro, XR_RESUME_OK);
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_CHANNEL_RECV >> XR_CORO_WAIT_SHIFT);
+    if (channel_wait_publish_is_cancelled(coro)) {
+        channel_abort_cancelled_wait_publish(coro);
+        xr_amutex_unlock(&ch->lock);
+        return XR_CHAN_NO_CORO;
+    }
     (void) xr_coro_publish_wait_block(coro);
     // Set affinity_p for cross-Worker wake + waiter mask for routing
     XrWorker *w = xr_current_worker();

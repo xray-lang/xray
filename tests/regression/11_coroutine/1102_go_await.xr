@@ -35,3 +35,5 @@ fn test_go_await() {
 // 30
 // 60
 // done
+
+test_go_await()

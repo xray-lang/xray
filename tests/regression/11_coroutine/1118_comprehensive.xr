@@ -78,3 +78,5 @@ fn test_main() {
 
     print("=== done ===")
 }
+
+test_main()

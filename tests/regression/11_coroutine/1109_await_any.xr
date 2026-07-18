@@ -53,3 +53,5 @@ fn test_await_any() {
 // 200
 // 999
 // done
+
+test_await_any()

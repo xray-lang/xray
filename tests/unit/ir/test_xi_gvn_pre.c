@@ -369,6 +369,56 @@ TEST(gvn_no_cross_block_load_elim_after_call) {
     xi_func_free(f);
 }
 
+TEST(gvn_no_same_block_load_elim_across_suspend) {
+    /* A suspension is an observable memory boundary: another task may update
+     * the slot before this task resumes. */
+    XiFunc *f = make_func("suspend_clobber_same_block", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *load1 = xi_value_new(f, entry, XI_GET_SHARED, &stub_int, 0);
+    load1->aux_int = 0;
+
+    (void) xi_value_new(f, entry, XI_YIELD, &stub_any, 0);
+
+    XiValue *load2 = xi_value_new(f, entry, XI_GET_SHARED, &stub_int, 0);
+    load2->aux_int = 0;
+    xi_block_set_return(entry, load2);
+
+    xi_tbaa_annotate(f);
+    (void) xi_opt_gvn_pre(f);
+
+    assert(load2->op == XI_GET_SHARED && "load after suspend must not be eliminated");
+    assert(load1->op == XI_GET_SHARED);
+
+    xi_func_free(f);
+}
+
+TEST(gvn_no_cross_block_load_elim_across_suspend) {
+    /* Memory SSA must also assign a new version at a suspension when the
+     * second load lives in a dominated successor block. */
+    XiFunc *f = make_func("suspend_clobber_cross_block", &stub_int);
+    XiBlock *entry = f->entry;
+    XiBlock *next = xi_block_new(f);
+    next->sealed = true;
+
+    XiValue *load1 = xi_value_new(f, entry, XI_GET_SHARED, &stub_int, 0);
+    load1->aux_int = 0;
+    (void) xi_value_new(f, entry, XI_YIELD, &stub_any, 0);
+    xi_block_set_jump(entry, next);
+
+    XiValue *load2 = xi_value_new(f, next, XI_GET_SHARED, &stub_int, 0);
+    load2->aux_int = 0;
+    xi_block_set_return(next, load2);
+
+    xi_tbaa_annotate(f);
+    (void) xi_opt_gvn_pre(f);
+
+    assert(load2->op == XI_GET_SHARED && "cross-block load after suspend must survive");
+    assert(load1->op == XI_GET_SHARED);
+
+    xi_func_free(f);
+}
+
 /* ========== 1. Full Redundancy Elimination (same block) ========== */
 
 TEST(same_block_add_elimination) {
@@ -1699,6 +1749,8 @@ int main(void) {
     run_gvn_pre_does_not_speculate_loads();
     run_gvn_eliminates_cross_block_load_via_memssa();
     run_gvn_no_cross_block_load_elim_after_call();
+    run_gvn_no_same_block_load_elim_across_suspend();
+    run_gvn_no_cross_block_load_elim_across_suspend();
 
     /* 1. Full Redundancy Elimination (same block) */
     run_same_block_add_elimination();

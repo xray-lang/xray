@@ -97,3 +97,5 @@ fn test_channel_timeout() {
     var consumed = await consumer
     print("  total consumed:", consumed)
 }
+
+test_channel_timeout()

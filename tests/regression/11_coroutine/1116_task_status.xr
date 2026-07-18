@@ -66,3 +66,5 @@ fn test_main() {
 //   done: true
 //   status: Success
 //   result: 42
+
+test_main()
