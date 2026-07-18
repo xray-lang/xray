@@ -38,11 +38,46 @@ struct XrProto;
 
 typedef enum {
     XI_PIPE_OK = 0,
+    XI_PIPE_ERR_ANALYZE,  /* semantic analysis produced an error */
     XI_PIPE_ERR_LOWER,    /* AST lowering failed */
     XI_PIPE_ERR_VERIFY,   /* IR verification found errors */
     XI_PIPE_ERR_EMIT,     /* bytecode emission failed */
     XI_PIPE_ERR_INTERNAL, /* unexpected internal error */
 } XiPipeStatus;
+
+typedef enum XiPipelineStage {
+    XI_PIPE_STAGE_NONE = 0,
+    XI_PIPE_STAGE_ANALYZE,
+    XI_PIPE_STAGE_LOWER,
+    XI_PIPE_STAGE_VERIFY_RAW,
+    XI_PIPE_STAGE_OPTIMIZE,
+    XI_PIPE_STAGE_ESCAPE,
+    XI_PIPE_STAGE_OWNERSHIP,
+    XI_PIPE_STAGE_REPRESENTATION,
+    XI_PIPE_STAGE_BACKEND,
+    XI_PIPE_STAGE_EMIT,
+} XiPipelineStage;
+
+typedef enum XiVerifyCode {
+    XI_VERIFY_NONE = 0,
+    XI_VERIFY_EXECUTABLE_TYPE,
+    XI_VERIFY_STRUCTURE,
+    XI_VERIFY_RETURN,
+    XI_VERIFY_MEMORY,
+    XI_VERIFY_OPT_INVARIANT,
+    XI_VERIFY_AOT_PLAN,
+    XI_VERIFY_EMISSION,
+} XiVerifyCode;
+
+typedef struct XiPipelineError {
+    XiPipelineStage stage;
+    XiVerifyCode code;
+    const XiFunc *func;
+    const XiValue *value;
+    uint32_t source_line;
+    const char *pass_name;
+    char detail[512];
+} XiPipelineError;
 
 /* ========== Pipeline Mode ========== */
 
@@ -59,7 +94,6 @@ typedef enum {
 
 typedef struct XiPipelineConfig {
     XiPipelineMode mode;     /* selects default pass sequence (can be overridden) */
-    bool run_verify;         /* run IR verification after lowering (default: true) */
     bool run_optimize;       /* run optimization passes (default: true) */
     XiOptLevel opt_level;    /* optimization aggressiveness (XI_OPT_LIGHT for VM,
                               * XI_OPT_FULL for AOT) */
@@ -101,7 +135,7 @@ typedef struct XiPipelineResult {
     struct XrProto *proto; /* output bytecode (owned by caller; NULL in AOT/CHECK mode) */
     XiFunc *ir;            /* intermediate IR (freed on result_free) */
     XiModule *module;      /* module metadata (populated in AOT mode; freed on result_free) */
-    const char *error_msg; /* human-readable error description */
+    XiPipelineError error; /* owned, structured first-error diagnostic */
 } XiPipelineResult;
 
 /* ========== API ========== */
@@ -136,5 +170,6 @@ XR_FUNC void xi_pipeline_result_free(XiPipelineResult *res);
 
 /* Human-readable status string. */
 XR_FUNC const char *xi_pipe_status_str(XiPipeStatus s);
+XR_FUNC const char *xi_pipeline_stage_str(XiPipelineStage stage);
 
 #endif  // XI_PIPELINE_H

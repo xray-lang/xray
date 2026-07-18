@@ -1687,10 +1687,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         cfg.global_evidence_module_id = (uint32_t) (ti + 1);
         pres_arr[ti] = xi_pipeline_compile_program((AstNode *) spec->ast, shared_analyzer, X, &cfg);
         if (pres_arr[ti].status != XI_PIPE_OK) {
-            fprintf(stderr, "Error: Xi pipeline failed for '%s': %s\n", paths[ti],
-                    xi_pipe_status_str(pres_arr[ti].status));
-            if (pres_arr[ti].error_msg)
-                fprintf(stderr, "  %s\n", pres_arr[ti].error_msg);
+            fprintf(stderr, "Error: Xi pipeline failed for '%s' at %s: %s\n", paths[ti],
+                    xi_pipeline_stage_str(pres_arr[ti].error.stage), pres_arr[ti].error.detail);
             goto fail_free_ir;
         }
         ir_funcs[ti] = pres_arr[ti].ir;

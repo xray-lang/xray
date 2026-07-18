@@ -14,11 +14,8 @@ static const XaotFuncPlan *cg_func_plan(XiCgenCtx *ctx, const XiFunc *f) {
     if (!ctx || !f)
         return NULL;
     plan = xaot_bundle_find_func_plan(ctx->aot_bundle, f);
-    if (!plan) {
-        fprintf(stderr, "[xi_cgen] ERROR: missing AOT function plan for %s\n",
-                f->name ? f->name : "?");
+    if (!plan)
         ctx->error = true;
-    }
     return plan;
 }
 
@@ -37,16 +34,14 @@ static const XaotValuePlan *cg_value_plan(XiCgenCtx *ctx, const XiValue *v) {
     if (!ctx || !v)
         return NULL;
     plan = xaot_bundle_find_value_plan(ctx->aot_bundle, v);
-    if (!plan) {
-        fprintf(stderr, "[xi_cgen] ERROR: missing AOT value plan for v%u\n", v->id);
+    if (!plan)
         ctx->error = true;
-    }
     return plan;
 }
 
 static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
     const XaotValuePlan *plan = cg_value_plan(ctx, v);
-    return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_TAGGED;
+    return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
 
 static bool cg_int_widen_source_rep(uint16_t op, XaotRep *out) {

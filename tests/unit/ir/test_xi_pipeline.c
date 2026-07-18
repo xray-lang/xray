@@ -72,8 +72,8 @@ static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
     xr_program_destroy(program);
 
     if (res.status != XI_PIPE_OK) {
-        fprintf(stderr, "  PIPELINE FAILED: %s (%s)\n", xi_pipe_status_str(res.status),
-                res.error_msg ? res.error_msg : "no detail");
+        fprintf(stderr, "  PIPELINE FAILED at %s: %s\n", xi_pipeline_stage_str(res.error.stage),
+                res.error.detail);
         xi_pipeline_result_free(&res);
         return NULL;
     }
@@ -188,7 +188,6 @@ TEST(e2e_no_optimize) {
 TEST(e2e_with_verify) {
     /* Verify passes by default */
     XiPipelineConfig cfg = xi_pipeline_default_config();
-    cfg.run_verify = true;
     XrProto *p = compile_source("var x = 42\nprint(x)", &cfg);
     assert(p != NULL);
     xr_vm_proto_free(p);
@@ -567,9 +566,16 @@ TEST(e2e_try_catch) {
 /* ========== Slice ========== */
 
 TEST(e2e_slice) {
-    XrProto *p = compile_source("var arr = [1, 2, 3, 4, 5]\nvar s = arr[1:3]\nprint(s)", NULL);
+    XrProto *p = compile_source("fn useSlice() {\n"
+                                "  var arr = [1, 2, 3, 4, 5]\n"
+                                "  var s: Slice<int> = arr[1:3]\n"
+                                "  print(s)\n"
+                                "}\n"
+                                "useSlice()",
+                                NULL);
     assert(p != NULL);
-    assert(has_opcode(p, OP_SLICE) && "slice expression needs OP_SLICE");
+    assert(PROTO_PROTO_COUNT(p) >= 1);
+    assert(has_opcode(PROTO_PROTO(p, 0), OP_SLICE) && "slice expression needs OP_SLICE");
     xr_vm_proto_free(p);
 }
 
@@ -773,7 +779,6 @@ TEST(stress_budget_truncation_still_valid) {
 
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.budget_ns = 1ULL * 1000 * 1000; /* 1 ms: very tight */
-    cfg.run_verify = true;
 
     XrProto *p = compile_source(src, &cfg);
     assert(p != NULL);
@@ -787,9 +792,31 @@ TEST(stress_budget_truncation_still_valid) {
 
 /* ========== Pipeline Status API ========== */
 
+TEST(e2e_analyzer_error_stops_before_lowering) {
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
+    assert(analyzer != NULL);
+    AstNode *program = xr_parse(session, "var x: int = \"not an int\"\n");
+    assert(program != NULL);
+    xa_analyzer_analyze(analyzer, "invalid.xr", program);
+
+    XiPipelineResult res = xi_pipeline_compile_program(program, analyzer, g_iso, NULL);
+    assert(res.status == XI_PIPE_ERR_ANALYZE);
+    assert(res.error.stage == XI_PIPE_STAGE_ANALYZE);
+    assert(res.error.code == XI_VERIFY_EXECUTABLE_TYPE);
+    assert(res.error.detail[0] != '\0');
+    assert(res.ir == NULL && res.proto == NULL);
+
+    xi_pipeline_result_free(&res);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+}
+
 TEST(e2e_status_str) {
     assert(strcmp(xi_pipe_status_str(XI_PIPE_OK), "OK") == 0);
+    assert(strcmp(xi_pipe_status_str(XI_PIPE_ERR_ANALYZE), "semantic analysis failed") == 0);
     assert(strcmp(xi_pipe_status_str(XI_PIPE_ERR_LOWER), "AST lowering failed") == 0);
+    assert(strcmp(xi_pipeline_stage_str(XI_PIPE_STAGE_OPTIMIZE), "optimize") == 0);
 }
 
 /* ========== Main ========== */
@@ -912,6 +939,7 @@ int main(void) {
     run_stress_budget_truncation_still_valid();
 
     /* API */
+    run_e2e_analyzer_error_stops_before_lowering();
     run_e2e_status_str();
 
     teardown();

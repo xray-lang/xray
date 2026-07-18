@@ -21,6 +21,7 @@
 #include "xi_own.h"
 #include "xi_arc.h"
 #include "../frontend/canonical/xcanon.h"
+#include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast.h"
 #include "../runtime/xisolate_api.h"
 #include "../toolchain/xcompiler_session.h"
@@ -91,13 +92,87 @@ static void xi_set_source_file_recursive(XiFunc *f, const char *source_file) {
         xi_set_source_file_recursive(f->children[i], source_file);
 }
 
+static void xi_pipeline_set_error(XiPipelineResult *res, XiPipeStatus status, XiPipelineStage stage,
+                                  XiVerifyCode code, const XiFunc *func, const XiValue *value,
+                                  const char *pass_name, const char *detail) {
+    if (!res || res->status != XI_PIPE_OK || res->error.detail[0] != '\0')
+        return;
+    res->status = status;
+    res->error.stage = stage;
+    res->error.code = code;
+    res->error.func = func;
+    res->error.value = value;
+    res->error.source_line = value ? value->line : 0;
+    res->error.pass_name = pass_name;
+    snprintf(res->error.detail, sizeof(res->error.detail), "%s",
+             detail && detail[0] ? detail : "pipeline stage failed without a diagnostic");
+}
+
+static bool xi_verify_tree(const XiFunc *f, const XiFunc **failed_func, char *errbuf,
+                           size_t errbuf_size) {
+    if (!f) {
+        snprintf(errbuf, errbuf_size, "NULL Xi function");
+        if (failed_func)
+            *failed_func = NULL;
+        return false;
+    }
+    if (!xi_verify_stage(f, f->stage, errbuf, (int) errbuf_size)) {
+        if (failed_func)
+            *failed_func = f;
+        return false;
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i] && !xi_verify_tree(f->children[i], failed_func, errbuf, errbuf_size))
+            return false;
+    }
+    return true;
+}
+
+static XiVerifyCode xi_verify_code_from_detail(const char *detail) {
+    if (!detail)
+        return XI_VERIFY_STRUCTURE;
+    if (strstr(detail, "RETURN") || strstr(detail, "return"))
+        return XI_VERIFY_RETURN;
+    if (strstr(detail, "PTR_") || strstr(detail, "memory") || strstr(detail, "Endian"))
+        return XI_VERIFY_MEMORY;
+    if (strstr(detail, "ErrorType"))
+        return XI_VERIFY_EXECUTABLE_TYPE;
+    return XI_VERIFY_STRUCTURE;
+}
+
+static bool xi_pipeline_verify_barrier(XiPipelineResult *res, XiPipelineStage stage) {
+    char errbuf[512];
+    const XiFunc *failed_func = NULL;
+    if (xi_verify_tree(res->ir, &failed_func, errbuf, sizeof(errbuf)))
+        return true;
+    xi_pipeline_set_error(res, XI_PIPE_ERR_VERIFY, stage, xi_verify_code_from_detail(errbuf),
+                          failed_func, NULL, NULL, errbuf);
+    return false;
+}
+
+static bool xi_pipeline_analyzer_gate(struct XaAnalyzer *analyzer, XiPipelineResult *res) {
+    if (!analyzer)
+        return true;
+    int count = 0;
+    for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(analyzer, &count); diag;
+         diag = diag->next) {
+        if (diag->severity != XR_DIAG_SEV_ERROR)
+            continue;
+        xi_pipeline_set_error(res, XI_PIPE_ERR_ANALYZE, XI_PIPE_STAGE_ANALYZE,
+                              XI_VERIFY_EXECUTABLE_TYPE, NULL, NULL, NULL,
+                              diag->message ? diag->message : "semantic analysis failed");
+        res->error.source_line = diag->location.line > 0 ? (uint32_t) diag->location.line : 0;
+        return false;
+    }
+    return true;
+}
+
 /* ========== Configuration ========== */
 
 XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     XiPipelineConfig cfg;
     memset(&cfg, 0, sizeof(cfg));
     cfg.mode = XI_PIPE_VM;
-    cfg.run_verify = true;
     cfg.run_optimize = true;
     cfg.opt_level = XI_OPT_LIGHT;
     cfg.run_select_rep = false;
@@ -119,7 +194,6 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     XiPipelineConfig cfg;
     memset(&cfg, 0, sizeof(cfg));
     cfg.mode = XI_PIPE_AOT;
-    cfg.run_verify = true;
     cfg.run_optimize = true;
     cfg.opt_level = XI_OPT_FULL;
     cfg.run_select_rep = true;
@@ -144,8 +218,9 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     res.ir = ir;
 
     if (!ir) {
-        res.status = XI_PIPE_ERR_LOWER;
-        res.error_msg = "lowering returned NULL";
+        xi_pipeline_set_error(&res, XI_PIPE_ERR_LOWER, XI_PIPE_STAGE_LOWER,
+                              XI_VERIFY_EXECUTABLE_TYPE, NULL, NULL, NULL,
+                              "lowering did not produce executable Xi IR");
         return res;
     }
 
@@ -160,16 +235,10 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         fprintf(stderr, "===================================\n");
     }
 
-    /* Verification pass (catches lowering bugs early) */
-    if (cfg->run_verify) {
-        char errbuf[512];
-        if (!xi_verify(ir, errbuf, sizeof(errbuf))) {
-            res.status = XI_PIPE_ERR_VERIFY;
-            res.error_msg = "IR verification failed";
-            fprintf(stderr, "[xi_pipeline] verify error: %s\n", errbuf);
-            return res;
-        }
-    }
+    /* Verification barriers are part of the executable pipeline contract and
+     * cannot be disabled by configuration. */
+    if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_VERIFY_RAW))
+        return res;
 
     /* Optimization passes (pipeline driver handles per-round verify) */
     if (cfg->run_optimize) {
@@ -178,14 +247,21 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
             level = XI_OPT_LIGHT;
 
         XiPipelineStats stats;
-        xi_opt_run_pipeline_ex_with_mask(ir, level, &stats, cfg->budget_ns,
-                                         cfg->disabled_opt_passes);
+        XiOptResult opt = xi_opt_run_pipeline_ex_with_mask(ir, level, &stats, cfg->budget_ns,
+                                                           cfg->disabled_opt_passes);
+        if (!opt.ok) {
+            xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_OPTIMIZE,
+                                  XI_VERIFY_OPT_INVARIANT, ir, NULL, opt.pass_name, opt.detail);
+            return res;
+        }
 
         /* Optional dump: XRAY_XI_STATS=1 prints per-function stats */
         if (xi_env_is_enabled("XRAY_XI_STATS")) {
             xi_pipeline_stats_dump(&stats, ir->name);
         }
     }
+    if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OPTIMIZE))
+        return res;
 
     /* Escape analysis: compute escape levels for heap-allocating values.
      * Run after optimization (dead code eliminated) but before select_rep
@@ -193,6 +269,8 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     if (cfg->run_escape) {
         xi_escape_analyze(ir);
     }
+    if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_ESCAPE))
+        return res;
 
     /* Backward ownership inference (analysis only — does not mutate IR).
      * Gated behind XRAY_XI_OWN_DUMP=1 for manual verification of dup/drop
@@ -238,6 +316,8 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         }
         xi_func_set_stage_recursive(ir, XI_STAGE_OWNED);
     }
+    if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OWNERSHIP))
+        return res;
 
     /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.
      * Run after general optimization so constants/copies are resolved first. */
@@ -245,30 +325,16 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         xi_opt_select_rep_with_policy(ir, &cfg->rep_policy);
         xi_opt_box_elim(ir);
         xi_rep_cleanup_recursive(ir);
-#ifndef NDEBUG
-        if (cfg->run_verify) {
-            char rep_errbuf[512];
-            if (!xi_verify(ir, rep_errbuf, sizeof(rep_errbuf)))
-                fprintf(stderr, "[xi_pipeline] post-select_rep verify: %s\n", rep_errbuf);
-            XR_DCHECK(xi_verify(ir, rep_errbuf, sizeof(rep_errbuf)),
-                      "post-select_rep verify failed");
-        }
-#endif
+        if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_REPRESENTATION))
+            return res;
     }
 
     /* Backend lowering: rewrite high-level ops to XI_CALL_BUILTIN.
      * Advances stage to STAGE_BACKEND. */
     if (cfg->run_backend_lower) {
         xi_backend_lower(ir);
-#ifndef NDEBUG
-        if (cfg->run_verify) {
-            char be_errbuf[512];
-            if (!xi_verify(ir, be_errbuf, sizeof(be_errbuf)))
-                fprintf(stderr, "[xi_pipeline] post-backend_lower verify: %s\n", be_errbuf);
-            XR_DCHECK(xi_verify(ir, be_errbuf, sizeof(be_errbuf)),
-                      "post-backend_lower verify failed");
-        }
-#endif
+        if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_BACKEND))
+            return res;
     }
 
     /* Optional: dump IR after optimization */
@@ -283,8 +349,8 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         struct XrProto *proto = NULL;
         XiEmitStatus emit_st = xi_emit(ir, X, &proto);
         if (emit_st != XI_EMIT_OK) {
-            res.status = XI_PIPE_ERR_EMIT;
-            res.error_msg = xi_emit_status_str(emit_st);
+            xi_pipeline_set_error(&res, XI_PIPE_ERR_EMIT, XI_PIPE_STAGE_EMIT, XI_VERIFY_EMISSION,
+                                  ir, NULL, NULL, xi_emit_status_str(emit_st));
             return res;
         }
         res.proto = proto;
@@ -313,6 +379,11 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
         cfg = &default_cfg;
     }
 
+    XiPipelineResult gate;
+    memset(&gate, 0, sizeof(gate));
+    if (!xi_pipeline_analyzer_gate(analyzer, &gate))
+        return gate;
+
     /* Canonicalize AST before lowering */
     if (cfg->run_canonicalize)
         xr_canon_func(func_node, analyzer, session);
@@ -340,6 +411,11 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
         default_cfg = xi_pipeline_default_config();
         cfg = &default_cfg;
     }
+
+    XiPipelineResult gate;
+    memset(&gate, 0, sizeof(gate));
+    if (!xi_pipeline_analyzer_gate(analyzer, &gate))
+        return gate;
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     XrCompilerSessionScope canon_scope;
@@ -402,6 +478,8 @@ XR_FUNC const char *xi_pipe_status_str(XiPipeStatus s) {
     switch (s) {
         case XI_PIPE_OK:
             return "OK";
+        case XI_PIPE_ERR_ANALYZE:
+            return "semantic analysis failed";
         case XI_PIPE_ERR_LOWER:
             return "AST lowering failed";
         case XI_PIPE_ERR_VERIFY:
@@ -410,6 +488,32 @@ XR_FUNC const char *xi_pipe_status_str(XiPipeStatus s) {
             return "bytecode emission failed";
         case XI_PIPE_ERR_INTERNAL:
             return "internal pipeline error";
+    }
+    return "unknown";
+}
+
+XR_FUNC const char *xi_pipeline_stage_str(XiPipelineStage stage) {
+    switch (stage) {
+        case XI_PIPE_STAGE_NONE:
+            return "none";
+        case XI_PIPE_STAGE_ANALYZE:
+            return "analyze";
+        case XI_PIPE_STAGE_LOWER:
+            return "lower";
+        case XI_PIPE_STAGE_VERIFY_RAW:
+            return "verify-raw";
+        case XI_PIPE_STAGE_OPTIMIZE:
+            return "optimize";
+        case XI_PIPE_STAGE_ESCAPE:
+            return "escape";
+        case XI_PIPE_STAGE_OWNERSHIP:
+            return "ownership";
+        case XI_PIPE_STAGE_REPRESENTATION:
+            return "representation";
+        case XI_PIPE_STAGE_BACKEND:
+            return "backend";
+        case XI_PIPE_STAGE_EMIT:
+            return "emit";
     }
     return "unknown";
 }

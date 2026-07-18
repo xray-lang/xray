@@ -4275,6 +4275,33 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
                          callee_val->var_id == (XiVarId) l->self_var_id);
 
     struct XrType *result_type = xi_lower_node_type(l, node);
+    struct XrType *symbol_return_type = NULL;
+    if (call->callee && call->callee->type == AST_VARIABLE && l->analyzer) {
+        XaSymbol *callee_symbol =
+            xa_scope_lookup_by_id(l->analyzer->global_scope, call->callee->as.variable.symbol_id);
+        XaSymbolLinks *callee_links =
+            callee_symbol ? xa_analyzer_get_links(l->analyzer, callee_symbol) : NULL;
+        if (callee_links) {
+            symbol_return_type = callee_links->return_type;
+            if (!symbol_return_type && callee_links->type &&
+                callee_links->type->kind == XR_KIND_FUNCTION)
+                symbol_return_type = callee_links->type->function.return_type;
+        }
+    }
+    /* A direct Xi callee is the executable signature authority.  Analyzer
+     * recovery may leave a call-expression side-table entry as unit even when
+     * the resolved function returns a value; carrying that residue forward
+     * creates an invalid value-producing CALL and, historically, an empty RET.
+     */
+    if (static_callee && static_callee->return_type)
+        result_type = static_callee->return_type;
+    else if (symbol_return_type)
+        result_type = symbol_return_type;
+    else if ((!result_type || result_type->kind == XR_KIND_UNIT ||
+              result_type->kind == XR_KIND_UNKNOWN) &&
+             callee_type && callee_type->kind == XR_KIND_FUNCTION &&
+             callee_type->function.return_type)
+        result_type = callee_type->function.return_type;
     if (math_callee_member && lower_math_call_arity_ok(math_callee_member, n))
         result_type = lower_math_call_result_type(l, math_callee_member, arg_vals, n);
 
@@ -4498,10 +4525,7 @@ static XiValue *lower_mem_access_call(XiLower *l, AstNode *node, CallExprNode *c
                               : xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
         if (!endian)
             return NULL;
-        XrType *result_type = xi_lower_node_type(l, node);
-        if (!result_type || xi_lower_type_is_unknown(result_type))
-            result_type = target;
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 2);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, target, 2);
         if (!v)
             return NULL;
         v->args[0] = addr;
@@ -4515,6 +4539,7 @@ static XiValue *lower_mem_access_call(XiLower *l, AstNode *node, CallExprNode *c
     XiValue *value = xi_lower_expr(l, call->arguments[2]);
     if (!value)
         return NULL;
+    value = xi_lower_narrow_for_static_type(l, node, value, target);
     XiValue *endian = call->arg_count >= 4
                           ? lower_byte_slice_endian_arg(l, call->arguments[3])
                           : xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);

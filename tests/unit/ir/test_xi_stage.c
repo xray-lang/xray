@@ -107,7 +107,6 @@ static void test_stage_after_lowering(void) {
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.run_optimize = false;
     cfg.run_emit = false;
-    cfg.run_verify = true;
 
     /* We need a full parse+analyze cycle.  Use the compiler entry point
      * indirectly by testing that lowered IR has stage == RAW.
@@ -522,10 +521,31 @@ static void test_pass_order_and_invariants(void) {
     assert(c42 != NULL);
     xi_block_set_return(entry, c42);
 
-    xi_opt_run_pipeline(f, XI_OPT_FULL);
+    XiOptResult opt = xi_opt_run_pipeline(f, XI_OPT_FULL);
+    assert(opt.ok);
 
     assert(f->invariant_mask & XI_INV_TBAA_ANNOTATED);
     assert(f->invariant_mask & XI_INV_RANGE_ANNOTATED);
+
+    xi_func_free(f);
+    printf("  PASS\n");
+}
+
+static void test_optimizer_invariant_failure_is_data(void) {
+    printf("--- test_optimizer_invariant_failure_is_data ---\n");
+
+    XiFunc *f = xi_func_new("invalid_pass_input", &stub_int);
+    assert(f != NULL);
+    XiBlock *entry = xi_block_new(f);
+    assert(entry != NULL);
+    XiValue *value = xi_const_int(f, entry, 1, &stub_int);
+    xi_block_set_return(entry, value);
+    f->stage = XI_STAGE_CLOSED;
+    f->invariant_mask = 0;
+
+    XiOptResult opt = xi_opt_run_pipeline(f, XI_OPT_FULL);
+    assert(!opt.ok);
+    assert(opt.detail[0] != '\0');
 
     xi_func_free(f);
     printf("  PASS\n");
@@ -549,6 +569,7 @@ int main(void) {
     test_backend_lower_rewrites_generated_builtin_ops();
     test_stage_monotonicity();
     test_pass_order_and_invariants();
+    test_optimizer_invariant_failure_is_data();
 
     printf("\n=== All stage contract tests passed ===\n");
     return 0;

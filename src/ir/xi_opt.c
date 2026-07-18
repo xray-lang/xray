@@ -2955,7 +2955,7 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
         }
 
         /* Return control follows the function ABI policy. */
-        if (blk->kind == XI_BLOCK_RETURN && blk->control) {
+        if (blk->kind == XI_BLOCK_RETURN && blk->control && blk->control->op != XI_ERR_RETURN) {
             XrRep ret_rep = local_policy.force_return_tagged
                                 ? XR_REP_TAGGED
                                 : sr_type_native_boundary_rep(f->return_type);
@@ -3590,15 +3590,22 @@ cleanup:
     }
 }
 
-XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level,
-                                                      XiPipelineStats *stats, uint64_t budget_ns,
-                                                      XiOptDisableMask disabled_passes) {
+XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level,
+                                                     XiPipelineStats *stats, uint64_t budget_ns,
+                                                     XiOptDisableMask disabled_passes) {
     XR_DCHECK(f != NULL, "xi_opt_run_pipeline_ex_with_mask: NULL func");
+
+    XiOptResult result;
+    memset(&result, 0, sizeof(result));
+    result.ok = true;
+    result.round = -1;
 
     validate_pass_table();
 
-    if (level == XI_OPT_NONE)
-        return xi_pass_no_change();
+    if (level == XI_OPT_NONE) {
+        result.change = xi_pass_no_change();
+        return result;
+    }
 
     if (stats)
         memset(stats, 0, sizeof(*stats));
@@ -3660,11 +3667,13 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel leve
 
             XiInvariantMask missing_inv = desc->requires_inv_mask & ~f->invariant_mask;
             if (missing_inv) {
-                fprintf(stderr,
-                        "[xi_pass] pass '%s' requires invariant bits 0x%x "
-                        "but func '%s' only has 0x%x\n",
-                        desc->name, missing_inv, f->name ? f->name : "?", f->invariant_mask);
-                XR_CHECK(false, "xi pass missing required invariant");
+                result.ok = false;
+                result.pass_name = desc->name;
+                result.round = round;
+                snprintf(result.detail, sizeof(result.detail),
+                         "pass '%s' requires invariant bits 0x%x but func '%s' only has 0x%x",
+                         desc->name, missing_inv, f->name ? f->name : "?", f->invariant_mask);
+                goto done;
             }
 
             /* Shuffle blocks[1..n-1] (preserve entry at [0]) to catch
@@ -3706,11 +3715,13 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel leve
 
             XiInvariantMask missing_produced = desc->produces_inv_mask & ~f->invariant_mask;
             if (missing_produced) {
-                fprintf(stderr,
-                        "[xi_pass] pass '%s' did not produce invariant bits "
-                        "0x%x for func '%s'\n",
-                        desc->name, missing_produced, f->name ? f->name : "?");
-                XR_CHECK(false, "xi pass invariant production failed");
+                result.ok = false;
+                result.pass_name = desc->name;
+                result.round = round;
+                snprintf(result.detail, sizeof(result.detail),
+                         "pass '%s' did not produce invariant bits 0x%x for func '%s'", desc->name,
+                         missing_produced, f->name ? f->name : "?");
+                goto done;
             }
 
             /* XRAY_XI_DUMP: targeted IR dump after matching pass */
@@ -3759,34 +3770,39 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel leve
             if (xi_check_per_pass_enabled) {
                 char check_errbuf[512];
                 if (!xi_verify_stage(f, f->stage, check_errbuf, sizeof(check_errbuf))) {
-                    fprintf(stderr,
-                            "[xi_check] verify failed after pass '%s' "
-                            "round %d for '%s': %s\n",
-                            desc->name, round, f->name ? f->name : "?", check_errbuf);
-                    XR_DCHECK(false, "XRAY_XI_CHECK: post-pass verify failed");
+                    result.ok = false;
+                    result.pass_name = desc->name;
+                    result.round = round;
+                    snprintf(result.detail, sizeof(result.detail),
+                             "verify failed after pass '%s' round %d for '%s': %.360s", desc->name,
+                             round, f->name ? f->name : "?", check_errbuf);
+                    goto done;
                 }
             }
         }
 
         total = xi_pass_merge(total, round_chg);
 
+        /* This barrier is unconditional in every build.  An optimization
+         * round that violates Xi contracts is a normal compiler-phase error,
+         * not a reason to abort the process or feed damaged IR downstream. */
+        {
+            char errbuf[512];
+            if (!xi_verify_stage(f, f->stage, errbuf, sizeof(errbuf))) {
+                result.ok = false;
+                result.round = round;
+                snprintf(result.detail, sizeof(result.detail),
+                         "verify failed after optimization round %d for '%s': %.380s", round,
+                         f->name ? f->name : "?", errbuf);
+                goto done;
+            }
+        }
+
         /* Converged: no pass changed anything this round */
         if (!round_chg.cfg_changed && !round_chg.values_changed && !round_chg.types_changed) {
             round++; /* count final round */
             break;
         }
-
-#ifndef NDEBUG
-        /* Re-verify after each round in debug builds */
-        if (!xi_check_per_pass_enabled) {
-            char errbuf[512];
-            if (!xi_verify(f, errbuf, sizeof(errbuf))) {
-                fprintf(stderr, "[xi_pass] verify failed after round %d for '%s': %s\n", round,
-                        f->name ? f->name : "?", errbuf);
-                XR_DCHECK(false, "xi_pass: post-round verify failed");
-            }
-        }
-#endif
     }
 
 done:
@@ -3798,28 +3814,37 @@ done:
         stats->loop_recomputes = f->loop_recomputes;
     }
 
+    result.change = total;
+    if (!result.ok)
+        return result;
+
     /* Recurse into nested functions / closures */
     for (uint16_t i = 0; i < f->nchildren; i++) {
         if (f->children[i]) {
             XiPipelineStats child_stats;
             XiPipelineStats *child_stats_ptr = stats ? &child_stats : NULL;
-            XiPassChange child_chg = xi_opt_run_pipeline_ex_with_mask(
+            XiOptResult child = xi_opt_run_pipeline_ex_with_mask(
                 f->children[i], level, child_stats_ptr, budget_ns, disabled_passes);
-            total = xi_pass_merge(total, child_chg);
+            total = xi_pass_merge(total, child.change);
             if (stats)
                 stats_merge(stats, &child_stats);
+            if (!child.ok) {
+                child.change = total;
+                return child;
+            }
         }
     }
 
-    return total;
+    result.change = total;
+    return result;
 }
 
-XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipelineStats *stats,
-                                            uint64_t budget_ns) {
+XR_FUNC XiOptResult xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipelineStats *stats,
+                                           uint64_t budget_ns) {
     return xi_opt_run_pipeline_ex_with_mask(f, level, stats, budget_ns, XI_OPT_DISABLE_NONE);
 }
 
-XR_FUNC XiPassChange xi_opt_run_pipeline(XiFunc *f, XiOptLevel level) {
+XR_FUNC XiOptResult xi_opt_run_pipeline(XiFunc *f, XiOptLevel level) {
     return xi_opt_run_pipeline_ex(f, level, NULL, 0);
 }
 
