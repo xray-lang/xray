@@ -253,6 +253,13 @@ static const XiClassData *resolve_imported_class(const XaotBundle *bundle, const
             ref->resolved_mod_index >= 0 && (uint32_t) ref->resolved_mod_index == mi;
         if (!mod || (!resolved_match && !module_matches_import(mod, ref)))
             continue;
+        if (resolved_match && ref->resolved_shared_slot >= 0 &&
+            ref->resolved_shared_slot < mod->nslots && mod->slot_classes &&
+            mod->slot_classes[ref->resolved_shared_slot]) {
+            if (owner_out)
+                *owner_out = mod;
+            return mod->slot_classes[ref->resolved_shared_slot];
+        }
         for (uint16_t ei = 0; ei < mod->nexports; ei++) {
             const XiModuleExport *exp = &mod->exports[ei];
             if (!exp->class_data || !exp->name || strcmp(exp->name, ref->member_name) != 0)

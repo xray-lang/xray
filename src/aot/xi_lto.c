@@ -24,6 +24,12 @@ static XiFunc *lto_export_in_module(const XiModule *mod, const char *name) {
     return NULL;
 }
 
+static XiFunc *lto_export_slot_in_module(const XiModule *mod, int slot) {
+    if (!mod || slot < 0 || slot >= mod->nslots || !mod->slot_funcs)
+        return NULL;
+    return mod->slot_funcs[slot];
+}
+
 /* Module-aware import resolution.
  *
  * The import's target module identity is resolved before LTO runs
@@ -39,8 +45,10 @@ static XiFunc *lto_resolve_import(const XiLtoContext *ctx, const XiImportRef *re
         return NULL;
 
     if (ref->resolved_mod_index >= 0 && (uint32_t) ref->resolved_mod_index < ctx->nmodules) {
-        XiFunc *target =
-            lto_export_in_module(ctx->modules[ref->resolved_mod_index], ref->member_name);
+        const XiModule *module = ctx->modules[ref->resolved_mod_index];
+        XiFunc *target = lto_export_slot_in_module(module, ref->resolved_shared_slot);
+        if (!target)
+            target = lto_export_in_module(module, ref->member_name);
         if (target)
             return target;
     }

@@ -1,0 +1,5 @@
+import { facadeValue, aliasedValue, starValue } from "./_reexport_facade"
+
+print(facadeValue())
+print(aliasedValue())
+print(starValue())
