@@ -1,0 +1,17 @@
+/* name, stable code, XrNativeType, fixed bytes, width kind,
+ * signed, float, pointer, memory scalar, generated-C type */
+XR_ABI_SCALAR(VOID, 0, UINT8_MAX, 0, XR_ABI_WIDTH_FIXED, false, false, false, false, "void")
+XR_ABI_SCALAR(BOOL, 1, XR_NATIVE_BOOL, 1, XR_ABI_WIDTH_FIXED, false, false, false, true, "uint8_t")
+XR_ABI_SCALAR(I8, 2, XR_NATIVE_I8, 1, XR_ABI_WIDTH_FIXED, true, false, false, true, "int8_t")
+XR_ABI_SCALAR(U8, 3, XR_NATIVE_U8, 1, XR_ABI_WIDTH_FIXED, false, false, false, true, "uint8_t")
+XR_ABI_SCALAR(I16, 4, XR_NATIVE_I16, 2, XR_ABI_WIDTH_FIXED, true, false, false, true, "int16_t")
+XR_ABI_SCALAR(U16, 5, XR_NATIVE_U16, 2, XR_ABI_WIDTH_FIXED, false, false, false, true, "uint16_t")
+XR_ABI_SCALAR(I32, 6, XR_NATIVE_I32, 4, XR_ABI_WIDTH_FIXED, true, false, false, true, "int32_t")
+XR_ABI_SCALAR(U32, 7, XR_NATIVE_U32, 4, XR_ABI_WIDTH_FIXED, false, false, false, true, "uint32_t")
+XR_ABI_SCALAR(I64, 8, XR_NATIVE_I64, 8, XR_ABI_WIDTH_FIXED, true, false, false, true, "int64_t")
+XR_ABI_SCALAR(U64, 9, XR_NATIVE_U64, 8, XR_ABI_WIDTH_FIXED, false, false, false, true, "uint64_t")
+XR_ABI_SCALAR(F32, 10, XR_NATIVE_F32, 4, XR_ABI_WIDTH_FIXED, true, true, false, true, "float")
+XR_ABI_SCALAR(F64, 11, XR_NATIVE_F64, 8, XR_ABI_WIDTH_FIXED, true, true, false, true, "double")
+XR_ABI_SCALAR(PTR, 12, XR_NATIVE_POINTER, 0, XR_ABI_WIDTH_POINTER, false, false, true, true, "void *")
+XR_ABI_SCALAR(SIZE, 13, XR_NATIVE_USIZE, 0, XR_ABI_WIDTH_POINTER, false, false, false, true, "size_t")
+XR_ABI_SCALAR(SSIZE, 14, XR_NATIVE_ISIZE, 0, XR_ABI_WIDTH_POINTER, true, false, false, true, "ptrdiff_t")

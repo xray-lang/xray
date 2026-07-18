@@ -23,119 +23,117 @@
 
 #define XR_FFI_MAX_ARGS 32
 
+static uint64_t ffi_load_integer_bits(const void *ptr, uint8_t width, int64_t endian, bool *ok) {
+    switch (width) {
+        case 1: {
+            uint8_t value = 0;
+            memcpy(&value, ptr, sizeof(value));
+            if (ok)
+                *ok = true;
+            return value;
+        }
+        case 2:
+            return xr_array_core_bytes_load_u16(ptr, 2, XR_ELEM_U8, 0, endian, ok);
+        case 4:
+            return xr_array_core_bytes_load_u32(ptr, 4, XR_ELEM_U8, 0, endian, ok);
+        case 8:
+            return xr_array_core_bytes_load_u64(ptr, 8, XR_ELEM_U8, 0, endian, ok);
+        default:
+            if (ok)
+                *ok = false;
+            return 0;
+    }
+}
+
+static xr_Integer ffi_sign_extend_integer(uint64_t bits, uint8_t width) {
+    switch (width) {
+        case 1:
+            return (xr_Integer) (int8_t) bits;
+        case 2:
+            return (xr_Integer) (int16_t) bits;
+        case 4:
+            return (xr_Integer) (int32_t) bits;
+        case 8:
+            return (xr_Integer) (int64_t) bits;
+        default:
+            return 0;
+    }
+}
+
+static bool ffi_store_integer_bits(void *ptr, uint8_t width, uint64_t bits, int64_t endian) {
+    switch (width) {
+        case 1: {
+            uint8_t value = (uint8_t) bits;
+            memcpy(ptr, &value, sizeof(value));
+            return true;
+        }
+        case 2:
+            return xr_array_core_bytes_store_u16(ptr, 2, XR_ELEM_U8, 0, (uint16_t) bits, endian);
+        case 4:
+            return xr_array_core_bytes_store_u32(ptr, 4, XR_ELEM_U8, 0, (uint32_t) bits, endian);
+        case 8:
+            return xr_array_core_bytes_store_u64(ptr, 8, XR_ELEM_U8, 0, bits, endian);
+        default:
+            return false;
+    }
+}
+
 /* FFI raw-pointer scalar load/store. The pointee width/flags byte is recorded
  * on XI_PTR_LOAD/STORE while Endian remains a normal evaluated operand. These
  * back the VM's OP_PTR_LOAD / OP_PTR_STORE and are independent of libffi. No
  * bounds or null check: validity of `addr` is the `unsafe` block's contract. */
 XrValue xr_ffi_ptr_load(uintptr_t addr, uint8_t ffi_type, int64_t endian) {
     uint8_t code = xr_ffi_ptr_aux_type(ffi_type);
+    const XrAbiScalarDesc *desc = xr_abi_scalar_desc(code);
     const void *ptr = (const void *) addr;
     bool ok = false;
-    switch ((XrFFIType) code) {
-        case XR_FFI_T_I8: {
-            int8_t value = 0;
-            memcpy(&value, ptr, sizeof(value));
-            return xr_int(value);
-        }
-        case XR_FFI_T_U8: {
-            uint8_t value = 0;
-            memcpy(&value, ptr, sizeof(value));
-            return xr_int(value);
-        }
-        case XR_FFI_T_I16:
-            return xr_int(
-                (int16_t) xr_array_core_bytes_load_u16(ptr, 2, XR_ELEM_U8, 0, endian, &ok));
-        case XR_FFI_T_U16:
-            return xr_int(xr_array_core_bytes_load_u16(ptr, 2, XR_ELEM_U8, 0, endian, &ok));
-        case XR_FFI_T_I32:
-            return xr_int(
-                (int32_t) xr_array_core_bytes_load_u32(ptr, 4, XR_ELEM_U8, 0, endian, &ok));
-        case XR_FFI_T_U32:
-            return xr_int(xr_array_core_bytes_load_u32(ptr, 4, XR_ELEM_U8, 0, endian, &ok));
-        case XR_FFI_T_I64:
-            return xr_int(
-                (int64_t) xr_array_core_bytes_load_u64(ptr, 8, XR_ELEM_U8, 0, endian, &ok));
-        case XR_FFI_T_U64:
-            return xr_int(
-                (xr_Integer) xr_array_core_bytes_load_u64(ptr, 8, XR_ELEM_U8, 0, endian, &ok));
-        case XR_FFI_T_SIZE:
-        case XR_FFI_T_SSIZE:
-            if (sizeof(size_t) == 4)
-                return xr_int(
-                    (xr_Integer) xr_array_core_bytes_load_u32(ptr, 4, XR_ELEM_U8, 0, endian, &ok));
-            return xr_int(
-                (xr_Integer) xr_array_core_bytes_load_u64(ptr, 8, XR_ELEM_U8, 0, endian, &ok));
-        case XR_FFI_T_F32:
+    if (!desc || !desc->is_memory_scalar)
+        return xr_null();
+    if (desc->is_pointer) {
+        void *value = NULL;
+        memcpy(&value, ptr, sizeof(value));
+        return xr_int((xr_Integer) (uintptr_t) value);
+    }
+    uint8_t width = xr_abi_scalar_width(desc, (uint8_t) sizeof(void *));
+    if (desc->is_float) {
+        if (width == 4)
             return xr_float(
                 (double) xr_array_core_bytes_load_f32(ptr, 4, XR_ELEM_U8, 0, endian, &ok));
-        case XR_FFI_T_F64:
+        if (width == 8)
             return xr_float(xr_array_core_bytes_load_f64(ptr, 8, XR_ELEM_U8, 0, endian, &ok));
-        case XR_FFI_T_BOOL: {
-            uint8_t value = 0;
-            memcpy(&value, ptr, sizeof(value));
-            return xr_bool(value != 0);
-        }
-        case XR_FFI_T_PTR: {
-            void *value = NULL;
-            memcpy(&value, ptr, sizeof(value));
-            return xr_int((xr_Integer) (uintptr_t) value);
-        }
-        case XR_FFI_T_VOID:
-        default:
-            return xr_null();
+        return xr_null();
     }
+    uint64_t bits = ffi_load_integer_bits(ptr, width, endian, &ok);
+    if (!ok)
+        return xr_null();
+    if (code == XR_FFI_T_BOOL)
+        return xr_bool(bits != 0);
+    return xr_int(desc->is_signed ? ffi_sign_extend_integer(bits, width) : (xr_Integer) bits);
 }
 
 void xr_ffi_ptr_store(uintptr_t addr, uint8_t ffi_type, XrValue val, int64_t endian) {
     uint8_t code = xr_ffi_ptr_aux_type(ffi_type);
+    const XrAbiScalarDesc *desc = xr_abi_scalar_desc(code);
     double f = XR_IS_FLOAT(val) ? XR_TO_FLOAT(val) : (double) XR_TO_INT(val);
     xr_Integer iv = XR_IS_FLOAT(val) ? (xr_Integer) XR_TO_FLOAT(val) : XR_TO_INT(val);
     void *ptr = (void *) addr;
-    switch ((XrFFIType) code) {
-        case XR_FFI_T_I8:
-        case XR_FFI_T_U8: {
-            uint8_t value = (uint8_t) iv;
-            memcpy(ptr, &value, sizeof(value));
-            break;
-        }
-        case XR_FFI_T_I16:
-        case XR_FFI_T_U16:
-            (void) xr_array_core_bytes_store_u16(ptr, 2, XR_ELEM_U8, 0, (uint16_t) iv, endian);
-            break;
-        case XR_FFI_T_I32:
-        case XR_FFI_T_U32:
-            (void) xr_array_core_bytes_store_u32(ptr, 4, XR_ELEM_U8, 0, (uint32_t) iv, endian);
-            break;
-        case XR_FFI_T_I64:
-        case XR_FFI_T_U64:
-            (void) xr_array_core_bytes_store_u64(ptr, 8, XR_ELEM_U8, 0, (uint64_t) iv, endian);
-            break;
-        case XR_FFI_T_SIZE:
-        case XR_FFI_T_SSIZE:
-            if (sizeof(size_t) == 4)
-                (void) xr_array_core_bytes_store_u32(ptr, 4, XR_ELEM_U8, 0, (uint32_t) iv, endian);
-            else
-                (void) xr_array_core_bytes_store_u64(ptr, 8, XR_ELEM_U8, 0, (uint64_t) iv, endian);
-            break;
-        case XR_FFI_T_F32:
-            (void) xr_array_core_bytes_store_f32(ptr, 4, XR_ELEM_U8, 0, (float) f, endian);
-            break;
-        case XR_FFI_T_F64:
-            (void) xr_array_core_bytes_store_f64(ptr, 8, XR_ELEM_U8, 0, f, endian);
-            break;
-        case XR_FFI_T_BOOL: {
-            uint8_t value = (uint8_t) (iv != 0);
-            memcpy(ptr, &value, sizeof(value));
-            break;
-        }
-        case XR_FFI_T_PTR: {
-            void *value = (void *) (uintptr_t) iv;
-            memcpy(ptr, &value, sizeof(value));
-            break;
-        }
-        case XR_FFI_T_VOID:
-            break;
+    if (!desc || !desc->is_memory_scalar)
+        return;
+    if (desc->is_pointer) {
+        void *value = (void *) (uintptr_t) iv;
+        memcpy(ptr, &value, sizeof(value));
+        return;
     }
+    uint8_t width = xr_abi_scalar_width(desc, (uint8_t) sizeof(void *));
+    if (desc->is_float) {
+        if (width == 4)
+            (void) xr_array_core_bytes_store_f32(ptr, 4, XR_ELEM_U8, 0, (float) f, endian);
+        else if (width == 8)
+            (void) xr_array_core_bytes_store_f64(ptr, 8, XR_ELEM_U8, 0, f, endian);
+        return;
+    }
+    uint64_t bits = code == XR_FFI_T_BOOL ? (uint64_t) (iv != 0) : (uint64_t) iv;
+    (void) ffi_store_integer_bits(ptr, width, bits, endian);
 }
 
 #ifdef XRAY_HAVE_LIBFFI
@@ -148,37 +146,27 @@ void xr_ffi_ptr_store(uintptr_t addr, uint8_t ffi_type, XrValue val, int64_t end
  * XrFFISig stores these codes so the mapping is identical for in-process and
  * embedded (serialized) bytecode. */
 static ffi_type *ffi_type_for_code(uint8_t code) {
-    switch (code) {
-        case XR_FFI_T_VOID:
-            return &ffi_type_void;
-        case XR_FFI_T_BOOL:
-        case XR_FFI_T_U8:
-            return &ffi_type_uint8;
-        case XR_FFI_T_I8:
-            return &ffi_type_sint8;
-        case XR_FFI_T_I16:
-            return &ffi_type_sint16;
-        case XR_FFI_T_U16:
-            return &ffi_type_uint16;
-        case XR_FFI_T_I32:
-            return &ffi_type_sint32;
-        case XR_FFI_T_U32:
-            return &ffi_type_uint32;
-        case XR_FFI_T_I64:
-            return &ffi_type_sint64;
-        case XR_FFI_T_U64:
-            return &ffi_type_uint64;
-        case XR_FFI_T_SIZE:
-            return sizeof(size_t) == 4 ? &ffi_type_uint32 : &ffi_type_uint64;
-        case XR_FFI_T_SSIZE:
-            return sizeof(ptrdiff_t) == 4 ? &ffi_type_sint32 : &ffi_type_sint64;
-        case XR_FFI_T_F32:
-            return &ffi_type_float;
-        case XR_FFI_T_F64:
-            return &ffi_type_double;
-        case XR_FFI_T_PTR:
+    const XrAbiScalarDesc *desc = xr_abi_scalar_desc(code);
+    if (!desc)
+        return &ffi_type_void;
+    if (desc->ffi_type == XR_FFI_T_VOID)
+        return &ffi_type_void;
+    if (desc->is_pointer)
+        return &ffi_type_pointer;
+    uint8_t width = xr_abi_scalar_width(desc, (uint8_t) sizeof(void *));
+    if (desc->is_float)
+        return width == 4 ? &ffi_type_float : &ffi_type_double;
+    switch (width) {
+        case 1:
+            return desc->is_signed ? &ffi_type_sint8 : &ffi_type_uint8;
+        case 2:
+            return desc->is_signed ? &ffi_type_sint16 : &ffi_type_uint16;
+        case 4:
+            return desc->is_signed ? &ffi_type_sint32 : &ffi_type_uint32;
+        case 8:
+            return desc->is_signed ? &ffi_type_sint64 : &ffi_type_uint64;
         default:
-            return &ffi_type_pointer;
+            return &ffi_type_void;
     }
 }
 

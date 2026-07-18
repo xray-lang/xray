@@ -3,19 +3,27 @@
 import mem
 
 fn run() {
-    var bytes = Array<byte>(40)
+    var bytes = Array<byte>(64)
     var view: Slice<byte> = bytes[:]
     unsafe {
         var raw = view.mutPtr()
+        var allBits: uint64 = 0xffff_ffff_ffff_ffff
+        var maxNative: uintsize = allBits as uintsize
+        var minNative: intsize =
+            ((1 as uintsize) << ((mem.sizeOf<uintsize>() * 8) - 1)) as intsize
         mem.store<uintsize>(raw, 1, 37, Endian.Native)
         mem.store<intsize>(raw, 10, -37, Endian.Native)
         mem.store<uintsize>(raw, 19, 91, Endian.LE)
         mem.store<intsize>(raw, 28, -91, Endian.LE)
+        mem.store<uintsize>(raw, 40, maxNative, Endian.LE)
+        mem.store<intsize>(raw, 49, minNative, Endian.LE)
 
         print(mem.load<uintsize>(raw, 1, Endian.Native))
         print(mem.load<intsize>(raw, 10, Endian.Native))
         print(mem.load<uintsize>(raw, 19, Endian.LE))
         print(mem.load<intsize>(raw, 28, Endian.LE))
+        print(mem.load<uintsize>(raw, 40, Endian.LE) == maxNative)
+        print(mem.load<intsize>(raw, 49, Endian.LE) == minNative)
     }
 }
 
