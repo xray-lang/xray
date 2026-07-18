@@ -1436,6 +1436,7 @@ static const StdlibEntry stdlib_core[] = {
     {"runtime", xr_load_module_runtime},
     {"sync", xr_load_module_sync},
     {"parallel", xr_load_module_parallel},
+    {"simd", xr_load_module_simd},
     {"sys", xr_load_module_sys},
     {"url", xr_load_module_url},
     {"datetime", xr_load_module_datetime},

@@ -5748,6 +5748,14 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
     if (!ctx || !ctx->analyzer)
         return NULL;
     while (expr) {
+        /* Borrow provenance follows aliases and views, not scalar values read
+         * from them.  In particular, indexing an `in Slice<T>` where T is a
+         * primitive produces a copied scalar; embedding that scalar in a new
+         * fixed aggregate cannot make the aggregate borrow the Slice owner. */
+        XrType *expr_type = xa_analyzer_get_node_type(ctx->analyzer, expr);
+        if (expr_type && !xa_type_needs_borrow_escape_guard(expr_type) &&
+            !XR_TYPE_IS_POINTER(expr_type))
+            return NULL;
         switch (expr->type) {
             case AST_VARIABLE: {
                 const char *name = expr->as.variable.name;

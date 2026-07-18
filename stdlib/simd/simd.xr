@@ -1,0 +1,384 @@
+// simd — portable fixed-width integer vectors.
+//
+// These source bodies are the scalar semantic truth used by the VM and by
+// unsupported AOT targets. Native AOT lowering recognizes this exact module
+// surface and maps the same operations to typed Xi vector ops.
+export struct U8x16 align(16) {
+    private _lanes: [byte; 16]
+
+    @no_alloc
+    static fromLanes(lanes: in [byte; 16]) -> U8x16 {
+        return U8x16{_lanes: copy(lanes)}
+    }
+
+    @no_alloc
+    static splat(value: byte) -> U8x16 {
+        return U8x16{_lanes: [value; 16]}
+    }
+
+    @no_alloc
+    static load(data: in Slice<byte>, offset: int = 0) -> U8x16 {
+        var lanes: [byte; 16] = [0; 16]
+        var i = 0
+        while (i < 16) {
+            lanes[i] = data[offset + i]
+            i += 1
+        }
+        return U8x16{_lanes: lanes}
+    }
+
+    @no_alloc
+    store(output: Array<byte>, offset: int = 0) {
+        var i = 0
+        while (i < 16) {
+            output[offset + i] = this._lanes[i]
+            i += 1
+        }
+    }
+
+    @no_alloc
+    extract(lane: int) -> byte {
+        return this._lanes[lane]
+    }
+
+    @no_alloc
+    replace(lane: int, value: byte) -> U8x16 {
+        var lanes = copy(this._lanes)
+        lanes[lane] = value
+        return U8x16{_lanes: lanes}
+    }
+
+    @no_alloc
+    bitAnd(other: in U8x16) -> U8x16 {
+        var lanes: [byte; 16] = [0; 16]
+        var i = 0
+        while (i < 16) {
+            lanes[i] = this._lanes[i] & other._lanes[i]
+            i += 1
+        }
+        return U8x16{_lanes: lanes}
+    }
+
+    @no_alloc
+    bitOr(other: in U8x16) -> U8x16 {
+        var lanes: [byte; 16] = [0; 16]
+        var i = 0
+        while (i < 16) {
+            lanes[i] = this._lanes[i] | other._lanes[i]
+            i += 1
+        }
+        return U8x16{_lanes: lanes}
+    }
+
+    @no_alloc
+    bitXor(other: in U8x16) -> U8x16 {
+        var lanes: [byte; 16] = [0; 16]
+        var i = 0
+        while (i < 16) {
+            lanes[i] = this._lanes[i] ^ other._lanes[i]
+            i += 1
+        }
+        return U8x16{_lanes: lanes}
+    }
+
+    @no_alloc
+    bitNot() -> U8x16 {
+        var lanes: [byte; 16] = [0; 16]
+        var i = 0
+        while (i < 16) {
+            lanes[i] = ~this._lanes[i]
+            i += 1
+        }
+        return U8x16{_lanes: lanes}
+    }
+
+    @no_alloc
+    reinterpretU32() -> U32x4 {
+        var lanes: [uint32; 4] = [0; 4]
+        var i = 0
+        while (i < 4) {
+            var base = i * 4
+            lanes[i] = (this._lanes[base] as uint32) | ((this._lanes[base + 1] as uint32) << 8) | ((this._lanes[base + 2] as uint32) << 16) | ((this._lanes[base + 3] as uint32) << 24)
+            i += 1
+        }
+        return U32x4.fromLanes(lanes)
+    }
+}
+
+export struct U32x4 align(16) {
+    private _lanes: [uint32; 4]
+
+    @no_alloc
+    static fromLanes(lanes: in [uint32; 4]) -> U32x4 {
+        return U32x4{_lanes: copy(lanes)}
+    }
+
+    @no_alloc
+    static splat(value: uint32) -> U32x4 {
+        return U32x4{_lanes: [value; 4]}
+    }
+
+    @no_alloc
+    static load(data: in Slice<uint32>, offset: int = 0) -> U32x4 {
+        var lanes: [uint32; 4] = [0; 4]
+        var i = 0
+        while (i < 4) {
+            lanes[i] = data[offset + i]
+            i += 1
+        }
+        return U32x4{_lanes: lanes}
+    }
+
+    @no_alloc
+    store(output: Array<uint32>, offset: int = 0) {
+        var i = 0
+        while (i < 4) {
+            output[offset + i] = this._lanes[i]
+            i += 1
+        }
+    }
+
+    @no_alloc
+    extract(lane: int) -> uint32 {
+        return this._lanes[lane]
+    }
+
+    @no_alloc
+    replace(lane: int, value: uint32) -> U32x4 {
+        var lanes = copy(this._lanes)
+        lanes[lane] = value
+        return U32x4{_lanes: lanes}
+    }
+
+    @no_alloc
+    add(other: in U32x4) -> U32x4 {
+        var lanes: [uint32; 4] = [0; 4]
+        var i = 0
+        while (i < 4) {
+            lanes[i] = this._lanes[i] + other._lanes[i]
+            i += 1
+        }
+        return U32x4{_lanes: lanes}
+    }
+
+    @no_alloc
+    sub(other: in U32x4) -> U32x4 {
+        var lanes: [uint32; 4] = [0; 4]
+        var i = 0
+        while (i < 4) {
+            lanes[i] = this._lanes[i] - other._lanes[i]
+            i += 1
+        }
+        return U32x4{_lanes: lanes}
+    }
+
+    @no_alloc
+    mul(other: in U32x4) -> U32x4 {
+        var lanes: [uint32; 4] = [0; 4]
+        var i = 0
+        while (i < 4) {
+            lanes[i] = this._lanes[i] * other._lanes[i]
+            i += 1
+        }
+        return U32x4{_lanes: lanes}
+    }
+
+    @no_alloc
+    bitAnd(other: in U32x4) -> U32x4 {
+        var lanes: [uint32; 4] = [0; 4]
+        var i = 0
+        while (i < 4) {
+            lanes[i] = this._lanes[i] & other._lanes[i]
+            i += 1
+        }
+        return U32x4{_lanes: lanes}
+    }
+
+    @no_alloc
+    bitOr(other: in U32x4) -> U32x4 {
+        var lanes: [uint32; 4] = [0; 4]
+        var i = 0
+        while (i < 4) {
+            lanes[i] = this._lanes[i] | other._lanes[i]
+            i += 1
+        }
+        return U32x4{_lanes: lanes}
+    }
+
+    @no_alloc
+    bitXor(other: in U32x4) -> U32x4 {
+        var lanes: [uint32; 4] = [0; 4]
+        var i = 0
+        while (i < 4) {
+            lanes[i] = this._lanes[i] ^ other._lanes[i]
+            i += 1
+        }
+        return U32x4{_lanes: lanes}
+    }
+
+    @no_alloc
+    bitNot() -> U32x4 {
+        var lanes: [uint32; 4] = [0; 4]
+        var i = 0
+        while (i < 4) {
+            lanes[i] = ~this._lanes[i]
+            i += 1
+        }
+        return U32x4{_lanes: lanes}
+    }
+
+    @no_alloc
+    shiftLeft(bits: int) -> U32x4 {
+        var lanes: [uint32; 4] = [0; 4]
+        var i = 0
+        while (i < 4) {
+            lanes[i] = this._lanes[i] << bits
+            i += 1
+        }
+        return U32x4{_lanes: lanes}
+    }
+
+    @no_alloc
+    shiftRight(bits: int) -> U32x4 {
+        var lanes: [uint32; 4] = [0; 4]
+        var i = 0
+        while (i < 4) {
+            lanes[i] = this._lanes[i] >> bits
+            i += 1
+        }
+        return U32x4{_lanes: lanes}
+    }
+
+    @no_alloc
+    shuffle(i0: int, i1: int, i2: int, i3: int) -> U32x4 {
+        return U32x4{_lanes: [this._lanes[i0], this._lanes[i1], this._lanes[i2], this._lanes[i3]]}
+    }
+
+    @no_alloc
+    widenMulEven(other: in U32x4) -> U64x2 {
+        return U64x2.fromLanes([(this._lanes[0] as uint64) * (other._lanes[0] as uint64), (this._lanes[2] as uint64) * (other._lanes[2] as uint64)])
+    }
+
+    @no_alloc
+    widenMulOdd(other: in U32x4) -> U64x2 {
+        return U64x2.fromLanes([(this._lanes[1] as uint64) * (other._lanes[1] as uint64), (this._lanes[3] as uint64) * (other._lanes[3] as uint64)])
+    }
+
+    @no_alloc
+    reinterpretU8() -> U8x16 {
+        var lanes: [byte; 16] = [0; 16]
+        var i = 0
+        while (i < 4) {
+            var word = this._lanes[i]
+            var base = i * 4
+            lanes[base] = (word & 255) as byte
+            lanes[base + 1] = ((word >> 8) & 255) as byte
+            lanes[base + 2] = ((word >> 16) & 255) as byte
+            lanes[base + 3] = ((word >> 24) & 255) as byte
+            i += 1
+        }
+        return U8x16.fromLanes(lanes)
+    }
+}
+
+export struct U64x2 align(16) {
+    private _lanes: [uint64; 2]
+
+    @no_alloc
+    static fromLanes(lanes: in [uint64; 2]) -> U64x2 {
+        return U64x2{_lanes: copy(lanes)}
+    }
+
+    @no_alloc
+    static splat(value: uint64) -> U64x2 {
+        return U64x2{_lanes: [value; 2]}
+    }
+
+    @no_alloc
+    static load(data: in Slice<uint64>, offset: int = 0) -> U64x2 {
+        return U64x2{_lanes: [data[offset], data[offset + 1]]}
+    }
+
+    @no_alloc
+    store(output: Array<uint64>, offset: int = 0) {
+        output[offset] = this._lanes[0]
+        output[offset + 1] = this._lanes[1]
+    }
+
+    @no_alloc
+    extract(lane: int) -> uint64 {
+        return this._lanes[lane]
+    }
+
+    @no_alloc
+    replace(lane: int, value: uint64) -> U64x2 {
+        var lanes = copy(this._lanes)
+        lanes[lane] = value
+        return U64x2{_lanes: lanes}
+    }
+
+    @no_alloc
+    add(other: in U64x2) -> U64x2 {
+        return U64x2{_lanes: [this._lanes[0] + other._lanes[0], this._lanes[1] + other._lanes[1]]}
+    }
+
+    @no_alloc
+    sub(other: in U64x2) -> U64x2 {
+        return U64x2{_lanes: [this._lanes[0] - other._lanes[0], this._lanes[1] - other._lanes[1]]}
+    }
+
+    @no_alloc
+    mul(other: in U64x2) -> U64x2 {
+        return U64x2{_lanes: [this._lanes[0] * other._lanes[0], this._lanes[1] * other._lanes[1]]}
+    }
+
+    @no_alloc
+    bitAnd(other: in U64x2) -> U64x2 {
+        return U64x2{_lanes: [this._lanes[0] & other._lanes[0], this._lanes[1] & other._lanes[1]]}
+    }
+
+    @no_alloc
+    bitOr(other: in U64x2) -> U64x2 {
+        return U64x2{_lanes: [this._lanes[0] | other._lanes[0], this._lanes[1] | other._lanes[1]]}
+    }
+
+    @no_alloc
+    bitXor(other: in U64x2) -> U64x2 {
+        return U64x2{_lanes: [this._lanes[0] ^ other._lanes[0], this._lanes[1] ^ other._lanes[1]]}
+    }
+
+    @no_alloc
+    bitNot() -> U64x2 {
+        return U64x2{_lanes: [~this._lanes[0], ~this._lanes[1]]}
+    }
+
+    @no_alloc
+    shiftLeft(bits: int) -> U64x2 {
+        return U64x2{_lanes: [this._lanes[0] << bits, this._lanes[1] << bits]}
+    }
+
+    @no_alloc
+    shiftRight(bits: int) -> U64x2 {
+        return U64x2{_lanes: [this._lanes[0] >> bits, this._lanes[1] >> bits]}
+    }
+
+    @no_alloc
+    swapLanes() -> U64x2 {
+        return U64x2{_lanes: [this._lanes[1], this._lanes[0]]}
+    }
+
+    @no_alloc
+    shuffle(i0: int, i1: int) -> U64x2 {
+        return U64x2{_lanes: [this._lanes[i0], this._lanes[i1]]}
+    }
+
+    @no_alloc
+    reduceAdd() -> uint64 {
+        return this._lanes[0] + this._lanes[1]
+    }
+
+    @no_alloc
+    reinterpretU32() -> U32x4 {
+        return U32x4.fromLanes([(this._lanes[0] & 4294967295) as uint32, (this._lanes[0] >> 32) as uint32, (this._lanes[1] & 4294967295) as uint32, (this._lanes[1] >> 32) as uint32])
+    }
+}

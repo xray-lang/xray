@@ -519,8 +519,31 @@ static bool xa_summary_name_is_local(XaParamEscapeSummary *summary, const char *
     return false;
 }
 
+static XrType *xa_summary_known_expr_type(XaParamEscapeSummary *summary, AstNode *expr) {
+    if (!summary || !expr)
+        return NULL;
+    XrType *type = summary->ctx ? xa_analyzer_get_node_type(summary->ctx->analyzer, expr) : NULL;
+    if (type)
+        return type;
+    if (expr->type == AST_VARIABLE) {
+        int slot = xa_summary_param_slot(summary, expr->as.variable.name);
+        if (slot >= 0 && slot < summary->param_count && summary->param_types)
+            return summary->param_types[slot];
+        return NULL;
+    }
+    if (expr->type == AST_INDEX_GET) {
+        XrType *container = xa_summary_known_expr_type(summary, expr->as.index_get.array);
+        return (XrType *) xr_type_contiguous_element_type(container);
+    }
+    return NULL;
+}
+
 static int xa_summary_expr_root_param_slot(XaParamEscapeSummary *summary, AstNode *expr) {
     while (expr) {
+        XrType *expr_type = xa_summary_known_expr_type(summary, expr);
+        if (expr_type && !xa_type_needs_borrow_escape_guard(expr_type) &&
+            !XR_TYPE_IS_POINTER(expr_type))
+            return -1;
         switch (expr->type) {
             case AST_VARIABLE:
                 return xa_summary_param_slot(summary, expr->as.variable.name);
@@ -811,6 +834,10 @@ static void xa_validate_aot_interrupt_attr(XaInferContext *ctx, AstNode *node,
 
 static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr) {
     if (!summary || !expr)
+        return;
+    XrType *expr_type = xa_summary_known_expr_type(summary, expr);
+    if (expr_type && !xa_type_needs_borrow_escape_guard(expr_type) &&
+        !XR_TYPE_IS_POINTER(expr_type))
         return;
     int slot = xa_summary_expr_root_param_slot(summary, expr);
     if (slot >= 0 && slot < summary->param_count)
