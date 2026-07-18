@@ -450,6 +450,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {
 };
 #define GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT 7
 
+// simd module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_simd_symbols[] = {
+    {"U8x16", XLSP_SYM_CLASS, "type U8x16", "Class type", NULL, 0},
+    {"U32x4", XLSP_SYM_CLASS, "type U32x4", "Class type", NULL, 0},
+    {"U64x2", XLSP_SYM_CLASS, "type U64x2", "Class type", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_SIMD_SYMBOL_COUNT 3
+
 // strconv module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_strconv_symbols[] = {
     {"parseInt", XLSP_SYM_FUNCTION, "fn(value: string): int?", "", NULL, 0},
@@ -651,6 +659,7 @@ static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
     {"path", "path standard library module", g_xlsp_stdlib_path_symbols, GEN_XLSP_STDLIB_PATH_SYMBOL_COUNT},
     {"regex", "regex standard library module", g_xlsp_stdlib_regex_symbols, GEN_XLSP_STDLIB_REGEX_SYMBOL_COUNT},
     {"runtime", "runtime standard library module", g_xlsp_stdlib_runtime_symbols, GEN_XLSP_STDLIB_RUNTIME_SYMBOL_COUNT},
+    {"simd", "simd standard library module", g_xlsp_stdlib_simd_symbols, GEN_XLSP_STDLIB_SIMD_SYMBOL_COUNT},
     {"strconv", "strconv standard library module", g_xlsp_stdlib_strconv_symbols, GEN_XLSP_STDLIB_STRCONV_SYMBOL_COUNT},
     {"sync", "sync standard library module", g_xlsp_stdlib_sync_symbols, GEN_XLSP_STDLIB_SYNC_SYMBOL_COUNT},
     {"sys", "sys standard library module", g_xlsp_stdlib_sys_symbols, GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT},

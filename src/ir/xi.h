@@ -578,14 +578,27 @@ typedef enum {
      * OP_UNLOCK_THREAD) or OP_CORO_CTRL with sub-opcode. */
     XI_CORO_OP,
 
-    /* SIMD / Vector ops for SLP vectorization.
-     * VF (vector factor) is encoded in aux_int.
-     * All vec ops operate on contiguous memory. */
-    XI_VEC_LOAD,  /* args[0]=base, args[1]=start_idx, aux_int=VF */
-    XI_VEC_STORE, /* args[0]=base, args[1]=vec_val, args[2]=start_idx, aux_int=VF */
-    XI_VEC_ADD,   /* args[0]=vec_a, args[1]=vec_b, aux_int=VF */
-    XI_VEC_SUB,   /* args[0]=vec_a, args[1]=vec_b, aux_int=VF */
-    XI_VEC_MUL,   /* args[0]=vec_a, args[1]=vec_b, aux_int=VF */
+    /* Typed SIMD / Vector ops shared by explicit portable SIMD and automatic
+     * vectorization.  Explicit shapes encode lane count + XrNativeType in
+     * aux_int; legacy automatic-vectorization producers carry only VF. */
+    XI_VEC_LOAD,
+    XI_VEC_STORE,
+    XI_VEC_SPLAT,
+    XI_VEC_EXTRACT,
+    XI_VEC_REPLACE,
+    XI_VEC_ADD,
+    XI_VEC_SUB,
+    XI_VEC_MUL,
+    XI_VEC_BIT_AND,
+    XI_VEC_BIT_OR,
+    XI_VEC_BIT_XOR,
+    XI_VEC_BIT_NOT,
+    XI_VEC_SHL,
+    XI_VEC_SHR,
+    XI_VEC_REINTERPRET,
+    XI_VEC_SHUFFLE,
+    XI_VEC_WIDEN_MUL,
+    XI_VEC_REDUCE_ADD,
 
     XI_OP_COUNT /* sentinel */
 } XiOp;
@@ -599,6 +612,31 @@ typedef enum {
  * sub-opcode = (aux_int - XI_CORO_SUB_CTRL_BASE), which corresponds
  * to the CORO_CTRL_* constants in xchunk.h. */
 #define XI_CORO_SUB_CTRL_BASE 100
+
+/* Explicit SIMD shape encoding in XiValue.aux_int. */
+#define XI_VEC_SHAPE_EXPLICIT (INT64_C(1) << 16)
+#define XI_VEC_SHAPE_ODD_LANES (INT64_C(1) << 17)
+#define XI_VEC_SHAPE_LANES_MASK INT64_C(0xff)
+#define XI_VEC_SHAPE_NATIVE_SHIFT 8
+#define XI_VEC_SHAPE_NATIVE_MASK (INT64_C(0xff) << XI_VEC_SHAPE_NATIVE_SHIFT)
+#define XI_VEC_SHAPE_SHUFFLE_SHIFT 24
+
+static inline int64_t xi_vec_shape_encode(uint8_t native_type, uint8_t lanes) {
+    return XI_VEC_SHAPE_EXPLICIT | (int64_t) lanes |
+           ((int64_t) native_type << XI_VEC_SHAPE_NATIVE_SHIFT);
+}
+
+static inline bool xi_vec_shape_is_explicit(int64_t shape) {
+    return (shape & XI_VEC_SHAPE_EXPLICIT) != 0;
+}
+
+static inline uint8_t xi_vec_shape_lanes(int64_t shape) {
+    return (uint8_t) (shape & XI_VEC_SHAPE_LANES_MASK);
+}
+
+static inline uint8_t xi_vec_shape_native_type(int64_t shape) {
+    return (uint8_t) ((shape & XI_VEC_SHAPE_NATIVE_MASK) >> XI_VEC_SHAPE_NATIVE_SHIFT);
+}
 
 /* Import reference metadata for XI_IMPORT_REF.
  * Stored in XiValue.aux, resolved by the AOT driver after all modules

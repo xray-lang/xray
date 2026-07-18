@@ -1,0 +1,6 @@
+import {U32x4} from simd
+
+var lanes: [uint32; 4] = [1, 2, 3, 4]
+var vector = U32x4.fromLanes(lanes)
+var lane = 1
+print(vector.shuffle(0, lane, 2, 3).extract(0))

@@ -28,7 +28,7 @@ export struct U8x16 align(16) {
     }
 
     @no_alloc
-    store(output: Array<byte>, offset: int = 0) {
+    store(output: Slice<byte>, offset: int = 0) {
         var i = 0
         while (i < 16) {
             output[offset + i] = this._lanes[i]
@@ -103,6 +103,25 @@ export struct U8x16 align(16) {
         }
         return U32x4.fromLanes(lanes)
     }
+
+    @no_alloc
+    reinterpretU64() -> U64x2 {
+        var lanes: [uint64; 2] = [0; 2]
+        var i = 0
+        while (i < 2) {
+            var base = i * 8
+            lanes[i] = (this._lanes[base] as uint64) |
+                       ((this._lanes[base + 1] as uint64) << 8) |
+                       ((this._lanes[base + 2] as uint64) << 16) |
+                       ((this._lanes[base + 3] as uint64) << 24) |
+                       ((this._lanes[base + 4] as uint64) << 32) |
+                       ((this._lanes[base + 5] as uint64) << 40) |
+                       ((this._lanes[base + 6] as uint64) << 48) |
+                       ((this._lanes[base + 7] as uint64) << 56)
+            i += 1
+        }
+        return U64x2.fromLanes(lanes)
+    }
 }
 
 export struct U32x4 align(16) {
@@ -130,7 +149,7 @@ export struct U32x4 align(16) {
     }
 
     @no_alloc
-    store(output: Array<uint32>, offset: int = 0) {
+    store(output: Slice<uint32>, offset: int = 0) {
         var i = 0
         while (i < 4) {
             output[offset + i] = this._lanes[i]
@@ -255,6 +274,11 @@ export struct U32x4 align(16) {
     }
 
     @no_alloc
+    swapAdjacent() -> U32x4 {
+        return U32x4{_lanes: [this._lanes[1], this._lanes[0], this._lanes[3], this._lanes[2]]}
+    }
+
+    @no_alloc
     widenMulEven(other: in U32x4) -> U64x2 {
         return U64x2.fromLanes([(this._lanes[0] as uint64) * (other._lanes[0] as uint64), (this._lanes[2] as uint64) * (other._lanes[2] as uint64)])
     }
@@ -279,6 +303,14 @@ export struct U32x4 align(16) {
         }
         return U8x16.fromLanes(lanes)
     }
+
+    @no_alloc
+    reinterpretU64() -> U64x2 {
+        return U64x2.fromLanes([
+            (this._lanes[0] as uint64) | ((this._lanes[1] as uint64) << 32),
+            (this._lanes[2] as uint64) | ((this._lanes[3] as uint64) << 32),
+        ])
+    }
 }
 
 export struct U64x2 align(16) {
@@ -300,7 +332,7 @@ export struct U64x2 align(16) {
     }
 
     @no_alloc
-    store(output: Array<uint64>, offset: int = 0) {
+    store(output: Slice<uint64>, offset: int = 0) {
         output[offset] = this._lanes[0]
         output[offset + 1] = this._lanes[1]
     }
@@ -380,5 +412,25 @@ export struct U64x2 align(16) {
     @no_alloc
     reinterpretU32() -> U32x4 {
         return U32x4.fromLanes([(this._lanes[0] & 4294967295) as uint32, (this._lanes[0] >> 32) as uint32, (this._lanes[1] & 4294967295) as uint32, (this._lanes[1] >> 32) as uint32])
+    }
+
+    @no_alloc
+    reinterpretU8() -> U8x16 {
+        var lanes: [byte; 16] = [0; 16]
+        var i = 0
+        while (i < 2) {
+            var word = this._lanes[i]
+            var base = i * 8
+            lanes[base] = (word & 255) as byte
+            lanes[base + 1] = ((word >> 8) & 255) as byte
+            lanes[base + 2] = ((word >> 16) & 255) as byte
+            lanes[base + 3] = ((word >> 24) & 255) as byte
+            lanes[base + 4] = ((word >> 32) & 255) as byte
+            lanes[base + 5] = ((word >> 40) & 255) as byte
+            lanes[base + 6] = ((word >> 48) & 255) as byte
+            lanes[base + 7] = ((word >> 56) & 255) as byte
+            i += 1
+        }
+        return U8x16.fromLanes(lanes)
     }
 }

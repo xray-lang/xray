@@ -79,6 +79,13 @@ XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle
         ctx->aot_bundle = bundle;
 }
 
+XR_FUNC void xi_cgen_ctx_set_target(XiCgenCtx *ctx, const XaotTarget *target, bool simd_active) {
+    if (ctx) {
+        ctx->target = target;
+        ctx->simd_active = simd_active;
+    }
+}
+
 XR_FUNC void xi_cgen_ctx_set_emit_main(XiCgenCtx *ctx, bool emit_main) {
     if (ctx)
         ctx->emit_main = emit_main;

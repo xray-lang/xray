@@ -2627,6 +2627,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn cacheFlush {

@@ -1973,44 +1973,195 @@
 (define-xi-op xi.vec.load
   :class vector
   :arity 2
-  :effects (memory-read)
+  :own-use borrow
+  :effects (may-throw memory-read)
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-c aot-verify)
-  :lowering-policy pass-local)
+  :targets (aot-c aot-verify))
 
 (define-xi-op xi.vec.store
   :class vector
   :arity 3
-  :effects (side-effect memory-write)
+  :result-ownership none
+  :own-use borrow
+  :effects (side-effect may-throw memory-write)
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-c aot-verify)
-  :lowering-policy pass-local)
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.splat
+  :class vector
+  :arity 1
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.extract
+  :class vector
+  :arity 2
+  :own-use borrow
+  :effects (may-throw)
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.replace
+  :class vector
+  :arity 3
+  :own-use borrow
+  :effects (may-throw)
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
 
 (define-xi-op xi.vec.add
   :class vector
   :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :algebraic (associative commutative)
   :effects ()
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-c aot-verify)
-  :lowering-policy pass-local)
+  :targets (aot-c aot-verify))
 
 (define-xi-op xi.vec.sub
   :class vector
   :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-c aot-verify)
-  :lowering-policy pass-local)
+  :targets (aot-c aot-verify))
 
 (define-xi-op xi.vec.mul
   :class vector
   :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :algebraic (associative commutative)
   :effects ()
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-c aot-verify)
-  :lowering-policy pass-local)
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.bit.and
+  :class vector
+  :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :algebraic (associative commutative)
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.bit.or
+  :class vector
+  :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :algebraic (associative commutative)
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.bit.xor
+  :class vector
+  :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :algebraic (associative commutative)
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.bit.not
+  :class vector
+  :arity 1
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.shl
+  :class vector
+  :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.shr
+  :class vector
+  :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.reinterpret
+  :class vector
+  :arity 1
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.shuffle
+  :class vector
+  :arity 1
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.widen.mul
+  :class vector
+  :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+(define-xi-op xi.vec.reduce.add
+  :class vector
+  :arity 1
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))

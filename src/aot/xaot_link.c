@@ -11,6 +11,7 @@
 #include "xaot_link.h"
 #include "../base/xmalloc.h"
 #include "../base/xmemstream.h"
+#include "../base/xplatform.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -206,12 +207,14 @@ static bool xaot_json_write_string_array(FILE *out, const char *name, char **ite
 
 static bool xaot_json_write_target(FILE *out, const XaotTarget *target) {
     char bits[16];
+    char features[16];
     bool ok;
 
     if (!target)
         return false;
 
     snprintf(bits, sizeof(bits), "%u", (unsigned) target->pointer_bits);
+    snprintf(features, sizeof(features), "%u", (unsigned) target->simd_features);
     ok = true;
     ok = ok && xaot_json_write_raw(out, "  \"target\": {\n");
     ok = ok && xaot_json_write_raw(out, "    \"name\": ");
@@ -232,11 +235,20 @@ static bool xaot_json_write_target(FILE *out, const XaotTarget *target) {
     ok = ok && xaot_json_write_raw(out, "    \"triple\": ");
     ok = ok && xaot_json_write_string(out, target->triple);
     ok = ok && xaot_json_write_raw(out, ",\n");
+    ok = ok && xaot_json_write_raw(out, "    \"cpu\": ");
+    ok = ok && xaot_json_write_string(out, target->cpu);
+    ok = ok && xaot_json_write_raw(out, ",\n");
     ok = ok && xaot_json_write_raw(out, "    \"pointer_bits\": ");
     ok = ok && xaot_json_write_raw(out, bits);
     ok = ok && xaot_json_write_raw(out, ",\n");
     ok = ok && xaot_json_write_raw(out, "    \"endian\": ");
     ok = ok && xaot_json_write_string(out, target->endian);
+    ok = ok && xaot_json_write_raw(out, ",\n");
+    ok = ok && xaot_json_write_raw(out, "    \"simd_mode\": ");
+    ok = ok && xaot_json_write_string(out, xaot_simd_mode_name(target->simd_mode));
+    ok = ok && xaot_json_write_raw(out, ",\n");
+    ok = ok && xaot_json_write_raw(out, "    \"simd_features\": ");
+    ok = ok && xaot_json_write_raw(out, features);
     ok = ok && xaot_json_write_raw(out, "\n");
     ok = ok && xaot_json_write_raw(out, "  },\n");
     return ok;
@@ -369,6 +381,7 @@ XR_FUNC bool xaot_target_init_ex(XaotTarget *target, const char *name, const cha
     target->abi = xr_strdup(abi ? abi : "unknown");
     target->object_format = xr_strdup(object_format ? object_format : "unknown");
     target->triple = xr_strdup(triple ? triple : (name ? name : "native"));
+    target->cpu = xr_strdup("");
     target->pointer_bits = pointer_bits;
     target->endian = xr_strdup(endian ? endian : "unknown");
     XrTargetEndian target_endian =
@@ -382,11 +395,11 @@ XR_FUNC bool xaot_target_init_ex(XaotTarget *target, const char *name, const cha
         return false;
     }
     if (!target->name || !target->arch || !target->os || !target->abi || !target->object_format ||
-        !target->triple || !target->endian) {
+        !target->triple || !target->cpu || !target->endian) {
         xaot_target_free(target);
         return false;
     }
-    return true;
+    return xaot_target_configure_simd(target, XAOT_SIMD_AUTO, NULL, NULL, 0);
 }
 
 XR_FUNC void xaot_target_free(XaotTarget *target) {
@@ -399,6 +412,7 @@ XR_FUNC void xaot_target_free(XaotTarget *target) {
     xr_free(target->abi);
     xr_free(target->object_format);
     xr_free(target->triple);
+    xr_free(target->cpu);
     xr_free(target->endian);
     memset(target, 0, sizeof(*target));
 }
@@ -414,7 +428,127 @@ static bool xaot_target_copy_init(XaotTarget *out, const XaotTarget *target) {
                              target->endian);
     if (ok)
         out->data_layout = target->data_layout;
+    if (ok && !xaot_target_configure_simd(out, target->simd_mode, target->cpu, NULL, 0)) {
+        xaot_target_free(out);
+        ok = false;
+    }
     return ok;
+}
+
+XR_FUNC bool xaot_simd_mode_parse(const char *text, XaotSimdMode *out) {
+    XaotSimdMode mode;
+    if (!text || strcmp(text, "auto") == 0)
+        mode = XAOT_SIMD_AUTO;
+    else if (strcmp(text, "scalar") == 0)
+        mode = XAOT_SIMD_SCALAR;
+    else if (strcmp(text, "native") == 0)
+        mode = XAOT_SIMD_NATIVE;
+    else if (strcmp(text, "neon") == 0)
+        mode = XAOT_SIMD_NEON;
+    else if (strcmp(text, "sse2") == 0)
+        mode = XAOT_SIMD_SSE2;
+    else if (strcmp(text, "avx2") == 0)
+        mode = XAOT_SIMD_AVX2;
+    else
+        return false;
+    if (out)
+        *out = mode;
+    return true;
+}
+
+XR_FUNC const char *xaot_simd_mode_name(XaotSimdMode mode) {
+    switch (mode) {
+        case XAOT_SIMD_AUTO:
+            return "auto";
+        case XAOT_SIMD_SCALAR:
+            return "scalar";
+        case XAOT_SIMD_NATIVE:
+            return "native";
+        case XAOT_SIMD_NEON:
+            return "neon";
+        case XAOT_SIMD_SSE2:
+            return "sse2";
+        case XAOT_SIMD_AVX2:
+            return "avx2";
+        default:
+            return "invalid";
+    }
+}
+
+static void xaot_simd_error(char *err, size_t err_size, const char *message) {
+    if (err && err_size > 0)
+        snprintf(err, err_size, "%s", message ? message : "invalid SIMD target plan");
+}
+
+static const char *xaot_target_effective_arch(const XaotTarget *target) {
+    if (target && target->arch && strcmp(target->arch, "native") != 0)
+        return target->arch;
+#if defined(XR_ARCH_ARM64)
+    return "aarch64";
+#elif defined(XR_ARCH_X86_64)
+    return "x86_64";
+#else
+    return "unknown";
+#endif
+}
+
+XR_FUNC bool xaot_target_configure_simd(XaotTarget *target, XaotSimdMode mode, const char *cpu,
+                                        char *err, size_t err_size) {
+    if (!target || mode < XAOT_SIMD_AUTO || mode > XAOT_SIMD_AVX2) {
+        xaot_simd_error(err, err_size, "invalid SIMD mode");
+        return false;
+    }
+    const char *arch = xaot_target_effective_arch(target);
+    bool arm64 = strcmp(arch, "aarch64") == 0 || strcmp(arch, "arm64") == 0;
+    bool x86_64 = strcmp(arch, "x86_64") == 0 || strcmp(arch, "amd64") == 0;
+    uint32_t features = 0;
+    switch (mode) {
+        case XAOT_SIMD_AUTO:
+            features = arm64 ? XAOT_SIMD_FEATURE_NEON : x86_64 ? XAOT_SIMD_FEATURE_SSE2 : 0;
+            break;
+        case XAOT_SIMD_SCALAR:
+            break;
+        case XAOT_SIMD_NATIVE:
+            features = arm64    ? XAOT_SIMD_FEATURE_NEON
+                       : x86_64 ? XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2
+                                : 0;
+            if (features == 0) {
+                xaot_simd_error(err, err_size, "--simd native is unsupported for this target");
+                return false;
+            }
+            break;
+        case XAOT_SIMD_NEON:
+            if (!arm64) {
+                xaot_simd_error(err, err_size, "--simd neon requires an AArch64 target");
+                return false;
+            }
+            features = XAOT_SIMD_FEATURE_NEON;
+            break;
+        case XAOT_SIMD_SSE2:
+            if (!x86_64) {
+                xaot_simd_error(err, err_size, "--simd sse2 requires an x86_64 target");
+                return false;
+            }
+            features = XAOT_SIMD_FEATURE_SSE2;
+            break;
+        case XAOT_SIMD_AVX2:
+            if (!x86_64) {
+                xaot_simd_error(err, err_size, "--simd avx2 requires an x86_64 target");
+                return false;
+            }
+            features = XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2;
+            break;
+    }
+    char *cpu_copy = xr_strdup(cpu ? cpu : "");
+    if (!cpu_copy) {
+        xaot_simd_error(err, err_size, "out of memory while configuring SIMD target");
+        return false;
+    }
+    xr_free(target->cpu);
+    target->cpu = cpu_copy;
+    target->simd_mode = mode;
+    target->simd_features = features;
+    return true;
 }
 
 XR_FUNC bool xaot_link_manifest_init(XaotLinkManifest *manifest, const XaotTarget *target) {

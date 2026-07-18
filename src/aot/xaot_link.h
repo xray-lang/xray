@@ -14,6 +14,21 @@
 #include "../base/xdefs.h"
 #include "xaot_class_layout.h"
 
+typedef enum XaotSimdMode {
+    XAOT_SIMD_AUTO = 0,
+    XAOT_SIMD_SCALAR,
+    XAOT_SIMD_NATIVE,
+    XAOT_SIMD_NEON,
+    XAOT_SIMD_SSE2,
+    XAOT_SIMD_AVX2,
+} XaotSimdMode;
+
+enum {
+    XAOT_SIMD_FEATURE_NEON = 1u << 0,
+    XAOT_SIMD_FEATURE_SSE2 = 1u << 1,
+    XAOT_SIMD_FEATURE_AVX2 = 1u << 2,
+};
+
 typedef struct XaotTarget {
     char *name;
     char *arch;
@@ -21,9 +36,12 @@ typedef struct XaotTarget {
     char *abi;
     char *object_format;
     char *triple;
+    char *cpu;
     uint16_t pointer_bits;
     char *endian;
     XrTargetDataLayout data_layout;
+    XaotSimdMode simd_mode;
+    uint32_t simd_features;
 } XaotTarget;
 
 typedef enum XaotLinkEntryKind {
@@ -74,6 +92,10 @@ XR_FUNC bool xaot_target_init_ex(XaotTarget *target, const char *name, const cha
                                  const char *os, const char *abi, const char *object_format,
                                  const char *triple, uint16_t pointer_bits, const char *endian);
 XR_FUNC void xaot_target_free(XaotTarget *target);
+XR_FUNC bool xaot_simd_mode_parse(const char *text, XaotSimdMode *out);
+XR_FUNC const char *xaot_simd_mode_name(XaotSimdMode mode);
+XR_FUNC bool xaot_target_configure_simd(XaotTarget *target, XaotSimdMode mode, const char *cpu,
+                                        char *err, size_t err_size);
 
 XR_FUNC bool xaot_link_manifest_init(XaotLinkManifest *manifest, const XaotTarget *target);
 XR_FUNC void xaot_link_manifest_free(XaotLinkManifest *manifest);

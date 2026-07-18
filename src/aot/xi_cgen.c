@@ -18,6 +18,7 @@
  */
 #include "xi_cgen.h"
 #include "xaot_bundle.h"
+#include "xaot_link.h"
 #include "xaot_class_native.h"
 #include "xaot_rep_gen.h"
 #include "xaot_abi_gen.h"
@@ -657,6 +658,8 @@ struct XiCgenCtx {
     XiCgenStats stats;
     XiCgenCoroFrameStats coro_frame_stats;
     const XaotBundle *aot_bundle;
+    const XaotTarget *target;
+    bool simd_active;
     CgWriter writer;
     uint8_t *used_extern_decls;    /* stable_id - 1, reset for each translation unit */
     uint8_t *extern_decl_adapters; /* used declarations needing a boxed closure entry */

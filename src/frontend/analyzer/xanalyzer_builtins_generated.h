@@ -250,7 +250,7 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 // mem module functions
 static const XaBuiltinMember g_gen_mem_functions[] = {
     {"fence", "(ordering: int): ()", "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
-    {"prefetch", "(ptr: Ptr<byte>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"prefetch", "(ptr: Ptr<byte>, rw: int): ()", "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP},
     {"cacheFlush", "(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"cacheInvalidate", "(ptr: Ptr<byte>, n: int): ()", "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"nontemporalStore", "(ptr: MutPtr<byte>, v: int, size: int): ()", "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},

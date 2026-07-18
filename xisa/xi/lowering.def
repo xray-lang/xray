@@ -145,6 +145,96 @@
   :vm-bytecode (driver emit_select)
   :aot-c (driver xicgen_select))
 
+(lower xi.vec.load
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.store
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.splat
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.extract
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.replace
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.add
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.sub
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.mul
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.bit.and
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.bit.or
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.bit.xor
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.bit.not
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.shl
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.shr
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.reinterpret
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.shuffle
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.widen.mul
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.reduce.add
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
 (lower xi.get.shared
   :match ()
   :required-targets (vm-bytecode aot-c)
