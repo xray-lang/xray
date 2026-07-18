@@ -15,6 +15,7 @@
 #include <stddef.h>
 
 typedef enum {
+    XA_BUILTIN_RECEIVER_EXACT_INTEGER,
     XA_BUILTIN_RECEIVER_U8_ARRAY,
     XA_BUILTIN_RECEIVER_ARRAY,
     XA_BUILTIN_RECEIVER_U8_SLICE,
@@ -79,6 +80,7 @@ typedef enum {
 
 typedef enum {
     XA_BUILTIN_DOC_GROUP_GENERAL,
+    XA_BUILTIN_DOC_GROUP_EXACT_INTEGER,
     XA_BUILTIN_DOC_GROUP_ARRAY,
     XA_BUILTIN_DOC_GROUP_U8_ARRAY,
     XA_BUILTIN_DOC_GROUP_U8_SLICE,
@@ -180,6 +182,8 @@ xa_builtin_receiver_method_documentation_group(const XaBuiltinReceiverMethodSpec
     if (!spec)
         return XA_BUILTIN_DOC_GROUP_GENERAL;
     switch (spec->receiver) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return XA_BUILTIN_DOC_GROUP_EXACT_INTEGER;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return XA_BUILTIN_DOC_GROUP_U8_ARRAY;
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -206,6 +210,8 @@ xa_builtin_receiver_profile_availability_label(XaBuiltinMethodProfileAvailabilit
 static inline const char *
 xa_builtin_receiver_documentation_group_label(XaBuiltinMethodDocumentationGroup group) {
     switch (group) {
+        case XA_BUILTIN_DOC_GROUP_EXACT_INTEGER:
+            return "exact-width integer bit methods";
         case XA_BUILTIN_DOC_GROUP_ARRAY:
             return "Array<T> collection methods";
         case XA_BUILTIN_DOC_GROUP_U8_ARRAY:

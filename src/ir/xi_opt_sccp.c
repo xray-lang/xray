@@ -29,6 +29,7 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../shared/xr_int_arith.h"
+#include "../shared/xr_bits_core.h"
 #include "../runtime/value/xtype.h"
 #include <string.h>
 #include <stdio.h>
@@ -329,6 +330,32 @@ static SccpCell eval_unary(uint16_t op, SccpCell a) {
     }
 }
 
+static SccpCell eval_exact_bit(const XiValue *v, SccpCell a, SccpCell b) {
+    if (!v || a.kind != SCCP_CONST_INT)
+        return sccp_bot();
+    uint8_t native_type = (uint8_t) v->aux_int;
+    switch (v->op) {
+        case XI_BIT_BSWAP:
+            return sccp_int(xr_bits_exact_byteswap(a.ival, native_type));
+        case XI_BIT_POPCOUNT:
+            return sccp_int(xr_bits_exact_popcount(a.ival, native_type));
+        case XI_BIT_CLZ:
+            return sccp_int(xr_bits_exact_leading_zeros(a.ival, native_type));
+        case XI_BIT_CTZ:
+            return sccp_int(xr_bits_exact_trailing_zeros(a.ival, native_type));
+        case XI_BIT_ROTL:
+            return b.kind == SCCP_CONST_INT
+                       ? sccp_int(xr_bits_exact_rotate_left(a.ival, b.ival, native_type))
+                       : sccp_bot();
+        case XI_BIT_ROTR:
+            return b.kind == SCCP_CONST_INT
+                       ? sccp_int(xr_bits_exact_rotate_right(a.ival, b.ival, native_type))
+                       : sccp_bot();
+        default:
+            return sccp_bot();
+    }
+}
+
 /* Integer / float arithmetic on two operand cells. */
 static SccpCell eval_arith(uint16_t op, SccpCell a, SccpCell b) {
     switch (op) {
@@ -529,6 +556,9 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
         SccpCell a = value_cell(ctx, v->args[0]);
         if (a.kind == SCCP_TOP)
             return sccp_top();
+        if (v->op == XI_BIT_BSWAP || v->op == XI_BIT_POPCOUNT || v->op == XI_BIT_CLZ ||
+            v->op == XI_BIT_CTZ)
+            return eval_exact_bit(v, a, sccp_bot());
         return eval_unary(v->op, a);
     }
 
@@ -539,6 +569,8 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
          * pollute the lattice. */
         if (a.kind == SCCP_TOP || b.kind == SCCP_TOP)
             return sccp_top();
+        if (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR)
+            return eval_exact_bit(v, a, b);
         if (is_compare_op(v->op))
             return eval_compare(v->op, a, b, sccp_compare_uses_unsigned(v));
         if (is_bitwise_op(v->op))

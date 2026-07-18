@@ -207,6 +207,53 @@ XR_FUNC void xi_emit_bnot(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(op, dst, src, 0));
 }
 
+XR_FUNC void xi_emit_exact_bit(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    bool rotate = v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR;
+    uint16_t expected = rotate ? 2 : 1;
+    if (v->nargs != expected || v->aux_int < 0 || v->aux_int > UINT8_MAX) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    OpCode op = v->op == XI_BIT_ROTL       ? OP_BIT_ROTL
+                : v->op == XI_BIT_ROTR     ? OP_BIT_ROTR
+                : v->op == XI_BIT_BSWAP    ? OP_BIT_BSWAP
+                : v->op == XI_BIT_POPCOUNT ? OP_BIT_POPCOUNT
+                : v->op == XI_BIT_CLZ      ? OP_BIT_CLZ
+                : v->op == XI_BIT_CTZ      ? OP_BIT_CTZ
+                                           : OP_NOP;
+    if (op == OP_NOP) {
+        emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
+        return;
+    }
+
+    if (!rotate) {
+        XiEmitReg src = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABC(op, dst, src, (uint8_t) v->aux_int));
+        return;
+    }
+
+    if (ctx->next_reg + 2 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg += 2;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    for (uint16_t arg = 0; arg < 2; arg++) {
+        XiEmitReg src = reg_of(ctx, v->args[arg]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        XiEmitReg target = (XiEmitReg) (base + arg);
+        if (src != target)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, src, 0));
+    }
+    emit_inst(ctx, CREATE_ABC(op, dst, base, (uint8_t) v->aux_int));
+}
+
 /* Comparison ops -> CMP_* (produce bool in register) */
 XR_FUNC void xi_emit_cmp(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 2) {

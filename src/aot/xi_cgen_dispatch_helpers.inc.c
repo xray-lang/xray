@@ -835,6 +835,138 @@ static void xicgen_template_bitwise_unary(XiCgenCtx *ctx, FILE *out, const XiFun
     emit_bitwise_unop_ctx(ctx, out, v, xi_to_c_template_bitwise_unary_op(v->op));
 }
 
+static const char *cg_exact_bit_unsigned_ctype(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+            return "uint8_t";
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+            return "uint16_t";
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+            return "uint32_t";
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
+            return "uintptr_t";
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
+        default:
+            return "uint64_t";
+    }
+}
+
+static const char *cg_exact_bit_width_expr(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+            return "8u";
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+            return "16u";
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+            return "32u";
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
+            return "(sizeof(uintptr_t) * 8u)";
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
+        default:
+            return "64u";
+    }
+}
+
+static void cg_emit_exact_bit_pattern(XiCgenCtx *ctx, FILE *out, const XiValue *value,
+                                      uint8_t native_type) {
+    fprintf(out, "((%s) (", cg_exact_bit_unsigned_ctype(native_type));
+    emit_value_as_rep_ctx(ctx, out, value, XR_REP_I64);
+    fprintf(out, "))");
+}
+
+static void xicgen_exact_bit(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    (void) f;
+    (void) prefix;
+    if (!v || v->nargs < 1 || !v->args[0]) {
+        if (ctx)
+            ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+
+    uint8_t native_type = (uint8_t) v->aux_int;
+    const char *width = cg_exact_bit_width_expr(native_type);
+    const char *uctype = cg_exact_bit_unsigned_ctype(native_type);
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+
+    if (v->op == XI_BIT_POPCOUNT) {
+        fprintf(out, "((int64_t) __builtin_popcountll((unsigned long long) ");
+        cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+        fprintf(out, "))");
+    } else if (v->op == XI_BIT_CLZ || v->op == XI_BIT_CTZ) {
+        fprintf(out, "(");
+        cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+        fprintf(out, " == 0 ? (int64_t) %s : (int64_t) ", width);
+        if (v->op == XI_BIT_CLZ) {
+            fprintf(out, "(__builtin_clzll((unsigned long long) ");
+            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+            fprintf(out, ") - (64u - %s)))", width);
+        } else {
+            fprintf(out, "__builtin_ctzll((unsigned long long) ");
+            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+            fprintf(out, "))");
+        }
+    } else if (v->op == XI_BIT_BSWAP) {
+        const char *result_ctype = cg_native_int_ctype(native_type);
+        if (!result_ctype)
+            result_ctype = "int64_t";
+        fprintf(out, "((int64_t) ((%s) (", result_ctype);
+        if (native_type == XR_NATIVE_I8 || native_type == XR_NATIVE_U8) {
+            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+        } else if (native_type == XR_NATIVE_I16 || native_type == XR_NATIVE_U16) {
+            fprintf(out, "__builtin_bswap16((uint16_t) ");
+            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+            fprintf(out, ")");
+        } else if (native_type == XR_NATIVE_I32 || native_type == XR_NATIVE_U32) {
+            fprintf(out, "__builtin_bswap32((uint32_t) ");
+            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+            fprintf(out, ")");
+        } else if (native_type == XR_NATIVE_ISIZE || native_type == XR_NATIVE_USIZE) {
+            fprintf(out, "(sizeof(uintptr_t) == 8 ? (uintptr_t) __builtin_bswap64((uint64_t) ");
+            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+            fprintf(out, ") : (uintptr_t) __builtin_bswap32((uint32_t) ");
+            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+            fprintf(out, "))");
+        } else {
+            fprintf(out, "__builtin_bswap64((uint64_t) ");
+            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+            fprintf(out, ")");
+        }
+        fprintf(out, ")))");
+    } else if ((v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR) && v->nargs == 2) {
+        const char *result_ctype = cg_native_int_ctype(native_type);
+        if (!result_ctype)
+            result_ctype = "int64_t";
+        fprintf(out, "((int64_t) ((%s) ((%s) ((", result_ctype, uctype);
+        cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+        fprintf(out, v->op == XI_BIT_ROTL ? " << " : " >> ");
+        fprintf(out, "((uint64_t) (");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ") & (%s - 1u))) | (", width);
+        cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+        fprintf(out, v->op == XI_BIT_ROTL ? " >> " : " << ");
+        fprintf(out, "((-(uint64_t) (");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ")) & (%s - 1u)))))))", width);
+    } else {
+        if (ctx)
+            ctx->error = true;
+        emit_codegen_abort_expr(out);
+    }
+    emit_conversion_suffix(out, conv_suffix);
+}
+
 #define XICGEN_DEFINE_TEMPLATE_BITWISE_UNARY_DRIVER(ident, driver)                                 \
     static void driver(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,               \
                        const char *prefix) {                                                       \
@@ -6596,14 +6728,9 @@ static bool xicgen_emit_bigint_method(XiCgenCtx *ctx, FILE *out, const XiValue *
     return false;
 }
 
-/* Direct scalar lowering for int numeric methods (task 153). When the
- * receiver is statically `int`, emit the shared-core helper on native i64
- * operands instead of the tagged xrt_method_* dispatch: the semantics live
- * in src/shared/xr_bits_core.h / xr_arith_core.h / xr_int_arith.h (the same
- * cores the VM binding and xrt_method.h call), and all three headers are
- * available in both hosted (xrt.h) and freestanding (xrt_core_freestanding.h)
- * profiles, so this stays zero-overhead with no runtime symbols. checked*
- * methods return `int?` (tagged) and keep the generic dispatch. */
+/* Direct scalar lowering for the remaining int arithmetic methods. Exact
+ * width bit methods are canonical XI_BIT_* operations before C generation;
+ * method-name dispatch here would discard their width contract. */
 static bool xicgen_emit_int_numeric_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                            const char *method, uint16_t nargs) {
     if (!v || v->nargs < 1 || !method)
@@ -6612,27 +6739,8 @@ static bool xicgen_emit_int_numeric_method(XiCgenCtx *ctx, FILE *out, const XiVa
     if (!recv || !recv->type || recv->type->kind != XR_KIND_INT)
         return false;
 
-    /* 0-arg int -> int (bit queries). */
-    const char *fn0 = NULL;
-    if (nargs == 0) {
-        if (strcmp(method, "popcount") == 0)
-            fn0 = "xr_bits_core_popcount";
-        else if (strcmp(method, "leadingZeros") == 0)
-            fn0 = "xr_bits_core_leading_zeros";
-        else if (strcmp(method, "trailingZeros") == 0)
-            fn0 = "xr_bits_core_trailing_zeros";
-        else if (strcmp(method, "byteswap") == 0)
-            fn0 = "xr_bits_core_byteswap";
-        if (fn0) {
-            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
-            fprintf(out, "%s(", fn0);
-            emit_value_as_rep_ctx(ctx, out, recv, XR_REP_I64);
-            fprintf(out, ")");
-            emit_conversion_suffix(out, conv_suffix);
-            return true;
-        }
+    if (nargs == 0)
         return false;
-    }
 
     if (nargs != 1 || v->nargs < 2)
         return false;
@@ -6640,13 +6748,9 @@ static bool xicgen_emit_int_numeric_method(XiCgenCtx *ctx, FILE *out, const XiVa
     if (!arg || !arg->type || arg->type->kind != XR_KIND_INT)
         return false;
 
-    /* 1-arg int -> int (rotates + wrapping/saturating arithmetic). */
+    /* 1-arg int -> int (wrapping/saturating arithmetic). */
     const char *fn1 = NULL;
-    if (strcmp(method, "rotateLeft") == 0)
-        fn1 = "xr_bits_core_rotate_left";
-    else if (strcmp(method, "rotateRight") == 0)
-        fn1 = "xr_bits_core_rotate_right";
-    else if (strcmp(method, "wrappingAdd") == 0)
+    if (strcmp(method, "wrappingAdd") == 0)
         fn1 = "xr_i64_add_wrap";
     else if (strcmp(method, "wrappingSub") == 0)
         fn1 = "xr_i64_sub_wrap";

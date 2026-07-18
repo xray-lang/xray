@@ -653,6 +653,65 @@ static bool verify_type_assignable_or_unknown(XrType *target, XrType *source) {
     return xr_type_assignable(target, source);
 }
 
+static bool verify_exact_bit_native_type(int64_t native_type) {
+    switch ((uint8_t) native_type) {
+        case XR_NATIVE_I64: /* also canonical `int`, with 64-bit bit semantics */
+        case XR_NATIVE_I8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
+            return native_type >= 0 && native_type <= UINT8_MAX;
+        default:
+            return false;
+    }
+}
+
+static bool verify_exact_bit_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
+                                      const XiValue *v) {
+    bool rotate = v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR;
+    bool receiver_result = rotate || v->op == XI_BIT_BSWAP;
+    bool query = v->op == XI_BIT_POPCOUNT || v->op == XI_BIT_CLZ || v->op == XI_BIT_CTZ;
+    if (!rotate && !receiver_result && !query)
+        return true;
+
+    uint16_t expected_args = rotate ? 2 : 1;
+    if (v->nargs != expected_args || !v->args[0] || !v->args[0]->type ||
+        v->args[0]->type->kind != XR_KIND_INT || v->args[0]->type->is_nullable) {
+        verr(ctx, "func '%s': v%u %s in b%u requires a non-null exact integer receiver", f->name,
+             v->id, xi_op_name(v->op), blk->id);
+        return false;
+    }
+    if (!verify_exact_bit_native_type(v->aux_int) ||
+        v->args[0]->type->native_width != (uint8_t) v->aux_int) {
+        verr(ctx, "func '%s': v%u %s in b%u has native type %lld but receiver width tag is %u",
+             f->name, v->id, xi_op_name(v->op), blk->id, (long long) v->aux_int,
+             (unsigned) v->args[0]->type->native_width);
+        return false;
+    }
+    if (rotate && (!v->args[1] || !v->args[1]->type || v->args[1]->type->kind != XR_KIND_INT ||
+                   v->args[1]->type->is_nullable)) {
+        verr(ctx, "func '%s': v%u %s in b%u requires an integer rotate count", f->name, v->id,
+             xi_op_name(v->op), blk->id);
+        return false;
+    }
+    if (receiver_result && !xr_type_equals((XrType *) v->type, (XrType *) v->args[0]->type)) {
+        verr(ctx, "func '%s': v%u %s in b%u must preserve the exact receiver type", f->name, v->id,
+             xi_op_name(v->op), blk->id);
+        return false;
+    }
+    if (query && (!v->type || v->type->kind != XR_KIND_INT || v->type->native_width != 0)) {
+        verr(ctx, "func '%s': v%u %s in b%u must return int", f->name, v->id, xi_op_name(v->op),
+             blk->id);
+        return false;
+    }
+    return true;
+}
+
 static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -674,6 +733,9 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
             if (!v || !v->type)
                 continue;
             uint16_t op = v->op;
+
+            if (!verify_exact_bit_contract(ctx, f, blk, v))
+                return;
 
             if (xi_verify_generated_op_has_check(op, XI_VERIFY_CHECK_OBSOLETE)) {
                 verr(ctx, "func '%s': obsolete multi-return op %u in b%u; use tuple values instead",

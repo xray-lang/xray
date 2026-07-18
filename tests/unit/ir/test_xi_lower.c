@@ -691,6 +691,47 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
     xi_func_free(f);
 }
 
+TEST(exact_integer_bit_methods_lower_to_typed_semantic_ops) {
+    XiFunc *f = lower_source("var octet: uint8 = 129\n"
+                             "var rotated = octet.rotateLeft(-1)\n"
+                             "var restored = rotated.rotateRight(15)\n"
+                             "var half: int16 = -2\n"
+                             "var swapped = half.byteswap()\n"
+                             "print(restored)\n"
+                             "print(swapped)\n"
+                             "print(octet.popcount())\n"
+                             "print(octet.leadingZeros())\n"
+                             "var wide: int = 256\n"
+                             "print(wide.trailingZeros())\n");
+    assert(f != NULL);
+
+    XiValue *rotl = func_tree_find_op(f, XI_BIT_ROTL);
+    XiValue *rotr = func_tree_find_op(f, XI_BIT_ROTR);
+    XiValue *bswap = func_tree_find_op(f, XI_BIT_BSWAP);
+    XiValue *popcount = func_tree_find_op(f, XI_BIT_POPCOUNT);
+    XiValue *clz = func_tree_find_op(f, XI_BIT_CLZ);
+    XiValue *ctz = func_tree_find_op(f, XI_BIT_CTZ);
+    assert(rotl && rotr && bswap && popcount && clz && ctz &&
+           "all exact-width bit methods should lower to stable Xi ops");
+    assert(rotl->aux_int == XR_NATIVE_U8 && rotr->aux_int == XR_NATIVE_U8 &&
+           "rotate ops should retain the exact receiver width in aux_int");
+    assert(rotl->type && rotl->type->native_width == XR_NATIVE_U8 && rotr->type &&
+           rotr->type->native_width == XR_NATIVE_U8 &&
+           "rotate results should preserve the exact receiver type");
+    assert(bswap->aux_int == XR_NATIVE_I16 && bswap->type &&
+           bswap->type->native_width == XR_NATIVE_I16 &&
+           "byteswap should preserve signed exact-width receiver type");
+    assert(popcount->aux_int == XR_NATIVE_U8 && popcount->type &&
+           popcount->type->kind == XR_KIND_INT && popcount->type->native_width == 0 &&
+           "bit queries should return canonical int while retaining receiver width metadata");
+    assert(ctz->aux_int == 0 && ctz->type && ctz->type->native_width == 0 &&
+           "canonical int should retain its zero native-width tag and 64-bit bit semantics");
+    assert(!func_tree_find_method(f, "rotateLeft") && !func_tree_find_method(f, "byteswap") &&
+           !func_tree_find_method(f, "popcount") &&
+           "exact-width bit methods should not survive as string-dispatched method calls");
+    xi_func_free(f);
+}
+
 TEST(throw_stmt) {
     XiFunc *f = lower_source("enum LowerErr { Error }\n"
                              "var x = 1\n"
@@ -2504,6 +2545,7 @@ int main(void) {
     run_member_access();
     run_member_access_field_symbols_are_distinct();
     run_bytes_new_low_level_methods_lower_to_semantic_ops();
+    run_exact_integer_bit_methods_lower_to_typed_semantic_ops();
     run_throw_stmt();
     run_for_in_loop();
     run_nullish_coalesce();

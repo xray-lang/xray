@@ -23,10 +23,4 @@ class int {
     addOverflows(other: int) -> bool
     subOverflows(other: int) -> bool
     mulOverflows(other: int) -> bool
-    popcount() -> int
-    leadingZeros() -> int
-    trailingZeros() -> int
-    byteswap() -> int
-    rotateLeft(n: int) -> int
-    rotateRight(n: int) -> int
 }

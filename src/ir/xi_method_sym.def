@@ -131,8 +131,8 @@ XI_METHOD_SYM(SATURATING_MUL, 200, SATURATING_MUL, "saturatingMul")
 XI_METHOD_SYM(WRAPPING_ADD, 201, WRAPPING_ADD, "wrappingAdd")
 XI_METHOD_SYM(WRAPPING_SUB, 202, WRAPPING_SUB, "wrappingSub")
 XI_METHOD_SYM(WRAPPING_MUL, 203, WRAPPING_MUL, "wrappingMul")
-/* Int bit-manipulation + overflow predicates (task 153: moved from mem.*;
- * single semantic source src/shared/xr_bits_core.h / xr_arith_core.h). */
+/* Stable source symbols. Bit methods lower to xi.bit.* and never require a
+ * runtime method fallback; overflow predicates retain their arithmetic path. */
 XI_METHOD_SYM(POPCOUNT, 219, POPCOUNT, "popcount")
 XI_METHOD_SYM(LEADING_ZEROS, 220, LEADING_ZEROS, "leadingZeros")
 XI_METHOD_SYM(TRAILING_ZEROS, 221, TRAILING_ZEROS, "trailingZeros")

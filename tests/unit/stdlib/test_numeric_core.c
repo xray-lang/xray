@@ -9,6 +9,7 @@
  */
 
 #include "../test_framework.h"
+#include "shared/xr_bits_core.h"
 #include "shared/xr_numeric_core.h"
 #include <stdint.h>
 #include <string.h>
@@ -91,6 +92,43 @@ TEST(numeric_core_shift_counts_are_mod64) {
     ASSERT_EQ_INT(xr_numeric_core_i64_shr_wrap(INT64_MIN, 63), -1);
 }
 
+TEST(bits_core_exact_width_queries) {
+    ASSERT_EQ_INT(xr_bits_exact_popcount(-1, XR_NATIVE_I8), 8);
+    ASSERT_EQ_INT(xr_bits_exact_popcount(-1, XR_NATIVE_I16), 16);
+    ASSERT_EQ_INT(xr_bits_exact_popcount(-1, XR_NATIVE_I32), 32);
+    ASSERT_EQ_INT(xr_bits_exact_popcount(-1, XR_NATIVE_I64), 64);
+    ASSERT_EQ_INT(xr_bits_exact_leading_zeros(0, XR_NATIVE_U8), 8);
+    ASSERT_EQ_INT(xr_bits_exact_leading_zeros(1, XR_NATIVE_U16), 15);
+    ASSERT_EQ_INT(xr_bits_exact_trailing_zeros(0, XR_NATIVE_U32), 32);
+    ASSERT_EQ_INT(xr_bits_exact_trailing_zeros(0x100, XR_NATIVE_U64), 8);
+}
+
+TEST(bits_core_exact_width_preserves_type_pattern) {
+    ASSERT_EQ_INT(xr_bits_exact_byteswap(0x12, XR_NATIVE_U8), 0x12);
+    ASSERT_EQ_INT(xr_bits_exact_byteswap(0x1234, XR_NATIVE_U16), 0x3412);
+    ASSERT_EQ_INT(xr_bits_exact_byteswap(0x80ff, XR_NATIVE_I16), -128);
+    ASSERT_EQ_INT(xr_bits_exact_rotate_left(0x81, 1, XR_NATIVE_U8), 3);
+    ASSERT_EQ_INT(xr_bits_exact_rotate_right(1, 1, XR_NATIVE_U8), 128);
+    ASSERT_EQ_INT(xr_bits_exact_rotate_left(-128, -1, XR_NATIVE_I8), 64);
+}
+
+TEST(bits_core_rotate_count_is_euclidean_mod_width) {
+    static const uint8_t widths[] = {XR_NATIVE_I8,  XR_NATIVE_U16,   XR_NATIVE_I32,
+                                     XR_NATIVE_U64, XR_NATIVE_ISIZE, XR_NATIVE_USIZE};
+    for (size_t i = 0; i < sizeof(widths) / sizeof(widths[0]); i++) {
+        uint8_t native_type = widths[i];
+        int64_t value = xr_bits_exact_restore(UINT64_C(0x81), native_type);
+        uint8_t width = xr_bits_exact_width(native_type);
+        ASSERT_EQ_INT(xr_bits_exact_rotate_left(value, -1, native_type),
+                      xr_bits_exact_rotate_right(value, 1, native_type));
+        ASSERT_EQ_INT(xr_bits_exact_rotate_left(value, width + 3, native_type),
+                      xr_bits_exact_rotate_left(value, 3, native_type));
+        ASSERT_EQ_INT(xr_bits_exact_rotate_right(xr_bits_exact_rotate_left(value, -65, native_type),
+                                                 -65, native_type),
+                      value);
+    }
+}
+
 TEST(numeric_core_to_fixed_decimals_clamps) {
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(-10), 0);
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(3), 3);
@@ -108,6 +146,9 @@ RUN_TEST(numeric_core_math_abs_preserves_int_or_promotes_min);
 RUN_TEST(numeric_core_integer_arithmetic_wraps);
 RUN_TEST(numeric_core_integer_div_mod_edges_match_language);
 RUN_TEST(numeric_core_shift_counts_are_mod64);
+RUN_TEST(bits_core_exact_width_queries);
+RUN_TEST(bits_core_exact_width_preserves_type_pattern);
+RUN_TEST(bits_core_rotate_count_is_euclidean_mod_width);
 RUN_TEST(numeric_core_to_fixed_decimals_clamps);
 
 TEST_MAIN_END()

@@ -267,7 +267,7 @@ static const char *xr_builtin_symbol_names[] = {
     "broadcast",
     "call",
     "detach",
-    // Int bit-manipulation methods (task 153; shared core xr_bits_core.h)
+    // Stable source symbols for compiler-known exact-width integer methods.
     "popcount",
     "leadingZeros",
     "trailingZeros",

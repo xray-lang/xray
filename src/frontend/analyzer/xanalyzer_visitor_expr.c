@@ -528,6 +528,8 @@ static XrType *xa_function_type1(XaInferContext *ctx, XrType *p0, XrType *ret) {
 
 static bool xa_builtin_receiver_matches(XrType *receiver, XaBuiltinReceiverKind kind) {
     switch (kind) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return receiver && receiver->kind == XR_KIND_INT && !receiver->is_nullable;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -559,6 +561,8 @@ static const char *xa_builtin_receiver_display_name(const XaBuiltinReceiverMetho
     if (!spec)
         return "receiver";
     switch (spec->receiver) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return "integer";
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return "Array<byte>";
         case XA_BUILTIN_RECEIVER_ARRAY:

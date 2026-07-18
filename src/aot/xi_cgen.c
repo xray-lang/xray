@@ -352,6 +352,9 @@ static bool cg_builtin_receiver_pod_span_elem(const XrType *type) {
 static bool cg_builtin_receiver_registry_matches(const XrType *receiver_type,
                                                  XaBuiltinReceiverKind kind) {
     switch (kind) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return receiver_type && receiver_type->kind == XR_KIND_INT &&
+                   !receiver_type->is_nullable;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver_type);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -4383,6 +4386,8 @@ static const char *cg_builtin_receiver_registry_detail(XiCgenCtx *ctx,
                                                        XaBuiltinReceiverKind receiver,
                                                        const char *method_name) {
     switch (receiver) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return cg_no_alloc_owned_stdlib_detail(ctx, "integer", method_name);
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return cg_no_alloc_owned_stdlib_detail(ctx, "Array<byte>", method_name);
         case XA_BUILTIN_RECEIVER_ARRAY:

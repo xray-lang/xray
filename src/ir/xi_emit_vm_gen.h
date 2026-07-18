@@ -26,6 +26,12 @@
     X(BOR, xi_emit_arith) \
     X(BXOR, xi_emit_arith) \
     X(BNOT, xi_emit_bnot) \
+    X(BIT_ROTL, xi_emit_exact_bit) \
+    X(BIT_ROTR, xi_emit_exact_bit) \
+    X(BIT_BSWAP, xi_emit_exact_bit) \
+    X(BIT_POPCOUNT, xi_emit_exact_bit) \
+    X(BIT_CLZ, xi_emit_exact_bit) \
+    X(BIT_CTZ, xi_emit_exact_bit) \
     X(NOT, xi_emit_not) \
     X(SELECT, emit_select) \
     X(GET_SHARED, xi_emit_get_shared) \

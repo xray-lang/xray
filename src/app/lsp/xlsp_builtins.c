@@ -79,6 +79,8 @@ static bool xlsp_type_is_pod_slice_elem(XrType *type) {
 
 static bool xlsp_receiver_matches(XrType *type, XlspReceiverKind receiver) {
     switch (receiver) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return type && type->kind == XR_KIND_INT && !type->is_nullable;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(type);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -118,6 +120,9 @@ static void xlsp_receiver_label(XrType *type, const XlspReceiverMethodSpec *spec
         return;
     }
     switch (spec->receiver) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            xlsp_type_label(type, buf, buf_size);
+            return;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             snprintf(buf, buf_size, "Array<byte>");
             return;
@@ -255,6 +260,9 @@ static const char *xlsp_registry_param_name(const XlspReceiverMethodSpec *spec, 
     if (kind == XA_BUILTIN_TYPE_U8_SLICE || kind == XA_BUILTIN_TYPE_SLICE_OF_RECEIVER_ELEM)
         return "source";
     if (kind == XA_BUILTIN_TYPE_INT) {
+        if (strcmp(spec->source_name, "rotateLeft") == 0 ||
+            strcmp(spec->source_name, "rotateRight") == 0)
+            return "count";
         if (strcmp(spec->source_name, "resize") == 0)
             return "length";
         if (strcmp(spec->source_name, "reserve") == 0)

@@ -5,12 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrt_mem.h - Freestanding AOT wrappers for the mem.* bit intrinsics.
+ * xrt_mem.h - Freestanding AOT wrappers for the mem module.
  *
- * These mirror the VM bindings in stdlib/mem/mem.c one-for-one and call
- * the same shared core (src/shared/xr_bits_core.h), so AOT-compiled code
- * and the VM produce identical results. AOT direct-call metadata for
- * these lives in stdlib/defs/core.def (aot: "xrt_mem_*", arg_spec).
+ * These mirror the VM bindings in stdlib/mem/mem.c for memory-management and
+ * raw-memory operations. Exact-width integer bit operations are compiler Xi
+ * intrinsics and intentionally have no runtime entry points here.
  */
 
 #ifndef XRT_MEM_H
@@ -37,7 +36,6 @@
 #include "xrt_value.h"
 #include "xrt_arc.h"
 #include "xrt_coll.h"
-#include "../shared/xr_bits_core.h"
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_sync_core.h"
 
@@ -185,11 +183,8 @@ static inline XrValue xrt_buffer_method_1(XrValue recv, int sym, XrValue arg0) {
     return XR_NULL_VAL;
 }
 
-/* Bit intrinsics + wrapping/overflow arithmetic moved to `int` methods
- * (task 153): the AOT path now lowers x.popcount()/x.rotateLeft(n)/... to
- * xr_bits_core_* / xr_arith_core_* / xr_i64_* directly in the cgen (see
- * xicgen_emit_int_numeric_method), so the old boxed mem.* wrappers here
- * were deleted along with the core.def mem entries. */
+/* Exact-width bit operations lower through xi.bit.* and have no boxed mem.*
+ * or method-dispatch wrappers. Arithmetic intrinsics use their own lowering. */
 
 static inline XrValue xrt_mem_fence(XrValue ordering) {
     xr_sync_core_fence(xrt_mem_int_arg(ordering));

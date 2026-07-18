@@ -97,6 +97,42 @@
   :vm-bytecode (driver xi_emit_bnot)
   :aot-c (driver xicgen_bnot))
 
+(lower xi.bit.rotl
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_exact_bit)
+  :aot-c (driver xicgen_exact_bit))
+
+(lower xi.bit.rotr
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_exact_bit)
+  :aot-c (driver xicgen_exact_bit))
+
+(lower xi.bit.bswap
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_exact_bit)
+  :aot-c (driver xicgen_exact_bit))
+
+(lower xi.bit.popcount
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_exact_bit)
+  :aot-c (driver xicgen_exact_bit))
+
+(lower xi.bit.clz
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_exact_bit)
+  :aot-c (driver xicgen_exact_bit))
+
+(lower xi.bit.ctz
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_exact_bit)
+  :aot-c (driver xicgen_exact_bit))
+
 (lower xi.not
   :match (value-unary)
   :required-targets (vm-bytecode aot-c)

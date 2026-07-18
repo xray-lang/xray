@@ -25,6 +25,12 @@
     X(BOR, "xi.bor", xicgen_bor) \
     X(BXOR, "xi.bxor", xicgen_bxor) \
     X(BNOT, "xi.bnot", xicgen_bnot) \
+    X(BIT_ROTL, "xi.bit.rotl", xicgen_exact_bit) \
+    X(BIT_ROTR, "xi.bit.rotr", xicgen_exact_bit) \
+    X(BIT_BSWAP, "xi.bit.bswap", xicgen_exact_bit) \
+    X(BIT_POPCOUNT, "xi.bit.popcount", xicgen_exact_bit) \
+    X(BIT_CLZ, "xi.bit.clz", xicgen_exact_bit) \
+    X(BIT_CTZ, "xi.bit.ctz", xicgen_exact_bit) \
     X(NOT, "xi.not", xicgen_not) \
     X(SELECT, "xi.select", xicgen_select) \
     X(GET_SHARED, "xi.get.shared", xicgen_get_shared) \
