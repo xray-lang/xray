@@ -729,6 +729,12 @@ static AstNode *xr_parse_extern_block_declaration(Parser *parser) {
 
         AstNode *decl = NULL;
         bool is_extern_layout = false;
+        bool is_exported = xr_parser_match(parser, TK_EXPORT);
+        if (is_exported && xr_parser_check(parser, TK_AT)) {
+            xr_parser_error_at_current(parser,
+                                       "attributes must appear before 'export' in a declaration");
+            return NULL;
+        }
         if (xr_parser_check(parser, TK_AT)) {
             decl = xr_parse_attributed_declaration(parser);
         } else if (xr_parser_match(parser, TK_FN)) {
@@ -754,6 +760,8 @@ static AstNode *xr_parse_extern_block_declaration(Parser *parser) {
 
         if (!decl)
             return NULL;
+        if (is_exported)
+            decl->is_exported = true;
         if (decl->type == AST_FUNCTION_DECL) {
             if (xr_parser_check(parser, TK_LBRACE)) {
                 xr_parser_error_at_current(

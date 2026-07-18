@@ -306,6 +306,7 @@ unsafe { header.count = 4 }
 - ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
 - `dylib("name-or-path")` 指定符号所在动态库；`link("name")` 指定 AOT 系统链接名。二者都进入统一 typed FFI descriptor，未指定时从默认进程/系统路径解析。
 - extern 块内函数只能声明签名，不能带 `{ }` 函数体；普通函数必须带块体。
+- 需要从模块发布的外部函数或 layout 必须在 extern 块内直接写 `export fn`、`export struct`、`export union` 或 `export packed struct`；已删除的同模块 post-hoc `export { Name }` 不可用于补发布。
 - extern 块内可声明 `struct`、`union` 与 `packed struct`。布局字段只能使用 C ABI 标量、`Ptr<T>` / `MutPtr<T>`、标量定长数组，或另一个 extern layout；普通 xray struct、class、`string`、nullable 与其他 managed 类型均被拒绝。
 - extern layout 不允许泛型、接口、方法、字段修饰符或字段初始化器；按值嵌套的聚合必须也在 extern 块中声明。
 - `flex T` 表示真正的 C flexible array member，只能出现在 extern struct 的最后一个字段，并且之前至少有一个固定字段；extern union 与普通 xray struct 均不允许 `flex`。`sizeOf` 返回已按 struct alignment 补齐的 header size，`offsetOf` 可查询 flexible tail 的起始偏移；tail 不携带隐式长度。
@@ -1215,6 +1216,7 @@ Rules:
 - The ABI string is mandatory; `"C"` is currently the only supported value.
 - `dylib("name-or-path")` selects a dynamic library, while `link("name")` selects an AOT system link name. Both feed the same typed FFI descriptor; without either, resolution uses the default process/system lookup path.
 - Functions inside an extern block may only declare signatures and cannot have `{ }` bodies; ordinary functions require block bodies.
+- An external function or layout published by the module must use direct visibility inside the extern block: `export fn`, `export struct`, `export union`, or `export packed struct`. The removed same-module post-hoc `export { Name }` form cannot publish it afterward.
 - An extern block may declare `struct`, `union`, and `packed struct` layouts. Layout fields may contain only C ABI scalars, `Ptr<T>` / `MutPtr<T>`, fixed arrays of scalars, or another extern layout. Ordinary xray structs, classes, `string`, nullable types, and other managed types are rejected.
 - Extern layouts cannot have generics, interfaces, methods, field modifiers, or field initializers. Any aggregate nested by value must itself be declared as an extern layout.
 - `flex T` is a real C flexible array member. It may appear only as the last field of an extern struct and requires at least one preceding fixed field; extern unions and ordinary xray structs reject `flex`. `sizeOf` returns the header size padded to the struct alignment, while `offsetOf` can query the flexible tail's starting offset. The tail carries no implicit length.

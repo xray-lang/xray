@@ -285,7 +285,6 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
     if (is_ctor && is_inst)
         ml.func->return_type = this_type;
 
-    bool is_ctor = m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
     XaSymbol *method_sym = class_method_analyzer_symbol(l, cd, m);
     xi_lower_publish_allocation_effect(ml.func, l->analyzer, method_sym);
     XaSymbolLinks *owner_links = method_sym && method_sym->parent

@@ -291,7 +291,7 @@ TEST(parser_function_decl) {
 TEST(parser_extern_block_flattens_typed_descriptors) {
     setup();
     AstNode *program = parse_ok("extern \"C\" dylib(\"m\") {\n"
-                                "  fn cos(x: float64) -> float64\n"
+                                "  export fn cos(x: float64) -> float64\n"
                                 "  fn clear(value: out int32)\n"
                                 "}");
     ASSERT_EQ_INT(program->as.program.count, 2);
@@ -305,6 +305,8 @@ TEST(parser_extern_block_flattens_typed_descriptors) {
         ASSERT_EQ_INT(decl->as.function_decl.attributes[1]->kind, ATTR_DYLIB);
         ASSERT_STR_EQ(decl->as.function_decl.attributes[1]->str_arg, "m");
     }
+    ASSERT_TRUE(program->as.program.statements[0]->is_exported);
+    ASSERT_FALSE(program->as.program.statements[1]->is_exported);
     ASSERT_EQ_INT(program->as.program.statements[1]->as.function_decl.params[0]->passing_mode,
                   XR_PARAM_OUT);
     teardown();
@@ -312,21 +314,25 @@ TEST(parser_extern_block_flattens_typed_descriptors) {
 
 TEST(parser_extern_block_flattens_layout_declarations) {
     setup();
-    AstNode *program = parse_ok("extern \"C\" {\n"
-                                "  struct Header { tag: uint8 next: Ptr<byte> tail: flex uint8 }\n"
-                                "  packed struct Packed { tag: uint8 count: uint32 }\n"
-                                "  union Word { bits: uint32 bytes: [uint8; 4] }\n"
-                                "}");
+    AstNode *program =
+        parse_ok("extern \"C\" {\n"
+                 "  export struct Header { tag: uint8 next: Ptr<byte> tail: flex uint8 }\n"
+                 "  export packed struct Packed { tag: uint8 count: uint32 }\n"
+                 "  union Word { bits: uint32 bytes: [uint8; 4] }\n"
+                 "}");
     ASSERT_EQ_INT(program->as.program.count, 3);
     ASSERT_EQ_INT(program->as.program.statements[0]->type, AST_STRUCT_DECL);
+    ASSERT_TRUE(program->as.program.statements[0]->is_exported);
     ASSERT_TRUE(program->as.program.statements[0]->as.struct_decl.is_extern_layout);
     ASSERT_FALSE(program->as.program.statements[0]->as.struct_decl.is_packed);
     ASSERT_TRUE(
         program->as.program.statements[0]->as.struct_decl.fields[2]->as.field_decl.is_flexible);
     ASSERT_EQ_INT(program->as.program.statements[1]->type, AST_STRUCT_DECL);
+    ASSERT_TRUE(program->as.program.statements[1]->is_exported);
     ASSERT_TRUE(program->as.program.statements[1]->as.struct_decl.is_extern_layout);
     ASSERT_TRUE(program->as.program.statements[1]->as.struct_decl.is_packed);
     ASSERT_EQ_INT(program->as.program.statements[2]->type, AST_UNION_DECL);
+    ASSERT_FALSE(program->as.program.statements[2]->is_exported);
     ASSERT_TRUE(program->as.program.statements[2]->as.union_decl.is_extern_layout);
     teardown();
 }
