@@ -1,3 +1,4 @@
-c_regex=static XR_AINLINE (XRT_FN_[A-Z]+ )?int64_t _aot_inline_policy_lib_small_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
-c_regex=static int64_t _aot_inline_policy_lib_looping_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
-c_not_regex=static XR_AINLINE int64_t _aot_inline_policy_lib_looping_[0-9]+
+c_not_regex=_aot_inline_policy_lib_[0-9a-f]+_small_[0-9]+
+c_regex=static int64_t _aot_inline_policy_lib_[0-9a-f]+_looping_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
+c_not_regex=static XR_AINLINE int64_t _aot_inline_policy_lib_[0-9a-f]+_looping_[0-9]+
+c_regex=\(uint64_t\)\(v[0-9]+\) \+ \(uint64_t\)\(v[0-9]+\)

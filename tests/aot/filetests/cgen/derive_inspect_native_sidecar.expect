@@ -1,6 +1,6 @@
-c_contains=static const XrtInspectField xrt_native_derive_inspect_native_sidecar_Point_inspect_fields[]
+c_regex=static const XrtInspectField xrt_native_derive_inspect_native_sidecar_[0-9a-f]+_Point_inspect_fields\[\]
 c_contains={"x", 0u, 0}
 c_contains={"y", 8u, 0}
-c_contains=xrt_type_set_derive(_tid, 3u, xrt_native_derive_inspect_native_sidecar_Point_inspect_fields, 2);
+c_regex=xrt_type_set_derive\(_tid, 3u, xrt_native_derive_inspect_native_sidecar_[0-9a-f]+_Point_inspect_fields, 2\);
 c_not_contains=Reflect
 c_not_contains=need_reflection

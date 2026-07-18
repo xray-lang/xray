@@ -385,7 +385,7 @@ fn xray_top_const_struct_string_array_print(i: int) -> int {
 
 @c_export("xray_top_const_struct_array_field_runtime")
 fn xray_top_const_struct_array_field_runtime(i: int) -> int {
-    return ENTRIES[i].code + (ENTRIES[i].flag as int)
+    return ENTRIES[i].code + (ENTRIES[i].flag ? 1 : 0)
 }
 
 @c_export("xray_top_const_struct_array_fixed_field_runtime")

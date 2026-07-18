@@ -3,8 +3,9 @@ c_contains=uint8_t _fa
 c_contains=xr_array_ref(_fa
 c_contains=INT64_C(4)
 c_contains=[INT64_C(1)] = (uint8_t)
-c_contains=((uint8_t*)
-c_contains=xrt_fixed_index_oob(_idx, 4)
+c_regex=_fa[0-9]+\[INT64_C\(1\)\] = \(uint8_t\)
+c_not_contains=xrt_fixed_index_oob(_idx, 4)
 c_not_contains=xrt_index_get(
 c_not_contains=xrt_index_set(
 c_not_contains=((xrt_array_t*)
+c_not_contains=((uint8_t*)

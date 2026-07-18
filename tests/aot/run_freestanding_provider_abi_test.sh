@@ -10,6 +10,11 @@ trap 'rm -rf "$TMP"' EXIT
 
 "$XRAY" build --native --target native -c -o "$TMP/provider.c" "$CASE" >/dev/null
 
+if grep -Eq 'xrt_runtime_value_ops|runtime_cfg\.value_ops' "$TMP/provider.c"; then
+    echo "freestanding provider object emitted the hosted value-ops bridge" >&2
+    exit 1
+fi
+
 "$CC" -std=c11 -ffreestanding -fno-stack-protector \
     -DXRAY_TARGET_RUNTIME_PROVIDER=1 \
     -DXRAY_PROVIDER_ABI=1 \

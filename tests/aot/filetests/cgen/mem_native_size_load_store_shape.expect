@@ -2,9 +2,11 @@ contains=xaot-plan v0
 regex=value v[0-9]+ op=PTR_STORE kind=void rep=void c_type=void
 regex=value v[0-9]+ op=PTR_LOAD kind=scalar rep=isize c_type=ptrdiff_t
 regex=value v[0-9]+ op=PTR_LOAD kind=scalar rep=usize c_type=size_t
-c_contains=(*(size_t *)(
-c_contains=(*(ptrdiff_t *)(
-c_regex=xrt_ptr_store_int_unchecked_raw\([^;]+UINT8_C\(8\)
-c_regex=xrt_ptr_load_int_unchecked_raw\([^;]+UINT8_C\(8\), UINT8_C\(0\)
+c_contains=xr_raw_store_u64_unaligned(
+c_contains=xr_raw_load_u64_unaligned(
+c_regex=xr_raw_store_u64_unaligned\([^;]+\)
+c_regex=xr_raw_load_u64_unaligned\([^;]+\)
 c_not_contains=(*(int64_t *)(
+c_not_contains=(*(size_t *)(
+c_not_contains=(*(ptrdiff_t *)(
 c_not_contains=sizeof(void *)
