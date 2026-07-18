@@ -11,31 +11,21 @@
 #include "xlsp_keywords.h"
 #include <stddef.h>
 
-// xray language keywords
+// Xray reserved words. Keep this array mechanically tied to the lexer table so
+// completion and rename cannot drift from the parser-visible token set.
 const char *xr_keywords[] = {
-    // Declarations
-    "var", "const", "fn", "class", "struct", "packed", "union", "interface", "enum", "type",
-    // Control flow
-    "if", "else", "while", "for", "in", "is", "to", "break", "continue", "return", "match",
-    "default",
-    // Class
-    "extends", "implements", "constructor", "this", "super", "new", "static", "private", "final",
-    "operator",
-    // Exception
-    "try", "catch", "throw",
-    // Module
-    "import", "export", "from", "as",
-    // Coroutine
-    "go", "await", "select", "defer", "scope", "cancelled", "shared", "after",
-    // Literals
-    "true", "false", "null",
-    // Types
-    "void", "int", "float", "string", "bool", "Array", "Map", "Set", "Json", "Channel", "Recv",
-    "SendResult", "Task", "TaskResult", "TaskStatus", "BigInt", "StringBuilder", "PanicInfo",
-    "Regex", NULL};
+#define XR_KW(spelling, length, token) spelling,
+#include "xkeywords.def"
+#undef XR_KW
+    NULL};
 
-// Builtin functions
-const char *xr_builtins[] = {"print",       "dump",         "typeOf",    "typeName",  "assert",
-                             "assert_true", "assert_false", "assert_eq", "assert_ne", "int",
-                             "float",       "string",       "bool",      "copy",      "chr",
-                             "Coro",        "CoroPool",     NULL};
+// Builtin and prelude symbols offered by completion and protected from rename.
+// Prelude names are tied to the same registry used by the analyzer.
+const char *xr_builtins[] = {
+#define XR_PRELUDE_TYPE(name, native_type, kind) name,
+#include "../../../stdlib/prelude/prelude_types.def"
+#undef XR_PRELUDE_TYPE
+    "Coro",   "CoroPool",  "WeakMap",      "WeakSet",   "__dir__",       "__file__",    "process",
+    "assert", "assert_eq", "assert_false", "assert_ne", "assert_throws", "assert_true", "bool",
+    "chr",    "copy",      "dump",         "float",     "int",           "len",         "likely",
+    "print",  "rune",      "string",       "typeName",  "typeOf",        "unlikely",    NULL};
