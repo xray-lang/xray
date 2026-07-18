@@ -277,6 +277,14 @@ print(mem.alignOf<CHeader>())
 print(mem.offsetOf<CHeader>("next"))
 ```
 
+外部地址可在 `unsafe` 中用 `mem.view<T>(ptr)` 投影为该 layout 的 typed C view。投影不分配、不复制，也不创建 xray 对象；字段读写直接作用于外部存储，并继续遵守 `Ptr` / `MutPtr` 的只读/可写区分：
+
+```xray
+var header = unsafe { mem.view<CHeader>(rawHeader) }
+print(header.count)
+unsafe { header.count = 4 }
+```
+
 规则：
 - ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
 - `dylib("name-or-path")` 指定符号所在动态库；`link("name")` 指定 AOT 系统链接名。二者都进入统一 typed FFI descriptor，未指定时从默认进程/系统路径解析。
@@ -285,6 +293,8 @@ print(mem.offsetOf<CHeader>("next"))
 - extern layout 不允许泛型、接口、方法、字段修饰符或字段初始化器；按值嵌套的聚合必须也在 extern 块中声明。
 - `flex T` 表示真正的 C flexible array member，只能出现在 extern struct 的最后一个字段，并且之前至少有一个固定字段；extern union 与普通 xray struct 均不允许 `flex`。`sizeOf` 返回已按 struct alignment 补齐的 header size，`offsetOf` 可查询 flexible tail 的起始偏移；tail 不携带隐式长度。
 - extern layout 不能用 `T(...)` 或 struct literal 构造为 xray 值；它只定义由外部内存承载的原生布局。`mem.sizeOf<T>()`、`mem.alignOf<T>()` 与 `mem.offsetOf<T>(field)` 使用该原生布局表。
+- 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、`mem.view` 和 layout introspection 共用同一份 size/alignment/field-offset 结果；嵌套、packed、union、fixed array 与 flexible tail 均不得由后端再次推导。
+- extern layout 随 bytecode 确定性序列化，并绑定目标 ABI fingerprint。加载器必须拒绝 ABI 不匹配、残缺、越界、循环或带尾随垃圾的 layout payload，不能回退到宿主机布局。
 - 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
 - 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
@@ -1160,6 +1170,14 @@ print(mem.alignOf<CHeader>())
 print(mem.offsetOf<CHeader>("next"))
 ```
 
+Inside `unsafe`, an external address can be projected with `mem.view<T>(ptr)` as a typed C-layout view. The projection allocates and copies nothing and does not create an xray object; field reads and writes directly access foreign storage while preserving the readonly/mutable distinction of `Ptr` and `MutPtr`:
+
+```xray
+var header = unsafe { mem.view<CHeader>(rawHeader) }
+print(header.count)
+unsafe { header.count = 4 }
+```
+
 Rules:
 - The ABI string is mandatory; `"C"` is currently the only supported value.
 - `dylib("name-or-path")` selects a dynamic library, while `link("name")` selects an AOT system link name. Both feed the same typed FFI descriptor; without either, resolution uses the default process/system lookup path.
@@ -1168,6 +1186,8 @@ Rules:
 - Extern layouts cannot have generics, interfaces, methods, field modifiers, or field initializers. Any aggregate nested by value must itself be declared as an extern layout.
 - `flex T` is a real C flexible array member. It may appear only as the last field of an extern struct and requires at least one preceding fixed field; extern unions and ordinary xray structs reject `flex`. `sizeOf` returns the header size padded to the struct alignment, while `offsetOf` can query the flexible tail's starting offset. The tail carries no implicit length.
 - An extern layout cannot be constructed as an xray value with `T(...)` or a struct literal; it only describes native storage owned outside xray. `mem.sizeOf<T>()`, `mem.alignOf<T>()`, and `mem.offsetOf<T>(field)` consume the native layout table.
+- Each compilation target has one canonical target data layout. The analyzer, VM, AOT backend, `mem.view`, and layout introspection share the same size/alignment/field-offset results; nested, packed, union, fixed-array, and flexible-tail layouts are never re-derived by individual backends.
+- Extern layouts are serialized deterministically with bytecode and bound to a target-ABI fingerprint. The loader rejects ABI mismatches and truncated, out-of-range, cyclic, or trailing-garbage layout payloads; it never falls back to host layout.
 - Boundary types that are aligned across the VM/AOT backends include `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
 - C callback parameters must use `CFn<(A, B) -> R>`, not the ordinary xray function type `(A, B) -> R`.
 - A current `CFn` argument must be a module-level, noncapturing xray function with an exact signature match; anonymous functions, capturing closures, and extern functions themselves are rejected.

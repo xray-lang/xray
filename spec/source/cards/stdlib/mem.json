@@ -1,5 +1,5 @@
 {
   "module": "mem",
   "summary": "Raw memory, Buffer allocation, page allocation, volatile access, and memory primitives",
-  "lead": "Raw-memory capabilities for explicit low-level work. `mem.alloc*` returns managed `Buffer`; GC and heap introspection lives in the `runtime` module."
+  "lead": "Raw-memory capabilities for explicit low-level work. `mem.view<T>` is a zero-copy typed projection over canonical target layouts, `mem.load/store<T>` use target-sized scalar descriptors, and `mem.alloc*` returns managed `Buffer`; GC and heap introspection lives in the `runtime` module."
 }

@@ -639,8 +639,8 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 
 | 类型 | C ABI 含义 | 备注 |
 |--|--|--|
-| `uintsize` | `size_t` | 当前支持目标上为 `uint64` |
-| `intsize` | `ptrdiff_t` / 平台有符号宽度 | 当前支持目标上为 `int64` |
+| `uintsize` | `size_t` | 宽度由编译目标决定；不得按宿主机 `uint64` 代用 |
+| `intsize` | `ptrdiff_t` / 平台有符号宽度 | 宽度由编译目标决定；不得按宿主机 `int64` 代用 |
 | `Ptr<T>` | `const void *` 边界值 | 只读裸指针；`T` 用于 xray 端解引用/索引宽度 |
 | `MutPtr<T>` | `void *` 边界值 | 可写裸指针；可传给需要 `Ptr<T>` 的位置 |
 | `CFn<(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `extern "C"` 函数 |
@@ -662,6 +662,8 @@ unsafe {
 ```
 
 `Ptr<T>` 只能读取，写入必须使用 `MutPtr<T>`；`unsafe` 不会绕过这个类型规则。裸指针访问不做空指针或边界检查，调用方必须保证地址、生命周期、对齐和别名规则正确。
+
+`uintsize` / `intsize` 在 FFI 调用、`mem.load/store<T>`、extern layout 字段和生成 C 中使用同一份目标 ABI 标量描述。VM、AOT 与布局 introspection 必须采用编译目标的宽度和对齐；交叉编译时不得读取构建宿主机的 `sizeof(size_t)` 作为语义。
 
 `CFn<(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 extern 函数本身不能作为 `CFn` 回调实参。
 
@@ -2188,6 +2190,14 @@ print(mem.alignOf<CHeader>())
 print(mem.offsetOf<CHeader>("next"))
 ```
 
+外部地址可在 `unsafe` 中用 `mem.view<T>(ptr)` 投影为该 layout 的 typed C view。投影不分配、不复制，也不创建 xray 对象；字段读写直接作用于外部存储，并继续遵守 `Ptr` / `MutPtr` 的只读/可写区分：
+
+```xray
+var header = unsafe { mem.view<CHeader>(rawHeader) }
+print(header.count)
+unsafe { header.count = 4 }
+```
+
 规则：
 - ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
 - `dylib("name-or-path")` 指定符号所在动态库；`link("name")` 指定 AOT 系统链接名。二者都进入统一 typed FFI descriptor，未指定时从默认进程/系统路径解析。
@@ -2196,6 +2206,8 @@ print(mem.offsetOf<CHeader>("next"))
 - extern layout 不允许泛型、接口、方法、字段修饰符或字段初始化器；按值嵌套的聚合必须也在 extern 块中声明。
 - `flex T` 表示真正的 C flexible array member，只能出现在 extern struct 的最后一个字段，并且之前至少有一个固定字段；extern union 与普通 xray struct 均不允许 `flex`。`sizeOf` 返回已按 struct alignment 补齐的 header size，`offsetOf` 可查询 flexible tail 的起始偏移；tail 不携带隐式长度。
 - extern layout 不能用 `T(...)` 或 struct literal 构造为 xray 值；它只定义由外部内存承载的原生布局。`mem.sizeOf<T>()`、`mem.alignOf<T>()` 与 `mem.offsetOf<T>(field)` 使用该原生布局表。
+- 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、`mem.view` 和 layout introspection 共用同一份 size/alignment/field-offset 结果；嵌套、packed、union、fixed array 与 flexible tail 均不得由后端再次推导。
+- extern layout 随 bytecode 确定性序列化，并绑定目标 ABI fingerprint。加载器必须拒绝 ABI 不匹配、残缺、越界、循环或带尾随垃圾的 layout payload，不能回退到宿主机布局。
 - 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
 - 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
@@ -5132,6 +5144,7 @@ Bytecode  →  AOT (machine code)
 - 真值源：`src/vm/`、`include/xray_opcodes.h`。
 - 寄存器栈混合 VM。
 - IC（inline cache）加速属性访问与方法分派。
+- 字节码必须以确定性顺序序列化 extern 聚合布局及目标 ABI 指纹。加载器必须在执行前校验布局深度、递归环、字段范围、总大小、尾随数据和 ABI 一致性；任何损坏或目标不匹配都必须拒绝加载，不能回退到宿主机布局。
 
 ### 17.7 JIT 与 AOT
 

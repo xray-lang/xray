@@ -6452,7 +6452,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .body =
             "# mem module\n"
             "\n"
-            "Raw-memory capabilities for explicit low-level work. `mem.alloc*` returns managed `Buffer`; GC and heap introspection lives in the `runtime` module.\n"
+            "Raw-memory capabilities for explicit low-level work. `mem.view<T>` is a zero-copy typed projection over canonical target layouts, `mem.load/store<T>` use target-sized scalar descriptors, and `mem.alloc*` returns managed `Buffer`; GC and heap introspection lives in the `runtime` module.\n"
             "\n"
             "Usage: `import mem` then call `mem.function()`.\n"
             "\n"

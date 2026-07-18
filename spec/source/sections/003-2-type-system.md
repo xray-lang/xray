@@ -146,8 +146,8 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 
 | 类型 | C ABI 含义 | 备注 |
 |--|--|--|
-| `uintsize` | `size_t` | 当前支持目标上为 `uint64` |
-| `intsize` | `ptrdiff_t` / 平台有符号宽度 | 当前支持目标上为 `int64` |
+| `uintsize` | `size_t` | 宽度由编译目标决定；不得按宿主机 `uint64` 代用 |
+| `intsize` | `ptrdiff_t` / 平台有符号宽度 | 宽度由编译目标决定；不得按宿主机 `int64` 代用 |
 | `Ptr<T>` | `const void *` 边界值 | 只读裸指针；`T` 用于 xray 端解引用/索引宽度 |
 | `MutPtr<T>` | `void *` 边界值 | 可写裸指针；可传给需要 `Ptr<T>` 的位置 |
 | `CFn<(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `extern "C"` 函数 |
@@ -169,6 +169,8 @@ unsafe {
 ```
 
 `Ptr<T>` 只能读取，写入必须使用 `MutPtr<T>`；`unsafe` 不会绕过这个类型规则。裸指针访问不做空指针或边界检查，调用方必须保证地址、生命周期、对齐和别名规则正确。
+
+`uintsize` / `intsize` 在 FFI 调用、`mem.load/store<T>`、extern layout 字段和生成 C 中使用同一份目标 ABI 标量描述。VM、AOT 与布局 introspection 必须采用编译目标的宽度和对齐；交叉编译时不得读取构建宿主机的 `sizeof(size_t)` 作为语义。
 
 `CFn<(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 extern 函数本身不能作为 `CFn` 回调实参。
 
@@ -688,8 +690,8 @@ Xray's C FFI uses explicit boundary types so ordinary xray objects are not impli
 
 | Type | C ABI meaning | Notes |
 |--|--|--|
-| `uintsize` | `size_t` | `uint64` on the currently supported targets |
-| `intsize` | `ptrdiff_t` / platform signed width | `int64` on the currently supported targets |
+| `uintsize` | `size_t` | width comes from the compilation target; it must not be substituted with the host's `uint64` |
+| `intsize` | `ptrdiff_t` / platform signed width | width comes from the compilation target; it must not be substituted with the host's `int64` |
 | `Ptr<T>` | `const void *` boundary value | read-only raw pointer; `T` gives the xray-side dereference/index width |
 | `MutPtr<T>` | `void *` boundary value | mutable raw pointer; assignable where `Ptr<T>` is expected |
 | `CFn<(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `extern "C"` function |
@@ -711,6 +713,8 @@ unsafe {
 ```
 
 `Ptr<T>` is read-only; writes require `MutPtr<T>`. `unsafe` does not bypass that type rule. Raw pointer access performs no null or bounds checks, so the caller must guarantee address validity, lifetime, alignment, and aliasing correctness.
+
+`uintsize` / `intsize` use one target-ABI scalar descriptor across FFI calls, `mem.load/store<T>`, extern-layout fields, and generated C. The VM, AOT backend, and layout introspection must use the compilation target's width and alignment; cross-compilation never derives language semantics from the build host's `sizeof(size_t)`.
 
 `CFn<(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and extern functions themselves cannot be used as `CFn` callback arguments.
 
