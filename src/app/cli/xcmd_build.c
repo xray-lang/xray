@@ -1412,12 +1412,12 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     }
     bool freestanding_shared_object =
         shared_library && profile == XR_CLI_BUILD_PROFILE_FREESTANDING;
-    if (shared_library && !target.is_native && !freestanding_shared_object) {
+    if (shared_library && !c_only && !target.is_native && !freestanding_shared_object) {
         fprintf(stderr, "Error: --shared currently requires native target\n");
         CMD_BUILD_RETURN(2);
     }
 #ifdef XR_OS_WINDOWS
-    if (shared_library && !freestanding_shared_object) {
+    if (shared_library && !c_only && !freestanding_shared_object) {
         fprintf(stderr, "Error: --shared is not implemented for Windows hosts yet\n");
         CMD_BUILD_RETURN(2);
     }
@@ -1458,7 +1458,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: %s\n", parse_err);
         CMD_BUILD_RETURN(2);
     }
-    if (shared_library && toolchain_plan.kind != XR_CLI_TOOLCHAIN_HOST &&
+    if (shared_library && !c_only && toolchain_plan.kind != XR_CLI_TOOLCHAIN_HOST &&
         !freestanding_shared_object) {
         fprintf(stderr, "Error: --shared currently requires the host toolchain\n");
         CMD_BUILD_RETURN(2);
@@ -2609,9 +2609,10 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         return 1;
     }
 
-    /* --c-only: emit the generated C for inspection.  A single-module program
-     * is one translation unit; a multi-module program is written as the
-     * concatenation of its per-module units, each labeled. */
+    /* --c-only emits one compilable amalgamated translation unit.  Put the
+     * entry unit first so its XRT_IMPL definitions are seen before the shared
+     * runtime headers' include guards; all remaining units then contribute
+     * declarations and module-local code only. */
     if (c_only) {
         FILE *f = fopen(output, "w");
         if (!f) {
@@ -2619,7 +2620,24 @@ static int cmd_build_native(const char *input, const char *output, const char *c
             xaot_build_result_free(&aot_result);
             return 1;
         }
+        int impl_source = -1;
         for (int i = 0; i < n_sources; i++) {
+            if (strstr(aot_result.sources[i].c_source, "#define XRT_IMPL")) {
+                impl_source = i;
+                break;
+            }
+        }
+        if (impl_source >= 0) {
+            if (n_sources > 1)
+                fprintf(f, "/* ==== module: %s ==== */\n",
+                        aot_result.sources[impl_source].name ? aot_result.sources[impl_source].name
+                                                             : "?");
+            fputs(aot_result.sources[impl_source].c_source, f);
+            fputc('\n', f);
+        }
+        for (int i = 0; i < n_sources; i++) {
+            if (i == impl_source)
+                continue;
             if (n_sources > 1)
                 fprintf(f, "/* ==== module: %s ==== */\n",
                         aot_result.sources[i].name ? aot_result.sources[i].name : "?");

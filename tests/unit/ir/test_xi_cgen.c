@@ -1711,7 +1711,8 @@ TEST(cgen_struct_value_abi_uses_canonical_layout_typedef) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "struct value ABI should generate without adapter errors");
-    assert(contains(code, "typedef struct xrt_struct_abi_") &&
+    assert(contains(code, "#ifndef XRT_TYPEDEF_xrt_struct_abi_") &&
+           contains(code, "typedef struct xrt_struct_abi_") &&
            "native value struct typedef should use canonical layout identity");
     assert(contains(code, "static xrt_struct_abi_") &&
            "struct-returning helpers should use native value struct ABI");
