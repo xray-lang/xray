@@ -178,6 +178,12 @@ static void verify_block(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk) {
                 }
                 break;
             }
+            /* A generator's declared return type is the Iterator<T> produced
+             * when the function is called.  Reaching the end of its resumable
+             * body instead signals iterator completion and carries no normal
+             * return value. */
+            if (f->entry_type == 2 && !blk->control)
+                break;
             if (!blk->control) {
                 verr(ctx, "func '%s': non-unit RETURN block b%u requires a value", f->name,
                      blk->id);
