@@ -54,6 +54,12 @@ invoke_dispatch:;
     } while (0)
 
     XrValue receiver = R(a + 1);
+    if (XR_IS_PLACE(receiver)) {
+        if (receiver.i < 0 || receiver.i >= vm_ctx->stack_capacity) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid method receiver place");
+        }
+        receiver = vm_ctx->stack[receiver.i];
+    }
     int method_symbol = PROTO_SYMBOL(cl->proto, b);
 
     /* ── Channel methods ──
@@ -464,6 +470,12 @@ vmcase(OP_INVOKE_DIRECT) {
     int nargs = c_raw & 0x7F;
 
     XrValue receiver = R(a + 1);
+    if (XR_IS_PLACE(receiver)) {
+        if (receiver.i < 0 || receiver.i >= vm_ctx->stack_capacity) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid direct method receiver place");
+        }
+        receiver = vm_ctx->stack[receiver.i];
+    }
     XrClass *cls = NULL;
     if (XR_IS_AGG_REF(receiver)) {
         // Stack-allocated struct: class ptr at head
@@ -494,7 +506,7 @@ vmcase(OP_INVOKE_DIRECT) {
      * native method), accessing .as.closure would read the wrong union
      * member and crash.  Guard defensively. */
     if (method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-        XrValue result = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
+        XrValue result = method->as.primitive(isolate, receiver, &R(a + 2), nargs);
         VM_REBIND_AFTER_NATIVE_CALL();
         R(a) = result;
         VM_BUILTIN_INVOKE_CHECK_EXC();
@@ -503,7 +515,7 @@ vmcase(OP_INVOKE_DIRECT) {
     if (method->type == XMETHOD_YIELDABLE_PRIMITIVE && method->as.yieldable_primitive) {
         XrValue result = xr_null();
         XrCFuncResult status =
-            method->as.yieldable_primitive(isolate, R(a + 1), &R(a + 2), nargs, &result);
+            method->as.yieldable_primitive(isolate, receiver, &R(a + 2), nargs, &result);
         VM_REBIND_AFTER_NATIVE_CALL();
         if (status == XR_CFUNC_DONE) {
             vm_suspend_clear_yielded(ci);

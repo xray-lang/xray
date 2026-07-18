@@ -453,10 +453,6 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
     return true;
 }
 
-static bool xg_class_summary_is_runtime_class(const XgClassSummary *cls) {
-    return cls && (cls->decl_kind == 0 || cls->decl_kind == XG_DECL_CLASS);
-}
-
 static const XgClassSummary *xg_evidence_find_class(const XgGlobalEvidence *ev,
                                                     XgClassId class_id) {
     if (!ev || class_id == XG_NO_ID)
@@ -1066,7 +1062,7 @@ static bool xaot_bundle_add_method_dispatch_plan(XaotBundle *bundle, const XgCal
         for (uint32_t i = 0; i < ev->nclasses; i++) {
             const XgClassSummary *candidate = &ev->classes[i];
             const XgMethodSummary *target_method;
-            if (!xg_class_summary_is_runtime_class(candidate))
+            if (!xg_decl_kind_is_runtime_class(candidate->decl_kind))
                 continue;
             if (!xg_evidence_class_is_descendant_or_self(ev, candidate->class_id,
                                                          call->receiver_static_class_id))
@@ -4048,7 +4044,7 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
     }
     for (uint32_t i = 0; i < evidence->nclasses; i++) {
         const XgClassSummary *summary = &evidence->classes[i];
-        if (!xg_class_summary_is_runtime_class(summary))
+        if (!xg_decl_kind_is_runtime_class(summary->decl_kind))
             continue;
         if (!xaot_bundle_add_class_hierarchy_plan(bundle, summary) ||
             !xaot_bundle_add_class_layout_plan(bundle, evidence, summary)) {

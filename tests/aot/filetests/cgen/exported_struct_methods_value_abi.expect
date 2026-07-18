@@ -1,0 +1,9 @@
+c_regex=typedef struct xrt_struct_abi_[0-9a-f]+ \{ uint8_t data\[4\]; int64_t total; \} xrt_struct_abi_[0-9a-f]+;
+c_regex=void [A-Za-z0-9_]+_ByteState_update_m\(xrt_closure_t \*_cl, xrt_struct_abi_[0-9a-f]+ \* p0, uint8_t p1\)
+c_regex=XRT_FN_PURE int64_t [A-Za-z0-9_]+_ByteState_digest_m\(xrt_closure_t \*_cl, xrt_struct_abi_[0-9a-f]+ \* p0\)
+c_regex=xrt_struct_abi_[0-9a-f]+ [A-Za-z0-9_]+_ByteState_init_m\(xrt_closure_t \*_cl, int64_t p0\)
+c_not_contains=xrt_method_call
+c_not_contains=xrt_getprop_name
+c_not_contains=xrt_setprop_name
+c_not_contains=xr_aggregate_ref(
+c_not_contains=xrt_arc_alloc(

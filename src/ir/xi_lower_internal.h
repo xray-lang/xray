@@ -185,8 +185,8 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_enum_decl(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_class_decl(XiLower *l, struct AstNode *node);
 XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
-                                        ClassDeclNode *cd, struct XrType *receiver_type,
-                                        uint32_t source_span_id);
+                                        ClassDeclNode *cd, bool owner_is_value_aggregate,
+                                        struct XrType *receiver_type, uint32_t source_span_id);
 XR_FUNC const char *xi_lower_enum_method_hidden_name(XiFunc *arena, const char *enum_name,
                                                      const char *method_name, bool is_static);
 

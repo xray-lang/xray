@@ -1,0 +1,12 @@
+import { ByteState } from "./_exported_struct_methods_lib"
+
+fn exercise() {
+    var state = ByteState.init(7)
+    state.update(5)
+    var copied = state
+    copied.update(1)
+    print(state.digest())
+    print(copied.digest())
+}
+
+exercise()

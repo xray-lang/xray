@@ -108,8 +108,8 @@ static uint32_t class_method_evidence_source_node_id(XiLower *l, const ClassDecl
     return match && match->source_node_id != 0 ? match->source_node_id : fallback;
 }
 
-static XrType *class_method_analyzer_signature(XiLower *l, const ClassDeclNode *cd,
-                                               const MethodDeclNode *m) {
+static XaSymbol *class_method_analyzer_symbol(XiLower *l, const ClassDeclNode *cd,
+                                              const MethodDeclNode *m) {
     if (!l || !l->analyzer || !cd || !m || !m->name)
         return NULL;
 
@@ -124,8 +124,14 @@ static XrType *class_method_analyzer_signature(XiLower *l, const ClassDeclNode *
     XrClassInfo *class_info = class_links ? class_links->class_info : NULL;
     XaSymbol *method_sym = m->is_static ? xa_class_info_lookup_static_member(class_info, m->name)
                                         : xa_class_info_lookup_instance_member(class_info, m->name);
+    return method_sym;
+}
+
+static XrType *class_method_analyzer_signature(XiLower *l, const ClassDeclNode *cd,
+                                               const MethodDeclNode *m) {
+    XaSymbol *method_sym = class_method_analyzer_symbol(l, cd, m);
     XaSymbolLinks *method_links =
-        method_sym ? xa_analyzer_get_links(l->analyzer, method_sym) : NULL;
+        method_sym && l && l->analyzer ? xa_analyzer_get_links(l->analyzer, method_sym) : NULL;
     XrType *method_type = method_links ? method_links->type : NULL;
     return (method_type && method_type->kind == XR_KIND_FUNCTION) ? method_type : NULL;
 }
@@ -213,8 +219,8 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
  * For constructors, cd provides field declarations so complex
  * default values can be lowered as IR before the user body. */
 XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
-                                        ClassDeclNode *cd, struct XrType *receiver_type,
-                                        uint32_t source_node_id) {
+                                        ClassDeclNode *cd, bool owner_is_value_aggregate,
+                                        struct XrType *receiver_type, uint32_t source_node_id) {
     XiLower ml;
     xi_lower_init(&ml, l->analyzer, l->isolate);
     ml.parent = l;
@@ -279,11 +285,38 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
     if (is_ctor && is_inst)
         ml.func->return_type = this_type;
 
-    /* Instance methods: 'this' is param 0 */
+    bool is_ctor = m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
+    XaSymbol *method_sym = class_method_analyzer_symbol(l, cd, m);
+    XaSymbolLinks *owner_links = method_sym && method_sym->parent
+                                     ? xa_analyzer_get_links(l->analyzer, method_sym->parent)
+                                     : NULL;
+    bool value_receiver =
+        is_inst && !is_ctor &&
+        (owner_is_value_aggregate ||
+         ((this_type && this_type->is_value_type) ||
+          (owner_links && owner_links->class_info && owner_links->class_info->struct_layout)));
+
+    /* Value-aggregate receivers use the same call-bound place contract as
+     * explicit `in`/`ref` parameters. Readonly methods borrow the place;
+     * mutating methods write through it. Reference-class receivers retain the
+     * ordinary value parameter ABI. */
     if (is_inst) {
         XiValue *th = xi_param(ml.func, entry, 0, this_type);
         ml.func->params[0] = th;
-        xi_lower_braun_write(&ml, xi_lower_var_create(&ml, 0, "this", this_type), entry, th);
+        int this_var = xi_lower_var_create(&ml, 0, "this", this_type);
+        if (value_receiver) {
+            XrParamMode receiver_mode =
+                method_sym && method_sym->mutates_receiver ? XR_PARAM_REF : XR_PARAM_IN;
+            if (!xi_func_set_param_passing_mode(ml.func, 0, receiver_mode)) {
+                xi_func_free(ml.func);
+                xi_lower_cleanup(&ml);
+                return NULL;
+            }
+            ml.vars[this_var].call_place = th;
+            ml.vars[this_var].place_mode = receiver_mode;
+        } else {
+            xi_lower_braun_write(&ml, this_var, entry, th);
+        }
     }
 
     /* Resolve each source ParamContract type through the analyzer so
@@ -392,6 +425,7 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
  * emit XI_CLASS_CREATE carrying XiClassData for the emitter. */
 XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     ClassDeclNode *cd = &node->as.class_decl;
+    bool owner_is_value_aggregate = node->type == AST_STRUCT_DECL || node->type == AST_UNION_DECL;
     XR_DCHECK(cd->name != NULL, "class name must not be NULL");
 
     /* Count instance / static methods (skip static constructors) */
@@ -429,8 +463,9 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (m->is_static_constructor || m->is_static)
             continue;
 
-        XiFunc *mf = xi_lower_method_as_func(
-            l, m, true, cd, NULL, class_method_evidence_source_node_id(l, cd, cd->methods[i]));
+        XiFunc *mf =
+            xi_lower_method_as_func(l, m, true, cd, owner_is_value_aggregate, NULL,
+                                    class_method_evidence_source_node_id(l, cd, cd->methods[i]));
         if (!mf) {
             l->had_error = true;
             continue;
@@ -446,7 +481,8 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         synth.name = "constructor";
         synth.is_constructor = true;
 
-        XiFunc *mf = xi_lower_method_as_func(l, &synth, true, cd, NULL, 0);
+        XiFunc *mf =
+            xi_lower_method_as_func(l, &synth, true, cd, owner_is_value_aggregate, NULL, 0);
         if (mf) {
             xi_lower_func_add_child(l->func, mf);
             if (cidx)
@@ -465,8 +501,9 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (m->is_static_constructor || !m->is_static)
             continue;
 
-        XiFunc *mf = xi_lower_method_as_func(
-            l, m, false, cd, NULL, class_method_evidence_source_node_id(l, cd, cd->methods[i]));
+        XiFunc *mf =
+            xi_lower_method_as_func(l, m, false, cd, owner_is_value_aggregate, NULL,
+                                    class_method_evidence_source_node_id(l, cd, cd->methods[i]));
         if (!mf) {
             l->had_error = true;
             continue;
@@ -523,8 +560,9 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         MethodDeclNode *m = &cd->methods[i]->as.method_decl;
         if (!m->is_static_constructor)
             continue;
-        XiFunc *cf = xi_lower_method_as_func(
-            l, m, false, cd, NULL, class_method_evidence_source_node_id(l, cd, cd->methods[i]));
+        XiFunc *cf =
+            xi_lower_method_as_func(l, m, false, cd, owner_is_value_aggregate, NULL,
+                                    class_method_evidence_source_node_id(l, cd, cd->methods[i]));
         if (cf) {
             xi_lower_func_add_child(l->func, cf);
             clinit_idx = (int) (l->func->nchildren - 1);

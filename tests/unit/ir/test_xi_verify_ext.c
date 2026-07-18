@@ -333,6 +333,36 @@ static XiValue *make_ref_call(XiFunc *f, XiBlock *entry, XiValue **place_out) {
     return call;
 }
 
+static XiValue *make_place_receiver_call(XiFunc *f, XiBlock *entry, XrParamMode mode,
+                                         XiValue **place_out) {
+    f->source_var_count = 1;
+    XiValue *source = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *place = xi_value_new(f, entry, XI_LOCAL_ADDR, &stub_int, 1);
+    XiValue *call = xi_value_new(f, entry, XI_CALL_METHOD, &stub_int, 1);
+    XiCallPlan *plan = (XiCallPlan *) xi_func_arena_alloc(f, sizeof(*plan));
+    if (!source || !place || !call || !plan)
+        return NULL;
+    source->var_id = 0;
+    place->args[0] = source;
+    call->args[0] = place;
+    call->aux = (void *) "valueMethod";
+    memset(plan, 0, sizeof(*plan));
+    plan->receiver.param_mode = mode;
+    plan->receiver.access = XR_CALL_ARG_VALUE;
+    plan->receiver.origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+    plan->receiver.lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+    plan->receiver.escape = XI_PLACE_ESCAPE_NONE;
+    plan->receiver.addressable = true;
+    plan->receiver.origin_var_id = 0;
+    plan->receiver.place = place;
+    plan->has_receiver = true;
+    plan->verified = true;
+    call->call_plan = plan;
+    if (place_out)
+        *place_out = place;
+    return call;
+}
+
 TEST(call_plan_valid_ref_local_place_passes) {
     XiFunc *f = make_func("call_plan_valid");
     ASSERT(f != NULL);
@@ -450,6 +480,34 @@ TEST(call_plan_rejects_suspendable_call_boundary) {
     XiValue *call = make_ref_call(f, f->entry, NULL);
     ASSERT(call != NULL);
     call->flags |= XI_FLAG_MAY_SUSPEND;
+    xi_block_set_return(f->entry, call);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_valid_method_receiver_place_passes) {
+    XiFunc *f = make_func("call_plan_method_receiver");
+    ASSERT(f != NULL);
+    XiValue *place = NULL;
+    XiValue *call = make_place_receiver_call(f, f->entry, XR_PARAM_REF, &place);
+    ASSERT(call != NULL && place != NULL);
+    XiValue *load = xi_value_new(f, f->entry, XI_PLACE_LOAD, &stub_int, 1);
+    ASSERT(load != NULL);
+    load->args[0] = place;
+    xi_block_set_return(f->entry, load);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_rejects_method_receiver_place_mismatch) {
+    XiFunc *f = make_func("call_plan_method_receiver_mismatch");
+    ASSERT(f != NULL);
+    XiValue *place = NULL;
+    XiValue *call = make_place_receiver_call(f, f->entry, XR_PARAM_IN, &place);
+    ASSERT(call != NULL && place != NULL && call->call_plan != NULL);
+    call->call_plan->receiver.place = place->args[0];
     xi_block_set_return(f->entry, call);
 
     ASSERT(verify_fail(f));
@@ -1586,6 +1644,8 @@ int main(void) {
     run_call_bound_param_last_use_before_suspend_passes();
     run_call_bound_param_use_after_suspend_fails();
     run_call_plan_rejects_suspendable_call_boundary();
+    run_call_plan_valid_method_receiver_place_passes();
+    run_call_plan_rejects_method_receiver_place_mismatch();
     run_tbaa_memory_op_requires_mem_group();
     run_tbaa_memory_op_with_group_passes();
     run_tbaa_store_requires_mem_group();

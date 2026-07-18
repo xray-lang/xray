@@ -769,6 +769,25 @@ XR_FUNC const char *xg_decl_kind_name(uint8_t kind) {
     }
 }
 
+XR_FUNC bool xg_decl_kind_supports_methods(uint8_t kind) {
+    switch ((XgDeclKind) kind) {
+        case XG_DECL_CLASS:
+        case XG_DECL_STRUCT:
+        case XG_DECL_UNION:
+            return true;
+        default:
+            return false;
+    }
+}
+
+XR_FUNC bool xg_decl_kind_is_runtime_class(uint8_t kind) {
+    return kind == XG_DECL_CLASS;
+}
+
+XR_FUNC bool xg_decl_kind_is_value_aggregate(uint8_t kind) {
+    return kind == XG_DECL_STRUCT || kind == XG_DECL_UNION;
+}
+
 XR_FUNC const char *xg_callsite_kind_name(uint8_t kind) {
     switch ((XgCallsiteKind) kind) {
         case XG_CALL_DIRECT_FUNC:
@@ -2397,10 +2416,6 @@ static const XgClassSummary *xg_global_evidence_find_class(const XgGlobalEvidenc
     return NULL;
 }
 
-static bool xg_class_summary_is_runtime_class(const XgClassSummary *cls) {
-    return cls && (cls->decl_kind == 0 || cls->decl_kind == XG_DECL_CLASS);
-}
-
 static bool xg_global_evidence_class_is_descendant_or_self(const XgGlobalEvidence *evidence,
                                                            XgClassId class_id,
                                                            XgClassId ancestor_id) {
@@ -2652,7 +2667,7 @@ static bool xg_method_callsite_compose_target_set(const XgGlobalEvidence *eviden
     for (uint32_t i = 0; i < evidence->nclasses; i++) {
         const XgClassSummary *candidate = &evidence->classes[i];
         const XgMethodSummary *target_method;
-        if (!xg_class_summary_is_runtime_class(candidate))
+        if (!xg_decl_kind_is_runtime_class(candidate->decl_kind))
             continue;
         if (!xg_global_evidence_class_is_descendant_or_self(evidence, candidate->class_id,
                                                             call->receiver_static_class_id))
@@ -2770,7 +2785,7 @@ static bool xg_body_reachability_mark_call(const XgGlobalEvidence *evidence,
         for (uint32_t i = 0; i < evidence->nclasses; i++) {
             const XgClassSummary *candidate = &evidence->classes[i];
             const XgMethodSummary *target;
-            if (!xg_class_summary_is_runtime_class(candidate) ||
+            if (!xg_decl_kind_is_runtime_class(candidate->decl_kind) ||
                 !xg_global_evidence_class_is_descendant_or_self(evidence, candidate->class_id,
                                                                 call->receiver_static_class_id))
                 continue;

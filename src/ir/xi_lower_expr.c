@@ -4134,31 +4134,136 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
     return plan;
 }
 
+static bool lower_method_receiver_mode(XiLower *l, const XaSelection *selection, XiValue *receiver,
+                                       XrParamMode *out_mode) {
+    if (!l || !selection || !selection->target_symbol || !receiver || !out_mode ||
+        selection->target_symbol->kind != XA_SYM_METHOD || selection->target_symbol->is_static ||
+        !xi_lower_type_needs_value_clone(l, receiver->type))
+        return false;
+    *out_mode = selection->target_symbol->mutates_receiver ? XR_PARAM_REF : XR_PARAM_IN;
+    return true;
+}
+
+static XiValue *lower_build_method_receiver_place(XiLower *l, CallExprNode *call,
+                                                  AstNode *receiver_node, XiValue *receiver,
+                                                  int explicit_arg_count, XrParamMode mode,
+                                                  XiCallPlan **plan_io, XiCallWriteback *writeback,
+                                                  int line) {
+    if (!l || !receiver || !plan_io || !writeback || (mode != XR_PARAM_IN && mode != XR_PARAM_REF))
+        return NULL;
+    memset(writeback, 0, sizeof(*writeback));
+    writeback->var_id = -1;
+    writeback->top_binding = (XiTopBinding) {.slot = -1, .name = NULL, .type = NULL};
+
+    AstNode *place_node = lower_call_unwrap_place(receiver_node);
+    int var_id = -1;
+    XiTopBinding top_binding = {.slot = -1, .name = NULL, .type = NULL};
+    if (place_node && place_node->type == AST_VARIABLE) {
+        var_id =
+            xi_lower_var_find(l, place_node->as.variable.symbol_id, place_node->as.variable.name);
+        if (var_id >= 0 && l->is_program && l->shared_map[var_id] >= 0) {
+            top_binding.slot = l->shared_map[var_id];
+            top_binding.name = l->vars[var_id].name;
+            top_binding.type = l->vars[var_id].type;
+        } else if (var_id < 0) {
+            top_binding = xi_lower_find_top_binding(l, place_node->as.variable.symbol_id,
+                                                    place_node->as.variable.name);
+        }
+    } else if (place_node && place_node->type == AST_THIS_EXPR) {
+        var_id = xi_lower_var_find(l, 0, "this");
+    }
+
+    XiValue *place = NULL;
+    XiPlaceOrigin origin = XI_PLACE_ORIGIN_PROJECTION_TEMP;
+    XiVarId origin_var_id = XI_NO_VAR_ID;
+    if (var_id >= 0 && l->vars[var_id].call_place) {
+        place = l->vars[var_id].call_place;
+        origin = XI_PLACE_ORIGIN_PARAM;
+        origin_var_id = (XiVarId) var_id;
+    } else {
+        place = xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR, receiver->type, 1);
+        if (!place)
+            return NULL;
+        place->args[0] = receiver;
+        place->line = (uint32_t) line;
+        if (var_id >= 0) {
+            origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+            origin_var_id = (XiVarId) var_id;
+        }
+        if (mode == XR_PARAM_REF) {
+            writeback->source = receiver;
+            writeback->place = place;
+            writeback->top_binding = top_binding;
+            writeback->var_id = var_id;
+            writeback->projection = var_id < 0 && !xi_top_binding_valid(top_binding);
+        }
+    }
+
+    XiCallPlan *plan = *plan_io;
+    if (!plan) {
+        plan = (XiCallPlan *) xi_func_arena_alloc(l->func, sizeof(*plan));
+        if (!plan)
+            return NULL;
+        memset(plan, 0, sizeof(*plan));
+        plan->nargs = (uint16_t) explicit_arg_count;
+        if (explicit_arg_count > 0) {
+            plan->args = (XiCallArgPlan *) xi_func_arena_alloc(
+                l->func, (uint32_t) ((size_t) explicit_arg_count * sizeof(*plan->args)));
+            if (!plan->args)
+                return NULL;
+            memset(plan->args, 0, (size_t) explicit_arg_count * sizeof(*plan->args));
+            for (int i = 0; i < explicit_arg_count; i++) {
+                plan->args[i].param_mode = XR_PARAM_VALUE;
+                plan->args[i].access = lower_call_arg_access(call, i);
+                plan->args[i].origin_var_id = XI_NO_VAR_ID;
+            }
+        }
+        plan->verified = true;
+        *plan_io = plan;
+    }
+    plan->has_receiver = true;
+    plan->receiver.param_mode = mode;
+    plan->receiver.access = XR_CALL_ARG_VALUE;
+    plan->receiver.origin = (uint8_t) origin;
+    plan->receiver.lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+    plan->receiver.escape = XI_PLACE_ESCAPE_NONE;
+    plan->receiver.addressable = true;
+    plan->receiver.origin_var_id = origin_var_id;
+    plan->receiver.place = place;
+    return place;
+}
+
+static bool lower_apply_one_call_writeback(XiLower *l, XiCallWriteback *wb, int line) {
+    if (!wb || !wb->place)
+        return true;
+    XiValue *load = xi_value_new(l->func, l->cur_block, XI_PLACE_LOAD,
+                                 wb->source ? wb->source->type : l->type_any, 1);
+    if (!load)
+        return false;
+    load->args[0] = wb->place;
+    load->line = (uint32_t) line;
+    if (xi_top_binding_valid(wb->top_binding)) {
+        if (!xi_lower_emit_top_store(l, wb->top_binding, load))
+            return false;
+        if (wb->var_id >= 0)
+            xi_lower_braun_write(l, wb->var_id, l->cur_block, load);
+    } else if (wb->var_id >= 0) {
+        load->var_id = (XiVarId) wb->var_id;
+        xi_lower_braun_write(l, wb->var_id, l->cur_block, load);
+    } else if (wb->projection && !lower_call_store_projection(l, wb->source, load, line)) {
+        return false;
+    }
+    return true;
+}
+
 static bool lower_apply_call_writebacks(XiLower *l, const XiCallPlan *plan,
                                         XiCallWriteback *writebacks, int line) {
     if (!plan || !writebacks)
         return true;
     for (uint16_t i = 0; i < plan->nargs; i++) {
         XiCallWriteback *wb = &writebacks[i];
-        if (!wb->place)
-            continue;
-        XiValue *load = xi_value_new(l->func, l->cur_block, XI_PLACE_LOAD,
-                                     wb->source ? wb->source->type : l->type_any, 1);
-        if (!load)
+        if (!lower_apply_one_call_writeback(l, wb, line))
             return false;
-        load->args[0] = wb->place;
-        load->line = (uint32_t) line;
-        if (xi_top_binding_valid(wb->top_binding)) {
-            if (!xi_lower_emit_top_store(l, wb->top_binding, load))
-                return false;
-            if (wb->var_id >= 0)
-                xi_lower_braun_write(l, wb->var_id, l->cur_block, load);
-        } else if (wb->var_id >= 0) {
-            load->var_id = (XiVarId) wb->var_id;
-            xi_lower_braun_write(l, wb->var_id, l->cur_block, load);
-        } else if (wb->projection && !lower_call_store_projection(l, wb->source, load, line)) {
-            return false;
-        }
     }
     return true;
 }
@@ -5718,6 +5823,19 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (l->had_error)
             return NULL;
 
+        XiCallWriteback receiver_writeback;
+        memset(&receiver_writeback, 0, sizeof(receiver_writeback));
+        XrParamMode receiver_mode = XR_PARAM_VALUE;
+        const XaSelection *method_selection = xa_analyzer_get_selection(l->analyzer, call->callee);
+        if (lower_method_receiver_mode(l, method_selection, recv, &receiver_mode)) {
+            XiValue *receiver_place = lower_build_method_receiver_place(
+                l, call, ma->object, recv, n, receiver_mode, &call_plan, &receiver_writeback,
+                (int) node->line);
+            if (!receiver_place)
+                return NULL;
+            recv = receiver_place;
+        }
+
         uint16_t nargs = (uint16_t) (n + 1); /* receiver + args */
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, nargs);
         if (!v)
@@ -5741,6 +5859,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         xi_lower_insert_err_check(l, node);
         if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
+            return NULL;
+        if (!lower_apply_one_call_writeback(l, &receiver_writeback, (int) node->line))
             return NULL;
         return v;
     }
@@ -8507,11 +8627,19 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
 }
 
 static XiValue *lower_this_expr(XiLower *l, AstNode *node) {
-    (void) node;
     struct XrType *this_type = xi_lower_node_type(l, node);
 
     /* Try local scope first (direct method context) */
     int var_id = xi_lower_var_find(l, 0, "this");
+    if (var_id >= 0 && l->vars[var_id].call_place) {
+        XiValue *load = xi_value_new(l->func, l->cur_block, XI_PLACE_LOAD, l->vars[var_id].type, 1);
+        if (!load)
+            return NULL;
+        load->args[0] = l->vars[var_id].call_place;
+        load->var_id = (XiVarId) var_id;
+        load->line = (uint32_t) node->line;
+        return load;
+    }
     if (var_id >= 0)
         return xi_lower_braun_read(l, var_id, l->cur_block);
 

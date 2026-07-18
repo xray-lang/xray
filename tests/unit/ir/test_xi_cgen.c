@@ -1665,11 +1665,11 @@ TEST(cgen_struct_debug_source_var_slots_use_typed_pointers) {
     assert(!had_error && "struct debug source-var slot test should generate");
     assert(contains(code, "#if defined(XRAY_AOT_DEBUG_LOCALS)") &&
            "struct debug source locals should be guarded by the debug-local define");
-    assert(contains(code, "xrt_struct_test_") &&
-           "test module should emit native struct storage types");
-    assert(contains(code, " p = ((xrt_struct_test_") &&
+    assert(contains(code, "xrt_struct_abi_") &&
+           "value structs should emit canonical native storage types");
+    assert(contains(code, " p = ((xrt_struct_abi_") &&
            "value-ABI struct source local p should use a native aggregate slot");
-    assert(contains(code, " q = ((xrt_struct_test_") &&
+    assert(contains(code, " q = ((xrt_struct_abi_") &&
            "value-ABI struct source local q should use a native aggregate slot");
     assert(contains(code, "\n    p = v") &&
            "value-ABI struct source local p should synchronize from the native aggregate");
@@ -1685,7 +1685,7 @@ TEST(cgen_struct_debug_source_var_slots_use_typed_pointers) {
     xi_func_free(ir);
 }
 
-TEST(cgen_struct_value_abi_uses_module_prefixed_typedef) {
+TEST(cgen_struct_value_abi_uses_canonical_layout_typedef) {
     const char *src =
         "struct Totals {\n"
         "    bytes: int\n"
@@ -1710,11 +1710,11 @@ TEST(cgen_struct_value_abi_uses_module_prefixed_typedef) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "struct value ABI should generate without adapter errors");
-    assert(contains(code, "typedef struct xrt_struct_test_") &&
-           "native value struct typedef should use the module prefix");
-    assert(contains(code, "static xrt_struct_test_") &&
+    assert(contains(code, "typedef struct xrt_struct_abi_") &&
+           "native value struct typedef should use canonical layout identity");
+    assert(contains(code, "static xrt_struct_abi_") &&
            "struct-returning helpers should use native value struct ABI");
-    assert(contains(code, ", xrt_struct_test_") &&
+    assert(contains(code, ", xrt_struct_abi_") &&
            "struct parameters should pass by value through the native ABI");
     assert(!contains(code, "xrt_struct_mod_") &&
            "child function ABI must not fall back to the generic mod prefix");
@@ -2089,7 +2089,7 @@ TEST(cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime) {
            "aggregate reducer should receive the native range callback");
     assert(contains(code, "(XrParallelReduceCombineAggFn)") &&
            "aggregate reducer should receive the native combine callback");
-    assert(contains(code, "static XR_AINLINE xrt_struct_test_") &&
+    assert(contains(code, "static XR_AINLINE xrt_struct_abi_") &&
            "reduce body/combine should be inline native struct callbacks");
     assert(!contains(code, "xr_parallel_reduce_i64(") &&
            "struct reduce must not route through the i64 runtime reducer");
@@ -3290,7 +3290,7 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "escaping struct heap-native path should generate");
-    assert(contains(code, "typedef struct xrt_struct_test_") &&
+    assert(contains(code, "typedef struct xrt_struct_abi_") &&
            "escaping primitive struct must emit a native heap layout");
     assert(contains(code, "xr_aggregate_ref(") &&
            "escaping primitive struct must allocate as an AOT struct reference");
@@ -3328,7 +3328,7 @@ TEST(cgen_same_shape_structs_keep_distinct_source_field_names) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "same-shape source-named structs should generate");
     const char *code_end = code + strlen(code);
-    assert(count_between(code, code_end, "typedef struct xrt_struct_test_") >= 2 &&
+    assert(count_between(code, code_end, "typedef struct xrt_struct_abi_") >= 2 &&
            "same-shape structs with different source field names must not share one typedef");
     assert(contains(code, "int64_t x; int64_t y;") &&
            "Point native layout must preserve source field names");
@@ -3359,7 +3359,7 @@ TEST(cgen_escaping_struct_string_field_uses_heap_native_storage) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "string-field heap-native struct path should generate");
-    assert(contains(code, "typedef struct xrt_struct_test_") &&
+    assert(contains(code, "typedef struct xrt_struct_abi_") &&
            "mixed scalar/string struct must emit a native heap layout");
     assert(contains(code, "XrValue name") &&
            "string struct field must be stored as a tagged immutable reference field");
@@ -3393,7 +3393,7 @@ TEST(cgen_fixed_layout_struct_omits_native_header) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "fixed-layout struct path should generate");
 
-    const char *typedef_start = strstr(code, "typedef struct xrt_struct_test_");
+    const char *typedef_start = strstr(code, "typedef struct xrt_struct_abi_");
     assert(typedef_start != NULL && "fixed-layout struct must emit a native typedef");
     const char *typedef_end = strstr(typedef_start, ";\n");
     assert(typedef_end != NULL && "typedef should be bounded");
@@ -3434,9 +3434,9 @@ TEST(cgen_nested_struct_field_uses_embedded_heap_native_storage) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "nested struct heap-native path should generate");
     const char *code_end = code + strlen(code);
-    assert(count_between(code, code_end, "typedef struct xrt_struct_test_") >= 2 &&
+    assert(count_between(code, code_end, "typedef struct xrt_struct_abi_") >= 2 &&
            "nested struct path must emit parent and child native heap layouts");
-    assert(contains(code, "xrt_struct_test_") && contains(code, " p;") &&
+    assert(contains(code, "xrt_struct_abi_") && contains(code, " p;") &&
            "parent heap layout must embed the child native struct field");
     assert(contains(code, "memcpy(&") &&
            "nested struct field assignment must copy embedded native bytes");
@@ -8278,7 +8278,7 @@ int main(void) {
     run_cgen_emits_debug_source_var_slots();
     run_cgen_emits_shadowed_debug_source_var_slots();
     run_cgen_struct_debug_source_var_slots_use_typed_pointers();
-    run_cgen_struct_value_abi_uses_module_prefixed_typedef();
+    run_cgen_struct_value_abi_uses_canonical_layout_typedef();
     run_cgen_coro_emits_source_line_directives();
     run_cgen_coro_emits_debug_source_var_slots();
     run_cgen_coro_syncs_helper_result_debug_source_vars();

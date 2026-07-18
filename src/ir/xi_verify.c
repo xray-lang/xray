@@ -910,7 +910,7 @@ static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
             if (!plan) {
                 if (!call_op)
                     continue;
-                for (uint16_t a = 1; a < v->nargs; a++) {
+                for (uint16_t a = 0; a < v->nargs; a++) {
                     if (verify_is_call_bound_place(v->args[a])) {
                         verr(ctx,
                              "func '%s': call v%u in b%u passes call-bound place v%u without "
@@ -932,13 +932,54 @@ static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
                      v->nargs > 0 ? (unsigned) (v->nargs - 1) : 0u);
                 return;
             }
-            if (!plan->verified || plan->nargs == 0 || !plan->args) {
+            if (!plan->verified || (!plan->has_receiver && plan->nargs == 0) ||
+                (plan->nargs > 0 && !plan->args)) {
                 verr(ctx, "func '%s': call v%u in b%u has an unverified or empty call plan",
                      f->name, v->id, blk->id);
                 return;
             }
 
             bool saw_place = false;
+            if (plan->has_receiver) {
+                const XiCallArgPlan *receiver = &plan->receiver;
+                XiValue *place = receiver->place;
+                bool receiver_mode =
+                    receiver->param_mode == XR_PARAM_IN || receiver->param_mode == XR_PARAM_REF;
+                if (!receiver_mode || receiver->access != XR_CALL_ARG_VALUE ||
+                    !receiver->addressable || receiver->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
+                    receiver->escape != XI_PLACE_ESCAPE_NONE || !place || place != v->args[0] ||
+                    !verify_is_call_bound_place(place)) {
+                    verr(ctx,
+                         "func '%s': call v%u receiver is not a verified nonescaping "
+                         "call-bound place",
+                         f->name, v->id);
+                    return;
+                }
+                if (place->op == XI_LOCAL_ADDR) {
+                    if (place->nargs != 1 || !place->args[0] ||
+                        (receiver->origin != XI_PLACE_ORIGIN_STACK_LOCAL &&
+                         receiver->origin != XI_PLACE_ORIGIN_PROJECTION_TEMP)) {
+                        verr(ctx, "func '%s': call v%u receiver has invalid local-place origin",
+                             f->name, v->id);
+                        return;
+                    }
+                    bool source_var = receiver->origin == XI_PLACE_ORIGIN_STACK_LOCAL;
+                    if (source_var != xi_var_id_is_valid(receiver->origin_var_id) ||
+                        (source_var && receiver->origin_var_id >= f->source_var_count)) {
+                        verr(ctx,
+                             "func '%s': call v%u receiver has inconsistent local origin "
+                             "variable",
+                             f->name, v->id);
+                        return;
+                    }
+                } else if (receiver->origin != XI_PLACE_ORIGIN_PARAM ||
+                           !xi_var_id_is_valid(receiver->origin_var_id)) {
+                    verr(ctx, "func '%s': call v%u receiver has invalid parameter origin", f->name,
+                         v->id);
+                    return;
+                }
+                saw_place = true;
+            }
             for (uint16_t a = 0; a < plan->nargs; a++) {
                 const XiCallArgPlan *arg_plan = &plan->args[a];
                 if (!xr_param_mode_is_valid(arg_plan->param_mode) ||
@@ -1017,8 +1058,13 @@ static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
 
 static bool verify_call_plan_accepts_place_at(const XiValue *user, uint16_t arg_index,
                                               const XiValue *place) {
-    if (!user || !user->call_plan || arg_index == 0 || arg_index > user->call_plan->nargs ||
-        arg_index >= user->nargs)
+    if (!user || !user->call_plan || arg_index >= user->nargs)
+        return false;
+    if (arg_index == 0)
+        return user->call_plan->has_receiver &&
+               user->call_plan->receiver.param_mode != XR_PARAM_VALUE &&
+               user->call_plan->receiver.place == place;
+    if (arg_index > user->call_plan->nargs)
         return false;
     const XiCallArgPlan *arg_plan = &user->call_plan->args[arg_index - 1];
     return arg_plan->param_mode != XR_PARAM_VALUE && arg_plan->place == place;

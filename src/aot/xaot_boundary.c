@@ -220,6 +220,93 @@ static const XiFunc *resolve_module_member_target(const XaotBundle *bundle, cons
     return resolve_import_ref(bundle, &member_ref);
 }
 
+static const XiImportRef *binding_import_ref_for_value(const XaotBundle *bundle,
+                                                       const XiFunc *current,
+                                                       const XiValue *value) {
+    const XiValue *v = unwrap_identity_value(value);
+    const XiImportRef *ref = value_import_ref(v);
+    const XiModule *mod;
+
+    if (ref)
+        return ref;
+    if (!v || v->op != XI_GET_SHARED)
+        return NULL;
+    mod = bundle_module_for_func(bundle, current);
+    ref = module_slot_import_ref(mod, (int) v->aux_int);
+    if (ref)
+        return ref;
+    ref = shared_slot_import_ref(current, (int) v->aux_int);
+    if (!ref && current && current->module && current->module->init != current)
+        ref = shared_slot_import_ref(current->module->init, (int) v->aux_int);
+    return ref;
+}
+
+static const XiClassData *resolve_imported_class(const XaotBundle *bundle, const XiImportRef *ref,
+                                                 const XiModule **owner_out) {
+    if (owner_out)
+        *owner_out = NULL;
+    if (!bundle || !ref || !ref->member_name)
+        return NULL;
+    for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+        const XiModule *mod = bundle->modules[mi];
+        bool resolved_match =
+            ref->resolved_mod_index >= 0 && (uint32_t) ref->resolved_mod_index == mi;
+        if (!mod || (!resolved_match && !module_matches_import(mod, ref)))
+            continue;
+        for (uint16_t ei = 0; ei < mod->nexports; ei++) {
+            const XiModuleExport *exp = &mod->exports[ei];
+            if (!exp->class_data || !exp->name || strcmp(exp->name, ref->member_name) != 0)
+                continue;
+            if (owner_out)
+                *owner_out = mod;
+            return exp->class_data;
+        }
+    }
+    return NULL;
+}
+
+static const XiFunc *resolve_imported_static_method_target(const XaotBundle *bundle,
+                                                           const XiFunc *current,
+                                                           const XiValue *call) {
+    const XiImportRef *ref;
+    XiImportRef nested_ref;
+    const XiClassData *cls;
+    const XiModule *owner;
+    const char *method_name;
+
+    if (!bundle || !current || !call || call->op != XI_CALL_METHOD || call->nargs < 1 ||
+        !call->aux || (call->aux_int & 1) != 0)
+        return NULL;
+    ref = binding_import_ref_for_value(bundle, current, call->args[0]);
+    if (!ref) {
+        const XiValue *receiver = unwrap_identity_value(call->args[0]);
+        const XiImportRef *module_ref =
+            receiver && receiver->op == XI_LOAD_FIELD && receiver->nargs >= 1 && receiver->aux
+                ? module_import_ref_for_value(bundle, current, receiver->args[0])
+                : NULL;
+        if (module_ref) {
+            nested_ref = *module_ref;
+            nested_ref.member_name = (const char *) receiver->aux;
+            nested_ref.resolved_shared_slot = -1;
+            ref = &nested_ref;
+        }
+    }
+    cls = resolve_imported_class(bundle, ref, &owner);
+    method_name = (const char *) call->aux;
+    if (!cls || !owner || !owner->init || !cls->methods || !cls->child_idx)
+        return NULL;
+    for (uint16_t mi = 0; mi < cls->nmethod; mi++) {
+        const XiClassMethod *method = &cls->methods[mi];
+        uint16_t child_idx;
+        if (!method->is_static || method->is_static_constructor || !method->name ||
+            strcmp(method->name, method_name) != 0)
+            continue;
+        child_idx = cls->child_idx[mi];
+        return child_idx < owner->init->nchildren ? owner->init->children[child_idx] : NULL;
+    }
+    return NULL;
+}
+
 static const XiFunc *resolve_shared_function(const XaotBundle *bundle, const XiFunc *current,
                                              int slot) {
     const XiModule *mod = NULL;
@@ -351,6 +438,12 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle 
             *first_arg_out = 1;
         if (target)
             return target;
+        target = resolve_imported_static_method_target(bundle, current, call);
+        if (target) {
+            if (first_arg_out)
+                *first_arg_out = 1;
+            return target;
+        }
         target = resolve_dispatch_plan_target(bundle, call);
         if (target)
             return target;
