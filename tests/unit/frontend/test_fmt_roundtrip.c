@@ -424,8 +424,8 @@ TEST(parameter_modes_roundtrip) {
     ASSERT_TRUE(contains(fmt1, "touch(a: int, b: in int, c: ref int, d: out int)"));
     ASSERT_TRUE(contains(fmt1, "configure(limit: in int = 4)"));
     ASSERT_TRUE(contains(fmt1, "collect(...values: int)"));
-    ASSERT_TRUE(contains(fmt1, "type ComplexHandler = (in Array<int>, ref Slice<uint8>?, "
-                               "out [uint8; 16], (int, string), in (ref int) -> bool) -> "
+    ASSERT_TRUE(contains(fmt1, "type ComplexHandler = (in Array<int>, ref Slice<byte>?, "
+                               "out [byte; 16], (int, string), in (ref int) -> bool) -> "
                                "Array<string>"));
     ASSERT_FALSE(contains(fmt1, "bool,) -> Array<string>"));
     ASSERT_FALSE(contains(fmt1, "in a:"));
@@ -468,7 +468,7 @@ TEST(extern_layout_roundtrip) {
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1, "extern \"C\""));
     ASSERT_TRUE(contains(fmt1, "struct Header"));
-    ASSERT_TRUE(contains(fmt1, "tail: flex uint8"));
+    ASSERT_TRUE(contains(fmt1, "tail: flex byte"));
     ASSERT_TRUE(contains(fmt1, "packed struct Packed align(8)"));
     ASSERT_TRUE(contains(fmt1, "union Word"));
     char *fmt2 = parse_and_format(fmt1, "extern-layout-formatted.xr");
@@ -506,7 +506,7 @@ TEST(parameter_modes_comments_roundtrip) {
     ASSERT_TRUE(contains(fmt1, "commented_modes(a: int, b: in int, c: ref int, d: out int)"));
     ASSERT_TRUE(contains(fmt1, "touch(ref c, out d)"));
     ASSERT_TRUE(
-        contains(fmt1, "type CommentedHandler = (in int, ref string, out [uint8; 4]) -> bool"));
+        contains(fmt1, "type CommentedHandler = (in int, ref string, out [byte; 4]) -> bool"));
     ASSERT_TRUE(contains(fmt1, "touch(value: ref int, slot: out int)"));
     ASSERT_TRUE(contains(fmt1, "call(value: in int, slot: out int) -> int"));
     ASSERT_FALSE(contains(fmt1, "in value:"));

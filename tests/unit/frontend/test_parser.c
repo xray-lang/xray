@@ -482,7 +482,7 @@ TEST(parser_function_type_param_modes) {
     ASSERT_STR_EQ(complex->children[5]->name, "Array");
     char complex_buf[512];
     xr_tref_to_string_buf(complex, complex_buf, sizeof(complex_buf));
-    ASSERT_STR_EQ(complex_buf, "(in Array<int>, ref Slice<uint8>?, out [uint8; 16], (int, string), "
+    ASSERT_STR_EQ(complex_buf, "(in Array<int>, ref Slice<byte>?, out [byte; 16], (int, string), "
                                "in (ref int) -> bool) -> Array<string>");
 
     teardown();
