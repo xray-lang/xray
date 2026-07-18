@@ -1421,6 +1421,36 @@ TEST(select_rep_aot_policy_keeps_scalar_phi_unboxed) {
     xi_func_free(f);
 }
 
+TEST(select_rep_advances_empty_func_tree) {
+    XiFunc *root = make_func("empty_facade_init", &stub_void);
+    XiFunc *child = make_func("empty_nested", &stub_void);
+    root->stage = XI_STAGE_OWNED;
+    child->stage = XI_STAGE_OWNED;
+    child->parent_func = root;
+    root->children = (XiFunc **) xr_malloc(sizeof(XiFunc *));
+    assert(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = 1;
+    root->children_cap = 1;
+
+    assert(root->next_value_id == 0);
+    assert(child->next_value_id == 0);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XiPassChange change = xi_opt_select_rep_with_policy(root, &policy);
+
+    assert(change.cfg_changed && change.values_changed && change.types_changed &&
+           "empty pipeline root must record its stage transition");
+    assert(root->stage == XI_STAGE_REPPED);
+    assert(child->stage == XI_STAGE_REPPED);
+    assert((root->invariant_mask & xi_stage_invariants(XI_STAGE_REPPED)) ==
+           xi_stage_invariants(XI_STAGE_REPPED));
+    assert((child->invariant_mask & xi_stage_invariants(XI_STAGE_REPPED)) ==
+           xi_stage_invariants(XI_STAGE_REPPED));
+
+    xi_func_free(root);
+}
+
 /* ========== Tuple Projection Peephole Tests ========== */
 
 /* TUPLE_GET(TUPLE_NEW(a, b), 0) collapses to COPY(a). */
@@ -1943,6 +1973,7 @@ int main(void) {
     run_select_rep_keeps_narrow_store_for_shared_typed_array();
     run_select_rep_native_policy_keeps_return_unboxed();
     run_select_rep_aot_policy_keeps_scalar_phi_unboxed();
+    run_select_rep_advances_empty_func_tree();
 
     /* Tuple projection peephole */
     run_tuple_get_of_tuple_new_first();

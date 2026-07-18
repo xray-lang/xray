@@ -10,18 +10,21 @@
 
 static bool cg_import_entry_matches_ref(const XiCgenCtx *ctx, const CgImportEntry *imp,
                                         const XiImportRef *ref, const char *member_name) {
-    if (!ctx || !imp || !ref || !member_name || !imp->member_name ||
-        strcmp(imp->member_name, member_name) != 0)
+    if (!ctx || !imp || !ref || !member_name || !imp->member_name)
         return false;
     if (ctx->all_modules && ref->resolved_mod_index >= 0 &&
         ref->resolved_mod_index < ctx->all_nmodules) {
         const XiModule *target_module = ctx->all_modules[ref->resolved_mod_index];
         const char *target_module_name = target_module ? target_module->name : NULL;
         if (imp->target_mod_name && target_module_name &&
-            strcmp(imp->target_mod_name, target_module_name) == 0)
-            return true;
+            strcmp(imp->target_mod_name, target_module_name) == 0) {
+            if (ref->resolved_shared_slot >= 0)
+                return imp->shared_slot == ref->resolved_shared_slot;
+            return strcmp(imp->member_name, member_name) == 0;
+        }
     }
-    return imp->module_path && ref->module_path && strcmp(imp->module_path, ref->module_path) == 0;
+    return strcmp(imp->member_name, member_name) == 0 && imp->module_path && ref->module_path &&
+           strcmp(imp->module_path, ref->module_path) == 0;
 }
 
 static CgStaticFunctionCall cg_import_entry_static_call(const CgImportEntry *imp) {

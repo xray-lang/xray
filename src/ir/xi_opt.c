@@ -2973,8 +2973,19 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
     XiRepPolicy local_policy = policy ? *policy : xi_rep_policy_tagged_boundary();
 
     uint32_t max_id = f->next_value_id;
-    if (max_id == 0)
-        return xi_pass_no_change();
+    /* Empty module initializers are real pipeline roots.  A facade that only
+     * re-exports names has no SSA values, but it must still cross the REPPED
+     * stage before backend lowering.  It may also own nested functions, so do
+     * not bypass the recursive stage transition. */
+    if (max_id == 0) {
+        for (uint16_t i = 0; i < f->nchildren; i++) {
+            if (f->children[i])
+                xi_opt_select_rep_with_policy(f->children[i], &local_policy);
+        }
+        f->stage = XI_STAGE_REPPED;
+        f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
+        return xi_pass_change_all();
+    }
 
     XiValue **box_of = (XiValue **) xr_calloc(max_id, sizeof(XiValue *));
     XiValue **unbox_of = (XiValue **) xr_calloc(max_id, sizeof(XiValue *));

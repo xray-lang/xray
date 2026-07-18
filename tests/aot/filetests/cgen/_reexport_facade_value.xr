@@ -1,0 +1,11 @@
+export fn facadeValue() -> int {
+    return 42
+}
+
+export fn aliasedSource() -> int {
+    return 7
+}
+
+export fn starValue() -> int {
+    return 9
+}

@@ -19,6 +19,7 @@
 #include "xi_import_resolve.h"
 #include "../module/xmodule_graph.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -27,6 +28,11 @@
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
+
+typedef struct XiResolvedExport {
+    int mod_index;
+    int shared_slot;
+} XiResolvedExport;
 
 #ifdef _WIN32
 #define realpath(path, resolved) _fullpath((resolved), (path), PATH_MAX)
@@ -75,6 +81,97 @@ XR_FUNC const char *xi_resolve_import_canonical(const XrModuleGraph *graph,
     return NULL;
 }
 
+static int graph_spec_to_topo(const XrModuleGraph *graph, int spec_index, int nmodules) {
+    if (!graph || spec_index < 0)
+        return -1;
+    for (int topo = 0; topo < nmodules; topo++) {
+        if (graph->topo_order[topo] == spec_index)
+            return topo;
+    }
+    return -1;
+}
+
+static int resolve_reexport_source_topo(const XrModuleGraph *graph, const XiModule *module,
+                                        const char *specifier, int nmodules) {
+    if (!graph || !module || !specifier)
+        return -1;
+    int spec_index = -1;
+    if (specifier[0] == '.') {
+        const char *canonical = xi_resolve_import_canonical(graph, module->path, specifier);
+        if (canonical)
+            spec_index = xr_module_graph_find(graph, canonical);
+    } else {
+        spec_index = xr_module_graph_find(graph, specifier);
+    }
+    return graph_spec_to_topo(graph, spec_index, nmodules);
+}
+
+/* Resolve an exported name to its owning module and concrete shared slot.
+ * Re-export-only facade modules intentionally own no duplicate shared slot:
+ * AOT links directly to the original declaration, following selective,
+ * aliased, and star re-export chains. */
+static bool resolve_export_target(const XrModuleGraph *graph, XiModule **modules, int nmodules,
+                                  int mod_index, const char *member_name, uint8_t *visiting,
+                                  XiResolvedExport *out) {
+    if (!graph || !modules || !member_name || !visiting || !out || mod_index < 0 ||
+        mod_index >= nmodules || visiting[mod_index])
+        return false;
+    XiModule *module = modules[mod_index];
+    if (!module)
+        return false;
+
+    visiting[mod_index] = 1;
+
+    /* A declaration owned by this module always wins over star re-exports. */
+    for (uint16_t ei = 0; ei < module->nexports; ei++) {
+        const XiModuleExport *exp = &module->exports[ei];
+        if (exp->name && strcmp(exp->name, member_name) == 0) {
+            out->mod_index = mod_index;
+            out->shared_slot = (int) exp->shared_slot;
+            visiting[mod_index] = 0;
+            return true;
+        }
+    }
+
+    XiFunc *init = module->init;
+    if (!init || !init->reexports) {
+        visiting[mod_index] = 0;
+        return false;
+    }
+
+    /* Selective re-exports take precedence over star re-exports and may
+     * rename the public binding. */
+    for (uint16_t ri = 0; ri < init->reexport_count; ri++) {
+        const XiReexportEntry *re = &init->reexports[ri];
+        if (!re->name)
+            continue;
+        const char *exported_name = re->alias ? re->alias : re->name;
+        if (!exported_name || strcmp(exported_name, member_name) != 0)
+            continue;
+        int source_topo = resolve_reexport_source_topo(graph, module, re->from_path, nmodules);
+        if (source_topo >= 0 &&
+            resolve_export_target(graph, modules, nmodules, source_topo, re->name, visiting, out)) {
+            visiting[mod_index] = 0;
+            return true;
+        }
+    }
+
+    for (uint16_t ri = 0; ri < init->reexport_count; ri++) {
+        const XiReexportEntry *re = &init->reexports[ri];
+        if (re->name)
+            continue;
+        int source_topo = resolve_reexport_source_topo(graph, module, re->from_path, nmodules);
+        if (source_topo >= 0 && resolve_export_target(graph, modules, nmodules, source_topo,
+                                                      member_name, visiting, out)) {
+            visiting[mod_index] = 0;
+            return true;
+        }
+    }
+
+    visiting[mod_index] = 0;
+    return false;
+}
+
 /* ========== Single-Function Resolution ========== */
 
 /* Walk a single XiFunc (non-recursive) and resolve XI_IMPORT_REF values. */
@@ -118,29 +215,23 @@ static void resolve_func_imports(XiFunc *f, const XrModuleGraph *graph, const ch
                 continue;
 
             /* Map spec index to topo position (= modules[] index) */
-            int target_topo = -1;
-            for (int t = 0; t < nmodules; t++) {
-                if (graph->topo_order[t] == target_spec_idx) {
-                    target_topo = t;
-                    break;
-                }
-            }
+            int target_topo = graph_spec_to_topo(graph, target_spec_idx, nmodules);
             if (target_topo < 0)
                 continue;
 
-            ref->resolved_mod_index = target_topo;
-
-            /* For selective imports, find the export slot */
-            if (ref->member_name && modules[target_topo]) {
-                XiModule *tmod = modules[target_topo];
-                for (uint16_t ei = 0; ei < tmod->nexports; ei++) {
-                    if (tmod->exports[ei].name &&
-                        strcmp(tmod->exports[ei].name, ref->member_name) == 0) {
-                        ref->resolved_shared_slot = (int) tmod->exports[ei].shared_slot;
-                        break;
-                    }
-                }
+            if (!ref->member_name) {
+                ref->resolved_mod_index = target_topo;
+                continue;
             }
+
+            uint8_t *visiting = (uint8_t *) xr_calloc((size_t) nmodules, sizeof(uint8_t));
+            XiResolvedExport resolved = {-1, -1};
+            if (visiting && resolve_export_target(graph, modules, nmodules, target_topo,
+                                                  ref->member_name, visiting, &resolved)) {
+                ref->resolved_mod_index = resolved.mod_index;
+                ref->resolved_shared_slot = resolved.shared_slot;
+            }
+            xr_free(visiting);
         }
     }
 }
