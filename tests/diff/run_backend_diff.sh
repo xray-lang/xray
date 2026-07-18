@@ -40,6 +40,7 @@
 # Per-case optional sidecar:
 #   <case>.args    first line = whitespace-separated program arguments
 #   <case>.stdin   bytes fed to both VM and AOT stdin
+#   <case>.xr.expected exact stdout required from every enabled backend
 #   <case>.xr first line may carry "// anchor: <tag>" for failure labeling.
 #
 # Cases live in tests/diff/cases/**/*.xr; files whose basename starts with
@@ -356,7 +357,7 @@ stdin=$(xray_test_file_key "$stdinfile")"
 run_case() {
     local case="$1"
     local case_id="${2:-0}"
-    local name base anchor argfile
+    local name base anchor argfile expected_file
     name="$(rel_path "$case")"
     base="$(printf '%05d_%s' "$case_id" "$(printf '%s' "${name%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g')")"
     printf '  %-84s' "$name"
@@ -374,6 +375,7 @@ run_case() {
     local has_args=0
     local argline=""
     argfile="${case%.xr}.args"
+    expected_file="${case}.expected"
     if [ -f "$argfile" ]; then
         argline="$(head -n1 "$argfile")"
         has_args=1
@@ -431,6 +433,15 @@ run_case() {
         fi
     done
 
+    if [ -z "$mismatch" ] && [ -f "$expected_file" ]; then
+        if [ "$ref_rc" != "0" ]; then
+            mismatch="exit code ($ref=$ref_rc expected=0)"
+        elif ! diff -q "$ref_out" "$expected_file" >/dev/null 2>&1; then
+            mismatch="stdout ($ref vs expected)"
+            other="expected"
+        fi
+    fi
+
     if [ -z "$mismatch" ]; then
         if [ -n "$excluded" ]; then
             echo "PASS (excl:$excluded)"
@@ -446,6 +457,7 @@ run_case() {
         echo "      $b: rc=$(cat "$WORK/${base}.$b.rc")  stdout: $(head -3 "$WORK/${base}.$b.out" | tr '\n' '|')"
     done
     case "$mismatch" in
+        *"vs expected"*) diff -u "$expected_file" "$ref_out" | sed -n '1,30p' | sed 's/^/      /' ;;
         stdout*) diff -u "$ref_out" "$WORK/${base}.$other.out" | sed -n '1,30p' | sed 's/^/      /' ;;
         stderr*) diff -u "$ref_err" "$WORK/${base}.$other.err" | sed -n '1,30p' | sed 's/^/      /' ;;
     esac
