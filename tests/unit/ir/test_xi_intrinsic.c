@@ -300,6 +300,25 @@ static void test_builtin_receiver_registry_metadata(void) {
 }
 
 static void test_builtin_receiver_method_placement(void) {
+    const char *exact_bit_methods[] = {"rotateLeft",   "rotateRight",   "byteswap", "popcount",
+                                       "leadingZeros", "trailingZeros", NULL};
+    for (int i = 0; exact_bit_methods[i]; i++) {
+        char msg[192];
+        snprintf(msg, sizeof(msg), "exact integer registry must contain %s", exact_bit_methods[i]);
+        ASSERT_TRUE(receiver_has_method(XA_BUILTIN_RECEIVER_EXACT_INTEGER, exact_bit_methods[i]),
+                    msg);
+    }
+    const XaBuiltinReceiverMethodSpec *rotate =
+        xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_LEFT);
+    ASSERT_TRUE(rotate && rotate->result == XA_BUILTIN_TYPE_RECEIVER &&
+                    rotate->params[0] == XA_BUILTIN_TYPE_INT &&
+                    rotate->allocation == XA_BUILTIN_ALLOCATION_NO_HEAP,
+                "rotateLeft must preserve its exact receiver and be no-heap");
+    const XaBuiltinReceiverMethodSpec *popcount =
+        xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_POPCOUNT);
+    ASSERT_TRUE(popcount && popcount->result == XA_BUILTIN_TYPE_INT,
+                "popcount must return language int");
+
     const char *u8_array_methods[] = {"appendFrom", "repeatFrom", NULL};
     for (int i = 0; u8_array_methods[i]; i++) {
         char msg[160];

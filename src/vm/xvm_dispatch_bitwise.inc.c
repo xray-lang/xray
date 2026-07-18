@@ -131,3 +131,43 @@
 XVM_TEMPLATE_SHIFT_CASE(OP_SHR_U, xr_int_shr_u_wrap, xr_bigint_shr)
 
 #undef XVM_TEMPLATE_SHIFT_CASE
+
+/* Exact-width bit intrinsics are statically typed Xi operations. C carries
+ * the receiver's XrNativeType; rotations place receiver/count contiguously at
+ * B/B+1 so one compact opcode still retains the width contract. */
+#define XVM_EXACT_BIT_UNARY_CASE(op, fn)                                                           \
+    vmcase(op) {                                                                                   \
+        int a = GETARG_A(i);                                                                       \
+        int b = GETARG_B(i);                                                                       \
+        uint8_t native_type = (uint8_t) GETARG_C(i);                                               \
+        XrValue value = R(b);                                                                      \
+        if (!XR_IS_INT(value))                                                                     \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "exact-width bit intrinsic requires int");      \
+        XR_SET_INT(R(a), fn(XR_TO_INT(value), native_type));                                       \
+        vmbreak;                                                                                   \
+    }
+
+XVM_EXACT_BIT_UNARY_CASE(OP_BIT_BSWAP, xr_bits_exact_byteswap)
+XVM_EXACT_BIT_UNARY_CASE(OP_BIT_POPCOUNT, xr_bits_exact_popcount)
+XVM_EXACT_BIT_UNARY_CASE(OP_BIT_CLZ, xr_bits_exact_leading_zeros)
+XVM_EXACT_BIT_UNARY_CASE(OP_BIT_CTZ, xr_bits_exact_trailing_zeros)
+
+#undef XVM_EXACT_BIT_UNARY_CASE
+
+#define XVM_EXACT_BIT_ROTATE_CASE(op, fn)                                                          \
+    vmcase(op) {                                                                                   \
+        int a = GETARG_A(i);                                                                       \
+        int b = GETARG_B(i);                                                                       \
+        uint8_t native_type = (uint8_t) GETARG_C(i);                                               \
+        XrValue value = R(b);                                                                      \
+        XrValue count = R(b + 1);                                                                  \
+        if (!XR_IS_INT(value) || !XR_IS_INT(count))                                                \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "exact-width rotate requires integer inputs");  \
+        XR_SET_INT(R(a), fn(XR_TO_INT(value), XR_TO_INT(count), native_type));                     \
+        vmbreak;                                                                                   \
+    }
+
+XVM_EXACT_BIT_ROTATE_CASE(OP_BIT_ROTL, xr_bits_exact_rotate_left)
+XVM_EXACT_BIT_ROTATE_CASE(OP_BIT_ROTR, xr_bits_exact_rotate_right)
+
+#undef XVM_EXACT_BIT_ROTATE_CASE

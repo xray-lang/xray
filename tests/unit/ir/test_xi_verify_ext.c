@@ -999,6 +999,55 @@ TEST(typed_array_store_u64_without_narrow_passes) {
     xi_func_free(f);
 }
 
+/* ========== Exact-width integer bit-op contracts ========== */
+
+TEST(exact_bit_rotate_accepts_canonical_int_width_tag) {
+    XiFunc *f = make_func("exact_bit_int");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *value = xi_param(f, entry, 0, &stub_int);
+    XiValue *count = xi_const_int(f, entry, -1, &stub_int);
+    XiValue *rot = xi_value_new(f, entry, XI_BIT_ROTL, &stub_int, 2);
+    rot->args[0] = value;
+    rot->args[1] = count;
+    rot->aux_int = 0;
+    xi_block_set_return(entry, rot);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(exact_bit_receiver_result_width_mismatch_fails) {
+    XiFunc *f = make_func("exact_bit_result_width");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *value = xi_param(f, entry, 0, &stub_u16);
+    XiValue *swap = xi_value_new(f, entry, XI_BIT_BSWAP, &stub_int, 1);
+    swap->args[0] = value;
+    swap->aux_int = XR_NATIVE_U16;
+    xi_block_set_return(entry, swap);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(exact_bit_native_width_tag_mismatch_fails) {
+    XiFunc *f = make_func("exact_bit_aux_width");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *value = xi_param(f, entry, 0, &stub_u16);
+    XiValue *count = xi_value_new(f, entry, XI_BIT_POPCOUNT, &stub_int, 1);
+    count->args[0] = value;
+    count->aux_int = XR_NATIVE_U64;
+    xi_block_set_return(entry, count);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
 /* ========== Unique value IDs ========== */
 
 TEST(duplicate_value_id_fails) {
@@ -1674,6 +1723,9 @@ int main(void) {
     run_typed_array_store_with_narrow_passes();
     run_typed_array_store_with_wrong_narrow_fails();
     run_typed_array_store_u64_without_narrow_passes();
+    run_exact_bit_rotate_accepts_canonical_int_width_tag();
+    run_exact_bit_receiver_result_width_mismatch_fails();
+    run_exact_bit_native_width_tag_mismatch_fails();
     run_duplicate_value_id_fails();
     run_phi_arg_count_mismatch_fails();
     run_use_not_dominated_by_def_fails();

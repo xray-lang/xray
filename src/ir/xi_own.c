@@ -165,6 +165,9 @@ static bool own_type_is_pod_span_elem(const XrType *type) {
 static bool own_builtin_receiver_registry_matches(const XrType *receiver_type,
                                                   XaBuiltinReceiverKind kind) {
     switch (kind) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return receiver_type && receiver_type->kind == XR_KIND_INT &&
+                   !receiver_type->is_nullable;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver_type);
         case XA_BUILTIN_RECEIVER_ARRAY:

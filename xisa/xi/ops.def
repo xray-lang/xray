@@ -169,6 +169,74 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+; Exact-width integer bit intrinsics. aux_int carries the receiver's
+; XrNativeType and is part of the semantic contract, not a backend hint.
+(define-xi-op xi.bit.rotl
+  :class bitwise
+  :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bit.rotr
+  :class bitwise
+  :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bit.bswap
+  :class bitwise
+  :arity 1
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bit.popcount
+  :class bitwise
+  :arity 1
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bit.clz
+  :class bitwise
+  :arity 1
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bit.ctz
+  :class bitwise
+  :arity 1
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.eq
   :class comparison
   :arity 2

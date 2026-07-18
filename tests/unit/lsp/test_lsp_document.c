@@ -606,6 +606,40 @@ TEST(global_type_query_builtins_use_canonical_names) {
     xlsp_server_free(server);
 }
 
+TEST(exact_integer_bit_builtins_use_receiver_specialized_registry) {
+    XrType u32;
+    memset(&u32, 0, sizeof(u32));
+    u32.kind = XR_KIND_INT;
+    u32.native_width = XR_NATIVE_U32;
+
+    XrJsonValue *items = xlsp_builtin_get_completions_for_type(&u32);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "rotateLeft"));
+    ASSERT(json_array_contains_label(items, "rotateRight"));
+    ASSERT(json_array_contains_label(items, "byteswap"));
+    ASSERT(json_array_contains_label(items, "popcount"));
+    ASSERT(json_array_contains_label(items, "leadingZeros"));
+    ASSERT(json_array_contains_label(items, "trailingZeros"));
+
+    XrJsonValue *rotate = json_array_find_label(items, "rotateLeft");
+    ASSERT(rotate != NULL);
+    ASSERT_STR_EQ(xjson_get_string(rotate, "detail"), "rotateLeft(count: int): uint32");
+    const char *documentation = xjson_get_string(rotate, "documentation");
+    ASSERT(documentation != NULL);
+    ASSERT(strstr(documentation, "Allocation: no heap allocation") != NULL);
+    ASSERT(strstr(documentation, "Lowering: xi.bit.rotl") != NULL);
+
+    char signature[160];
+    ASSERT(xlsp_builtin_get_signature_for_type(&u32, "byteswap", signature, sizeof(signature)) !=
+           NULL);
+    ASSERT_STR_EQ(signature, "byteswap(): uint32");
+    ASSERT(xlsp_builtin_get_signature_for_type(&u32, "popcount", signature, sizeof(signature)) !=
+           NULL);
+    ASSERT_STR_EQ(signature, "popcount(): int");
+
+    xjson_free(items);
+}
+
 TEST(param_mode_user_function_lsp_display) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
@@ -885,6 +919,7 @@ int main(int argc, char **argv) {
     RUN_TEST(signature_help_u8_array_registry_method);
     RUN_TEST(builtin_generic_array_uses_error_placeholder);
     RUN_TEST(global_type_query_builtins_use_canonical_names);
+    RUN_TEST(exact_integer_bit_builtins_use_receiver_specialized_registry);
     RUN_TEST(param_mode_user_function_lsp_display);
     RUN_TEST(param_mode_semantic_tokens_mark_modes_and_call_access);
     RUN_TEST(param_mode_inlay_hints_describe_modes);

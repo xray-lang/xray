@@ -40,6 +40,7 @@
 #include "xi_value_query.h"
 #include "../os/os_thread.h"
 #include "../shared/xr_int_arith.h"
+#include "../shared/xr_bits_core.h"
 #include "xi_analysis.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
@@ -627,6 +628,33 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
                 continue;
             }
 
+            if (v->nargs == 1 && const_int_value(v->args[0], &unary_i)) {
+                int64_t exact_result = 0;
+                bool exact_folded = true;
+                switch (v->op) {
+                    case XI_BIT_BSWAP:
+                        exact_result = xr_bits_exact_byteswap(unary_i, (uint8_t) v->aux_int);
+                        break;
+                    case XI_BIT_POPCOUNT:
+                        exact_result = xr_bits_exact_popcount(unary_i, (uint8_t) v->aux_int);
+                        break;
+                    case XI_BIT_CLZ:
+                        exact_result = xr_bits_exact_leading_zeros(unary_i, (uint8_t) v->aux_int);
+                        break;
+                    case XI_BIT_CTZ:
+                        exact_result = xr_bits_exact_trailing_zeros(unary_i, (uint8_t) v->aux_int);
+                        break;
+                    default:
+                        exact_folded = false;
+                        break;
+                }
+                if (exact_folded) {
+                    rewrite_to_const_int(v, exact_result);
+                    chg.values_changed = true;
+                    continue;
+                }
+            }
+
             /* Tuple projection: TUPLE_GET(TUPLE_NEW(e0..en-1), idx) → COPY(e_idx).
              * Tuples are immutable, so the source slot is always the literal
              * element passed at construction time.  Out-of-range indices are
@@ -656,6 +684,14 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             int64_t lhs_i = 0, rhs_i = 0;
             if (const_int_value(lhs, &lhs_i) && const_int_value(rhs, &rhs_i)) {
                 int64_t result;
+                if (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR) {
+                    result = v->op == XI_BIT_ROTL
+                                 ? xr_bits_exact_rotate_left(lhs_i, rhs_i, (uint8_t) v->aux_int)
+                                 : xr_bits_exact_rotate_right(lhs_i, rhs_i, (uint8_t) v->aux_int);
+                    rewrite_to_const_int(v, result);
+                    chg.values_changed = true;
+                    continue;
+                }
                 bool shr_unsigned = v->op == XI_SHR && opt_type_is_int_like(lhs->type) &&
                                     opt_type_is_unsigned_int(lhs->type);
                 if (fold_int_binary(v->op, lhs_i, rhs_i, shr_unsigned, &result)) {
@@ -1979,6 +2015,9 @@ static bool sr_type_is_pod_span_elem(const XrType *type) {
 static bool sr_builtin_receiver_registry_matches(const XrType *receiver_type,
                                                  XaBuiltinReceiverKind kind) {
     switch (kind) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return receiver_type && receiver_type->kind == XR_KIND_INT &&
+                   !receiver_type->is_nullable;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver_type);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -2352,6 +2391,10 @@ static XrRep sr_arith_native_result_rep_depth(const XiValue *v, const XiRepPolic
         case XI_NEG:
             return sr_value_numeric_rep_hint_depth(v->args[0], policy, (uint8_t) (depth + 1));
         case XI_BNOT:
+        case XI_BIT_BSWAP:
+        case XI_BIT_POPCOUNT:
+        case XI_BIT_CLZ:
+        case XI_BIT_CTZ:
             return sr_value_numeric_rep_hint_depth(v->args[0], policy, (uint8_t) (depth + 1)) ==
                            XR_REP_I64
                        ? XR_REP_I64
@@ -2361,6 +2404,8 @@ static XrRep sr_arith_native_result_rep_depth(const XiValue *v, const XiRepPolic
         case XI_BXOR:
         case XI_SHL:
         case XI_SHR:
+        case XI_BIT_ROTL:
+        case XI_BIT_ROTR:
         case XI_MOD: {
             if (v->nargs < 2)
                 return XR_REP_TAGGED;
@@ -2421,7 +2466,13 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_BXOR:
         case XI_BNOT:
         case XI_SHL:
-        case XI_SHR: {
+        case XI_SHR:
+        case XI_BIT_ROTL:
+        case XI_BIT_ROTR:
+        case XI_BIT_BSWAP:
+        case XI_BIT_POPCOUNT:
+        case XI_BIT_CLZ:
+        case XI_BIT_CTZ: {
             return sr_arith_native_result_rep(v, policy);
         }
         case XI_EQ:
@@ -2735,7 +2786,13 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_BXOR:
         case XI_BNOT:
         case XI_SHL:
-        case XI_SHR: {
+        case XI_SHR:
+        case XI_BIT_ROTL:
+        case XI_BIT_ROTR:
+        case XI_BIT_BSWAP:
+        case XI_BIT_POPCOUNT:
+        case XI_BIT_CLZ:
+        case XI_BIT_CTZ: {
             if ((user->op == XI_ADD || user->op == XI_SUB) && user->type &&
                 user->type->kind == XR_KIND_POINTER && arg_idx < user->nargs &&
                 user->args[arg_idx] && user->args[arg_idx]->type) {

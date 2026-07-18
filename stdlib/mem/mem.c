@@ -22,10 +22,9 @@
  *   Moved out per the 151 surface convergence:
  *   - Cycle-collector control + memory statistics -> `runtime` module
  *     (stdlib/runtime/runtime.c, task 154).
- *   - Bit intrinsics + wrapping/overflow arithmetic -> `int` methods
- *     (src/runtime/value/xint_methods.h VM, xrt_method.h + cgen direct
- *     lowering AOT; semantics in src/shared/xr_bits_core.h and
- *     xr_arith_core.h, task 153).
+ *   - Integer operations -> compiler-known receiver methods. Exact-width bit
+ *     operations lower to stable xi.bit.* ops; arithmetic methods retain the
+ *     shared xr_arith_core.h semantics.
  */
 
 #include "mem.h"

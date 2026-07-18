@@ -218,6 +218,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_PARAM         —                    parameter index
  *  XI_TARGET_SIZEOF —                    XrNativeType whose target C sizeof is needed
  *  XI_TARGET_ALIGNOF —                   XrNativeType whose target C alignment is needed
+ *  XI_BIT_*         —                    receiver XrNativeType (exact width/sign contract)
  *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
  *  XI_STORE_FIELD   field name or NULL   symbol id or field index
  *  XI_STATIC_ADDR   —                    shared slot index for freestanding static data
@@ -279,6 +280,12 @@ typedef enum {
     XI_BNOT, /* ~ */
     XI_SHL,  /* << */
     XI_SHR,  /* >> */
+    XI_BIT_ROTL,
+    XI_BIT_ROTR,
+    XI_BIT_BSWAP,
+    XI_BIT_POPCOUNT,
+    XI_BIT_CLZ,
+    XI_BIT_CTZ,
 
     /* Comparison (result is always bool) */
     XI_EQ,

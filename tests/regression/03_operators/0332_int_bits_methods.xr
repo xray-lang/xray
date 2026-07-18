@@ -1,7 +1,6 @@
-// Test: int bit-manipulation methods + signed-overflow predicates.
-// Task 153 moved these from mem.* module functions to int methods; the
-// semantics live in src/shared/xr_bits_core.h and xr_arith_core.h, shared
-// by VM and AOT.
+// Test: integer bit-manipulation methods + signed-overflow predicates.
+// Bit methods lower to exact-width xi.bit.* operations; overflow predicates
+// retain the shared arithmetic semantics.
 
 @test
 fn test_int_bits() {

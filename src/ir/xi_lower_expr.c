@@ -2197,6 +2197,9 @@ static bool xi_type_is_pod_span_elem(struct XrType *type) {
 static bool xi_lower_builtin_receiver_registry_matches(struct XrType *receiver_type,
                                                        XaBuiltinReceiverKind kind) {
     switch (kind) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return receiver_type && receiver_type->kind == XR_KIND_INT &&
+                   !receiver_type->is_nullable;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver_type);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -2215,6 +2218,32 @@ static bool xi_lower_receiver_method_matches(struct XrType *receiver_type, const
     const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
     return spec && method && strcmp(method, spec->source_name) == 0 &&
            xi_lower_builtin_receiver_registry_matches(receiver_type, spec->receiver);
+}
+
+static uint16_t xi_lower_exact_integer_bit_op(struct XrType *receiver_type, const char *method,
+                                              int arg_count) {
+    if (arg_count == 0) {
+        if (xi_lower_receiver_method_matches(receiver_type, method,
+                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_POPCOUNT))
+            return XI_BIT_POPCOUNT;
+        if (xi_lower_receiver_method_matches(receiver_type, method,
+                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_LEADING_ZEROS))
+            return XI_BIT_CLZ;
+        if (xi_lower_receiver_method_matches(receiver_type, method,
+                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_TRAILING_ZEROS))
+            return XI_BIT_CTZ;
+        if (xi_lower_receiver_method_matches(receiver_type, method,
+                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_BYTESWAP))
+            return XI_BIT_BSWAP;
+    } else if (arg_count == 1) {
+        if (xi_lower_receiver_method_matches(receiver_type, method,
+                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_LEFT))
+            return XI_BIT_ROTL;
+        if (xi_lower_receiver_method_matches(receiver_type, method,
+                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_RIGHT))
+            return XI_BIT_ROTR;
+    }
+    return XI_OP_COUNT;
 }
 
 static bool xi_lower_receiver_method_arg_count_matches(const XaBuiltinReceiverMethodSpec *spec,
@@ -5315,6 +5344,20 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (lower_value_is_whole_module_import(l, recv, "math") &&
             lower_math_call_arity_ok(ma->name, n))
             result_type = lower_math_call_result_type(l, ma->name, arg_vals, n);
+
+        uint16_t exact_bit_op = xi_lower_exact_integer_bit_op(recv->type, ma->name, n);
+        if (exact_bit_op != XI_OP_COUNT) {
+            XiValue *v =
+                xi_value_new(l->func, l->cur_block, exact_bit_op, result_type, (uint16_t) (n + 1));
+            if (!v)
+                return NULL;
+            v->args[0] = recv;
+            if (n == 1)
+                v->args[1] = arg_vals[0];
+            v->aux_int = recv->type->native_width;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
 
         if (xi_lower_receiver_method_call_matches(recv->type, ma->name, n,
                                                   XA_BUILTIN_RECEIVER_METHOD_ARRAY_CLEAR)) {

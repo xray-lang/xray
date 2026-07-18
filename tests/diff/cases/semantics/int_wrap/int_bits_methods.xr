@@ -1,9 +1,7 @@
 // anchor: int-bits-methods
-// int bit-manipulation methods (task 153: moved from mem.*). VM dispatch
-// (xint_methods.h), AOT method dispatch (xrt_method.h) and the AOT cgen
-// direct lowering all call src/shared/xr_bits_core.h, so every line below
-// must print identically under both backends (including the sign-bit and
-// modulo-64 rotate edge cases).
+// `int` is one member of the exact-width bit-intrinsic family. Calls lower to
+// stable XI_BIT_* operations; VM bytecode, AOT native expressions and constant
+// folding share the same width-aware contract.
 
 // popcount
 print((0).popcount())

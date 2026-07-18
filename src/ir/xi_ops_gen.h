@@ -173,7 +173,7 @@ typedef enum {
 #define XI_GEN_ALGEBRAIC_ASSOCIATIVE (1u << 0)
 #define XI_GEN_ALGEBRAIC_COMMUTATIVE (1u << 1)
 
-enum { XI_GEN_OP_COUNT = 180 };
+enum { XI_GEN_OP_COUNT = 186 };
 typedef char xi_generated_op_count_must_match_XiOp[
     ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];
 
@@ -223,6 +223,12 @@ typedef struct {
     X(BNOT, "xi.bnot", XI_GEN_CLASS_BITWISE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(SHL, "xi.shl", XI_GEN_CLASS_BITWISE, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(SHR, "xi.shr", XI_GEN_CLASS_BITWISE, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(BIT_ROTL, "xi.bit.rotl", XI_GEN_CLASS_BITWISE, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(BIT_ROTR, "xi.bit.rotr", XI_GEN_CLASS_BITWISE, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(BIT_BSWAP, "xi.bit.bswap", XI_GEN_CLASS_BITWISE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(BIT_POPCOUNT, "xi.bit.popcount", XI_GEN_CLASS_BITWISE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(BIT_CLZ, "xi.bit.clz", XI_GEN_CLASS_BITWISE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(BIT_CTZ, "xi.bit.ctz", XI_GEN_CLASS_BITWISE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(EQ, "xi.eq", XI_GEN_CLASS_COMPARISON, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_NE, 0, XI_GEN_ALGEBRAIC_COMMUTATIVE, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(NE, "xi.ne", XI_GEN_CLASS_COMPARISON, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_EQ, 0, XI_GEN_ALGEBRAIC_COMMUTATIVE, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(LT, "xi.lt", XI_GEN_CLASS_COMPARISON, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_GE, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
@@ -407,6 +413,12 @@ static inline const char *xi_generated_op_name(uint16_t op) {
         case XI_BNOT: return "BNOT";
         case XI_SHL: return "SHL";
         case XI_SHR: return "SHR";
+        case XI_BIT_ROTL: return "BIT_ROTL";
+        case XI_BIT_ROTR: return "BIT_ROTR";
+        case XI_BIT_BSWAP: return "BIT_BSWAP";
+        case XI_BIT_POPCOUNT: return "BIT_POPCOUNT";
+        case XI_BIT_CLZ: return "BIT_CLZ";
+        case XI_BIT_CTZ: return "BIT_CTZ";
         case XI_EQ: return "EQ";
         case XI_NE: return "NE";
         case XI_LT: return "LT";
@@ -594,6 +606,12 @@ static inline uint8_t xi_generated_op_arity(uint16_t op) {
         case XI_BNOT: return 1;
         case XI_SHL: return 2;
         case XI_SHR: return 2;
+        case XI_BIT_ROTL: return 2;
+        case XI_BIT_ROTR: return 2;
+        case XI_BIT_BSWAP: return 1;
+        case XI_BIT_POPCOUNT: return 1;
+        case XI_BIT_CLZ: return 1;
+        case XI_BIT_CTZ: return 1;
         case XI_EQ: return 2;
         case XI_NE: return 2;
         case XI_LT: return 2;
@@ -781,6 +799,12 @@ static inline uint8_t xi_generated_op_class(uint16_t op) {
         case XI_BNOT: return XI_GEN_CLASS_BITWISE;
         case XI_SHL: return XI_GEN_CLASS_BITWISE;
         case XI_SHR: return XI_GEN_CLASS_BITWISE;
+        case XI_BIT_ROTL: return XI_GEN_CLASS_BITWISE;
+        case XI_BIT_ROTR: return XI_GEN_CLASS_BITWISE;
+        case XI_BIT_BSWAP: return XI_GEN_CLASS_BITWISE;
+        case XI_BIT_POPCOUNT: return XI_GEN_CLASS_BITWISE;
+        case XI_BIT_CLZ: return XI_GEN_CLASS_BITWISE;
+        case XI_BIT_CTZ: return XI_GEN_CLASS_BITWISE;
         case XI_EQ: return XI_GEN_CLASS_COMPARISON;
         case XI_NE: return XI_GEN_CLASS_COMPARISON;
         case XI_LT: return XI_GEN_CLASS_COMPARISON;
@@ -968,6 +992,12 @@ static inline uint8_t xi_generated_op_result_kind(uint16_t op) {
         case XI_BNOT: return XI_GEN_RESULT_VALUE;
         case XI_SHL: return XI_GEN_RESULT_VALUE;
         case XI_SHR: return XI_GEN_RESULT_VALUE;
+        case XI_BIT_ROTL: return XI_GEN_RESULT_VALUE;
+        case XI_BIT_ROTR: return XI_GEN_RESULT_VALUE;
+        case XI_BIT_BSWAP: return XI_GEN_RESULT_VALUE;
+        case XI_BIT_POPCOUNT: return XI_GEN_RESULT_VALUE;
+        case XI_BIT_CLZ: return XI_GEN_RESULT_VALUE;
+        case XI_BIT_CTZ: return XI_GEN_RESULT_VALUE;
         case XI_EQ: return XI_GEN_RESULT_VALUE;
         case XI_NE: return XI_GEN_RESULT_VALUE;
         case XI_LT: return XI_GEN_RESULT_VALUE;
@@ -1155,6 +1185,12 @@ static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {
         case XI_BNOT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_SHL: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_SHR: return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        case XI_BIT_ROTL: return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        case XI_BIT_ROTR: return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        case XI_BIT_BSWAP: return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        case XI_BIT_POPCOUNT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        case XI_BIT_CLZ: return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        case XI_BIT_CTZ: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_EQ: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_NE: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_LT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
@@ -1342,6 +1378,12 @@ static inline const char *xi_generated_op_result_native_type(uint16_t op) {
         case XI_BNOT: return NULL;
         case XI_SHL: return NULL;
         case XI_SHR: return NULL;
+        case XI_BIT_ROTL: return NULL;
+        case XI_BIT_ROTR: return NULL;
+        case XI_BIT_BSWAP: return NULL;
+        case XI_BIT_POPCOUNT: return NULL;
+        case XI_BIT_CLZ: return NULL;
+        case XI_BIT_CTZ: return NULL;
         case XI_EQ: return NULL;
         case XI_NE: return NULL;
         case XI_LT: return NULL;
@@ -1529,6 +1571,12 @@ static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {
         case XI_BNOT: return XI_GEN_LOWERING_GENERATED;
         case XI_SHL: return XI_GEN_LOWERING_GENERATED;
         case XI_SHR: return XI_GEN_LOWERING_GENERATED;
+        case XI_BIT_ROTL: return XI_GEN_LOWERING_GENERATED;
+        case XI_BIT_ROTR: return XI_GEN_LOWERING_GENERATED;
+        case XI_BIT_BSWAP: return XI_GEN_LOWERING_GENERATED;
+        case XI_BIT_POPCOUNT: return XI_GEN_LOWERING_GENERATED;
+        case XI_BIT_CLZ: return XI_GEN_LOWERING_GENERATED;
+        case XI_BIT_CTZ: return XI_GEN_LOWERING_GENERATED;
         case XI_EQ: return XI_GEN_LOWERING_GENERATED;
         case XI_NE: return XI_GEN_LOWERING_GENERATED;
         case XI_LT: return XI_GEN_LOWERING_GENERATED;
@@ -1716,6 +1764,12 @@ static inline uint8_t xi_generated_op_speculation(uint16_t op) {
         case XI_BNOT: return XI_GEN_SPECULATION_SAFE;
         case XI_SHL: return XI_GEN_SPECULATION_SAFE;
         case XI_SHR: return XI_GEN_SPECULATION_SAFE;
+        case XI_BIT_ROTL: return XI_GEN_SPECULATION_SAFE;
+        case XI_BIT_ROTR: return XI_GEN_SPECULATION_SAFE;
+        case XI_BIT_BSWAP: return XI_GEN_SPECULATION_SAFE;
+        case XI_BIT_POPCOUNT: return XI_GEN_SPECULATION_SAFE;
+        case XI_BIT_CLZ: return XI_GEN_SPECULATION_SAFE;
+        case XI_BIT_CTZ: return XI_GEN_SPECULATION_SAFE;
         case XI_EQ: return XI_GEN_SPECULATION_SAFE;
         case XI_NE: return XI_GEN_SPECULATION_SAFE;
         case XI_LT: return XI_GEN_SPECULATION_SAFE;
@@ -1903,6 +1957,12 @@ static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {
         case XI_BNOT: return XI_GEN_VN_PURE;
         case XI_SHL: return XI_GEN_VN_PURE;
         case XI_SHR: return XI_GEN_VN_PURE;
+        case XI_BIT_ROTL: return XI_GEN_VN_PURE;
+        case XI_BIT_ROTR: return XI_GEN_VN_PURE;
+        case XI_BIT_BSWAP: return XI_GEN_VN_PURE;
+        case XI_BIT_POPCOUNT: return XI_GEN_VN_PURE;
+        case XI_BIT_CLZ: return XI_GEN_VN_PURE;
+        case XI_BIT_CTZ: return XI_GEN_VN_PURE;
         case XI_EQ: return XI_GEN_VN_PURE;
         case XI_NE: return XI_GEN_VN_PURE;
         case XI_LT: return XI_GEN_VN_PURE;
@@ -2090,6 +2150,12 @@ static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {
         case XI_BNOT: return XI_GEN_TBAA_NONE;
         case XI_SHL: return XI_GEN_TBAA_NONE;
         case XI_SHR: return XI_GEN_TBAA_NONE;
+        case XI_BIT_ROTL: return XI_GEN_TBAA_NONE;
+        case XI_BIT_ROTR: return XI_GEN_TBAA_NONE;
+        case XI_BIT_BSWAP: return XI_GEN_TBAA_NONE;
+        case XI_BIT_POPCOUNT: return XI_GEN_TBAA_NONE;
+        case XI_BIT_CLZ: return XI_GEN_TBAA_NONE;
+        case XI_BIT_CTZ: return XI_GEN_TBAA_NONE;
         case XI_EQ: return XI_GEN_TBAA_NONE;
         case XI_NE: return XI_GEN_TBAA_NONE;
         case XI_LT: return XI_GEN_TBAA_NONE;
@@ -2277,6 +2343,12 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_BNOT: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_SHL: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_SHR: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_BIT_ROTL: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_BIT_ROTR: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_BIT_BSWAP: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_BIT_POPCOUNT: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_BIT_CLZ: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_BIT_CTZ: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_EQ: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_NE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_LT: return XI_GEN_BACKEND_REWRITE_NONE;
@@ -2464,6 +2536,12 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_BNOT: return NULL;
         case XI_SHL: return NULL;
         case XI_SHR: return NULL;
+        case XI_BIT_ROTL: return NULL;
+        case XI_BIT_ROTR: return NULL;
+        case XI_BIT_BSWAP: return NULL;
+        case XI_BIT_POPCOUNT: return NULL;
+        case XI_BIT_CLZ: return NULL;
+        case XI_BIT_CTZ: return NULL;
         case XI_EQ: return NULL;
         case XI_NE: return NULL;
         case XI_LT: return NULL;
@@ -2656,6 +2734,12 @@ static inline uint8_t xi_generated_op_escape_use(uint16_t op) {
         case XI_BNOT: return XI_GEN_ESCAPE_USE_NONE;
         case XI_SHL: return XI_GEN_ESCAPE_USE_NONE;
         case XI_SHR: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_BIT_ROTL: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_BIT_ROTR: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_BIT_BSWAP: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_BIT_POPCOUNT: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_BIT_CLZ: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_BIT_CTZ: return XI_GEN_ESCAPE_USE_NONE;
         case XI_EQ: return XI_GEN_ESCAPE_USE_NONE;
         case XI_NE: return XI_GEN_ESCAPE_USE_NONE;
         case XI_LT: return XI_GEN_ESCAPE_USE_NONE;
@@ -2843,6 +2927,12 @@ static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {
         case XI_BNOT: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_SHL: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_SHR: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_BIT_ROTL: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_BIT_ROTR: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_BIT_BSWAP: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_BIT_POPCOUNT: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_BIT_CLZ: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_BIT_CTZ: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_EQ: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_NE: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_LT: return XI_GEN_ESCAPE_ALLOC_NONE;
@@ -3030,6 +3120,12 @@ static inline uint8_t xi_generated_op_own_use(uint16_t op) {
         case XI_BNOT: return XI_GEN_OWN_USE_CONSUME;
         case XI_SHL: return XI_GEN_OWN_USE_CONSUME;
         case XI_SHR: return XI_GEN_OWN_USE_CONSUME;
+        case XI_BIT_ROTL: return XI_GEN_OWN_USE_BORROW;
+        case XI_BIT_ROTR: return XI_GEN_OWN_USE_BORROW;
+        case XI_BIT_BSWAP: return XI_GEN_OWN_USE_BORROW;
+        case XI_BIT_POPCOUNT: return XI_GEN_OWN_USE_BORROW;
+        case XI_BIT_CLZ: return XI_GEN_OWN_USE_BORROW;
+        case XI_BIT_CTZ: return XI_GEN_OWN_USE_BORROW;
         case XI_EQ: return XI_GEN_OWN_USE_BORROW;
         case XI_NE: return XI_GEN_OWN_USE_BORROW;
         case XI_LT: return XI_GEN_OWN_USE_BORROW;
@@ -3217,6 +3313,12 @@ static inline uint8_t xi_generated_op_ic_site(uint16_t op) {
         case XI_BNOT: return XI_GEN_IC_SITE_NONE;
         case XI_SHL: return XI_GEN_IC_SITE_NONE;
         case XI_SHR: return XI_GEN_IC_SITE_NONE;
+        case XI_BIT_ROTL: return XI_GEN_IC_SITE_NONE;
+        case XI_BIT_ROTR: return XI_GEN_IC_SITE_NONE;
+        case XI_BIT_BSWAP: return XI_GEN_IC_SITE_NONE;
+        case XI_BIT_POPCOUNT: return XI_GEN_IC_SITE_NONE;
+        case XI_BIT_CLZ: return XI_GEN_IC_SITE_NONE;
+        case XI_BIT_CTZ: return XI_GEN_IC_SITE_NONE;
         case XI_EQ: return XI_GEN_IC_SITE_NONE;
         case XI_NE: return XI_GEN_IC_SITE_NONE;
         case XI_LT: return XI_GEN_IC_SITE_NONE;
@@ -3404,6 +3506,12 @@ static inline XiOp xi_generated_op_negates_to(uint16_t op) {
         case XI_BNOT: return XI_OP_COUNT;
         case XI_SHL: return XI_OP_COUNT;
         case XI_SHR: return XI_OP_COUNT;
+        case XI_BIT_ROTL: return XI_OP_COUNT;
+        case XI_BIT_ROTR: return XI_OP_COUNT;
+        case XI_BIT_BSWAP: return XI_OP_COUNT;
+        case XI_BIT_POPCOUNT: return XI_OP_COUNT;
+        case XI_BIT_CLZ: return XI_OP_COUNT;
+        case XI_BIT_CTZ: return XI_OP_COUNT;
         case XI_EQ: return XI_NE;
         case XI_NE: return XI_EQ;
         case XI_LT: return XI_GE;
@@ -3591,6 +3699,12 @@ static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {
         case XI_BNOT: return 0;
         case XI_SHL: return 0;
         case XI_SHR: return 0;
+        case XI_BIT_ROTL: return 0;
+        case XI_BIT_ROTR: return 0;
+        case XI_BIT_BSWAP: return 0;
+        case XI_BIT_POPCOUNT: return 0;
+        case XI_BIT_CLZ: return 0;
+        case XI_BIT_CTZ: return 0;
         case XI_EQ: return XI_GEN_ALGEBRAIC_COMMUTATIVE;
         case XI_NE: return XI_GEN_ALGEBRAIC_COMMUTATIVE;
         case XI_LT: return 0;
@@ -3778,6 +3892,12 @@ static inline uint8_t xi_generated_op_default_flags(uint16_t op) {
         case XI_BNOT: return 0;
         case XI_SHL: return 0;
         case XI_SHR: return 0;
+        case XI_BIT_ROTL: return 0;
+        case XI_BIT_ROTR: return 0;
+        case XI_BIT_BSWAP: return 0;
+        case XI_BIT_POPCOUNT: return 0;
+        case XI_BIT_CLZ: return 0;
+        case XI_BIT_CTZ: return 0;
         case XI_EQ: return 0;
         case XI_NE: return 0;
         case XI_LT: return 0;
@@ -3965,6 +4085,12 @@ static inline uint32_t xi_generated_op_effects(uint16_t op) {
         case XI_BNOT: return 0;
         case XI_SHL: return 0;
         case XI_SHR: return 0;
+        case XI_BIT_ROTL: return 0;
+        case XI_BIT_ROTR: return 0;
+        case XI_BIT_BSWAP: return 0;
+        case XI_BIT_POPCOUNT: return 0;
+        case XI_BIT_CLZ: return 0;
+        case XI_BIT_CTZ: return 0;
         case XI_EQ: return 0;
         case XI_NE: return 0;
         case XI_LT: return 0;

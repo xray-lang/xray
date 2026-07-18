@@ -59,6 +59,7 @@
 #define KOP_ABC_BIN_K XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_K_IDX
 #define KOP_ABC_BIN_S XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_LIT_S
 #define KOP_ABC_BIN_LIT XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_LIT
+#define KOP_ABC_OUT_BASE_LIT XR_OPF_REG_OUT, XR_OPF_REG_BASE, XR_OPF_LIT
 #define KOP_ABC_INOUT_IN_LIT XR_OPF_REG_INOUT, XR_OPF_REG_IN, XR_OPF_LIT
 #define KOP_ABC_STORE_LIT XR_OPF_REG_IN, XR_OPF_REG_IN, XR_OPF_LIT
 #define KOP_ABC_OUT_LIT_K XR_OPF_REG_OUT, XR_OPF_LIT, XR_OPF_K_IDX
@@ -129,6 +130,12 @@
     _(SHL, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B] << R[C]")                                            \
     _(SHR, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B] >> R[C]")                                            \
     _(SHR_U, FMT_ABC, KOP_ABC_BIN, "R[A] = (uint64)R[B] >> R[C]")                                  \
+    _(BIT_ROTL, FMT_ABC, KOP_ABC_OUT_BASE_LIT, "R[A] = exact_rotl(R[B], R[B+1], native_type=C)")   \
+    _(BIT_ROTR, FMT_ABC, KOP_ABC_OUT_BASE_LIT, "R[A] = exact_rotr(R[B], R[B+1], native_type=C)")   \
+    _(BIT_BSWAP, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = exact_bswap(R[B], native_type=C)")              \
+    _(BIT_POPCOUNT, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = exact_popcount(R[B], native_type=C)")        \
+    _(BIT_CLZ, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = exact_clz(R[B], native_type=C)")                  \
+    _(BIT_CTZ, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = exact_ctz(R[B], native_type=C)")                  \
     _(EQ, FMT_AB_IMM, KOP_AB_TEST, "if (R[A] == R[B]) != k then PC++")                             \
     _(EQK, FMT_AB_IMM, KOP_AB_TEST_K, "if (R[A] == K[B]) != k then PC++")                          \
     _(EQI, FMT_AsB_C, KOP_AB_TEST_S, "if (R[A] == sB) != k then PC++")                             \
