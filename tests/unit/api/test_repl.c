@@ -237,7 +237,7 @@ TEST(repl_compile_function_registers_symbol) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                     "fn double(n) { return n * 2 }\n");
+                                     "fn double(n: int) -> int { return n * 2 }\n");
     ASSERT_NOT_NULL(proto);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);

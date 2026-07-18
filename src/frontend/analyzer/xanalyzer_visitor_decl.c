@@ -2497,11 +2497,9 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
     for (int i = 0; i < fn->param_count; i++) {
         XrParamNode *p = fn->params[i];
         if (p && p->name) {
-            XaSymbol *param = xa_symbol_new(p->name, XA_SYM_PARAMETER);
-            param->location.line = p->line > 0 ? p->line : node->line;
-            param->passing_mode = p->passing_mode;
-            xa_visit_add_symbol_checked(ctx, param, 0);
-            p->symbol_id = param->id;
+            XaSymbol *param = xa_visit_bind_parameter_symbol(ctx, p, node->line);
+            if (!param)
+                continue;
 
             XaSymbolLinks *param_links = xa_analyzer_get_links(ctx->analyzer, param);
             if (p->is_rest) {
@@ -3956,10 +3954,9 @@ skip_layout:
             if (!pname)
                 continue;
 
-            XaSymbol *param = xa_symbol_new(pname, XA_SYM_PARAMETER);
-            param->location.line = method->line;
-            param->passing_mode = source_param->passing_mode;
-            xa_visit_add_symbol_checked(ctx, param, 0);
+            XaSymbol *param = xa_visit_bind_parameter_symbol(ctx, source_param, method->line);
+            if (!param)
+                continue;
 
             XaSymbolLinks *plinks = xa_analyzer_get_links(ctx->analyzer, param);
             if (plinks) {

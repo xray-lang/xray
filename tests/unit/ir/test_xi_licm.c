@@ -17,6 +17,7 @@
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
+static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 3, .frozen = true};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -42,7 +43,7 @@ static int tests_failed = 0;
 
 /* Helper: create a func with entry block. */
 static XiFunc *make_func(void) {
-    XiFunc *f = xi_func_new("test_licm", &stub_int);
+    XiFunc *f = xi_func_new("test_licm", &stub_unit);
     XiBlock *entry = xi_block_new(f);
     entry->sealed = true;
     return f;
@@ -178,7 +179,10 @@ TEST(hoist_const_operand_before_dependent_value) {
     ASSERT(cmp->block == entry);
 
     char errbuf[256];
-    ASSERT(xi_verify(f, errbuf, sizeof(errbuf)));
+    bool verified = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!verified)
+        printf("  verifier: %s\n", errbuf);
+    ASSERT(verified);
 
     xi_func_free(f);
 }
@@ -238,7 +242,10 @@ TEST(hoist_generated_speculatable_select) {
     ASSERT(!found_in_body);
 
     char errbuf[256];
-    ASSERT(xi_verify(f, errbuf, sizeof(errbuf)));
+    bool verified = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!verified)
+        printf("  verifier: %s\n", errbuf);
+    ASSERT(verified);
 
     xi_func_free(f);
 }

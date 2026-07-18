@@ -3067,6 +3067,40 @@ XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, 
     xa_scope_add_symbol(scope, symbol);
 }
 
+XR_FUNC XaSymbol *xa_visit_bind_parameter_symbol(XaInferContext *ctx, XrParamNode *param,
+                                                 int fallback_line) {
+    if (!ctx || !ctx->analyzer || !ctx->analyzer->current_scope || !param || !param->name)
+        return NULL;
+
+    XaSymbol *symbol = NULL;
+    if (param->symbol_id != 0) {
+        XaSymbol *bound = xa_scope_lookup_by_id(ctx->analyzer->global_scope, param->symbol_id);
+        if (bound && bound->scope == ctx->analyzer->current_scope &&
+            bound->kind == XA_SYM_PARAMETER && bound->name &&
+            strcmp(bound->name, param->name) == 0) {
+            symbol = bound;
+        }
+    }
+
+    if (!symbol) {
+        symbol = xa_symbol_new(param->name, XA_SYM_PARAMETER);
+        if (!symbol)
+            return NULL;
+        symbol->location.line = param->line > 0 ? param->line : fallback_line;
+        symbol->location.column = param->column;
+        xa_visit_add_symbol_checked(ctx, symbol, 0);
+        param->symbol_id = symbol->id;
+    }
+
+    symbol->passing_mode = param->passing_mode;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
+    if (links) {
+        links->is_definitely_assigned = param->passing_mode != XR_PARAM_OUT;
+        xa_symbol_links_restore_out_field_da_paths(links, NULL);
+    }
+    return symbol;
+}
+
 /* ============================================================================
  * Pass 1: Symbol Collection
  * ============================================================================
@@ -3570,10 +3604,9 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
             const char *pname = source_param ? source_param->name : NULL;
             if (!pname)
                 continue;
-            XaSymbol *param = xa_symbol_new(pname, XA_SYM_PARAMETER);
-            param->location.line = method->line;
-            param->passing_mode = source_param->passing_mode;
-            xa_visit_add_symbol_checked(ctx, param, 0);
+            XaSymbol *param = xa_visit_bind_parameter_symbol(ctx, source_param, method->line);
+            if (!param)
+                continue;
             XaSymbolLinks *plinks = xa_analyzer_get_links(ctx->analyzer, param);
             if (plinks) {
                 XrType *param_type =
