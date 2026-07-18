@@ -8,7 +8,8 @@ static inline XrValue xrt_range_method_0(XrValue recv, int sym) {
         return xrt_range_to_string(recv);
     if (sym == XRT_SYM_VALUES || sym == XRT_SYM_TO_ARRAY) {
         XrRangeCore core =
-            r ? xr_range_core_make(r->start, r->end, r->step) : xr_range_core_make(0, 0, 1);
+            r ? xr_range_core_make_with_bound(r->start, r->end, r->step, r->inclusive_end)
+              : xr_range_core_make(0, 0, 1);
         XrRangeCoreMaterializePlan plan = xr_range_core_materialize_plan(core);
         if (plan.kind == XR_RANGE_CORE_MATERIALIZE_TOO_LARGE) {
             xrt_throw_error(XR_ERR_OUT_OF_MEMORY, XR_ERROR_CORE_RANGE_TO_ARRAY_TOO_LARGE_MSG);

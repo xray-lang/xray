@@ -10,6 +10,7 @@ fn test_inclusive_range_properties() {
     assert_eq(r.contains(4), false)
     assert_eq(r[0], 1)
     assert_eq(r[2], 3)
+    assert_eq(r.toArray(), [1, 2, 3])
 }
 
 @test

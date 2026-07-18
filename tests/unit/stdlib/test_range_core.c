@@ -26,6 +26,21 @@ TEST(range_core_length_uses_half_open_reverse_bounds) {
     ASSERT_EQ_INT(xr_range_core_length(xr_range_core_make(1, 10, -1)), 0);
 }
 
+TEST(range_core_length_and_contains_use_inclusive_bounds) {
+    XrRangeCore forward = xr_range_core_make_with_bound(1, 10, 2, true);
+    ASSERT_EQ_INT(xr_range_core_length(forward), 5);
+    ASSERT_TRUE(xr_range_core_contains(forward, 9));
+    ASSERT_FALSE(xr_range_core_contains(forward, 10));
+
+    XrRangeCore singleton = xr_range_core_make_with_bound(5, 5, 1, true);
+    ASSERT_EQ_INT(xr_range_core_length(singleton), 1);
+    ASSERT_TRUE(xr_range_core_contains(singleton, 5));
+
+    XrRangeCore reverse = xr_range_core_make_with_bound(10, 1, -3, true);
+    ASSERT_EQ_INT(xr_range_core_length(reverse), 4);
+    ASSERT_TRUE(xr_range_core_contains(reverse, 1));
+}
+
 TEST(range_core_contains_respects_step_and_exclusive_end) {
     XrRangeCore forward = xr_range_core_make(1, 10, 2);
     ASSERT_TRUE(xr_range_core_contains(forward, 1));
@@ -77,6 +92,12 @@ TEST(range_core_materialize_plan_caps_large_ranges) {
     ASSERT_EQ_INT(reverse.length, 3);
     ASSERT_EQ_INT(xr_range_core_value_at(xr_range_core_make(10, 1, -3), reverse.length - 1), 4);
 
+    XrRangeCore inclusive = xr_range_core_make_with_bound(1, 3, 1, true);
+    XrRangeCoreMaterializePlan inclusive_values = xr_range_core_materialize_plan(inclusive);
+    ASSERT_EQ_INT(inclusive_values.kind, XR_RANGE_CORE_MATERIALIZE_VALUES);
+    ASSERT_EQ_INT(inclusive_values.length, 3);
+    ASSERT_EQ_INT(xr_range_core_value_at(inclusive, inclusive_values.length - 1), 3);
+
     XrRangeCoreMaterializePlan too_large =
         xr_range_core_materialize_plan(xr_range_core_make(0, XR_RANGE_CORE_MATERIALIZE_MAX + 1, 1));
     ASSERT_EQ_INT(too_large.kind, XR_RANGE_CORE_MATERIALIZE_TOO_LARGE);
@@ -89,6 +110,10 @@ TEST(range_core_format_matches_range_to_string) {
     ASSERT_STR_EQ(buf, "1..10");
     ASSERT_EQ_INT(xr_range_core_format_buf(xr_range_core_make(10, 1, -2), buf, sizeof(buf)), 8);
     ASSERT_STR_EQ(buf, "10..1:-2");
+    ASSERT_EQ_INT(
+        xr_range_core_format_buf(xr_range_core_make_with_bound(1, 3, 1, true), buf, sizeof(buf)),
+        5);
+    ASSERT_STR_EQ(buf, "1..=3");
 }
 
 TEST_MAIN_BEGIN()
@@ -96,6 +121,7 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Range Core");
 RUN_TEST(range_core_length_uses_half_open_forward_bounds);
 RUN_TEST(range_core_length_uses_half_open_reverse_bounds);
+RUN_TEST(range_core_length_and_contains_use_inclusive_bounds);
 RUN_TEST(range_core_contains_respects_step_and_exclusive_end);
 RUN_TEST(range_core_index_supports_negative_indices);
 RUN_TEST(range_core_materialize_plan_caps_large_ranges);

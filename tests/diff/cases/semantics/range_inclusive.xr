@@ -8,6 +8,7 @@ print(inc.contains(3))
 print(inc.contains(4))
 print(inc[0])
 print(inc[2])
+print(inc.toArray())
 
 var total = 0
 for (i in 1..=3) {

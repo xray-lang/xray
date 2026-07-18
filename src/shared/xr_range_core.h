@@ -20,6 +20,7 @@ typedef struct XrRangeCore {
     int64_t start;
     int64_t end;
     int64_t step;
+    bool inclusive_end;
 } XrRangeCore;
 
 enum {
@@ -38,7 +39,12 @@ typedef struct XrRangeCoreMaterializePlan {
 } XrRangeCoreMaterializePlan;
 
 static inline XrRangeCore xr_range_core_make(int64_t start, int64_t end, int64_t step) {
-    return (XrRangeCore) {start, end, step};
+    return (XrRangeCore) {start, end, step, false};
+}
+
+static inline XrRangeCore xr_range_core_make_with_bound(int64_t start, int64_t end, int64_t step,
+                                                        bool inclusive_end) {
+    return (XrRangeCore) {start, end, step, inclusive_end};
 }
 
 static inline uint64_t xr_range_core_abs_step_u64(int64_t step) {
@@ -47,10 +53,15 @@ static inline uint64_t xr_range_core_abs_step_u64(int64_t step) {
     return (uint64_t) (-(step + 1)) + 1u;
 }
 
-static inline int64_t xr_range_core_count_from_distance(uint64_t distance, uint64_t step) {
+static inline int64_t xr_range_core_count_from_distance(uint64_t distance, uint64_t step,
+                                                        bool inclusive_end) {
     if (step == 0)
         return 0;
-    uint64_t count = distance / step + ((distance % step) != 0);
+    uint64_t base = distance / step;
+    uint64_t extra = inclusive_end ? 1u : (uint64_t) ((distance % step) != 0);
+    if (base > UINT64_MAX - extra)
+        return INT64_MAX;
+    uint64_t count = base + extra;
     return count > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) count;
 }
 
@@ -58,26 +69,26 @@ static inline int64_t xr_range_core_length(XrRangeCore r) {
     if (r.step == 0)
         return 0;
     if (r.step > 0) {
-        if (r.end <= r.start)
+        if (r.inclusive_end ? (r.end < r.start) : (r.end <= r.start))
             return 0;
         return xr_range_core_count_from_distance((uint64_t) r.end - (uint64_t) r.start,
-                                                 (uint64_t) r.step);
+                                                 (uint64_t) r.step, r.inclusive_end);
     }
-    if (r.end >= r.start)
+    if (r.inclusive_end ? (r.end > r.start) : (r.end >= r.start))
         return 0;
     return xr_range_core_count_from_distance((uint64_t) r.start - (uint64_t) r.end,
-                                             xr_range_core_abs_step_u64(r.step));
+                                             xr_range_core_abs_step_u64(r.step), r.inclusive_end);
 }
 
 static inline bool xr_range_core_contains(XrRangeCore r, int64_t value) {
     if (r.step == 0)
         return false;
     if (r.step > 0) {
-        if (value < r.start || value >= r.end)
+        if (value < r.start || (r.inclusive_end ? value > r.end : value >= r.end))
             return false;
         return (((uint64_t) value - (uint64_t) r.start) % (uint64_t) r.step) == 0;
     }
-    if (value > r.start || value <= r.end)
+    if (value > r.start || (r.inclusive_end ? value < r.end : value <= r.end))
         return false;
     return (((uint64_t) r.start - (uint64_t) value) % xr_range_core_abs_step_u64(r.step)) == 0;
 }
@@ -108,9 +119,10 @@ static inline XrRangeCoreMaterializePlan xr_range_core_materialize_plan(XrRangeC
 }
 
 static inline int xr_range_core_format_buf(XrRangeCore r, char *buf, size_t cap) {
+    const char *op = r.inclusive_end ? "..=" : "..";
     if (r.step == 1)
-        return snprintf(buf, cap, "%" PRId64 "..%" PRId64, r.start, r.end);
-    return snprintf(buf, cap, "%" PRId64 "..%" PRId64 ":%" PRId64, r.start, r.end, r.step);
+        return snprintf(buf, cap, "%" PRId64 "%s%" PRId64, r.start, op, r.end);
+    return snprintf(buf, cap, "%" PRId64 "%s%" PRId64 ":%" PRId64, r.start, op, r.end, r.step);
 }
 
 #endif  // XR_RANGE_CORE_H
