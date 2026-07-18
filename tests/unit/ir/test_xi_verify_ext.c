@@ -9,6 +9,8 @@
 #include "../../../src/ir/xi_coro_analyze.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/runtime/value/xffi_sig.h"
+#include "../../../src/shared/xr_array_core.h"
 #include "../../../src/base/xmalloc.h"
 
 #include <stdio.h>
@@ -28,6 +30,10 @@ static XrType stub_u64 = {
 static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 9, .frozen = true};
 static XrType stub_null = {.kind = XR_KIND_NULL, .id = 10, .frozen = true};
 static XrType stub_error = {.kind = XR_KIND_ERROR, .id = 12, .frozen = true};
+static XrType stub_usize = {
+    .kind = XR_KIND_INT, .id = 14, .frozen = true, .native_width = XR_NATIVE_USIZE};
+static XrType stub_pointer = {
+    .kind = XR_KIND_POINTER, .id = 15, .frozen = true, .native_width = XR_NATIVE_POINTER};
 static XrType stub_array_error = {
     .kind = XR_KIND_ARRAY, .id = 13, .frozen = true, .container = {.element_type = &stub_error}};
 static XrType stub_array_i8 = {
@@ -100,6 +106,96 @@ static void make_if_returning_ints(XiFunc *f, XiValue *cond) {
     xi_block_set_return(then_b, then_v);
     xi_block_set_return(else_b, else_v);
     xi_block_set_if(entry, cond, then_b, else_b);
+}
+
+/* ========== Return and raw-memory executable contracts ========== */
+
+TEST(non_unit_return_requires_value) {
+    XiFunc *f = make_func("return_missing_value");
+    ASSERT(f != NULL);
+    xi_block_set_return(f->entry, NULL);
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(unit_return_rejects_value) {
+    XiFunc *f = make_func("unit_return_with_value");
+    ASSERT(f != NULL);
+    f->return_type = &stub_unit;
+    XiValue *value = xi_const_int(f, f->entry, 1, &stub_int);
+    xi_block_set_return(f->entry, value);
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+static XiValue *make_pointer_const(XiFunc *f) {
+    return xi_const_null(f, f->entry, &stub_pointer);
+}
+
+TEST(ptr_load_usize_contract_passes) {
+    XiFunc *f = make_func("ptr_load_usize_valid");
+    ASSERT(f != NULL);
+    f->return_type = &stub_usize;
+    XiValue *addr = make_pointer_const(f);
+    XiValue *endian = xi_const_int(f, f->entry, XR_ENDIAN_NATIVE, &stub_int);
+    XiValue *load = xi_value_new(f, f->entry, XI_PTR_LOAD, &stub_usize, 2);
+    ASSERT(addr && endian && load);
+    load->args[0] = addr;
+    load->args[1] = endian;
+    load->aux_int = xr_ffi_ptr_aux(XR_FFI_T_SIZE, false);
+    xi_block_set_return(f->entry, load);
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(ptr_load_rejects_reserved_aux_bits) {
+    XiFunc *f = make_func("ptr_load_reserved_aux");
+    ASSERT(f != NULL);
+    f->return_type = &stub_usize;
+    XiValue *load = xi_value_new(f, f->entry, XI_PTR_LOAD, &stub_usize, 2);
+    load->args[0] = make_pointer_const(f);
+    load->args[1] = xi_const_int(f, f->entry, XR_ENDIAN_NATIVE, &stub_int);
+    load->aux_int = XR_FFI_T_SIZE | 0x20;
+    xi_block_set_return(f->entry, load);
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(ptr_load_rejects_result_scalar_mismatch) {
+    XiFunc *f = make_func("ptr_load_type_mismatch");
+    ASSERT(f != NULL);
+    XiValue *load = xi_value_new(f, f->entry, XI_PTR_LOAD, &stub_int, 2);
+    load->args[0] = make_pointer_const(f);
+    load->args[1] = xi_const_int(f, f->entry, XR_ENDIAN_NATIVE, &stub_int);
+    load->aux_int = xr_ffi_ptr_aux(XR_FFI_T_SIZE, false);
+    xi_block_set_return(f->entry, load);
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(ptr_access_rejects_non_pointer_address) {
+    XiFunc *f = make_func("ptr_load_bad_address");
+    ASSERT(f != NULL);
+    XiValue *load = xi_value_new(f, f->entry, XI_PTR_LOAD, &stub_int, 2);
+    load->args[0] = xi_const_int(f, f->entry, 0, &stub_int);
+    load->args[1] = xi_const_int(f, f->entry, XR_ENDIAN_NATIVE, &stub_int);
+    load->aux_int = xr_ffi_ptr_aux(XR_FFI_T_I64, false);
+    xi_block_set_return(f->entry, load);
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(pointer_load_requires_native_endian) {
+    XiFunc *f = make_func("ptr_load_pointer_endian");
+    ASSERT(f != NULL);
+    f->return_type = &stub_pointer;
+    XiValue *load = xi_value_new(f, f->entry, XI_PTR_LOAD, &stub_pointer, 2);
+    load->args[0] = make_pointer_const(f);
+    load->args[1] = xi_const_int(f, f->entry, XR_ENDIAN_LE, &stub_int);
+    load->aux_int = xr_ffi_ptr_aux(XR_FFI_T_PTR, false);
+    xi_block_set_return(f->entry, load);
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
 }
 
 /* ========== Bounds check contracts ========== */
@@ -1429,6 +1525,7 @@ TEST(backend_accepts_map_new) {
 TEST(backend_accepts_str_concat) {
     XiFunc *f = make_func("backend_str_concat");
     ASSERT(f != NULL);
+    f->return_type = &stub_str;
     XiBlock *entry = f->entry;
 
     XiValue *a = xi_const_str(f, entry, "hello", &stub_str);
@@ -1466,6 +1563,14 @@ TEST(backend_accepts_range_op) {
 
 int main(void) {
     printf("=== Xi Extended Verifier Tests ===\n\n");
+
+    run_non_unit_return_requires_value();
+    run_unit_return_rejects_value();
+    run_ptr_load_usize_contract_passes();
+    run_ptr_load_rejects_reserved_aux_bits();
+    run_ptr_load_rejects_result_scalar_mismatch();
+    run_ptr_access_rejects_non_pointer_address();
+    run_pointer_load_requires_native_endian();
 
     run_bounds_check_valid();
     run_bounds_check_arity_failure();

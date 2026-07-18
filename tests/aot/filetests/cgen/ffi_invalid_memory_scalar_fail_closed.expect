@@ -1,0 +1,5 @@
+status=fail
+contains=mem.load<T>() supports T = int8, uint8, int16, uint16, int32, uint32, int64, uint64, intsize, uintsize, float32, float64, Ptr<U> or MutPtr<U>
+not_contains=[FATAL]
+not_contains=[xi_cgen]
+not_contains=missing AOT value plan

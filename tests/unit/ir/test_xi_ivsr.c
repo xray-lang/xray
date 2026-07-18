@@ -272,7 +272,9 @@ TEST(pipeline_stats_include_child_ivsr) {
     parent->children_cap = 1;
 
     XiPipelineStats stats;
-    XiPassChange chg = xi_opt_run_pipeline_ex(parent, XI_OPT_FULL, &stats, 0);
+    XiOptResult opt = xi_opt_run_pipeline_ex(parent, XI_OPT_FULL, &stats, 0);
+    ASSERT(opt.ok);
+    XiPassChange chg = opt.change;
 
     ASSERT(chg.values_changed);
     const XiPassStats *ivsr = find_stats(&stats, "ivsr");

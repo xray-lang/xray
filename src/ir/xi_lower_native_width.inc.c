@@ -63,6 +63,10 @@ static struct XrType *xi_lower_native_result_type(XiLower *l, struct XrType *fal
         case XR_NATIVE_U16:
         case XR_NATIVE_I32:
         case XR_NATIVE_U32:
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
             type = xr_type_new_int_width(l->isolate, native_type);
             break;
         case XR_NATIVE_F32:
@@ -77,10 +81,22 @@ static struct XrType *xi_lower_native_result_type(XiLower *l, struct XrType *fal
 static XiValue *xi_lower_narrow_for_native_type(XiLower *l, AstNode *node, XiValue *val,
                                                 struct XrType *target_type, uint8_t native_type) {
     uint16_t narrow_op = xi_narrow_op_for_native_type(native_type);
-    if (!narrow_op || !val)
-        return val;
+    if (!val)
+        return NULL;
     struct XrType *result_type =
         target_type ? target_type : xi_lower_native_result_type(l, val->type, native_type);
+    if (!narrow_op) {
+        if (!result_type || !val->type || xr_type_equals(result_type, val->type) ||
+            !((XR_TYPE_IS_INT(result_type) && XR_TYPE_IS_INT(val->type)) ||
+              (XR_TYPE_IS_FLOAT(result_type) && XR_TYPE_IS_FLOAT(val->type))))
+            return val;
+        XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
+        if (!copy)
+            return val;
+        copy->args[0] = val;
+        copy->line = (uint32_t) node->line;
+        return copy;
+    }
     XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, result_type, 1);
     if (!n)
         return val;

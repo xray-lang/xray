@@ -157,12 +157,14 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
             xi_pipeline_result_free(&pipe_res);
             return proto;
         }
-        /* Pipeline failed — report and abort */
-        fprintf(stderr, "[xcompiler] Xi IR pipeline failed: %s\n",
-                xi_pipe_status_str(pipe_res.status));
-        if (pipe_res.error_msg) {
-            fprintf(stderr, "[xcompiler]   detail: %s\n", pipe_res.error_msg);
-        }
+        /* Render the structured root error exactly once. */
+        fprintf(stderr, "[xcompiler] Xi IR pipeline failed at %s: %s",
+                xi_pipeline_stage_str(pipe_res.error.stage), pipe_res.error.detail);
+        if (pipe_res.error.func)
+            fprintf(stderr, " (func=%s)", pipe_res.error.func->name);
+        if (pipe_res.error.value)
+            fprintf(stderr, " (v%u)", pipe_res.error.value->id);
+        fprintf(stderr, "\n");
         xi_pipeline_result_free(&pipe_res);
         return NULL;
     }

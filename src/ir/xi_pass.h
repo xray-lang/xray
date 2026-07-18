@@ -136,23 +136,34 @@ typedef struct XiPipelineStats {
     uint32_t loop_recomputes;
 } XiPipelineStats;
 
+/* Optimization is a fallible compiler phase.  Invariant failures are carried
+ * to the pipeline as data; they are never rendered or converted to aborts by
+ * the pass driver. */
+typedef struct XiOptResult {
+    XiPassChange change;
+    bool ok;
+    const char *pass_name; /* static pass-table name, NULL for round/tree checks */
+    int32_t round;
+    char detail[512];
+} XiOptResult;
+
 /* ========== Pipeline API ========== */
 
 /* Run the optimization pipeline at the given level.
  * Executes passes in order, repeating until convergence or round cap.
  * Recurses into nested functions (children) at the same level.
  * Returns merged change record across all rounds and children. */
-XR_FUNC XiPassChange xi_opt_run_pipeline(XiFunc *f, XiOptLevel level);
+XR_FUNC XiOptResult xi_opt_run_pipeline(XiFunc *f, XiOptLevel level);
 
 /* Extended pipeline driver with per-pass statistics and optional time budget.
  *   stats     — if non-NULL, filled with per-pass timing and counters.
  *   budget_ns — if > 0, pipeline aborts early when cumulative wall-clock
  *               time exceeds this limit (0 = no limit). */
-XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipelineStats *stats,
-                                            uint64_t budget_ns);
-XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level,
-                                                      XiPipelineStats *stats, uint64_t budget_ns,
-                                                      XiOptDisableMask disabled_passes);
+XR_FUNC XiOptResult xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipelineStats *stats,
+                                           uint64_t budget_ns);
+XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level,
+                                                     XiPipelineStats *stats, uint64_t budget_ns,
+                                                     XiOptDisableMask disabled_passes);
 
 /* Dump pipeline stats to stderr (human-readable, one line per pass). */
 XR_FUNC void xi_pipeline_stats_dump(const XiPipelineStats *stats, const char *func_name);

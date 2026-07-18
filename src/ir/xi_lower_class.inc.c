@@ -220,6 +220,7 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
     ml.repl_mode = l->repl_mode;
     xi_lower_inherit_evidence(&ml, l);
 
+    const bool is_ctor = m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
     XrType *method_sig = class_method_analyzer_signature(l, cd, m);
     /* Prefer the analyzer-owned method signature: it was resolved in the
      * class lexical scope, so self-references and same-module class names do
@@ -271,6 +272,11 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         if (named_this)
             this_type = named_this;
     }
+    /* A constructor's executable ABI returns the newly initialized receiver.
+     * Keep that fact in XiFunc itself instead of teaching every verifier and
+     * backend a unit-return exception for a value-carrying RETURN block. */
+    if (is_ctor && is_inst)
+        ml.func->return_type = this_type;
 
     /* Instance methods: 'this' is param 0 */
     if (is_inst) {
@@ -320,8 +326,6 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
      * Simple literals (int/float/bool/string) are handled by the VM via
      * field_default_values on the class descriptor; complex expressions
      * (array, map, json, new-expr, etc.) must be lowered as IR. */
-    bool is_ctor = m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
-
     /* Non-constructor instance methods receive `this` BORROWED: the caller
      * retains ownership and does not dup before the call, so xi_arc must not
      * drop param 0 here. Constructors own their freshly-allocated `this` and

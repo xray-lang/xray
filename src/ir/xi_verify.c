@@ -22,6 +22,8 @@
 #include "xi_own.h"
 #include "xi_tbaa.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/value/xffi_sig.h"
+#include "../shared/xr_array_core.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -147,13 +149,144 @@ static void verify_block(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk) {
             }
             break;
         case XI_BLOCK_RETURN:
-            /* control may be NULL for void returns */
+            /* Error-channel propagation terminates a function without
+             * producing its normal return value.  It is represented as a
+             * RETURN-kind block so CFG consumers still see a terminal edge. */
+            if (blk->control && blk->control->op == XI_ERR_RETURN) {
+                if (blk->control->nargs != 1 || !blk->control->args[0]) {
+                    verr(ctx, "func '%s': error RETURN block b%u has malformed ERR_RETURN v%u",
+                         f->name, blk->id, blk->control->id);
+                    return;
+                }
+                break;
+            }
+            if (!f->return_type) {
+                verr(ctx, "func '%s': RETURN block b%u has no function return type", f->name,
+                     blk->id);
+                return;
+            }
+            if (f->return_type->kind == XR_KIND_NEVER) {
+                verr(ctx, "func '%s': never-returning function has RETURN block b%u", f->name,
+                     blk->id);
+                return;
+            }
+            if (f->return_type->kind == XR_KIND_UNIT) {
+                if (blk->control) {
+                    verr(ctx, "func '%s': unit RETURN block b%u carries unexpected value v%u",
+                         f->name, blk->id, blk->control->id);
+                    return;
+                }
+                break;
+            }
+            if (!blk->control) {
+                verr(ctx, "func '%s': non-unit RETURN block b%u requires a value", f->name,
+                     blk->id);
+                return;
+            }
+            const bool nominal_ref_compatible = blk->control->type &&
+                                                (f->return_type->kind == XR_KIND_CLASS ||
+                                                 f->return_type->kind == XR_KIND_INSTANCE ||
+                                                 f->return_type->kind == XR_KIND_INTERFACE) &&
+                                                (blk->control->type->kind == XR_KIND_CLASS ||
+                                                 blk->control->type->kind == XR_KIND_INSTANCE ||
+                                                 blk->control->type->kind == XR_KIND_INTERFACE);
+            if (!blk->control->type ||
+                (f->return_type->kind != XR_KIND_UNKNOWN &&
+                 blk->control->type->kind != XR_KIND_UNKNOWN &&
+                 f->return_type->kind != blk->control->type->kind && !nominal_ref_compatible &&
+                 !xr_type_assignable((XrType *) f->return_type, (XrType *) blk->control->type))) {
+                verr(ctx,
+                     "func '%s': RETURN block b%u value v%u is not assignable to function "
+                     "return type (op=%s, result kind=%u, return kind=%u)",
+                     f->name, blk->id, blk->control->id, xi_op_name(blk->control->op),
+                     blk->control->type->kind, f->return_type->kind);
+                return;
+            }
             break;
         case XI_BLOCK_UNREACHABLE:
             break;
         default:
             verr(ctx, "func '%s': block b%u has invalid kind %u", f->name, blk->id, blk->kind);
             return;
+    }
+}
+
+static bool verify_endian_operand(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
+                                  const XiValue *owner, const XiValue *endian) {
+    if (!endian || !endian->type ||
+        (endian->type->kind != XR_KIND_INT && endian->type->kind != XR_KIND_ENUM &&
+         endian->type->kind != XR_KIND_UNKNOWN)) {
+        verr(ctx, "func '%s': v%u %s in b%u has invalid Endian operand type", f->name, owner->id,
+             xi_op_name(owner->op), blk->id);
+        return false;
+    }
+    if (endian->op == XI_CONST &&
+        (endian->aux_int < XR_ENDIAN_NATIVE || endian->aux_int > XR_ENDIAN_BE)) {
+        verr(ctx, "func '%s': v%u %s in b%u has invalid Endian value %lld", f->name, owner->id,
+             xi_op_name(owner->op), blk->id, (long long) endian->aux_int);
+        return false;
+    }
+    return true;
+}
+
+static void verify_ptr_memory_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
+                                       const XiValue *v) {
+    if (ctx->failed || (v->op != XI_PTR_LOAD && v->op != XI_PTR_STORE))
+        return;
+
+    const uint16_t expected_nargs = v->op == XI_PTR_LOAD ? 2 : 3;
+    if (v->nargs != expected_nargs)
+        return; /* The generic arity verifier owns this diagnostic. */
+    if (v->aux_int < 0 || v->aux_int > UINT8_MAX) {
+        verr(ctx, "func '%s': v%u %s in b%u has out-of-range memory aux %lld", f->name, v->id,
+             xi_op_name(v->op), blk->id, (long long) v->aux_int);
+        return;
+    }
+
+    const uint8_t aux = (uint8_t) v->aux_int;
+    const uint8_t valid_bits = XR_FFI_PTR_AUX_TYPE_MASK | XR_FFI_PTR_AUX_UNALIGNED;
+    const uint8_t ffi_type = xr_ffi_ptr_aux_type(aux);
+    const XrAbiScalarDesc *desc = xr_abi_scalar_desc(ffi_type);
+    if ((aux & (uint8_t) ~valid_bits) != 0 || !desc || !desc->is_memory_scalar) {
+        verr(ctx, "func '%s': v%u %s in b%u has invalid memory scalar aux 0x%02x", f->name, v->id,
+             xi_op_name(v->op), blk->id, aux);
+        return;
+    }
+    if (!v->args[0] || !v->args[0]->type || !XR_TYPE_IS_POINTER(v->args[0]->type)) {
+        verr(ctx, "func '%s': v%u %s in b%u address is not a raw pointer", f->name, v->id,
+             xi_op_name(v->op), blk->id);
+        return;
+    }
+
+    const XiValue *endian = v->args[v->op == XI_PTR_LOAD ? 1 : 2];
+    if (!verify_endian_operand(ctx, f, blk, v, endian))
+        return;
+    if (ffi_type == XR_FFI_T_PTR &&
+        (endian->op != XI_CONST || endian->aux_int != XR_ENDIAN_NATIVE)) {
+        verr(ctx, "func '%s': v%u %s in b%u pointer memory access requires constant Endian.Native",
+             f->name, v->id, xi_op_name(v->op), blk->id);
+        return;
+    }
+
+    if (v->op == XI_PTR_LOAD) {
+        const uint8_t result_ffi = xr_ffi_type_from_xrtype(v->type, false);
+        if (result_ffi != ffi_type) {
+            verr(ctx,
+                 "func '%s': v%u PTR_LOAD in b%u result type maps to ABI scalar %u, aux uses %u",
+                 f->name, v->id, blk->id, result_ffi, ffi_type);
+        }
+        return;
+    }
+
+    if (!v->type || v->type->kind != XR_KIND_UNIT) {
+        verr(ctx, "func '%s': v%u PTR_STORE in b%u must produce unit", f->name, v->id, blk->id);
+        return;
+    }
+    const XiValue *value = v->args[1];
+    const uint8_t value_ffi = xr_ffi_type_from_xrtype(value ? value->type : NULL, false);
+    if (value_ffi != ffi_type) {
+        verr(ctx, "func '%s': v%u PTR_STORE in b%u value type maps to ABI scalar %u, aux uses %u",
+             f->name, v->id, blk->id, value_ffi, ffi_type);
     }
 }
 
@@ -1268,25 +1401,22 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
                 return;
             }
 
-            /* XI_MOVE: source must not be used after the move within
-             * the same block.  (Cross-block check would require dominance
-             * analysis — defer to a more advanced future pass.) */
+            /* XI_MOVE is an ownership-edge marker, not an SSA invalidation:
+             * a preceding RETAIN, a borrowed call result, or a branch-local
+             * consume can legitimately leave the same SSA carrier usable.
+             * The old same-block "no later use" heuristic rejected valid ARC
+             * output while missing cross-block errors.  Verify only the local
+             * executable contract here; the ARC ownership proof owns the
+             * global consume accounting. */
             if (v->op == XI_MOVE && v->nargs >= 1 && v->args[0]) {
                 XiValue *moved = v->args[0];
-                /* Scan remaining values in this block for use of moved */
-                for (uint32_t j = i + 1; j < blk->nvalues && !ctx->failed; j++) {
-                    XiValue *later = blk->values[j];
-                    if (!later)
-                        continue;
-                    for (uint16_t a = 0; a < later->nargs; a++) {
-                        if (later->args[a] == moved) {
-                            verr(ctx,
-                                 "func '%s': v%u uses moved value v%u "
-                                 "(moved at v%u) in b%u",
-                                 f->name, later->id, moved->id, v->id, blk->id);
-                            return;
-                        }
-                    }
+                if (!v->type || !moved->type ||
+                    (v->type->kind != XR_KIND_UNKNOWN && moved->type->kind != XR_KIND_UNKNOWN &&
+                     v->type->kind != moved->type->kind &&
+                     !xr_type_assignable(v->type, moved->type))) {
+                    verr(ctx, "func '%s': XI_MOVE v%u in b%u changes value type", f->name, v->id,
+                         blk->id);
+                    return;
                 }
             }
         }
@@ -1635,6 +1765,7 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
                 break;
             }
             verify_value(&ctx, f, blk, blk->values[i]);
+            verify_ptr_memory_contract(&ctx, f, blk, blk->values[i]);
         }
 
         /* Phi nodes */
