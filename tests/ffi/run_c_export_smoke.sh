@@ -17,7 +17,11 @@ PASS=0
 FAIL=0
 
 cleanup() {
-    rm -rf "$WORK"
+    if [ "${XRAY_FFI_KEEP_WORK:-0}" = "1" ]; then
+        echo "Work dir: $WORK"
+    else
+        rm -rf "$WORK"
+    fi
 }
 trap cleanup EXIT
 
@@ -139,9 +143,16 @@ packed struct PackedAligned align(16) {
     value: uint32
 }
 
+const XR_C_EXPORT_SECRET: [byte; 4] = comptime [40, 2, 7, 9]
+
 @c_export("xr_add_i32")
 fn add_i32(a: int32, b: int32) -> int32 {
     return a + b
+}
+
+@c_export("xr_top_const_sum")
+fn top_const_sum() -> int32 {
+    return XR_C_EXPORT_SECRET[0] as int32 + XR_C_EXPORT_SECRET[1] as int32
 }
 
 @c_export("xr_mix_i64")
@@ -475,6 +486,10 @@ int main(void) {
     int32_t value = 10;
     if (xr_add_i32(40, 2) != 42)
         return 10;
+#if defined(XR_SHARED_CALLER)
+    if (xr_top_const_sum() != 42)
+        return 23;
+#endif
     if (xr_mix_i64(6, 7) != 49)
         return 11;
     d = xr_mix_f64(1.25, 2.0);
@@ -557,7 +572,8 @@ elif grep -Fq -- "-fsanitize=undefined" "$SHARED_LOG"; then
 fi
 
 if [ -f "$GEN_LIB" ] &&
-    cc -O2 -Wall -I "$WORK" ${CALLER_SHARED_SAN_FLAGS:+$CALLER_SHARED_SAN_FLAGS} "$CALLER_C" "$GEN_LIB" \
+    cc -O2 -Wall -DXR_SHARED_CALLER -I "$WORK" \
+        ${CALLER_SHARED_SAN_FLAGS:+$CALLER_SHARED_SAN_FLAGS} "$CALLER_C" "$GEN_LIB" \
         -Wl,-rpath,"$WORK" -lm \
         -o "$CALLER_SHARED_BIN" >"$SHARED_LINK_LOG" 2>&1; then
     record_pass "link C caller with shared library"
@@ -568,8 +584,9 @@ fi
 
 if [ -x "$CALLER_SHARED_BIN" ]; then
     if "$CALLER_SHARED_BIN" >"$SHARED_RUN_LOG" 2>&1 &&
-        [ "$(cat "$SHARED_RUN_LOG")" = "ok" ]; then
-        record_pass "C caller invokes shared-library exports"
+        [ "$(cat "$SHARED_RUN_LOG")" = "42
+ok" ]; then
+        record_pass "shared library initializes top-level aggregates before C exports"
     else
         record_fail "C caller invokes shared-library exports"
         sed 's/^/      /' "$SHARED_RUN_LOG" | sed -n '1,80p'
