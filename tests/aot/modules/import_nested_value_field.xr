@@ -1,0 +1,7 @@
+import { makeOuter } from "./nested_value_field_lib"
+
+var outer = makeOuter(40)
+var inner = outer.inner
+print(inner.value)
+print(inner.other)
+print(outer.marker)

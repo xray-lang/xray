@@ -2072,10 +2072,14 @@ static void emit_struct_field_ref(FILE *out, const XrAggregateLayout *sl, const 
 }
 
 static void emit_struct_inline_field_get_expr(FILE *out, const XrAggregateLayout *sl,
-                                              const XiValue *origin, int64_t idx,
-                                              XrRep result_rep) {
+                                              const XiValue *origin, int64_t idx, XrRep result_rep,
+                                              bool result_is_struct_aggregate) {
     const XrAggregateFieldLayout *field = cg_struct_field(sl, idx);
     if (field && field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+        if (result_is_struct_aggregate) {
+            emit_struct_field_ref(out, sl, origin, idx);
+            return;
+        }
         fprintf(out, "xr_aggregate_ref(&");
         emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, ", (uint16_t)sizeof(");
@@ -2443,11 +2447,15 @@ static bool emit_struct_heap_nested_object_ptr_expr(XiCgenCtx *ctx, FILE *out, c
 static bool emit_struct_heap_field_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                             const XrAggregateLayout *sl, int64_t idx,
                                             const XiValue *object, XrRep result_rep,
-                                            const char *prefix) {
+                                            bool result_is_struct_aggregate, const char *prefix) {
     if (!cg_struct_native_heap_supported(sl) || idx < 0 || idx >= sl->field_count)
         return false;
     const XrAggregateFieldLayout *field = cg_struct_field(sl, idx);
     if (field && field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+        if (result_is_struct_aggregate) {
+            emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+            return true;
+        }
         fprintf(out, "xr_aggregate_ref(&");
         emit_struct_field_lvalue(ctx, out, f, sl, idx, object, prefix);
         fprintf(out, ", (uint16_t)sizeof(");
@@ -2487,8 +2495,10 @@ static bool emit_struct_heap_field_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
 static void emit_struct_fallback_field_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XrAggregateLayout *sl, int64_t idx,
                                            const XiValue *object, const XrType *result_type,
-                                           XrRep result_rep, const char *prefix) {
-    if (emit_struct_heap_field_get_expr(ctx, out, f, sl, idx, object, result_rep, prefix))
+                                           XrRep result_rep, bool result_is_struct_aggregate,
+                                           const char *prefix) {
+    if (emit_struct_heap_field_get_expr(ctx, out, f, sl, idx, object, result_rep,
+                                        result_is_struct_aggregate, prefix))
         return;
     emit_struct_runtime_field_get(ctx, out, sl, idx, object, result_type, result_rep);
 }

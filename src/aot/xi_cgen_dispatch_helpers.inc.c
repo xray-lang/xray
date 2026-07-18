@@ -7868,11 +7868,13 @@ static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     const XiValue *origin = cg_trace_struct_new(v->args[0]);
     if (origin && cg_struct_inline_local_storage(ctx, f, origin)) {
         emit_struct_inline_field_get_expr(out, (XrAggregateLayout *) origin->aux, origin,
-                                          v->aux_int, cg_value_plan_storage_rep(ctx, v));
+                                          v->aux_int, cg_value_plan_storage_rep(ctx, v),
+                                          cg_value_plan_is_struct_aggregate(ctx, v));
     } else {
         XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         emit_struct_fallback_field_get(ctx, out, f, sl, v->aux_int, v->args[0], v->type,
-                                       cg_value_plan_storage_rep(ctx, v), prefix);
+                                       cg_value_plan_storage_rep(ctx, v),
+                                       cg_value_plan_is_struct_aggregate(ctx, v), prefix);
     }
 }
 
