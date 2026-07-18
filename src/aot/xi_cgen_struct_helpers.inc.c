@@ -1748,6 +1748,47 @@ static bool emit_struct_aggregate_box_expr(XiCgenCtx *ctx, FILE *out, const XiFu
     return true;
 }
 
+/* Box a native value-struct expression at a tagged ABI boundary.  Typed AOT
+ * callers continue to pass and return the aggregate by value; only the boxed
+ * adapter pays for the heap object required by XrValue. */
+static bool emit_struct_aggregate_box_c_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                             const char *value_expr, const char *prefix) {
+    if (!ctx || !out || !f || !value_expr || !value_expr[0])
+        return false;
+    const XrAggregateLayout *sl = cg_type_struct_layout(f->return_type);
+    if (!sl) {
+        for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+            const XiBlock *blk = f->blocks ? f->blocks[bi] : NULL;
+            if (!blk || blk->kind != XI_BLOCK_RETURN || !blk->control)
+                continue;
+            sl = cg_value_struct_layout(ctx, f, blk->control);
+            if (sl)
+                break;
+        }
+    }
+    if (!cg_struct_native_heap_supported(sl))
+        return false;
+
+    char tname_buf[128];
+    const char *tname = cg_func_return_abi_c_type(ctx, f);
+    if (!tname || !tname[0] || strcmp(tname, "XrValue") == 0) {
+        cg_struct_heap_type_name(tname_buf, sizeof(tname_buf), prefix, sl);
+        tname = tname_buf;
+    }
+
+    fprintf(out, "({ %s *_s = (%s*)xrt_arc_alloc(sizeof(%s)); *_s = %s; ", tname, tname, tname,
+            value_expr);
+    if (xr_aggregate_layout_header_size(sl) == 0) {
+        fprintf(out, "xr_aggregate_ref(_s, (uint16_t)sizeof(%s)); })", tname);
+    } else {
+        fprintf(out,
+                "_s->_size = (uint32_t)sizeof(%s); _s->_layout = UINT32_C(%" PRIu32 "); "
+                "xr_mkptr(_s, XR_TAG_AGG_REF); })",
+                tname, (uint32_t) cg_struct_layout_hash(sl));
+    }
+    return true;
+}
+
 static bool cg_heap_struct_shared_alias_safe_uses(const XiCgenCtx *ctx, const XiFunc *f,
                                                   const XiValue *target, int slot, int depth) {
     if (!f || !target || depth > 8)

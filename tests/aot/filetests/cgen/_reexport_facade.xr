@@ -1,2 +1,4 @@
 export { facadeValue, aliasedSource as aliasedValue } from "./_reexport_facade_value"
+export { groupTwoA, groupTwoB, groupTwoC } from "./_reexport_facade_value"
+export { ReexportPair, makeReexportPair } from "./_reexport_facade_value"
 export * from "./_reexport_facade_value"

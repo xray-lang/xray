@@ -9,3 +9,24 @@ export fn aliasedSource() -> int {
 export fn starValue() -> int {
     return 9
 }
+
+export fn groupTwoA() -> int {
+    return 11
+}
+
+export fn groupTwoB() -> int {
+    return 13
+}
+
+export fn groupTwoC() -> int {
+    return 17
+}
+
+export struct ReexportPair {
+    low: int
+    high: int
+}
+
+export fn makeReexportPair(low: int, high: int) -> ReexportPair {
+    return ReexportPair{low: low, high: high}
+}

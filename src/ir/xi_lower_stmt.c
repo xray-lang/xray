@@ -3541,6 +3541,30 @@ static void lower_continue(XiLower *l, AstNode *node) {
 
 /* Re-export: "export { a, b as c } from './file'" or "export * from './file'".
  * Records XiReexportEntry on XiFunc; emit_reexports() generates bytecodes. */
+static bool ensure_reexport_capacity(XiFunc *f, uint16_t additional) {
+    XR_DCHECK(f != NULL, "ensure_reexport_capacity: NULL func");
+    if (!f || additional == 0)
+        return true;
+    uint32_t required = (uint32_t) f->reexport_count + additional;
+    if (required <= f->reexport_capacity)
+        return true;
+    uint32_t capacity = f->reexport_capacity ? f->reexport_capacity : 4;
+    while (capacity < required)
+        capacity *= 2;
+    if (capacity > UINT16_MAX)
+        return false;
+    XiReexportEntry *entries =
+        (XiReexportEntry *) xi_func_arena_alloc(f, (uint32_t) (capacity * sizeof(XiReexportEntry)));
+    if (!entries)
+        return false;
+    if (f->reexports && f->reexport_count > 0) {
+        memcpy(entries, f->reexports, (size_t) f->reexport_count * sizeof(XiReexportEntry));
+    }
+    f->reexports = entries;
+    f->reexport_capacity = (uint16_t) capacity;
+    return true;
+}
+
 static void lower_reexport_stmt(XiLower *l, AstNode *node) {
     XR_DCHECK(l != NULL, "lower_reexport_stmt: NULL lowerer");
     XR_DCHECK(node != NULL, "lower_reexport_stmt: NULL node");
@@ -3563,15 +3587,9 @@ static void lower_reexport_stmt(XiLower *l, AstNode *node) {
         e->name = NULL;
         e->alias = NULL;
 
-        /* Append to reexports array (grow by doubling) */
         uint16_t idx = f->reexport_count;
-        if (idx == 0 || !f->reexports) {
-            uint16_t cap = 4;
-            f->reexports = (XiReexportEntry *) xi_func_arena_alloc(
-                f, (uint32_t) (cap * sizeof(XiReexportEntry)));
-            if (!f->reexports)
-                return;
-        }
+        if (!ensure_reexport_capacity(f, 1))
+            return;
         f->reexports[idx] = *e;
         f->reexport_count = idx + 1;
         return;
@@ -3584,14 +3602,8 @@ static void lower_reexport_stmt(XiLower *l, AstNode *node) {
             continue;
 
         uint16_t idx = f->reexport_count;
-        /* Ensure array capacity (initial alloc or grow) */
-        if (idx == 0 || !f->reexports) {
-            uint16_t cap = (uint16_t) (exp->reexport_count > 4 ? exp->reexport_count : 4);
-            f->reexports = (XiReexportEntry *) xi_func_arena_alloc(
-                f, (uint32_t) (cap * sizeof(XiReexportEntry)));
-            if (!f->reexports)
-                return;
-        }
+        if (!ensure_reexport_capacity(f, 1))
+            return;
 
         XiReexportEntry *e = &f->reexports[idx];
         /* Arena-copy strings */

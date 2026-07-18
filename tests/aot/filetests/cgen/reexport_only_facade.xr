@@ -1,5 +1,14 @@
-import { facadeValue, aliasedValue, starValue } from "./_reexport_facade"
+import {
+    facadeValue, aliasedValue, starValue,
+    groupTwoA, groupTwoB, groupTwoC,
+    ReexportPair, makeReexportPair,
+} from "./_reexport_facade"
 
 print(facadeValue())
 print(aliasedValue())
 print(starValue())
+print(groupTwoA())
+print(groupTwoB())
+print(groupTwoC())
+var pair: ReexportPair = makeReexportPair(19, 23)
+print(pair.low + pair.high)
