@@ -239,6 +239,16 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
             xr_parser_error(parser, "removed @dylib syntax requires a library name string");
         }
         xr_parser_consume(parser, TK_RPAREN, "expected ')' after removed @dylib syntax");
+    } else if (name_token.length == 9 && memcmp(name_token.start, "link_name", 9) == 0) {
+        attr->kind = ATTR_LINK_NAME;
+        xr_parser_consume(parser, TK_LPAREN, "expected '(' after @link_name");
+        if (xr_parser_check(parser, TK_LITERAL_STRING)) {
+            xr_parser_advance(parser);
+            attr->str_arg = xr_attr_string_arg(parser);
+        } else {
+            xr_parser_error(parser, "@link_name requires a C symbol string");
+        }
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @link_name");
     } else if (name_token.length == 8 && memcmp(name_token.start, "c_export", 8) == 0) {
         // @c_export("name") — expose a top-level function through an AOT C ABI
         // wrapper. The exported symbol is open text, so it uses a string arg.

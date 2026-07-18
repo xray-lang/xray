@@ -584,6 +584,30 @@ typedef struct CgSharedSlotReachMemo {
     bool has_get;
 } CgSharedSlotReachMemo;
 
+typedef enum CgWriterPhase {
+    CG_WRITER_PHASE_IDLE = 0,
+    CG_WRITER_PHASE_COLLECT,
+    CG_WRITER_PHASE_INCLUDES,
+    CG_WRITER_PHASE_TYPES,
+    CG_WRITER_PHASE_EXTERN_DECLS,
+    CG_WRITER_PHASE_INTERNAL_DECLS,
+    CG_WRITER_PHASE_STATIC_DATA,
+    CG_WRITER_PHASE_BODIES,
+    CG_WRITER_PHASE_GLUE,
+    CG_WRITER_PHASE_FINALIZED,
+} CgWriterPhase;
+
+/* Phase guard for the declaration paths migrated by task 208.  The broader
+ * emitter still uses FILE helpers, but extern/type declarations can no longer
+ * be discovered or written while a body is streaming. */
+typedef struct CgWriter {
+    FILE *out;
+    CgWriterPhase phase;
+    const XiFunc *current_func;
+    int brace_depth;
+    bool error;
+} CgWriter;
+
 /* All mutable codegen state for one C-generation session.
  * Heap-allocated via xi_cgen_ctx_new; no file-scope globals. */
 struct XiCgenCtx {
@@ -647,6 +671,10 @@ struct XiCgenCtx {
     XiCgenStats stats;
     XiCgenCoroFrameStats coro_frame_stats;
     const XaotBundle *aot_bundle;
+    CgWriter writer;
+    uint8_t *used_extern_decls;    /* stable_id - 1, reset for each translation unit */
+    uint8_t *extern_decl_adapters; /* used declarations needing a boxed closure entry */
+    uint32_t used_extern_decl_cap;
     const XiFunc *sync_go_targets[CG_MAX_SYNC_GO_TARGETS];
     int nsync_go_targets;
     const XiFunc *sync_heartbeat_targets[CG_MAX_SYNC_HEARTBEAT_TARGETS];
@@ -1040,6 +1068,78 @@ static void cg_emit_static_str_value_initializer(XiCgenCtx *ctx, FILE *out, cons
 
 static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx) {
     return ctx ? ctx->aot_bundle : NULL;
+}
+
+static void cg_writer_reset(XiCgenCtx *ctx) {
+    if (!ctx)
+        return;
+    memset(&ctx->writer, 0, sizeof(ctx->writer));
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    uint32_t need = bundle ? bundle->nextern_decls : 0;
+    if (need > ctx->used_extern_decl_cap) {
+        uint8_t *used =
+            (uint8_t *) xr_realloc(ctx->used_extern_decls, sizeof(uint8_t) * (size_t) need);
+        uint8_t *adapters =
+            (uint8_t *) xr_realloc(ctx->extern_decl_adapters, sizeof(uint8_t) * (size_t) need);
+        if (!used || !adapters) {
+            if (used)
+                ctx->used_extern_decls = used;
+            if (adapters)
+                ctx->extern_decl_adapters = adapters;
+            ctx->error = true;
+            ctx->writer.error = true;
+            return;
+        }
+        ctx->used_extern_decls = used;
+        ctx->extern_decl_adapters = adapters;
+        ctx->used_extern_decl_cap = need;
+    }
+    if (ctx->used_extern_decls && ctx->used_extern_decl_cap > 0) {
+        memset(ctx->used_extern_decls, 0, ctx->used_extern_decl_cap);
+        memset(ctx->extern_decl_adapters, 0, ctx->used_extern_decl_cap);
+    }
+    ctx->writer.phase = CG_WRITER_PHASE_COLLECT;
+}
+
+static bool cg_writer_enter(XiCgenCtx *ctx, FILE *out, CgWriterPhase phase) {
+    if (!ctx || !out || ctx->error || ctx->writer.error || phase <= CG_WRITER_PHASE_COLLECT ||
+        phase >= CG_WRITER_PHASE_FINALIZED ||
+        (ctx->writer.phase > CG_WRITER_PHASE_COLLECT && phase < ctx->writer.phase)) {
+        if (ctx) {
+            ctx->error = true;
+            ctx->writer.error = true;
+        }
+        return false;
+    }
+    ctx->writer.out = out;
+    ctx->writer.phase = phase;
+    return true;
+}
+
+static bool cg_mark_extern_decl_used(XiCgenCtx *ctx, const XiFunc *func,
+                                     const XaotExternDecl **out_decl) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XaotExternDecl *decl = xaot_bundle_find_extern_decl_for_func(bundle, func);
+    if (out_decl)
+        *out_decl = decl;
+    if (!ctx || !decl || decl->stable_id == 0 || decl->stable_id > ctx->used_extern_decl_cap) {
+        if (ctx)
+            ctx->error = true;
+        return false;
+    }
+    ctx->used_extern_decls[decl->stable_id - 1] = 1;
+    return true;
+}
+
+static bool cg_mark_extern_decl_adapter_used(XiCgenCtx *ctx, const XiFunc *func,
+                                             const XaotExternDecl **out_decl) {
+    const XaotExternDecl *decl = NULL;
+    if (!cg_mark_extern_decl_used(ctx, func, &decl))
+        return false;
+    ctx->extern_decl_adapters[decl->stable_id - 1] = 1;
+    if (out_decl)
+        *out_decl = decl;
+    return true;
 }
 
 static void cg_array_data_cache_decls_reset(XiCgenCtx *ctx) {
@@ -9498,53 +9598,130 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
 
 /* ========== Forward Declarations ========== */
 
+static void emit_canonical_extern_decl(XiCgenCtx *ctx, FILE *out, const XaotExternDecl *decl) {
+    if (!ctx || !out || !decl || ctx->writer.phase != CG_WRITER_PHASE_EXTERN_DECLS ||
+        ctx->writer.out != out) {
+        if (ctx) {
+            ctx->error = true;
+            ctx->writer.error = true;
+        }
+        return;
+    }
+    const char *ret_ptr = cg_extern_ptr_boundary_c_type(decl->ret_type);
+    fprintf(out, "extern ");
+    if ((decl->attributes & XAOT_EXTERN_ATTR_NAKED) != 0)
+        fprintf(out, "XRT_ATTR_NAKED ");
+    if ((decl->attributes & XAOT_EXTERN_ATTR_INTERRUPT) != 0) {
+        fprintf(out, "XRT_ATTR_INTERRUPT(");
+        emit_c_string_literal(out, decl->interrupt_abi);
+        fprintf(out, ") ");
+    }
+    if (ret_ptr)
+        fprintf(out, "%s", ret_ptr);
+    else
+        fprintf(out, "%s", decl->ret.c_type ? decl->ret.c_type : "void");
+    fprintf(out, " xr_ffi_%s(", decl->link_symbol);
+    if (decl->nparams == 0) {
+        fprintf(out, "void");
+    } else {
+        for (uint16_t i = 0; i < decl->nparams; i++) {
+            const XrType *type = decl->param_types ? decl->param_types[i] : NULL;
+            const char *ptr_type = cg_extern_ptr_boundary_c_type(type);
+            if (i > 0)
+                fprintf(out, ", ");
+            if (cg_type_is_c_callback(type))
+                emit_cfn_pointer_type(ctx, out, type, NULL);
+            else if (ptr_type)
+                fprintf(out, "%s", ptr_type);
+            else
+                fprintf(out, "%s", decl->params[i].c_type ? decl->params[i].c_type : "XrValue");
+        }
+    }
+    fprintf(out, ") __asm__(XR_FFI_ASMNAME(\"%s\"));\n", decl->link_symbol);
+}
+
+static void emit_canonical_extern_decls(XiCgenCtx *ctx, FILE *out) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!cg_writer_enter(ctx, out, CG_WRITER_PHASE_EXTERN_DECLS) || !bundle)
+        return;
+    for (uint32_t i = 0; i < bundle->nextern_decls; i++) {
+        if (i < ctx->used_extern_decl_cap && ctx->used_extern_decls[i])
+            emit_canonical_extern_decl(ctx, out, &bundle->extern_decls[i]);
+    }
+}
+
+static void emit_extern_closure_adapter_decls(XiCgenCtx *ctx, FILE *out) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!ctx || !out || !bundle || ctx->writer.phase != CG_WRITER_PHASE_INTERNAL_DECLS ||
+        ctx->writer.out != out) {
+        if (ctx) {
+            ctx->error = true;
+            ctx->writer.error = true;
+        }
+        return;
+    }
+    for (uint32_t i = 0; i < bundle->nextern_decls; i++) {
+        const XaotExternDecl *decl = &bundle->extern_decls[i];
+        if (i >= ctx->used_extern_decl_cap || !ctx->extern_decl_adapters[i])
+            continue;
+        fprintf(out, "static XrValue xr_ffi_closure_%u(xrt_closure_t *_cl", decl->stable_id);
+        for (uint16_t pi = 0; pi < decl->nparams; pi++)
+            fprintf(out, ", XrValue p%u", pi);
+        fprintf(out, ");\n");
+    }
+}
+
+static void emit_extern_closure_adapter_defs(XiCgenCtx *ctx, FILE *out) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!ctx || !out || !bundle || ctx->writer.phase != CG_WRITER_PHASE_BODIES ||
+        ctx->writer.out != out) {
+        if (ctx) {
+            ctx->error = true;
+            ctx->writer.error = true;
+        }
+        return;
+    }
+    for (uint32_t i = 0; i < bundle->nextern_decls; i++) {
+        const XaotExternDecl *decl = &bundle->extern_decls[i];
+        if (i >= ctx->used_extern_decl_cap || !ctx->extern_decl_adapters[i])
+            continue;
+        fprintf(out, "static XrValue xr_ffi_closure_%u(xrt_closure_t *_cl", decl->stable_id);
+        for (uint16_t pi = 0; pi < decl->nparams; pi++)
+            fprintf(out, ", XrValue p%u", pi);
+        fprintf(out, ") {\n    (void)_cl;\n    ");
+
+        XrRep ret_rep = xaot_value_storage_rep(xaot_abi_slot_value_rep(&decl->ret));
+        if (ret_rep != XR_REP_VOID)
+            fprintf(out, "return ");
+        const char *ret_suffix =
+            emit_conversion_prefix(out, decl->ret_type, ret_rep, XR_REP_TAGGED);
+        fprintf(out, "xr_ffi_%s(", decl->link_symbol);
+        for (uint16_t pi = 0; pi < decl->nparams; pi++) {
+            if (pi > 0)
+                fprintf(out, ", ");
+            char param_expr[32];
+            snprintf(param_expr, sizeof(param_expr), "p%u", pi);
+            emit_boxed_value_as_func_param_abi(ctx, out, decl->representative_func, pi, param_expr);
+        }
+        fprintf(out, ")");
+        emit_conversion_suffix(out, ret_suffix);
+        fprintf(out, ";\n");
+        if (ret_rep == XR_REP_VOID)
+            fprintf(out, "    return XR_NULL_VAL;\n");
+        fprintf(out, "}\n\n");
+    }
+}
+
 /* Emit the forward declaration(s) for a single function (no recursion): the
  * function prototype plus any boxed adapter / coroutine frame declarations it
  * needs.  Used both for a unit's own functions (via emit_forward_decls) and for
  * the imported cross-module functions a unit references (114). */
 static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
-    /* FFI: extern-block function — declare the foreign C symbol directly (no name
-     * mangling, no hidden _cl). The linker resolves it from the process / a
-     * linked library; call sites emit `sym(args)`. */
-    if (f->is_extern) {
-        const char *sym = f->extern_symbol ? f->extern_symbol : (f->name ? f->name : "");
-        const char *ret_ptr = cg_extern_ptr_boundary_c_type(f->return_type);
-        /* Bind a fresh `xr_ffi_<sym>` alias to the real C symbol via an asm label.
-         * Using a distinct name avoids libc fortify macros (memcpy, ...) and any
-         * mismatch with system prototypes (e.g. size_t vs uint64_t), while still
-         * calling the exact symbol. */
-        fprintf(out, "extern ");
-        if (f->aot_naked)
-            fprintf(out, "XRT_ATTR_NAKED ");
-        if (f->aot_interrupt_abi && f->aot_interrupt_abi[0]) {
-            fprintf(out, "XRT_ATTR_INTERRUPT(");
-            emit_c_string_literal(out, f->aot_interrupt_abi);
-            fprintf(out, ") ");
-        }
-        if (ret_ptr)
-            fprintf(out, "%s", ret_ptr);
-        else if (!emit_class_native_return_type(ctx, out, prefix, f))
-            fprintf(out, "%s", cg_func_return_abi_c_type(ctx, f));
-        fprintf(out, " xr_ffi_%s(", sym);
-        if (f->nparams == 0) {
-            fprintf(out, "void");
-        } else {
-            for (uint16_t i = 0; i < f->nparams; i++) {
-                if (i > 0)
-                    fprintf(out, ", ");
-                const XrType *pt = (f->params && f->params[i]) ? f->params[i]->type : NULL;
-                const char *p_ptr = cg_extern_ptr_boundary_c_type(pt);
-                if (cg_type_is_c_callback(pt))
-                    emit_cfn_pointer_type(ctx, out, pt, NULL);
-                else if (p_ptr)
-                    fprintf(out, "%s", p_ptr);
-                else
-                    fprintf(out, "%s", cg_func_param_abi_c_type(ctx, f, i));
-            }
-        }
-        fprintf(out, ") __asm__(XR_FFI_ASMNAME(\"%s\"));\n", sym);
+    /* Extern declarations have a dedicated registry phase.  Reaching this
+     * internal-forward path for one is harmless but must never re-emit or
+     * re-derive a second declaration. */
+    if (f->is_extern)
         return;
-    }
     bool needs_aot_coro = cg_func_needs_aot_coro_ctx(ctx, f);
     /* Coroutine functions are emitted (definition) with file-static linkage by
      * the coro codegen, so their forward declaration must match; only plain

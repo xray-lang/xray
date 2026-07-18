@@ -528,36 +528,61 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     if (!cg_mandatory_plans_preflight_func_tree(ctx, main_func))
         return;
 
-    xi_cgen_header(ctx, out);
+    cg_writer_reset(ctx);
+    if (ctx->error)
+        return;
 
-    /* Bodies are buffered so interned string literal definitions (only
-     * known after emission) can be placed ahead of every use. */
+    /* Build every section off-output.  The final unit is assembled in fixed
+     * phase order and copied to the caller only after every buffer closes and
+     * Cgen remains error-free. */
+    char *typebuf = NULL;
+    size_t typesz = 0;
+    FILE *types = xr_open_memstream(&typebuf, &typesz);
+    char *forwardbuf = NULL;
+    size_t forwardsz = 0;
+    FILE *forwards = xr_open_memstream(&forwardbuf, &forwardsz);
+    char *staticbuf = NULL;
+    size_t staticsz = 0;
+    FILE *statics = xr_open_memstream(&staticbuf, &staticsz);
     char *bodybuf = NULL;
     size_t bodysz = 0;
     FILE *body = xr_open_memstream(&bodybuf, &bodysz);
-    if (!body) {
+    if (!types || !forwards || !statics || !body) {
         ctx->error = true;
+        if (types)
+            (void) xr_close_memstream(types, &typebuf, &typesz);
+        if (forwards)
+            (void) xr_close_memstream(forwards, &forwardbuf, &forwardsz);
+        if (statics)
+            (void) xr_close_memstream(statics, &staticbuf, &staticsz);
+        if (body)
+            (void) xr_close_memstream(body, &bodybuf, &bodysz);
+        xr_free(typebuf);
+        xr_free(forwardbuf);
+        xr_free(staticbuf);
+        xr_free(bodybuf);
         return;
     }
 
-    emit_class_native_typedefs(ctx, body, module, prefix);
-    emit_class_native_clone_helpers(ctx, body, module, prefix);
-    emit_class_shared_native_storage_decls(ctx, body, prefix);
-    emit_struct_native_typedefs(body, main_func, prefix);
-    emit_enum_native_typedefs(ctx, body, module);
+    emit_class_native_typedefs(ctx, types, module, prefix);
+    emit_class_native_clone_helpers(ctx, types, module, prefix);
+    emit_class_shared_native_storage_decls(ctx, types, prefix);
+    emit_struct_native_typedefs(types, main_func, prefix);
+    emit_enum_native_typedefs(ctx, types, module);
 
-    cg_emit_global_asm(body, module);
-    cg_emit_freestanding_static_scalar_const_defs(ctx, body, module);
-    cg_emit_freestanding_static_fixed_array_defs(ctx, body, module);
-    cg_emit_freestanding_static_fixed_matrix_defs(ctx, body, module);
-    cg_emit_freestanding_static_fixed_cube_defs(ctx, body, module);
-    cg_emit_freestanding_static_fixed_struct_array_defs(ctx, body, module, prefix);
-    cg_emit_freestanding_static_fixed_tuple_array_defs(ctx, body, module);
-    cg_emit_freestanding_static_tuple_defs(ctx, body, module);
-    cg_emit_freestanding_static_struct_defs(ctx, body, module, prefix);
-    cg_emit_freestanding_imported_static_const_decls(ctx, body, module);
-    emit_forward_decls(ctx, body, main_func, prefix);
-    fprintf(body, "\n");
+    emit_forward_decls(ctx, forwards, main_func, prefix);
+    fprintf(forwards, "\n");
+
+    cg_emit_global_asm(statics, module);
+    cg_emit_freestanding_static_scalar_const_defs(ctx, statics, module);
+    cg_emit_freestanding_static_fixed_array_defs(ctx, statics, module);
+    cg_emit_freestanding_static_fixed_matrix_defs(ctx, statics, module);
+    cg_emit_freestanding_static_fixed_cube_defs(ctx, statics, module);
+    cg_emit_freestanding_static_fixed_struct_array_defs(ctx, statics, module, prefix);
+    cg_emit_freestanding_static_fixed_tuple_array_defs(ctx, statics, module);
+    cg_emit_freestanding_static_tuple_defs(ctx, statics, module);
+    cg_emit_freestanding_static_struct_defs(ctx, statics, module, prefix);
+    cg_emit_freestanding_imported_static_const_decls(ctx, statics, module);
 
     xi_cgen_func(ctx, body, main_func, prefix);
 
@@ -615,16 +640,63 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         xi_cgen_shared_lib_ctor(ctx, body, single_module, 1, 0);
     }
 
-    if (xr_close_memstream(body, &bodybuf, &bodysz) != 0) {
+    bool close_failed = xr_close_memstream(types, &typebuf, &typesz) != 0;
+    close_failed = (xr_close_memstream(forwards, &forwardbuf, &forwardsz) != 0) || close_failed;
+    close_failed = (xr_close_memstream(statics, &staticbuf, &staticsz) != 0) || close_failed;
+    close_failed = (xr_close_memstream(body, &bodybuf, &bodysz) != 0) || close_failed;
+    if (close_failed || ctx->error) {
         ctx->error = true;
+        xr_free(typebuf);
+        xr_free(forwardbuf);
+        xr_free(staticbuf);
+        xr_free(bodybuf);
         return;
     }
-    xi_cgen_emit_str_literal_defs(ctx, out);
-    if (main_func->nshared > 0 && bodybuf && strstr(bodybuf, "xrt_shared"))
-        cg_emit_shared_array_definition(ctx, out, "static ", "xrt_shared", module,
+
+    char *unitbuf = NULL;
+    size_t unitsz = 0;
+    FILE *unit = xr_open_memstream(&unitbuf, &unitsz);
+    if (!unit) {
+        ctx->error = true;
+        xr_free(typebuf);
+        xr_free(forwardbuf);
+        xr_free(staticbuf);
+        xr_free(bodybuf);
+        return;
+    }
+    if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_INCLUDES))
+        xi_cgen_header(ctx, unit);
+    if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_TYPES))
+        fwrite(typebuf, 1, typesz, unit);
+    emit_canonical_extern_decls(ctx, unit);
+    if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_INTERNAL_DECLS)) {
+        emit_extern_closure_adapter_decls(ctx, unit);
+        fwrite(forwardbuf, 1, forwardsz, unit);
+    }
+    if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_STATIC_DATA))
+        xi_cgen_emit_str_literal_defs(ctx, unit);
+    if (main_func->nshared > 0 && ((bodybuf && strstr(bodybuf, "xrt_shared")) ||
+                                   (staticbuf && strstr(staticbuf, "xrt_shared"))))
+        cg_emit_shared_array_definition(ctx, unit, "static ", "xrt_shared", module,
                                         main_func->nshared);
-    fwrite(bodybuf, 1, bodysz, out);
+    if (!ctx->error)
+        fwrite(staticbuf, 1, staticsz, unit);
+    if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_BODIES)) {
+        emit_extern_closure_adapter_defs(ctx, unit);
+        fwrite(bodybuf, 1, bodysz, unit);
+    }
+    ctx->writer.phase = ctx->error ? ctx->writer.phase : CG_WRITER_PHASE_FINALIZED;
+    bool unit_close_failed = xr_close_memstream(unit, &unitbuf, &unitsz) != 0;
+    if (!ctx->error && !unit_close_failed)
+        fwrite(unitbuf, 1, unitsz, out);
+    else
+        ctx->error = true;
+
+    xr_free(typebuf);
+    xr_free(forwardbuf);
+    xr_free(staticbuf);
     xr_free(bodybuf);
+    xr_free(unitbuf);
 }
 
 /* Emit one self-contained translation unit for modules[mod_index], suitable
@@ -691,11 +763,27 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
         return;
     }
 
+    cg_writer_reset(ctx);
+    if (ctx->error) {
+        ctx->shared_name = "xrt_shared";
+        ctx->extern_linkage = false;
+        return;
+    }
+
+    char *staticbuf = NULL;
+    size_t staticsz = 0;
+    FILE *statics = xr_open_memstream(&staticbuf, &staticsz);
     char *bodybuf = NULL;
     size_t bodysz = 0;
     FILE *body = xr_open_memstream(&bodybuf, &bodysz);
-    if (!body) {
+    if (!statics || !body) {
         ctx->error = true;
+        if (statics)
+            (void) xr_close_memstream(statics, &staticbuf, &staticsz);
+        if (body)
+            (void) xr_close_memstream(body, &bodybuf, &bodysz);
+        xr_free(staticbuf);
+        xr_free(bodybuf);
         ctx->shared_name = "xrt_shared";
         ctx->extern_linkage = false;
         return;
@@ -703,15 +791,15 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
 
     ctx->n_xmod_refs = 0;
     ctx->collect_xmod_refs = true;
-    cg_emit_global_asm(body, module);
-    cg_emit_freestanding_static_scalar_const_defs(ctx, body, module);
-    cg_emit_freestanding_static_fixed_array_defs(ctx, body, module);
-    cg_emit_freestanding_static_fixed_matrix_defs(ctx, body, module);
-    cg_emit_freestanding_static_fixed_cube_defs(ctx, body, module);
-    cg_emit_freestanding_static_fixed_struct_array_defs(ctx, body, module, prefix);
-    cg_emit_freestanding_static_fixed_tuple_array_defs(ctx, body, module);
-    cg_emit_freestanding_static_tuple_defs(ctx, body, module);
-    cg_emit_freestanding_static_struct_defs(ctx, body, module, prefix);
+    cg_emit_global_asm(statics, module);
+    cg_emit_freestanding_static_scalar_const_defs(ctx, statics, module);
+    cg_emit_freestanding_static_fixed_array_defs(ctx, statics, module);
+    cg_emit_freestanding_static_fixed_matrix_defs(ctx, statics, module);
+    cg_emit_freestanding_static_fixed_cube_defs(ctx, statics, module);
+    cg_emit_freestanding_static_fixed_struct_array_defs(ctx, statics, module, prefix);
+    cg_emit_freestanding_static_fixed_tuple_array_defs(ctx, statics, module);
+    cg_emit_freestanding_static_tuple_defs(ctx, statics, module);
+    cg_emit_freestanding_static_struct_defs(ctx, statics, module, prefix);
     xi_cgen_func(ctx, body, module->init, prefix);
 
     if (is_entry) {
@@ -722,8 +810,24 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     }
     ctx->collect_xmod_refs = false;
 
-    if (xr_close_memstream(body, &bodybuf, &bodysz) != 0) {
+    bool close_failed = xr_close_memstream(statics, &staticbuf, &staticsz) != 0;
+    close_failed = (xr_close_memstream(body, &bodybuf, &bodysz) != 0) || close_failed;
+    if (close_failed || ctx->error) {
         ctx->error = true;
+        xr_free(staticbuf);
+        xr_free(bodybuf);
+        ctx->shared_name = "xrt_shared";
+        ctx->extern_linkage = false;
+        return;
+    }
+
+    char *unitbuf = NULL;
+    size_t unitsz = 0;
+    FILE *unit = xr_open_memstream(&unitbuf, &unitsz);
+    if (!unit) {
+        ctx->error = true;
+        xr_free(staticbuf);
+        xr_free(bodybuf);
         ctx->shared_name = "xrt_shared";
         ctx->extern_linkage = false;
         return;
@@ -731,50 +835,68 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
 
     /* Shared includes; the entry unit defines the runtime impl (XRT_IMPL) and
      * xrt_builtins, every other unit only declares them. */
-    cg_emit_tu_includes(out, is_entry, ctx->freestanding_profile);
-    fprintf(out, "%sXrAotContext xrt_global_ctx;\n", is_entry ? "" : "extern ");
-    fprintf(out, "%sXrValue xrt_builtins[%d];\n\n", is_entry ? "" : "extern ",
-            XR_USER_GLOBALS_START);
-
-    /* Define this module's shared-slot array.  Other modules' arrays are
-     * declared without a bound so this object stays byte-identical when an
-     * unrelated module gains or loses a shared slot (114 incremental caching);
-     * the defining unit still carries the sized definition. */
-    if (module->init->nshared > 0)
-        cg_emit_shared_array_definition(ctx, out, "", shared_buf, module, module->init->nshared);
-    for (int i = 0; i < nmodules; i++) {
-        XiModule *m = modules[i];
-        if (i == mod_index || !m || !m->init || m->init->nshared == 0)
-            continue;
-        fprintf(out, "extern XrValue xrt_shared_%s[];\n", m->name ? m->name : "mod");
-    }
-    fprintf(out, "\n");
+    if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_INCLUDES))
+        cg_emit_tu_includes(unit, is_entry, ctx->freestanding_profile);
 
     /* Native class / struct typedefs must precede the forward declarations and
      * bodies that use them.  Imported (and cross-module base) class typedefs
      * come first so a locally-defined class can embed an imported base; then
      * this module's own classes. */
-    emit_imported_class_native_typedefs(ctx, out);
-    emit_class_native_typedefs(ctx, out, module, prefix);
-    emit_class_native_clone_helpers(ctx, out, module, prefix);
-    emit_class_shared_native_storage_decls(ctx, out, prefix);
-    emit_imported_class_shared_native_storage_decls(ctx, out);
-    emit_struct_native_typedefs(out, module->init, prefix);
-    emit_imported_enum_native_typedefs(ctx, out);
-    emit_enum_native_typedefs(ctx, out, module);
-    fprintf(out, "\n");
-    cg_emit_freestanding_imported_static_const_decls(ctx, out, module);
+    if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_TYPES)) {
+        emit_imported_class_native_typedefs(ctx, unit);
+        emit_class_native_typedefs(ctx, unit, module, prefix);
+        emit_class_native_clone_helpers(ctx, unit, module, prefix);
+        emit_class_shared_native_storage_decls(ctx, unit, prefix);
+        emit_imported_class_shared_native_storage_decls(ctx, unit);
+        emit_struct_native_typedefs(unit, module->init, prefix);
+        emit_imported_enum_native_typedefs(ctx, unit);
+        emit_enum_native_typedefs(ctx, unit, module);
+        fprintf(unit, "\n");
+    }
+
+    emit_canonical_extern_decls(ctx, unit);
 
     /* Forward declarations: this module's own functions in full, plus only the
      * cross-module symbols this unit actually references. */
-    emit_forward_decls(ctx, out, module->init, prefix);
-    for (int i = 0; i < ctx->n_xmod_refs; i++)
-        emit_one_forward_decl(ctx, out, ctx->xmod_ref_funcs[i], ctx->xmod_ref_prefixes[i]);
-    fprintf(out, "\n");
+    if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_INTERNAL_DECLS)) {
+        emit_extern_closure_adapter_decls(ctx, unit);
+        emit_forward_decls(ctx, unit, module->init, prefix);
+        for (int i = 0; i < ctx->n_xmod_refs; i++)
+            emit_one_forward_decl(ctx, unit, ctx->xmod_ref_funcs[i], ctx->xmod_ref_prefixes[i]);
+        fprintf(unit, "\n");
+    }
 
-    xi_cgen_emit_str_literal_defs(ctx, out);
-    fwrite(bodybuf, 1, bodysz, out);
+    if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_STATIC_DATA)) {
+        fprintf(unit, "%sXrAotContext xrt_global_ctx;\n", is_entry ? "" : "extern ");
+        fprintf(unit, "%sXrValue xrt_builtins[%d];\n\n", is_entry ? "" : "extern ",
+                XR_USER_GLOBALS_START);
+        if (module->init->nshared > 0)
+            cg_emit_shared_array_definition(ctx, unit, "", shared_buf, module,
+                                            module->init->nshared);
+        for (int i = 0; i < nmodules; i++) {
+            XiModule *m = modules[i];
+            if (i == mod_index || !m || !m->init || m->init->nshared == 0)
+                continue;
+            fprintf(unit, "extern XrValue xrt_shared_%s[];\n", m->name ? m->name : "mod");
+        }
+        fprintf(unit, "\n");
+        cg_emit_freestanding_imported_static_const_decls(ctx, unit, module);
+        xi_cgen_emit_str_literal_defs(ctx, unit);
+        fwrite(staticbuf, 1, staticsz, unit);
+    }
+    if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_BODIES)) {
+        emit_extern_closure_adapter_defs(ctx, unit);
+        fwrite(bodybuf, 1, bodysz, unit);
+    }
+    ctx->writer.phase = ctx->error ? ctx->writer.phase : CG_WRITER_PHASE_FINALIZED;
+    bool unit_close_failed = xr_close_memstream(unit, &unitbuf, &unitsz) != 0;
+    if (!ctx->error && !unit_close_failed)
+        fwrite(unitbuf, 1, unitsz, out);
+    else
+        ctx->error = true;
+    xr_free(staticbuf);
     xr_free(bodybuf);
+    xr_free(unitbuf);
 
     ctx->shared_name = "xrt_shared";
     ctx->extern_linkage = false;

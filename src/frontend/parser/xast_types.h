@@ -245,6 +245,7 @@ typedef enum {
     ATTR_EXTERN,        // internal extern-block ABI metadata, calling convention in str_arg
     ATTR_DYLIB,         // internal extern-block dynamic-library metadata
     ATTR_LINK,          // internal extern-block system-link metadata
+    ATTR_LINK_NAME,     // @link_name("symbol") — foreign C symbol for an extern declaration
     ATTR_C_EXPORT,      // @c_export("name") — expose an AOT C ABI wrapper symbol
     ATTR_SECTION,       // @section("name") — place AOT function/C export or static data in section
     ATTR_WEAK,          // @weak — emit weak AOT C export or const static data symbol

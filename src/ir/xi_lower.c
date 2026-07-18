@@ -1451,7 +1451,10 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
                 continue;
             if (a->kind == ATTR_EXTERN) {
                 l.func->is_extern = true;
-                l.func->extern_symbol = fdecl->name;
+                if (!l.func->extern_symbol)
+                    l.func->extern_symbol = fdecl->name;
+            } else if (a->kind == ATTR_LINK_NAME) {
+                l.func->extern_symbol = a->str_arg;
             } else if (a->kind == ATTR_DYLIB || a->kind == ATTR_LINK) {
                 l.func->extern_dylib = a->str_arg;
             } else if (a->kind == ATTR_C_EXPORT) {

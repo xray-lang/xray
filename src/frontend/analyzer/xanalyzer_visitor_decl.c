@@ -2229,6 +2229,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     XrAttribute *section_attr = xa_function_attr(fn, ATTR_SECTION);
     XrAttribute *weak_attr = xa_function_attr(fn, ATTR_WEAK);
     XrAttribute *extern_attr = xa_function_attr(fn, ATTR_EXTERN);
+    XrAttribute *link_name_attr = xa_function_attr(fn, ATTR_LINK_NAME);
     XrAttribute *dylib_attr = xa_function_attr(fn, ATTR_DYLIB);
     if (!dylib_attr)
         dylib_attr = xa_function_attr(fn, ATTR_LINK);
@@ -2240,6 +2241,20 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         c_export_attr && c_export_attr->str_arg ? xr_strdup(c_export_attr->str_arg) : NULL;
     if (links->is_extern)
         xa_validate_extern_function_abi(ctx, node, fn, param_types, return_type);
+    if (link_name_attr) {
+        XrLocation link_name_loc = {.file = ctx->file_path,
+                                    .line = node ? node->line : 0,
+                                    .column = node ? node->column : 0};
+        if (!links->is_extern) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "@link_name is only valid on extern declarations",
+                                       &link_name_loc);
+        } else if (!xa_c_symbol_is_identifier(link_name_attr->str_arg)) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "@link_name requires a non-empty C identifier",
+                                       &link_name_loc);
+        }
+    }
     if (c_export_attr)
         xa_validate_c_export_function_abi(ctx, node, fn, sym, param_types, return_type,
                                           c_export_attr, links->is_extern);

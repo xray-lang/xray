@@ -1,0 +1,10 @@
+extern "C" {
+    @link_name("labs")
+    fn task208LabsInt(x: intsize) -> intsize
+
+    @link_name("labs")
+    fn task208LabsFloat(x: float32) -> float32
+}
+
+print(unsafe { task208LabsInt(-7) })
+print(unsafe { task208LabsFloat(-7.0) })

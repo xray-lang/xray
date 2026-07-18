@@ -1,0 +1,17 @@
+extern "C" {
+    fn memchr(bytes: Ptr<byte>, value: int32, count: uintsize) -> Ptr<byte>
+}
+
+fn readUtf8Like(bytes: Ptr<byte>, length: uintsize) -> uintsize {
+    var cursor: uintsize = 0
+    var checksum: uintsize = 0
+    while (cursor < length) {
+        checksum += unsafe { bytes[cursor] }
+        cursor += 1
+    }
+    unsafe { memchr(bytes, 109, length) }
+    return checksum
+}
+
+const utf8 = b"wasm3"
+print(readUtf8Like(unsafe { utf8.ptr() }, len(utf8)))

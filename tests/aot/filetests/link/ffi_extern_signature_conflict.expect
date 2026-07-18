@@ -1,0 +1,2 @@
+status=fail
+contains=Error: AOT prepare failed: conflicting extern declarations for one link symbol

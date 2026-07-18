@@ -871,12 +871,24 @@ static void features_apply_link_dependency_plans(XaotFeatureSet *fs, const XaotB
         return;
     for (uint32_t i = 0; i < bundle->nlink_dependency_plans; i++) {
         const XaotLinkDependencyPlan *plan = &bundle->link_dependency_plans[i];
-        if (plan->kind == XG_LINK_DEP_EXTERN_DYLIB)
-            features_add_extern_dylib(fs, plan->name);
-        else if (plan->kind == XG_LINK_DEP_STDLIB_MODULE)
+        if (plan->kind == XG_LINK_DEP_STDLIB_MODULE)
             features_add_stdlib_module(fs, plan->name);
         else if (plan->kind == XG_LINK_DEP_STDLIB_SYMBOL)
             features_apply_stdlib_symbol(fs, plan->name);
+    }
+}
+
+/* Foreign link inputs are derived from the same canonical declarations that
+ * Cgen renders.  Global dependency summaries remain the source for stdlib
+ * closure only; keeping extern dylibs here would recreate an independent,
+ * potentially stale declaration path. */
+static void features_apply_extern_decls(XaotFeatureSet *fs, const XaotBundle *bundle) {
+    if (!fs || !bundle)
+        return;
+    for (uint32_t i = 0; i < bundle->nextern_decls; i++) {
+        const XaotExternDecl *decl = &bundle->extern_decls[i];
+        if (decl->library && decl->library[0])
+            features_add_extern_dylib(fs, decl->library);
     }
 }
 
@@ -1881,6 +1893,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     features_apply_capability_plans(&features, &aot_bundle);
     features_apply_ir_intrinsics(&features, &aot_bundle);
     features_apply_link_dependency_plans(&features, &aot_bundle);
+    features_apply_extern_decls(&features, &aot_bundle);
     if (!build_link_manifest(&features, options->target, &link_manifest,
                              profile == XAOT_BUILD_PROFILE_FREESTANDING,
                              options->capability_provider, &aot_bundle.entry_plan)) {

@@ -40,8 +40,48 @@ typedef struct XaotFuncPlan {
     XiFunc *func;
     uint32_t module_index;
     uint16_t depth;
+    /* 1-based index into extern_decls.  Zero means this function is not a
+     * used foreign declaration.  Keeping the identity on the function plan
+     * makes every call/declaration emitter consume the same prepare fact. */
+    uint32_t extern_decl_id;
     XaotFuncAbi abi;
 } XaotFuncPlan;
+
+typedef enum XaotCallingConvention {
+    XAOT_CALL_CONV_C = 0,
+} XaotCallingConvention;
+
+enum {
+    XAOT_EXTERN_ATTR_NAKED = 1u << 0,
+    XAOT_EXTERN_ATTR_INTERRUPT = 1u << 1,
+    XAOT_EXTERN_ATTR_WEAK = 1u << 2,
+    XAOT_EXTERN_ATTR_USED = 1u << 3,
+};
+
+/* Canonical, prepare-owned foreign declaration.  ret/params are the verified
+ * AOT ABI slots; the parallel source type pointers preserve pointer and CFn
+ * boundary spelling without asking Cgen to rediscover the declaration from
+ * XiFunc.  Multiple XiFunc declarations may map to one stable_id when their
+ * complete contracts are identical. */
+typedef struct XaotExternDecl {
+    const XiFunc *representative_func;
+    const char *source_name;
+    const char *link_symbol;
+    const char *library;
+    const char *section;
+    const char *interrupt_abi;
+    XaotAbiSlot ret;
+    XaotAbiSlot *params;
+    const XrType *ret_type;
+    const XrType **param_types;
+    uint16_t nparams;
+    XaotCallingConvention call_conv;
+    uint32_t attributes;
+    uint64_t signature_hash;
+    uint32_t first_module;
+    uint32_t first_source_line;
+    uint32_t stable_id;
+} XaotExternDecl;
 
 typedef struct XaotValuePlan {
     const XiFunc *func;
@@ -1571,6 +1611,9 @@ typedef struct XaotBundle {
     XaotFuncPlan *func_plans;
     uint32_t nfunc_plans;
     uint32_t func_plan_cap;
+    XaotExternDecl *extern_decls;
+    uint32_t nextern_decls;
+    uint32_t extern_decl_cap;
     XaotValuePlan *value_plans;
     uint32_t nvalue_plans;
     uint32_t value_plan_cap;
@@ -1822,6 +1865,14 @@ XR_FUNC XaotFuncPlan *xaot_bundle_add_func_plan(XaotBundle *bundle, XiFunc *func
                                                 uint32_t module_index, uint16_t depth);
 XR_FUNC const XaotFuncPlan *xaot_bundle_find_func_plan(const XaotBundle *bundle,
                                                        const XiFunc *func);
+XR_FUNC const XaotExternDecl *xaot_bundle_find_extern_decl(const XaotBundle *bundle,
+                                                           uint32_t stable_id);
+XR_FUNC const XaotExternDecl *xaot_bundle_find_extern_decl_for_func(const XaotBundle *bundle,
+                                                                    const XiFunc *func);
+XR_FUNC bool xaot_bundle_extern_closure_is_used(const XaotBundle *bundle, const XiFunc *owner,
+                                                const XiValue *closure);
+XR_FUNC bool xaot_bundle_register_extern_decl(XaotBundle *bundle, XiFunc *func,
+                                              uint32_t first_source_line);
 XR_FUNC XaotValuePlan *xaot_bundle_add_value_plan(XaotBundle *bundle, const XiFunc *func,
                                                   const XiValue *value);
 XR_FUNC const XaotValuePlan *xaot_bundle_find_value_plan(const XaotBundle *bundle,

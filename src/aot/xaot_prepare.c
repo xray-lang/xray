@@ -3767,6 +3767,43 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     return true;
 }
 
+/* Materialize foreign declarations from executable callsites, never from the
+ * mere presence of an extern item.  This is the pruning boundary that keeps
+ * unused symbols and dylibs out of generated units. */
+static bool prepare_func_extern_decls(XaotBundle *bundle, const XiFunc *func) {
+    if (!bundle || !func)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks ? func->blocks[bi] : NULL;
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *call = block->values ? block->values[vi] : NULL;
+            uint16_t first_arg = 0;
+            if (!call)
+                continue;
+            if ((call->op == XI_CLOSURE_NEW ||
+                 (call->op == XI_STACK_ALLOC && call->aux_int == XI_CLOSURE_NEW)) &&
+                call->aux && ((XiFunc *) call->aux)->is_extern) {
+                if (xaot_bundle_extern_closure_is_used(bundle, func, call) &&
+                    !xaot_bundle_register_extern_decl(bundle, (XiFunc *) call->aux, call->line))
+                    return false;
+                continue;
+            }
+            if (call->op != XI_CALL && call->op != XI_CALL_METHOD &&
+                call->op != XI_CALL_METHOD_DIRECT)
+                continue;
+            XiFunc *target =
+                (XiFunc *) xaot_boundary_resolve_direct_call_target(bundle, func, call, &first_arg);
+            (void) first_arg;
+            if (target && target->is_extern &&
+                !xaot_bundle_register_extern_decl(bundle, target, call->line))
+                return false;
+        }
+    }
+    return true;
+}
+
 XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats) {
     uint32_t mi;
     if (!bundle || !bundle->modules)
@@ -3782,6 +3819,10 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
             return false;
         }
         if (!prepare_func_recursive(bundle, mod->init, mi, 0, true))
+            return false;
+    }
+    for (mi = 0; mi < bundle->nfunc_plans; mi++) {
+        if (!prepare_func_extern_decls(bundle, bundle->func_plans[mi].func))
             return false;
     }
     if (!xaot_bundle_sync_transfer_capability_plans(bundle)) {

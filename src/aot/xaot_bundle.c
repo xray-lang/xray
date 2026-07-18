@@ -4200,6 +4200,11 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     for (i = 0; i < bundle->nfunc_plans; i++)
         xaot_abi_free(&bundle->func_plans[i].abi);
     xr_free(bundle->func_plans);
+    for (i = 0; i < bundle->nextern_decls; i++) {
+        xr_free(bundle->extern_decls[i].params);
+        xr_free(bundle->extern_decls[i].param_types);
+    }
+    xr_free(bundle->extern_decls);
     xr_free(bundle->value_plans);
     xr_free(bundle->container_plans);
     for (i = 0; i < bundle->nenum_plans; i++)
@@ -4864,6 +4869,282 @@ XR_FUNC const XaotFuncPlan *xaot_bundle_find_func_plan(const XaotBundle *bundle,
     if (xaot_ptr_index_get(&bundle->func_index, func, &idx) && idx < bundle->nfunc_plans)
         return &bundle->func_plans[idx];
     return NULL;
+}
+
+static bool xaot_extern_text_equal(const char *a, const char *b) {
+    if (!a || !a[0])
+        a = NULL;
+    if (!b || !b[0])
+        b = NULL;
+    return a == b || (a && b && strcmp(a, b) == 0);
+}
+
+static uint64_t xaot_extern_hash_bytes(uint64_t hash, const void *data, size_t len) {
+    const uint8_t *bytes = (const uint8_t *) data;
+    for (size_t i = 0; i < len; i++) {
+        hash ^= bytes[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static uint64_t xaot_extern_hash_u64(uint64_t hash, uint64_t value) {
+    return xaot_extern_hash_bytes(hash, &value, sizeof(value));
+}
+
+static uint64_t xaot_extern_hash_text(uint64_t hash, const char *text) {
+    if (!text || !text[0])
+        return xaot_extern_hash_u64(hash, 0);
+    hash = xaot_extern_hash_bytes(hash, text, strlen(text));
+    return xaot_extern_hash_u64(hash, UINT64_C(0xff));
+}
+
+static bool xaot_extern_type_equal(const XrType *a, const XrType *b) {
+    return a == b || (a && b && xr_type_equals((XrType *) a, (XrType *) b));
+}
+
+static bool xaot_extern_slot_equal(const XaotAbiSlot *a, const XaotAbiSlot *b) {
+    return a && b && a->cls == b->cls && a->flags == b->flags &&
+           xaot_value_reps_equal(a->rep, b->rep) &&
+           xaot_value_reps_equal(a->pointee_rep, b->pointee_rep) &&
+           xaot_extern_text_equal(a->c_type, b->c_type) &&
+           xaot_extern_text_equal(a->c_name, b->c_name);
+}
+
+static uint32_t xaot_extern_attributes(const XiFunc *func) {
+    uint32_t attributes = 0;
+    if (!func)
+        return 0;
+    if (func->aot_naked)
+        attributes |= XAOT_EXTERN_ATTR_NAKED;
+    if (func->aot_interrupt_abi && func->aot_interrupt_abi[0])
+        attributes |= XAOT_EXTERN_ATTR_INTERRUPT;
+    if (func->aot_weak)
+        attributes |= XAOT_EXTERN_ATTR_WEAK;
+    if (func->aot_used)
+        attributes |= XAOT_EXTERN_ATTR_USED;
+    return attributes;
+}
+
+static uint64_t xaot_extern_signature_hash(const XiFunc *func, const XaotFuncAbi *abi) {
+    uint64_t hash = UINT64_C(1469598103934665603);
+    const char *link_symbol =
+        func && func->extern_symbol ? func->extern_symbol : (func && func->name ? func->name : "");
+    hash = xaot_extern_hash_text(hash, link_symbol);
+    hash = xaot_extern_hash_text(hash, func ? func->extern_dylib : NULL);
+    hash = xaot_extern_hash_text(hash, func ? func->aot_section : NULL);
+    hash = xaot_extern_hash_text(hash, func ? func->aot_interrupt_abi : NULL);
+    hash = xaot_extern_hash_u64(hash, XAOT_CALL_CONV_C);
+    hash = xaot_extern_hash_u64(hash, xaot_extern_attributes(func));
+    hash = xaot_extern_hash_u64(hash, func ? xaot_type_fingerprint(func->return_type) : 0);
+    hash = xaot_extern_hash_u64(hash, abi ? (uint64_t) abi->ret.cls : 0);
+    hash = xaot_extern_hash_text(hash, abi ? abi->ret.c_type : NULL);
+    hash = xaot_extern_hash_u64(hash, func ? func->nparams : 0);
+    if (func && abi) {
+        for (uint16_t i = 0; i < func->nparams; i++) {
+            const XrType *type = func->params && func->params[i] ? func->params[i]->type : NULL;
+            hash = xaot_extern_hash_u64(hash, xaot_type_fingerprint(type));
+            hash = xaot_extern_hash_u64(hash, (uint64_t) abi->params[i].cls);
+            hash = xaot_extern_hash_text(hash, abi->params[i].c_type);
+        }
+    }
+    return hash ? hash : UINT64_C(1);
+}
+
+static bool xaot_extern_decl_matches(const XaotExternDecl *decl, const XiFunc *func,
+                                     const XaotFuncAbi *abi, uint64_t signature_hash) {
+    const char *link_symbol =
+        func->extern_symbol ? func->extern_symbol : (func->name ? func->name : "");
+    if (!decl || !func || !abi || decl->signature_hash != signature_hash ||
+        !xaot_extern_text_equal(decl->link_symbol, link_symbol) ||
+        !xaot_extern_text_equal(decl->library, func->extern_dylib) ||
+        !xaot_extern_text_equal(decl->section, func->aot_section) ||
+        !xaot_extern_text_equal(decl->interrupt_abi, func->aot_interrupt_abi) ||
+        decl->call_conv != XAOT_CALL_CONV_C || decl->attributes != xaot_extern_attributes(func) ||
+        decl->nparams != func->nparams ||
+        !xaot_extern_type_equal(decl->ret_type, func->return_type) ||
+        !xaot_extern_slot_equal(&decl->ret, &abi->ret))
+        return false;
+    for (uint16_t i = 0; i < decl->nparams; i++) {
+        const XrType *type = func->params && func->params[i] ? func->params[i]->type : NULL;
+        if (!xaot_extern_type_equal(decl->param_types[i], type) ||
+            !xaot_extern_slot_equal(&decl->params[i], &abi->params[i]))
+            return false;
+    }
+    return true;
+}
+
+XR_FUNC const XaotExternDecl *xaot_bundle_find_extern_decl(const XaotBundle *bundle,
+                                                           uint32_t stable_id) {
+    if (!bundle || stable_id == 0 || stable_id > bundle->nextern_decls)
+        return NULL;
+    return &bundle->extern_decls[stable_id - 1];
+}
+
+XR_FUNC const XaotExternDecl *xaot_bundle_find_extern_decl_for_func(const XaotBundle *bundle,
+                                                                    const XiFunc *func) {
+    const XaotFuncPlan *plan = xaot_bundle_find_func_plan(bundle, func);
+    return plan ? xaot_bundle_find_extern_decl(bundle, plan->extern_decl_id) : NULL;
+}
+
+static bool xaot_func_reads_shared_slot(const XiFunc *func, int64_t slot) {
+    if (!func)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks ? func->blocks[bi] : NULL;
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values ? block->values[vi] : NULL;
+            if (value && value->op == XI_GET_SHARED && value->aux_int == slot)
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool xaot_func_uses_closure_value(const XiFunc *func, const XiValue *closure,
+                                         int64_t *out_stored_slot) {
+    if (!func || !closure)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks ? func->blocks[bi] : NULL;
+        if (!block)
+            continue;
+        if (block->control == closure)
+            return true;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                if (phi->value.args && phi->value.args[ai] == closure)
+                    return true;
+            }
+        }
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *user = block->values ? block->values[vi] : NULL;
+            if (!user)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (!user->args || user->args[ai] != closure)
+                    continue;
+                if (user->op == XI_SET_SHARED && ai == 0) {
+                    if (out_stored_slot)
+                        *out_stored_slot = user->aux_int;
+                    continue;
+                }
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+XR_FUNC bool xaot_bundle_extern_closure_is_used(const XaotBundle *bundle, const XiFunc *owner,
+                                                const XiValue *closure) {
+    const XaotFuncPlan *owner_plan = xaot_bundle_find_func_plan(bundle, owner);
+    int64_t stored_slot = -1;
+    if (!bundle || !owner_plan || !closure)
+        return false;
+    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+        const XaotFuncPlan *plan = &bundle->func_plans[fi];
+        if (plan->module_index == owner_plan->module_index &&
+            xaot_func_uses_closure_value(plan->func, closure, &stored_slot))
+            return true;
+    }
+    if (stored_slot < 0)
+        return false;
+    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+        const XaotFuncPlan *plan = &bundle->func_plans[fi];
+        if (plan->module_index == owner_plan->module_index &&
+            xaot_func_reads_shared_slot(plan->func, stored_slot))
+            return true;
+    }
+    return false;
+}
+
+XR_FUNC bool xaot_bundle_register_extern_decl(XaotBundle *bundle, XiFunc *func,
+                                              uint32_t first_source_line) {
+    uint32_t func_plan_index;
+    XaotFuncPlan *func_plan;
+    const char *link_symbol;
+    uint64_t signature_hash;
+
+    if (!bundle || !func || !func->is_extern ||
+        !xaot_ptr_index_get(&bundle->func_index, func, &func_plan_index) ||
+        func_plan_index >= bundle->nfunc_plans)
+        return false;
+    func_plan = &bundle->func_plans[func_plan_index];
+    if (func_plan->extern_decl_id != 0)
+        return true;
+    if (func->is_vararg || func_plan->abi.nparams != func->nparams ||
+        (func->nparams > 0 && (!func_plan->abi.params || !func->params))) {
+        bundle->error_msg = "unsupported variadic or incomplete extern ABI";
+        return false;
+    }
+
+    link_symbol = func->extern_symbol ? func->extern_symbol : (func->name ? func->name : "");
+    if (!link_symbol[0]) {
+        bundle->error_msg = "extern declaration has no link symbol";
+        return false;
+    }
+    signature_hash = xaot_extern_signature_hash(func, &func_plan->abi);
+    for (uint32_t i = 0; i < bundle->nextern_decls; i++) {
+        XaotExternDecl *decl = &bundle->extern_decls[i];
+        if (!xaot_extern_text_equal(decl->link_symbol, link_symbol))
+            continue;
+        if (!xaot_extern_decl_matches(decl, func, &func_plan->abi, signature_hash)) {
+            bundle->error_msg = "conflicting extern declarations for one link symbol";
+            return false;
+        }
+        func_plan->extern_decl_id = decl->stable_id;
+        return true;
+    }
+
+    if (bundle->nextern_decls == bundle->extern_decl_cap) {
+        uint32_t new_cap = bundle->extern_decl_cap < 8 ? 8 : bundle->extern_decl_cap * 2;
+        XaotExternDecl *new_decls = (XaotExternDecl *) xr_realloc(
+            bundle->extern_decls, sizeof(XaotExternDecl) * (size_t) new_cap);
+        if (!new_decls) {
+            bundle->error_msg = "failed to allocate extern declaration registry";
+            return false;
+        }
+        bundle->extern_decls = new_decls;
+        bundle->extern_decl_cap = new_cap;
+    }
+
+    XaotExternDecl *decl = &bundle->extern_decls[bundle->nextern_decls];
+    memset(decl, 0, sizeof(*decl));
+    if (func->nparams > 0) {
+        decl->params = (XaotAbiSlot *) xr_calloc(func->nparams, sizeof(XaotAbiSlot));
+        decl->param_types = (const XrType **) xr_calloc(func->nparams, sizeof(const XrType *));
+        if (!decl->params || !decl->param_types) {
+            xr_free(decl->params);
+            xr_free(decl->param_types);
+            memset(decl, 0, sizeof(*decl));
+            bundle->error_msg = "failed to allocate extern declaration signature";
+            return false;
+        }
+        memcpy(decl->params, func_plan->abi.params, sizeof(XaotAbiSlot) * (size_t) func->nparams);
+        for (uint16_t i = 0; i < func->nparams; i++)
+            decl->param_types[i] = func->params[i] ? func->params[i]->type : NULL;
+    }
+    decl->representative_func = func;
+    decl->source_name = func->name;
+    decl->link_symbol = link_symbol;
+    decl->library = func->extern_dylib;
+    decl->section = func->aot_section;
+    decl->interrupt_abi = func->aot_interrupt_abi;
+    decl->ret = func_plan->abi.ret;
+    decl->ret_type = func->return_type;
+    decl->nparams = func->nparams;
+    decl->call_conv = XAOT_CALL_CONV_C;
+    decl->attributes = xaot_extern_attributes(func);
+    decl->signature_hash = signature_hash;
+    decl->first_module = func_plan->module_index;
+    decl->first_source_line = first_source_line;
+    decl->stable_id = bundle->nextern_decls + 1;
+    bundle->nextern_decls++;
+    func_plan->extern_decl_id = decl->stable_id;
+    return true;
 }
 
 XR_FUNC XaotValuePlan *xaot_bundle_add_value_plan(XaotBundle *bundle, const XiFunc *func,
@@ -7726,6 +8007,16 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 "link-dependency %u id=%u kind=%s name_id=%u name=%s evidence=0x%x reason=%u\n", li,
                 lp->link_id, xg_link_dependency_kind_name(lp->kind), lp->name_id, lp->name,
                 lp->evidence, (unsigned) lp->unproven_reason);
+    }
+
+    for (uint32_t ei = 0; ei < bundle->nextern_decls; ei++) {
+        const XaotExternDecl *decl = &bundle->extern_decls[ei];
+        fprintf(out,
+                "extern-decl %u id=%u source=%s symbol=%s library=%s params=%u cc=c "
+                "attrs=0x%x signature=%016" PRIx64 " first-module=%u first-line=%u\n",
+                ei, decl->stable_id, safe_str(decl->source_name), safe_str(decl->link_symbol),
+                safe_str(decl->library), (unsigned) decl->nparams, decl->attributes,
+                decl->signature_hash, decl->first_module, decl->first_source_line);
     }
 
     for (fi = 0; fi < bundle->nfunc_plans; fi++) {

@@ -2758,12 +2758,17 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
      * hidden _cl closure and arguments converted to their native C reps (the
      * same conversion as a typed direct call, so e.g. tagged -> double). */
     if (target && target->is_extern) {
+        const XaotExternDecl *extern_decl = NULL;
+        if (!cg_mark_extern_decl_used(ctx, target, &extern_decl)) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
         /* FFI: raw pointers cross the C boundary as real C pointers but are held
          * internally as address-width ints. A pointer return converts from the
          * C pointer to whatever storage rep the planner picked for this value
          * (void* stays bare, i64 casts the address, tagged boxes it); other
          * return reps go through the normal conversion prefix/suffix. */
-        const XrType *ret_type = target->return_type;
+        const XrType *ret_type = extern_decl->ret_type;
         bool ret_is_ptr = ret_type && ret_type->kind == XR_KIND_POINTER;
         const char *conv_suffix = NULL;
         if (ret_is_ptr) {
@@ -2776,15 +2781,13 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                 return;
             }
         }
-        fprintf(out, "xr_ffi_%s(",
-                target->extern_symbol ? target->extern_symbol : (target->name ? target->name : ""));
+        fprintf(out, "xr_ffi_%s(", extern_decl->link_symbol);
         for (uint16_t a = 1; a < v->nargs; a++) {
             if (a > 1)
                 fprintf(out, ", ");
-            const XrType *pt =
-                (target->params && (a - 1) < target->nparams && target->params[a - 1])
-                    ? target->params[a - 1]->type
-                    : NULL;
+            const XrType *pt = (extern_decl->param_types && (a - 1) < extern_decl->nparams)
+                                   ? extern_decl->param_types[a - 1]
+                                   : NULL;
             const char *p_ptr = cg_extern_ptr_boundary_c_type(pt);
             if (cg_type_is_c_callback(pt)) {
                 if (!emit_cfn_callback_arg(ctx, out, f, prefix, v, (uint16_t) (a - 1), pt,
