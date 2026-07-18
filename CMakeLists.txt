@@ -1940,6 +1940,20 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME raw_scalar_assembly_shape
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/check_raw_scalar_assembly.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(raw_scalar_assembly_shape PROPERTIES
+        LABELS "aot;assembly;ffi;task-207"
+        PROCESSORS 2
+        SKIP_RETURN_CODE 77
+        TIMEOUT 60
+    )
+
+    add_test(
         NAME aot_cross_smoke
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_cross_smoke.sh
                 $<TARGET_FILE:xray>

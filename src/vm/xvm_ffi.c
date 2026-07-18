@@ -16,7 +16,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../vm/xvm_closure.h"
 #include "../os/os_dylib.h"
-#include "../shared/xr_array_core.h"
+#include "../shared/xr_raw_scalar_core.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -25,19 +25,22 @@
 
 static uint64_t ffi_load_integer_bits(const void *ptr, uint8_t width, int64_t endian, bool *ok) {
     switch (width) {
-        case 1: {
-            uint8_t value = 0;
-            memcpy(&value, ptr, sizeof(value));
+        case 1:
             if (ok)
                 *ok = true;
-            return value;
-        }
+            return xr_raw_load_u8_unaligned(ptr);
         case 2:
-            return xr_array_core_bytes_load_u16(ptr, 2, XR_ELEM_U8, 0, endian, ok);
+            if (ok)
+                *ok = true;
+            return xr_raw_u16_from_endian(xr_raw_load_u16_unaligned(ptr), endian);
         case 4:
-            return xr_array_core_bytes_load_u32(ptr, 4, XR_ELEM_U8, 0, endian, ok);
+            if (ok)
+                *ok = true;
+            return xr_raw_u32_from_endian(xr_raw_load_u32_unaligned(ptr), endian);
         case 8:
-            return xr_array_core_bytes_load_u64(ptr, 8, XR_ELEM_U8, 0, endian, ok);
+            if (ok)
+                *ok = true;
+            return xr_raw_u64_from_endian(xr_raw_load_u64_unaligned(ptr), endian);
         default:
             if (ok)
                 *ok = false;
@@ -62,17 +65,18 @@ static xr_Integer ffi_sign_extend_integer(uint64_t bits, uint8_t width) {
 
 static bool ffi_store_integer_bits(void *ptr, uint8_t width, uint64_t bits, int64_t endian) {
     switch (width) {
-        case 1: {
-            uint8_t value = (uint8_t) bits;
-            memcpy(ptr, &value, sizeof(value));
+        case 1:
+            xr_raw_store_u8_unaligned(ptr, (uint8_t) bits);
             return true;
-        }
         case 2:
-            return xr_array_core_bytes_store_u16(ptr, 2, XR_ELEM_U8, 0, (uint16_t) bits, endian);
+            xr_raw_store_u16_unaligned(ptr, xr_raw_u16_from_endian((uint16_t) bits, endian));
+            return true;
         case 4:
-            return xr_array_core_bytes_store_u32(ptr, 4, XR_ELEM_U8, 0, (uint32_t) bits, endian);
+            xr_raw_store_u32_unaligned(ptr, xr_raw_u32_from_endian((uint32_t) bits, endian));
+            return true;
         case 8:
-            return xr_array_core_bytes_store_u64(ptr, 8, XR_ELEM_U8, 0, bits, endian);
+            xr_raw_store_u64_unaligned(ptr, xr_raw_u64_from_endian(bits, endian));
+            return true;
         default:
             return false;
     }
@@ -90,17 +94,17 @@ XrValue xr_ffi_ptr_load(uintptr_t addr, uint8_t ffi_type, int64_t endian) {
     if (!desc || !desc->is_memory_scalar)
         return xr_null();
     if (desc->is_pointer) {
-        void *value = NULL;
-        memcpy(&value, ptr, sizeof(value));
-        return xr_int((xr_Integer) (uintptr_t) value);
+        return xr_int((xr_Integer) (uintptr_t) xr_raw_load_ptr_unaligned(ptr));
     }
     uint8_t width = xr_abi_scalar_width(desc, (uint8_t) sizeof(void *));
     if (desc->is_float) {
+        uint64_t bits = ffi_load_integer_bits(ptr, width, endian, &ok);
+        if (!ok)
+            return xr_null();
         if (width == 4)
-            return xr_float(
-                (double) xr_array_core_bytes_load_f32(ptr, 4, XR_ELEM_U8, 0, endian, &ok));
+            return xr_float((double) xr_raw_f32_from_bits((uint32_t) bits));
         if (width == 8)
-            return xr_float(xr_array_core_bytes_load_f64(ptr, 8, XR_ELEM_U8, 0, endian, &ok));
+            return xr_float(xr_raw_f64_from_bits(bits));
         return xr_null();
     }
     uint64_t bits = ffi_load_integer_bits(ptr, width, endian, &ok);
@@ -120,16 +124,15 @@ void xr_ffi_ptr_store(uintptr_t addr, uint8_t ffi_type, XrValue val, int64_t end
     if (!desc || !desc->is_memory_scalar)
         return;
     if (desc->is_pointer) {
-        void *value = (void *) (uintptr_t) iv;
-        memcpy(ptr, &value, sizeof(value));
+        xr_raw_store_ptr_unaligned(ptr, (void *) (uintptr_t) iv);
         return;
     }
     uint8_t width = xr_abi_scalar_width(desc, (uint8_t) sizeof(void *));
     if (desc->is_float) {
         if (width == 4)
-            (void) xr_array_core_bytes_store_f32(ptr, 4, XR_ELEM_U8, 0, (float) f, endian);
+            (void) ffi_store_integer_bits(ptr, 4, xr_raw_f32_to_bits((float) f), endian);
         else if (width == 8)
-            (void) xr_array_core_bytes_store_f64(ptr, 8, XR_ELEM_U8, 0, f, endian);
+            (void) ffi_store_integer_bits(ptr, 8, xr_raw_f64_to_bits(f), endian);
         return;
     }
     uint64_t bits = code == XR_FFI_T_BOOL ? (uint64_t) (iv != 0) : (uint64_t) iv;

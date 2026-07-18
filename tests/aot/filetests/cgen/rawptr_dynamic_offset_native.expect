@@ -3,6 +3,7 @@ regex=value v[0-9]+ op=ADD kind=ptr rep=rawptr c_type=void \*
 regex=value v[0-9]+ op=PTR_STORE kind=void rep=void c_type=void
 regex=value v[0-9]+ op=PTR_LOAD kind=scalar rep=u8 c_type=uint8_t
 c_regex=void \* v[0-9]+ = \(void \*\)\(\(uint8_t \*\)\(v[0-9]+\) \+ \(intptr_t\)\(v[0-9]+\)\);
-c_contains=(*(uint8_t *)(
-c_contains=)) = (uint8_t)(
+c_contains=xr_raw_store_u8_unaligned(
+c_contains=xr_raw_load_u8_unaligned(
+c_not_contains=*(uint8_t *)(
 c_not_contains=xrt_add(

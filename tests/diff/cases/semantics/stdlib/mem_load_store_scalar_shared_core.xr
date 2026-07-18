@@ -1,4 +1,4 @@
-// anchor: mem-load-store-scalar-shared-core
+// anchor: mem-load-store-scalar-raw-core
 import mem
 
 fn dynamicRoundTrip(p: MutPtr<uint8>, offset: int, endian: Endian) -> uint32 {

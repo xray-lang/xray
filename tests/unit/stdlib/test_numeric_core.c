@@ -11,6 +11,7 @@
 #include "../test_framework.h"
 #include "shared/xr_bits_core.h"
 #include "shared/xr_numeric_core.h"
+#include "shared/xr_raw_scalar_core.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -129,6 +130,56 @@ TEST(bits_core_rotate_count_is_euclidean_mod_width) {
     }
 }
 
+TEST(raw_scalar_core_unaligned_integer_access_preserves_bytes) {
+    uint8_t bytes[32] = {0};
+    uint8_t *p = bytes + 1;
+
+    xr_raw_store_u8_unaligned(p, UINT8_C(0xa5));
+    ASSERT_EQ_INT(xr_raw_load_u8_unaligned(p), UINT8_C(0xa5));
+
+    xr_raw_store_u16_unaligned(p, xr_raw_u16_from_le(UINT16_C(0x1234)));
+    ASSERT_EQ_INT(bytes[1], UINT8_C(0x34));
+    ASSERT_EQ_INT(bytes[2], UINT8_C(0x12));
+    ASSERT_EQ_INT(xr_raw_u16_from_le(xr_raw_load_u16_unaligned(p)), UINT16_C(0x1234));
+
+    xr_raw_store_u32_unaligned(p, xr_raw_u32_from_be(UINT32_C(0x12345678)));
+    ASSERT_EQ_INT(bytes[1], UINT8_C(0x12));
+    ASSERT_EQ_INT(bytes[2], UINT8_C(0x34));
+    ASSERT_EQ_INT(bytes[3], UINT8_C(0x56));
+    ASSERT_EQ_INT(bytes[4], UINT8_C(0x78));
+    ASSERT_EQ_INT(xr_raw_u32_from_be(xr_raw_load_u32_unaligned(p)), UINT32_C(0x12345678));
+
+    xr_raw_store_u64_unaligned(p, xr_raw_u64_from_le(UINT64_C(0x0102030405060708)));
+    ASSERT_EQ_INT(bytes[1], UINT8_C(0x08));
+    ASSERT_EQ_INT(bytes[8], UINT8_C(0x01));
+    ASSERT_EQ_INT(xr_raw_u64_from_le(xr_raw_load_u64_unaligned(p)), UINT64_C(0x0102030405060708));
+}
+
+TEST(raw_scalar_core_dynamic_endian_is_only_a_value_transform) {
+    const uint64_t value = UINT64_C(0x0102030405060708);
+
+    ASSERT_EQ_INT(xr_raw_u64_from_endian(value, XR_RAW_ENDIAN_NATIVE), value);
+    ASSERT_EQ_INT(xr_raw_u64_from_endian(value, XR_RAW_ENDIAN_LE), xr_raw_u64_from_le(value));
+    ASSERT_EQ_INT(xr_raw_u64_from_endian(value, XR_RAW_ENDIAN_BE), xr_raw_u64_from_be(value));
+}
+
+TEST(raw_scalar_core_float_and_pointer_access_preserve_bits) {
+    uint8_t bytes[32] = {0};
+    uint8_t *p = bytes + 1;
+    const uint32_t f32_bits = UINT32_C(0x7fc01234);
+    const uint64_t f64_bits = UINT64_C(0x7ff8000000001234);
+    uint8_t target = 0;
+
+    xr_raw_store_u32_unaligned(p, f32_bits);
+    ASSERT_EQ_INT(xr_raw_f32_to_bits(xr_raw_f32_from_bits(xr_raw_load_u32_unaligned(p))), f32_bits);
+
+    xr_raw_store_u64_unaligned(p, f64_bits);
+    ASSERT_EQ_INT(xr_raw_f64_to_bits(xr_raw_f64_from_bits(xr_raw_load_u64_unaligned(p))), f64_bits);
+
+    xr_raw_store_ptr_unaligned(p, &target);
+    ASSERT(xr_raw_load_ptr_unaligned(p) == &target);
+}
+
 TEST(numeric_core_to_fixed_decimals_clamps) {
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(-10), 0);
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(3), 3);
@@ -149,6 +200,9 @@ RUN_TEST(numeric_core_shift_counts_are_mod64);
 RUN_TEST(bits_core_exact_width_queries);
 RUN_TEST(bits_core_exact_width_preserves_type_pattern);
 RUN_TEST(bits_core_rotate_count_is_euclidean_mod_width);
+RUN_TEST(raw_scalar_core_unaligned_integer_access_preserves_bytes);
+RUN_TEST(raw_scalar_core_dynamic_endian_is_only_a_value_transform);
+RUN_TEST(raw_scalar_core_float_and_pointer_access_preserve_bits);
 RUN_TEST(numeric_core_to_fixed_decimals_clamps);
 
 TEST_MAIN_END()

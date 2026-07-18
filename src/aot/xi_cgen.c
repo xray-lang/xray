@@ -6887,6 +6887,49 @@ static bool cg_pure_value_only_feeds_aot_elided_values(XiCgenCtx *ctx, const XiF
     return seen_use;
 }
 
+/* Prelude enum namespaces are compile-time type tokens when every use is a
+ * static member load. The member emitter materializes the immutable enum
+ * singleton directly, so constructing a temporary runtime Map here would be
+ * both semantically redundant and an unexpected allocation in expressions
+ * such as `flag ? Endian.LE : Endian.BE`. */
+static bool cg_static_prelude_enum_namespace_is_elided(const XiFunc *f, const XiValue *v) {
+    if (!f || !v || v->op != XI_GET_BUILTIN)
+        return false;
+    const CgPreludeEnumData *enum_data = cg_prelude_enum_data((int) v->aux_int);
+    if (!enum_data || cg_prelude_enum_has_payload_member(enum_data))
+        return false;
+
+    bool seen_use = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == v)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == v)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user || user == v)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != v)
+                    continue;
+                const char *member = user->aux ? (const char *) user->aux : NULL;
+                if (a != 0 || user->op != XI_LOAD_FIELD || !member ||
+                    cg_prelude_enum_member_index(enum_data, member) < 0)
+                    return false;
+                seen_use = true;
+            }
+        }
+    }
+    return seen_use;
+}
+
 /* Emit a complete value statement: type vN = <rhs>; */
 static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
@@ -6911,6 +6954,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (cg_native_box_value_is_elided_in_aot(ctx, f, v))
         return;
     if (cg_pure_value_only_feeds_aot_elided_values(ctx, f, v))
+        return;
+    if (cg_static_prelude_enum_namespace_is_elided(f, v))
         return;
 
     /* Inlined struct: emit local anonymous C struct with native fields. */
@@ -7542,6 +7587,8 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
     if (cg_native_box_value_is_elided_in_aot(ctx, f, v))
         return true;
     if (cg_pure_value_only_feeds_aot_elided_values(ctx, f, v))
+        return true;
+    if (cg_static_prelude_enum_namespace_is_elided(f, v))
         return true;
     if (v->op == XI_AGG_NEW && cg_struct_inline_local_storage(ctx, f, v))
         return true;
