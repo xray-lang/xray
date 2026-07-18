@@ -4292,20 +4292,22 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
                 symbol_return_type = callee_links->type->function.return_type;
         }
     }
-    /* A direct Xi callee is the executable signature authority.  Analyzer
-     * recovery may leave a call-expression side-table entry as unit even when
-     * the resolved function returns a value; carrying that residue forward
-     * creates an invalid value-producing CALL and, historically, an empty RET.
+    /* The analyzed call-expression type is authoritative after overload and
+     * generic resolution.  Only recover from an absent/incomplete side-table
+     * result; replacing a concrete result with the declaration signature loses
+     * specialization facts (for example math.min<int> becoming float).
      */
-    if (static_callee && static_callee->return_type)
-        result_type = static_callee->return_type;
-    else if (symbol_return_type)
-        result_type = symbol_return_type;
-    else if ((!result_type || result_type->kind == XR_KIND_UNIT ||
-              result_type->kind == XR_KIND_UNKNOWN) &&
-             callee_type && callee_type->kind == XR_KIND_FUNCTION &&
-             callee_type->function.return_type)
-        result_type = callee_type->function.return_type;
+    bool result_type_needs_recovery =
+        !result_type || result_type->kind == XR_KIND_UNIT || result_type->kind == XR_KIND_UNKNOWN;
+    if (result_type_needs_recovery) {
+        if (static_callee && static_callee->return_type)
+            result_type = static_callee->return_type;
+        else if (symbol_return_type)
+            result_type = symbol_return_type;
+        else if (callee_type && callee_type->kind == XR_KIND_FUNCTION &&
+                 callee_type->function.return_type)
+            result_type = callee_type->function.return_type;
+    }
     if (math_callee_member && lower_math_call_arity_ok(math_callee_member, n))
         result_type = lower_math_call_result_type(l, math_callee_member, arg_vals, n);
 
