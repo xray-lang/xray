@@ -6,12 +6,19 @@ regex=value v[0-9]+ op=PTR_LOAD kind=scalar rep=u32 c_type=uint32_t
 regex=value v[0-9]+ op=PTR_LOAD kind=scalar rep=f32 c_type=float
 regex=value v[0-9]+ op=PTR_LOAD kind=ptr rep=rawptr c_type=const void \*
 c_regex=void \* v[0-9]+ = \(void \*\)\(\(uint8_t \*\)\(v[0-9]+\) \+ \(intptr_t\)\(v[0-9]+\)\);
-c_contains=xrt_ptr_store_int_unchecked_raw(
-c_contains=xrt_ptr_load_int_unchecked_raw(
-c_contains=xrt_ptr_store_float_unchecked_raw(
-c_contains=xrt_ptr_load_float_unchecked_raw(
-c_contains=xrt_ptr_store_pointer_unchecked_raw(
-c_contains=xrt_ptr_load_pointer_unchecked_raw(
+c_contains=xr_raw_store_u32_unaligned(
+c_contains=xr_raw_load_u32_unaligned(
+c_contains=xr_raw_f32_to_bits(
+c_contains=xr_raw_f32_from_bits(
+c_contains=xr_raw_store_ptr_unaligned(
+c_contains=xr_raw_load_ptr_unaligned(
+c_contains=xr_raw_u32_from_le(
+c_contains=xr_raw_u64_from_endian(
+c_not_contains=xrt_ptr_
+c_not_contains=xrt_endian_arg(
+c_not_contains=xrt_map_new(
+c_not_contains=xr_array_core_bytes_
+c_not_contains=bool ok
 c_not_contains=xrt_add(
 c_not_contains=xrt_mem_load
 c_not_contains=xrt_mem_store

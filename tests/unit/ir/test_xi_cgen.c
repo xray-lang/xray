@@ -2665,8 +2665,9 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     assert(fn_end != NULL && "run function body should be bounded");
     assert(count_between(fn, fn_end, "void *") > 0 &&
            "Ptr/MutPtr locals must use native pointer C storage");
-    assert(count_between(fn, fn_end, "*(uint8_t *)(") > 0 &&
-           "MutPtr<uint8>/Ptr<uint8> accesses must lower to direct pointer load/store");
+    assert(count_between(fn, fn_end, "xr_raw_store_u8_unaligned(") > 0 &&
+           count_between(fn, fn_end, "xr_raw_load_u8_unaligned(") > 0 &&
+           "MutPtr<uint8>/Ptr<uint8> accesses must use alias-safe raw scalar operations");
     assert(count_between(fn, fn_end, "memcpy(") > 0 &&
            "MutPtr.copyFromNonOverlapping must lower to raw memcpy");
     assert(count_between(fn, fn_end, "(size_t)INT64_C(2)") > 0 &&
@@ -2959,8 +2960,14 @@ TEST(cgen_mem_load_uses_pointer_helper) {
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "read function body should be bounded");
 
-    assert(count_between(fn, fn_end, "xrt_ptr_load_int_unchecked_raw(") == 3 &&
-           "mem.load integer widths must lower to the unaligned raw pointer helper");
+    assert(count_between(fn, fn_end, "xr_raw_load_u16_unaligned(") == 1 &&
+           count_between(fn, fn_end, "xr_raw_load_u32_unaligned(") == 1 &&
+           count_between(fn, fn_end, "xr_raw_load_u64_unaligned(") == 1 &&
+           "mem.load integer widths must lower to fixed-size raw scalar operations");
+    assert(count_between(fn, fn_end, "xr_raw_u16_from_le(") == 1 &&
+           count_between(fn, fn_end, "xr_raw_u32_from_le(") == 1 &&
+           count_between(fn, fn_end, "xr_raw_u64_from_le(") == 1 &&
+           "constant little-endian loads must be specialized before C compilation");
     assert(count_between(fn, fn_end, "void *") > 0 &&
            "mem.load should keep the data pointer in native C storage");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
@@ -2972,6 +2979,9 @@ TEST(cgen_mem_load_uses_pointer_helper) {
            count_between(fn, fn_end, "xrt_byte_array_load_u32_le_") == 0 &&
            count_between(fn, fn_end, "xrt_byte_array_load_u64_le_") == 0 &&
            "mem.load must not route back through Array<byte>/Slice<byte> helpers");
+    assert(count_between(fn, fn_end, "xr_array_core_bytes_") == 0 &&
+           count_between(fn, fn_end, "bool ok") == 0 &&
+           "unchecked loads must not contain checked Array core state");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
            "mem.load hot path must not keep a dead ERR_CHECK");
 
@@ -3013,14 +3023,23 @@ TEST(cgen_mem_store_uses_pointer_helper) {
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "write function body should be bounded");
 
-    assert(count_between(fn, fn_end, "xrt_ptr_store_int_unchecked_raw(v") == 3 &&
-           "mem.store integer widths must pass native pointers to the unaligned helper");
+    assert(count_between(fn, fn_end, "xr_raw_store_u16_unaligned(v") == 1 &&
+           count_between(fn, fn_end, "xr_raw_store_u32_unaligned(v") == 1 &&
+           count_between(fn, fn_end, "xr_raw_store_u64_unaligned(v") == 1 &&
+           "mem.store integer widths must pass native pointers to raw scalar operations");
+    assert(count_between(fn, fn_end, "xr_raw_u16_from_le(") == 1 &&
+           count_between(fn, fn_end, "xr_raw_u32_from_le(") == 1 &&
+           count_between(fn, fn_end, "xr_raw_u64_from_le(") == 1 &&
+           "constant little-endian stores must be specialized before C compilation");
     assert(count_between(fn, fn_end, "void *") > 0 &&
            "mem.store should keep the data pointer in native C storage");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
            "mem.store hot path must not round-trip through integer pointer casts");
     assert(count_between(fn, fn_end, "xrt_byte_slice_store_") == 0 &&
            "mem.store must not route back through Slice<byte> helpers");
+    assert(count_between(fn, fn_end, "xr_array_core_bytes_") == 0 &&
+           count_between(fn, fn_end, "bool ok") == 0 &&
+           "unchecked stores must not contain checked Array core state");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
            "mem.store hot path must not keep a dead ERR_CHECK");
 

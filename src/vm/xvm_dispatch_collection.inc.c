@@ -1463,6 +1463,18 @@ vmcase(OP_ARRAY_RESIZE) {
         }                                                                                          \
     } while (0)
 
+/* OP_PTR_LOAD/STORE are emitted only after the analyzer has proven Endian.
+ * Trust that bytecode contract instead of adding a recoverable type/range
+ * error to an otherwise unchecked unsafe operation. */
+#define VM_RAW_ENDIAN_ARG(value, out_endian)                                                       \
+    do {                                                                                           \
+        XrValue _endian_value = (value);                                                           \
+        (out_endian) =                                                                             \
+            XR_IS_INT(_endian_value)                                                               \
+                ? XR_TO_INT(_endian_value)                                                         \
+                : (int64_t) ((XrEnumAggregateValue *) XR_TO_PTR(_endian_value))->member_index;     \
+    } while (0)
+
 #define VM_BYTE_SLICE_VIEW(value, out_data, out_length, out_readonly, out_elem_type, message)      \
     do {                                                                                           \
         XrValue _span_value = (value);                                                             \
@@ -1808,10 +1820,7 @@ vmcase(OP_PTR_LOAD) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int64_t endian = XR_ENDIAN_NATIVE;
-    VM_PARSE_ENDIAN_ARG(R(a + 2), endian);
-    if (xr_ffi_ptr_aux_type((uint8_t) b) == XR_FFI_T_PTR && endian != XR_ENDIAN_NATIVE) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "pointer memory load requires Endian.Native");
-    }
+    VM_RAW_ENDIAN_ARG(R(a + 2), endian);
     R(a) = xr_ffi_ptr_load((uintptr_t) (intptr_t) XR_TO_INT(R(a + 1)), (uint8_t) b, endian);
     vmbreak;
 }
@@ -1820,15 +1829,13 @@ vmcase(OP_PTR_STORE) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int64_t endian = XR_ENDIAN_NATIVE;
-    VM_PARSE_ENDIAN_ARG(R(a + 2), endian);
-    if (xr_ffi_ptr_aux_type((uint8_t) b) == XR_FFI_T_PTR && endian != XR_ENDIAN_NATIVE) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "pointer memory store requires Endian.Native");
-    }
+    VM_RAW_ENDIAN_ARG(R(a + 2), endian);
     xr_ffi_ptr_store((uintptr_t) (intptr_t) XR_TO_INT(R(a)), (uint8_t) b, R(a + 1), endian);
     vmbreak;
 }
 
 #undef VM_PARSE_ENDIAN_ARG
+#undef VM_RAW_ENDIAN_ARG
 
 vmcase(OP_PTR_COPY_NONOVERLAP) {
     int a = GETARG_A(i);

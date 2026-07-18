@@ -41,6 +41,7 @@ void *memmove(void *dst, const void *src, size_t n);
 void *memset(void *dst, int value, size_t n);
 int memcmp(const void *a, const void *b, size_t n);
 
+#include "../shared/xr_raw_scalar_core.h"
 #include "../shared/xr_obj_header.h"
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_arith_core.h"
@@ -1180,21 +1181,18 @@ static inline bool xr_array_core_bytes_store_f64(void *data, int64_t length, uin
 }
 
 static inline int64_t xrt_byte_slice_load_u16_le_unchecked_raw(xr_span_t span, int64_t off) {
-    bool ok = false;
-    return (int64_t) xr_array_core_bytes_load_u16_le(span.data, span.length, span.elem_type, off,
-                                                     &ok);
+    const uint8_t *ptr = (const uint8_t *) span.data + off;
+    return (int64_t) xr_raw_u16_from_le(xr_raw_load_u16_unaligned(ptr));
 }
 
 static inline int64_t xrt_byte_slice_load_u32_le_unchecked_raw(xr_span_t span, int64_t off) {
-    bool ok = false;
-    return (int64_t) xr_array_core_bytes_load_u32_le(span.data, span.length, span.elem_type, off,
-                                                     &ok);
+    const uint8_t *ptr = (const uint8_t *) span.data + off;
+    return (int64_t) xr_raw_u32_from_le(xr_raw_load_u32_unaligned(ptr));
 }
 
 static inline int64_t xrt_byte_slice_load_u64_le_unchecked_raw(xr_span_t span, int64_t off) {
-    bool ok = false;
-    return (int64_t) xr_array_core_bytes_load_u64_le(span.data, span.length, span.elem_type, off,
-                                                     &ok);
+    const uint8_t *ptr = (const uint8_t *) span.data + off;
+    return (int64_t) xr_raw_u64_from_le(xr_raw_load_u64_unaligned(ptr));
 }
 
 static inline int64_t xr_value_to_int64_coerce(XrValue v) {

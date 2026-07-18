@@ -1,5 +1,19 @@
 import mem
 
+@c_export("xray_mem_u32_load_le")
+fn xray_mem_u32_load_le(p: Ptr<uint8>, offset: int) -> uint32 {
+    unsafe {
+        return mem.load<uint32>(p, offset, Endian.LE)
+    }
+}
+
+@c_export("xray_mem_u32_store_le")
+fn xray_mem_u32_store_le(p: MutPtr<uint8>, offset: int, value: uint32) {
+    unsafe {
+        mem.store<uint32>(p, offset, value, Endian.LE)
+    }
+}
+
 @c_export("xray_mem_u32_roundtrip")
 fn xray_mem_u32_roundtrip(p: MutPtr<uint8>, offset: int) -> uint32 {
     unsafe {
@@ -21,5 +35,15 @@ fn xray_mem_ptr_roundtrip(p: MutPtr<uint8>, q: Ptr<uint8>, offset: int) -> Ptr<u
     unsafe {
         mem.store<Ptr<uint8>>(p, offset, q)
         return mem.load<Ptr<uint8>>(p, offset)
+    }
+}
+
+@c_export("xray_mem_u64_dynamic_endian")
+fn xray_mem_u64_dynamic_endian(p: MutPtr<uint8>, offset: int, value: uint64,
+                               little: bool) -> uint64 {
+    var endian = little ? Endian.LE : Endian.BE
+    unsafe {
+        mem.store<uint64>(p, offset, value, endian)
+        return mem.load<uint64>(p, offset, endian)
     }
 }

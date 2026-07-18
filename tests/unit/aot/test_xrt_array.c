@@ -442,12 +442,12 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     ASSERT_EQ_INT((int64_t) xrt_byte_array_load_u64_le_raw(a, 0), 578437695752307201LL,
                   "u64 load is little-endian");
     const uint8_t *raw = (const uint8_t *) a->data;
-    ASSERT_EQ_INT(xrt_ptr_load_u16_le_unchecked_raw(raw + 1), 770,
+    ASSERT_EQ_INT(xr_raw_u16_from_le(xr_raw_load_u16_unaligned(raw + 1)), 770,
                   "raw pointer u16 load is little-endian");
-    ASSERT_EQ_INT(xrt_ptr_load_u32_le_unchecked_raw(raw + 1), 84148994,
+    ASSERT_EQ_INT(xr_raw_u32_from_le(xr_raw_load_u32_unaligned(raw + 1)), 84148994,
                   "raw pointer u32 load is little-endian");
-    ASSERT_EQ_INT((int64_t) xrt_ptr_load_u64_le_unchecked_raw(raw), 578437695752307201LL,
-                  "raw pointer u64 load is little-endian");
+    ASSERT_EQ_INT((int64_t) xr_raw_u64_from_le(xr_raw_load_u64_unaligned(raw)),
+                  578437695752307201LL, "raw pointer u64 load is little-endian");
     xrt_byte_array_copy_within_raw(a, 2, 0, 4);
     ASSERT_EQ_INT(((uint8_t *) a->data)[2], 1, "copyWithin writes first overlap byte");
     ASSERT_EQ_INT(((uint8_t *) a->data)[3], 2, "copyWithin writes second overlap byte");

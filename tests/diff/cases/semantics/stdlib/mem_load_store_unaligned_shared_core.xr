@@ -1,4 +1,4 @@
-// anchor: mem-load-store-shared-core
+// anchor: mem-load-store-unaligned-raw-core
 // mem.load/store<T> are unsafe, unchecked, unaligned raw-memory primitives.
 import mem
 

@@ -1,5 +1,7 @@
 /* AOT Array capacity and byte-array helpers. */
 
+#include "../shared/xr_raw_scalar_core.h"
+
 static inline XrValue xrt_array_new_typed_exact(int64_t cap, uint8_t etype) {
     if (cap < 0)
         cap = 0;
@@ -152,149 +154,9 @@ static inline int xrt_byte_array_range_ok(xrt_array_t *a, int64_t offset, int64_
            offset <= a->length - count;
 }
 
-static inline int64_t xrt_ptr_load_int_unchecked_raw(const void *ptr, uint8_t width,
-                                                     uint8_t is_signed, int64_t endian) {
-    bool ok = false;
-    switch (width) {
-        case 1: {
-            uint8_t value = 0;
-            memcpy(&value, ptr, sizeof(value));
-            return is_signed ? (int64_t) (int8_t) value : (int64_t) value;
-        }
-        case 2: {
-            uint16_t value = xr_array_core_bytes_load_u16(ptr, 2, XR_ELEM_U8, 0, endian, &ok);
-            return is_signed ? (int64_t) (int16_t) value : (int64_t) value;
-        }
-        case 4: {
-            uint32_t value = xr_array_core_bytes_load_u32(ptr, 4, XR_ELEM_U8, 0, endian, &ok);
-            return is_signed ? (int64_t) (int32_t) value : (int64_t) value;
-        }
-        case 8:
-            return (int64_t) xr_array_core_bytes_load_u64(ptr, 8, XR_ELEM_U8, 0, endian, &ok);
-        default:
-            return 0;
-    }
-}
-
-static inline double xrt_ptr_load_float_unchecked_raw(const void *ptr, uint8_t width,
-                                                      int64_t endian) {
-    bool ok = false;
-    if (width == 4)
-        return (double) xr_array_core_bytes_load_f32(ptr, 4, XR_ELEM_U8, 0, endian, &ok);
-    if (width == 8)
-        return xr_array_core_bytes_load_f64(ptr, 8, XR_ELEM_U8, 0, endian, &ok);
-    return 0.0;
-}
-
-static inline void *xrt_ptr_load_pointer_unchecked_raw(const void *ptr) {
-    void *value = NULL;
-    memcpy(&value, ptr, sizeof(value));
-    return value;
-}
-
-static inline void xrt_ptr_store_int_unchecked_raw(void *ptr, int64_t raw_value, uint8_t width,
-                                                   int64_t endian) {
-    switch (width) {
-        case 1: {
-            uint8_t value = (uint8_t) raw_value;
-            memcpy(ptr, &value, sizeof(value));
-            break;
-        }
-        case 2:
-            (void) xr_array_core_bytes_store_u16(ptr, 2, XR_ELEM_U8, 0, (uint16_t) raw_value,
-                                                 endian);
-            break;
-        case 4:
-            (void) xr_array_core_bytes_store_u32(ptr, 4, XR_ELEM_U8, 0, (uint32_t) raw_value,
-                                                 endian);
-            break;
-        case 8:
-            (void) xr_array_core_bytes_store_u64(ptr, 8, XR_ELEM_U8, 0, (uint64_t) raw_value,
-                                                 endian);
-            break;
-        default:
-            break;
-    }
-}
-
-static inline void xrt_ptr_store_float_unchecked_raw(void *ptr, double raw_value, uint8_t width,
-                                                     int64_t endian) {
-    if (width == 4)
-        (void) xr_array_core_bytes_store_f32(ptr, 4, XR_ELEM_U8, 0, (float) raw_value, endian);
-    else if (width == 8)
-        (void) xr_array_core_bytes_store_f64(ptr, 8, XR_ELEM_U8, 0, raw_value, endian);
-}
-
-static inline void xrt_ptr_store_pointer_unchecked_raw(void *ptr, const void *raw_value) {
-    memcpy(ptr, &raw_value, sizeof(raw_value));
-}
-
-static inline int64_t xrt_ptr_load_u16_le_unchecked_raw(const void *ptr) {
-    uint16_t value;
-    memcpy(&value, ptr, sizeof(value));
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap16(value);
-#endif
-    return (int64_t) value;
-}
-
-static inline int64_t xrt_ptr_load_u32_le_unchecked_raw(const void *ptr) {
-    uint32_t value;
-    memcpy(&value, ptr, sizeof(value));
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap32(value);
-#endif
-    return (int64_t) value;
-}
-
-static inline int64_t xrt_ptr_load_u64_le_unchecked_raw(const void *ptr) {
-    uint64_t value;
-    memcpy(&value, ptr, sizeof(value));
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap64(value);
-#endif
-    return (int64_t) value;
-}
-
-static inline void xrt_ptr_store_u16_le_unchecked_raw(void *ptr, int64_t raw_value) {
-    uint16_t value = (uint16_t) raw_value;
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap16(value);
-#endif
-    memcpy(ptr, &value, sizeof(value));
-}
-
-static inline void xrt_ptr_store_u32_le_unchecked_raw(void *ptr, int64_t raw_value) {
-    uint32_t value = (uint32_t) raw_value;
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap32(value);
-#endif
-    memcpy(ptr, &value, sizeof(value));
-}
-
-static inline void xrt_ptr_store_u64_le_unchecked_raw(void *ptr, int64_t raw_value) {
-    uint64_t value = (uint64_t) raw_value;
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap64(value);
-#endif
-    memcpy(ptr, &value, sizeof(value));
-}
-
 static inline int64_t xrt_byte_array_load_u16_le_unchecked_raw(xrt_array_t *a, int64_t off) {
     const uint8_t *p = (const uint8_t *) a->data + off;
-    uint16_t value;
-    memcpy(&value, p, sizeof(value));
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap16(value);
-#endif
-    return (int64_t) value;
+    return (int64_t) xr_raw_u16_from_le(xr_raw_load_u16_unaligned(p));
 }
 
 static inline uint16_t xrt_byte_array_load_u16_le_raw(xrt_array_t *a, int64_t off) {
@@ -313,13 +175,7 @@ static inline int64_t xrt_byte_array_load_u16_le_checked_raw(xrt_array_t *a, int
 
 static inline int64_t xrt_byte_array_load_u32_le_unchecked_raw(xrt_array_t *a, int64_t off) {
     const uint8_t *p = (const uint8_t *) a->data + off;
-    uint32_t value;
-    memcpy(&value, p, sizeof(value));
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap32(value);
-#endif
-    return (int64_t) value;
+    return (int64_t) xr_raw_u32_from_le(xr_raw_load_u32_unaligned(p));
 }
 
 static inline uint32_t xrt_byte_array_load_u32_le_raw(xrt_array_t *a, int64_t off) {
@@ -338,13 +194,7 @@ static inline int64_t xrt_byte_array_load_u32_le_checked_raw(xrt_array_t *a, int
 
 static inline int64_t xrt_byte_array_load_u64_le_unchecked_raw(xrt_array_t *a, int64_t off) {
     const uint8_t *p = (const uint8_t *) a->data + off;
-    uint64_t value;
-    memcpy(&value, p, sizeof(value));
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    value = __builtin_bswap64(value);
-#endif
-    return (int64_t) value;
+    return (int64_t) xr_raw_u64_from_le(xr_raw_load_u64_unaligned(p));
 }
 
 static inline uint64_t xrt_byte_array_load_u64_le_raw(xrt_array_t *a, int64_t off) {
@@ -693,7 +543,8 @@ static inline void xrt_byte_slice_store_f64_value(XrValue recv, XrValue off_valu
 }
 
 static inline int64_t xrt_byte_slice_load_u16_le_unchecked_raw(xr_span_t span, int64_t off) {
-    return xrt_ptr_load_u16_le_unchecked_raw((const uint8_t *) span.data + off);
+    const uint8_t *ptr = (const uint8_t *) span.data + off;
+    return (int64_t) xr_raw_u16_from_le(xr_raw_load_u16_unaligned(ptr));
 }
 
 static inline int64_t xrt_byte_slice_load_u16_le_checked_raw(xr_span_t span, int64_t off) {
@@ -705,7 +556,8 @@ static inline int64_t xrt_byte_slice_load_u16_le_checked_raw(xr_span_t span, int
 }
 
 static inline int64_t xrt_byte_slice_load_u32_le_unchecked_raw(xr_span_t span, int64_t off) {
-    return xrt_ptr_load_u32_le_unchecked_raw((const uint8_t *) span.data + off);
+    const uint8_t *ptr = (const uint8_t *) span.data + off;
+    return (int64_t) xr_raw_u32_from_le(xr_raw_load_u32_unaligned(ptr));
 }
 
 static inline int64_t xrt_byte_slice_load_u32_le_checked_raw(xr_span_t span, int64_t off) {
@@ -717,7 +569,8 @@ static inline int64_t xrt_byte_slice_load_u32_le_checked_raw(xr_span_t span, int
 }
 
 static inline int64_t xrt_byte_slice_load_u64_le_unchecked_raw(xr_span_t span, int64_t off) {
-    return xrt_ptr_load_u64_le_unchecked_raw((const uint8_t *) span.data + off);
+    const uint8_t *ptr = (const uint8_t *) span.data + off;
+    return (int64_t) xr_raw_u64_from_le(xr_raw_load_u64_unaligned(ptr));
 }
 
 static inline int64_t xrt_byte_slice_load_u64_le_checked_raw(xr_span_t span, int64_t off) {
