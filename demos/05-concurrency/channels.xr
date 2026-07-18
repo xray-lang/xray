@@ -15,15 +15,15 @@ ch.send(30)
 // Receive values
 match (ch.recv()) {
     Recv.Value(v) -> print("recv: ${v}")
-    _ -> print("recv: closed")
+    _             -> print("recv: closed")
 }
 match (ch.recv()) {
     Recv.Value(v) -> print("recv: ${v}")
-    _ -> print("recv: closed")
+    _             -> print("recv: closed")
 }
 match (ch.recv()) {
     Recv.Value(v) -> print("recv: ${v}")
-    _ -> print("recv: closed")
+    _             -> print("recv: closed")
 }
 ch.close()
 
@@ -41,8 +41,8 @@ fn consumer(input: Channel<int>) {
     while (true) {
         match (input.recv()) {
             Recv.Value(val) -> print("consumed: ${val}")
-            Recv.Closed -> { break }
-            _ -> { break }
+            Recv.Closed     -> { break }
+            _               -> { break }
         }
     }
 }
@@ -57,8 +57,8 @@ fn worker(id: int, jobs: Channel<int>) {
     while (true) {
         match (jobs.recv()) {
             Recv.Value(job) -> print("worker-${id}: processed job ${job}")
-            Recv.Closed -> { break }
-            _ -> { break }
+            Recv.Closed     -> { break }
+            _               -> { break }
         }
     }
 }
@@ -82,15 +82,15 @@ ch2.send(42)
 
 match (ch2.tryRecv()) {
     Recv.Value(val) -> print("tryRecv: value=${val}")
-    Recv.Empty -> print("tryRecv: empty")
-    Recv.Closed -> print("tryRecv: closed")
-    _ -> print("tryRecv: timeout")
+    Recv.Empty      -> print("tryRecv: empty")
+    Recv.Closed     -> print("tryRecv: closed")
+    _               -> print("tryRecv: timeout")
 }
 
 match (ch2.tryRecv()) {
     Recv.Value(val) -> print("tryRecv empty: value=${val}")
-    Recv.Empty -> print("tryRecv empty: empty")
-    Recv.Closed -> print("tryRecv empty: closed")
-    _ -> print("tryRecv empty: timeout")
+    Recv.Empty      -> print("tryRecv empty: empty")
+    Recv.Closed     -> print("tryRecv empty: closed")
+    _               -> print("tryRecv empty: timeout")
 }
 ch2.close()

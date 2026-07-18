@@ -3,7 +3,7 @@
 //
 // Run: xray demos/02-collections/maps_and_sets.xr
 
-// === Map (key => value syntax) ===
+// === Map ===
 var scores = #{"alice": 95, "bob": 87, "charlie": 92}
 print("scores: ${scores}")
 
@@ -21,13 +21,13 @@ print("length: ${len(scores)}")
 print("keys: ${scores.keys()}")
 print("values: ${scores.values()}")
 
-// Iterate
-scores.forEach((key: string, val: int) -> {
-    print("  ${key} => ${val}")
-})
+// Iterate through the current key snapshot
+for (key in scores.keys()) {
+    print("  ${key} -> ${scores.get(key)}")
+}
 
 // Empty map
-var empty = #{}
+var empty: Map<string, int> = #{}
 print("empty map length: ${len(empty)}")
 
 // === Set (unique elements) ===

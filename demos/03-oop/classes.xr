@@ -34,7 +34,7 @@ class Dog extends Animal {
         this.breed = breed
     }
 
-    override speak() -> string {
+    speak() -> string {
         return "${this.name} (${this.breed}) says woof!"
     }
 

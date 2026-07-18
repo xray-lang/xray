@@ -57,30 +57,26 @@ for (s in shapes) {
 // === Enum ===
 enum Color { Red, Green, Blue }
 
-print("Color.Red: name=${Color.Red.name}, value=${Color.Red.value}")
+print("Color.Red: name=${Color.Red.name}, ordinal=${Color.Red.ordinal}")
 print("Color.Green: ordinal=${Color.Green.ordinal}")
-print("memberCount: ${Color.memberCount}")
 
-// Enum iteration
-for (c in Color) {
-    print("  ${c.name} = ${c.value}")
-}
+// Enum reflection/iteration is not implicit; derive explicit metadata when needed.
 
-// Enum with custom values
+// Enum variants use ordinal identity; custom backing values are not supported.
 enum HttpStatus {
-    OK = 200,
-    NotFound = 404,
-    ServerError = 500
+    OK,
+    NotFound,
+    ServerError
 }
-print("NotFound = ${HttpStatus.NotFound.value}")
+print("NotFound ordinal = ${HttpStatus.NotFound.ordinal}")
 
 // Match with enum
 fn statusMessage(s: HttpStatus) -> string {
     return match (s) {
-        HttpStatus.OK -> "Success",
-        HttpStatus.NotFound -> "Not Found",
-        HttpStatus.ServerError -> "Internal Error",
-        _ -> "Unknown"
+        HttpStatus.OK          -> "Success"
+        HttpStatus.NotFound    -> "Not Found"
+        HttpStatus.ServerError -> "Internal Error"
+        _                      -> "Unknown"
     }
 }
 print(statusMessage(HttpStatus.NotFound))
