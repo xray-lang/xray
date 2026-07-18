@@ -42,8 +42,7 @@ op_call_entry:;
     */
     TRACE_EXECUTION();
 
-    /* GC safe point: function call boundary is ideal for GC.
-    ** Stack is consistent, all locals are valid.
+    /* The legacy tracing-GC hook at call boundaries is now a no-op.
     ** Reductions check intentionally absent here: only OP_JMP backward
     ** jumps check reductions. This reduces overhead from <3% to <1%.
     ** Preemption for pure call chains relies on sysmon + handoff. */
@@ -494,7 +493,7 @@ vmcase(OP_LOOP_BACK) {
     // Reset PC to function entry
     pc = PROTO_CODE_BASE(frame->closure->proto);
 
-    // GC safe point + reduction check (same as backward JMP)
+    // Legacy tracing-GC no-op + reduction check (same as backward JMP)
     if (vm_ctx && vm_ctx->current_coro) {
         XrCoroutine *coro = (XrCoroutine *) vm_ctx->current_coro;
         xr_worker_bump_heartbeat(vm_worker);
@@ -716,8 +715,7 @@ vmcase(OP_TAILCALL) {
 vmcase(OP_RETURN) {
     // OP_RETURN: function return (multi-value support)
 
-    /* GC safe point: function exit is ideal for GC
-    ** Stack frame is about to be popped, good time to collect */
+    /* Legacy tracing-GC hook; currently a no-op before frame teardown. */
     VM_GC_SAFEPOINT();
 
     // Clean up exception handlers belonging to current frame

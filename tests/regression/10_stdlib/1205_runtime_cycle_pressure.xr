@@ -1,12 +1,11 @@
-// Test incremental GC under allocation pressure
-// Verifies dual-bitmap design: alloc_marks stable during GC mark phase,
-// preventing live child objects from being overwritten by hole scanning.
+// Test RC/cycle-collection block reclamation under allocation pressure.
+// Verifies that explicit cycle collection and whole-block reclaim preserve
+// live objects and their children.
 
 import runtime
 
-// --- Test 1: Nested objects survive incremental GC ---
-// Parent objects reference child objects. During incremental GC,
-// child lines must not be treated as free holes.
+// --- Test 1: Nested objects survive collection and block reclaim ---
+// Parent objects keep their children live throughout the reclaim pass.
 @test
 fn test_nested_object_survival() {
     runtime.disableCycleCollection()
@@ -19,7 +18,7 @@ fn test_nested_object_survival() {
             "name": "container_" + string(i)})
     }
 
-    // Force cycle collection to run
+    // Force cycle collection and whole-block reclaim to run.
     runtime.collectCycles()
 
     // Verify all nested data is intact
@@ -32,7 +31,7 @@ fn test_nested_object_survival() {
 }
 
 // --- Test 2: Allocate during cycle-collection round ---
-// Create objects, trigger GC, then create more objects.
+// Create objects, run collection/reclaim, then create more objects.
 // The new objects must not overwrite old live objects.
 @test
 fn test_alloc_interleaved_with_gc() {
@@ -59,8 +58,8 @@ fn test_alloc_interleaved_with_gc() {
 }
 
 // --- Test 3: Deep reference chains ---
-// Build a linked-list-like structure. cycle collector must traverse the full chain
-// and mark all lines before hole scanning can reclaim anything.
+// Build a linked-list-like structure. Collection/reclaim must preserve the
+// entire live chain.
 @test
 fn test_deep_reference_chain() {
     runtime.disableCycleCollection()

@@ -85,7 +85,7 @@ fn test_closure_upvalue_gc() {
 
 // --- Test 4: Rapid alloc-collect cycles ---
 // Bug #1 pattern: allocations interleaved with cycle collector must not overwrite each other
-// Exercises: alloc_marks stability during mark phase
+// Exercises: live-object preservation across cycle collection and block reclaim
 @test
 fn test_rapid_alloc_collect() {
     var survivors: Array<Array<Json>> = []

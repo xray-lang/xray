@@ -8,7 +8,7 @@
  * xworker_sysmon.c - System monitor, main thread loop, and debug support
  *
  * KEY CONCEPT:
- *   Sysmon thread monitors worker health (preemption, GC scheduling).
+ *   Sysmon thread monitors worker health and preemption progress.
  *   Main thread run loop handles the initial coroutine.
  *   Debug resume and select block/unblock support.
  */
