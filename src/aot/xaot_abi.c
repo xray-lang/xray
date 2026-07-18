@@ -415,10 +415,13 @@ static XaotAbiSlot borrowed_place_slot(const XrType *type, XaotAbiSlot value_slo
 
 static XaotAbiSlot place_value_slot_for_type(const XaotBundle *bundle, const XiFunc *func,
                                              const XrType *type, const XiValue *value) {
-    /* Only a borrowed value-struct receiver is guaranteed to have concrete
-     * aggregate storage at every direct method boundary. General ref/out
-     * arguments can cross the boxed closure ABI, so their stable place remains
-     * an XrValue slot until that indirect ABI publishes an aggregate pointee. */
+    XrParamMode mode = XR_PARAM_VALUE;
+    (void) param_uses_place_abi(func, value, false, &mode);
+
+    /* Read-only aggregate borrows have concrete storage at both boundaries:
+     * direct calls pass the aggregate address and boxed adapters project the
+     * payload from XrValue. Writable ref/out aggregates still use XrValue
+     * places until PLACE_STORE is lowered to native aggregate assignment. */
     if (type && !type->is_nullable) {
         switch (type->kind) {
             case XR_KIND_INT:
@@ -429,9 +432,7 @@ static XaotAbiSlot place_value_slot_for_type(const XaotBundle *bundle, const XiF
             case XR_KIND_SPAN:
                 return native_value_slot_for_type(bundle, func, type, value, false);
             default:
-                if (func && func->receiver_borrowed && func->nparams > 0 && func->params &&
-                    func->params[0] == value &&
-                    struct_layout_for_slot(bundle, func, type, value, false))
+                if (mode == XR_PARAM_IN && struct_layout_for_slot(bundle, func, type, value, false))
                     return native_value_slot_for_type(bundle, func, type, value, false);
                 break;
         }

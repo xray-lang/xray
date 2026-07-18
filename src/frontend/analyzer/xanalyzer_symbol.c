@@ -109,6 +109,11 @@ XaEnumInfo *xa_enum_info_clone(const XaEnumInfo *src) {
         xa_enum_info_free(dst);
         return NULL;
     }
+    /* A metadata clone describes the same enum declaration.  Its physical
+     * layout storage is independent, but the runtime identity must remain
+     * stable across imports and re-exports. */
+    if (src->layout && dst->layout)
+        dst->layout->layout_id = src->layout->layout_id;
     return dst;
 }
 

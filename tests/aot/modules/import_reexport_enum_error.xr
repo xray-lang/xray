@@ -1,0 +1,8 @@
+import { ReexportError, failReexportError } from "./reexport_enum_error_facade"
+
+try {
+    failReexportError()
+} catch ReexportError.Invalid(actual, expected) {
+    print(actual)
+    print(expected)
+}

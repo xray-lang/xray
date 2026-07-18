@@ -314,6 +314,32 @@ static const XiFunc *resolve_imported_static_method_target(const XaotBundle *bun
     return NULL;
 }
 
+static const XiFunc *resolve_local_static_method_target(const XaotBundle *bundle,
+                                                        const XiFunc *current,
+                                                        const XiValue *call) {
+    if (!bundle || !current || !call || call->op != XI_CALL_METHOD || call->nargs < 1 ||
+        !call->aux || (call->aux_int & 1) != 0)
+        return NULL;
+    const XiValue *receiver = unwrap_identity_value(call->args[0]);
+    const XiModule *mod = bundle_module_for_func(bundle, current);
+    if (!receiver || receiver->op != XI_GET_SHARED || !mod || !mod->slot_classes ||
+        receiver->aux_int < 0 || receiver->aux_int >= mod->nslots)
+        return NULL;
+    const XiClassData *cls = mod->slot_classes[receiver->aux_int];
+    if (!cls || !cls->methods || !cls->child_idx || !mod->init)
+        return NULL;
+    const char *method_name = (const char *) call->aux;
+    for (uint16_t mi = 0; mi < cls->nmethod; mi++) {
+        const XiClassMethod *method = &cls->methods[mi];
+        if (!method->is_static || method->is_static_constructor || !method->name ||
+            strcmp(method->name, method_name) != 0)
+            continue;
+        uint16_t child_idx = cls->child_idx[mi];
+        return child_idx < mod->init->nchildren ? mod->init->children[child_idx] : NULL;
+    }
+    return NULL;
+}
+
 static const XiFunc *resolve_shared_function(const XaotBundle *bundle, const XiFunc *current,
                                              int slot) {
     const XiModule *mod = NULL;
@@ -352,13 +378,15 @@ static const char *receiver_class_name(const XiValue *recv) {
 }
 
 static const XiFunc *method_func_from_class(const XiModule *mod, const XiClassData *cd,
-                                            const char *method_name, int method_index) {
+                                            const char *method_name, int method_index,
+                                            bool is_static_call) {
     if (!mod || !mod->init || !cd || !cd->methods || !cd->child_idx)
         return NULL;
     for (uint16_t mi = 0; mi < cd->nmethod; mi++) {
         const XiClassMethod *method = &cd->methods[mi];
         uint16_t child_idx;
-        if (method->is_static_constructor || method->is_constructor || method->is_static)
+        if (method->is_static_constructor || method->is_constructor ||
+            method->is_static != is_static_call)
             continue;
         if (method_index >= 0) {
             if ((int) mi != method_index)
@@ -380,6 +408,7 @@ static const XiFunc *resolve_method_target(const XaotBundle *bundle, const XiVal
     const char *class_name;
     const char *method_name;
     int method_index = -1;
+    bool is_static_call;
     uint32_t mi;
 
     if (!bundle || !call || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
@@ -391,6 +420,7 @@ static const XiFunc *resolve_method_target(const XaotBundle *bundle, const XiVal
     class_name = receiver_class_name(call->args[0]);
     if (!class_name)
         return NULL;
+    is_static_call = call->args[0]->type && call->args[0]->type->kind == XR_KIND_CLASS;
     method_name = call->aux ? (const char *) call->aux : NULL;
     if (call->op == XI_CALL_METHOD_DIRECT)
         method_index = (int) call->aux_int;
@@ -405,7 +435,7 @@ static const XiFunc *resolve_method_target(const XaotBundle *bundle, const XiVal
             const XiFunc *target;
             if (!cd || !cd->class_name || strcmp(cd->class_name, class_name) != 0)
                 continue;
-            target = method_func_from_class(mod, cd, method_name, method_index);
+            target = method_func_from_class(mod, cd, method_name, method_index, is_static_call);
             if (target)
                 return target;
         }
@@ -445,6 +475,12 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle 
             *first_arg_out = 1;
         if (target)
             return target;
+        target = resolve_local_static_method_target(bundle, current, call);
+        if (target) {
+            if (first_arg_out)
+                *first_arg_out = 1;
+            return target;
+        }
         target = resolve_imported_static_method_target(bundle, current, call);
         if (target) {
             if (first_arg_out)
