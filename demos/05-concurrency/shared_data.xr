@@ -36,13 +36,13 @@ fn sender(ch: Channel<int>) {
 go sender(ch)
 var val = match (ch.recv()) {
     Recv.Value(v) -> v
-    _ -> -1
+    _             -> -1
 }
 print("received via channel: ${val}")
 ch.close()
 
-// === Rule 3: Function parameters (deep copy) ===
-// When you pass data to go, it's deep-copied to the child coroutine
+// === Rule 3: Explicit copy or move ===
+// Crossing a go boundary requires copy(...), move of an owned source, or shared identity.
 fn processData(data: Array<int>) {
     // This is a separate copy — mutations don't affect the original
     data.push(999)
@@ -50,17 +50,17 @@ fn processData(data: Array<int>) {
 }
 
 var myData = [1, 2, 3]
-var t = go processData(myData)
+var t = go processData(copy(myData))
 await t
 print("parent still has: ${myData}")
 
 // === What you CANNOT do (compiler errors): ===
 // These would all fail at compile time:
 //
-// let x = [1, 2, 3]
+// var x = [1, 2, 3]
 // go fn() { print(x) }()              // ERROR: cannot capture 'x' in go closure
 //
-// let ch2 = Channel<int>(1)            // ERROR: Channel must be `shared`
+// var ch2 = Channel<int>(1)            // ERROR: Channel must be `shared`
 //
 // shared data = [1,2,3]
 // go fn() { data.push(4) }()           // ERROR: cannot capture `shared`

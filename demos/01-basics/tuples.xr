@@ -52,11 +52,11 @@ for ((k, v) in pairs) {
 // === Match with tuple patterns ===
 fn classify(p: (int, int)) -> string {
     return match (p) {
-        (0, 0) -> "origin"
-        (0, _) -> "y-axis"
-        (_, 0) -> "x-axis"
+        (0, 0)             -> "origin"
+        (0, _)             -> "y-axis"
+        (_, 0)             -> "x-axis"
         (x, y) if (x == y) -> "diagonal"
-        _ -> "general"
+        _                  -> "general"
     }
 }
 print(classify((0, 0)))

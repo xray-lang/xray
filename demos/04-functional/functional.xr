@@ -4,7 +4,7 @@
 // Run: xray demos/04-functional/functional.xr
 
 // === Closures ===
-fn makeCounter(start: int) ->() -> int {
+fn makeCounter(start: int) -> () -> int {
     var count = start
     return fn() -> int {
         count = count + 1
@@ -33,7 +33,7 @@ var doubleThenAdd = compose(addTen, doubleIt)
 print("doubleThenAdd(5) = ${doubleThenAdd(5)}")
 
 // === Currying ===
-fn multiply(a: int) ->(int) -> int {
+fn multiply(a: int) -> (int) -> int {
     return fn(b: int) -> int { return a * b }
 }
 var triple = multiply(3)
@@ -52,7 +52,7 @@ var result = data
 print("sum of even squares: ${result}")
 
 // === Memoization pattern ===
-fn makeFibMemo() ->(int) -> int {
+fn makeFibMemo() -> (int) -> int {
     var cache = #{"0": 0, "1": 1}
     var fib_inner = fn(n: int) -> int {
         var key = string(n)

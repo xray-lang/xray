@@ -48,11 +48,11 @@ for (var i = 0; i < 10; i++) {
 // === match expression ===
 fn describe(x: int) -> string {
     return match (x) {
-        0 -> "zero",
-        1 -> "one",
-        2, 3 -> "two or three",
+        0     -> "zero",
+        1     -> "one",
+        2, 3  -> "two or three",
         4..10 -> "four to ten",
-        _ -> "something else"
+        _     -> "something else"
     }
 }
 print(describe(0))
@@ -63,10 +63,10 @@ print(describe(42))
 // === match with guard ===
 fn classify(n: int) -> string {
     return match (n) {
-        0 -> "zero",
-        n if (n < 0) -> "negative",
+        0              -> "zero",
+        n if (n < 0)   -> "negative",
         n if (n > 100) -> "big",
-        _ -> "small positive"
+        _              -> "small positive"
     }
 }
 print(classify(-5))
@@ -95,4 +95,3 @@ fn runDivision() {
     }
 }
 runDivision()
-

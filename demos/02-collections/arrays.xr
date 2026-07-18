@@ -21,11 +21,11 @@ nums.unshift(0)
 var shifted = nums.shift()
 print("after unshift(0) + shift(): ${nums}, shifted: ${shifted}")
 
-// === Slicing (creates a copy) ===
-var slice = nums[1:4]
+// === Slicing (copy() creates independent owned data) ===
+var slice = copy(nums[1:4])
 print("nums[1:4] = ${slice}")
-print("nums[:3]  = ${nums[:3]}")
-print("nums[3:]  = ${nums[3:]}")
+print("nums[:3]  = ${copy(nums[:3])}")
+print("nums[3:]  = ${copy(nums[3:])}")
 
 // === Search ===
 print("indexOf(3) = ${nums.indexOf(3)}")

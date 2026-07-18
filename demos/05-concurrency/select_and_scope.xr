@@ -21,7 +21,7 @@ go sendDelayed(ch2, "from ch2", 100)
 select {
     msg from ch1 -> { print("select got: ${msg}") }
     msg from ch2 -> { print("select got: ${msg}") }
-    after 500 -> { print("timeout!") }
+    after 500    -> { print("timeout!") }
 }
 
 ch1.close()
@@ -75,7 +75,7 @@ results.close()
 while (true) {
     match (results.recv()) {
         Recv.Value(r) -> print("got: ${r}")
-        Recv.Closed -> { break }
-        _ -> { break }
+        Recv.Closed   -> { break }
+        _             -> { break }
     }
 }
