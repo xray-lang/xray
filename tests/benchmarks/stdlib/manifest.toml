@@ -126,3 +126,16 @@ quick_iterations = 2
 metrics = ["wall_ns"]
 compare = ["vm", "aot"]
 vm_budget_ratio = 50.0
+
+[[benchmark]]
+id = "ws.protocol.contract"
+module = "ws"
+suite = "stdlib/ws"
+kind = "protocol_helper"
+source = "tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr"
+warmup = 1
+iterations = 5
+quick_iterations = 2
+metrics = ["wall_ns"]
+compare = ["vm", "aot"]
+vm_budget_ratio = 60.0
