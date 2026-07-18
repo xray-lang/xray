@@ -442,12 +442,13 @@ TEST(parameter_modes_roundtrip) {
 TEST(extern_block_roundtrip) {
     setup();
     const char *src = "extern \"C\" link(\"m\") {\n"
-                      "  fn cos(x: float64) -> float64\n"
+                      "  export fn cos(x: float64) -> float64\n"
                       "  fn clear(value: out int32)\n"
                       "}\n";
     char *fmt1 = parse_and_format(src, "extern-block.xr");
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1, "extern \"C\" link(\"m\")"));
+    ASSERT_TRUE(contains(fmt1, "export fn cos"));
     ASSERT_TRUE(!contains(fmt1, "@extern"));
     char *fmt2 = parse_and_format(fmt1, "extern-block-formatted.xr");
     ASSERT_NOT_NULL(fmt2);
@@ -460,16 +461,16 @@ TEST(extern_block_roundtrip) {
 TEST(extern_layout_roundtrip) {
     setup();
     const char *src = "extern \"C\" {\n"
-                      "  struct Header { tag: uint8 next: Ptr<byte> tail: flex uint8 }\n"
-                      "  packed struct Packed align(8) { tag: uint8 count: uint32 }\n"
+                      "  export struct Header { tag: uint8 next: Ptr<byte> tail: flex uint8 }\n"
+                      "  export packed struct Packed align(8) { tag: uint8 count: uint32 }\n"
                       "  union Word { bits: uint32 bytes: [uint8; 4] }\n"
                       "}\n";
     char *fmt1 = parse_and_format(src, "extern-layout.xr");
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1, "extern \"C\""));
-    ASSERT_TRUE(contains(fmt1, "struct Header"));
+    ASSERT_TRUE(contains(fmt1, "export struct Header"));
     ASSERT_TRUE(contains(fmt1, "tail: flex byte"));
-    ASSERT_TRUE(contains(fmt1, "packed struct Packed align(8)"));
+    ASSERT_TRUE(contains(fmt1, "export packed struct Packed align(8)"));
     ASSERT_TRUE(contains(fmt1, "union Word"));
     char *fmt2 = parse_and_format(fmt1, "extern-layout-formatted.xr");
     ASSERT_NOT_NULL(fmt2);
