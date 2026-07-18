@@ -928,6 +928,13 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
                          "fn callbackBad(xs: Array<int>) {\n"
                          "  xs.forEach(fn(value: int, index: int) { var copy = [value, index] })\n"
                          "}\n"
+                         "@no_alloc\n"
+                         "fn slicePointerViews(data: Slice<byte>) {\n"
+                         "  unsafe {\n"
+                         "    var readPtr = data.ptr()\n"
+                         "    var writePtr = data.mutPtr()\n"
+                         "  }\n"
+                         "}\n"
                          "struct Counter {\n"
                          "  value: int\n"
                          "  @no_alloc\n"
@@ -947,6 +954,8 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     const XaAllocationSummary *callback_ok = analyzer_function_allocation_summary(a, "callbackOk");
     const XaAllocationSummary *callback_bad =
         analyzer_function_allocation_summary(a, "callbackBad");
+    const XaAllocationSummary *slice_pointer_views =
+        analyzer_function_allocation_summary(a, "slicePointerViews");
     ASSERT(scalar && scalar->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(cycle_entry && cycle_entry->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(leaf && leaf->state == XA_ALLOC_MAY);
@@ -954,6 +963,7 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     ASSERT(unknown && unknown->state == XA_ALLOC_UNKNOWN);
     ASSERT(callback_ok && callback_ok->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(callback_bad && callback_bad->state == XA_ALLOC_MAY);
+    ASSERT(slice_pointer_views && slice_pointer_views->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(scalar->stable_fingerprint != 0);
     ASSERT(analyzer_diag_contains(a, "allocates via call 'allocateLeaf'"));
     ASSERT(analyzer_diag_contains(a, "'allocateLeaf' allocates via literal 'Array'"));
@@ -961,6 +971,7 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     ASSERT(analyzer_diag_contains(a, "callbackBad"));
     ASSERT(analyzer_diag_contains(a, "bad"));
     ASSERT(!analyzer_diag_contains(a, "cannot be proven for 'callbackOk'"));
+    ASSERT(!analyzer_diag_contains(a, "cannot be proven for 'slicePointerViews'"));
 
     xa_analyzer_free(a);
     setup_pool();
