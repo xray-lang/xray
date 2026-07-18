@@ -30,6 +30,12 @@ static bool simd_shape_named(const char *name, XiSimdShape *out) {
         shape = (XiSimdShape) {4, XR_NATIVE_U32};
     else if (strcmp(name, "U64x2") == 0)
         shape = (XiSimdShape) {2, XR_NATIVE_U64};
+    else if (strcmp(name, "U8x32") == 0)
+        shape = (XiSimdShape) {32, XR_NATIVE_U8};
+    else if (strcmp(name, "U32x8") == 0)
+        shape = (XiSimdShape) {8, XR_NATIVE_U32};
+    else if (strcmp(name, "U64x4") == 0)
+        shape = (XiSimdShape) {4, XR_NATIVE_U64};
     else
         return false;
     if (out)
@@ -97,18 +103,22 @@ static bool simd_shape_value(const XaotBundle *bundle, const XiModule *module, c
            simd_shape_static_receiver(module, value->args[0], out);
 }
 
-static bool simd_shape_static_receiver(const XiModule *module, const XiValue *receiver,
-                                       XiSimdShape *out) {
+static const char *simd_static_receiver_name(const XiModule *module, const XiValue *receiver) {
     if (!module || !receiver)
-        return false;
+        return NULL;
     while ((receiver->op == XI_COPY || receiver->op == XI_MOVE) && receiver->nargs == 1)
         receiver = receiver->args[0];
     if (receiver->op != XI_GET_SHARED || receiver->aux_int < 0 ||
         receiver->aux_int >= module->nslots || !module->slot_imports)
-        return false;
+        return NULL;
     const XiImportRef *ref = module->slot_imports[receiver->aux_int];
-    return ref && ref->module_path && strcmp(ref->module_path, "simd") == 0 &&
-           simd_shape_named(ref->member_name, out);
+    return ref && ref->module_path && strcmp(ref->module_path, "simd") == 0 ? ref->member_name
+                                                                            : NULL;
+}
+
+static bool simd_shape_static_receiver(const XiModule *module, const XiValue *receiver,
+                                       XiSimdShape *out) {
+    return simd_shape_named(simd_static_receiver_name(module, receiver), out);
 }
 
 static bool const_lane(const XiValue *value, uint8_t lanes, uint8_t *out) {
@@ -186,29 +196,37 @@ static bool lower_instance_call(const XaotBundle *bundle, const XiModule *module
         op = XI_VEC_REDUCE_ADD;
     else if (strcmp(method, "widenMulEven") == 0 && nargs == 2) {
         op = XI_VEC_WIDEN_MUL;
-        result = (XiSimdShape) {2, XR_NATIVE_U64};
+        result = (XiSimdShape) {(uint8_t) (input.lanes / 2), XR_NATIVE_U64};
     } else if (strcmp(method, "widenMulOdd") == 0 && nargs == 2) {
         op = XI_VEC_WIDEN_MUL;
-        result = (XiSimdShape) {2, XR_NATIVE_U64};
+        result = (XiSimdShape) {(uint8_t) (input.lanes / 2), XR_NATIVE_U64};
         extra = XI_VEC_SHAPE_ODD_LANES;
     } else if (strcmp(method, "reinterpretU8") == 0 && nargs == 1) {
         op = XI_VEC_REINTERPRET;
-        result = (XiSimdShape) {16, XR_NATIVE_U8};
+        unsigned bytes = input.lanes * (input.native_type == XR_NATIVE_U8    ? 1u
+                                        : input.native_type == XR_NATIVE_U32 ? 4u
+                                                                             : 8u);
+        result = (XiSimdShape) {(uint8_t) bytes, XR_NATIVE_U8};
     } else if (strcmp(method, "reinterpretU32") == 0 && nargs == 1) {
         op = XI_VEC_REINTERPRET;
-        result = (XiSimdShape) {4, XR_NATIVE_U32};
+        unsigned bytes = input.lanes * (input.native_type == XR_NATIVE_U8    ? 1u
+                                        : input.native_type == XR_NATIVE_U32 ? 4u
+                                                                             : 8u);
+        result = (XiSimdShape) {(uint8_t) (bytes / 4u), XR_NATIVE_U32};
     } else if (strcmp(method, "reinterpretU64") == 0 && nargs == 1) {
         op = XI_VEC_REINTERPRET;
-        result = (XiSimdShape) {2, XR_NATIVE_U64};
+        unsigned bytes = input.lanes * (input.native_type == XR_NATIVE_U8    ? 1u
+                                        : input.native_type == XR_NATIVE_U32 ? 4u
+                                                                             : 8u);
+        result = (XiSimdShape) {(uint8_t) (bytes / 8u), XR_NATIVE_U64};
     } else if (strcmp(method, "swapLanes") == 0 && nargs == 1 && input.lanes == 2) {
         op = XI_VEC_SHUFFLE;
         extra = (INT64_C(1) << XI_VEC_SHAPE_SHUFFLE_SHIFT);
-    } else if (strcmp(method, "swapAdjacent") == 0 && nargs == 1 && input.lanes == 4) {
+    } else if (strcmp(method, "swapAdjacent") == 0 && nargs == 1 &&
+               (input.lanes == 4 || input.lanes == 8)) {
         op = XI_VEC_SHUFFLE;
-        extra = (INT64_C(1) << XI_VEC_SHAPE_SHUFFLE_SHIFT) |
-                (INT64_C(0) << (XI_VEC_SHAPE_SHUFFLE_SHIFT + 4)) |
-                (INT64_C(3) << (XI_VEC_SHAPE_SHUFFLE_SHIFT + 8)) |
-                (INT64_C(2) << (XI_VEC_SHAPE_SHUFFLE_SHIFT + 12));
+        for (uint8_t lane = 0; lane < input.lanes; lane++)
+            extra |= (int64_t) (lane ^ 1u) << (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4);
     } else if (strcmp(method, "shuffle") == 0 && nargs == (uint16_t) (input.lanes + 1)) {
         op = XI_VEC_SHUFFLE;
         for (uint8_t lane = 0; lane < input.lanes; lane++) {
@@ -222,16 +240,27 @@ static bool lower_instance_call(const XaotBundle *bundle, const XiModule *module
         return false;
     }
 
-    if (op == XI_VEC_REINTERPRET || op == XI_VEC_WIDEN_MUL) {
-        XiSimdShape prepared_result;
-        if (simd_shape_value(bundle, module, value, &prepared_result))
-            result = prepared_result;
-    }
+    (void) bundle;
+    (void) module;
     rewrite_vec(value, op, 0, nargs, result, extra);
     return true;
 }
 
-static uint32_t lower_func(const XaotBundle *bundle, const XiModule *module, XiFunc *func) {
+static void rewrite_capability_const(XiValue *value, int64_t result) {
+    value->op = XI_CONST;
+    value->nargs = 0;
+    value->aux_int = result;
+    value->aux = NULL;
+    value->aux_kind = XI_AUX_KIND_NONE;
+    value->call_plan = NULL;
+    value->flags = xi_op_default_effects(XI_CONST);
+    value->xg_callsite_id = 0;
+    value->xg_method_id = 0;
+    value->xg_interface_dispatch_slot = UINT32_MAX;
+}
+
+static uint32_t lower_func(const XaotBundle *bundle, const XaotTarget *target,
+                           const XiModule *module, XiFunc *func) {
     uint32_t count = 0;
     if (!func)
         return 0;
@@ -245,6 +274,14 @@ static uint32_t lower_func(const XaotBundle *bundle, const XiModule *module, XiF
                 continue;
             const char *method = (const char *) value->aux;
             XiSimdShape shape;
+            const char *receiver_name = simd_static_receiver_name(module, value->args[0]);
+            if (receiver_name && strcmp(receiver_name, "Capabilities") == 0 &&
+                strcmp(method, "nativeBytes") == 0 && value->nargs == 1) {
+                bool wide = target && (target->simd_features & XAOT_SIMD_FEATURE_AVX2) != 0;
+                rewrite_capability_const(value, wide ? 32 : 16);
+                count++;
+                continue;
+            }
             if (simd_shape_static_receiver(module, value->args[0], &shape)) {
                 if (lower_static_call(module, value, method, shape))
                     count++;
@@ -256,11 +293,12 @@ static uint32_t lower_func(const XaotBundle *bundle, const XiModule *module, XiF
         }
     }
     for (uint16_t i = 0; i < func->nchildren; i++)
-        count += lower_func(bundle, module, func->children[i]);
+        count += lower_func(bundle, target, module, func->children[i]);
     return count;
 }
 
-XR_FUNC bool xi_simd_lower_bundle(XaotBundle *bundle, uint32_t *lowered_count) {
+XR_FUNC bool xi_simd_lower_bundle(XaotBundle *bundle, const XaotTarget *target,
+                                  uint32_t *lowered_count) {
     if (!bundle || !bundle->modules)
         return false;
     uint32_t count = 0;
@@ -268,7 +306,7 @@ XR_FUNC bool xi_simd_lower_bundle(XaotBundle *bundle, uint32_t *lowered_count) {
         XiModule *module = bundle->modules[i];
         if (!module || !module->init || path_is_simd(module->path))
             continue;
-        count += lower_func(bundle, module, module->init);
+        count += lower_func(bundle, target, module, module->init);
     }
     if (lowered_count)
         *lowered_count = count;

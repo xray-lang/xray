@@ -1785,7 +1785,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
      * the prepared value/ABI sidecars for typed Xi C lowering. */
     uint32_t simd_lowered = 0;
     {
-        if (!xi_simd_lower_bundle(&aot_bundle, &simd_lowered)) {
+        if (!xi_simd_lower_bundle(&aot_bundle, options->target, &simd_lowered)) {
             fprintf(stderr, "Error: portable SIMD Xi lowering failed\n");
             goto fail_free_ir;
         }
