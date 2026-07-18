@@ -379,6 +379,22 @@ TEST(e2e_native_pointer_store_narrows_to_pointee) {
     xr_vm_proto_free(p);
 }
 
+TEST(e2e_inlined_ref_forwarding_remaps_place_origin) {
+    XrProto *p = compile_source("fn core(cursor: ref Ptr<uint8>) {\n"
+                                "  cursor = cursor.offset(1)\n"
+                                "}\n"
+                                "fn forward(cursor: ref Ptr<uint8>) {\n"
+                                "  core(ref cursor)\n"
+                                "}\n"
+                                "fn adapter(input: Ptr<uint8>) {\n"
+                                "  var cursor = input\n"
+                                "  forward(ref cursor)\n"
+                                "}",
+                                NULL);
+    assert(p != NULL && "inlining must remap forwarded ref place origins into the caller");
+    xr_vm_proto_free(p);
+}
+
 /* ========== Bitwise Operations ========== */
 
 TEST(e2e_bitwise_ops) {
@@ -880,6 +896,7 @@ int main(void) {
     run_e2e_array_literal();
     run_e2e_array_set();
     run_e2e_native_pointer_store_narrows_to_pointee();
+    run_e2e_inlined_ref_forwarding_remaps_place_origin();
 
     /* Bitwise operations */
     run_e2e_bitwise_ops();

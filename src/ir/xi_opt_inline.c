@@ -266,8 +266,61 @@ static XiFunc *resolve_callee(const XiFunc *caller, const XiValue *callee_val) {
 
 /* Clone a single value into dst_blk, remapping args via value_map.
  * Constants are cloned as new constants in the caller. */
+static const XiCallArgPlan *inline_outer_place_origin(const XiValue *outer_call,
+                                                      const XiValue *place) {
+    const XiCallPlan *plan = xi_call_plan(outer_call);
+    if (!plan || !place)
+        return NULL;
+    for (uint16_t i = 0; i < plan->nargs; i++) {
+        const XiCallArgPlan *arg = &plan->args[i];
+        if (arg->param_mode != XR_PARAM_VALUE && arg->place == place)
+            return arg;
+    }
+    return NULL;
+}
+
+static void inline_remap_call_place_origins(XiFunc *caller, XiValue *cloned,
+                                            const XiValue *outer_call) {
+    XiCallPlan *plan = cloned ? cloned->call_plan : NULL;
+    if (!caller || !plan)
+        return;
+
+    for (uint16_t i = 0; i < plan->nargs; i++) {
+        XiCallArgPlan *arg = &plan->args[i];
+        XiValue *place = arg->place;
+        if (arg->param_mode == XR_PARAM_VALUE || !place)
+            continue;
+
+        const XiCallArgPlan *outer = inline_outer_place_origin(outer_call, place);
+        if (outer) {
+            arg->origin = outer->origin;
+            arg->origin_var_id = outer->origin_var_id;
+            continue;
+        }
+
+        if (place->op == XI_LOCAL_ADDR) {
+            /* A callee local has no source-variable identity in the caller.  It
+             * remains a call-bound temporary after inlining. */
+            arg->origin = XI_PLACE_ORIGIN_PROJECTION_TEMP;
+            arg->origin_var_id = XI_NO_VAR_ID;
+            continue;
+        }
+
+        if (place->op == XI_PARAM) {
+            arg->origin = XI_PLACE_ORIGIN_PARAM;
+            arg->origin_var_id = XI_NO_VAR_ID;
+            for (uint16_t p = 0; p < caller->nparams; p++) {
+                if (caller->params && caller->params[p] == place && p < caller->source_var_count) {
+                    arg->origin_var_id = (XiVarId) p;
+                    break;
+                }
+            }
+        }
+    }
+}
+
 static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src,
-                            XiValue **value_map, uint32_t map_size) {
+                            XiValue **value_map, uint32_t map_size, const XiValue *outer_call) {
     XiValue *cloned = xi_value_new(caller, dst_blk, src->op, src->type, src->nargs);
     if (!cloned)
         return NULL;
@@ -286,6 +339,7 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
     }
     if (!xi_value_clone_call_plan(caller, cloned, src))
         return NULL;
+    inline_remap_call_place_origins(caller, cloned, outer_call);
 
     /* Register in value_map */
     if (src->id < map_size)
@@ -440,7 +494,7 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
              * arguments. */
             if (src_v->op == XI_PARAM)
                 continue;
-            clone_value(caller, dst_blk, src_v, value_map, callee_max_id);
+            clone_value(caller, dst_blk, src_v, value_map, callee_max_id, call_val);
         }
 
         /* Clone terminator */
