@@ -2463,6 +2463,8 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
 
     /* FFI raw pointer store p[i] = v => XI_PTR_STORE(p + i*sizeof(T), v). */
     if (obj->type && XR_TYPE_IS_POINTER(obj->type)) {
+        struct XrType *pointee_type = obj->type->container.element_type;
+        val = xi_lower_narrow_for_static_type(l, node, val, pointee_type);
         XiValue *addr = xi_lower_ptr_scaled_addr(l, node, obj, idx, obj->type, obj->type);
         if (!addr)
             return NULL;

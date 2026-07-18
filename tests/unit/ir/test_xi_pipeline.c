@@ -370,6 +370,15 @@ TEST(e2e_array_set) {
     xr_vm_proto_free(p);
 }
 
+TEST(e2e_native_pointer_store_narrows_to_pointee) {
+    XrProto *p = compile_source("fn write(p: MutPtr<uint16>, value: uint16) {\n"
+                                "  unsafe { p[0] = value }\n"
+                                "}",
+                                NULL);
+    assert(p != NULL && "raw pointer stores must preserve the pointee's native width");
+    xr_vm_proto_free(p);
+}
+
 /* ========== Bitwise Operations ========== */
 
 TEST(e2e_bitwise_ops) {
@@ -870,6 +879,7 @@ int main(void) {
     /* Array operations */
     run_e2e_array_literal();
     run_e2e_array_set();
+    run_e2e_native_pointer_store_narrows_to_pointee();
 
     /* Bitwise operations */
     run_e2e_bitwise_ops();
