@@ -564,6 +564,28 @@ static void rewrite_to_copy(XiValue *v, XiValue *src) {
     v->mem_group = XI_MEM_NONE;
 }
 
+static bool fold_exact_integer_unary(XiValue *v, int64_t operand) {
+    int64_t result;
+    switch (v->op) {
+        case XI_BIT_BSWAP:
+            result = xr_bits_exact_byteswap(operand, (uint8_t) v->aux_int);
+            break;
+        case XI_BIT_POPCOUNT:
+            result = xr_bits_exact_popcount(operand, (uint8_t) v->aux_int);
+            break;
+        case XI_BIT_CLZ:
+            result = xr_bits_exact_leading_zeros(operand, (uint8_t) v->aux_int);
+            break;
+        case XI_BIT_CTZ:
+            result = xr_bits_exact_trailing_zeros(operand, (uint8_t) v->aux_int);
+            break;
+        default:
+            return false;
+    }
+    rewrite_to_const_int(v, result);
+    return true;
+}
+
 XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_const_fold: NULL func");
     XiPassChange chg = xi_pass_no_change();
@@ -628,31 +650,10 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
                 continue;
             }
 
-            if (v->nargs == 1 && const_int_value(v->args[0], &unary_i)) {
-                int64_t exact_result = 0;
-                bool exact_folded = true;
-                switch (v->op) {
-                    case XI_BIT_BSWAP:
-                        exact_result = xr_bits_exact_byteswap(unary_i, (uint8_t) v->aux_int);
-                        break;
-                    case XI_BIT_POPCOUNT:
-                        exact_result = xr_bits_exact_popcount(unary_i, (uint8_t) v->aux_int);
-                        break;
-                    case XI_BIT_CLZ:
-                        exact_result = xr_bits_exact_leading_zeros(unary_i, (uint8_t) v->aux_int);
-                        break;
-                    case XI_BIT_CTZ:
-                        exact_result = xr_bits_exact_trailing_zeros(unary_i, (uint8_t) v->aux_int);
-                        break;
-                    default:
-                        exact_folded = false;
-                        break;
-                }
-                if (exact_folded) {
-                    rewrite_to_const_int(v, exact_result);
-                    chg.values_changed = true;
-                    continue;
-                }
+            if (v->nargs == 1 && const_int_value(v->args[0], &unary_i) &&
+                fold_exact_integer_unary(v, unary_i)) {
+                chg.values_changed = true;
+                continue;
             }
 
             /* Tuple projection: TUPLE_GET(TUPLE_NEW(e0..en-1), idx) → COPY(e_idx).
