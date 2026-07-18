@@ -36,6 +36,7 @@
 #define XRT_H
 
 #include "../shared/xr_raw_scalar_core.h"  // L0: unsafe raw scalar load/store
+#include "../shared/xr_bits_core.h"        // L0: exact-width compiler bit intrinsics
 #include "xrt_value.h"      // L0: tags, boxing, unboxing, source-level aliases, XrtContext
 #include "xrt_arc.h"        // L1: bump alloc, xrt_str_alloc, xrt_str_concat
 #include "xrt_net.h"        // L1: hosted TCP handle helpers

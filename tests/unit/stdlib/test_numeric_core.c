@@ -130,6 +130,17 @@ TEST(bits_core_rotate_count_is_euclidean_mod_width) {
     }
 }
 
+TEST(bits_core_aot_rotate_macros_match_exact_semantics) {
+    ASSERT_EQ_INT(XR_BITS_ROTL8(UINT8_C(0x81), 1), UINT8_C(0x03));
+    ASSERT_EQ_INT(XR_BITS_ROTR8(UINT8_C(0x01), 1), UINT8_C(0x80));
+    ASSERT_EQ_INT(XR_BITS_ROTL16(UINT16_C(0x8001), -1), UINT16_C(0xc000));
+    ASSERT_EQ_INT(XR_BITS_ROTR16(UINT16_C(0x0003), 17), UINT16_C(0x8001));
+    ASSERT_EQ_INT(XR_BITS_ROTL32(UINT32_C(0x80000001), 33), UINT32_C(0x00000003));
+    ASSERT_EQ_INT(XR_BITS_ROTR32(UINT32_C(0x00000003), -1), UINT32_C(0x00000006));
+    ASSERT_EQ_INT(XR_BITS_ROTL64(UINT64_C(0x8000000000000001), 65), UINT64_C(3));
+    ASSERT_EQ_INT(XR_BITS_ROTR64(UINT64_C(3), 1), UINT64_C(0x8000000000000001));
+}
+
 TEST(raw_scalar_core_unaligned_integer_access_preserves_bytes) {
     uint8_t bytes[32] = {0};
     uint8_t *p = bytes + 1;
@@ -200,6 +211,7 @@ RUN_TEST(numeric_core_shift_counts_are_mod64);
 RUN_TEST(bits_core_exact_width_queries);
 RUN_TEST(bits_core_exact_width_preserves_type_pattern);
 RUN_TEST(bits_core_rotate_count_is_euclidean_mod_width);
+RUN_TEST(bits_core_aot_rotate_macros_match_exact_semantics);
 RUN_TEST(raw_scalar_core_unaligned_integer_access_preserves_bytes);
 RUN_TEST(raw_scalar_core_dynamic_endian_is_only_a_value_transform);
 RUN_TEST(raw_scalar_core_float_and_pointer_access_preserve_bits);

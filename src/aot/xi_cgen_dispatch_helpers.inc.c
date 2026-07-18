@@ -948,17 +948,32 @@ static void xicgen_exact_bit(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         const char *result_ctype = cg_native_int_ctype(native_type);
         if (!result_ctype)
             result_ctype = "int64_t";
-        fprintf(out, "((int64_t) ((%s) ((%s) ((", result_ctype, uctype);
-        cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-        fprintf(out, v->op == XI_BIT_ROTL ? " << " : " >> ");
-        fprintf(out, "((uint64_t) (");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ") & (%s - 1u))) | (", width);
-        cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-        fprintf(out, v->op == XI_BIT_ROTL ? " >> " : " << ");
-        fprintf(out, "((-(uint64_t) (");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ")) & (%s - 1u)))))))", width);
+        const char *direction = v->op == XI_BIT_ROTL ? "ROTL" : "ROTR";
+        fprintf(out, "((int64_t) ((%s) (", result_ctype);
+        if (native_type == XR_NATIVE_ISIZE || native_type == XR_NATIVE_USIZE) {
+            fprintf(out, "sizeof(uintptr_t) == 8 ? (uintptr_t) XR_BITS_%s64((uint64_t) ",
+                    direction);
+            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+            fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ") : (uintptr_t) XR_BITS_%s32((uint32_t) ", direction);
+            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+            fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ")");
+        } else {
+            const char *bits = native_type == XR_NATIVE_I8 || native_type == XR_NATIVE_U8     ? "8"
+                               : native_type == XR_NATIVE_I16 || native_type == XR_NATIVE_U16 ? "16"
+                               : native_type == XR_NATIVE_I32 || native_type == XR_NATIVE_U32
+                                   ? "32"
+                                   : "64";
+            fprintf(out, "XR_BITS_%s%s((%s) ", direction, bits, uctype);
+            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
+            fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ")");
+        }
+        fprintf(out, ")))");
     } else {
         if (ctx)
             ctx->error = true;
