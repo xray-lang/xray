@@ -392,6 +392,32 @@ static XaAllocationContractKind alloc_intrinsic_contract(const char *name) {
     return XA_ALLOCATION_CONTRACT_MISSING;
 }
 
+static bool alloc_fixed_value_copy_is_no_heap(const XrType *type, int depth) {
+    if (!type || type->is_nullable || depth > 8)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+        case XR_KIND_POINTER:
+            return true;
+        case XR_KIND_FIXED_ARRAY:
+            return type->fixed_array.length >= 0 &&
+                   alloc_fixed_value_copy_is_no_heap(type->fixed_array.element_type, depth + 1);
+        default:
+            return false;
+    }
+}
+
+static bool alloc_copy_call_is_fixed_value(XaAllocScan *scan, const CallExprNode *call,
+                                           const char *name) {
+    if (!scan || !call || !name || strcmp(name, "copy") != 0 || call->arg_count != 1)
+        return false;
+    const XrType *arg_type = xa_analyzer_get_node_type(scan->pass->analyzer, call->arguments[0]);
+    return alloc_fixed_value_copy_is_no_heap(arg_type, 0);
+}
+
 static int alloc_hof_callback_index(const XrType *receiver, const char *method) {
     if (!receiver || !method)
         return -1;
@@ -501,6 +527,8 @@ static void alloc_scan_call(XaAllocScan *scan, AstNode *node) {
     }
     if (callee->type == AST_VARIABLE) {
         const char *name = callee->as.variable.name;
+        if (alloc_copy_call_is_fixed_value(scan, call, name))
+            return;
         XaAllocationContractKind intrinsic_contract = alloc_intrinsic_contract(name);
         if (intrinsic_contract == XA_ALLOCATION_CONTRACT_NO_HEAP)
             return;
@@ -522,6 +550,13 @@ static void alloc_scan_call(XaAllocScan *scan, AstNode *node) {
     }
     if (callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &callee->as.member_access;
+        const XaSelection *selection = xa_selection_table_get(
+            (XaSelectionTable *) scan->pass->analyzer->selection_table, callee);
+        /* Enum variants are value constructors.  Their compact typed lowering
+         * is an inline aggregate even when the variant carries payloads. */
+        if (selection && selection->kind == XA_SEL_ENUM_MEMBER && selection->target_symbol &&
+            selection->target_symbol->kind == XA_SYM_ENUM)
+            return;
         XrType *receiver = xa_analyzer_get_node_type(scan->pass->analyzer, member->object);
         AstNode *receiver_expr = alloc_identity_expr(member->object);
         const char *receiver_name = receiver_expr && receiver_expr->type == AST_VARIABLE
@@ -553,8 +588,6 @@ static void alloc_scan_call(XaAllocScan *scan, AstNode *node) {
                 alloc_add_edge(scan->row, NULL, XA_ALLOC_EFFECT_NONE, node,
                                XA_ALLOC_REASON_NATIVE_CONTRACT_MISSING, false);
             } else {
-                const XaSelection *selection = xa_selection_table_get(
-                    (XaSelectionTable *) scan->pass->analyzer->selection_table, callee);
                 XaSymbol *target = selection ? selection->target_symbol : NULL;
                 if (selection && selection->kind == XA_SEL_MODULE_EXPORT && target &&
                     (target->links.function_decl_node ||

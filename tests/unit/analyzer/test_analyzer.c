@@ -935,6 +935,15 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
                          "    var writePtr = data.mutPtr()\n"
                          "  }\n"
                          "}\n"
+                         "enum ValueError { Bad(actual: int, minimum: int) }\n"
+                         "@no_alloc\n"
+                         "fn fixedValueCopy(data: in [byte; 4]) -> [byte; 4] {\n"
+                         "  return copy(data)\n"
+                         "}\n"
+                         "@no_alloc\n"
+                         "fn valueError(actual: int) {\n"
+                         "  if (actual < 4) { throw ValueError.Bad(actual, 4) }\n"
+                         "}\n"
                          "struct Counter {\n"
                          "  value: int\n"
                          "  @no_alloc\n"
@@ -956,6 +965,9 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
         analyzer_function_allocation_summary(a, "callbackBad");
     const XaAllocationSummary *slice_pointer_views =
         analyzer_function_allocation_summary(a, "slicePointerViews");
+    const XaAllocationSummary *fixed_value_copy =
+        analyzer_function_allocation_summary(a, "fixedValueCopy");
+    const XaAllocationSummary *value_error = analyzer_function_allocation_summary(a, "valueError");
     ASSERT(scalar && scalar->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(cycle_entry && cycle_entry->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(leaf && leaf->state == XA_ALLOC_MAY);
@@ -964,6 +976,8 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     ASSERT(callback_ok && callback_ok->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(callback_bad && callback_bad->state == XA_ALLOC_MAY);
     ASSERT(slice_pointer_views && slice_pointer_views->state == XA_ALLOC_PROVEN_NONE);
+    ASSERT(fixed_value_copy && fixed_value_copy->state == XA_ALLOC_PROVEN_NONE);
+    ASSERT(value_error && value_error->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(scalar->stable_fingerprint != 0);
     ASSERT(analyzer_diag_contains(a, "allocates via call 'allocateLeaf'"));
     ASSERT(analyzer_diag_contains(a, "'allocateLeaf' allocates via literal 'Array'"));
@@ -972,6 +986,8 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     ASSERT(analyzer_diag_contains(a, "bad"));
     ASSERT(!analyzer_diag_contains(a, "cannot be proven for 'callbackOk'"));
     ASSERT(!analyzer_diag_contains(a, "cannot be proven for 'slicePointerViews'"));
+    ASSERT(!analyzer_diag_contains(a, "fixedValueCopy"));
+    ASSERT(!analyzer_diag_contains(a, "valueError"));
 
     xa_analyzer_free(a);
     setup_pool();
