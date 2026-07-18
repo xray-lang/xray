@@ -1,0 +1,6 @@
+import { NarrowState, WideState } from "./_exported_struct_static_name_collision_lib"
+
+var narrow = NarrowState.init(7)
+var wide = WideState.init(11)
+print(narrow.digest())
+print(wide.digest())

@@ -7310,7 +7310,9 @@ static bool xicgen_emit_static_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     const char *method = (const char *) v->aux;
     /* The receiver of a static call is the class object, not an instance, so its
      * value type is unresolved; recover the class from the shared slot it loads. */
-    const char *recv_class = cg_class_native_receiver_class_name(ctx, f, v->args[0]);
+    const XiClassData *recv_data = cg_class_native_class_value_data(ctx, f, v->args[0]);
+    const char *recv_class =
+        recv_data ? recv_data->class_name : cg_class_native_receiver_class_name(ctx, f, v->args[0]);
     if (!recv_class) {
         const XiValue *rv = cg_unwrap_identity_value(v->args[0]);
         if (rv && rv->op == XI_GET_SHARED) {

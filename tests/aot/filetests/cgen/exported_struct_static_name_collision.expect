@@ -1,0 +1,3 @@
+c_regex=xrt_struct_abi_[0-9a-f]+ [A-Za-z0-9_]+_NarrowState_init_m\(xrt_closure_t \*_cl, uint32_t p0\)
+c_regex=xrt_struct_abi_[0-9a-f]+ [A-Za-z0-9_]+_WideState_init_m\(xrt_closure_t \*_cl, uint64_t p0\)
+c_not_contains=abort()
