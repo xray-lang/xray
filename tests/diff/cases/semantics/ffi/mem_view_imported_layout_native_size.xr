@@ -1,0 +1,20 @@
+// anchor: task-208-imported-native-size-layout
+import mem
+import { ImportedNativeSize } from "./_native_size_layout_lib"
+
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<byte>
+    fn free(p: MutPtr<byte>)
+}
+
+var raw = unsafe { malloc(mem.sizeOf<ImportedNativeSize>()) }
+var value = unsafe { mem.view<ImportedNativeSize>(raw) }
+value.length = 37
+value.delta = -37
+print(value.length)
+print(value.delta)
+value.length = 91
+value.delta = -91
+print(value.length)
+print(value.delta)
+unsafe { free(raw) }

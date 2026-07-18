@@ -1,0 +1,9 @@
+// Shared extern-layout declaration for the imported-layout task-208 fixture.
+extern "C" {
+    struct ImportedNativeSize {
+        length: uintsize
+        delta: intsize
+    }
+}
+
+export { ImportedNativeSize }

@@ -115,7 +115,7 @@ def case_dir_key(case_file: Path) -> str:
             return cached
 
     chunks: list[str] = []
-    for pattern in ("*.xr", "*.args"):
+    for pattern in ("*.xr", "*.args", "*.xr.expected"):
         for file in sorted(directory.glob(pattern)):
             if not file.is_file():
                 continue
@@ -231,6 +231,17 @@ def read_stdin(path: Path) -> bytes:
         return sidecar.read_bytes()
     except OSError:
         return b""
+
+
+def read_expected_stdout(path: Path) -> bytes | None:
+    """Optional exact stdout oracle stored as <case>.xr.expected."""
+    sidecar = Path(str(path) + ".expected")
+    if not sidecar.is_file():
+        return None
+    try:
+        return sidecar.read_bytes()
+    except OSError:
+        return None
 
 
 def head_text(data: bytes, lines: int = 3) -> str:
@@ -381,6 +392,14 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
             other = backend
             break
 
+    expected_stdout = read_expected_stdout(case)
+    if not mismatch and expected_stdout is not None:
+        if ref_result.rc != 0:
+            mismatch = f"exit code ({ref}={ref_result.rc} expected=0)"
+        elif ref_result.stdout != expected_stdout:
+            mismatch = f"stdout ({ref} vs expected)"
+            other = "expected"
+
     if not mismatch:
         suffix = f"PASS (excl:{' '.join(excluded)})" if excluded else "PASS"
         return CaseResult(order, "pass", prefix + suffix)
@@ -391,7 +410,10 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
         lines.append(f"      {backend}: rc={res.rc}  stdout: {head_text(res.stdout)}")
         if res.rc == 200 and res.buildlog:
             lines.extend("      " + line for line in res.buildlog.decode("utf-8", "replace").splitlines()[:20])
-    if other:
+    if other == "expected":
+        lines.append(f"      {ref}: {head_text(ref_result.stdout, 6)}")
+        lines.append(f"      expected: {head_text(expected_stdout or b'', 6)}")
+    elif other:
         lhs = ref_result.stdout if mismatch.startswith("stdout") else ref_result.stderr
         rhs = results[other].stdout if mismatch.startswith("stdout") else results[other].stderr
         lines.append(f"      {ref}: {head_text(lhs, 6)}")

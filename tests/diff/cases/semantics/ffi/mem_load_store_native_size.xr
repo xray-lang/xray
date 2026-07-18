@@ -1,0 +1,22 @@
+// anchor: task-208-direct-native-size-memory
+// Covers unaligned native-size integer loads/stores and both endian paths.
+import mem
+
+fn run() {
+    var bytes = Array<byte>(40)
+    var view: Slice<byte> = bytes[:]
+    unsafe {
+        var raw = view.mutPtr()
+        mem.store<uintsize>(raw, 1, 37, Endian.Native)
+        mem.store<intsize>(raw, 10, -37, Endian.Native)
+        mem.store<uintsize>(raw, 19, 91, Endian.LE)
+        mem.store<intsize>(raw, 28, -91, Endian.LE)
+
+        print(mem.load<uintsize>(raw, 1, Endian.Native))
+        print(mem.load<intsize>(raw, 10, Endian.Native))
+        print(mem.load<uintsize>(raw, 19, Endian.LE))
+        print(mem.load<intsize>(raw, 28, Endian.LE))
+    }
+}
+
+run()
