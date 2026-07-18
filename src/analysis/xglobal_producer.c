@@ -8823,12 +8823,14 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             uint32_t map_key_type_key = 0;
             uint32_t map_value_type_key = 0;
             XgLocalType *source_map_local = NULL;
+            XgLocalType source_map_snapshot;
             uint8_t sequence_kind = 0;
             uint32_t sequence_elem_type_key = 0;
             const XrTypeRef *sequence_elem_type_ref = NULL;
             const ObjectLiteralNode *sequence_json_literal = NULL;
             XgJsonShapeId sequence_json_shape_id = XG_NO_ID;
             XgLocalType *source_sequence_local = NULL;
+            XgLocalType source_sequence_snapshot;
             uint32_t source_sequence_storage_id = 0;
             XgClassId class_id =
                 producer_lookup_class_from_tref(bc->producer, node->as.var_decl.type_annotation);
@@ -8865,8 +8867,17 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 body_lookup_record_shape(bc, node->as.var_decl.initializer, &source_record_literal);
             source_map_local = body_lookup_local_map_shape(bc, node->as.var_decl.initializer);
             source_sequence_local = body_lookup_local_sequence(bc, node->as.var_decl.initializer);
-            if (source_sequence_local)
+            /* body_push_local below may grow bc->locals. Preserve any source
+             * row whose metadata must survive that insertion. */
+            if (source_map_local) {
+                source_map_snapshot = *source_map_local;
+                source_map_local = &source_map_snapshot;
+            }
+            if (source_sequence_local) {
+                source_sequence_snapshot = *source_sequence_local;
+                source_sequence_local = &source_sequence_snapshot;
                 source_sequence_storage_id = source_sequence_local->sequence_storage_id;
+            }
             if (node->as.var_decl.initializer &&
                 (node->as.var_decl.initializer->type == AST_MAP_LITERAL ||
                  node->as.var_decl.initializer->type == AST_SET_LITERAL)) {
@@ -9001,6 +9012,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_ASSIGNMENT: {
             XgLocalType *target_row = body_find_local(bc, node->as.assignment.name);
+            XgLocalType target_row_snapshot;
             bool target_is_json = body_local_type_is_json(target_row);
             const ObjectLiteralNode *json_literal =
                 target_is_json ? body_static_object_literal(node->as.assignment.value) : NULL;
@@ -9012,8 +9024,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 body_lookup_record_shape(bc, node->as.assignment.value, &source_record_literal);
             XgLocalType *source_map_local =
                 body_lookup_local_map_shape(bc, node->as.assignment.value);
+            XgLocalType source_map_snapshot;
             XgLocalType *source_sequence_local =
                 body_lookup_local_sequence(bc, node->as.assignment.value);
+            XgLocalType source_sequence_snapshot;
             uint8_t target_sequence_kind = target_row ? target_row->sequence_kind : 0;
             uint32_t target_sequence_elem_type_key =
                 target_row ? target_row->sequence_elem_type_key : 0;
@@ -9029,6 +9043,19 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             XgClassId class_id;
             XgInterfaceId interface_id;
             uint32_t type_key;
+            /* Walking and rebinding the RHS may grow or replace bc->locals. */
+            if (target_row) {
+                target_row_snapshot = *target_row;
+                target_row = &target_row_snapshot;
+            }
+            if (source_map_local) {
+                source_map_snapshot = *source_map_local;
+                source_map_local = &source_map_snapshot;
+            }
+            if (source_sequence_local) {
+                source_sequence_snapshot = *source_sequence_local;
+                source_sequence_local = &source_sequence_snapshot;
+            }
             if (body_type_ref_sequence_parts(source_sequence_type_ref, &source_sequence_kind,
                                              &source_sequence_elem_type_key)) {
                 source_sequence_elem_type_ref =
