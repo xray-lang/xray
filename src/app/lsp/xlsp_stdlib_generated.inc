@@ -393,11 +393,13 @@ static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
 static const XlspSymbolInfo g_xlsp_stdlib_parallel_symbols[] = {
     {"forEach", XLSP_SYM_FUNCTION, "fn(range: Range, body: (int): (), options: Options = Options())", "", NULL, 0},
     {"map", XLSP_SYM_FUNCTION, "fn(range: Range, body: (int): T, options: Options = Options()) -> Array<T>", "", NULL, 0},
+    {"mapInto", XLSP_SYM_FUNCTION, "fn(range: Range, output: Array<T>, body: (int): T, options: Options = Options()) -> Array<T>", "", NULL, 0},
+    {"reduce", XLSP_SYM_FUNCTION, "fn(range: Range, initial: A, body: (int): A, combine: (A, A) -> A, options: Options = Options()) -> A", "", NULL, 0},
     {"ParallelError", XLSP_SYM_CLASS, "type ParallelError", "Enum type", NULL, 0},
     {"Options", XLSP_SYM_CLASS, "type Options", "Class type", NULL, 0},
     {"Plan", XLSP_SYM_CLASS, "type Plan", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_PARALLEL_SYMBOL_COUNT 5
+#define GEN_XLSP_STDLIB_PARALLEL_SYMBOL_COUNT 7
 
 // path module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_path_symbols[] = {
