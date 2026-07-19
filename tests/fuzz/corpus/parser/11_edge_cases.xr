@@ -1,0 +1,101 @@
+// Edge cases for parser
+
+// Empty structures
+let empty_arr = []
+let empty_map = #{}
+let empty_set = #[]
+let empty_obj = {}
+fn empty_fn() {}
+class EmptyClass {}
+interface EmptyInterface {}
+
+// Single element
+let single_arr = [1]
+let single_set = #[1]
+let single_obj = { a: 1 }
+
+// Deeply nested
+let deep = [[[[[[1]]]]]]
+let deep_obj = { a: { b: { c: { d: { e: 1 } } } } }
+let deep_call = f(g(h(i(j(k(x))))))
+let deep_chain = a?.b?.c?.d?.e?.f
+
+// Long expressions
+let long = 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10
+let long_and = true && true && true && true && true
+let long_or = false || false || false || false || true
+
+// Trailing commas
+let arr_trailing = [1, 2, 3,]
+let obj_trailing = { a: 1, b: 2, }
+let fn_trailing = fn(a, b, c,) { return a + b + c }
+let call_trailing = fn(1, 2, 3,)
+
+// Nested control flow
+if (a) {
+    if (b) {
+        if (c) {
+            if (d) {
+                return e
+            }
+        }
+    }
+}
+
+for (i in 0..10) {
+    for (j in 0..10) {
+        for (k in 0..10) {
+            print(i * j * k)
+        }
+    }
+}
+
+// Complex match
+let result = match (x) {
+    0 => match (y) {
+        0 => "both zero",
+        _ => "x zero"
+    },
+    _ => match (y) {
+        0 => "y zero",
+        _ => "neither zero"
+    }
+}
+
+// Chained ternary
+let grade = score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : score >= 60 ? "D" : "F"
+
+// Complex type annotations
+let fn_typed: fn(int, int): int = (a, b) => a + b
+let arr_typed: Array<int> = [1, 2, 3]
+let map_typed: Map<string, string> = {"key" => "value"}
+
+// Anonymous class in expression (if supported)
+let instance = new class {
+    value = 42
+    getValue() { return this.value }
+}()
+
+// Method with all modifiers
+class AllModifiers {
+    private static _instance = null
+
+    private constructor() {}
+
+    static getInstance() {
+        if (AllModifiers._instance == null) {
+            AllModifiers._instance = new AllModifiers()
+        }
+        return AllModifiers._instance
+    }
+}
+
+// Complex destructuring
+let { a: { b: { c: deepValue } } } = obj
+let [first, [second, [third]]] = nested_arr
+let { arr: [x, y, z] } = mixed
+
+// Expression as statement
+(fn() { print("IIFE") })()
+(async_fn())
+(obj.method())

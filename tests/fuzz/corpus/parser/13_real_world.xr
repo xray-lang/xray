@@ -1,0 +1,162 @@
+// Real-world example: HTTP Server handler
+import http
+import json
+import log
+import datetime
+
+class UserController {
+    private users: Map<any, any>
+
+    constructor() {
+        this.users = #{}
+    }
+
+    getUser(id: string) {
+        return this.users.get(id)
+    }
+
+    createUser(data) {
+        let id = generateId()
+        let user = { "id": id, "name": data.name, "email": data.email, "createdAt": datetime.now() }
+        this.users.set(id, user)
+        return user
+    }
+
+    updateUser(id: string, data) {
+        let user = this.users.get(id)
+        if (user == null) {
+            return null
+        }
+        if (data.name != null) {
+            user.name = data.name
+        }
+        if (data.email != null) {
+            user.email = data.email
+        }
+        user.updatedAt = datetime.now()
+        return user
+    }
+
+    deleteUser(id: string) {
+        return this.users.delete(id)
+    }
+
+    listUsers() {
+        return this.users.values()
+    }
+}
+
+fn handleRequest(req, res, controller: UserController) {
+    let path = req.path
+    let method = req.method
+    try {
+        if (path == "/users" && method == "GET") {
+            let users = controller.listUsers()
+            res.json(users)
+        } else if (path == "/users" && method == "POST") {
+            let body = json.parse(req.body)
+            let user = controller.createUser(body)
+            res.status(201).json(user)
+        } else if (path.startsWith("/users/") && method == "GET") {
+            let id = path.substring(7)
+            let user = controller.getUser(id)
+            if (user == null) {
+                res.status(404).json({ "error": "User not found" })
+            } else {
+                res.json(user)
+            }
+        } else if (path.startsWith("/users/") && method == "PUT") {
+            let id = path.substring(7)
+            let body = json.parse(req.body)
+            let user = controller.updateUser(id, body)
+            if (user == null) {
+                res.status(404).json({ "error": "User not found" })
+            } else {
+                res.json(user)
+            }
+        } else if (path.startsWith("/users/") && method == "DELETE") {
+            let id = path.substring(7)
+            let deleted = controller.deleteUser(id)
+            if (!deleted) {
+                res.status(404).json({ "error": "User not found" })
+            } else {
+                res.status(204).end()
+            }
+        } else {
+            res.status(404).json({ "error": "Not found" })
+        }
+    } catch (e) {
+        log.error("Request failed: " + e)
+        res.status(500).json({ "error": "Internal server error" })
+    }
+}
+
+// Concurrent task example
+fn recvValue(ch) {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> null
+    }
+}
+
+fn processItems(items: Array<any>) {
+    shared const results = new Channel(len(items))
+    for (item in items) {
+        go fn(data) {
+            let result = processItem(data)
+            results.send(result)
+        }(item)
+    }
+    let processed = []
+    for (i in 0..len(items)) {
+        let result = recvValue(results)
+        processed.push(result)
+    }
+    return processed
+}
+
+// Pipeline pattern
+fn pipeline(input: Array<any>) {
+    shared const stage1 = new Channel(10)
+    shared const stage2 = new Channel(10)
+    shared const output = new Channel(10)
+    // Stage 1: Transform
+    go fn() {
+        for (item in input) {
+            stage1.send(transform(item))
+        }
+        stage1.close()
+    }()
+    // Stage 2: Filter
+    go fn() {
+        for (item in stage1) {
+            if (filter(item)) {
+                stage2.send(item)
+            }
+        }
+        stage2.close()
+    }()
+    // Stage 3: Aggregate
+    go fn() {
+        let result = []
+        for (item in stage2) {
+            result.push(aggregate(item))
+        }
+        output.send(result)
+        output.close()
+    }()
+    return recvValue(output)
+}
+
+// Main
+fn main() {
+    let controller = new UserController()
+    let server = http.Server()
+    server.on("request", fn(req, res) {
+        handleRequest(req, res, controller)
+    })
+    server.listen(8080)
+    log.info("Server started on port 8080")
+}
+
+main()

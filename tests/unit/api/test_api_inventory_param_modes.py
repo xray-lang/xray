@@ -100,6 +100,45 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             signatures[("Process", "configure", "method")],
         )
 
+    def test_pure_stdlib_inventory_reads_aligned_structs(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xray-api-inventory-aligned-struct.") as tmp:
+            root = Path(tmp)
+            module_dir = root / "stdlib" / "vectors"
+            module_dir.mkdir(parents=True)
+            (module_dir / "vectors.xr").write_text(
+                "\n".join(
+                    [
+                        "export struct U32x4 align(16) {",
+                        "    private _lanes: [uint32; 4]",
+                        "    static splat(value: uint32) -> U32x4 {",
+                        "        return U32x4{_lanes: [value; 4]}",
+                        "    }",
+                        "    extract(lane: int) -> uint32 {",
+                        "        return this._lanes[lane]",
+                        "    }",
+                        "}",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            items = api_inventory.collect_pure_stdlib(root)
+            signatures = {
+                (item["namespace"], item["name"], item["kind"]): item["signature"]
+                for item in items
+            }
+
+        self.assertEqual("U32x4", signatures[("U32x4", "U32x4", "type")])
+        self.assertEqual(
+            "(value: uint32): U32x4",
+            signatures[("U32x4", "splat", "static-method")],
+        )
+        self.assertEqual(
+            "(lane: int): uint32",
+            signatures[("U32x4", "extract", "method")],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

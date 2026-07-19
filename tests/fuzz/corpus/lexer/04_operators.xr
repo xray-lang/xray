@@ -1,0 +1,31 @@
+// All operators
+let a = 1 + 2
+let b = 3 - 4
+let c = 5 * 6
+let d = 7 / 8
+let e = 9 % 10
+let eq = a == b
+let ne = a != b
+let lt = a < b
+let gt = a > b
+let le = a <= b
+let ge = a >= b
+let strict_eq = a === b
+let strict_ne = a !== b
+let and = true && false
+let or = true || false
+let not = !true
+let bit_and = a & b
+let bit_or = a | b
+let bit_xor = a ^ b
+let bit_not = ~a
+let shift_left = a << 2
+let shift_right = a >> 2
+a += 1
+a -= 1
+a *= 2
+a /= 2
+a %= 2
+let ternary = a > 0 ? "pos" : "neg"
+let nullish = a ?? "default"
+let optional = obj?.value?.nested

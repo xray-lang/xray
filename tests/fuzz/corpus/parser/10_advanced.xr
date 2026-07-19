@@ -1,0 +1,107 @@
+// Type alias
+type Point = { x: int, y: int }
+type Callback = fn(int): int
+type StringArray = Array<string>
+
+// Generic functions (if supported)
+fn identity<T>(x: T): T {
+    return x
+}
+
+fn swap<T, U>(a: T, b: U): [U, T] {
+    return [b, a]
+}
+
+// Optional chaining
+let user = {
+    name: "Alice",
+    address: {
+        city: "Beijing",
+        street: null
+    }
+}
+
+let street = user?.address?.street
+let zip = user?.address?.zipCode ?? "unknown"
+
+// Nullish coalescing
+let value = null ?? "default"
+let config = options?.timeout ?? 30000
+
+// Spread operator
+let arr1 = [1, 2, 3]
+let arr2 = [4, 5, 6]
+let merged = [...arr1, ...arr2]
+
+let obj1 = { a: 1, b: 2 }
+let obj2 = { c: 3, d: 4 }
+let combined = { ...obj1, ...obj2 }
+
+// Method chaining
+let result = [1, 2, 3, 4, 5]
+    .map((x) => x * 2)
+    .filter((x) => x > 4)
+    .reduce((acc, x) => acc + x, 0)
+
+// Nested functions
+fn outer(x) {
+    fn inner(y) {
+        return x + y
+    }
+    return inner(10)
+}
+
+// IIFE (Immediately Invoked Function Expression)
+let result = (fn() {
+    let temp = compute()
+    return temp * 2
+})()
+
+// Complex expressions
+let complex = a > 0 ? (b > 0 ? "both positive" : "a positive") : (b > 0 ? "b positive" : "both negative")
+
+// Range in expressions
+for (i in 0..len(arr)) {
+    print(arr[i])
+}
+
+// Custom iterator (if supported)
+class Range {
+    start: int
+    end: int
+
+    constructor(start, end) {
+        this.start = start
+        this.end = end
+    }
+
+    iterator() {
+        let current = this.start
+        let end = this.end
+        return {
+            next: fn() {
+                if (current < end) {
+                    let value = current
+                    current++
+                    return { value: value, done: false }
+                }
+                return { done: true }
+            }
+        }
+    }
+}
+
+// WeakMap and WeakSet
+let weakMap = WeakMap()
+let weakSet = WeakSet()
+
+// Typed arrays
+let int8 = Int8Array(10)
+let uint8 = Uint8Array(10)
+let int16 = Int16Array(10)
+let float32 = Float32Array(10)
+let float64 = Float64Array(10)
+
+int8[0] = 127
+uint8[0] = 255
+float32[0] = 3.14

@@ -2968,6 +2968,43 @@ static void sr_rewrite_arg(XiFunc *f, XiValue **arg_slot, XrRep use_r, XiValue *
     }
 }
 
+static void sr_rewrite_func_uses(XiFunc *f, XiValue **box_of, XiValue **unbox_of, uint32_t max_id,
+                                 const XiRepPolicy *policy) {
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            for (uint16_t ai = 0; ai < v->nargs; ai++) {
+                XrRep use_r = sr_use_rep(v, ai, policy);
+                sr_rewrite_arg(f, &v->args[ai], use_r, box_of, unbox_of, max_id, policy);
+            }
+        }
+
+        /* Phi args follow the selected backend policy.  VM-style consumers keep
+         * merge points tagged; AOT can keep native boundary phis unboxed. */
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            XrRep phi_rep = policy->force_phi_tagged ? XR_REP_TAGGED
+                                                     : sr_type_native_boundary_rep(phi->value.type);
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                sr_rewrite_arg(f, &phi->value.args[ai], phi_rep, box_of, unbox_of, max_id, policy);
+            }
+        }
+
+        /* Return control follows the function ABI policy. */
+        if (blk->kind == XI_BLOCK_RETURN && blk->control && blk->control->op != XI_ERR_RETURN) {
+            XrRep ret_rep = policy->force_return_tagged
+                                ? XR_REP_TAGGED
+                                : sr_type_native_boundary_rep(f->return_type);
+            sr_rewrite_arg(f, &blk->control, ret_rep, box_of, unbox_of, max_id, policy);
+        }
+    }
+}
+
 XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy *policy) {
     XR_DCHECK(f != NULL, "xi_opt_select_rep_with_policy: NULL func");
     XiRepPolicy local_policy = policy ? *policy : xi_rep_policy_tagged_boundary();
@@ -2996,41 +3033,7 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
     }
 
     /* Rewrite args of every instruction, phi, and block control. */
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            XiValue *v = blk->values[vi];
-            if (!v)
-                continue;
-            for (uint16_t ai = 0; ai < v->nargs; ai++) {
-                XrRep use_r = sr_use_rep(v, ai, &local_policy);
-                sr_rewrite_arg(f, &v->args[ai], use_r, box_of, unbox_of, max_id, &local_policy);
-            }
-        }
-
-        /* Phi args follow the selected backend policy.  VM-style consumers keep
-         * merge points tagged; AOT can keep native boundary phis unboxed. */
-        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            XrRep phi_rep = local_policy.force_phi_tagged
-                                ? XR_REP_TAGGED
-                                : sr_type_native_boundary_rep(phi->value.type);
-            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
-                sr_rewrite_arg(f, &phi->value.args[ai], phi_rep, box_of, unbox_of, max_id,
-                               &local_policy);
-            }
-        }
-
-        /* Return control follows the function ABI policy. */
-        if (blk->kind == XI_BLOCK_RETURN && blk->control && blk->control->op != XI_ERR_RETURN) {
-            XrRep ret_rep = local_policy.force_return_tagged
-                                ? XR_REP_TAGGED
-                                : sr_type_native_boundary_rep(f->return_type);
-            sr_rewrite_arg(f, &blk->control, ret_rep, box_of, unbox_of, max_id, &local_policy);
-        }
-    }
+    sr_rewrite_func_uses(f, box_of, unbox_of, max_id, &local_policy);
 
     /* Rebuild each block's value array to include BOX/UNBOX after source.
      * PHI nodes live on blk->phis, not in values[], so we must also

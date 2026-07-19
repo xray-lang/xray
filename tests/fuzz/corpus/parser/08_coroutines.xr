@@ -1,0 +1,92 @@
+// Basic go and await
+fn compute(x) {
+    return x * 2
+}
+
+let task = go compute(10)
+let result = await task
+// Multiple coroutines
+let t1 = go compute(1)
+let t2 = go compute(2)
+let t3 = go compute(3)
+let r1 = await t1
+let r2 = await t2
+let r3 = await t3
+// await all - wait for all
+let tasks = [go compute(1), go compute(2), go compute(3)]
+let results = await tasks
+// Channel
+shared const ch = new Channel(3)
+go fn() {
+    ch.send(1)
+    ch.send(2)
+    ch.send(3)
+    ch.close()
+}()
+while (true) {
+    match (ch.tryRecv()) {
+        Recv.Value(value) -> {
+            print(value)
+        }
+        _ -> {
+            break
+        }
+    }
+}
+// Select statement
+shared const ch1 = new Channel(1)
+shared const ch2 = new Channel(1)
+go fn() {
+    ch1.send("from ch1")
+}()
+go fn() {
+    ch2.send("from ch2")
+}()
+select {
+    msg from ch1 -> {
+        print("Received from ch1: " + msg)
+    }
+    msg from ch2 -> {
+        print("Received from ch2: " + msg)
+    }
+    _ -> {
+        print("No message available")
+    }
+}
+
+// Defer
+fn processFile(path) {
+    let file = openFile(path)
+    defer file.close()
+    let data = file.read()
+    defer print("Processing complete")
+    return process(data)
+}
+
+// Shared variables
+shared const config = { "name": "test", "value": 42, "settings": [1, 2, 3] }
+// Coroutine with closure (parameter passing)
+let arr = [1, 2, 3]
+let task = go fn(data) {
+    let sum = 0
+    for (x in data) {
+        sum += x
+    }
+    return sum
+}(arr)
+let sum = await task
+// Producer-consumer pattern
+shared const queue = new Channel(10)
+// Producer
+go fn() {
+    for (i in 0..10) {
+        queue.send(i)
+    }
+    queue.close()
+}()
+// Consumer
+go fn() {
+    for (item in queue) {
+        print("Consumed: " + item)
+    }
+}()

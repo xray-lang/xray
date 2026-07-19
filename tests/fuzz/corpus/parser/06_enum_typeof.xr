@@ -1,0 +1,53 @@
+// Enum declarations
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+enum HttpStatus {
+    OK = 200,
+    Created = 201,
+    BadRequest = 400,
+    NotFound = 404,
+    ServerError = 500
+}
+
+enum Direction {
+    North = "N",
+    South = "S",
+    East = "E",
+    West = "W"
+}
+
+// Enum usage
+let color = Color.Red
+let status = HttpStatus.OK
+let dir = Direction.North
+// Enum properties
+let name = Color.Red.name
+let value = HttpStatus.OK.value
+// Enum in match
+let color_name = match (color) {
+    Color.Red => "red"
+    Color.Green => "green"
+    Color.Blue => "blue"
+    _ => "unknown"
+}
+// typeof operator
+let type_int = typeName(42)
+let type_float = typeName(3.14)
+let type_string = typeName("hello")
+let type_bool = typeName(true)
+let type_null = typeName(null)
+let type_array = typeName([1, 2, 3])
+let type_map = typeName({ "a" => 1 })
+let type_set = typeName(#[1, 2])
+let type_function = typeName(fn() {
+})
+
+class MyClass {
+}
+
+let obj = new MyClass()
+let type_object = typeName(obj)

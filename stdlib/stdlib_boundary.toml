@@ -155,6 +155,18 @@ public_native = ["E", "EPSILON", "INF", "LN10", "LN2", "LOG10E", "LOG2E", "MAX_F
 perf_suite = "stdlib/math"
 
 [[module]]
+name = "simd"
+public = true
+layer = "L1"
+policy = "xray_semantic"
+semantic_source = "stdlib/simd/simd.xr"
+loader = "stdlib/simd/simd.c"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/simd"
+
+[[module]]
 name = "path"
 public = true
 layer = "L4"

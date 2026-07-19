@@ -1,0 +1,50 @@
+// Import statements
+import math
+import json
+import time
+import io
+import http
+import net
+// Import with alias
+import "./mymodule" as mymod
+import "./utils/helper" as helper
+// Export function
+export fn add(a, b) {
+    return a + b
+}
+export fn subtract(a, b) {
+    return a - b
+}
+// Export constant
+export const VERSION = "1.0.0"
+export const MAX_SIZE = 1024
+// Export class
+export class Calculator {
+    value: int
+
+    constructor(initial) {
+        this.value = initial
+    }
+
+    add(x) {
+        this.value += x
+        return this
+    }
+
+    result() {
+        return this.value
+    }
+}
+// Export existing variable
+let internalValue = 42
+export internalValue
+// Re-export
+export export export // Usage of imported modules
+let angle = 3.14159 / 4
+let s = math.sin(angle)
+let c = math.cos(angle)
+let data = json.parse("{"key": "value"}")
+print(json.stringify(data))
+let start = time.now()
+time.sleep(10)
+print(time.now() - start)

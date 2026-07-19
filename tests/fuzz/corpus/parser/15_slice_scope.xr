@@ -1,0 +1,51 @@
+// Slice expressions
+let arr = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+// Basic slicing
+let first_three = arr[0:3]
+let middle = arr[3:7]
+let last_three = arr[7:10]
+// Omitting indices
+let from_start = arr[:5]
+let to_end = arr[5:]
+let full_copy = arr[:]
+// Negative indices (if supported)
+// let last_two = arr[-2:]
+// let except_last = arr[:-1]
+// Slice of slice
+let nested = arr[2:8][1:4]
+// String slicing
+let str = "Hello, World!"
+let hello = str[0:5]
+let world = str[7:12]
+// Scope blocks
+scope {
+    let temp = 42
+    print(temp)
+}
+// temp is not accessible here
+scope {
+    let resource = openResource()
+    defer resource.close()
+    // Use resource
+    process(resource)
+}
+// Nested scope
+scope {
+    let outer = 1
+    scope {
+        let inner = 2
+        print(outer + inner)
+    }
+}
+
+// Scope with control flow
+fn processWithScope() {
+    scope {
+        let file = openFile("data.txt")
+        defer file.close()
+        if (len(file) == 0) {
+            return null
+        }
+        return file.read()
+    }
+}

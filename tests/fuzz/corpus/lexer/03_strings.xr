@@ -1,0 +1,15 @@
+// String literals
+let simple = "hello world"
+let empty = ""
+let escaped = "say "hello""
+let newline = "line1
+line2"
+let tab = "col1	col2"
+let backslash = "path\to\file"
+let unicode = "你好世界"
+let emoji = "hello 🌍"
+let template = "Hello, ${name}!"
+let template_expr = "Sum: ${a + b}"
+let template_multi = "Line 1
+Line 2
+${value}"

@@ -1,0 +1,11 @@
+// Integer literals
+let decimal = 42
+let negative = -100
+let underscore = 1000000
+let hex = 255
+let hex_upper = 43981
+let binary = 10
+let octal = 511
+let bigint = 9223372036854775807n
+let bigint_hex = 0xFFn
+let bigint_underscore = 1000000000n

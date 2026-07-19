@@ -1,0 +1,94 @@
+// Standard library usage examples
+// Math module
+import math
+let angle = 3.14159 / 4
+let sine = math.sin(angle)
+let cosine = math.cos(angle)
+let tangent = math.tan(angle)
+let root = math.sqrt(16)
+let power = math.pow(2, 10)
+let absolute = math.abs(-42)
+let floored = math.floor(3.7)
+let ceiled = math.ceil(3.2)
+let rounded = math.round(3.5)
+let minimum = math.min(1, 2, 3)
+let maximum = math.max(1, 2, 3)
+let rand = math.random()
+// String methods (built-in, no import needed)
+let s = "  hello world  "
+let trimmed = s.trim()
+let upper = s.toUpperCase()
+let lower = s.toLowerCase()
+let parts = s.split(" ")
+let replaced = s.replace("world", "xray")
+let repeated = "ab".repeat(3)
+let contains = s.contains("hello")
+let starts = s.startsWith("  ")
+let ends = s.endsWith("  ")
+let index = s.indexOf("world")
+let char = s.runes().nth(2)
+let sub = s.substring(2, 7)
+// JSON module
+import json
+let json_str = "{"name": "Alice", "age": 30}"
+let obj = json.parse(json_str)
+let back = json.stringify(obj)
+let pretty = json.stringify(obj, 2)
+// Time module
+import time
+let start = time.now()
+time.sleep(100)
+let elapsed = time.now() - start
+// DateTime module
+import datetime
+let dt = datetime.now()
+let year = dt.year
+let month = dt.month
+let day = dt.day
+let hour = dt.hour
+let minute = dt.minute
+let second = dt.second
+let formatted = dt.format("YYYY-MM-DD HH:mm:ss")
+let parsed = datetime.parse("2024-01-15 10:30:00", "YYYY-MM-DD HH:mm:ss")
+// Regex module
+import regex
+let pattern = regex.compile("\d+")
+let matches = pattern.test("abc123def")
+let found = pattern.find("abc123def")
+let all = pattern.findAll("a1b2c3")
+let replaced_regex = pattern.replace("abc123def", "XXX")
+// Crypto module
+import crypto
+let hash = crypto.sha256("hello world")
+let hash512 = crypto.sha512("hello world")
+let md5hash = crypto.md5("hello world")
+let sig = crypto.hmac("sha256", "secret", "message")
+let bytes = crypto.randomBytes(16)
+// Encoding module
+import encoding
+let encoded = encoding.base64Encode("hello world")
+let decoded = encoding.base64Decode(encoded)
+let hex = encoding.hexEncode("hello".bytes())
+let unhex = encoding.hexDecode(hex)
+// URL module
+import url
+let parsed_url = url.parse("https://example.com/path?query=value#hash")
+let host = parsed_url.host
+let path = parsed_url.path
+let query = parsed_url.query
+let encoded_comp = url.encodeComponent("hello world")
+let decoded_comp = url.decodeComponent(encoded_comp)
+// Log module
+import log
+log.setLevel(log.DEBUG)
+log.info("Application started")
+log.warn("Warning message")
+log.error("Error occurred")
+log.debug("Debug info")
+log.info("server started", "port", 8080, "host", "localhost")
+// Memory module
+import runtime
+runtime.collectCycles()
+let stats = runtime.info()
+print(stats.liveBytes)
+print(stats.liveObjects)

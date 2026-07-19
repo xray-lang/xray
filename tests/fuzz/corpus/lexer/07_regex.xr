@@ -1,0 +1,8 @@
+// Regex literals
+let simple = /hello/
+let flags = /pattern/gi
+let escaped = /\d+\.\d+/
+let groups = /(\w+)\s+(\w+)/
+let unicode = /[\u4e00-\u9fa5]+/u
+let multiline = /^start.*end$/m
+let complex = /^(?:https?|ftp):\/\/[^\s/$.?#].[^\s]*$/i

@@ -1,0 +1,105 @@
+// Generic functions
+fn identity<T>(x: T): T {
+    return x
+}
+
+fn swap<T, U>(a: T, b: U): [U, T] {
+    return [b, a]
+}
+
+fn first<T>(arr: Array<T>): T {
+    return arr[0]
+}
+
+fn map_values<K, V, R>(m: Map<K, V>, f: fn(V): R): Map<K, R> {
+    let result = #{}
+    for (kv in m) {
+        result.set(kv.key, f(kv.value))
+    }
+    return result
+}
+
+// Generic classes
+class Box<T> {
+    value: T
+
+    constructor(value: T) {
+        this.value = value
+    }
+
+    get(): T {
+        return this.value
+    }
+
+    set(value: T) {
+        this.value = value
+    }
+
+    map<U>(f: fn(T): U): Box<U> {
+        return new Box<U>(f(this.value))
+    }
+}
+
+class Pair<A, B> {
+    first: A
+    second: B
+
+    constructor(first: A, second: B) {
+        this.first = first
+        this.second = second
+    }
+
+    swap(): Pair<B, A> {
+        return new Pair<B, A>(this.second, this.first)
+    }
+}
+
+class Stack<T> {
+    private items: Array<T>
+
+    constructor() {
+        this.items = []
+    }
+
+    push(item: T) {
+        this.items.push(item)
+    }
+
+    pop(): T? {
+        if (len(this.items) == 0) {
+            return null
+        }
+        return this.items.pop()
+    }
+
+    peek(): T? {
+        if (len(this.items) == 0) {
+            return null
+        }
+        return this.items[len(this.items) - 1]
+    }
+
+    isEmpty(): bool {
+        return len(this.items) == 0
+    }
+}
+
+// Generic Channel
+shared const intChannel: Channel<int> = Channel<int>(10)
+shared const stringChannel: Channel<string> = Channel<string>(5)
+
+// Usage
+let intBox = new Box<int>(42)
+let strBox = new Box<string>("hello")
+
+let pair = new Pair<string, int>("age", 25)
+let swapped = pair.swap()
+
+let stack = new Stack<float>()
+stack.push(1.0)
+stack.push(2.0)
+stack.push(3.0)
+
+while (len(stack) != 0) {
+    print(stack.pop())
+}
