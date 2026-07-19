@@ -34,7 +34,9 @@ Xray is designed for scripts, services, and command-line programs that benefit f
 - **Integrated tooling** — formatter, test runner, REPL, bytecode compiler, LSP server, DAP adapter, MCP server, and AOT toolchain diagnostics ship in the repository.
 - **C embedding API** — [`include/xray_vm.h`](include/xray_vm.h) exposes the VM API for host applications.
 
-## Install
+## Install and Try Xray
+
+### 1. Install the Xray CLI
 
 On macOS or Linux:
 
@@ -43,7 +45,37 @@ curl -fsSL https://xray-lang.org/install.sh | sh
 xray --version
 ```
 
-The installer selects the release archive for the current operating system and architecture and installs `xray` into `~/.xray/bin`. Windows users can download `xray-windows-x64.zip` from [GitHub Releases](https://github.com/xray-lang/xray/releases/latest). See the [installation guide](https://xray-lang.org/docs/getting-started/install) for PATH setup, upgrades, and source builds.
+The installer selects the release archive for the current operating system and architecture and installs `xray` into `~/.xray/bin`. Windows users can download `xray-windows-x64.zip` from [GitHub Releases](https://github.com/xray-lang/xray/releases/latest). See the [installation guide](https://xray-lang.org/docs/getting-started/install) for PATH setup, upgrades, and detailed Windows steps.
+
+### 2. Install the VS Code Extension
+
+Install **Xray Language** for syntax highlighting, completion, diagnostics, formatting, navigation, rename, run, and debugging support:
+
+```bash
+code --install-extension xray-lang.xray-lang
+```
+
+You can also search for `Xray Language` in the Extensions view or install it from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=xray-lang.xray-lang) / [Open VSX Registry](https://open-vsx.org/extension/xray-lang/xray-lang). Each platform package bundles the `xray` binary used by its LSP and DAP; the separately installed CLI is still used for terminal commands, builds, tests, and MCP.
+
+### 3. Connect an AI Coding Client through Xray MCP
+
+The Xray CLI includes a stdio MCP server. For VS Code, create `.vscode/mcp.json` in your project:
+
+```json
+{
+  "servers": {
+    "xray": {
+      "type": "stdio",
+      "command": "xray",
+      "args": ["mcp-server"]
+    }
+  }
+}
+```
+
+Run **MCP: List Servers** from the Command Palette and start `xray`. The AI client can then query real Xray syntax and standard-library APIs and check generated code with the analyzer and formatter. Code execution is disabled by default; add `--enable-runner` only when you explicitly want to run restricted snippets. See the [MCP and AI-assisted development guide](https://xray-lang.org/docs/getting-started/mcp) for other client formats, the capability list, and troubleshooting.
+
+### Build from Source
 
 To build the repository directly, use a C11 compiler and CMake 3.12 or newer:
 
@@ -140,6 +172,7 @@ Xray is a pre-1.0 language under active development. The repository contains the
 ## Documentation
 
 - [Language guide](https://xray-lang.org/docs/getting-started/quickstart) — installation, tutorials, and standard-library guides
+- [MCP and AI-assisted development](https://xray-lang.org/docs/getting-started/mcp) — connect AI clients to Xray syntax, APIs, analysis, and formatting
 - [`LANGUAGE_SPEC.md`](LANGUAGE_SPEC.md) — English language reference
 - [`LANGUAGE_SPEC_CN.md`](LANGUAGE_SPEC_CN.md) — Chinese language reference
 - [`demos/`](demos/) — runnable examples organized by topic
