@@ -139,7 +139,7 @@ XR_FUNC const XrTargetDataLayout *xr_target_data_layout_host(void) {
     static XrTargetDataLayout layout;
     /* 0 = uninitialized, 1 = one thread is initializing, 2 = ready,
      * 3 = initialization failed permanently. */
-    static atomic_uint state = ATOMIC_VAR_INIT(0);
+    static atomic_uint state;
     unsigned current = atomic_load_explicit(&state, memory_order_acquire);
     if (current == 0) {
         unsigned expected = 0;
