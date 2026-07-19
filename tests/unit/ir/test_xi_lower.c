@@ -694,6 +694,16 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
            "load<uint64> should lower to Array<byte> op");
     assert(func_tree_has_op(f, XI_BYTE_SLICE_STORE_U16) &&
            "store<uint16> should lower to Array<byte> op");
+    XiValue *load_u16 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U16);
+    XiValue *load_u32 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U32);
+    XiValue *load_u64 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U64);
+    XiValue *store_u16 = func_tree_find_op(f, XI_BYTE_SLICE_STORE_U16);
+    assert(load_u16 && load_u16->xa_intrinsic_id == XA_INTRINSIC_BYTE_SLICE_LOAD &&
+           "typed load must retain the canonical analyzer intrinsic id");
+    assert(load_u32 && load_u32->xa_intrinsic_id == XA_INTRINSIC_BYTE_SLICE_LOAD);
+    assert(load_u64 && load_u64->xa_intrinsic_id == XA_INTRINSIC_BYTE_SLICE_LOAD);
+    assert(store_u16 && store_u16->xa_intrinsic_id == XA_INTRINSIC_BYTE_SLICE_STORE &&
+           "typed store must retain the canonical analyzer intrinsic id");
     assert(func_tree_has_op(f, XI_BYTE_ARRAY_APPEND_FROM) &&
            "appendFrom should lower to stable Array<byte> append op");
     assert(func_tree_has_op(f, XI_BYTE_ARRAY_REPEAT_FROM) &&
@@ -702,6 +712,8 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
            "appendFrom should not remain an explicit method call");
     assert(!func_tree_find_method(f, "repeatFrom") &&
            "repeatFrom should not remain an explicit method call");
+    assert(!func_tree_find_method(f, "load") && !func_tree_find_method(f, "store") &&
+           "canonical byte slice memory operations must not leak as ordinary calls");
     assert(!func_tree_has_builtin_name(f, "bytes_load_u16_le") &&
            !func_tree_has_builtin_name(f, "bytes_load_u32_le") &&
            "load should not lower through string builtin");

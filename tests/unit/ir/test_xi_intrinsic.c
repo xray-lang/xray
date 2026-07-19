@@ -399,6 +399,19 @@ static void test_semantic_intrinsic_registry(void) {
                     rotl->max_arity == 1,
                 "exact integer bit semantics must be represented in the canonical registry");
 
+    const XaIntrinsicDesc *slice_copy = xa_intrinsic_by_id(XA_INTRINSIC_BYTE_SLICE_COPY);
+    ASSERT_TRUE(slice_copy && slice_copy->family == XA_INTRINSIC_FAMILY_MEMORY &&
+                    slice_copy->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_COPY &&
+                    slice_copy->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW &&
+                    slice_copy->min_arity == 1 && slice_copy->max_arity == 1,
+                "Slice<byte>.copyFrom must have one stable memory identity");
+
+    const XaIntrinsicDesc *pod_ptr = xa_intrinsic_by_id(XA_INTRINSIC_POD_SLICE_PTR);
+    ASSERT_TRUE(pod_ptr && pod_ptr->family == XA_INTRINSIC_FAMILY_MEMORY &&
+                    pod_ptr->lowering == XA_INTRINSIC_LOWERING_SPAN_DATA_PTR &&
+                    pod_ptr->effect == XA_INTRINSIC_EFFECT_PURE,
+                "Slice<POD>.ptr must be canonical before Xi construction");
+
     const XaIntrinsicDesc *par_map_into = xa_intrinsic_by_id(XA_INTRINSIC_PARALLEL_PLAN_MAP_INTO);
     ASSERT_TRUE(par_map_into && par_map_into->family == XA_INTRINSIC_FAMILY_PARALLEL &&
                     par_map_into->lowering == XA_INTRINSIC_LOWERING_PAR_MAP_INTO &&

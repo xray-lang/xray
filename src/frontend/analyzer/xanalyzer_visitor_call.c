@@ -59,6 +59,7 @@ static void xa_check_call_arg_access_authorization(XaInferContext *ctx, AstNode 
 static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index);
 static bool xa_class_name_matches_mono_base(const char *class_name, const char *base);
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object, const char *module_name);
+static bool xa_type_is_pod_span_elem(XrType *type);
 
 static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, XaSymbol *sym) {
     if (!ctx || !ctx->analyzer || !sym)
@@ -145,33 +146,83 @@ static void xa_check_intrinsic_shuffle_lanes(XaInferContext *ctx, const AstNode 
     }
 }
 
+static bool xa_builtin_receiver_intrinsic_matches(XrType *receiver, XaBuiltinReceiverKind kind) {
+    switch (kind) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return receiver && receiver->kind == XR_KIND_INT && !receiver->is_nullable;
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return xr_type_is_u8_array(receiver);
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return receiver && XR_TYPE_IS_ARRAY(receiver);
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return xr_type_is_u8_slice(receiver);
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return receiver && XR_TYPE_IS_SPAN(receiver) && receiver->container.element_type &&
+                   xa_type_is_pod_span_elem(receiver->container.element_type);
+    }
+    return false;
+}
+
+static XaIntrinsicId xa_builtin_receiver_method_intrinsic_id(XaBuiltinReceiverMethodId method_id) {
+    switch (method_id) {
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_POPCOUNT:
+            return XA_INTRINSIC_BITS_POPCOUNT;
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_LEADING_ZEROS:
+            return XA_INTRINSIC_BITS_LEADING_ZEROS;
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_TRAILING_ZEROS:
+            return XA_INTRINSIC_BITS_TRAILING_ZEROS;
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_BYTESWAP:
+            return XA_INTRINSIC_BITS_BYTESWAP;
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_LEFT:
+            return XA_INTRINSIC_BITS_ROTATE_LEFT;
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_RIGHT:
+            return XA_INTRINSIC_BITS_ROTATE_RIGHT;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_LOAD:
+            return XA_INTRINSIC_BYTE_SLICE_LOAD;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_STORE:
+            return XA_INTRINSIC_BYTE_SLICE_STORE;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_FILL:
+            return XA_INTRINSIC_BYTE_SLICE_FILL;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COPY_FROM:
+            return XA_INTRINSIC_BYTE_SLICE_COPY;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMPARE:
+            return XA_INTRINSIC_BYTE_SLICE_COMPARE;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMMON_PREFIX:
+            return XA_INTRINSIC_BYTE_SLICE_COMMON_PREFIX;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REPEAT_FROM:
+            return XA_INTRINSIC_BYTE_SLICE_REPEAT;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REINTERPRET:
+            return XA_INTRINSIC_BYTE_SLICE_REINTERPRET;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_PTR:
+            return XA_INTRINSIC_POD_SLICE_PTR;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_MUT_PTR:
+            return XA_INTRINSIC_POD_SLICE_MUT_PTR;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_AS_BYTES:
+            return XA_INTRINSIC_POD_SLICE_AS_BYTES;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_FILL:
+            return XA_INTRINSIC_POD_SLICE_FILL;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COPY_FROM:
+            return XA_INTRINSIC_POD_SLICE_COPY;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COMPARE:
+            return XA_INTRINSIC_POD_SLICE_COMPARE;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_GET:
+            return XA_INTRINSIC_POD_SLICE_GET;
+        default:
+            return XA_INTRINSIC_NONE;
+    }
+}
+
 static XaIntrinsicId xa_builtin_receiver_intrinsic_id(XrType *receiver, AstNode *callee) {
-    if (!receiver || receiver->kind != XR_KIND_INT || receiver->is_nullable || !callee ||
-        callee->type != AST_MEMBER_ACCESS || !callee->as.member_access.name)
+    if (!receiver || !callee || callee->type != AST_MEMBER_ACCESS || !callee->as.member_access.name)
         return XA_INTRINSIC_NONE;
 
     const char *name = callee->as.member_access.name;
     for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
         const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
-        if (spec->receiver != XA_BUILTIN_RECEIVER_EXACT_INTEGER ||
+        if (!xa_builtin_receiver_intrinsic_matches(receiver, spec->receiver) ||
             strcmp(spec->source_name, name) != 0)
             continue;
-        switch (spec->method_id) {
-            case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_POPCOUNT:
-                return XA_INTRINSIC_BITS_POPCOUNT;
-            case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_LEADING_ZEROS:
-                return XA_INTRINSIC_BITS_LEADING_ZEROS;
-            case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_TRAILING_ZEROS:
-                return XA_INTRINSIC_BITS_TRAILING_ZEROS;
-            case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_BYTESWAP:
-                return XA_INTRINSIC_BITS_BYTESWAP;
-            case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_LEFT:
-                return XA_INTRINSIC_BITS_ROTATE_LEFT;
-            case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_RIGHT:
-                return XA_INTRINSIC_BITS_ROTATE_RIGHT;
-            default:
-                return XA_INTRINSIC_NONE;
-        }
+        return xa_builtin_receiver_method_intrinsic_id(spec->method_id);
     }
     return XA_INTRINSIC_NONE;
 }

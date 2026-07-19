@@ -66,6 +66,33 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_BIT_CLZ;
         case XA_INTRINSIC_LOWERING_BIT_CTZ:
             return XI_BIT_CTZ;
+        case XA_INTRINSIC_LOWERING_BYTE_SLICE_TYPED_LOAD:
+        case XA_INTRINSIC_LOWERING_BYTE_SLICE_TYPED_STORE:
+            return XI_OP_COUNT;
+        case XA_INTRINSIC_LOWERING_BYTE_SLICE_FILL:
+            return XI_BYTE_SLICE_FILL;
+        case XA_INTRINSIC_LOWERING_BYTE_SLICE_COPY:
+            return XI_BYTE_SLICE_COPY;
+        case XA_INTRINSIC_LOWERING_BYTE_SLICE_COMPARE:
+            return XI_BYTE_SLICE_COMPARE;
+        case XA_INTRINSIC_LOWERING_BYTE_SLICE_COMMON_PREFIX:
+            return XI_BYTE_SLICE_COMMON_PREFIX;
+        case XA_INTRINSIC_LOWERING_BYTE_SLICE_REPEAT:
+            return XI_BYTE_SLICE_REPEAT;
+        case XA_INTRINSIC_LOWERING_SPAN_REINTERPRET:
+            return XI_SPAN_REINTERPRET;
+        case XA_INTRINSIC_LOWERING_SPAN_DATA_PTR:
+            return XI_ARRAY_DATA_PTR;
+        case XA_INTRINSIC_LOWERING_SPAN_AS_BYTES:
+            return XI_SPAN_AS_BYTES;
+        case XA_INTRINSIC_LOWERING_SPAN_FILL:
+            return XI_SPAN_FILL;
+        case XA_INTRINSIC_LOWERING_SPAN_COPY:
+            return XI_SPAN_COPY;
+        case XA_INTRINSIC_LOWERING_SPAN_COMPARE:
+            return XI_SPAN_COMPARE;
+        case XA_INTRINSIC_LOWERING_SPAN_GET:
+            return XI_INDEX_GET;
         case XA_INTRINSIC_LOWERING_PAR_FOR:
             return XI_PAR_FOR;
         case XA_INTRINSIC_LOWERING_PAR_MAP:
@@ -77,6 +104,23 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_OP_COUNT;
     }
     return XI_OP_COUNT;
+}
+
+static bool semantic_intrinsic_op_matches(const XaIntrinsicDesc *desc, XiOp op) {
+    if (!desc)
+        return false;
+    if (desc->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_TYPED_LOAD) {
+        return op == XI_BYTE_SLICE_LOAD_U16 || op == XI_BYTE_SLICE_LOAD_U32 ||
+               op == XI_BYTE_SLICE_LOAD_U64 || op == XI_BYTE_SLICE_LOAD_F32 ||
+               op == XI_BYTE_SLICE_LOAD_F64;
+    }
+    if (desc->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_TYPED_STORE) {
+        return op == XI_BYTE_SLICE_STORE_U16 || op == XI_BYTE_SLICE_STORE_U32 ||
+               op == XI_BYTE_SLICE_STORE_U64 || op == XI_BYTE_SLICE_STORE_F32 ||
+               op == XI_BYTE_SLICE_STORE_F64;
+    }
+    XiOp expected = xi_semantic_intrinsic_op(desc);
+    return expected != XI_OP_COUNT && op == expected;
 }
 
 static bool set_error(char *error, size_t error_size, const char *format, ...) {
@@ -120,7 +164,7 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
                          value->xa_intrinsic_id);
 
     XiOp expected = xi_semantic_intrinsic_op(desc);
-    if (expected == XI_OP_COUNT || value->op != expected)
+    if (!semantic_intrinsic_op_matches(desc, (XiOp) value->op))
         return set_error(error, error_size, "canonical intrinsic id %u requires Xi op %u",
                          value->xa_intrinsic_id, (unsigned) expected);
 
@@ -162,6 +206,11 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
             return set_error(error, error_size,
                              "canonical intrinsic id %u has invalid odd-lane flag %u",
                              value->xa_intrinsic_id, has_odd ? 1u : 0u);
+    } else if (desc->family == XA_INTRINSIC_FAMILY_MEMORY) {
+        if (desc->lowering == XA_INTRINSIC_LOWERING_SPAN_REINTERPRET && value->aux_int == 0)
+            return set_error(error, error_size,
+                             "canonical intrinsic id %u lacks reinterpret element metadata",
+                             value->xa_intrinsic_id);
     } else if (desc->family == XA_INTRINSIC_FAMILY_PARALLEL) {
         XiAuxKind expected_aux = value->op == XI_PAR_FOR      ? XI_AUX_KIND_PAR_FOR
                                  : value->op == XI_PAR_MAP    ? XI_AUX_KIND_PAR_MAP

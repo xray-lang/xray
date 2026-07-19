@@ -2122,13 +2122,6 @@ static bool xi_lower_builtin_receiver_registry_matches(struct XrType *receiver_t
     return false;
 }
 
-static bool xi_lower_receiver_method_matches(struct XrType *receiver_type, const char *method,
-                                             XaBuiltinReceiverMethodId method_id) {
-    const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
-    return spec && method && strcmp(method, spec->source_name) == 0 &&
-           xi_lower_builtin_receiver_registry_matches(receiver_type, spec->receiver);
-}
-
 static bool xi_lower_receiver_method_arg_count_matches(const XaBuiltinReceiverMethodSpec *spec,
                                                        int arg_count) {
     if (!spec || arg_count < spec->min_params)
@@ -4639,15 +4632,13 @@ static XiValue *lower_byte_slice_typed_signed_load_narrow(XiLower *l, AstNode *n
 }
 
 static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                            MemberAccessNode *ma, XiValue *recv,
+                                            XaIntrinsicId intrinsic_id, XiValue *recv,
                                             struct XrType *result_type) {
-    if (!ma->name || !call->type_args || !call->type_args[0] || call->type_arg_count != 1)
+    if (!call->type_args || !call->type_args[0] || call->type_arg_count != 1)
         return NULL;
 
-    bool byte_slice_typed_load = xi_lower_receiver_method_matches(
-        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_LOAD);
-    bool byte_slice_typed_store = xi_lower_receiver_method_matches(
-        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_STORE);
+    bool byte_slice_typed_load = intrinsic_id == XA_INTRINSIC_BYTE_SLICE_LOAD;
+    bool byte_slice_typed_store = intrinsic_id == XA_INTRINSIC_BYTE_SLICE_STORE;
     int n = call->arg_count;
     if ((!byte_slice_typed_load || (n != 1 && n != 2)) &&
         (!byte_slice_typed_store || (n != 2 && n != 3)))
@@ -4706,6 +4697,9 @@ static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprN
         v->args[2] = endian;
     }
     v->line = (uint32_t) node->line;
+    v->xa_intrinsic_id = (uint32_t) intrinsic_id;
+    v->flags = xi_op_default_effects((XiOp) v->op);
+    xi_lower_insert_err_check(l, node);
     return byte_slice_typed_load ? lower_byte_slice_typed_signed_load_narrow(l, node, v, target)
                                  : v;
 }
@@ -4959,6 +4953,35 @@ static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
     xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, kinds, out_ids);
 }
 
+static void lower_take_memory_intrinsic_evidence(XiLower *l, const AstNode *node,
+                                                 XaIntrinsicId intrinsic_id,
+                                                 XiSequenceEvidenceIds *out_ids) {
+    XiSequenceEvidenceKinds kinds = {0};
+    if (!out_ids)
+        return;
+    memset(out_ids, 0, sizeof(*out_ids));
+    switch (intrinsic_id) {
+        case XA_INTRINSIC_BYTE_SLICE_FILL:
+        case XA_INTRINSIC_POD_SLICE_FILL:
+            kinds.bulk_op_kind = XG_BULK_FILL;
+            break;
+        case XA_INTRINSIC_BYTE_SLICE_COPY:
+        case XA_INTRINSIC_POD_SLICE_COPY:
+            kinds.bulk_op_kind = XG_BULK_COPY;
+            break;
+        case XA_INTRINSIC_BYTE_SLICE_COMPARE:
+        case XA_INTRINSIC_POD_SLICE_COMPARE:
+            kinds.bulk_op_kind = XG_BULK_COMPARE;
+            break;
+        case XA_INTRINSIC_BYTE_SLICE_REPEAT:
+            kinds.bulk_op_kind = XG_BULK_REPEAT;
+            break;
+        default:
+            break;
+    }
+    xi_lower_take_sequence_evidence_ids(l, node ? (uint32_t) node->line : 0, kinds, out_ids);
+}
+
 static bool lower_intrinsic_shuffle_pattern(XiLower *l, AstNode *node, CallExprNode *call,
                                             const XaIntrinsicDesc *desc, int64_t *extra) {
     if (!l || !call || !desc || !extra)
@@ -5003,7 +5026,9 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     }
     MemberAccessNode *member = &call->callee->as.member_access;
     XiOp op = xi_semantic_intrinsic_op(desc);
-    if (op == XI_OP_COUNT || !member->object) {
+    bool typed_byte_slice = desc->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_TYPED_LOAD ||
+                            desc->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_TYPED_STORE;
+    if ((!typed_byte_slice && op == XI_OP_COUNT) || !member->object) {
         l->had_error = true;
         return NULL;
     }
@@ -5015,6 +5040,9 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     XiValue *receiver = xi_lower_expr(l, member->object);
     if (!receiver)
         return NULL;
+    if (typed_byte_slice)
+        return lower_byte_slice_typed_call(l, node, call, resolved->intrinsic_id, receiver,
+                                           xi_lower_node_type(l, node));
 
     XrParamMode stack_modes[64];
     const XrParamMode *param_modes = NULL;
@@ -5058,6 +5086,27 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     value->xa_intrinsic_id = (uint32_t) desc->id;
     value->flags = xi_op_default_effects(op);
     value->line = (uint32_t) node->line;
+    if (desc->family == XA_INTRINSIC_FAMILY_MEMORY) {
+        if (desc->lowering == XA_INTRINSIC_LOWERING_SPAN_REINTERPRET) {
+            if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
+                l->had_error = true;
+                return NULL;
+            }
+            XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
+            target = xi_lower_type_or_any(l, target, "span reinterpret type argument",
+                                          node ? node->line : 0);
+            if (!xi_type_is_pod_span_elem(target)) {
+                l->had_error = true;
+                return NULL;
+            }
+            value->aux_int = xi_pack_span_elem_aux(target);
+        } else if (desc->lowering == XA_INTRINSIC_LOWERING_SPAN_GET) {
+            value->aux_int = 1;
+        }
+        XiSequenceEvidenceIds sequence_ids;
+        lower_take_memory_intrinsic_evidence(l, node, resolved->intrinsic_id, &sequence_ids);
+        xi_lower_apply_sequence_evidence_ids(value, &sequence_ids);
+    }
     if (desc->effect != XA_INTRINSIC_EFFECT_PURE)
         xi_lower_insert_err_check(l, node);
     return value;
@@ -5316,11 +5365,6 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         struct XrType *result_type = xi_lower_node_type(l, node);
 
-        XiValue *byte_slice_typed =
-            lower_byte_slice_typed_call(l, node, call, ma, recv, result_type);
-        if (byte_slice_typed)
-            return byte_slice_typed;
-
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
         XiLowerArgList args;
         xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
@@ -5470,22 +5514,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return v;
         }
 
-        if (recv->type && XR_TYPE_IS_SPAN(recv->type) && ma->name && strcmp(ma->name, "get") == 0 &&
-            n == 1) {
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, result_type, 2);
-            if (!v)
-                return NULL;
-            v->args[0] = recv;
-            v->args[1] = arg_vals[0];
-            v->aux_int = 1;
-            v->line = (uint32_t) node->line;
-            return v;
-        }
-
         if (recv->type &&
-            (XR_TYPE_IS_ARRAY(recv->type) || XR_TYPE_IS_SPAN(recv->type) ||
-             recv->type->kind == XR_KIND_FIXED_ARRAY) &&
-            ma->name && n == 0 &&
+            (XR_TYPE_IS_ARRAY(recv->type) || recv->type->kind == XR_KIND_FIXED_ARRAY) && ma->name &&
+            n == 0 &&
             (strcmp(ma->name, "ptr") == 0 ||
              (recv->type->kind != XR_KIND_FIXED_ARRAY && strcmp(ma->name, "mutPtr") == 0))) {
             struct XrType *pointer_type = result_type;
@@ -5560,212 +5591,6 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 v->args[1] = zero;
                 v->line = (uint32_t) node->line;
                 return v;
-            }
-        }
-
-        if (recv->type && n == 0 &&
-            xi_lower_receiver_method_matches(recv->type, ma->name,
-                                             XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_AS_BYTES)) {
-            struct XrType *elem = recv->type->container.element_type;
-            if (xi_type_is_pod_span_elem(elem)) {
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_AS_BYTES, result_type, 1);
-                if (!v)
-                    return NULL;
-                v->args[0] = recv;
-                v->line = (uint32_t) node->line;
-                return v;
-            }
-        }
-
-        if (recv->type && n == 1 && !xi_type_is_bytes(recv->type) &&
-            xi_lower_receiver_method_matches(recv->type, ma->name,
-                                             XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_FILL)) {
-            struct XrType *elem = recv->type->container.element_type;
-            if (xi_type_is_pod_span_elem(elem)) {
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_FILL, recv->type, 2);
-                if (!v)
-                    return NULL;
-                v->args[0] = recv;
-                v->args[1] = arg_vals[0];
-                v->line = (uint32_t) node->line;
-                xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                return v;
-            }
-        }
-
-        if (recv->type && n == 1 && !xi_type_is_bytes(recv->type) &&
-            xi_lower_receiver_method_matches(recv->type, ma->name,
-                                             XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COPY_FROM)) {
-            struct XrType *elem = recv->type->container.element_type;
-            if (xi_type_is_pod_span_elem(elem)) {
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_COPY, recv->type, 2);
-                if (!v)
-                    return NULL;
-                v->args[0] = recv;
-                v->args[1] = arg_vals[0];
-                v->line = (uint32_t) node->line;
-                xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                return v;
-            }
-        }
-
-        if (recv->type && n == 1 && !xi_type_is_bytes(recv->type) &&
-            xi_lower_receiver_method_matches(recv->type, ma->name,
-                                             XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COMPARE)) {
-            struct XrType *elem = recv->type->container.element_type;
-            if (xi_type_is_pod_span_elem(elem)) {
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_COMPARE, l->type_int, 2);
-                if (!v)
-                    return NULL;
-                v->args[0] = recv;
-                v->args[1] = arg_vals[0];
-                v->line = (uint32_t) node->line;
-                xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                return v;
-            }
-        }
-
-        if (xi_type_is_bytes(recv->type) && ma->name) {
-            uint16_t byte_slice_op = 0;
-            uint16_t expected_args = 0;
-            XrType *target = NULL;
-            bool byte_slice_typed_load = xi_lower_receiver_method_matches(
-                recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_LOAD);
-            bool byte_slice_typed_store = xi_lower_receiver_method_matches(
-                recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_STORE);
-            if (byte_slice_typed_load && (n == 1 || n == 2) && call->type_arg_count == 1 &&
-                call->type_args && call->type_args[0]) {
-                target = xr_tref_resolve(l->isolate, call->type_args[0]);
-                target = xi_lower_type_or_any(l, target, "byte-slice type argument",
-                                              node ? node->line : 0);
-                byte_slice_op = lower_byte_slice_typed_op_for_target(target, true);
-                if (byte_slice_op)
-                    expected_args = 3;
-            } else if (byte_slice_typed_store && (n == 2 || n == 3) && call->type_arg_count == 1 &&
-                       call->type_args && call->type_args[0]) {
-                target = xr_tref_resolve(l->isolate, call->type_args[0]);
-                target = xi_lower_type_or_any(l, target, "byte-slice type argument",
-                                              node ? node->line : 0);
-                byte_slice_op = lower_byte_slice_typed_op_for_target(target, false);
-                if (byte_slice_op)
-                    expected_args = 4;
-            }
-            if (byte_slice_op) {
-                /* Strict dynamic-to-int boundary on byte-array intrinsic offsets/counts:
-                 * a Json/dynamic argument is verified at runtime via OP_CHECKTYPE
-                 * so VM and AOT raise the same TypeError instead of silently
-                 * coercing. */
-                for (int i = 0; i < n; i++) {
-                    bool needs_int_boundary =
-                        byte_slice_typed_load || i != 1 || XR_TYPE_IS_INT(target);
-                    if (arg_vals[i] && arg_vals[i]->type && needs_int_boundary &&
-                        xr_is_json_coercion(l->type_int, arg_vals[i]->type))
-                        arg_vals[i] =
-                            xi_lower_checktype_for_type(l, node, arg_vals[i], l->type_int);
-                }
-                XiValue *default_endian = NULL;
-                if ((byte_slice_typed_load && n == 1) || (byte_slice_typed_store && n == 2))
-                    default_endian =
-                        xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
-                XrType *op_type = byte_slice_typed_store ? l->type_unit : result_type;
-                XiValue *v =
-                    xi_value_new(l->func, l->cur_block, byte_slice_op, op_type, expected_args);
-                if (!v)
-                    return NULL;
-                v->args[0] = recv;
-                for (int i = 0; i < n; i++)
-                    v->args[i + 1] = arg_vals[i];
-                if (default_endian)
-                    v->args[expected_args - 1] = default_endian;
-                v->line = (uint32_t) node->line;
-                return byte_slice_typed_load
-                           ? lower_byte_slice_typed_signed_load_narrow(l, node, v, target)
-                           : v;
-            }
-
-            if (XR_TYPE_IS_SPAN(recv->type)) {
-                if (n == 0 && call->type_arg_count == 1 && call->type_args && call->type_args[0] &&
-                    xi_lower_receiver_method_matches(
-                        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REINTERPRET)) {
-                    XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
-                    target = xi_lower_type_or_any(l, target, "span reinterpret type argument",
-                                                  node ? node->line : 0);
-                    if (xi_type_is_pod_span_elem(target)) {
-                        XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_REINTERPRET,
-                                                  result_type, 1);
-                        if (!v)
-                            return NULL;
-                        v->args[0] = recv;
-                        v->aux_int = xi_pack_span_elem_aux(target);
-                        v->line = (uint32_t) node->line;
-                        return v;
-                    }
-                }
-                if (n == 1 && xi_lower_receiver_method_matches(
-                                  recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_FILL)) {
-                    XiValue *v =
-                        xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_FILL, recv->type, 2);
-                    if (!v)
-                        return NULL;
-                    v->args[0] = recv;
-                    v->args[1] = arg_vals[0];
-                    v->line = (uint32_t) node->line;
-                    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                    return v;
-                }
-                if (n == 1 &&
-                    xi_lower_receiver_method_matches(
-                        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COPY_FROM)) {
-                    XiValue *v =
-                        xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_COPY, recv->type, 2);
-                    if (!v)
-                        return NULL;
-                    v->args[0] = recv;
-                    v->args[1] = arg_vals[0];
-                    v->line = (uint32_t) node->line;
-                    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                    return v;
-                }
-                if (n == 1 &&
-                    xi_lower_receiver_method_matches(recv->type, ma->name,
-                                                     XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMPARE)) {
-                    XiValue *v =
-                        xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_COMPARE, l->type_int, 2);
-                    if (!v)
-                        return NULL;
-                    v->args[0] = recv;
-                    v->args[1] = arg_vals[0];
-                    v->line = (uint32_t) node->line;
-                    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                    return v;
-                }
-                if (n == 1 &&
-                    xi_lower_receiver_method_matches(
-                        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMMON_PREFIX)) {
-                    XiValue *v = xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_COMMON_PREFIX,
-                                              l->type_int, 2);
-                    if (!v)
-                        return NULL;
-                    v->args[0] = recv;
-                    v->args[1] = arg_vals[0];
-                    v->line = (uint32_t) node->line;
-                    return v;
-                }
-                if (n == 3 &&
-                    xi_lower_receiver_method_matches(
-                        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REPEAT_FROM)) {
-                    XiValue *v =
-                        xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_REPEAT, recv->type, 4);
-                    if (!v)
-                        return NULL;
-                    v->args[0] = recv;
-                    v->args[1] = arg_vals[0];
-                    v->args[2] = arg_vals[1];
-                    v->args[3] = arg_vals[2];
-                    v->line = (uint32_t) node->line;
-                    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                    return v;
-                }
             }
         }
 
