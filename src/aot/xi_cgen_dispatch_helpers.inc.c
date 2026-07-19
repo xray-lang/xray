@@ -6663,6 +6663,13 @@ static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current
     const XiValue *v = cg_unwrap_identity_value(value);
     if (!v)
         return false;
+    if (v->xa_intrinsic_id != XA_INTRINSIC_NONE) {
+        const XaIntrinsicDesc *desc = xa_intrinsic_by_id((XaIntrinsicId) v->xa_intrinsic_id);
+        if (desc && desc->effect != XA_INTRINSIC_EFFECT_MAY_THROW &&
+            desc->effect != XA_INTRINSIC_EFFECT_READ_MAY_THROW &&
+            desc->effect != XA_INTRINSIC_EFFECT_WRITE_MAY_THROW)
+            return true;
+    }
     if (v->op == XI_ARRAY_DATA_PTR || v->op == XI_PTR_LOAD)
         return true;
     if (xicgen_value_is_nothrow_native_scalar(current, v))

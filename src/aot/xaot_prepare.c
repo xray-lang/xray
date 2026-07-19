@@ -2909,7 +2909,11 @@ static bool prepare_array_class_field_read_cacheable(const XaotBundle *bundle, c
             const XiValue *cur = blk->values[vi];
             if (!cur || cur == target)
                 continue;
-            if (cur->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM))
+            /* ARC bookkeeping mutates only reference counts.  It cannot
+             * replace the class field or mutate the typed-array payload, so
+             * it does not invalidate a cached data pointer. */
+            if ((cur->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM)) != 0 &&
+                cur->op != XI_RETAIN && cur->op != XI_RELEASE)
                 return false;
         }
     }

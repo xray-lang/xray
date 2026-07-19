@@ -2522,6 +2522,13 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_CALL:
         case XI_CALL_METHOD_DIRECT:
             return sr_type_native_boundary_rep(v->type);
+        case XI_ATOMIC_LOAD:
+        case XI_ATOMIC_RMW:
+            /* Canonical Atomic operations are no longer CALL_METHOD nodes, but
+             * they retain the same concrete result contract.  Selecting a
+             * tagged default here would re-box fetch/load results after the
+             * semantic-intrinsic rewrite and defeat the direct C11 lowering. */
+            return sr_type_native_boundary_rep(v->type);
         case XI_CALL_BUILTIN: {
             const char *name = (const char *) v->aux;
             if (name && strcmp(name, "array_reserve") == 0)

@@ -1,6 +1,5 @@
 contains=xaot-plan v0
 regex=closure [0-9]+ func=directClosure value=v[0-9]+ target=<anonymous> captures=0 repr=direct_symbol evidence=xi_value\+target\+captures\+direct_symbol reason=none
-c_contains=INT64_C(42)
-c_not_regex=closure_direct_symbol_plan_[0-9a-f]+___anonymous__
+c_regex=int64_t v[0-9]+ = closure_direct_symbol_plan_[0-9a-f]+___anonymous__[0-9]+\(NULL\);
 c_not_contains=xrt_closure_new(
 c_not_contains=xrt_closure_stack_new(
