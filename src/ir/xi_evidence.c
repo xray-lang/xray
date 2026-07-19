@@ -276,6 +276,43 @@ void xi_evidence_prune_orphans(XiFunc *func) {
     func->evidence->count = write;
 }
 
+static bool stamp_equal(XiEvidenceStamp lhs, XiEvidenceStamp rhs) {
+    return lhs.ir_revision == rhs.ir_revision && lhs.cfg_revision == rhs.cfg_revision &&
+           lhs.memory_revision == rhs.memory_revision && lhs.call_revision == rhs.call_revision;
+}
+
+void xi_evidence_rebase_preserved(XiFunc *func, XiEvidenceDomainMask domains,
+                                  XiEvidenceStamp prior_stamp) {
+    if (!func || !func->evidence || domains == 0)
+        return;
+    uint32_t original_count = func->evidence->count;
+    for (uint32_t i = 0; i < original_count; i++) {
+        const XiEvidenceRecord *source = func->evidence->records[i];
+        if (!source || ((uint32_t) source->domain & domains) == 0 ||
+            source->state == XI_PROOF_INVALID || !stamp_equal(source->stamp, prior_stamp))
+            continue;
+        bool superseded = false;
+        for (uint32_t j = i + 1; j < original_count; j++) {
+            const XiEvidenceRecord *later = func->evidence->records[j];
+            if (later && later->domain == source->domain &&
+                later->subject.kind == source->subject.kind &&
+                later->subject.id == source->subject.id && stamp_equal(later->stamp, prior_stamp)) {
+                superseded = true;
+                break;
+            }
+        }
+        if (superseded)
+            continue;
+        XiEvidenceRecord *rebased = append_record(func->evidence);
+        if (!rebased)
+            return;
+        *rebased = *source;
+        rebased->id = func->evidence->next_id++;
+        rebased->derived_from = source->id;
+        rebased->stamp = xi_evidence_current_stamp(func);
+    }
+}
+
 void xi_evidence_note_rewrite(XiFunc *func, bool cfg_changed, bool values_changed,
                               bool types_changed, XiEvidenceDomainMask invalidates) {
     if (!func || (!cfg_changed && !values_changed && !types_changed))
@@ -405,9 +442,11 @@ void xi_evidence_dump(const XiFunc *func, void *file) {
         const XiEvidenceRecord *record = func->evidence->records[i];
         XiEvidenceView view = xi_evidence_query(func, record->domain, record->subject);
         fprintf(out,
-                "evidence id=%llu domain=%s subject=%s:%llu state=%s current=%s reason=%s "
+                "evidence id=%llu derived_from=%llu domain=%s subject=%s:%llu state=%s current=%s "
+                "reason=%s "
                 "producer=%s source=%s:%u stamp=%llu/%llu/%llu/%llu\n",
-                (unsigned long long) record->id, xi_evidence_domain_name(record->domain),
+                (unsigned long long) record->id, (unsigned long long) record->derived_from,
+                xi_evidence_domain_name(record->domain),
                 xi_evidence_subject_kind_name(record->subject.kind),
                 (unsigned long long) record->subject.id,
                 record->state == XI_PROOF_PROVEN ? "proven" : "unproven",

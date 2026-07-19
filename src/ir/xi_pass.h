@@ -44,6 +44,23 @@ typedef struct XiPassChange {
     uint32_t n_added;    /* values inserted (for logging) */
 } XiPassChange;
 
+typedef struct XiRevisionDelta {
+    bool ir_changed;
+    bool cfg_changed;
+    bool memory_changed;
+    bool call_changed;
+} XiRevisionDelta;
+
+/* The driver completes this outcome from the pass report plus an audited IR
+ * edit session. Evidence policy is therefore data, not an implicit side effect
+ * hidden inside an optimization. */
+typedef struct XiPassOutcome {
+    XiPassChange change;
+    XiEvidenceDomainMask invalidates;
+    XiEvidenceDomainMask preserves;
+    XiRevisionDelta revision_delta;
+} XiPassOutcome;
+
 /* Sentinel: nothing changed */
 static inline XiPassChange xi_pass_no_change(void) {
     return (XiPassChange) {false, false, false, 0, 0};

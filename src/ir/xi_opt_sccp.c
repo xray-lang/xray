@@ -768,9 +768,8 @@ static void revisit_value(SccpCtx *ctx, uint32_t vid) {
 
 /* ========== Rewriting ========== */
 
-static bool rewrite_function(SccpCtx *ctx) {
+static void rewrite_function(SccpCtx *ctx, bool *values_changed, bool *cfg_changed) {
     XiFunc *f = ctx->func;
-    bool any = false;
 
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         XiBlock *blk = f->blocks[bi];
@@ -794,7 +793,7 @@ static bool rewrite_function(SccpCtx *ctx) {
                     v->aux_kind = XI_AUX_KIND_NONE;
                     v->nargs = 0;
                     v->xa_intrinsic_id = XA_INTRINSIC_NONE;
-                    any = true;
+                    *values_changed = true;
                     break;
                 case SCCP_CONST_FLOAT: {
                     v->op = XI_CONST;
@@ -804,7 +803,7 @@ static bool rewrite_function(SccpCtx *ctx) {
                     v->aux_kind = XI_AUX_KIND_NONE;
                     v->nargs = 0;
                     v->xa_intrinsic_id = XA_INTRINSIC_NONE;
-                    any = true;
+                    *values_changed = true;
                     break;
                 }
                 case SCCP_CONST_BOOL:
@@ -814,7 +813,7 @@ static bool rewrite_function(SccpCtx *ctx) {
                     v->aux_kind = XI_AUX_KIND_NONE;
                     v->nargs = 0;
                     v->xa_intrinsic_id = XA_INTRINSIC_NONE;
-                    any = true;
+                    *values_changed = true;
                     break;
                 case SCCP_TOP:
                 case SCCP_BOT:
@@ -839,7 +838,7 @@ static bool rewrite_function(SccpCtx *ctx) {
                 blk->succs[1] = NULL;
                 blk->control = NULL;
                 blk->line = 0;
-                any = true;
+                *cfg_changed = true;
                 continue;
             }
 
@@ -856,11 +855,10 @@ static bool rewrite_function(SccpCtx *ctx) {
                 blk->succs[1] = NULL;
                 blk->control = NULL;
                 blk->line = 0;
-                any = true;
+                *cfg_changed = true;
             }
         }
     }
-    return any;
 }
 
 static void sccp_set_unreachable(XiBlock *blk) {
@@ -985,7 +983,9 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
     }
 
     /* Rewrite phase */
-    bool any_rewrite = rewrite_function(&ctx);
+    bool values_rewritten = false;
+    bool cfg_rewritten = false;
+    rewrite_function(&ctx, &values_rewritten, &cfg_rewritten);
 
     /* Remove unreachable blocks */
     for (uint32_t i = 0; i < n; i++) {
@@ -1016,10 +1016,10 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
     xr_free(ctx.ssa.buf);
 
     XiPassChange chg = xi_pass_no_change();
-    if (any_rewrite) {
+    if (values_rewritten) {
         chg.values_changed = true;
     }
-    if (blocks_removed || compacted_at_entry) {
+    if (cfg_rewritten || blocks_removed || compacted_at_entry) {
         chg.cfg_changed = true;
     }
     return chg;

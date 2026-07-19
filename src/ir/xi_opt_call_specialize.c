@@ -40,7 +40,7 @@ XR_FUNC XiPassChange xi_opt_call_specialize(XiFunc *f) {
                 }
             }
 
-            if (all_const_args && v->nargs > 1) {
+            if (all_const_args && v->nargs > 1 && (v->flags & CALL_SPEC_FLAG) == 0) {
                 v->flags |= CALL_SPEC_FLAG;
                 n_spec++;
             }
@@ -51,7 +51,7 @@ XR_FUNC XiPassChange xi_opt_call_specialize(XiFunc *f) {
         return xi_pass_no_change();
 
     return (XiPassChange) {
-        .values_changed = false,
+        .values_changed = true,
         .types_changed = false,
         .n_added = 0,
     };

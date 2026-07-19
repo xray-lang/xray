@@ -117,6 +117,7 @@ typedef struct XiEvidenceStamp {
 
 typedef struct XiEvidenceRecord {
     XiEvidenceId id;
+    XiEvidenceId derived_from;
     XiEvidenceDomain domain;
     XiEvidenceSubject subject;
     XiProofState state;
@@ -156,6 +157,8 @@ XR_FUNC bool xi_evidence_domain_is_proven_current(const XiFunc *func, XiEvidence
 XR_FUNC void xi_evidence_invalidate(XiFunc *func, XiEvidenceDomainMask domains,
                                     XiEvidenceReason reason);
 XR_FUNC void xi_evidence_prune_orphans(XiFunc *func);
+XR_FUNC void xi_evidence_rebase_preserved(XiFunc *func, XiEvidenceDomainMask domains,
+                                          XiEvidenceStamp prior_stamp);
 XR_FUNC void xi_evidence_note_rewrite(XiFunc *func, bool cfg_changed, bool values_changed,
                                       bool types_changed, XiEvidenceDomainMask invalidates);
 XR_FUNC const char *xi_evidence_domain_name(XiEvidenceDomain domain);

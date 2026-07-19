@@ -44,6 +44,7 @@
 #include "../shared/xr_bits_core.h"
 #include "xi_analysis.h"
 #include "xi_analysis_manager.h"
+#include "xi_edit.h"
 #include "xi_evidence.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
@@ -3195,8 +3196,9 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
 
 /* ========== Pipeline Driver ========== */
 
-/* Every pass declares an evidence policy. Rewrites conservatively invalidate
- * every proof; analysis passes preserve IR revisions and publish fresh proof. */
+/* Every pass declares an evidence policy. XiEditSession derives the precise
+ * invalidation set from audited CFG/value/type/memory/call fingerprints;
+ * analysis passes preserve IR revisions and publish fresh proof. */
 #define XI_REWRITE_PASS(pass_name, pass_fn, level, pass_flags, required_evidence)                  \
     {                                                                                              \
         .name = pass_name,                                                                         \
@@ -3209,7 +3211,7 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
         .produces_inv_mask = 0,                                                                    \
         .requires_evidence = required_evidence,                                                    \
         .produces_evidence = 0,                                                                    \
-        .invalidates_evidence = XI_EVD_ALL,                                                        \
+        .invalidates_evidence = 0,                                                                 \
         .preserves_evidence = 0,                                                                   \
     }
 
@@ -3768,20 +3770,6 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                 goto done;
             }
 
-            if (desc->requires_evidence) {
-                char evidence_error[256];
-                if (!xi_analysis_require_proven_domains(&analysis_manager, desc->requires_evidence,
-                                                        evidence_error, sizeof(evidence_error))) {
-                    result.ok = false;
-                    result.pass_name = desc->name;
-                    result.round = round;
-                    snprintf(result.detail, sizeof(result.detail),
-                             "pass '%s' requires current evidence: %.180s", desc->name,
-                             evidence_error);
-                    goto done;
-                }
-            }
-
             /* Shuffle blocks[1..n-1] (preserve entry at [0]) to catch
              * passes that assume RPO or insertion order.  Xi IR carries
              * an implicit invariant that block->id equals its index in
@@ -3809,8 +3797,48 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                 }
             }
 
+            /* Debug shuffling changes CFG revision and value order. Acquire
+             * proofs only after that instrumentation so a pass can never see
+             * evidence stamped for the pre-shuffle graph. */
+            if (desc->requires_evidence) {
+                char evidence_error[256];
+                if (!xi_analysis_require_proven_domains(&analysis_manager, desc->requires_evidence,
+                                                        evidence_error, sizeof(evidence_error))) {
+                    result.ok = false;
+                    result.pass_name = desc->name;
+                    result.round = round;
+                    snprintf(result.detail, sizeof(result.detail),
+                             "pass '%s' requires current evidence: %.180s", desc->name,
+                             evidence_error);
+                    goto done;
+                }
+            }
+
             uint64_t t0 = xr_time_monotonic_ns();
+            XiEditSession edit_session;
+            if (!xi_edit_begin(&edit_session, f)) {
+                result.ok = false;
+                result.pass_name = desc->name;
+                result.round = round;
+                snprintf(result.detail, sizeof(result.detail),
+                         "pass '%s' could not open an Xi edit session", desc->name);
+                goto done;
+            }
             XiPassChange pc = desc->fn(f);
+
+            XiPassOutcome pass_outcome;
+            char edit_error[256] = {0};
+            if (!xi_edit_finish(&edit_session, pc, desc->invalidates_evidence,
+                                desc->preserves_evidence, &pass_outcome, edit_error,
+                                sizeof(edit_error))) {
+                result.ok = false;
+                result.pass_name = desc->name;
+                result.round = round;
+                snprintf(result.detail, sizeof(result.detail),
+                         "pass '%s' mutation audit failed: %.180s", desc->name, edit_error);
+                goto done;
+            }
+            (void) pass_outcome;
 
             uint64_t dt = xr_time_monotonic_ns() - t0;
 
@@ -3859,18 +3887,6 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
             }
 
             round_chg = xi_pass_merge(round_chg, pc);
-
-            /* If the pass changed the CFG, invalidate cached RPO /
-             * dominators so the next xi_ensure_*() recomputes. */
-            if (pc.cfg_changed)
-                xi_cfg_invalidate(f);
-
-            if (pc.cfg_changed || pc.values_changed || pc.types_changed) {
-                XiEvidenceDomainMask invalidates =
-                    desc->invalidates_evidence | (XI_EVD_ALL & ~desc->preserves_evidence);
-                xi_evidence_note_rewrite(f, pc.cfg_changed, pc.values_changed, pc.types_changed,
-                                         invalidates);
-            }
 
             for (uint32_t bit = 1; bit <= XI_EVD_MEMSSA; bit <<= 1u) {
                 if ((desc->produces_evidence & bit) != 0 &&
