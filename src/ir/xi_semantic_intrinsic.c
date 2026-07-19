@@ -54,6 +54,18 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_VEC_REDUCE_ADD;
         case XA_INTRINSIC_LOWERING_TARGET_SIMD_BYTES:
             return XI_TARGET_SIMD_BYTES;
+        case XA_INTRINSIC_LOWERING_BIT_ROTL:
+            return XI_BIT_ROTL;
+        case XA_INTRINSIC_LOWERING_BIT_ROTR:
+            return XI_BIT_ROTR;
+        case XA_INTRINSIC_LOWERING_BIT_BSWAP:
+            return XI_BIT_BSWAP;
+        case XA_INTRINSIC_LOWERING_BIT_POPCOUNT:
+            return XI_BIT_POPCOUNT;
+        case XA_INTRINSIC_LOWERING_BIT_CLZ:
+            return XI_BIT_CLZ;
+        case XA_INTRINSIC_LOWERING_BIT_CTZ:
+            return XI_BIT_CTZ;
         case XA_INTRINSIC_LOWERING_NONE:
             return XI_OP_COUNT;
     }
@@ -68,6 +80,24 @@ static bool set_error(char *error, size_t error_size, const char *format, ...) {
         va_end(args);
     }
     return false;
+}
+
+static bool semantic_intrinsic_native_is_integer(int64_t native_type) {
+    switch ((XrNativeType) native_type) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
+            return true;
+        default:
+            return false;
+    }
 }
 
 bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, char *error,
@@ -100,25 +130,33 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
         return set_error(error, error_size, "canonical intrinsic id %u has invalid Xi arity %u",
                          value->xa_intrinsic_id, value->nargs);
 
-    if (expected == XI_TARGET_SIMD_BYTES) {
+    if (desc->family == XA_INTRINSIC_FAMILY_TARGET) {
         if (value->aux_int != 0)
             return set_error(error, error_size, "canonical intrinsic id %u has unexpected shape %u",
                              value->xa_intrinsic_id, (unsigned) value->aux_int);
-        return true;
+    } else if (desc->family == XA_INTRINSIC_FAMILY_BITS) {
+        if (!semantic_intrinsic_native_is_integer(value->aux_int))
+            return set_error(error, error_size,
+                             "canonical intrinsic id %u has invalid integer width %u",
+                             value->xa_intrinsic_id, (unsigned) value->aux_int);
+    } else if (desc->family == XA_INTRINSIC_FAMILY_SIMD) {
+        if (!xi_vec_shape_is_explicit(value->aux_int) ||
+            xi_vec_shape_native_type(value->aux_int) != desc->shape_rule.result_native_type ||
+            xi_vec_shape_lanes(value->aux_int) != desc->shape_rule.result_lanes)
+            return set_error(error, error_size,
+                             "canonical intrinsic id %u has invalid vector shape %u",
+                             value->xa_intrinsic_id, (unsigned) value->aux_int);
+
+        bool expects_odd = (desc->flags & XA_INTRINSIC_FLAG_ODD_LANES) != 0;
+        bool has_odd = (value->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0;
+        if (expects_odd != has_odd)
+            return set_error(error, error_size,
+                             "canonical intrinsic id %u has invalid odd-lane flag %u",
+                             value->xa_intrinsic_id, has_odd ? 1u : 0u);
+    } else {
+        return set_error(error, error_size, "canonical intrinsic id %u has unsupported family %u",
+                         value->xa_intrinsic_id, (unsigned) desc->family);
     }
-
-    if (!xi_vec_shape_is_explicit(value->aux_int) ||
-        xi_vec_shape_native_type(value->aux_int) != desc->shape_rule.result_native_type ||
-        xi_vec_shape_lanes(value->aux_int) != desc->shape_rule.result_lanes)
-        return set_error(error, error_size, "canonical intrinsic id %u has invalid vector shape %u",
-                         value->xa_intrinsic_id, (unsigned) value->aux_int);
-
-    bool expects_odd = (desc->flags & XA_INTRINSIC_FLAG_ODD_LANES) != 0;
-    bool has_odd = (value->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0;
-    if (expects_odd != has_odd)
-        return set_error(error, error_size,
-                         "canonical intrinsic id %u has invalid odd-lane flag %u",
-                         value->xa_intrinsic_id, has_odd ? 1u : 0u);
 
     if (value->flags != xi_op_default_effects(value->op))
         return set_error(error, error_size, "canonical intrinsic id %u has invalid effect flags %u",

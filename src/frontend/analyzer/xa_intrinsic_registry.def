@@ -142,3 +142,19 @@ XA_INTRINSIC(SIMD_U64X4_REDUCE_ADD, 1113, "simd.U64x4.reduceAdd", SIMD, VEC_REDU
              NO_ALLOC, SAFE, 0, 0, NONE, U64, 4, U64, 4)
 XA_INTRINSIC(SIMD_U64X4_SWAP_ADJACENT, 1114, "simd.U64x4.swapAdjacent", SIMD, VEC_SHUFFLE, PURE,
              NO_ALLOC, SAFE, 0, 0, SWAP_ADJACENT, U64, 4, U64, 4)
+
+/* Exact-width integer receiver methods are compiler-owned declarations even
+ * though they do not live in a script stdlib module.  Analyzer resolution
+ * maps their receiver-registry method ID to these stable semantic IDs. */
+XA_INTRINSIC(BITS_POPCOUNT, 2001, "core.ExactInt.popcount", BITS, BIT_POPCOUNT, PURE, NO_ALLOC,
+             SAFE, 0, 0, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(BITS_LEADING_ZEROS, 2002, "core.ExactInt.leadingZeros", BITS, BIT_CLZ, PURE,
+             NO_ALLOC, SAFE, 0, 0, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(BITS_TRAILING_ZEROS, 2003, "core.ExactInt.trailingZeros", BITS, BIT_CTZ, PURE,
+             NO_ALLOC, SAFE, 0, 0, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(BITS_BYTESWAP, 2004, "core.ExactInt.byteswap", BITS, BIT_BSWAP, PURE, NO_ALLOC,
+             SAFE, 0, 0, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(BITS_ROTATE_LEFT, 2005, "core.ExactInt.rotateLeft", BITS, BIT_ROTL, PURE, NO_ALLOC,
+             SAFE, 1, 1, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(BITS_ROTATE_RIGHT, 2006, "core.ExactInt.rotateRight", BITS, BIT_ROTR, PURE, NO_ALLOC,
+             SAFE, 1, 1, NONE, NONE, 0, NONE, 0)

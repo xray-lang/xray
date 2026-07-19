@@ -391,6 +391,13 @@ static void test_semantic_intrinsic_registry(void) {
                     cap->lowering == XA_INTRINSIC_LOWERING_TARGET_SIMD_BYTES &&
                     (cap->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0,
                 "target capability must be an explicit semantic identity, not a late name match");
+
+    const XaIntrinsicDesc *rotl = xa_intrinsic_by_id(XA_INTRINSIC_BITS_ROTATE_LEFT);
+    ASSERT_TRUE(rotl && rotl->family == XA_INTRINSIC_FAMILY_BITS &&
+                    rotl->lowering == XA_INTRINSIC_LOWERING_BIT_ROTL &&
+                    rotl->effect == XA_INTRINSIC_EFFECT_PURE && rotl->min_arity == 1 &&
+                    rotl->max_arity == 1,
+                "exact integer bit semantics must be represented in the canonical registry");
 }
 
 int main(void) {

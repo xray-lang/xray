@@ -1581,9 +1581,12 @@ static void verify_lowered(VerifyCtx *ctx, const XiFunc *f) {
                          f->name, v->id, blk->id, intrinsic_error);
                     return;
                 }
-            } else if (xi_op_class(v->op) == XI_GEN_CLASS_VECTOR &&
-                       xi_vec_shape_is_explicit(v->aux_int)) {
-                verr(ctx, "func '%s': explicit vector v%u %s in b%u has no canonical intrinsic id",
+            } else if ((xi_op_class(v->op) == XI_GEN_CLASS_VECTOR &&
+                        xi_vec_shape_is_explicit(v->aux_int)) ||
+                       v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR || v->op == XI_BIT_BSWAP ||
+                       v->op == XI_BIT_POPCOUNT || v->op == XI_BIT_CLZ || v->op == XI_BIT_CTZ) {
+                verr(ctx,
+                     "func '%s': canonical semantic op v%u %s in b%u has no intrinsic identity",
                      f->name, v->id, xi_op_name(v->op), blk->id);
                 return;
             }

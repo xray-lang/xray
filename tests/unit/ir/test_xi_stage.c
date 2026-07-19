@@ -639,7 +639,7 @@ static void test_semantic_intrinsic_corruption_fails_closed(void) {
     vec->xa_intrinsic_id = XA_INTRINSIC_NONE;
     error[0] = '\0';
     assert(!xi_verify_stage(f, XI_STAGE_LOWERED, error, sizeof(error)));
-    assert(strstr(error, "has no canonical intrinsic id") != NULL);
+    assert(strstr(error, "has no intrinsic identity") != NULL);
 
     xi_func_free(xi_lowered_program_release(lowered));
     printf("  PASS\n");

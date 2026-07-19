@@ -38,6 +38,7 @@
 #include "xi_opt_comptime.h"
 #include "xi_range.h"
 #include "xi_value_query.h"
+#include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../os/os_thread.h"
 #include "../shared/xr_int_arith.h"
 #include "../shared/xr_bits_core.h"
@@ -228,6 +229,7 @@ static bool rewrite_to_const_literal(XiValue *v, const XiConstLiteral *lit) {
     v->aux_kind = XI_AUX_KIND_NONE;
     v->flags = xi_op_default_effects(XI_CONST);
     v->mem_group = XI_MEM_NONE;
+    v->xa_intrinsic_id = XA_INTRINSIC_NONE;
     switch (lit->kind) {
         case XI_CONST_LITERAL_NULL:
             return true;
@@ -498,6 +500,7 @@ static void rewrite_to_const_int(XiValue *v, int64_t value) {
     v->nargs = 0;
     v->flags = xi_op_default_effects(XI_CONST);
     v->mem_group = XI_MEM_NONE;
+    v->xa_intrinsic_id = XA_INTRINSIC_NONE;
 }
 
 static bool ordering_member_index_opt(const char *name, int64_t *out_index) {
@@ -551,6 +554,7 @@ static void rewrite_to_const_float(XiValue *v, double value) {
     v->nargs = 0;
     v->flags = xi_op_default_effects(XI_CONST);
     v->mem_group = XI_MEM_NONE;
+    v->xa_intrinsic_id = XA_INTRINSIC_NONE;
 }
 
 static void rewrite_to_copy(XiValue *v, XiValue *src) {
@@ -564,6 +568,7 @@ static void rewrite_to_copy(XiValue *v, XiValue *src) {
     v->aux = NULL;
     v->aux_kind = XI_AUX_KIND_NONE;
     v->mem_group = XI_MEM_NONE;
+    v->xa_intrinsic_id = XA_INTRINSIC_NONE;
 }
 
 static bool fold_exact_integer_unary(XiValue *v, int64_t operand) {

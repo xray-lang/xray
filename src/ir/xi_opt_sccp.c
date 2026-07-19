@@ -31,6 +31,7 @@
 #include "../shared/xr_int_arith.h"
 #include "../shared/xr_bits_core.h"
 #include "../runtime/value/xtype.h"
+#include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -792,6 +793,7 @@ static bool rewrite_function(SccpCtx *ctx) {
                     v->aux = NULL;
                     v->aux_kind = XI_AUX_KIND_NONE;
                     v->nargs = 0;
+                    v->xa_intrinsic_id = XA_INTRINSIC_NONE;
                     any = true;
                     break;
                 case SCCP_CONST_FLOAT: {
@@ -801,6 +803,7 @@ static bool rewrite_function(SccpCtx *ctx) {
                     v->aux = NULL;
                     v->aux_kind = XI_AUX_KIND_NONE;
                     v->nargs = 0;
+                    v->xa_intrinsic_id = XA_INTRINSIC_NONE;
                     any = true;
                     break;
                 }
@@ -810,6 +813,7 @@ static bool rewrite_function(SccpCtx *ctx) {
                     v->aux = NULL;
                     v->aux_kind = XI_AUX_KIND_NONE;
                     v->nargs = 0;
+                    v->xa_intrinsic_id = XA_INTRINSIC_NONE;
                     any = true;
                     break;
                 case SCCP_TOP:

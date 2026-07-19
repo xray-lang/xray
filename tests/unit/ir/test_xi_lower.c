@@ -18,6 +18,7 @@
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/frontend/analyzer/xa_typed_program.h"
+#include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/toolchain/xcompiler_session.h"
@@ -745,6 +746,13 @@ TEST(exact_integer_bit_methods_lower_to_typed_semantic_ops) {
     assert(!func_tree_find_method(f, "rotateLeft") && !func_tree_find_method(f, "byteswap") &&
            !func_tree_find_method(f, "popcount") &&
            "exact-width bit methods should not survive as string-dispatched method calls");
+    assert(rotl->xa_intrinsic_id == XA_INTRINSIC_BITS_ROTATE_LEFT &&
+           rotr->xa_intrinsic_id == XA_INTRINSIC_BITS_ROTATE_RIGHT &&
+           bswap->xa_intrinsic_id == XA_INTRINSIC_BITS_BYTESWAP &&
+           popcount->xa_intrinsic_id == XA_INTRINSIC_BITS_POPCOUNT &&
+           clz->xa_intrinsic_id == XA_INTRINSIC_BITS_LEADING_ZEROS &&
+           ctz->xa_intrinsic_id == XA_INTRINSIC_BITS_TRAILING_ZEROS &&
+           "bit Xi ops must carry analyzer-owned canonical semantic identities");
     xi_func_free(f);
 }
 

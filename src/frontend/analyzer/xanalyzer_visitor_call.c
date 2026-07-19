@@ -24,6 +24,7 @@
 #include "xa_parallel_call_plan.h"
 #include "xa_resolved_call.h"
 #include "xa_intrinsic_registry.h"
+#include "xbuiltin_receiver_registry.h"
 #include "xa_selection.h"
 #include "xaddressability.h"
 #include "xtype_ref_resolve.h"
@@ -113,8 +114,40 @@ static void xa_check_intrinsic_shuffle_lanes(XaInferContext *ctx, const AstNode 
     }
 }
 
+static XaIntrinsicId xa_builtin_receiver_intrinsic_id(XrType *receiver, AstNode *callee) {
+    if (!receiver || receiver->kind != XR_KIND_INT || receiver->is_nullable || !callee ||
+        callee->type != AST_MEMBER_ACCESS || !callee->as.member_access.name)
+        return XA_INTRINSIC_NONE;
+
+    const char *name = callee->as.member_access.name;
+    for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
+        const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
+        if (spec->receiver != XA_BUILTIN_RECEIVER_EXACT_INTEGER ||
+            strcmp(spec->source_name, name) != 0)
+            continue;
+        switch (spec->method_id) {
+            case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_POPCOUNT:
+                return XA_INTRINSIC_BITS_POPCOUNT;
+            case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_LEADING_ZEROS:
+                return XA_INTRINSIC_BITS_LEADING_ZEROS;
+            case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_TRAILING_ZEROS:
+                return XA_INTRINSIC_BITS_TRAILING_ZEROS;
+            case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_BYTESWAP:
+                return XA_INTRINSIC_BITS_BYTESWAP;
+            case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_LEFT:
+                return XA_INTRINSIC_BITS_ROTATE_LEFT;
+            case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_RIGHT:
+                return XA_INTRINSIC_BITS_ROTATE_RIGHT;
+            default:
+                return XA_INTRINSIC_NONE;
+        }
+    }
+    return XA_INTRINSIC_NONE;
+}
+
 static const XaResolvedCall *xa_record_resolved_intrinsic_call(XaInferContext *ctx, AstNode *node,
                                                                AstNode *callee,
+                                                               XrType *receiver_type,
                                                                XaSymbol *fallback_symbol,
                                                                XaSymbolLinks *fallback_links) {
     if (!ctx || !ctx->analyzer || !node || !ctx->analyzer->resolved_call_table)
@@ -122,12 +155,15 @@ static const XaResolvedCall *xa_record_resolved_intrinsic_call(XaInferContext *c
     const XaSelection *selection = xa_analyzer_get_selection(ctx->analyzer, callee);
     XaSymbol *target = selection ? selection->target_symbol : fallback_symbol;
     XaSymbolLinks *links = target ? xa_analyzer_get_links(ctx->analyzer, target) : fallback_links;
-    if (!links || links->intrinsic_id == XA_INTRINSIC_NONE)
+    XaIntrinsicId intrinsic_id = links ? links->intrinsic_id : XA_INTRINSIC_NONE;
+    if (intrinsic_id == XA_INTRINSIC_NONE)
+        intrinsic_id = xa_builtin_receiver_intrinsic_id(receiver_type, callee);
+    if (intrinsic_id == XA_INTRINSIC_NONE)
         return NULL;
     XaResolvedCall resolved = {
         .source_node_id = node->node_id,
         .target_symbol_id = target ? target->id : 0,
-        .intrinsic_id = links->intrinsic_id,
+        .intrinsic_id = intrinsic_id,
         .reason = XA_RESOLVED_CALL_REASON_RESOLVED,
     };
     xa_resolved_call_table_set((XaResolvedCallTable *) ctx->analyzer->resolved_call_table, node,
@@ -4517,8 +4553,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    const XaResolvedCall *resolved_intrinsic =
-        xa_record_resolved_intrinsic_call(ctx, node, call->callee, fn_sym, fn_links);
+    const XaResolvedCall *resolved_intrinsic = xa_record_resolved_intrinsic_call(
+        ctx, node, call->callee, callee_obj_type, fn_sym, fn_links);
     const XaIntrinsicDesc *intrinsic_desc =
         resolved_intrinsic ? xa_intrinsic_by_id(resolved_intrinsic->intrinsic_id) : NULL;
 
