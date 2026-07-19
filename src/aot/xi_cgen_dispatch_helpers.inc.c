@@ -3580,7 +3580,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         return;
     }
 
-    if (target && cg_func_needs_aot_coro(target)) {
+    if (target && cg_func_needs_aot_coro_ctx(ctx, target)) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT sync call to suspendable function '%s'\n",
                 target->name ? target->name : "?");
@@ -5420,7 +5420,7 @@ static bool xicgen_emit_direct_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
                                       const char *method_prefix) {
     if (!mfunc)
         return false;
-    if (cg_func_needs_aot_coro(mfunc)) {
+    if (cg_func_needs_aot_coro_ctx(ctx, mfunc)) {
         ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: unsupported AOT sync method call to suspendable function '%s'\n",
@@ -5609,6 +5609,8 @@ static const XiClassData *xicgen_parallel_plan_class_for_call(XiCgenCtx *ctx, co
         receiver->op == XI_GET_SHARED) {
         class_data = xicgen_parallel_plan_shared_slot_init_class(ctx, f, (int) receiver->aux_int);
     }
+    if (!xicgen_class_data_is_parallel_plan(ctx, class_data))
+        class_data = cg_class_data_for_type_name(ctx, receiver ? receiver->type : v->args[0]->type);
     if (!xicgen_class_data_is_parallel_plan(ctx, class_data)) {
         const char *recv_class =
             cg_class_native_receiver_class_name(ctx, f, receiver ? receiver : v->args[0]);
@@ -5617,30 +5619,51 @@ static const XiClassData *xicgen_parallel_plan_class_for_call(XiCgenCtx *ctx, co
     return xicgen_class_data_is_parallel_plan(ctx, class_data) ? class_data : NULL;
 }
 
+static void xicgen_accumulate_parallel_plan_class(XiCgenCtx *ctx, const XiClassData *class_data,
+                                                  const XiClassData **concrete,
+                                                  const XiClassData **skeleton, bool *ambiguous) {
+    if (!xicgen_class_data_is_parallel_plan(ctx, class_data) || !concrete || !skeleton ||
+        !ambiguous)
+        return;
+    if (!class_data->is_monomorphized) {
+        if (!*skeleton)
+            *skeleton = class_data;
+        return;
+    }
+    if (!*concrete) {
+        *concrete = class_data;
+        return;
+    }
+    if (!cg_class_native_data_matches(*concrete, class_data))
+        *ambiguous = true;
+}
+
 static const XiClassData *xicgen_find_parallel_plan_class_data(XiCgenCtx *ctx) {
     if (!ctx)
         return NULL;
+    const XiClassData *concrete = NULL;
+    const XiClassData *skeleton = NULL;
+    bool ambiguous = false;
     for (int mi = 0; mi < ctx->all_nmodules; mi++) {
         const XiModule *module = ctx->all_modules ? ctx->all_modules[mi] : NULL;
         if (!module)
             continue;
         for (uint16_t ci = 0; ci < module->nclasses; ci++) {
             const XiClassData *class_data = module->classes ? module->classes[ci] : NULL;
-            if (xicgen_class_data_is_parallel_plan(ctx, class_data))
-                return class_data;
+            xicgen_accumulate_parallel_plan_class(ctx, class_data, &concrete, &skeleton,
+                                                  &ambiguous);
         }
         for (uint16_t si = 0; si < module->nslots; si++) {
             const XiClassData *class_data = module->slot_classes ? module->slot_classes[si] : NULL;
-            if (xicgen_class_data_is_parallel_plan(ctx, class_data))
-                return class_data;
+            xicgen_accumulate_parallel_plan_class(ctx, class_data, &concrete, &skeleton,
+                                                  &ambiguous);
         }
     }
     for (int i = 0; i < ctx->nimports; i++) {
         const XiClassData *class_data = ctx->imports[i].target_class;
-        if (xicgen_class_data_is_parallel_plan(ctx, class_data))
-            return class_data;
+        xicgen_accumulate_parallel_plan_class(ctx, class_data, &concrete, &skeleton, &ambiguous);
     }
-    return NULL;
+    return ambiguous ? NULL : (concrete ? concrete : skeleton);
 }
 
 static const XiFunc *xicgen_parallel_plan_lifecycle_target(XiCgenCtx *ctx,
@@ -5694,6 +5717,12 @@ static bool xicgen_emit_parallel_plan_lifecycle_method(XiCgenCtx *ctx, FILE *out
          strcmp(method, "close") != 0))
         return false;
     const XiClassData *class_data = xicgen_parallel_plan_class_for_call(ctx, f, v);
+    if (class_data && class_data->is_generic_skeleton &&
+        (v->lowering_flags & XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE)) {
+        const XiClassData *closed_world = xicgen_find_parallel_plan_class_data(ctx);
+        if (closed_world && closed_world->is_monomorphized)
+            class_data = closed_world;
+    }
     if (!class_data && (v->lowering_flags & XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE) &&
         v->xg_callsite_id == XG_NO_ID && v->xg_method_id == XG_NO_ID)
         class_data = xicgen_find_parallel_plan_class_data(ctx);
@@ -6091,7 +6120,7 @@ static bool xicgen_emit_planned_itable_method(XiCgenCtx *ctx, FILE *out, const X
 static bool xicgen_emit_vtable_target_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                              const XiValue *v, const char *prefix,
                                              const XiFunc *target_func, const char *target_prefix) {
-    if (cg_func_needs_aot_coro(target_func)) {
+    if (cg_func_needs_aot_coro_ctx(ctx, target_func)) {
         ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: unsupported AOT sync vtable method call to suspendable function "
@@ -6653,7 +6682,7 @@ static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *cu
     CgStaticFunctionCall direct = cg_resolve_static_function_call(ctx, current, v->args[0]);
     const XiFunc *target = direct.func;
     if (!target || target == current || target->is_extern || direct.is_class_constructor ||
-        cg_func_needs_aot_coro(target))
+        cg_func_needs_aot_coro_ctx(ctx, target))
         return false;
     return !xicgen_func_has_error_flow(ctx, target, (uint8_t) (depth + 1));
 }
@@ -8068,7 +8097,7 @@ static bool xicgen_emit_static_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     }
     if (!sfunc)
         return false;
-    if (cg_func_needs_aot_coro(sfunc)) {
+    if (cg_func_needs_aot_coro_ctx(ctx, sfunc)) {
         ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: unsupported AOT sync call to suspendable static method '%s'\n",
@@ -8099,7 +8128,7 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
     const XiFunc *target = call.func;
     if (!target && !(call.is_class_constructor && call.class_data))
         return false;
-    if (target && cg_func_needs_aot_coro(target)) {
+    if (target && cg_func_needs_aot_coro_ctx(ctx, target)) {
         ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: unsupported AOT sync module-member call to suspendable "
@@ -8299,7 +8328,7 @@ static void xicgen_emit_class_itable_init(XiCgenCtx *ctx, FILE *out, const XiCla
             const char *target_prefix = NULL;
             const XiFunc *target = xicgen_find_itable_target_func(ctx, class_id, abi->interface_id,
                                                                   slot, &target_prefix);
-            if (!target || cg_func_needs_aot_coro(target)) {
+            if (!target || cg_func_needs_aot_coro_ctx(ctx, target)) {
                 ctx->error = true;
                 fprintf(stderr,
                         "[xi_cgen] ERROR: verified AOT itable target for class %u interface %u "
@@ -12788,6 +12817,31 @@ static bool xicgen_par_reduce_validate_nothrow_body(XiCgenCtx *ctx, const XiFunc
     return false;
 }
 
+typedef enum XicgenParallelCallbackMode {
+    XICGEN_PAR_CALLBACK_INVALID = 0,
+    XICGEN_PAR_CALLBACK_PARALLEL,
+    XICGEN_PAR_CALLBACK_SERIAL,
+} XicgenParallelCallbackMode;
+
+/* Worker callbacks cannot unwind through another native thread.  A callback
+ * that may throw therefore executes on the invoking thread, preserving the
+ * ordinary exception/defer stack.  This is a semantic fallback, not a hidden
+ * failure: proven no-throw callbacks still take the parallel runtime path,
+ * while genuinely suspendable callbacks remain rejected until the runtime has
+ * an explicit cross-scheduler callback protocol. */
+static XicgenParallelCallbackMode xicgen_parallel_callback_mode(XiCgenCtx *ctx, const XiFunc *func,
+                                                                const char *role) {
+    if (!ctx || !func)
+        return XICGEN_PAR_CALLBACK_INVALID;
+    if (cg_func_needs_aot_coro_ctx(ctx, func)) {
+        fprintf(stderr, "[xi_cgen] ERROR: parallel AOT %s cannot be suspendable: '%s'\n",
+                role ? role : "callback", func->name ? func->name : "?");
+        return XICGEN_PAR_CALLBACK_INVALID;
+    }
+    return xicgen_find_par_for_unsupported_body_value(ctx, func) ? XICGEN_PAR_CALLBACK_SERIAL
+                                                                 : XICGEN_PAR_CALLBACK_PARALLEL;
+}
+
 static void xicgen_par_reduce_emit_serial_int64max(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                    const XiValue *v, const XiFunc *body,
                                                    const XiFunc *combine, const char *prefix,
@@ -13145,6 +13199,31 @@ static void xicgen_par_map_emit_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f
             out_ptr_name, idx_name, v->id);
 }
 
+static void xicgen_par_map_emit_serial_exclusive(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                 const XiValue *v, const XiFunc *body,
+                                                 const char *prefix, const char *iter_name,
+                                                 const char *idx_name, const char *closure_name,
+                                                 const char *state_name, const char *out_ptr_name,
+                                                 bool native_result, const CgArrayElemInfo *info) {
+    const XiParallelMapData *data = (const XiParallelMapData *) (v ? v->aux : NULL);
+    if (data && data->plan_state) {
+        fprintf(out,
+                "                XrValue %s = xrt_index_get(_xr_pm_states_%u, "
+                "XR_FROM_INT(0));\n",
+                state_name, v->id);
+    }
+    fprintf(out,
+            "                for (int64_t %s = _xr_pm_start_%u; %s < "
+            "_xr_pm_end_excl_%u; %s++) {\n",
+            iter_name, v->id, iter_name, v->id, iter_name);
+    fprintf(out, "                    int64_t %s = %s - _xr_pm_start_%u;\n", idx_name, iter_name,
+            v->id);
+    xicgen_par_map_emit_store(ctx, out, f, v, body, prefix, iter_name, "0", closure_name,
+                              data && data->plan_state ? state_name : NULL, out_ptr_name, idx_name,
+                              native_result, info);
+    fprintf(out, "                }\n");
+}
+
 static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
     if (!ctx || !out || !f || !v || v->nargs < 4 || v->aux_kind != XI_AUX_KIND_PAR_MAP || !v->aux) {
@@ -13328,10 +13407,11 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         have_info && info.elem_name && strcmp(info.elem_name, "XR_ELEM_ANY") != 0;
     bool native_result = have_info && xicgen_par_map_body_has_native_result(ctx, v, &info);
     uint16_t expected_params = data->plan_state ? 3 : 2;
+    XicgenParallelCallbackMode callback_mode = xicgen_parallel_callback_mode(ctx, body, "map body");
     if (!body || body->nparams != expected_params ||
         (body->native_callback_kind == XI_NATIVE_CALLBACK_PAR_MAP_SCALAR_BODY &&
          !xicgen_par_map_validate_scalar_func(ctx, body, have_info ? &info : NULL)) ||
-        !xicgen_par_reduce_validate_nothrow_body(ctx, body, "map body")) {
+        callback_mode == XICGEN_PAR_CALLBACK_INVALID) {
         xicgen_par_reduce_emit_abort_expr(ctx, out);
         return;
     }
@@ -13454,7 +13534,13 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                               native_result, have_info ? &info : NULL);
     fprintf(out, "                    if (%s == _xr_pm_end_%u) break;\n", iter_name, v->id);
     fprintf(out, "                }\n");
-    if (data->plan_state) {
+    if (callback_mode == XICGEN_PAR_CALLBACK_SERIAL) {
+        fprintf(out, "            } else {\n");
+        xicgen_par_map_emit_serial_exclusive(ctx, out, f, v, body, prefix, iter_name, idx_name,
+                                             closure_name, state_name, out_ptr_name, native_result,
+                                             have_info ? &info : NULL);
+        fprintf(out, "            }\n");
+    } else if (data->plan_state) {
         fprintf(out,
                 "            } else if (!xr_parallel_for_range_state_i64(%s, _xr_pm_start_%u, "
                 "_xr_pm_end_excl_%u, _xr_pm_workers_%u, (XrParallelRangeStateI64Fn)",

@@ -4183,7 +4183,7 @@ static bool xa_type_allows_shared_interior_mutation(XrType *type) {
     if (xa_type_is_concurrency_handle(type))
         return true;
     static const char *const audited[] = {"Mutex",   "RwLock",      "Once", "Barrier",
-                                          "Condvar", "ThreadLocal", NULL};
+                                          "Condvar", "ThreadLocal", "Plan", NULL};
     const char *class_name = xr_type_get_class_name(type);
     for (const char *const *p = audited; *p; p++) {
         if (xa_class_name_matches_mono_base(class_name, *p))

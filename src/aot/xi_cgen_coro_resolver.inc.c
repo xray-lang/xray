@@ -55,12 +55,6 @@ static const XiFunc *cg_coro_resolve_method_cb(void *ud, const XiFunc *current,
     return cg_class_native_resolve_method_call(ctx, current, call, &method_prefix);
 }
 
-static bool cg_coro_module_import_intra_cb(void *ud, const XiFunc *f, const XiValue *v,
-                                           const char *module) {
-    (void) ud;
-    return cg_value_is_module_import(f, v, module);
-}
-
 static bool cg_coro_module_import_ctx_cb(void *ud, const XiFunc *f, const XiValue *v,
                                          const char *module) {
     return cg_value_is_module_import_ctx((XiCgenCtx *) ud, f, v, module);
@@ -72,16 +66,6 @@ static int cg_coro_func_suspendability_cb(void *ud, const XiFunc *func) {
     return plan ? (plan->may_suspend != 0 ? 1 : 0) : -1;
 }
 
-static XiCoroResolver cg_coro_resolver_intra(void) {
-    XiCoroResolver resolver;
-    resolver.resolve_callee = NULL;
-    resolver.resolve_method = NULL;
-    resolver.func_suspendability = NULL;
-    resolver.value_is_module_import = cg_coro_module_import_intra_cb;
-    resolver.ud = NULL;
-    return resolver;
-}
-
 static XiCoroResolver cg_coro_resolver_ctx(XiCgenCtx *ctx) {
     XiCoroResolver resolver;
     resolver.resolve_callee = cg_coro_resolve_callee_cb;
@@ -90,11 +74,6 @@ static XiCoroResolver cg_coro_resolver_ctx(XiCgenCtx *ctx) {
     resolver.value_is_module_import = cg_coro_module_import_ctx_cb;
     resolver.ud = ctx;
     return resolver;
-}
-
-static bool cg_func_needs_aot_coro(const XiFunc *f) {
-    XiCoroResolver resolver = cg_coro_resolver_intra();
-    return xi_coro_func_is_suspendable(f, &resolver);
 }
 
 static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f) {

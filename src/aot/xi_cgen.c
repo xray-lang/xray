@@ -1825,6 +1825,34 @@ static bool cg_static_function_value_uses_are_parallel_callbacks(const XiFunc *o
     return saw_callback;
 }
 
+/* Canonical parallel lowering materializes a stack closure with an
+ * XrAotCallableDesc even when the worker wrapper calls the typed body directly.
+ * The descriptor is executable metadata, so a typed callback whose descriptor
+ * names the boxed entry must retain that adapter. */
+static bool cg_func_has_parallel_callback_descriptor_use(const XiFunc *owner,
+                                                         const XiFunc *target) {
+    if (!owner || !target)
+        return false;
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *value = blk->values[vi];
+            if (value && value->aux == target &&
+                (value->op == XI_CLOSURE_NEW ||
+                 (value->op == XI_STACK_ALLOC && value->aux_int == XI_CLOSURE_NEW)) &&
+                cg_static_function_value_uses_are_parallel_callbacks(owner, value, target))
+                return true;
+        }
+    }
+    for (uint16_t ci = 0; ci < owner->nchildren; ci++) {
+        if (cg_func_has_parallel_callback_descriptor_use(owner->children[ci], target))
+            return true;
+    }
+    return false;
+}
+
 static bool cg_shared_static_function_slot_uses_are_direct(XiCgenCtx *ctx, const XiFunc *owner,
                                                            int slot, const XiFunc *target) {
     if (!ctx || !owner || slot < 0 || !target)
@@ -7420,6 +7448,9 @@ static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const c
 
     bool native_class_ptr_param = cg_func_has_native_class_ptr_param(ctx, f);
     const XiFunc *root = ctx && ctx->module ? ctx->module->init : NULL;
+    if (typed_abi && !cg_func_is_par_for_native_callback(f) &&
+        cg_func_has_parallel_callback_descriptor_use(root, f))
+        return true;
     if (cg_func_is_shared_slot_value(ctx, f)) {
         int func_slot = cg_shared_slot_for_func(ctx, f);
         if (func_slot >= 0) {

@@ -4634,7 +4634,7 @@ static const XiFunc *cg_class_native_resolve_getter_field_method(XiCgenCtx *ctx,
         if (!mfunc || !mfunc->name || strcmp(mfunc->name, getter_name) != 0)
             return NULL;
     }
-    if (!mfunc || cg_func_needs_aot_coro(mfunc) ||
+    if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
         (!cg_class_func_uses_native_receiver(ctx, mfunc) &&
          !cg_func_param_native_class_data(ctx, mfunc, 0)))
         return NULL;
@@ -4771,7 +4771,8 @@ static bool cg_class_shared_native_method_call_accepts_class(XiCgenCtx *ctx, con
                                                           (int) call->aux_int, &method_prefix)
                               : cg_lookup_method(ctx, method, source->class_name, &method_prefix);
     (void) method_prefix;
-    if (!mfunc || cg_func_needs_aot_coro(mfunc) || !cg_class_func_uses_native_receiver(ctx, mfunc))
+    if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
+        !cg_class_func_uses_native_receiver(ctx, mfunc))
         return false;
     CgClassNativeFunc target_info = cg_class_native_func(ctx, mfunc);
     return cg_class_native_can_pass_instance_as(ctx, source, target_info.class_data);
@@ -4806,7 +4807,8 @@ static bool cg_class_shared_native_getter_field_accepts_class(XiCgenCtx *ctx, co
             return false;
     }
     (void) method_prefix;
-    if (!mfunc || cg_func_needs_aot_coro(mfunc) || !cg_class_func_uses_native_receiver(ctx, mfunc))
+    if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
+        !cg_class_func_uses_native_receiver(ctx, mfunc))
         return false;
     CgClassNativeFunc target_info = cg_class_native_func(ctx, mfunc);
     return cg_class_native_can_pass_instance_as(ctx, source, target_info.class_data);
@@ -5361,7 +5363,8 @@ static bool cg_class_native_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const X
         return true;
     if (call->op == XI_CALL && call->nargs >= 1) {
         CgStaticFunctionCall direct = cg_resolve_static_function_call(ctx, current, call->args[0]);
-        if (direct.func && !direct.is_class_constructor && !cg_func_needs_aot_coro(direct.func) &&
+        if (direct.func && !direct.is_class_constructor &&
+            !cg_func_needs_aot_coro_ctx(ctx, direct.func) &&
             !cg_class_native_func_has_error_flow(ctx, direct.func, (uint8_t) (depth + 1)))
             return true;
 
@@ -5374,7 +5377,7 @@ static bool cg_class_native_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const X
     const char *method_prefix = NULL;
     const XiFunc *mfunc = cg_class_native_resolve_method_call(ctx, current, call, &method_prefix);
     (void) method_prefix;
-    if (!mfunc || cg_func_needs_aot_coro(mfunc) ||
+    if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
         !cg_class_func_uses_native_receiver(ctx, mfunc) ||
         cg_class_native_func_has_error_flow(ctx, mfunc, (uint8_t) (depth + 1)))
         return false;

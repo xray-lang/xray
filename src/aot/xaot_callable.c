@@ -59,6 +59,20 @@ typedef struct CallableAnalysis {
     uint32_t storage_cap;
 } CallableAnalysis;
 
+/* Canonical Xi records the strongest portable effect of parallel operations:
+ * the VM may park and replay them while the AOT runtime executes the operation
+ * as a synchronous fork/join boundary.  Callable planning is target-specific,
+ * so do not turn an AOT caller into a coroutine solely because it contains a
+ * canonical parallel op.  Real suspension in the callback remains rejected by
+ * parallel CGen and all other suspend points retain the shared classifier. */
+static bool callable_aot_value_may_suspend(const XiFunc *func, const XiValue *value) {
+    if (!value)
+        return false;
+    if (value->op == XI_PAR_FOR || value->op == XI_PAR_MAP || value->op == XI_PAR_REDUCE)
+        return false;
+    return xi_coro_is_suspend_point(func, value, NULL);
+}
+
 static bool callable_reserve(void **items, uint32_t *cap, uint32_t needed, size_t item_size) {
     uint32_t next;
     void *grown;
@@ -576,16 +590,25 @@ static bool callable_analysis_init(CallableAnalysis *a, const XaotBundle *bundle
         if (facts->value_count && !facts->values)
             return false;
         if (facts->func) {
+            bool has_portable_parallel_suspend = false;
+            bool has_aot_suspend = false;
             for (uint32_t bi = 0; bi < facts->func->nblocks; bi++) {
                 const XiBlock *block = facts->func->blocks[bi];
                 if (!block)
                     continue;
                 for (uint32_t vi = 0; vi < block->nvalues; vi++) {
                     const XiValue *value = block->values[vi];
-                    if (value && xi_coro_is_suspend_point(facts->func, value, NULL))
-                        facts->effect_bits |= XG_BODY_MAY_SUSPEND;
+                    if (value && (value->op == XI_PAR_FOR || value->op == XI_PAR_MAP ||
+                                  value->op == XI_PAR_REDUCE))
+                        has_portable_parallel_suspend = true;
+                    if (callable_aot_value_may_suspend(facts->func, value))
+                        has_aot_suspend = true;
                 }
             }
+            if (has_portable_parallel_suspend && !has_aot_suspend)
+                facts->effect_bits &= ~XG_BODY_MAY_SUSPEND;
+            if (has_aot_suspend)
+                facts->effect_bits |= XG_BODY_MAY_SUSPEND;
         }
     }
     for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {

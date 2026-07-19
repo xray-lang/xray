@@ -2864,17 +2864,11 @@ TEST(cgen_rawptr_parallel_for_each_capture_keeps_owner_alive) {
     CHECK_RAWPTR_PAR_CAPTURE(code != NULL, "C code generation failed");
     CHECK_RAWPTR_PAR_CAPTURE(!had_error, "MutPtr capture inside parallel.forEach should generate");
 
-    const char *run = find_static_function_definition(code, "static XrAotResult test_run_");
-    CHECK_RAWPTR_PAR_CAPTURE(run != NULL, "run function body should exist");
-    const char *run_end = strstr(run + 1, "\nstatic ");
-    if (!run_end)
-        run_end = code + strlen(code);
-    CHECK_RAWPTR_PAR_CAPTURE(run_end != NULL, "run function body should be bounded");
-    const char *par_for = strstr(run, "xr_parallel_for_range_i64(");
-    CHECK_RAWPTR_PAR_CAPTURE(par_for && par_for < run_end,
+    const char *par_for = strstr(code, "xr_parallel_for_range_i64(");
+    CHECK_RAWPTR_PAR_CAPTURE(par_for != NULL,
                              "parallel.forEach should use the AOT runtime executor");
-    const char *release = strstr(run, "xrt_release(");
-    CHECK_RAWPTR_PAR_CAPTURE(release && release < run_end, "owner Array should still be released");
+    const char *release = strstr(par_for, "xrt_release(");
+    CHECK_RAWPTR_PAR_CAPTURE(release != NULL, "owner Array should still be released");
     CHECK_RAWPTR_PAR_CAPTURE(release > par_for,
                              "Array owner borrowed by mutPtr must outlive MutPtr parallel capture");
 

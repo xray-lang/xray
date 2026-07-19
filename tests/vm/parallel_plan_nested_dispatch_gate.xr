@@ -1,6 +1,6 @@
 import parallel
 
-var seqPlan = parallel.Plan<int>(parallel.Options(1), (lane) -> lane)
+shared seqPlan = parallel.Plan<int>(parallel.Options(1), (lane) -> lane)
 
 try {
     seqPlan.forEach(0..4, (state, i) -> {
@@ -24,7 +24,7 @@ seqPlan.forEach(0..4, (state, i) -> {
 })
 print(seqTouched.load(Ordering.Relaxed) == 4)
 
-var vmPlan = parallel.Plan<int>(parallel.Options(2), (lane) -> lane)
+shared vmPlan = parallel.Plan<int>(parallel.Options(2), (lane) -> lane)
 
 try {
     vmPlan.forEach(0..20000, (state, i) -> {
