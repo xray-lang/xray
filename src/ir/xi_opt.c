@@ -3686,6 +3686,9 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
 
     validate_pass_table();
 
+    XiAnalysisManager analysis_manager;
+    xi_analysis_manager_init(&analysis_manager, f);
+
     if (level == XI_OPT_NONE) {
         result.change = xi_pass_no_change();
         return result;
@@ -3767,8 +3770,8 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
 
             if (desc->requires_evidence) {
                 char evidence_error[256];
-                if (!xi_analysis_require(f, desc->requires_evidence, evidence_error,
-                                         sizeof(evidence_error))) {
+                if (!xi_analysis_require_proven_domains(&analysis_manager, desc->requires_evidence,
+                                                        evidence_error, sizeof(evidence_error))) {
                     result.ok = false;
                     result.pass_name = desc->name;
                     result.round = round;

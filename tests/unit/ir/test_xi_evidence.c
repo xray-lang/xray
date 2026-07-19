@@ -100,32 +100,55 @@ TEST(unproven_is_a_current_formal_result) {
 
 TEST(analysis_manager_rejects_current_unproven_result) {
     XiFunc *func = make_func();
+    XiAnalysisManager manager;
+    xi_analysis_manager_init(&manager, func);
     char error[256] = {0};
     publish_function(func, XI_EVD_CALL_TARGET, XI_PROOF_UNPROVEN,
                      XI_EVIDENCE_REASON_INCOMPLETE_GLOBAL_FACTS);
-    ASSERT_FALSE(xi_analysis_require(func, XI_EVD_CALL_TARGET, error, sizeof(error)));
+    ASSERT_FALSE(
+        xi_analysis_require_proven_domains(&manager, XI_EVD_CALL_TARGET, error, sizeof(error)));
     ASSERT_TRUE(strstr(error, "call_target") != NULL);
     xi_func_free(func);
 }
 
 TEST(analysis_manager_recomputes_supported_evidence) {
     XiFunc *func = make_func();
+    XiAnalysisManager manager;
+    xi_analysis_manager_init(&manager, func);
     char error[256];
-    ASSERT_TRUE(xi_analysis_require(func, XI_EVD_RANGE | XI_EVD_ALIAS, error, sizeof(error)));
+    ASSERT_TRUE(xi_analysis_require_proven_domains(&manager, XI_EVD_RANGE | XI_EVD_ALIAS, error,
+                                                   sizeof(error)));
     ASSERT_TRUE(xi_evidence_domain_is_current(func, XI_EVD_RANGE));
     ASSERT_TRUE(xi_evidence_domain_is_current(func, XI_EVD_ALIAS));
 
     xi_evidence_note_rewrite(func, false, true, false, XI_EVD_RANGE | XI_EVD_ALIAS);
     ASSERT_FALSE(xi_evidence_domain_is_current(func, XI_EVD_RANGE));
-    ASSERT_TRUE(xi_analysis_require(func, XI_EVD_RANGE | XI_EVD_ALIAS, error, sizeof(error)));
+    ASSERT_TRUE(xi_analysis_require_proven_domains(&manager, XI_EVD_RANGE | XI_EVD_ALIAS, error,
+                                                   sizeof(error)));
     xi_func_free(func);
 }
 
-TEST(analysis_manager_rejects_domain_without_producer) {
+TEST(analysis_manager_proves_empty_call_target_set) {
     XiFunc *func = make_func();
+    XiAnalysisManager manager;
+    xi_analysis_manager_init(&manager, func);
     char error[256] = {0};
-    ASSERT_FALSE(xi_analysis_require(func, XI_EVD_CALL_TARGET, error, sizeof(error)));
-    ASSERT_TRUE(strstr(error, "call_target") != NULL);
+    ASSERT_TRUE(
+        xi_analysis_require_proven_domains(&manager, XI_EVD_CALL_TARGET, error, sizeof(error)));
+    ASSERT_TRUE(xi_evidence_domain_is_proven_current(func, XI_EVD_CALL_TARGET));
+    xi_func_free(func);
+}
+
+TEST(analysis_manager_routes_every_local_domain) {
+    XiFunc *func = make_func();
+    func->allocation_effect_complete = true;
+    func->allocation_state = 0;
+    XiAnalysisManager manager;
+    xi_analysis_manager_init(&manager, func);
+    char error[256] = {0};
+    ASSERT_TRUE(xi_analysis_require_proven_domains(&manager, XI_EVD_ALL, error, sizeof(error)));
+    for (uint32_t bit = 1; bit <= XI_EVD_MEMSSA; bit <<= 1u)
+        ASSERT_TRUE(xi_evidence_domain_is_proven_current(func, (XiEvidenceDomain) bit));
     xi_func_free(func);
 }
 
@@ -190,7 +213,8 @@ RUN_TEST(cfg_revision_mismatch_rejects_old_proof);
 RUN_TEST(unproven_is_a_current_formal_result);
 RUN_TEST(analysis_manager_rejects_current_unproven_result);
 RUN_TEST(analysis_manager_recomputes_supported_evidence);
-RUN_TEST(analysis_manager_rejects_domain_without_producer);
+RUN_TEST(analysis_manager_proves_empty_call_target_set);
+RUN_TEST(analysis_manager_routes_every_local_domain);
 RUN_TEST(value_proof_cannot_be_consumed_for_another_value);
 RUN_TEST(orphan_value_proof_is_pruned_after_rewrite);
 RUN_TEST(range_query_rejects_stale_subject_payload);

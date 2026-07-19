@@ -185,6 +185,15 @@ XR_FUNC XiPassChange xi_tbaa_annotate(XiFunc *f) {
             if (!v)
                 continue;
             xi_tbaa_annotate_value(v);
+            if (xi_is_memory_op(v->op)) {
+                XiEvidencePayload payload = {
+                    .kind = XI_EVIDENCE_PAYLOAD_U64_PAIR,
+                    .as.u64_pair = {.first = v->mem_group, .second = v->aux_int},
+                };
+                xi_evidence_publish(f, XI_EVD_ALIAS, xi_evidence_subject_value(v), XI_PROOF_PROVEN,
+                                    XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TBAA, v->line,
+                                    &payload);
+            }
         }
     }
 

@@ -287,6 +287,18 @@ XR_FUNC XiMemSSA *xi_memssa_build(XiFunc *f) {
     xr_free(cur_ver);
     xr_free(rpo);
 
+    for (uint32_t id = 0; id < mssa->naccesses; id++) {
+        XiMemAccess *access = mssa->accesses[id];
+        if (!access || !access->value)
+            continue;
+        XiEvidencePayload payload = {
+            .kind = XI_EVIDENCE_PAYLOAD_U64_PAIR,
+            .as.u64_pair = {.first = access->use_ver, .second = access->def_ver},
+        };
+        xi_evidence_publish(f, XI_EVD_MEMSSA, xi_evidence_subject_value(access->value),
+                            XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_MEMSSA,
+                            access->value->line, &payload);
+    }
     xi_evidence_publish(f, XI_EVD_MEMSSA, xi_evidence_subject_function(), XI_PROOF_PROVEN,
                         XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_MEMSSA, 0, NULL);
     return mssa;

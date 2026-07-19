@@ -75,12 +75,19 @@ typedef enum XiEvidenceProducer {
     XI_EVIDENCE_PRODUCER_ESCAPE_ANALYSIS,
     XI_EVIDENCE_PRODUCER_TBAA,
     XI_EVIDENCE_PRODUCER_MEMSSA,
+    XI_EVIDENCE_PRODUCER_EFFECT_SCAN,
+    XI_EVIDENCE_PRODUCER_OWNERSHIP_ANALYSIS,
+    XI_EVIDENCE_PRODUCER_LIFETIME_ANALYSIS,
+    XI_EVIDENCE_PRODUCER_ALLOCATION_PUBLICATION,
+    XI_EVIDENCE_PRODUCER_CALL_TARGET_PUBLICATION,
+    XI_EVIDENCE_PRODUCER_PROVENANCE_ANALYSIS,
     XI_EVIDENCE_PRODUCER_TEST,
 } XiEvidenceProducer;
 
 typedef enum XiEvidencePayloadKind {
     XI_EVIDENCE_PAYLOAD_NONE = 0,
     XI_EVIDENCE_PAYLOAD_RANGE,
+    XI_EVIDENCE_PAYLOAD_U64_PAIR,
 } XiEvidencePayloadKind;
 
 typedef struct XiEvidenceRangePayload {
@@ -94,6 +101,10 @@ typedef struct XiEvidencePayload {
     XiEvidencePayloadKind kind;
     union {
         XiEvidenceRangePayload range;
+        struct {
+            uint64_t first;
+            uint64_t second;
+        } u64_pair;
     } as;
 } XiEvidencePayload;
 

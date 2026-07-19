@@ -189,8 +189,9 @@ XiEvidenceView xi_evidence_query(const XiFunc *func, XiEvidenceDomain domain,
         view.reason = XI_EVIDENCE_REASON_SUBJECT_NOT_FOUND;
         return view;
     }
-    view.reason = stale_reason(func, view.record);
-    view.current = view.reason == XI_EVIDENCE_REASON_NONE;
+    XiEvidenceReason freshness = stale_reason(func, view.record);
+    view.current = freshness == XI_EVIDENCE_REASON_NONE;
+    view.reason = view.current ? view.record->reason : freshness;
     return view;
 }
 
@@ -376,6 +377,18 @@ const char *xi_evidence_producer_name(XiEvidenceProducer producer) {
             return "tbaa";
         case XI_EVIDENCE_PRODUCER_MEMSSA:
             return "memssa";
+        case XI_EVIDENCE_PRODUCER_EFFECT_SCAN:
+            return "effect_scan";
+        case XI_EVIDENCE_PRODUCER_OWNERSHIP_ANALYSIS:
+            return "ownership_analysis";
+        case XI_EVIDENCE_PRODUCER_LIFETIME_ANALYSIS:
+            return "lifetime_analysis";
+        case XI_EVIDENCE_PRODUCER_ALLOCATION_PUBLICATION:
+            return "allocation_publication";
+        case XI_EVIDENCE_PRODUCER_CALL_TARGET_PUBLICATION:
+            return "call_target_publication";
+        case XI_EVIDENCE_PRODUCER_PROVENANCE_ANALYSIS:
+            return "provenance_analysis";
         case XI_EVIDENCE_PRODUCER_TEST:
             return "test";
         case XI_EVIDENCE_PRODUCER_INVALID:
