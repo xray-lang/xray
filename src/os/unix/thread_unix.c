@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <sched.h>
+#include <stdatomic.h>
 #include <time.h>
 #include <string.h>
 #include <unistd.h>  // sysconf
@@ -95,10 +96,10 @@ void xr_thread_sleep_ms(unsigned int ms) {
 }
 
 unsigned int xr_os_cpu_count(void) {
-    static unsigned int cached = 0;
-    if (cached != 0) {
-        return cached;
-    }
+    static atomic_uint cached;
+    unsigned int current = atomic_load_explicit(&cached, memory_order_acquire);
+    if (current != 0)
+        return current;
     long n = -1;
 #if defined(_SC_NPROCESSORS_ONLN)
     n = sysconf(_SC_NPROCESSORS_ONLN);
@@ -114,8 +115,12 @@ unsigned int xr_os_cpu_count(void) {
         }
     }
 #endif
-    cached = (n > 0) ? (unsigned int) n : 1u;
-    return cached;
+    unsigned int detected = (n > 0) ? (unsigned int) n : 1u;
+    unsigned int expected = 0;
+    if (!atomic_compare_exchange_strong_explicit(&cached, &expected, detected, memory_order_release,
+                                                 memory_order_acquire))
+        return expected;
+    return detected;
 }
 
 int xr_thread_pin_to_cpu(unsigned int cpu_index) {
