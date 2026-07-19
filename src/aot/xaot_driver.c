@@ -36,6 +36,7 @@
 #include "../base/xglobal_indices.h"
 #include "../os/os_dir.h"
 #include "../ir/xi.h"
+#include "../ir/xi_evidence.h"
 #include "../ir/xi_pipeline.h"
 #include "../ir/xi_import_resolve.h"
 #include "xi_cgen.h"
@@ -92,6 +93,35 @@ static bool xaot_bundle_has_explicit_vector_ops(XiModule **modules, int nmodules
             return true;
     }
     return false;
+}
+
+static void xaot_dump_func_local_evidence(FILE *out, const XiFunc *func, uint32_t depth) {
+    if (!out || !func)
+        return;
+    fprintf(out, "xi-evidence function=%s depth=%u stage=%s revision=%llu/%llu/%llu/%llu\n",
+            func->name ? func->name : "<anonymous>", depth, xi_stage_name(func->stage),
+            (unsigned long long) func->ir_revision, (unsigned long long) func->cfg_version,
+            (unsigned long long) func->memory_revision, (unsigned long long) func->call_revision);
+    xi_evidence_dump(func, out);
+    for (uint16_t i = 0; i < func->nchildren; i++)
+        xaot_dump_func_local_evidence(out, func->children[i], depth + 1);
+}
+
+static char *xaot_dump_local_evidence(XiFunc **funcs, int nfuncs) {
+    char *buf = NULL;
+    size_t bufsz = 0;
+    FILE *out = xr_open_memstream(&buf, &bufsz);
+    if (!out)
+        return NULL;
+    for (int i = 0; funcs && i < nfuncs; i++)
+        xaot_dump_func_local_evidence(out, funcs[i], 0);
+    bool write_failed = ferror(out) != 0;
+    int close_status = xr_close_memstream(out, &buf, &bufsz);
+    if (write_failed || close_status != 0) {
+        xr_free(buf);
+        return NULL;
+    }
+    return buf;
 }
 
 static bool xaot_str_has_suffix(const char *text, const char *suffix) {
@@ -1326,6 +1356,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     bool emit_plan_dump;
     bool emit_program_main;
     bool emit_global_evidence_dump;
+    bool emit_local_evidence_dump;
     const char *evidence_cache_dir;
     bool evidence_cache_rebuild;
     bool evidence_cache_verbose;
@@ -1355,6 +1386,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     emit_plan_dump = options->emit_plan_dump;
     emit_program_main = options->emit_program_main;
     emit_global_evidence_dump = options->emit_global_evidence_dump;
+    emit_local_evidence_dump = options->emit_local_evidence_dump;
     evidence_cache_dir = options->evidence_cache_dir;
     evidence_cache_rebuild = options->evidence_cache_rebuild;
     evidence_cache_verbose = options->evidence_cache_verbose;
@@ -1602,6 +1634,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     XaotPrepareStats prepare_stats;
     char *plan_dump = NULL;
     char *global_evidence_dump = NULL;
+    char *local_evidence_dump = NULL;
     char *evidence_cache_payloads[XG_EVIDENCE_CACHE_PHASE_COUNT];
     XgEvidenceCacheManifest evidence_cache_manifest;
     bool evidence_cache_manifest_valid = false;
@@ -1806,6 +1839,13 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     if (!reject_profile_static_data_plans(&aot_bundle))
         goto fail_free_ir;
+    if (emit_local_evidence_dump) {
+        local_evidence_dump = xaot_dump_local_evidence(ir_funcs, nmodules);
+        if (!local_evidence_dump) {
+            fprintf(stderr, "Error: failed to dump local Xi evidence\n");
+            goto fail_free_ir;
+        }
+    }
     /* The plan dump is O(functions x values) diagnostics; only build it when
      * the caller actually wants it (--dump-xaot-plan). */
     if (emit_plan_dump) {
@@ -1966,6 +2006,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     plan_dump = NULL;
     result->global_evidence_dump = global_evidence_dump;
     global_evidence_dump = NULL;
+    result->local_evidence_dump = local_evidence_dump;
+    local_evidence_dump = NULL;
     result->evidence_cache_manifest = evidence_cache_manifest;
     result->has_evidence_cache_manifest = evidence_cache_manifest_valid;
     for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++) {
@@ -1999,6 +2041,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
 fail_free_ir:
     xr_free(plan_dump);
     xr_free(global_evidence_dump);
+    xr_free(local_evidence_dump);
     for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++)
         xr_free(evidence_cache_payloads[i]);
     xr_free(c_export_header);
@@ -2066,6 +2109,7 @@ XR_FUNC void xaot_build_result_free(XaotBuildResult *result) {
     }
     xr_free(result->plan_dump);
     xr_free(result->global_evidence_dump);
+    xr_free(result->local_evidence_dump);
     for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++)
         xr_free(result->evidence_cache_payloads[i]);
     xr_free(result->c_export_header);

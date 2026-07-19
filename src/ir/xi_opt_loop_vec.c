@@ -27,6 +27,8 @@ static bool mark_loop_vectorized(XiLoop *loop) {
     XiBasicIV *biv = &loop->basic_ivs[0];
     if (!biv->phi)
         return false;
+    if ((biv->phi->flags & LOOP_VEC_FLAG) != 0)
+        return false;
     biv->phi->flags |= LOOP_VEC_FLAG;
     return true;
 }
@@ -55,6 +57,7 @@ XR_FUNC XiPassChange xi_opt_loop_vec(XiFunc *f) {
 
     /* Run SLP on marked loop bodies to pack inner stores. */
     XiPassChange slp = xi_opt_slp(f);
+    slp.values_changed = true;
     slp.n_added += n_marked;
     return slp;
 }

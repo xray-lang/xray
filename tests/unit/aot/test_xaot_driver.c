@@ -470,6 +470,33 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
     passed++;
 }
 
+static void test_driver_dumps_subject_bound_local_evidence(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(write_temp_source(source_path, sizeof(source_path)));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.emit_local_evidence_dump = true;
+
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.local_evidence_dump != NULL);
+    ASSERT_TRUE(strstr(result.local_evidence_dump, "xi-evidence function=") != NULL);
+    ASSERT_TRUE(strstr(result.local_evidence_dump, "revision=") != NULL);
+    ASSERT_TRUE(strstr(result.local_evidence_dump, "subject=") != NULL);
+    ASSERT_TRUE(strstr(result.local_evidence_dump, "producer=") != NULL);
+    ASSERT_TRUE(strstr(result.local_evidence_dump, "source=") != NULL);
+
+    xaot_build_result_free(&result);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
 static void test_driver_rejects_invalid_imported_summary_payload_set(void) {
     XaotTarget target = {0};
     XaotBuildOptions options = {0};
@@ -770,6 +797,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
 int main(void) {
     test_target_simd_plan_is_explicit_and_fail_closed();
     test_driver_consumes_imported_summary_payload_set();
+    test_driver_dumps_subject_bound_local_evidence();
     test_driver_rejects_invalid_imported_summary_payload_set();
     test_driver_analyzes_aggregate_layout_with_selected_target();
     test_driver_validates_freestanding_runtime_provider();
