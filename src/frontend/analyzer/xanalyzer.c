@@ -1190,6 +1190,33 @@ static XaFileEntry *find_or_create_file(XaAnalyzer *analyzer, const char *file) 
     return entry;
 }
 
+bool xa_analyzer_push_file_scope(XaAnalyzer *analyzer, const char *file,
+                                 XaAnalyzerFileScope *scope) {
+    if (!analyzer || !file || !scope)
+        return false;
+
+    memset(scope, 0, sizeof(*scope));
+    XrHashMap *fmap = (XrHashMap *) analyzer->files_map;
+    XaFileEntry *entry = fmap ? (XaFileEntry *) xr_hashmap_get(fmap, file) : NULL;
+    if (!entry || !entry->file_scope)
+        return false;
+
+    scope->previous_scope = analyzer->current_scope;
+    scope->previous_file = analyzer->current_file;
+    scope->active = true;
+    analyzer->current_scope = entry->file_scope;
+    analyzer->current_file = entry->path;
+    return true;
+}
+
+void xa_analyzer_pop_file_scope(XaAnalyzer *analyzer, XaAnalyzerFileScope *scope) {
+    if (!analyzer || !scope || !scope->active)
+        return;
+    analyzer->current_scope = scope->previous_scope;
+    analyzer->current_file = scope->previous_file;
+    memset(scope, 0, sizeof(*scope));
+}
+
 // Clear all base pointers that reference a specific class_info (before freeing it)
 static void clear_base_references(XaScope *scope, XrClassInfo *target, XaAnalyzer *analyzer) {
     if (!scope || !target)

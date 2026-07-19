@@ -1,0 +1,13 @@
+// A dependency module must lower enum payload types in its own analyzed file
+// scope even when the entry module does not import those nested payload types.
+import { MirroredResult, mirror, produce } from "./enum_payload_import_dep"
+
+fn score(ok: bool) -> int {
+    return match (mirror(produce(ok))) {
+        MirroredResult.Ok(value)  -> 42
+        MirroredResult.Err(error) -> -3
+    }
+}
+
+print(score(true))
+print(score(false))

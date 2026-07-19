@@ -167,6 +167,20 @@ static bool xi_pipeline_analyzer_gate(struct XaAnalyzer *analyzer, XiPipelineRes
     return true;
 }
 
+static bool xi_pipeline_push_source_file(struct XaAnalyzer *analyzer, const XiPipelineConfig *cfg,
+                                         XaAnalyzerFileScope *file_scope, XiPipelineResult *res) {
+    if (!analyzer || !cfg || !cfg->source_file || !cfg->source_file[0])
+        return true;
+    if (xa_analyzer_push_file_scope(analyzer, cfg->source_file, file_scope))
+        return true;
+
+    char detail[512];
+    snprintf(detail, sizeof(detail), "analyzer has no file scope for '%s'", cfg->source_file);
+    xi_pipeline_set_error(res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_ANALYZE, XI_VERIFY_STRUCTURE,
+                          NULL, NULL, NULL, detail);
+    return false;
+}
+
 /* ========== Configuration ========== */
 
 XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
@@ -381,14 +395,21 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
 
     XiPipelineResult gate;
     memset(&gate, 0, sizeof(gate));
-    if (!xi_pipeline_analyzer_gate(analyzer, &gate))
+    XaAnalyzerFileScope file_scope = {0};
+    if (!xi_pipeline_push_source_file(analyzer, cfg, &file_scope, &gate))
         return gate;
+    if (!xi_pipeline_analyzer_gate(analyzer, &gate)) {
+        xa_analyzer_pop_file_scope(analyzer, &file_scope);
+        return gate;
+    }
 
     /* Canonicalize AST before lowering */
     if (cfg->run_canonicalize)
         xr_canon_func(func_node, analyzer, session);
 
     XiFunc *ir = xi_lower_func(func_node, analyzer, isolate);
+
+    xa_analyzer_pop_file_scope(analyzer, &file_scope);
 
     /* Canonicalization guarantees: advance stage and invariant mask
      * for the root and all nested child functions. */
@@ -414,8 +435,13 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
 
     XiPipelineResult gate;
     memset(&gate, 0, sizeof(gate));
-    if (!xi_pipeline_analyzer_gate(analyzer, &gate))
+    XaAnalyzerFileScope file_scope = {0};
+    if (!xi_pipeline_push_source_file(analyzer, cfg, &file_scope, &gate))
         return gate;
+    if (!xi_pipeline_analyzer_gate(analyzer, &gate)) {
+        xa_analyzer_pop_file_scope(analyzer, &file_scope);
+        return gate;
+    }
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     XrCompilerSessionScope canon_scope;
@@ -433,6 +459,8 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
 
     XiFunc *ir = xi_lower_program_ex(program_node, analyzer, isolate, cfg->repl_mode,
                                      cfg->global_evidence, cfg->global_evidence_module_id);
+
+    xa_analyzer_pop_file_scope(analyzer, &file_scope);
 
     /* Canonicalization guarantees: advance stage and invariant mask
      * for the root and all nested child functions. */

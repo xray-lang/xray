@@ -961,11 +961,45 @@ static bool pattern_is_irrefutable_binding(AstNode *pattern) {
     return false;
 }
 
-/* True if the pattern is (or, for nesting, contains at top level) an array
- * pattern. Array element reads must be deferred until after the length test
- * passes (out-of-bounds index traps), so their bindings run in the body block. */
-static bool pattern_contains_array(AstNode *pattern) {
-    return pattern && pattern->type == AST_PATTERN_ARRAY;
+/* Binding extraction that is only valid after the pattern test succeeds.
+ * Array element reads can trap before the length check. ADT payload slots are
+ * variant-typed, so loading them before the tag check lets optimizers merge
+ * physically identical slots with incompatible static types. Defer both, even
+ * when nested in another structural pattern. */
+static bool pattern_bindings_require_match(AstNode *pattern) {
+    if (!pattern)
+        return false;
+    switch (pattern->type) {
+        case AST_PATTERN_ARRAY:
+        case AST_PATTERN_ADT:
+            return true;
+        case AST_PATTERN_TUPLE: {
+            PatternTupleNode *tuple = &pattern->as.pattern_tuple;
+            for (int i = 0; i < tuple->count; i++) {
+                if (pattern_bindings_require_match(tuple->patterns[i]))
+                    return true;
+            }
+            return false;
+        }
+        case AST_PATTERN_OBJECT: {
+            PatternObjectNode *object = &pattern->as.pattern_object;
+            for (int i = 0; i < object->count; i++) {
+                if (pattern_bindings_require_match(object->patterns[i]))
+                    return true;
+            }
+            return false;
+        }
+        case AST_PATTERN_MULTI: {
+            PatternMultiNode *multi = &pattern->as.pattern_multi;
+            for (int i = 0; i < multi->count; i++) {
+                if (pattern_bindings_require_match(multi->patterns[i]))
+                    return true;
+            }
+            return false;
+        }
+        default:
+            return false;
+    }
 }
 
 static bool pattern_payload_is_irrefutable(AstNode *pattern) {
@@ -1762,8 +1796,8 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
         MatchArmNode *arm = &arm_node->as.match_arm;
 
         /* Bind every named slot in the pattern (top-level bare name or
-         * AST_VARIABLEs nested inside a tuple pattern) before lowering
-         * the test or guard, so both can reference the captures.
+         * AST_VARIABLEs nested inside a tuple pattern) before lowering the
+         * test or guard when extraction is unconditionally safe.
          *
          * is_top_binding is the legacy "bare-name pattern" case where
          * the match test reduces to TRUE and selection is decided
@@ -1771,10 +1805,10 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
          * that shortcut: their refutable slots still need TUPLE_GET-
          * based equality testing.
          *
-         * Array patterns defer their bindings (and any guard reading them) to
-         * the matched body block: element reads trap out of bounds, so they
-         * must run only after the length test has passed. */
-        bool defer_bindings = pattern_contains_array(arm->pattern);
+         * Array and ADT patterns defer their bindings (and any guard reading
+         * them) to the matched body block: array reads require a successful
+         * length test, and ADT payload types require a successful tag test. */
+        bool defer_bindings = pattern_bindings_require_match(arm->pattern);
         if (!defer_bindings)
             lower_pattern_bindings(l, subject, arm->pattern);
 
