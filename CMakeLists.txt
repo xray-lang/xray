@@ -2072,6 +2072,16 @@ if(BUILD_TESTS)
         TIMEOUT 20
     )
 
+    add_test(
+        NAME zero_cost_contract_inventory
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks/aot/zero_cost/contracts_inventory.sh
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(zero_cost_contract_inventory PROPERTIES
+        LABELS "aot;benchmark;plan;evidence"
+        TIMEOUT 20
+    )
+
     # Link manifest contract: freestanding direct calls and runtime-backed
     # stdlib modules must not drag in the full xray_core library.
     add_test(

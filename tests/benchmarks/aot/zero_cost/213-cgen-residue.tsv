@@ -1,0 +1,11 @@
+metric	count	scope	command_class	gating
+late_simd_path_match	1	src/aot,src/ir	rg stdlib/simd/simd.xr	must_reach_zero
+late_simd_type_name_match	6	src/aot/xi_simd_lower.c	rg SIMD display type names	must_reach_zero
+late_simd_method_name_match	24	src/aot/xi_simd_lower.c	rg SIMD method spellings	must_reach_zero
+cgen_lane_materialization_sites	43	src/aot/xi_cgen*	rg _lanes	must_reach_zero_in_pure_vector_contract
+cgen_pending_error_sites	9	src/aot/xi_cgen*	rg xrt_has_pending_error	contract_scoped
+cgen_text_matcher_sites	701	src/aot/xi_cgen*	rg strcmp,strstr,path	must_classify_then_remove_semantic_inference
+cgen_analysis_word_sites	403	src/aot/xi_cgen*	rg range,escape,alias,effect,infer,analy	must_classify_then_remove_analysis
+production_stage_direct_writes	11	src excluding XiPipelineError	rg stage assignment	must_reach_transition_core_only
+transient_invariant_references	33	src	rg transient XI_INV names	must_reach_zero
+late_simd_bundle_references	3	src	rg xi_simd_lower_bundle	must_reach_zero
