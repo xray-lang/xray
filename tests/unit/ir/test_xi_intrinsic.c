@@ -412,6 +412,13 @@ static void test_semantic_intrinsic_registry(void) {
                     pod_ptr->effect == XA_INTRINSIC_EFFECT_PURE,
                 "Slice<POD>.ptr must be canonical before Xi construction");
 
+    const XaIntrinsicDesc *atomic_fetch_add = xa_intrinsic_by_id(XA_INTRINSIC_ATOMIC_FETCH_ADD);
+    ASSERT_TRUE(atomic_fetch_add && atomic_fetch_add->family == XA_INTRINSIC_FAMILY_ATOMIC &&
+                    atomic_fetch_add->lowering == XA_INTRINSIC_LOWERING_ATOMIC_RMW &&
+                    atomic_fetch_add->effect == XA_INTRINSIC_EFFECT_READ_WRITE &&
+                    atomic_fetch_add->allocation == XA_INTRINSIC_ALLOCATION_NO_ALLOC,
+                "Atomic.fetchAdd must publish stable nothrow RMW semantics");
+
     const XaIntrinsicDesc *par_map_into = xa_intrinsic_by_id(XA_INTRINSIC_PARALLEL_PLAN_MAP_INTO);
     ASSERT_TRUE(par_map_into && par_map_into->family == XA_INTRINSIC_FAMILY_PARALLEL &&
                     par_map_into->lowering == XA_INTRINSIC_LOWERING_PAR_MAP_INTO &&

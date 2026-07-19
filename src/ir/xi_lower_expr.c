@@ -5107,7 +5107,9 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         lower_take_memory_intrinsic_evidence(l, node, resolved->intrinsic_id, &sequence_ids);
         xi_lower_apply_sequence_evidence_ids(value, &sequence_ids);
     }
-    if (desc->effect != XA_INTRINSIC_EFFECT_PURE)
+    if (desc->effect == XA_INTRINSIC_EFFECT_MAY_THROW ||
+        desc->effect == XA_INTRINSIC_EFFECT_READ_MAY_THROW ||
+        desc->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW)
         xi_lower_insert_err_check(l, node);
     return value;
 }

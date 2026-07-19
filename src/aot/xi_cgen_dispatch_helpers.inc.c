@@ -6497,64 +6497,35 @@ typedef enum {
     CG_ATOMIC_I64_DIRECT_SWAP,
 } CgAtomicI64DirectOp;
 
-static CgAtomicI64DirectOp xicgen_atomic_i64_direct_op(const XiValue *v, const char *method,
+static CgAtomicI64DirectOp xicgen_atomic_i64_direct_op(const XiValue *v, XaIntrinsicId intrinsic_id,
                                                        uint16_t nargs) {
-    if (!v || v->nargs < 1 || !method)
+    if (!v || v->nargs < 1)
         return CG_ATOMIC_I64_DIRECT_NONE;
-    if (strcmp(method, "load") == 0 && (nargs == 0 || nargs == 1))
-        return CG_ATOMIC_I64_DIRECT_LOAD;
-    if (strcmp(method, "store") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2)
-        return CG_ATOMIC_I64_DIRECT_STORE;
-    if (strcmp(method, "add") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2)
-        return CG_ATOMIC_I64_DIRECT_ADD;
-    if (strcmp(method, "sub") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2)
-        return CG_ATOMIC_I64_DIRECT_SUB;
-    if (strcmp(method, "fetchAdd") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2)
-        return CG_ATOMIC_I64_DIRECT_FETCH_ADD;
-    if (strcmp(method, "fetchSub") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2)
-        return CG_ATOMIC_I64_DIRECT_FETCH_SUB;
-    if (strcmp(method, "swap") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2)
-        return CG_ATOMIC_I64_DIRECT_SWAP;
+    switch (intrinsic_id) {
+        case XA_INTRINSIC_ATOMIC_LOAD:
+            return nargs <= 1 ? CG_ATOMIC_I64_DIRECT_LOAD : CG_ATOMIC_I64_DIRECT_NONE;
+        case XA_INTRINSIC_ATOMIC_STORE:
+            return nargs >= 1 && nargs <= 2 && v->nargs >= 2 ? CG_ATOMIC_I64_DIRECT_STORE
+                                                             : CG_ATOMIC_I64_DIRECT_NONE;
+        case XA_INTRINSIC_ATOMIC_ADD:
+            return nargs >= 1 && nargs <= 2 && v->nargs >= 2 ? CG_ATOMIC_I64_DIRECT_ADD
+                                                             : CG_ATOMIC_I64_DIRECT_NONE;
+        case XA_INTRINSIC_ATOMIC_SUB:
+            return nargs >= 1 && nargs <= 2 && v->nargs >= 2 ? CG_ATOMIC_I64_DIRECT_SUB
+                                                             : CG_ATOMIC_I64_DIRECT_NONE;
+        case XA_INTRINSIC_ATOMIC_FETCH_ADD:
+            return nargs >= 1 && nargs <= 2 && v->nargs >= 2 ? CG_ATOMIC_I64_DIRECT_FETCH_ADD
+                                                             : CG_ATOMIC_I64_DIRECT_NONE;
+        case XA_INTRINSIC_ATOMIC_FETCH_SUB:
+            return nargs >= 1 && nargs <= 2 && v->nargs >= 2 ? CG_ATOMIC_I64_DIRECT_FETCH_SUB
+                                                             : CG_ATOMIC_I64_DIRECT_NONE;
+        case XA_INTRINSIC_ATOMIC_SWAP:
+            return nargs >= 1 && nargs <= 2 && v->nargs >= 2 ? CG_ATOMIC_I64_DIRECT_SWAP
+                                                             : CG_ATOMIC_I64_DIRECT_NONE;
+        default:
+            break;
+    }
     return CG_ATOMIC_I64_DIRECT_NONE;
-}
-
-static const XiValue *xicgen_atomic_i64_direct_ordering_arg(const XiValue *v, const char *method,
-                                                            uint16_t nargs) {
-    if (!v || !method)
-        return NULL;
-    if (strcmp(method, "load") == 0 && nargs == 1)
-        return v->nargs >= 2 ? v->args[1] : NULL;
-    if ((strcmp(method, "store") == 0 || strcmp(method, "add") == 0 || strcmp(method, "sub") == 0 ||
-         strcmp(method, "fetchAdd") == 0 || strcmp(method, "fetchSub") == 0 ||
-         strcmp(method, "swap") == 0) &&
-        nargs == 2)
-        return v->nargs >= 3 ? v->args[2] : NULL;
-    return NULL;
-}
-
-static bool xicgen_atomic_call_is_i64_direct_nothrow(const XiValue *call) {
-    const XiValue *v = cg_unwrap_identity_value(call);
-    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1 ||
-        !v->aux || !xi_value_type_is_atomic(v->args[0]))
-        return false;
-
-    if (xicgen_atomic_kind_from_receiver(v->args[0]) != CG_ATOMIC_INT)
-        return false;
-
-    const char *method = (const char *) v->aux;
-    uint16_t nargs = (uint16_t) (v->nargs - 1);
-    if (xicgen_atomic_i64_direct_op(v, method, nargs) == CG_ATOMIC_I64_DIRECT_NONE)
-        return false;
-
-    int64_t ordering = XR_AOT_ORDERING_SEQ_CST;
-    return xicgen_value_is_const_ordering(xicgen_atomic_i64_direct_ordering_arg(v, method, nargs),
-                                          &ordering);
-}
-
-static bool xicgen_atomic_err_check_after_direct_nothrow(const XiValue *check) {
-    if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
-        return false;
-    return xicgen_atomic_call_is_i64_direct_nothrow(cg_class_native_prev_error_source_value(check));
 }
 
 static bool xicgen_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f, uint8_t depth);
@@ -6643,8 +6614,6 @@ static bool xicgen_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const XiFunc *cu
     if (!ctx || !current || !v || depth > 8)
         return false;
 
-    if (xicgen_atomic_call_is_i64_direct_nothrow(v))
-        return true;
     if (cg_array_call_is_direct_byte_array_mutator_trusted_nothrow(ctx, current, v))
         return true;
     if (cg_array_call_is_byte_array_append_trusted_nothrow(ctx, current, v))
@@ -6747,15 +6716,15 @@ static bool xicgen_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f, uint8_t 
 }
 
 static bool xicgen_emit_atomic_i64_direct(FILE *out, const XiValue *v, const XiValue *ordering_arg,
-                                          const char *method, uint16_t nargs) {
-    if (!v || v->nargs < 1 || !method)
+                                          XaIntrinsicId intrinsic_id, uint16_t nargs) {
+    if (!v || v->nargs < 1)
         return false;
 
     int64_t ordering = XR_AOT_ORDERING_SEQ_CST;
     if (!xicgen_value_is_const_ordering(ordering_arg, &ordering))
         return false;
 
-    CgAtomicI64DirectOp op = xicgen_atomic_i64_direct_op(v, method, nargs);
+    CgAtomicI64DirectOp op = xicgen_atomic_i64_direct_op(v, intrinsic_id, nargs);
     if (op == CG_ATOMIC_I64_DIRECT_NONE)
         return false;
 
@@ -6830,54 +6799,65 @@ static bool xicgen_emit_atomic_i64_direct(FILE *out, const XiValue *v, const XiV
 }
 
 static bool xicgen_emit_atomic_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                      const char *method, uint16_t nargs) {
-    if (!v || v->nargs < 1 || !method || !xi_value_type_is_atomic(v->args[0]))
+                                      XaIntrinsicId intrinsic_id, uint16_t nargs) {
+    if (!v || v->nargs < 1 || !xi_value_type_is_atomic(v->args[0]))
         return false;
 
     CgAtomicKind kind = xicgen_atomic_kind_from_receiver(v->args[0]);
     const XiValue *ordering_arg = NULL;
-    if ((strcmp(method, "load") == 0 && nargs == 1) ||
-        (strcmp(method, "toggle") == 0 && nargs == 1)) {
+    if ((intrinsic_id == XA_INTRINSIC_ATOMIC_LOAD || intrinsic_id == XA_INTRINSIC_ATOMIC_TOGGLE) &&
+        nargs == 1) {
         ordering_arg = v->nargs >= 2 ? v->args[1] : NULL;
-    } else if ((strcmp(method, "store") == 0 || strcmp(method, "add") == 0 ||
-                strcmp(method, "sub") == 0 || strcmp(method, "fetchAdd") == 0 ||
-                strcmp(method, "fetchSub") == 0 || strcmp(method, "swap") == 0) &&
+    } else if ((intrinsic_id == XA_INTRINSIC_ATOMIC_STORE ||
+                intrinsic_id == XA_INTRINSIC_ATOMIC_ADD ||
+                intrinsic_id == XA_INTRINSIC_ATOMIC_SUB ||
+                intrinsic_id == XA_INTRINSIC_ATOMIC_FETCH_ADD ||
+                intrinsic_id == XA_INTRINSIC_ATOMIC_FETCH_SUB ||
+                intrinsic_id == XA_INTRINSIC_ATOMIC_SWAP) &&
                nargs == 2) {
         ordering_arg = v->nargs >= 3 ? v->args[2] : NULL;
-    } else if (strcmp(method, "compareExchange") == 0 && nargs == 3) {
+    } else if (intrinsic_id == XA_INTRINSIC_ATOMIC_COMPARE_EXCHANGE && nargs == 3) {
         ordering_arg = v->nargs >= 4 ? v->args[3] : NULL;
     }
 
-    bool is_load = strcmp(method, "load") == 0 && (nargs == 0 || nargs == 1);
-    bool is_store = strcmp(method, "store") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2;
-    bool is_add = strcmp(method, "add") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2;
-    bool is_sub = strcmp(method, "sub") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2;
+    bool is_load = intrinsic_id == XA_INTRINSIC_ATOMIC_LOAD && nargs <= 1;
+    bool is_store =
+        intrinsic_id == XA_INTRINSIC_ATOMIC_STORE && nargs >= 1 && nargs <= 2 && v->nargs >= 2;
+    bool is_add =
+        intrinsic_id == XA_INTRINSIC_ATOMIC_ADD && nargs >= 1 && nargs <= 2 && v->nargs >= 2;
+    bool is_sub =
+        intrinsic_id == XA_INTRINSIC_ATOMIC_SUB && nargs >= 1 && nargs <= 2 && v->nargs >= 2;
     bool is_fetch_add =
-        strcmp(method, "fetchAdd") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2;
+        intrinsic_id == XA_INTRINSIC_ATOMIC_FETCH_ADD && nargs >= 1 && nargs <= 2 && v->nargs >= 2;
     bool is_fetch_sub =
-        strcmp(method, "fetchSub") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2;
-    bool is_swap = strcmp(method, "swap") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2;
-    bool is_compare_exchange =
-        strcmp(method, "compareExchange") == 0 && (nargs == 2 || nargs == 3) && v->nargs >= 3;
-    bool is_toggle = strcmp(method, "toggle") == 0 && (nargs == 0 || nargs == 1);
-    bool is_to_string = strcmp(method, "toString") == 0 && nargs == 0;
+        intrinsic_id == XA_INTRINSIC_ATOMIC_FETCH_SUB && nargs >= 1 && nargs <= 2 && v->nargs >= 2;
+    bool is_swap =
+        intrinsic_id == XA_INTRINSIC_ATOMIC_SWAP && nargs >= 1 && nargs <= 2 && v->nargs >= 2;
+    bool is_compare_exchange = intrinsic_id == XA_INTRINSIC_ATOMIC_COMPARE_EXCHANGE && nargs >= 2 &&
+                               nargs <= 3 && v->nargs >= 3;
+    bool is_toggle = intrinsic_id == XA_INTRINSIC_ATOMIC_TOGGLE && nargs <= 1;
+    bool is_to_string = intrinsic_id == XA_INTRINSIC_ATOMIC_TO_STRING && nargs == 0;
 
     if (!is_load && !is_store && !is_add && !is_sub && !is_fetch_add && !is_fetch_sub && !is_swap &&
         !is_compare_exchange && !is_toggle && !is_to_string) {
         ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Atomic method '%s'\n", method);
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported canonical Atomic intrinsic id %u\n",
+                (unsigned) intrinsic_id);
         emit_codegen_abort_expr(out);
         return true;
     }
 
     if ((is_add || is_sub || is_fetch_add || is_fetch_sub) && kind == CG_ATOMIC_BOOL) {
+        const XaIntrinsicDesc *desc = xa_intrinsic_by_id(intrinsic_id);
         ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: Atomic<bool>.%s is not supported in AOT\n", method);
+        fprintf(stderr, "[xi_cgen] ERROR: Atomic<bool> intrinsic '%s' is not supported in AOT\n",
+                desc ? desc->key : "?");
         emit_codegen_abort_expr(out);
         return true;
     }
 
-    if (kind == CG_ATOMIC_INT && xicgen_emit_atomic_i64_direct(out, v, ordering_arg, method, nargs))
+    if (kind == CG_ATOMIC_INT &&
+        xicgen_emit_atomic_i64_direct(out, v, ordering_arg, intrinsic_id, nargs))
         return true;
 
     if (is_load) {
@@ -7009,6 +6989,21 @@ static bool xicgen_emit_atomic_method(XiCgenCtx *ctx, FILE *out, const XiValue *
     }
 
     return false;
+}
+
+static void xicgen_atomic(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                          const char *prefix) {
+    (void) f;
+    (void) prefix;
+    const XaIntrinsicDesc *desc = v ? xa_intrinsic_by_id((XaIntrinsicId) v->xa_intrinsic_id) : NULL;
+    uint16_t nargs = v && v->nargs > 0 ? (uint16_t) (v->nargs - 1) : 0;
+    if (!desc || desc->family != XA_INTRINSIC_FAMILY_ATOMIC ||
+        !xicgen_emit_atomic_method(ctx, out, v, desc->id, nargs)) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: invalid canonical Atomic intrinsic id %u\n",
+                v ? v->xa_intrinsic_id : 0u);
+        emit_codegen_abort_expr(out);
+    }
 }
 
 static bool xicgen_emit_channel_method(FILE *out, const XiValue *v, const char *method,
@@ -7610,8 +7605,6 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     if (xicgen_emit_json_static_method(ctx, out, v, method, nargs))
         return;
     if (xicgen_emit_bigint_method(ctx, out, v, method, nargs))
-        return;
-    if (xicgen_emit_atomic_method(ctx, out, v, method, nargs))
         return;
     if (xicgen_emit_freestanding_enum_to_string_method(ctx, out, v, method, nargs))
         return;
@@ -12464,8 +12457,6 @@ static const XiValue *xicgen_find_par_for_unsupported_call_value(XiCgenCtx *ctx,
     if (!ctx || !current || !call)
         return NULL;
 
-    if (xicgen_atomic_call_is_i64_direct_nothrow(call))
-        return NULL;
     if (cg_array_call_is_direct_byte_array_mutator_trusted_nothrow(ctx, current, call))
         return NULL;
     if (cg_array_call_is_byte_array_append_trusted_nothrow(ctx, current, call))
@@ -12537,8 +12528,6 @@ static const XiValue *xicgen_find_par_for_unsupported_body_value_depth(XiCgenCtx
             if (cg_byte_slice_load_trusted_nothrow(ctx, body, value))
                 continue;
             if (cg_array_builtin_call_is_trusted_nothrow(ctx, body, value))
-                continue;
-            if (xicgen_atomic_err_check_after_direct_nothrow(value))
                 continue;
             if (xicgen_err_check_after_proven_nothrow(ctx, body, value))
                 continue;

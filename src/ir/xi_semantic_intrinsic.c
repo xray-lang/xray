@@ -8,6 +8,7 @@
 
 #include "xi_semantic_intrinsic.h"
 #include "xi_effect.h"
+#include "../runtime/value/xtype.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -93,6 +94,14 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_SPAN_COMPARE;
         case XA_INTRINSIC_LOWERING_SPAN_GET:
             return XI_INDEX_GET;
+        case XA_INTRINSIC_LOWERING_ATOMIC_LOAD:
+            return XI_ATOMIC_LOAD;
+        case XA_INTRINSIC_LOWERING_ATOMIC_STORE:
+            return XI_ATOMIC_STORE;
+        case XA_INTRINSIC_LOWERING_ATOMIC_RMW:
+            return XI_ATOMIC_RMW;
+        case XA_INTRINSIC_LOWERING_ATOMIC_TO_STRING:
+            return XI_ATOMIC_TO_STRING;
         case XA_INTRINSIC_LOWERING_PAR_FOR:
             return XI_PAR_FOR;
         case XA_INTRINSIC_LOWERING_PAR_MAP:
@@ -210,6 +219,12 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
         if (desc->lowering == XA_INTRINSIC_LOWERING_SPAN_REINTERPRET && value->aux_int == 0)
             return set_error(error, error_size,
                              "canonical intrinsic id %u lacks reinterpret element metadata",
+                             value->xa_intrinsic_id);
+    } else if (desc->family == XA_INTRINSIC_FAMILY_ATOMIC) {
+        if (!value->args || !value->args[0] || !value->args[0]->type ||
+            !xr_type_is_named_class(value->args[0]->type, "Atomic"))
+            return set_error(error, error_size,
+                             "canonical atomic intrinsic id %u lacks Atomic<T> receiver",
                              value->xa_intrinsic_id);
     } else if (desc->family == XA_INTRINSIC_FAMILY_PARALLEL) {
         XiAuxKind expected_aux = value->op == XI_PAR_FOR      ? XI_AUX_KIND_PAR_FOR

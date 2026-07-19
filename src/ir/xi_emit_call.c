@@ -276,7 +276,7 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
 static bool semantic_intrinsic_operand_is_readonly_place(const XaIntrinsicDesc *desc,
                                                          uint16_t operand_index) {
-    if (!desc)
+    if (!desc || desc->family != XA_INTRINSIC_FAMILY_SIMD)
         return false;
     if (operand_index == 0)
         return (desc->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) == 0;

@@ -1182,6 +1182,46 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+; Canonical Atomic<T> operations. xa_intrinsic_id distinguishes individual
+; RMW semantics (add/sub/fetch/swap/CAS/toggle) without a method-name payload.
+(define-xi-op xi.atomic.load
+  :class memory-read
+  :arity variadic
+  :own-use borrow
+  :effects (memory-read)
+  :requires (atomic-order)
+  :observable (atomic-load)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.atomic.store
+  :class memory-write
+  :arity variadic
+  :result-kind void
+  :result-ownership none
+  :own-use borrow
+  :effects (side-effect memory-write)
+  :requires (atomic-order)
+  :observable (atomic-store)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.atomic.rmw
+  :class memory-write
+  :arity variadic
+  :own-use borrow
+  :effects (side-effect memory-read memory-write)
+  :requires (atomic-order)
+  :observable (atomic-rmw)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.atomic.to.string
+  :class call
+  :arity 1
+  :own-use borrow
+  :effects (side-effect may-throw memory-read allocates)
+  :requires ()
+  :observable (atomic-load string-format)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.extract
   :class call
   :arity 1

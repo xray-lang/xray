@@ -393,6 +393,30 @@
   :vm-bytecode (driver xi_emit_call_builtin)
   :aot-c (driver xicgen_call_builtin))
 
+(lower xi.atomic.load
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_semantic_intrinsic_call)
+  :aot-c (driver xicgen_atomic))
+
+(lower xi.atomic.store
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_semantic_intrinsic_call)
+  :aot-c (driver xicgen_atomic))
+
+(lower xi.atomic.rmw
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_semantic_intrinsic_call)
+  :aot-c (driver xicgen_atomic))
+
+(lower xi.atomic.to.string
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_semantic_intrinsic_call)
+  :aot-c (driver xicgen_atomic))
+
 (lower xi.throw
   :match ()
   :required-targets (vm-bytecode aot-c)

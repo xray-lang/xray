@@ -2017,7 +2017,7 @@ TEST(cgen_for_loop) {
 TEST(cgen_parallel_for_each_uses_runtime_executor) {
     const char *src = "import parallel\n"
                       "fn run(n: int) {\n"
-                      "    var base = 10\n"
+                      "    const base = 10\n"
                       "    parallel.forEach(0..n, (i) -> {\n"
                       "        print(i + base)\n"
                       "    }, parallel.Options(2))\n"
@@ -2117,7 +2117,7 @@ TEST(cgen_parallel_map_return_uses_runtime_executor) {
 TEST(cgen_parallel_reduce_uses_runtime_executor) {
     const char *src = "import parallel\n"
                       "fn run(n: int) -> int {\n"
-                      "    var base = 10\n"
+                      "    const base = 10\n"
                       "    return parallel.reduce(0..n, 0, (i) -> i + base, "
                       "(a, b) -> a + b, parallel.Options(2))\n"
                       "}\n"
@@ -2261,6 +2261,10 @@ TEST(cgen_parallel_for_each_allows_atomic_i64_direct_body) {
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL);
+    assert(count_op_in_func(ir, XI_ATOMIC_RMW) == 1 &&
+           "Atomic.fetchAdd in a contextual parallel callback must be canonical before CGen");
+    assert(count_op_in_func(ir, XI_CALL_METHOD) == 0 &&
+           "parallel callback lowering must not leak an ordinary Atomic method call");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
@@ -2275,7 +2279,7 @@ TEST(cgen_parallel_for_each_allows_atomic_i64_direct_body) {
     xi_func_free(ir);
 }
 
-TEST(cgen_parallel_for_each_rejects_throwing_body) {
+TEST(analyzer_parallel_for_each_rejects_throwing_body) {
     const char *src = "import parallel\n"
                       "fn run(n: int) {\n"
                       "    parallel.forEach(0..n, (i) -> {\n"
@@ -2285,16 +2289,7 @@ TEST(cgen_parallel_for_each_rejects_throwing_body) {
                       "run(3)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(had_error && "AOT parallel.forEach body must reject throwing ops");
-    assert(code[0] == '\0' && "failed C generation must not publish a partial translation unit");
-
-    xr_free(code);
-    xi_func_free(ir);
+    assert(ir == NULL && "parallel callback effects must be rejected during semantic analysis");
 }
 
 TEST(cgen_parallel_for_body_closure_stack_allocates) {
@@ -8415,7 +8410,7 @@ int main(void) {
     run_lower_parallel_call_plan_resolves_selective_aliases();
     run_lower_parallel_plan_methods_preserve_intrinsic_identity();
     run_cgen_parallel_for_each_allows_atomic_i64_direct_body();
-    run_cgen_parallel_for_each_rejects_throwing_body();
+    run_analyzer_parallel_for_each_rejects_throwing_body();
     run_cgen_parallel_for_body_closure_stack_allocates();
     run_cgen_typed_array_uses_raw_storage_fast_path();
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();

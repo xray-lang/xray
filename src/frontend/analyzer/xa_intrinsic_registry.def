@@ -195,6 +195,30 @@ XA_INTRINSIC(POD_SLICE_COMPARE, 3015, "core.SlicePod.compare", MEMORY, SPAN_COMP
 XA_INTRINSIC(POD_SLICE_GET, 3016, "core.SlicePod.get", MEMORY, SPAN_GET, PURE, NO_ALLOC, SAFE,
              1, 1, NONE, NONE, 0, NONE, 0)
 
+/* Atomic<T> is a compiler-owned native receiver.  The analyzer resolves these
+ * method declarations to stable IDs before Xi construction; backends never
+ * recover the operation from the source member spelling. */
+XA_INTRINSIC(ATOMIC_LOAD, 3501, "core.Atomic.load", ATOMIC, ATOMIC_LOAD, READ_ONLY, NO_ALLOC,
+             SAFE, 0, 1, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(ATOMIC_STORE, 3502, "core.Atomic.store", ATOMIC, ATOMIC_STORE, WRITE_ONLY,
+             NO_ALLOC, SAFE, 1, 2, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(ATOMIC_ADD, 3503, "core.Atomic.add", ATOMIC, ATOMIC_RMW, READ_WRITE, NO_ALLOC, SAFE,
+             1, 2, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(ATOMIC_SUB, 3504, "core.Atomic.sub", ATOMIC, ATOMIC_RMW, READ_WRITE, NO_ALLOC, SAFE,
+             1, 2, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(ATOMIC_FETCH_ADD, 3505, "core.Atomic.fetchAdd", ATOMIC, ATOMIC_RMW, READ_WRITE,
+             NO_ALLOC, SAFE, 1, 2, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(ATOMIC_FETCH_SUB, 3506, "core.Atomic.fetchSub", ATOMIC, ATOMIC_RMW, READ_WRITE,
+             NO_ALLOC, SAFE, 1, 2, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(ATOMIC_SWAP, 3507, "core.Atomic.swap", ATOMIC, ATOMIC_RMW, READ_WRITE, NO_ALLOC,
+             SAFE, 1, 2, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(ATOMIC_COMPARE_EXCHANGE, 3508, "core.Atomic.compareExchange", ATOMIC, ATOMIC_RMW,
+             READ_WRITE, NO_ALLOC, SAFE, 2, 3, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(ATOMIC_TOGGLE, 3509, "core.Atomic.toggle", ATOMIC, ATOMIC_RMW, READ_WRITE, NO_ALLOC,
+             SAFE, 0, 1, NONE, NONE, 0, NONE, 0)
+XA_INTRINSIC(ATOMIC_TO_STRING, 3510, "core.Atomic.toString", ATOMIC, ATOMIC_TO_STRING,
+             READ_MAY_THROW, MAY_ALLOC, SAFE, 0, 0, NONE, NONE, 0, NONE, 0)
+
 XA_INTRINSIC(PARALLEL_FOR_EACH, 4001, "parallel.forEach", PARALLEL, PAR_FOR, MAY_THROW, MAY_ALLOC,
              SAFE, 2, 3, NONE, NONE, 0, NONE, 0)
 XA_INTRINSIC(PARALLEL_MAP, 4002, "parallel.map", PARALLEL, PAR_MAP, MAY_THROW, MAY_ALLOC, SAFE, 2,

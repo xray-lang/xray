@@ -42,6 +42,7 @@ typedef struct XaSemanticTypeDesc {
 
 static const XaSemanticTypeDesc g_semantic_types[] = {
     {XA_SEMANTIC_TYPE_PARALLEL_PLAN, "parallel.Plan", "Plan"},
+    {XA_SEMANTIC_TYPE_PARALLEL_OPTIONS, "parallel.Options", "Options"},
 };
 
 XaSemanticTypeId xa_semantic_type_by_key(const char *key) {

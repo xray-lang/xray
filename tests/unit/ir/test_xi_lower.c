@@ -720,6 +720,51 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
     xi_func_free(f);
 }
 
+TEST(atomic_methods_lower_to_nothrow_canonical_ops) {
+    XiFunc *f = lower_source("fn update(counter: Atomic<int>) -> int {\n"
+                             "  var before = counter.load(Ordering.Relaxed)\n"
+                             "  counter.store(before + 1, Ordering.Release)\n"
+                             "  var old = counter.fetchAdd(2, Ordering.AcquireRelease)\n"
+                             "  var swapped = counter.swap(old, Ordering.SeqCst)\n"
+                             "  var (seen, ok) = counter.compareExchange(swapped, 9)\n"
+                             "  return seen\n"
+                             "}\n");
+    assert(f != NULL);
+
+    XiValue *load = func_tree_find_op(f, XI_ATOMIC_LOAD);
+    XiValue *store = func_tree_find_op(f, XI_ATOMIC_STORE);
+    XiValue *rmw = func_tree_find_op(f, XI_ATOMIC_RMW);
+    assert(load && load->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_LOAD);
+    assert(store && store->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_STORE);
+    assert(rmw && (rmw->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_FETCH_ADD ||
+                   rmw->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_SWAP ||
+                   rmw->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_COMPARE_EXCHANGE));
+    assert((load->flags & XI_FLAG_MAY_THROW) == 0 && (store->flags & XI_FLAG_MAY_THROW) == 0 &&
+           (rmw->flags & XI_FLAG_MAY_THROW) == 0 &&
+           "typed Atomic operations are intrinsically nothrow");
+    assert(!func_tree_find_op(f, XI_ERR_CHECK) &&
+           "nothrow Atomic operations must not create synthetic error edges");
+    assert(!func_tree_find_method(f, "load") && !func_tree_find_method(f, "store") &&
+           !func_tree_find_method(f, "fetchAdd") &&
+           "canonical Atomic operations must not leak as ordinary method calls");
+    xi_func_free(f);
+}
+
+TEST(user_method_named_fetch_add_remains_ordinary_call) {
+    XiFunc *f = lower_source("class Counter {\n"
+                             "  fetchAdd(delta: int) -> int { return delta }\n"
+                             "}\n"
+                             "fn use(counter: Counter) -> int {\n"
+                             "  return counter.fetchAdd(2)\n"
+                             "}\n");
+    assert(f != NULL);
+    assert(func_tree_find_method(f, "fetchAdd") != NULL &&
+           "a user declaration with the same spelling must remain an ordinary method call");
+    assert(!func_tree_has_op(f, XI_ATOMIC_RMW) &&
+           "Atomic semantics must come from resolved receiver identity, never method spelling");
+    xi_func_free(f);
+}
+
 TEST(exact_integer_bit_methods_lower_to_typed_semantic_ops) {
     XiFunc *f = lower_source("var octet: uint8 = 129\n"
                              "var rotated = octet.rotateLeft(-1)\n"
@@ -2585,6 +2630,8 @@ int main(void) {
     run_member_access();
     run_member_access_field_symbols_are_distinct();
     run_bytes_new_low_level_methods_lower_to_semantic_ops();
+    run_atomic_methods_lower_to_nothrow_canonical_ops();
+    run_user_method_named_fetch_add_remains_ordinary_call();
     run_exact_integer_bit_methods_lower_to_typed_semantic_ops();
     run_throw_stmt();
     run_for_in_loop();

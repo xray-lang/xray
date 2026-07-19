@@ -217,6 +217,28 @@ static XaIntrinsicId xa_builtin_receiver_intrinsic_id(XrType *receiver, AstNode 
         return XA_INTRINSIC_NONE;
 
     const char *name = callee->as.member_access.name;
+    if (receiver->kind == XR_KIND_INSTANCE && xr_type_is_named_class(receiver, "Atomic")) {
+        static const struct {
+            const char *source_name;
+            XaIntrinsicId intrinsic_id;
+        } atomic_methods[] = {
+            {"load", XA_INTRINSIC_ATOMIC_LOAD},
+            {"store", XA_INTRINSIC_ATOMIC_STORE},
+            {"add", XA_INTRINSIC_ATOMIC_ADD},
+            {"sub", XA_INTRINSIC_ATOMIC_SUB},
+            {"fetchAdd", XA_INTRINSIC_ATOMIC_FETCH_ADD},
+            {"fetchSub", XA_INTRINSIC_ATOMIC_FETCH_SUB},
+            {"swap", XA_INTRINSIC_ATOMIC_SWAP},
+            {"compareExchange", XA_INTRINSIC_ATOMIC_COMPARE_EXCHANGE},
+            {"toggle", XA_INTRINSIC_ATOMIC_TOGGLE},
+            {"toString", XA_INTRINSIC_ATOMIC_TO_STRING},
+        };
+        for (size_t i = 0; i < sizeof(atomic_methods) / sizeof(atomic_methods[0]); i++) {
+            if (strcmp(atomic_methods[i].source_name, name) == 0)
+                return atomic_methods[i].intrinsic_id;
+        }
+        return XA_INTRINSIC_NONE;
+    }
     for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
         const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
         if (!xa_builtin_receiver_intrinsic_matches(receiver, spec->receiver) ||
@@ -237,8 +259,15 @@ static const XaResolvedCall *xa_record_resolved_intrinsic_call(XaInferContext *c
     const XaSelection *selection = xa_analyzer_get_selection(ctx->analyzer, callee);
     XaSymbol *target = selection ? selection->target_symbol : fallback_symbol;
     XaSymbolLinks *links = target ? xa_analyzer_get_links(ctx->analyzer, target) : fallback_links;
+    if (callee && callee->type == AST_MEMBER_ACCESS && callee->as.member_access.object) {
+        XrType *recorded_receiver =
+            xa_analyzer_get_node_type(ctx->analyzer, callee->as.member_access.object);
+        if (recorded_receiver && !XR_TYPE_IS_UNKNOWN(recorded_receiver) &&
+            !XR_TYPE_IS_ERROR(recorded_receiver))
+            receiver_type = recorded_receiver;
+    }
     XaIntrinsicId intrinsic_id = links ? links->intrinsic_id : XA_INTRINSIC_NONE;
-    if (intrinsic_id == XA_INTRINSIC_NONE)
+    if (intrinsic_id == XA_INTRINSIC_NONE && (!target || target->is_builtin))
         intrinsic_id = xa_builtin_receiver_intrinsic_id(receiver_type, callee);
     if (intrinsic_id == XA_INTRINSIC_NONE)
         return NULL;
@@ -424,21 +453,74 @@ static XaSemanticTypeId xa_class_constructor_semantic_type(CallExprNode *call,
 static XrType *xa_semantic_constructor_instance(XaInferContext *ctx, CallExprNode *call,
                                                 XaSemanticTypeId semantic_type_id,
                                                 XrClassInfo *class_info) {
-    if (!ctx || !ctx->analyzer || !call || semantic_type_id == XA_SEMANTIC_TYPE_NONE ||
-        call->semantic_type_arg_count <= 0 || !call->semantic_type_args)
+    if (!ctx || !ctx->analyzer || !call || semantic_type_id == XA_SEMANTIC_TYPE_NONE)
         return NULL;
     int count = call->semantic_type_arg_count;
-    XrType **args = xr_malloc(sizeof(XrType *) * (size_t) count);
-    if (!args)
+    if (count < 0 || (count > 0 && !call->semantic_type_args))
+        return NULL;
+    XrType **args = count > 0 ? xr_malloc(sizeof(XrType *) * (size_t) count) : NULL;
+    if (count > 0 && !args)
         return NULL;
     for (int i = 0; i < count; i++)
         args[i] = xr_tref_resolve_in_analyzer(ctx->analyzer, call->semantic_type_args[i]);
     const char *source_name = xa_semantic_type_source_name(semantic_type_id);
-    XrType *instance = xr_type_new_generic_instance(
-        ctx->analyzer->isolate, source_name ? source_name : "<semantic>", class_info, args, count);
+    XrType *instance = count > 0
+                           ? xr_type_new_generic_instance(ctx->analyzer->isolate,
+                                                          source_name ? source_name : "<semantic>",
+                                                          class_info, args, count)
+                           : xr_type_new_named_instance(ctx->analyzer->isolate,
+                                                        source_name ? source_name : "<semantic>");
+    if (instance && class_info)
+        instance->instance.class_ref = class_info;
     xr_free(args);
     if (instance)
         instance->semantic_type_id = (uint32_t) semantic_type_id;
+    return instance;
+}
+
+static XrType *xa_imported_semantic_class_instance_type(XaInferContext *ctx, AstNode *node,
+                                                        CallExprNode *call) {
+    if (!ctx || !ctx->analyzer || !call || !call->callee || call->callee->type != AST_VARIABLE ||
+        !call->callee->as.variable.name)
+        return NULL;
+    const char *source_spelling = call->callee->as.variable.name;
+    XaSymbol *symbol = xa_lookup_visible_symbol(ctx, source_spelling);
+    if (!symbol || (!symbol->is_imported && symbol->kind != XA_SYM_IMPORT))
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
+    XaSemanticTypeId semantic_type_id =
+        xa_class_constructor_semantic_type(call, source_spelling, links);
+    if (semantic_type_id == XA_SEMANTIC_TYPE_NONE)
+        return NULL;
+
+    int expected_type_args = semantic_type_id == XA_SEMANTIC_TYPE_PARALLEL_PLAN ? 1 : 0;
+    if (call->semantic_type_arg_count != expected_type_args) {
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = node ? node->line : 0,
+                          .column = node ? node->column : 0};
+        char msg[192];
+        snprintf(msg, sizeof(msg), "Generic class '%s' expects %d type argument(s), but got %d",
+                 xa_semantic_type_source_name(semantic_type_id), expected_type_args,
+                 call->semantic_type_arg_count);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
+    XrType *instance = xa_semantic_constructor_instance(ctx, call, semantic_type_id, NULL);
+    if (!instance)
+        return NULL;
+    if (semantic_type_id == XA_SEMANTIC_TYPE_PARALLEL_PLAN && call->arg_count > 1 &&
+        instance->instance.type_arg_count == 1 && instance->instance.type_args &&
+        instance->instance.type_args[0]) {
+        XrType *lane_params[] = {xr_type_new_int(ctx->analyzer->isolate)};
+        XrType *init_type = xr_type_new_function(ctx->analyzer->isolate, lane_params, 1,
+                                                 instance->instance.type_args[0], false);
+        XrType *saved_expected = ctx->expected_type;
+        ctx->expected_type = init_type;
+        xa_visit_infer_expr(ctx, call->arguments[1]);
+        ctx->expected_type = saved_expected;
+    }
     return instance;
 }
 
@@ -2355,47 +2437,71 @@ static const char *xa_parallel_callback_label_for_plan(const XaParallelCallPlan 
                                 : xa_parallel_callback_label_for_arg(member, arg_index);
 }
 
-static XrType *xa_parallel_plan_callable_type(XaInferContext *ctx, CallExprNode *call,
-                                              XrType *receiver_type,
-                                              const XaParallelCallPlan *plan) {
-    if (!ctx || !ctx->analyzer || !call || !receiver_type || !plan || !plan->is_plan_method)
+static XrType *xa_parallel_callable_type(XaInferContext *ctx, CallExprNode *call,
+                                         XrType *receiver_type, const XaParallelCallPlan *plan) {
+    if (!ctx || !ctx->analyzer || !call || !plan)
         return NULL;
-    XrType *state_type =
-        receiver_type->instance.type_arg_count > 0 && receiver_type->instance.type_args
-            ? receiver_type->instance.type_args[0]
-            : NULL;
-    if (!state_type && receiver_type->instance.class_ref) {
-        XaSymbol *states =
-            xa_class_info_lookup_instance_member(receiver_type->instance.class_ref, "_states");
-        XaSymbolLinks *state_links = states ? xa_analyzer_get_links(ctx->analyzer, states) : NULL;
-        if (state_links && state_links->type && XR_TYPE_IS_ARRAY(state_links->type))
-            state_type = state_links->type->container.element_type;
+    XrType *state_type = NULL;
+    if (plan->is_plan_method) {
+        if (!receiver_type || !XR_TYPE_IS_INSTANCE(receiver_type))
+            return NULL;
+        state_type = receiver_type->instance.type_arg_count > 0 && receiver_type->instance.type_args
+                         ? receiver_type->instance.type_args[0]
+                         : NULL;
+        if (!state_type && receiver_type->instance.class_ref) {
+            XaSymbol *states =
+                xa_class_info_lookup_instance_member(receiver_type->instance.class_ref, "_states");
+            XaSymbolLinks *state_links =
+                states ? xa_analyzer_get_links(ctx->analyzer, states) : NULL;
+            if (state_links && state_links->type && XR_TYPE_IS_ARRAY(state_links->type))
+                state_type = state_links->type->container.element_type;
+        }
+        if (!state_type)
+            state_type = xr_type_new_unknown(ctx->analyzer->isolate);
     }
-    if (!state_type)
-        state_type = xr_type_new_unknown(ctx->analyzer->isolate);
     XrType *range_type = xr_type_new_named_instance(ctx->analyzer->isolate, "Range");
     XrType *int_type = xr_type_new_int(ctx->analyzer->isolate);
     XrType *unit_type = xr_type_new_unit(ctx->analyzer->isolate);
     XrType *unknown_type = xr_type_new_unknown(ctx->analyzer->isolate);
+    XrType *options_type = xr_type_new_named_instance(ctx->analyzer->isolate, "Options");
     XrType *body_params[] = {state_type, int_type};
     XrType *combine_params[2] = {unknown_type, unknown_type};
-    XrType *params[4] = {0};
+    XrType *params[5] = {0};
     XrType *return_type = unit_type;
     int param_count = 0;
+    int min_params = 0;
+    int body_param_offset = plan->is_plan_method ? 0 : 1;
+    int body_param_count = plan->is_plan_method ? 2 : 1;
 
     switch (plan->kind) {
         case XA_PAR_CALL_FOR_EACH:
             params[0] = range_type;
             params[1] =
-                xr_type_new_function(ctx->analyzer->isolate, body_params, 2, unit_type, false);
-            param_count = 2;
+                xr_type_new_function(ctx->analyzer->isolate, body_params + body_param_offset,
+                                     body_param_count, unit_type, false);
+            if (plan->is_plan_method) {
+                param_count = 2;
+                min_params = 2;
+            } else {
+                params[2] = options_type;
+                param_count = 3;
+                min_params = 2;
+            }
             break;
         case XA_PAR_CALL_MAP:
             params[0] = range_type;
             params[1] =
-                xr_type_new_function(ctx->analyzer->isolate, body_params, 2, unknown_type, false);
+                xr_type_new_function(ctx->analyzer->isolate, body_params + body_param_offset,
+                                     body_param_count, unknown_type, false);
             return_type = xr_type_new_array(ctx->analyzer->isolate, unknown_type);
-            param_count = 2;
+            if (plan->is_plan_method) {
+                param_count = 2;
+                min_params = 2;
+            } else {
+                params[2] = options_type;
+                param_count = 3;
+                min_params = 2;
+            }
             break;
         case XA_PAR_CALL_MAP_INTO: {
             XrType *output_type = call->arg_count > 1
@@ -2407,9 +2513,17 @@ static XrType *xa_parallel_plan_callable_type(XaInferContext *ctx, CallExprNode 
             params[0] = range_type;
             params[1] = output_type;
             params[2] =
-                xr_type_new_function(ctx->analyzer->isolate, body_params, 2, element_type, false);
+                xr_type_new_function(ctx->analyzer->isolate, body_params + body_param_offset,
+                                     body_param_count, element_type, false);
             return_type = output_type;
-            param_count = 3;
+            if (plan->is_plan_method) {
+                param_count = 3;
+                min_params = 3;
+            } else {
+                params[3] = options_type;
+                param_count = 4;
+                min_params = 3;
+            }
             break;
         }
         case XA_PAR_CALL_REDUCE: {
@@ -2422,17 +2536,29 @@ static XrType *xa_parallel_plan_callable_type(XaInferContext *ctx, CallExprNode 
             params[0] = range_type;
             params[1] = acc_type;
             params[2] =
-                xr_type_new_function(ctx->analyzer->isolate, body_params, 2, acc_type, false);
+                xr_type_new_function(ctx->analyzer->isolate, body_params + body_param_offset,
+                                     body_param_count, acc_type, false);
             params[3] =
                 xr_type_new_function(ctx->analyzer->isolate, combine_params, 2, acc_type, false);
             return_type = acc_type;
-            param_count = 4;
+            if (plan->is_plan_method) {
+                param_count = 4;
+                min_params = 4;
+            } else {
+                params[4] = options_type;
+                param_count = 5;
+                min_params = 4;
+            }
             break;
         }
         case XA_PAR_CALL_NONE:
             return NULL;
     }
-    return xr_type_new_function(ctx->analyzer->isolate, params, param_count, return_type, false);
+    XrType *callable =
+        xr_type_new_function(ctx->analyzer->isolate, params, param_count, return_type, false);
+    if (callable)
+        callable->function.min_params = min_params;
+    return callable;
 }
 
 static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstNode *arg_node,
@@ -4844,12 +4970,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     ctx->allow_payload_enum_ctor_value = saved_payload_ctor_value;
     if (optional_function_call && callee_type)
         callee_type = xr_type_non_nullable(ctx->analyzer->isolate, callee_type);
-    if (parallel_call_plan && parallel_call_plan->is_plan_method &&
-        (!callee_type || XR_TYPE_IS_UNKNOWN(callee_type))) {
-        XrType *plan_callable =
-            xa_parallel_plan_callable_type(ctx, call, callee_obj_type, parallel_call_plan);
-        if (plan_callable)
-            callee_type = plan_callable;
+    if (parallel_call_plan && (!callee_type || !XR_TYPE_IS_FUNCTION(callee_type))) {
+        XrType *parallel_callable =
+            xa_parallel_callable_type(ctx, call, callee_obj_type, parallel_call_plan);
+        if (parallel_callable)
+            callee_type = parallel_callable;
     }
 
     if (class_ctor_links && class_ctor_links->param_defaults) {
@@ -4892,16 +5017,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
     xa_check_intrinsic_shuffle_lanes(ctx, node, call, intrinsic_desc);
 
-    // A diagnosed callee failure is recovery poison, not an unresolved callable.
-    // Arguments were still visited above so their independent diagnostics survive.
-    if (XR_TYPE_IS_ERROR(callee_type)) {
-        // ref/out authorization is independent of callee type recovery: an
-        // unresolved callee cannot provide the parameter contract required by
-        // either access marker.
-        xa_report_arg_accesses_require_known_contract(ctx, node, call);
-        return callee_type;
-    }
-
     if (payload_variant) {
         xa_check_payload_enum_variant_call(ctx, node, call, payload_variant, payload_enum_name,
                                            payload_variant_name);
@@ -4925,6 +5040,29 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 return xr_type_new_error(ctx->analyzer->isolate);
             return ns_instance;
         }
+    }
+    XrType *imported_semantic_instance = xa_imported_semantic_class_instance_type(ctx, node, call);
+    if (imported_semantic_instance) {
+        xa_report_arg_accesses_require_known_contract(ctx, node, call);
+        xa_check_threadlocal_initializer(ctx, node, call, imported_semantic_instance);
+        xa_freestanding_report_unavailable(
+            ctx, node, "class construction",
+            "use structs or explicit raw-memory APIs in this profile");
+        if (xa_freestanding_profile_enabled(ctx->analyzer))
+            return xr_type_new_error(ctx->analyzer->isolate);
+        return imported_semantic_instance;
+    }
+
+    // A diagnosed callee failure is recovery poison, not an unresolved callable.
+    // Arguments were still visited above so their independent diagnostics survive. A
+    // canonical namespace class is checked first because source-only analysis can know its
+    // semantic identity even when no module export graph is attached to the session.
+    if (XR_TYPE_IS_ERROR(callee_type)) {
+        // ref/out authorization is independent of callee type recovery: an
+        // unresolved callee cannot provide the parameter contract required by
+        // either access marker.
+        xa_report_arg_accesses_require_known_contract(ctx, node, call);
+        return callee_type;
     }
 
     // Unknown callee type preserves error recovery after imprecise analysis.
