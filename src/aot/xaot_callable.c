@@ -24,6 +24,7 @@ typedef struct CallableSet {
     uint32_t *items; /* indices into XaotBundle.func_plans */
     uint32_t count;
     uint32_t cap;
+    bool may_be_null;
 } CallableSet;
 
 typedef struct CallableFuncFacts {
@@ -110,6 +111,11 @@ static bool callable_set_add(CallableSet *set, uint32_t item, bool *changed) {
 static bool callable_set_union(CallableSet *dst, const CallableSet *src, bool *changed) {
     if (!dst || !src)
         return false;
+    if (src->may_be_null && !dst->may_be_null) {
+        dst->may_be_null = true;
+        if (changed)
+            *changed = true;
+    }
     for (uint32_t i = 0; i < src->count; i++) {
         if (!callable_set_add(dst, src->items[i], changed))
             return false;
@@ -232,6 +238,11 @@ static bool callable_call_is_function_value(const XaotBundle *bundle, const XiFu
         callable_resolve_direct_target(bundle, owner, call))
         return false;
     const XiValue *callee = call->args[0];
+    /* A raw import reference is a statically named module/foreign boundary.
+     * Aliased imported function values flow through ordinary SSA values and
+     * are still handled by the closed-world callable analysis. */
+    if (callee->op == XI_IMPORT_REF)
+        return false;
     return (callee->type && XR_TYPE_IS_FUNCTION(callee->type)) || callee->op == XI_LOAD_UPVAL;
 }
 
@@ -313,9 +324,15 @@ static bool callable_seed_static_value(CallableAnalysis *a, const XiFunc *owner,
     set = callable_value_set(a, owner, value);
     if (!set)
         return false;
-    if ((value->op == XI_CLOSURE_NEW ||
-         (value->op == XI_STACK_ALLOC && value->aux_int == XI_CLOSURE_NEW)) &&
-        value->aux) {
+    if (value->op == XI_CONST && value->type && value->type->kind == XR_KIND_NULL) {
+        if (!set->may_be_null) {
+            set->may_be_null = true;
+            if (changed)
+                *changed = true;
+        }
+    } else if ((value->op == XI_CLOSURE_NEW ||
+                (value->op == XI_STACK_ALLOC && value->aux_int == XI_CLOSURE_NEW)) &&
+               value->aux) {
         target = (const XiFunc *) value->aux;
     } else if (value->op == XI_GET_SHARED) {
         CallableSet *slot = callable_module_slot(a, owner, value->aux_int);
@@ -336,6 +353,20 @@ static bool callable_seed_static_value(CallableAnalysis *a, const XiFunc *owner,
             return false;
     }
     return true;
+}
+
+static CallableSet *callable_capture_source_set(CallableAnalysis *a, const XiFunc *func,
+                                                const XiCapture *capture) {
+    const XiFunc *parent = func ? func->parent_func : NULL;
+    while (parent && capture) {
+        if (capture->source == XI_CAPTURE_SRC_REG)
+            return capture->value ? callable_value_set(a, parent, capture->value) : NULL;
+        if (capture->source != XI_CAPTURE_SRC_UPVAL || capture->index >= parent->ncaptures)
+            return NULL;
+        capture = &parent->captures[capture->index];
+        parent = parent->parent_func;
+    }
+    return NULL;
 }
 
 static bool callable_propagate_storage(CallableAnalysis *a, const XiFunc *func,
@@ -435,11 +466,9 @@ static bool callable_propagate_value(CallableAnalysis *a, const XiFunc *func, co
 
     if (value->op == XI_LOAD_UPVAL && value->aux_int >= 0 && value->aux_int < func->ncaptures) {
         const XiCapture *capture = &func->captures[value->aux_int];
-        if (capture->value && func->parent_func) {
-            CallableSet *src = callable_value_set(a, func->parent_func, capture->value);
-            if (src && !callable_set_union(dst, src, changed))
-                return false;
-        }
+        CallableSet *src = callable_capture_source_set(a, func, capture);
+        if (src && !callable_set_union(dst, src, changed))
+            return false;
     }
 
     if (!callable_propagate_storage(a, func, value, changed))
@@ -890,6 +919,10 @@ static bool callable_materialize(XaotBundle *bundle, const CallableAnalysis *a) 
                 const CallableSet *targets = call->args[0]->id < a->funcs[fi].value_count
                                                  ? &a->funcs[fi].values[call->args[0]->id]
                                                  : NULL;
+                /* A guarded optional call whose entire closed-world value set
+                 * is the null constant has no executable invocation edge. */
+                if (targets && targets->count == 0 && targets->may_be_null)
+                    continue;
                 /* A proven target set is useful even when the independent
                  * body-reachability graph has not yet discovered the owner:
                  * projecting its effects may be what turns an enclosing

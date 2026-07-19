@@ -17,6 +17,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct XrType;
+
 typedef enum XaIntrinsicId {
     XA_INTRINSIC_NONE = 0,
 #define XA_INTRINSIC(id, numeric_id, key, family, lowering, effect, allocation, safety, min_arity, \
@@ -151,6 +153,8 @@ typedef struct XaIntrinsicDesc {
 XR_FUNC const XaIntrinsicDesc *xa_intrinsic_by_id(XaIntrinsicId id);
 XR_FUNC const XaIntrinsicDesc *xa_intrinsic_by_key(const char *key);
 XR_FUNC const char *xa_intrinsic_source_member(const XaIntrinsicDesc *desc);
+XR_FUNC XaIntrinsicId xa_intrinsic_compiler_receiver_method(const struct XrType *receiver,
+                                                            const char *member_name);
 XR_FUNC size_t xa_intrinsic_count(void);
 XR_FUNC const XaIntrinsicDesc *xa_intrinsic_at(size_t index);
 XR_FUNC bool xa_intrinsic_registry_validate(char *error, size_t error_size);

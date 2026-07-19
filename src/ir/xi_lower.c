@@ -719,19 +719,49 @@ XR_FUNC uint32_t xi_lower_source_node_id(const XiLower *l, const AstNode *node) 
     return xg_stable_source_node_id(l->xg_module_id, (uint32_t) node->type, line, column);
 }
 
-static XgFuncId xi_lower_find_unique_body_id(XiLower *l, uint8_t kind, uint32_t source_node_id) {
+static XgFuncId xi_lower_find_unique_body_id(XiLower *l, uint8_t kind, uint32_t source_node_id,
+                                             uint32_t source_span_id) {
     const XgGlobalEvidence *ev;
     XgFuncId match = XG_NO_ID;
+    XgClassId owner_class_id = XG_NO_ID;
+    bool owner_class_known = false;
     if (!l || !l->global_evidence || (kind != XG_BODY_MODULE_INIT && source_node_id == 0))
         return XG_NO_ID;
     ev = l->global_evidence;
+    if (kind == XG_BODY_FUNCTION && l->parent && l->parent->func &&
+        l->parent->func->xg_body_func_id != XG_NO_ID) {
+        for (uint32_t i = 0; i < ev->nbodies; i++) {
+            if (ev->bodies[i].func_id == l->parent->func->xg_body_func_id) {
+                owner_class_id = ev->bodies[i].owner_class_id;
+                owner_class_known = true;
+                break;
+            }
+        }
+    }
     for (uint32_t i = 0; i < ev->nbodies; i++) {
         const XgBodySummary *body = &ev->bodies[i];
         if (body->func_id == XG_NO_ID || body->kind != kind)
             continue;
         if (!xi_lower_evidence_module_matches(l, body->module_id))
             continue;
+        if (owner_class_known && body->owner_class_id != owner_class_id)
+            continue;
         if (kind != XG_BODY_MODULE_INIT && body->source_node_id != source_node_id)
+            continue;
+        if (match != XG_NO_ID)
+            return XG_NO_ID;
+        match = body->func_id;
+    }
+    if (match != XG_NO_ID || kind != XG_BODY_FUNCTION || !owner_class_known || source_span_id == 0)
+        return match;
+    /* Monomorphized AST clones preserve the origin source coordinate while
+     * global evidence assigns the clone a distinct semantic node id.  Select
+     * the child body through its already-bound owner class and source span. */
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        const XgBodySummary *body = &ev->bodies[i];
+        if (body->func_id == XG_NO_ID || body->kind != kind ||
+            !xi_lower_evidence_module_matches(l, body->module_id) ||
+            body->owner_class_id != owner_class_id || body->source_span_id != source_span_id)
             continue;
         if (match != XG_NO_ID)
             return XG_NO_ID;
@@ -792,17 +822,19 @@ static void xi_lower_bind_current_func_body_id(XiLower *l, XgFuncId body_func_id
 }
 
 XR_FUNC void xi_lower_bind_module_body_id(XiLower *l) {
-    xi_lower_bind_current_func_body_id(l, xi_lower_find_unique_body_id(l, XG_BODY_MODULE_INIT, 0));
+    xi_lower_bind_current_func_body_id(l,
+                                       xi_lower_find_unique_body_id(l, XG_BODY_MODULE_INIT, 0, 0));
 }
 
-XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, uint32_t source_node_id) {
+XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, uint32_t source_node_id,
+                                            uint32_t source_span_id) {
     xi_lower_bind_current_func_body_id(
-        l, xi_lower_find_unique_body_id(l, XG_BODY_FUNCTION, source_node_id));
+        l, xi_lower_find_unique_body_id(l, XG_BODY_FUNCTION, source_node_id, source_span_id));
 }
 
 XR_FUNC void xi_lower_bind_method_body_id(XiLower *l, uint32_t source_node_id) {
     xi_lower_bind_current_func_body_id(
-        l, xi_lower_find_unique_body_id(l, XG_BODY_METHOD, source_node_id));
+        l, xi_lower_find_unique_body_id(l, XG_BODY_METHOD, source_node_id, 0));
 }
 
 XR_FUNC uint32_t xi_lower_next_key_access_ordinal(XiLower *l, uint32_t source_span_id,
@@ -1485,7 +1517,8 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     xi_lower_publish_allocation_effect(l.func, analyzer,
                                        xi_lower_function_symbol(analyzer, func_node));
     xi_lower_bind_function_body_id(&l,
-                                   xi_lower_function_evidence_source_node_id(&l, func_node, fdecl));
+                                   xi_lower_function_evidence_source_node_id(&l, func_node, fdecl),
+                                   func_node->line > 0 ? (uint32_t) func_node->line : 0);
 
     /* FFI: extern "C" functions are bodyless foreign declarations. Record
      * the C symbol + optional dylib; the body below stays empty and a trivial

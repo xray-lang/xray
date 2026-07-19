@@ -217,28 +217,9 @@ static XaIntrinsicId xa_builtin_receiver_intrinsic_id(XrType *receiver, AstNode 
         return XA_INTRINSIC_NONE;
 
     const char *name = callee->as.member_access.name;
-    if (receiver->kind == XR_KIND_INSTANCE && xr_type_is_named_class(receiver, "Atomic")) {
-        static const struct {
-            const char *source_name;
-            XaIntrinsicId intrinsic_id;
-        } atomic_methods[] = {
-            {"load", XA_INTRINSIC_ATOMIC_LOAD},
-            {"store", XA_INTRINSIC_ATOMIC_STORE},
-            {"add", XA_INTRINSIC_ATOMIC_ADD},
-            {"sub", XA_INTRINSIC_ATOMIC_SUB},
-            {"fetchAdd", XA_INTRINSIC_ATOMIC_FETCH_ADD},
-            {"fetchSub", XA_INTRINSIC_ATOMIC_FETCH_SUB},
-            {"swap", XA_INTRINSIC_ATOMIC_SWAP},
-            {"compareExchange", XA_INTRINSIC_ATOMIC_COMPARE_EXCHANGE},
-            {"toggle", XA_INTRINSIC_ATOMIC_TOGGLE},
-            {"toString", XA_INTRINSIC_ATOMIC_TO_STRING},
-        };
-        for (size_t i = 0; i < sizeof(atomic_methods) / sizeof(atomic_methods[0]); i++) {
-            if (strcmp(atomic_methods[i].source_name, name) == 0)
-                return atomic_methods[i].intrinsic_id;
-        }
-        return XA_INTRINSIC_NONE;
-    }
+    XaIntrinsicId compiler_owned = xa_intrinsic_compiler_receiver_method(receiver, name);
+    if (compiler_owned != XA_INTRINSIC_NONE)
+        return compiler_owned;
     for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
         const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
         if (!xa_builtin_receiver_intrinsic_matches(receiver, spec->receiver) ||
@@ -267,6 +248,10 @@ static const XaResolvedCall *xa_record_resolved_intrinsic_call(XaInferContext *c
             receiver_type = recorded_receiver;
     }
     XaIntrinsicId intrinsic_id = links ? links->intrinsic_id : XA_INTRINSIC_NONE;
+    if (intrinsic_id == XA_INTRINSIC_NONE)
+        intrinsic_id = xa_intrinsic_compiler_receiver_method(
+            receiver_type,
+            callee && callee->type == AST_MEMBER_ACCESS ? callee->as.member_access.name : NULL);
     if (intrinsic_id == XA_INTRINSIC_NONE && (!target || target->is_builtin))
         intrinsic_id = xa_builtin_receiver_intrinsic_id(receiver_type, callee);
     if (intrinsic_id == XA_INTRINSIC_NONE)

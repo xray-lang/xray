@@ -14,6 +14,10 @@
 #include <string.h>
 
 static const XiValue *unwrap_identity_value(const XiValue *v);
+static const XiImportRef *module_import_ref_for_value(const XaotBundle *bundle,
+                                                      const XiFunc *current, const XiValue *value);
+static const XiClassData *resolve_imported_class(const XaotBundle *bundle, const XiImportRef *ref,
+                                                 const XiModule **owner_out);
 
 static const XiFunc *boundary_find_constructor(const XiFunc *parent,
                                                const XiClassData *class_data) {
@@ -55,17 +59,29 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_constructor_call_target(const XaotBu
                                                                     const XiValue *call,
                                                                     uint16_t *first_arg_out,
                                                                     uint16_t *first_param_out) {
+    const XiFunc *target = NULL;
     if (first_arg_out)
         *first_arg_out = 0;
     if (first_param_out)
         *first_param_out = 0;
-    if (!bundle || !current || !call || call->op != XI_CALL || call->nargs < 1)
+    if (!bundle || !current || !call || call->nargs < 1)
         return NULL;
-    const XiValue *callee = unwrap_identity_value(call->args[0]);
-    if (!callee || callee->op != XI_GET_SHARED)
-        return NULL;
-    const XiFunc *target =
-        boundary_resolve_shared_constructor(bundle, current, (int) callee->aux_int);
+    if (call->op == XI_CALL) {
+        const XiValue *callee = unwrap_identity_value(call->args[0]);
+        if (callee && callee->op == XI_GET_SHARED)
+            target = boundary_resolve_shared_constructor(bundle, current, (int) callee->aux_int);
+    } else if (call->op == XI_CALL_METHOD && call->aux && (call->aux_int & 1) == 0) {
+        const XiImportRef *module_ref = module_import_ref_for_value(bundle, current, call->args[0]);
+        if (module_ref) {
+            XiImportRef class_ref = *module_ref;
+            const XiModule *owner = NULL;
+            class_ref.member_name = (const char *) call->aux;
+            class_ref.resolved_shared_slot = -1;
+            const XiClassData *cls = resolve_imported_class(bundle, &class_ref, &owner);
+            if (cls && owner && owner->init)
+                target = boundary_find_constructor(owner->init, cls);
+        }
+    }
     if (target) {
         if (first_arg_out)
             *first_arg_out = 1;

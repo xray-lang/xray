@@ -7,6 +7,7 @@
  */
 
 #include "xa_intrinsic_registry.h"
+#include "../../runtime/value/xtype.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -86,6 +87,20 @@ const char *xa_intrinsic_source_member(const XaIntrinsicDesc *desc) {
         return NULL;
     const char *dot = strrchr(desc->key, '.');
     return dot ? dot + 1 : desc->key;
+}
+
+XaIntrinsicId xa_intrinsic_compiler_receiver_method(const XrType *receiver,
+                                                    const char *member_name) {
+    if (!receiver || !member_name || receiver->kind != XR_KIND_INSTANCE ||
+        !xr_type_is_named_class(receiver, "Atomic"))
+        return XA_INTRINSIC_NONE;
+    for (size_t i = 0; i < xa_intrinsic_count(); i++) {
+        const XaIntrinsicDesc *desc = &g_intrinsics[i];
+        if (desc->family == XA_INTRINSIC_FAMILY_ATOMIC &&
+            strcmp(xa_intrinsic_source_member(desc), member_name) == 0)
+            return desc->id;
+    }
+    return XA_INTRINSIC_NONE;
 }
 
 size_t xa_intrinsic_count(void) {

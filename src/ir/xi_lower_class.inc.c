@@ -252,7 +252,8 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
     /* A method's own type parameters use the canonical erased method ABI.
      * Methods on an open generic class skeleton are different: their receiver
      * layout is not concrete, so the skeleton body is not executable. */
-    ml.func->is_generic_template = cd && (cd->type_param_count > 0 || cd->is_generic_skeleton);
+    ml.func->is_generic_template =
+        cd && !cd->is_monomorphized && (cd->type_param_count > 0 || cd->is_generic_skeleton);
     xi_lower_bind_method_body_id(&ml, source_node_id);
 
     XiBlock *entry = xi_block_new(ml.func);

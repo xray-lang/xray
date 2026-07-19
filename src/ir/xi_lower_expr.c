@@ -5114,11 +5114,41 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     return value;
 }
 
+static XrType *lower_known_expr_type(XiLower *l, AstNode *node) {
+    XrType *type = l && node ? xi_lower_node_type(l, node) : NULL;
+    if (type && !xi_lower_type_is_unknown(type))
+        return type;
+    if (!l || !node || node->type != AST_VARIABLE)
+        return NULL;
+    for (XiLower *scope = l; scope; scope = scope->parent) {
+        int var_id = xi_lower_var_find(scope, node->as.variable.symbol_id, node->as.variable.name);
+        if (var_id >= 0 && var_id < scope->var_count && scope->vars[var_id].type)
+            return scope->vars[var_id].type;
+    }
+    XiTopBinding top =
+        xi_lower_find_top_binding(l, node->as.variable.symbol_id, node->as.variable.name);
+    return xi_top_binding_valid(top) ? top.type : NULL;
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
 
     const XaResolvedCall *resolved =
         l && l->typed_program ? xa_typed_program_resolved_call(l->typed_program, node) : NULL;
+    XaResolvedCall lowering_resolved;
+    if (!resolved && call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *member = &call->callee->as.member_access;
+        XaIntrinsicId intrinsic_id = xa_intrinsic_compiler_receiver_method(
+            lower_known_expr_type(l, member->object), member->name);
+        if (intrinsic_id != XA_INTRINSIC_NONE) {
+            lowering_resolved = (XaResolvedCall) {
+                .source_node_id = node->node_id,
+                .intrinsic_id = intrinsic_id,
+                .reason = XA_RESOLVED_CALL_REASON_RESOLVED,
+            };
+            resolved = &lowering_resolved;
+        }
+    }
     const XaIntrinsicDesc *resolved_desc =
         resolved ? xa_intrinsic_by_id(resolved->intrinsic_id) : NULL;
     if (resolved_desc && resolved_desc->family != XA_INTRINSIC_FAMILY_PARALLEL)
@@ -6272,7 +6302,9 @@ static XiFunc *parallel_call_lower_lambda_func(
     child_l.func->native_callback_kind = callback_kind;
     child_l.func->parent_func = parent->func;
     child_l.func->analyzer = parent->analyzer;
-    xi_lower_bind_function_body_id(&child_l, xi_lower_source_node_id(&child_l, lambda_node));
+    child_l.func->is_generic_template = parent->func && parent->func->is_generic_template;
+    xi_lower_bind_function_body_id(&child_l, xi_lower_source_node_id(&child_l, lambda_node),
+                                   lambda_node->line > 0 ? (uint32_t) lambda_node->line : 0);
     child_l.func->nparams = abi_param_count;
     child_l.func->min_params = abi_param_count;
     child_l.func->entry_type = 0;
@@ -6758,7 +6790,9 @@ static XiValue *lower_parallel_plan_end_defer_closure(XiLower *l, AstNode *node,
     }
     child_l.func->parent_func = l->func;
     child_l.func->analyzer = l->analyzer;
-    xi_lower_bind_function_body_id(&child_l, node ? xi_lower_source_node_id(&child_l, node) : 0);
+    child_l.func->is_generic_template = l->func && l->func->is_generic_template;
+    xi_lower_bind_function_body_id(&child_l, node ? xi_lower_source_node_id(&child_l, node) : 0,
+                                   node && node->line > 0 ? (uint32_t) node->line : 0);
     child_l.func->nparams = 0;
     child_l.func->min_params = 0;
     child_l.func->entry_type = 0;

@@ -9820,7 +9820,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             method.flags |= XG_METHOD_CONSTRUCTOR;
         if (cls->is_native || !m->body)
             method.flags |= XG_METHOD_NATIVE;
-        if (cls->type_param_count > 0 || cls->is_generic_skeleton || m->type_param_count > 0)
+        if (!cls->is_monomorphized && (cls->type_param_count > 0 || cls->is_generic_skeleton))
             method.flags |= XG_METHOD_GENERIC_TEMPLATE;
         if (!xg_global_evidence_add_method(p->evidence, &method))
             return false;
@@ -9876,7 +9876,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         csum.flags |= XG_CLASS_EXPLICIT_FINAL;
     if (cls->is_native)
         csum.flags |= XG_CLASS_NATIVE;
-    if (cls->type_param_count > 0 || cls->is_generic_skeleton)
+    if (!cls->is_monomorphized && (cls->type_param_count > 0 || cls->is_generic_skeleton))
         csum.flags |= XG_CLASS_GENERIC_SKELETON;
     if (cls->is_monomorphized) {
         const char *origin_name = cls->generic_origin_name;
