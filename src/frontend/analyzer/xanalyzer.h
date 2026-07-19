@@ -74,6 +74,15 @@ typedef struct XaFileEntry {
     struct XaFileEntry *next;
 } XaFileEntry;
 
+// Scoped activation of one analyzed file. Multi-module compiler phases must
+// resolve names from the file that owns the AST, not whichever file happened
+// to be analyzed last by a shared analyzer.
+typedef struct XaAnalyzerFileScope {
+    XaScope *previous_scope;
+    const char *previous_file;
+    bool active;
+} XaAnalyzerFileScope;
+
 // Analyzer context
 struct XaAnalyzer {
     // Owning compiler session (explicit, no TLS)
@@ -189,6 +198,9 @@ XR_FUNC void xa_analyzer_set_graph(XaAnalyzer *analyzer, struct XrModuleGraph *g
 // API: Analysis
 XR_FUNC void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast);
 XR_FUNC void xa_analyzer_update(XaAnalyzer *analyzer, const char *file, XrAstNode *ast);
+XR_FUNC bool xa_analyzer_push_file_scope(XaAnalyzer *analyzer, const char *file,
+                                         XaAnalyzerFileScope *scope);
+XR_FUNC void xa_analyzer_pop_file_scope(XaAnalyzer *analyzer, XaAnalyzerFileScope *scope);
 
 // Full-file rebuild + dependency-graph dirty propagation. Earlier
 // versions named this xa_analyzer_update_incremental(), which lied about its

@@ -1,0 +1,25 @@
+// Dependency for the imported enum-payload type regression.
+export enum SharedError {
+    Invalid(string)
+}
+
+export enum SharedResult {
+    Ok(Json),
+    Err(SharedError)
+}
+
+export enum MirroredResult {
+    Ok(Json),
+    Err(SharedError)
+}
+
+export fn produce(ok: bool) -> SharedResult {
+    return ok ? SharedResult.Ok({ "answer": 42 }) : SharedResult.Err(SharedError.Invalid("bad"))
+}
+
+export fn mirror(result: SharedResult) -> MirroredResult {
+    return match (result) {
+        SharedResult.Ok(value)  -> MirroredResult.Ok(value)
+        SharedResult.Err(error) -> MirroredResult.Err(error)
+    }
+}
