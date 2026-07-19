@@ -34,7 +34,9 @@ Xray 面向脚本、服务和命令行程序，适合需要静态类型、语言
 - **集成开发工具**：仓库提供格式化器、测试运行器、REPL、字节码编译器、LSP 服务、DAP 适配器、MCP 服务和 AOT 工具链诊断。
 - **C 嵌入 API**：[`include/xray_vm.h`](include/xray_vm.h) 提供宿主应用使用的 VM 接口。
 
-## 安装
+## 安装与快速体验
+
+### 1. 安装 Xray 命令行
 
 macOS 或 Linux：
 
@@ -43,7 +45,37 @@ curl -fsSL https://xray-lang.org/install.sh | sh
 xray --version
 ```
 
-安装脚本会根据当前操作系统和处理器架构选择发行包，并把 `xray` 安装到 `~/.xray/bin`。Windows 用户可以从 [GitHub Releases](https://github.com/xray-lang/xray/releases/latest) 下载 `xray-windows-x64.zip`。PATH 配置、升级和源码构建说明见[安装教程](https://xray-lang.org/docs/getting-started/install)。
+安装脚本会根据当前操作系统和处理器架构选择发行包，并把 `xray` 安装到 `~/.xray/bin`。Windows 用户可以从 [GitHub Releases](https://github.com/xray-lang/xray/releases/latest) 下载 `xray-windows-x64.zip`。PATH 配置、升级和 Windows 详细步骤见[安装教程](https://xray-lang.org/docs/getting-started/install)。
+
+### 2. 安装 VS Code 扩展
+
+推荐安装 **Xray Language**，获得语法高亮、补全、诊断、格式化、跳转、重命名、运行和调试支持：
+
+```bash
+code --install-extension xray-lang.xray-lang
+```
+
+也可以在扩展面板中搜索 `Xray Language`，或从 [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=xray-lang.xray-lang) / [Open VSX Registry](https://open-vsx.org/extension/xray-lang/xray-lang) 安装。各平台扩展包已经内置供 LSP 和 DAP 使用的 `xray`；独立安装的命令行仍用于终端运行、构建、测试和 MCP。
+
+### 3. 让 AI 编程客户端连接 Xray MCP
+
+Xray 命令行内置 stdio MCP 服务。在 VS Code 项目中创建 `.vscode/mcp.json`：
+
+```json
+{
+  "servers": {
+    "xray": {
+      "type": "stdio",
+      "command": "xray",
+      "args": ["mcp-server"]
+    }
+  }
+}
+```
+
+在命令面板中运行 **MCP: List Servers** 并启动 `xray`。AI 客户端随后可以查询真实的 Xray 语法和标准库，并使用 analyzer 与 formatter 检查生成代码。默认不开放代码执行；需要运行受限短代码片段时才显式加入 `--enable-runner`。其它客户端格式、能力清单和排错方法见 [MCP 与 AI 编程指南](https://xray-lang.org/docs/getting-started/mcp)。
+
+### 从源码构建
 
 直接构建仓库需要 C11 编译器和 CMake 3.12 或更高版本：
 
@@ -140,6 +172,7 @@ Xray 仍处于 1.0 之前的活跃开发阶段。仓库包含可工作的 parser
 ## 文档
 
 - [语言教程](https://xray-lang.org/docs/getting-started/quickstart) —— 安装、入门教程和标准库指南
+- [MCP 与 AI 编程](https://xray-lang.org/docs/getting-started/mcp) —— 为 AI 客户端接入 Xray 语法、API、分析和格式化能力
 - [`LANGUAGE_SPEC_CN.md`](LANGUAGE_SPEC_CN.md) —— 中文语言参考
 - [`LANGUAGE_SPEC.md`](LANGUAGE_SPEC.md) —— English language reference
 - [`demos/`](demos/) —— 按主题组织的可运行示例
