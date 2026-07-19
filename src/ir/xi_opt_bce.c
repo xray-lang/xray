@@ -112,7 +112,7 @@ XR_FUNC XiPassChange xi_opt_bce(XiFunc *f) {
         return xi_pass_no_change();
 
     /* Range analysis must have run. */
-    if (!xi_evidence_is_proven_current(f, XI_EVD_RANGE))
+    if (!xi_evidence_domain_is_proven_current(f, XI_EVD_RANGE))
         return xi_pass_no_change();
 
     BceSeen seen;

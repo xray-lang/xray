@@ -388,8 +388,8 @@ XR_FUNC void xi_escape_analyze(XiFunc *f) {
     }
 
     analyze_func(f);
-    xi_evidence_publish(f, XI_EVD_ESCAPE, XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE,
-                        "xi_escape_analyze");
+    xi_evidence_publish(f, XI_EVD_ESCAPE, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_ESCAPE_ANALYSIS, 0, NULL);
 }
 
 /* ========== Cross-Function Escape Summary ========== */

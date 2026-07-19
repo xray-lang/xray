@@ -665,8 +665,8 @@ static void test_pass_order_and_invariants(void) {
     XiOptResult opt = xi_opt_run_pipeline(f, XI_OPT_FULL);
     assert(opt.ok);
 
-    assert(xi_evidence_is_current(f, XI_EVD_ALIAS));
-    assert(xi_evidence_is_current(f, XI_EVD_RANGE));
+    assert(xi_evidence_domain_is_current(f, XI_EVD_ALIAS));
+    assert(xi_evidence_domain_is_current(f, XI_EVD_RANGE));
 
     char error[256] = {0};
     XiOptimizedProgram *optimized = xi_program_finish_optimization(lowered, error, sizeof(error));

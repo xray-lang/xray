@@ -501,7 +501,7 @@ XR_FUNC XiPassChange xi_opt_gvn_pre(XiFunc *f) {
     /* Ensure dominator tree is available (cached across passes). */
     xi_ensure_dominators(f);
 
-    bool tbaa_active = xi_evidence_is_proven_current(f, XI_EVD_ALIAS);
+    bool tbaa_active = xi_evidence_domain_is_proven_current(f, XI_EVD_ALIAS);
 
     /* Build Memory SSA for cross-block load elimination. */
     XiMemSSA *mssa = NULL;

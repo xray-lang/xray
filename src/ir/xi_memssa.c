@@ -187,7 +187,7 @@ static XiBlock **compute_rpo(XiFunc *f, uint32_t *out_count) {
 
 XR_FUNC XiMemSSA *xi_memssa_build(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_memssa_build: NULL func");
-    XR_DCHECK(xi_evidence_is_proven_current(f, XI_EVD_ALIAS),
+    XR_DCHECK(xi_evidence_domain_is_proven_current(f, XI_EVD_ALIAS),
               "xi_memssa_build: requires current alias evidence");
 
     XiMemSSA *mssa = (XiMemSSA *) xr_calloc(1, sizeof(XiMemSSA));
@@ -287,8 +287,8 @@ XR_FUNC XiMemSSA *xi_memssa_build(XiFunc *f) {
     xr_free(cur_ver);
     xr_free(rpo);
 
-    xi_evidence_publish(f, XI_EVD_MEMSSA, XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE,
-                        "xi_memssa_build");
+    xi_evidence_publish(f, XI_EVD_MEMSSA, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_MEMSSA, 0, NULL);
     return mssa;
 }
 

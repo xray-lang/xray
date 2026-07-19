@@ -245,9 +245,9 @@ TEST(annotate_sets_invariant) {
     XiValue *c = xi_const_int(f, blk, 1, &stub_int);
     xi_block_set_return(blk, c);
 
-    assert(!xi_evidence_is_current(f, XI_EVD_ALIAS));
+    assert(!xi_evidence_domain_is_current(f, XI_EVD_ALIAS));
     xi_tbaa_annotate(f);
-    assert(xi_evidence_is_current(f, XI_EVD_ALIAS));
+    assert(xi_evidence_domain_is_current(f, XI_EVD_ALIAS));
 
     xi_func_free(f);
 }
@@ -305,7 +305,7 @@ TEST(memssa_build_simple) {
     xi_tbaa_annotate(f);
     XiMemSSA *mssa = xi_memssa_build(f);
     assert(mssa != NULL);
-    assert(xi_evidence_is_current(f, XI_EVD_MEMSSA));
+    assert(xi_evidence_domain_is_current(f, XI_EVD_MEMSSA));
 
     /* The load should have an access node. */
     XiMemAccess *acc = xi_memssa_access(mssa, get);

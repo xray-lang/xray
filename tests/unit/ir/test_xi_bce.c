@@ -234,7 +234,8 @@ TEST(no_elimination_without_range) {
 
 TEST(empty_func_no_crash) {
     XiFunc *f = make_func();
-    xi_evidence_publish(f, XI_EVD_RANGE, XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE, "test_bce");
+    xi_evidence_publish(f, XI_EVD_RANGE, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TEST, 0, NULL);
     xi_opt_bce(f);
     xi_func_free(f);
 }
@@ -1062,7 +1063,8 @@ TEST(multiple_empty_blocks_no_crash) {
     wire(b2, b3, 0);
     b3->kind = XI_BLOCK_RETURN;
 
-    xi_evidence_publish(f, XI_EVD_RANGE, XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE, "test_bce");
+    xi_evidence_publish(f, XI_EVD_RANGE, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TEST, 0, NULL);
     xi_opt_bce(f);
 
     xi_func_free(f);

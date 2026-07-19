@@ -188,8 +188,8 @@ XR_FUNC XiPassChange xi_tbaa_annotate(XiFunc *f) {
         }
     }
 
-    xi_evidence_publish(f, XI_EVD_ALIAS, XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE,
-                        "xi_tbaa_annotate");
+    xi_evidence_publish(f, XI_EVD_ALIAS, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TBAA, 0, NULL);
 
     return (XiPassChange) {
         .cfg_changed = false,

@@ -12,7 +12,7 @@
 #include <stdio.h>
 
 static bool require_one(XiFunc *func, XiEvidenceDomain domain) {
-    if (xi_evidence_is_proven_current(func, domain))
+    if (xi_evidence_domain_is_proven_current(func, domain))
         return true;
     switch (domain) {
         case XI_EVD_RANGE:
@@ -24,7 +24,7 @@ static bool require_one(XiFunc *func, XiEvidenceDomain domain) {
         default:
             return false;
     }
-    return xi_evidence_is_proven_current(func, domain);
+    return xi_evidence_domain_is_proven_current(func, domain);
 }
 
 bool xi_analysis_require(XiFunc *func, XiEvidenceDomainMask domains, char *error,
@@ -40,7 +40,7 @@ bool xi_analysis_require(XiFunc *func, XiEvidenceDomainMask domains, char *error
         XiEvidenceDomain domain = (XiEvidenceDomain) bit;
         if (require_one(func, domain))
             continue;
-        XiEvidenceView view = xi_evidence_query(func, domain);
+        XiEvidenceView view = xi_evidence_query(func, domain, xi_evidence_subject_function());
         if (error && error_size) {
             snprintf(error, error_size, "evidence domain '%s' is unavailable: %s",
                      xi_evidence_domain_name(domain), xi_evidence_reason_name(view.reason));

@@ -270,7 +270,7 @@ TEST(analyze_sets_invariant) {
 
     xi_range_analyze(f);
 
-    ASSERT(xi_evidence_is_current(f, XI_EVD_RANGE));
+    ASSERT(xi_evidence_domain_is_current(f, XI_EVD_RANGE));
 
     xi_func_free(f);
 }

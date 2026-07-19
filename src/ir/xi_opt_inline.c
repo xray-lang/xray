@@ -327,7 +327,7 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
         return NULL;
 
     xi_value_copy_metadata(cloned, src);
-    if (xi_evidence_is_proven_current(caller, XI_EVD_ALIAS))
+    if (xi_evidence_domain_is_proven_current(caller, XI_EVD_ALIAS))
         xi_tbaa_annotate_value(cloned);
 
     /* Remap args */

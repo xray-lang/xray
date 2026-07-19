@@ -3871,7 +3871,7 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
 
             for (uint32_t bit = 1; bit <= XI_EVD_MEMSSA; bit <<= 1u) {
                 if ((desc->produces_evidence & bit) != 0 &&
-                    !xi_evidence_is_current(f, (XiEvidenceDomain) bit)) {
+                    !xi_evidence_domain_is_current(f, (XiEvidenceDomain) bit)) {
                     result.ok = false;
                     result.pass_name = desc->name;
                     result.round = round;
