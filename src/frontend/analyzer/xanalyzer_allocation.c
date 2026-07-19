@@ -186,6 +186,10 @@ static bool alloc_append_row(XaAllocPass *pass, AstNode *node, XaSymbol *symbol)
                (size_t) (next_capacity - pass->row_capacity) * sizeof(XaAllocFunctionRow));
         pass->rows = next;
         pass->row_capacity = next_capacity;
+        for (int i = 0; i < pass->row_count; i++) {
+            if (pass->rows[i].uses_synthetic_symbol)
+                pass->rows[i].symbol = &pass->rows[i].synthetic_symbol;
+        }
     }
     XaAllocFunctionRow *row = &pass->rows[pass->row_count++];
     memset(row, 0, sizeof(*row));
