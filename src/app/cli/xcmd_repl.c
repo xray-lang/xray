@@ -157,6 +157,16 @@ static char *repl_completion_generator(const char *text, int state) {
                     return xr_strdup(name);
             }
         }
+        phase = 3;
+        idx = 0;
+    }
+
+    /* Phase 3: the virtual last-result binding.  Its versioned storage
+     * names are deliberately absent from completion. */
+    if (phase == 3 && g_completion_state && g_completion_state->isolate && idx == 0) {
+        idx++;
+        if (xr_repl_has_last_result(g_completion_state->isolate) && strncmp("it", text, len) == 0)
+            return xr_strdup("it");
     }
 
     return NULL;
@@ -426,8 +436,8 @@ static void reset_buffer(ReplState *state) {
     state->buffer[0] = '\0';
 }
 
-// Incremental execution: compile only new code, execute on persistent isolate+runtime.
-// Definitions survive across inputs via REPL symbol table + shared array.
+// Incremental execution on a persistent isolate+runtime.
+// Definitions survive across inputs via the REPL symbol table + globals dict.
 // Runtime stays alive across inputs (heap objects like closures must not be freed).
 // Free all tracked protos
 static void repl_free_protos(ReplState *state) {
@@ -438,10 +448,11 @@ static void repl_free_protos(ReplState *state) {
 }
 
 static void execute_code(ReplState *state, const char *code) {
-    // Incremental compile (seeds compiler context from repl_symbols)
+    // Compile and execute once. Publishing declarations and `it` is part of
+    // xr_repl_eval's successful-transaction boundary.
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(state->isolate);
-    XrProto *proto = xr_repl_compile(session, state->isolate, code);
-    if (!proto) {
+    XrReplEvalResult result = xr_repl_eval(session, state->isolate, code);
+    if (!result.proto) {
         return;  // compile error already reported
     }
 
@@ -451,10 +462,7 @@ static void execute_code(ReplState *state, const char *code) {
         XR_REALLOC_OR_ABORT(state->protos, (size_t) state->proto_capacity * sizeof(XrProto *),
                             "repl protos grow");
     }
-    state->protos[state->proto_count++] = proto;
-
-    // Execute on persistent runtime
-    xr_execute(state->isolate, proto);
+    state->protos[state->proto_count++] = result.proto;
 }
 
 // Handle .load command (uses incremental compilation path)
