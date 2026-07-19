@@ -225,6 +225,8 @@ static bool xi_coro_func_intrinsic_suspends(const XiFunc *f, const XiCoroResolve
             const XiValue *v = blk->values[vi];
             if (!v)
                 continue;
+            if ((v->flags & XI_FLAG_MAY_SUSPEND) != 0)
+                return true;
             if (v->op == XI_YIELD || v->op == XI_GEN_YIELD || v->op == XI_GO || v->op == XI_AWAIT ||
                 v->op == XI_CHAN_SEND || v->op == XI_CHAN_RECV || v->op == XI_SELECT_BLOCK ||
                 v->op == XI_SCOPE_EXIT)

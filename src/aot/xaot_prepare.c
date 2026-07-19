@@ -11,6 +11,7 @@
 #include "xaot_prepare.h"
 #include "xaot_boundary.h"
 #include "xaot_class_native.h"
+#include "xaot_callable.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
@@ -3973,6 +3974,19 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
         if (!prepare_func_recursive(bundle, mod->init, mi, 0, true))
             return false;
     }
+    /* Function-value flow is whole-program: function/ABI rows for every
+     * module must exist before argument/return/storage edges can converge. */
+    if (!xaot_callable_plans_build(bundle)) {
+        bundle->error_msg = "failed to build closed-world callable invoke plans";
+        return false;
+    }
+    if (!xaot_entry_plan_derive(bundle, bundle->global_evidence_plan.evidence,
+                                bundle->global_evidence_plan.profile, &bundle->entry_plan) ||
+        bundle->entry_plan.unproven_reason != XR_ENTRY_PROVEN) {
+        bundle->error_msg = "failed to refresh entry plan from callable reachability";
+        return false;
+    }
+    bundle->has_entry_plan = true;
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
         if (!prepare_func_extern_decls(bundle, bundle->func_plans[mi].func))
             return false;

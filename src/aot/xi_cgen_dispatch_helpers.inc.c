@@ -3691,10 +3691,10 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         return;
     }
 
-    /* Indirect call through a closure value.  A function value is always a
-     * closure whose stored `fn` is the boxed entry point
+    /* Indirect call through a closure value.  A function value carries a
+     * canonical descriptor whose sync_entry is the boxed entry point
      * `XrValue (xrt_closure_t *, XrValue...)` (see emit_closure_new_expr), so
-     * any closure can be invoked by casting fn to that signature, passing the
+     * any proven-sync closure can be invoked by casting sync_entry to that signature, passing the
      * arguments boxed, and converting the boxed result to the call's rep.
      * Static targets are handled above; this covers function values flowing
      * through params / phis / containers / returns that cannot be statically
@@ -3714,7 +3714,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
             fprintf(out, ".ptr; ((XrValue (*)(xrt_closure_t *");
             for (uint16_t a = 1; a < v->nargs; a++)
                 fprintf(out, ", XrValue");
-            fprintf(out, ")) _icl->fn)(_icl");
+            fprintf(out, ")) _icl->callable->sync_entry)(_icl");
             for (uint16_t a = 1; a < v->nargs; a++) {
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
@@ -12380,12 +12380,11 @@ static void xicgen_emit_par_for_scoped_closure(XiCgenCtx *ctx, FILE *out, const 
             "        xrt_closure_t *_xr_par_closure_%u = (xrt_closure_t *)((char "
             "*)_xr_par_closure_hdr_%u + sizeof(XrObjHeader));\n",
             par_for->id, par_for->id);
-    fprintf(out, "        xrt_closure_init(_xr_par_closure_%u, (void*)", par_for->id);
-    if (native_entry)
-        emit_fname(ctx, out, prefix, body);
-    else
-        emit_closure_entry_pointer(ctx, out, prefix, body);
-    fprintf(out, ", %u);\n", ncap);
+    (void) native_entry;
+    fprintf(out, "        ");
+    emit_callable_descriptor(ctx, out, prefix, par_for->id, closure, body, 0, 0, NULL);
+    fprintf(out, "\n        xrt_closure_init(_xr_par_closure_%u, &_xr_callable_%u, %u);\n",
+            par_for->id, par_for->id, ncap);
     fprintf(out, "        { xrt_closure_t *_c = _xr_par_closure_%u; ", par_for->id);
     emit_closure_upval_initializers(ctx, out, f, closure, false);
     fprintf(out, "}\n");
@@ -12416,12 +12415,10 @@ static void xicgen_emit_par_map_scoped_closure(XiCgenCtx *ctx, FILE *out, const 
             "        xrt_closure_t *_xr_pm_closure_%u = (xrt_closure_t *)((char "
             "*)_xr_pm_closure_hdr_%u + sizeof(XrObjHeader));\n",
             par_map->id, par_map->id);
-    fprintf(out, "        xrt_closure_init(_xr_pm_closure_%u, (void*)", par_map->id);
-    if (data && data->plan_state)
-        emit_fname(ctx, out, prefix, body);
-    else
-        emit_closure_entry_pointer(ctx, out, prefix, body);
-    fprintf(out, ", %u);\n", total);
+    fprintf(out, "        ");
+    emit_callable_descriptor(ctx, out, prefix, par_map->id, closure, body, 0, 0, NULL);
+    fprintf(out, "\n        xrt_closure_init(_xr_pm_closure_%u, &_xr_callable_%u, %u);\n",
+            par_map->id, par_map->id, total);
     fprintf(out, "        { xrt_closure_t *_c = _xr_pm_closure_%u; ", par_map->id);
     emit_closure_upval_initializers(ctx, out, f, closure, false);
     fprintf(out, "_c->upvals[%u] = %s; _c->upvals[%u] = XR_FROM_INT(%s); }\n",
@@ -13251,9 +13248,10 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                     "        xrt_closure_t *_xr_pm_closure_%u = (xrt_closure_t *)((char "
                     "*)_xr_pm_closure_hdr_%u + sizeof(XrObjHeader));\n",
                     v->id, v->id);
-            fprintf(out, "        xrt_closure_init(_xr_pm_closure_%u, (void*)", v->id);
-            emit_closure_entry_pointer(ctx, out, prefix, body);
-            fprintf(out, ", %u);\n", ncap);
+            fprintf(out, "        ");
+            emit_callable_descriptor(ctx, out, prefix, v->id, v->args[3], body, 0, 0, NULL);
+            fprintf(out, "\n        xrt_closure_init(_xr_pm_closure_%u, &_xr_callable_%u, %u);\n",
+                    v->id, v->id, ncap);
             fprintf(out, "        { xrt_closure_t *_c = _xr_pm_closure_%u; ", v->id);
             emit_closure_upval_initializers(ctx, out, f, v->args[3], false);
             fprintf(out, "}\n");

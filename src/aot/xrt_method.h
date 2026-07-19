@@ -795,7 +795,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         if (arg0.tag == XR_TAG_CLOSURE) {
             xrt_closure_t *cl = (xrt_closure_t *) arg0.ptr;
             typedef XrValue (*xrt_fn1_t)(xrt_closure_t *, XrValue);
-            xrt_fn1_t fn = (xrt_fn1_t) cl->fn;
+            xrt_fn1_t fn = (xrt_fn1_t) cl->callable->sync_entry;
             if (sym == XRT_SYM_SORT)
                 return xrt_array_sort(recv, cl);
             if (sym == XRT_SYM_MAP) {

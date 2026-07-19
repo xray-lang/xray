@@ -22,6 +22,7 @@
 #include <limits.h>
 #include <float.h>
 #include <stdatomic.h>
+#include "xrt_callable.h"
 
 #ifdef memcpy
 #undef memcpy
@@ -397,7 +398,7 @@ xrt_enum_aggregate_make(uint32_t layout_id, int64_t tag, uint32_t payload_count,
 }
 
 typedef struct xrt_closure {
-    void *fn;
+    const XrAotCallableDesc *callable;
     int nupvals;
     XrValue upvals[];
 } xrt_closure_t;

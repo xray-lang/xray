@@ -8832,29 +8832,23 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     /* Coroutine functions are emitted (definition) with file-static linkage by
      * the coro codegen, so their forward declaration must match; only plain
      * functions participate in cross-module external linkage. */
-    fprintf(out, "%s", needs_aot_coro ? "static " : cg_func_linkage(ctx, f, prefix));
-    if (!needs_aot_coro && cg_func_attrs_apply_to_internal(f))
-        emit_aot_symbol_attrs(out, f, false);
-    emit_func_attr_qualifier(ctx, out, f);
-    if (needs_aot_coro) {
-        fprintf(out, "XrValue");
-    } else if (!emit_class_native_return_type(ctx, out, prefix, f)) {
-        fprintf(out, "%s", cg_func_return_abi_c_type(ctx, f));
-    }
-    fprintf(out, " ");
-    emit_fname(ctx, out, prefix, f);
-    fprintf(out, "(");
-    fprintf(out, "xrt_closure_t *_cl");
-    uint16_t fwd_nparams = (uint16_t) (f->nparams + (f->is_vararg ? 1 : 0));
-    for (uint16_t i = 0; i < fwd_nparams; i++) {
-        if (needs_aot_coro) {
-            fprintf(out, ", XrValue p%u", i);
-        } else {
+    if (!needs_aot_coro) {
+        fprintf(out, "%s", cg_func_linkage(ctx, f, prefix));
+        if (cg_func_attrs_apply_to_internal(f))
+            emit_aot_symbol_attrs(out, f, false);
+        emit_func_attr_qualifier(ctx, out, f);
+        if (!emit_class_native_return_type(ctx, out, prefix, f))
+            fprintf(out, "%s", cg_func_return_abi_c_type(ctx, f));
+        fprintf(out, " ");
+        emit_fname(ctx, out, prefix, f);
+        fprintf(out, "(xrt_closure_t *_cl");
+        uint16_t fwd_nparams = (uint16_t) (f->nparams + (f->is_vararg ? 1 : 0));
+        for (uint16_t i = 0; i < fwd_nparams; i++) {
             fprintf(out, ", ");
             emit_class_native_param_decl(ctx, out, prefix, f, i);
         }
+        fprintf(out, ");\n");
     }
-    fprintf(out, ");\n");
 
     if (cg_func_can_have_cfn_stub(ctx, f)) {
         emit_cfn_stub_signature(ctx, out, f, prefix);

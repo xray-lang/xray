@@ -399,6 +399,50 @@ typedef struct XaotClosurePlan {
     uint8_t unproven_reason;
 } XaotClosurePlan;
 
+/* A closure allocation plan answers how a function value is materialized.
+ * Invocation is a separate, callsite-owned contract: whole-program prepare
+ * computes the exact target set and its composed effects, the verifier checks
+ * that immutable result, and coroutine analysis/Cgen only consume it. */
+typedef enum XaotCallableInvokeAction {
+    XAOT_CALLABLE_DIRECT_SYNC = 1,
+    XAOT_CALLABLE_DIRECT_SUSPEND = 2,
+    XAOT_CALLABLE_TARGET_SWITCH = 3,
+    XAOT_CALLABLE_REJECT = 4,
+} XaotCallableInvokeAction;
+
+enum {
+    XAOT_CALLABLE_EV_CLOSED_TARGET_SET = 1u << 0,
+    XAOT_CALLABLE_EV_SIGNATURE = 1u << 1,
+    XAOT_CALLABLE_EV_TARGET_EFFECTS = 1u << 2,
+    XAOT_CALLABLE_EV_XI_FLOW = 1u << 3,
+};
+
+typedef enum XaotCallableUnprovenReason {
+    XAOT_CALLABLE_PROVEN = 0,
+    XAOT_CALLABLE_UNPROVEN_EMPTY_TARGET_SET = 1,
+    XAOT_CALLABLE_UNPROVEN_OPEN_BOUNDARY = 2,
+    XAOT_CALLABLE_UNPROVEN_SIGNATURE_MISMATCH = 3,
+} XaotCallableUnprovenReason;
+
+typedef struct XaotCallableTargetCase {
+    const XiFunc *target_func;
+    uint64_t signature_key;
+    uint32_t target_id;
+    uint32_t effect_bits;
+} XaotCallableTargetCase;
+
+typedef struct XaotCallableInvokePlan {
+    const XiFunc *owner;
+    const XiValue *call;
+    uint64_t signature_key;
+    uint32_t effect_bits;
+    uint32_t target_start; /* zero-based index into callable_target_cases */
+    uint16_t target_count;
+    uint8_t action;
+    uint32_t evidence;
+    uint8_t unproven_reason;
+} XaotCallableInvokePlan;
+
 typedef enum XaotTransferSiteKind {
     XAOT_TRANSFER_GO_ARG = 1,
     XAOT_TRANSFER_THREAD_ARG = 2,
@@ -1650,6 +1694,12 @@ typedef struct XaotBundle {
     XaotClosurePlan *closure_plans;
     uint32_t nclosure_plans;
     uint32_t closure_plan_cap;
+    XaotCallableInvokePlan *callable_invoke_plans;
+    uint32_t ncallable_invoke_plans;
+    uint32_t callable_invoke_plan_cap;
+    XaotCallableTargetCase *callable_target_cases;
+    uint32_t ncallable_target_cases;
+    uint32_t callable_target_case_cap;
     XaotTransferPlan *transfer_plans;
     uint32_t ntransfer_plans;
     uint32_t transfer_plan_cap;
@@ -1947,6 +1997,11 @@ xaot_bundle_add_closure_plan(XaotBundle *bundle, const XiFunc *func, const XiVal
                              uint8_t representation, uint32_t evidence, uint8_t unproven_reason);
 XR_FUNC const XaotClosurePlan *xaot_bundle_find_closure_plan(const XaotBundle *bundle,
                                                              const XiValue *value);
+XR_FUNC const XaotCallableInvokePlan *
+xaot_bundle_find_callable_invoke_plan(const XaotBundle *bundle, const XiValue *call);
+XR_FUNC const XaotCallableTargetCase *
+xaot_bundle_callable_target_case(const XaotBundle *bundle, const XaotCallableInvokePlan *plan,
+                                 uint16_t target_index);
 XR_FUNC XaotTransferPlan *xaot_bundle_add_transfer_plan(
     XaotBundle *bundle, const XiFunc *func, const XiValue *site, uint16_t transfer_index,
     const XiValue *value, const XrType *value_type, const XaotTypeKey *value_type_key,

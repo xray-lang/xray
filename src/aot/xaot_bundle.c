@@ -4215,6 +4215,8 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xr_free(bundle->alias_plans);
     xr_free(bundle->allocation_plans);
     xr_free(bundle->closure_plans);
+    xr_free(bundle->callable_invoke_plans);
+    xr_free(bundle->callable_target_cases);
     xr_free(bundle->transfer_plans);
     xaot_bundle_clear_global_lowered_plans(bundle);
     xr_free(bundle->boundary_steps);
@@ -4805,8 +4807,25 @@ XR_FUNC bool xaot_bundle_sync_transfer_capability_plans(XaotBundle *bundle) {
     existing = xaot_bundle_find_capability_plan(bundle, XG_CAP_DEEP_COPY);
     if (existing)
         body_count = existing->body_count;
-    return xaot_bundle_add_capability_plan(bundle, XG_CAP_DEEP_COPY, body_count,
-                                           deep_copy_transfer_count);
+    if (!xaot_bundle_add_capability_plan(bundle, XG_CAP_DEEP_COPY, body_count,
+                                         deep_copy_transfer_count))
+        return false;
+
+    /* Callable-flow discovery can upgrade the executable root to a coroutine
+     * after the initial global-evidence plans were attached.  Synchronize the
+     * canonical capability table from that refreshed entry contract before
+     * verification/link planning. */
+    uint32_t capability_count = 0;
+    const uint32_t *capabilities = xg_capability_catalog(&capability_count);
+    for (uint32_t i = 0; i < capability_count; i++) {
+        uint32_t cap = capabilities[i];
+        uint32_t entry_count = (bundle->entry_plan.required_capability_bits & cap) != 0 ? 1u : 0u;
+        const XaotCapabilityPlan *plan = xaot_bundle_find_capability_plan(bundle, cap);
+        uint32_t transfer_count = plan ? plan->transfer_count : 0;
+        if (!xaot_bundle_add_capability_plan(bundle, cap, entry_count, transfer_count))
+            return false;
+    }
+    return true;
 }
 
 XR_FUNC const XaotStaticDataPlan *xaot_bundle_find_static_data_plan(const XaotBundle *bundle,
@@ -5964,6 +5983,29 @@ XR_FUNC const XaotClosurePlan *xaot_bundle_find_closure_plan(const XaotBundle *b
     if (xaot_ptr_index_get(&bundle->closure_index, value, &idx) && idx < bundle->nclosure_plans)
         return &bundle->closure_plans[idx];
     return NULL;
+}
+
+XR_FUNC const XaotCallableInvokePlan *
+xaot_bundle_find_callable_invoke_plan(const XaotBundle *bundle, const XiValue *call) {
+    if (!bundle || !call)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->ncallable_invoke_plans; i++) {
+        if (bundle->callable_invoke_plans[i].call == call)
+            return &bundle->callable_invoke_plans[i];
+    }
+    return NULL;
+}
+
+XR_FUNC const XaotCallableTargetCase *
+xaot_bundle_callable_target_case(const XaotBundle *bundle, const XaotCallableInvokePlan *plan,
+                                 uint16_t target_index) {
+    uint32_t index;
+    if (!bundle || !plan || target_index >= plan->target_count)
+        return NULL;
+    index = plan->target_start + target_index;
+    if (index >= bundle->ncallable_target_cases)
+        return NULL;
+    return &bundle->callable_target_cases[index];
 }
 
 XR_FUNC XaotTransferPlan *xaot_bundle_add_transfer_plan(
@@ -8213,6 +8255,43 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 (unsigned) cp->capture_count, closure_representation_name(cp->representation));
         print_closure_evidence_bits(out, cp->evidence);
         fprintf(out, " reason=%s\n", closure_unproven_reason_name(cp->unproven_reason));
+    }
+
+    for (uint32_t ci = 0; ci < bundle->ncallable_invoke_plans; ci++) {
+        const XaotCallableInvokePlan *ip = &bundle->callable_invoke_plans[ci];
+        char call_buf[32];
+        const char *action = "reject";
+        value_ref(call_buf, sizeof(call_buf), ip->call);
+        switch ((XaotCallableInvokeAction) ip->action) {
+            case XAOT_CALLABLE_DIRECT_SYNC:
+                action = "direct_sync";
+                break;
+            case XAOT_CALLABLE_DIRECT_SUSPEND:
+                action = "direct_suspend";
+                break;
+            case XAOT_CALLABLE_TARGET_SWITCH:
+                action = "target_switch";
+                break;
+            case XAOT_CALLABLE_REJECT:
+                break;
+        }
+        fprintf(out,
+                "callable-invoke %u owner=%s call=%s action=%s targets=%u effect=0x%x "
+                "signature-key=%016" PRIx64 " evidence=0x%x reason=%u\n",
+                ci, safe_str(ip->owner ? ip->owner->name : NULL), call_buf, action,
+                (unsigned) ip->target_count, ip->effect_bits, ip->signature_key, ip->evidence,
+                (unsigned) ip->unproven_reason);
+        for (uint16_t ti = 0; ti < ip->target_count; ti++) {
+            const XaotCallableTargetCase *tc = xaot_bundle_callable_target_case(bundle, ip, ti);
+            if (!tc)
+                continue;
+            fprintf(out,
+                    "callable-target invoke=%u case=%u target-id=%u target=%s effect=0x%x "
+                    "signature-key=%016" PRIx64 "\n",
+                    ci, (unsigned) ti, tc->target_id,
+                    safe_str(tc->target_func ? tc->target_func->name : NULL), tc->effect_bits,
+                    tc->signature_key);
+        }
     }
 
     for (uint32_t ti = 0; ti < bundle->ntransfer_plans; ti++) {

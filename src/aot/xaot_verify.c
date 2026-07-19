@@ -10,6 +10,7 @@
 
 #include "xaot_verify.h"
 #include "xaot_prepare.h"
+#include "xaot_callable.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xhash.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -7422,6 +7423,8 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
     if (bundle->nfunc_plans == 0)
         return set_error(errbuf, errbuf_len, "AOT bundle has no function plans");
     if (!verify_global_evidence_plan(bundle, errbuf, errbuf_len))
+        return false;
+    if (!xaot_callable_plans_verify(bundle, errbuf, errbuf_len))
         return false;
     if (!verify_extern_registry(bundle, errbuf, errbuf_len))
         return false;

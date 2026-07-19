@@ -1027,60 +1027,6 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     fprintf(out, "xrt_str_concat_parts(%u, _scp_%u); })", (unsigned) v->nargs, v->id);
 }
 
-static bool cg_aot_coro_closure_has_only_supported_uses(XiCgenCtx *ctx, const XiFunc *current,
-                                                        const XiValue *value, const XiFunc *child,
-                                                        int depth) {
-    if (!ctx || !current || !value || !child || depth > 8)
-        return false;
-
-    bool saw_use = false;
-    for (uint32_t bi = 0; bi < current->nblocks; bi++) {
-        const XiBlock *blk = current->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *user = blk->values[vi];
-            if (!user)
-                continue;
-            for (uint16_t ai = 0; ai < user->nargs; ai++) {
-                if (user->args[ai] != value)
-                    continue;
-                saw_use = true;
-                switch ((XiOp) user->op) {
-                    case XI_RETAIN:
-                    case XI_RELEASE:
-                    case XI_SET_SHARED:
-                        break;
-                    case XI_BOX:
-                    case XI_COPY:
-                    case XI_MOVE:
-                        if (!cg_aot_coro_closure_has_only_supported_uses(ctx, current, user, child,
-                                                                         depth + 1))
-                            return false;
-                        break;
-                    case XI_GO:
-                    case XI_THREAD_SPAWN:
-                        if (ai != 0)
-                            return false;
-                        break;
-                    case XI_CALL: {
-                        if (ai != 0 || !cg_func_needs_aot_coro_ctx(ctx, current))
-                            return false;
-                        CgStaticFunctionCall call =
-                            cg_resolve_static_function_call(ctx, current, user->args[0]);
-                        if (call.func != child)
-                            return false;
-                        break;
-                    }
-                    default:
-                        return false;
-                }
-            }
-        }
-    }
-    return saw_use;
-}
-
 static void emit_closure_entry_pointer(XiCgenCtx *ctx, FILE *out, const char *prefix,
                                        const XiFunc *child) {
     if (cg_func_is_par_for_native_callback(child))
@@ -1089,6 +1035,54 @@ static void emit_closure_entry_pointer(XiCgenCtx *ctx, FILE *out, const char *pr
         emit_typed_abi_fname(ctx, out, prefix, child);
     else
         emit_fname(ctx, out, prefix, child);
+}
+
+static uint32_t cg_callable_target_effects(XiCgenCtx *ctx, const XiFunc *target) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    uint32_t effects = 0;
+    if (bundle) {
+        for (uint32_t i = 0; i < bundle->ncallable_target_cases; i++) {
+            if (bundle->callable_target_cases[i].target_func == target)
+                effects |= bundle->callable_target_cases[i].effect_bits;
+        }
+        const XgGlobalEvidence *ev = bundle->global_evidence_plan.evidence;
+        for (uint32_t i = 0; ev && target && i < ev->nbodies; i++) {
+            if (ev->bodies[i].func_id == target->xg_body_func_id)
+                effects |= ev->bodies[i].effect_bits;
+        }
+    }
+    if (cg_func_needs_aot_coro_ctx(ctx, target))
+        effects |= XG_BODY_MAY_SUSPEND;
+    return effects;
+}
+
+static void emit_callable_descriptor(XiCgenCtx *ctx, FILE *out, const char *prefix,
+                                     uint32_t descriptor_id, const XiValue *closure,
+                                     const XiFunc *target, uint32_t target_id_override,
+                                     uint64_t signature_override, const char *sync_entry_override) {
+    uint32_t target_id = target_id_override;
+    uint64_t signature = signature_override;
+    uint32_t effects = target ? cg_callable_target_effects(ctx, target) : XG_BODY_MAY_CALL_NATIVE;
+    if (target_id == 0 && target)
+        target_id = target->xg_body_func_id;
+    if (target_id == 0)
+        target_id = closure ? closure->id + 1 : 1;
+    if (signature == 0 && closure)
+        signature = xaot_type_fingerprint(closure->type);
+    fprintf(out,
+            "static const XrAotCallableDesc _xr_callable_%u = {.target_id=%uu, "
+            ".effect_bits=0x%xu, .signature_key=UINT64_C(0x%016" PRIx64 "), "
+            ".sync_entry=",
+            descriptor_id, target_id, effects, signature);
+    if (sync_entry_override) {
+        fprintf(out, "(void*)%s", sync_entry_override);
+    } else if (target && !cg_func_needs_aot_coro_ctx(ctx, target)) {
+        fprintf(out, "(void*)");
+        emit_closure_entry_pointer(ctx, out, prefix, target);
+    } else {
+        fprintf(out, "NULL");
+    }
+    fprintf(out, "}; ");
 }
 
 static void emit_closure_upval_initializers(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
@@ -1143,10 +1137,15 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
                 emit_codegen_abort_expr(out);
                 return;
             }
+            fprintf(out, "({ ");
+            char adapter[64];
+            snprintf(adapter, sizeof(adapter), "xr_ffi_closure_%u", decl->stable_id);
+            emit_callable_descriptor(ctx, out, prefix, v->id, v, NULL, decl->stable_id,
+                                     decl->signature_hash, adapter);
             fprintf(out,
-                    "({ xrt_closure_t *_c = (xrt_closure_t*)xrt_closure_new((void*)"
-                    "xr_ffi_closure_%u, 0).ptr; xr_mkptr(_c, XR_TAG_CLOSURE); })",
-                    decl->stable_id);
+                    "xrt_closure_t *_c = (xrt_closure_t*)xrt_closure_new("
+                    "&_xr_callable_%u, 0).ptr; xr_mkptr(_c, XR_TAG_CLOSURE); })",
+                    v->id);
             return;
         }
         if (cg_closure_new_value_can_emit_null_for_unreachable_body(ctx, current, v, child, 0)) {
@@ -1154,21 +1153,13 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
                     child->name ? child->name : "?");
             return;
         }
-        if (cg_func_needs_aot_coro_ctx(ctx, child) &&
-            !cg_aot_coro_closure_has_only_supported_uses(ctx, current, v, child, 0)) {
-            ctx->error = true;
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: unsupported AOT sync call to suspendable function '%s'\n",
-                    child->name ? child->name : "?");
-            fprintf(out, "XR_NULL_VAL /* unsupported suspendable closure */");
-            return;
-        }
         uint16_t ncap = child->ncaptures;
         bool stack_closure = v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW;
         const char *alloc_fn = stack_closure ? "xrt_closure_stack_new" : "xrt_closure_new";
-        fprintf(out, "({ xrt_closure_t *_c = (xrt_closure_t*)%s((void*)", alloc_fn);
-        emit_closure_entry_pointer(ctx, out, prefix, child);
-        fprintf(out, ", %u).ptr; ", ncap);
+        fprintf(out, "({ ");
+        emit_callable_descriptor(ctx, out, prefix, v->id, v, child, 0, 0, NULL);
+        fprintf(out, "xrt_closure_t *_c = (xrt_closure_t*)%s(&_xr_callable_%u, %u).ptr; ", alloc_fn,
+                v->id, ncap);
         emit_closure_upval_initializers(ctx, out, current, v, !stack_closure);
         fprintf(out, "xr_mkptr(_c, XR_TAG_CLOSURE); })");
     } else {

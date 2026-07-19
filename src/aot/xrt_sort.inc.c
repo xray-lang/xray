@@ -55,7 +55,7 @@ static inline int xrt_sort_cmp_default(XrValue a, XrValue b) {
 static inline int xrt_sort_cmp(XrValue a, XrValue b, xrt_closure_t *cl) {
     if (cl) {
         typedef XrValue (*xrt_fn2_t)(xrt_closure_t *, XrValue, XrValue);
-        XrValue r = ((xrt_fn2_t) cl->fn)(cl, a, b);
+        XrValue r = ((xrt_fn2_t) cl->callable->sync_entry)(cl, a, b);
         if (r.tag == XR_TAG_I64)
             return (r.i > 0) - (r.i < 0);
         if (r.tag == XR_TAG_F64)

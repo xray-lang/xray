@@ -928,6 +928,15 @@ static CgCoroSuspendCallSite cg_coro_direct_call_site_info(XiCgenCtx *ctx, const
     CgCoroSuspendCallSite site = cg_no_coro_suspend_call_site();
     if (v->op == XI_CALL) {
         site.call = cg_resolve_static_function_call(ctx, current, v->args[0]);
+        if (!site.call.func) {
+            const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+            const XaotCallableInvokePlan *plan = xaot_bundle_find_callable_invoke_plan(bundle, v);
+            const XaotCallableTargetCase *target =
+                xaot_bundle_callable_target_case(bundle, plan, 0);
+            if (plan && plan->target_count == 1 && target && target->target_func)
+                site.call = cg_static_function_call(
+                    target->target_func, cg_module_prefix_for_func(ctx, target->target_func));
+        }
         site.cl_source = v->args[0];
         site.arg_start = 1;
     } else if (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) {
@@ -1173,7 +1182,7 @@ static bool emit_aot_frame_transfer_cl_arg(XiCgenCtx *ctx, FILE *out, const XiFu
     emit_aot_frame_raw_cl_arg(out, current, callee, target);
     fprintf(out,
             "; xrt_closure_t *_dst = NULL; if (_src) { XrValue _dstv = "
-            "xrt_closure_new(_src->fn, %u); _dst = (xrt_closure_t *)_dstv.ptr; ",
+            "xrt_closure_new(_src->callable, %u); _dst = (xrt_closure_t *)_dstv.ptr; ",
             (unsigned) target->ncaptures);
     for (uint16_t ci = 0; ci < target->ncaptures; ci++) {
         const XaotCapturePlan *plan = xaot_capture_plan_find(bundle, target, ci);
@@ -2000,25 +2009,6 @@ static bool emit_coro_i64_optional_native_stmt(XiCgenCtx *ctx, FILE *out, const 
     }
 
     return false;
-}
-
-static void emit_coro_sync_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
-    fprintf(out, "static XrValue ");
-    emit_fname(ctx, out, prefix, f);
-    fprintf(out, "(xrt_closure_t *_cl");
-    for (uint16_t i = 0; i < f->nparams; i++)
-        fprintf(out, ", XrValue p%u", i);
-    fprintf(out, ") {\n");
-    fprintf(out, "    (void)_cl;\n");
-    for (uint16_t i = 0; i < f->nparams; i++)
-        fprintf(out, "    (void)p%u;\n", i);
-    if (ctx && ctx->freestanding_profile)
-        fprintf(out,
-                "    xrt_freestanding_trap(\"suspendable function requires coroutine entry\");\n"
-                "    return XR_NULL_VAL;\n");
-    else
-        fprintf(out, "    return (abort(), XR_NULL_VAL);\n");
-    fprintf(out, "}\n\n");
 }
 
 static bool cg_coro_edge_is_backedge(const XiBlock *from, const XiBlock *to) {
@@ -4843,7 +4833,6 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     record_coro_frame_stats(ctx, frame_size, root_count, release_count);
 
     emit_coro_frame_type(ctx, out, f, prefix);
-    emit_coro_sync_wrapper(ctx, out, f, prefix);
     emit_coro_frame_init(ctx, out, f, prefix);
     emit_coro_frame_factory(ctx, out, f, prefix);
 

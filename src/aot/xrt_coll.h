@@ -16,6 +16,7 @@
 #endif
 
 #include "xrt_value.h"
+#include "xrt_callable.h"
 #include "xrt_arc.h"  // xrt_str_alloc used by xrt_strbuf_finish
 #include "xrt_net.h"
 #include "xrt_range.h"
@@ -4787,9 +4788,9 @@ static inline void xrt_record_merge_copy_table(XrValue dst_val, XrValue src_val,
  * ========================================================================= */
 
 struct xrt_closure {
-    void *fn;          // C function pointer
-    int nupvals;       // number of captured upvalues
-    XrValue upvals[];  // captured values (flexible array)
+    const XrAotCallableDesc *callable;  // canonical generated descriptor
+    int nupvals;                        // number of captured upvalues
+    XrValue upvals[];                   // captured values (flexible array)
 };
 
 static inline size_t xrt_closure_object_size(int nupvals) {
@@ -4802,23 +4803,24 @@ static inline size_t xrt_closure_object_size(int nupvals) {
     return sizeof(xrt_closure_t) + (size_t) nupvals * sizeof(XrValue);
 }
 
-static inline void xrt_closure_init(xrt_closure_t *c, void *fn, int nupvals) {
+static inline void xrt_closure_init(xrt_closure_t *c, const XrAotCallableDesc *callable,
+                                    int nupvals) {
     if (nupvals < 0)
         nupvals = 0;
-    c->fn = fn;
+    c->callable = callable;
     c->nupvals = nupvals;
     for (int i = 0; i < nupvals; i++)
         c->upvals[i] = XR_NULL_VAL;
 }
 
-static inline XrValue xrt_closure_new(void *fn, int nupvals) {
+static inline XrValue xrt_closure_new(const XrAotCallableDesc *callable, int nupvals) {
     xrt_closure_t *c = (xrt_closure_t *) xrt_arc_alloc(xrt_closure_object_size(nupvals));
     if (XR_UNLIKELY(!c)) {
         fprintf(stderr, "xrt_closure_new: out of memory\n");
         abort();
     }
     xrt_arc_mark_builtin(c, XRT_ARC_KIND_CLOSURE);
-    xrt_closure_init(c, fn, nupvals);
+    xrt_closure_init(c, callable, nupvals);
     return xr_mkptr(c, XR_TAG_CLOSURE);
 }
 
@@ -4827,11 +4829,11 @@ static inline XrValue xrt_closure_call0(XrValue callback) {
         return XR_NULL_VAL;
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
     typedef XrValue (*xrt_closure_fn0_t)(xrt_closure_t *);
-    return ((xrt_closure_fn0_t) cl->fn)(cl);
+    return ((xrt_closure_fn0_t) cl->callable->sync_entry)(cl);
 }
 
 #ifndef xrt_closure_stack_new
-#define xrt_closure_stack_new(fn_expr, nupvals_expr)                                               \
+#define xrt_closure_stack_new(callable_expr, nupvals_expr)                                         \
     ({                                                                                             \
         int _nupvals = (nupvals_expr);                                                             \
         if (_nupvals < 0)                                                                          \
@@ -4841,7 +4843,7 @@ static inline XrValue xrt_closure_call0(XrValue callback) {
         memset(_hdr, 0, sizeof(XrObjHeader) + _obj_size);                                          \
         _hdr->extra = XR_OBJ_STORAGE_STACK;                                                        \
         xrt_closure_t *_c = (xrt_closure_t *) ((char *) _hdr + sizeof(XrObjHeader));               \
-        xrt_closure_init(_c, (fn_expr), _nupvals);                                                 \
+        xrt_closure_init(_c, (callable_expr), _nupvals);                                           \
         xr_mkptr(_c, XR_TAG_CLOSURE);                                                              \
     })
 #endif

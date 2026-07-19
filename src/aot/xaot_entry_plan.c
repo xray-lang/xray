@@ -116,6 +116,42 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
             }
         }
     }
+    /* Closure-call reachability is published after the ordinary Xg graph has
+     * been lowered to Xi.  Fold those verified closed target sets into the
+     * same root closure before deriving effects/capabilities. */
+    {
+        bool changed = true;
+        while (changed) {
+            changed = false;
+            for (uint32_t pi = 0; pi < bundle->ncallable_invoke_plans; pi++) {
+                const XaotCallableInvokePlan *plan = &bundle->callable_invoke_plans[pi];
+                XgFuncId owner_id = plan->owner ? plan->owner->xg_body_func_id : XG_NO_ID;
+                bool owner_reachable = false;
+                for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+                    if (evidence->bodies[bi].func_id == owner_id && reachable[bi]) {
+                        owner_reachable = true;
+                        break;
+                    }
+                }
+                if (!owner_reachable)
+                    continue;
+                for (uint16_t ti = 0; ti < plan->target_count; ti++) {
+                    const XaotCallableTargetCase *target =
+                        xaot_bundle_callable_target_case(bundle, plan, ti);
+                    XgFuncId target_id = target && target->target_func
+                                             ? target->target_func->xg_body_func_id
+                                             : XG_NO_ID;
+                    for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+                        if (target_id != XG_NO_ID && evidence->bodies[bi].func_id == target_id &&
+                            !reachable[bi]) {
+                            reachable[bi] = 1;
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
     for (uint32_t i = 0; i < evidence->nbodies; i++) {
         const XgBodySummary *body;
         uint32_t effect_bits;
@@ -132,6 +168,21 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
         out->reachable_effect_bits |= effect_bits;
         out->required_capability_bits |= body->capability_bits;
     }
+    for (uint32_t pi = 0; pi < bundle->ncallable_invoke_plans; pi++) {
+        const XaotCallableInvokePlan *plan = &bundle->callable_invoke_plans[pi];
+        XgFuncId owner_id = plan->owner ? plan->owner->xg_body_func_id : XG_NO_ID;
+        bool owner_reachable = false;
+        for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+            if (evidence->bodies[bi].func_id == owner_id && reachable[bi]) {
+                owner_reachable = true;
+                break;
+            }
+        }
+        if (owner_reachable)
+            out->reachable_effect_bits |= plan->effect_bits;
+    }
+    if ((out->reachable_effect_bits & XR_EFFECT_MAY_SUSPEND) != 0)
+        out->required_capability_bits |= XG_CAP_COROUTINE;
     xr_free(reachable);
 
     out->runtime_component_bits = out->required_capability_bits;
