@@ -1,0 +1,75 @@
+// Array
+let arr = [1, 2, 3, 4, 5]
+let empty_arr = []
+let mixed = [1, "two", true, null]
+let nested = [[1, 2], [3, 4], [5, 6]]
+// Array access and modification
+arr[0] = 10
+let first = arr[0]
+let last = arr[len(arr) - 1]
+// Array methods
+arr.push(6)
+let popped = arr.pop()
+let shifted = arr.shift()
+arr.unshift(0)
+let item_count = len(arr)
+let is_empty = len(arr) == 0
+let idx = arr.indexOf(3)
+let has_item = arr.contains(2)
+let joined = arr.join(",")
+let reversed = arr.reverse()
+arr.clear()
+// Functional array methods
+let doubled = arr.map(fn(x) {
+    return x * 2
+})
+let evens = arr.filter(fn(x) {
+    return x % 2 == 0
+})
+let sum = arr.reduce(fn(acc, x) {
+    return acc + x
+}, 0)
+arr.forEach(fn(x) {
+    print(x)
+})
+// Map
+let map = { "a" => 1, "b" => 2, "c" => 3 }
+let empty_map = #{}
+// Map access and modification
+map.set("d", 4)
+map["e"] = 5
+let val = map.get("a")
+let val2 = map["b"]
+let has_key = map.contains("a")
+map.delete("a")
+let size = map.size
+let keys = map.keys()
+let values = map.values()
+map.clear()
+// Map iteration
+for (kv in map) {
+    print(kv.key)
+    print(kv.value)
+}
+// Set
+let set = #[1, 2, 3, 4, 5]
+let empty_set = #[]
+// Set operations
+set.add(6)
+set.delete(1)
+let has_elem = set.contains(2)
+let set_size = set.size
+set.clear()
+let arr_from_set = set.toArray()
+// Set iteration
+for (elem in set) {
+    print(elem)
+}
+// Object literal
+let point = { "x": 10, "y": 20 }
+let person = { "name": "Alice", "age": 25, "address": { "city": "Beijing", "country": "China" } }
+// Object access
+let name = person.name
+let city = person.address.city
+person.age = 26
+person.email = "alice@example.com"

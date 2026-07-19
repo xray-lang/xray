@@ -1,0 +1,106 @@
+// Operator precedence edge cases
+// This file tests parser's handling of operator precedence
+// Note: In xray, only `null` and `false` are falsy; 0 and "" are truthy
+// 1. Nullish coalescing vs ternary
+// ?? has higher precedence than ?:
+// a ?? b ? c : d = (a ?? b) ? c : d
+let r1 = false ?? true ? "yes" : "no"
+// = (false ?? true) ? "yes" : "no" = "no"
+let r2 = null ?? false ? "yes" : "no"
+// = (null ?? false) ? "yes" : "no" = "no"
+let r3 = null ?? true ? "yes" : "no"
+// = (null ?? true) ? "yes" : "no" = "yes"
+// 2. Nullish coalescing right associativity
+// a ?? b ?? c = a ?? (b ?? c)
+let a = null
+let b = null
+let c = "c"
+let r4 = a ?? b ?? c
+// = null ?? (null ?? "c") = "c"
+// 3. Ternary right associativity
+// a ? b : c ? d : e = a ? b : (c ? d : e)
+let r5 = true ? "A" : true ? "B" : "C"
+// = "A"
+let r6 = false ? "A" : true ? "B" : "C"
+// = "B"
+let r7 = false ? "A" : false ? "B" : "C"
+// = "C"
+let r8 = true ? 2 : true ? 4 : 5
+// = 2 (right assoc proven)
+// 4. Logical operators vs nullish coalescing
+let r9 = null ?? false || true
+// = (null ?? false) || true = true
+let r10 = false || null ?? true
+// = (false || null) ?? true = true
+// 5. Comparison vs arithmetic
+let r11 = 1 + 2 < 3 + 4
+// = (1 + 2) < (3 + 4) = true
+let r12 = 1 < 2 && 3 < 4
+// = (1 < 2) && (3 < 4) = true
+// 6. Bitwise operators (integers only)
+let r13 = (1 | 2) == 3
+// = 3 == 3 = true
+let r14 = (1 & 3) == 1
+// = 1 == 1 = true
+// 7. Unary operators
+let r15 = -1 + 2
+// = (-1) + 2 = 1
+let r16 = !true || false
+// = (!true) || false = false
+let r17 = ~0 + 1
+// = (~0) + 1 = -1 + 1 = 0
+// 8. Optional chaining with nullish coalescing
+let obj = null
+let r18 = obj?.value ?? "default"
+// = null ?? "default" = "default"
+// 9. Shift operators
+let r19 = 1 << 2 + 1
+// = 1 << (2 + 1) = 1 << 3 = 8
+let r20 = (1 << 2) + 1
+// = 4 + 1 = 5
+// 10. Nested ternary (with explicit parens for clarity)
+let r21 = false ? "A" : (true ? "B" : "C")
+// = "B"
+let r22 = (false ? "A" : true) ? "B" : "C"
+// = true ? "B" : "C" = "B"
+// 11. Precedence with parentheses
+let r23 = (1 + 2) * 3
+// = 9
+let r24 = 1 + (2 * 3)
+// = 7
+let r25 = 1 + 2 * 3
+// = 7 (mul higher than add)
+// 12. Comparison with explicit grouping
+let r26 = (1 < 2) == true
+// = true == true = true
+let r27 = (2 > 1) == (3 > 2)
+// = true == true = true
+// Assertions
+assert_eq(r1, "no")
+assert_eq(r2, "no")
+assert_eq(r3, "yes")
+assert_eq(r4, "c")
+assert_eq(r5, "A")
+assert_eq(r6, "B")
+assert_eq(r7, "C")
+assert_eq(r8, 2)
+assert_eq(r9, true)
+assert_eq(r10, true)
+assert_eq(r11, true)
+assert_eq(r12, true)
+assert_eq(r13, true)
+assert_eq(r14, true)
+assert_eq(r15, 1)
+assert_eq(r16, false)
+assert_eq(r17, 0)
+assert_eq(r18, "default")
+assert_eq(r19, 8)
+assert_eq(r20, 5)
+assert_eq(r21, "B")
+assert_eq(r22, "B")
+assert_eq(r23, 9)
+assert_eq(r24, 7)
+assert_eq(r25, 7)
+assert_eq(r26, true)
+assert_eq(r27, true)
+print("All operator precedence tests passed!")

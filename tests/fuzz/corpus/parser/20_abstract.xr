@@ -1,0 +1,112 @@
+// Abstract classes and methods
+
+abstract class Shape {
+    x: float
+    y: float
+
+    constructor(x: float, y: float) {
+        this.x = x
+        this.y = y
+    }
+
+    // Abstract methods - must be implemented by subclasses
+    abstract area(): float
+    abstract perimeter(): float
+
+    // Concrete method
+    move(dx: float, dy: float) {
+        this.x += dx
+        this.y += dy
+    }
+
+    describe(): string {
+        return "Shape at (${this.x}, ${this.y})"
+    }
+}
+
+class Circle extends Shape {
+    radius: float
+
+    constructor(x: float, y: float, radius: float) {
+        super(x, y)
+        this.radius = radius
+    }
+
+    // Implement abstract methods
+    area(): float {
+        return 3.14159 * this.radius * this.radius
+    }
+
+    perimeter(): float {
+        return 2 * 3.14159 * this.radius
+    }
+
+    // Override concrete method
+    describe(): string {
+        return "Circle(r=${this.radius}) at (${this.x}, ${this.y})"
+    }
+}
+
+class Rectangle extends Shape {
+    width: float
+    height: float
+
+    constructor(x: float, y: float, width: float, height: float) {
+        super(x, y)
+        this.width = width
+        this.height = height
+    }
+
+    area(): float {
+        return this.width * this.height
+    }
+
+    perimeter(): float {
+        return 2 * (this.width + this.height)
+    }
+
+    describe(): string {
+        return "Rectangle(${this.width}x${this.height}) at (${this.x}, ${this.y})"
+    }
+}
+
+class Triangle extends Shape {
+    a: float
+    b: float
+    c: float
+
+    constructor(x: float, y: float, a: float, b: float, c: float) {
+        super(x, y)
+        this.a = a
+        this.b = b
+        this.c = c
+    }
+
+    area(): float {
+        // Heron's formula
+        let s = (this.a + this.b + this.c) / 2
+        return math.sqrt(s * (s - this.a) * (s - this.b) * (s - this.c))
+    }
+
+    perimeter(): float {
+        return this.a + this.b + this.c
+    }
+}
+
+// Usage with polymorphism
+fn printShapeInfo(shape: Shape) {
+    print(shape.describe())
+    print("Area: " + shape.area())
+    print("Perimeter: " + shape.perimeter())
+}
+
+let shapes: Array<Shape> = [
+    new Circle(0, 0, 5),
+    new Rectangle(1, 1, 4, 3),
+    new Triangle(2, 2, 3, 4, 5)
+]
+
+for (shape in shapes) {
+    printShapeInfo(shape)
+    shape.move(1, 1)
+}

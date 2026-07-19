@@ -1,0 +1,9 @@
+// Float literals
+let basic = 3.14
+let negative = -1.5
+let small = 0.001
+let scientific1 = 1000
+let scientific2 = 150
+let scientific3 = 0.25
+let underscore = 1000.5
+let pi = 3.14159

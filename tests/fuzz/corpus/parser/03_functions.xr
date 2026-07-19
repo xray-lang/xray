@@ -1,0 +1,99 @@
+// Function declarations
+fn add(a, b) {
+    return a + b
+}
+
+fn multiply(x: int, y: int): int {
+    return x * y
+}
+
+fn greet(name: string): string {
+    return "Hello, ${name}!"
+}
+
+// Arrow functions
+let double = fn(x) {
+    return x * 2
+}
+let sum = fn(a, b) {
+    return a + b
+}
+let greetFn = fn() {
+    return "hello"
+}
+let identity = fn(x) {
+    return x
+}
+// Arrow function with block
+let factorial = fn(n) {
+    if (n <= 1) {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+// Closure
+fn makeCounter() {
+    let count = 0
+    fn increment() {
+        count++
+        return count
+    }
+    return increment
+}
+
+fn makeAdder(x) {
+    return fn(y) {
+        return x + y
+    }
+}
+
+// Higher-order functions
+fn apply(f, x) {
+    return f(x)
+}
+
+fn compose(f, g) {
+    return fn(x) {
+        return f(g(x))
+    }
+}
+
+fn map_custom(arr, f) {
+    let result = []
+    for (item in arr) {
+        result.push(f(item))
+    }
+    return result
+}
+
+// Recursion
+fn fib(n) {
+    if (n <= 1) {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fn gcd(a, b) {
+    if (b == 0) {
+        return a
+    }
+    return gcd(b, a % b)
+}
+
+// Default parameters
+fn greetWithDefault(name: string = "World") {
+    return "Hello, ${name}!"
+}
+
+fn createPoint(x: int = 0, y: int = 0) {
+    return { "x": x, "y": y }
+}
+
+// Function calls
+let r1 = add(1, 2)
+let r2 = apply(double, 5)
+let r3 = compose(double, fn(x) {
+    return x + 1
+})(3)

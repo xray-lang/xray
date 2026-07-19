@@ -2992,6 +2992,389 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     },
 };
 
+static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
+    {
+        .name = "Capabilities",
+        .signature = "Capabilities",
+        .summary = "",
+    },
+    {
+        .name = "Capabilities.nativeBytes",
+        .signature = "(): int",
+        .summary = "",
+    },
+    {
+        .name = "U32x4",
+        .signature = "U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.add",
+        .signature = "(other: in U32x4): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.bitAnd",
+        .signature = "(other: in U32x4): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.bitNot",
+        .signature = "(): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.bitOr",
+        .signature = "(other: in U32x4): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.bitXor",
+        .signature = "(other: in U32x4): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.extract",
+        .signature = "(lane: int): uint32",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.fromLanes",
+        .signature = "(lanes: in [uint32; 4]): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.load",
+        .signature = "(data: in Slice<uint32>, offset: int = 0): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.mul",
+        .signature = "(other: in U32x4): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.reinterpretU64",
+        .signature = "(): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.reinterpretU8",
+        .signature = "(): U8x16",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.replace",
+        .signature = "(lane: int, value: uint32): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.shiftLeft",
+        .signature = "(bits: int): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.shiftRight",
+        .signature = "(bits: int): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.shuffle",
+        .signature = "(i0: int, i1: int, i2: int, i3: int): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.splat",
+        .signature = "(value: uint32): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.store",
+        .signature = "(output: Slice<uint32>, offset: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.sub",
+        .signature = "(other: in U32x4): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.swapAdjacent",
+        .signature = "(): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.widenMulEven",
+        .signature = "(other: in U32x4): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.widenMulOdd",
+        .signature = "(other: in U32x4): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U32x8",
+        .signature = "U32x8",
+        .summary = "",
+    },
+    {
+        .name = "U32x8.fromLanes",
+        .signature = "(lanes: in [uint32; 8]): U32x8",
+        .summary = "",
+    },
+    {
+        .name = "U32x8.swapAdjacent",
+        .signature = "(): U32x8",
+        .summary = "",
+    },
+    {
+        .name = "U32x8.widenMulEven",
+        .signature = "(other: in U32x8): U64x4",
+        .summary = "",
+    },
+    {
+        .name = "U64x2",
+        .signature = "U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.add",
+        .signature = "(other: in U64x2): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.bitAnd",
+        .signature = "(other: in U64x2): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.bitNot",
+        .signature = "(): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.bitOr",
+        .signature = "(other: in U64x2): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.bitXor",
+        .signature = "(other: in U64x2): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.extract",
+        .signature = "(lane: int): uint64",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.fromLanes",
+        .signature = "(lanes: in [uint64; 2]): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.load",
+        .signature = "(data: in Slice<uint64>, offset: int = 0): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.mul",
+        .signature = "(other: in U64x2): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.reduceAdd",
+        .signature = "(): uint64",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.reinterpretU32",
+        .signature = "(): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.reinterpretU8",
+        .signature = "(): U8x16",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.replace",
+        .signature = "(lane: int, value: uint64): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.shiftLeft",
+        .signature = "(bits: int): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.shiftRight",
+        .signature = "(bits: int): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.shuffle",
+        .signature = "(i0: int, i1: int): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.splat",
+        .signature = "(value: uint64): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.store",
+        .signature = "(output: Slice<uint64>, offset: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.sub",
+        .signature = "(other: in U64x2): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x2.swapLanes",
+        .signature = "(): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U64x4",
+        .signature = "U64x4",
+        .summary = "",
+    },
+    {
+        .name = "U64x4.add",
+        .signature = "(other: in U64x4): U64x4",
+        .summary = "",
+    },
+    {
+        .name = "U64x4.fromLanes",
+        .signature = "(lanes: in [uint64; 4]): U64x4",
+        .summary = "",
+    },
+    {
+        .name = "U64x4.load",
+        .signature = "(data: in Slice<uint64>, offset: int = 0): U64x4",
+        .summary = "",
+    },
+    {
+        .name = "U64x4.reduceAdd",
+        .signature = "(): uint64",
+        .summary = "",
+    },
+    {
+        .name = "U64x4.store",
+        .signature = "(output: Slice<uint64>, offset: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "U64x4.swapAdjacent",
+        .signature = "(): U64x4",
+        .summary = "",
+    },
+    {
+        .name = "U8x16",
+        .signature = "U8x16",
+        .summary = "",
+    },
+    {
+        .name = "U8x16.bitAnd",
+        .signature = "(other: in U8x16): U8x16",
+        .summary = "",
+    },
+    {
+        .name = "U8x16.bitNot",
+        .signature = "(): U8x16",
+        .summary = "",
+    },
+    {
+        .name = "U8x16.bitOr",
+        .signature = "(other: in U8x16): U8x16",
+        .summary = "",
+    },
+    {
+        .name = "U8x16.bitXor",
+        .signature = "(other: in U8x16): U8x16",
+        .summary = "",
+    },
+    {
+        .name = "U8x16.extract",
+        .signature = "(lane: int): byte",
+        .summary = "",
+    },
+    {
+        .name = "U8x16.fromLanes",
+        .signature = "(lanes: in [byte; 16]): U8x16",
+        .summary = "",
+    },
+    {
+        .name = "U8x16.load",
+        .signature = "(data: in Slice<byte>, offset: int = 0): U8x16",
+        .summary = "",
+    },
+    {
+        .name = "U8x16.reinterpretU32",
+        .signature = "(): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U8x16.reinterpretU64",
+        .signature = "(): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U8x16.replace",
+        .signature = "(lane: int, value: byte): U8x16",
+        .summary = "",
+    },
+    {
+        .name = "U8x16.splat",
+        .signature = "(value: byte): U8x16",
+        .summary = "",
+    },
+    {
+        .name = "U8x16.store",
+        .signature = "(output: Slice<byte>, offset: int = 0): ()",
+        .summary = "",
+    },
+    {
+        .name = "U8x32",
+        .signature = "U8x32",
+        .summary = "",
+    },
+    {
+        .name = "U8x32.bitXor",
+        .signature = "(other: in U8x32): U8x32",
+        .summary = "",
+    },
+    {
+        .name = "U8x32.fromLanes",
+        .signature = "(lanes: in [byte; 32]): U8x32",
+        .summary = "",
+    },
+    {
+        .name = "U8x32.load",
+        .signature = "(data: in Slice<byte>, offset: int = 0): U8x32",
+        .summary = "",
+    },
+    {
+        .name = "U8x32.reinterpretU32",
+        .signature = "(): U32x8",
+        .summary = "",
+    },
+    {
+        .name = "U8x32.reinterpretU64",
+        .signature = "(): U64x4",
+        .summary = "",
+    },
+    {
+        .name = "U8x32.store",
+        .signature = "(output: Slice<byte>, offset: int = 0): ()",
+        .summary = "",
+    },
+};
+
 static const XmcpGeneratedStdlibSymbol _symbols_strconv[] = {
     {
         .name = "parseFloat",
@@ -3019,6 +3402,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     {
         .name = "Barrier.wait",
         .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "CachePadded",
+        .signature = "CachePadded",
+        .summary = "",
+    },
+    {
+        .name = "CachePadded.value",
+        .signature = ": T",
         .summary = "",
     },
     {
@@ -6815,6 +7208,127 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_runtime) / sizeof(_symbols_runtime[0])),
     },
     {
+        .module = "simd",
+        .summary = "Portable fixed-width integer vectors",
+        .body =
+            "# simd module\n"
+            "\n"
+            "Portable 128-bit and 256-bit integer-vector operations. The same API has scalar semantics in the VM and on targets without matching vector instructions; native AOT lowers supported operations according to the selected target.\n"
+            "\n"
+            "Usage: `import simd` then call `simd.function()`.\n"
+            "\n"
+            "### Vector types\n"
+            "- `U8x16`, `U32x4`, and `U64x2` are the portable 128-bit baseline.\n"
+            "- `U8x32`, `U32x8`, and `U64x4` provide 256-bit operations for algorithms that select a wide path.\n"
+            "- `Capabilities.nativeBytes()` returns the native vector width chosen for the compile target; it is at least 16 bytes.\n"
+            "\n"
+            "### Loading and storing\n"
+            "Use `load` and `store` with a typed `Slice<T>`. The optional offset is measured in elements. `fromLanes` constructs a vector from a fixed array, while `splat` fills every lane with one value where that operation is available.\n"
+            "\n"
+            "### Operations\n"
+            "The vector types provide lane extraction and replacement, integer arithmetic, bitwise operations, shifts, shuffles, widening multiplication, reductions, and bit-preserving reinterpretation where supported by the type. Shuffle lane arguments must be compile-time integers within the vector's lane range.\n"
+            "\n"
+            "### Example\n"
+            "```xray\n"
+            "import { Capabilities, U32x4 } from simd\n"
+            "\n"
+            "fn main() {\n"
+            "    var words = Array<uint32>([1, 2, 3, 4])\n"
+            "    var view: Slice<uint32> = words[:]\n"
+            "    var result = U32x4.load(view).add(U32x4.splat(10))\n"
+            "\n"
+            "    print(result.extract(2))\n"
+            "    print(Capabilities.nativeBytes() >= 16)\n"
+            "}\n"
+            "\n"
+            "main()\n"
+            "```\n"
+            "\n"
+            "## API\n"
+            "\n"
+            "| Symbol | Signature | Summary |\n"
+            "|--|--|--|\n"
+            "| `Capabilities` | `Capabilities` |  |\n"
+            "| `Capabilities.nativeBytes` | `(): int` |  |\n"
+            "| `U32x4` | `U32x4` |  |\n"
+            "| `U32x4.add` | `(other: in U32x4): U32x4` |  |\n"
+            "| `U32x4.bitAnd` | `(other: in U32x4): U32x4` |  |\n"
+            "| `U32x4.bitNot` | `(): U32x4` |  |\n"
+            "| `U32x4.bitOr` | `(other: in U32x4): U32x4` |  |\n"
+            "| `U32x4.bitXor` | `(other: in U32x4): U32x4` |  |\n"
+            "| `U32x4.extract` | `(lane: int): uint32` |  |\n"
+            "| `U32x4.fromLanes` | `(lanes: in [uint32; 4]): U32x4` |  |\n"
+            "| `U32x4.load` | `(data: in Slice<uint32>, offset: int = 0): U32x4` |  |\n"
+            "| `U32x4.mul` | `(other: in U32x4): U32x4` |  |\n"
+            "| `U32x4.reinterpretU64` | `(): U64x2` |  |\n"
+            "| `U32x4.reinterpretU8` | `(): U8x16` |  |\n"
+            "| `U32x4.replace` | `(lane: int, value: uint32): U32x4` |  |\n"
+            "| `U32x4.shiftLeft` | `(bits: int): U32x4` |  |\n"
+            "| `U32x4.shiftRight` | `(bits: int): U32x4` |  |\n"
+            "| `U32x4.shuffle` | `(i0: int, i1: int, i2: int, i3: int): U32x4` |  |\n"
+            "| `U32x4.splat` | `(value: uint32): U32x4` |  |\n"
+            "| `U32x4.store` | `(output: Slice<uint32>, offset: int = 0): ()` |  |\n"
+            "| `U32x4.sub` | `(other: in U32x4): U32x4` |  |\n"
+            "| `U32x4.swapAdjacent` | `(): U32x4` |  |\n"
+            "| `U32x4.widenMulEven` | `(other: in U32x4): U64x2` |  |\n"
+            "| `U32x4.widenMulOdd` | `(other: in U32x4): U64x2` |  |\n"
+            "| `U32x8` | `U32x8` |  |\n"
+            "| `U32x8.fromLanes` | `(lanes: in [uint32; 8]): U32x8` |  |\n"
+            "| `U32x8.swapAdjacent` | `(): U32x8` |  |\n"
+            "| `U32x8.widenMulEven` | `(other: in U32x8): U64x4` |  |\n"
+            "| `U64x2` | `U64x2` |  |\n"
+            "| `U64x2.add` | `(other: in U64x2): U64x2` |  |\n"
+            "| `U64x2.bitAnd` | `(other: in U64x2): U64x2` |  |\n"
+            "| `U64x2.bitNot` | `(): U64x2` |  |\n"
+            "| `U64x2.bitOr` | `(other: in U64x2): U64x2` |  |\n"
+            "| `U64x2.bitXor` | `(other: in U64x2): U64x2` |  |\n"
+            "| `U64x2.extract` | `(lane: int): uint64` |  |\n"
+            "| `U64x2.fromLanes` | `(lanes: in [uint64; 2]): U64x2` |  |\n"
+            "| `U64x2.load` | `(data: in Slice<uint64>, offset: int = 0): U64x2` |  |\n"
+            "| `U64x2.mul` | `(other: in U64x2): U64x2` |  |\n"
+            "| `U64x2.reduceAdd` | `(): uint64` |  |\n"
+            "| `U64x2.reinterpretU32` | `(): U32x4` |  |\n"
+            "| `U64x2.reinterpretU8` | `(): U8x16` |  |\n"
+            "| `U64x2.replace` | `(lane: int, value: uint64): U64x2` |  |\n"
+            "| `U64x2.shiftLeft` | `(bits: int): U64x2` |  |\n"
+            "| `U64x2.shiftRight` | `(bits: int): U64x2` |  |\n"
+            "| `U64x2.shuffle` | `(i0: int, i1: int): U64x2` |  |\n"
+            "| `U64x2.splat` | `(value: uint64): U64x2` |  |\n"
+            "| `U64x2.store` | `(output: Slice<uint64>, offset: int = 0): ()` |  |\n"
+            "| `U64x2.sub` | `(other: in U64x2): U64x2` |  |\n"
+            "| `U64x2.swapLanes` | `(): U64x2` |  |\n"
+            "| `U64x4` | `U64x4` |  |\n"
+            "| `U64x4.add` | `(other: in U64x4): U64x4` |  |\n"
+            "| `U64x4.fromLanes` | `(lanes: in [uint64; 4]): U64x4` |  |\n"
+            "| `U64x4.load` | `(data: in Slice<uint64>, offset: int = 0): U64x4` |  |\n"
+            "| `U64x4.reduceAdd` | `(): uint64` |  |\n"
+            "| `U64x4.store` | `(output: Slice<uint64>, offset: int = 0): ()` |  |\n"
+            "| `U64x4.swapAdjacent` | `(): U64x4` |  |\n"
+            "| `U8x16` | `U8x16` |  |\n"
+            "| `U8x16.bitAnd` | `(other: in U8x16): U8x16` |  |\n"
+            "| `U8x16.bitNot` | `(): U8x16` |  |\n"
+            "| `U8x16.bitOr` | `(other: in U8x16): U8x16` |  |\n"
+            "| `U8x16.bitXor` | `(other: in U8x16): U8x16` |  |\n"
+            "| `U8x16.extract` | `(lane: int): byte` |  |\n"
+            "| `U8x16.fromLanes` | `(lanes: in [byte; 16]): U8x16` |  |\n"
+            "| `U8x16.load` | `(data: in Slice<byte>, offset: int = 0): U8x16` |  |\n"
+            "| `U8x16.reinterpretU32` | `(): U32x4` |  |\n"
+            "| `U8x16.reinterpretU64` | `(): U64x2` |  |\n"
+            "| `U8x16.replace` | `(lane: int, value: byte): U8x16` |  |\n"
+            "| `U8x16.splat` | `(value: byte): U8x16` |  |\n"
+            "| `U8x16.store` | `(output: Slice<byte>, offset: int = 0): ()` |  |\n"
+            "| `U8x32` | `U8x32` |  |\n"
+            "| `U8x32.bitXor` | `(other: in U8x32): U8x32` |  |\n"
+            "| `U8x32.fromLanes` | `(lanes: in [byte; 32]): U8x32` |  |\n"
+            "| `U8x32.load` | `(data: in Slice<byte>, offset: int = 0): U8x32` |  |\n"
+            "| `U8x32.reinterpretU32` | `(): U32x8` |  |\n"
+            "| `U8x32.reinterpretU64` | `(): U64x4` |  |\n"
+            "| `U8x32.store` | `(output: Slice<byte>, offset: int = 0): ()` |  |\n"
+            "",
+        .symbols = _symbols_simd,
+        .symbol_count = (int)(sizeof(_symbols_simd) / sizeof(_symbols_simd[0])),
+    },
+    {
         .module = "strconv",
         .summary = "Explicit string and scalar conversions",
         .body =
@@ -6855,6 +7369,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Barrier` | `Barrier` |  |\n"
             "| `Barrier.constructor` | `(parties: int): ()` |  |\n"
             "| `Barrier.wait` | `(): bool` |  |\n"
+            "| `CachePadded` | `CachePadded` |  |\n"
+            "| `CachePadded.value` | `: T` |  |\n"
             "| `Condvar` | `Condvar` |  |\n"
             "| `Condvar.broadcast` | `(): ()` |  |\n"
             "| `Condvar.constructor` | `(): ()` |  |\n"
@@ -7282,7 +7798,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),
     },
 };
-XR_DATADEF const int xmcp_generated_stdlib_count = 31;
+XR_DATADEF const int xmcp_generated_stdlib_count = 32;
 
 XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "# Xray Language Cheatsheet\n"

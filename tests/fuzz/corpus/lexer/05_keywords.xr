@@ -1,0 +1,55 @@
+// Keywords
+let x = 1
+const y = 2
+
+fn test() {
+}
+
+class MyClass {
+}
+
+interface MyInterface {
+}
+
+enum MyEnum {
+    A,
+    B,
+    C
+}
+
+if (true) {
+} else {
+}
+while (true) {
+    break
+}
+for (let i = 0; i < 10; i++) {
+    continue
+}
+for (x in arr) {
+}
+match (value) {
+    _ -> "default"
+}
+return null
+throw "error"
+try {
+} catch (e) {
+}
+new MyClass()
+this.field
+super.method()
+import math
+import "./mymodule" as mymod
+export fn exported() {
+    return x
+}
+export x
+go task()
+await promise
+defer cleanup()
+shared const config = {}
+select {
+    _ -> {
+    }
+}

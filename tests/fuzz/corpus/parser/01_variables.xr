@@ -1,0 +1,26 @@
+// Variable declarations
+let x = 10
+let y: int = 20
+const PI = 3.14159
+const NAME: string = "xray"
+// Type annotations
+let arr: Array<any> = [1, 2, 3]
+let m: Map<any, any> = { "a" => 1, "b" => 2 }
+let s: Set<any> = #[1, 2, 3]
+// Array destructuring
+let [a, b, c] = [1, 2, 3]
+let [first, _, third] = [10, 20, 30]
+let [head, ...rest] = [1, 2, 3, 4, 5]
+let [x, y = 10] = [1]
+// Object destructuring
+let {name, age} = { "name": "Alice", "age": 30 }
+let {name: n, age: a} = { "name": "Bob", "age": 25 }
+// Map destructuring
+let {"name" => userName, "age" => userAge} = { "name" => "Alice", "age" => 30 }
+// Variable shadowing
+let outer = 1
+{
+    let outer = 2
+    print(outer)
+}
+print(outer)

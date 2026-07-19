@@ -1,0 +1,30 @@
+// Tuple-based multi-value forms
+fn getTwoValues(): (int, int) {
+    return (1, 2)
+}
+
+fn getThreeValues(): (string, string, string) {
+    return ("a", "b", "c")
+}
+
+// Tuple destructure declaration
+let (a, b) = getTwoValues()
+let (x, y, z) = getThreeValues()
+
+// Tuple destructure swap assignment
+(a, b) = (b, a)
+(x, y) = (y, x)  // (z left untouched)
+
+// Ignoring values via _ pattern
+let (_, important) = getTwoValues()
+let (val, _) = getTwoValues()
+
+// Channel tryRecv now produces Recv<T>
+shared const ch = new Channel(1)
+ch.send(42)
+match (ch.tryRecv()) {
+    Recv.Value(value) -> {
+        print(value)
+    }
+    _ -> {}
+}

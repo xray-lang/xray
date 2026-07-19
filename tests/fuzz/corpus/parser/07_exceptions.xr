@@ -1,0 +1,58 @@
+// Basic try-catch
+enum FuzzErr { DivZero, Inner, Outer }
+
+try {
+    let result = riskyOperation()
+    print(result)
+} catch (e) {
+    print("Error: " + e)
+}
+// try-catch with defer cleanup
+fn processWithCleanup() {
+    defer { print("Cleanup completed") }
+    try {
+        let file = openFile("data.txt")
+        processFile(file)
+    } catch (e) {
+        print("Failed to process file: " + e)
+    }
+}
+
+// Throw statement
+fn divide(a, b) {
+    if (b == 0) {
+        throw FuzzErr.DivZero
+    }
+    return a / b
+}
+
+// Nested try-catch
+try {
+    try {
+        throw FuzzErr.Inner
+    } catch (e) {
+        print("Caught inner: " + e)
+        throw FuzzErr.Outer
+    }
+} catch (e) {
+    print("Caught outer: " + e)
+}
+// Re-throwing
+try {
+    doSomething()
+} catch (e) {
+    print("Handled: " + e)
+}
+// Multiple operations in try
+fn pipeline() {
+    defer { cleanup() }
+    try {
+        let a = step1()
+        let b = step2(a)
+        let c = step3(b)
+        return c
+    } catch (e) {
+        print("Pipeline failed: " + e)
+        return null
+    }
+}

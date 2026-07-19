@@ -1,0 +1,158 @@
+// Extended edge cases for parser testing
+// ============================================
+// 1. Arrow function vs Grouping ambiguity
+// ============================================
+// Grouping expression
+let a = (1 + 2) * 3
+assert_eq(a, 9)
+// Arrow function with single param (parens required in xray)
+let f1 = fn(x) {
+    return x * 2
+}
+assert_eq(f1(5), 10)
+// Arrow function returning expression
+let f2 = fn(x) {
+    return x + 1
+}
+assert_eq(f2(5), 6)
+// Arrow function with multiple params
+let f3 = fn(x, y) {
+    return x + y
+}
+assert_eq(f3(3, 4), 7)
+// Grouping followed by operator
+let b = (1) + 2
+assert_eq(b, 3)
+// ============================================
+// 2. Object literal vs Code block
+// ============================================
+// Object literal (not a code block)
+let obj = { "name": "Alice", "age": 30 }
+assert_eq(obj.name, "Alice")
+// Empty object
+let empty_obj = {}
+assert_eq(typeName(empty_obj), "Json")
+// Nested object
+let nested = { "a": { "b": { "c": 1 } } }
+assert_eq(nested.a.b.c, 1)
+// ============================================
+// 3. Map vs Object distinction
+// ============================================
+// Object uses :
+let json = { "key": "value" }
+assert_eq(json.key, "value")
+// Map uses =>
+let map = { "key" => "value" }
+assert_eq(map["key"], "value")
+// New Map syntax with #{}
+let map2 = { "key" => "value" }
+assert_eq(map2["key"], "value")
+// ============================================
+// 4. Generics vs Comparison
+// ============================================
+// Comparison (not generics in expression context)
+let x = 5
+let y = 10
+let z = 3
+let cmp = x < y
+assert_eq(cmp, true)
+// Chained comparison
+let cmp2 = (x < y) == true
+assert_eq(cmp2, true)
+// Generic function call (requires parens after >)
+// Array<int>(10) - this is generic instantiation
+let arr = []
+arr.push(1)
+assert_eq(len(arr), 1)
+// ============================================
+// 5. Ternary vs Optional chain
+// ============================================
+// Ternary
+let t1 = true ? "yes" : "no"
+assert_eq(t1, "yes")
+// Optional chain
+let obj2 = null
+let v1 = obj2?.name
+assert_eq(v1, null)
+// Combined (ternary with optional chain)
+let obj3 = { "name": "Bob" }
+let v2 = obj3?.name ? "has name" : "no name"
+assert_eq(v2, "has name")
+
+// ============================================
+// 6. Type annotation
+// ============================================
+// Function with type annotations
+fn typed_func(x: int): int {
+    return x * 2
+}
+
+assert_eq(typed_func(5), 10)
+// Variable with type annotation
+let typed_var: int = 42
+assert_eq(typed_var, 42)
+// Array type
+let typed_arr: Array<any> = [1, 2, 3]
+assert_eq(len(typed_arr), 3)
+// ============================================
+// 7. Range in different contexts
+// ============================================
+// Range in for-in
+let sum = 0
+for (i in 0..5) {
+    sum += i
+}
+assert_eq(sum, 10)
+// Range in match
+let grade = match (85) {
+    90..100 => "A"
+    80..90 => "B"
+    70..80 => "C"
+    _ => "D"
+}
+assert_eq(grade, "B")
+// ============================================
+// 8. Increment/Decrement (standalone statement only in xray)
+// ============================================
+let n = 5
+n++
+assert_eq(n, 6)
+n--
+assert_eq(n, 5)
+// Must be standalone statement
+let m = 10
+m++
+assert_eq(m, 11)
+// For loop increment
+for (let i = 0; i < 3; i++) {
+}
+// While with increment
+let count = 0
+while (count < 3) {
+    count++
+}
+assert_eq(count, 3)
+// ============================================
+// 9. Nullish coalescing chains
+// ============================================
+let v3 = null ?? null ?? "default"
+assert_eq(v3, "default")
+let v4 = null ?? "first" ?? "second"
+assert_eq(v4, "first")
+let v5 = "exists" ?? "default"
+assert_eq(v5, "exists")
+// ============================================
+// 10. Complex nested expressions
+// ============================================
+let complex = (1 + 2) * 3 - 4 / 2 + (5 % 3)
+assert_eq(complex, 9 - 2 + 2)
+// = 9
+// Nested ternary (right associative)
+let nested_ternary = false ? "a" : false ? "b" : "c"
+assert_eq(nested_ternary, "c")
+// Logical with nullish
+let logic = false || null ?? true
+// (false || null) = null
+// null ?? true = true
+assert_eq(logic, true)
+print("Extended edge cases passed!")

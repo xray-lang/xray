@@ -15,7 +15,7 @@ xray demos/01-basics/hello.xr
 | File | Topics |
 |------|--------|
 | [hello.xr](01-basics/hello.xr) | print, string interpolation |
-| [variables.xr](01-basics/variables.xr) | let, const, types, nullable, destructuring |
+| [variables.xr](01-basics/variables.xr) | var, const, types, nullable, destructuring |
 | [functions.xr](01-basics/functions.xr) | fn, arrow functions, default params, rest params, recursion |
 | [tuples.xr](01-basics/tuples.xr) | tuple literals, `.N` access, destructure, match patterns, spread, generics |
 | [control_flow.xr](01-basics/control_flow.xr) | if/else, while, for, for-in, match, try/catch |
@@ -90,18 +90,47 @@ var combined = (...p, true)         // spread → (1, "hi", true)
 // Concurrency
 var task = go compute(42)      // spawn coroutine
 var result = await task         // wait for result
-shared ch = new Channel<int>(10)
+shared ch = Channel<int>(10)
 ch.send(val); match (ch.recv()) { Recv.Value(v) -> use(v); _ -> {} }
 shared CFG = { ... }     // immutable cross-coroutine data
+```
+
+## `owned` Bindings
+
+`owned` is a **local storage declaration**, not a type modifier. For example, the type of `payload` below is still `Array<byte>`; `owned` states that this binding holds a unique, mutable reference identity.
+
+- An `owned` declaration must be a local, single-name declaration with an initializer. Module-level and destructuring `owned` declarations are rejected.
+- The binding name cannot be reassigned, but the owned object can be mutated according to its type.
+- A freshly constructed reference value can initialize an `owned` binding directly. An existing reference binding must be transferred with `move source` or duplicated with `copy(source)`.
+- `move` can transfer the identity to another `owned` or `shared` binding, a function or coroutine, a Channel, or a return value. The source binding is invalid after the move.
+- A `Slice` or raw pointer borrowed from an owned object must not remain live when that object is moved.
+
+```xray
+fn byteCount(data: Array<byte>) -> int {
+    return len(data)
+}
+
+fn ownedExample() {
+    owned payload = Array<byte>(4, 0)
+    payload[0] = 7
+    owned snapshot = copy(payload)
+    var task = go byteCount(move payload)
+    var count = await task
+    print("moved length: ${count}")
+    print("snapshot first byte: ${snapshot[0]}")
+}
+
+ownedExample()
 ```
 
 ## Concurrency Safety Rules
 
 | Mechanism | Purpose | How it works |
 |-----------|---------|-------------|
-| `shared` | Immutable sharing | Zero-copy reads across coroutines |
-| `Channel` | Communication | Deep-copies values on send |
-| Function params | Pass data to `go` | Deep-copied to child coroutine |
-| `move` | Transfer ownership | Original becomes inaccessible |
+| `owned` | Unique local identity | Creates a non-rebindable local owner that can be transferred with `move` |
+| `shared` | Stable shared identity | Crosses execution boundaries directly; mutation is limited by the shared type's API |
+| `Channel` | Boundary communication | Uses the same explicit `copy` / `move` / `shared` transfer rules as `go` |
+| `copy(value)` | Independent data | Deep-copies an execution-local reference graph; the source remains usable |
+| `move value` | Ownership transfer | Transfers a local `var` or `owned` identity and invalidates the source |
 
-Regular `let`/`const` variables **cannot** be captured by `go` closures — the compiler will reject it.
+Every `go` argument, `go` closure capture, and Channel send uses the same transfer plan. Inline values, published module-readonly values, and shared identities may cross directly. Execution-local reference graphs require explicit `copy(value)` or `move value`, while mutable captured locals and borrowed views or pointers that cannot outlive the boundary are rejected.

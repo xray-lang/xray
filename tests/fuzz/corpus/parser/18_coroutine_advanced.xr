@@ -1,0 +1,120 @@
+// Advanced coroutine features
+enum FetchErr { Timeout }
+
+// yield - cooperative scheduling
+fn generator() {
+    for (i in 0..10) {
+        yield  // Give up control
+        print(i)
+    }
+}
+
+// cancelled() - check if coroutine is cancelled
+fn longRunningTask() {
+    for (i in 0..1000) {
+        if (cancelled()) {
+            print("Task was cancelled at iteration " + i)
+            return null
+        }
+        // Do work
+        processItem(i)
+    }
+    return "completed"
+}
+
+// await any - wait for first result
+fn raceRequests() {
+    let t1 = go fetchFromServer1()
+    let t2 = go fetchFromServer2()
+    let t3 = go fetchFromServer3()
+
+    // Return result from whichever finishes first
+    let result = await any [t1, t2, t3]
+    return result
+}
+
+// Timeout pattern with await any
+fn fetchWithTimeout(url, timeout_ms) {
+    let fetch_task = go http.get(url)
+    let timeout_task = go fn() {
+        time.sleep(timeout_ms)
+        throw FetchErr.Timeout    }()
+
+    return await any [fetch_task, timeout_task]
+}
+
+// Task cancellation
+fn cancellableWork() {
+    let task = go fn() {
+        while (!cancelled()) {
+            doSomeWork()
+            yield
+        }
+        cleanup()
+    }()
+
+    // Later, cancel the task
+    time.sleep(1000)
+    task.cancel()
+    await task
+}
+
+// Select with timeout
+fn selectWithTimeout() {
+    shared const ch = new Channel(1)
+
+    select {
+        msg from ch -> {
+            print("Received: " + msg)
+        }
+        _ -> {
+            print("No message, doing default action")
+        }
+    }
+}
+
+// Channel iteration
+fn consumeChannel() {
+    shared const ch = new Channel(10)
+
+    // Producer
+    go fn() {
+        for (i in 0..10) {
+            ch.send(i)
+        }
+        ch.close()
+    }()
+
+    // Consumer - iterate over channel
+    for (item in ch) {
+        print("Got: " + item)
+    }
+}
+
+// Coordinated shutdown
+fn coordinatedShutdown() {
+    shared const done = new Channel(1)
+    shared const workers = new Channel(3)
+
+    // Start workers
+    for (i in 0..3) {
+        go fn(id) {
+            while (true) {
+                select {
+                    _ from done -> {
+                        print("Worker " + id + " shutting down")
+                        return
+                    }
+                    _ -> {
+                        doWork()
+                        yield
+                    }
+                }
+            }
+        }(i)
+    }
+
+    // Signal shutdown
+    time.sleep(5000)
+    done.close()
+}

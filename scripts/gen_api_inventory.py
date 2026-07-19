@@ -332,8 +332,9 @@ def decode_c_string(raw: str) -> str:
 
 
 CLASS_RE = re.compile(
-    r"(?m)^(?:@[A-Za-z_][^\n]*\n)*(?:export\s+)?(?:final\s+)?"
-    r"class\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\{"
+    r"(?m)^(?:@[A-Za-z_][^\n]*\n)*(?:export\s+)?(?:(?:final|packed)\s+)?"
+    r"(?:class|struct|union)\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?"
+    r"(?:\s+align\s*\([^\n)]*\))?\s*\{"
 )
 TOP_FN_RE = re.compile(
     r"(?m)^(?:export\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*"

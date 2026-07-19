@@ -1,0 +1,50 @@
+// Edge cases for lexer
+
+// Empty and minimal
+let empty = ""
+let single = "a"
+let space = " "
+
+// Special characters in strings
+let special = "\0\a\b\f\r\v"
+let unicode_escape = "\u0041\u0042\u0043"
+let unicode_brace = "\u{1F600}\u{1F601}"
+
+// Numbers at boundaries
+let max_int = 9223372036854775807
+let min_int = -9223372036854775808
+let tiny_float = 0.0000000001
+let huge_float = 1e308
+let tiny_exp = 1e-308
+
+// Identifier edge cases
+let _ = 1
+let _a = 2
+let a_ = 3
+let _123 = 4
+let camelCase = 5
+let snake_case = 6
+let PascalCase = 7
+let SCREAMING_CASE = 8
+
+// Comment edge cases
+// Single line comment
+/* Multi-line
+   comment */
+/* Nested /* not really */ works */
+// Comment with special chars: αβγ δεζ 你好
+
+// Adjacent operators
+let a = 1+2
+let b = 3-4
+let c = a++
+let d = --b
+let e = x==y
+let f = x===y
+let g = a&&b||c
+let h = x?.y?.z
+
+// Unicode identifiers (if supported)
+let 变量 = 1
+let αβγ = 2
+let δεζ = 3

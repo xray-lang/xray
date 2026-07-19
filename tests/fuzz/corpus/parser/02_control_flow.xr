@@ -1,0 +1,79 @@
+// Control flow - if statement
+let x = 10
+if (x > 0) {
+    print("positive")
+}
+if (x > 0) {
+    print("positive")
+} else {
+    print("non-positive")
+}
+if (x > 100) {
+    print("big")
+} else if (x > 50) {
+    print("medium")
+} else if (x > 0) {
+    print("small")
+} else {
+    print("zero or negative")
+}
+// Control flow - while loop
+let i = 0
+while (i < 5) {
+    print(i)
+    i++
+}
+while (true) {
+    if (i > 10) {
+        break
+    }
+    i++
+}
+// Control flow - for loop
+for (let j = 0; j < 5; j++) {
+    print(j)
+}
+for (let k = 10; k > 0; k--) {
+    if (k == 5) {
+        continue
+    }
+    print(k)
+}
+// Control flow - for-in loop
+let arr = [1, 2, 3, 4, 5]
+for (item in arr) {
+    print(item)
+}
+for (idx in 0..10) {
+    print(idx)
+}
+let map = { "a" => 1, "b" => 2 }
+for (kv in map) {
+    print(kv.key)
+    print(kv.value)
+}
+// Control flow - match expression
+let result = match (x) {
+    1 => "one"
+    2 => "two"
+    3 => "three"
+    _ => "other"
+}
+let grade = match (score) {
+    90..100 => "A"
+    80..90 => "B"
+    70..80 => "C"
+    60..70 => "D"
+    _ => "F"
+}
+let day_type = match (day) {
+    "Mon", "Tue", "Wed", "Thu", "Fri" => "weekday"
+    "Sat", "Sun" => "weekend"
+    _ => "unknown"
+}
+let category = match (n) {
+    n if n < 0 => "negative"
+    0 => "zero"
+    n if n > 100 => "large"
+    _ => "normal"
+}

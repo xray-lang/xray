@@ -1,0 +1,29 @@
+{
+  "module": "simd",
+  "summary": "Portable fixed-width integer vectors",
+  "lead": "Portable 128-bit and 256-bit integer-vector operations. The same API has scalar semantics in the VM and on targets without matching vector instructions; native AOT lowers supported operations according to the selected target.",
+  "sections": [
+    {
+      "heading": "Vector types",
+      "bullets": [
+        "`U8x16`, `U32x4`, and `U64x2` are the portable 128-bit baseline.",
+        "`U8x32`, `U32x8`, and `U64x4` provide 256-bit operations for algorithms that select a wide path.",
+        "`Capabilities.nativeBytes()` returns the native vector width chosen for the compile target; it is at least 16 bytes."
+      ]
+    },
+    {
+      "heading": "Loading and storing",
+      "before_text": "Use `load` and `store` with a typed `Slice<T>`. The optional offset is measured in elements. `fromLanes` constructs a vector from a fixed array, while `splat` fills every lane with one value where that operation is available."
+    },
+    {
+      "heading": "Operations",
+      "before_text": "The vector types provide lane extraction and replacement, integer arithmetic, bitwise operations, shifts, shuffles, widening multiplication, reductions, and bit-preserving reinterpretation where supported by the type. Shuffle lane arguments must be compile-time integers within the vector's lane range."
+    },
+    {
+      "heading": "Example",
+      "code": [
+        "import { Capabilities, U32x4 } from simd\n\nfn main() {\n    var words = Array<uint32>([1, 2, 3, 4])\n    var view: Slice<uint32> = words[:]\n    var result = U32x4.load(view).add(U32x4.splat(10))\n\n    print(result.extract(2))\n    print(Capabilities.nativeBytes() >= 16)\n}\n\nmain()"
+      ]
+    }
+  ]
+}

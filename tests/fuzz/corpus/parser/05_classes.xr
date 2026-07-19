@@ -1,0 +1,175 @@
+// Basic class
+class Point {
+    x: int
+    y: int
+
+    constructor(x, y) {
+        this.x = x
+        this.y = y
+    }
+
+    toString() {
+        return "(${this.x}, ${this.y})"
+    }
+
+    distanceTo(other) {
+        let dx = this.x - other.x
+        let dy = this.y - other.y
+        return Math.sqrt(dx * dx + dy * dy)
+    }
+}
+
+// Class with static members
+class Counter {
+    static count = 0
+    value: int
+
+    constructor() {
+        Counter.count++
+        this.value = Counter.count
+    }
+
+    static getTotal() {
+        return Counter.count
+    }
+}
+
+// Inheritance
+class Animal {
+    name: string
+
+    constructor(name) {
+        this.name = name
+    }
+
+    speak() {
+        return this.name + " makes a sound"
+    }
+}
+
+class Dog extends Animal {
+    breed: string
+
+    constructor(name, breed) {
+        super(name)
+        this.breed = breed
+    }
+
+    speak() {
+        return this.name + " barks"
+    }
+
+    parentSpeak() {
+        return super.speak()
+    }
+}
+
+// Getter and Setter
+class Circle {
+    _radius: float
+
+    constructor(radius) {
+        this._radius = radius
+    }
+
+    radius: float {
+        fn() { return this._radius }
+        fn(value) { this._radius = value }
+    }
+
+    diameter: float {
+        fn() { return this._radius * 2 }
+    }
+
+    area: float {
+        fn() { return 3.14159 * this._radius * this._radius }
+    }
+}
+
+// Operator overloading
+class Vector2 {
+    x: float
+    y: float
+
+    constructor(x, y) {
+        this.x = x
+        this.y = y
+    }
+
+    operator+(other) {
+        return new Vector2(this.x + other.x, this.y + other.y)
+    }
+
+    operator-(other) {
+        return new Vector2(this.x - other.x, this.y - other.y)
+    }
+
+    operator*(scalar) {
+        return new Vector2(this.x * scalar, this.y * scalar)
+    }
+
+    operator==(other) {
+        return this.x === other.x && this.y === other.y
+    }
+}
+
+// Interface
+interface Drawable {
+    draw()
+}
+
+interface Shape {
+    area(): float
+    perimeter(): float
+}
+
+class Rectangle implements Shape {
+    width: float
+    height: float
+
+    constructor(width, height) {
+        this.width = width
+        this.height = height
+    }
+
+    area() {
+        return this.width * this.height
+    }
+
+    perimeter() {
+        return 2 * (this.width + this.height)
+    }
+}
+
+// Private members
+class BankAccount {
+    private _balance: float
+
+    constructor(initial) {
+        this._balance = initial
+    }
+
+    deposit(amount) {
+        this._balance += amount
+    }
+
+    withdraw(amount) {
+        if (amount <= this._balance) {
+            this._balance -= amount
+            return true
+        }
+        return false
+    }
+
+    getBalance() {
+        return this._balance
+    }
+}
+
+// Usage
+let p = new Point(3, 4)
+let dog = new Dog("Buddy", "Labrador")
+let circle = new Circle(5.0)
+let v1 = new Vector2(1.0, 2.0)
+let v2 = new Vector2(3.0, 4.0)
+let v3 = v1 + v2

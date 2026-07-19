@@ -473,7 +473,12 @@ static void xi_cgen_shared_lib_ctor(XiCgenCtx *ctx, FILE *out, XiModule **module
         fprintf(out, "    ");
         emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
         fprintf(out, "(NULL);\n");
-        fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) abort();\n");
+        if (ctx->freestanding_profile) {
+            fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) "
+                         "xrt_freestanding_trap(\"module initialization failed\");\n");
+        } else {
+            fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) abort();\n");
+        }
     }
     fprintf(out, "}\n");
 }
@@ -743,8 +748,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     }
     if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_STATIC_DATA))
         xi_cgen_emit_str_literal_defs(ctx, unit);
-    if (main_func->nshared > 0 && ((bodybuf && strstr(bodybuf, "xrt_shared")) ||
-                                   (staticbuf && strstr(staticbuf, "xrt_shared"))))
+    if (main_func->nshared > 0 && ((bodybuf && strstr(bodybuf, "xrt_shared[")) ||
+                                   (staticbuf && strstr(staticbuf, "xrt_shared["))))
         cg_emit_shared_array_definition(ctx, unit, "static ", "xrt_shared", module,
                                         main_func->nshared);
     if (!ctx->error)
