@@ -88,6 +88,10 @@ struct XaAnalyzer {
     // Owning compiler session (explicit, no TLS)
     XrCompilerSession *compiler_session;
 
+    /* Monotonic semantic publication revision. TypedProgram snapshots bind
+     * to this value and become invalid after any completed re-analysis. */
+    uint64_t semantic_revision;
+
     // Borrowed VM host for the current bytecode/runtime type helpers.
     XrVMRuntime *isolate;
 

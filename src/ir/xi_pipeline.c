@@ -11,6 +11,7 @@
  */
 
 #include "xi_pipeline.h"
+#include "../frontend/analyzer/xa_typed_program.h"
 #include "xi_lower.h"
 #include "xi_verify.h"
 #include "xi_opt.h"
@@ -407,7 +408,17 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
     if (cfg->run_canonicalize)
         xr_canon_func(func_node, analyzer, session);
 
-    XiFunc *ir = xi_lower_func(func_node, analyzer, isolate);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, func_node, NULL, 0);
+    if (!typed.program) {
+        xi_pipeline_set_error(&gate, XI_PIPE_ERR_ANALYZE, XI_PIPE_STAGE_ANALYZE,
+                              XI_VERIFY_EXECUTABLE_TYPE, NULL, NULL,
+                              xa_typed_program_reason_name(typed.reason), typed.detail);
+        gate.error.source_line = typed.source_line;
+        xa_analyzer_pop_file_scope(analyzer, &file_scope);
+        return gate;
+    }
+    XiFunc *ir = xi_lower_func(typed.program, isolate);
+    xa_typed_program_free(typed.program);
 
     xa_analyzer_pop_file_scope(analyzer, &file_scope);
 
@@ -457,8 +468,18 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
 
-    XiFunc *ir = xi_lower_program_ex(program_node, analyzer, isolate, cfg->repl_mode,
-                                     cfg->global_evidence, cfg->global_evidence_module_id);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(
+        analyzer, program_node, cfg->global_evidence, cfg->global_evidence_module_id);
+    if (!typed.program) {
+        xi_pipeline_set_error(&gate, XI_PIPE_ERR_ANALYZE, XI_PIPE_STAGE_ANALYZE,
+                              XI_VERIFY_EXECUTABLE_TYPE, NULL, NULL,
+                              xa_typed_program_reason_name(typed.reason), typed.detail);
+        gate.error.source_line = typed.source_line;
+        xa_analyzer_pop_file_scope(analyzer, &file_scope);
+        return gate;
+    }
+    XiFunc *ir = xi_lower_program(typed.program, isolate, cfg->repl_mode);
+    xa_typed_program_free(typed.program);
 
     xa_analyzer_pop_file_scope(analyzer, &file_scope);
 

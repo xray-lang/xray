@@ -317,6 +317,7 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     // Store owning compiler session and borrowed VM host (explicit, no TLS)
     analyzer->compiler_session = session;
     analyzer->isolate = X;
+    analyzer->semantic_revision = 1;
 
     analyzer->consteval_arena = (XrArena *) xr_malloc(sizeof(XrArena));
     if (!analyzer->consteval_arena) {
@@ -1475,6 +1476,10 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
 
     // Use the visitor-based analysis
     xa_analyze_ast(analyzer, ast);
+
+    analyzer->semantic_revision++;
+    if (analyzer->semantic_revision == 0)
+        analyzer->semantic_revision = 1;
 
     analyzer->current_file = NULL;
     analyzer->current_scope = file_scope;

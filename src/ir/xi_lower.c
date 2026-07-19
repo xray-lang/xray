@@ -20,6 +20,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xa_typed_program.h"
 #include "../frontend/analyzer/xconsteval.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/lexer/xlex.h"
@@ -1650,10 +1651,14 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
 
 /* ========== Public API ========== */
 
-XR_FUNC XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
-                              struct XrVMRuntime *isolate) {
-    XR_CHECK(func_node != NULL, "xi_lower_func: func_node is NULL");
-    XR_CHECK(analyzer != NULL, "xi_lower_func: analyzer is NULL");
+XR_FUNC XiFunc *xi_lower_func(const XaTypedProgram *program, struct XrVMRuntime *isolate) {
+    XR_CHECK(program != NULL, "xi_lower_func: typed program is NULL");
+    XR_CHECK(xa_typed_program_is_verified(program), "xi_lower_func: typed program is unverified");
+    XR_CHECK(xa_typed_program_is_current(program), "xi_lower_func: typed program is stale");
+    AstNode *func_node = (AstNode *) xa_typed_program_syntax(program);
+    XaAnalyzer *analyzer = xa_typed_program_semantics(program);
+    XR_CHECK(func_node != NULL, "xi_lower_func: typed syntax is NULL");
+    XR_CHECK(analyzer != NULL, "xi_lower_func: semantic database is NULL");
     XR_CHECK(func_node->type == AST_FUNCTION_DECL || func_node->type == AST_FUNCTION_EXPR,
              "xi_lower_func: not a function node");
     XiFunc *f = xi_lower_func_impl(func_node, analyzer, isolate, NULL);
@@ -2473,17 +2478,18 @@ static void build_module_metadata(XiLower *l) {
     f->module = mod;
 }
 
-XR_FUNC XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
-                                 struct XrVMRuntime *isolate) {
-    return xi_lower_program_ex(program_node, analyzer, isolate, false, NULL, 0);
-}
-
-XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *analyzer,
-                                    struct XrVMRuntime *isolate, bool repl_mode,
-                                    const struct XgGlobalEvidence *global_evidence,
-                                    uint32_t module_id) {
-    XR_CHECK(program_node != NULL, "xi_lower_program: node is NULL");
-    XR_CHECK(analyzer != NULL, "xi_lower_program: analyzer is NULL");
+XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRuntime *isolate,
+                                 bool repl_mode) {
+    XR_CHECK(program != NULL, "xi_lower_program: typed program is NULL");
+    XR_CHECK(xa_typed_program_is_verified(program),
+             "xi_lower_program: typed program is unverified");
+    XR_CHECK(xa_typed_program_is_current(program), "xi_lower_program: typed program is stale");
+    AstNode *program_node = (AstNode *) xa_typed_program_syntax(program);
+    XaAnalyzer *analyzer = xa_typed_program_semantics(program);
+    const struct XgGlobalEvidence *global_evidence = xa_typed_program_global_evidence(program);
+    uint32_t module_id = xa_typed_program_module_id(program);
+    XR_CHECK(program_node != NULL, "xi_lower_program: typed syntax is NULL");
+    XR_CHECK(analyzer != NULL, "xi_lower_program: semantic database is NULL");
 
     XiLower l;
     xi_lower_init(&l, analyzer, isolate);

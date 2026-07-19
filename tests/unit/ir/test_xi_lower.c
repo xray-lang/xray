@@ -17,6 +17,7 @@
 #include "../../../src/frontend/parser/xast_types.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/frontend/analyzer/xa_typed_program.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/toolchain/xcompiler_session.h"
@@ -80,7 +81,13 @@ static XiFunc *lower_source(const char *source) {
     xr_canon_program(program, analyzer, session);
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
-    XiFunc *func = xi_lower_program(program, analyzer, g_iso);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false) : NULL;
+    if (!typed.program) {
+        fprintf(stderr, "  TYPED PROGRAM REJECTED (%s): %s\n",
+                xa_typed_program_reason_name(typed.reason), typed.detail ? typed.detail : "");
+    }
+    xa_typed_program_free(typed.program);
     if (!func) {
         fprintf(stderr, "  LOWER FAILED for: %s\n", source);
         xa_analyzer_free(analyzer);
@@ -149,7 +156,13 @@ static XiFunc *lower_source_with_global_evidence_ex(const char *source, XgGlobal
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
 
-    XiFunc *func = xi_lower_program_ex(program, analyzer, g_iso, false, out_ev, 1);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, out_ev, 1);
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false) : NULL;
+    if (!typed.program) {
+        fprintf(stderr, "  TYPED PROGRAM REJECTED (%s): %s\n",
+                xa_typed_program_reason_name(typed.reason), typed.detail ? typed.detail : "");
+    }
+    xa_typed_program_free(typed.program);
     if (!func) {
         fprintf(stderr, "  LOWER FAILED for: %s\n", source);
         xa_analyzer_free(analyzer);
@@ -656,18 +669,21 @@ TEST(member_access_field_symbols_are_distinct) {
 }
 
 TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
-    XiFunc *f = lower_source("var src = Array<byte>(8)\n"
-                             "var view: Slice<byte> = src\n"
-                             "var dst = Array<byte>(0)\n"
-                             "var h = view.load<uint16>(0, Endian.LE)\n"
-                             "var a = view.load<uint32>(0, Endian.LE)\n"
-                             "var b = view.load<uint64>(0, Endian.LE)\n"
-                             "view.store<uint16>(6, h, Endian.LE)\n"
-                             "dst.appendFrom(view[0:2])\n"
-                             "dst.repeatFrom(2, 4)\n"
-                             "print(h)\n"
-                             "print(a)\n"
-                             "print(b)\n");
+    XiFunc *f = lower_source("fn exerciseBytes() {\n"
+                             "  var src = Array<byte>(8)\n"
+                             "  var view: Slice<byte> = src[:]\n"
+                             "  var dst = Array<byte>(0)\n"
+                             "  var h = view.load<uint16>(0, Endian.LE)\n"
+                             "  var a = view.load<uint32>(0, Endian.LE)\n"
+                             "  var b = view.load<uint64>(0, Endian.LE)\n"
+                             "  view.store<uint16>(6, h, Endian.LE)\n"
+                             "  dst.appendFrom(view[0:2])\n"
+                             "  dst.repeatFrom(2, 4)\n"
+                             "  print(h)\n"
+                             "  print(a)\n"
+                             "  print(b)\n"
+                             "}\n"
+                             "exerciseBytes()\n");
     assert(f != NULL);
     assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U16) &&
            "load<uint16> should lower to Array<byte> op");
@@ -1480,7 +1496,7 @@ static const char *json_codec_same_line_source(void) {
     return "type User = { name: string, age: int }\n"
            "fn codecs() -> string {\n"
            "    var parsed: Json = Json.parse(\"{\\\"name\\\":\\\"A\\\",\\\"age\\\":1}\"); var "
-           "decoded: User = Json.decode<User>(parsed); var encoded: Json = Json.encode(decoded); "
+           "decoded: User = Json.decode<User>(parsed)!; var encoded: Json = Json.encode(decoded); "
            "return Json.stringify(encoded)\n"
            "}\n"
            "print(codecs())\n";
@@ -2085,9 +2101,12 @@ TEST(go_arg_transfer_modes) {
     xi_func_free(copy_ir);
 
     XiFunc *move_ir = lower_source("fn worker(xs: Array<int>) -> int { return len(xs) }\n"
-                                   "shared xs: Array<int> = [1, 2]\n"
-                                   "var task = go worker(move xs)\n"
-                                   "print(await task)\n");
+                                   "fn moveCase() {\n"
+                                   "  owned xs: Array<int> = [1, 2]\n"
+                                   "  var task = go worker(move xs)\n"
+                                   "  print(await task)\n"
+                                   "}\n"
+                                   "moveCase()\n");
     assert(move_ir != NULL);
     XiValue *move_go = func_tree_find_op(move_ir, XI_GO);
     assert(move_go != NULL && "move case should lower a GO op");
@@ -2123,8 +2142,11 @@ TEST(channel_send_transfer_modes) {
     xi_func_free(copy_ir);
 
     XiFunc *move_ir = lower_source("shared ch: Channel<Array<int>> = Channel(1)\n"
-                                   "var xs = [1, 2]\n"
-                                   "ch.send(move xs)\n");
+                                   "fn sendMove() {\n"
+                                   "  owned xs: Array<int> = [1, 2]\n"
+                                   "  ch.send(move xs)\n"
+                                   "}\n"
+                                   "sendMove()\n");
     assert(move_ir != NULL);
     XiValue *move_send = func_tree_find_op(move_ir, XI_CHAN_SEND);
     assert(move_send != NULL && "move case should lower to CHAN_SEND");
@@ -2231,16 +2253,14 @@ TEST(is_expr) {
 }
 
 TEST(slice_expr) {
-    XiFunc *f = lower_source("var arr = [1, 2, 3, 4]\n"
-                             "var sub = arr[1:3]\n"
-                             "print(sub)\n");
+    XiFunc *f = lower_source("fn sliceLocal() {\n"
+                             "  var arr = [1, 2, 3, 4]\n"
+                             "  var sub: Slice<int> = arr[1:3]\n"
+                             "  print(sub)\n"
+                             "}\n"
+                             "sliceLocal()\n");
     assert(f != NULL);
-    int found_slice = 0;
-    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
-        if (f->entry->values[i]->op == XI_SLICE)
-            found_slice = 1;
-    }
-    assert(found_slice && "should have SLICE op");
+    assert(func_tree_has_op(f, XI_SLICE) && "should have SLICE op");
     xi_func_free(f);
 }
 
@@ -2348,7 +2368,7 @@ TEST(struct_field_store_narrows_native_width) {
                              "    octet: byte\n"
                              "}\n"
                              "fn run() -> int {\n"
-                             "    var p = Sample{octet: 300}\n"
+                             "    var p = Sample{octet: 200}\n"
                              "    p.octet = p.octet + 1\n"
                              "    return p.octet\n"
                              "}\n"
@@ -2489,7 +2509,7 @@ TEST(import_export_skip) {
 
 TEST(class_decl_skip) {
     XiFunc *f = lower_source("class Dog {\n"
-                             "    name: string\n"
+                             "    name: string = \"\"\n"
                              "}\n"
                              "print(1)\n");
     assert(f != NULL);
