@@ -1641,8 +1641,6 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     XiFunc *result = NULL;
     if (!l.had_error && xi_lower_capture_source_vars(&l)) {
         result = l.func;
-        result->stage = XI_STAGE_RAW;
-        result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
         xi_lower_assert_var_ids(&l, result);
     }
     xi_lower_cleanup(&l);
@@ -2603,8 +2601,6 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
     XiFunc *result = NULL;
     if (!l.had_error && xi_lower_capture_source_vars(&l)) {
         result = l.func;
-        result->stage = XI_STAGE_RAW;
-        result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
         xi_lower_assert_var_ids(&l, result);
     }
     xi_lower_cleanup(&l);

@@ -21,7 +21,7 @@
  *      a dominating definition, replace the use with XI_COPY.
  *
  *   3. TBAA-AWARE LOAD ELIMINATION:
- *      Memory loads participate when XI_INV_TBAA_ANNOTATED is set. A
+ *      Memory loads participate when current alias evidence exists. A
  *      load is redundant if an earlier load with the same VN exists and
  *      no intervening store may alias it (checked via mem_group).
  *

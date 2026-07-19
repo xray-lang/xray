@@ -8541,14 +8541,6 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
         return;
     if (!cg_func_body_is_reachable_from_roots(ctx, f, 0))
         return;
-    /* Auto-lower if callers bypass the pipeline. */
-    if (f->stage < XI_STAGE_REPPED) {
-        XiRepPolicy policy = xi_rep_policy_native_boundary();
-        xi_opt_select_rep_with_policy(f, &policy);
-        xi_opt_box_elim(f);
-    }
-    if (f->stage < XI_STAGE_BACKEND)
-        xi_backend_lower(f);
     xicgen_emit_par_for_range_wrappers(ctx, out, f, prefix);
     xicgen_emit_par_map_range_wrappers(ctx, out, f, prefix);
     xicgen_emit_par_reduce_range_wrappers(ctx, out, f, prefix);

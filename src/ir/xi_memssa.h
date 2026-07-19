@@ -25,8 +25,8 @@
  *     is created for memory versions (keeps IR clean)
  *
  * INVARIANTS:
- *   - Requires XI_INV_TBAA_ANNOTATED (mem_group must be set)
- *   - After construction, XI_INV_MEM_SSA is set on the function
+ *   - Requires current proven XI_EVD_ALIAS evidence
+ *   - Publishes current XI_EVD_MEMSSA evidence after construction
  *   - Memory SSA is invalidated when CFG or memory ops change
  *
  * LIFETIME:
@@ -97,10 +97,9 @@ typedef struct XiMemSSA {
 
 /* ========== Construction API ========== */
 
-/* Build the Memory SSA graph for a function.
- * Requires XI_INV_TBAA_ANNOTATED to be set.
- * Returns NULL on allocation failure.
- * On success, sets XI_INV_MEM_SSA on the function. */
+/* Build the Memory SSA graph for a function. Requires current proven alias
+ * evidence. Returns NULL on allocation failure and publishes MemSSA evidence
+ * on success. */
 XR_FUNC XiMemSSA *xi_memssa_build(XiFunc *f);
 
 /* Destroy a Memory SSA graph and free all resources. */

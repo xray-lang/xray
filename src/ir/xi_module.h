@@ -95,8 +95,8 @@ XR_FUNC void xi_module_free(XiModule *mod);
 /* ========== Closure Pass ========== */
 
 /* Build XiClosureMeta for all closures in a function tree.
- * Assigns env_offset and cell_index for each capture.
- * Advances stage to XI_STAGE_CLOSED. */
+ * Assigns env_offset and cell_index for each capture. The consuming stage
+ * transition verifies and publishes XI_STAGE_CLOSED. */
 XR_FUNC void xi_pass_close(XiFunc *f);
 
 #endif  // XI_MODULE_H

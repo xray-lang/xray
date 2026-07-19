@@ -9,7 +9,7 @@
  *
  * Eliminates redundant XI_BOUNDS_CHECK instructions when the index
  * range can be statically proven to be within [0, len).  Uses range
- * analysis results (XI_INV_RANGE_ANNOTATED).
+ * analysis evidence (XI_EVD_RANGE).
  *
  * Two elimination strategies:
  *   1. Range proof: range(idx) ⊆ [0, range(len).lo - 1]
@@ -24,7 +24,7 @@
 #include "xi_pass.h"
 
 /* Run bounds check elimination.
- * Requires: XI_INV_RANGE_ANNOTATED (run xi_range_analyze first).
+ * Requires current proven range evidence.
  * Eliminates provably-safe bounds checks by replacing them with XI_COPY
  * of the index value (preserving SSA def). */
 XR_FUNC XiPassChange xi_opt_bce(XiFunc *f);

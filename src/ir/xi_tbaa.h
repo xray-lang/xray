@@ -35,7 +35,7 @@
  *   - Passes must never bypass the query or hard-code alias assumptions
  *
  * INVARIANTS:
- *   - After the TBAA annotation pass, XI_INV_TBAA_ANNOTATED is set
+ *   - The annotation pass publishes revision-bound XI_EVD_ALIAS evidence
  *   - Every load/store op has mem_group != XI_MEM_NONE
  *   - Non-memory ops always have mem_group == XI_MEM_NONE
  */
@@ -105,10 +105,9 @@ XR_FUNC void xi_tbaa_annotate_value(XiValue *v);
  *
  * Runs over all values in a function and sets mem_group based on the op
  * kind and type information.  Called during lowering or as an early
- * pipeline pass.  After completion, sets XI_INV_TBAA_ANNOTATED.
+ * pipeline pass. After completion, publishes current alias evidence.
  *
- * Returns a pass change record (values_changed = true if any annotation
- * was added or updated). */
+ * Returns a no-IR-change pass record; mem_group is analysis metadata. */
 XR_FUNC XiPassChange xi_tbaa_annotate(XiFunc *f);
 
 #endif  // XI_TBAA_H

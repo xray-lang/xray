@@ -31,13 +31,13 @@
 #include "xi_coro_analyze.h"
 
 /* Lower every suspendable function in the tree rooted at 'f' into an explicit
- * stackless state machine, then advance the tree to XI_STAGE_CORO_LOWERED.
+ * stackless state machine and record per-function XiLoweringFacts.
  * Non-suspendable functions are left structurally unchanged.  'resolver'
  * supplies the interprocedural / module-import queries (see XiCoroResolver);
  * it may be NULL for intraprocedural-only lowering.
  *
- * Requires: f at XI_STAGE_OWNED (ownership inserted, representations not yet
- * selected).  Returns true on success, false on a NULL function or allocation
+ * Requires ownership-explicit semantic IR; the consuming stage API owns stage
+ * advancement. Returns true on success, false on a NULL function or allocation
  * failure. */
 XR_FUNC bool xi_coro_lower(XiFunc *f, const XiCoroResolver *resolver);
 

@@ -10,7 +10,7 @@
  * Builds XiClosureMeta for every closure in a function tree.
  * Assigns env_offset and cell_index for each capture.
  * Determines capture_kind from escape/mutability facts.
- * Advances function stage to XI_STAGE_CLOSED.
+ * Stage publication is owned by xi_program_close().
  *
  * This pass runs after lowering and canonicalization but before
  * optimization.  All backends (VM/AOT) read the resulting
@@ -114,15 +114,9 @@ static XiClosureMeta *build_closure_meta(XiFunc *f) {
 
 /* ========== Recursive Tree Walk ========== */
 
-/* Process a function and all its children recursively.
- * Builds XiClosureMeta for every closure, assigns env layout,
- * and advances stage to XI_STAGE_CLOSED. */
+/* Process a function and all its children recursively. */
 static void close_func_recursive(XiFunc *f, XiFunc *parent) {
     XR_DCHECK(f != NULL, "close_func_recursive: NULL func");
-
-    /* Skip if already closed */
-    if (f->stage >= XI_STAGE_CLOSED)
-        return;
 
     /* Process children first (bottom-up: leaf closures before parents) */
     for (uint16_t i = 0; i < f->nchildren; i++) {
@@ -131,17 +125,11 @@ static void close_func_recursive(XiFunc *f, XiFunc *parent) {
     }
 
     /* Build closure meta if this function captures variables */
-    if (f->ncaptures > 0) {
+    if (f->ncaptures > 0 && !f->closure_meta) {
         XiClosureMeta *meta = build_closure_meta(f);
         if (meta) {
             meta->parent_func = parent;
         }
-    }
-
-    /* Advance stage */
-    if (f->stage < XI_STAGE_CLOSED) {
-        f->stage = XI_STAGE_CLOSED;
-        f->invariant_mask |= XI_INV_UPVALS_RESOLVED;
     }
 }
 

@@ -10,8 +10,8 @@
  * Rewrites remaining semantic sugar ops according to generated backend
  * rewrite metadata so that the function satisfies the STAGE_BACKEND contract.
  *
- * This pass runs after select_rep (STAGE_REPPED) and advances the
- * function to STAGE_BACKEND.  It does NOT allocate new values — it
+ * This pass runs on an exact STAGE_REPPED input. The consuming stage API
+ * verifies and publishes STAGE_BACKEND. It does NOT allocate new values — it
  * only mutates v->op and v->aux/aux_int in place, which is safe
  * because XI_CALL_BUILTIN has the same value shape (nargs preserved).
  */
@@ -231,15 +231,11 @@ static bool lower_value(XiFunc *f, XiValue *v) {
     return true;
 }
 
-/* Lower all non-backend-legal ops in a function and advance stage.
- * Recurses into children. */
+/* Lower all non-backend-legal ops in a function. Recurses into children. */
 XR_FUNC void xi_backend_lower(XiFunc *f) {
     if (!f)
         return;
-    if (f->stage >= XI_STAGE_BACKEND)
-        return;
-
-    XR_DCHECK(f->stage >= XI_STAGE_REPPED, "xi_backend_lower: requires STAGE_REPPED");
+    XR_DCHECK(f->stage == XI_STAGE_REPPED, "xi_backend_lower: requires exact STAGE_REPPED");
 
     /* Scalar-expand vector ops before other backend lowering. */
     (void) xi_vec_scalar_lower(f);
@@ -252,9 +248,6 @@ XR_FUNC void xi_backend_lower(XiFunc *f) {
             lower_value(f, blk->values[vi]);
         }
     }
-
-    f->stage = XI_STAGE_BACKEND;
-    f->invariant_mask |= xi_stage_invariants(XI_STAGE_BACKEND);
 
     /* Recurse into children */
     for (uint16_t i = 0; i < f->nchildren; i++) {

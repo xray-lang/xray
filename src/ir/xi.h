@@ -67,25 +67,21 @@ struct XiEvidenceSet;
  * active simply pass through (input == output == same stage).
  */
 typedef enum {
-    XI_STAGE_RAW = 0,      /* direct AST lowering output; high-level ops present */
-    XI_STAGE_CANONICAL,    /* evaluation order fixed, syntax sugar expanded */
-    XI_STAGE_CLOSED,       /* closure/module/class metadata materialized */
-    XI_STAGE_OWNED,        /* ownership/effect/lifetime explicit */
-    XI_STAGE_CORO_LOWERED, /* coroutine bodies lowered to explicit stackless state
-                            * machines (entry dispatch + suspend-split blocks +
-                            * explicit frame).  Selective and skippable: only
-                            * suspendable functions are rewritten, and the VM path
-                            * advances straight from OWNED to REPPED, so reaching
-                            * this stage establishes no new universal invariant. */
-    XI_STAGE_REPPED,       /* value representations selected, BOX/UNBOX inserted */
-    XI_STAGE_BACKEND,      /* low-level ops only, ready for code generation */
+    XI_STAGE_RAW = 0,
+    XI_STAGE_CANONICAL,
+    XI_STAGE_CLOSED,
+    XI_STAGE_OWNED,
+    XI_STAGE_LOWERED,
+    XI_STAGE_OPTIMIZED,
+    XI_STAGE_REPPED,
+    XI_STAGE_BACKEND,
     XI_STAGE_COUNT,
 } XiStage;
 
 /* Human-readable stage name (for dumps and diagnostics). */
 static inline const char *xi_stage_name(XiStage s) {
     static const char *names[] = {
-        "Raw", "Canonical", "Closed", "Owned", "CoroLowered", "Repped", "Backend",
+        "Raw", "Canonical", "Closed", "Owned", "Lowered", "Optimized", "Repped", "Backend",
     };
     return (unsigned) s < XI_STAGE_COUNT ? names[s] : "?";
 }
@@ -97,26 +93,15 @@ static inline const char *xi_stage_name(XiStage s) {
  */
 typedef uint32_t XiInvariantMask;
 
-#define XI_INV_SSA_DOM ((XiInvariantMask) (1u << 0)) /* SSA dominance holds */
-#define XI_INV_CFG_CLOSED                                                                          \
-    ((XiInvariantMask) (1u << 1)) /* CFG: no unreachable blocks, succ/pred symmetric */
-#define XI_INV_EVAL_ORDER                                                                          \
-    ((XiInvariantMask) (1u << 2)) /* evaluation order deterministic (no ambiguous side-effects) */
-#define XI_INV_UPVALS_RESOLVED                                                                     \
-    ((XiInvariantMask) (1u << 3)) /* all upvalue refs have valid indices */
-#define XI_INV_ESCAPE_DONE                                                                         \
-    ((XiInvariantMask) (1u << 4)) /* escape analysis has run; every alloc annotated */
-#define XI_INV_REPS_SELECTED                                                                       \
-    ((XiInvariantMask) (1u << 5)) /* representations chosen for all values */
-#define XI_INV_BACKEND_LEGAL ((XiInvariantMask) (1u << 6)) /* all ops in backend-legal set */
-#define XI_INV_ARC_INSERTED ((XiInvariantMask) (1u << 7))  /* RETAIN/RELEASE ops inserted */
-#define XI_INV_EFFECTS_VALID                                                                       \
-    ((XiInvariantMask) (1u << 8)) /* per-value effect flags match opcode table */
-#define XI_INV_TBAA_ANNOTATED                                                                      \
-    ((XiInvariantMask) (1u << 9))                     /* every load/store carries a mem_group */
-#define XI_INV_MEM_SSA ((XiInvariantMask) (1u << 10)) /* memory phi / version chain built */
-#define XI_INV_RANGE_ANNOTATED                                                                     \
-    ((XiInvariantMask) (1u << 11)) /* integer values carry [lo, hi] range */
+#define XI_INV_CFG_WELL_FORMED ((XiInvariantMask) (1u << 0))
+#define XI_INV_SSA_WELL_FORMED ((XiInvariantMask) (1u << 1))
+#define XI_INV_EVAL_ORDER_FIXED ((XiInvariantMask) (1u << 2))
+#define XI_INV_UPVALS_RESOLVED ((XiInvariantMask) (1u << 3))
+#define XI_INV_OWNERSHIP_EXPLICIT ((XiInvariantMask) (1u << 4))
+#define XI_INV_SEMANTIC_OPS_LOWERED ((XiInvariantMask) (1u << 5))
+#define XI_INV_OPTIMIZATION_COMPLETE ((XiInvariantMask) (1u << 6))
+#define XI_INV_REPS_SELECTED ((XiInvariantMask) (1u << 7))
+#define XI_INV_BACKEND_LEGAL ((XiInvariantMask) (1u << 8))
 
 typedef uint16_t XiVarId;
 
@@ -181,27 +166,34 @@ typedef struct XiCallPlan {
     bool verified;
 } XiCallPlan;
 
+typedef struct XiLoweringFacts {
+    bool initialized;
+    bool coroutine_required;
+    bool coroutine_lowered;
+    bool callable_required;
+    bool callable_lowered;
+    bool semantic_ops_lowered;
+} XiLoweringFacts;
+
 /* Invariant mask implied by reaching a given stage. */
 static inline XiInvariantMask xi_stage_invariants(XiStage s) {
     switch (s) {
         case XI_STAGE_RAW:
-            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED;
+            return XI_INV_CFG_WELL_FORMED | XI_INV_SSA_WELL_FORMED;
         case XI_STAGE_CANONICAL:
-            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER;
+            return xi_stage_invariants(XI_STAGE_RAW) | XI_INV_EVAL_ORDER_FIXED;
         case XI_STAGE_CLOSED:
-            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED;
+            return xi_stage_invariants(XI_STAGE_CANONICAL) | XI_INV_UPVALS_RESOLVED;
         case XI_STAGE_OWNED:
-        /* Coroutine lowering rewrites only suspendable bodies and is skippable;
-         * it adds no universal invariant, so it shares OWNED's invariant set. */
-        case XI_STAGE_CORO_LOWERED:
-            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED |
-                   XI_INV_ESCAPE_DONE;
+            return xi_stage_invariants(XI_STAGE_CLOSED) | XI_INV_OWNERSHIP_EXPLICIT;
+        case XI_STAGE_LOWERED:
+            return xi_stage_invariants(XI_STAGE_OWNED) | XI_INV_SEMANTIC_OPS_LOWERED;
+        case XI_STAGE_OPTIMIZED:
+            return xi_stage_invariants(XI_STAGE_LOWERED) | XI_INV_OPTIMIZATION_COMPLETE;
         case XI_STAGE_REPPED:
-            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED |
-                   XI_INV_ESCAPE_DONE | XI_INV_REPS_SELECTED;
+            return xi_stage_invariants(XI_STAGE_OPTIMIZED) | XI_INV_REPS_SELECTED;
         case XI_STAGE_BACKEND:
-            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED |
-                   XI_INV_ESCAPE_DONE | XI_INV_REPS_SELECTED | XI_INV_BACKEND_LEGAL;
+            return xi_stage_invariants(XI_STAGE_REPPED) | XI_INV_BACKEND_LEGAL;
         default:
             return 0;
     }
@@ -1283,6 +1275,9 @@ typedef struct XiFunc {
 
     /* Cumulative invariant mask established by passes and stage transitions. */
     XiInvariantMask invariant_mask;
+
+    /* Target-independent coroutine/callable lowering completion facts. */
+    XiLoweringFacts lowering_facts;
 
     /* IR revisions are the authoritative freshness keys for local evidence. */
     uint64_t ir_revision;

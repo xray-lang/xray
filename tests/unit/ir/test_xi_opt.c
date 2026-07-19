@@ -12,6 +12,8 @@
 #include "../../../src/ir/xi_opt_jump_thread.h"
 #include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_verify.h"
+#include "../../../src/ir/xi_stage.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
 
@@ -1424,8 +1426,8 @@ TEST(select_rep_aot_policy_keeps_scalar_phi_unboxed) {
 TEST(select_rep_advances_empty_func_tree) {
     XiFunc *root = make_func("empty_facade_init", &stub_void);
     XiFunc *child = make_func("empty_nested", &stub_void);
-    root->stage = XI_STAGE_OWNED;
-    child->stage = XI_STAGE_OWNED;
+    xi_block_set_return(root->entry, NULL);
+    xi_block_set_return(child->entry, NULL);
     child->parent_func = root;
     root->children = (XiFunc **) xr_malloc(sizeof(XiFunc *));
     assert(root->children != NULL);
@@ -1436,8 +1438,25 @@ TEST(select_rep_advances_empty_func_tree) {
     assert(root->next_value_id == 0);
     assert(child->next_value_id == 0);
 
+    char error[512] = {0};
+    XiRawProgram *raw = xi_stage_adopt_raw(root, error, sizeof(error));
+    assert(raw != NULL);
+    XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
+    assert(canonical != NULL);
+    xi_pass_close(root);
+    XiClosedProgram *closed = xi_program_close(canonical, error, sizeof(error));
+    assert(closed != NULL);
+    XiOwnedProgram *owned = xi_program_make_owned(closed, error, sizeof(error));
+    assert(owned != NULL);
+    XiLoweredProgram *lowered = xi_program_lower_semantics(owned, error, sizeof(error));
+    assert(lowered != NULL);
+    XiOptimizedProgram *optimized = xi_program_finish_optimization(lowered, error, sizeof(error));
+    assert(optimized != NULL);
+
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XiPassChange change = xi_opt_select_rep_with_policy(root, &policy);
+    XiReppedProgram *repped = xi_program_select_reps(optimized, error, sizeof(error));
+    assert(repped != NULL);
 
     assert(change.cfg_changed && change.values_changed && change.types_changed &&
            "empty pipeline root must record its stage transition");
@@ -1448,7 +1467,7 @@ TEST(select_rep_advances_empty_func_tree) {
     assert((child->invariant_mask & xi_stage_invariants(XI_STAGE_REPPED)) ==
            xi_stage_invariants(XI_STAGE_REPPED));
 
-    xi_func_free(root);
+    xi_func_free(xi_repped_program_release(repped));
 }
 
 /* ========== Tuple Projection Peephole Tests ========== */

@@ -59,6 +59,6 @@ XR_FUNC const char *xi_emit_status_str(XiEmitStatus s);
 /* Attach Xi IR to proto for AOT direct lowering.
  * Transfers XiFunc ownership: proto will free it in xr_proto_free().
  * Must only be called once per proto. */
-XR_FUNC void xi_emit_attach_ir(struct XrProto *proto, XiFunc *ir);
+XR_FUNC bool xi_emit_attach_ir(struct XrProto *proto, XiFunc *ir);
 
 #endif  // XI_EMIT_H

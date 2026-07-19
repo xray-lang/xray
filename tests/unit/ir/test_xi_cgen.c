@@ -21,6 +21,9 @@
 #include "../../../src/ir/xi_escape.h"
 #include "../../../src/ir/xi_coro_analyze.h"
 #include "../../../src/ir/xi_pipeline.h"
+#include "../../../src/ir/xi_stage.h"
+#include "../../../src/ir/xi_backend_lower.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xstruct_layout.h"
@@ -785,17 +788,83 @@ static XiFunc *compile_to_ir(const char *source) {
     return compile_to_ir_with_config(source, cfg);
 }
 
+/* CGen fixtures must explicitly produce a verified Backend program. CGen is
+ * deliberately incapable of repairing an earlier-stage input. */
+static bool test_prepare_backend_ir(XiFunc *ir) {
+    if (!ir)
+        return false;
+    if (ir->stage == XI_STAGE_BACKEND)
+        return true;
+
+    char error[512] = {0};
+    XiOptimizedProgram *optimized = NULL;
+    if (ir->stage == XI_STAGE_RAW) {
+        XiRawProgram *raw = xi_stage_adopt_raw(ir, error, sizeof(error));
+        if (!raw)
+            goto fail;
+        XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
+        if (!canonical)
+            goto fail;
+        xi_pass_close(ir);
+        XiClosedProgram *closed = xi_program_close(canonical, error, sizeof(error));
+        if (!closed)
+            goto fail;
+        XiOwnedProgram *owned = xi_program_make_owned(closed, error, sizeof(error));
+        if (!owned)
+            goto fail;
+        XiLoweredProgram *lowered = xi_program_lower_semantics(owned, error, sizeof(error));
+        if (!lowered)
+            goto fail;
+        optimized = xi_program_finish_optimization(lowered, error, sizeof(error));
+    } else if (ir->stage == XI_STAGE_OPTIMIZED) {
+        optimized = xi_stage_adopt_optimized(ir, error, sizeof(error));
+    }
+
+    XiReppedProgram *repped = NULL;
+    if (optimized) {
+        XiRepPolicy policy = xi_rep_policy_native_boundary();
+        xi_opt_select_rep_with_policy(ir, &policy);
+        xi_opt_box_elim(ir);
+        repped = xi_program_select_reps(optimized, error, sizeof(error));
+    } else if (ir->stage == XI_STAGE_REPPED) {
+        repped = xi_stage_adopt_repped(ir, error, sizeof(error));
+    }
+    if (!repped)
+        goto fail;
+
+    xi_backend_lower(ir);
+    XiBackendProgram *backend = xi_program_plan_backend(repped, error, sizeof(error));
+    if (!backend)
+        goto fail;
+    return xi_backend_program_release(backend) == ir;
+
+fail:
+    fprintf(stderr, "  fixture Backend transition failed for '%s': %s\n",
+            ir->name ? ir->name : "<anonymous>", error);
+    return false;
+}
+
+static char *test_failed_codegen_result(bool *had_error) {
+    if (had_error)
+        *had_error = true;
+    char *empty = (char *) xr_malloc(1);
+    TEST_REQUIRE(empty != NULL, "failed-codegen result allocation failed");
+    empty[0] = '\0';
+    return empty;
+}
+
 /* Generate C code for Xi IR into an xr_malloc-owned string.
  * Caller releases the returned string with xr_free(). */
 static char *generate_c_with_status_and_stats(XiFunc *ir, const char *module_name, bool *had_error,
                                               XiCgenCoroFrameStats *coro_stats) {
     assert(ir != NULL);
 
-    /* AOT codegen owns a native scalar boundary; tagged adapters are emitted
-     * only where dynamic closure calls require them. */
-    if (ir->stage < XI_STAGE_REPPED) {
-        XiRepPolicy policy = xi_rep_policy_native_boundary();
-        xi_opt_select_rep_with_policy(ir, &policy);
+    if (!test_prepare_backend_ir(ir)) {
+        if (coro_stats)
+            memset(coro_stats, 0, sizeof(*coro_stats));
+        if (had_error)
+            return test_failed_codegen_result(had_error);
+        TEST_REQUIRE(false, "fixture Backend preparation failed");
     }
 
     /* Build module metadata if the pipeline didn't (e.g. standalone tests) */
@@ -844,9 +913,12 @@ static char *generate_c_with_status_and_cgen_stats(XiFunc *ir, const char *modul
                                                    bool *had_error, XiCgenStats *cgen_stats) {
     assert(ir != NULL);
 
-    if (ir->stage < XI_STAGE_REPPED) {
-        XiRepPolicy policy = xi_rep_policy_native_boundary();
-        xi_opt_select_rep_with_policy(ir, &policy);
+    if (!test_prepare_backend_ir(ir)) {
+        if (cgen_stats)
+            memset(cgen_stats, 0, sizeof(*cgen_stats));
+        if (had_error)
+            return test_failed_codegen_result(had_error);
+        TEST_REQUIRE(false, "fixture Backend preparation failed");
     }
 
     XiModule *mod = ir->module;
@@ -1461,9 +1533,8 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
     app_ir->module->path = "app.xr";
     XiModule *modules[] = {lib_ir->module, app_ir->module};
 
-    XiRepPolicy policy = xi_rep_policy_native_boundary();
-    xi_opt_select_rep_with_policy(lib_ir, &policy);
-    xi_opt_select_rep_with_policy(app_ir, &policy);
+    assert(test_prepare_backend_ir(lib_ir));
+    assert(test_prepare_backend_ir(app_ir));
 
     TestAotPlan plan;
     test_aot_plan_prepare(&plan, modules, 2, 1);
@@ -5620,10 +5691,8 @@ static XiFunc *make_marked_json_parse_ir(void) {
 static char *generate_c_with_injected_json_codec_plan(XiFunc *ir,
                                                       const XaotJsonCodecPlan *codec_plan,
                                                       bool *had_error) {
-    if (ir->stage < XI_STAGE_REPPED) {
-        XiRepPolicy policy = xi_rep_policy_native_boundary();
-        xi_opt_select_rep_with_policy(ir, &policy);
-    }
+    if (!test_prepare_backend_ir(ir))
+        return test_failed_codegen_result(had_error);
     XiModule *mod = xi_module_new("test.xr", "test", ir);
     TEST_REQUIRE(mod != NULL, "Json codec preflight module allocation failed");
     XiModule *modules[] = {mod};

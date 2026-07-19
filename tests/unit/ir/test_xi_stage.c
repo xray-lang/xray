@@ -16,6 +16,8 @@
 #include "../../../src/ir/xi_pass.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_pipeline.h"
+#include "../../../src/ir/xi_stage.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xchecks.h"
@@ -27,11 +29,50 @@
 
 /* Minimal XrType stubs */
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
-static XrType stub_void = {.kind = XR_KIND_NULL, .id = 2, .frozen = true};
+static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 2, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType stub_array = {.kind = XR_KIND_ARRAY, .id = 4, .frozen = true};
 static XrType stub_map = {.kind = XR_KIND_MAP, .id = 5, .frozen = true};
 static XrType stub_set = {.kind = XR_KIND_SET, .id = 6, .frozen = true};
+static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 7, .frozen = true};
+
+static XiLoweredProgram *advance_to_lowered(XiFunc *f) {
+    char error[512] = {0};
+    XiRawProgram *raw = xi_stage_adopt_raw(f, error, sizeof(error));
+    if (!raw)
+        fprintf(stderr, "raw adoption failed: %s\n", error);
+    assert(raw != NULL);
+    XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
+    assert(canonical != NULL);
+    xi_pass_close(f);
+    XiClosedProgram *closed = xi_program_close(canonical, error, sizeof(error));
+    assert(closed != NULL);
+    XiOwnedProgram *owned = xi_program_make_owned(closed, error, sizeof(error));
+    assert(owned != NULL);
+    XiLoweredProgram *lowered = xi_program_lower_semantics(owned, error, sizeof(error));
+    assert(lowered != NULL);
+    return lowered;
+}
+
+static XiReppedProgram *advance_to_repped(XiFunc *f) {
+    char error[512] = {0};
+    XiLoweredProgram *lowered = advance_to_lowered(f);
+    XiOptimizedProgram *optimized = xi_program_finish_optimization(lowered, error, sizeof(error));
+    assert(optimized != NULL);
+    XiReppedProgram *repped = xi_program_select_reps(optimized, error, sizeof(error));
+    assert(repped != NULL);
+    return repped;
+}
+
+static XiBackendProgram *finish_backend(XiReppedProgram *repped, XiFunc *f) {
+    char error[512] = {0};
+    xi_backend_lower(f);
+    XiBackendProgram *backend = xi_program_plan_backend(repped, error, sizeof(error));
+    if (!backend)
+        fprintf(stderr, "backend transition failed: %s\n", error);
+    assert(backend != NULL);
+    return backend;
+}
 
 static void assert_rewritten_builtin(XiValue *v, const char *name) {
     assert(v != NULL);
@@ -53,17 +94,19 @@ static void test_stage_enum(void) {
     assert(XI_STAGE_CANONICAL > XI_STAGE_RAW);
     assert(XI_STAGE_CLOSED > XI_STAGE_CANONICAL);
     assert(XI_STAGE_OWNED > XI_STAGE_CLOSED);
-    assert(XI_STAGE_CORO_LOWERED > XI_STAGE_OWNED);
-    assert(XI_STAGE_REPPED > XI_STAGE_CORO_LOWERED);
+    assert(XI_STAGE_LOWERED > XI_STAGE_OWNED);
+    assert(XI_STAGE_OPTIMIZED > XI_STAGE_LOWERED);
+    assert(XI_STAGE_REPPED > XI_STAGE_OPTIMIZED);
     assert(XI_STAGE_BACKEND > XI_STAGE_REPPED);
-    assert(XI_STAGE_COUNT == 7);
+    assert(XI_STAGE_COUNT == 8);
 
     /* Verify names */
     assert(strcmp(xi_stage_name(XI_STAGE_RAW), "Raw") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_CANONICAL), "Canonical") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_CLOSED), "Closed") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_OWNED), "Owned") == 0);
-    assert(strcmp(xi_stage_name(XI_STAGE_CORO_LOWERED), "CoroLowered") == 0);
+    assert(strcmp(xi_stage_name(XI_STAGE_LOWERED), "Lowered") == 0);
+    assert(strcmp(xi_stage_name(XI_STAGE_OPTIMIZED), "Optimized") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_REPPED), "Repped") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_BACKEND), "Backend") == 0);
 
@@ -87,11 +130,18 @@ static void test_func_stage_default(void) {
     assert((f->invariant_mask & xi_stage_invariants(XI_STAGE_RAW)) ==
            xi_stage_invariants(XI_STAGE_RAW));
 
-    /* Can manually advance stage */
-    f->stage = XI_STAGE_CANONICAL;
+    XiBlock *entry = xi_block_new(f);
+    XiValue *value = xi_const_int(f, entry, 0, &stub_int);
+    xi_block_set_return(entry, value);
+    char error[256] = {0};
+    XiRawProgram *raw = xi_stage_adopt_raw(f, error, sizeof(error));
+    assert(raw != NULL);
+    XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
+    assert(canonical != NULL);
     assert(f->stage == XI_STAGE_CANONICAL);
     assert(f->stage > XI_STAGE_RAW);
 
+    assert(xi_canonical_program_release(canonical) == f);
     xi_func_free(f);
     printf("  PASS\n");
 }
@@ -133,33 +183,31 @@ static void test_pass_desc_fields(void) {
         .fn = NULL,
         .min_level = XI_OPT_LIGHT,
         .flags = XI_PASS_NONE,
-        .input_stage = XI_STAGE_RAW,
-        .output_stage = XI_STAGE_RAW,
+        .min_stage = XI_STAGE_RAW,
+        .max_stage = XI_STAGE_LOWERED,
         .requires_evidence = XI_EVD_ALIAS,
         .produces_evidence = XI_EVD_RANGE,
     };
 
-    assert(desc.input_stage == XI_STAGE_RAW);
-    assert(desc.output_stage == XI_STAGE_RAW);
-    assert(desc.output_stage >= desc.input_stage);
+    assert(desc.min_stage == XI_STAGE_RAW);
+    assert(desc.max_stage == XI_STAGE_LOWERED);
     assert(desc.requires_evidence == XI_EVD_ALIAS);
     assert(desc.produces_evidence == XI_EVD_RANGE);
 
-    /* A stage-transition pass would have output > input */
-    XiPassDesc transition = {
-        .name = "canonicalize",
+    XiPassDesc lowered_only = {
+        .name = "semantic-opt",
         .fn = NULL,
         .min_level = XI_OPT_NONE,
         .flags = XI_PASS_REQUIRED,
-        .input_stage = XI_STAGE_RAW,
-        .output_stage = XI_STAGE_CANONICAL,
+        .min_stage = XI_STAGE_LOWERED,
+        .max_stage = XI_STAGE_LOWERED,
         .requires_inv_mask = 0,
-        .produces_inv_mask = XI_INV_EVAL_ORDER,
+        .produces_inv_mask = XI_INV_EVAL_ORDER_FIXED,
     };
 
-    assert(transition.output_stage > transition.input_stage);
-    assert(transition.flags & XI_PASS_REQUIRED);
-    assert(transition.produces_inv_mask == XI_INV_EVAL_ORDER);
+    assert(lowered_only.min_stage == lowered_only.max_stage);
+    assert(lowered_only.flags & XI_PASS_REQUIRED);
+    assert(lowered_only.produces_inv_mask == XI_INV_EVAL_ORDER_FIXED);
 
     printf("  PASS\n");
 }
@@ -172,8 +220,6 @@ static void test_verify_with_stage(void) {
     /* Build minimal IR: fn f() -> int { return 42 } */
     XiFunc *f = xi_func_new("verify_stage_fn", &stub_int);
     assert(f != NULL);
-    f->stage = XI_STAGE_RAW;
-
     XiBlock *entry = xi_block_new(f);
     assert(entry != NULL);
 
@@ -205,8 +251,6 @@ static void test_backend_lower_preserves_print(void) {
 
     XiFunc *f = xi_func_new("backend_print_fn", &stub_void);
     assert(f != NULL);
-    f->stage = XI_STAGE_REPPED;
-    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
 
     XiBlock *entry = xi_block_new(f);
     assert(entry != NULL);
@@ -220,13 +264,15 @@ static void test_backend_lower_preserves_print(void) {
     print->flags = xi_op_default_effects(XI_PRINT);
     print->aux_int = 2;
 
-    xi_backend_lower(f);
+    xi_block_set_return(entry, NULL);
+    XiReppedProgram *repped = advance_to_repped(f);
+    XiBackendProgram *backend = finish_backend(repped, f);
 
     assert(f->stage == XI_STAGE_BACKEND);
     assert(print->op == XI_PRINT);
     assert(xi_op_is_backend_legal(print->op));
 
-    xi_func_free(f);
+    xi_func_free(xi_backend_program_release(backend));
     printf("  PASS\n");
 }
 
@@ -235,8 +281,6 @@ static void test_backend_lower_preserves_json_field_ops(void) {
 
     XiFunc *f = xi_func_new("backend_json_field_fn", &stub_void);
     assert(f != NULL);
-    f->stage = XI_STAGE_REPPED;
-    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
 
     XiBlock *entry = xi_block_new(f);
     assert(entry != NULL);
@@ -268,7 +312,9 @@ static void test_backend_lower_preserves_json_field_ops(void) {
     set->flags = xi_op_default_effects(XI_JSON_SET_F);
     set->aux_int = 0;
 
-    xi_backend_lower(f);
+    xi_block_set_return(entry, NULL);
+    XiReppedProgram *repped = advance_to_repped(f);
+    XiBackendProgram *backend = finish_backend(repped, f);
 
     assert(f->stage == XI_STAGE_BACKEND);
     assert(init->op == XI_JSON_INIT_F);
@@ -278,7 +324,7 @@ static void test_backend_lower_preserves_json_field_ops(void) {
     assert(xi_op_is_backend_legal(get->op));
     assert(xi_op_is_backend_legal(set->op));
 
-    xi_func_free(f);
+    xi_func_free(xi_backend_program_release(backend));
     printf("  PASS\n");
 }
 
@@ -287,8 +333,6 @@ static void test_backend_lower_preserves_collection_ops(void) {
 
     XiFunc *f = xi_func_new("backend_collection_fn", &stub_void);
     assert(f != NULL);
-    f->stage = XI_STAGE_REPPED;
-    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
 
     XiBlock *entry = xi_block_new(f);
     assert(entry != NULL);
@@ -317,7 +361,9 @@ static void test_backend_lower_preserves_collection_ops(void) {
     concat->args[1] = cap;
     concat->flags = xi_op_default_effects(XI_STR_CONCAT);
 
-    xi_backend_lower(f);
+    xi_block_set_return(entry, NULL);
+    XiReppedProgram *repped = advance_to_repped(f);
+    XiBackendProgram *backend = finish_backend(repped, f);
 
     assert(f->stage == XI_STAGE_BACKEND);
     assert(array_new->op == XI_ARRAY_NEW);
@@ -329,7 +375,7 @@ static void test_backend_lower_preserves_collection_ops(void) {
     assert(xi_op_is_backend_legal(set_new->op));
     assert(xi_op_is_backend_legal(concat->op));
 
-    xi_func_free(f);
+    xi_func_free(xi_backend_program_release(backend));
     printf("  PASS\n");
 }
 
@@ -338,8 +384,6 @@ static void test_backend_lower_preserves_type_slice_and_range_ops(void) {
 
     XiFunc *f = xi_func_new("backend_type_slice_fn", &stub_void);
     assert(f != NULL);
-    f->stage = XI_STAGE_REPPED;
-    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
 
     XiBlock *entry = xi_block_new(f);
     assert(entry != NULL);
@@ -376,7 +420,9 @@ static void test_backend_lower_preserves_type_slice_and_range_ops(void) {
     range_v->args[1] = end;
     range_v->flags = xi_op_default_effects(XI_RANGE);
 
-    xi_backend_lower(f);
+    xi_block_set_return(entry, NULL);
+    XiReppedProgram *repped = advance_to_repped(f);
+    XiBackendProgram *backend = finish_backend(repped, f);
 
     assert(f->stage == XI_STAGE_BACKEND);
     assert(typeof_v->op == XI_TYPENAME);
@@ -388,7 +434,7 @@ static void test_backend_lower_preserves_type_slice_and_range_ops(void) {
     assert(xi_op_is_backend_legal(slice_v->op));
     assert(xi_op_is_backend_legal(range_v->op));
 
-    xi_func_free(f);
+    xi_func_free(xi_backend_program_release(backend));
     printf("  PASS\n");
 }
 
@@ -422,8 +468,6 @@ static void test_backend_lower_rewrites_generated_builtin_ops(void) {
 
     XiFunc *f = xi_func_new("backend_generated_rewrite_fn", &stub_void);
     assert(f != NULL);
-    f->stage = XI_STAGE_REPPED;
-    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
 
     XiBlock *entry = xi_block_new(f);
     assert(entry != NULL);
@@ -441,7 +485,7 @@ static void test_backend_lower_rewrites_generated_builtin_ops(void) {
     iter_next->args[0] = iter_new;
     iter_next->flags = xi_op_default_effects(XI_ITER_NEXT);
 
-    XiValue *iter_valid = xi_value_new(f, entry, XI_ITER_VALID, &stub_int, 1);
+    XiValue *iter_valid = xi_value_new(f, entry, XI_ITER_VALID, &stub_bool, 1);
     assert(iter_valid != NULL);
     iter_valid->args[0] = iter_new;
     iter_valid->flags = xi_op_default_effects(XI_ITER_VALID);
@@ -456,7 +500,9 @@ static void test_backend_lower_rewrites_generated_builtin_ops(void) {
     regex->args[1] = flags;
     regex->flags = xi_op_default_effects(XI_REGEX_COMPILE);
 
-    xi_backend_lower(f);
+    xi_block_set_return(entry, NULL);
+    XiReppedProgram *repped = advance_to_repped(f);
+    XiBackendProgram *backend = finish_backend(repped, f);
 
     assert(f->stage == XI_STAGE_BACKEND);
     assert_rewritten_builtin(iter_new, "iter_new");
@@ -464,7 +510,7 @@ static void test_backend_lower_rewrites_generated_builtin_ops(void) {
     assert_rewritten_builtin(iter_valid, "iter_valid");
     assert_rewritten_builtin(regex, "regex_compile");
 
-    xi_func_free(f);
+    xi_func_free(xi_backend_program_release(backend));
     printf("  PASS\n");
 }
 
@@ -475,34 +521,77 @@ static void test_stage_monotonicity(void) {
 
     XiFunc *f = xi_func_new("mono_fn", &stub_void);
     assert(f != NULL);
-    f->stage = XI_STAGE_RAW;
-
-    /* Monotonic advancement */
-    assert(f->stage == XI_STAGE_RAW);
-
-    f->stage = XI_STAGE_CANONICAL;
-    assert(f->stage == XI_STAGE_CANONICAL);
-
-    f->stage = XI_STAGE_CLOSED;
-    assert(f->stage > XI_STAGE_CANONICAL);
-
-    f->stage = XI_STAGE_OWNED;
-    assert(f->stage > XI_STAGE_CLOSED);
-
-    f->stage = XI_STAGE_REPPED;
-    assert(f->stage > XI_STAGE_OWNED);
-
-    f->stage = XI_STAGE_BACKEND;
-    assert(f->stage > XI_STAGE_REPPED);
+    XiBlock *entry = xi_block_new(f);
+    xi_block_set_return(entry, NULL);
+    XiReppedProgram *repped = advance_to_repped(f);
+    assert(f->stage == XI_STAGE_REPPED);
+    XiBackendProgram *backend = finish_backend(repped, f);
+    assert(f->stage == XI_STAGE_BACKEND);
 
     /* Full ordering check */
     assert(XI_STAGE_RAW < XI_STAGE_CANONICAL);
     assert(XI_STAGE_CANONICAL < XI_STAGE_CLOSED);
     assert(XI_STAGE_CLOSED < XI_STAGE_OWNED);
-    assert(XI_STAGE_OWNED < XI_STAGE_REPPED);
+    assert(XI_STAGE_OWNED < XI_STAGE_LOWERED);
+    assert(XI_STAGE_LOWERED < XI_STAGE_OPTIMIZED);
+    assert(XI_STAGE_OPTIMIZED < XI_STAGE_REPPED);
     assert(XI_STAGE_REPPED < XI_STAGE_BACKEND);
 
+    xi_func_free(xi_backend_program_release(backend));
+    printf("  PASS\n");
+}
+
+static void test_consumed_handle_is_rejected(void) {
+    printf("--- test_consumed_handle_is_rejected ---\n");
+
+    XiFunc *f = xi_func_new("consume_once", &stub_void);
+    XiBlock *entry = xi_block_new(f);
+    xi_block_set_return(entry, NULL);
+    char error[256] = {0};
+    XiRawProgram *raw = xi_stage_adopt_raw(f, error, sizeof(error));
+    assert(raw != NULL);
+    XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
+    assert(canonical != NULL);
+
+    error[0] = '\0';
+    assert(xi_program_canonicalize(raw, error, sizeof(error)) == NULL);
+    assert(strstr(error, "wrong-stage") != NULL);
+
+    xi_func_free(xi_canonical_program_release(canonical));
+    printf("  PASS\n");
+}
+
+static void test_corrupt_stage_contract_is_rejected(void) {
+    printf("--- test_corrupt_stage_contract_is_rejected ---\n");
+
+    XiFunc *f = xi_func_new("corrupt_stage", &stub_void);
+    XiBlock *entry = xi_block_new(f);
+    xi_block_set_return(entry, NULL);
+    f->invariant_mask &= ~XI_INV_SSA_WELL_FORMED;
+
+    char error[256] = {0};
+    assert(xi_stage_adopt_raw(f, error, sizeof(error)) == NULL);
+    assert(error[0] != '\0');
     xi_func_free(f);
+    printf("  PASS\n");
+}
+
+static void test_lowering_fact_corruption_fails_closed(void) {
+    printf("--- test_lowering_fact_corruption_fails_closed ---\n");
+
+    XiFunc *f = xi_func_new("corrupt_lowering_fact", &stub_void);
+    XiBlock *entry = xi_block_new(f);
+    xi_block_set_return(entry, NULL);
+    XiLoweredProgram *lowered = advance_to_lowered(f);
+    assert(f->lowering_facts.initialized);
+
+    f->lowering_facts.semantic_ops_lowered = false;
+    char error[256] = {0};
+    assert(!xi_verify_stage(f, XI_STAGE_LOWERED, error, sizeof(error)));
+    assert(strstr(error, "semantic lowering") != NULL);
+    f->lowering_facts.semantic_ops_lowered = true;
+
+    xi_func_free(xi_lowered_program_release(lowered));
     printf("  PASS\n");
 }
 
@@ -513,7 +602,6 @@ static void test_pass_order_and_invariants(void) {
 
     XiFunc *f = xi_func_new("pass_inv_fn", &stub_int);
     assert(f != NULL);
-    f->stage = XI_STAGE_RAW;
 
     XiBlock *entry = xi_block_new(f);
     assert(entry != NULL);
@@ -522,13 +610,18 @@ static void test_pass_order_and_invariants(void) {
     assert(c42 != NULL);
     xi_block_set_return(entry, c42);
 
+    XiLoweredProgram *lowered = advance_to_lowered(f);
+
     XiOptResult opt = xi_opt_run_pipeline(f, XI_OPT_FULL);
     assert(opt.ok);
 
     assert(xi_evidence_is_current(f, XI_EVD_ALIAS));
     assert(xi_evidence_is_current(f, XI_EVD_RANGE));
 
-    xi_func_free(f);
+    char error[256] = {0};
+    XiOptimizedProgram *optimized = xi_program_finish_optimization(lowered, error, sizeof(error));
+    assert(optimized != NULL);
+    xi_func_free(xi_optimized_program_release(optimized));
     printf("  PASS\n");
 }
 
@@ -569,6 +662,9 @@ int main(void) {
     test_backend_policy_generated_metadata();
     test_backend_lower_rewrites_generated_builtin_ops();
     test_stage_monotonicity();
+    test_consumed_handle_is_rejected();
+    test_corrupt_stage_contract_is_rejected();
+    test_lowering_fact_corruption_fails_closed();
     test_pass_order_and_invariants();
     test_optimizer_invariant_failure_is_data();
 

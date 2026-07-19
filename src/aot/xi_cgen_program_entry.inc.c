@@ -572,7 +572,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     XiFunc *main_func = module->init;
     const char *prefix = module->name ? module->name : "mod";
 
-    cg_prepare_func_tree_for_cgen(main_func);
+    if (!cg_require_backend_tree(ctx, main_func))
+        return;
 
     /* Reset function name counter for each compilation unit */
     ctx->fname_counter = 0;
@@ -805,12 +806,11 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     ctx->fname_counter = 0;
     cg_reset_emitted_funcs(ctx);
 
-    /* Every unit references cross-module symbols by name, so all module IR must
-     * be lowered before any unit is emitted.  cg_prepare_func_tree_for_cgen is
-     * idempotent (stage-gated), so repeating it across units is cheap. */
+    /* Every unit references cross-module symbols by name, so every module must
+     * arrive as a verified Backend program. CGen never repairs its input. */
     for (int i = 0; i < nmodules; i++) {
-        if (modules[i] && modules[i]->init)
-            cg_prepare_func_tree_for_cgen(modules[i]->init);
+        if (modules[i] && modules[i]->init && !cg_require_backend_tree(ctx, modules[i]->init))
+            return;
     }
 
     /* This module's definitions.  Reset the literal pool so this object carries

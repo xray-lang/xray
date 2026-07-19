@@ -6558,8 +6558,6 @@ static XiFunc *parallel_call_lower_lambda_func(
     XiFunc *result = NULL;
     if (!child_l.had_error && xi_lower_capture_source_vars(&child_l)) {
         result = child_l.func;
-        result->stage = XI_STAGE_RAW;
-        result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
     } else {
         xi_func_free(child_l.func);
     }
@@ -7037,8 +7035,6 @@ static XiValue *lower_parallel_plan_end_defer_closure(XiLower *l, AstNode *node,
     XiFunc *result = NULL;
     if (!child_l.had_error && xi_lower_capture_source_vars(&child_l)) {
         result = child_l.func;
-        result->stage = XI_STAGE_RAW;
-        result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
     } else {
         xi_func_free(child_l.func);
     }

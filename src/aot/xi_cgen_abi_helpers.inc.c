@@ -435,16 +435,20 @@ static void emit_cfn_stub_fname(XiCgenCtx *ctx, FILE *out, const char *prefix, c
     emit_fname_suffix(ctx, out, prefix, f, "_cfn");
 }
 
-static void cg_prepare_func_tree_for_cgen(XiFunc *f) {
-    if (!f)
-        return;
-    if (f->stage < XI_STAGE_REPPED) {
-        XiRepPolicy policy = xi_rep_policy_native_boundary();
-        xi_opt_select_rep_with_policy(f, &policy);
-        xi_opt_box_elim(f);
+static bool cg_require_backend_tree(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !f)
+        return false;
+    if (f->stage != XI_STAGE_BACKEND) {
+        fprintf(stderr, "[xi_cgen] ERROR: function '%s' is at stage %s; Backend required\n",
+                f->name ? f->name : "<anonymous>", xi_stage_name(f->stage));
+        ctx->error = true;
+        return false;
     }
-    if (f->stage < XI_STAGE_BACKEND)
-        xi_backend_lower(f);
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i] && !cg_require_backend_tree(ctx, f->children[i]))
+            return false;
+    }
+    return true;
 }
 
 static const char *cg_ptr_box_suffix_for_type(const XrType *type) {

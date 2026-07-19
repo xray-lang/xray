@@ -1147,6 +1147,10 @@ static bool xi_await_all_task_array_allowed_structural_use(XiFunc *f, const XiVa
     return false;
 }
 
+static bool xi_task_array_use_is_ownership_bookkeeping(const XiValue *user, uint16_t arg_idx) {
+    return user && arg_idx == 0 && (user->op == XI_RETAIN || user->op == XI_RELEASE);
+}
+
 static bool xi_task_array_use_is_clear(XiFunc *f, const XiValue *user, uint16_t arg_idx,
                                        XiValue *arr) {
     if (!user || !arr || arg_idx != 0)
@@ -1184,6 +1188,8 @@ static bool xi_await_all_fresh_task_array_can_be_one_shot(XiFunc *f, XiValue *aw
                     continue;
                 }
                 if (xi_task_array_use_is_shared_init(f, v, a, arr))
+                    continue;
+                if (xi_task_array_use_is_ownership_bookkeeping(v, a))
                     continue;
                 if (a == 0 && xi_await_all_task_array_pushes_go(f, v, arr)) {
                     saw_set = true;
@@ -1410,6 +1416,11 @@ static bool xi_task_array_allowed_sequential_await_use(XiFunc *f, XiValue *user,
                                                        XiValue *arr, bool *saw_await) {
     if (!user || !arr || arg_idx != 0)
         return false;
+    /* Ownership is explicit before optimization in the staged pipeline. ARC
+     * bookkeeping does not make the task array semantically observable and
+     * therefore must not defeat the consuming-loop proof. */
+    if (xi_task_array_use_is_ownership_bookkeeping(user, arg_idx))
+        return true;
     if (xi_await_all_task_array_allowed_structural_use(f, user, arg_idx, arr))
         return true;
     if (user->op == XI_LEN && xi_task_array_values_same(f, user->args[0], arr))
@@ -3021,8 +3032,6 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
             if (f->children[i])
                 xi_opt_select_rep_with_policy(f->children[i], &local_policy);
         }
-        f->stage = XI_STAGE_REPPED;
-        f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
         return xi_pass_change_all();
     }
 
@@ -3122,8 +3131,6 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
             phi->value.rep = (uint8_t) sr_def_rep(&phi->value, &local_policy);
     }
 
-    f->stage = XI_STAGE_REPPED;
-    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
     return xi_pass_change_all();
 }
 
@@ -3191,8 +3198,8 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
         .fn = pass_fn,                                                                             \
         .min_level = level,                                                                        \
         .flags = pass_flags,                                                                       \
-        .input_stage = XI_STAGE_RAW,                                                               \
-        .output_stage = XI_STAGE_RAW,                                                              \
+        .min_stage = XI_STAGE_RAW,                                                                 \
+        .max_stage = XI_STAGE_LOWERED,                                                             \
         .requires_inv_mask = 0,                                                                    \
         .produces_inv_mask = 0,                                                                    \
         .requires_evidence = required_evidence,                                                    \
@@ -3207,8 +3214,8 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
         .fn = pass_fn,                                                                             \
         .min_level = level,                                                                        \
         .flags = pass_flags,                                                                       \
-        .input_stage = XI_STAGE_RAW,                                                               \
-        .output_stage = XI_STAGE_RAW,                                                              \
+        .min_stage = XI_STAGE_RAW,                                                                 \
+        .max_stage = XI_STAGE_LOWERED,                                                             \
         .requires_inv_mask = 0,                                                                    \
         .produces_inv_mask = 0,                                                                    \
         .requires_evidence = 0,                                                                    \
@@ -3270,30 +3277,7 @@ static void validate_pass_table_once(void) {
         (void) d;
         XR_DCHECK(d->name != NULL, "pass table entry has NULL name");
         XR_DCHECK(d->fn != NULL, "pass table entry has NULL fn");
-        /* output_stage must be >= input_stage (stages never go backwards) */
-        XR_DCHECK(d->output_stage >= d->input_stage, "pass has output_stage < input_stage");
-    }
-
-    /* Verify stage monotonicity across the table: no pass should require
-     * a higher input_stage than any earlier pass's output_stage can reach. */
-    XiStage max_output = XI_STAGE_RAW;
-    for (size_t i = 0; i < XI_PASS_TABLE_SIZE; i++) {
-        const XiPassDesc *d = &xi_pass_table[i];
-        if (d->input_stage > max_output) {
-            /* This pass requires a stage that no earlier pass produces.
-             * This is allowed only if an external stage-transition pass
-             * (not in this table) runs between them.  Log a diagnostic
-             * in debug builds but don't abort — the pipeline driver
-             * will soft-skip it via the stage check. */
-#ifndef NDEBUG
-            fprintf(stderr,
-                    "[xi_pass] warning: pass '%s' requires stage %s "
-                    "but max reachable from earlier passes is %s\n",
-                    d->name, xi_stage_name(d->input_stage), xi_stage_name(max_output));
-#endif
-        }
-        if (d->output_stage > max_output)
-            max_output = d->output_stage;
+        XR_DCHECK(d->max_stage >= d->min_stage, "pass has an invalid stage window");
     }
 
     /* Check declarative pass ordering constraints */
@@ -3754,11 +3738,16 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                     goto done;
             }
 
-            /* Stage contract: skip pass if function has not reached
-             * the required stage.  This is a soft check — the pass
-             * simply does not fire rather than aborting. */
-            if (desc->input_stage > f->stage)
-                continue;
+            if (f->stage < desc->min_stage || f->stage > desc->max_stage) {
+                result.ok = false;
+                result.pass_name = desc->name;
+                result.round = round;
+                snprintf(result.detail, sizeof(result.detail),
+                         "pass '%s' is illegal at stage %s (legal window %s..%s)", desc->name,
+                         xi_stage_name(f->stage), xi_stage_name(desc->min_stage),
+                         xi_stage_name(desc->max_stage));
+                goto done;
+            }
 
             XiInvariantMask missing_inv = desc->requires_inv_mask & ~f->invariant_mask;
             if (missing_inv) {
@@ -3815,11 +3804,6 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
             uint64_t t0 = xr_time_monotonic_ns();
             XiPassChange pc = desc->fn(f);
 
-            /* Advance stage if the pass declares a higher output stage */
-            if (desc->output_stage > f->stage) {
-                f->stage = desc->output_stage;
-                f->invariant_mask |= xi_stage_invariants(f->stage);
-            }
             uint64_t dt = xr_time_monotonic_ns() - t0;
 
             XiInvariantMask missing_produced = desc->produces_inv_mask & ~f->invariant_mask;

@@ -96,11 +96,10 @@ typedef struct XiPassDesc {
     XiOptLevel min_level; /* minimum opt level to run this pass */
     uint32_t flags;       /* XI_PASS_* flags */
 
-    /* Stage contract: the pass requires func->stage >= input_stage.
-     * On completion, func->stage is advanced to output_stage (if greater).
-     * Most optimization passes are stage-preserving (input == output). */
-    XiStage input_stage;  /* minimum stage required (0 = any) */
-    XiStage output_stage; /* stage after this pass (0 = unchanged) */
+    /* Legal stage window. Passes never advance stage; only consuming
+     * transition APIs can do that. */
+    XiStage min_stage;
+    XiStage max_stage;
 
     /* Analysis invariant contract: required bits must already be present
      * before the pass runs; produced bits are marked present after it
