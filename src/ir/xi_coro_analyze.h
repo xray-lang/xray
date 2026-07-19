@@ -100,6 +100,8 @@ typedef struct XiCoroPlan {
  * the two context-dependent queries through callbacks.
  *   - resolve_callee maps a call's callee value to its target XiFunc.
  *   - resolve_method maps a method-call value to its statically known target.
+ *   - func_suspendability returns the prepared whole-program execution shape
+ *     for a function (1 = suspendable, 0 = synchronous, -1 = unknown).
  *   - value_is_module_import decides whether 'v' (as used in 'f') refers to
  *     an import of the named stdlib module (e.g. "time" for time.sleep).
  * Either callback may be NULL; the analysis then answers only from the
@@ -107,6 +109,7 @@ typedef struct XiCoroPlan {
 typedef struct XiCoroResolver {
     const XiFunc *(*resolve_callee)(void *ud, const XiFunc *current, const XiValue *callee);
     const XiFunc *(*resolve_method)(void *ud, const XiFunc *current, const XiValue *call);
+    int (*func_suspendability)(void *ud, const XiFunc *func);
     bool (*value_is_module_import)(void *ud, const XiFunc *f, const XiValue *v, const char *module);
     void *ud;
 } XiCoroResolver;

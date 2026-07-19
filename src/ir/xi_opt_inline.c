@@ -695,6 +695,8 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 continue;
             if (callee->ncaptures > 0)
                 continue; /* LOAD_UPVAL/STORE_UPVAL need closure-env remapping before inlining. */
+            if (callee->is_vararg)
+                continue; /* Rest-Array construction needs a dedicated inline rewrite. */
 
             XiInlineCostModel cm = analyze_callee(callee);
             if (cm.value_count > XI_INLINE_MAX_COST)

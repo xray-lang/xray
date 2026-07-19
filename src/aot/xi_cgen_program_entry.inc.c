@@ -797,6 +797,9 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
 
     ctx->all_modules = modules;
     ctx->all_nmodules = nmodules;
+    /* Reachability still depends on module-local class/import resolution.
+     * Until that analysis is fully prepared into XaotBundle, each translation
+     * unit must rebuild it under its own module context. */
     cg_reachability_cache_clear(ctx);
     ctx->extern_linkage = true;
     /* Internal (non-exported) functions take a per-module ordinal suffix, so

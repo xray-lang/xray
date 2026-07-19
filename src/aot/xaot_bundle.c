@@ -8069,13 +8069,13 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
 
         fprintf(out,
                 "function %u name=%s module=%u depth=%u abi=%s boundary=%s params=%u "
-                "ret=%s/%s/%s captures=%u blocks=%u values=%u\n",
+                "ret=%s/%s/%s may_suspend=%u captures=%u blocks=%u values=%u\n",
                 fi, safe_str(func ? func->name : NULL), plan->module_index, (unsigned) plan->depth,
                 xaot_abi_kind_name(abi->kind), xaot_boundary_reason_name(abi->boundary_reason),
                 (unsigned) abi->nparams, safe_str(abi->ret.c_type),
                 xaot_value_kind_name(abi->ret.rep.kind), rep_name(abi->ret.rep.rep),
-                func ? (unsigned) func->ncaptures : 0u, func ? (unsigned) func->nblocks : 0u,
-                count_func_values(func));
+                (unsigned) plan->may_suspend, func ? (unsigned) func->ncaptures : 0u,
+                func ? (unsigned) func->nblocks : 0u, count_func_values(func));
         dump_slot(out, "  ret", &abi->ret);
         for (pi = 0; pi < abi->nparams; pi++) {
             char prefix[32];

@@ -1500,6 +1500,34 @@ TEST(cgen_function_call) {
     xi_func_free(ir);
 }
 
+TEST(cgen_canonical_generic_function_body_is_executable) {
+    const char *src = "fn keep<T>(value: T) -> T { return value }\n"
+                      "print(keep(41))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "generic function IR compilation failed");
+    XiFunc *keep = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "keep") == 0) {
+            keep = ir->children[i];
+            break;
+        }
+    }
+    assert(keep != NULL && "canonical generic function body must be lowered");
+    assert(!keep->is_generic_template &&
+           "a function's own type parameters must retain the canonical erased ABI");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "canonical generic body should generate");
+    assert(contains(code, "keep") &&
+           "reachable canonical generic body must not be pruned as an open owner template");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_c_export_emits_public_c_abi_wrapper) {
     const char *src = "@c_export(\"xr_add\")\n"
                       "fn add(a: int32, b: int32) -> int32 {\n"
@@ -5882,6 +5910,39 @@ TEST(cgen_returned_suspendable_closure_uses_verified_child_frame) {
     xi_func_free(ir);
 }
 
+TEST(cgen_mixed_callable_targets_use_stable_descriptor_switch) {
+    const char *src = "fn syncWorker() -> int { return 40 }\n"
+                      "fn suspendWorker() -> int { Coro.yield(); return 41 }\n"
+                      "var worker = syncWorker\n"
+                      "fn choose(suspend: bool) {\n"
+                      "    if (suspend) { worker = suspendWorker }\n"
+                      "    else { worker = syncWorker }\n"
+                      "}\n"
+                      "choose(false)\n"
+                      "print(worker())\n"
+                      "choose(true)\n"
+                      "print(worker())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "mixed callable target IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "mixed callable target C generation failed");
+    assert(!had_error && "closed mixed callable target set should verify and lower");
+    assert(contains(code, "switch (f->call_target_id_") &&
+           contains(code, "->callable->target_id") &&
+           "mixed callable invocation must dispatch on stable descriptor identity");
+    assert(contains(code, "->callable->sync_entry") && contains(code, "_aot_frame_new") &&
+           contains(code, "_aot_resume(f->call_frame_") &&
+           "mixed target switch must separate sync entry from suspend frame dispatch");
+    assert(!contains(code, "strcmp(") && !contains(code, "xrt_typename") &&
+           "mixed callable dispatch must not recover target identity from strings or types");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_direct_suspend_method_call_propagates_cps) {
     const char *src = "class Box {\n"
                       "    constructor() {}\n"
@@ -8405,6 +8466,7 @@ int main(void) {
     run_cgen_string_literal();
     run_cgen_str_concat_uses_single_allocation_helper();
     run_cgen_function_call();
+    run_cgen_canonical_generic_function_body_is_executable();
     run_cgen_c_export_emits_public_c_abi_wrapper();
     run_cgen_multimodule_private_helpers_are_file_local_inline();
     run_cgen_stats_tracks_native_abi();
@@ -8501,6 +8563,7 @@ int main(void) {
     run_cgen_suspendable_function_has_no_sync_wrapper();
     run_cgen_direct_suspend_call_propagates_cps();
     run_cgen_returned_suspendable_closure_uses_verified_child_frame();
+    run_cgen_mixed_callable_targets_use_stable_descriptor_switch();
     run_cgen_direct_suspend_method_call_propagates_cps();
     run_cgen_shared_static_function_retain_is_elided();
     run_cgen_coro_shared_static_function_retain_is_elided();

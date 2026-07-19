@@ -166,6 +166,14 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
         }
         out->reachable_body_count++;
         out->reachable_effect_bits |= effect_bits;
+        /* Function-value convergence can prove transitive suspension that the
+         * source-summary call graph could not close (for example, a direct
+         * caller of a variadic suspendable function).  The prepared function
+         * execution shape is authoritative for runtime selection too. */
+        const XiFunc *func = xaot_bundle_find_body_func(bundle, body->func_id, NULL);
+        const XaotFuncPlan *func_plan = xaot_bundle_find_func_plan(bundle, func);
+        if (func_plan && func_plan->may_suspend)
+            out->reachable_effect_bits |= XG_BODY_MAY_SUSPEND;
         out->required_capability_bits |= body->capability_bits;
     }
     for (uint32_t pi = 0; pi < bundle->ncallable_invoke_plans; pi++) {

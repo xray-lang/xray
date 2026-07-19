@@ -684,6 +684,7 @@ typedef struct XiClassData {
     uint16_t nstat;           /* static method count */
     int clinit_child_idx;     /* children index for static constructor (-1 if none) */
     uint32_t derive_flags;    /* XR_DERIVE_* flags copied from declaration attributes */
+    bool is_generic_skeleton; /* template class; concrete instances are separate classes */
     bool is_monomorphized;    /* true for mono-generated classes */
     bool is_cycle_candidate;  /* type graph forms a reference cycle (enables RC cycle collector) */
     const char **mono_type_arg_names; /* concrete type display names (e.g. ["int","string"]) */
@@ -1317,6 +1318,11 @@ typedef struct XiFunc {
      * signature; captures are passed through the hidden closure parameter, so
      * they must not be forced back to the generic tagged closure ABI. */
     XiNativeCallbackKind native_callback_kind;
+
+    /* Body belongs to an open generic owner whose receiver/storage layout is
+     * not executable.  Function-level generics instead keep a canonical
+     * erased ABI and do not set this bit. */
+    bool is_generic_template;
 
     /* FFI: foreign function declared in an extern "C" block. When set, this XiFunc
      * has no real body — the implementation is a C symbol. The AOT backend

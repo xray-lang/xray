@@ -9561,6 +9561,23 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
     }
 }
 
+static bool pending_body_is_generic_template(const XgProducer *producer,
+                                             const XgPendingBody *pending) {
+    if (!pending)
+        return false;
+    /* Function- and method-level generics retain a canonical erased body.
+     * Only an open generic class makes the enclosing receiver/layout
+     * non-executable before specialization. */
+    if (!producer || !producer->evidence || pending->current_class_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < producer->evidence->nclasses; i++) {
+        const XgClassSummary *cls = &producer->evidence->classes[i];
+        if (cls->class_id == pending->current_class_id)
+            return (cls->flags & XG_CLASS_GENERIC_SKELETON) != 0;
+    }
+    return false;
+}
+
 static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending) {
     XgBodyCollect bc;
     XgBodySummary row;
@@ -9606,6 +9623,8 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     row.signature_key = pending->signature_key;
     row.source_span_id = pending->source_span_id;
     row.kind = pending->kind;
+    if (pending_body_is_generic_template(producer, pending))
+        row.flags |= XG_BODY_GENERIC_TEMPLATE;
     row.body_hash = hash_ast_shape(pending->body, XR_FNV64_OFFSET_BASIS);
     row.effect_bits = bc.effect_bits;
     if (pending->links) {
@@ -9692,6 +9711,8 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
         decl.flags |= XG_DECL_NAKED;
     if (interrupt_attr)
         decl.flags |= XG_DECL_INTERRUPT;
+    if (fn->type_param_count > 0)
+        decl.flags |= XG_DECL_GENERIC_TEMPLATE;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
     if (!producer_register_func(p, module_id, fn->name,
@@ -9799,6 +9820,8 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             method.flags |= XG_METHOD_CONSTRUCTOR;
         if (cls->is_native || !m->body)
             method.flags |= XG_METHOD_NATIVE;
+        if (cls->type_param_count > 0 || cls->is_generic_skeleton || m->type_param_count > 0)
+            method.flags |= XG_METHOD_GENERIC_TEMPLATE;
         if (!xg_global_evidence_add_method(p->evidence, &method))
             return false;
         method_count++;
@@ -9853,7 +9876,7 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
         csum.flags |= XG_CLASS_EXPLICIT_FINAL;
     if (cls->is_native)
         csum.flags |= XG_CLASS_NATIVE;
-    if (cls->is_generic_skeleton)
+    if (cls->type_param_count > 0 || cls->is_generic_skeleton)
         csum.flags |= XG_CLASS_GENERIC_SKELETON;
     if (cls->is_monomorphized) {
         const char *origin_name = cls->generic_origin_name;

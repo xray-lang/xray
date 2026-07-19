@@ -21,4 +21,10 @@ XR_FUNC bool xaot_callable_plans_build(XaotBundle *bundle);
  * intentionally kept in this module so prepare/verifier cannot drift. */
 XR_FUNC bool xaot_callable_plans_verify(const XaotBundle *bundle, char *errbuf, size_t errbuf_len);
 
+/* Generic templates have no standalone ABI.  This returns true only for
+ * ordinary concrete bodies or for a template explicitly selected by a
+ * verified generic-body plan. */
+XR_FUNC bool xaot_callable_func_has_executable_body_plan(const XaotBundle *bundle,
+                                                         const XiFunc *func);
+
 #endif /* XAOT_CALLABLE_H */

@@ -280,7 +280,7 @@ XR_FUNC XiValue *xi_lower_emit_top_load(XiLower *l, XiTopBinding binding, struct
     if (l->repl_mode) {
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, type, 0);
         if (v)
-            v->aux = (void *) binding.name;
+            v->aux = (void *) arena_strdup(l->func, binding.name);
         return v;
     }
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, type, 0);
@@ -298,7 +298,7 @@ XR_FUNC XiValue *xi_lower_emit_top_store(XiLower *l, XiTopBinding binding, XiVal
         store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
         if (store) {
             store->args[0] = val;
-            store->aux = (void *) binding.name;
+            store->aux = (void *) arena_strdup(l->func, binding.name);
             store->flags |= XI_FLAG_SIDE_EFFECT;
         }
     } else {
@@ -1476,6 +1476,12 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     }
     l.func->parent_func = parent_ctx ? parent_ctx->func : NULL;
     l.func->analyzer = analyzer;
+    /* Function-level generics have a canonical erased body and therefore a
+     * real callable ABI.  Only bodies nested in an uninstantiated generic
+     * owner are templates: those mention the owner's open type parameters and
+     * must be selected through a concrete generic-body plan. */
+    l.func->is_generic_template =
+        parent_ctx && parent_ctx->func && parent_ctx->func->is_generic_template;
     xi_lower_publish_allocation_effect(l.func, analyzer,
                                        xi_lower_function_symbol(analyzer, func_node));
     xi_lower_bind_function_body_id(&l,

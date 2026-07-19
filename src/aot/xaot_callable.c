@@ -9,11 +9,15 @@
  */
 
 #include "xaot_callable.h"
+#include "xaot_boundary.h"
 #include "xaot_struct_name.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../ir/xi_coro_analyze.h"
+#include "../ir/xi_op_name.h"
+#include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct CallableSet {
@@ -46,6 +50,8 @@ typedef struct CallableStorageFacts {
 typedef struct CallableAnalysis {
     const XaotBundle *bundle;
     CallableFuncFacts *funcs;
+    uint8_t *reachable_funcs;  /* indexed by func plan */
+    uint8_t *reachable_bodies; /* indexed by global-evidence body */
     CallableSet **module_slots;
     CallableStorageFacts *storage;
     uint32_t nstorage;
@@ -128,6 +134,32 @@ static int callable_func_index(const CallableAnalysis *a, const XiFunc *func) {
     return -1;
 }
 
+XR_FUNC bool xaot_callable_func_has_executable_body_plan(const XaotBundle *bundle,
+                                                         const XiFunc *func) {
+    if (!func || !func->is_generic_template)
+        return func != NULL;
+    if (!bundle || func->xg_body_func_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < bundle->ngeneric_body_plans; i++) {
+        const XaotGenericBodyPlan *plan = &bundle->generic_body_plans[i];
+        XgFuncId selected = XG_NO_ID;
+        switch ((XaotGenericBodyAction) plan->action) {
+            case XAOT_GENERIC_BODY_CLONE:
+                selected = plan->specialized_body_func_id;
+                break;
+            case XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY:
+            case XAOT_GENERIC_BODY_DIRECT_CONSTRAINT_CALL:
+                selected = plan->origin_body_func_id;
+                break;
+            case XAOT_GENERIC_BODY_REJECT:
+                break;
+        }
+        if (selected == func->xg_body_func_id)
+            return true;
+    }
+    return false;
+}
+
 static CallableFuncFacts *callable_func_facts(CallableAnalysis *a, const XiFunc *func) {
     int index = callable_func_index(a, func);
     return index >= 0 ? &a->funcs[index] : NULL;
@@ -152,12 +184,55 @@ static uint32_t callable_body_effects(const XaotBundle *bundle, const XiFunc *fu
     return 0;
 }
 
-static bool callable_call_is_function_value(const XiValue *call) {
-    /* XI_CALL's operand zero is the callable by construction.  Backend rep
-     * selection may erase the operand's source function type (notably after a
-     * module/shared load), so target-flow completeness must not depend on that
-     * late type annotation surviving. */
-    return call && call->op == XI_CALL && call->nargs >= 1 && call->args[0];
+static uint32_t callable_func_value_count(const XiFunc *func) {
+    uint32_t count = func ? func->next_value_id : 0;
+    if (!func)
+        return 0;
+    for (uint16_t pi = 0; pi < func->nparams; pi++) {
+        const XiValue *param = func->params ? func->params[pi] : NULL;
+        if (param && param->id < UINT32_MAX && count <= param->id)
+            count = param->id + 1;
+    }
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            if (phi->value.id < UINT32_MAX && count <= phi->value.id)
+                count = phi->value.id + 1;
+        }
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (value && value->id < UINT32_MAX && count <= value->id)
+                count = value->id + 1;
+        }
+    }
+    return count;
+}
+
+static const XiFunc *callable_resolve_direct_target(const XaotBundle *bundle, const XiFunc *owner,
+                                                    const XiValue *call) {
+    uint16_t first_arg = 0;
+    uint16_t first_param = 0;
+    const XiFunc *target =
+        xaot_boundary_resolve_direct_call_target(bundle, owner, call, &first_arg);
+    if (!target)
+        target = xaot_boundary_resolve_constructor_call_target(bundle, owner, call, &first_arg,
+                                                               &first_param);
+    return target;
+}
+
+static bool callable_call_is_function_value(const XaotBundle *bundle, const XiFunc *owner,
+                                            const XiValue *call) {
+    /* XI_CALL's operand zero is the callable by construction.  Calls whose
+     * callee resolves to a named function or constructor use the ordinary
+     * direct-call plan.  Every other XI_CALL is a function-value boundary,
+     * even if backend rep selection erased its source function type. */
+    if (!call || call->op != XI_CALL || call->nargs < 1 || !call->args[0] ||
+        callable_resolve_direct_target(bundle, owner, call))
+        return false;
+    const XiValue *callee = call->args[0];
+    return (callee->type && XR_TYPE_IS_FUNCTION(callee->type)) || callee->op == XI_LOAD_UPVAL;
 }
 
 static const XiModule *callable_module_for_func(const XaotBundle *bundle, const XiFunc *func,
@@ -255,7 +330,7 @@ static bool callable_seed_static_value(CallableAnalysis *a, const XiFunc *owner,
                 target = mod->slot_funcs[ref->resolved_shared_slot];
         }
     }
-    if (target) {
+    if (target && xaot_callable_func_has_executable_body_plan(a->bundle, target)) {
         int target_index = callable_func_index(a, target);
         if (target_index >= 0 && !callable_set_add(set, (uint32_t) target_index, changed))
             return false;
@@ -370,7 +445,34 @@ static bool callable_propagate_value(CallableAnalysis *a, const XiFunc *func, co
     if (!callable_propagate_storage(a, func, value, changed))
         return false;
 
-    if (callable_call_is_function_value(value)) {
+    if (value->op == XI_CALL || value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT) {
+        uint16_t first_arg = 0;
+        uint16_t first_param = 0;
+        const XiFunc *direct =
+            xaot_boundary_resolve_direct_call_target(a->bundle, func, value, &first_arg);
+        if (!direct)
+            direct = xaot_boundary_resolve_constructor_call_target(a->bundle, func, value,
+                                                                   &first_arg, &first_param);
+        CallableFuncFacts *target = callable_func_facts(a, direct);
+        if (target) {
+            uint16_t argc = value->nargs > first_arg ? (uint16_t) (value->nargs - first_arg) : 0;
+            uint16_t nparams = target->func && target->func->nparams > first_param
+                                   ? (uint16_t) (target->func->nparams - first_param)
+                                   : 0;
+            uint16_t n = argc < nparams ? argc : nparams;
+            for (uint16_t ai = 0; ai < n; ai++) {
+                CallableSet *arg = callable_value_set(a, func, value->args[first_arg + ai]);
+                CallableSet *param =
+                    callable_value_set(a, target->func, target->func->params[first_param + ai]);
+                if (arg && param && !callable_set_union(param, arg, changed))
+                    return false;
+            }
+            if (!callable_set_union(dst, &target->returns, changed))
+                return false;
+        }
+    }
+
+    if (callable_call_is_function_value(a->bundle, func, value)) {
         CallableSet *callees = callable_value_set(a, func, value->args[0]);
         if (!callees)
             return false;
@@ -424,13 +526,22 @@ static bool callable_analysis_init(CallableAnalysis *a, const XaotBundle *bundle
     memset(a, 0, sizeof(*a));
     a->bundle = bundle;
     a->funcs = (CallableFuncFacts *) xr_calloc(bundle->nfunc_plans, sizeof(*a->funcs));
+    a->reachable_funcs = (uint8_t *) xr_calloc(bundle->nfunc_plans ? bundle->nfunc_plans : 1, 1);
     a->module_slots = (CallableSet **) xr_calloc(bundle->nmodules, sizeof(*a->module_slots));
-    if ((bundle->nfunc_plans && !a->funcs) || (bundle->nmodules && !a->module_slots))
+    if ((bundle->nfunc_plans && (!a->funcs || !a->reachable_funcs)) ||
+        (bundle->nmodules && !a->module_slots))
         return false;
+    if (bundle->global_evidence_plan.evidence &&
+        bundle->global_evidence_plan.evidence->nbodies > 0) {
+        a->reachable_bodies =
+            (uint8_t *) xr_calloc(bundle->global_evidence_plan.evidence->nbodies, sizeof(uint8_t));
+        if (!a->reachable_bodies)
+            return false;
+    }
     for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
         CallableFuncFacts *facts = &a->funcs[fi];
         facts->func = bundle->func_plans[fi].func;
-        facts->value_count = facts->func ? facts->func->next_value_id : 0;
+        facts->value_count = callable_func_value_count(facts->func);
         facts->values = (CallableSet *) xr_calloc(facts->value_count, sizeof(CallableSet));
         facts->effect_bits = callable_body_effects(bundle, facts->func);
         if (facts->value_count && !facts->values)
@@ -456,7 +567,10 @@ static bool callable_analysis_init(CallableAnalysis *a, const XaotBundle *bundle
         if (!a->module_slots[mi])
             return false;
         for (uint16_t si = 0; si < mod->nslots; si++) {
-            int target_index = mod->slot_funcs ? callable_func_index(a, mod->slot_funcs[si]) : -1;
+            const XiFunc *slot_func = mod->slot_funcs ? mod->slot_funcs[si] : NULL;
+            int target_index = xaot_callable_func_has_executable_body_plan(bundle, slot_func)
+                                   ? callable_func_index(a, slot_func)
+                                   : -1;
             if (target_index >= 0 &&
                 !callable_set_add(&a->module_slots[mi][si], (uint32_t) target_index, NULL))
                 return false;
@@ -489,6 +603,8 @@ static void callable_analysis_free(CallableAnalysis *a) {
     for (uint32_t i = 0; i < a->nstorage; i++)
         callable_set_free(&a->storage[i].targets);
     xr_free(a->storage);
+    xr_free(a->reachable_bodies);
+    xr_free(a->reachable_funcs);
     xr_free(a->module_slots);
     xr_free(a->funcs);
     memset(a, 0, sizeof(*a));
@@ -516,7 +632,16 @@ static bool callable_analysis_solve(CallableAnalysis *a) {
                     continue;
                 for (uint32_t vi = 0; vi < block->nvalues; vi++) {
                     const XiValue *call = block->values[vi];
-                    if (!callable_call_is_function_value(call))
+                    const XiFunc *direct = callable_resolve_direct_target(a->bundle, func, call);
+                    CallableFuncFacts *direct_facts = callable_func_facts(a, direct);
+                    if (direct_facts) {
+                        uint32_t next = facts->effect_bits | direct_facts->effect_bits;
+                        if (next != facts->effect_bits) {
+                            facts->effect_bits = next;
+                            changed = true;
+                        }
+                    }
+                    if (!callable_call_is_function_value(a->bundle, func, call))
                         continue;
                     CallableSet *targets = callable_value_set(a, func, call->args[0]);
                     for (uint32_t ti = 0; targets && ti < targets->count; ti++) {
@@ -531,6 +656,162 @@ static bool callable_analysis_solve(CallableAnalysis *a) {
             }
         }
     }
+    return true;
+}
+
+static bool callable_refresh_reachable_funcs(CallableAnalysis *a, bool *changed) {
+    const XgGlobalEvidence *ev = a && a->bundle ? a->bundle->global_evidence_plan.evidence : NULL;
+    if (!a)
+        return false;
+    if (!ev || !a->reachable_bodies) {
+        for (uint32_t fi = 0; fi < a->bundle->nfunc_plans; fi++) {
+            if (!a->reachable_funcs[fi]) {
+                a->reachable_funcs[fi] = 1;
+                if (changed)
+                    *changed = true;
+            }
+        }
+        return true;
+    }
+    for (uint32_t fi = 0; fi < a->bundle->nfunc_plans; fi++) {
+        const XiFunc *func = a->funcs[fi].func;
+        if (!func || func->xg_body_func_id == XG_NO_ID)
+            continue;
+        for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
+            if (ev->bodies[bi].func_id == func->xg_body_func_id && a->reachable_bodies[bi] &&
+                !a->reachable_funcs[fi]) {
+                a->reachable_funcs[fi] = 1;
+                if (changed)
+                    *changed = true;
+                break;
+            }
+        }
+    }
+    return true;
+}
+
+static bool callable_mark_reachable_func(CallableAnalysis *a, const XiFunc *func, bool *changed) {
+    const XgGlobalEvidence *ev = a && a->bundle ? a->bundle->global_evidence_plan.evidence : NULL;
+    int index = callable_func_index(a, func);
+    if (!a || !func || index < 0)
+        return true;
+    if (a->reachable_funcs[index])
+        return true;
+    if (!ev || !a->reachable_bodies || func->xg_body_func_id == XG_NO_ID) {
+        if (!a->reachable_funcs[index]) {
+            a->reachable_funcs[index] = 1;
+            if (changed)
+                *changed = true;
+        }
+        return true;
+    }
+    for (uint32_t bi = 0; bi < ev->nbodies; bi++) {
+        if (ev->bodies[bi].func_id != func->xg_body_func_id)
+            continue;
+        if (!a->reachable_bodies[bi]) {
+            a->reachable_bodies[bi] = 1;
+            if (changed)
+                *changed = true;
+        }
+        break;
+    }
+    if (!xg_body_reachability_mark_closed_world_calls(ev, func->xg_body_func_id,
+                                                      a->reachable_bodies, ev->nbodies))
+        return false;
+    return callable_refresh_reachable_funcs(a, changed);
+}
+
+static bool callable_mark_exported_class_methods(CallableAnalysis *a, const XiModule *mod,
+                                                 const XiClassData *cd, bool *changed) {
+    if (!a || !mod || !mod->init || !cd || !cd->child_idx)
+        return true;
+    uint16_t total = (uint16_t) (cd->ninst + cd->nstat);
+    if (total > cd->nmethod)
+        total = cd->nmethod;
+    for (uint16_t mi = 0; mi < total; mi++) {
+        uint16_t child = cd->child_idx[mi];
+        if (child < mod->init->nchildren &&
+            !callable_mark_reachable_func(a, mod->init->children[child], changed))
+            return false;
+    }
+    return true;
+}
+
+static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
+    const XaotBundle *bundle = a ? a->bundle : NULL;
+    bool changed = false;
+    if (!a || !bundle)
+        return false;
+    if (!bundle->global_evidence_plan.evidence)
+        return callable_refresh_reachable_funcs(a, &changed);
+
+    if (bundle->entry_module < bundle->nmodules) {
+        const XiModule *entry = bundle->modules[bundle->entry_module];
+        if (entry && entry->init && !callable_mark_reachable_func(a, entry->init, &changed))
+            return false;
+    }
+    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+        const XiFunc *func = a->funcs[fi].func;
+        if (!func)
+            continue;
+        if (func->c_export || func->aot_used || func->aot_naked || func->aot_weak ||
+            func->aot_section || (func->aot_interrupt_abi && func->aot_interrupt_abi[0]) ||
+            (func->is_generic_template &&
+             xaot_callable_func_has_executable_body_plan(bundle, func))) {
+            if (!callable_mark_reachable_func(a, func, &changed))
+                return false;
+        }
+    }
+    if (!bundle->emit_program_main) {
+        for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+            const XiModule *mod = bundle->modules[mi];
+            if (!mod)
+                continue;
+            for (uint16_t ei = 0; ei < mod->nexports; ei++) {
+                const XiModuleExport *exp = &mod->exports[ei];
+                if (exp->function && !callable_mark_reachable_func(a, exp->function, &changed))
+                    return false;
+                if (exp->class_data &&
+                    !callable_mark_exported_class_methods(a, mod, exp->class_data, &changed))
+                    return false;
+            }
+        }
+    }
+
+    do {
+        changed = false;
+        if (!callable_refresh_reachable_funcs(a, &changed))
+            return false;
+        for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+            const XiFunc *func = a->funcs[fi].func;
+            if (!a->reachable_funcs[fi] || !func)
+                continue;
+            for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+                const XiBlock *block = func->blocks[bi];
+                if (!block)
+                    continue;
+                for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+                    const XiValue *call = block->values[vi];
+                    if ((call->op == XI_CLOSURE_NEW ||
+                         (call->op == XI_STACK_ALLOC && call->aux_int == XI_CLOSURE_NEW)) &&
+                        call->aux &&
+                        !callable_mark_reachable_func(a, (const XiFunc *) call->aux, &changed))
+                        return false;
+                    const XiFunc *direct = callable_resolve_direct_target(a->bundle, func, call);
+                    if (direct && !callable_mark_reachable_func(a, direct, &changed))
+                        return false;
+                    if (!callable_call_is_function_value(a->bundle, func, call))
+                        continue;
+                    const CallableSet *targets = callable_value_set(a, func, call->args[0]);
+                    for (uint32_t ti = 0; targets && ti < targets->count; ti++) {
+                        const XiFunc *target = a->funcs[targets->items[ti]].func;
+                        if (!callable_mark_reachable_func(a, target, &changed))
+                            return false;
+                    }
+                }
+            }
+        }
+    } while (changed);
     return true;
 }
 
@@ -591,15 +872,31 @@ static bool callable_append_plan(XaotBundle *bundle, const CallableAnalysis *a,
 }
 
 static bool callable_materialize(XaotBundle *bundle, const CallableAnalysis *a) {
+    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++)
+        bundle->func_plans[fi].may_suspend = (a->funcs[fi].effect_bits & XG_BODY_MAY_SUSPEND) != 0;
+
     for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
         XiFunc *func = bundle->func_plans[fi].func;
+        if (!xaot_callable_func_has_executable_body_plan(bundle, func))
+            continue;
         for (uint32_t bi = 0; func && bi < func->nblocks; bi++) {
             XiBlock *block = func->blocks[bi];
             if (!block)
                 continue;
             for (uint32_t vi = 0; vi < block->nvalues; vi++) {
                 XiValue *call = block->values[vi];
-                if (!callable_call_is_function_value(call))
+                if (!callable_call_is_function_value(bundle, func, call))
+                    continue;
+                const CallableSet *targets = call->args[0]->id < a->funcs[fi].value_count
+                                                 ? &a->funcs[fi].values[call->args[0]->id]
+                                                 : NULL;
+                /* A proven target set is useful even when the independent
+                 * body-reachability graph has not yet discovered the owner:
+                 * projecting its effects may be what turns an enclosing
+                 * callback chain into a coroutine.  An open set rejects only
+                 * at a proven-reachable boundary; dead library helpers do not
+                 * poison an executable whole-program build. */
+                if ((!targets || targets->count == 0) && !a->reachable_funcs[fi])
                     continue;
                 if (!callable_append_plan(bundle, a, fi, call))
                     return false;
@@ -630,7 +927,9 @@ XR_FUNC bool xaot_callable_plans_build(XaotBundle *bundle) {
         callable_analysis_free(&analysis);
         return false;
     }
-    ok = callable_analysis_solve(&analysis) && callable_materialize(bundle, &analysis);
+    ok = callable_analysis_solve(&analysis) && callable_analysis_solve_reachability(&analysis);
+    if (ok)
+        ok = callable_materialize(bundle, &analysis);
     callable_analysis_free(&analysis);
     return ok;
 }
@@ -641,6 +940,58 @@ static bool callable_verify_error(char *errbuf, size_t errbuf_len, const char *m
     return false;
 }
 
+static bool callable_rederive_matches(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
+    XaotBundle expected = *bundle;
+    expected.func_plans = NULL;
+    if (bundle->nfunc_plans > 0) {
+        expected.func_plans =
+            (XaotFuncPlan *) xr_malloc(sizeof(*expected.func_plans) * bundle->nfunc_plans);
+        if (!expected.func_plans)
+            return callable_verify_error(errbuf, errbuf_len,
+                                         "failed to copy AOT function effects for rederivation");
+        memcpy(expected.func_plans, bundle->func_plans,
+               sizeof(*expected.func_plans) * bundle->nfunc_plans);
+    }
+    expected.callable_invoke_plans = NULL;
+    expected.ncallable_invoke_plans = 0;
+    expected.callable_invoke_plan_cap = 0;
+    expected.callable_target_cases = NULL;
+    expected.ncallable_target_cases = 0;
+    expected.callable_target_case_cap = 0;
+    if (!xaot_callable_plans_build(&expected)) {
+        xr_free(expected.func_plans);
+        return callable_verify_error(errbuf, errbuf_len,
+                                     "failed to rederive AOT callable invoke plans");
+    }
+
+    bool matches = expected.ncallable_invoke_plans == bundle->ncallable_invoke_plans &&
+                   expected.ncallable_target_cases == bundle->ncallable_target_cases;
+    for (uint32_t i = 0; matches && i < bundle->nfunc_plans; i++)
+        matches = expected.func_plans[i].func == bundle->func_plans[i].func &&
+                  expected.func_plans[i].may_suspend == bundle->func_plans[i].may_suspend;
+    for (uint32_t i = 0; matches && i < expected.ncallable_invoke_plans; i++) {
+        const XaotCallableInvokePlan *a = &expected.callable_invoke_plans[i];
+        const XaotCallableInvokePlan *b = &bundle->callable_invoke_plans[i];
+        matches = a->owner == b->owner && a->call == b->call &&
+                  a->signature_key == b->signature_key && a->effect_bits == b->effect_bits &&
+                  a->target_start == b->target_start && a->target_count == b->target_count &&
+                  a->action == b->action && a->evidence == b->evidence &&
+                  a->unproven_reason == b->unproven_reason;
+    }
+    for (uint32_t i = 0; matches && i < expected.ncallable_target_cases; i++) {
+        const XaotCallableTargetCase *a = &expected.callable_target_cases[i];
+        const XaotCallableTargetCase *b = &bundle->callable_target_cases[i];
+        matches = a->target_func == b->target_func && a->signature_key == b->signature_key &&
+                  a->target_id == b->target_id && a->effect_bits == b->effect_bits;
+    }
+    xr_free(expected.callable_invoke_plans);
+    xr_free(expected.callable_target_cases);
+    xr_free(expected.func_plans);
+    return matches ? true
+                   : callable_verify_error(errbuf, errbuf_len,
+                                           "AOT callable invoke plans differ from rederivation");
+}
+
 XR_FUNC bool xaot_callable_plans_verify(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     if (!bundle)
         return callable_verify_error(errbuf, errbuf_len, "missing AOT callable bundle");
@@ -648,7 +999,7 @@ XR_FUNC bool xaot_callable_plans_verify(const XaotBundle *bundle, char *errbuf, 
     for (uint32_t i = 0; i < bundle->ncallable_invoke_plans; i++) {
         const XaotCallableInvokePlan *plan = &bundle->callable_invoke_plans[i];
         uint32_t effects = 0;
-        if (!plan->owner || !callable_call_is_function_value(plan->call))
+        if (!plan->owner || !callable_call_is_function_value(bundle, plan->owner, plan->call))
             return callable_verify_error(errbuf, errbuf_len,
                                          "AOT callable invoke plan has stale callsite");
         if (plan->target_start != seen_targets ||
@@ -660,6 +1011,9 @@ XR_FUNC bool xaot_callable_plans_verify(const XaotBundle *bundle, char *errbuf, 
             if (!target || !target->target_func || target->signature_key != plan->signature_key)
                 return callable_verify_error(errbuf, errbuf_len,
                                              "AOT callable target case is stale");
+            if (!xaot_callable_func_has_executable_body_plan(bundle, target->target_func))
+                return callable_verify_error(
+                    errbuf, errbuf_len, "AOT callable target is an unselected generic template");
             for (uint16_t tj = 0; tj < ti; tj++) {
                 const XaotCallableTargetCase *prior =
                     xaot_bundle_callable_target_case(bundle, plan, tj);
@@ -677,6 +1031,15 @@ XR_FUNC bool xaot_callable_plans_verify(const XaotBundle *bundle, char *errbuf, 
                 plan->unproven_reason == XAOT_CALLABLE_PROVEN)
                 return callable_verify_error(errbuf, errbuf_len,
                                              "open AOT callable boundary did not reject");
+            if (errbuf && errbuf_len)
+                snprintf(errbuf, errbuf_len,
+                         "open AOT callable target set owner=%s call=v%u line=%u callee-op=%s "
+                         "callee-id=v%u callee-aux=%" PRId64 " reason=%u",
+                         plan->owner->name ? plan->owner->name : "?", plan->call->id,
+                         plan->call->line, xi_op_name((XiOp) plan->call->args[0]->op),
+                         plan->call->args[0]->id, plan->call->args[0]->aux_int,
+                         plan->unproven_reason);
+            return false;
         } else {
             uint8_t expected = plan->target_count > 1
                                    ? XAOT_CALLABLE_TARGET_SWITCH
@@ -699,5 +1062,5 @@ XR_FUNC bool xaot_callable_plans_verify(const XaotBundle *bundle, char *errbuf, 
     if (seen_targets != bundle->ncallable_target_cases)
         return callable_verify_error(errbuf, errbuf_len,
                                      "AOT callable target table has unreachable rows");
-    return true;
+    return callable_rederive_matches(bundle, errbuf, errbuf_len);
 }

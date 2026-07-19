@@ -18,6 +18,7 @@
  */
 #include "xi_cgen.h"
 #include "xaot_bundle.h"
+#include "xaot_callable.h"
 #include "xaot_link.h"
 #include "xaot_class_native.h"
 #include "xaot_rep_gen.h"
@@ -8230,6 +8231,8 @@ static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
     const XiModule *mod = cg_module_for_func(ctx, f);
     if (!f)
         return false;
+    if (!xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), f))
+        return false;
     if (mod && mod->init == f)
         return true;
     if (f->c_export || f->aot_used || f->aot_naked || f->aot_weak || f->aot_section ||
@@ -8262,7 +8265,7 @@ static void cg_func_reach_collect_tree(XiCgenCtx *ctx, const XiFunc *f) {
 }
 
 static void cg_func_reach_mark_root(XiCgenCtx *ctx, const XiFunc *f) {
-    if (!ctx || !f)
+    if (!ctx || !f || !xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), f))
         return;
     cg_func_reach_collect_tree(ctx, f);
     CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, f, true);
@@ -8363,6 +8366,9 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
                 CgFuncReachMemo *target = &ctx->func_reach_memo[ti];
                 if (target->reachable || source->func == target->func)
                     continue;
+                if (!xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx),
+                                                                 target->func))
+                    continue;
                 if (cg_func_body_has_static_func_use_in_owner_module(ctx, source->func,
                                                                      target->func)) {
                     target->reachable = true;
@@ -8382,6 +8388,8 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
 static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *target, int depth) {
     (void) depth;
     if (!ctx || !target)
+        return false;
+    if (!xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), target))
         return false;
     if (!ctx->func_reachability_valid && !ctx->func_reachability_computing)
         cg_func_reachability_compute(ctx);
@@ -8542,6 +8550,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
         return;
     if (!cg_func_body_is_reachable_from_roots(ctx, f, 0))
         return;
+    bool error_before_function = ctx->error;
     xicgen_emit_par_for_range_wrappers(ctx, out, f, prefix);
     xicgen_emit_par_map_range_wrappers(ctx, out, f, prefix);
     xicgen_emit_par_reduce_range_wrappers(ctx, out, f, prefix);
@@ -8564,6 +8573,9 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
 
     if (needs_aot_coro) {
         xi_cgen_coro_func(ctx, out, f, prefix);
+        if (!error_before_function && ctx->error)
+            fprintf(stderr, "[xi_cgen] ERROR: C generation failed in coroutine '%s'\n",
+                    f->name ? f->name : "?");
         return;
     }
 
@@ -8700,6 +8712,9 @@ boxed_adapter_done:
         ctx->stats.sync_go_wrappers++;
         emit_sync_go_wrapper(ctx, out, f, prefix);
     }
+    if (!error_before_function && ctx->error)
+        fprintf(stderr, "[xi_cgen] ERROR: C generation failed in function '%s'\n",
+                f->name ? f->name : "?");
 }
 
 /* ========== Forward Declarations ========== */
@@ -8888,7 +8903,7 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
             fprintf(out, "%sbool ", cg_linkage(ctx));
             emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_init");
             fprintf(out, "(void *raw_frame");
-            if (cg_func_frame_needs_cl(f) || f->nparams > 0)
+            if (cg_func_frame_needs_cl(f) || cg_coro_param_count(f) > 0)
                 fprintf(out, ", ");
             emit_aot_frame_new_params(out, f, false);
             fprintf(out, ");\n");

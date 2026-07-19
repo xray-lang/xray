@@ -40,6 +40,12 @@ typedef struct XaotFuncPlan {
     XiFunc *func;
     uint32_t module_index;
     uint16_t depth;
+    /* Closed-world execution shape after direct-call and function-value
+     * target-set convergence.  Backends consume this prepared fact instead of
+     * recursively rediscovering suspendability with translation-unit-local
+     * resolver state.  Other effect dimensions remain owned by global
+     * evidence, so this row has one unambiguous purpose. */
+    uint8_t may_suspend;
     /* 1-based index into extern_decls.  Zero means this function is not a
      * used foreign declaration.  Keeping the identity on the function plan
      * makes every call/declaration emitter consume the same prepare fact. */
@@ -1636,6 +1642,7 @@ typedef struct XaotBundle {
     XiModule **modules;
     uint32_t nmodules;
     uint32_t entry_module;
+    bool emit_program_main; /* executable closed world vs library export roots */
     XaotTargetCapabilityProvider target_provider;
     XrEntryPlan entry_plan;
     bool has_entry_plan;

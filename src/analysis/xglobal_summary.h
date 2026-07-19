@@ -59,7 +59,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 29,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 30,
 };
 
 typedef enum XgBuildProfile {
@@ -90,6 +90,10 @@ enum {
     XG_DECL_FINAL = 1u << 6,
     XG_DECL_NAKED = 1u << 7,
     XG_DECL_INTERRUPT = 1u << 8,
+    /* Source-level generic declarations are templates, not executable ABI
+     * bodies.  A concrete monomorphized clone or a verified canonical-body
+     * plan must be selected before a backend may retain them. */
+    XG_DECL_GENERIC_TEMPLATE = 1u << 9,
 };
 
 enum {
@@ -153,6 +157,7 @@ enum {
     XG_METHOD_DIRECT_ONLY = 1u << 2,
     XG_METHOD_OVERRIDDEN = 1u << 3,
     XG_METHOD_NATIVE = 1u << 4,
+    XG_METHOD_GENERIC_TEMPLATE = 1u << 5,
 };
 
 typedef enum XgCallsiteKind {
@@ -169,6 +174,12 @@ typedef enum XgBodyKind {
     XG_BODY_FUNCTION,
     XG_BODY_METHOD,
 } XgBodyKind;
+
+enum {
+    /* The body is owned by an open generic class skeleton.  A function's own
+     * type parameters use the canonical erased body and do not imply this. */
+    XG_BODY_GENERIC_TEMPLATE = 1u << 0,
+};
 
 typedef enum XgLinkDependencyKind {
     XG_LINK_DEP_EXTERN_DYLIB = 1,
@@ -793,6 +804,7 @@ typedef struct XgBodySummary {
     uint32_t signature_key;
     uint32_t source_span_id;
     uint8_t kind;
+    uint32_t flags;
     uint64_t body_hash;
     uint32_t effect_bits;
     uint8_t allocation_state; /* XaAllocState */

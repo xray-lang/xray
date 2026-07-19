@@ -1804,6 +1804,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     }
     aot_bundle_initialized = true;
+    aot_bundle.emit_program_main = emit_program_main;
     if (!xaot_bundle_set_target_data_layout(&aot_bundle,
                                             xr_compiler_session_target_data_layout(session))) {
         fprintf(stderr, "Error: failed to set AOT target data layout\n");
@@ -1829,6 +1830,13 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         char verify_err[512];
         if (!xaot_verify_bundle(&aot_bundle, XAOT_VERIFY_AOT_READY, verify_err,
                                 sizeof(verify_err))) {
+            /* A requested semantic-evidence dump is produced before Xi/AOT
+             * preparation.  Preserve that diagnostic on a later verifier
+             * failure: fail-closed plans are specifically when the evidence
+             * is most useful, and dropping it forces debugging to depend on
+             * unstable Xi names or ad-hoc instrumentation. */
+            if (emit_global_evidence_dump && global_evidence_dump)
+                fputs(global_evidence_dump, stdout);
             fprintf(stderr, "Error: AOT verifier failed: %s\n", verify_err);
             goto fail_free_ir;
         }
@@ -1907,6 +1915,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             /* Multi-module: emit module m as an independently compilable unit
              * (external cross-module symbols; entry unit carries main). */
             xi_cgen_module_tu(cg_ctx, mem, modules, nmodules, m, entry_index);
+        }
+        if (xi_cgen_has_error(cg_ctx)) {
+            fprintf(stderr, "Error: AOT C code generation failed in module '%s'\n",
+                    mod_names[m] ? mod_names[m] : "?");
+            emit_ok = false;
         }
         if (xr_close_memstream(mem, &buf, &bufsz) != 0) {
             fprintf(stderr, "Error: xr_close_memstream failed\n");

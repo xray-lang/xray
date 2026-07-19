@@ -123,6 +123,18 @@ static bool verify_func_has_plan_recursive(const XaotBundle *bundle, const XiFun
         return set_error(errbuf, errbuf_len, "Xi function has no AOT function plan");
     body = verify_find_evidence_body_by_func(bundle->global_evidence_plan.evidence,
                                              func->xg_body_func_id);
+    if (body && func->is_generic_template != ((body->flags & XG_BODY_GENERIC_TEMPLATE) != 0)) {
+        if (errbuf && errbuf_len)
+            snprintf(errbuf, errbuf_len,
+                     "Xi generic-template fact disagrees with global evidence func=%s body=%u "
+                     "xi=%u xg=%u",
+                     func->name ? func->name : "?", func->xg_body_func_id,
+                     func->is_generic_template ? 1u : 0u,
+                     (body->flags & XG_BODY_GENERIC_TEMPLATE) != 0 ? 1u : 0u);
+        return false;
+    }
+    if (func->is_generic_template && func->c_export)
+        return set_error(errbuf, errbuf_len, "generic template cannot expose a concrete C ABI");
     if (body && (func->has_no_alloc_contract || body->no_alloc_contract)) {
         if (!func->has_no_alloc_contract || !body->no_alloc_contract)
             return set_error(errbuf, errbuf_len, "AOT @no_alloc contract metadata is stale");

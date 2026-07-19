@@ -3236,9 +3236,9 @@ static bool xicgen_slice_value_only_used_by_stack_slice_direct_call(XiCgenCtx *c
  * typed lane reads match); reference elements use a tagged array. The fixed
  * arguments must already have been emitted by the caller. Mirrors the VM's
  * callee-side packing (OP_CALL / vm_invoke_module). */
-static void emit_vararg_rest_arg_from(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                      const XiFunc *target, uint16_t arg_start) {
-    (void) f;
+static void emit_vararg_rest_expr_values(XiCgenCtx *ctx, FILE *out, uint32_t site_id,
+                                         XiValue *const *args, uint16_t nargs, const XiFunc *target,
+                                         uint16_t arg_start) {
     uint16_t fixed = target->nparams;
     const XrType *rest_type =
         (target->params && target->params[fixed]) ? target->params[fixed]->type : NULL;
@@ -3247,34 +3247,46 @@ static void emit_vararg_rest_arg_from(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     bool rest_typed = cg_array_elem_info_from_type_ctx(ctx, rest_type, &rest_elem) &&
                       rest_elem.rep != XR_REP_TAGGED && rest_elem.ctype;
     if (rest_typed) {
-        int64_t rest_count = (int64_t) v->nargs - (int64_t) arg_start - (int64_t) fixed;
+        int64_t rest_count = (int64_t) nargs - (int64_t) arg_start - (int64_t) fixed;
         if (rest_count < 0)
             rest_count = 0;
-        fprintf(out, ", ({ xrt_array_t *_va%u = xrt_array_new_typed_ptr(%" PRId64 ", %s); ", v->id,
+        fprintf(out, "({ xrt_array_t *_va%u = xrt_array_new_typed_ptr(%" PRId64 ", %s); ", site_id,
                 rest_count, rest_elem.elem_name);
         int64_t idx = 0;
-        for (uint16_t a = (uint16_t) (arg_start + fixed); a < v->nargs; a++, idx++) {
-            fprintf(out, "((%s*)_va%u->data)[%" PRId64 "] = (%s)", rest_elem.ctype, v->id, idx,
+        for (uint16_t a = (uint16_t) (arg_start + fixed); a < nargs; a++, idx++) {
+            fprintf(out, "((%s*)_va%u->data)[%" PRId64 "] = (%s)", rest_elem.ctype, site_id, idx,
                     rest_elem.ctype);
-            emit_value_as_rep(out, v->args[a], rest_elem.rep);
+            emit_value_as_rep(out, args[a], rest_elem.rep);
             fprintf(out, "; ");
         }
         const char *rest_suffix = emit_conversion_prefix(out, rest_type, XR_REP_PTR, rest_rep);
-        fprintf(out, "_va%u", v->id);
+        fprintf(out, "_va%u", site_id);
         emit_conversion_suffix(out, rest_suffix);
         fprintf(out, "; })");
     } else {
-        fprintf(out, ", ({ XrValue _va%u = xrt_array_new(0); ", v->id);
-        for (uint16_t a = (uint16_t) (arg_start + fixed); a < v->nargs; a++) {
-            fprintf(out, "xrt_array_push(_va%u, ", v->id);
-            emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
+        fprintf(out, "({ XrValue _va%u = xrt_array_new(0); ", site_id);
+        for (uint16_t a = (uint16_t) (arg_start + fixed); a < nargs; a++) {
+            fprintf(out, "xrt_array_push(_va%u, ", site_id);
+            emit_value_as_rep(out, args[a], XR_REP_TAGGED);
             fprintf(out, "); ");
         }
         const char *rest_suffix = emit_conversion_prefix(out, rest_type, XR_REP_TAGGED, rest_rep);
-        fprintf(out, "_va%u", v->id);
+        fprintf(out, "_va%u", site_id);
         emit_conversion_suffix(out, rest_suffix);
         fprintf(out, "; })");
     }
+}
+
+static void emit_vararg_rest_expr_from(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                       const XiFunc *target, uint16_t arg_start) {
+    (void) f;
+    emit_vararg_rest_expr_values(ctx, out, v->id, v->args, v->nargs, target, arg_start);
+}
+
+static void emit_vararg_rest_arg_from(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      const XiFunc *target, uint16_t arg_start) {
+    fprintf(out, ", ");
+    emit_vararg_rest_expr_from(ctx, out, f, v, target, arg_start);
 }
 
 static void emit_vararg_rest_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -4503,7 +4515,13 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     bool is_safe = (v->aux_int & 1) != 0;
     int32_t tid = (int32_t) (v->aux_int >> 1);
     if (tid < 0) {
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        /* An unresolved named/generic cast is a semantic identity, but it is
+         * not necessarily a representation identity.  Native class fields
+         * and parameters can be planned as PTR while XI_AS remains TAGGED.
+         * Consume the verified value plan here so the representation boundary
+         * is explicit (for example PTR -> xrt_box_obj) instead of emitting an
+         * ill-typed C initializer. */
+        emit_value_as_rep_ctx(ctx, out, v->args[0], cg_value_plan_storage_rep(ctx, v));
         return;
     }
 
@@ -4511,12 +4529,12 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
         switch (tid) {
             case 8:
                 fprintf(out, "xrt_to_int(");
-                emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
                 fprintf(out, ")");
                 return;
             case 11:
                 fprintf(out, "xrt_to_float(");
-                emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
                 fprintf(out, ")");
                 return;
             case 12:
@@ -4526,13 +4544,13 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
                     fprintf(out, ")");
                 } else {
                     fprintf(out, "xrt_to_string(");
-                    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
                     fprintf(out, ")");
                 }
                 return;
             case 1:
                 fprintf(out, "xrt_to_bool(");
-                emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
                 fprintf(out, ")");
                 return;
             default:
@@ -4541,7 +4559,7 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     }
 
     fprintf(out, "({ XrValue _as = ");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, "; (xrt_typeof_id(_as) == %" PRId32 ") ? _as : ", tid);
     if (is_safe) {
         fprintf(out, "XR_NULL_VAL; })");

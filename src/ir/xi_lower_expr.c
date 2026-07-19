@@ -130,7 +130,7 @@ static XiValue *xi_lower_emit_builtin_class(XiLower *l, const char *name, int li
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, cls_type, 0);
     if (v) {
         v->aux_int = index;
-        v->aux = (void *) name;
+        v->aux = (void *) arena_strdup(l->func, name);
         v->line = (uint32_t) line;
     }
     return v;
@@ -7979,7 +7979,7 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
                                             target_type ? target_type : l->type_any, 0);
                     if (type_val) {
                         type_val->aux_int = builtin_index;
-                        type_val->aux = (void *) tref->name;
+                        type_val->aux = (void *) arena_strdup(l->func, tref->name);
                         type_val->line = (uint32_t) line;
                     }
                 }
@@ -8337,7 +8337,7 @@ static XiValue *lower_optional_chain(XiLower *l, AstNode *node) {
         access_val = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
         if (access_val) {
             access_val->args[0] = obj;
-            access_val->aux = (void *) oc->name;
+            access_val->aux = (void *) arena_strdup(l->func, oc->name);
             access_val->aux_int = xi_lower_method_symbol(l, oc->name);
         }
     } else if (oc->index) {
@@ -8572,7 +8572,7 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     call->args[0] = this_val ? this_val : xi_const_null(l->func, l->cur_block, l->type_null);
     for (int i = 0; i < n; i++)
         call->args[i + 1] = arg_vals[i];
-    call->aux = (void *) method_name;
+    call->aux = (void *) arena_strdup(l->func, method_name);
     call->aux_int = ((int64_t) xi_lower_method_symbol(l, method_name) << 1) | 1;
     call->call_plan = call_plan;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;

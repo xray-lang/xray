@@ -25,12 +25,11 @@ PROJECT_DIR = SCRIPT_DIR.parent.parent
 
 NEGATIVE_RE = re.compile(
     r"unsupported .*coroutine Xi op|"
-    r"unsupported AOT sync call to suspendable function|"
-    r"unsupported AOT indirect call|"
     r"exceptions inside AOT coroutine are unsupported|"
     r"unsupported Xi op ERR_|"
     r"semantic analysis failed|"
     r"derived Clone .* no consumable verified plan|"
+    r"open AOT callable target set|"
     r": error: "
 )
 

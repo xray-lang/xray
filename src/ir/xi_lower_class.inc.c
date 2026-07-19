@@ -249,6 +249,10 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         return NULL;
     }
     ml.func->analyzer = l->analyzer;
+    /* A method's own type parameters use the canonical erased method ABI.
+     * Methods on an open generic class skeleton are different: their receiver
+     * layout is not concrete, so the skeleton body is not executable. */
+    ml.func->is_generic_template = cd && (cd->type_param_count > 0 || cd->is_generic_skeleton);
     xi_lower_bind_method_body_id(&ml, source_node_id);
 
     XiBlock *entry = xi_block_new(ml.func);
@@ -580,6 +584,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->super_name = arena_strdup(l->func, cd->super_name);
     data->generic_origin_name = arena_strdup(l->func, cd->generic_origin_name);
     data->display_name = arena_strdup(l->func, cd->display_name);
+    data->is_generic_skeleton = cd->type_param_count > 0 || cd->is_generic_skeleton;
     data->is_monomorphized = cd->is_monomorphized;
     /* Copy concrete type arg display names (arena-duplicated) */
     data->mono_type_arg_names = NULL;

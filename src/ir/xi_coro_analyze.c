@@ -255,6 +255,11 @@ static bool xi_coro_func_intrinsic_suspends(const XiFunc *f, const XiCoroResolve
 
 static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResolver *resolver,
                                               int depth) {
+    if (f && resolver && resolver->func_suspendability) {
+        int prepared = resolver->func_suspendability(resolver->ud, f);
+        if (prepared >= 0)
+            return prepared != 0;
+    }
     if (xi_coro_func_intrinsic_suspends(f, resolver))
         return true;
     if (!f || !resolver || depth >= XI_CORO_RESOLVE_DEPTH_MAX)
@@ -317,8 +322,25 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
                                       const XiCoroResolver *resolver) {
     if (!v)
         return false;
-    if ((v->flags & XI_FLAG_MAY_SUSPEND) != 0)
+    if ((v->flags & XI_FLAG_MAY_SUSPEND) != 0) {
+        /* A global summary may conservatively project MAY_SUSPEND onto a
+         * direct call before the final whole-program target is known.  When a
+         * resolver can prove that target, its prepared execution shape wins;
+         * otherwise retain the conservative flag for true function-value/open
+         * calls.  This keeps plan state rows identical to backend child-frame
+         * emission. */
+        if (v->op == XI_CALL && v->nargs >= 1 && resolver && resolver->resolve_callee) {
+            const XiFunc *target = resolver->resolve_callee(resolver->ud, f, v->args[0]);
+            if (target)
+                return xi_coro_func_is_suspendable(target, resolver);
+        } else if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1 &&
+                   resolver && resolver->resolve_method) {
+            const XiFunc *target = resolver->resolve_method(resolver->ud, f, v);
+            if (target)
+                return xi_coro_func_is_suspendable(target, resolver);
+        }
         return true;
+    }
     if (v->op == XI_YIELD || v->op == XI_GEN_YIELD || v->op == XI_GO || v->op == XI_AWAIT ||
         v->op == XI_CHAN_SEND || v->op == XI_CHAN_RECV || v->op == XI_SELECT_BLOCK ||
         v->op == XI_SCOPE_EXIT)
