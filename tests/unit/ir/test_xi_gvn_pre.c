@@ -1735,6 +1735,68 @@ TEST(verify_full_pipeline_diamond) {
     xi_func_free(f);
 }
 
+TEST(gvn_uses_complete_semantic_identity) {
+    XiFunc *f = make_func("semantic_identity", &stub_any);
+    XiBlock *entry = f->entry;
+    XiValue *x = xi_param(f, entry, 0, &stub_any);
+    XiValue *y = xi_param(f, entry, 1, &stub_any);
+    XiValue *z = xi_param(f, entry, 2, &stub_int);
+    XiValue *w = xi_param(f, entry, 3, &stub_int);
+    const int64_t even_shape = xi_vec_shape_encode(XR_NATIVE_U64, 2);
+    const int64_t odd_shape = even_shape | XI_VEC_SHAPE_ODD_LANES;
+
+    XiValue *even = xi_value_new(f, entry, XI_VEC_WIDEN_MUL, &stub_any, 2);
+    even->args[0] = x;
+    even->args[1] = y;
+    even->aux_int = even_shape;
+    even->xa_intrinsic_id = 1036;
+
+    XiValue *even_duplicate = xi_value_new(f, entry, XI_VEC_WIDEN_MUL, &stub_any, 2);
+    even_duplicate->args[0] = x;
+    even_duplicate->args[1] = y;
+    even_duplicate->aux_int = even_shape;
+    even_duplicate->xa_intrinsic_id = 1036;
+
+    XiValue *odd = xi_value_new(f, entry, XI_VEC_WIDEN_MUL, &stub_any, 2);
+    odd->args[0] = x;
+    odd->args[1] = y;
+    odd->aux_int = odd_shape;
+    odd->xa_intrinsic_id = 1037;
+
+    XiValue *different_intrinsic = xi_value_new(f, entry, XI_VEC_WIDEN_MUL, &stub_any, 2);
+    different_intrinsic->args[0] = x;
+    different_intrinsic->args[1] = y;
+    different_intrinsic->aux_int = even_shape;
+    different_intrinsic->xa_intrinsic_id = 1037;
+
+    XiValue *shuffle_a = xi_value_new(f, entry, XI_VEC_SHUFFLE, &stub_any, 3);
+    shuffle_a->args[0] = x;
+    shuffle_a->args[1] = y;
+    shuffle_a->args[2] = z;
+    shuffle_a->aux_int = xi_vec_shape_encode(XR_NATIVE_U32, 4);
+    shuffle_a->xa_intrinsic_id = 1050;
+
+    XiValue *shuffle_b = xi_value_new(f, entry, XI_VEC_SHUFFLE, &stub_any, 3);
+    shuffle_b->args[0] = x;
+    shuffle_b->args[1] = y;
+    shuffle_b->args[2] = w;
+    shuffle_b->aux_int = shuffle_a->aux_int;
+    shuffle_b->xa_intrinsic_id = shuffle_a->xa_intrinsic_id;
+    xi_block_set_return(entry, shuffle_b);
+
+    xi_opt_gvn_pre(f);
+
+    assert(even_duplicate->op == XI_COPY && even_duplicate->args[0] == even &&
+           "an exact semantic duplicate should still be eliminated");
+    assert(odd->op == XI_VEC_WIDEN_MUL &&
+           "even and odd lane selection must not share a value number");
+    assert(different_intrinsic->op == XI_VEC_WIDEN_MUL &&
+           "canonical intrinsic identity must participate in value numbering");
+    assert(shuffle_b->op == XI_VEC_SHUFFLE &&
+           "every variadic operand must participate in value numbering");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -1830,6 +1892,7 @@ int main(void) {
     run_pre_bor_insertion();
     run_dom_mul_cross_block();
     run_verify_full_pipeline_diamond();
+    run_gvn_uses_complete_semantic_identity();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

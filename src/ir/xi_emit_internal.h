@@ -320,6 +320,7 @@ XR_FUNC void xi_emit_len(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_semantic_intrinsic_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_tail_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst);

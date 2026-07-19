@@ -72,3 +72,17 @@ bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
 
     return true;
 }
+
+bool xr_compile_stdlib_to_file(XrCompilerSession *session, const char *canonical_module,
+                               const char *source_file, const char *output_file, int flags) {
+    if (!session || !canonical_module || !canonical_module[0])
+        return false;
+    XrCompileUnitIdentity identity = {
+        .kind = XR_COMPILE_UNIT_STDLIB,
+        .canonical_module = canonical_module,
+    };
+    xr_compiler_session_set_compile_unit_identity(session, &identity);
+    bool ok = xr_compile_to_file(session, source_file, output_file, flags);
+    xr_compiler_session_set_compile_unit_identity(session, NULL);
+    return ok;
+}

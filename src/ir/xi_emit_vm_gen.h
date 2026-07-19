@@ -14,6 +14,7 @@
     X(PARAM, emit_param) \
     X(TARGET_SIZEOF, xi_emit_target_sizeof) \
     X(TARGET_ALIGNOF, xi_emit_target_alignof) \
+    X(TARGET_SIMD_BYTES, xi_emit_semantic_intrinsic_call) \
     X(COPY, emit_copy) \
     X(MOVE, xi_emit_move) \
     X(ADD, xi_emit_arith) \
@@ -34,6 +35,24 @@
     X(BIT_CTZ, xi_emit_exact_bit) \
     X(NOT, xi_emit_not) \
     X(SELECT, emit_select) \
+    X(VEC_LOAD, xi_emit_semantic_intrinsic_call) \
+    X(VEC_STORE, xi_emit_semantic_intrinsic_call) \
+    X(VEC_SPLAT, xi_emit_semantic_intrinsic_call) \
+    X(VEC_EXTRACT, xi_emit_semantic_intrinsic_call) \
+    X(VEC_REPLACE, xi_emit_semantic_intrinsic_call) \
+    X(VEC_ADD, xi_emit_semantic_intrinsic_call) \
+    X(VEC_SUB, xi_emit_semantic_intrinsic_call) \
+    X(VEC_MUL, xi_emit_semantic_intrinsic_call) \
+    X(VEC_BIT_AND, xi_emit_semantic_intrinsic_call) \
+    X(VEC_BIT_OR, xi_emit_semantic_intrinsic_call) \
+    X(VEC_BIT_XOR, xi_emit_semantic_intrinsic_call) \
+    X(VEC_BIT_NOT, xi_emit_semantic_intrinsic_call) \
+    X(VEC_SHL, xi_emit_semantic_intrinsic_call) \
+    X(VEC_SHR, xi_emit_semantic_intrinsic_call) \
+    X(VEC_REINTERPRET, xi_emit_semantic_intrinsic_call) \
+    X(VEC_SHUFFLE, xi_emit_semantic_intrinsic_call) \
+    X(VEC_WIDEN_MUL, xi_emit_semantic_intrinsic_call) \
+    X(VEC_REDUCE_ADD, xi_emit_semantic_intrinsic_call) \
     X(GET_SHARED, xi_emit_get_shared) \
     X(SET_SHARED, xi_emit_set_shared) \
     X(IMPORT_REF, xi_emit_import_ref) \

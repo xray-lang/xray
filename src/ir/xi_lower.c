@@ -692,6 +692,7 @@ XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent) {
         return;
     child->global_evidence = parent->global_evidence;
     child->xg_module_id = parent->xg_module_id;
+    child->typed_program = parent->typed_program;
 }
 
 static bool xi_lower_evidence_module_matches(const XiLower *l, XgModuleId module_id) {
@@ -1426,12 +1427,14 @@ static inline void xi_lower_assert_var_ids(const XiLower *l, const XiFunc *f) {
  * from enclosing scopes via the upvalue capture mechanism.
  */
 XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyzer,
-                                   struct XrVMRuntime *isolate, XiLower *parent_ctx) {
+                                   struct XrVMRuntime *isolate, XiLower *parent_ctx,
+                                   const XaTypedProgram *typed_program) {
     XR_DCHECK(func_node != NULL, "lower_func_impl: func_node is NULL");
     FunctionDeclNode *fdecl = &func_node->as.function_decl;
 
     XiLower l;
     xi_lower_init(&l, analyzer, isolate);
+    l.typed_program = typed_program;
     l.parent = parent_ctx;
     /* Inherit repl_mode from the enclosing program / function so nested
      * closures resolve free top-level names through the globals dict. */
@@ -1659,7 +1662,7 @@ XR_FUNC XiFunc *xi_lower_func(const XaTypedProgram *program, struct XrVMRuntime 
     XR_CHECK(analyzer != NULL, "xi_lower_func: semantic database is NULL");
     XR_CHECK(func_node->type == AST_FUNCTION_DECL || func_node->type == AST_FUNCTION_EXPR,
              "xi_lower_func: not a function node");
-    XiFunc *f = xi_lower_func_impl(func_node, analyzer, isolate, NULL);
+    XiFunc *f = xi_lower_func_impl(func_node, analyzer, isolate, NULL, program);
     if (f) {
         finalize_capture_metadata(f);
         xi_func_compute_effects(f);
@@ -2491,6 +2494,7 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
 
     XiLower l;
     xi_lower_init(&l, analyzer, isolate);
+    l.typed_program = program;
     l.is_program = true;
     l.repl_mode = repl_mode;
     l.global_evidence = global_evidence;

@@ -239,6 +239,18 @@ static void xicgen_target_alignof(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     xicgen_target_layout_expr(ctx, out, v, "_Alignof");
 }
 
+static void xicgen_target_simd_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                     const char *prefix) {
+    (void) f;
+    (void) prefix;
+    int bytes =
+        ctx && ctx->target && (ctx->target->simd_features & XAOT_SIMD_FEATURE_AVX2) != 0 ? 32 : 16;
+    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
+        fprintf(out, "XR_FROM_INT(%d)", bytes);
+    else
+        fprintf(out, "%d", bytes);
+}
+
 static bool xicgen_const_literal_is_freestanding_scalar(const XiConstLiteral *lit) {
     if (!lit)
         return false;

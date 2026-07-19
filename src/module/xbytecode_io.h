@@ -82,6 +82,9 @@ XR_FUNC int xr_eval_bytecode(struct XrVMRuntime *X, const uint8_t *data, size_t 
 // Compile source file with an explicit compiler session and save as bytecode.
 XR_FUNC bool xr_compile_to_file(struct XrCompilerSession *session, const char *source_file,
                                 const char *output_file, int flags);
+XR_FUNC bool xr_compile_stdlib_to_file(struct XrCompilerSession *session,
+                                       const char *canonical_module, const char *source_file,
+                                       const char *output_file, int flags);
 
 // Load and execute bytecode file
 XR_FUNC int xr_run_bytecode_file(struct XrVMRuntime *X, const char *bytecode_file);

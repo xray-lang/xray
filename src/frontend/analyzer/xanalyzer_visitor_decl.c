@@ -43,11 +43,14 @@
 
 #include "xanalyzer_visitor_internal.h"
 #include "xanalyzer_builtin_interfaces.h"
+#include "xa_intrinsic_registry.h"
 #include "xtype_ref_resolve.h"
 #include "../parser/xtype_ref.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../runtime/value/xstruct_layout.h"
+#include "../../module/xmodule_graph.h"
+#include "../../toolchain/xcompiler_session.h"
 
 static int xa_fixed_array_elem_native_lane(XrType *elem) {
     if (!elem || elem->is_nullable)
@@ -126,6 +129,83 @@ static XrAttribute *xa_function_attr(const FunctionDeclNode *fn, AttributeKind k
             return fn->attributes[i];
     }
     return NULL;
+}
+
+static const char *xa_intrinsic_owner_module(const XaInferContext *ctx) {
+    if (!ctx || !ctx->analyzer)
+        return NULL;
+    return ctx->analyzer->current_module_is_stdlib ? ctx->analyzer->current_module_canonical : NULL;
+}
+
+static XrAttribute *xa_decl_intrinsic_attr(XrAttribute **attributes, int count) {
+    XrAttribute *result = NULL;
+    for (int i = 0; attributes && i < count; i++) {
+        if (!attributes[i] || attributes[i]->kind != ATTR_INTRINSIC)
+            continue;
+        if (result)
+            return (XrAttribute *) (uintptr_t) 1;
+        result = attributes[i];
+    }
+    return result;
+}
+
+static void xa_bind_declared_intrinsic(XaInferContext *ctx, AstNode *node, XaSymbol *symbol,
+                                       const char *owner_name, const char *member_name,
+                                       bool is_static, int arity, XrAttribute **attributes,
+                                       int attribute_count) {
+    XrAttribute *attr = xa_decl_intrinsic_attr(attributes, attribute_count);
+    if (!attr)
+        return;
+    XrLocation loc = {.file = ctx ? ctx->file_path : NULL,
+                      .line = node ? node->line : 0,
+                      .column = node ? node->column : 0};
+    if (attr == (XrAttribute *) (uintptr_t) 1) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "duplicate @intrinsic declaration metadata", &loc);
+        return;
+    }
+    const char *canonical_module = xa_intrinsic_owner_module(ctx);
+    if (!canonical_module) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@intrinsic is reserved for compiler-owned stdlib modules",
+                                   &loc);
+        return;
+    }
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_key(attr->str_arg);
+    if (!desc) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@intrinsic identity is not present in the canonical registry",
+                                   &loc);
+        return;
+    }
+    size_t module_len = strlen(canonical_module);
+    size_t key_len = strlen(desc->key);
+    bool module_matches = key_len > module_len &&
+                          strncmp(desc->key, canonical_module, module_len) == 0 &&
+                          desc->key[module_len] == '.';
+    const char *owner = module_matches ? desc->key + module_len + 1 : desc->key + key_len;
+    const char *owner_end = strchr(owner, '.');
+    bool owner_matches = owner_name && owner_end &&
+                         (size_t) (owner_end - owner) == strlen(owner_name) &&
+                         strncmp(owner, owner_name, (size_t) (owner_end - owner)) == 0;
+    const char *source_member = xa_intrinsic_source_member(desc);
+    if (!module_matches || !owner_matches || !member_name || !source_member ||
+        strcmp(source_member, member_name) != 0) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@intrinsic identity does not match its stdlib declaration",
+                                   &loc);
+        return;
+    }
+    bool expects_static = (desc->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0;
+    if (expects_static != is_static || arity < desc->min_arity || arity > desc->max_arity) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@intrinsic declaration signature disagrees with registry",
+                                   &loc);
+        return;
+    }
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
+    if (links)
+        links->intrinsic_id = desc->id;
 }
 
 static void xa_bind_param_default_exprs(XaInferContext *ctx, AstNode **defaults,
@@ -3920,6 +4000,9 @@ skip_layout:
             }
             xa_validate_hashable_key_type(ctx, method_type->function.return_type, method_links,
                                           "method return type", &sig_loc);
+
+            xa_bind_declared_intrinsic(ctx, method, method_sym, cls->name, md->name, md->is_static,
+                                       md->param_count, md->attributes, md->attr_count);
 
             xa_class_info_add_method(info, method_sym);
 

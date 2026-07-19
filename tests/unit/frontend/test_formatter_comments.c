@@ -194,6 +194,18 @@ TEST(trailing_comment_on_block_decl) {
     teardown();
 }
 
+TEST(reexport_format_preserves_module_identity_kind) {
+    setup();
+    const char *src = "export { U32x4 } from simd\n"
+                      "export * from \"./local_vectors\"\n";
+    char *out = parse_and_format(src);
+    ASSERT_NOT_NULL(out);
+    ASSERT_TRUE(contains(out, "export { U32x4 } from simd\n"));
+    ASSERT_TRUE(contains(out, "export * from \"./local_vectors\"\n"));
+    free(out);
+    teardown();
+}
+
 /* ====================================================================== */
 /* Driver                                                                  */
 /* ====================================================================== */
@@ -206,4 +218,5 @@ RUN_TEST(trailing_comment_does_not_steal_next_line_leading);
 RUN_TEST(multiline_block_comment_stays_leading);
 RUN_TEST(format_is_idempotent_with_comments);
 RUN_TEST(trailing_comment_on_block_decl);
+RUN_TEST(reexport_format_preserves_module_identity_kind);
 TEST_MAIN_END()

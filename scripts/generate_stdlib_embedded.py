@@ -117,6 +117,8 @@ def compile_bytecodes(
                 str(out_path),
                 "--format",
                 "bytecode",
+                "--stdlib-module",
+                name,
             ],
             cwd=str(root),
             env=env,

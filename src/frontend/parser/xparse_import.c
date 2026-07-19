@@ -326,27 +326,27 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_export_declaration: NULL parser");
     int line = parser->previous.line;  // export keyword already consumed
 
-    // Check re-export: export * from "..."
+    // Check re-export: export * from module / "..."
     if (xr_parser_match(parser, TK_STAR)) {
         // export * from "./file"
         if (!xr_parser_match_name(parser, "from")) {
             xr_parser_error(parser, "expected 'from' after 'export *'");
             return NULL;
         }
-        if (!xr_parser_match(parser, TK_LITERAL_STRING)) {
-            xr_parser_error(parser, "expected string path after 'from'");
+        bool from_is_quoted = xr_parser_match(parser, TK_LITERAL_STRING);
+        if (!from_is_quoted && !xr_parser_match(parser, TK_NAME)) {
+            xr_parser_error(parser, "expected module name or string path after 'from'");
             return NULL;
         }
 
-        // Extract path
-        size_t len = parser->previous.length - 2;  // Remove quotes
+        size_t len = parser->previous.length - (from_is_quoted ? 2u : 0u);
         char *from_path = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
-        memcpy(from_path, parser->previous.start + 1, len);
+        memcpy(from_path, parser->previous.start + (from_is_quoted ? 1 : 0), len);
         from_path[len] = '\0';
 
         // xr_ast_export_reexport strdups from_path; release our copy.
-        AstNode *node =
-            xr_ast_export_reexport(parser->compiler_session, from_path, NULL, 0, true, line);
+        AstNode *node = xr_ast_export_reexport(parser->compiler_session, from_path, from_is_quoted,
+                                               NULL, 0, true, line);
         return node;
     }
 
@@ -409,19 +409,20 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
 
         /* A braced export is exclusively a cross-module re-export. */
         if (xr_parser_check_name(parser, "from")) {
-            /* Re-export: export { a, b as c } from "..." */
+            /* Re-export: export { a, b as c } from module / "..." */
             xr_parser_advance(parser);
-            if (!xr_parser_match(parser, TK_LITERAL_STRING)) {
-                xr_parser_error(parser, "expected string path after 'from'");
+            bool from_is_quoted = xr_parser_match(parser, TK_LITERAL_STRING);
+            if (!from_is_quoted && !xr_parser_match(parser, TK_NAME)) {
+                xr_parser_error(parser, "expected module name or string path after 'from'");
                 free_reexport_members(members, count);
                 return NULL;
             }
-            size_t path_len = parser->previous.length - 2;
+            size_t path_len = parser->previous.length - (from_is_quoted ? 2u : 0u);
             char *from_path = (char *) ast_alloc(parser->compiler_session, (size_t) path_len + 1);
-            memcpy(from_path, parser->previous.start + 1, path_len);
+            memcpy(from_path, parser->previous.start + (from_is_quoted ? 1 : 0), path_len);
             from_path[path_len] = '\0';
-            AstNode *node = xr_ast_export_reexport(parser->compiler_session, from_path, members,
-                                                   count, false, line);
+            AstNode *node = xr_ast_export_reexport(parser->compiler_session, from_path,
+                                                   from_is_quoted, members, count, false, line);
             return node;
         }
 

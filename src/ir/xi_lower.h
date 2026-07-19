@@ -103,6 +103,7 @@ typedef struct XiLower {
 
     /* Semantic analysis context (type queries) */
     struct XaAnalyzer *analyzer;
+    const struct XaTypedProgram *typed_program;
     struct XrVMRuntime *isolate;
 
     /* Braun SSA variable tracking.

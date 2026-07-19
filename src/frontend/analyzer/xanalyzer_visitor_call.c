@@ -22,6 +22,9 @@
 #include "xanalyzer_visitor_internal.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xa_parallel_call_plan.h"
+#include "xa_resolved_call.h"
+#include "xa_intrinsic_registry.h"
+#include "xa_selection.h"
 #include "xaddressability.h"
 #include "xtype_ref_resolve.h"
 #include "xanalyzer_mono.h"
@@ -56,14 +59,6 @@ static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index);
 static bool xa_class_name_matches_mono_base(const char *class_name, const char *base);
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object, const char *module_name);
 
-static bool xa_simd_class_path(const char *path) {
-    static const char suffix[] = "stdlib/simd/simd.xr";
-    if (!path)
-        return false;
-    size_t n = strlen(path);
-    return n >= sizeof(suffix) - 1 && strcmp(path + n - (sizeof(suffix) - 1), suffix) == 0;
-}
-
 static bool xa_simd_shuffle_diag_exists(const XaAnalyzer *analyzer, const XrLocation *loc) {
     if (!analyzer || !loc)
         return false;
@@ -79,31 +74,15 @@ static bool xa_simd_shuffle_diag_exists(const XaAnalyzer *analyzer, const XrLoca
     return false;
 }
 
-static void xa_check_simd_shuffle_lanes(XaInferContext *ctx, const AstNode *call_node,
-                                        const CallExprNode *call, const XrType *receiver_type,
-                                        const XaSymbolLinks *method_links,
-                                        const char *method_name) {
-    if (!ctx || !ctx->analyzer || !call_node || !call || !receiver_type || !method_name ||
-        strcmp(method_name, "shuffle") != 0 || !XR_TYPE_IS_INSTANCE(receiver_type))
+static void xa_check_intrinsic_shuffle_lanes(XaInferContext *ctx, const AstNode *call_node,
+                                             const CallExprNode *call,
+                                             const XaIntrinsicDesc *desc) {
+    if (!ctx || !ctx->analyzer || !call_node || !call || !desc ||
+        desc->safety != XA_INTRINSIC_SAFETY_CONST_LANES ||
+        (desc->flags & XA_INTRINSIC_FLAG_EXPLICIT_SHUFFLE) == 0)
         return;
-    const XrClassInfo *info = receiver_type->instance.class_ref;
-    const char *name = info && info->name ? info->name : receiver_type->instance.class_name;
-    int lanes = name && strcmp(name, "U32x4") == 0 ? 4 : name && strcmp(name, "U64x2") == 0 ? 2 : 0;
-    const char *file = info ? info->location.file : NULL;
-    if (!file && method_links)
-        file = method_links->file_path;
-    bool simd_module =
-        method_links && method_links->module_name && strcmp(method_links->module_name, "simd") == 0;
-    if (!simd_module && name) {
-        XaSymbol *class_sym = xa_lookup_visible_symbol(ctx, name);
-        XaSymbolLinks *class_links =
-            class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
-        simd_module = class_sym && class_sym->is_imported && class_links &&
-                      class_links->module_name && strcmp(class_links->module_name, "simd") == 0 &&
-                      class_links->import_member_name &&
-                      strcmp(class_links->import_member_name, name) == 0;
-    }
-    if (lanes == 0 || (!simd_module && !xa_simd_class_path(file)))
+    int lanes = desc->shape_rule.input_lanes;
+    if (lanes <= 0)
         return;
     for (int i = 0; i < call->arg_count; i++) {
         int64_t lane = -1;
@@ -114,8 +93,8 @@ static void xa_check_simd_shuffle_lanes(XaInferContext *ctx, const AstNode *call
                               .line = arg ? arg->line : call_node->line,
                               .column = arg ? arg->column : call_node->column};
             char msg[224];
-            snprintf(msg, sizeof(msg), "simd.%s.shuffle lane %d must be a compile-time integer",
-                     name ? name : "vector", i + 1);
+            snprintf(msg, sizeof(msg), "%s lane %d must be a compile-time integer", desc->key,
+                     i + 1);
             if (!xa_simd_shuffle_diag_exists(ctx->analyzer, &loc))
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);
@@ -125,13 +104,35 @@ static void xa_check_simd_shuffle_lanes(XaInferContext *ctx, const AstNode *call
             XrLocation loc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
             char msg[224];
             snprintf(msg, sizeof(msg),
-                     "simd.%s.shuffle lane %d is out of range: got %" PRId64 ", expected 0..%d",
-                     name ? name : "vector", i + 1, lane, lanes - 1);
+                     "%s lane %d is out of range: got %" PRId64 ", expected 0..%d", desc->key,
+                     i + 1, lane, lanes - 1);
             if (!xa_simd_shuffle_diag_exists(ctx->analyzer, &loc))
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);
         }
     }
+}
+
+static const XaResolvedCall *xa_record_resolved_intrinsic_call(XaInferContext *ctx, AstNode *node,
+                                                               AstNode *callee,
+                                                               XaSymbol *fallback_symbol,
+                                                               XaSymbolLinks *fallback_links) {
+    if (!ctx || !ctx->analyzer || !node || !ctx->analyzer->resolved_call_table)
+        return NULL;
+    const XaSelection *selection = xa_analyzer_get_selection(ctx->analyzer, callee);
+    XaSymbol *target = selection ? selection->target_symbol : fallback_symbol;
+    XaSymbolLinks *links = target ? xa_analyzer_get_links(ctx->analyzer, target) : fallback_links;
+    if (!links || links->intrinsic_id == XA_INTRINSIC_NONE)
+        return NULL;
+    XaResolvedCall resolved = {
+        .source_node_id = node->node_id,
+        .target_symbol_id = target ? target->id : 0,
+        .intrinsic_id = links->intrinsic_id,
+        .reason = XA_RESOLVED_CALL_REASON_RESOLVED,
+    };
+    xa_resolved_call_table_set((XaResolvedCallTable *) ctx->analyzer->resolved_call_table, node,
+                               &resolved);
+    return xa_analyzer_get_resolved_call(ctx->analyzer, node);
 }
 
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
@@ -4516,6 +4517,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    const XaResolvedCall *resolved_intrinsic =
+        xa_record_resolved_intrinsic_call(ctx, node, call->callee, fn_sym, fn_links);
+    const XaIntrinsicDesc *intrinsic_desc =
+        resolved_intrinsic ? xa_intrinsic_by_id(resolved_intrinsic->intrinsic_id) : NULL;
+
     /* Resolve symbol_ids in non-lambda arguments before any early-return path.
      * Skip AST_FUNCTION_EXPR args: they require expected_type context from
      * the callee's parameter signature (set in the detailed loop below).
@@ -4539,7 +4545,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (call->arguments[i])
             xa_visit_infer_expr(ctx, call->arguments[i]);
     }
-    xa_check_simd_shuffle_lanes(ctx, node, call, callee_obj_type, fn_links, method_name);
+    xa_check_intrinsic_shuffle_lanes(ctx, node, call, intrinsic_desc);
 
     // A diagnosed callee failure is recovery poison, not an unresolved callable.
     // Arguments were still visited above so their independent diagnostics survive.

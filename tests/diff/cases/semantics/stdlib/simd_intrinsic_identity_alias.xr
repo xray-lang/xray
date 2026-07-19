@@ -1,0 +1,12 @@
+import { U32x4 as AliasedWords } from simd
+import { ReexportedWords } from "./_simd_intrinsic_reexport"
+
+fn run() {
+    var aliased = AliasedWords.splat(7).bitXor(AliasedWords.splat(3))
+    var reexported = ReexportedWords.splat(9).bitXor(ReexportedWords.splat(5))
+    assert_eq(aliased.extract(0), 4)
+    assert_eq(reexported.extract(0), 12)
+    print("OK simd intrinsic identity alias")
+}
+
+run()

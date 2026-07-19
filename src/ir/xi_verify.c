@@ -20,6 +20,7 @@
 #include "xi_verify_gen.h"
 #include "xi_op_name.h"
 #include "xi_analysis.h"
+#include "xi_semantic_intrinsic.h"
 #include "xi_own.h"
 #include "xi_tbaa.h"
 #include "../runtime/value/xtype.h"
@@ -1561,6 +1562,32 @@ static void verify_lowered(VerifyCtx *ctx, const XiFunc *f) {
     }
     if (facts->callable_required && !facts->callable_lowered) {
         verr(ctx, "func '%s': required callable lowering is incomplete", f->name);
+        return;
+    }
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            if (v->xa_intrinsic_id != XA_INTRINSIC_NONE) {
+                char intrinsic_error[192] = {0};
+                if (!xi_semantic_intrinsic_verify_value(v, f->stage, intrinsic_error,
+                                                        sizeof(intrinsic_error))) {
+                    verr(ctx, "func '%s': v%u in b%u violates semantic intrinsic contract: %s",
+                         f->name, v->id, blk->id, intrinsic_error);
+                    return;
+                }
+            } else if (xi_op_class(v->op) == XI_GEN_CLASS_VECTOR &&
+                       xi_vec_shape_is_explicit(v->aux_int)) {
+                verr(ctx, "func '%s': explicit vector v%u %s in b%u has no canonical intrinsic id",
+                     f->name, v->id, xi_op_name(v->op), blk->id);
+                return;
+            }
+        }
     }
 }
 

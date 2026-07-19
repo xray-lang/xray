@@ -243,7 +243,8 @@ static void collect_and_resolve_imports(XrModuleGraph *g, int spec_idx, struct A
             continue;
         }
         if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.from_path) {
-            graph_resolve_and_add_dep(g, spec_idx, stmt->as.export_stmt.from_path, false);
+            graph_resolve_and_add_dep(g, spec_idx, stmt->as.export_stmt.from_path,
+                                      !stmt->as.export_stmt.from_is_quoted);
             continue;
         }
     }

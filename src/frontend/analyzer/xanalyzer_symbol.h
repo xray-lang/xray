@@ -23,6 +23,7 @@
 #include "xconsteval.h"
 #include "xa_effect_db.h"
 #include "xa_alloc_effect.h"
+#include "xa_intrinsic_registry.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xenum_layout.h"
 #include "../../runtime/class/xclass_info.h"
@@ -152,6 +153,7 @@ struct XaSymbolLinks {
     const char *c_export_symbol;
     XaEffectId effect_id;  // Canonical analyzer-owned effect summary id (0 = not inferred yet)
     XaAllocEffectId alloc_effect_id;  // Canonical allocation summary (0 = not inferred yet)
+    XaIntrinsicId intrinsic_id;       // canonical source-semantic identity, never name-derived
     /* Stable publication snapshot.  alloc_effect_id is local to one analyzer
      * database; these fields survive symbol cloning/import metadata and are
      * the cross-module contract surface. */

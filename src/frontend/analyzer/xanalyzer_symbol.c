@@ -1114,6 +1114,7 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     dst->c_export_symbol = src->c_export_symbol ? xr_strdup(src->c_export_symbol) : NULL;
     dst->effect_id = src->effect_id;
     dst->alloc_effect_id = src->alloc_effect_id;
+    dst->intrinsic_id = src->intrinsic_id;
     dst->alloc_state = src->alloc_state;
     dst->alloc_reason_bits = src->alloc_reason_bits;
     dst->alloc_fingerprint = src->alloc_fingerprint;

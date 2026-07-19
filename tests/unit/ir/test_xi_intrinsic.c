@@ -17,6 +17,7 @@
 #include <stdbool.h>
 #include "../../src/ir/xi_intrinsic_flags.h"
 #include "../../src/frontend/analyzer/xbuiltin_receiver_registry.h"
+#include "../../src/frontend/analyzer/xa_intrinsic_registry.h"
 
 /* Generate enum from xi_intrinsic.def — mirrors xm_intrinsic.h */
 typedef enum {
@@ -367,6 +368,31 @@ static void test_builtin_receiver_method_placement(void) {
     }
 }
 
+static void test_semantic_intrinsic_registry(void) {
+    char error[192];
+    ASSERT_TRUE(xa_intrinsic_registry_validate(error, sizeof(error)),
+                "semantic intrinsic registry must be internally consistent");
+    ASSERT_TRUE(xa_intrinsic_count() >= 51,
+                "semantic intrinsic registry must contain the portable SIMD surface");
+
+    const XaIntrinsicDesc *xor_desc = xa_intrinsic_by_key("simd.U32x4.bitXor");
+    ASSERT_TRUE(xor_desc && xor_desc->id == XA_INTRINSIC_SIMD_U32X4_BIT_XOR,
+                "canonical SIMD identity must resolve by declaration key");
+    ASSERT_TRUE(xor_desc && xor_desc->lowering == XA_INTRINSIC_LOWERING_VEC_BIT_XOR &&
+                    xor_desc->effect == XA_INTRINSIC_EFFECT_PURE &&
+                    xor_desc->shape_rule.input_lanes == 4 &&
+                    xor_desc->shape_rule.result_native_type == XR_NATIVE_U32,
+                "SIMD descriptor must publish lowering/effect/shape before Xi construction");
+    ASSERT_TRUE(xa_intrinsic_by_id(XA_INTRINSIC_SIMD_U32X4_BIT_XOR) == xor_desc,
+                "semantic intrinsic id and key lookup must share one descriptor");
+
+    const XaIntrinsicDesc *cap = xa_intrinsic_by_id(XA_INTRINSIC_SIMD_CAPABILITIES_NATIVE_BYTES);
+    ASSERT_TRUE(cap && cap->family == XA_INTRINSIC_FAMILY_TARGET &&
+                    cap->lowering == XA_INTRINSIC_LOWERING_TARGET_SIMD_BYTES &&
+                    (cap->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0,
+                "target capability must be an explicit semantic identity, not a late name match");
+}
+
 int main(void) {
     printf("--- xi_intrinsic.def ---\n");
     test_enum_values();
@@ -386,6 +412,7 @@ int main(void) {
     test_builtin_receiver_registry_method_ids();
     test_builtin_receiver_registry_metadata();
     test_builtin_receiver_method_placement();
+    test_semantic_intrinsic_registry();
 
     printf("\n=== test_xi_intrinsic: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;

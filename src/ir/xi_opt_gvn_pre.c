@@ -11,10 +11,11 @@
  * ALGORITHM (dominator-based GVN-PRE):
  *
  *   1. VALUE NUMBERING:
- *      Hash-consing table keyed by (op, vn(arg0), vn(arg1), type_key,
- *      aux_int). Commutative ops are normalized. Each unique expression
- *      receives a dense value number (VN); two values with the same VN
- *      are semantically equivalent.
+ *      Hash-consing table keyed by the complete semantic identity of an
+ *      instruction: op, result type/rep, every operand VN, semantic aux
+ *      data, lowering contract, and proof identities.  Binary commutative
+ *      ops are normalized. Each unique expression receives a dense value
+ *      number (VN); two values with the same VN are semantically equivalent.
  *
  *   2. FULL REDUNDANCY ELIMINATION:
  *      Walk blocks in dominator-tree RPO. If a value's VN already has
@@ -76,11 +77,7 @@ static bool gvn_is_load(uint16_t op) {
 #define GVN_NO_VN UINT32_MAX
 
 typedef struct {
-    uint32_t hash; /* 0 = empty slot */
-    uint16_t op;
-    uint32_t vn_arg0;    /* value number of arg0 */
-    uint32_t vn_arg1;    /* value number of arg1 (GVN_NO_VN for unary) */
-    int64_t aux;         /* aux_int for field index disambiguation */
+    uint32_t hash;       /* 0 = empty slot */
     uint32_t vn;         /* the assigned value number */
     XiValue *leader;     /* canonical leader value */
     uint32_t leader_blk; /* block index of leader (for dominance check) */
@@ -131,28 +128,109 @@ static void vn_set(VnTable *vn, const XiValue *v, uint32_t num) {
     vn->val_vn[v->id] = num;
 }
 
-static uint32_t vn_compute_hash(uint16_t op, uint32_t vn0, uint32_t vn1, int64_t aux) {
-    uint32_t h = (uint32_t) op * 2654435761u;
-    h ^= vn0 * 2246822519u;
-    h ^= vn1 * 3266489917u;
-    h ^= (uint32_t) aux * 2034824023u;
-    return h ? h : 1;
+static uint32_t vn_hash_mix(uint32_t h, uint64_t word) {
+    h ^= (uint32_t) word;
+    h *= 16777619u;
+    h ^= (uint32_t) (word >> 32);
+    h *= 16777619u;
+    return h;
 }
 
-/* Look up or insert an expression.  Returns the VN and sets *leader
- * to the canonical value (NULL if this is the first occurrence). */
-static uint32_t vn_lookup(VnTable *vn, uint16_t op, uint32_t vn0, uint32_t vn1, int64_t aux,
-                          XiValue *val, uint32_t blk_idx, XiValue **leader) {
-    XR_DCHECK(vn->table != NULL, "vn_lookup: NULL table");
-
-    /* Normalize commutative: ensure vn0 <= vn1. */
-    if (gvn_is_commutative(op) && vn0 > vn1) {
+static void vn_normalized_binary_vns(const VnTable *vn, const XiValue *v, uint32_t *out0,
+                                     uint32_t *out1) {
+    uint32_t vn0 = vn_get(vn, v->args[0]);
+    uint32_t vn1 = vn_get(vn, v->args[1]);
+    if (gvn_is_commutative(v->op) && vn0 > vn1) {
         uint32_t tmp = vn0;
         vn0 = vn1;
         vn1 = tmp;
     }
+    *out0 = vn0;
+    *out1 = vn1;
+}
 
-    uint32_t h = vn_compute_hash(op, vn0, vn1, aux);
+static uint32_t vn_value_hash(const VnTable *vn, const XiValue *v) {
+    uint32_t h = 2166136261u;
+    h = vn_hash_mix(h, v->op);
+    h = vn_hash_mix(h, v->nargs);
+    h = vn_hash_mix(h, (uintptr_t) v->type);
+    h = vn_hash_mix(h, v->flags);
+    h = vn_hash_mix(h, v->rep);
+    h = vn_hash_mix(h, v->transfer_mode);
+    h = vn_hash_mix(h, v->aux_kind);
+    h = vn_hash_mix(h, v->mem_group);
+    h = vn_hash_mix(h, v->lowering_flags);
+    h = vn_hash_mix(h, (uint64_t) v->aux_int);
+    h = vn_hash_mix(h, (uintptr_t) v->aux);
+    h = vn_hash_mix(h, (uintptr_t) v->call_plan);
+    h = vn_hash_mix(h, v->xa_intrinsic_id);
+    h = vn_hash_mix(h, v->xg_callsite_id);
+    h = vn_hash_mix(h, v->xg_method_id);
+    h = vn_hash_mix(h, v->xg_interface_dispatch_slot);
+    h = vn_hash_mix(h, v->xg_json_access_id);
+    h = vn_hash_mix(h, v->xg_json_codec_id);
+    h = vn_hash_mix(h, v->xg_record_access_id);
+    h = vn_hash_mix(h, v->xg_record_merge_id);
+    h = vn_hash_mix(h, v->xg_key_access_id);
+    h = vn_hash_mix(h, v->xg_map_shape_id);
+    h = vn_hash_mix(h, v->xg_class_field_id);
+    h = vn_hash_mix(h, v->xg_sequence_access_id);
+    h = vn_hash_mix(h, v->xg_capacity_op_id);
+    h = vn_hash_mix(h, v->xg_bulk_op_id);
+    h = vn_hash_mix(h, v->xg_encoding_op_id);
+
+    if (v->nargs == 2) {
+        uint32_t vn0 = GVN_NO_VN, vn1 = GVN_NO_VN;
+        vn_normalized_binary_vns(vn, v, &vn0, &vn1);
+        h = vn_hash_mix(h, vn0);
+        h = vn_hash_mix(h, vn1);
+    } else {
+        for (uint16_t i = 0; i < v->nargs; i++)
+            h = vn_hash_mix(h, vn_get(vn, v->args[i]));
+    }
+    return h ? h : 1;
+}
+
+static bool vn_same_semantic_metadata(const XiValue *a, const XiValue *b) {
+    return a->op == b->op && a->nargs == b->nargs && a->type == b->type && a->flags == b->flags &&
+           a->rep == b->rep && a->transfer_mode == b->transfer_mode && a->aux_kind == b->aux_kind &&
+           a->mem_group == b->mem_group && a->lowering_flags == b->lowering_flags &&
+           a->aux_int == b->aux_int && a->aux == b->aux && a->call_plan == b->call_plan &&
+           a->xa_intrinsic_id == b->xa_intrinsic_id && a->xg_callsite_id == b->xg_callsite_id &&
+           a->xg_method_id == b->xg_method_id &&
+           a->xg_interface_dispatch_slot == b->xg_interface_dispatch_slot &&
+           a->xg_json_access_id == b->xg_json_access_id &&
+           a->xg_json_codec_id == b->xg_json_codec_id &&
+           a->xg_record_access_id == b->xg_record_access_id &&
+           a->xg_record_merge_id == b->xg_record_merge_id &&
+           a->xg_key_access_id == b->xg_key_access_id && a->xg_map_shape_id == b->xg_map_shape_id &&
+           a->xg_class_field_id == b->xg_class_field_id &&
+           a->xg_sequence_access_id == b->xg_sequence_access_id &&
+           a->xg_capacity_op_id == b->xg_capacity_op_id && a->xg_bulk_op_id == b->xg_bulk_op_id &&
+           a->xg_encoding_op_id == b->xg_encoding_op_id;
+}
+
+static bool vn_values_equal(const VnTable *vn, const XiValue *a, const XiValue *b) {
+    if (!vn_same_semantic_metadata(a, b))
+        return false;
+    if (a->nargs == 2) {
+        uint32_t a0 = GVN_NO_VN, a1 = GVN_NO_VN, b0 = GVN_NO_VN, b1 = GVN_NO_VN;
+        vn_normalized_binary_vns(vn, a, &a0, &a1);
+        vn_normalized_binary_vns(vn, b, &b0, &b1);
+        return a0 == b0 && a1 == b1;
+    }
+    for (uint16_t i = 0; i < a->nargs; i++) {
+        if (vn_get(vn, a->args[i]) != vn_get(vn, b->args[i]))
+            return false;
+    }
+    return true;
+}
+
+/* Look up or insert an expression.  Returns the VN and sets *leader
+ * to the canonical value (NULL if this is the first occurrence). */
+static uint32_t vn_lookup(VnTable *vn, XiValue *val, uint32_t blk_idx, XiValue **leader) {
+    XR_DCHECK(vn->table != NULL, "vn_lookup: NULL table");
+    uint32_t h = vn_value_hash(vn, val);
     uint32_t slot = h & vn->mask;
 
     for (uint32_t probe = 0; probe < vn->size; probe++) {
@@ -163,10 +241,6 @@ static uint32_t vn_lookup(VnTable *vn, uint16_t op, uint32_t vn0, uint32_t vn1, 
             /* Empty: this is a new expression. */
             uint32_t new_vn = vn->next_vn++;
             e->hash = h;
-            e->op = op;
-            e->vn_arg0 = vn0;
-            e->vn_arg1 = vn1;
-            e->aux = aux;
             e->vn = new_vn;
             e->leader = val;
             e->leader_blk = blk_idx;
@@ -174,8 +248,7 @@ static uint32_t vn_lookup(VnTable *vn, uint16_t op, uint32_t vn0, uint32_t vn1, 
             return new_vn;
         }
 
-        if (e->hash == h && e->op == op && e->vn_arg0 == vn0 && e->vn_arg1 == vn1 &&
-            e->aux == aux) {
+        if (e->hash == h && vn_values_equal(vn, e->leader, val)) {
             /* Match: return existing VN + leader. */
             *leader = e->leader;
             return e->vn;
@@ -486,26 +559,21 @@ XR_FUNC XiPassChange xi_opt_gvn_pre(XiFunc *f) {
                 continue;
             }
 
-            /* Build VN key from operand VNs. */
-            uint32_t vn0 = GVN_NO_VN, vn1 = GVN_NO_VN;
-            if (v->nargs >= 1 && v->args[0])
-                vn0 = vn_get(&vn, v->args[0]);
-            if (v->nargs >= 2 && v->args[1])
-                vn1 = vn_get(&vn, v->args[1]);
-
-            /* If any operand has no VN yet, assign a unique VN to this value. */
-            if ((v->nargs >= 1 && vn0 == GVN_NO_VN) || (v->nargs >= 2 && vn1 == GVN_NO_VN)) {
+            /* A semantic key is valid only when every operand already has a VN. */
+            bool missing_operand_vn = false;
+            for (uint16_t ai = 0; ai < v->nargs; ai++) {
+                if (!v->args[ai] || vn_get(&vn, v->args[ai]) == GVN_NO_VN) {
+                    missing_operand_vn = true;
+                    break;
+                }
+            }
+            if (missing_operand_vn) {
                 vn_set(&vn, v, vn.next_vn++);
                 continue;
             }
 
-            /* Include aux_int in the key for field/slot disambiguation. */
-            int64_t aux_key = 0;
-            if (gvn_is_load(v->op))
-                aux_key = v->aux_int;
-
             XiValue *leader = NULL;
-            uint32_t this_vn = vn_lookup(&vn, v->op, vn0, vn1, aux_key, v, bi, &leader);
+            uint32_t this_vn = vn_lookup(&vn, v, bi, &leader);
 
             if (!leader) {
                 vn_set(&vn, v, this_vn);

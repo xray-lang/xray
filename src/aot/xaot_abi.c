@@ -392,6 +392,13 @@ static XaotAbiSlot native_value_slot_for_type(const XaotBundle *bundle, const Xi
     return slot;
 }
 
+XaotValueRep xaot_abi_native_value_rep(const XaotBundle *bundle, const XiFunc *func,
+                                       const XiValue *value) {
+    if (!value)
+        return xaot_value_rep_for_type(NULL);
+    return native_value_slot_for_type(bundle, func, value->type, value, false).rep;
+}
+
 static XaotAbiSlot borrowed_place_slot(const XrType *type, XaotAbiSlot value_slot) {
     XaotAbiSlot slot;
     memset(&slot, 0, sizeof(slot));

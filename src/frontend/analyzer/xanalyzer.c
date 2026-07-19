@@ -19,6 +19,7 @@
 #include "xa_effect_db.h"
 #include "xa_alloc_effect.h"
 #include "xa_parallel_call_plan.h"
+#include "xa_resolved_call.h"
 #include "xa_selection.h"
 #include "../../runtime/value/xtype_internal.h"
 #include "../../toolchain/xcompiler_session.h"
@@ -380,6 +381,9 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     // AST call -> resolved stdlib parallel intrinsic identity.
     analyzer->parallel_call_plan_table = xa_parallel_call_plan_table_new();
 
+    // AST call -> canonical resolved call identity.
+    analyzer->resolved_call_table = xa_resolved_call_table_new();
+
     // Canonical typed-error effect summaries.
     analyzer->effect_db = xa_effect_db_new();
 
@@ -425,6 +429,11 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
         xa_parallel_call_plan_table_free(
             (XaParallelCallPlanTable *) analyzer->parallel_call_plan_table);
         analyzer->parallel_call_plan_table = NULL;
+    }
+
+    if (analyzer->resolved_call_table) {
+        xa_resolved_call_table_free((XaResolvedCallTable *) analyzer->resolved_call_table);
+        analyzer->resolved_call_table = NULL;
     }
 
     if (analyzer->effect_db) {
@@ -595,7 +604,8 @@ static bool xa_export_map_try_set_symbol(XaAnalyzer *analyzer, XrHashMap **expor
 }
 
 static XrHashMap *xa_graph_reexport_source_exports(XaAnalyzer *analyzer, XrAstNode *ast,
-                                                   const char *from_path, bool *out_invalid) {
+                                                   const char *from_path, bool from_is_quoted,
+                                                   bool *out_invalid) {
     if (out_invalid)
         *out_invalid = false;
     XrModuleGraph *graph = analyzer ? analyzer->graph : NULL;
@@ -607,7 +617,8 @@ static XrHashMap *xa_graph_reexport_source_exports(XaAnalyzer *analyzer, XrAstNo
         owner && owner->source_path ? owner->source_path : analyzer->current_file;
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(graph->resolver, from_path, false, importer, &mid, &err);
+    int rc = xr_module_resolver_resolve(graph->resolver, from_path, !from_is_quoted, importer, &mid,
+                                        &err);
     xr_free(err);
     if (rc != 0)
         return NULL;
@@ -702,8 +713,8 @@ bool xa_analyzer_collect_export_symbols_checked(XaAnalyzer *analyzer, XrAstNode 
         /* Re-exports remain statements because they do not declare a local name. */
         if (exp->from_path) {
             bool source_invalid = false;
-            XrHashMap *source_exports =
-                xa_graph_reexport_source_exports(analyzer, ast, exp->from_path, &source_invalid);
+            XrHashMap *source_exports = xa_graph_reexport_source_exports(
+                analyzer, ast, exp->from_path, exp->from_is_quoted, &source_invalid);
             if (!source_exports) {
                 if (source_invalid) {
                     xa_report_poisoned_export_metadata(analyzer, stmt, exp->from_path);
@@ -1466,6 +1477,15 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
 
     XaScope *file_scope = entry && entry->file_scope ? entry->file_scope : analyzer->global_scope;
 
+    XrModuleSpec *module_spec = xa_graph_spec_for_ast(analyzer, ast);
+    XrCompileUnitIdentity compile_identity =
+        xr_compiler_session_compile_unit_identity(analyzer->compiler_session);
+    analyzer->current_module_is_stdlib = module_spec
+                                             ? module_spec->kind == XR_MOD_STDLIB
+                                             : compile_identity.kind == XR_COMPILE_UNIT_STDLIB;
+    analyzer->current_module_canonical =
+        module_spec ? module_spec->canonical : compile_identity.canonical_module;
+
     // Set current file/scope for symbol ownership tracking. The root global
     // scope is reserved for builtins/prelude; source modules live in their
     // own top-level scopes so private names cannot collide across modules.
@@ -1482,6 +1502,8 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
         analyzer->semantic_revision = 1;
 
     analyzer->current_file = NULL;
+    analyzer->current_module_is_stdlib = false;
+    analyzer->current_module_canonical = NULL;
     analyzer->current_scope = file_scope;
 
     // Keep pool set - type_check may call xa_analyzer_infer_expr_type after analyze
@@ -1723,6 +1745,13 @@ const XaParallelCallPlan *xa_analyzer_get_parallel_call_plan(XaAnalyzer *analyze
         return NULL;
     return xa_parallel_call_plan_table_get(
         (XaParallelCallPlanTable *) analyzer->parallel_call_plan_table, node);
+}
+
+const XaResolvedCall *xa_analyzer_get_resolved_call(XaAnalyzer *analyzer,
+                                                    const struct AstNode *node) {
+    if (!analyzer || !node)
+        return NULL;
+    return xa_resolved_call_table_get((XaResolvedCallTable *) analyzer->resolved_call_table, node);
 }
 
 static const char *adt_subject_enum_name(struct XrType *type) {

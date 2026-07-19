@@ -440,9 +440,12 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
                 // Re-export: export { a, b as c } from "./file"
                 //        or: export * from "./file"
                 if (exp->is_reexport_all) {
-                    xfmt_write_str(ctx, "* from \"");
+                    xfmt_write_str(ctx, "* from ");
+                    if (exp->from_is_quoted)
+                        xfmt_write_char(ctx, '"');
                     xfmt_write_str(ctx, exp->from_path);
-                    xfmt_write_char(ctx, '"');
+                    if (exp->from_is_quoted)
+                        xfmt_write_char(ctx, '"');
                 } else {
                     xfmt_write_str(ctx, "{ ");
                     for (int i = 0; i < exp->reexport_count; i++) {
@@ -454,9 +457,12 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
                             xfmt_write_str(ctx, exp->reexport_members[i].alias);
                         }
                     }
-                    xfmt_write_str(ctx, " } from \"");
+                    xfmt_write_str(ctx, " } from ");
+                    if (exp->from_is_quoted)
+                        xfmt_write_char(ctx, '"');
                     xfmt_write_str(ctx, exp->from_path);
-                    xfmt_write_char(ctx, '"');
+                    if (exp->from_is_quoted)
+                        xfmt_write_char(ctx, '"');
                 }
                 xfmt_write_newline(ctx);
             }

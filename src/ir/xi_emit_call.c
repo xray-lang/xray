@@ -10,6 +10,7 @@
  */
 
 #include "xi_emit_internal.h"
+#include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../runtime/mem/xobj_header.h"
 
 static bool emit_shared_slot_is_function(EmitCtx *ctx, int64_t slot) {
@@ -271,6 +272,83 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(invoke_op, base, sym_arg, nargs));
         emit_copy_call_results(ctx, dst, base, 1);
     }
+}
+
+static bool semantic_intrinsic_operand_is_readonly_place(const XaIntrinsicDesc *desc,
+                                                         uint16_t operand_index) {
+    if (!desc)
+        return false;
+    if (operand_index == 0)
+        return (desc->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) == 0;
+    if (operand_index != 1)
+        return false;
+    switch (desc->lowering) {
+        case XA_INTRINSIC_LOWERING_VEC_LOAD:
+        case XA_INTRINSIC_LOWERING_VEC_ADD:
+        case XA_INTRINSIC_LOWERING_VEC_SUB:
+        case XA_INTRINSIC_LOWERING_VEC_MUL:
+        case XA_INTRINSIC_LOWERING_VEC_BIT_AND:
+        case XA_INTRINSIC_LOWERING_VEC_BIT_OR:
+        case XA_INTRINSIC_LOWERING_VEC_BIT_XOR:
+        case XA_INTRINSIC_LOWERING_VEC_WIDEN_MUL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+XR_FUNC void xi_emit_semantic_intrinsic_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!ctx || !v || v->xa_intrinsic_id == XA_INTRINSIC_NONE || v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_id((XaIntrinsicId) v->xa_intrinsic_id);
+    const char *source_member = xa_intrinsic_source_member(desc);
+    if (!desc || !source_member) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        (void) reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+    }
+
+    uint16_t readonly_place_count = 0;
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        if (semantic_intrinsic_operand_is_readonly_place(desc, a))
+            readonly_place_count++;
+    }
+    XiEmitReg place_storage_base = NO_REG;
+    if (readonly_place_count > 0 &&
+        !emit_call_scratch_window(ctx, readonly_place_count, &place_storage_base))
+        return;
+    XiEmitReg base = NO_REG;
+    if (!emit_call_scratch_window(ctx, (uint32_t) nargs + 2, &base))
+        return;
+    uint16_t readonly_place_index = 0;
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        XiEmitReg source = reg_of(ctx, v->args[a]);
+        XiEmitReg target = (XiEmitReg) (base + 1 + a);
+        if (semantic_intrinsic_operand_is_readonly_place(desc, a)) {
+            XiEmitReg storage = (XiEmitReg) (place_storage_base + readonly_place_index++);
+            if (source != storage)
+                emit_inst(ctx, CREATE_ABC(OP_MOVE, storage, source, 0));
+            emit_inst(ctx, CREATE_ABC(OP_LOCAL_ADDR, target, storage, 0));
+        } else if (source != target) {
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, source, 0));
+        }
+    }
+
+    int sym = add_symbol(ctx, source_member);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint16_t sym_arg = 0;
+    if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_INVOKE, base, sym_arg, nargs));
+    emit_copy_call_results(ctx, dst, base, 1);
 }
 
 XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {

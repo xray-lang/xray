@@ -13,6 +13,7 @@
     X(PARAM, "xi.param", xicgen_param) \
     X(TARGET_SIZEOF, "xi.target.sizeof", xicgen_target_sizeof) \
     X(TARGET_ALIGNOF, "xi.target.alignof", xicgen_target_alignof) \
+    X(TARGET_SIMD_BYTES, "xi.target.simd.bytes", xicgen_target_simd_bytes) \
     X(COPY, "xi.copy", xicgen_copy) \
     X(MOVE, "xi.move", xicgen_move) \
     X(ADD, "xi.add", xicgen_add) \

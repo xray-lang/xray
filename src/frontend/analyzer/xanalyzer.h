@@ -26,6 +26,7 @@
 #include "../../base/xtarget_data_layout.h"
 #include "xanalyzer_symbol.h"
 #include "xa_parallel_call_plan.h"
+#include "xa_resolved_call.h"
 #include "../../runtime/value/xtype_pool.h"
 #include "../../runtime/xerror.h"
 #include <stdbool.h>
@@ -156,6 +157,10 @@ struct XaAnalyzer {
     // Consumed by lowerer/backend before falling back to textual rediscovery.
     void *parallel_call_plan_table;  // XaParallelCallPlanTable* (forward declared)
 
+    // AST call -> immutable canonical call identity. Intrinsics are assigned
+    // from declaration metadata and survive alias/re-export spelling changes.
+    void *resolved_call_table;  // XaResolvedCallTable* (forward declared)
+
     // Canonical analyzer-owned typed-error effect database. Function symbols
     // hold only non-owning XaEffectId values into this session-local store.
     XaEffectDatabase *effect_db;
@@ -173,6 +178,12 @@ struct XaAnalyzer {
     // When set, cross-module import types are resolved from the graph's
     // export tables instead of falling back to unknown.
     struct XrModuleGraph *graph;
+
+    /* Explicit identity of the module currently being analyzed.  This is
+     * derived from graph ownership by AST identity, or from the scoped
+     * compile-unit identity for graph-less bootstrap compilation. */
+    bool current_module_is_stdlib;
+    const char *current_module_canonical;
 };
 
 // API: Analyzer lifecycle
@@ -248,6 +259,8 @@ XR_FUNC const struct XaSelection *xa_analyzer_get_selection(XaAnalyzer *analyzer
                                                             const struct AstNode *node);
 XR_FUNC const XaParallelCallPlan *xa_analyzer_get_parallel_call_plan(XaAnalyzer *analyzer,
                                                                      const struct AstNode *node);
+XR_FUNC const XaResolvedCall *xa_analyzer_get_resolved_call(XaAnalyzer *analyzer,
+                                                            const struct AstNode *node);
 
 // API: Cross-file incremental analysis
 XR_FUNC const char **xa_analyzer_get_dirty_files(XaAnalyzer *analyzer, int *count);

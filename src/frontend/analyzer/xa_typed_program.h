@@ -18,6 +18,7 @@
 struct AstNode;
 struct XaAnalyzer;
 struct XgGlobalEvidence;
+struct XaResolvedCall;
 
 typedef struct XaTypedProgram XaTypedProgram;
 
@@ -51,6 +52,8 @@ XR_FUNC struct XaAnalyzer *xa_typed_program_semantics(const XaTypedProgram *prog
 XR_FUNC const struct XgGlobalEvidence *
 xa_typed_program_global_evidence(const XaTypedProgram *program);
 XR_FUNC uint32_t xa_typed_program_module_id(const XaTypedProgram *program);
+XR_FUNC const struct XaResolvedCall *
+xa_typed_program_resolved_call(const XaTypedProgram *program, const struct AstNode *call_node);
 XR_FUNC const char *xa_typed_program_reason_name(XaTypedProgramReason reason);
 
 #endif  // XA_TYPED_PROGRAM_H

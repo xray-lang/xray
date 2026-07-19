@@ -17,6 +17,7 @@
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/ir/xi_stage.h"
+#include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
@@ -595,6 +596,55 @@ static void test_lowering_fact_corruption_fails_closed(void) {
     printf("  PASS\n");
 }
 
+static void test_semantic_intrinsic_corruption_fails_closed(void) {
+    printf("--- test_semantic_intrinsic_corruption_fails_closed ---\n");
+
+    XiFunc *f = xi_func_new("corrupt_semantic_intrinsic", &stub_array);
+    XiBlock *entry = xi_block_new(f);
+    XiValue *lhs = xi_param(f, entry, 0, &stub_array);
+    XiValue *rhs = xi_param(f, entry, 1, &stub_array);
+    XiValue *vec = xi_value_new(f, entry, XI_VEC_WIDEN_MUL, &stub_array, 2);
+    vec->args[0] = lhs;
+    vec->args[1] = rhs;
+    vec->aux_int = xi_vec_shape_encode(XR_NATIVE_U64, 2) | XI_VEC_SHAPE_ODD_LANES;
+    vec->xa_intrinsic_id = 999999;
+    xi_block_set_return(entry, vec);
+
+    char error[512] = {0};
+    XiRawProgram *raw = xi_stage_adopt_raw(f, error, sizeof(error));
+    assert(raw != NULL);
+    XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
+    assert(canonical != NULL);
+    xi_pass_close(f);
+    XiClosedProgram *closed = xi_program_close(canonical, error, sizeof(error));
+    assert(closed != NULL);
+    XiOwnedProgram *owned = xi_program_make_owned(closed, error, sizeof(error));
+    assert(owned != NULL);
+
+    error[0] = '\0';
+    assert(xi_program_lower_semantics(owned, error, sizeof(error)) == NULL);
+    assert(strstr(error, "unknown canonical intrinsic") != NULL);
+    assert(f->stage == XI_STAGE_OWNED);
+
+    vec->xa_intrinsic_id = XA_INTRINSIC_SIMD_U32X4_WIDEN_MUL_ODD;
+    XiLoweredProgram *lowered = xi_program_lower_semantics(owned, error, sizeof(error));
+    assert(lowered != NULL);
+
+    vec->op = XI_VEC_ADD;
+    error[0] = '\0';
+    assert(!xi_verify_stage(f, XI_STAGE_LOWERED, error, sizeof(error)));
+    assert(strstr(error, "requires Xi op") != NULL);
+    vec->op = XI_VEC_WIDEN_MUL;
+
+    vec->xa_intrinsic_id = XA_INTRINSIC_NONE;
+    error[0] = '\0';
+    assert(!xi_verify_stage(f, XI_STAGE_LOWERED, error, sizeof(error)));
+    assert(strstr(error, "has no canonical intrinsic id") != NULL);
+
+    xi_func_free(xi_lowered_program_release(lowered));
+    printf("  PASS\n");
+}
+
 static void test_pass_order_and_invariants(void) {
     printf("--- test_pass_order_and_invariants ---\n");
 
@@ -665,6 +715,7 @@ int main(void) {
     test_consumed_handle_is_rejected();
     test_corrupt_stage_contract_is_rejected();
     test_lowering_fact_corruption_fails_closed();
+    test_semantic_intrinsic_corruption_fails_closed();
     test_pass_order_and_invariants();
     test_optimizer_invariant_failure_is_data();
 

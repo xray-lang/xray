@@ -21,6 +21,7 @@
 #include "xi_module.h"
 #include "xi_vec_scalar_lower.h"
 #include "../runtime/value/xtype.h"
+#include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include <string.h>
@@ -198,14 +199,36 @@ static bool lower_math_import_call(XiFunc *f, XiValue *v) {
     return false;
 }
 
+static bool lower_semantic_intrinsic_for_aot(XiValue *v) {
+    if (!v || v->xa_intrinsic_id == XA_INTRINSIC_NONE)
+        return false;
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_id((XaIntrinsicId) v->xa_intrinsic_id);
+    XR_CHECK(desc != NULL, "Xi value carries unknown canonical intrinsic id");
+    bool changed = false;
+    if ((desc->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0) {
+        XR_CHECK(v->nargs >= 1, "static canonical intrinsic is missing receiver identity");
+        if (v->nargs > 1)
+            memmove(v->args, v->args + 1, (size_t) (v->nargs - 1) * sizeof(v->args[0]));
+        v->nargs--;
+        changed = true;
+    }
+    if ((desc->flags & XA_INTRINSIC_FLAG_EXPLICIT_SHUFFLE) != 0) {
+        XR_CHECK(v->nargs >= 1, "shuffle canonical intrinsic is missing vector receiver");
+        v->nargs = 1;
+        changed = true;
+    }
+    return changed;
+}
+
 /* Lower one value if it's not backend-legal. Returns true if changed. */
 static bool lower_value(XiFunc *f, XiValue *v) {
     if (!v)
         return false;
+    bool intrinsic_changed = lower_semantic_intrinsic_for_aot(v);
     if (lower_math_import_call(f, v))
         return true;
     if (xi_op_is_backend_legal(v->op))
-        return false;
+        return intrinsic_changed;
 
     uint8_t rewrite = xi_op_backend_rewrite(v->op);
     switch (rewrite) {

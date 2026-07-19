@@ -3125,6 +3125,13 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             }
             if (!prepare_apply_param_abi_value_plan(bundle, func, vp))
                 return false;
+            if (blk->values[vi]->xa_intrinsic_id != 0 && blk->values[vi]->op >= XI_VEC_LOAD &&
+                blk->values[vi]->op <= XI_VEC_REDUCE_ADD) {
+                XaotValueRep intrinsic_rep =
+                    xaot_abi_native_value_rep(bundle, func, blk->values[vi]);
+                if (intrinsic_rep.kind != XAOT_VALUE_TAGGED)
+                    vp->rep = intrinsic_rep;
+            }
             apply_native_class_ptr_value_plan(bundle, vp);
             apply_freestanding_enum_ordinal_value_plan(bundle, vp);
             record_value_stats(&bundle->stats, vp->rep.kind);

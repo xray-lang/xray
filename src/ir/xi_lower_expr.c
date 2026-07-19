@@ -12,6 +12,7 @@
  */
 
 #include "xi_lower_internal.h"
+#include "xi_semantic_intrinsic.h"
 #include "xi.h"
 #include "xi_effect.h"
 #include "xi_lower_expr_helpers.h"
@@ -27,6 +28,8 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xa_parallel_call_plan.h"
+#include "../frontend/analyzer/xa_typed_program.h"
+#include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../frontend/analyzer/xa_selection.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../frontend/analyzer/xconsteval.h"
@@ -5076,8 +5079,115 @@ static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
     xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, kinds, out_ids);
 }
 
+static bool lower_intrinsic_shuffle_pattern(XiLower *l, AstNode *node, CallExprNode *call,
+                                            const XaIntrinsicDesc *desc, int64_t *extra) {
+    if (!l || !call || !desc || !extra)
+        return false;
+    uint8_t lanes = desc->shape_rule.input_lanes;
+    if ((desc->flags & XA_INTRINSIC_FLAG_EXPLICIT_SHUFFLE) != 0) {
+        for (uint8_t lane = 0; lane < lanes; lane++) {
+            int64_t selected = -1;
+            const char *error = NULL;
+            AstNode *arg = lane < call->arg_count ? call->arguments[lane] : NULL;
+            if (!arg || !xa_consteval_int_expr(l->analyzer, arg, &selected, &error) ||
+                selected < 0 || selected >= lanes) {
+                (void) error;
+                l->had_error = true;
+                return false;
+            }
+            *extra |= selected << (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4);
+        }
+    } else if ((desc->flags & XA_INTRINSIC_FLAG_SWAP_ADJACENT) != 0) {
+        for (uint8_t lane = 0; lane < lanes; lane++)
+            *extra |= (int64_t) (lane ^ 1u) << (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4);
+    } else if ((desc->flags & XA_INTRINSIC_FLAG_SWAP_LANES) != 0) {
+        if (lanes != 2) {
+            l->had_error = true;
+            return false;
+        }
+        *extra |= INT64_C(1) << XI_VEC_SHAPE_SHUFFLE_SHIFT;
+    }
+    (void) node;
+    return true;
+}
+
+static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                              const XaResolvedCall *resolved) {
+    if (!l || !node || !call || !resolved || resolved->reason != XA_RESOLVED_CALL_REASON_RESOLVED)
+        return NULL;
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_id(resolved->intrinsic_id);
+    if (!desc || call->arg_count < desc->min_arity || call->arg_count > desc->max_arity ||
+        !call->callee || call->callee->type != AST_MEMBER_ACCESS) {
+        l->had_error = true;
+        return NULL;
+    }
+    MemberAccessNode *member = &call->callee->as.member_access;
+    XiOp op = xi_semantic_intrinsic_op(desc);
+    if (op == XI_OP_COUNT || !member->object) {
+        l->had_error = true;
+        return NULL;
+    }
+
+    if (call->arg_count > XI_LOWER_MAX_CALL_ARGS) {
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *receiver = xi_lower_expr(l, member->object);
+    if (!receiver)
+        return NULL;
+
+    XrParamMode stack_modes[64];
+    const XrParamMode *param_modes = NULL;
+    int param_count = 0;
+    XrType *method_type = xr_type_non_nullable(l->isolate, xi_lower_node_type(l, call->callee));
+    if (method_type && method_type->kind == XR_KIND_FUNCTION) {
+        param_modes = lower_function_param_modes(
+            l, method_type, stack_modes, (int) (sizeof(stack_modes) / sizeof(stack_modes[0])),
+            &param_count);
+    }
+
+    XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
+    XiLowerArgList args;
+    xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
+    if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, param_modes,
+                                       param_count, (int) node->line))
+        return NULL;
+
+    uint16_t nargs = (uint16_t) (args.count + 1);
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    XiValue *value = xi_value_new(l->func, l->cur_block, op, result_type, nargs);
+    if (!value)
+        return NULL;
+    value->args[0] = receiver;
+    for (int i = 0; i < args.count; i++)
+        value->args[i + 1] = args.items[i];
+
+    int64_t extra = 0;
+    if ((desc->flags & XA_INTRINSIC_FLAG_ODD_LANES) != 0)
+        extra |= XI_VEC_SHAPE_ODD_LANES;
+    if (desc->lowering == XA_INTRINSIC_LOWERING_VEC_SHUFFLE &&
+        !lower_intrinsic_shuffle_pattern(l, node, call, desc, &extra))
+        return NULL;
+    if (op != XI_TARGET_SIMD_BYTES) {
+        value->aux_int = xi_vec_shape_encode(desc->shape_rule.result_native_type,
+                                             desc->shape_rule.result_lanes) |
+                         extra;
+    }
+    value->xa_intrinsic_id = (uint32_t) desc->id;
+    value->flags = xi_op_default_effects(op);
+    value->line = (uint32_t) node->line;
+    if (desc->effect != XA_INTRINSIC_EFFECT_PURE)
+        xi_lower_insert_err_check(l, node);
+    return value;
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
+
+    const XaResolvedCall *resolved =
+        l && l->typed_program ? xa_typed_program_resolved_call(l->typed_program, node) : NULL;
+    if (resolved && resolved->intrinsic_id != XA_INTRINSIC_NONE)
+        return lower_resolved_intrinsic_call(l, node, call, resolved);
 
     /* The source keyword is lowercase, while the runtime's builtin class is
      * named String. Resolve canonical static constructors to that class. */
@@ -6292,7 +6402,7 @@ XR_FUNC void xi_lower_func_add_child(XiFunc *parent, XiFunc *child) {
 XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
     /* Recursively lower the function body into a child XiFunc,
      * passing 'l' as parent so the child can resolve upvalue captures. */
-    XiFunc *child = xi_lower_func_impl(node, l->analyzer, l->isolate, l);
+    XiFunc *child = xi_lower_func_impl(node, l->analyzer, l->isolate, l, l->typed_program);
     if (!child) {
         l->had_error = true;
         return NULL;

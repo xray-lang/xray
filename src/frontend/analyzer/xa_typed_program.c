@@ -103,6 +103,13 @@ uint32_t xa_typed_program_module_id(const XaTypedProgram *program) {
     return program ? program->module_id : 0;
 }
 
+const struct XaResolvedCall *xa_typed_program_resolved_call(const XaTypedProgram *program,
+                                                            const struct AstNode *call_node) {
+    if (!xa_typed_program_is_current(program) || !call_node)
+        return NULL;
+    return xa_analyzer_get_resolved_call(program->semantics, call_node);
+}
+
 const char *xa_typed_program_reason_name(XaTypedProgramReason reason) {
     switch (reason) {
         case XA_TYPED_PROGRAM_REASON_NONE:
