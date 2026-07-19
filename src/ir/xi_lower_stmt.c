@@ -1912,7 +1912,8 @@ static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiVa
 
     int col_var = -1;
     if (get_item_coll) {
-        col_var = xi_lower_var_create(l, 0, col_name, l->type_any);
+        col_var = xi_lower_var_create(l, 0, col_name,
+                                      get_item_coll->type ? get_item_coll->type : l->type_any);
         xi_lower_braun_write(l, col_var, l->cur_block, get_item_coll);
     }
 
@@ -1941,12 +1942,38 @@ static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiVa
     XiValue *body_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
     XiValue *item;
 
-    if (get_item_coll) {
+    if (s->domain_kind == XR_FOR_IN_DOMAIN_ENUM_VARIANTS) {
+        XiValue *body_limit = xi_lower_braun_read(l, lim_var, l->cur_block);
+        item = xi_value_new(l->func, l->cur_block, XI_ENUM_VARIANT_AT, item_type, 2);
+        if (item) {
+            item->args[0] = body_limit;
+            item->args[1] = body_idx;
+            item->flags |= XI_FLAG_MAY_THROW;
+            item->line = (uint32_t) node->line;
+            item->enum_metadata_owner = xr_type_enum_metadata_owner(item_type);
+            item->enum_metadata_kind = XR_ENUM_METADATA_VARIANT;
+        }
+    } else if (s->domain_kind == XR_FOR_IN_DOMAIN_ENUM_PAYLOADS) {
+        XiValue *body_col = xi_lower_braun_read(l, col_var, l->cur_block);
+        item = xi_value_new(l->func, l->cur_block, XI_ENUM_PAYLOAD_AT, item_type, 2);
+        if (item) {
+            item->args[0] = body_col;
+            item->args[1] = body_idx;
+            item->flags |= XI_FLAG_MAY_THROW;
+            item->line = (uint32_t) node->line;
+            item->enum_metadata_owner = xr_type_enum_metadata_owner(item_type);
+            item->enum_metadata_kind = XR_ENUM_METADATA_PAYLOAD_FIELD;
+        }
+    } else if (get_item_coll) {
         XiValue *body_col = xi_lower_braun_read(l, col_var, l->cur_block);
         item = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, item_type, 2);
         if (item) {
             item->args[0] = body_col;
             item->args[1] = body_idx;
+            if (s->domain_kind == XR_FOR_IN_DOMAIN_UNIT_ENUM_VALUES)
+                item->aux_kind = XI_AUX_KIND_ENUM_CASE;
+            if (s->domain_kind == XR_FOR_IN_DOMAIN_UNIT_ENUM_VALUES)
+                item->enum_metadata_owner = item_type;
             item->line = (uint32_t) node->line;
         }
     } else {
@@ -2288,6 +2315,47 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
         if (!end || !l->cur_block)
             return;
         lower_for_in_loop(l, node, start, end, NULL, rn->inclusive_end);
+        return;
+    }
+
+    if (s->domain_kind == XR_FOR_IN_DOMAIN_UNIT_ENUM_VALUES) {
+        XaSymbol *enum_sym =
+            s->enum_symbol_id ? xa_scope_lookup_by_id(l->analyzer->global_scope, s->enum_symbol_id)
+                              : NULL;
+        XaSymbolLinks *enum_links = enum_sym ? xa_analyzer_get_links(l->analyzer, enum_sym) : NULL;
+        const char *enum_name =
+            enum_links && enum_links->type && enum_links->type->kind == XR_KIND_ENUM
+                ? enum_links->type->enum_type.enum_name
+                : (enum_sym ? enum_sym->name : NULL);
+        XiValue *enum_namespace =
+            enum_sym && enum_name
+                ? xi_lower_enum_namespace_value(l, enum_sym, enum_name, node->line)
+                : xi_lower_expr(l, s->collection);
+        if (!enum_namespace || !l->cur_block)
+            return;
+        XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+        XiValue *limit =
+            xi_const_int(l->func, l->cur_block, (int64_t) s->enum_variant_count, l->type_int);
+        lower_for_in_loop(l, node, zero, limit, enum_namespace, false);
+        return;
+    }
+
+    if (s->domain_kind == XR_FOR_IN_DOMAIN_ENUM_VARIANTS) {
+        XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+        XiValue *limit =
+            xi_const_int(l->func, l->cur_block, (int64_t) s->enum_variant_count, l->type_int);
+        lower_for_in_loop(l, node, zero, limit, NULL, false);
+        return;
+    }
+
+    if (s->domain_kind == XR_FOR_IN_DOMAIN_ENUM_PAYLOADS) {
+        XiValue *view = xi_lower_expr(l, s->collection);
+        if (!view || !l->cur_block)
+            return;
+        XiValue *shift = xi_const_int(l->func, l->cur_block, 32, l->type_int);
+        XiValue *limit = xi_binary(l->func, l->cur_block, XI_SHR, l->type_int, view, shift);
+        XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+        lower_for_in_loop(l, node, zero, limit, view, false);
         return;
     }
 

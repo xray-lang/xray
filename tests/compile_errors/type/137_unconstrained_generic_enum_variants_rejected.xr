@@ -1,0 +1,5 @@
+fn inspect<E>() {
+    for (variant in E.variants) {
+        print(variant)
+    }
+}

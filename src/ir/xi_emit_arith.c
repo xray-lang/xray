@@ -356,6 +356,40 @@ XR_FUNC void xi_emit_unbox(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_UNBOX_I64, dst, src, 0));
 }
 
+XR_FUNC void xi_emit_enum_descriptor_box(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!v || v->nargs < 1 || !v->args[0] || !v->enum_metadata_owner) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint32_t layout_id = v->enum_metadata_owner && v->enum_metadata_owner->kind == XR_KIND_ENUM
+                             ? (v->enum_metadata_owner->enum_type.layout &&
+                                        v->enum_metadata_owner->enum_type.layout->layout_id != 0
+                                    ? v->enum_metadata_owner->enum_type.layout->layout_id
+                                    : v->enum_metadata_owner->enum_type.layout_id)
+                             : xr_type_enum_metadata_layout_id(v->type);
+    uint8_t kind = v->enum_metadata_kind != 0 ? v->enum_metadata_kind
+                                              : (uint8_t) xr_type_enum_metadata_kind(v->type);
+    int64_t token = ((int64_t) layout_id << 8) | (int64_t) kind;
+    xi_emit_i64_const_reg(ctx, dst, token);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ENUM_DESCRIPTOR_BOX, dst, src, dst));
+}
+
+XR_FUNC void xi_emit_enum_descriptor_unbox(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!v || v->nargs < 1 || !v->args[0]) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ENUM_DESCRIPTOR_UNBOX, dst, src, 0));
+}
+
 /* Narrow: truncate int64/double to sub-width, sign/zero-extend back.
  * Each XI_NARROW_* maps 1:1 to the corresponding OP_NARROW_*. */
 XR_FUNC void xi_emit_narrow(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
@@ -417,7 +451,10 @@ XR_FUNC void xi_emit_is(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg type_reg = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_IS, dst, src, type_reg));
+    if (xr_type_is_enum_metadata((const XrType *) v->aux))
+        emit_inst(ctx, CREATE_ABC(OP_IS_ENUM_DESCRIPTOR, dst, src, type_reg));
+    else
+        emit_inst(ctx, CREATE_ABC(OP_IS, dst, src, type_reg));
 }
 
 /* Type cast (as / as?) with runtime typeof check.

@@ -1,0 +1,5 @@
+contains=extern-decl 0 id=1 source=xray_signal_level symbol=xray_signal_level
+c_count=1:static const XrAotEnumScalarLayout _xenum_scalar_layout_0
+c_contains=xrt_enum_scalar_box(&_xenum_scalar_layout_0
+c_contains=xr_ffi_xray_signal_level()
+c_syntax=pass

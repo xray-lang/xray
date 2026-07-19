@@ -237,7 +237,29 @@ const char *xr_type_to_string(XrType *type) {
     if (xr_type_is_named_class(type, "PanicInfo"))
         return "PanicInfo";
     if (type->kind == XR_KIND_ENUM) {
-        return type->enum_type.enum_name ? type->enum_type.enum_name : "Enum";
+        const char *name = type->enum_type.enum_name ? type->enum_type.enum_name : "Enum";
+        if (type->enum_type.type_arg_count <= 0 || !type->enum_type.type_args)
+            return name;
+        char *ptr = buf;
+        size_t remaining = TYPE_STR_BUF_SIZE;
+        int n = snprintf(ptr, remaining, "%s<", name);
+        ptr += n;
+        remaining -= n;
+        for (int i = 0; i < type->enum_type.type_arg_count && remaining > 2; i++) {
+            if (i > 0) {
+                n = snprintf(ptr, remaining, ", ");
+                ptr += n;
+                remaining -= n;
+            }
+            const char *arg_str = type->enum_type.type_args[i]
+                                      ? xr_type_to_string(type->enum_type.type_args[i])
+                                      : "<error>";
+            n = snprintf(ptr, remaining, "%s", arg_str);
+            ptr += n;
+            remaining -= n;
+        }
+        snprintf(ptr, remaining, ">");
+        return xr_pool_strdup(pool, buf);
     }
 
     if (XR_TYPE_IS_INSTANCE(type) || XR_TYPE_IS_CLASS(type)) {

@@ -864,6 +864,18 @@ static bool bc_write_enum_type(BcWriter *w, XrValue val) {
             return false;
         if (!bc_put_u16(w, (uint16_t) payload_count))
             return false;
+        const XrEnumVariantLayout *variant =
+            enum_type->layout ? xr_enum_layout_variant(enum_type->layout, i) : NULL;
+        for (int p = 0; p < payload_count; p++) {
+            const char *payload_name =
+                variant && variant->payload_names && variant->payload_names[p]
+                    ? variant->payload_names[p]
+                    : "";
+            uint8_t payload_type_id =
+                variant && variant->payload_type_ids ? variant->payload_type_ids[p] : XR_TID_NULL;
+            if (!bc_put_string(w, payload_name) || !bc_put_u8(w, payload_type_id))
+                return false;
+        }
     }
     return true;
 }
@@ -1099,10 +1111,14 @@ static XrValue bc_read_enum_type(BcReader *r) {
 
     char **member_names = xr_calloc(member_count, sizeof(char *));
     int *payload_counts = xr_calloc(member_count, sizeof(int));
-    if (!member_names || !payload_counts) {
+    char ***payload_names = xr_calloc(member_count, sizeof(char **));
+    uint8_t **payload_type_ids = xr_calloc(member_count, sizeof(uint8_t *));
+    if (!member_names || !payload_counts || !payload_names || !payload_type_ids) {
         xr_free(enum_name);
         xr_free(member_names);
         xr_free(payload_counts);
+        xr_free(payload_names);
+        xr_free(payload_type_ids);
         r->error = XR_BC_ERR_ALLOC;
         return xr_null();
     }
@@ -1118,8 +1134,27 @@ static XrValue bc_read_enum_type(BcReader *r) {
             break;
         }
         payload_counts[i] = (int) payload_count;
-        if (payload_count > 0)
+        if (payload_count > 0) {
             has_payloads = true;
+            payload_names[i] = xr_calloc(payload_count, sizeof(char *));
+            payload_type_ids[i] = xr_calloc(payload_count, sizeof(uint8_t));
+            if (!payload_names[i] || !payload_type_ids[i]) {
+                r->error = XR_BC_ERR_ALLOC;
+                break;
+            }
+            for (uint16_t p = 0; p < payload_count; p++) {
+                payload_names[i][p] = bc_read_string_or_empty(r);
+                payload_type_ids[i][p] = bc_get_u8(r);
+                if (r->error != XR_BC_OK)
+                    break;
+                if (!payload_names[i][p] || payload_type_ids[i][p] >= XR_TID_COUNT) {
+                    r->error = XR_BC_ERR_CORRUPT;
+                    break;
+                }
+            }
+            if (r->error != XR_BC_OK)
+                break;
+        }
     }
 
     XrEnumType *enum_type = NULL;
@@ -1134,13 +1169,32 @@ static XrValue bc_read_enum_type(BcReader *r) {
                 r->error = XR_BC_ERR_CORRUPT;
                 enum_type = NULL;
             }
+            if (enum_type) {
+                for (uint32_t i = 0; i < member_count; i++) {
+                    if (payload_counts[i] > 0 &&
+                        !xr_enum_layout_set_variant_payload_metadata(
+                            enum_type->layout, i, (const char *const *) payload_names[i],
+                            payload_type_ids[i], (uint16_t) payload_counts[i])) {
+                        r->error = XR_BC_ERR_CORRUPT;
+                        enum_type = NULL;
+                        break;
+                    }
+                }
+            }
         }
     }
 
-    for (uint32_t i = 0; i < member_count; i++)
+    for (uint32_t i = 0; i < member_count; i++) {
         xr_free(member_names[i]);
+        for (int p = 0; p < payload_counts[i]; p++)
+            xr_free(payload_names[i] ? payload_names[i][p] : NULL);
+        xr_free(payload_names[i]);
+        xr_free(payload_type_ids[i]);
+    }
     xr_free(member_names);
     xr_free(payload_counts);
+    xr_free(payload_names);
+    xr_free(payload_type_ids);
     xr_free(enum_name);
 
     return (r->error == XR_BC_OK && enum_type) ? XR_FROM_PTR(enum_type) : xr_null();

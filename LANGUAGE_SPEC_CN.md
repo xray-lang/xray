@@ -1749,7 +1749,10 @@ for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
 for (ch in "hello") { print(ch) }             // 字符串字符（按 Unicode scalar）
 for (key in someMap) { print(key) }           // Map 单变量 → key
 for (key in someJson) { print(key) }          // Json 单变量 → key
-// for (day in Color) { ... }                 // 编译错误：enum 类型本身不可迭代
+for (color in Color) { print(color.name) }    // 仅无 payload enum；产出 Color 值
+for (variant in Event.variants) {             // 任意具体 enum；产出 EnumVariant<Event>
+    print(variant.name)
+}
 for (_ in 0..n) { count++ }                   // 占位符忽略
 ```
 
@@ -1782,8 +1785,13 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 | `Json` | key (string) | (key, value) |
 | `string` | `rune` | (index, rune) |
 | `Range`（`a..b`） | int | — |
-| Enum 类型 | **不可迭代**；需要编译器生成或用户提供的显式 case 表 | — |
+| 仅含无 payload 变体的具体 enum 类型 `E` | `E` 的实际值（声明顺序） | — |
+| 含 payload 变体的 enum 类型 `E` | **编译错误**；使用 `E.variants` | — |
+| `EnumVariants<E>` | `EnumVariant<E>` 描述符（声明顺序） | — |
+| `EnumPayloads<E>` | `EnumPayloadField<E>` 描述符（声明顺序） | — |
 | 自定义 `Iterator<T>` | T | — |
+
+enum 类型域与 descriptor view 由编译器静态识别，不意味着 enum 实现 `Iterable`，也不会隐式构造数组或迭代器对象。`E` 必须是编译期可确定布局的具体 enum；未约束类型参数上的 `E.variants` 会被拒绝。详见 §5.6.5。
 
 #### 自定义迭代器
 
@@ -2707,17 +2715,55 @@ Color.Red.ordinal     // 0              声明顺序 tag (int，从 0)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
 ```
 
-enum 值提供 `name`、`ordinal` 与 `toString()`。需要遍历全部 case 时，应使用显式生成 metadata 的 `CaseIterable` 风格能力。
+enum 值提供 `name`、`ordinal` 与 `toString()`。它们不提供 `value`、`rawValue`、`fromName` 或 `fromOrdinal` 等隐式 backing-value/reflection API。
 
 #### 5.6.5 遍历
 
-enum 默认不可 `for-in` 遍历：
+仅由无 payload 变体组成的具体 enum 可以直接迭代实际 enum 值；任意具体 enum 都可通过 `.variants` 迭代声明级描述符：
 
 ```xray
-for (c in Color) { print(c.name) }        // 编译错误
+for (color in Color) {
+    print(color.name)                     // color: Color；Red、Green、Blue
+}
+
+for (variant in NetEvent.variants) {
+    print(variant.ordinal)                // variant: EnumVariant<NetEvent>
+    print(variant.name)
+    for (field in variant.payloads) {
+        print(field.name)                 // field: EnumPayloadField<NetEvent>
+        print(field.type)                 // int：具体字段类型的 canonical TypeId
+    }
+}
 ```
 
-原因是 case 列表属于可裁剪 metadata，不应成为每个 enum 的默认 runtime 对象能力。需要 case iteration 时应显式 opt-in，由编译器生成只读 case 表。
+两种循环语法相似，但产出类型有意不同：
+
+| 表达式 | 适用范围 | 循环变量类型 | 语义 |
+|---|---|---|---|
+| `E` | 仅 unit-only 具体 enum | `E` | 按声明顺序产出实际 enum 值 |
+| `E.variants` | 任意具体 enum | `EnumVariant<E>` | 按声明顺序产出只读变体描述符 |
+| `variant.payloads` | 一个 `EnumVariant<E>` | `EnumPayloadField<E>` | 按声明顺序产出只读 payload 字段描述符 |
+
+若 `E` 含任一 payload 变体，`for (value in E)` 是编译错误，诊断会建议 `E.variants`；编译器不会虚构 payload 值。`for (variant in Color.variants)` 对 unit-only enum 也完全合法，但 `variant` 仍是描述符而不是 `Color` 值。循环本身不打印任何内容；只有循环体显式执行的副作用会产生输出。
+
+descriptor API 是封闭白名单：
+
+| 类型 | 属性 / 操作 |
+|---|---|
+| `EnumVariants<E>` | `length: int`、检查边界的 `[index] -> EnumVariant<E>`、`for-in` |
+| `EnumVariant<E>` | `ordinal: int`、`name: string`、`payloadCount: int`、`isUnit: bool`、`payloads: EnumPayloads<E>` |
+| `EnumPayloads<E>` | `length: int`、检查边界的 `[index] -> EnumPayloadField<E>`、`for-in` |
+| `EnumPayloadField<E>` | `index: int`、`name: string`、`type: int`（canonical TypeId） |
+
+命名 payload 字段的 `name` 是源码声明名；位置 payload 字段没有声明名，其 `name` 确定为 `""`，不使用 `null`，因此 descriptor 表面保持非空 `string` 类型。
+
+这些类型不可由用户构造，描述符不可调用，也不提供从名字/ordinal 构造 enum 值的入口。越界索引按普通 checked index 失败。descriptor 不进入 C ABI，FFI 边界会编译拒绝。
+
+该能力是编译器静态类型域，不是 `Iterable` 协议实现：直接循环和不逃逸 descriptor 在 VM/AOT 中以 ordinal/index 标量降低，不分配数组或 iterator。只有 descriptor 流入 `any`、擦除 union、泛型存储、容器、闭包或跨协程通道等需要身份的边界时才物化不可变 box；`.name`、payload schema 与 type token 由使用证据分别保留，未使用的 cold sidecar 可裁剪。
+
+unit-only enum 的实际值在 typed 路径中同样只携带 ordinal；一旦该值跨入 tagged/擦除边界，静态 sidecar 必须保留 enum 名与全部 case 名，使边界后的 `.name`、`toString()`、相等性和通用字符串格式化与 VM 语义一致。仍保持 typed 的 enum 不生成该 sidecar。
+
+泛型时必须知道具体 enum layout，例如 `Option<int>.variants` 合法；未约束类型参数 `E.variants` 不合法。别名、导入和跨模块编译保留同一声明顺序与具体类型替换。
 
 #### 5.6.6 反查（从值到成员）
 
@@ -3710,7 +3756,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | `Comparable` | 可用 `<` `<=` `>` `>=` 比较；int/float/string/Comparable 实现者 |
 | `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `int` / `float` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==(other: Self) -> bool` 与 `hash() -> int` |
 | `Stringable` | 可调 `.toString()`；几乎所有内置类型默认实现 |
-| `Iterable<T>` | 可被 `for-in` 遍历；Array、Map、Json、string、Range 与自定义 `iterator()`；enum 类型本身不可迭代 |
+| `Iterable<T>` | 通过 iterator 协议被 `for-in` 遍历；Array、Map、Json、string、Range 与自定义 `iterator()` 满足此约束。unit-only enum 的 `for (value in E)` 与 concrete enum 的 `E.variants` 是编译期有限域语法，不使 enum 满足 `Iterable<T>`，也不能替代泛型 `Iterable<T>` 约束 |
 
 `Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==(other: Self) -> bool` 与 `hash() -> int`。只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, int>)`。
 

@@ -186,6 +186,36 @@ typedef struct XrAotEnumBox {
     XrValue payloads[];
 } XrAotEnumBox;
 
+/* One immutable sidecar per reachable unit enum is sufficient to box any
+ * compact ordinal at an erased/tagged boundary.  XrValue.ext carries the
+ * declaration ordinal; ptr identifies this layout and supplies cold names.
+ * Unlike XrAotEnumBox, this does not allocate one object per case or per loop
+ * iteration. */
+typedef struct XrAotEnumScalarLayout {
+    XrObjHeader hdr;
+    const char *enum_name;
+    const char *const *member_names;
+    uint32_t member_count;
+    uint32_t layout_id;
+} XrAotEnumScalarLayout;
+
+static inline XrValue xrt_enum_scalar_box(const XrAotEnumScalarLayout *layout, int64_t ordinal) {
+    if (!layout || ordinal < 0 || (uint64_t) ordinal >= layout->member_count)
+        return (XrValue) {0};
+    XrValue out = {0};
+    out.tag = XR_TAG_ENUM;
+    out.ext = (uint32_t) ordinal;
+    out.ptr = (void *) layout;
+    return out;
+}
+
+typedef struct XrAotErasedEnumDescriptor {
+    uint32_t layout_id;
+    uint8_t metadata_kind;
+    uint8_t _reserved[3];
+    int64_t scalar;
+} XrAotErasedEnumDescriptor;
+
 typedef struct XrAotRuntimeEnumCtorView {
     XrObjHeader hdr;
     const char *enum_name;
@@ -211,6 +241,21 @@ static inline int xrt_enum_key_parts(XrValue v, const char **enum_name, const ch
         return 0;
 
     const XrObjHeader *hdr = (const XrObjHeader *) v.ptr;
+    if (hdr->type == XR_TENUM_SCALAR_LAYOUT) {
+        const XrAotEnumScalarLayout *layout = (const XrAotEnumScalarLayout *) v.ptr;
+        uint32_t index = v.ext;
+        if (index >= layout->member_count)
+            return 0;
+        if (enum_name)
+            *enum_name = layout->enum_name;
+        if (member_name)
+            *member_name = layout->member_names ? layout->member_names[index] : NULL;
+        if (member_index)
+            *member_index = index;
+        if (layout_id)
+            *layout_id = layout->layout_id;
+        return 1;
+    }
     if (hdr->type == XR_TENUM_CTOR) {
         const XrAotRuntimeEnumCtorView *ctor = (const XrAotRuntimeEnumCtorView *) v.ptr;
         if (enum_name)

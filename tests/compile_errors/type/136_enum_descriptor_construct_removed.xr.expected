@@ -1,0 +1,2 @@
+has no member 'construct'
+construct enum values with an explicit static variant constructor

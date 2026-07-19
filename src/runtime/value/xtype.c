@@ -488,6 +488,13 @@ static bool xr_type_contains_error_impl(const XrType *type, int depth) {
                     return true;
             }
             return false;
+        case XR_KIND_ENUM:
+            for (int i = 0; i < type->enum_type.type_arg_count; i++) {
+                XrType *arg = type->enum_type.type_args ? type->enum_type.type_args[i] : NULL;
+                if (xr_type_contains_error_impl(arg, depth + 1))
+                    return true;
+            }
+            return false;
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_STRING:
@@ -497,7 +504,6 @@ static bool xr_type_contains_error_impl(const XrType *type, int depth) {
         case XR_KIND_ERROR:
         case XR_KIND_NEVER:
         case XR_KIND_UNIT:
-        case XR_KIND_ENUM:
         case XR_KIND_RUNE:
         case XR_KIND_COUNT:
             return false;
@@ -648,6 +654,30 @@ XrType *xr_type_new_enum(XrVMRuntime *X, const char *enum_name) {
         type->enum_type.enum_name = xr_pool_strdup(pool, enum_name);
         type->enum_type.layout_id = 0;
         type->enum_type.layout = NULL;
+        type->enum_type.type_args = NULL;
+        type->enum_type.type_arg_count = 0;
+    }
+    return type;
+}
+
+XrType *xr_type_new_generic_enum(XrVMRuntime *X, const char *enum_name, const XrEnumLayout *layout,
+                                 XrType **type_args, int type_arg_count) {
+    if (type_arg_count < 0 || (type_arg_count > 0 && !type_args))
+        return NULL;
+    XrType *type = xr_type_new_enum(X, enum_name);
+    if (!type)
+        return NULL;
+    type->enum_type.layout = layout;
+    type->enum_type.layout_id = layout ? layout->layout_id : 0;
+    if (type_arg_count > 0) {
+        XrTypePool *pool = resolve_type_pool(resolve_isolate(X));
+        type->enum_type.type_args =
+            (XrType **) type_alloc_array(pool, sizeof(XrType *), (size_t) type_arg_count, NULL);
+        if (!type->enum_type.type_args)
+            return NULL;
+        type->enum_type.type_arg_count = type_arg_count;
+        for (int i = 0; i < type_arg_count; i++)
+            type->enum_type.type_args[i] = type_args[i];
     }
     return type;
 }
@@ -700,6 +730,14 @@ XrType *xr_type_new_generic_instance(XrVMRuntime *X, const char *class_name,
     }
 
     return type;
+}
+
+XrType *xr_type_new_enum_metadata(XrVMRuntime *X, const char *metadata_name, XrType *enum_type) {
+    if (!metadata_name || !enum_type || enum_type->kind != XR_KIND_ENUM ||
+        !enum_type->enum_type.layout)
+        return NULL;
+    XrType *args[1] = {enum_type};
+    return xr_type_new_generic_instance(X, metadata_name, NULL, args, 1);
 }
 
 // Function type
@@ -1116,6 +1154,15 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
                 type->enum_type.enum_name ? xr_pool_strdup(pool, type->enum_type.enum_name) : NULL;
             copy->enum_type.layout_id = type->enum_type.layout_id;
             copy->enum_type.layout = type->enum_type.layout;
+            copy->enum_type.type_arg_count = type->enum_type.type_arg_count;
+            if (type->enum_type.type_arg_count > 0 && type->enum_type.type_args) {
+                copy->enum_type.type_args = (XrType **) type_alloc_array(
+                    pool, sizeof(XrType *), (size_t) type->enum_type.type_arg_count, NULL);
+                if (!copy->enum_type.type_args)
+                    return NULL;
+                for (int i = 0; i < type->enum_type.type_arg_count; i++)
+                    copy->enum_type.type_args[i] = type->enum_type.type_args[i];
+            }
             break;
         case XR_KIND_INSTANCE:
         case XR_KIND_CLASS:
@@ -1775,6 +1822,18 @@ bool xr_type_equals(XrType *a, XrType *b) {
     if (a->kind == XR_KIND_MAP) {
         return xr_type_equals(a->map.key_type, b->map.key_type) &&
                xr_type_equals(a->map.value_type, b->map.value_type);
+    }
+    if (a->kind == XR_KIND_ENUM) {
+        if (!a->enum_type.enum_name || !b->enum_type.enum_name ||
+            strcmp(a->enum_type.enum_name, b->enum_type.enum_name) != 0 ||
+            a->enum_type.type_arg_count != b->enum_type.type_arg_count)
+            return false;
+        for (int i = 0; i < a->enum_type.type_arg_count; i++) {
+            if (!xr_type_equals(a->enum_type.type_args ? a->enum_type.type_args[i] : NULL,
+                                b->enum_type.type_args ? b->enum_type.type_args[i] : NULL))
+                return false;
+        }
+        return true;
     }
     if (a->kind == XR_KIND_INSTANCE || a->kind == XR_KIND_CLASS) {
         // Compare class references first

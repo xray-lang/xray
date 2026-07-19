@@ -14,6 +14,7 @@
 #include "../base/xhash.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
+#include "../frontend/analyzer/xa_selection.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -31,7 +32,7 @@ enum {
     XG_DENSE_ENUM_MEMBER_MAX = 256
 };
 
-#define XG_COMPILER_SEMVER_HASH UINT64_C(0x0000017200000004)
+#define XG_COMPILER_SEMVER_HASH UINT64_C(0x0000017200000005)
 
 typedef struct XgClassNameRow {
     XgModuleId module_id;
@@ -8714,6 +8715,63 @@ static bool body_stdlib_call_may_suspend(XgBodyCollect *bc, const AstNode *call)
            strcmp(callee->as.member_access.name, "sleep") == 0;
 }
 
+static uint32_t body_enum_metadata_bit(uint32_t field) {
+    switch ((XaEnumMetaField) field) {
+        case XA_ENUM_META_VARIANTS:
+        case XA_ENUM_META_LENGTH:
+            return XG_METADATA_ENUM_COUNT;
+        case XA_ENUM_META_ORDINAL:
+            return XG_METADATA_ENUM_ORDINAL;
+        case XA_ENUM_META_NAME:
+            return XG_METADATA_ENUM_VARIANT_NAME;
+        case XA_ENUM_META_PAYLOAD_COUNT:
+        case XA_ENUM_META_IS_UNIT:
+        case XA_ENUM_META_PAYLOADS:
+            return XG_METADATA_ENUM_PAYLOAD_COUNT;
+        case XA_ENUM_META_PAYLOAD_INDEX:
+            return XG_METADATA_ENUM_PAYLOAD_INDEX;
+        case XA_ENUM_META_PAYLOAD_NAME:
+            return XG_METADATA_ENUM_PAYLOAD_NAME;
+        case XA_ENUM_META_PAYLOAD_TYPE:
+            return XG_METADATA_ENUM_PAYLOAD_TYPE;
+        default:
+            return 0;
+    }
+}
+
+static void body_add_enum_metadata_use(XgBodyCollect *bc, const AstNode *node) {
+    const XaSelection *selection;
+    XaSelectionTable *table;
+    if (!bc || !bc->producer || !bc->producer->analyzer || !node ||
+        !bc->producer->analyzer->selection_table)
+        return;
+    table = (XaSelectionTable *) bc->producer->analyzer->selection_table;
+    selection = xa_selection_table_get(table, node);
+    if (!selection) {
+        if (node->type == AST_MEMBER_ACCESS && node->as.member_access.object &&
+            node->as.member_access.name) {
+            XrType *receiver =
+                xa_analyzer_get_node_type(bc->producer->analyzer, node->as.member_access.object);
+            if (receiver && receiver->kind == XR_KIND_ENUM) {
+                if (strcmp(node->as.member_access.name, "name") == 0)
+                    bc->metadata_use_bits |= XG_METADATA_ENUM_VARIANT_NAME;
+                else if (strcmp(node->as.member_access.name, "ordinal") == 0)
+                    bc->metadata_use_bits |= XG_METADATA_ENUM_ORDINAL;
+            }
+        }
+        return;
+    }
+    if (selection->kind == XA_SEL_ENUM_VARIANTS)
+        bc->metadata_use_bits |= XG_METADATA_ENUM_COUNT;
+    else if (selection->kind == XA_SEL_ENUM_META) {
+        uint32_t field = selection->field_index;
+        if (field == XA_ENUM_META_LENGTH &&
+            xr_type_is_enum_metadata_named(selection->receiver_type, XR_ENUM_PAYLOADS_TYPE_NAME))
+            field = XA_ENUM_META_PAYLOAD_COUNT;
+        bc->metadata_use_bits |= body_enum_metadata_bit(field);
+    }
+}
+
 static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
     if (!bc || !node)
         return;
@@ -9153,6 +9211,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             body_add_json_member_access(bc, node, false);
             body_add_record_member_access(bc, node, false);
+            body_add_enum_metadata_use(bc, node);
             walk_body_for_calls(bc, node->as.member_access.object);
             break;
         }
@@ -9440,6 +9499,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             uint32_t item_type_key =
                 node->as.for_in_stmt.item_type ? hash_tref32(node->as.for_in_stmt.item_type) : 0;
             bc->capability_bits |= body_capabilities_for_type_ref(node->as.for_in_stmt.item_type);
+            if (node->as.for_in_stmt.domain_kind == XR_FOR_IN_DOMAIN_UNIT_ENUM_VALUES ||
+                node->as.for_in_stmt.domain_kind == XR_FOR_IN_DOMAIN_ENUM_VARIANTS)
+                bc->metadata_use_bits |= XG_METADATA_ENUM_COUNT;
             bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             walk_body_for_calls(bc, node->as.for_in_stmt.collection);
             (void) body_push_name_local(bc, node->as.for_in_stmt.value_name,

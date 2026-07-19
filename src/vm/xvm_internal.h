@@ -35,6 +35,7 @@
 #include "../runtime/object/xpanic_info.h"
 #include "../runtime/object/xbigint.h"
 #include "../runtime/value/xstruct_layout.h"
+#include "../runtime/value/xenum_descriptor.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../base/xglobal_indices.h"
 #include "xvm_coro_api.h"

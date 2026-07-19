@@ -416,6 +416,10 @@ static void emit_i64_const_reg(EmitCtx *ctx, XiEmitReg dst, int64_t val) {
     }
 }
 
+void xi_emit_i64_const_reg(EmitCtx *ctx, XiEmitReg dst, int64_t value) {
+    emit_i64_const_reg(ctx, dst, value);
+}
+
 static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     struct XrType *ty = v->type;
     if (!ty) {
@@ -479,6 +483,14 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             break;
         }
         case XR_KIND_INSTANCE: {
+            /* Enum metadata views/descriptors are compiler intrinsics with an
+             * I64 representation. Their nominal generic type keeps values
+             * such as EnumVariant<E> distinct in the analyzer, but bytecode
+             * must load the packed scalar rather than a null instance. */
+            if (xr_type_is_enum_metadata(ty)) {
+                emit_i64_const_reg(ctx, dst, v->aux_int);
+                break;
+            }
             /* BigInt: aux holds decimal digit string, create XrBigInt object */
             if (xr_type_is_named_class(ty, "BigInt") && v->aux) {
                 const char *digits = (const char *) v->aux;

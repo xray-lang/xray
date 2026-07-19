@@ -49,6 +49,7 @@
 #include "../base/xglobal_indices.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../frontend/analyzer/xa_selection.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../os/os_time.h"
 #include "../runtime/symbol/xsymbol_table.h"
@@ -586,6 +587,67 @@ static bool fold_exact_integer_unary(XiValue *v, int64_t operand) {
     return true;
 }
 
+static bool enum_metadata_value_token(const XiValue *v, int64_t *out_token) {
+    if (!v || !out_token)
+        return false;
+    const XrType *owner =
+        v->enum_metadata_owner ? v->enum_metadata_owner : xr_type_enum_metadata_owner(v->type);
+    XrEnumMetadataKind kind = v->enum_metadata_kind != XR_ENUM_METADATA_NONE
+                                  ? (XrEnumMetadataKind) v->enum_metadata_kind
+                                  : xr_type_enum_metadata_kind(v->type);
+    if (!owner || owner->kind != XR_KIND_ENUM || !owner->enum_type.layout ||
+        owner->enum_type.layout->layout_id == 0 || kind == XR_ENUM_METADATA_NONE)
+        return false;
+    *out_token = ((int64_t) owner->enum_type.layout->layout_id << 8) | (int64_t) kind;
+    return true;
+}
+
+/* A direct unit-enum for-in loop lowers its induction variable as
+ *
+ *     INDEX_GET(enum-domain, ordinal)  [XI_AUX_KIND_ENUM_CASE]
+ *
+ * The value is real and may escape as an enum, but projecting `.ordinal`
+ * immediately after that access must not materialize one static enum box per
+ * declaration.  The verified enum-domain access is indexed by exactly the
+ * declaration ordinal, so the projection is the index itself.  Rewriting here
+ * also lets DCE remove the otherwise O(variant-count) AOT switch when the loop
+ * only needs the tag. */
+static XiValue *enum_case_iteration_ordinal(XiValue *value) {
+    for (uint8_t depth = 0; value && depth < 8; depth++) {
+        if (value->op == XI_INDEX_GET && value->aux_kind == XI_AUX_KIND_ENUM_CASE &&
+            value->nargs >= 2 && value->args[1] && value->type &&
+            value->type->kind == XR_KIND_ENUM && value->type->enum_type.layout &&
+            value->type->enum_type.layout->is_zero_payload)
+            return value->args[1];
+        if (!xi_copy_is_identity_alias(value) || value->nargs < 1 || !value->args[0])
+            return NULL;
+        value = value->args[0];
+    }
+    return NULL;
+}
+
+static bool fold_enum_metadata_value(XiValue *value) {
+    if (value->op == XI_IS && value->nargs == 2 && value->args[0] && value->args[1]) {
+        int64_t source_token = 0;
+        int64_t target_token = 0;
+        if (enum_metadata_value_token(value->args[0], &source_token) &&
+            const_int_value(value->args[1], &target_token)) {
+            rewrite_to_const_int(value, source_token == target_token ? 1 : 0);
+            return true;
+        }
+    }
+
+    if (value->op == XI_LOAD_FIELD && value->nargs == 1 &&
+        value->enum_metadata_field == XA_ENUM_META_ORDINAL) {
+        XiValue *ordinal = enum_case_iteration_ordinal(value->args[0]);
+        if (ordinal) {
+            rewrite_to_copy(value, ordinal);
+            return true;
+        }
+    }
+    return false;
+}
+
 XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_const_fold: NULL func");
     XiPassChange chg = xi_pass_no_change();
@@ -652,6 +714,13 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
 
             if (v->nargs == 1 && const_int_value(v->args[0], &unary_i) &&
                 fold_exact_integer_unary(v, unary_i)) {
+                chg.values_changed = true;
+                continue;
+            }
+
+            /* Descriptor type tests and unit-enum ordinal projections are
+             * fully static and must not force descriptor/value materialization. */
+            if (fold_enum_metadata_value(v)) {
                 chg.values_changed = true;
                 continue;
             }
@@ -2435,12 +2504,33 @@ static XrRep sr_arith_native_result_rep(const XiValue *v, const XiRepPolicy *pol
     return sr_arith_native_result_rep_depth(v, policy, 0);
 }
 
+static bool sr_def_rep_enum_op(const XiValue *value, XrRep *out) {
+    switch (value->op) {
+        case XI_ENUM_VARIANT_AT:
+        case XI_ENUM_PAYLOAD_AT:
+        case XI_ENUM_META_GET:
+            *out = sr_type_scalar_rep(value->type);
+            return true;
+        case XI_ENUM_DESCRIPTOR_BOX:
+            *out = XR_REP_TAGGED;
+            return true;
+        case XI_ENUM_DESCRIPTOR_UNBOX:
+            *out = XR_REP_I64;
+            return true;
+        default:
+            return false;
+    }
+}
+
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
     if (!v || !v->type)
         return XR_REP_TAGGED;
     XrRep memory_rep = XR_REP_TAGGED;
     if (sr_def_rep_memory_op(v, &memory_rep))
         return memory_rep;
+    XrRep enum_rep = XR_REP_TAGGED;
+    if (sr_def_rep_enum_op(v, &enum_rep))
+        return enum_rep;
     switch (v->op) {
         case XI_PARAM: {
             if (sr_param_is_call_bound_place(v))
@@ -2592,6 +2682,10 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
                                  XrRep *out) {
     switch (user->op) {
         case XI_INDEX_GET:
+            if (user->aux_kind == XI_AUX_KIND_ENUM_CASE) {
+                *out = arg_idx == 1 ? XR_REP_I64 : XR_REP_TAGGED;
+                return true;
+            }
             if (user->nargs >= 2 && user->args[0] &&
                 sr_value_has_static_index_storage(user->args[0])) {
                 if (arg_idx == 0) {
@@ -2771,10 +2865,39 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
     }
 }
 
+static bool sr_use_rep_enum_op(const XiValue *user, uint16_t arg_idx, XrRep *out) {
+    switch (user->op) {
+        case XI_ENUM_VARIANT_AT:
+        case XI_ENUM_PAYLOAD_AT:
+            *out = XR_REP_I64;
+            return true;
+        case XI_ENUM_META_GET:
+            /* The AOT-only compact payload-TypeId form repeats the descriptor
+             * in arg0; the concrete enum plan replaces the VM namespace. */
+            if (user->enum_metadata_field == XA_ENUM_META_PAYLOAD_TYPE &&
+                user->enum_metadata_owner && user->nargs == 2 && user->args[0] == user->args[1])
+                *out = XR_REP_I64;
+            else
+                *out = arg_idx == 1 ? XR_REP_I64 : XR_REP_TAGGED;
+            return true;
+        case XI_ENUM_DESCRIPTOR_BOX:
+            *out = XR_REP_I64;
+            return true;
+        case XI_ENUM_DESCRIPTOR_UNBOX:
+            *out = XR_REP_TAGGED;
+            return true;
+        default:
+            return false;
+    }
+}
+
 static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy *policy) {
     XrRep mem_rep = XR_REP_TAGGED;
     if (sr_use_rep_memory_op(user, arg_idx, policy, &mem_rep))
         return mem_rep;
+    XrRep enum_rep = XR_REP_TAGGED;
+    if (sr_use_rep_enum_op(user, arg_idx, &enum_rep))
+        return enum_rep;
     switch (user->op) {
         case XI_ADD:
         case XI_SUB:
@@ -2929,6 +3052,7 @@ static XiValue *sr_make_convert(XiFunc *f, XiBlock *blk, uint16_t op, struct XrT
     memset(v, 0, sizeof(XiValue));
     v->id = f->next_value_id++;
     v->op = op;
+    v->flags = xi_op_default_effects(op);
     v->var_id = arg->var_id;
     v->type = type;
     v->nargs = 1;
@@ -2938,12 +3062,32 @@ static XiValue *sr_make_convert(XiFunc *f, XiBlock *blk, uint16_t op, struct XrT
     if (!v->args)
         return NULL;
     v->args[0] = arg;
+    v->enum_metadata_owner = arg->enum_metadata_owner;
+    v->enum_metadata_field = arg->enum_metadata_field;
+    v->enum_metadata_kind = arg->enum_metadata_kind;
     return v;
+}
+
+static bool sr_conversion_erases_enum_metadata(const XiValue *source, const XrType *target) {
+    if (!source || !target ||
+        (!xr_type_is_enum_metadata(source->type) &&
+         source->enum_metadata_kind == XR_ENUM_METADATA_NONE))
+        return false;
+    /* Every enum-metadata target is a statically typed descriptor boundary.
+     * Type checking and monomorphization have already established descriptor
+     * kind/owner compatibility; wrapper pointer inequality here can merely be
+     * a generic-specialization artifact.  Only an actually erased target
+     * (union/interface/unknown/JSON) requires the semantic heap box. */
+    if (xr_type_is_enum_metadata(target))
+        return false;
+    return target->kind == XR_KIND_UNION || target->kind == XR_KIND_INTERFACE ||
+           target->kind == XR_KIND_JSON || target->kind == XR_KIND_UNKNOWN;
 }
 
 /* Rewrite a single arg reference if rep mismatches. */
 static void sr_rewrite_arg(XiFunc *f, XiValue **arg_slot, XrRep use_r, XiValue **box_of,
-                           XiValue **unbox_of, uint32_t max_id, const XiRepPolicy *policy) {
+                           XiValue **erased_box_of, XiValue **unbox_of, uint32_t max_id,
+                           const XiRepPolicy *policy, bool erase_enum_descriptor) {
     XiValue *arg = *arg_slot;
     if (!arg || arg->id >= max_id)
         return;
@@ -2953,18 +3097,87 @@ static void sr_rewrite_arg(XiFunc *f, XiValue **arg_slot, XrRep use_r, XiValue *
 
     if (def_r != XR_REP_TAGGED && use_r == XR_REP_TAGGED) {
         /* Unboxed -> tagged: insert BOX */
-        if (!box_of[arg->id]) {
-            box_of[arg->id] = sr_make_convert(f, arg->block, XI_BOX, arg->type, arg);
+        XiValue **cache = erase_enum_descriptor ? erased_box_of : box_of;
+        uint16_t op = erase_enum_descriptor ? XI_ENUM_DESCRIPTOR_BOX : XI_BOX;
+        if (!cache[arg->id]) {
+            cache[arg->id] = sr_make_convert(f, arg->block, op, arg->type, arg);
         }
-        if (box_of[arg->id])
-            *arg_slot = box_of[arg->id];
+        if (cache[arg->id])
+            *arg_slot = cache[arg->id];
     } else if (def_r == XR_REP_TAGGED && use_r != XR_REP_TAGGED) {
         /* Tagged -> unboxed: insert UNBOX */
         if (!unbox_of[arg->id]) {
-            unbox_of[arg->id] = sr_make_convert(f, arg->block, XI_UNBOX, arg->type, arg);
+            uint16_t op = arg->op == XI_ENUM_DESCRIPTOR_BOX ? XI_ENUM_DESCRIPTOR_UNBOX : XI_UNBOX;
+            unbox_of[arg->id] = sr_make_convert(f, arg->block, op, arg->type, arg);
         }
         if (unbox_of[arg->id])
             *arg_slot = unbox_of[arg->id];
+    }
+}
+
+static void sr_rebuild_conversions(XiFunc *func, XiValue **box_of, XiValue **erased_box_of,
+                                   XiValue **unbox_of, uint32_t max_id) {
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+
+        uint32_t extra = 0;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (!value)
+                continue;
+            if (value->id < max_id && box_of[value->id] && box_of[value->id]->block == block)
+                extra++;
+            if (value->id < max_id && erased_box_of[value->id] &&
+                erased_box_of[value->id]->block == block)
+                extra++;
+            if (value->id < max_id && unbox_of[value->id] && unbox_of[value->id]->block == block)
+                extra++;
+        }
+        for (XiPhi *phi = block->phis; phi; phi = phi->next) {
+            uint32_t id = phi->value.id;
+            if (id < max_id && box_of[id] && box_of[id]->block == block)
+                extra++;
+            if (id < max_id && erased_box_of[id] && erased_box_of[id]->block == block)
+                extra++;
+            if (id < max_id && unbox_of[id] && unbox_of[id]->block == block)
+                extra++;
+        }
+        if (extra == 0)
+            continue;
+
+        uint32_t new_cap = block->nvalues + extra;
+        XiValue **values = (XiValue **) xi_func_arena_alloc(func, new_cap * sizeof(XiValue *));
+        if (!values)
+            continue;
+
+        uint32_t count = 0;
+        /* Phi-sourced conversions must precede regular instructions. */
+        for (XiPhi *phi = block->phis; phi; phi = phi->next) {
+            uint32_t id = phi->value.id;
+            if (id < max_id && unbox_of[id] && unbox_of[id]->block == block)
+                values[count++] = unbox_of[id];
+            if (id < max_id && box_of[id] && box_of[id]->block == block)
+                values[count++] = box_of[id];
+            if (id < max_id && erased_box_of[id] && erased_box_of[id]->block == block)
+                values[count++] = erased_box_of[id];
+        }
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            values[count++] = value;
+            if (!value || value->id >= max_id)
+                continue;
+            if (unbox_of[value->id] && unbox_of[value->id]->block == block)
+                values[count++] = unbox_of[value->id];
+            if (box_of[value->id] && box_of[value->id]->block == block)
+                values[count++] = box_of[value->id];
+            if (erased_box_of[value->id] && erased_box_of[value->id]->block == block)
+                values[count++] = erased_box_of[value->id];
+        }
+        block->values = values;
+        block->nvalues = count;
+        block->values_cap = new_cap;
     }
 }
 
@@ -2988,9 +3201,11 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
     }
 
     XiValue **box_of = (XiValue **) xr_calloc(max_id, sizeof(XiValue *));
+    XiValue **erased_box_of = (XiValue **) xr_calloc(max_id, sizeof(XiValue *));
     XiValue **unbox_of = (XiValue **) xr_calloc(max_id, sizeof(XiValue *));
-    if (!box_of || !unbox_of) {
+    if (!box_of || !erased_box_of || !unbox_of) {
         xr_free(box_of);
+        xr_free(erased_box_of);
         xr_free(unbox_of);
         return xi_pass_no_change();
     }
@@ -3007,7 +3222,11 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
                 continue;
             for (uint16_t ai = 0; ai < v->nargs; ai++) {
                 XrRep use_r = sr_use_rep(v, ai, &local_policy);
-                sr_rewrite_arg(f, &v->args[ai], use_r, box_of, unbox_of, max_id, &local_policy);
+                bool erase_descriptor = false;
+                if ((v->op == XI_COPY || v->op == XI_MOVE) && ai == 0)
+                    erase_descriptor = sr_conversion_erases_enum_metadata(v->args[ai], v->type);
+                sr_rewrite_arg(f, &v->args[ai], use_r, box_of, erased_box_of, unbox_of, max_id,
+                               &local_policy, erase_descriptor);
             }
         }
 
@@ -3018,8 +3237,10 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
                                 ? XR_REP_TAGGED
                                 : sr_type_native_boundary_rep(phi->value.type);
             for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
-                sr_rewrite_arg(f, &phi->value.args[ai], phi_rep, box_of, unbox_of, max_id,
-                               &local_policy);
+                bool erase_descriptor =
+                    sr_conversion_erases_enum_metadata(phi->value.args[ai], phi->value.type);
+                sr_rewrite_arg(f, &phi->value.args[ai], phi_rep, box_of, erased_box_of, unbox_of,
+                               max_id, &local_policy, erase_descriptor);
             }
         }
 
@@ -3028,71 +3249,19 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
             XrRep ret_rep = local_policy.force_return_tagged
                                 ? XR_REP_TAGGED
                                 : sr_type_native_boundary_rep(f->return_type);
-            sr_rewrite_arg(f, &blk->control, ret_rep, box_of, unbox_of, max_id, &local_policy);
+            bool erase_descriptor =
+                sr_conversion_erases_enum_metadata(blk->control, f->return_type);
+            sr_rewrite_arg(f, &blk->control, ret_rep, box_of, erased_box_of, unbox_of, max_id,
+                           &local_policy, erase_descriptor);
         }
     }
 
-    /* Rebuild each block's value array to include BOX/UNBOX after source.
-     * PHI nodes live on blk->phis, not in values[], so we must also
-     * check phi-sourced BOX/UNBOX and prepend them to the block. */
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-
-        uint32_t extra = 0;
-        /* Count conversions sourced from regular values */
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            XiValue *v = blk->values[vi];
-            if (!v)
-                continue;
-            if (v->id < max_id && box_of[v->id] && box_of[v->id]->block == blk)
-                extra++;
-            if (v->id < max_id && unbox_of[v->id] && unbox_of[v->id]->block == blk)
-                extra++;
-        }
-        /* Count conversions sourced from phi nodes */
-        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            uint32_t pid = phi->value.id;
-            if (pid < max_id && box_of[pid] && box_of[pid]->block == blk)
-                extra++;
-            if (pid < max_id && unbox_of[pid] && unbox_of[pid]->block == blk)
-                extra++;
-        }
-        if (extra == 0)
-            continue;
-
-        uint32_t new_cap = blk->nvalues + extra;
-        XiValue **nv = (XiValue **) xi_func_arena_alloc(f, new_cap * sizeof(XiValue *));
-        if (!nv)
-            continue;
-
-        uint32_t ni = 0;
-        /* Prepend phi-sourced BOX/UNBOX before regular instructions */
-        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            uint32_t pid = phi->value.id;
-            if (pid < max_id && unbox_of[pid] && unbox_of[pid]->block == blk)
-                nv[ni++] = unbox_of[pid];
-            if (pid < max_id && box_of[pid] && box_of[pid]->block == blk)
-                nv[ni++] = box_of[pid];
-        }
-        /* Then regular values with their conversions */
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            XiValue *v = blk->values[vi];
-            nv[ni++] = v;
-            if (!v || v->id >= max_id)
-                continue;
-            if (unbox_of[v->id] && unbox_of[v->id]->block == blk)
-                nv[ni++] = unbox_of[v->id];
-            if (box_of[v->id] && box_of[v->id]->block == blk)
-                nv[ni++] = box_of[v->id];
-        }
-        blk->values = nv;
-        blk->nvalues = ni;
-        blk->values_cap = new_cap;
-    }
+    /* Add BOX/UNBOX immediately after regular sources and prepend
+     * phi-sourced conversions before ordinary block instructions. */
+    sr_rebuild_conversions(f, box_of, erased_box_of, unbox_of, max_id);
 
     xr_free(box_of);
+    xr_free(erased_box_of);
     xr_free(unbox_of);
 
     /* Recurse into children first (bottom-up) */
@@ -3127,6 +3296,320 @@ XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f) {
     return xi_opt_select_rep_with_policy(f, &policy);
 }
 
+static XiFunc *sr_enum_erasure_shared_callee(const XiFunc *caller, int64_t slot) {
+    if (!caller || slot < 0)
+        return NULL;
+    for (const XiFunc *owner = caller; owner; owner = owner->parent_func) {
+        if (!owner->shared_slot_funcs || slot >= owner->shared_slot_func_count)
+            continue;
+        if (owner->shared_slot_funcs[slot])
+            return owner->shared_slot_funcs[slot];
+    }
+    return NULL;
+}
+
+static XiFunc *sr_enum_erasure_callee(const XiFunc *caller, const XiValue *callee) {
+    if (!callee)
+        return NULL;
+    if (callee->op == XI_CLOSURE_NEW && callee->aux)
+        return (XiFunc *) callee->aux;
+    if (callee->op == XI_GET_SHARED)
+        return sr_enum_erasure_shared_callee(caller, callee->aux_int);
+    if (xi_copy_is_identity_alias(callee) && callee->nargs >= 1)
+        return sr_enum_erasure_callee(caller, callee->args[0]);
+    return NULL;
+}
+
+static XrType *sr_enum_erasure_container_element(XrType *type) {
+    if (!type)
+        return NULL;
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_VIEW:
+        case XR_KIND_SPAN:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+            return type->container.element_type;
+        case XR_KIND_FIXED_ARRAY:
+            return type->fixed_array.element_type;
+        default:
+            return NULL;
+    }
+}
+
+static XrType *sr_enum_erasure_shared_type(const XiFunc *f, int64_t slot) {
+    if (!f || slot < 0)
+        return NULL;
+    XrType *observed = NULL;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_GET_SHARED || v->aux_int != slot || !v->type)
+                continue;
+            if (v->type->kind == XR_KIND_UNION || v->type->kind == XR_KIND_INTERFACE ||
+                v->type->kind == XR_KIND_JSON || v->type->kind == XR_KIND_UNKNOWN)
+                return v->type;
+            if (!observed)
+                observed = v->type;
+        }
+    }
+    return observed;
+}
+
+static XrType *sr_enum_erasure_arg_target(XiFunc *f, XiValue *user, uint16_t arg_index) {
+    if (!user || arg_index >= user->nargs)
+        return NULL;
+    switch (user->op) {
+        case XI_COPY:
+        case XI_MOVE:
+            return arg_index == 0 ? user->type : NULL;
+        case XI_SET_SHARED:
+            return arg_index == 0 ? sr_enum_erasure_shared_type(f, user->aux_int) : NULL;
+        case XI_STORE_UPVAL:
+            return arg_index == 0 && user->aux_int >= 0 && user->aux_int < (int64_t) f->ncaptures
+                       ? f->captures[user->aux_int].type
+                       : NULL;
+        case XI_INDEX_SET:
+            if (arg_index != 2 || !user->args[0] || !user->args[0]->type)
+                return NULL;
+            return user->args[0]->type->kind == XR_KIND_MAP
+                       ? user->args[0]->type->map.value_type
+                       : sr_enum_erasure_container_element(user->args[0]->type);
+        case XI_ARRAY_PUSH:
+            return arg_index == 1 && user->args[0]
+                       ? sr_enum_erasure_container_element(user->args[0]->type)
+                       : NULL;
+        case XI_CHAN_SEND:
+        case XI_CHAN_TRY_SEND:
+            return arg_index == 1 && user->args[0]
+                       ? sr_enum_erasure_container_element(user->args[0]->type)
+                       : NULL;
+        case XI_CALL:
+        case XI_TAIL_CALL:
+            if (arg_index > 0 && user->args[0]) {
+                XiFunc *callee = sr_enum_erasure_callee(f, user->args[0]);
+                uint16_t param = (uint16_t) (arg_index - 1);
+                if (callee && param < callee->nparams && callee->params[param])
+                    return callee->params[param]->type;
+                XrType *fn_type = user->args[0]->type;
+                if (fn_type && fn_type->kind == XR_KIND_FUNCTION &&
+                    param < (uint16_t) fn_type->function.param_count)
+                    return fn_type->function.params[param].type;
+            }
+            return NULL;
+        case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
+            if (arg_index == 1 && user->args[0] && xi_opt_method_name_is(user, "push", SYMBOL_PUSH))
+                return sr_enum_erasure_container_element(user->args[0]->type);
+            if (arg_index == 1 && user->args[0] && user->args[0]->type &&
+                user->args[0]->type->kind == XR_KIND_CHANNEL) {
+                const char *method = user->aux ? (const char *) user->aux : NULL;
+                if (method && (strcmp(method, "send") == 0 || strcmp(method, "trySend") == 0 ||
+                               strcmp(method, "sendTimeout") == 0))
+                    return sr_enum_erasure_container_element(user->args[0]->type);
+            }
+            return NULL;
+        default:
+            return NULL;
+    }
+}
+
+/* Materialize the semantic allocation required when a compact, typed enum
+ * descriptor crosses an erased identity boundary.  This runs before escape
+ * and ownership analysis on both VM and AOT paths; ordinary representation
+ * BOX/UNBOX remains an AOT-only concern. */
+XR_FUNC XiPassChange xi_opt_materialize_enum_descriptor_erasure(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_opt_materialize_enum_descriptor_erasure: NULL func");
+
+    uint32_t max_id = f->next_value_id;
+    if (max_id == 0) {
+        XiPassChange nested = xi_pass_no_change();
+        for (uint16_t i = 0; i < f->nchildren; i++) {
+            if (!f->children[i])
+                continue;
+            XiPassChange child = xi_opt_materialize_enum_descriptor_erasure(f->children[i]);
+            if (child.cfg_changed || child.values_changed || child.types_changed)
+                nested = xi_pass_change_all();
+        }
+        return nested;
+    }
+
+    XiValue **box_of = (XiValue **) xr_calloc(max_id, sizeof(XiValue *));
+    if (!box_of)
+        return xi_pass_no_change();
+    bool changed = false;
+
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v || v->nargs == 0)
+                continue;
+            for (uint16_t ai = 0; ai < v->nargs; ai++) {
+                XiValue *source = v->args[ai];
+                XrType *target = sr_enum_erasure_arg_target(f, v, ai);
+                if (!source || !target || source->op == XI_ENUM_DESCRIPTOR_BOX ||
+                    source->id >= max_id || !sr_conversion_erases_enum_metadata(source, target))
+                    continue;
+                if (!box_of[source->id])
+                    box_of[source->id] =
+                        sr_make_convert(f, source->block, XI_ENUM_DESCRIPTOR_BOX, target, source);
+                if (box_of[source->id]) {
+                    v->args[ai] = box_of[source->id];
+                    changed = true;
+                }
+            }
+        }
+
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                XiValue *source = phi->value.args[ai];
+                if (!source || source->op == XI_ENUM_DESCRIPTOR_BOX || source->id >= max_id ||
+                    !sr_conversion_erases_enum_metadata(source, phi->value.type))
+                    continue;
+                if (!box_of[source->id])
+                    box_of[source->id] = sr_make_convert(f, source->block, XI_ENUM_DESCRIPTOR_BOX,
+                                                         phi->value.type, source);
+                if (box_of[source->id]) {
+                    phi->value.args[ai] = box_of[source->id];
+                    changed = true;
+                }
+            }
+        }
+
+        if (blk->kind == XI_BLOCK_RETURN && blk->control && blk->control->op != XI_ERR_RETURN &&
+            blk->control->op != XI_ENUM_DESCRIPTOR_BOX && blk->control->id < max_id &&
+            sr_conversion_erases_enum_metadata(blk->control, f->return_type)) {
+            XiValue *source = blk->control;
+            if (!box_of[source->id])
+                box_of[source->id] = sr_make_convert(f, source->block, XI_ENUM_DESCRIPTOR_BOX,
+                                                     f->return_type, source);
+            if (box_of[source->id]) {
+                blk->control = box_of[source->id];
+                changed = true;
+            }
+        }
+    }
+
+    if (changed) {
+        for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+            XiBlock *blk = f->blocks[bi];
+            if (!blk)
+                continue;
+            uint32_t extra = 0;
+            for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+                XiValue *v = blk->values[vi];
+                if (v && v->id < max_id && box_of[v->id] && box_of[v->id]->block == blk)
+                    extra++;
+            }
+            for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+                uint32_t id = phi->value.id;
+                if (id < max_id && box_of[id] && box_of[id]->block == blk)
+                    extra++;
+            }
+            if (extra == 0)
+                continue;
+            XiValue **values =
+                (XiValue **) xi_func_arena_alloc(f, (blk->nvalues + extra) * sizeof(XiValue *));
+            if (!values)
+                continue;
+            uint32_t out = 0;
+            for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+                uint32_t id = phi->value.id;
+                if (id < max_id && box_of[id] && box_of[id]->block == blk)
+                    values[out++] = box_of[id];
+            }
+            for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+                XiValue *v = blk->values[vi];
+                values[out++] = v;
+                if (v && v->id < max_id && box_of[v->id] && box_of[v->id]->block == blk)
+                    values[out++] = box_of[v->id];
+            }
+            blk->values = values;
+            blk->nvalues = out;
+            blk->values_cap = out;
+        }
+    }
+    xr_free(box_of);
+
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (!f->children[i])
+            continue;
+        XiPassChange child = xi_opt_materialize_enum_descriptor_erasure(f->children[i]);
+        if (child.cfg_changed || child.values_changed || child.types_changed)
+            changed = true;
+    }
+    return changed ? xi_pass_change_all() : xi_pass_no_change();
+}
+
+/* The VM bytecode path intentionally lowers a concrete generic enum payload
+ * TypeId lookup to a finite XI_SELECT chain: its runtime enum namespace is
+ * declaration-shaped and cannot encode every generic specialization.  AOT,
+ * however, owns a verified, concrete XaotEnumPlan with substituted payload
+ * types.  Collapse that VM-oriented chain before AOT representation selection
+ * so large enums produce one cold table lookup instead of thousands of SSA
+ * compares/selects. */
+static XiValue *enum_payload_type_select_descriptor(XiValue *value) {
+    if (!value || value->op != XI_SELECT || value->nargs != 3 || !value->args[0])
+        return NULL;
+    XiValue *condition = value->args[0];
+    if (condition->op != XI_EQ || condition->nargs != 2 || !condition->args[0] ||
+        !condition->args[1])
+        return NULL;
+    int64_t ignored = 0;
+    if (const_int_value(condition->args[0], &ignored))
+        return condition->args[1];
+    if (const_int_value(condition->args[1], &ignored))
+        return condition->args[0];
+    return NULL;
+}
+
+XR_FUNC XiPassChange xi_opt_compact_enum_payload_type_lookup(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_opt_compact_enum_payload_type_lookup: NULL func");
+    XiPassChange changed = xi_pass_no_change();
+
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *block = f->blocks ? f->blocks[bi] : NULL;
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            XiValue *value = block->values ? block->values[vi] : NULL;
+            if (!value || value->enum_metadata_field != XA_ENUM_META_PAYLOAD_TYPE ||
+                !value->enum_metadata_owner || value->enum_metadata_owner->kind != XR_KIND_ENUM ||
+                !value->enum_metadata_owner->enum_type.layout)
+                continue;
+            XiValue *descriptor = enum_payload_type_select_descriptor(value);
+            if (!descriptor)
+                continue;
+            value->op = XI_ENUM_META_GET;
+            value->args[0] = descriptor;
+            value->args[1] = descriptor;
+            value->nargs = 2;
+            value->aux_int = XA_ENUM_META_PAYLOAD_TYPE;
+            value->aux = NULL;
+            value->aux_kind = XI_AUX_KIND_NONE;
+            value->flags = xi_op_default_effects(XI_ENUM_META_GET);
+            value->mem_group = XI_MEM_NONE;
+            changed.values_changed = true;
+        }
+    }
+
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (!f->children[i])
+            continue;
+        XiPassChange child = xi_opt_compact_enum_payload_type_lookup(f->children[i]);
+        if (child.cfg_changed || child.values_changed || child.types_changed)
+            changed = xi_pass_change_all();
+    }
+    return changed;
+}
+
 /* ========== BOX/UNBOX Peephole Elimination ========== */
 
 /*
@@ -3153,8 +3636,11 @@ XR_FUNC XiPassChange xi_opt_box_elim(XiFunc *f) {
             if (inner->nargs < 1 || !inner->args[0])
                 continue;
 
-            bool elim = (v->op == XI_UNBOX && inner->op == XI_BOX) ||
-                        (v->op == XI_BOX && inner->op == XI_UNBOX);
+            bool elim =
+                (v->op == XI_UNBOX && inner->op == XI_BOX) ||
+                (v->op == XI_BOX && inner->op == XI_UNBOX) ||
+                (v->op == XI_ENUM_DESCRIPTOR_UNBOX && inner->op == XI_ENUM_DESCRIPTOR_BOX) ||
+                (v->op == XI_ENUM_DESCRIPTOR_BOX && inner->op == XI_ENUM_DESCRIPTOR_UNBOX);
             if (elim) {
                 rewrite_to_copy(v, inner->args[0]);
                 chg.values_changed = true;

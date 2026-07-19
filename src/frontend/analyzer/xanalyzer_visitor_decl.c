@@ -318,7 +318,18 @@ static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
                                        msg, &loc);
         }
         XrType *type = param_types ? param_types[i] : NULL;
-        if (type && XR_TYPE_IS_C_FUNCTION(type)) {
+        if (xr_type_is_enum_metadata(type)) {
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = param ? param->line : (node ? node->line : 0),
+                              .column = param ? param->column : (node ? node->column : 0)};
+            char msg[320];
+            snprintf(msg, sizeof(msg),
+                     "extern function parameter '%s' uses enum descriptor type '%s', which has "
+                     "no stable C ABI; pass explicit scalar schema data instead",
+                     param && param->name ? param->name : "?", xr_type_to_string(type));
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        } else if (type && XR_TYPE_IS_C_FUNCTION(type)) {
             xa_validate_extern_cfn_callback_param_modes(ctx, node, param, type, false);
         } else if (type && XR_TYPE_IS_FUNCTION(type)) {
             XrLocation loc = {.file = ctx->file_path,
@@ -333,7 +344,18 @@ static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
                                        msg, &loc);
         }
     }
-    if (return_type && XR_TYPE_IS_C_FUNCTION(return_type))
+    if (xr_type_is_enum_metadata(return_type)) {
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = node ? node->line : 0,
+                          .column = node ? node->column : 0};
+        char msg[320];
+        snprintf(msg, sizeof(msg),
+                 "extern function returns enum descriptor type '%s', which has no stable C ABI; "
+                 "return explicit scalar schema data instead",
+                 xr_type_to_string(return_type));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    } else if (return_type && XR_TYPE_IS_C_FUNCTION(return_type))
         xa_validate_extern_cfn_callback_param_modes(ctx, node, NULL, return_type, true);
     if (return_type && XR_TYPE_IS_FUNCTION(return_type) && !XR_TYPE_IS_C_FUNCTION(return_type)) {
         XrLocation loc = {.file = ctx->file_path,

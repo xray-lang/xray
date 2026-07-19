@@ -246,6 +246,27 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
         return type;
     }
 
+    if (type->kind == XR_KIND_ENUM && type->enum_type.type_arg_count > 0) {
+        bool changed = false;
+        XrType *stack_args[16];
+        int ac = type->enum_type.type_arg_count;
+        XrType **new_args = ac <= 16 ? stack_args : xr_malloc(sizeof(XrType *) * (size_t) ac);
+        if (!new_args)
+            return type;
+        for (int i = 0; i < ac; i++) {
+            new_args[i] = xr_type_substitute(X, type->enum_type.type_args[i], param_names,
+                                             actual_types, count);
+            if (new_args[i] != type->enum_type.type_args[i])
+                changed = true;
+        }
+        XrType *result = changed ? xr_type_new_generic_enum(X, type->enum_type.enum_name,
+                                                            type->enum_type.layout, new_args, ac)
+                                 : type;
+        if (new_args != stack_args)
+            xr_free(new_args);
+        return result;
+    }
+
     // Substitute in fixed-length array types
     if (type->kind == XR_KIND_FIXED_ARRAY) {
         XrType *elem =

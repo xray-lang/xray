@@ -2,10 +2,15 @@
 ** generic_result_lib.xr
 ** 用于验证跨模块导出的泛型 ADT enum 会保留 payload 元数据。
 */
-
 export enum Result<T> {
     Ok(T),
-    Err(int),
+    Err(int)
+}
+
+export enum Traffic {
+    Stop,
+    Ready,
+    Go
 }
 
 export fn makeByteArray() -> Result<Array<byte>> {

@@ -94,10 +94,15 @@
     X(CONVERT, xi_emit_convert) \
     X(BOX, xi_emit_box) \
     X(UNBOX, xi_emit_unbox) \
+    X(ENUM_DESCRIPTOR_BOX, xi_emit_enum_descriptor_box) \
+    X(ENUM_DESCRIPTOR_UNBOX, xi_emit_enum_descriptor_unbox) \
     X(LOAD_FIELD, xi_emit_load_field) \
     X(STORE_FIELD, xi_emit_store_field) \
     X(INDEX_GET, xi_emit_index_get) \
     X(INDEX_SET, xi_emit_index_set) \
+    X(ENUM_VARIANT_AT, xi_emit_enum_variant_at) \
+    X(ENUM_PAYLOAD_AT, xi_emit_enum_payload_at) \
+    X(ENUM_META_GET, xi_emit_enum_meta_get) \
     X(ARRAY_NEW, xi_emit_array_new) \
     X(ARRAY_PUSH, xi_emit_array_push) \
     X(ARRAY_EXTEND, xi_emit_array_extend) \

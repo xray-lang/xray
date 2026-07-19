@@ -1334,6 +1334,20 @@ XR_FUNC const char *xg_metadata_name(uint32_t metadata) {
             return "debug";
         case XG_METADATA_TOOLING:
             return "tooling";
+        case XG_METADATA_ENUM_COUNT:
+            return "enum_count";
+        case XG_METADATA_ENUM_ORDINAL:
+            return "enum_ordinal";
+        case XG_METADATA_ENUM_VARIANT_NAME:
+            return "enum_variant_name";
+        case XG_METADATA_ENUM_PAYLOAD_COUNT:
+            return "enum_payload_count";
+        case XG_METADATA_ENUM_PAYLOAD_INDEX:
+            return "enum_payload_index";
+        case XG_METADATA_ENUM_PAYLOAD_NAME:
+            return "enum_payload_name";
+        case XG_METADATA_ENUM_PAYLOAD_TYPE:
+            return "enum_payload_type";
         default:
             return "unknown";
     }
@@ -1345,6 +1359,13 @@ XR_FUNC const uint32_t *xg_metadata_catalog(uint32_t *out_count) {
         XG_METADATA_DERIVE,
         XG_METADATA_DEBUG,
         XG_METADATA_TOOLING,
+        XG_METADATA_ENUM_COUNT,
+        XG_METADATA_ENUM_ORDINAL,
+        XG_METADATA_ENUM_VARIANT_NAME,
+        XG_METADATA_ENUM_PAYLOAD_COUNT,
+        XG_METADATA_ENUM_PAYLOAD_INDEX,
+        XG_METADATA_ENUM_PAYLOAD_NAME,
+        XG_METADATA_ENUM_PAYLOAD_TYPE,
     };
     if (out_count)
         *out_count = (uint32_t) (sizeof(metadata) / sizeof(metadata[0]));

@@ -27,6 +27,7 @@
 #include "../base/xmalloc.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
+#include "../frontend/analyzer/xa_selection.h"
 
 /* Recursively propagate shared_offset to a proto and all its descendants.
  * When a parent closure emits a child via xi_emit(), the child's sub-protos
@@ -379,7 +380,8 @@ XR_FUNC void xi_emit_index_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg key = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_INDEX_GET, dst, obj, key));
+    emit_inst(ctx, CREATE_ABC(v->aux_kind == XI_AUX_KIND_ENUM_CASE ? OP_ENUM_ACCESS : OP_INDEX_GET,
+                              dst, obj, key));
 }
 
 /* Index set */
@@ -395,6 +397,48 @@ XR_FUNC void xi_emit_index_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
     emit_inst(ctx, CREATE_ABC(OP_INDEX_SET, obj, key, val));
+}
+
+static void xi_emit_enum_binary(EmitCtx *ctx, XiValue *v, XiEmitReg dst, OpCode op) {
+    if (!v || v->nargs < 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg lhs = reg_of(ctx, v->args[0]);
+    XiEmitReg rhs = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(op, dst, lhs, rhs));
+}
+
+XR_FUNC void xi_emit_enum_variant_at(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    xi_emit_enum_binary(ctx, v, dst, OP_ENUM_VARIANT_AT);
+}
+
+XR_FUNC void xi_emit_enum_payload_at(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    xi_emit_enum_binary(ctx, v, dst, OP_ENUM_PAYLOAD_AT);
+}
+
+XR_FUNC void xi_emit_enum_meta_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    OpCode op;
+    switch ((XaEnumMetaField) v->aux_int) {
+        case XA_ENUM_META_NAME:
+            op = OP_ENUM_VARIANT_NAME;
+            break;
+        case XA_ENUM_META_PAYLOAD_COUNT:
+            op = OP_ENUM_VARIANT_PAYLOAD_COUNT;
+            break;
+        case XA_ENUM_META_PAYLOAD_NAME:
+            op = OP_ENUM_PAYLOAD_FIELD_NAME;
+            break;
+        case XA_ENUM_META_PAYLOAD_TYPE:
+            op = OP_ENUM_PAYLOAD_FIELD_TYPE;
+            break;
+        default:
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+    }
+    xi_emit_enum_binary(ctx, v, dst, op);
 }
 
 /* Array creation */

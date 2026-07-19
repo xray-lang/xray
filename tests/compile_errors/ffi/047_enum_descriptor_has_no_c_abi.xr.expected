@@ -1,0 +1,3 @@
+uses enum descriptor type 'EnumVariant<Color>'
+has no stable C ABI
+returns enum descriptor type 'EnumVariant<Color>'

@@ -58,6 +58,26 @@ enum {
     XAOT_EXTERN_ATTR_USED = 1u << 3,
 };
 
+/* Closed-world enum-domain facts.  These bits describe language-visible
+ * descriptor fields, not the compiler's diagnostic schema.  CGen may emit a
+ * cold sidecar only when the corresponding bit is present in the verified
+ * plan. */
+enum {
+    XAOT_ENUM_USE_COUNT = 1u << 0,
+    XAOT_ENUM_USE_ORDINAL = 1u << 1,
+    XAOT_ENUM_USE_VARIANT_NAME = 1u << 2,
+    XAOT_ENUM_USE_PAYLOAD_COUNT = 1u << 3,
+    XAOT_ENUM_USE_PAYLOAD_INDEX = 1u << 4,
+    XAOT_ENUM_USE_PAYLOAD_NAME = 1u << 5,
+    XAOT_ENUM_USE_PAYLOAD_TYPE = 1u << 6,
+};
+
+typedef enum XaotEnumDescriptorEscapeKind {
+    XAOT_ENUM_DESCRIPTOR_SCALAR = 0,
+    XAOT_ENUM_DESCRIPTOR_TYPED_VALUE = 1,
+    XAOT_ENUM_DESCRIPTOR_ERASED_BOX = 2,
+} XaotEnumDescriptorEscapeKind;
+
 /* Canonical, prepare-owned foreign declaration.  ret/params are the verified
  * AOT ABI slots; the parallel source type pointers preserve pointer and CFn
  * boundary spelling without asking Cgen to rediscover the declaration from
@@ -115,10 +135,14 @@ typedef struct XaotEnumPlan {
     uint32_t member_count;
     uint32_t layout_id;
     uint32_t scalar_evidence;
+    uint32_t descriptor_use_bits;
     uint16_t max_payload;
     uint16_t scalar_payload_cap;
     uint8_t type_arg_count;
     uint8_t scalar_action;
+    uint8_t descriptor_escape_kind;
+    bool value_iteration_reachable;
+    bool variant_iteration_reachable;
     bool owns_members;
     const char *c_type;
 } XaotEnumPlan;

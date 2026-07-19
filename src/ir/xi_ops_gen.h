@@ -39,10 +39,10 @@ typedef enum {
     XI_GEN_CLASS_COMPARISON = 3,
     XI_GEN_CLASS_TYPE = 4,
     XI_GEN_CLASS_CONVERSION = 5,
-    XI_GEN_CLASS_MEMORY_READ = 6,
-    XI_GEN_CLASS_MEMORY_WRITE = 7,
-    XI_GEN_CLASS_PURE = 8,
-    XI_GEN_CLASS_ALLOCATION = 9,
+    XI_GEN_CLASS_ALLOCATION = 6,
+    XI_GEN_CLASS_MEMORY_READ = 7,
+    XI_GEN_CLASS_MEMORY_WRITE = 8,
+    XI_GEN_CLASS_PURE = 9,
     XI_GEN_CLASS_CALL = 10,
     XI_GEN_CLASS_SIDE_EFFECT = 11,
     XI_GEN_CLASS_COROUTINE = 12,
@@ -173,7 +173,7 @@ typedef enum {
 #define XI_GEN_ALGEBRAIC_ASSOCIATIVE (1u << 0)
 #define XI_GEN_ALGEBRAIC_COMMUTATIVE (1u << 1)
 
-enum { XI_GEN_OP_COUNT = 199 };
+enum { XI_GEN_OP_COUNT = 204 };
 typedef char xi_generated_op_count_must_match_XiOp[
     ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];
 
@@ -239,6 +239,8 @@ typedef struct {
     X(CONVERT, "xi.convert", XI_GEN_CLASS_CONVERSION, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(BOX, "xi.box", XI_GEN_CLASS_CONVERSION, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(UNBOX, "xi.unbox", XI_GEN_CLASS_CONVERSION, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(ENUM_DESCRIPTOR_BOX, "xi.enum.descriptor.box", XI_GEN_CLASS_ALLOCATION, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_HEAP, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(ENUM_DESCRIPTOR_UNBOX, "xi.enum.descriptor.unbox", XI_GEN_CLASS_CONVERSION, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(NARROW_I8, "xi.narrow.i8", XI_GEN_CLASS_CONVERSION, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, "i8") \
     X(NARROW_U8, "xi.narrow.u8", XI_GEN_CLASS_CONVERSION, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, "u8") \
     X(NARROW_I16, "xi.narrow.i16", XI_GEN_CLASS_CONVERSION, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, "i16") \
@@ -257,6 +259,9 @@ typedef struct {
     X(STORE_FIELD, "xi.store.field", XI_GEN_CLASS_MEMORY_WRITE, 2, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_FIELD, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_HEAP, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_STORED_VALUE, XI_GEN_IC_SITE_FIELD, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(INDEX_GET, "xi.index.get", XI_GEN_CLASS_MEMORY_READ, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_MEMORY_READ, XI_GEN_TBAA_ARRAY, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_READS_MEM, 0, XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(INDEX_SET, "xi.index.set", XI_GEN_CLASS_MEMORY_WRITE, 3, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_ARRAY, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_HEAP, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_STORED_VALUE, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(ENUM_VARIANT_AT, "xi.enum.variant.at", XI_GEN_CLASS_PURE, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_MAY_THROW, 0, XI_EFFECT_MAY_THROW, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(ENUM_PAYLOAD_AT, "xi.enum.payload.at", XI_GEN_CLASS_PURE, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_MAY_THROW, 0, XI_EFFECT_MAY_THROW, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(ENUM_META_GET, "xi.enum.meta.get", XI_GEN_CLASS_MEMORY_READ, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_BORROWED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM, 0, XI_EFFECT_MAY_THROW | XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(BYTE_SLICE_LOAD_U16, "xi.byte.slice.load.u16", XI_GEN_CLASS_MEMORY_READ, 3, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_ARRAY, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM, 0, XI_EFFECT_MAY_THROW | XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(BYTE_SLICE_LOAD_U32, "xi.byte.slice.load.u32", XI_GEN_CLASS_MEMORY_READ, 3, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_ARRAY, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM, 0, XI_EFFECT_MAY_THROW | XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(BYTE_SLICE_LOAD_U64, "xi.byte.slice.load.u64", XI_GEN_CLASS_MEMORY_READ, 3, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_ARRAY, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM, 0, XI_EFFECT_MAY_THROW | XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
@@ -442,6 +447,8 @@ static inline const char *xi_generated_op_name(uint16_t op) {
         case XI_CONVERT: return "CONVERT";
         case XI_BOX: return "BOX";
         case XI_UNBOX: return "UNBOX";
+        case XI_ENUM_DESCRIPTOR_BOX: return "ENUM_DESCRIPTOR_BOX";
+        case XI_ENUM_DESCRIPTOR_UNBOX: return "ENUM_DESCRIPTOR_UNBOX";
         case XI_NARROW_I8: return "NARROW_I8";
         case XI_NARROW_U8: return "NARROW_U8";
         case XI_NARROW_I16: return "NARROW_I16";
@@ -460,6 +467,9 @@ static inline const char *xi_generated_op_name(uint16_t op) {
         case XI_STORE_FIELD: return "STORE_FIELD";
         case XI_INDEX_GET: return "INDEX_GET";
         case XI_INDEX_SET: return "INDEX_SET";
+        case XI_ENUM_VARIANT_AT: return "ENUM_VARIANT_AT";
+        case XI_ENUM_PAYLOAD_AT: return "ENUM_PAYLOAD_AT";
+        case XI_ENUM_META_GET: return "ENUM_META_GET";
         case XI_BYTE_SLICE_LOAD_U16: return "BYTE_SLICE_LOAD_U16";
         case XI_BYTE_SLICE_LOAD_U32: return "BYTE_SLICE_LOAD_U32";
         case XI_BYTE_SLICE_LOAD_U64: return "BYTE_SLICE_LOAD_U64";
@@ -648,6 +658,8 @@ static inline uint8_t xi_generated_op_arity(uint16_t op) {
         case XI_CONVERT: return 1;
         case XI_BOX: return 1;
         case XI_UNBOX: return 1;
+        case XI_ENUM_DESCRIPTOR_BOX: return 1;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return 1;
         case XI_NARROW_I8: return 1;
         case XI_NARROW_U8: return 1;
         case XI_NARROW_I16: return 1;
@@ -666,6 +678,9 @@ static inline uint8_t xi_generated_op_arity(uint16_t op) {
         case XI_STORE_FIELD: return 2;
         case XI_INDEX_GET: return 2;
         case XI_INDEX_SET: return 3;
+        case XI_ENUM_VARIANT_AT: return 2;
+        case XI_ENUM_PAYLOAD_AT: return 2;
+        case XI_ENUM_META_GET: return 2;
         case XI_BYTE_SLICE_LOAD_U16: return 3;
         case XI_BYTE_SLICE_LOAD_U32: return 3;
         case XI_BYTE_SLICE_LOAD_U64: return 3;
@@ -854,6 +869,8 @@ static inline uint8_t xi_generated_op_class(uint16_t op) {
         case XI_CONVERT: return XI_GEN_CLASS_CONVERSION;
         case XI_BOX: return XI_GEN_CLASS_CONVERSION;
         case XI_UNBOX: return XI_GEN_CLASS_CONVERSION;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_GEN_CLASS_ALLOCATION;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_GEN_CLASS_CONVERSION;
         case XI_NARROW_I8: return XI_GEN_CLASS_CONVERSION;
         case XI_NARROW_U8: return XI_GEN_CLASS_CONVERSION;
         case XI_NARROW_I16: return XI_GEN_CLASS_CONVERSION;
@@ -872,6 +889,9 @@ static inline uint8_t xi_generated_op_class(uint16_t op) {
         case XI_STORE_FIELD: return XI_GEN_CLASS_MEMORY_WRITE;
         case XI_INDEX_GET: return XI_GEN_CLASS_MEMORY_READ;
         case XI_INDEX_SET: return XI_GEN_CLASS_MEMORY_WRITE;
+        case XI_ENUM_VARIANT_AT: return XI_GEN_CLASS_PURE;
+        case XI_ENUM_PAYLOAD_AT: return XI_GEN_CLASS_PURE;
+        case XI_ENUM_META_GET: return XI_GEN_CLASS_MEMORY_READ;
         case XI_BYTE_SLICE_LOAD_U16: return XI_GEN_CLASS_MEMORY_READ;
         case XI_BYTE_SLICE_LOAD_U32: return XI_GEN_CLASS_MEMORY_READ;
         case XI_BYTE_SLICE_LOAD_U64: return XI_GEN_CLASS_MEMORY_READ;
@@ -1060,6 +1080,8 @@ static inline uint8_t xi_generated_op_result_kind(uint16_t op) {
         case XI_CONVERT: return XI_GEN_RESULT_VALUE;
         case XI_BOX: return XI_GEN_RESULT_VALUE;
         case XI_UNBOX: return XI_GEN_RESULT_VALUE;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_GEN_RESULT_VALUE;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_GEN_RESULT_VALUE;
         case XI_NARROW_I8: return XI_GEN_RESULT_VALUE;
         case XI_NARROW_U8: return XI_GEN_RESULT_VALUE;
         case XI_NARROW_I16: return XI_GEN_RESULT_VALUE;
@@ -1078,6 +1100,9 @@ static inline uint8_t xi_generated_op_result_kind(uint16_t op) {
         case XI_STORE_FIELD: return XI_GEN_RESULT_VOID;
         case XI_INDEX_GET: return XI_GEN_RESULT_VALUE;
         case XI_INDEX_SET: return XI_GEN_RESULT_VOID;
+        case XI_ENUM_VARIANT_AT: return XI_GEN_RESULT_VALUE;
+        case XI_ENUM_PAYLOAD_AT: return XI_GEN_RESULT_VALUE;
+        case XI_ENUM_META_GET: return XI_GEN_RESULT_VALUE;
         case XI_BYTE_SLICE_LOAD_U16: return XI_GEN_RESULT_VALUE;
         case XI_BYTE_SLICE_LOAD_U32: return XI_GEN_RESULT_VALUE;
         case XI_BYTE_SLICE_LOAD_U64: return XI_GEN_RESULT_VALUE;
@@ -1266,6 +1291,8 @@ static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {
         case XI_CONVERT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_BOX: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_UNBOX: return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_NARROW_I8: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_NARROW_U8: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_NARROW_I16: return XI_GEN_RESULT_OWNERSHIP_OWNED;
@@ -1284,6 +1311,9 @@ static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {
         case XI_STORE_FIELD: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_INDEX_GET: return XI_GEN_RESULT_OWNERSHIP_BORROWED;
         case XI_INDEX_SET: return XI_GEN_RESULT_OWNERSHIP_NONE;
+        case XI_ENUM_VARIANT_AT: return XI_GEN_RESULT_OWNERSHIP_BORROWED;
+        case XI_ENUM_PAYLOAD_AT: return XI_GEN_RESULT_OWNERSHIP_BORROWED;
+        case XI_ENUM_META_GET: return XI_GEN_RESULT_OWNERSHIP_BORROWED;
         case XI_BYTE_SLICE_LOAD_U16: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_BYTE_SLICE_LOAD_U32: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_BYTE_SLICE_LOAD_U64: return XI_GEN_RESULT_OWNERSHIP_OWNED;
@@ -1472,6 +1502,8 @@ static inline const char *xi_generated_op_result_native_type(uint16_t op) {
         case XI_CONVERT: return NULL;
         case XI_BOX: return NULL;
         case XI_UNBOX: return NULL;
+        case XI_ENUM_DESCRIPTOR_BOX: return NULL;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return NULL;
         case XI_NARROW_I8: return "i8";
         case XI_NARROW_U8: return "u8";
         case XI_NARROW_I16: return "i16";
@@ -1490,6 +1522,9 @@ static inline const char *xi_generated_op_result_native_type(uint16_t op) {
         case XI_STORE_FIELD: return NULL;
         case XI_INDEX_GET: return NULL;
         case XI_INDEX_SET: return NULL;
+        case XI_ENUM_VARIANT_AT: return NULL;
+        case XI_ENUM_PAYLOAD_AT: return NULL;
+        case XI_ENUM_META_GET: return NULL;
         case XI_BYTE_SLICE_LOAD_U16: return NULL;
         case XI_BYTE_SLICE_LOAD_U32: return NULL;
         case XI_BYTE_SLICE_LOAD_U64: return NULL;
@@ -1678,6 +1713,8 @@ static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {
         case XI_CONVERT: return XI_GEN_LOWERING_GENERATED;
         case XI_BOX: return XI_GEN_LOWERING_GENERATED;
         case XI_UNBOX: return XI_GEN_LOWERING_GENERATED;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_GEN_LOWERING_GENERATED;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_GEN_LOWERING_GENERATED;
         case XI_NARROW_I8: return XI_GEN_LOWERING_GENERATED;
         case XI_NARROW_U8: return XI_GEN_LOWERING_GENERATED;
         case XI_NARROW_I16: return XI_GEN_LOWERING_GENERATED;
@@ -1696,6 +1733,9 @@ static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {
         case XI_STORE_FIELD: return XI_GEN_LOWERING_GENERATED;
         case XI_INDEX_GET: return XI_GEN_LOWERING_GENERATED;
         case XI_INDEX_SET: return XI_GEN_LOWERING_GENERATED;
+        case XI_ENUM_VARIANT_AT: return XI_GEN_LOWERING_GENERATED;
+        case XI_ENUM_PAYLOAD_AT: return XI_GEN_LOWERING_GENERATED;
+        case XI_ENUM_META_GET: return XI_GEN_LOWERING_GENERATED;
         case XI_BYTE_SLICE_LOAD_U16: return XI_GEN_LOWERING_GENERATED;
         case XI_BYTE_SLICE_LOAD_U32: return XI_GEN_LOWERING_GENERATED;
         case XI_BYTE_SLICE_LOAD_U64: return XI_GEN_LOWERING_GENERATED;
@@ -1884,6 +1924,8 @@ static inline uint8_t xi_generated_op_speculation(uint16_t op) {
         case XI_CONVERT: return XI_GEN_SPECULATION_SAFE;
         case XI_BOX: return XI_GEN_SPECULATION_SAFE;
         case XI_UNBOX: return XI_GEN_SPECULATION_SAFE;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_GEN_SPECULATION_NEVER;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_GEN_SPECULATION_SAFE;
         case XI_NARROW_I8: return XI_GEN_SPECULATION_SAFE;
         case XI_NARROW_U8: return XI_GEN_SPECULATION_SAFE;
         case XI_NARROW_I16: return XI_GEN_SPECULATION_SAFE;
@@ -1902,6 +1944,9 @@ static inline uint8_t xi_generated_op_speculation(uint16_t op) {
         case XI_STORE_FIELD: return XI_GEN_SPECULATION_NEVER;
         case XI_INDEX_GET: return XI_GEN_SPECULATION_NEVER;
         case XI_INDEX_SET: return XI_GEN_SPECULATION_NEVER;
+        case XI_ENUM_VARIANT_AT: return XI_GEN_SPECULATION_NEVER;
+        case XI_ENUM_PAYLOAD_AT: return XI_GEN_SPECULATION_NEVER;
+        case XI_ENUM_META_GET: return XI_GEN_SPECULATION_NEVER;
         case XI_BYTE_SLICE_LOAD_U16: return XI_GEN_SPECULATION_NEVER;
         case XI_BYTE_SLICE_LOAD_U32: return XI_GEN_SPECULATION_NEVER;
         case XI_BYTE_SLICE_LOAD_U64: return XI_GEN_SPECULATION_NEVER;
@@ -2090,6 +2135,8 @@ static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {
         case XI_CONVERT: return XI_GEN_VN_PURE;
         case XI_BOX: return XI_GEN_VN_NONE;
         case XI_UNBOX: return XI_GEN_VN_NONE;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_GEN_VN_NONE;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_GEN_VN_NONE;
         case XI_NARROW_I8: return XI_GEN_VN_PURE;
         case XI_NARROW_U8: return XI_GEN_VN_PURE;
         case XI_NARROW_I16: return XI_GEN_VN_PURE;
@@ -2108,6 +2155,9 @@ static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {
         case XI_STORE_FIELD: return XI_GEN_VN_NONE;
         case XI_INDEX_GET: return XI_GEN_VN_MEMORY_READ;
         case XI_INDEX_SET: return XI_GEN_VN_NONE;
+        case XI_ENUM_VARIANT_AT: return XI_GEN_VN_NONE;
+        case XI_ENUM_PAYLOAD_AT: return XI_GEN_VN_NONE;
+        case XI_ENUM_META_GET: return XI_GEN_VN_NONE;
         case XI_BYTE_SLICE_LOAD_U16: return XI_GEN_VN_NONE;
         case XI_BYTE_SLICE_LOAD_U32: return XI_GEN_VN_NONE;
         case XI_BYTE_SLICE_LOAD_U64: return XI_GEN_VN_NONE;
@@ -2296,6 +2346,8 @@ static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {
         case XI_CONVERT: return XI_GEN_TBAA_NONE;
         case XI_BOX: return XI_GEN_TBAA_NONE;
         case XI_UNBOX: return XI_GEN_TBAA_NONE;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_GEN_TBAA_NONE;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_GEN_TBAA_NONE;
         case XI_NARROW_I8: return XI_GEN_TBAA_NONE;
         case XI_NARROW_U8: return XI_GEN_TBAA_NONE;
         case XI_NARROW_I16: return XI_GEN_TBAA_NONE;
@@ -2314,6 +2366,9 @@ static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {
         case XI_STORE_FIELD: return XI_GEN_TBAA_FIELD;
         case XI_INDEX_GET: return XI_GEN_TBAA_ARRAY;
         case XI_INDEX_SET: return XI_GEN_TBAA_ARRAY;
+        case XI_ENUM_VARIANT_AT: return XI_GEN_TBAA_NONE;
+        case XI_ENUM_PAYLOAD_AT: return XI_GEN_TBAA_NONE;
+        case XI_ENUM_META_GET: return XI_GEN_TBAA_NONE;
         case XI_BYTE_SLICE_LOAD_U16: return XI_GEN_TBAA_ARRAY;
         case XI_BYTE_SLICE_LOAD_U32: return XI_GEN_TBAA_ARRAY;
         case XI_BYTE_SLICE_LOAD_U64: return XI_GEN_TBAA_ARRAY;
@@ -2502,6 +2557,8 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_CONVERT: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_BOX: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_UNBOX: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_NARROW_I8: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_NARROW_U8: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_NARROW_I16: return XI_GEN_BACKEND_REWRITE_NONE;
@@ -2520,6 +2577,9 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_STORE_FIELD: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_INDEX_GET: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_INDEX_SET: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_ENUM_VARIANT_AT: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_ENUM_PAYLOAD_AT: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_ENUM_META_GET: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_BYTE_SLICE_LOAD_U16: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_BYTE_SLICE_LOAD_U32: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_BYTE_SLICE_LOAD_U64: return XI_GEN_BACKEND_REWRITE_NONE;
@@ -2708,6 +2768,8 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_CONVERT: return NULL;
         case XI_BOX: return NULL;
         case XI_UNBOX: return NULL;
+        case XI_ENUM_DESCRIPTOR_BOX: return NULL;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return NULL;
         case XI_NARROW_I8: return NULL;
         case XI_NARROW_U8: return NULL;
         case XI_NARROW_I16: return NULL;
@@ -2726,6 +2788,9 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_STORE_FIELD: return NULL;
         case XI_INDEX_GET: return NULL;
         case XI_INDEX_SET: return NULL;
+        case XI_ENUM_VARIANT_AT: return NULL;
+        case XI_ENUM_PAYLOAD_AT: return NULL;
+        case XI_ENUM_META_GET: return NULL;
         case XI_BYTE_SLICE_LOAD_U16: return NULL;
         case XI_BYTE_SLICE_LOAD_U32: return NULL;
         case XI_BYTE_SLICE_LOAD_U64: return NULL;
@@ -2919,6 +2984,8 @@ static inline uint8_t xi_generated_op_escape_use(uint16_t op) {
         case XI_CONVERT: return XI_GEN_ESCAPE_USE_NONE;
         case XI_BOX: return XI_GEN_ESCAPE_USE_NONE;
         case XI_UNBOX: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_GEN_ESCAPE_USE_NONE;
         case XI_NARROW_I8: return XI_GEN_ESCAPE_USE_NONE;
         case XI_NARROW_U8: return XI_GEN_ESCAPE_USE_NONE;
         case XI_NARROW_I16: return XI_GEN_ESCAPE_USE_NONE;
@@ -2937,6 +3004,9 @@ static inline uint8_t xi_generated_op_escape_use(uint16_t op) {
         case XI_STORE_FIELD: return XI_GEN_ESCAPE_USE_HEAP;
         case XI_INDEX_GET: return XI_GEN_ESCAPE_USE_NONE;
         case XI_INDEX_SET: return XI_GEN_ESCAPE_USE_HEAP;
+        case XI_ENUM_VARIANT_AT: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_ENUM_PAYLOAD_AT: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_ENUM_META_GET: return XI_GEN_ESCAPE_USE_NONE;
         case XI_BYTE_SLICE_LOAD_U16: return XI_GEN_ESCAPE_USE_NONE;
         case XI_BYTE_SLICE_LOAD_U32: return XI_GEN_ESCAPE_USE_NONE;
         case XI_BYTE_SLICE_LOAD_U64: return XI_GEN_ESCAPE_USE_NONE;
@@ -3125,6 +3195,8 @@ static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {
         case XI_CONVERT: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_BOX: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_UNBOX: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_GEN_ESCAPE_ALLOC_HEAP;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_NARROW_I8: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_NARROW_U8: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_NARROW_I16: return XI_GEN_ESCAPE_ALLOC_NONE;
@@ -3143,6 +3215,9 @@ static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {
         case XI_STORE_FIELD: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_INDEX_GET: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_INDEX_SET: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_ENUM_VARIANT_AT: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_ENUM_PAYLOAD_AT: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_ENUM_META_GET: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_BYTE_SLICE_LOAD_U16: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_BYTE_SLICE_LOAD_U32: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_BYTE_SLICE_LOAD_U64: return XI_GEN_ESCAPE_ALLOC_NONE;
@@ -3331,6 +3406,8 @@ static inline uint8_t xi_generated_op_own_use(uint16_t op) {
         case XI_CONVERT: return XI_GEN_OWN_USE_BORROW;
         case XI_BOX: return XI_GEN_OWN_USE_BORROW;
         case XI_UNBOX: return XI_GEN_OWN_USE_BORROW;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_GEN_OWN_USE_BORROW;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_GEN_OWN_USE_BORROW;
         case XI_NARROW_I8: return XI_GEN_OWN_USE_BORROW;
         case XI_NARROW_U8: return XI_GEN_OWN_USE_BORROW;
         case XI_NARROW_I16: return XI_GEN_OWN_USE_BORROW;
@@ -3349,6 +3426,9 @@ static inline uint8_t xi_generated_op_own_use(uint16_t op) {
         case XI_STORE_FIELD: return XI_GEN_OWN_USE_STORED_VALUE;
         case XI_INDEX_GET: return XI_GEN_OWN_USE_BORROW;
         case XI_INDEX_SET: return XI_GEN_OWN_USE_STORED_VALUE;
+        case XI_ENUM_VARIANT_AT: return XI_GEN_OWN_USE_BORROW;
+        case XI_ENUM_PAYLOAD_AT: return XI_GEN_OWN_USE_BORROW;
+        case XI_ENUM_META_GET: return XI_GEN_OWN_USE_BORROW;
         case XI_BYTE_SLICE_LOAD_U16: return XI_GEN_OWN_USE_BORROW;
         case XI_BYTE_SLICE_LOAD_U32: return XI_GEN_OWN_USE_BORROW;
         case XI_BYTE_SLICE_LOAD_U64: return XI_GEN_OWN_USE_BORROW;
@@ -3537,6 +3617,8 @@ static inline uint8_t xi_generated_op_ic_site(uint16_t op) {
         case XI_CONVERT: return XI_GEN_IC_SITE_NONE;
         case XI_BOX: return XI_GEN_IC_SITE_NONE;
         case XI_UNBOX: return XI_GEN_IC_SITE_NONE;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_GEN_IC_SITE_NONE;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_GEN_IC_SITE_NONE;
         case XI_NARROW_I8: return XI_GEN_IC_SITE_NONE;
         case XI_NARROW_U8: return XI_GEN_IC_SITE_NONE;
         case XI_NARROW_I16: return XI_GEN_IC_SITE_NONE;
@@ -3555,6 +3637,9 @@ static inline uint8_t xi_generated_op_ic_site(uint16_t op) {
         case XI_STORE_FIELD: return XI_GEN_IC_SITE_FIELD;
         case XI_INDEX_GET: return XI_GEN_IC_SITE_NONE;
         case XI_INDEX_SET: return XI_GEN_IC_SITE_NONE;
+        case XI_ENUM_VARIANT_AT: return XI_GEN_IC_SITE_NONE;
+        case XI_ENUM_PAYLOAD_AT: return XI_GEN_IC_SITE_NONE;
+        case XI_ENUM_META_GET: return XI_GEN_IC_SITE_NONE;
         case XI_BYTE_SLICE_LOAD_U16: return XI_GEN_IC_SITE_NONE;
         case XI_BYTE_SLICE_LOAD_U32: return XI_GEN_IC_SITE_NONE;
         case XI_BYTE_SLICE_LOAD_U64: return XI_GEN_IC_SITE_NONE;
@@ -3743,6 +3828,8 @@ static inline XiOp xi_generated_op_negates_to(uint16_t op) {
         case XI_CONVERT: return XI_OP_COUNT;
         case XI_BOX: return XI_OP_COUNT;
         case XI_UNBOX: return XI_OP_COUNT;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_OP_COUNT;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return XI_OP_COUNT;
         case XI_NARROW_I8: return XI_OP_COUNT;
         case XI_NARROW_U8: return XI_OP_COUNT;
         case XI_NARROW_I16: return XI_OP_COUNT;
@@ -3761,6 +3848,9 @@ static inline XiOp xi_generated_op_negates_to(uint16_t op) {
         case XI_STORE_FIELD: return XI_OP_COUNT;
         case XI_INDEX_GET: return XI_OP_COUNT;
         case XI_INDEX_SET: return XI_OP_COUNT;
+        case XI_ENUM_VARIANT_AT: return XI_OP_COUNT;
+        case XI_ENUM_PAYLOAD_AT: return XI_OP_COUNT;
+        case XI_ENUM_META_GET: return XI_OP_COUNT;
         case XI_BYTE_SLICE_LOAD_U16: return XI_OP_COUNT;
         case XI_BYTE_SLICE_LOAD_U32: return XI_OP_COUNT;
         case XI_BYTE_SLICE_LOAD_U64: return XI_OP_COUNT;
@@ -3949,6 +4039,8 @@ static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {
         case XI_CONVERT: return 0;
         case XI_BOX: return 0;
         case XI_UNBOX: return 0;
+        case XI_ENUM_DESCRIPTOR_BOX: return 0;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return 0;
         case XI_NARROW_I8: return 0;
         case XI_NARROW_U8: return 0;
         case XI_NARROW_I16: return 0;
@@ -3967,6 +4059,9 @@ static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {
         case XI_STORE_FIELD: return 0;
         case XI_INDEX_GET: return 0;
         case XI_INDEX_SET: return 0;
+        case XI_ENUM_VARIANT_AT: return 0;
+        case XI_ENUM_PAYLOAD_AT: return 0;
+        case XI_ENUM_META_GET: return 0;
         case XI_BYTE_SLICE_LOAD_U16: return 0;
         case XI_BYTE_SLICE_LOAD_U32: return 0;
         case XI_BYTE_SLICE_LOAD_U64: return 0;
@@ -4155,6 +4250,8 @@ static inline uint8_t xi_generated_op_default_flags(uint16_t op) {
         case XI_CONVERT: return 0;
         case XI_BOX: return 0;
         case XI_UNBOX: return 0;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return 0;
         case XI_NARROW_I8: return 0;
         case XI_NARROW_U8: return 0;
         case XI_NARROW_I16: return 0;
@@ -4173,6 +4270,9 @@ static inline uint8_t xi_generated_op_default_flags(uint16_t op) {
         case XI_STORE_FIELD: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_INDEX_GET: return XI_FLAG_READS_MEM;
         case XI_INDEX_SET: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+        case XI_ENUM_VARIANT_AT: return XI_FLAG_MAY_THROW;
+        case XI_ENUM_PAYLOAD_AT: return XI_FLAG_MAY_THROW;
+        case XI_ENUM_META_GET: return XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM;
         case XI_BYTE_SLICE_LOAD_U16: return XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM;
         case XI_BYTE_SLICE_LOAD_U32: return XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM;
         case XI_BYTE_SLICE_LOAD_U64: return XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM;
@@ -4361,6 +4461,8 @@ static inline uint32_t xi_generated_op_effects(uint16_t op) {
         case XI_CONVERT: return 0;
         case XI_BOX: return 0;
         case XI_UNBOX: return 0;
+        case XI_ENUM_DESCRIPTOR_BOX: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES;
+        case XI_ENUM_DESCRIPTOR_UNBOX: return 0;
         case XI_NARROW_I8: return 0;
         case XI_NARROW_U8: return 0;
         case XI_NARROW_I16: return 0;
@@ -4379,6 +4481,9 @@ static inline uint32_t xi_generated_op_effects(uint16_t op) {
         case XI_STORE_FIELD: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE;
         case XI_INDEX_GET: return XI_EFFECT_MEMORY_READ;
         case XI_INDEX_SET: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE;
+        case XI_ENUM_VARIANT_AT: return XI_EFFECT_MAY_THROW;
+        case XI_ENUM_PAYLOAD_AT: return XI_EFFECT_MAY_THROW;
+        case XI_ENUM_META_GET: return XI_EFFECT_MAY_THROW | XI_EFFECT_MEMORY_READ;
         case XI_BYTE_SLICE_LOAD_U16: return XI_EFFECT_MAY_THROW | XI_EFFECT_MEMORY_READ;
         case XI_BYTE_SLICE_LOAD_U32: return XI_EFFECT_MAY_THROW | XI_EFFECT_MEMORY_READ;
         case XI_BYTE_SLICE_LOAD_U64: return XI_EFFECT_MAY_THROW | XI_EFFECT_MEMORY_READ;

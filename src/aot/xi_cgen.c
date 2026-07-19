@@ -58,6 +58,7 @@
 #include "../frontend/parser/xtype_ref.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../frontend/analyzer/xconsteval.h"
+#include "../frontend/analyzer/xa_selection.h"
 #include "../stdlib/xstdlib_defs_generated.h"
 #include <string.h>
 #include <inttypes.h>
@@ -664,6 +665,11 @@ struct XiCgenCtx {
     uint8_t *used_extern_decls;    /* stable_id - 1, reset for each translation unit */
     uint8_t *extern_decl_adapters; /* used declarations needing a boxed closure entry */
     uint32_t used_extern_decl_cap;
+    /* Per-translation-unit unit-enum sidecars.  Body emission marks the
+     * concrete enum plans that actually cross a tagged boundary; static-data
+     * emission then writes exactly one immutable layout for each marked plan. */
+    uint8_t *enum_scalar_sidecar_used;
+    uint32_t enum_scalar_sidecar_cap;
     const XiFunc *sync_go_targets[CG_MAX_SYNC_GO_TARGETS];
     int nsync_go_targets;
     const XiFunc *sync_heartbeat_targets[CG_MAX_SYNC_HEARTBEAT_TARGETS];
@@ -2037,6 +2043,7 @@ static void emit_vref(FILE *out, const XiValue *v) {
 
 #include "xi_cgen_class_native_meta.inc.c"
 static void emit_codegen_abort_expr(FILE *out);
+static void emit_c_string_literal(FILE *out, const char *s);
 static bool emit_struct_aggregate_box_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XiValue *value, const char *prefix);
 static bool emit_struct_aggregate_box_c_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -4844,14 +4851,22 @@ static bool cg_return_value_needs_owned_array_ref(const XiValue *value, XrRep re
     return ret_rep == XR_REP_TAGGED && v && v->type && v->type->kind == XR_KIND_FIXED_ARRAY;
 }
 
-static void emit_return_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *value,
-                                         XrRep ret_rep) {
+static void emit_return_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiFunc *func,
+                                         const XiValue *value, XrRep ret_rep) {
     if (cg_return_value_needs_owned_array_ref(value, ret_rep)) {
         fprintf(out, "({ XrValue _xrv = ");
         emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
         fprintf(out,
                 "; (XR_IS_ARRAY_REF(_xrv) && (_xrv.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) == 0) "
                 "? xrt_array_ref_to_owned(_xrv) : _xrv; })");
+        return;
+    }
+    XrRep value_rep = cg_value_plan_storage_rep(ctx, value);
+    if (value_rep != ret_rep && func && cg_unit_enum_scalar_plan(ctx, func->return_type)) {
+        const char *suffix =
+            emit_conversion_prefix_ctx(ctx, out, func->return_type, value_rep, ret_rep);
+        emit_vref(out, value);
+        emit_conversion_suffix(out, suffix);
         return;
     }
     emit_value_as_rep_ctx(ctx, out, value, ret_rep);
@@ -5981,6 +5996,99 @@ static bool cg_static_prelude_enum_namespace_is_elided(const XiFunc *f, const Xi
     return seen_use;
 }
 
+/* User enum namespaces are type-domain tokens as well.  The frontend never
+ * exposes them as ordinary collection values; their legal Xi consumers are
+ * static member loads, enum-case iteration, and typed metadata operations.
+ * When every use stays in that closed set, do not materialize the historical
+ * Map-backed namespace or its shared slot in hosted AOT. */
+static const XiEnumData *cg_static_enum_namespace_data(XiCgenCtx *ctx, const XiFunc *f,
+                                                       const XiValue *value) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    if (!ctx || !v)
+        return NULL;
+    if (v->op == XI_GET_SHARED)
+        return cg_enum_for_shared_value_in_func(ctx, f, v);
+    if (v->op == XI_IMPORT_REF)
+        return cg_resolve_imported_enum_value(ctx, f, v);
+    if (v->op == XI_CONST && v->aux)
+        return cg_enum_for_runtime_type(ctx, v->aux);
+    return NULL;
+}
+
+static bool cg_static_enum_namespace_uses_are_elidable(XiCgenCtx *ctx, const XiFunc *f,
+                                                       const XiValue *value, int depth) {
+    if (!ctx || !f || !value || depth > 8 || !cg_static_enum_namespace_data(ctx, f, value))
+        return false;
+
+    bool seen_use = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == value)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == value)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user || user == value)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != value)
+                    continue;
+                seen_use = true;
+                if (a == 0 && user->op == XI_LOAD_FIELD && user->aux)
+                    continue;
+                if (a == 0 && user->op == XI_INDEX_GET && user->aux_kind == XI_AUX_KIND_ENUM_CASE)
+                    continue;
+                if (a == 0 && user->op == XI_ENUM_META_GET)
+                    continue;
+                if (a == 0 && (user->op == XI_RETAIN || user->op == XI_RELEASE))
+                    continue;
+                if (a == 0 && (user->op == XI_COPY || user->op == XI_MOVE) &&
+                    cg_static_enum_namespace_uses_are_elidable(ctx, f, user, depth + 1))
+                    continue;
+                if (a == 0 && user->op == XI_SET_SHARED && user->aux_int >= 0 && f->module &&
+                    f->module->slot_enums && user->aux_int < f->module->nslots &&
+                    f->module->slot_enums[user->aux_int])
+                    continue;
+                return false;
+            }
+        }
+    }
+    return seen_use;
+}
+
+static bool cg_static_enum_namespace_value_is_elided(XiCgenCtx *ctx, const XiFunc *f,
+                                                     const XiValue *v) {
+    if (!ctx || !f || !v)
+        return false;
+    /* Enum declarations themselves are canonical schema records.  Their Xi
+     * CONST and enum-owned shared store cannot denote a user-observable value,
+     * so they are always compile-time-only in AOT. */
+    if (v->op == XI_CONST && v->aux && cg_enum_for_runtime_type(ctx, v->aux))
+        return true;
+    if (v->op == XI_SET_SHARED && v->nargs >= 1 && v->aux_int >= 0 && f->module &&
+        f->module->slot_enums && v->aux_int < f->module->nslots &&
+        f->module->slot_enums[v->aux_int])
+        return true;
+    if (v->op == XI_SET_SHARED && v->nargs >= 1 &&
+        cg_static_enum_namespace_data(ctx, f, v->args[0]))
+        return true;
+    if ((v->op == XI_GET_SHARED || v->op == XI_IMPORT_REF || v->op == XI_COPY ||
+         v->op == XI_MOVE) &&
+        cg_static_enum_namespace_uses_are_elidable(ctx, f, v, 0))
+        return true;
+    if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1 &&
+        cg_static_enum_namespace_data(ctx, f, v->args[0]))
+        return true;
+    return false;
+}
+
 /* Emit a complete value statement: type vN = <rhs>; */
 static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
@@ -6007,6 +6115,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (cg_pure_value_only_feeds_aot_elided_values(ctx, f, v))
         return;
     if (cg_static_prelude_enum_namespace_is_elided(f, v))
+        return;
+    if (cg_static_enum_namespace_value_is_elided(ctx, f, v))
         return;
 
     /* Inlined struct: emit local anonymous C struct with native fields. */
@@ -6530,7 +6640,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                     fprintf(out, ";\n");
                 } else {
                     fprintf(out, "    return ");
-                    emit_return_value_as_rep_ctx(ctx, out, blk->control, ret_rep);
+                    emit_return_value_as_rep_ctx(ctx, out, f, blk->control, ret_rep);
                     fprintf(out, ";\n");
                 }
             } else {
@@ -6640,6 +6750,8 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
     if (cg_pure_value_only_feeds_aot_elided_values(ctx, f, v))
         return true;
     if (cg_static_prelude_enum_namespace_is_elided(f, v))
+        return true;
+    if (cg_static_enum_namespace_value_is_elided(ctx, f, v))
         return true;
     if (v->op == XI_AGG_NEW && cg_struct_inline_local_storage(ctx, f, v))
         return true;
@@ -7524,7 +7636,7 @@ static void emit_cfn_target_call_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         const char *suffix;
 
         fprintf(out, ", ");
-        suffix = emit_conversion_prefix(out, pt, from_rep, to_rep);
+        suffix = emit_conversion_prefix_ctx(ctx, out, pt, from_rep, to_rep);
         emit_cfn_c_param_storage_expr(out, pt, i);
         emit_conversion_suffix(out, suffix);
     }
@@ -7570,7 +7682,7 @@ static void emit_cfn_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     } else {
         const char *suffix;
         fprintf(out, "(%s)(", ret_c_type);
-        suffix = emit_conversion_prefix(out, ret_type, ret_rep, c_ret_rep);
+        suffix = emit_conversion_prefix_ctx(ctx, out, ret_type, ret_rep, c_ret_rep);
         emit_cfn_target_call_expr(ctx, out, f, prefix);
         emit_conversion_suffix(out, suffix);
         fprintf(out, ")");
@@ -7892,7 +8004,7 @@ static void emit_c_export_target_call_expr(XiCgenCtx *ctx, FILE *out, const XiFu
         }
         XrRep from_rep = cg_cfn_value_storage_rep(pt, false);
         XrRep to_rep = cg_func_param_abi_rep(ctx, f, i);
-        const char *suffix = emit_conversion_prefix(out, pt, from_rep, to_rep);
+        const char *suffix = emit_conversion_prefix_ctx(ctx, out, pt, from_rep, to_rep);
         emit_c_export_c_param_storage_expr(out, f, i);
         emit_conversion_suffix(out, suffix);
     }
@@ -7955,7 +8067,7 @@ static void emit_c_export_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFun
     } else {
         const char *suffix;
         fprintf(out, "(%s)(", ret_c_type);
-        suffix = emit_conversion_prefix(out, ret_type, ret_rep, c_ret_rep);
+        suffix = emit_conversion_prefix_ctx(ctx, out, ret_type, ret_rep, c_ret_rep);
         emit_c_export_target_call_expr(ctx, out, f, prefix);
         emit_conversion_suffix(out, suffix);
         fprintf(out, ")");
@@ -8678,7 +8790,8 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
                 if (cg_value_rep_is_typed_adt_aggregate(ret_value_rep))
                     fprintf(out, "%s_to_base(", ret_value_rep.c_type);
             } else if (ret_rep != XR_REP_VOID)
-                conv_suffix = emit_conversion_prefix(out, f->return_type, ret_rep, XR_REP_TAGGED);
+                conv_suffix =
+                    emit_conversion_prefix_ctx(ctx, out, f->return_type, ret_rep, XR_REP_TAGGED);
             emit_fname(ctx, out, prefix, f);
             fprintf(out, "(_cl");
             for (uint16_t i = 0; i < boxed_total; i++) {
@@ -8807,7 +8920,7 @@ static void emit_extern_closure_adapter_defs(XiCgenCtx *ctx, FILE *out) {
         if (ret_rep != XR_REP_VOID)
             fprintf(out, "return ");
         const char *ret_suffix =
-            emit_conversion_prefix(out, decl->ret_type, ret_rep, XR_REP_TAGGED);
+            emit_conversion_prefix_ctx(ctx, out, decl->ret_type, ret_rep, XR_REP_TAGGED);
         fprintf(out, "xr_ffi_%s(", decl->link_symbol);
         for (uint16_t pi = 0; pi < decl->nparams; pi++) {
             if (pi > 0)
@@ -8822,6 +8935,27 @@ static void emit_extern_closure_adapter_defs(XiCgenCtx *ctx, FILE *out) {
         if (ret_rep == XR_REP_VOID)
             fprintf(out, "    return XR_NULL_VAL;\n");
         fprintf(out, "}\n\n");
+    }
+}
+
+/* Adapter bodies are assembled after the translation unit's static-data
+ * phase, but a unit-enum return converted to the boxed closure ABI needs its
+ * immutable scalar-layout sidecar declared in that earlier phase.  Pre-mark
+ * exactly those late conversions once reachability has selected the adapters. */
+static void cg_mark_extern_adapter_enum_scalar_sidecars(XiCgenCtx *ctx) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!ctx || !bundle)
+        return;
+    for (uint32_t i = 0; i < bundle->nextern_decls; i++) {
+        const XaotExternDecl *decl = &bundle->extern_decls[i];
+        if (i >= ctx->used_extern_decl_cap || !ctx->extern_decl_adapters[i])
+            continue;
+        XrRep ret_rep = xaot_value_storage_rep(xaot_abi_slot_value_rep(&decl->ret));
+        if (ret_rep != XR_REP_I64)
+            continue;
+        const XaotEnumPlan *plan = cg_unit_enum_scalar_plan(ctx, decl->ret_type);
+        if (plan)
+            (void) cg_mark_enum_scalar_sidecar(ctx, plan, NULL);
     }
 }
 

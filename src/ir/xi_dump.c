@@ -185,6 +185,13 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " [json_codec=%u]", v->xg_json_codec_id);
     if (v->xg_record_merge_id != 0)
         fprintf(out, " [record_merge=%u]", v->xg_record_merge_id);
+    if (v->enum_metadata_owner) {
+        const XrType *owner = v->enum_metadata_owner;
+        const char *owner_name =
+            owner->kind == XR_KIND_ENUM ? owner->enum_type.enum_name : owner->instance.class_name;
+        fprintf(out, " [enum_owner=%s kind=%u field=%u]", owner_name ? owner_name : "?",
+                (unsigned) v->enum_metadata_kind, (unsigned) v->enum_metadata_field);
+    }
 
     /* Type + rep annotation */
     fprintf(out, "  ; %s", xi_type_name(v->type));

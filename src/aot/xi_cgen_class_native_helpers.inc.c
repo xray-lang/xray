@@ -3777,7 +3777,8 @@ static void emit_class_native_boxed_adapter(XiCgenCtx *ctx, FILE *out, const cha
         fprintf(out, ", ");
         XrRep rep = cg_func_param_abi_rep(ctx, f, i);
         const XrType *param_type = f->params && f->params[i] ? f->params[i]->type : NULL;
-        const char *param_suffix = emit_conversion_prefix(out, param_type, XR_REP_TAGGED, rep);
+        const char *param_suffix =
+            emit_conversion_prefix_ctx(ctx, out, param_type, XR_REP_TAGGED, rep);
         fprintf(out, "p%u", (unsigned) i);
         emit_conversion_suffix(out, param_suffix);
     }
@@ -3788,7 +3789,8 @@ static void emit_class_native_boxed_adapter(XiCgenCtx *ctx, FILE *out, const cha
         return;
     }
     fprintf(out, "    return ");
-    const char *conv_suffix = emit_conversion_prefix(out, f->return_type, ret_rep, XR_REP_TAGGED);
+    const char *conv_suffix =
+        emit_conversion_prefix_ctx(ctx, out, f->return_type, ret_rep, XR_REP_TAGGED);
     fprintf(out, "_result");
     emit_conversion_suffix(out, conv_suffix);
     fprintf(out, ";\n");
@@ -3874,7 +3876,8 @@ static bool emit_class_native_typed_boxed_adapter(XiCgenCtx *ctx, FILE *out, con
         return true;
     }
     fprintf(out, "    return ");
-    const char *conv_suffix = emit_conversion_prefix(out, f->return_type, ret_rep, XR_REP_TAGGED);
+    const char *conv_suffix =
+        emit_conversion_prefix_ctx(ctx, out, f->return_type, ret_rep, XR_REP_TAGGED);
     fprintf(out, "_result");
     emit_conversion_suffix(out, conv_suffix);
     fprintf(out, ";\n");
@@ -4593,8 +4596,8 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
             emit_conversion_suffix(out, conv_suffix);
     } else {
         const XrType *ret_type = mfunc && mfunc->return_type ? mfunc->return_type : v->type;
-        const char *conv_suffix =
-            emit_conversion_prefix(out, ret_type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+        const char *conv_suffix = emit_conversion_prefix_ctx(ctx, out, ret_type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
         emit_typed_abi_fname(ctx, out, method_prefix ? method_prefix : prefix, mfunc);
         fprintf(out, "(NULL");
         for (uint16_t a = 0; a < v->nargs; a++) {

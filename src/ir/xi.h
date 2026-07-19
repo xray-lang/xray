@@ -127,6 +127,7 @@ typedef enum {
     XI_AUX_KIND_PAR_MAP = 4,
     XI_AUX_KIND_THREAD_SPAWN = 5,
     XI_AUX_KIND_MAP_LITERAL = 6,
+    XI_AUX_KIND_ENUM_CASE = 7,
 } XiAuxKind;
 
 /* Source-variable IDs are carried on XiValue for backend register/cell
@@ -299,9 +300,11 @@ typedef enum {
     XI_NOT, /* ! (unary) */
 
     /* Type conversion */
-    XI_CONVERT, /* explicit type cast: aux stores target type */
-    XI_BOX,     /* unboxed -> tagged XrValue */
-    XI_UNBOX,   /* tagged -> unboxed (type guard) */
+    XI_CONVERT,               /* explicit type cast: aux stores target type */
+    XI_BOX,                   /* unboxed -> tagged XrValue */
+    XI_UNBOX,                 /* tagged -> unboxed (type guard) */
+    XI_ENUM_DESCRIPTOR_BOX,   /* typed scalar -> erased {layout, kind, scalar} box */
+    XI_ENUM_DESCRIPTOR_UNBOX, /* erased enum descriptor box -> typed scalar */
 
     /* Explicit narrowing: truncate int64/double to sub-width, re-extend.
      * Result rep stays I64 (or F64 for F32 variant) — only value range changes.
@@ -326,10 +329,13 @@ typedef enum {
     XI_WIDEN_F32, /* (double)(float) roundtrip — explicit precision gate */
 
     /* Memory / field access */
-    XI_LOAD_FIELD,  /* obj.field: args[0]=obj, aux=name, aux_int=symbol id */
-    XI_STORE_FIELD, /* obj.field=val: args[0]=obj, args[1]=val, aux=name, aux_int=symbol id */
-    XI_INDEX_GET,   /* obj[key]: args[0]=obj, args[1]=key */
-    XI_INDEX_SET,   /* obj[key]=val: args[0]=obj, args[1]=key, args[2]=val */
+    XI_LOAD_FIELD,      /* obj.field: args[0]=obj, aux=name, aux_int=symbol id */
+    XI_STORE_FIELD,     /* obj.field=val: args[0]=obj, args[1]=val, aux=name, aux_int=symbol id */
+    XI_INDEX_GET,       /* obj[key]: args[0]=obj, args[1]=key */
+    XI_INDEX_SET,       /* obj[key]=val: args[0]=obj, args[1]=key, args[2]=val */
+    XI_ENUM_VARIANT_AT, /* checked EnumVariants<E>[index] -> EnumVariant<E> */
+    XI_ENUM_PAYLOAD_AT, /* checked EnumPayloads<E>[index] -> EnumPayloadField<E> */
+    XI_ENUM_META_GET,   /* cold descriptor field: args[0]=enum namespace, args[1]=descriptor */
 
     /* U8 memory primitives: all offsets/counts are integer values.
      * LOAD args: args[0]=bytes, args[1]=offset, args[2]=Endian.
@@ -849,6 +855,13 @@ typedef struct XiValue {
     uint32_t xg_capacity_op_id; /* stable XgCapacityOpId for capacity/growth plans */
     uint32_t xg_bulk_op_id;     /* stable XgBulkOpId for bulk operation plans */
     uint32_t xg_encoding_op_id; /* stable XgEncodingOpId for encoding validation plans */
+    /* Typed enum-domain provenance.  `enum_metadata_owner` is the concrete E
+     * in EnumVariant<E>/EnumPayloadField<E>; `enum_metadata_field` is a stable
+     * XA_ENUM_META_* id (0 for domain iteration).  This survives lowering so
+     * global/AOT evidence never has to recover enum semantics from names. */
+    struct XrType *enum_metadata_owner;
+    uint8_t enum_metadata_field;
+    uint8_t enum_metadata_kind; /* XrEnumMetadataKind for descriptor/view values. */
     struct XiBlock *block;      /* containing block */
 } XiValue;
 
@@ -880,6 +893,9 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->xg_capacity_op_id = src->xg_capacity_op_id;
     dst->xg_bulk_op_id = src->xg_bulk_op_id;
     dst->xg_encoding_op_id = src->xg_encoding_op_id;
+    dst->enum_metadata_owner = src->enum_metadata_owner;
+    dst->enum_metadata_field = src->enum_metadata_field;
+    dst->enum_metadata_kind = src->enum_metadata_kind;
 }
 
 typedef struct XiMapLiteralData {
@@ -1000,7 +1016,9 @@ static inline bool xi_copy_is_cell_read(const XiValue *v) {
 }
 
 static inline bool xi_copy_is_identity_alias(const XiValue *v) {
-    return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_IDENTITY;
+    return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_IDENTITY &&
+           v->enum_metadata_owner == NULL && v->enum_metadata_field == 0 &&
+           v->enum_metadata_kind == 0;
 }
 
 static inline bool xi_copy_is_branch_hint(const XiValue *v) {

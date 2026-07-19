@@ -91,14 +91,11 @@ static XaotAbiSlot ptr_slot(const XrType *type) {
     return slot;
 }
 
-static bool bundle_is_freestanding_profile(const XaotBundle *bundle) {
-    return bundle && bundle->global_evidence_plan.profile == XG_BUILD_FREESTANDING;
-}
-
-static bool type_is_freestanding_ordinal_enum(const XaotBundle *bundle, const XrType *type) {
-    return bundle_is_freestanding_profile(bundle) && type && !type->is_nullable &&
-           type->kind == XR_KIND_ENUM && type->enum_type.layout &&
-           type->enum_type.layout->is_zero_payload;
+static bool type_is_unit_enum_ordinal(const XaotBundle *bundle, const XrType *type) {
+    if (!bundle || !type || type->is_nullable)
+        return false;
+    const XaotEnumPlan *plan = xaot_bundle_find_enum_plan_for_type(bundle, type);
+    return plan && plan->enum_data && plan->member_count > 0 && plan->max_payload == 0;
 }
 
 static XaotValueRep enum_ordinal_value_rep(const XrType *type) {
@@ -372,7 +369,7 @@ static XaotAbiSlot native_value_slot_for_type(const XaotBundle *bundle, const Xi
     XaotAbiSlot slot;
     XaotValueRep struct_rep;
 
-    if (type_is_freestanding_ordinal_enum(bundle, type))
+    if (type_is_unit_enum_ordinal(bundle, type))
         return enum_ordinal_slot(type);
     if (type_is_class_instance_ptr_boundary(bundle, type))
         return ptr_slot(type);
@@ -461,7 +458,7 @@ static bool type_can_use_native_return_boundary(const XaotBundle *bundle, const 
                                                 const XrType *type) {
     if (type && XR_TYPE_IS_UNIT(type))
         return true;
-    if (type_is_freestanding_ordinal_enum(bundle, type))
+    if (type_is_unit_enum_ordinal(bundle, type))
         return true;
     return abi_type_can_use_typed_boundary(bundle, type) ||
            struct_layout_can_use_value_abi_depth(

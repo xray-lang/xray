@@ -69,6 +69,16 @@ typedef struct ForStmtNode {
     AstNode *body;
 } ForStmtNode;
 
+/* Compiler-known domains that use for-in syntax without implementing the
+ * user-visible Iterable protocol.  The analyzer is the only producer of a
+ * non-default value; lowering must not rediscover the domain from syntax. */
+typedef enum XrForInDomainKind {
+    XR_FOR_IN_DOMAIN_DEFAULT = 0,
+    XR_FOR_IN_DOMAIN_UNIT_ENUM_VALUES = 1,
+    XR_FOR_IN_DOMAIN_ENUM_VARIANTS = 2,
+    XR_FOR_IN_DOMAIN_ENUM_PAYLOADS = 3,
+} XrForInDomainKind;
+
 typedef struct ForInStmtNode {
     char *label;
     char *item_name;
@@ -77,8 +87,11 @@ typedef struct ForInStmtNode {
     XrTypeRef *item_type;
     AstNode *collection;
     AstNode *body;
-    uint32_t item_symbol_id;  /* symbol ID for iteration key/item variable */
-    uint32_t value_symbol_id; /* symbol ID for iteration value variable (key-value loops) */
+    uint32_t item_symbol_id;     /* symbol ID for iteration key/item variable */
+    uint32_t value_symbol_id;    /* symbol ID for iteration value variable (key-value loops) */
+    uint32_t enum_symbol_id;     /* concrete enum declaration selected by the analyzer */
+    uint32_t enum_variant_count; /* declaration-order domain cardinality */
+    uint8_t domain_kind;         /* XrForInDomainKind */
 } ForInStmtNode;
 
 typedef struct BreakStmtNode {

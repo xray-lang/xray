@@ -257,6 +257,38 @@ static inline void *xrt_arc_alloc(size_t obj_size) {
     return (char *) hdr + sizeof(XrObjHeader);
 }
 
+static inline XrValue xrt_enum_descriptor_box_new(uint32_t layout_id, uint8_t metadata_kind,
+                                                  int64_t scalar) {
+    XrAotErasedEnumDescriptor *box = (XrAotErasedEnumDescriptor *) xrt_arc_alloc(sizeof(*box));
+    XrObjHeader *hdr = XRT_ARC_HDR(box);
+    hdr->type = XR_TENUM_DESCRIPTOR;
+    box->layout_id = layout_id;
+    box->metadata_kind = metadata_kind;
+    box->_reserved[0] = box->_reserved[1] = box->_reserved[2] = 0;
+    box->scalar = scalar;
+    XrValue value = {0};
+    value.tag = XR_TAG_PTR;
+    value.heap_type = XR_TENUM_DESCRIPTOR;
+    value.ptr = box;
+    return value;
+}
+
+static inline int xrt_enum_descriptor_matches(XrValue value, uint32_t layout_id,
+                                              uint8_t metadata_kind) {
+    if (value.tag != XR_TAG_PTR || value.heap_type != XR_TENUM_DESCRIPTOR || !value.ptr)
+        return 0;
+    const XrAotErasedEnumDescriptor *box = (const XrAotErasedEnumDescriptor *) value.ptr;
+    return box->layout_id == layout_id && box->metadata_kind == metadata_kind;
+}
+
+static inline int64_t xrt_enum_descriptor_unbox(XrValue value) {
+    if (value.tag != XR_TAG_PTR || value.heap_type != XR_TENUM_DESCRIPTOR || !value.ptr) {
+        fprintf(stderr, "xray: value is not an erased enum descriptor\n");
+        abort();
+    }
+    return ((const XrAotErasedEnumDescriptor *) value.ptr)->scalar;
+}
+
 static inline void xrt_arc_mark_builtin(void *obj, uint32_t kind) {
     XrObjHeader *hdr = XRT_ARC_HDR(obj);
     hdr->_rsv = kind;
@@ -284,7 +316,7 @@ static inline int xrt_arc_value_has_header(XrValue v) {
     if (XR_IS_ARRAY_REF(v))
         return (v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0;
     if (v.tag == XR_TAG_PTR)
-        return v.heap_type == XR_TINSTANCE;
+        return v.heap_type == XR_TINSTANCE || v.heap_type == XR_TENUM_DESCRIPTOR;
     return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_CLOSURE || v.tag == XR_TAG_CELL ||
            v.tag == XR_TAG_AGG_REF || v.tag == XR_TAG_REGEX || v.tag == XR_TAG_SYS_MUTEX ||
            v.tag == XR_TAG_SYS_RWLOCK || v.tag == XR_TAG_SYS_CONDVAR ||

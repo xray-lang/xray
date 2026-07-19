@@ -110,7 +110,10 @@ for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
 for (ch in "hello") { print(ch) }             // 字符串字符（按 Unicode scalar）
 for (key in someMap) { print(key) }           // Map 单变量 → key
 for (key in someJson) { print(key) }          // Json 单变量 → key
-// for (day in Color) { ... }                 // 编译错误：enum 类型本身不可迭代
+for (color in Color) { print(color.name) }    // 仅无 payload enum；产出 Color 值
+for (variant in Event.variants) {             // 任意具体 enum；产出 EnumVariant<Event>
+    print(variant.name)
+}
 for (_ in 0..n) { count++ }                   // 占位符忽略
 ```
 
@@ -143,8 +146,13 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 | `Json` | key (string) | (key, value) |
 | `string` | `rune` | (index, rune) |
 | `Range`（`a..b`） | int | — |
-| Enum 类型 | **不可迭代**；需要编译器生成或用户提供的显式 case 表 | — |
+| 仅含无 payload 变体的具体 enum 类型 `E` | `E` 的实际值（声明顺序） | — |
+| 含 payload 变体的 enum 类型 `E` | **编译错误**；使用 `E.variants` | — |
+| `EnumVariants<E>` | `EnumVariant<E>` 描述符（声明顺序） | — |
+| `EnumPayloads<E>` | `EnumPayloadField<E>` 描述符（声明顺序） | — |
 | 自定义 `Iterator<T>` | T | — |
+
+enum 类型域与 descriptor view 由编译器静态识别，不意味着 enum 实现 `Iterable`，也不会隐式构造数组或迭代器对象。`E` 必须是编译期可确定布局的具体 enum；未约束类型参数上的 `E.variants` 会被拒绝。详见 §5.6.5。
 
 #### 自定义迭代器
 
@@ -422,7 +430,10 @@ for (i in 0..n) { print(i) }                  // range iteration (half-open)
 for (ch in "hello") { print(ch) }             // string characters (by Unicode scalar)
 for (key in someMap) { print(key) }           // single variable over Map → key
 for (key in someJson) { print(key) }          // single variable over Json → key
-// for (day in Color) { ... }                 // compile error: an enum type is not iterable
+for (color in Color) { print(color.name) }    // unit-only enum; yields Color values
+for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>
+    print(variant.name)
+}
 for (_ in 0..n) { count++ }                   // discard with placeholder
 ```
 
@@ -455,8 +466,13 @@ Iteration source / yield mapping:
 | `Json` | key (string) | (key, value) |
 | `string` | `rune` | (index, rune) |
 | `Range` (`a..b`) | int | — |
-| Enum type | **not iterable**; use an explicitly generated or user-provided case table | — |
+| Concrete enum type `E` with unit-only variants | actual `E` values (declaration order) | — |
+| Enum type `E` containing a payload variant | **compile error**; use `E.variants` | — |
+| `EnumVariants<E>` | `EnumVariant<E>` descriptors (declaration order) | — |
+| `EnumPayloads<E>` | `EnumPayloadField<E>` descriptors (declaration order) | — |
 | Custom `Iterator<T>` | T | — |
+
+Enum type domains and descriptor views are compiler-recognized static domains. They do not make enums conform to `Iterable`, and they do not implicitly construct arrays or iterator objects. `E` must have a compile-time-known concrete enum layout; `E.variants` on an unconstrained type parameter is rejected. See §5.6.5.
 
 #### Custom iterators
 

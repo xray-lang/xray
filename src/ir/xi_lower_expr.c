@@ -305,8 +305,8 @@ static const char *xi_lower_export_module_for_symbol(XiLower *l, XaSymbol *targe
     return NULL;
 }
 
-static XiValue *xi_lower_enum_namespace_value(XiLower *l, XaSymbol *enum_sym, const char *enum_name,
-                                              int line) {
+XiValue *xi_lower_enum_namespace_value(XiLower *l, XaSymbol *enum_sym, const char *enum_name,
+                                       int line) {
     if (!l || !enum_sym || !enum_name)
         return NULL;
 
@@ -1809,6 +1809,253 @@ static XiValue *lower_module_member_constant(XiLower *l, XiValue *obj, const cha
     return NULL;
 }
 
+/* Payload descriptor type IDs are specialization-dependent: the declaration
+ * metadata for `Result<T>.Ok(T)` contains T, while `Result<int>.variants`
+ * must expose int.  Lower the finite lookup to scalar Xi selects so VM and
+ * AOT share the same concrete answer without cloning or mutating the runtime
+ * enum namespace for each specialization. */
+static XiValue *lower_enum_payload_type_id(XiLower *l, XrType *owner, XaSymbol *enum_sym,
+                                           XiValue *descriptor, uint32_t line) {
+    if (!l || !owner || owner->kind != XR_KIND_ENUM || !enum_sym || !descriptor)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, enum_sym);
+    XaEnumInfo *info = links ? links->enum_info : NULL;
+    if (!info || !info->variants)
+        return NULL;
+
+    int param_count = xa_symbol_links_get_type_param_count(links);
+    const char *stack_names[8];
+    const char **param_names = stack_names;
+    if (param_count > 8) {
+        param_names = (const char **) xr_malloc(sizeof(const char *) * (size_t) param_count);
+        if (!param_names)
+            return NULL;
+    }
+    for (int i = 0; i < param_count; i++)
+        param_names[i] = xa_symbol_links_get_type_param_name(links, i);
+
+    XiValue *result = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+    for (int vi = (int) info->variant_count - 1; vi >= 0; vi--) {
+        XaEnumVariantInfo *variant = &info->variants[vi];
+        for (int pi = (int) variant->payload_count - 1; pi >= 0; pi--) {
+            XrType *payload_type = variant->payload_types ? variant->payload_types[pi] : NULL;
+            if (param_count > 0 && owner->enum_type.type_arg_count == param_count &&
+                owner->enum_type.type_args) {
+                payload_type = xr_type_substitute(l->isolate, payload_type, param_names,
+                                                  owner->enum_type.type_args, param_count);
+            }
+            int64_t packed = (int64_t) (((uint64_t) (uint32_t) vi << 32) | (uint32_t) pi);
+            XiValue *key = xi_const_int(l->func, l->cur_block, packed, l->type_int);
+            XiValue *condition =
+                xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, descriptor, key);
+            XiValue *type_id = xi_const_int(l->func, l->cur_block,
+                                            (int64_t) xr_type_to_tid(payload_type), l->type_int);
+            XiValue *select = xi_value_new(l->func, l->cur_block, XI_SELECT, l->type_int, 3);
+            if (!key || !condition || !type_id || !select) {
+                if (param_names != stack_names)
+                    xr_free((void *) param_names);
+                return NULL;
+            }
+            select->args[0] = condition;
+            select->args[1] = type_id;
+            select->args[2] = result;
+            select->line = line;
+            result = select;
+        }
+    }
+    if (param_names != stack_names)
+        xr_free((void *) param_names);
+    if (result) {
+        result->enum_metadata_owner = owner;
+        result->enum_metadata_field = XA_ENUM_META_PAYLOAD_TYPE;
+        result->enum_metadata_kind = descriptor->enum_metadata_kind != XR_ENUM_METADATA_NONE
+                                         ? descriptor->enum_metadata_kind
+                                         : (uint8_t) xr_type_enum_metadata_kind(descriptor->type);
+    }
+    return result;
+}
+
+static XiValue *lower_mark_enum_metadata(XiValue *value, XrType *owner, uint8_t field) {
+    if (value) {
+        value->enum_metadata_owner = owner;
+        value->enum_metadata_field = field;
+        value->enum_metadata_kind = (uint8_t) xr_type_enum_metadata_kind(value->type);
+    }
+    return value;
+}
+
+static XiValue *lower_mark_enum_metadata_from(XiValue *value, XrType *owner, uint8_t field,
+                                              const XiValue *descriptor) {
+    value = lower_mark_enum_metadata(value, owner, field);
+    if (value && descriptor) {
+        uint8_t kind = descriptor->enum_metadata_kind != XR_ENUM_METADATA_NONE
+                           ? descriptor->enum_metadata_kind
+                           : (uint8_t) xr_type_enum_metadata_kind(descriptor->type);
+        if (kind != XR_ENUM_METADATA_NONE)
+            value->enum_metadata_kind = kind;
+    }
+    return value;
+}
+
+static bool lower_symbol_has_enum_schema(XiLower *l, XaSymbol *sym) {
+    if (!l || !sym)
+        return false;
+    if (sym->kind == XA_SYM_ENUM)
+        return true;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+    return sym->kind == XA_SYM_IMPORT && links && links->type &&
+           links->type->kind == XR_KIND_ENUM && links->enum_info;
+}
+
+static bool lower_selected_enum_member_access(XiLower *l, AstNode *node, const XaSelection *sel,
+                                              XiValue **out) {
+    MemberAccessNode *ma = &node->as.member_access;
+    *out = NULL;
+    if (!sel)
+        return false;
+
+    if (sel->kind == XA_SEL_ENUM_VARIANTS && sel->result_type) {
+        XrType *owner = xr_type_enum_metadata_owner(sel->result_type);
+        int64_t count =
+            owner && owner->enum_type.layout ? (int64_t) owner->enum_type.layout->variant_count : 0;
+        XiValue *view = xi_value_new(l->func, l->cur_block, XI_CONST, sel->result_type, 0);
+        if (view) {
+            view->aux_int = count;
+            view->line = (uint32_t) node->line;
+            lower_mark_enum_metadata(view, owner, XA_ENUM_META_VARIANTS);
+        }
+        *out = view;
+        return true;
+    }
+
+    if (sel->kind == XA_SEL_ENUM_MEMBER && sel->target_symbol &&
+        sel->target_symbol->kind == XA_SYM_ENUM && ma->name) {
+        const char *enum_name = sel->target_symbol->name;
+        XiValue *enum_val =
+            xi_lower_enum_namespace_value(l, sel->target_symbol, enum_name, (int) node->line);
+        if (!enum_val)
+            return false;
+        struct XrType *result_type =
+            sel->result_type ? sel->result_type : xi_lower_node_type(l, node);
+        XiValue *value = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
+        if (value) {
+            value->args[0] = enum_val;
+            value->aux = (void *) arena_strdup(l->func, ma->name);
+            value->aux_int = xi_lower_method_symbol(l, ma->name);
+            value->line = (uint32_t) node->line;
+        }
+        *out = value;
+        return true;
+    }
+
+    if (sel->kind != XA_SEL_ENUM_META || !sel->result_type)
+        return false;
+
+    XrType *receiver = sel->receiver_type;
+    XrType *owner = xr_type_enum_metadata_owner(receiver);
+    XiValue *descriptor = xi_lower_expr(l, ma->object);
+    if (!descriptor)
+        return true;
+    /* Flow narrowing can prove an erased union value to be
+     * EnumVariant<E>/EnumPayloadField<E>.  The runtime value is still the
+     * explicit erased descriptor box, so recover its scalar only on this
+     * statically proven metadata access path.  A typed descriptor remains
+     * an I64 and needs no conversion. */
+    if (xr_type_is_enum_metadata(receiver) && !xr_type_is_enum_metadata(descriptor->type)) {
+        XiValue *unbox = xi_value_new(l->func, l->cur_block, XI_ENUM_DESCRIPTOR_UNBOX, receiver, 1);
+        if (!unbox)
+            return true;
+        unbox->args[0] = descriptor;
+        unbox->line = (uint32_t) node->line;
+        descriptor = lower_mark_enum_metadata(unbox, owner, (uint8_t) sel->field_index);
+    }
+    if (sel->field_index == XA_ENUM_META_LENGTH) {
+        if (xr_type_is_enum_metadata_named(receiver, XR_ENUM_VARIANTS_TYPE_NAME))
+            *out = lower_mark_enum_metadata_from(
+                xi_const_int(l->func, l->cur_block,
+                             owner && owner->enum_type.layout
+                                 ? (int64_t) owner->enum_type.layout->variant_count
+                                 : 0,
+                             l->type_int),
+                owner, XA_ENUM_META_LENGTH, descriptor);
+        else {
+            XiValue *shift = xi_const_int(l->func, l->cur_block, 32, l->type_int);
+            *out = lower_mark_enum_metadata_from(
+                xi_binary(l->func, l->cur_block, XI_SHR, l->type_int, descriptor, shift), owner,
+                XA_ENUM_META_PAYLOAD_COUNT, descriptor);
+        }
+        return true;
+    }
+    if (sel->field_index == XA_ENUM_META_ORDINAL) {
+        XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, l->type_int, 1);
+        if (copy)
+            copy->args[0] = descriptor;
+        *out = lower_mark_enum_metadata_from(copy, owner, XA_ENUM_META_ORDINAL, descriptor);
+        return true;
+    }
+    if (sel->field_index == XA_ENUM_META_PAYLOAD_INDEX) {
+        XiValue *mask = xi_const_int(l->func, l->cur_block, UINT32_MAX, l->type_int);
+        *out = lower_mark_enum_metadata_from(
+            xi_binary(l->func, l->cur_block, XI_BAND, l->type_int, descriptor, mask), owner,
+            XA_ENUM_META_PAYLOAD_INDEX, descriptor);
+        return true;
+    }
+
+    const char *enum_name =
+        owner && owner->kind == XR_KIND_ENUM ? owner->enum_type.enum_name : NULL;
+    XaSymbol *enum_sym = sel->target_symbol;
+    if (!lower_symbol_has_enum_schema(l, enum_sym) && enum_name)
+        enum_sym = xa_analyzer_lookup_deep(l->analyzer, enum_name);
+    if (sel->field_index == XA_ENUM_META_PAYLOAD_TYPE) {
+        *out = lower_enum_payload_type_id(l, owner, enum_sym, descriptor, (uint32_t) node->line);
+        if (!*out)
+            l->had_error = true;
+        return true;
+    }
+    XiValue *enum_namespace =
+        lower_symbol_has_enum_schema(l, enum_sym)
+            ? xi_lower_enum_namespace_value(l, enum_sym, enum_name, (int) node->line)
+            : NULL;
+    if (!enum_namespace) {
+        l->had_error = true;
+        return true;
+    }
+
+    int meta_field = sel->field_index;
+    if (meta_field == XA_ENUM_META_IS_UNIT || meta_field == XA_ENUM_META_PAYLOADS)
+        meta_field = XA_ENUM_META_PAYLOAD_COUNT;
+    XiValue *meta =
+        xi_value_new(l->func, l->cur_block, XI_ENUM_META_GET,
+                     meta_field == XA_ENUM_META_PAYLOAD_COUNT ? l->type_int : sel->result_type, 2);
+    if (!meta)
+        return true;
+    meta->args[0] = enum_namespace;
+    meta->args[1] = descriptor;
+    meta->aux_int = meta_field;
+    lower_mark_enum_metadata_from(meta, owner, (uint8_t) meta_field, descriptor);
+    meta->flags |= XI_FLAG_READS_MEM | XI_FLAG_MAY_THROW;
+    meta->line = (uint32_t) node->line;
+    if (sel->field_index == XA_ENUM_META_IS_UNIT) {
+        XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+        *out = lower_mark_enum_metadata_from(
+            xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, meta, zero), owner,
+            XA_ENUM_META_IS_UNIT, descriptor);
+        return true;
+    }
+    if (sel->field_index == XA_ENUM_META_PAYLOADS) {
+        XiValue *shift = xi_const_int(l->func, l->cur_block, 32, l->type_int);
+        XiValue *count_hi = xi_binary(l->func, l->cur_block, XI_SHL, l->type_int, meta, shift);
+        XiValue *mask = xi_const_int(l->func, l->cur_block, UINT32_MAX, l->type_int);
+        XiValue *ordinal = xi_binary(l->func, l->cur_block, XI_BAND, l->type_int, descriptor, mask);
+        *out = lower_mark_enum_metadata_from(
+            xi_binary(l->func, l->cur_block, XI_BOR, sel->result_type, count_hi, ordinal), owner,
+            XA_ENUM_META_PAYLOADS, descriptor);
+        return true;
+    }
+    *out = meta;
+    return true;
+}
+
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
     XiSequenceEvidenceIds sequence_ids;
@@ -1825,24 +2072,9 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         l && l->analyzer && l->analyzer->selection_table
             ? xa_selection_table_get((XaSelectionTable *) l->analyzer->selection_table, node)
             : NULL;
-    if (sel && sel->kind == XA_SEL_ENUM_MEMBER && sel->target_symbol &&
-        sel->target_symbol->kind == XA_SYM_ENUM && ma->name) {
-        const char *enum_name = sel->target_symbol->name;
-        XiValue *enum_val =
-            xi_lower_enum_namespace_value(l, sel->target_symbol, enum_name, (int) node->line);
-        if (enum_val) {
-            struct XrType *result_type =
-                sel->result_type ? sel->result_type : xi_lower_node_type(l, node);
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
-            if (!v)
-                return NULL;
-            v->args[0] = enum_val;
-            v->aux = (void *) arena_strdup(l->func, ma->name);
-            v->aux_int = xi_lower_method_symbol(l, ma->name);
-            v->line = (uint32_t) node->line;
-            return v;
-        }
-    }
+    XiValue *enum_member = NULL;
+    if (lower_selected_enum_member_access(l, node, sel, &enum_member))
+        return enum_member;
 
     XiValue *type_member = lower_type_namespace_member(l, ma);
     if (type_member)
@@ -1952,6 +2184,19 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     v->aux = (void *) arena_strdup(l->func, ma->name);
     v->aux_int = xi_lower_method_symbol(l, ma->name);
     v->line = (uint32_t) node->line;
+    /* Ordinary enum value properties participate in the metadata reachability
+     * bitmap only when flow preserved a concrete nominal owner.  Legacy/prelude
+     * enum phis can carry an anonymous enum-shaped type; tagging that as a
+     * concrete enum domain would make the fail-closed descriptor verifier
+     * reject otherwise valid `.name`/`.ordinal` code.  Descriptor selections
+     * above always carry their concrete owner and remain strict. */
+    if (obj->type && obj->type->kind == XR_KIND_ENUM && obj->type->enum_type.enum_name &&
+        obj->type->enum_type.layout && ma->name) {
+        if (strcmp(ma->name, "name") == 0)
+            lower_mark_enum_metadata(v, obj->type, XA_ENUM_META_NAME);
+        else if (strcmp(ma->name, "ordinal") == 0)
+            lower_mark_enum_metadata(v, obj->type, XA_ENUM_META_ORDINAL);
+    }
     xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
     xi_lower_bind_class_field_id(l, v, obj->type, ma->name);
     if (obj->type && XR_TYPE_IS_JSON(obj->type))
@@ -1966,6 +2211,36 @@ static XiValue *lower_member_set_target(XiValue *obj) {
     return obj;
 }
 
+static bool lower_enum_descriptor_erases_to(const XiValue *value, const XrType *target) {
+    if (!value || !target ||
+        (!xr_type_is_enum_metadata(value->type) &&
+         value->enum_metadata_kind == XR_ENUM_METADATA_NONE))
+        return false;
+    if (xr_type_is_enum_metadata(target))
+        return !xr_type_equals(value->type, (XrType *) (uintptr_t) target);
+    return target->kind == XR_KIND_UNION || target->kind == XR_KIND_INTERFACE ||
+           target->kind == XR_KIND_JSON || target->kind == XR_KIND_UNKNOWN;
+}
+
+static XiValue *lower_enum_descriptor_box_for_boundary(XiLower *l, XiValue *value, XrType *target,
+                                                       uint32_t line) {
+    if (!lower_enum_descriptor_erases_to(value, target))
+        return value;
+    XiValue *box = xi_value_new(l->func, l->cur_block, XI_ENUM_DESCRIPTOR_BOX, target, 1);
+    if (!box)
+        return NULL;
+    box->args[0] = value;
+    box->line = line;
+    box->enum_metadata_owner = value->enum_metadata_owner
+                                   ? value->enum_metadata_owner
+                                   : xr_type_enum_metadata_owner(value->type);
+    box->enum_metadata_kind = value->enum_metadata_kind != XR_ENUM_METADATA_NONE
+                                  ? value->enum_metadata_kind
+                                  : (uint8_t) xr_type_enum_metadata_kind(value->type);
+    box->enum_metadata_field = value->enum_metadata_field;
+    return box;
+}
+
 static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     MemberSetNode *ms = &node->as.member_set;
     XiValue *obj = xi_lower_expr(l, ms->object);
@@ -1973,6 +2248,11 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     if (!obj || !val)
         return NULL;
     obj = lower_member_set_target(obj);
+
+    XrType *write_type = xi_lower_node_type(l, node);
+    val = lower_enum_descriptor_box_for_boundary(l, val, write_type, (uint32_t) node->line);
+    if (!val)
+        return NULL;
 
     struct XrType *result_type = val->type;
 
@@ -2398,6 +2678,28 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     XiValue *idx = xi_lower_expr(l, ig->index);
     if (!obj || !idx)
         return NULL;
+
+    if (xr_type_is_enum_metadata_named(obj->type, XR_ENUM_VARIANTS_TYPE_NAME) ||
+        xr_type_is_enum_metadata_named(obj->type, XR_ENUM_PAYLOADS_TYPE_NAME)) {
+        struct XrType *result_type = xi_lower_node_type(l, node);
+        XiValue *v =
+            xi_value_new(l->func, l->cur_block,
+                         xr_type_is_enum_metadata_named(obj->type, XR_ENUM_VARIANTS_TYPE_NAME)
+                             ? XI_ENUM_VARIANT_AT
+                             : XI_ENUM_PAYLOAD_AT,
+                         result_type, 2);
+        if (!v)
+            return NULL;
+        v->args[0] = obj;
+        v->args[1] = idx;
+        v->flags |= XI_FLAG_MAY_THROW;
+        v->line = (uint32_t) node->line;
+        v->enum_metadata_owner = xr_type_enum_metadata_owner(result_type);
+        v->enum_metadata_kind =
+            (uint8_t) (v->op == XI_ENUM_VARIANT_AT ? XR_ENUM_METADATA_VARIANT
+                                                   : XR_ENUM_METADATA_PAYLOAD_FIELD);
+        return v;
+    }
 
     /* FFI raw pointer subscript p[i] => XI_PTR_LOAD(p + i*sizeof(T)). */
     if (obj->type && XR_TYPE_IS_POINTER(obj->type)) {
@@ -8089,6 +8391,32 @@ static XiValue *lower_set_literal(XiLower *l, AstNode *node) {
     return set_val;
 }
 
+static XiValue *lower_typed_enum_metadata_is_test(XiLower *l, XiValue *value, XrType *target_type) {
+    if (!xr_type_is_enum_metadata(target_type))
+        return NULL;
+    XrType *source_owner = value->enum_metadata_owner ? value->enum_metadata_owner
+                                                      : xr_type_enum_metadata_owner(value->type);
+    XrEnumMetadataKind source_kind = value->enum_metadata_kind != XR_ENUM_METADATA_NONE
+                                         ? (XrEnumMetadataKind) value->enum_metadata_kind
+                                         : xr_type_enum_metadata_kind(value->type);
+    XrType *target_owner = xr_type_enum_metadata_owner(target_type);
+    XrEnumMetadataKind target_kind = xr_type_enum_metadata_kind(target_type);
+    if (!source_owner || source_kind == XR_ENUM_METADATA_NONE || !target_owner ||
+        target_kind == XR_ENUM_METADATA_NONE)
+        return NULL;
+    uint32_t source_layout = source_owner->kind == XR_KIND_ENUM && source_owner->enum_type.layout
+                                 ? source_owner->enum_type.layout->layout_id
+                                 : 0;
+    uint32_t target_layout = target_owner->kind == XR_KIND_ENUM && target_owner->enum_type.layout
+                                 ? target_owner->enum_type.layout->layout_id
+                                 : 0;
+    if (source_layout == 0 || target_layout == 0)
+        return NULL;
+    return xi_const_bool(l->func, l->cur_block,
+                         source_layout == target_layout && source_kind == target_kind,
+                         l->type_bool);
+}
+
 /* Emit an XI_IS test against the given XrTypeRef for an existing value.
  * Used both by `expr is T` and by `is T` patterns in match arms. */
 XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int line) {
@@ -8097,6 +8425,12 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
 
     XrType *target_type =
         (tref && l && l->analyzer) ? xr_tref_resolve_in_analyzer(l->analyzer, tref) : NULL;
+
+    /* Typed descriptors have a statically known owner and kind, so this test
+     * folds without interpreting the scalar as an erased descriptor box. */
+    XiValue *enum_metadata_test = lower_typed_enum_metadata_is_test(l, val, target_type);
+    if (enum_metadata_test)
+        return enum_metadata_test;
 
     /* Resolve the target type to a runtime value so the VM can use it
      * directly from a register:
@@ -8171,6 +8505,13 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
             type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
             if (type_val)
                 type_val->aux_int = tid;
+        } else if (xr_type_is_enum_metadata(target_type)) {
+            /* Enum descriptor type tests use a backend-neutral token rather
+             * than a runtime class namespace.  The token is consumed only by
+             * XI_IS and never exposed as a source value. */
+            type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
+            if (type_val)
+                type_val->aux_int = xr_type_enum_metadata_token(target_type);
         } else if (tref->kind == XR_TREF_NAMED && tref->name) {
             /* Resolve class from scope chain */
             int var = xi_lower_var_find(l, 0, tref->name);

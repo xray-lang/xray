@@ -47,7 +47,22 @@ typedef enum XaSelectionKind {
     XA_SEL_STATIC_MEMBER, /* static member: Class.staticField */
     XA_SEL_MODULE_EXPORT, /* module namespace access: mod.exportedName */
     XA_SEL_ENUM_MEMBER,   /* enum member: Color.Red */
+    XA_SEL_ENUM_VARIANTS, /* concrete enum metadata view: Color.variants */
+    XA_SEL_ENUM_META,     /* EnumVariant / EnumPayloadField intrinsic field */
 } XaSelectionKind;
+
+typedef enum XaEnumMetaField {
+    XA_ENUM_META_VARIANTS = 1,
+    XA_ENUM_META_LENGTH,
+    XA_ENUM_META_ORDINAL,
+    XA_ENUM_META_NAME,
+    XA_ENUM_META_PAYLOAD_COUNT,
+    XA_ENUM_META_IS_UNIT,
+    XA_ENUM_META_PAYLOADS,
+    XA_ENUM_META_PAYLOAD_INDEX,
+    XA_ENUM_META_PAYLOAD_NAME,
+    XA_ENUM_META_PAYLOAD_TYPE,
+} XaEnumMetaField;
 
 /* A resolved selection fact for one AST node. */
 typedef struct XaSelection {

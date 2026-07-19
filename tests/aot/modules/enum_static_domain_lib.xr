@@ -1,0 +1,14 @@
+export enum ExportColor {
+    Red,
+    Green,
+    Blue
+}
+
+export enum ExportEvent {
+    Ready,
+    Data(code: int)
+}
+
+export fn failWithBlue() {
+    throw ExportColor.Blue
+}

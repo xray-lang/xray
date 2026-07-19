@@ -758,17 +758,55 @@ Color.Red.ordinal     // 0              声明顺序 tag (int，从 0)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
 ```
 
-enum 值提供 `name`、`ordinal` 与 `toString()`。需要遍历全部 case 时，应使用显式生成 metadata 的 `CaseIterable` 风格能力。
+enum 值提供 `name`、`ordinal` 与 `toString()`。它们不提供 `value`、`rawValue`、`fromName` 或 `fromOrdinal` 等隐式 backing-value/reflection API。
 
 #### 5.6.5 遍历
 
-enum 默认不可 `for-in` 遍历：
+仅由无 payload 变体组成的具体 enum 可以直接迭代实际 enum 值；任意具体 enum 都可通过 `.variants` 迭代声明级描述符：
 
 ```xray @id=decl-enum-iteration
-for (c in Color) { print(c.name) }        // 编译错误
+for (color in Color) {
+    print(color.name)                     // color: Color；Red、Green、Blue
+}
+
+for (variant in NetEvent.variants) {
+    print(variant.ordinal)                // variant: EnumVariant<NetEvent>
+    print(variant.name)
+    for (field in variant.payloads) {
+        print(field.name)                 // field: EnumPayloadField<NetEvent>
+        print(field.type)                 // int：具体字段类型的 canonical TypeId
+    }
+}
 ```
 
-原因是 case 列表属于可裁剪 metadata，不应成为每个 enum 的默认 runtime 对象能力。需要 case iteration 时应显式 opt-in，由编译器生成只读 case 表。
+两种循环语法相似，但产出类型有意不同：
+
+| 表达式 | 适用范围 | 循环变量类型 | 语义 |
+|---|---|---|---|
+| `E` | 仅 unit-only 具体 enum | `E` | 按声明顺序产出实际 enum 值 |
+| `E.variants` | 任意具体 enum | `EnumVariant<E>` | 按声明顺序产出只读变体描述符 |
+| `variant.payloads` | 一个 `EnumVariant<E>` | `EnumPayloadField<E>` | 按声明顺序产出只读 payload 字段描述符 |
+
+若 `E` 含任一 payload 变体，`for (value in E)` 是编译错误，诊断会建议 `E.variants`；编译器不会虚构 payload 值。`for (variant in Color.variants)` 对 unit-only enum 也完全合法，但 `variant` 仍是描述符而不是 `Color` 值。循环本身不打印任何内容；只有循环体显式执行的副作用会产生输出。
+
+descriptor API 是封闭白名单：
+
+| 类型 | 属性 / 操作 |
+|---|---|
+| `EnumVariants<E>` | `length: int`、检查边界的 `[index] -> EnumVariant<E>`、`for-in` |
+| `EnumVariant<E>` | `ordinal: int`、`name: string`、`payloadCount: int`、`isUnit: bool`、`payloads: EnumPayloads<E>` |
+| `EnumPayloads<E>` | `length: int`、检查边界的 `[index] -> EnumPayloadField<E>`、`for-in` |
+| `EnumPayloadField<E>` | `index: int`、`name: string`、`type: int`（canonical TypeId） |
+
+命名 payload 字段的 `name` 是源码声明名；位置 payload 字段没有声明名，其 `name` 确定为 `""`，不使用 `null`，因此 descriptor 表面保持非空 `string` 类型。
+
+这些类型不可由用户构造，描述符不可调用，也不提供从名字/ordinal 构造 enum 值的入口。越界索引按普通 checked index 失败。descriptor 不进入 C ABI，FFI 边界会编译拒绝。
+
+该能力是编译器静态类型域，不是 `Iterable` 协议实现：直接循环和不逃逸 descriptor 在 VM/AOT 中以 ordinal/index 标量降低，不分配数组或 iterator。只有 descriptor 流入 `any`、擦除 union、泛型存储、容器、闭包或跨协程通道等需要身份的边界时才物化不可变 box；`.name`、payload schema 与 type token 由使用证据分别保留，未使用的 cold sidecar 可裁剪。
+
+unit-only enum 的实际值在 typed 路径中同样只携带 ordinal；一旦该值跨入 tagged/擦除边界，静态 sidecar 必须保留 enum 名与全部 case 名，使边界后的 `.name`、`toString()`、相等性和通用字符串格式化与 VM 语义一致。仍保持 typed 的 enum 不生成该 sidecar。
+
+泛型时必须知道具体 enum layout，例如 `Option<int>.variants` 合法；未约束类型参数 `E.variants` 不合法。别名、导入和跨模块编译保留同一声明顺序与具体类型替换。
 
 #### 5.6.6 反查（从值到成员）
 
@@ -1668,17 +1706,55 @@ Color.Red.ordinal     // 0              declaration-order tag (int, zero-based)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
 ```
 
-Enum values provide `name`, `ordinal`, and `toString()`. Code that needs to iterate all cases should use an explicit generated-metadata capability in the style of `CaseIterable`.
+Enum values provide `name`, `ordinal`, and `toString()`. They do not expose implicit backing-value/reflection APIs such as `value`, `rawValue`, `fromName`, or `fromOrdinal`.
 
 #### 5.6.5 Iteration
 
-Enums are not iterable by default:
+A concrete enum containing only payload-free variants can be iterated directly as actual enum values. Every concrete enum can expose declaration metadata through `.variants`:
 
 ```xray @id=decl-enum-iteration
-for (c in Color) { print(c.name) }        // compile error
+for (color in Color) {
+    print(color.name)                     // color: Color; Red, Green, Blue
+}
+
+for (variant in NetEvent.variants) {
+    print(variant.ordinal)                // variant: EnumVariant<NetEvent>
+    print(variant.name)
+    for (field in variant.payloads) {
+        print(field.name)                 // field: EnumPayloadField<NetEvent>
+        print(field.type)                 // int: canonical TypeId for the concrete field type
+    }
+}
 ```
 
-The case list is strippable metadata and should not become a default runtime object capability for every enum. Case iteration should be explicit opt-in and compiler-generated when needed.
+The two loop forms deliberately yield different types:
+
+| Expression | Availability | Loop variable | Meaning |
+|---|---|---|---|
+| `E` | concrete unit-only enum | `E` | actual enum values in declaration order |
+| `E.variants` | any concrete enum | `EnumVariant<E>` | read-only variant descriptors in declaration order |
+| `variant.payloads` | an `EnumVariant<E>` | `EnumPayloadField<E>` | read-only payload-field descriptors in declaration order |
+
+If `E` contains any payload variant, `for (value in E)` is a compile error and the diagnostic recommends `E.variants`; the compiler never invents payload values. `for (variant in Color.variants)` is also valid for a unit-only enum, but `variant` remains a descriptor, not a `Color` value. A loop does not print by itself; only explicit effects in its body produce output.
+
+The descriptor API is a closed whitelist:
+
+| Type | Properties / operations |
+|---|---|
+| `EnumVariants<E>` | `length: int`, checked `[index] -> EnumVariant<E>`, and `for-in` |
+| `EnumVariant<E>` | `ordinal: int`, `name: string`, `payloadCount: int`, `isUnit: bool`, `payloads: EnumPayloads<E>` |
+| `EnumPayloads<E>` | `length: int`, checked `[index] -> EnumPayloadField<E>`, and `for-in` |
+| `EnumPayloadField<E>` | `index: int`, `name: string`, `type: int` (canonical TypeId) |
+
+For a named payload field, `name` is its source declaration name. A positional payload field has no declared name and deterministically reports `""`, not `null`, so the descriptor surface keeps a non-null `string` type.
+
+Users cannot construct these types, descriptors are not callable, and they do not provide name/ordinal-to-value construction. Out-of-range access fails like other checked indexing. Descriptors have no C ABI and are rejected at FFI boundaries.
+
+This facility is a compiler-recognized static type domain, not an `Iterable` conformance. Direct loops and non-escaping descriptors lower to ordinal/index scalars in VM and AOT without allocating an array or iterator. An immutable box is materialized only when a descriptor crosses an identity-requiring boundary such as `any`, an erased union, generic storage, a container, a closure, or a cross-coroutine channel. Use evidence independently retains `.name`, payload-schema, and type-token metadata; unused cold sidecars remain strippable.
+
+An actual unit-only enum value likewise carries only its ordinal on typed paths. Once it crosses a tagged or erased boundary, its immutable static sidecar must retain the enum name and every case name so later `.name`, `toString()`, equality, and generic string formatting remain VM-equivalent. Enums that stay typed emit no such sidecar.
+
+Generic code must identify a concrete enum layout. `Option<int>.variants` is valid; `E.variants` on an unconstrained type parameter is not. Aliases, imports, and separate compilation preserve declaration order and concrete type substitution.
 
 #### 5.6.6 Reverse lookup (value to member)
 

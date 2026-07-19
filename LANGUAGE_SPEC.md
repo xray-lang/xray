@@ -1754,7 +1754,10 @@ for (i in 0..n) { print(i) }                  // range iteration (half-open)
 for (ch in "hello") { print(ch) }             // string characters (by Unicode scalar)
 for (key in someMap) { print(key) }           // single variable over Map → key
 for (key in someJson) { print(key) }          // single variable over Json → key
-// for (day in Color) { ... }                 // compile error: an enum type is not iterable
+for (color in Color) { print(color.name) }    // unit-only enum; yields Color values
+for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>
+    print(variant.name)
+}
 for (_ in 0..n) { count++ }                   // discard with placeholder
 ```
 
@@ -1787,8 +1790,13 @@ Iteration source / yield mapping:
 | `Json` | key (string) | (key, value) |
 | `string` | `rune` | (index, rune) |
 | `Range` (`a..b`) | int | — |
-| Enum type | **not iterable**; use an explicitly generated or user-provided case table | — |
+| Concrete enum type `E` with unit-only variants | actual `E` values (declaration order) | — |
+| Enum type `E` containing a payload variant | **compile error**; use `E.variants` | — |
+| `EnumVariants<E>` | `EnumVariant<E>` descriptors (declaration order) | — |
+| `EnumPayloads<E>` | `EnumPayloadField<E>` descriptors (declaration order) | — |
 | Custom `Iterator<T>` | T | — |
+
+Enum type domains and descriptor views are compiler-recognized static domains. They do not make enums conform to `Iterable`, and they do not implicitly construct arrays or iterator objects. `E` must have a compile-time-known concrete enum layout; `E.variants` on an unconstrained type parameter is rejected. See §5.6.5.
 
 #### Custom iterators
 
@@ -2714,17 +2722,55 @@ Color.Red.ordinal     // 0              declaration-order tag (int, zero-based)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
 ```
 
-Enum values provide `name`, `ordinal`, and `toString()`. Code that needs to iterate all cases should use an explicit generated-metadata capability in the style of `CaseIterable`.
+Enum values provide `name`, `ordinal`, and `toString()`. They do not expose implicit backing-value/reflection APIs such as `value`, `rawValue`, `fromName`, or `fromOrdinal`.
 
 #### 5.6.5 Iteration
 
-Enums are not iterable by default:
+A concrete enum containing only payload-free variants can be iterated directly as actual enum values. Every concrete enum can expose declaration metadata through `.variants`:
 
 ```xray
-for (c in Color) { print(c.name) }        // compile error
+for (color in Color) {
+    print(color.name)                     // color: Color; Red, Green, Blue
+}
+
+for (variant in NetEvent.variants) {
+    print(variant.ordinal)                // variant: EnumVariant<NetEvent>
+    print(variant.name)
+    for (field in variant.payloads) {
+        print(field.name)                 // field: EnumPayloadField<NetEvent>
+        print(field.type)                 // int: canonical TypeId for the concrete field type
+    }
+}
 ```
 
-The case list is strippable metadata and should not become a default runtime object capability for every enum. Case iteration should be explicit opt-in and compiler-generated when needed.
+The two loop forms deliberately yield different types:
+
+| Expression | Availability | Loop variable | Meaning |
+|---|---|---|---|
+| `E` | concrete unit-only enum | `E` | actual enum values in declaration order |
+| `E.variants` | any concrete enum | `EnumVariant<E>` | read-only variant descriptors in declaration order |
+| `variant.payloads` | an `EnumVariant<E>` | `EnumPayloadField<E>` | read-only payload-field descriptors in declaration order |
+
+If `E` contains any payload variant, `for (value in E)` is a compile error and the diagnostic recommends `E.variants`; the compiler never invents payload values. `for (variant in Color.variants)` is also valid for a unit-only enum, but `variant` remains a descriptor, not a `Color` value. A loop does not print by itself; only explicit effects in its body produce output.
+
+The descriptor API is a closed whitelist:
+
+| Type | Properties / operations |
+|---|---|
+| `EnumVariants<E>` | `length: int`, checked `[index] -> EnumVariant<E>`, and `for-in` |
+| `EnumVariant<E>` | `ordinal: int`, `name: string`, `payloadCount: int`, `isUnit: bool`, `payloads: EnumPayloads<E>` |
+| `EnumPayloads<E>` | `length: int`, checked `[index] -> EnumPayloadField<E>`, and `for-in` |
+| `EnumPayloadField<E>` | `index: int`, `name: string`, `type: int` (canonical TypeId) |
+
+For a named payload field, `name` is its source declaration name. A positional payload field has no declared name and deterministically reports `""`, not `null`, so the descriptor surface keeps a non-null `string` type.
+
+Users cannot construct these types, descriptors are not callable, and they do not provide name/ordinal-to-value construction. Out-of-range access fails like other checked indexing. Descriptors have no C ABI and are rejected at FFI boundaries.
+
+This facility is a compiler-recognized static type domain, not an `Iterable` conformance. Direct loops and non-escaping descriptors lower to ordinal/index scalars in VM and AOT without allocating an array or iterator. An immutable box is materialized only when a descriptor crosses an identity-requiring boundary such as `any`, an erased union, generic storage, a container, a closure, or a cross-coroutine channel. Use evidence independently retains `.name`, payload-schema, and type-token metadata; unused cold sidecars remain strippable.
+
+An actual unit-only enum value likewise carries only its ordinal on typed paths. Once it crosses a tagged or erased boundary, its immutable static sidecar must retain the enum name and every case name so later `.name`, `toString()`, equality, and generic string formatting remain VM-equivalent. Enums that stay typed emit no such sidecar.
+
+Generic code must identify a concrete enum layout. `Option<int>.variants` is valid; `E.variants` on an unconstrained type parameter is not. Aliases, imports, and separate compilation preserve declaration order and concrete type substitution.
 
 #### 5.6.6 Reverse lookup (value to member)
 
@@ -3721,7 +3767,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | `Comparable` | usable with `<` `<=` `>` `>=`; int/float/string and types implementing `Comparable` |
 | `Hashable` | usable as a `Map` key or `Set` element; built-in `int` / `float` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==(other: Self) -> bool` and `hash() -> int` |
 | `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
-| `Iterable<T>` | usable in `for-in`; Array, Map, Json, string, Range, and types with a custom `iterator()`; enum types themselves are not iterable |
+| `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Map, Json, string, Range, and types with a custom `iterator()` satisfy this constraint. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
 
 `Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==(other: Self) -> bool` and `hash() -> int`. Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
 

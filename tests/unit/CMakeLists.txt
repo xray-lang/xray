@@ -337,6 +337,14 @@ set_tests_properties(test_api_inventory_diff PROPERTIES
     LABELS "api;metadata;tooling"
 )
 add_test(
+    NAME test_api_inventory_enum_metadata
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_api_inventory_enum_metadata.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(test_api_inventory_enum_metadata PROPERTIES
+    LABELS "api;metadata;tooling;enum"
+)
+add_test(
     NAME test_param_mode_tooling_display
     COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/api/test_param_mode_tooling_display.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

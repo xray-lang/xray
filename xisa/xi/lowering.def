@@ -596,6 +596,18 @@
   :vm-bytecode (driver xi_emit_unbox)
   :aot-c (driver xicgen_unbox))
 
+(lower xi.enum.descriptor.box
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_enum_descriptor_box)
+  :aot-c (driver xicgen_enum_descriptor_box))
+
+(lower xi.enum.descriptor.unbox
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_enum_descriptor_unbox)
+  :aot-c (driver xicgen_enum_descriptor_unbox))
+
 (lower xi.load.field
   :match ()
   :required-targets (vm-bytecode aot-c)
@@ -619,6 +631,24 @@
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_index_set)
   :aot-c (driver xicgen_index_set))
+
+(lower xi.enum.variant.at
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_enum_variant_at)
+  :aot-c (driver xicgen_enum_variant_at))
+
+(lower xi.enum.payload.at
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_enum_payload_at)
+  :aot-c (driver xicgen_enum_payload_at))
+
+(lower xi.enum.meta.get
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_enum_meta_get)
+  :aot-c (driver xicgen_enum_meta_get))
 
 (lower xi.array.new
   :match ()

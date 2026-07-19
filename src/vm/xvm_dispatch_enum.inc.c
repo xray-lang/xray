@@ -62,3 +62,91 @@ vmcase(OP_ENUM_NAME) {
     R(a) = xr_string_value(name_str);
     vmbreak;
 }
+
+vmcase(OP_ENUM_VARIANT_AT) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    int64_t count = XR_TO_INT(R(b));
+    int64_t index = XR_TO_INT(R(c));
+    if (index < 0 || index >= count)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "enum variant index out of bounds");
+    R(a) = XR_FROM_INT(index);
+    vmbreak;
+}
+
+vmcase(OP_ENUM_PAYLOAD_AT) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    uint64_t view = (uint64_t) XR_TO_INT(R(b));
+    uint32_t ordinal = (uint32_t) view;
+    uint32_t count = (uint32_t) (view >> 32);
+    int64_t index = XR_TO_INT(R(c));
+    if (index < 0 || (uint64_t) index >= count)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "enum payload field index out of bounds");
+    R(a) = XR_FROM_INT((int64_t) (((uint64_t) ordinal << 32) | (uint32_t) index));
+    vmbreak;
+}
+
+vmcase(OP_ENUM_VARIANT_NAME) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(R(b));
+    int64_t ordinal = XR_TO_INT(R(c));
+    const char *name = ordinal >= 0 && (uint64_t) ordinal < enum_type->member_count
+                           ? xr_enum_type_member_name(enum_type, (uint32_t) ordinal)
+                           : NULL;
+    if (!name)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "enum variant ordinal out of bounds");
+    size_t len = strlen(name);
+    R(a) = xr_string_value(xr_string_intern(isolate, name, len, xr_string_hash(name, len)));
+    vmbreak;
+}
+
+vmcase(OP_ENUM_VARIANT_PAYLOAD_COUNT) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(R(b));
+    int64_t ordinal = XR_TO_INT(R(c));
+    if (ordinal < 0 || (uint64_t) ordinal >= enum_type->member_count)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "enum variant ordinal out of bounds");
+    R(a) = XR_FROM_INT(xr_enum_type_payload_count(enum_type, (uint32_t) ordinal));
+    vmbreak;
+}
+
+vmcase(OP_ENUM_PAYLOAD_FIELD_NAME) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(R(b));
+    uint64_t packed = (uint64_t) XR_TO_INT(R(c));
+    uint32_t ordinal = (uint32_t) (packed >> 32);
+    uint32_t field = (uint32_t) packed;
+    const XrEnumVariantLayout *variant = xr_enum_layout_variant(enum_type->layout, ordinal);
+    if (!variant || field >= variant->payload_count)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "enum payload field index out of bounds");
+    const char *name = variant->payload_names && variant->payload_names[field]
+                           ? variant->payload_names[field]
+                           : "";
+    size_t len = strlen(name);
+    R(a) = xr_string_value(xr_string_intern(isolate, name, len, xr_string_hash(name, len)));
+    vmbreak;
+}
+
+vmcase(OP_ENUM_PAYLOAD_FIELD_TYPE) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(R(b));
+    uint64_t packed = (uint64_t) XR_TO_INT(R(c));
+    uint32_t ordinal = (uint32_t) (packed >> 32);
+    uint32_t field = (uint32_t) packed;
+    const XrEnumVariantLayout *variant = xr_enum_layout_variant(enum_type->layout, ordinal);
+    if (!variant || field >= variant->payload_count)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "enum payload field index out of bounds");
+    R(a) = XR_FROM_INT(variant->payload_type_ids ? variant->payload_type_ids[field] : 0);
+    vmbreak;
+}

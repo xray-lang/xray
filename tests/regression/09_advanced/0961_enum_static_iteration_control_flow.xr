@@ -1,0 +1,91 @@
+// Enum static domains reuse ordinary for-in CFG, cleanup, checked indexing,
+// and closure-capture semantics.
+enum Color {
+    Red,
+    Green,
+    Blue,
+    White
+}
+
+enum Event {
+    Ready,
+    Data(value: int),
+    Error(message: string)
+}
+
+fn firstPayloadVariantOrdinal() -> int {
+    for (variant in Event.variants) {
+        if (!variant.isUnit) {
+            return variant.ordinal
+        }
+    }
+    return -1
+}
+
+@test
+fn test_enum_value_loop_break_and_continue() {
+    var trace = ""
+    for (color in Color) {
+        if (color == Color.Green) {
+            continue
+        }
+        if (color == Color.White) {
+            break
+        }
+        trace += color.name + ":"
+    }
+    assert_eq(trace, "Red:Blue:")
+}
+
+@test
+fn test_enum_descriptor_labeled_control_flow() {
+    var trace = ""
+    outer: for (variant in Event.variants) {
+        for (i in 0..2) {
+            if (variant.ordinal == 1) {
+                continue outer
+            }
+            if (variant.ordinal == 2) {
+                break outer
+            }
+            trace += string(variant.ordinal) + string(i)
+        }
+    }
+    assert_eq(trace, "0001")
+    assert_eq(firstPayloadVariantOrdinal(), 1)
+}
+
+@test
+fn test_enum_descriptor_checked_indexing() {
+    assert_throws(fn() {
+        var value = Event.variants[-1]
+    })
+    assert_throws(fn() {
+        var value = Event.variants[3]
+    })
+    assert_throws(fn() {
+        var value = Event.variants[1].payloads[1]
+    })
+}
+
+@test
+fn test_enum_descriptor_closure_capture_keeps_iteration_value() {
+    var readers: Array<() -> int> = []
+    for (variant in Event.variants) {
+        var captured = variant
+        fn readOrdinal() -> int {
+            return captured.ordinal
+        }
+        readers.push(readOrdinal)
+    }
+    assert_eq(len(readers), 3)
+    assert_eq(readers[0](), 0)
+    assert_eq(readers[1](), 1)
+    assert_eq(readers[2](), 2)
+}
+
+@test
+fn test_unit_enum_variants_empty_body_is_valid() {
+    for (variant in Color.variants) {
+    }
+}

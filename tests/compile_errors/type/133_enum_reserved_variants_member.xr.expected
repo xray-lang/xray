@@ -1,0 +1,2 @@
+cannot declare a variant named 'variants'
+'.variants' is the reserved static variant metadata view

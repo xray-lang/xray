@@ -1368,12 +1368,22 @@ static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
                      blk->id, v->rep);
                 return;
             }
+            if (v->op == XI_ENUM_DESCRIPTOR_BOX && v->rep != XR_REP_TAGGED) {
+                verr(ctx, "func '%s': v%u ENUM_DESCRIPTOR_BOX in b%u has rep %u, expected TAGGED",
+                     f->name, v->id, blk->id, v->rep);
+                return;
+            }
 
             /* UNBOX must produce a native boundary rep or remain tagged if no unbox exists. */
             if (v->op == XI_UNBOX && v->rep != XR_REP_I64 && v->rep != XR_REP_F64 &&
                 v->rep != XR_REP_PTR && v->rep != XR_REP_RAWPTR && v->rep != XR_REP_TAGGED) {
                 verr(ctx, "func '%s': v%u UNBOX in b%u has invalid rep %u", f->name, v->id, blk->id,
                      v->rep);
+                return;
+            }
+            if (v->op == XI_ENUM_DESCRIPTOR_UNBOX && v->rep != XR_REP_I64) {
+                verr(ctx, "func '%s': v%u ENUM_DESCRIPTOR_UNBOX in b%u has rep %u, expected I64",
+                     f->name, v->id, blk->id, v->rep);
                 return;
             }
         }

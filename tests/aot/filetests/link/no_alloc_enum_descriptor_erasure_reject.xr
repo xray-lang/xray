@@ -1,0 +1,21 @@
+enum NoAllocHue {
+    Red,
+    Blue,
+}
+
+enum NoAllocState {
+    Idle,
+    Busy(int),
+}
+
+type NoAllocVariant = EnumVariant<NoAllocHue> | EnumVariant<NoAllocState>
+
+@no_alloc
+fn xray_no_alloc_enum_descriptor_erasure_reject(useState: bool) -> NoAllocVariant {
+    if (useState) {
+        return NoAllocState.variants[0]
+    }
+    return NoAllocHue.variants[0]
+}
+
+print(xray_no_alloc_enum_descriptor_erasure_reject(false) is EnumVariant<NoAllocHue>)

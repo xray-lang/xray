@@ -328,8 +328,10 @@ static inline const char *xr_obj_type_name(XrObjType type) {
                                   TYPE_NAME_EVENTCOUNT,
                                   TYPE_NAME_THREAD,
                                   TYPE_NAME_ENUM_TYPE,
-                                  "enum_ctor"};
-    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TENUM_CTOR + 1,
+                                  "enum_ctor",
+                                  "enum_descriptor",
+                                  "enum_scalar_layout"};
+    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TENUM_SCALAR_LAYOUT + 1,
                    "xr_obj_type_name: names array out of sync with XrObjType enum");
     if (type < sizeof(names) / sizeof(names[0])) {
         return names[type];

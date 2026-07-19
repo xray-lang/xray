@@ -59,7 +59,7 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 29,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 30,
 };
 
 typedef enum XgBuildProfile {
@@ -361,6 +361,13 @@ enum {
     XG_METADATA_DERIVE = 1u << 1,
     XG_METADATA_DEBUG = 1u << 2,
     XG_METADATA_TOOLING = 1u << 3,
+    XG_METADATA_ENUM_COUNT = 1u << 4,
+    XG_METADATA_ENUM_ORDINAL = 1u << 5,
+    XG_METADATA_ENUM_VARIANT_NAME = 1u << 6,
+    XG_METADATA_ENUM_PAYLOAD_COUNT = 1u << 7,
+    XG_METADATA_ENUM_PAYLOAD_INDEX = 1u << 8,
+    XG_METADATA_ENUM_PAYLOAD_NAME = 1u << 9,
+    XG_METADATA_ENUM_PAYLOAD_TYPE = 1u << 10,
 };
 
 enum {

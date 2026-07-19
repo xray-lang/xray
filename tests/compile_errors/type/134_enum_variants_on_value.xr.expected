@@ -1,0 +1,2 @@
+'.variants' is only available on the enum type 'State'
+this receiver is an enum value

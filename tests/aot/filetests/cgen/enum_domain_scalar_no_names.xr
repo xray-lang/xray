@@ -1,0 +1,39 @@
+enum SpectrumMark {
+    CrimsonToken,
+    VerdantToken,
+    AzureToken
+}
+
+enum PacketShape {
+    EmptyToken,
+    DataToken(code: int)
+}
+
+fn firstVariant() -> EnumVariant<SpectrumMark> {
+    return SpectrumMark.variants[0]
+}
+
+fn variantOrdinal(variant: EnumVariant<SpectrumMark>) -> int {
+    return variant.ordinal
+}
+
+fn enumIdentity(value: SpectrumMark) -> SpectrumMark {
+    return value
+}
+
+fn enumOrdinalValue(value: SpectrumMark) -> int {
+    return value.ordinal
+}
+
+fn scoreDomains() -> int {
+    var score = 0
+    for (value in SpectrumMark) {
+        score += enumOrdinalValue(enumIdentity(value))
+    }
+    for (variant in PacketShape.variants) {
+        score += variant.ordinal + variant.payloadCount
+    }
+    return score + variantOrdinal(firstVariant())
+}
+
+print(scoreDomains())

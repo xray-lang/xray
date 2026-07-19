@@ -1,0 +1,7 @@
+enum State {
+    Ready,
+    Done,
+}
+
+var state = State.Ready
+print(state.variants.length)

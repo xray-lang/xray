@@ -1,0 +1,26 @@
+enum Hue {
+    Red,
+    Blue
+}
+
+enum State {
+    Idle,
+    Busy(int)
+}
+
+type ErasedVariant = EnumVariant<Hue> | EnumVariant<State>
+
+fn erasedVariant(useState: bool) -> EnumVariant<Hue> | EnumVariant<State> {
+    if (useState) {
+        return State.variants[1]
+    } else {
+        return Hue.variants[0]
+    }
+}
+
+var hue = erasedVariant(false)
+var state = erasedVariant(true)
+print(hue is EnumVariant<Hue>)
+print(hue is EnumVariant<State>)
+print(state is EnumVariant<Hue>)
+print(state is EnumVariant<State>)

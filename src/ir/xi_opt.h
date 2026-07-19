@@ -101,6 +101,13 @@ static inline XiRepPolicy xi_rep_policy_native_boundary(void) {
 XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f);
 XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy *policy);
 
+/* Insert the allocating erased descriptor box at semantic identity
+ * boundaries before escape/ownership analysis on every backend. */
+XR_FUNC XiPassChange xi_opt_materialize_enum_descriptor_erasure(XiFunc *f);
+/* AOT-only: replace the VM-oriented finite select chain for a concrete
+ * payload-field TypeId with one plan-backed XI_ENUM_META_GET. */
+XR_FUNC XiPassChange xi_opt_compact_enum_payload_type_lookup(XiFunc *f);
+
 /* BOX/UNBOX peephole: collapse inverse BOX(UNBOX(x)) and UNBOX(BOX(x))
  * pairs into XI_COPY. Run after select_rep for best results. */
 XR_FUNC XiPassChange xi_opt_box_elim(XiFunc *f);

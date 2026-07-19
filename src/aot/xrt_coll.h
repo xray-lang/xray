@@ -461,6 +461,15 @@ static inline XrValue xrt_enum_aggregate_box(XrAotEnumAggregate value) {
 static inline XrAotEnumAggregate xrt_enum_aggregate_from_boxed(XrValue boxed) {
     if (boxed.tag != XR_TAG_ENUM || !boxed.ptr)
         return xrt_enum_aggregate_zero();
+    const XrObjHeader *hdr = (const XrObjHeader *) boxed.ptr;
+    if (hdr->type == XR_TENUM_SCALAR_LAYOUT) {
+        XrAotEnumAggregate out = xrt_enum_aggregate_zero();
+        uint32_t member_index = 0;
+        (void) xrt_enum_key_parts(boxed, &out.enum_name, &out.member_name, &member_index,
+                                  &out.layout_id);
+        out.tag = member_index;
+        return out;
+    }
     const XrAotEnumBox *ev = (const XrAotEnumBox *) boxed.ptr;
     XrAotEnumAggregate out = xrt_enum_aggregate_zero();
     out.enum_name = ev->enum_name;
@@ -491,7 +500,9 @@ static inline XrValue xrt_enum_field_get(XrValue boxed, int64_t index) {
     if (index == 0 && xrt_enum_key_parts(boxed, NULL, NULL, &member_index, NULL))
         return XR_FROM_INT(member_index);
     const XrObjHeader *hdr = (const XrObjHeader *) boxed.ptr;
-    const XrAotEnumBox *ev = hdr->type == XR_TENUM_CTOR ? NULL : (const XrAotEnumBox *) boxed.ptr;
+    const XrAotEnumBox *ev = hdr->type == XR_TENUM_CTOR || hdr->type == XR_TENUM_SCALAR_LAYOUT
+                                 ? NULL
+                                 : (const XrAotEnumBox *) boxed.ptr;
     if (ev && index > 0 && (uint32_t) index <= ev->payload_count)
         return ev->payloads[index - 1];
     return XR_NULL_VAL;
@@ -1353,7 +1364,9 @@ static inline const XrAotEnumBox *xrt_enum_box_view(XrValue obj) {
     if (obj.tag != XR_TAG_ENUM || !obj.ptr)
         return NULL;
     const XrObjHeader *hdr = (const XrObjHeader *) obj.ptr;
-    return hdr->type == XR_TENUM_CTOR ? NULL : (const XrAotEnumBox *) obj.ptr;
+    return hdr->type == XR_TENUM_CTOR || hdr->type == XR_TENUM_SCALAR_LAYOUT
+               ? NULL
+               : (const XrAotEnumBox *) obj.ptr;
 }
 
 static inline XrValue xrt_enum_box_name(XrValue obj) {
@@ -1443,6 +1456,20 @@ static inline uint64_t xrt_hash_value(XrValue v) {
             return xr_hash_core_mix_u64(xrt_str_hash(v));
         case XR_TAG_BIGINT:
             return xrt_bigint_hash_value(v);
+        case XR_TAG_ENUM: {
+            const char *enum_name = NULL;
+            const char *member_name = NULL;
+            uint32_t member_index = 0;
+            uint32_t layout_id = 0;
+            if (!xrt_enum_key_parts(v, &enum_name, &member_name, &member_index, &layout_id))
+                return xr_hash_core_mix_u64((uint64_t) (uintptr_t) v.ptr);
+            if (layout_id != 0)
+                return xr_hash_core_mix_u64(((uint64_t) layout_id << 32) | member_index);
+            uint64_t enum_hash = enum_name ? xr_hash_core_bytes(enum_name, strlen(enum_name)) : 0;
+            uint64_t member_hash =
+                member_name ? xr_hash_core_bytes(member_name, strlen(member_name)) : 0;
+            return xr_hash_core_mix_u64(enum_hash ^ (member_hash << 1) ^ member_index);
+        }
         case XR_TAG_NULL:
             return xr_hash_core_mix_u64(0x9e3779b97f4a7c15ull);
         case XR_TAG_AGG_REF:

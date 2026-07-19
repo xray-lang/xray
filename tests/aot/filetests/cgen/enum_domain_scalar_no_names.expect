@@ -1,0 +1,21 @@
+contains=enum-domain-plan 0 enum=0 value_iteration=no variant_iteration=yes descriptor=count+ordinal escape=typed_value
+contains=enum-domain-plan 1 enum=1 value_iteration=no variant_iteration=yes descriptor=count+ordinal+payload_count escape=scalar
+regex=function [0-9]+ name=firstVariant module=0 depth=1 abi=native boundary=none params=0 ret=int64_t/scalar/i64
+regex=function [0-9]+ name=variantOrdinal module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
+contains=  param 0 class=scalar kind=scalar rep=i64 c_type=int64_t
+regex=function [0-9]+ name=enumIdentity module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
+regex=function [0-9]+ name=enumOrdinalValue module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
+regex=  value v[0-9]+ op=ENUM_VARIANT_AT kind=scalar rep=i64 c_type=int64_t
+c_not_contains=CrimsonToken
+c_not_contains=VerdantToken
+c_not_contains=AzureToken
+c_not_contains=EmptyToken
+c_not_contains=DataToken
+c_not_contains=xrt_map_new(
+c_not_contains=xrt_enum_box_new(
+c_not_contains=xrt_array_new(
+c_not_contains=xrt_getprop_name(
+c_not_contains=_xenum_i
+c_not_contains=XrAotEnumBox
+c_not_contains=xrt_enum_box_ordinal(
+c_not_contains=xrt_enum_scalar_box(

@@ -1,0 +1,36 @@
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+enum WireEvent {
+    Ready,
+    Data(bytes: string, code: int),
+    Error(message: string)
+}
+
+enum GenericResult<T> {
+    Ok(value: T),
+    Error(message: string),
+    Empty
+}
+
+var valueOrder = ""
+for (color in Color) {
+    valueOrder += color.name + ":" + string(color.ordinal) + ";"
+}
+print(valueOrder)
+var schema = ""
+for (variant in WireEvent.variants) {
+    schema += variant.name + ":" + string(variant.payloadCount) + ":"
+    for (field in variant.payloads) {
+        schema += field.name + "@" + string(field.index) + ","
+    }
+    schema += ";"
+}
+print(schema)
+print(Color.variants.length)
+print(Color.variants[1].name)
+print(WireEvent.variants[1].payloads[1].name)
+print(GenericResult<int>.variants[0].payloads[0].type)

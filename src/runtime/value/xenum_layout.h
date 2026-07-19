@@ -23,6 +23,8 @@ typedef struct XrEnumVariantLayout {
     uint32_t payload_size;
     uint16_t payload_align;
     bool contains_refs;
+    const char **payload_names; /* owned strings, one per payload slot */
+    uint8_t *payload_type_ids;  /* stable XrTypeId values, one per payload slot */
 } XrEnumVariantLayout;
 
 typedef struct XrEnumLayout {
@@ -43,6 +45,10 @@ XR_FUNC XrEnumLayout *xr_enum_layout_new(const char *name, const char *const *va
                                          uint32_t variant_count);
 XR_FUNC bool xr_enum_layout_set_payload_counts(XrEnumLayout *layout, const int *payload_counts,
                                                uint32_t count);
+XR_FUNC bool xr_enum_layout_set_variant_payload_metadata(XrEnumLayout *layout, uint32_t tag,
+                                                         const char *const *payload_names,
+                                                         const uint8_t *payload_type_ids,
+                                                         uint16_t payload_count);
 XR_FUNC void xr_enum_layout_set_variant_symbol(XrEnumLayout *layout, uint32_t tag, int symbol);
 XR_FUNC const XrEnumVariantLayout *xr_enum_layout_variant(const XrEnumLayout *layout, uint32_t tag);
 XR_FUNC int xr_enum_layout_payload_count(const XrEnumLayout *layout, uint32_t tag);
