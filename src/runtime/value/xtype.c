@@ -1091,6 +1091,7 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
 
     XrTypePool *pool = resolve_type_pool(X);
 
+    copy->semantic_type_id = type->semantic_type_id;
     copy->is_nullable = type->is_nullable;
 
     copy->is_const = type->is_const;

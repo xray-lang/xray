@@ -38,8 +38,8 @@
 #include "../../shared/xr_array_core.h"
 #include <inttypes.h>
 
-static bool xa_path_is_parallel_stdlib_module(const char *file);
 static bool xa_class_info_is_parallel_plan(XaInferContext *ctx, XrClassInfo *info);
+static bool xa_intrinsic_is_parallel_plan_method(XaIntrinsicId intrinsic_id);
 static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstNode *arg_node,
                                                        const char *callback_label);
 static XrType *xa_visit_call_arg_for_param_mode(XaInferContext *ctx, AstNode *arg_node,
@@ -59,6 +59,37 @@ static void xa_check_call_arg_access_authorization(XaInferContext *ctx, AstNode 
 static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index);
 static bool xa_class_name_matches_mono_base(const char *class_name, const char *base);
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object, const char *module_name);
+
+static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, XaSymbol *sym) {
+    if (!ctx || !ctx->analyzer || !sym)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!sym->is_imported || !links || links->intrinsic_id != XA_INTRINSIC_NONE ||
+        !links->module_name || !links->import_member_name)
+        return links;
+
+    const char *module_name = links->module_name;
+    const char *member_name = links->import_member_name;
+    bool is_quoted = module_name[0] == '.' || module_name[0] == '/';
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name, is_quoted);
+    XaSymbol *export_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
+    if (!export_sym && !is_quoted) {
+        char key[192];
+        int key_len = snprintf(key, sizeof(key), "%s.%s", module_name, member_name);
+        const XaIntrinsicDesc *desc =
+            key_len > 0 && (size_t) key_len < sizeof(key) ? xa_intrinsic_by_key(key) : NULL;
+        if (desc)
+            links->intrinsic_id = desc->id;
+        return links;
+    }
+    if (!export_sym || export_sym->links.intrinsic_id == XA_INTRINSIC_NONE)
+        return links;
+
+    xa_symbol_links_copy_export_metadata(links, &export_sym->links);
+    links->module_name = module_name;
+    links->import_member_name = member_name;
+    return links;
+}
 
 static bool xa_simd_shuffle_diag_exists(const XaAnalyzer *analyzer, const XrLocation *loc) {
     if (!analyzer || !loc)
@@ -257,12 +288,10 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
     int class_tp_count = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
     const char **param_names = NULL;
     const char *param_names_buf[8] = {0};
-    bool is_parallel_plan_ctor =
-        class_name && strcmp(class_name, "Plan") == 0 &&
-        ((class_links && class_links->module_name &&
-          strcmp(class_links->module_name, "parallel") == 0) ||
-         (class_links && xa_path_is_parallel_stdlib_module(class_links->file_path)) ||
-         xa_class_info_is_parallel_plan(ctx, class_info));
+    bool is_parallel_plan_ctor = class_name && strcmp(class_name, "Plan") == 0 &&
+                                 ((class_links && class_links->module_name &&
+                                   strcmp(class_links->module_name, "parallel") == 0) ||
+                                  xa_class_info_is_parallel_plan(ctx, class_info));
     if (class_tp_count > 0 && type_args && type_arg_count == class_tp_count) {
         param_names = (class_tp_count <= 8)
                           ? param_names_buf
@@ -314,6 +343,54 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
         xr_free((void *) param_names);
 }
 
+static XaSemanticTypeId xa_class_constructor_semantic_type(CallExprNode *call,
+                                                           const char *class_name,
+                                                           XaSymbolLinks *class_links) {
+    if (!call)
+        return XA_SEMANTIC_TYPE_NONE;
+    XaSemanticTypeId id = (XaSemanticTypeId) call->semantic_type_id;
+    if (id != XA_SEMANTIC_TYPE_NONE)
+        return id;
+    const char *module_name = class_links ? class_links->module_name : NULL;
+    const char *member_name = class_links && class_links->import_member_name
+                                  ? class_links->import_member_name
+                                  : class_name;
+    if (!module_name || !member_name || module_name[0] == '.' || module_name[0] == '/')
+        return XA_SEMANTIC_TYPE_NONE;
+    char key[192];
+    int key_len = snprintf(key, sizeof(key), "%s.%s", module_name, member_name);
+    if (key_len <= 0 || (size_t) key_len >= sizeof(key))
+        return XA_SEMANTIC_TYPE_NONE;
+    id = xa_semantic_type_by_key(key);
+    if (id != XA_SEMANTIC_TYPE_NONE) {
+        call->semantic_type_id = (uint32_t) id;
+        call->semantic_type_args = call->type_args;
+        call->semantic_type_arg_count = call->type_arg_count;
+    }
+    return id;
+}
+
+static XrType *xa_semantic_constructor_instance(XaInferContext *ctx, CallExprNode *call,
+                                                XaSemanticTypeId semantic_type_id,
+                                                XrClassInfo *class_info) {
+    if (!ctx || !ctx->analyzer || !call || semantic_type_id == XA_SEMANTIC_TYPE_NONE ||
+        call->semantic_type_arg_count <= 0 || !call->semantic_type_args)
+        return NULL;
+    int count = call->semantic_type_arg_count;
+    XrType **args = xr_malloc(sizeof(XrType *) * (size_t) count);
+    if (!args)
+        return NULL;
+    for (int i = 0; i < count; i++)
+        args[i] = xr_tref_resolve_in_analyzer(ctx->analyzer, call->semantic_type_args[i]);
+    const char *source_name = xa_semantic_type_source_name(semantic_type_id);
+    XrType *instance = xr_type_new_generic_instance(
+        ctx->analyzer->isolate, source_name ? source_name : "<semantic>", class_info, args, count);
+    xr_free(args);
+    if (instance)
+        instance->semantic_type_id = (uint32_t) semantic_type_id;
+    return instance;
+}
+
 static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *node,
                                                   CallExprNode *call, const char *class_name,
                                                   XaSymbolLinks *class_links,
@@ -334,9 +411,38 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
     }
 
     xa_check_constructor_visibility(ctx, node, class_info);
+    XaSemanticTypeId semantic_type_id =
+        xa_class_constructor_semantic_type(call, class_name, class_links);
 
     bool is_value_type = class_links && class_links->type && class_links->type->is_value_type;
     int type_param_count = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
+    if (call && type_param_count > 0 && call->type_arg_count == 0 &&
+        semantic_type_id != XA_SEMANTIC_TYPE_NONE &&
+        call->semantic_type_arg_count == type_param_count && call->semantic_type_args) {
+        XrType *resolved_buf[8] = {0};
+        XrType **resolved = type_param_count <= 8
+                                ? resolved_buf
+                                : xr_malloc(sizeof(XrType *) * (size_t) type_param_count);
+        if (!resolved)
+            return xr_type_new_error(ctx->analyzer->isolate);
+        for (int i = 0; i < type_param_count; i++)
+            resolved[i] = xr_tref_resolve_in_analyzer(ctx->analyzer, call->semantic_type_args[i]);
+        xa_check_span_generic_class_type_args(ctx, node, class_name, resolved, type_param_count);
+        xa_check_class_constructor_args(ctx, node, call, class_name, class_links, class_info,
+                                        resolved, type_param_count);
+        const char *source_name = xa_semantic_type_source_name(semantic_type_id);
+        XrType *inst = xr_type_new_generic_instance(ctx->analyzer->isolate,
+                                                    source_name ? source_name : class_name,
+                                                    class_info, resolved, type_param_count);
+        if (resolved != resolved_buf)
+            xr_free(resolved);
+        if (inst) {
+            inst->semantic_type_id = (uint32_t) semantic_type_id;
+            if (is_value_type)
+                inst->is_value_type = true;
+        }
+        return inst ? inst : xr_type_new_error(ctx->analyzer->isolate);
+    }
     if (call && type_param_count > 0) {
         if (call->type_arg_count > 0) {
             if (call->type_arg_count != type_param_count) {
@@ -385,6 +491,8 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                                                      resolved, call->type_arg_count);
                     if (inst && is_value_type)
                         inst->is_value_type = true;
+                    if (inst && semantic_type_id != XA_SEMANTIC_TYPE_NONE)
+                        inst->semantic_type_id = (uint32_t) semantic_type_id;
                     if (resolved != resolved_buf)
                         xr_free(resolved);
                     if (inst)
@@ -451,6 +559,8 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                                                          class_info, inferred, type_param_count);
                         if (inst && is_value_type)
                             inst->is_value_type = true;
+                        if (inst && semantic_type_id != XA_SEMANTIC_TYPE_NONE)
+                            inst->semantic_type_id = (uint32_t) semantic_type_id;
                         if (inferred != inferred_buf)
                             xr_free(inferred);
                         if (inst)
@@ -473,9 +583,18 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
     }
 
     xa_check_class_constructor_args(ctx, node, call, class_name, class_links, class_info, NULL, 0);
+    XrType *semantic_instance =
+        xa_semantic_constructor_instance(ctx, call, semantic_type_id, class_info);
+    if (semantic_instance) {
+        if (is_value_type)
+            semantic_instance->is_value_type = true;
+        return semantic_instance;
+    }
     XrType *inst = xr_type_new_instance(ctx->analyzer->isolate, class_info);
     if (inst && is_value_type)
         inst->is_value_type = true;
+    if (inst && semantic_type_id != XA_SEMANTIC_TYPE_NONE)
+        inst->semantic_type_id = (uint32_t) semantic_type_id;
     return inst;
 }
 
@@ -1989,104 +2108,80 @@ static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object,
     return links && links->module_name && strcmp(links->module_name, module_name) == 0;
 }
 
-static bool xa_parallel_intrinsic_member_name(const char *name) {
-    return name && (strcmp(name, "forEach") == 0 || strcmp(name, "map") == 0 ||
-                    strcmp(name, "mapInto") == 0 || strcmp(name, "reduce") == 0);
+static bool xa_intrinsic_is_parallel_plan_method(XaIntrinsicId intrinsic_id) {
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_id(intrinsic_id);
+    return desc && desc->family == XA_INTRINSIC_FAMILY_PARALLEL &&
+           (desc->flags & XA_INTRINSIC_FLAG_PLAN_RECEIVER) != 0;
 }
 
-static bool xa_path_is_parallel_stdlib_module(const char *file) {
-    if (!file)
-        return false;
-    const char *suffixes[] = {"stdlib/parallel/parallel.xr", "stdlib\\parallel\\parallel.xr",
-                              "<embedded stdlib>/parallel/parallel.xr"};
-    for (int i = 0; i < (int) (sizeof(suffixes) / sizeof(suffixes[0])); i++) {
-        size_t flen = strlen(file);
-        size_t slen = strlen(suffixes[i]);
-        if (flen >= slen && strcmp(file + flen - slen, suffixes[i]) == 0)
-            return true;
-    }
-    return false;
+static bool xa_intrinsic_is_parallel_module_function(XaIntrinsicId intrinsic_id) {
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_id(intrinsic_id);
+    return desc && desc->family == XA_INTRINSIC_FAMILY_PARALLEL &&
+           (desc->flags & XA_INTRINSIC_FLAG_PLAN_RECEIVER) == 0;
 }
 
 static bool xa_class_info_is_parallel_plan(XaInferContext *ctx, XrClassInfo *info) {
-    if (!info || !info->name || strcmp(info->name, "Plan") != 0)
-        return false;
-    if (xa_path_is_parallel_stdlib_module(info->location.file))
-        return true;
-    if (!ctx || !ctx->analyzer)
+    if (!info || !ctx || !ctx->analyzer)
         return false;
     for (int i = 0; i < info->method_count; i++) {
         XaSymbol *method = info->methods ? info->methods[i] : NULL;
         XaSymbolLinks *links = method ? xa_analyzer_get_links(ctx->analyzer, method) : NULL;
-        if (links && xa_path_is_parallel_stdlib_module(links->file_path))
+        if (links && xa_intrinsic_is_parallel_plan_method(links->intrinsic_id))
             return true;
     }
     return false;
 }
 
-static bool xa_symbol_is_parallel_plan_class(XaInferContext *ctx, XaSymbol *sym, const char *name) {
-    if (!ctx || !ctx->analyzer || !sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_IMPORT))
-        return false;
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    const char *member_name =
-        links && links->import_member_name ? links->import_member_name : (name ? name : sym->name);
-    if (!member_name || strcmp(member_name, "Plan") != 0)
-        return false;
-    if (links && links->module_name && strcmp(links->module_name, "parallel") == 0)
-        return true;
-    if (links && xa_path_is_parallel_stdlib_module(links->file_path))
-        return true;
-    return links && xa_class_info_is_parallel_plan(ctx, links->class_info);
+static XaIntrinsicId xa_parallel_module_call_intrinsic(XaInferContext *ctx, AstNode *callee,
+                                                       XaSymbolLinks *links) {
+    if (links && xa_intrinsic_is_parallel_module_function(links->intrinsic_id))
+        return links->intrinsic_id;
+    if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
+        return XA_INTRINSIC_NONE;
+
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !xa_call_object_is_module(ctx, ma->object, "parallel"))
+        return XA_INTRINSIC_NONE;
+    char key[192];
+    int key_len = snprintf(key, sizeof(key), "parallel.%s", ma->name);
+    const XaIntrinsicDesc *desc =
+        key_len > 0 && (size_t) key_len < sizeof(key) ? xa_intrinsic_by_key(key) : NULL;
+    return desc && xa_intrinsic_is_parallel_module_function(desc->id) ? desc->id
+                                                                      : XA_INTRINSIC_NONE;
 }
 
-static bool xa_type_is_parallel_plan(XaInferContext *ctx, XrType *type) {
-    if (!type || !XR_TYPE_IS_INSTANCE(type))
-        return false;
-    const char *class_name = xr_type_get_class_name(type);
-    if (!class_name || strcmp(class_name, "Plan") != 0)
-        return false;
-    if (type->instance.class_ref && xa_class_info_is_parallel_plan(ctx, type->instance.class_ref))
-        return true;
-    XaSymbol *sym = xa_lookup_visible_class_symbol(ctx, class_name);
-    return sym && xa_symbol_is_parallel_plan_class(ctx, sym, class_name);
-}
-
-static const char *xa_parallel_call_member_name(XaInferContext *ctx, CallExprNode *call,
-                                                XaSymbolLinks *links, XaSymbol *fn_sym) {
-    if (!call || !call->callee)
-        return NULL;
-    if (call->callee->type == AST_MEMBER_ACCESS) {
-        MemberAccessNode *ma = &call->callee->as.member_access;
-        if (ma->name && xa_parallel_intrinsic_member_name(ma->name) &&
-            xa_call_object_is_module(ctx, ma->object, "parallel"))
-            return ma->name;
-    }
-    if (links && links->module_name && strcmp(links->module_name, "parallel") == 0) {
-        const char *name =
-            links->import_member_name ? links->import_member_name : (fn_sym ? fn_sym->name : NULL);
-        if (xa_parallel_intrinsic_member_name(name))
-            return name;
-    }
-    return NULL;
-}
-
-static const char *xa_parallel_plan_call_member_name(XaInferContext *ctx, XrType *receiver_type,
+static XaIntrinsicId xa_parallel_plan_call_intrinsic(XaInferContext *ctx, XrType *receiver_type,
                                                      const char *method_name) {
-    if (!method_name || !xa_parallel_intrinsic_member_name(method_name))
-        return NULL;
-    return xa_type_is_parallel_plan(ctx, receiver_type) ? method_name : NULL;
+    if (!ctx || !ctx->analyzer || !receiver_type || !method_name ||
+        !XR_TYPE_IS_INSTANCE(receiver_type))
+        return XA_INTRINSIC_NONE;
+    if (receiver_type->semantic_type_id == XA_SEMANTIC_TYPE_PARALLEL_PLAN) {
+        char key[192];
+        int key_len = snprintf(key, sizeof(key), "parallel.Plan.%s", method_name);
+        const XaIntrinsicDesc *desc =
+            key_len > 0 && (size_t) key_len < sizeof(key) ? xa_intrinsic_by_key(key) : NULL;
+        return desc && xa_intrinsic_is_parallel_plan_method(desc->id) ? desc->id
+                                                                      : XA_INTRINSIC_NONE;
+    }
+    XrClassInfo *info = receiver_type->instance.class_ref;
+    XaSymbol *method = info ? xa_class_info_lookup_instance_member(info, method_name) : NULL;
+    XaSymbolLinks *links = method ? xa_analyzer_get_links(ctx->analyzer, method) : NULL;
+    return links && xa_intrinsic_is_parallel_plan_method(links->intrinsic_id) ? links->intrinsic_id
+                                                                              : XA_INTRINSIC_NONE;
 }
 
-static void xa_record_parallel_call_plan(XaInferContext *ctx, AstNode *node, const char *member,
-                                         bool is_plan_method) {
-    if (!ctx || !ctx->analyzer || !node || !member || !ctx->analyzer->parallel_call_plan_table)
+static void xa_record_parallel_call_plan(XaInferContext *ctx, AstNode *node,
+                                         XaIntrinsicId intrinsic_id) {
+    if (!ctx || !ctx->analyzer || !node || intrinsic_id == XA_INTRINSIC_NONE ||
+        !ctx->analyzer->parallel_call_plan_table)
         return;
-    XaParallelCallKind kind = xa_parallel_call_kind_from_name(member);
+    XaParallelCallKind kind = xa_parallel_call_kind_from_intrinsic(intrinsic_id);
     if (kind == XA_PAR_CALL_NONE)
         return;
     XaParallelCallPlan plan = {
         .kind = kind,
-        .is_plan_method = is_plan_method,
+        .intrinsic_id = intrinsic_id,
+        .is_plan_method = xa_intrinsic_is_parallel_plan_method(intrinsic_id),
     };
     xa_parallel_call_plan_table_set(
         (XaParallelCallPlanTable *) ctx->analyzer->parallel_call_plan_table, node, &plan);
@@ -2207,6 +2302,86 @@ static const char *xa_parallel_callback_label_for_plan(const XaParallelCallPlan 
     const char *member = xa_parallel_call_kind_name(plan->kind);
     return plan->is_plan_method ? xa_parallel_plan_callback_label_for_arg(member, arg_index)
                                 : xa_parallel_callback_label_for_arg(member, arg_index);
+}
+
+static XrType *xa_parallel_plan_callable_type(XaInferContext *ctx, CallExprNode *call,
+                                              XrType *receiver_type,
+                                              const XaParallelCallPlan *plan) {
+    if (!ctx || !ctx->analyzer || !call || !receiver_type || !plan || !plan->is_plan_method)
+        return NULL;
+    XrType *state_type =
+        receiver_type->instance.type_arg_count > 0 && receiver_type->instance.type_args
+            ? receiver_type->instance.type_args[0]
+            : NULL;
+    if (!state_type && receiver_type->instance.class_ref) {
+        XaSymbol *states =
+            xa_class_info_lookup_instance_member(receiver_type->instance.class_ref, "_states");
+        XaSymbolLinks *state_links = states ? xa_analyzer_get_links(ctx->analyzer, states) : NULL;
+        if (state_links && state_links->type && XR_TYPE_IS_ARRAY(state_links->type))
+            state_type = state_links->type->container.element_type;
+    }
+    if (!state_type)
+        state_type = xr_type_new_unknown(ctx->analyzer->isolate);
+    XrType *range_type = xr_type_new_named_instance(ctx->analyzer->isolate, "Range");
+    XrType *int_type = xr_type_new_int(ctx->analyzer->isolate);
+    XrType *unit_type = xr_type_new_unit(ctx->analyzer->isolate);
+    XrType *unknown_type = xr_type_new_unknown(ctx->analyzer->isolate);
+    XrType *body_params[] = {state_type, int_type};
+    XrType *combine_params[2] = {unknown_type, unknown_type};
+    XrType *params[4] = {0};
+    XrType *return_type = unit_type;
+    int param_count = 0;
+
+    switch (plan->kind) {
+        case XA_PAR_CALL_FOR_EACH:
+            params[0] = range_type;
+            params[1] =
+                xr_type_new_function(ctx->analyzer->isolate, body_params, 2, unit_type, false);
+            param_count = 2;
+            break;
+        case XA_PAR_CALL_MAP:
+            params[0] = range_type;
+            params[1] =
+                xr_type_new_function(ctx->analyzer->isolate, body_params, 2, unknown_type, false);
+            return_type = xr_type_new_array(ctx->analyzer->isolate, unknown_type);
+            param_count = 2;
+            break;
+        case XA_PAR_CALL_MAP_INTO: {
+            XrType *output_type = call->arg_count > 1
+                                      ? xa_visit_infer_expr(ctx, call->arguments[1])
+                                      : xr_type_new_array(ctx->analyzer->isolate, unknown_type);
+            XrType *element_type = output_type && XR_TYPE_IS_ARRAY(output_type)
+                                       ? output_type->container.element_type
+                                       : unknown_type;
+            params[0] = range_type;
+            params[1] = output_type;
+            params[2] =
+                xr_type_new_function(ctx->analyzer->isolate, body_params, 2, element_type, false);
+            return_type = output_type;
+            param_count = 3;
+            break;
+        }
+        case XA_PAR_CALL_REDUCE: {
+            XrType *acc_type =
+                call->arg_count > 1 ? xa_visit_infer_expr(ctx, call->arguments[1]) : unknown_type;
+            body_params[0] = state_type;
+            body_params[1] = int_type;
+            combine_params[0] = acc_type;
+            combine_params[1] = acc_type;
+            params[0] = range_type;
+            params[1] = acc_type;
+            params[2] =
+                xr_type_new_function(ctx->analyzer->isolate, body_params, 2, acc_type, false);
+            params[3] =
+                xr_type_new_function(ctx->analyzer->isolate, combine_params, 2, acc_type, false);
+            return_type = acc_type;
+            param_count = 4;
+            break;
+        }
+        case XA_PAR_CALL_NONE:
+            return NULL;
+    }
+    return xr_type_new_function(ctx->analyzer->isolate, params, param_count, return_type, false);
 }
 
 static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstNode *arg_node,
@@ -3263,18 +3438,81 @@ static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, CallExp
     const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
                                                                  : ma->object->as.variable.name;
     bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
+    char semantic_key[192];
+    int semantic_key_len =
+        snprintf(semantic_key, sizeof(semantic_key), "%s.%s", mod_name, ma->name);
+    XaSemanticTypeId semantic_type_id = (XaSemanticTypeId) call->semantic_type_id;
+    if (semantic_type_id == XA_SEMANTIC_TYPE_NONE && !is_quoted && semantic_key_len > 0 &&
+        (size_t) semantic_key_len < sizeof(semantic_key)) {
+        semantic_type_id = xa_semantic_type_by_key(semantic_key);
+        if (semantic_type_id != XA_SEMANTIC_TYPE_NONE) {
+            /* Preserve canonical ownership across generic specialization. The
+             * monomorphizer substitutes semantic_type_args while it may rewrite
+             * the source spelling and consume ordinary call type arguments. */
+            call->semantic_type_id = (uint32_t) semantic_type_id;
+            call->semantic_type_args = call->type_args;
+            call->semantic_type_arg_count = call->type_arg_count;
+        }
+    }
+    XrTypeRef **semantic_trefs =
+        call->semantic_type_id != 0 ? call->semantic_type_args : call->type_args;
+    int semantic_tref_count =
+        call->semantic_type_id != 0 ? call->semantic_type_arg_count : call->type_arg_count;
+    const char *semantic_source_name = xa_semantic_type_source_name(semantic_type_id);
     XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
-    if (!exports)
-        return NULL;
+    if (!exports) {
+        if (semantic_type_id == XA_SEMANTIC_TYPE_NONE)
+            return NULL;
+        int type_arg_count = semantic_tref_count;
+        XrType **type_args =
+            type_arg_count > 0 ? xr_malloc(sizeof(XrType *) * (size_t) type_arg_count) : NULL;
+        if (type_arg_count > 0 && !type_args)
+            return NULL;
+        for (int i = 0; i < type_arg_count; i++)
+            type_args[i] = xr_tref_resolve_in_analyzer(ctx->analyzer, semantic_trefs[i]);
+        XrType *instance = xr_type_new_generic_instance(
+            ctx->analyzer->isolate, semantic_source_name ? semantic_source_name : ma->name, NULL,
+            type_args, type_arg_count);
+        if (semantic_type_id == XA_SEMANTIC_TYPE_PARALLEL_PLAN && call->arg_count > 1 &&
+            type_arg_count > 0 && type_args[0]) {
+            XrType *lane_params[] = {xr_type_new_int(ctx->analyzer->isolate)};
+            XrType *init_type =
+                xr_type_new_function(ctx->analyzer->isolate, lane_params, 1, type_args[0], false);
+            XrType *saved_expected = ctx->expected_type;
+            ctx->expected_type = init_type;
+            xa_visit_infer_expr(ctx, call->arguments[1]);
+            ctx->expected_type = saved_expected;
+        }
+        xr_free(type_args);
+        if (instance)
+            instance->semantic_type_id = (uint32_t) semantic_type_id;
+        return instance;
+    }
 
     XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
     if (!member_sym || member_sym->kind != XA_SYM_CLASS)
         return NULL;
 
     XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
-    if (member_links && member_links->class_info)
-        return xa_class_constructor_instance_type(ctx, callee, call, ma->name, member_links,
-                                                  member_links->class_info);
+    if (member_links && member_links->class_info) {
+        XrType *instance = xa_class_constructor_instance_type(
+            ctx, callee, call, ma->name, member_links, member_links->class_info);
+        if (instance && semantic_type_id != XA_SEMANTIC_TYPE_NONE) {
+            if (semantic_tref_count > 0) {
+                XrType **type_args = xr_malloc(sizeof(XrType *) * (size_t) semantic_tref_count);
+                if (!type_args)
+                    return NULL;
+                for (int i = 0; i < semantic_tref_count; i++)
+                    type_args[i] = xr_tref_resolve_in_analyzer(ctx->analyzer, semantic_trefs[i]);
+                instance = xr_type_new_generic_instance(
+                    ctx->analyzer->isolate, semantic_source_name ? semantic_source_name : ma->name,
+                    member_links->class_info, type_args, semantic_tref_count);
+                xr_free(type_args);
+            }
+            instance->semantic_type_id = (uint32_t) semantic_type_id;
+        }
+        return instance;
+    }
     if (!is_quoted && strcmp(mod_name, "sync") == 0)
         return xa_sync_runtime_construct_type(ctx, ma->name, call);
     return NULL;
@@ -4116,8 +4354,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 "this builtin depends on hosted conversion, cloning, or debug helpers");
         }
         fn_sym = xa_lookup_visible_symbol(ctx, fn_name);
+        if (!fn_sym && call->semantic_type_id != 0 && call->callee->as.variable.symbol_id != 0) {
+            fn_sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope,
+                                           call->callee->as.variable.symbol_id);
+        }
         if (fn_sym) {
-            fn_links = xa_analyzer_get_links(ctx->analyzer, fn_sym);
+            fn_links = xa_refresh_imported_symbol_metadata(ctx, fn_sym);
             if (fn_sym->kind == XA_SYM_CLASS)
                 class_ctor_links = xa_class_constructor_links(ctx, fn_sym);
             if (fn_sym->is_imported && fn_links && fn_links->module_name &&
@@ -4521,11 +4763,20 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    const char *parallel_call_member = xa_parallel_call_member_name(ctx, call, fn_links, fn_sym);
-    const char *parallel_plan_member =
-        xa_parallel_plan_call_member_name(ctx, callee_obj_type, method_name);
-    xa_record_parallel_call_plan(ctx, node, parallel_call_member, false);
-    xa_record_parallel_call_plan(ctx, node, parallel_plan_member, true);
+    XaIntrinsicId parallel_call_intrinsic =
+        xa_parallel_module_call_intrinsic(ctx, call->callee, fn_links);
+    XaIntrinsicId parallel_plan_intrinsic =
+        xa_parallel_plan_call_intrinsic(ctx, callee_obj_type, method_name);
+    xa_record_parallel_call_plan(ctx, node,
+                                 parallel_call_intrinsic != XA_INTRINSIC_NONE
+                                     ? parallel_call_intrinsic
+                                     : parallel_plan_intrinsic);
+    const XaParallelCallPlan *recorded_parallel_plan =
+        xa_analyzer_get_parallel_call_plan(ctx->analyzer, node);
+    const char *parallel_call_member =
+        recorded_parallel_plan && !recorded_parallel_plan->is_plan_method
+            ? xa_parallel_call_kind_name(recorded_parallel_plan->kind)
+            : NULL;
     xa_check_parallel_options_workers_const(ctx, node, call, parallel_call_member);
     const XaParallelCallPlan *parallel_call_plan =
         xa_analyzer_get_parallel_call_plan(ctx->analyzer, node);
@@ -4542,6 +4793,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     ctx->allow_payload_enum_ctor_value = saved_payload_ctor_value;
     if (optional_function_call && callee_type)
         callee_type = xr_type_non_nullable(ctx->analyzer->isolate, callee_type);
+    if (parallel_call_plan && parallel_call_plan->is_plan_method &&
+        (!callee_type || XR_TYPE_IS_UNKNOWN(callee_type))) {
+        XrType *plan_callable =
+            xa_parallel_plan_callable_type(ctx, call, callee_obj_type, parallel_call_plan);
+        if (plan_callable)
+            callee_type = plan_callable;
+    }
 
     if (class_ctor_links && class_ctor_links->param_defaults) {
         if (call->arg_count < class_ctor_links->param_count) {
@@ -4740,6 +4998,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             XaSymbol *class_sym = xa_lookup_visible_symbol(ctx, class_name);
             if (!class_sym || class_sym->kind != XA_SYM_CLASS)
                 class_sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
+            if ((!class_sym || class_sym->kind != XA_SYM_CLASS) && call->semantic_type_id != 0 &&
+                fn_sym && fn_sym->kind == XA_SYM_CLASS) {
+                class_sym = fn_sym;
+            }
             if (class_sym && class_sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, class_sym);
                 if (links && links->class_info) {
@@ -5303,6 +5565,35 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             return_type = xr_type_new_int(NULL);
         } else if (strcmp(method_name, "every") == 0 || strcmp(method_name, "some") == 0) {
             return_type = xr_type_new_bool(NULL);
+        }
+    }
+
+    if (parallel_call_plan && parallel_call_plan->is_plan_method) {
+        switch (parallel_call_plan->kind) {
+            case XA_PAR_CALL_FOR_EACH:
+                return_type = xr_type_new_unit(ctx->analyzer->isolate);
+                break;
+            case XA_PAR_CALL_MAP: {
+                XrType *callback_type =
+                    call->arg_count > 1
+                        ? xa_analyzer_get_node_type(ctx->analyzer, call->arguments[1])
+                        : NULL;
+                XrType *element_type = callback_type && XR_TYPE_IS_FUNCTION(callback_type)
+                                           ? callback_type->function.return_type
+                                           : xr_type_new_unknown(ctx->analyzer->isolate);
+                return_type = xr_type_new_array(ctx->analyzer->isolate, element_type);
+                break;
+            }
+            case XA_PAR_CALL_MAP_INTO:
+                if (call->arg_count > 1)
+                    return_type = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[1]);
+                break;
+            case XA_PAR_CALL_REDUCE:
+                if (call->arg_count > 1)
+                    return_type = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[1]);
+                break;
+            case XA_PAR_CALL_NONE:
+                break;
         }
     }
 

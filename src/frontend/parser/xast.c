@@ -623,6 +623,9 @@ AstNode *xr_ast_call_expr(XrCompilerSession *session, AstNode *callee, AstNode *
     // No generic type arguments
     node->as.call_expr.type_args = NULL;
     node->as.call_expr.type_arg_count = 0;
+    node->as.call_expr.semantic_type_id = 0;
+    node->as.call_expr.semantic_type_args = NULL;
+    node->as.call_expr.semantic_type_arg_count = 0;
 
     return node;
 }
@@ -670,6 +673,9 @@ AstNode *xr_ast_call_expr_generic(XrCompilerSession *session, AstNode *callee, A
     } else {
         node->as.call_expr.type_args = NULL;
     }
+    node->as.call_expr.semantic_type_id = 0;
+    node->as.call_expr.semantic_type_args = NULL;
+    node->as.call_expr.semantic_type_arg_count = 0;
 
     return node;
 }

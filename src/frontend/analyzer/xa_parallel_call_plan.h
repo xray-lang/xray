@@ -16,6 +16,7 @@
 #define XA_PARALLEL_CALL_PLAN_H
 
 #include "../../base/xdefs.h"
+#include "xa_intrinsic_registry.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -31,6 +32,7 @@ typedef enum XaParallelCallKind {
 
 typedef struct XaParallelCallPlan {
     XaParallelCallKind kind;
+    XaIntrinsicId intrinsic_id;
     bool is_plan_method;
 } XaParallelCallPlan;
 
@@ -46,7 +48,7 @@ XR_FUNC void xa_parallel_call_plan_table_set(XaParallelCallPlanTable *t, struct 
 XR_FUNC const XaParallelCallPlan *xa_parallel_call_plan_table_get(const XaParallelCallPlanTable *t,
                                                                   const struct AstNode *node);
 
-XR_FUNC XaParallelCallKind xa_parallel_call_kind_from_name(const char *name);
+XR_FUNC XaParallelCallKind xa_parallel_call_kind_from_intrinsic(XaIntrinsicId intrinsic_id);
 XR_FUNC const char *xa_parallel_call_kind_name(XaParallelCallKind kind);
 
 #endif  // XA_PARALLEL_CALL_PLAN_H

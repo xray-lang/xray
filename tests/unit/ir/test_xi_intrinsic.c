@@ -398,6 +398,13 @@ static void test_semantic_intrinsic_registry(void) {
                     rotl->effect == XA_INTRINSIC_EFFECT_PURE && rotl->min_arity == 1 &&
                     rotl->max_arity == 1,
                 "exact integer bit semantics must be represented in the canonical registry");
+
+    const XaIntrinsicDesc *par_map_into = xa_intrinsic_by_id(XA_INTRINSIC_PARALLEL_PLAN_MAP_INTO);
+    ASSERT_TRUE(par_map_into && par_map_into->family == XA_INTRINSIC_FAMILY_PARALLEL &&
+                    par_map_into->lowering == XA_INTRINSIC_LOWERING_PAR_MAP_INTO &&
+                    (par_map_into->flags & XA_INTRINSIC_FLAG_PLAN_RECEIVER) != 0 &&
+                    par_map_into->min_arity == 3 && par_map_into->max_arity == 3,
+                "parallel Plan.mapInto must publish receiver, arity, and lowering identity");
 }
 
 int main(void) {

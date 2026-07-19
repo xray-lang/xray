@@ -185,9 +185,10 @@ static void xa_bind_declared_intrinsic(XaInferContext *ctx, AstNode *node, XaSym
                           desc->key[module_len] == '.';
     const char *owner = module_matches ? desc->key + module_len + 1 : desc->key + key_len;
     const char *owner_end = strchr(owner, '.');
-    bool owner_matches = owner_name && owner_end &&
-                         (size_t) (owner_end - owner) == strlen(owner_name) &&
-                         strncmp(owner, owner_name, (size_t) (owner_end - owner)) == 0;
+    bool owner_matches = owner_name
+                             ? owner_end && (size_t) (owner_end - owner) == strlen(owner_name) &&
+                                   strncmp(owner, owner_name, (size_t) (owner_end - owner)) == 0
+                             : owner_end == NULL;
     const char *source_member = xa_intrinsic_source_member(desc);
     if (!module_matches || !owner_matches || !member_name || !source_member ||
         strcmp(source_member, member_name) != 0) {
@@ -2329,6 +2330,8 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     links->declared_type = fn_type;
     links->file_path = ctx->file_path;
     links->function_decl_node = node;
+    xa_bind_declared_intrinsic(ctx, node, sym, NULL, fn->name, false, fn->param_count,
+                               fn->attributes, fn->attr_count);
 
     // FFI: mark extern-block functions so call sites can require `unsafe { }`.
     XrAttribute *c_export_attr = xa_function_attr(fn, ATTR_C_EXPORT);
@@ -4001,8 +4004,11 @@ skip_layout:
             xa_validate_hashable_key_type(ctx, method_type->function.return_type, method_links,
                                           "method return type", &sig_loc);
 
-            xa_bind_declared_intrinsic(ctx, method, method_sym, cls->name, md->name, md->is_static,
-                                       md->param_count, md->attributes, md->attr_count);
+            const char *intrinsic_owner_name =
+                cls->generic_origin_name ? cls->generic_origin_name : cls->name;
+            xa_bind_declared_intrinsic(ctx, method, method_sym, intrinsic_owner_name, md->name,
+                                       md->is_static, md->param_count, md->attributes,
+                                       md->attr_count);
 
             xa_class_info_add_method(info, method_sym);
 

@@ -66,6 +66,13 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_BIT_CLZ;
         case XA_INTRINSIC_LOWERING_BIT_CTZ:
             return XI_BIT_CTZ;
+        case XA_INTRINSIC_LOWERING_PAR_FOR:
+            return XI_PAR_FOR;
+        case XA_INTRINSIC_LOWERING_PAR_MAP:
+        case XA_INTRINSIC_LOWERING_PAR_MAP_INTO:
+            return XI_PAR_MAP;
+        case XA_INTRINSIC_LOWERING_PAR_REDUCE:
+            return XI_PAR_REDUCE;
         case XA_INTRINSIC_LOWERING_NONE:
             return XI_OP_COUNT;
     }
@@ -125,7 +132,9 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
     bool backend_encoded_shuffle = stage >= XI_STAGE_BACKEND &&
                                    (desc->flags & XA_INTRINSIC_FLAG_EXPLICIT_SHUFFLE) != 0 &&
                                    value->nargs == 1;
-    if (!backend_static_arity && !backend_encoded_shuffle &&
+    bool lowered_parallel_arity = desc->family == XA_INTRINSIC_FAMILY_PARALLEL &&
+                                  value->nargs >= (expected == XI_PAR_FOR ? 4u : 5u);
+    if (!backend_static_arity && !backend_encoded_shuffle && !lowered_parallel_arity &&
         (value->nargs < min_nargs || value->nargs > max_nargs))
         return set_error(error, error_size, "canonical intrinsic id %u has invalid Xi arity %u",
                          value->xa_intrinsic_id, value->nargs);
@@ -153,6 +162,15 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
             return set_error(error, error_size,
                              "canonical intrinsic id %u has invalid odd-lane flag %u",
                              value->xa_intrinsic_id, has_odd ? 1u : 0u);
+    } else if (desc->family == XA_INTRINSIC_FAMILY_PARALLEL) {
+        XiAuxKind expected_aux = value->op == XI_PAR_FOR      ? XI_AUX_KIND_PAR_FOR
+                                 : value->op == XI_PAR_MAP    ? XI_AUX_KIND_PAR_MAP
+                                 : value->op == XI_PAR_REDUCE ? XI_AUX_KIND_PAR_REDUCE
+                                                              : XI_AUX_KIND_NONE;
+        if (expected_aux == XI_AUX_KIND_NONE || value->aux_kind != expected_aux || !value->aux)
+            return set_error(error, error_size,
+                             "canonical parallel intrinsic id %u has invalid lowering contract",
+                             value->xa_intrinsic_id);
     } else {
         return set_error(error, error_size, "canonical intrinsic id %u has unsupported family %u",
                          value->xa_intrinsic_id, (unsigned) desc->family);

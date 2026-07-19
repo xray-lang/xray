@@ -14,8 +14,6 @@
 #include "../../base/xmalloc.h"
 #include "../../frontend/parser/xast_nodes.h"
 
-#include <string.h>
-
 typedef struct XaParCallPlanEntry {
     uint32_t node_id;
     XaParallelCallPlan plan;
@@ -40,18 +38,23 @@ static inline int bucket_of(const XaParallelCallPlanTable *t, uint32_t id) {
     return (int) (hash_id(id) % (uint32_t) t->bucket_count);
 }
 
-XR_FUNC XaParallelCallKind xa_parallel_call_kind_from_name(const char *name) {
-    if (!name)
-        return XA_PAR_CALL_NONE;
-    if (strcmp(name, "forEach") == 0)
-        return XA_PAR_CALL_FOR_EACH;
-    if (strcmp(name, "map") == 0)
-        return XA_PAR_CALL_MAP;
-    if (strcmp(name, "mapInto") == 0)
-        return XA_PAR_CALL_MAP_INTO;
-    if (strcmp(name, "reduce") == 0)
-        return XA_PAR_CALL_REDUCE;
-    return XA_PAR_CALL_NONE;
+XR_FUNC XaParallelCallKind xa_parallel_call_kind_from_intrinsic(XaIntrinsicId intrinsic_id) {
+    switch (intrinsic_id) {
+        case XA_INTRINSIC_PARALLEL_FOR_EACH:
+        case XA_INTRINSIC_PARALLEL_PLAN_FOR_EACH:
+            return XA_PAR_CALL_FOR_EACH;
+        case XA_INTRINSIC_PARALLEL_MAP:
+        case XA_INTRINSIC_PARALLEL_PLAN_MAP:
+            return XA_PAR_CALL_MAP;
+        case XA_INTRINSIC_PARALLEL_MAP_INTO:
+        case XA_INTRINSIC_PARALLEL_PLAN_MAP_INTO:
+            return XA_PAR_CALL_MAP_INTO;
+        case XA_INTRINSIC_PARALLEL_REDUCE:
+        case XA_INTRINSIC_PARALLEL_PLAN_REDUCE:
+            return XA_PAR_CALL_REDUCE;
+        default:
+            return XA_PAR_CALL_NONE;
+    }
 }
 
 XR_FUNC const char *xa_parallel_call_kind_name(XaParallelCallKind kind) {

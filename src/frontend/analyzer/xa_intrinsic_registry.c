@@ -34,6 +34,34 @@ static const XaIntrinsicDesc g_intrinsics[] = {
 #undef XA_INTRINSIC
 };
 
+typedef struct XaSemanticTypeDesc {
+    XaSemanticTypeId id;
+    const char *key;
+    const char *source_name;
+} XaSemanticTypeDesc;
+
+static const XaSemanticTypeDesc g_semantic_types[] = {
+    {XA_SEMANTIC_TYPE_PARALLEL_PLAN, "parallel.Plan", "Plan"},
+};
+
+XaSemanticTypeId xa_semantic_type_by_key(const char *key) {
+    if (!key)
+        return XA_SEMANTIC_TYPE_NONE;
+    for (size_t i = 0; i < sizeof(g_semantic_types) / sizeof(g_semantic_types[0]); i++) {
+        if (strcmp(g_semantic_types[i].key, key) == 0)
+            return g_semantic_types[i].id;
+    }
+    return XA_SEMANTIC_TYPE_NONE;
+}
+
+const char *xa_semantic_type_source_name(XaSemanticTypeId id) {
+    for (size_t i = 0; i < sizeof(g_semantic_types) / sizeof(g_semantic_types[0]); i++) {
+        if (g_semantic_types[i].id == id)
+            return g_semantic_types[i].source_name;
+    }
+    return NULL;
+}
+
 const XaIntrinsicDesc *xa_intrinsic_by_id(XaIntrinsicId id) {
     for (size_t i = 0; i < sizeof(g_intrinsics) / sizeof(g_intrinsics[0]); i++) {
         if (g_intrinsics[i].id == id)

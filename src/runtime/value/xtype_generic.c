@@ -237,6 +237,7 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
         if (changed) {
             XrType *result = xr_type_new_generic_instance(X, type->instance.class_name,
                                                           type->instance.class_ref, new_args, ac);
+            result->semantic_type_id = type->semantic_type_id;
             if (new_args != stack_args)
                 xr_free(new_args);
             return result;

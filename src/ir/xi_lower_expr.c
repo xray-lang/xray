@@ -63,9 +63,10 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
                                 const char *module_name, const char *cname, AstNode **arguments,
                                 XrCallArgAccess *arg_accesses, int arg_count);
 static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                                     const char *method);
+                                                     XaParallelCallKind kind);
 static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                                   XiValue *plan, const char *method);
+                                                   XiValue *plan, XaParallelCallKind kind,
+                                                   XaIntrinsicId intrinsic_id);
 
 static int pack_go_aux(int link_mode) {
     return link_mode & XI_GO_AUX_LINK_MASK;
@@ -1304,142 +1305,10 @@ static const char *lower_call_callee_imported_member(XiLower *l, AstNode *callee
                                      : (sym->name ? sym->name : var->name);
 }
 
-static bool lower_parallel_is_batch_method(const char *method) {
-    return method && (strcmp(method, "forEach") == 0 || strcmp(method, "map") == 0 ||
-                      strcmp(method, "mapInto") == 0 || strcmp(method, "reduce") == 0);
-}
-
 static const XaParallelCallPlan *lower_analyzer_parallel_call_plan(XiLower *l, AstNode *call_node) {
     if (!l || !l->analyzer || !call_node)
         return NULL;
     return xa_analyzer_get_parallel_call_plan(l->analyzer, call_node);
-}
-
-static const char *lower_analyzer_parallel_call_method(const XaParallelCallPlan *plan) {
-    return plan ? xa_parallel_call_kind_name(plan->kind) : NULL;
-}
-
-static bool lower_path_is_parallel_stdlib_module(const char *file) {
-    if (!file)
-        return false;
-    const char *suffixes[] = {"stdlib/parallel/parallel.xr",
-                              "<embedded stdlib>/parallel/parallel.xr"};
-    for (int i = 0; i < (int) (sizeof(suffixes) / sizeof(suffixes[0])); i++) {
-        size_t flen = strlen(file);
-        size_t slen = strlen(suffixes[i]);
-        if (flen >= slen && strcmp(file + flen - slen, suffixes[i]) == 0)
-            return true;
-    }
-    return false;
-}
-
-static XaSymbol *lower_class_info_lookup_instance_member(XrClassInfo *info, const char *name,
-                                                         XaSymbolKind kind) {
-    XaSymbol *member = xa_class_info_lookup_instance_member(info, name);
-    return member && member->kind == kind ? member : NULL;
-}
-
-static XaSymbol *lower_class_info_lookup_instance_storage_member(XrClassInfo *info,
-                                                                 const char *name) {
-    XaSymbol *member = xa_class_info_lookup_instance_member(info, name);
-    if (!member)
-        return NULL;
-    return (member->kind == XA_SYM_FIELD || member->kind == XA_SYM_PROPERTY) ? member : NULL;
-}
-
-static bool lower_class_info_matches_parallel_plan_shape(XiLower *l, XrClassInfo *info) {
-    if (!info || !info->name || strcmp(info->name, "Plan") != 0)
-        return false;
-
-    XaSymbol *states = lower_class_info_lookup_instance_storage_member(info, "_states");
-    XaSymbol *closed = lower_class_info_lookup_instance_storage_member(info, "_closed");
-    XaSymbol *active = lower_class_info_lookup_instance_storage_member(info, "_active");
-    if (!states || !closed || !active || !states->is_private || !closed->is_private ||
-        !active->is_private)
-        return false;
-
-    XaSymbolLinks *state_links = l ? xa_analyzer_get_links(l->analyzer, states) : NULL;
-    XaSymbolLinks *closed_links = l ? xa_analyzer_get_links(l->analyzer, closed) : NULL;
-    XaSymbolLinks *active_links = l ? xa_analyzer_get_links(l->analyzer, active) : NULL;
-    if (!state_links || !XR_TYPE_IS_ARRAY(state_links->type) || !closed_links ||
-        !XR_TYPE_IS_BOOL(closed_links->type) || !active_links ||
-        !XR_TYPE_IS_BOOL(active_links->type))
-        return false;
-
-    const char *required_methods[] = {"_begin", "_end",    "_stateFor", "forEach",
-                                      "map",    "mapInto", "reduce",    "close"};
-    for (int i = 0; i < (int) (sizeof(required_methods) / sizeof(required_methods[0])); i++) {
-        if (!lower_class_info_lookup_instance_member(info, required_methods[i], XA_SYM_METHOD))
-            return false;
-    }
-    return true;
-}
-
-static bool lower_class_info_is_parallel_plan(XiLower *l, XrClassInfo *info) {
-    if (!info || !info->name || strcmp(info->name, "Plan") != 0)
-        return false;
-    if (lower_path_is_parallel_stdlib_module(info->location.file))
-        return true;
-    if (!l || !l->analyzer)
-        return false;
-    for (int i = 0; i < info->method_count; i++) {
-        XaSymbol *method = info->methods ? info->methods[i] : NULL;
-        XaSymbolLinks *links = method ? xa_analyzer_get_links(l->analyzer, method) : NULL;
-        if (links && lower_path_is_parallel_stdlib_module(links->file_path))
-            return true;
-    }
-    return lower_class_info_matches_parallel_plan_shape(l, info);
-}
-
-static bool lower_symbol_is_parallel_plan_class(XiLower *l, XaSymbol *sym, const char *name) {
-    if (!l || !l->analyzer || !sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_IMPORT))
-        return false;
-    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
-    const char *member_name =
-        links && links->import_member_name ? links->import_member_name : (name ? name : sym->name);
-    if (!member_name || strcmp(member_name, "Plan") != 0)
-        return false;
-    if (links && links->module_name && strcmp(links->module_name, "parallel") == 0)
-        return true;
-    if (links && lower_path_is_parallel_stdlib_module(links->file_path))
-        return true;
-    return links && lower_class_info_is_parallel_plan(l, links->class_info);
-}
-
-static bool lower_type_is_parallel_plan(XiLower *l, XrType *type) {
-    if (!type || !XR_TYPE_IS_INSTANCE(type))
-        return false;
-    if (type->instance.class_ref && lower_class_info_is_parallel_plan(l, type->instance.class_ref))
-        return true;
-    const char *class_name = xr_type_get_class_name(type);
-    if (!class_name || strcmp(class_name, "Plan") != 0)
-        return false;
-    if (!l || !l->analyzer)
-        return false;
-    XaSymbol *sym = xa_analyzer_lookup(l->analyzer, class_name);
-    if (!sym)
-        sym = xa_analyzer_lookup_in_scope(l->analyzer, class_name, l->analyzer->global_scope);
-    if (!sym)
-        sym = xa_analyzer_lookup_deep(l->analyzer, class_name);
-    return lower_symbol_is_parallel_plan_class(l, sym, class_name);
-}
-
-static bool lower_selection_is_parallel_plan_method(XiLower *l, AstNode *callee,
-                                                    const char *method) {
-    if (!l || !l->analyzer || !callee || !method)
-        return false;
-    const XaSelection *sel = xa_analyzer_get_selection(l->analyzer, callee);
-    if (!sel || sel->kind != XA_SEL_METHOD)
-        return false;
-    if (sel->receiver_type && lower_type_is_parallel_plan(l, sel->receiver_type))
-        return true;
-    XaSymbol *target = sel->target_symbol;
-    if (!target || !target->name || strcmp(target->name, method) != 0)
-        return false;
-    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, target);
-    if (links && lower_path_is_parallel_stdlib_module(links->file_path))
-        return true;
-    return target->parent && lower_symbol_is_parallel_plan_class(l, target->parent, "Plan");
 }
 
 static XiValue *lower_emit_field_load(XiLower *l, XiValue *obj, const char *name,
@@ -1469,29 +1338,66 @@ static XiValue *lower_emit_len(XiLower *l, XiValue *value, int line) {
     return len;
 }
 
+static XiValue *lower_bind_parallel_intrinsic_result(XiLower *l, uint32_t first_value_id,
+                                                     XaIntrinsicId intrinsic_id, XiValue *result) {
+    if (!l || !l->func || !result || intrinsic_id == XA_INTRINSIC_NONE)
+        return result;
+    XiValue *semantic = NULL;
+    for (uint32_t bi = 0; bi < l->func->nblocks; bi++) {
+        XiBlock *block = l->func->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (!value || value->id < first_value_id ||
+                (value->op != XI_PAR_FOR && value->op != XI_PAR_MAP && value->op != XI_PAR_REDUCE))
+                continue;
+            if (semantic) {
+                l->had_error = true;
+                fprintf(stderr,
+                        "error: canonical parallel call emitted more than one semantic Xi op\n");
+                return NULL;
+            }
+            semantic = value;
+        }
+    }
+    if (!semantic) {
+        l->had_error = true;
+        fprintf(stderr, "error: canonical parallel call emitted no semantic Xi op\n");
+        return NULL;
+    }
+    semantic->xa_intrinsic_id = intrinsic_id;
+    return result;
+}
+
 static XiValue *lower_parallel_module_intrinsic_or_error(XiLower *l, AstNode *node,
-                                                         CallExprNode *call, const char *method) {
-    XiValue *parallel_intrinsic = lower_parallel_module_intrinsic_call(l, node, call, method);
-    if (parallel_intrinsic || (l && l->had_error) || !lower_parallel_is_batch_method(method))
-        return parallel_intrinsic;
+                                                         CallExprNode *call,
+                                                         XaParallelCallKind kind,
+                                                         XaIntrinsicId intrinsic_id) {
+    uint32_t first_value_id = l && l->func ? l->func->next_value_id : 0;
+    XiValue *parallel_intrinsic = lower_parallel_module_intrinsic_call(l, node, call, kind);
+    if (parallel_intrinsic)
+        return lower_bind_parallel_intrinsic_result(l, first_value_id, intrinsic_id,
+                                                    parallel_intrinsic);
+    if ((l && l->had_error) || kind == XA_PAR_CALL_NONE)
+        return NULL;
 
     if (l)
         l->had_error = true;
-    if (strcmp(method, "mapInto") == 0) {
+    if (kind == XA_PAR_CALL_MAP_INTO) {
         fprintf(stderr,
                 "error: parallel.mapInto expected (Range, output, inline (item) lambda[, "
                 "literal parallel.Options(...)]) at line %d\n",
                 node ? node->line : -1);
-    } else if (strcmp(method, "reduce") == 0) {
+    } else if (kind == XA_PAR_CALL_REDUCE) {
         fprintf(stderr,
                 "error: parallel.reduce expected (Range, initial, inline (item) body, inline "
                 "combine lambda[, literal parallel.Options(...)]) at line %d\n",
                 node ? node->line : -1);
     } else {
+        const char *source_name = xa_parallel_call_kind_name(kind);
         fprintf(stderr,
                 "error: parallel.%s expected (Range, inline (item) lambda[, literal "
                 "parallel.Options(...)]) at line %d\n",
-                method, node ? node->line : -1);
+                source_name ? source_name : "<invalid>", node ? node->line : -1);
     }
     return NULL;
 }
@@ -5162,7 +5068,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
     const XaResolvedCall *resolved =
         l && l->typed_program ? xa_typed_program_resolved_call(l->typed_program, node) : NULL;
-    if (resolved && resolved->intrinsic_id != XA_INTRINSIC_NONE)
+    const XaIntrinsicDesc *resolved_desc =
+        resolved ? xa_intrinsic_by_id(resolved->intrinsic_id) : NULL;
+    if (resolved_desc && resolved_desc->family != XA_INTRINSIC_FAMILY_PARALLEL)
         return lower_resolved_intrinsic_call(l, node, call, resolved);
 
     /* The source keyword is lowercase, while the runtime's builtin class is
@@ -5343,20 +5251,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         const XaParallelCallPlan *analyzer_parallel_plan =
             lower_analyzer_parallel_call_plan(l, node);
-        const char *analyzer_parallel_method =
-            lower_analyzer_parallel_call_method(analyzer_parallel_plan);
-
-        if (analyzer_parallel_plan && !analyzer_parallel_plan->is_plan_method &&
-            analyzer_parallel_method) {
-            XiValue *parallel_intrinsic =
-                lower_parallel_module_intrinsic_or_error(l, node, call, analyzer_parallel_method);
-            if (parallel_intrinsic || l->had_error)
-                return parallel_intrinsic;
-        }
-
-        if (ma->name && lower_call_object_is_module(l, ma->object, "parallel")) {
-            XiValue *parallel_intrinsic =
-                lower_parallel_module_intrinsic_or_error(l, node, call, ma->name);
+        if (analyzer_parallel_plan && !analyzer_parallel_plan->is_plan_method) {
+            XiValue *parallel_intrinsic = lower_parallel_module_intrinsic_or_error(
+                l, node, call, analyzer_parallel_plan->kind, analyzer_parallel_plan->intrinsic_id);
             if (parallel_intrinsic || l->had_error)
                 return parallel_intrinsic;
         }
@@ -5381,18 +5278,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (!recv)
             return NULL;
 
-        if (analyzer_parallel_plan && analyzer_parallel_plan->is_plan_method &&
-            analyzer_parallel_method) {
-            XiValue *parallel_plan_intrinsic =
-                lower_parallel_plan_intrinsic_call(l, node, call, recv, analyzer_parallel_method);
-            if (parallel_plan_intrinsic || l->had_error)
-                return parallel_plan_intrinsic;
-        }
-
-        if (ma->name && (lower_type_is_parallel_plan(l, recv->type) ||
-                         lower_selection_is_parallel_plan_method(l, call->callee, ma->name))) {
-            XiValue *parallel_plan_intrinsic =
-                lower_parallel_plan_intrinsic_call(l, node, call, recv, ma->name);
+        if (analyzer_parallel_plan && analyzer_parallel_plan->is_plan_method) {
+            XiValue *parallel_plan_intrinsic = lower_parallel_plan_intrinsic_call(
+                l, node, call, recv, analyzer_parallel_plan->kind,
+                analyzer_parallel_plan->intrinsic_id);
             if (parallel_plan_intrinsic || l->had_error)
                 return parallel_plan_intrinsic;
         }
@@ -6134,20 +6023,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         const char *fname = call->callee->as.variable.name;
         const XaParallelCallPlan *analyzer_parallel_plan =
             lower_analyzer_parallel_call_plan(l, node);
-        const char *analyzer_parallel_method =
-            lower_analyzer_parallel_call_method(analyzer_parallel_plan);
-        if (analyzer_parallel_plan && !analyzer_parallel_plan->is_plan_method &&
-            analyzer_parallel_method) {
-            XiValue *parallel_intrinsic =
-                lower_parallel_module_intrinsic_or_error(l, node, call, analyzer_parallel_method);
-            if (parallel_intrinsic || l->had_error)
-                return parallel_intrinsic;
-        }
-        const char *parallel_member =
-            lower_call_callee_imported_member(l, call->callee, "parallel");
-        if (parallel_member) {
-            XiValue *parallel_intrinsic =
-                lower_parallel_module_intrinsic_or_error(l, node, call, parallel_member);
+        if (analyzer_parallel_plan && !analyzer_parallel_plan->is_plan_method) {
+            XiValue *parallel_intrinsic = lower_parallel_module_intrinsic_or_error(
+                l, node, call, analyzer_parallel_plan->kind, analyzer_parallel_plan->intrinsic_id);
             if (parallel_intrinsic || l->had_error)
                 return parallel_intrinsic;
         }
@@ -6944,11 +6822,11 @@ static XiValue *parallel_call_make_reduce(XiLower *l, AstNode *node, AstNode *ra
 }
 
 static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                                     const char *method) {
-    if (!l || !node || !call || !method)
+                                                     XaParallelCallKind kind) {
+    if (!l || !node || !call || kind == XA_PAR_CALL_NONE)
         return NULL;
 
-    if (strcmp(method, "forEach") == 0) {
+    if (kind == XA_PAR_CALL_FOR_EACH) {
         if (call->arg_count != 2 && call->arg_count != 3)
             return NULL;
         AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
@@ -6961,7 +6839,7 @@ static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, 
         return parallel_call_make_for_each(l, node, range, call->arguments[1], workers);
     }
 
-    if (strcmp(method, "map") == 0) {
+    if (kind == XA_PAR_CALL_MAP) {
         if (call->arg_count != 2 && call->arg_count != 3)
             return NULL;
         AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
@@ -6974,7 +6852,7 @@ static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, 
         return parallel_call_make_map(l, node, range, call->arguments[1], workers, NULL);
     }
 
-    if (strcmp(method, "mapInto") == 0) {
+    if (kind == XA_PAR_CALL_MAP_INTO) {
         if (call->arg_count != 3 && call->arg_count != 4)
             return NULL;
         AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
@@ -6990,7 +6868,7 @@ static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, 
         return parallel_call_make_map(l, node, range, call->arguments[2], workers, into);
     }
 
-    if (strcmp(method, "reduce") == 0) {
+    if (kind == XA_PAR_CALL_REDUCE) {
         if (call->arg_count != 4 && call->arg_count != 5)
             return NULL;
         AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
@@ -7498,11 +7376,13 @@ static void parallel_plan_intrinsic_error(XiLower *l, AstNode *node, const char 
 }
 
 static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                                   XiValue *plan, const char *method) {
-    if (!l || !node || !call || !plan || !method)
+                                                   XiValue *plan, XaParallelCallKind kind,
+                                                   XaIntrinsicId intrinsic_id) {
+    if (!l || !node || !call || !plan || kind == XA_PAR_CALL_NONE)
         return NULL;
+    uint32_t first_value_id = l->func ? l->func->next_value_id : 0;
 
-    if (strcmp(method, "forEach") == 0) {
+    if (kind == XA_PAR_CALL_FOR_EACH) {
         if (call->arg_count != 2) {
             parallel_plan_intrinsic_error(
                 l, node, "parallel.Plan.forEach expected (Range, inline (state, item) lambda)");
@@ -7515,10 +7395,12 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
                 l, node, "parallel.Plan.forEach expected a Range and inline (state, item) lambda");
             return NULL;
         }
-        return parallel_plan_call_make_for_each(l, node, plan, range, call->arguments[1]);
+        XiValue *result =
+            parallel_plan_call_make_for_each(l, node, plan, range, call->arguments[1]);
+        return lower_bind_parallel_intrinsic_result(l, first_value_id, intrinsic_id, result);
     }
 
-    if (strcmp(method, "map") == 0) {
+    if (kind == XA_PAR_CALL_MAP) {
         if (call->arg_count != 2) {
             parallel_plan_intrinsic_error(
                 l, node, "parallel.Plan.map expected (Range, inline (state, item) lambda)");
@@ -7531,10 +7413,12 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
                 l, node, "parallel.Plan.map expected a Range and inline (state, item) lambda");
             return NULL;
         }
-        return parallel_plan_call_make_map(l, node, plan, range, call->arguments[1], NULL);
+        XiValue *result =
+            parallel_plan_call_make_map(l, node, plan, range, call->arguments[1], NULL);
+        return lower_bind_parallel_intrinsic_result(l, first_value_id, intrinsic_id, result);
     }
 
-    if (strcmp(method, "mapInto") == 0) {
+    if (kind == XA_PAR_CALL_MAP_INTO) {
         if (call->arg_count != 3) {
             parallel_plan_intrinsic_error(
                 l, node,
@@ -7553,10 +7437,12 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
         XiValue *into = xi_lower_expr(l, call->arguments[1]);
         if (!into)
             return NULL;
-        return parallel_plan_call_make_map(l, node, plan, range, call->arguments[2], into);
+        XiValue *result =
+            parallel_plan_call_make_map(l, node, plan, range, call->arguments[2], into);
+        return lower_bind_parallel_intrinsic_result(l, first_value_id, intrinsic_id, result);
     }
 
-    if (strcmp(method, "reduce") == 0) {
+    if (kind == XA_PAR_CALL_REDUCE) {
         if (call->arg_count != 4) {
             parallel_plan_intrinsic_error(l, node,
                                           "parallel.Plan.reduce expected (Range, initial, inline "
@@ -7572,8 +7458,9 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
                                           "item) body, and inline combine lambda");
             return NULL;
         }
-        return parallel_plan_call_make_reduce(l, node, plan, range, call->arguments[1],
-                                              call->arguments[2], call->arguments[3]);
+        XiValue *result = parallel_plan_call_make_reduce(l, node, plan, range, call->arguments[1],
+                                                         call->arguments[2], call->arguments[3]);
+        return lower_bind_parallel_intrinsic_result(l, first_value_id, intrinsic_id, result);
     }
 
     return NULL;

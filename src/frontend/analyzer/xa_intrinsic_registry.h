@@ -26,6 +26,14 @@ typedef enum XaIntrinsicId {
 #undef XA_INTRINSIC
 } XaIntrinsicId;
 
+typedef enum XaSemanticTypeId {
+    XA_SEMANTIC_TYPE_NONE = 0,
+    XA_SEMANTIC_TYPE_PARALLEL_PLAN = 4000,
+} XaSemanticTypeId;
+
+XR_FUNC XaSemanticTypeId xa_semantic_type_by_key(const char *key);
+XR_FUNC const char *xa_semantic_type_source_name(XaSemanticTypeId id);
+
 typedef enum XaIntrinsicFamily {
     XA_INTRINSIC_FAMILY_BITS = 1,
     XA_INTRINSIC_FAMILY_MEMORY,
@@ -63,6 +71,10 @@ typedef enum XaIntrinsicLowering {
     XA_INTRINSIC_LOWERING_BIT_POPCOUNT,
     XA_INTRINSIC_LOWERING_BIT_CLZ,
     XA_INTRINSIC_LOWERING_BIT_CTZ,
+    XA_INTRINSIC_LOWERING_PAR_FOR,
+    XA_INTRINSIC_LOWERING_PAR_MAP,
+    XA_INTRINSIC_LOWERING_PAR_MAP_INTO,
+    XA_INTRINSIC_LOWERING_PAR_REDUCE,
 } XaIntrinsicLowering;
 
 typedef enum XaIntrinsicEffectContract {
@@ -90,6 +102,7 @@ enum {
     XA_INTRINSIC_FLAG_EXPLICIT_SHUFFLE = 1u << 2,
     XA_INTRINSIC_FLAG_SWAP_ADJACENT = 1u << 3,
     XA_INTRINSIC_FLAG_SWAP_LANES = 1u << 4,
+    XA_INTRINSIC_FLAG_PLAN_RECEIVER = 1u << 5,
 };
 
 typedef struct XaIntrinsicShapeRule {

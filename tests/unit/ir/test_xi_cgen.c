@@ -1034,6 +1034,23 @@ static size_t count_op_in_func(const XiFunc *func, XiOp op) {
     return count;
 }
 
+static size_t count_intrinsic_in_func(const XiFunc *func, XaIntrinsicId intrinsic_id) {
+    size_t count = 0;
+    if (!func)
+        return 0;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (value && value->xa_intrinsic_id == (uint32_t) intrinsic_id)
+                count++;
+        }
+    }
+    for (uint16_t ci = 0; ci < func->nchildren; ci++)
+        count += count_intrinsic_in_func(func->children[ci], intrinsic_id);
+    return count;
+}
+
 static const char *next_static_after(const char *fn) {
     assert(fn != NULL);
     const char *next = strstr(fn + 1, "\nstatic ");
@@ -2196,7 +2213,39 @@ TEST(lower_parallel_call_plan_resolves_selective_aliases) {
                  "resolved map alias should lower to XI_PAR_MAP");
     TEST_REQUIRE(count_op_in_func(ir, XI_PAR_REDUCE) == 1,
                  "resolved reduce alias should lower to XI_PAR_REDUCE");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_FOR_EACH) == 1,
+                 "forEach alias must preserve canonical identity on XI_PAR_FOR");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_MAP) == 1,
+                 "map alias must preserve canonical identity on XI_PAR_MAP");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_REDUCE) == 1,
+                 "reduce alias must preserve canonical identity on XI_PAR_REDUCE");
 
+    xi_func_free(ir);
+}
+
+TEST(lower_parallel_plan_methods_preserve_intrinsic_identity) {
+    const char *src = "import parallel\n"
+                      "fn initLane(lane: int) -> int { return lane }\n"
+                      "var plan = parallel.Plan<int>(parallel.Options(2), initLane)\n"
+                      "plan.forEach(0..2, (state, i) -> {})\n"
+                      "var mapped = plan.map(0..2, (state, i) -> state + i)\n"
+                      "var out: Array<int> = []\n"
+                      "out.reserve(2)\n"
+                      "plan.mapInto(0..2, out, (state, i) -> state + i)\n"
+                      "var sum = plan.reduce(0..2, 0, (state, i) -> state + i, "
+                      "(a, b) -> a + b)\n"
+                      "print(len(mapped), len(out), sum)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "parallel Plan methods should lower to IR");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_PLAN_FOR_EACH) == 1,
+                 "Plan.forEach must preserve its canonical identity");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_PLAN_MAP) == 1,
+                 "Plan.map must preserve its canonical identity");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_PLAN_MAP_INTO) == 1,
+                 "Plan.mapInto must preserve its canonical identity on XI_PAR_MAP");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_PLAN_REDUCE) == 1,
+                 "Plan.reduce must preserve its canonical identity");
     xi_func_free(ir);
 }
 
@@ -8364,6 +8413,7 @@ int main(void) {
     run_cgen_parallel_reduce_uses_runtime_executor();
     run_cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime();
     run_lower_parallel_call_plan_resolves_selective_aliases();
+    run_lower_parallel_plan_methods_preserve_intrinsic_identity();
     run_cgen_parallel_for_each_allows_atomic_i64_direct_body();
     run_cgen_parallel_for_each_rejects_throwing_body();
     run_cgen_parallel_for_body_closure_stack_allocates();

@@ -130,9 +130,10 @@ typedef struct XrObjectType {
 
 // Type structure
 struct XrType {
-    XrTypeKind kind;  // Primary type discriminator
-    uint32_t id;      // Unique type ID for caching
-    bool frozen;      // Singleton protection
+    XrTypeKind kind;            // Primary type discriminator
+    uint32_t id;                // Unique type ID for caching
+    uint32_t semantic_type_id;  // Stable analyzer semantic identity; 0 for ordinary types.
+    bool frozen;                // Singleton protection
 
     union {
         // For Array<T>, Set<T>, Channel<T>
