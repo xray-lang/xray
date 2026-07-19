@@ -37,6 +37,7 @@
  */
 
 #include "xi_opt_gvn_pre.h"
+#include "xi_evidence.h"
 #include "xi_analysis.h"
 #include "xi_effect.h"
 #include "xi_tbaa.h"
@@ -427,7 +428,7 @@ XR_FUNC XiPassChange xi_opt_gvn_pre(XiFunc *f) {
     /* Ensure dominator tree is available (cached across passes). */
     xi_ensure_dominators(f);
 
-    bool tbaa_active = (f->invariant_mask & XI_INV_TBAA_ANNOTATED) != 0;
+    bool tbaa_active = xi_evidence_is_proven_current(f, XI_EVD_ALIAS);
 
     /* Build Memory SSA for cross-block load elimination. */
     XiMemSSA *mssa = NULL;

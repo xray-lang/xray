@@ -42,6 +42,8 @@
 #include "../shared/xr_int_arith.h"
 #include "../shared/xr_bits_core.h"
 #include "xi_analysis.h"
+#include "xi_analysis_manager.h"
+#include "xi_evidence.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
 #include "xi_opt_devirt.h"
@@ -3181,62 +3183,83 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
 
 /* ========== Pipeline Driver ========== */
 
+/* Every pass declares an evidence policy. Rewrites conservatively invalidate
+ * every proof; analysis passes preserve IR revisions and publish fresh proof. */
+#define XI_REWRITE_PASS(pass_name, pass_fn, level, pass_flags, required_evidence)                  \
+    {                                                                                              \
+        .name = pass_name,                                                                         \
+        .fn = pass_fn,                                                                             \
+        .min_level = level,                                                                        \
+        .flags = pass_flags,                                                                       \
+        .input_stage = XI_STAGE_RAW,                                                               \
+        .output_stage = XI_STAGE_RAW,                                                              \
+        .requires_inv_mask = 0,                                                                    \
+        .produces_inv_mask = 0,                                                                    \
+        .requires_evidence = required_evidence,                                                    \
+        .produces_evidence = 0,                                                                    \
+        .invalidates_evidence = XI_EVD_ALL,                                                        \
+        .preserves_evidence = 0,                                                                   \
+    }
+
+#define XI_ANALYSIS_PASS(pass_name, pass_fn, level, pass_flags, produced_evidence)                 \
+    {                                                                                              \
+        .name = pass_name,                                                                         \
+        .fn = pass_fn,                                                                             \
+        .min_level = level,                                                                        \
+        .flags = pass_flags,                                                                       \
+        .input_stage = XI_STAGE_RAW,                                                               \
+        .output_stage = XI_STAGE_RAW,                                                              \
+        .requires_inv_mask = 0,                                                                    \
+        .produces_inv_mask = 0,                                                                    \
+        .requires_evidence = 0,                                                                    \
+        .produces_evidence = produced_evidence,                                                    \
+        .invalidates_evidence = 0,                                                                 \
+        .preserves_evidence = XI_EVD_ALL,                                                          \
+    }
+
 /* Pass table: ordered by recommended execution sequence.
  * The driver runs all passes whose min_level <= requested level. */
 static const XiPassDesc xi_pass_table[] = {
-    /* name              fn                       min_level      flags               in_stage
-       out_stage       requires              produces */
-    {"tbaa", xi_tbaa_annotate, XI_OPT_LIGHT, XI_PASS_REQUIRED, XI_STAGE_RAW, XI_STAGE_RAW, 0,
-     XI_INV_TBAA_ANNOTATED},
-    {"constfold", xi_opt_const_fold, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"strength_reduce", xi_opt_strength_reduce, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW,
-     XI_STAGE_RAW, 0, 0},
-    {"copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"mark_one_shot_await", xi_opt_mark_one_shot_await, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW,
-     XI_STAGE_RAW, 0, 0},
-    {"phi_simplify", xi_opt_phi_simplify, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
-     0},
-    {"dce", xi_opt_dce, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"sccp", xi_opt_sccp, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"range", xi_range_analyze, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
-     XI_INV_RANGE_ANNOTATED},
-    {"bce", xi_opt_bce, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
-     XI_INV_RANGE_ANNOTATED, 0},
-    {"gvn", xi_opt_gvn_pre, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
-     XI_INV_TBAA_ANNOTATED, 0},
-    {"loop_rotate", xi_opt_loop_rotate, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
-     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
-     XI_INV_TBAA_ANNOTATED, 0},
-    {"ivsr", xi_opt_ivsr, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"loop_peel", xi_opt_loop_peel, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
-     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"loop_unroll", xi_opt_loop_unroll, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
-     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"loop_split", xi_opt_loop_split, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
-     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"loop_inv_branch", xi_opt_loop_inv_branch, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
-     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"devirt", xi_opt_devirt, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
-     0, 0},
-    {"block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
-     0, 0},
-    {"block_layout", xi_opt_block_layout, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW,
-     XI_STAGE_RAW, 0, 0},
-    {"slp", xi_opt_slp, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"loop_vec", xi_opt_loop_vec, XI_OPT_FULL, XI_PASS_NEEDS_LOOP, XI_STAGE_RAW, XI_STAGE_RAW, 0,
-     0},
-    {"reduction", xi_opt_reduction, XI_OPT_FULL, XI_PASS_NEEDS_LOOP, XI_STAGE_RAW, XI_STAGE_RAW, 0,
-     0},
-    {"call_specialize", xi_opt_call_specialize, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW,
-     XI_STAGE_RAW, 0, 0},
-    {"const_fixpoint", xi_opt_const_fixpoint, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
-     0, 0},
+    XI_ANALYSIS_PASS("tbaa", xi_tbaa_annotate, XI_OPT_LIGHT, XI_PASS_REQUIRED, XI_EVD_ALIAS),
+    XI_REWRITE_PASS("constfold", xi_opt_const_fold, XI_OPT_LIGHT, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("strength_reduce", xi_opt_strength_reduce, XI_OPT_LIGHT, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("mark_one_shot_await", xi_opt_mark_one_shot_await, XI_OPT_LIGHT, XI_PASS_NONE,
+                    0),
+    XI_REWRITE_PASS("phi_simplify", xi_opt_phi_simplify, XI_OPT_LIGHT, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("dce", xi_opt_dce, XI_OPT_LIGHT, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("sccp", xi_opt_sccp, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_ANALYSIS_PASS("range", xi_range_analyze, XI_OPT_FULL, XI_PASS_NONE, XI_EVD_RANGE),
+    XI_REWRITE_PASS("bce", xi_opt_bce, XI_OPT_FULL, XI_PASS_NONE, XI_EVD_RANGE),
+    XI_REWRITE_PASS("gvn", xi_opt_gvn_pre, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_EVD_ALIAS),
+    XI_REWRITE_PASS("loop_rotate", xi_opt_loop_rotate, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_EVD_ALIAS),
+    XI_REWRITE_PASS("ivsr", xi_opt_ivsr, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
+    XI_REWRITE_PASS("loop_peel", xi_opt_loop_peel, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("loop_unroll", xi_opt_loop_unroll, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("loop_split", xi_opt_loop_split, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("loop_inv_branch", xi_opt_loop_inv_branch, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("devirt", xi_opt_devirt, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
+    XI_REWRITE_PASS("jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
+    XI_REWRITE_PASS("block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("block_layout", xi_opt_block_layout, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
+    XI_REWRITE_PASS("slp", xi_opt_slp, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("loop_vec", xi_opt_loop_vec, XI_OPT_FULL, XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("reduction", xi_opt_reduction, XI_OPT_FULL, XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("call_specialize", xi_opt_call_specialize, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("const_fixpoint", xi_opt_const_fixpoint, XI_OPT_FULL, XI_PASS_NONE, 0),
 };
+
+#undef XI_ANALYSIS_PASS
+#undef XI_REWRITE_PASS
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
 
@@ -3748,6 +3771,20 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                 goto done;
             }
 
+            if (desc->requires_evidence) {
+                char evidence_error[256];
+                if (!xi_analysis_require(f, desc->requires_evidence, evidence_error,
+                                         sizeof(evidence_error))) {
+                    result.ok = false;
+                    result.pass_name = desc->name;
+                    result.round = round;
+                    snprintf(result.detail, sizeof(result.detail),
+                             "pass '%s' requires current evidence: %.180s", desc->name,
+                             evidence_error);
+                    goto done;
+                }
+            }
+
             /* Shuffle blocks[1..n-1] (preserve entry at [0]) to catch
              * passes that assume RPO or insertion order.  Xi IR carries
              * an implicit invariant that block->id equals its index in
@@ -3835,6 +3872,26 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
              * dominators so the next xi_ensure_*() recomputes. */
             if (pc.cfg_changed)
                 xi_cfg_invalidate(f);
+
+            if (pc.cfg_changed || pc.values_changed || pc.types_changed) {
+                XiEvidenceDomainMask invalidates =
+                    desc->invalidates_evidence | (XI_EVD_ALL & ~desc->preserves_evidence);
+                xi_evidence_note_rewrite(f, pc.cfg_changed, pc.values_changed, pc.types_changed,
+                                         invalidates);
+            }
+
+            for (uint32_t bit = 1; bit <= XI_EVD_MEMSSA; bit <<= 1u) {
+                if ((desc->produces_evidence & bit) != 0 &&
+                    !xi_evidence_is_current(f, (XiEvidenceDomain) bit)) {
+                    result.ok = false;
+                    result.pass_name = desc->name;
+                    result.round = round;
+                    snprintf(result.detail, sizeof(result.detail),
+                             "pass '%s' did not publish current '%s' evidence", desc->name,
+                             xi_evidence_domain_name((XiEvidenceDomain) bit));
+                    goto done;
+                }
+            }
 
             /* XRAY_XI_CHECK=1: verify after every single pass.
              * Uses stage-aware verification so stage-specific invariants

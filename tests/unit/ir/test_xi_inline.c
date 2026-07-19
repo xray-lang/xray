@@ -4,6 +4,7 @@
  */
 
 #include "../../../src/ir/xi_opt_inline.h"
+#include "../../../src/ir/xi_evidence.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_verify.h"
@@ -309,7 +310,8 @@ TEST(inlines_unannotated_callee_under_tbaa_invariant) {
     XiValue *call = add_known_call(caller, callee);
     ASSERT(call != NULL);
     xi_block_set_return(caller->entry, call);
-    caller->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+    xi_evidence_publish(caller, XI_EVD_ALIAS, XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE,
+                        "test_inline");
 
     XiPassChange chg = xi_opt_inline(caller);
     ASSERT(chg.cfg_changed && chg.values_changed);

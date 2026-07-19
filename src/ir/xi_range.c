@@ -18,6 +18,7 @@
  */
 
 #include "xi_range.h"
+#include "xi_evidence.h"
 #include "xi_analysis.h"
 #include "xi_loop.h"
 #include "../base/xchecks.h"
@@ -546,9 +547,7 @@ XR_FUNC XiPassChange xi_range_analyze(XiFunc *f) {
 
     /* Store in function's analysis slot. */
     f->analysis_data[0] = rt;
-    f->invariant_mask |= XI_INV_RANGE_ANNOTATED;
-
-    XiPassChange chg = xi_pass_no_change();
-    chg.values_changed = true;
-    return chg;
+    xi_evidence_publish(f, XI_EVD_RANGE, XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE,
+                        "xi_range_analyze");
+    return xi_pass_no_change();
 }

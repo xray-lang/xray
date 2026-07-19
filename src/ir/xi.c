@@ -13,6 +13,7 @@
  */
 
 #include "xi.h"
+#include "xi_evidence.h"
 #include "xi_loop.h"
 #include "xi_module.h"
 #include "xi_effect.h"
@@ -224,6 +225,7 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
     /* Start cfg_version at 1 so the calloc-zeroed rpo/dom versions
      * deterministically trigger the first xi_ensure_*() recompute. */
     f->cfg_version = 1;
+    xi_evidence_init_func(f);
 
     /* Initialize arena: allocate first chunk eagerly so the common
      * fast path in arena_alloc avoids a NULL check on every call. */
@@ -289,6 +291,8 @@ void xi_func_free(XiFunc *f) {
         xi_loopinfo_free(f->loop_cache);
         f->loop_cache = NULL;
     }
+
+    xi_evidence_dispose_func(f);
 
     /* Arena owns all XiValues, XiPhis, XiBlocks, and arg arrays.
      * blocks[] (the index array) is heap-allocated separately because

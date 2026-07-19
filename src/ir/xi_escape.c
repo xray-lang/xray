@@ -31,6 +31,7 @@
  */
 
 #include "xi_escape.h"
+#include "xi_evidence.h"
 #include "xi_analysis.h"
 #include "xi_loop.h"
 #include "xi_value_query.h"
@@ -387,6 +388,8 @@ XR_FUNC void xi_escape_analyze(XiFunc *f) {
     }
 
     analyze_func(f);
+    xi_evidence_publish(f, XI_EVD_ESCAPE, XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE,
+                        "xi_escape_analyze");
 }
 
 /* ========== Cross-Function Escape Summary ========== */

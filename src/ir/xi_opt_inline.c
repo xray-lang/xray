@@ -28,6 +28,7 @@
  */
 
 #include "xi_opt_inline.h"
+#include "xi_evidence.h"
 #include "xi_cfg_edit.h"
 #include "xi_tbaa.h"
 #include "xi_ops_gen.h"
@@ -326,7 +327,7 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
         return NULL;
 
     xi_value_copy_metadata(cloned, src);
-    if (caller->invariant_mask & XI_INV_TBAA_ANNOTATED)
+    if (xi_evidence_is_proven_current(caller, XI_EVD_ALIAS))
         xi_tbaa_annotate_value(cloned);
 
     /* Remap args */

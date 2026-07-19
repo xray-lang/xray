@@ -4,6 +4,7 @@
  */
 
 #include "../../../src/ir/xi_opt_bce.h"
+#include "../../../src/ir/xi_evidence.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_range.h"
 #include "../../../src/ir/xi_op_name.h"
@@ -233,7 +234,7 @@ TEST(no_elimination_without_range) {
 
 TEST(empty_func_no_crash) {
     XiFunc *f = make_func();
-    f->invariant_mask |= XI_INV_RANGE_ANNOTATED;
+    xi_evidence_publish(f, XI_EVD_RANGE, XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE, "test_bce");
     xi_opt_bce(f);
     xi_func_free(f);
 }
@@ -1061,7 +1062,7 @@ TEST(multiple_empty_blocks_no_crash) {
     wire(b2, b3, 0);
     b3->kind = XI_BLOCK_RETURN;
 
-    f->invariant_mask |= XI_INV_RANGE_ANNOTATED;
+    xi_evidence_publish(f, XI_EVD_RANGE, XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE, "test_bce");
     xi_opt_bce(f);
 
     xi_func_free(f);

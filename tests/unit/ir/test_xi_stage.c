@@ -12,6 +12,7 @@
 #include "../../../src/ir/xi_backend.h"
 #include "../../../src/ir/xi_backend_lower.h"
 #include "../../../src/ir/xi_effect.h"
+#include "../../../src/ir/xi_evidence.h"
 #include "../../../src/ir/xi_pass.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_pipeline.h"
@@ -134,15 +135,15 @@ static void test_pass_desc_fields(void) {
         .flags = XI_PASS_NONE,
         .input_stage = XI_STAGE_RAW,
         .output_stage = XI_STAGE_RAW,
-        .requires_inv_mask = XI_INV_TBAA_ANNOTATED,
-        .produces_inv_mask = XI_INV_RANGE_ANNOTATED,
+        .requires_evidence = XI_EVD_ALIAS,
+        .produces_evidence = XI_EVD_RANGE,
     };
 
     assert(desc.input_stage == XI_STAGE_RAW);
     assert(desc.output_stage == XI_STAGE_RAW);
     assert(desc.output_stage >= desc.input_stage);
-    assert(desc.requires_inv_mask == XI_INV_TBAA_ANNOTATED);
-    assert(desc.produces_inv_mask == XI_INV_RANGE_ANNOTATED);
+    assert(desc.requires_evidence == XI_EVD_ALIAS);
+    assert(desc.produces_evidence == XI_EVD_RANGE);
 
     /* A stage-transition pass would have output > input */
     XiPassDesc transition = {
@@ -524,8 +525,8 @@ static void test_pass_order_and_invariants(void) {
     XiOptResult opt = xi_opt_run_pipeline(f, XI_OPT_FULL);
     assert(opt.ok);
 
-    assert(f->invariant_mask & XI_INV_TBAA_ANNOTATED);
-    assert(f->invariant_mask & XI_INV_RANGE_ANNOTATED);
+    assert(xi_evidence_is_current(f, XI_EVD_ALIAS));
+    assert(xi_evidence_is_current(f, XI_EVD_RANGE));
 
     xi_func_free(f);
     printf("  PASS\n");

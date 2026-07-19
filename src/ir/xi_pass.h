@@ -30,6 +30,7 @@
 #define XI_PASS_H
 
 #include "xi.h"
+#include "xi_evidence.h"
 #include "../base/xdefs.h"
 #include <stdbool.h>
 
@@ -106,6 +107,14 @@ typedef struct XiPassDesc {
      * returns successfully. */
     XiInvariantMask requires_inv_mask;
     XiInvariantMask produces_inv_mask;
+
+    /* Revision-bound analysis contract. Required domains are obtained through
+     * the analysis manager. Any rewrite invalidates every domain not listed in
+     * preserves_evidence, plus the explicitly invalidated domains. */
+    XiEvidenceDomainMask requires_evidence;
+    XiEvidenceDomainMask produces_evidence;
+    XiEvidenceDomainMask invalidates_evidence;
+    XiEvidenceDomainMask preserves_evidence;
 } XiPassDesc;
 
 /* ========== Per-Pass Statistics ========== */

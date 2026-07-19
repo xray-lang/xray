@@ -107,8 +107,7 @@ XR_FUNC XiRange xi_range_of(const XiValue *v);
 
 /* ========== Analysis Pass ========== */
 
-/* Run range analysis on the function.  Annotates integer values with
- * ranges via the per-value aux storage.  Sets XI_INV_RANGE_ANNOTATED. */
+/* Run range analysis and publish revision-bound range evidence. */
 XR_FUNC XiPassChange xi_range_analyze(XiFunc *f);
 
 #endif  // XI_RANGE_H

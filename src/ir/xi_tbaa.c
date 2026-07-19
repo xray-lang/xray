@@ -16,6 +16,7 @@
  */
 
 #include "xi_tbaa.h"
+#include "xi_evidence.h"
 #include "xi_ops_gen.h"
 #include "xi_pass.h"
 #include "../base/xdefs.h"
@@ -164,11 +165,9 @@ XR_FUNC void xi_tbaa_annotate_value(XiValue *v) {
     v->mem_group = (uint8_t) g;
 }
 
-/* Annotate all values in a function.  Sets XI_INV_TBAA_ANNOTATED on success. */
+/* Annotate all values in a function and publish revision-bound alias evidence. */
 XR_FUNC XiPassChange xi_tbaa_annotate(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_tbaa_annotate: NULL func");
-
-    bool any_change = false;
 
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         XiBlock *blk = f->blocks[bi];
@@ -177,10 +176,7 @@ XR_FUNC XiPassChange xi_tbaa_annotate(XiFunc *f) {
 
         /* Annotate phi nodes. */
         for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            uint8_t old = phi->value.mem_group;
             phi->value.mem_group = XI_MEM_NONE;
-            if (old != XI_MEM_NONE)
-                any_change = true;
         }
 
         /* Annotate instruction values. */
@@ -188,18 +184,16 @@ XR_FUNC XiPassChange xi_tbaa_annotate(XiFunc *f) {
             XiValue *v = blk->values[vi];
             if (!v)
                 continue;
-            uint8_t old = v->mem_group;
             xi_tbaa_annotate_value(v);
-            if (v->mem_group != old)
-                any_change = true;
         }
     }
 
-    f->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+    xi_evidence_publish(f, XI_EVD_ALIAS, XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE,
+                        "xi_tbaa_annotate");
 
     return (XiPassChange) {
         .cfg_changed = false,
-        .values_changed = any_change,
+        .values_changed = false,
         .types_changed = false,
         .n_removed = 0,
         .n_added = 0,

@@ -51,6 +51,7 @@ struct XrCtValue;
 struct AstNode;
 struct XaAnalyzer;
 struct XiCoroPlan;
+struct XiEvidenceSet;
 
 /* ========== IR Stage ========== */
 
@@ -1283,7 +1284,13 @@ typedef struct XiFunc {
     /* Cumulative invariant mask established by passes and stage transitions. */
     XiInvariantMask invariant_mask;
 
-    /* CFG and analysis version tags for lazy recomputation. */
+    /* IR revisions are the authoritative freshness keys for local evidence. */
+    uint64_t ir_revision;
+    uint64_t memory_revision;
+    uint64_t call_revision;
+    struct XiEvidenceSet *evidence;
+
+    /* CFG and structural-analysis version tags for lazy recomputation. */
     uint64_t cfg_version;
     uint64_t rpo_version;
     uint64_t dom_version;

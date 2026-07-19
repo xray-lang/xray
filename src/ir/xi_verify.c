@@ -12,6 +12,7 @@
  */
 
 #include "xi_verify.h"
+#include "xi_evidence.h"
 #include "xi_effect.h"
 #include "xi_backend.h"
 #include "xi_coro_analyze.h"
@@ -1815,7 +1816,7 @@ static void verify_coro_plan(VerifyCtx *ctx, const XiFunc *f) {
 /* ========== Public API ========== */
 
 static void verify_tbaa_annotations(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed || !(f->invariant_mask & XI_INV_TBAA_ANNOTATED))
+    if (ctx->failed || !xi_evidence_is_proven_current(f, XI_EVD_ALIAS))
         return;
     for (uint32_t bi = 0; bi < f->nblocks && !ctx->failed; bi++) {
         XiBlock *blk = f->blocks[bi];

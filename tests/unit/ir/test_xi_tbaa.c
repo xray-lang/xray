@@ -7,6 +7,7 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_tbaa.h"
+#include "../../../src/ir/xi_evidence.h"
 #include "../../../src/ir/xi_memssa.h"
 #include "../../../src/ir/xi_pass.h"
 #include "../../../src/ir/xi_verify.h"
@@ -244,9 +245,9 @@ TEST(annotate_sets_invariant) {
     XiValue *c = xi_const_int(f, blk, 1, &stub_int);
     xi_block_set_return(blk, c);
 
-    assert(!(f->invariant_mask & XI_INV_TBAA_ANNOTATED));
+    assert(!xi_evidence_is_current(f, XI_EVD_ALIAS));
     xi_tbaa_annotate(f);
-    assert(f->invariant_mask & XI_INV_TBAA_ANNOTATED);
+    assert(xi_evidence_is_current(f, XI_EVD_ALIAS));
 
     xi_func_free(f);
 }
@@ -304,7 +305,7 @@ TEST(memssa_build_simple) {
     xi_tbaa_annotate(f);
     XiMemSSA *mssa = xi_memssa_build(f);
     assert(mssa != NULL);
-    assert(f->invariant_mask & XI_INV_MEM_SSA);
+    assert(xi_evidence_is_current(f, XI_EVD_MEMSSA));
 
     /* The load should have an access node. */
     XiMemAccess *acc = xi_memssa_access(mssa, get);
