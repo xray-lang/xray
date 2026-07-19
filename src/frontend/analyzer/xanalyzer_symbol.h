@@ -261,6 +261,12 @@ struct XaScope {
     // Symbols in this scope (hash map: name -> XaSymbol*)
     void *symbols;  // XrHashMap internally
 
+    // Lookup-only aliases (hash map: alias -> existing XaSymbol*). Aliases
+    // participate in lexical resolution but are intentionally omitted from
+    // symbol enumeration, ownership, completion, and redeclaration storage.
+    // REPL `it` uses this to point at the latest versioned result binding.
+    void *aliases;  // XrHashMap internally
+
     // For function scopes
     XaSymbol *function_symbol;  // The function this scope belongs to
 
@@ -292,6 +298,8 @@ XR_FUNC void xa_scope_free(XaScope *scope);
 // API: Scope operations
 XR_FUNC void xa_scope_add_symbol(XaScope *scope, XaSymbol *symbol);
 XR_FUNC bool xa_scope_remove_symbol(XaScope *scope, const char *name);  // Returns true if removed
+XR_FUNC void xa_scope_set_alias(XaScope *scope, const char *alias, XaSymbol *symbol);
+XR_FUNC bool xa_scope_remove_alias(XaScope *scope, const char *alias);
 XR_FUNC XaSymbol *xa_scope_lookup(XaScope *scope, const char *name);
 XR_FUNC XaSymbol *xa_scope_lookup_local(XaScope *scope, const char *name);
 XR_FUNC XaSymbol *xa_scope_lookup_by_id(XaScope *scope, uint32_t id);

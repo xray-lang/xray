@@ -40,12 +40,20 @@ typedef struct XrReplSymbolTable {
     XrReplSymbol *symbols;
     int count;
     int capacity;
+
+    /* Versioned implicit results are compiler/runtime storage, not user
+     * declarations. Keep them separate so completion and `.vars` expose only
+     * the stable `it` alias instead of implementation names. */
+    XrString **result_names;
+    int result_count;
+    int result_capacity;
+    XrString *latest_result_name;
+    uint64_t next_result_id;
 } XrReplSymbolTable;
 
 // Lifecycle
 XR_FUNC XrReplSymbolTable *xr_repl_symbols_new(void);
 XR_FUNC void xr_repl_symbols_free(XrReplSymbolTable *table);
-XR_FUNC void xr_repl_symbols_clear(XrReplSymbolTable *table);
 
 /* Return the isolate's REPL symbol table (NULL before any REPL compile).
  * Read-only view for tab completion / introspection by CLI / embedders;
@@ -62,6 +70,9 @@ XR_FUNC const char *xr_repl_symbol_cname(const XrReplSymbol *sym);
  * tests and tools that need to verify scalar binding state without
  * pulling in the full XrValue ABI. */
 XR_FUNC bool xr_repl_peek_int(XrVMRuntime *isolate, const char *name, int64_t *out);
+
+/* Whether this session has a successfully evaluated, meaningful last result. */
+XR_FUNC bool xr_repl_has_last_result(XrVMRuntime *isolate);
 
 // Seed compiler context with prior definitions
 XR_FUNC void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *ctx);
@@ -80,17 +91,31 @@ typedef enum {
  */
 XR_FUNC XrInputStatus xr_repl_check_input(const char *source);
 
-/* ========== REPL Compilation & Execution ========== */
+/* ========== REPL Evaluation ========== */
+
+typedef enum XrReplEvalStatus {
+    XR_REPL_EVAL_OK,
+    XR_REPL_EVAL_COMPILE_ERROR,
+    XR_REPL_EVAL_RUNTIME_ERROR,
+} XrReplEvalStatus;
+
+typedef struct XrReplEvalResult {
+    /* Non-NULL whenever compilation succeeded. The caller owns the proto and
+     * must retain it while closures produced by this submission can survive. */
+    XrProto *proto;
+    XrReplEvalStatus status;
+} XrReplEvalResult;
 
 /*
- * Compile source for REPL incremental execution.
+ * Compile and execute one REPL submission atomically with respect to the
+ * implicit last-result binding.
  * - Seeds compiler context from session-owned repl_symbols (name metadata)
  * - Emits OP_GETGLOBAL/OP_SETGLOBAL for top-level variable access
- * - Updates repl_symbols with new definitions
- * Returns compiled proto, or NULL on error.
+ * - Publishes declarations and a new `it` only after successful execution
+ * - Returns the compiled proto even on runtime failure so callers can free it
  */
-XR_FUNC XrProto *xr_repl_compile(XrCompilerSession *session, XrVMRuntime *vm_host,
-                                 const char *source);
+XR_FUNC XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
+                                      const char *source);
 
 /* ========== Interactive Inspection ========== */
 

@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Covers the REPL symbol table lifecycle, the persistent analyzer
- *   path through xr_repl_compile, the .vars / .type introspection
+ *   path through xr_repl_eval, the .vars / .type introspection
  *   helpers, the const round-trip, and the XR_ISOLATE_PROFILE_REPL
  *   profile's JIT-off invariant.
  *
@@ -36,6 +36,15 @@
 
 static XrVMRuntime *make_repl_iso(void) {
     return xr_isolate_profile_new(XR_ISOLATE_PROFILE_REPL);
+}
+
+static XrProto *eval_repl(XrCompilerSession *session, XrVMRuntime *isolate, const char *source) {
+    XrReplEvalResult result = xr_repl_eval(session, isolate, source);
+    if (result.status == XR_REPL_EVAL_OK)
+        return result.proto;
+    if (result.proto)
+        xr_free_code(isolate, result.proto);
+    return NULL;
 }
 
 /* Find a symbol by name; returns -1 if not present. */
@@ -136,10 +145,9 @@ TEST(sync_root_elides_coroutine_with_ordinary_allocation) {
     ASSERT_NOT_NULL(iso);
     ASSERT_NULL(iso->main_coro);
 
-    XrProto *proto = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                     "var xs = [1, 2, 3]\nvar n = len(xs)\n");
+    XrProto *proto = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
+                               "var xs = [1, 2, 3]\nvar n = len(xs)\n");
     ASSERT_NOT_NULL(proto);
-    ASSERT_EQ_INT(xr_execute(iso, proto), 0);
     ASSERT_NULL(iso->main_coro);
 
     XrString *name = xr_string_intern_permanent(iso, "n", 1);
@@ -179,7 +187,6 @@ TEST(repl_symbols_new_and_free) {
 TEST(repl_symbols_free_null_is_noop) {
     /* Lifecycle helpers must tolerate NULL without crashing. */
     xr_repl_symbols_free(NULL);
-    xr_repl_symbols_clear(NULL);
     ASSERT_TRUE(1);
 }
 
@@ -191,14 +198,13 @@ TEST(repl_symbol_cname_null_safety) {
     ASSERT_NULL(xr_repl_symbol_cname(NULL));
 }
 
-/* ========== Incremental Compile: Symbol Registration ========== */
+/* ========== Incremental Evaluation: Symbol Registration ========== */
 
-TEST(repl_compile_let_registers_symbol) {
+TEST(repl_eval_let_registers_symbol) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *proto =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var x = 42\n");
+    XrProto *proto = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var x = 42\n");
     ASSERT_NOT_NULL(proto);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
@@ -211,7 +217,7 @@ TEST(repl_compile_let_registers_symbol) {
     xray_vm_delete(iso);
 }
 
-TEST(repl_compile_const_marks_is_const) {
+TEST(repl_eval_const_marks_is_const) {
     /* `const PI = ...` must round-trip the const bit through
      * XiFunc.slot_owned_consts so .vars can distinguish var from
      * const without re-parsing. */
@@ -219,7 +225,7 @@ TEST(repl_compile_const_marks_is_const) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "const PI = 3.14\n");
+        eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "const PI = 3.14\n");
     ASSERT_NOT_NULL(proto);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
@@ -232,12 +238,12 @@ TEST(repl_compile_const_marks_is_const) {
     xray_vm_delete(iso);
 }
 
-TEST(repl_compile_function_registers_symbol) {
+TEST(repl_eval_function_registers_symbol) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *proto = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                     "fn double(n: int) -> int { return n * 2 }\n");
+    XrProto *proto = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
+                               "fn double(n: int) -> int { return n * 2 }\n");
     ASSERT_NOT_NULL(proto);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
@@ -251,14 +257,14 @@ TEST(repl_compile_function_registers_symbol) {
     xray_vm_delete(iso);
 }
 
-TEST(repl_compile_let_and_const_round_trip) {
+TEST(repl_eval_let_and_const_round_trip) {
     /* Mixed declarations within a single input must each carry the
      * correct is_const flag. */
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *proto = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                     "var x = 1\nconst Y = 2\n");
+    XrProto *proto =
+        eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var x = 1\nconst Y = 2\n");
     ASSERT_NOT_NULL(proto);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
@@ -284,15 +290,11 @@ TEST(repl_cross_input_symbol_resolves) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var x = 42\n");
+    XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var x = 42\n");
     ASSERT_NOT_NULL(p1);
-    xr_execute(iso, p1);
 
-    XrProto *p2 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var y = x + 1\n");
+    XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var y = x + 1\n");
     ASSERT_NOT_NULL(p2);
-    xr_execute(iso, p2);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
     ASSERT_NOT_NULL(t);
@@ -314,15 +316,12 @@ TEST(repl_cross_input_function_call) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                  "fn inc(n: int) -> int { return n + 1 }\n");
+    XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
+                            "fn inc(n: int) -> int { return n + 1 }\n");
     ASSERT_NOT_NULL(p1);
-    xr_execute(iso, p1);
 
-    XrProto *p2 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var r = inc(10)\n");
+    XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var r = inc(10)\n");
     ASSERT_NOT_NULL(p2);
-    xr_execute(iso, p2);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
     ASSERT_GE(find_symbol(t, "inc"), 0);
@@ -348,20 +347,15 @@ TEST(repl_cross_input_function_reads_shared) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var x = 10\n");
+    XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var x = 10\n");
     ASSERT_NOT_NULL(p1);
-    xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                  "fn getx() -> int { return x }\n");
+    XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
+                            "fn getx() -> int { return x }\n");
     ASSERT_NOT_NULL(p2);
-    xr_execute(iso, p2);
 
-    XrProto *p3 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var r = getx()\n");
+    XrProto *p3 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var r = getx()\n");
     ASSERT_NOT_NULL(p3);
-    xr_execute(iso, p3);
 
     int64_t r_val = 0;
     ASSERT_TRUE(xr_repl_peek_int(iso, "r", &r_val));
@@ -383,25 +377,18 @@ TEST(repl_cross_input_function_mutates_shared) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var counter = 0\n");
+    XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var counter = 0\n");
     ASSERT_NOT_NULL(p1);
-    xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                  "fn bump() -> int { counter = counter + 1; return counter }\n");
+    XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
+                            "fn bump() -> int { counter = counter + 1; return counter }\n");
     ASSERT_NOT_NULL(p2);
-    xr_execute(iso, p2);
 
-    XrProto *p3 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var r1 = bump()\n");
+    XrProto *p3 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var r1 = bump()\n");
     ASSERT_NOT_NULL(p3);
-    xr_execute(iso, p3);
 
-    XrProto *p4 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var r2 = bump()\n");
+    XrProto *p4 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var r2 = bump()\n");
     ASSERT_NOT_NULL(p4);
-    xr_execute(iso, p4);
 
     int64_t r1 = 0, r2 = 0, counter = 0;
     ASSERT_TRUE(xr_repl_peek_int(iso, "r1", &r1));
@@ -427,12 +414,10 @@ TEST(repl_redefinition_reuses_slot) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var x = 1\n");
+    XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var x = 1\n");
     ASSERT_NOT_NULL(p1);
-    xr_execute(iso, p1);
-    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var x = 2\n");
+    XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var x = 2\n");
     ASSERT_NOT_NULL(p2);
-    xr_execute(iso, p2);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
     int count_x = 0;
@@ -460,20 +445,16 @@ TEST(repl_function_calls_function_cross_input) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                  "fn b() -> int { return 100 }\n");
+    XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
+                            "fn b() -> int { return 100 }\n");
     ASSERT_NOT_NULL(p1);
-    xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                  "fn a() -> int { return b() + 1 }\n");
+    XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
+                            "fn a() -> int { return b() + 1 }\n");
     ASSERT_NOT_NULL(p2);
-    xr_execute(iso, p2);
 
-    XrProto *p3 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var r = a()\n");
+    XrProto *p3 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var r = a()\n");
     ASSERT_NOT_NULL(p3);
-    xr_execute(iso, p3);
 
     int64_t r = 0;
     ASSERT_TRUE(xr_repl_peek_int(iso, "r", &r));
@@ -497,14 +478,11 @@ TEST(repl_function_recursive_self_reference) {
                       "  if (n <= 1) { return 1 }\n"
                       "  return n * fact(n - 1)\n"
                       "}\n";
-    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, src);
+    XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, src);
     ASSERT_NOT_NULL(p1);
-    xr_execute(iso, p1);
 
-    XrProto *p2 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var r = fact(5)\n");
+    XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var r = fact(5)\n");
     ASSERT_NOT_NULL(p2);
-    xr_execute(iso, p2);
 
     int64_t r = 0;
     ASSERT_TRUE(xr_repl_peek_int(iso, "r", &r));
@@ -524,25 +502,21 @@ TEST(repl_function_mutates_array_cross_input) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                  "var arr: Array<int> = []\n");
+    XrProto *p1 =
+        eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var arr: Array<int> = []\n");
     ASSERT_NOT_NULL(p1);
-    xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                  "fn push_one() { arr.push(1) }\n");
+    XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
+                            "fn push_one() { arr.push(1) }\n");
     ASSERT_NOT_NULL(p2);
-    xr_execute(iso, p2);
 
-    XrProto *p3 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                  "push_one(); push_one()\n");
+    XrProto *p3 =
+        eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "push_one(); push_one()\n");
     ASSERT_NOT_NULL(p3);
-    xr_execute(iso, p3);
 
     XrProto *p4 =
-        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var n = len(arr)\n");
+        eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var n = len(arr)\n");
     ASSERT_NOT_NULL(p4);
-    xr_execute(iso, p4);
 
     int64_t n = 0;
     ASSERT_TRUE(xr_repl_peek_int(iso, "n", &n));
@@ -575,13 +549,11 @@ TEST(repl_class_instantiation_cross_input) {
         "  var x: int; var y: int\n"
         "  constructor(x: int, y: int) { this.x = x; this.y = y }\n"
         "}\n";
-    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, cls);
+    XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, cls);
     ASSERT_NOT_NULL(p1);
-    xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "var px = Point(7, 8).x\n");
+    XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var px = Point(7, 8).x\n");
     ASSERT_NOT_NULL(p2);
-    xr_execute(iso, p2);
 
     int64_t px = 0;
     ASSERT_TRUE(xr_repl_peek_int(iso, "px", &px));
@@ -602,32 +574,28 @@ TEST(repl_auto_echo_compiles_bare_expression) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "1 + 1\n");
+    XrProto *p = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "1 + 1\n");
     ASSERT_NOT_NULL(p);
-    int rc = xr_execute(iso, p);
-    (void) rc; /* execution itself just needs to not abort */
 
     xr_free_code(iso, p);
     xray_vm_delete(iso);
 }
 
 TEST(repl_auto_echo_creates_it_binding) {
-    /* The trailing-expression rewrite must bind the result to `it`
-     * (GHCi convention) so the user can chain off the previous
-     * value.  A bare `null` echo therefore creates exactly one
-     * symbol: `it`, with value null.  The print itself is
-     * suppressed via skip_null. */
+    /* The public `it` name is an alias to immutable, versioned result
+     * storage. The implementation name is not a user declaration and
+     * null printing remains suppressed via skip_null. */
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "null\n");
+    XrProto *p = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "null\n");
     ASSERT_NOT_NULL(p);
-    xr_execute(iso, p);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
     ASSERT_NOT_NULL(t);
-    ASSERT_EQ_INT(t->count, 1);
-    ASSERT_STR_EQ(xr_repl_symbol_cname(&t->symbols[0]), "it");
+    ASSERT_EQ_INT(t->count, 0);
+    ASSERT_EQ_INT(t->result_count, 1);
+    ASSERT_TRUE(xr_repl_has_last_result(iso));
 
     xr_free_code(iso, p);
     xray_vm_delete(iso);
@@ -639,28 +607,151 @@ TEST(repl_auto_echo_it_chaining) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "1 + 2\n");
+    XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "1 + 2\n");
     ASSERT_NOT_NULL(p1);
-    xr_execute(iso, p1);
 
-    /* Subsequent compile must use AST_ASSIGNMENT for `it` (not a
-     * re-declaration), so it must succeed without analyzer
-     * "redeclared name" errors. */
-    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "it * 10\n");
+    /* `it` resolves to the prior immutable result while the new result gets
+     * a fresh hidden binding. */
+    XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "it * 10\n");
     ASSERT_NOT_NULL(p2);
-    xr_execute(iso, p2);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
-    int idx = find_symbol(t, "it");
-    ASSERT_GE(idx, 0);
-    /* Still exactly one `it` entry after the second echo. */
-    int count_it = 0;
-    for (int i = 0; i < t->count; i++) {
-        const char *n = xr_repl_symbol_cname(&t->symbols[i]);
-        if (n && strcmp(n, "it") == 0)
-            count_it++;
-    }
-    ASSERT_EQ_INT(count_it, 1);
+    ASSERT_NOT_NULL(t);
+    ASSERT_EQ_INT(t->count, 0);
+    ASSERT_EQ_INT(t->result_count, 2);
+    int64_t value = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "it", &value));
+    ASSERT_EQ_INT(value, 30);
+
+    xr_free_code(iso, p2);
+    xr_free_code(iso, p1);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_it_can_change_static_type) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+
+    XrProto *p1 = eval_repl(session, iso, "1\n");
+    ASSERT_NOT_NULL(p1);
+    XrProto *p2 = eval_repl(session, iso, "\"hello\"\n");
+    ASSERT_NOT_NULL(p2);
+    XrProto *p3 = eval_repl(session, iso, "var n = len(it)\n");
+    ASSERT_NOT_NULL(p3);
+
+    int64_t n = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "n", &n));
+    ASSERT_EQ_INT(n, 5);
+
+    xr_free_code(iso, p3);
+    xr_free_code(iso, p2);
+    xr_free_code(iso, p1);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_unit_result_does_not_replace_it) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+
+    XrProto *p1 = eval_repl(session, iso,
+                            "var calls = 0\n"
+                            "fn test() { calls = calls + 1 }\n");
+    ASSERT_NOT_NULL(p1);
+    XrProto *p2 = eval_repl(session, iso, "test\n");
+    ASSERT_NOT_NULL(p2);
+    XrProto *p3 = eval_repl(session, iso, "test()\n");
+    ASSERT_NOT_NULL(p3);
+    XrProto *p4 = eval_repl(session, iso, "it()\n");
+    ASSERT_NOT_NULL(p4);
+
+    XrReplSymbolTable *t = xr_repl_symbols_of(iso);
+    ASSERT_NOT_NULL(t);
+    ASSERT_EQ_INT(t->result_count, 1);
+    int64_t calls = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "calls", &calls));
+    ASSERT_EQ_INT(calls, 2);
+
+    xr_free_code(iso, p4);
+    xr_free_code(iso, p3);
+    xr_free_code(iso, p2);
+    xr_free_code(iso, p1);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_it_reference_is_a_typed_snapshot) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+
+    XrProto *p1 = eval_repl(session, iso, "1\n");
+    ASSERT_NOT_NULL(p1);
+    XrProto *p2 = eval_repl(session, iso, "fn previous() -> int { return it }\n");
+    ASSERT_NOT_NULL(p2);
+    XrProto *p3 = eval_repl(session, iso, "\"later\"\n");
+    ASSERT_NOT_NULL(p3);
+    XrProto *p4 = eval_repl(session, iso, "var saved = previous()\n");
+    ASSERT_NOT_NULL(p4);
+
+    int64_t saved = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "saved", &saved));
+    ASSERT_EQ_INT(saved, 1);
+
+    xr_free_code(iso, p4);
+    xr_free_code(iso, p3);
+    xr_free_code(iso, p2);
+    xr_free_code(iso, p1);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_unit_before_value_does_not_create_it) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+
+    XrProto *p1 = eval_repl(session, iso, "fn noop() {}\n");
+    ASSERT_NOT_NULL(p1);
+    XrProto *p2 = eval_repl(session, iso, "noop()\n");
+    ASSERT_NOT_NULL(p2);
+    ASSERT_FALSE(xr_repl_has_last_result(iso));
+
+    xr_free_code(iso, p2);
+    xr_free_code(iso, p1);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_it_is_reserved_for_implicit_results) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+
+    XrReplEvalResult result = xr_repl_eval(session, iso, "var it = 1\n");
+    ASSERT_EQ_INT(result.status, XR_REPL_EVAL_COMPILE_ERROR);
+    ASSERT_NULL(result.proto);
+    ASSERT_FALSE(xr_repl_has_last_result(iso));
+
+    xray_vm_delete(iso);
+}
+
+TEST(repl_auto_echo_evaluates_expression_once) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+
+    XrProto *p1 = eval_repl(session, iso,
+                            "var counter = 0\n"
+                            "fn next() -> int { counter = counter + 1; return counter }\n");
+    ASSERT_NOT_NULL(p1);
+    XrProto *p2 = eval_repl(session, iso, "next()\n");
+    ASSERT_NOT_NULL(p2);
+
+    int64_t counter = 0;
+    int64_t result = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "counter", &counter));
+    ASSERT_TRUE(xr_repl_peek_int(iso, "it", &result));
+    ASSERT_EQ_INT(counter, 1);
+    ASSERT_EQ_INT(result, 1);
 
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
@@ -683,10 +774,9 @@ TEST(repl_print_vars_after_compile_no_crash) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                 "var x = 1\nconst Y = 2\n");
+    XrProto *p =
+        eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var x = 1\nconst Y = 2\n");
     ASSERT_NOT_NULL(p);
-    xr_execute(iso, p);
 
     xr_repl_print_vars(iso);
 
@@ -711,7 +801,7 @@ TEST(repl_print_type_null_and_empty_safe) {
 
 TEST(repl_print_type_simple_expression) {
     /* Driving .type through the API end-to-end exercises:
-     * synthesize source → xr_repl_compile → xr_execute.  Capturing
+     * synthesize source → xr_repl_eval. Capturing
      * stdout here also prevents the helper from regressing to the
      * removed `typename(...)` spelling, which compiles to no output. */
     XrVMRuntime *iso = make_repl_iso();
@@ -748,11 +838,11 @@ RUN_TEST(repl_symbols_free_null_is_noop);
 RUN_TEST(repl_symbols_of_null_isolate);
 RUN_TEST(repl_symbol_cname_null_safety);
 
-RUN_TEST_SUITE("REPL Incremental Compile");
-RUN_TEST(repl_compile_let_registers_symbol);
-RUN_TEST(repl_compile_const_marks_is_const);
-RUN_TEST(repl_compile_function_registers_symbol);
-RUN_TEST(repl_compile_let_and_const_round_trip);
+RUN_TEST_SUITE("REPL Incremental Evaluation");
+RUN_TEST(repl_eval_let_registers_symbol);
+RUN_TEST(repl_eval_const_marks_is_const);
+RUN_TEST(repl_eval_function_registers_symbol);
+RUN_TEST(repl_eval_let_and_const_round_trip);
 
 RUN_TEST_SUITE("REPL Cross-Input Persistence");
 RUN_TEST(repl_cross_input_symbol_resolves);
@@ -768,6 +858,12 @@ RUN_TEST_SUITE("REPL Auto-echo");
 RUN_TEST(repl_auto_echo_compiles_bare_expression);
 RUN_TEST(repl_auto_echo_creates_it_binding);
 RUN_TEST(repl_auto_echo_it_chaining);
+RUN_TEST(repl_it_can_change_static_type);
+RUN_TEST(repl_unit_result_does_not_replace_it);
+RUN_TEST(repl_it_reference_is_a_typed_snapshot);
+RUN_TEST(repl_unit_before_value_does_not_create_it);
+RUN_TEST(repl_it_is_reserved_for_implicit_results);
+RUN_TEST(repl_auto_echo_evaluates_expression_once);
 
 RUN_TEST_SUITE("REPL Introspection");
 RUN_TEST(repl_print_vars_empty_is_safe);
