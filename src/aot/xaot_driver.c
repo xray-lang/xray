@@ -40,6 +40,7 @@
 #include "../ir/xi_pipeline.h"
 #include "../ir/xi_import_resolve.h"
 #include "xi_cgen.h"
+#include "xi_cgen_verify_output.h"
 #include "xi_backend_plan_contract.h"
 #include "xi_lto.h"
 #include "xaot_bundle.h"
@@ -1948,6 +1949,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             emit_ok = false;
             break;
         }
+        /* Task 218 defense line 3: verify the generated translation unit is
+         * structurally well-formed before it can be written to disk / handed
+         * to the C toolchain. Fail-closed — a malformed TU raises an ICE with
+         * a full on-disk dump and never reaches clang. No bypass. */
+        xi_cgen_verify_output_or_ice(buf, bufsz, mod_names[m] ? mod_names[m] : "module");
         sources[m].name = xr_strdup(mod_names[m] ? mod_names[m] : "module");
         sources[m].c_source = buf;
         n_sources++;
