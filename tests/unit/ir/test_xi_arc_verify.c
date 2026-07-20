@@ -95,6 +95,18 @@ static XiValue *index_get(XiFunc *f, XiBlock *b, XiValue *base) {
     return g;
 }
 
+/* A borrow view (Span) of `base`: result-ownership is BORROWED, so the verifier
+ * records base as the view's owner (C3). */
+static XiValue *span_view(XiFunc *f, XiBlock *b, XiValue *base) {
+    XiValue *s = xi_const_int(f, b, 0, &t_int);
+    XiValue *e = xi_const_int(f, b, 1, &t_int);
+    XiValue *v = xi_value_new(f, b, XI_SPAN_WINDOW, &t_span, 3);
+    v->args[0] = base;
+    v->args[1] = s;
+    v->args[2] = e;
+    return v;
+}
+
 /* Remove v from blk->values[] to simulate a def that a pass eliminated while
  * leaving a stale user behind (incident 4). */
 static void orphan_value(XiBlock *blk, XiValue *v) {
@@ -161,6 +173,101 @@ static void test_incident5_rc_op_metadata(void) {
     retain(f, b0, n);
     xi_block_set_return(b0, n);
     ASSERT_CONTRACT(f, XI_ARC_C5_METADATA, "incident5: retain on non-RC value");
+    xi_func_free(f);
+}
+
+/* ========== Incident 2 (C3): borrow view outlives released owner ========== */
+
+/* base owner released before a loop; a Span borrow of base is merged by the
+ * loop-header phi and read inside the loop → the owner is gone under the view. */
+static void test_incident2_borrow_view_owner_released(void) {
+    XiFunc *f = make_func("incident2_c3", &t_int);
+    XiBlock *b0 = f->entry;
+    XiBlock *b1 = xi_block_new(f);
+
+    XiValue *base = rc_new(f, b0);
+    XiValue *sp = span_view(f, b0, base);
+    release(f, b0, base); /* owner dropped before the borrow view's loop use */
+    xi_block_set_jump(b0, b1);
+
+    XiPhi *p = xi_phi_new(f, b1, &t_span, b1->npreds);
+    p->value.args[0] = sp;
+    XiValue *u = index_get(f, b1, &p->value);
+    xi_block_set_return(b1, u);
+
+    ASSERT_CONTRACT(f, XI_ARC_C3_BORROW_ESCAPE, "incident2: phi borrow view over-released owner");
+    xi_func_free(f);
+}
+
+/* ========== Incident 3 (C4): release on a non-dominating join path ========= */
+
+/* larr is defined only in the left branch; releasing it in the join executes on
+ * the right path where larr was never defined. */
+static void test_incident3_nondominating_release(void) {
+    XiFunc *f = make_func("incident3_c4", &t_int);
+    XiBlock *b0 = f->entry;
+    XiBlock *b1 = xi_block_new(f);
+    XiBlock *b2 = xi_block_new(f);
+    XiBlock *b3 = xi_block_new(f);
+
+    XiValue *cond = xi_const_bool(f, b0, true, &t_bool);
+    xi_block_set_if(b0, cond, b1, b2);
+
+    XiValue *larr = rc_new(f, b1);
+    xi_block_set_jump(b1, b3);
+    xi_block_set_jump(b2, b3);
+
+    release(f, b3, larr); /* larr's def (b1) does not dominate b3 */
+    XiValue *ret = xi_const_int(f, b3, 0, &t_int);
+    xi_block_set_return(b3, ret);
+
+    ASSERT_CONTRACT(f, XI_ARC_C4_DOMINANCE, "incident3: release on non-dominating join path");
+    xi_func_free(f);
+}
+
+/* ========== Legal C3: owner alive at every borrow-view use ================= */
+
+static void test_legal_borrow_view_owner_alive(void) {
+    XiFunc *f = make_func("legal_c3", &t_int);
+    XiBlock *b0 = f->entry;
+    XiBlock *b1 = xi_block_new(f);
+
+    XiValue *base = rc_new(f, b0);
+    XiValue *sp = span_view(f, b0, base);
+    xi_block_set_jump(b0, b1);
+
+    XiPhi *p = xi_phi_new(f, b1, &t_span, b1->npreds);
+    p->value.args[0] = sp;
+    index_get(f, b1, &p->value); /* read the view */
+    release(f, b1, base);        /* owner released only AFTER the view's last use */
+    XiValue *ret = xi_const_int(f, b1, 0, &t_int);
+    xi_block_set_return(b1, ret);
+
+    ASSERT_OK(f, "legal borrow view: owner outlives view");
+    xi_func_free(f);
+}
+
+/* ========== Legal C4: branch-local release stays in dominance region ======= */
+
+static void test_legal_branch_local_release(void) {
+    XiFunc *f = make_func("legal_c4", &t_int);
+    XiBlock *b0 = f->entry;
+    XiBlock *b1 = xi_block_new(f);
+    XiBlock *b2 = xi_block_new(f);
+    XiBlock *b3 = xi_block_new(f);
+
+    XiValue *cond = xi_const_bool(f, b0, true, &t_bool);
+    xi_block_set_if(b0, cond, b1, b2);
+
+    XiValue *larr = rc_new(f, b1);
+    release(f, b1, larr); /* released in its own defining, dominating block */
+    xi_block_set_jump(b1, b3);
+    xi_block_set_jump(b2, b3);
+
+    XiValue *ret = xi_const_int(f, b3, 0, &t_int);
+    xi_block_set_return(b3, ret);
+
+    ASSERT_OK(f, "legal branch-local release in dominance region");
     xi_func_free(f);
 }
 
@@ -274,6 +381,8 @@ int main(void) {
     fprintf(stderr, "test_xi_arc_verify:\n");
 
     test_incident1_phi_released_input();
+    test_incident2_borrow_view_owner_released();
+    test_incident3_nondominating_release();
     test_incident4_stale_use();
     test_incident5_rc_op_metadata();
     test_double_release();
@@ -281,6 +390,8 @@ int main(void) {
     test_legal_loop_header_borrow_phi();
     test_legal_move_out();
     test_legal_early_return_release();
+    test_legal_borrow_view_owner_alive();
+    test_legal_branch_local_release();
     test_legal_trivial();
 
     fprintf(stderr, "\n%d passed, %d failed\n", g_passed, g_failed);

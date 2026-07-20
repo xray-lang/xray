@@ -58,6 +58,7 @@ typedef struct ArcVerify {
     uint32_t n;         /* value-id count (f->next_value_id) */
     XiValue **def;      /* def[id] = defining value pointer (NULL = none) */
     bool *is_rc;        /* is_rc[id] = RC-managed */
+    int32_t *owner;     /* owner[id] = base RC value id this value borrows, or -1 (C3) */
     int32_t *track;     /* track[id] = compact delta index, or -1 (not retained/released) */
     uint32_t ntracked;  /* number of distinct retained/released references */
     int16_t *delta_in;  /* [nblocks*ntracked] net (retain-release) on entry (min over preds) */
@@ -208,6 +209,31 @@ static void build_defs(ArcVerify *av) {
     }
 }
 
+/* Record, for each borrow view, the base RC value it borrows (its owner). A
+ * view is any op whose result-ownership is BORROWED and whose base operand
+ * (arg0) is RC — index.get / load.field / span.window / span.as.bytes /
+ * span.reinterpret / copy. The owner must outlive every use of the view (C3).
+ * This reads the ops.def result-ownership column; it does not reuse xi_arc's
+ * borrow-closure code. */
+static void build_owners(ArcVerify *av) {
+    XiFunc *f = av->f;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->id >= av->n || !av->is_rc[v->id])
+                continue;
+            if (xi_generated_op_result_ownership(v->op) != XI_GEN_RESULT_OWNERSHIP_BORROWED)
+                continue;
+            XiValue *base = (v->nargs >= 1) ? v->args[0] : NULL;
+            if (base && base->id < av->n && av->is_rc[base->id])
+                av->owner[v->id] = (int32_t) base->id;
+        }
+    }
+}
+
 /* Assign a compact delta index to every value that is a RETAIN/RELEASE target;
  * only those can ever reach delta < 0, so the delta dataflow tracks just them. */
 static void build_tracked(ArcVerify *av) {
@@ -303,7 +329,40 @@ static bool check_rc_op_metadata(ArcVerify *av) {
     return true;
 }
 
-/* ========== Net-delta dataflow (C1 / C2) ========== */
+/* C4 (dominance boundary): a RETAIN/RELEASE point must be dominated by the
+ * definition of the value it names. ARC's borrow closure must not attribute a
+ * post-join use to one predecessor's owner and then drop that owner in a block
+ * the owner's definition does not dominate (incident 3: non-dominating join).
+ * A release reached on a path where the owner was never defined is UB. Correct
+ * SSA output always dominates, so this is zero-false-positive. */
+static bool check_release_dominance(ArcVerify *av) {
+    XiFunc *f = av->f;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk || blk->rpo == 0)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || (v->op != XI_RELEASE && v->op != XI_RETAIN) || v->nargs < 1)
+                continue;
+            XiValue *x = v->args[0];
+            if (!x || x->id >= av->n || !av->is_rc[x->id] || !x->block)
+                continue;
+            if (x->block->rpo != 0 && !xi_dominates(x->block, blk)) {
+                char detail[144];
+                snprintf(detail, sizeof(detail),
+                         "%s(v%u) in b%u is not dominated by its definition in b%u "
+                         "(release on a non-dominating path)",
+                         xi_op_name(v->op), x->id, blk->id, x->block->id);
+                return report_violation(av, XI_ARC_C4_DOMINANCE, x->id, x->block->id, blk->id,
+                                        detail);
+            }
+        }
+    }
+    return true;
+}
+
+/* ========== Net-delta dataflow (C1 / C2 / C3) ========== */
 
 /* Apply block `blk`'s transfer to `work` (net delta per tracked reference).
  * On `report`, record the first C1/C2 violation and return false. */
@@ -319,16 +378,35 @@ static bool transfer_block(ArcVerify *av, XiBlock *blk, int16_t *work, bool repo
             for (uint16_t a = 0; a < pv->nargs && a < blk->npreds; a++) {
                 XiValue *in = pv->args[a];
                 XiBlock *pred = blk->preds[a];
-                if (!in || in->id >= av->n || av->track[in->id] < 0 || !pred ||
-                    pred->id >= av->f->nblocks)
+                if (!in || in->id >= av->n || !pred || pred->id >= av->f->nblocks)
                     continue;
-                int16_t d = av->delta_out[(size_t) pred->id * T + (uint32_t) av->track[in->id]];
-                if (d < 0) {
-                    char detail[128];
-                    snprintf(detail, sizeof(detail),
-                             "phi merges over-released value v%u from pred b%u", in->id, pred->id);
-                    return report_violation(av, XI_ARC_C1_USE_AFTER_RELEASE, in->id, pred->id,
-                                            blk->id, detail);
+                /* C1: the merged owning reference itself is over-released. */
+                if (av->track[in->id] >= 0) {
+                    int16_t d = av->delta_out[(size_t) pred->id * T + (uint32_t) av->track[in->id]];
+                    if (d < 0) {
+                        char detail[128];
+                        snprintf(detail, sizeof(detail),
+                                 "phi merges over-released value v%u from pred b%u", in->id,
+                                 pred->id);
+                        return report_violation(av, XI_ARC_C1_USE_AFTER_RELEASE, in->id, pred->id,
+                                                blk->id, detail);
+                    }
+                }
+                /* C3: the merged value is a borrow VIEW whose owner is
+                 * over-released on this edge (incident 2: string -> Span ->
+                 * phi<Span> -> loop read, string dropped before the loop). */
+                if (av->owner[in->id] >= 0 && av->track[av->owner[in->id]] >= 0) {
+                    uint32_t o = (uint32_t) av->owner[in->id];
+                    int16_t d = av->delta_out[(size_t) pred->id * T + (uint32_t) av->track[o]];
+                    if (d < 0) {
+                        char detail[160];
+                        snprintf(detail, sizeof(detail),
+                                 "phi merges borrow view v%u whose owner v%u is over-released "
+                                 "on pred b%u",
+                                 in->id, o, pred->id);
+                        return report_violation(av, XI_ARC_C3_BORROW_ESCAPE, in->id, pred->id,
+                                                blk->id, detail);
+                    }
                 }
             }
         }
@@ -460,20 +538,27 @@ XR_FUNC bool xi_arc_verify(XiFunc *f, XiArcVerifyReport *report) {
     av.def = (XiValue **) xr_calloc(av.n, sizeof(XiValue *));
     av.is_rc = (bool *) xr_calloc(av.n, sizeof(bool));
     av.track = (int32_t *) xr_malloc(av.n * sizeof(int32_t));
-    if (!av.def || !av.is_rc || !av.track) {
+    av.owner = (int32_t *) xr_malloc(av.n * sizeof(int32_t));
+    if (!av.def || !av.is_rc || !av.track || !av.owner) {
         xr_free(av.def);
         xr_free(av.is_rc);
         xr_free(av.track);
+        xr_free(av.owner);
         return true; /* allocation failure: do not falsely fail the compile */
     }
-    for (uint32_t i = 0; i < av.n; i++)
+    for (uint32_t i = 0; i < av.n; i++) {
         av.track[i] = -1;
+        av.owner[i] = -1;
+    }
 
     build_defs(&av);
+    build_owners(&av);
 
     bool ok = check_stale_uses(&av); /* C5 (SSA completeness) */
     if (ok)
         ok = check_rc_op_metadata(&av); /* C5 (RC-op metadata consistency) */
+    if (ok)
+        ok = check_release_dominance(&av); /* C4 (dominance boundary) */
 
     if (ok) {
         build_tracked(&av);
@@ -490,6 +575,7 @@ XR_FUNC bool xi_arc_verify(XiFunc *f, XiArcVerifyReport *report) {
     xr_free(av.def);
     xr_free(av.is_rc);
     xr_free(av.track);
+    xr_free(av.owner);
     return ok;
 }
 
