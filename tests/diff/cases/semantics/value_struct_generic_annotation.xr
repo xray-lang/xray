@@ -1,0 +1,35 @@
+// Explicit generic value-struct annotations (var / param / return / field) must
+// resolve to the same monomorphized concrete type as the struct literal, and
+// behave identically on VM and AOT (task 183 escalation, Option A).
+struct Box<T> {
+    value: T
+}
+
+struct Holder {
+    b: Box<int>
+}
+
+fn take(b: Box<int>) -> int {
+    return b.value
+}
+
+fn make() -> Box<int> {
+    return Box<int>{value: 41}
+}
+
+var p: Box<int> = Box<int>{value: 41}
+print(p.value)
+
+var q = Box<int>{value: 99}
+print(take(q))
+
+var r = make()
+print(r.value)
+
+var h: Holder = Holder{b: Box<int>{value: 7}}
+print(h.b.value)
+
+var h2 = h
+h2.b.value = 100
+print(h.b.value)
+print(h2.b.value)

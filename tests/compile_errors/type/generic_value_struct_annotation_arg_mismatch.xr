@@ -1,0 +1,14 @@
+// A generic value-struct annotation must still reject a differently-parameterized
+// instance: resolving `Box<int>` to its monomorphized concrete type must not
+// make `Box<string>` assignable to it (task 183 escalation, Option A must not
+// over-loosen).
+struct Box<T> {
+    value: T
+}
+
+// Materialize both Box$i64 and Box$str so the rejection is between two concrete
+// monomorphized instances.
+var ok = Box<int>{value: 1}
+var bad: Box<int> = Box<string>{value: "x"}
+print(ok.value)
+print(bad.value)

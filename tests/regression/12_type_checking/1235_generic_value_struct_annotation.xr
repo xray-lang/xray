@@ -1,0 +1,64 @@
+// Test: explicit generic value-struct type annotations are assignable from the
+// monomorphized struct literal (task 183 escalation, Option A).
+//
+// The declared annotation (`Box<int>`) and the monomorphized struct literal
+// (`Box$i64` after the mono pass) must resolve to one canonical type so the
+// annotation, parameters, return types, and struct fields all type-check.
+// Regression for: "Type 'Box$i64' is not assignable to type 'Box<int>'".
+
+struct Box<T> {
+    value: T
+}
+
+struct Pair<A, B> {
+    first: A
+    second: B
+}
+
+struct Holder {
+    b: Box<int>
+}
+
+fn take(b: Box<int>) -> int {
+    return b.value
+}
+
+fn make() -> Box<int> {
+    return Box<int>{value: 41}
+}
+
+@test
+fn test_var_annotation() {
+    // Explicit annotation must accept the inferred monomorphized literal.
+    var p: Box<int> = Box<int>{value: 41}
+    assert_eq(p.value, 41)
+
+    var q: Pair<int, string> = Pair<int, string>{first: 7, second: "hi"}
+    assert_eq(q.first, 7)
+    assert_eq(q.second, "hi")
+}
+
+@test
+fn test_param_annotation() {
+    var p = Box<int>{value: 99}
+    assert_eq(take(p), 99)
+    assert_eq(take(Box<int>{value: 5}), 5)
+}
+
+@test
+fn test_return_annotation() {
+    var p = make()
+    assert_eq(p.value, 41)
+}
+
+@test
+fn test_struct_field_annotation() {
+    var h: Holder = Holder{b: Box<int>{value: 41}}
+    assert_eq(h.b.value, 41)
+
+    // Value semantics: copying the outer struct deep-copies the nested value.
+    var h2 = h
+    h2.b.value = 100
+    assert_eq(h.b.value, 41)
+    assert_eq(h2.b.value, 100)
+}

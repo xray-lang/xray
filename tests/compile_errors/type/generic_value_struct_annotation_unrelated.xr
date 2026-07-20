@@ -1,0 +1,13 @@
+// A generic value-struct annotation must still reject an unrelated struct type:
+// resolving `Box<int>` to its monomorphized concrete type must not accept a
+// structurally similar but nominally different struct (task 183 escalation,
+// Option A must not over-loosen).
+struct Box<T> {
+    value: T
+}
+struct Other {
+    value: int
+}
+
+var p: Box<int> = Other{value: 41}
+print(p.value)
