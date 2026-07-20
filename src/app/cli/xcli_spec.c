@@ -126,6 +126,10 @@ static const XrCliOptionSpec build_options[] = {
      "Force recompile all AOT modules, ignoring cached objects"},
     {"lto", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Whole-program link-time optimization (cross-module inlining)"},
+    {"rc-guard", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Debug RC guard codegen: poison objects on release, abort on use-after-release (task 219)"},
+    {"verify-arc", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Force the RC/ownership verifier on after every lifetime/CFG-invalidating pass (task 219)"},
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     XR_CLI_OPT_END};
 

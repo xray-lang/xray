@@ -245,6 +245,15 @@ XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
             return false;
         case XI_GEN_OWN_USE_CONSUME:
             return true;
+        case XI_GEN_OWN_USE_PASS:
+            /* Identity-alias op (PHI/MOVE): the operand's owning reference is
+             * not read-and-kept (borrow) but transferred THROUGH to the result,
+             * which is the same RC object. For dup/drop placement this behaves
+             * exactly like a consume of the operand (the operand is no longer an
+             * independent owner afterwards). The independent xi_arc_verify pass
+             * additionally reads XI_GEN_OWN_USE_PASS to union the operand and
+             * result into one lifetime equivalence class (C5). */
+            return true;
         case XI_GEN_OWN_USE_STORED_VALUE:
             /* arg 0 = container/receiver; arg 1+ = stored value. */
             return arg_idx != 0;

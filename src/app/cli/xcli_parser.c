@@ -18,6 +18,7 @@
 #include "xcli_output.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../ir/xi_arc_verify.h"
 #include "../../os/os_fd.h"
 #include <string.h>
 #include <stdlib.h>
@@ -69,6 +70,11 @@ int xr_cli_parse_global(int argc, char **argv, XrCliContext *ctx) {
             consumed++;
         } else if (strcmp(arg, "--json") == 0) {
             ctx->json_output = true;
+            consumed++;
+        } else if (strcmp(arg, "--verify-arc") == 0) {
+            /* Task 219: force the RC/ownership verifier on after every
+             * lifetime/CFG-invalidating pass, in any build mode. */
+            xi_arc_verify_set_per_pass(true);
             consumed++;
         } else {
             /* Unknown flag — not a global flag, let command parse it */
