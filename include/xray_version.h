@@ -16,9 +16,9 @@
 
 #define XRAY_VERSION_MAJOR 0
 #define XRAY_VERSION_MINOR 9
-#define XRAY_VERSION_PATCH 1
-#define XRAY_VERSION "Xray 0.9.1"
-#define XRAY_VERSION_STRING "0.9.1"
+#define XRAY_VERSION_PATCH 2
+#define XRAY_VERSION "Xray 0.9.2"
+#define XRAY_VERSION_STRING "0.9.2"
 
 #define XRAY_COPYRIGHT "Copyright (C) 2026 Xray Team"
 #define XRAY_AUTHORS "Xinglei Xu"
