@@ -527,6 +527,56 @@ class Counter {
 
 实现 `iterator()` 返回带 `hasNext() -> bool` 和 `next() -> T?` 的对象即可启用 `for-in`。详见 §14.15。
 
+#### 5.3.7 完整可运行示例
+
+以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
+
+继承与自动覆写：
+
+```xray
+class Animal {
+    name: string
+    constructor(name: string) { this.name = name }
+    speak() -> string { return "..." }
+}
+
+class Dog extends Animal {
+    constructor(name: string) { super(name) }
+    speak() -> string { return "woof" }   // 同名同签：自动覆写
+}
+
+fn main() {
+    var d = Dog("Rex")
+    print(d.name)      // => Rex
+    print(d.speak())   // => woof
+}
+
+main()
+```
+
+运算符重载（用具名变量调用）：
+
+```xray
+class Vec2 {
+    x: int
+    y: int
+    constructor(x: int, y: int) { this.x = x; this.y = y }
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+}
+
+fn main() {
+    var a = Vec2(1, 2)
+    var b = Vec2(3, 4)
+    var sum = a + b
+    print(sum.x)   // => 4
+    print(sum.y)   // => 6
+}
+
+main()
+```
+
 ### 5.4 `struct` 声明
 
 ```ebnf
@@ -577,6 +627,27 @@ b.x = 99.0
 - 数学类型（Vec2/Vec3/Quat/Color）
 - 短生命周期值（迭代器状态、临时元组替代）
 - 性能敏感、希望避免堆分配的数据
+
+#### 5.4.1 值语义示例
+
+`struct` 是值类型，赋值与传参都会拷贝：
+
+```xray
+struct Point {
+    x: int
+    y: int
+}
+
+fn main() {
+    var p = Point{x: 3, y: 4}
+    var q = p            // struct 赋值是拷贝
+    q.x = 99
+    print(p.x)           // => 3（不受影响）
+    print(q.x)           // => 99
+}
+
+main()
+```
 
 ### 5.5 `interface` 与 `implements`
 
@@ -1437,6 +1508,56 @@ class Counter {
 
 Implement `iterator()` returning an object with `hasNext() -> bool` and `next() -> T?` to enable `for-in`. See §14.15.
 
+#### 5.3.7 Worked Examples
+
+Self-contained programs that run as-is and pass `xray check` (comments show the real output).
+
+Inheritance with automatic override:
+
+```xray
+class Animal {
+    name: string
+    constructor(name: string) { this.name = name }
+    speak() -> string { return "..." }
+}
+
+class Dog extends Animal {
+    constructor(name: string) { super(name) }
+    speak() -> string { return "woof" }   // same name/signature: auto-override
+}
+
+fn main() {
+    var d = Dog("Rex")
+    print(d.name)      // => Rex
+    print(d.speak())   // => woof
+}
+
+main()
+```
+
+Operator overloading (call with named values):
+
+```xray
+class Vec2 {
+    x: int
+    y: int
+    constructor(x: int, y: int) { this.x = x; this.y = y }
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+}
+
+fn main() {
+    var a = Vec2(1, 2)
+    var b = Vec2(3, 4)
+    var sum = a + b
+    print(sum.x)   // => 4
+    print(sum.y)   // => 6
+}
+
+main()
+```
+
 ### 5.4 `struct` declaration
 
 ```ebnf
@@ -1487,6 +1608,27 @@ b.x = 99.0
 - Math types (Vec2/Vec3/Quat/Color)
 - Short-lived values (iterator state, ad-hoc tuples)
 - Performance-sensitive data where heap allocation should be avoided
+
+#### 5.4.1 Value-semantics example
+
+A `struct` is a value type: assignment and argument passing copy it.
+
+```xray
+struct Point {
+    x: int
+    y: int
+}
+
+fn main() {
+    var p = Point{x: 3, y: 4}
+    var q = p            // struct assignment copies
+    q.x = 99
+    print(p.x)           // => 3 (unchanged)
+    print(q.x)           // => 99
+}
+
+main()
+```
 
 ### 5.5 `interface` and `implements`
 
