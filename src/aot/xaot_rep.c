@@ -285,9 +285,11 @@ static bool rep_c_type_equal(const char *a, const char *b) {
 }
 
 XR_FUNC bool xaot_value_reps_equal(XaotValueRep a, XaotValueRep b) {
-    if (a.kind == XAOT_VALUE_AGGREGATE || b.kind == XAOT_VALUE_AGGREGATE) {
+    if (a.kind == XAOT_VALUE_AGGREGATE || b.kind == XAOT_VALUE_AGGREGATE ||
+        a.kind == XAOT_VALUE_VECTOR || b.kind == XAOT_VALUE_VECTOR) {
         return a.kind == b.kind && a.rep == b.rep && a.flags == b.flags &&
-               rep_c_type_equal(a.c_type, b.c_type);
+               a.vector_native_type == b.vector_native_type && a.vector_lanes == b.vector_lanes &&
+               a.vector_width_bytes == b.vector_width_bytes && rep_c_type_equal(a.c_type, b.c_type);
     }
     return xaot_value_storage_rep(a) == xaot_value_storage_rep(b);
 }
@@ -304,6 +306,8 @@ XR_FUNC const char *xaot_value_kind_name(XaotValueKind kind) {
             return "ptr";
         case XAOT_VALUE_AGGREGATE:
             return "aggregate";
+        case XAOT_VALUE_VECTOR:
+            return "vector";
         case XAOT_VALUE_VIEW:
             return "view";
         default:

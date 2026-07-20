@@ -457,6 +457,56 @@ static XiValue *braun_read_local(XiLower *l, int var_id, XiBlock *blk) {
 static XiValue *braun_read_recursive(XiLower *l, int var_id, XiBlock *blk);
 static XiValue *add_phi_operands(XiLower *l, int var_id, XiPhi *phi);
 
+/* Braun's trivial-phi rule is a real SSA rewrite, not just a hint for future
+ * reads. An incomplete loop-header phi can already have users by the time the
+ * header is sealed, so updating only currentDef leaves those users pointing at
+ * a dead identity merge. Besides violating canonical SSA, that splits one RC
+ * owner into two apparent values before ARC. */
+static void braun_replace_all_uses(XiLower *l, XiValue *old_val, XiValue *new_val) {
+    XiFunc *f = l->func;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] == old_val)
+                    v->args[a] = new_val;
+            }
+        }
+        for (XiPhi *other = blk->phis; other; other = other->next) {
+            if (&other->value == old_val)
+                continue;
+            for (uint16_t a = 0; a < other->value.nargs; a++) {
+                if (other->value.args[a] == old_val)
+                    other->value.args[a] = new_val;
+            }
+        }
+        if (blk->control == old_val)
+            blk->control = new_val;
+    }
+
+    size_t defs_count = (size_t) l->var_cap * (size_t) l->block_cap;
+    for (size_t i = 0; i < defs_count; i++) {
+        if (l->var_defs[i] == old_val)
+            l->var_defs[i] = new_val;
+    }
+}
+
+static void braun_unlink_phi(XiPhi *phi) {
+    XiBlock *blk = phi ? phi->value.block : NULL;
+    if (!blk)
+        return;
+    XiPhi **link = &blk->phis;
+    while (*link && *link != phi)
+        link = &(*link)->next;
+    if (*link == phi)
+        *link = phi->next;
+}
+
 XR_FUNC XiValue *xi_lower_braun_read(XiLower *l, int var_id, XiBlock *blk) {
     XiValue *val = braun_read_local(l, var_id, blk);
     if (val)
@@ -522,8 +572,12 @@ static XiValue *try_remove_trivial_phi(XiLower *l, int var_id, XiPhi *phi) {
     if (same == NULL)
         return pv; /* undefined — keep the phi */
 
-    /* Trivial: update the def map so future reads see the simplified value */
+    /* Trivial: rewrite existing and future uses, then remove the identity
+     * definition from the block. The arena owns the node, so unlinking is
+     * sufficient and keeps any temporary lowering pointer memory-safe. */
+    braun_replace_all_uses(l, pv, same);
     xi_lower_braun_write(l, var_id, phi->value.block, same);
+    braun_unlink_phi(phi);
     return same;
 }
 

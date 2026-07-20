@@ -256,6 +256,8 @@ typedef enum XaotSpanAccessKind {
     XAOT_SPAN_ACCESS_SPAN_COPY,
     XAOT_SPAN_ACCESS_SPAN_COMPARE,
     XAOT_SPAN_ACCESS_REINTERPRET,
+    XAOT_SPAN_ACCESS_VEC_LOAD,
+    XAOT_SPAN_ACCESS_VEC_STORE,
 } XaotSpanAccessKind;
 
 enum {
@@ -1622,6 +1624,7 @@ typedef struct XaotPrepareStats {
     uint32_t values_tagged;
     uint32_t values_ptr;
     uint32_t values_aggregate;
+    uint32_t values_vector;
     uint32_t values_view;
     uint32_t values_void;
     uint32_t boundary_count;
@@ -1643,6 +1646,7 @@ typedef struct XaotBundle {
     uint32_t nmodules;
     uint32_t entry_module;
     bool emit_program_main; /* executable closed world vs library export roots */
+    uint32_t target_simd_features;
     XaotTargetCapabilityProvider target_provider;
     XrEntryPlan entry_plan;
     bool has_entry_plan;
@@ -1833,6 +1837,7 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
 XR_FUNC void xaot_bundle_free(XaotBundle *bundle);
 XR_FUNC bool xaot_bundle_set_target_data_layout(XaotBundle *bundle,
                                                 const XrTargetDataLayout *target_layout);
+XR_FUNC bool xaot_bundle_set_target_simd_features(XaotBundle *bundle, uint32_t features);
 XR_FUNC bool xaot_bundle_set_capability_provider(XaotBundle *bundle,
                                                  const XaotTargetCapabilityProvider *provider);
 XR_FUNC bool xaot_bundle_set_global_evidence(XaotBundle *bundle, const XgGlobalEvidence *evidence,

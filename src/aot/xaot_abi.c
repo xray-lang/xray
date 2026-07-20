@@ -48,6 +48,8 @@ static XaotArgClass arg_class_for_value_rep(XaotValueRep rep) {
             return XAOT_ARG_PTR;
         case XAOT_VALUE_AGGREGATE:
             return XAOT_ARG_AGG_BY_VALUE;
+        case XAOT_VALUE_VECTOR:
+            return XAOT_ARG_AGG_BY_VALUE;
         case XAOT_VALUE_TAGGED:
         default:
             return XAOT_ARG_TAGGED;

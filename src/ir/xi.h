@@ -281,6 +281,7 @@ typedef enum {
     XI_BIT_POPCOUNT,
     XI_BIT_CLZ,
     XI_BIT_CTZ,
+    XI_BIT_MUL_HIGH,
 
     /* Comparison (result is always bool) */
     XI_EQ,
@@ -348,6 +349,7 @@ typedef enum {
     XI_BYTE_SLICE_COMPARE,
     XI_BYTE_SLICE_COMMON_PREFIX,
     XI_BYTE_SLICE_REPEAT,
+    XI_SPAN_WINDOW,      /* args[0]=Span<T>, args[1]=start, args[2]=count; strict borrowed span */
     XI_SPAN_AS_BYTES,    /* args[0]=Span<T>; result Slice<byte>; aux unused */
     XI_SPAN_FILL,        /* args[0]=Span<T> dst, args[1]=T value; result dst */
     XI_SPAN_COPY,        /* args[0]=Span<T> dst, args[1]=Span<T> src; result dst */
@@ -615,6 +617,8 @@ typedef enum {
 /* Explicit SIMD shape encoding in XiValue.aux_int. */
 #define XI_VEC_SHAPE_EXPLICIT (INT64_C(1) << 16)
 #define XI_VEC_SHAPE_ODD_LANES (INT64_C(1) << 17)
+#define XI_VEC_SHAPE_UNZIP (INT64_C(1) << 18)
+#define XI_VEC_SHAPE_CONTIGUOUS_HALF (INT64_C(1) << 19)
 #define XI_VEC_SHAPE_LANES_MASK INT64_C(0xff)
 #define XI_VEC_SHAPE_NATIVE_SHIFT 8
 #define XI_VEC_SHAPE_NATIVE_MASK (INT64_C(0xff) << XI_VEC_SHAPE_NATIVE_SHIFT)

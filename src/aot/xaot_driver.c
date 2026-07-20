@@ -1373,6 +1373,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     XiCgenTypeNameProfile type_name_profile;
     int nmodules = 0;
     int entry_index = -1;
+    bool has_explicit_vector_ops = false;
     char **paths = NULL;
     char **mod_names = NULL;
     AstNode **mono_roots = NULL;
@@ -1810,6 +1811,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         fprintf(stderr, "Error: failed to set AOT target data layout\n");
         goto fail_free_ir;
     }
+    if (!xaot_bundle_set_target_simd_features(
+            &aot_bundle, options->target ? options->target->simd_features : 0)) {
+        fprintf(stderr, "Error: failed to set AOT target SIMD features\n");
+        goto fail_free_ir;
+    }
     if (options->capability_provider &&
         !xaot_bundle_set_capability_provider(&aot_bundle, options->capability_provider)) {
         fprintf(stderr, "Error: invalid AOT target capability provider\n");
@@ -1877,9 +1883,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         fprintf(stderr, "Error: failed to create codegen context\n");
         goto fail_free_ir;
     }
+    has_explicit_vector_ops = xaot_bundle_has_explicit_vector_ops(modules, nmodules);
     xi_cgen_ctx_set_aot_bundle(cg_ctx, &aot_bundle);
-    xi_cgen_ctx_set_target(cg_ctx, options->target,
-                           xaot_bundle_has_explicit_vector_ops(modules, nmodules));
+    xi_cgen_ctx_set_target(cg_ctx, options->target, has_explicit_vector_ops);
     xi_cgen_ctx_set_emit_main(cg_ctx, emit_program_main);
     xi_cgen_ctx_set_freestanding_profile(cg_ctx, profile == XAOT_BUILD_PROFILE_FREESTANDING);
     xi_cgen_ctx_set_type_name_profile(cg_ctx, type_name_profile);
@@ -2036,6 +2042,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     result->total_aot = total_funcs;
     result->nmodules = nmodules;
     result->features = features;
+    result->has_explicit_vector_ops = has_explicit_vector_ops;
     result->prepare_stats = prepare_stats;
     result->cgen_stats = cgen_stats;
     result->coro_frame_stats = coro_frame_stats;

@@ -2526,3 +2526,30 @@ vmcase(OP_SLICE) {
 
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "this type does not support slicing");
 }
+
+vmcase(OP_SPAN_WINDOW) {
+    /* Strict count-based borrowed view. Unlike slice syntax this operation
+     * never clamps and never interprets negative values from the end. One
+     * successful check proves every access inside [0, count). */
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    if (!XR_IS_SPAN_REF(R(b)) || !XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1)) || !XR_IS_INT(R(c + 2))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "Slice.window(start, count) expects a Span and integer bounds");
+    }
+    XrSpanView *src = XR_TO_SPAN_REF(R(b));
+    int64_t start = XR_TO_INT(R(c));
+    int64_t count = XR_TO_INT(R(c + 1));
+    if (!src || start < 0 || count < 0 || start > src->length || count > src->length - start) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                         "Slice.window(start, count) is outside the source Span");
+    }
+    XrSpanView *span = VM_SPAN_SLOT(R(c + 2));
+    *span = *src;
+    span->data = (src->data && count > 0) ? (uint8_t *) src->data + (size_t) start * src->elem_size
+                                          : (uint8_t *) src->data;
+    span->length = count;
+    R(a) = xr_span_ref(span);
+    vmbreak;
+}

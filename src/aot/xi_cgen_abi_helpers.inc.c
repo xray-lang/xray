@@ -123,6 +123,11 @@ static bool cg_value_plan_is_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     return plan && plan->rep.kind == XAOT_VALUE_AGGREGATE;
 }
 
+static bool cg_value_plan_is_vector(XiCgenCtx *ctx, const XiValue *v) {
+    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    return plan && plan->rep.kind == XAOT_VALUE_VECTOR;
+}
+
 static bool cg_value_rep_is_adt_aggregate(XaotValueRep rep) {
     return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_ENUM) != 0;
 }
@@ -203,6 +208,10 @@ static void emit_value_plan_zero_expr(XiCgenCtx *ctx, FILE *out, const XiValue *
     const XaotValuePlan *plan = cg_value_plan(ctx, v);
     if (plan && plan->rep.kind == XAOT_VALUE_AGGREGATE) {
         emit_aggregate_zero_expr(out, plan->rep);
+        return;
+    }
+    if (plan && plan->rep.kind == XAOT_VALUE_VECTOR && plan->rep.c_type) {
+        fprintf(out, "((%s){0})", plan->rep.c_type);
         return;
     }
     fprintf(out, "XR_NULL_VAL");

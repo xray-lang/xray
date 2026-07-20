@@ -8,6 +8,8 @@ fn rotr8(x: byte, n: int) -> byte { return x.rotateRight(n) }
 fn swap16(x: uint16) -> uint16 { return x.byteswap() }
 fn round32(x: int32, n: int) -> int32 { return x.rotateLeft(n).rotateRight(n) }
 fn swap64(x: uint64) -> uint64 { return x.byteswap() }
+fn mulhi32(x: uint32, y: uint32) -> uint32 { return x.mulHigh(y) }
+fn mulhi64(x: uint64, y: uint64) -> uint64 { return x.mulHigh(y) }
 
 var b: byte = rotl8(129, 1)
 var u8: uint8 = b.byteswap()
@@ -36,6 +38,12 @@ var u64: uint64 = swap64(72623859790382856)
 print(i64)                                // INT64_MIN bit pattern
 print(u64)                                // 0x0807060504030201
 print((-1 as uint64).popcount())          // 64
+print((255 as byte).mulHigh(2 as byte))   // 1
+print((65535 as uint16).mulHigh(2 as uint16)) // 1
+var max32: uint32 = (0 as uint32) - (1 as uint32)
+var max64: uint64 = (0 as uint64) - (1 as uint64)
+print(mulhi32(max32, 2 as uint32))         // 1
+print(mulhi64(max64, 2 as uint64))         // 1
 
 var iz: intsize = (1 as intsize).rotateLeft(-1).rotateRight(-1)
 var uz: uintsize = (1 as uintsize).byteswap().byteswap()

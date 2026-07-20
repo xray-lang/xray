@@ -246,6 +246,57 @@ TEST(no_const_no_change) {
     xi_func_free(f);
 }
 
+/* ========== Test: metadata-only CFG compaction is reported ========== */
+
+TEST(stale_next_block_id_reports_cfg_change) {
+    XiFunc *f = make_func();
+    XiBlock *entry = f->entry;
+    XiValue *p = xi_param(f, entry, 0, &stub_int);
+    xi_block_set_return(entry, p);
+
+    /* Edge splitting/removal can leave the allocator watermark above the
+     * compact block count even when every remaining block id is canonical. */
+    f->next_block_id += 7;
+    XiPassChange chg = xi_opt_sccp(f);
+
+    ASSERT(chg.cfg_changed);
+    ASSERT(f->next_block_id == f->nblocks);
+    ASSERT(entry->id == 0);
+    xi_func_free(f);
+}
+
+/* ========== Test: unreachable catch with an SSA-only pred is removed ========== */
+
+TEST(removes_unreachable_catch_with_synthetic_pred) {
+    XiFunc *f = make_func();
+    XiBlock *entry = f->entry;
+    XiBlock *try_body = xi_block_new(f);
+    XiBlock *catch_body = xi_block_new(f);
+    XiBlock *merge = xi_block_new(f);
+
+    xi_block_set_jump(entry, try_body);
+    xi_block_set_jump(try_body, merge);
+    xi_block_set_jump(catch_body, merge);
+    /* Mirrors lowering of an error catch when the try body emitted no real
+     * error edge: this predecessor exists for SSA sealing only. */
+    xi_block_add_pred(catch_body, try_body);
+    XiValue *zero = xi_const_int(f, merge, 0, &stub_int);
+    xi_block_set_return(merge, zero);
+    try_body->sealed = true;
+    catch_body->sealed = true;
+    merge->sealed = true;
+
+    XiPassChange chg = xi_opt_sccp(f);
+
+    ASSERT(chg.cfg_changed);
+    ASSERT(f->nblocks == 3);
+    ASSERT(merge->npreds == 1);
+    ASSERT(merge->preds[0] == try_body);
+    for (uint32_t i = 0; i < f->nblocks; i++)
+        ASSERT(f->blocks[i] != catch_body);
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -257,6 +308,8 @@ int main(void) {
     run_shared_load_branch_remains_unknown();
     run_reachable_unreachable_successor_is_preserved();
     run_no_const_no_change();
+    run_stale_next_block_id_reports_cfg_change();
+    run_removes_unreachable_catch_with_synthetic_pred();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

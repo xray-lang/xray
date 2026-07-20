@@ -4266,6 +4266,13 @@ XR_FUNC bool xaot_bundle_set_target_data_layout(XaotBundle *bundle,
     return true;
 }
 
+XR_FUNC bool xaot_bundle_set_target_simd_features(XaotBundle *bundle, uint32_t features) {
+    if (!bundle || bundle->global_evidence_plan.evidence)
+        return false;
+    bundle->target_simd_features = features;
+    return true;
+}
+
 XR_FUNC bool xaot_bundle_set_capability_provider(XaotBundle *bundle,
                                                  const XaotTargetCapabilityProvider *provider) {
     uint32_t capability_count = 0;
@@ -7299,6 +7306,10 @@ static const char *span_access_kind_name(uint8_t kind) {
             return "span_compare";
         case XAOT_SPAN_ACCESS_REINTERPRET:
             return "reinterpret";
+        case XAOT_SPAN_ACCESS_VEC_LOAD:
+            return "vec_load";
+        case XAOT_SPAN_ACCESS_VEC_STORE:
+            return "vec_store";
         default:
             return "unknown";
     }
@@ -8340,9 +8351,10 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
             bundle->stats.functions_tagged_abi, bundle->stats.functions_coro_abi,
             bundle->stats.values_total, bundle->stats.boundary_count,
             bundle->stats.containers_total);
-    fprintf(out, "value-stats scalar=%u tagged=%u ptr=%u aggregate=%u view=%u void=%u\n",
+    fprintf(out, "value-stats scalar=%u tagged=%u ptr=%u aggregate=%u vector=%u view=%u void=%u\n",
             bundle->stats.values_scalar, bundle->stats.values_tagged, bundle->stats.values_ptr,
-            bundle->stats.values_aggregate, bundle->stats.values_view, bundle->stats.values_void);
+            bundle->stats.values_aggregate, bundle->stats.values_vector, bundle->stats.values_view,
+            bundle->stats.values_void);
     fprintf(out, "container-stats array=%u map=%u set=%u direct=%u\n",
             bundle->stats.containers_array, bundle->stats.containers_map,
             bundle->stats.containers_set, bundle->stats.containers_direct);

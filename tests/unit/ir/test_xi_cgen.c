@@ -3043,6 +3043,40 @@ TEST(cgen_byte_array_repeat_from_tail_elides_dead_err_check) {
     xi_func_free(ir);
 }
 
+TEST(cgen_verified_span_helper_drop_elides_pending_error_checks) {
+    const char *src = "fn hot(dst: Slice<byte>, src: in Slice<byte>) -> int {\n"
+                      "    var copied: Slice<byte> = dst.copyFrom(src)\n"
+                      "    var word: uint16 = dst.load<uint16>(0, Endian.LE)\n"
+                      "    dst.store<uint16>(0, word + 1, Endian.LE)\n"
+                      "    return len(copied) + dst.compare(src)\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    var dst = Array<byte>(8, 0)\n"
+                      "    var src = Array<byte>(8, 1)\n"
+                      "    return hot(dst[:], src[:])\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "verified Span helper-drop path should generate");
+
+    const char *fn = find_static_function_definition(code, "test_hot_");
+    assert(fn != NULL && "hot definition should exist");
+    const char *fn_end = next_static_after(fn);
+    assert(fn_end != NULL && "hot function body should be bounded");
+    assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
+           "verified inline Span operations must not retain pending-error polls");
+
+    printf("  Generated verified Span helper-drop path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_mem_load_uses_pointer_helper) {
     const char *src = "import mem\n"
                       "fn read(src: Array<byte>) -> int {\n"
@@ -4700,8 +4734,8 @@ TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
     assert((contains(code, "xrt_array_new_typed_uninit(") ||
             contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
            "branchy Array<float> fill loop must preallocate uninitialized typed storage");
-    assert(contains(code, "double *_ad") &&
-           "branchy Array<float> fill loop must cache raw double storage");
+    assert((contains(code, "double *_ad") || contains(code, "double *XRT_RESTRICT _ad")) &&
+           "branchy Array<float> fill loop must cache raw double storage (optionally restrict)");
     assert(!contains(code, "_a->len =") &&
            "branchy typed array fill loop must use final len store outside the push body");
     assert(!contains(code, "_a->len >= _a->cap") &&
@@ -4711,8 +4745,9 @@ TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
     assert(!contains(code, "xrt_has_pending_error()) {\n        return 0;") &&
            "branchy typed array fill loop must not keep dead error propagation checks");
     assert(!contains(code, "xr_typed_get(") && !contains(code, "xr_typed_set(") &&
-           !contains(code, "xrt_release(") &&
-           "branchy typed array fill loop must not use typed runtime switches or no-op release");
+           "branchy typed array fill loop must not use typed runtime switches");
+    assert(count_between(code, code + strlen(code), "xrt_release(") == 1 &&
+           "branchy typed array must release its heap owner exactly once after the final read");
 
     printf("  Generated branchy typed array fill loop %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -8499,6 +8534,7 @@ int main(void) {
     run_cgen_span_slice_elides_dead_err_check();
     run_cgen_byte_array_append_from_slice_elides_dead_err_check();
     run_cgen_byte_array_repeat_from_tail_elides_dead_err_check();
+    run_cgen_verified_span_helper_drop_elides_pending_error_checks();
     run_cgen_mem_load_uses_pointer_helper();
     run_cgen_mem_store_uses_pointer_helper();
     run_cgen_stack_borrow_slice_allows_local_rawptr_read_chain();

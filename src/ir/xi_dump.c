@@ -187,9 +187,11 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " [intrinsic=%u]", v->xa_intrinsic_id);
     if (v->op >= XI_VEC_LOAD && v->op <= XI_VEC_REDUCE_ADD &&
         xi_vec_shape_is_explicit(v->aux_int)) {
-        fprintf(out, " [shape=%ux%u%s]", (unsigned) xi_vec_shape_native_type(v->aux_int),
+        fprintf(out, " [shape=%ux%u%s%s%s]", (unsigned) xi_vec_shape_native_type(v->aux_int),
                 (unsigned) xi_vec_shape_lanes(v->aux_int),
-                (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? ",odd" : "");
+                (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? ",odd" : "",
+                (v->aux_int & XI_VEC_SHAPE_UNZIP) != 0 ? ",unzip" : "",
+                (v->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0 ? ",half" : "");
     }
     if (v->xg_json_codec_id != 0 && v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT)
         fprintf(out, " [json_codec=%u]", v->xg_json_codec_id);

@@ -63,6 +63,18 @@ static XgFuncId entry_func_id(const XaotBundle *bundle, const XgGlobalEvidence *
     return fallback;
 }
 
+static bool entry_root_uses_resumable_frame(const XaotBundle *bundle, XgFuncId root,
+                                            uint32_t reachable_effect_bits) {
+    const XiFunc *func = xaot_bundle_find_body_func(bundle, root, NULL);
+    const XaotFuncPlan *plan = xaot_bundle_find_func_plan(bundle, func);
+    if (plan)
+        return plan->may_suspend;
+    /* Global-evidence installation precedes function-plan preparation. Keep
+     * that early plan conservative; prepare refreshes it from the exact root
+     * execution shape once all callable plans have converged. */
+    return (reachable_effect_bits & XR_EFFECT_MAY_SUSPEND) != 0;
+}
+
 bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *evidence,
                             uint32_t profile, XrEntryPlan *out) {
     uint8_t *reachable;
@@ -194,7 +206,7 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
     xr_free(reachable);
 
     out->runtime_component_bits = out->required_capability_bits;
-    if ((out->reachable_effect_bits & XR_EFFECT_MAY_SUSPEND) != 0)
+    if (entry_root_uses_resumable_frame(bundle, root, out->reachable_effect_bits))
         out->root_representation = XR_ROOT_RESUMABLE_FRAME;
     else if ((out->reachable_effect_bits & (XR_EFFECT_MAY_SPAWN | XR_EFFECT_OBSERVES_TASK_ID)) != 0)
         out->root_representation = XR_ROOT_DESCRIPTOR;

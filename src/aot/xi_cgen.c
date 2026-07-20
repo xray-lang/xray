@@ -58,6 +58,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
+#include "../frontend/analyzer/xa_alloc_effect.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../frontend/analyzer/xconsteval.h"
 #include "../stdlib/xstdlib_defs_generated.h"
@@ -358,6 +359,8 @@ static bool cg_builtin_receiver_registry_matches(const XrType *receiver_type,
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
             return receiver_type && receiver_type->kind == XR_KIND_INT &&
                    !receiver_type->is_nullable;
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+            return xr_type_is_exact_unsigned_integer(receiver_type);
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver_type);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -980,6 +983,7 @@ static bool cg_func_stable_cname(const XiCgenCtx *ctx, const XiFunc *f, const ch
                                  char *buf, size_t bufsz);
 static bool cg_func_needs_external_linkage(const XiCgenCtx *ctx, const XiFunc *f,
                                            const char *prefix);
+static bool cg_func_contains_stack_array(const XiFunc *f);
 static bool cg_func_should_force_inline(const XiFunc *f);
 
 static bool cg_func_is_par_for_native_callback(const XiFunc *f) {
@@ -997,8 +1001,11 @@ static const char *cg_func_linkage(const XiCgenCtx *ctx, const XiFunc *f, const 
         return "static XR_AINLINE ";
     if (cg_func_needs_external_linkage(ctx, f, prefix))
         return "";
-    if (ctx && ctx->extern_linkage)
+    if (ctx && ctx->extern_linkage) {
+        if (cg_func_contains_stack_array(f))
+            return "static XR_NOINLINE ";
         return cg_func_should_force_inline(f) ? "static XR_AINLINE " : "static ";
+    }
     return cg_linkage(ctx);
 }
 
@@ -4919,6 +4926,7 @@ typedef struct CgDebugSourceVarInfo {
     const char *ctype;
     char ctype_buf[160];
     XrRep rep;
+    bool is_vector;
     XiVarId var_id;
     uint32_t shadow_index;
 } CgDebugSourceVarInfo;
@@ -5207,6 +5215,7 @@ static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, Xi
 
     const char *ctype = NULL;
     XrRep rep = XR_REP_VOID;
+    bool is_vector = false;
     bool found = false;
 
     for (uint16_t i = 0; i < f->nparams; i++) {
@@ -5224,8 +5233,10 @@ static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, Xi
             snprintf(out_info->ctype_buf, sizeof(out_info->ctype_buf), "%s", cur_ctype);
             ctype = out_info->ctype_buf;
             rep = cur_rep;
+            is_vector = cg_value_plan_is_vector(ctx, storage_v);
             found = true;
-        } else if (strcmp(ctype, cur_ctype) != 0 || rep != cur_rep) {
+        } else if (strcmp(ctype, cur_ctype) != 0 || rep != cur_rep ||
+                   is_vector != cg_value_plan_is_vector(ctx, storage_v)) {
             return false;
         }
     }
@@ -5249,8 +5260,10 @@ static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, Xi
                 snprintf(out_info->ctype_buf, sizeof(out_info->ctype_buf), "%s", cur_ctype);
                 ctype = out_info->ctype_buf;
                 rep = cur_rep;
+                is_vector = cg_value_plan_is_vector(ctx, storage_v);
                 found = true;
-            } else if (strcmp(ctype, cur_ctype) != 0 || rep != cur_rep) {
+            } else if (strcmp(ctype, cur_ctype) != 0 || rep != cur_rep ||
+                       is_vector != cg_value_plan_is_vector(ctx, storage_v)) {
                 return false;
             }
         }
@@ -5269,8 +5282,10 @@ static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, Xi
                 snprintf(out_info->ctype_buf, sizeof(out_info->ctype_buf), "%s", cur_ctype);
                 ctype = out_info->ctype_buf;
                 rep = cur_rep;
+                is_vector = cg_value_plan_is_vector(ctx, storage_v);
                 found = true;
-            } else if (strcmp(ctype, cur_ctype) != 0 || rep != cur_rep) {
+            } else if (strcmp(ctype, cur_ctype) != 0 || rep != cur_rep ||
+                       is_vector != cg_value_plan_is_vector(ctx, storage_v)) {
                 return false;
             }
         }
@@ -5281,6 +5296,7 @@ static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, Xi
     out_info->name = f->source_var_names[var_id];
     out_info->ctype = ctype;
     out_info->rep = rep;
+    out_info->is_vector = is_vector;
     out_info->var_id = var_id;
     out_info->shadow_index = cg_debug_source_var_shadow_index(f, var_id);
     return true;
@@ -5319,6 +5335,8 @@ static void emit_debug_source_var_declarations(XiCgenCtx *ctx, FILE *out, const 
         else if (strncmp(info.ctype, "xrt_enum_", 9) == 0)
             fprintf(out, "%s_from_base(xrt_enum_aggregate_zero())", info.ctype);
         else if (strncmp(info.ctype, "xrt_struct_", 11) == 0)
+            fprintf(out, "((%s){0})", info.ctype);
+        else if (info.is_vector)
             fprintf(out, "((%s){0})", info.ctype);
         else if (info.rep == XR_REP_TAGGED)
             fprintf(out, "XR_NULL_VAL");
@@ -5367,6 +5385,11 @@ static void emit_debug_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *
             fprintf(out, ")");
             emit_adt_base_to_value_rep_suffix(out, rep);
         }
+    } else if (info.is_vector) {
+        if (cg_value_plan_is_vector(ctx, storage_v))
+            emit_vref(out, storage_v);
+        else
+            fprintf(out, "((%s){0})", info.ctype);
     } else if (strcmp(info.ctype, "XrValue") == 0) {
         emit_value_as_rep_ctx(ctx, out, storage_v, info.rep);
     } else {
@@ -6349,6 +6372,21 @@ static void emit_phi_incoming_as_rep(XiCgenCtx *ctx, FILE *out, const XiPhi *phi
         emit_codegen_abort_expr(out);
         return;
     }
+    if (cg_value_plan_is_vector(ctx, &phi->value)) {
+        const XaotValuePlan *phi_plan = cg_value_plan(ctx, &phi->value);
+        const XaotValuePlan *incoming_plan = cg_value_plan(ctx, incoming);
+        if (phi_plan && incoming_plan && xaot_value_reps_equal(phi_plan->rep, incoming_plan->rep)) {
+            emit_vref(out, incoming);
+            return;
+        }
+        if (ctx) {
+            fprintf(stderr, "[xi_cgen] ERROR: vector PHI v%u incoming v%u has mismatched plan\n",
+                    (unsigned) phi->value.id, incoming ? (unsigned) incoming->id : 0);
+            ctx->error = true;
+        }
+        emit_codegen_abort_expr(out);
+        return;
+    }
     emit_value_as_rep_ctx(ctx, out, incoming, cg_value_plan_storage_rep(ctx, &phi->value));
 }
 
@@ -6447,19 +6485,89 @@ static bool cg_func_has_backedge(const XiFunc *f) {
     return false;
 }
 
+static bool cg_func_contains_vector_op(const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *value = blk->values[vi];
+            if (value && xi_generated_op_class(value->op) == XI_GEN_CLASS_VECTOR)
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_func_contains_stack_array(const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *value = blk->values[vi];
+            if (!value)
+                continue;
+            if (value->op == XI_STACK_ALLOC && value->aux_int == XI_ARRAY_NEW)
+                return true;
+            if (value->op == XI_ARRAY_NEW)
+                return true;
+            if (value->op == XI_FIXED_ARRAY_NEW)
+                return true;
+            if (value->op != XI_PARAM && value->type && value->type->kind == XR_KIND_FIXED_ARRAY)
+                return true;
+        }
+    }
+    return false;
+}
+
 static bool cg_func_should_force_inline(const XiFunc *f) {
     enum {
-        CG_FORCE_INLINE_VALUE_LIMIT = 48
+        CG_FORCE_INLINE_VALUE_LIMIT = 48,
+        CG_FORCE_INLINE_PROVEN_NOALLOC_VALUE_LIMIT = 128,
+        CG_FORCE_INLINE_VECTOR_LEAF_VALUE_LIMIT = 192
     };
     if (!f)
         return false;
-    /* Keep separate-compilation helpers inlineable when they are tiny, but do
-     * not force loops into large callers/coroutine resume functions. Clang can
-     * otherwise spill hot loop state every iteration, as seen in xlz4's block
-     * roundtrip checksum path. */
-    if (cg_func_has_backedge(f))
+    uint32_t value_count = cg_func_value_count(f);
+    bool proven_noalloc =
+        f->allocation_effect_complete && f->allocation_state == XA_ALLOC_PROVEN_NONE;
+    bool vector_kernel = cg_func_contains_vector_op(f);
+    /* A stack array is cheap inside its owner but inlining the owner into a
+     * dispatcher hoists the full frame/canary prologue onto unrelated hot
+     * branches. cg_func_linkage therefore emits an explicit noinline boundary;
+     * this predicate also keeps it out of the force-inline class. */
+    if (cg_func_contains_stack_array(f))
         return false;
-    return cg_func_value_count(f) <= CG_FORCE_INLINE_VALUE_LIMIT;
+    /* Keep separate-compilation helpers inlineable when they are tiny, but do
+     * not force arbitrary loops into large callers/coroutine resume functions.
+     * A bounded-size, proven-noalloc typed-vector kernel is the narrow
+     * exception: inlining the loop once exposes its lane induction/range facts
+     * without source duplication or forced unrolling. */
+    if (cg_func_has_backedge(f))
+        return proven_noalloc && vector_kernel &&
+               value_count <= CG_FORCE_INLINE_VECTOR_LEAF_VALUE_LIMIT;
+    if (value_count <= CG_FORCE_INLINE_VALUE_LIMIT)
+        return true;
+
+    /* A leaf proven allocation-free by the whole-program effect summary has no
+     * hidden allocation slow path and is a substantially safer inlining
+     * candidate than an arbitrary helper.  An explicit @no_alloc contract is
+     * useful as a verifier promise, but must not be required for optimization:
+     * inferred proof carries the same semantic fact.
+     * Native-vector Xi ops additionally represent whole-lane instructions,
+     * while their checked-span and VM bookkeeping expands to several IR
+     * values.  Use bounded budgets for both classes; unknown loops were
+     * rejected above, and neither decision relies on source names. */
+    if (!proven_noalloc)
+        return false;
+    uint32_t limit = vector_kernel ? CG_FORCE_INLINE_VECTOR_LEAF_VALUE_LIMIT
+                                   : CG_FORCE_INLINE_PROVEN_NOALLOC_VALUE_LIMIT;
+    return value_count <= limit;
 }
 
 static bool cg_sync_backedge_heartbeat_enabled(XiCgenCtx *ctx, const XiFunc *f) {
@@ -6986,7 +7094,8 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
             XrRep rep = cg_value_plan_storage_rep(ctx, &phi->value);
             fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, &phi->value));
             emit_phi_ref(ctx, out, phi);
-            if (cg_value_plan_is_aggregate(ctx, &phi->value)) {
+            if (cg_value_plan_is_aggregate(ctx, &phi->value) ||
+                cg_value_plan_is_vector(ctx, &phi->value)) {
                 fprintf(out, " = ");
                 emit_value_plan_zero_expr(ctx, out, &phi->value);
                 fprintf(out, ";\n");
@@ -7013,7 +7122,7 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                 XrRep rep = cg_value_plan_storage_rep(ctx, v);
                 fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
                 emit_vref(out, v);
-                if (cg_value_plan_is_aggregate(ctx, v)) {
+                if (cg_value_plan_is_aggregate(ctx, v) || cg_value_plan_is_vector(ctx, v)) {
                     fprintf(out, " = ");
                     emit_value_plan_zero_expr(ctx, out, v);
                     fprintf(out, ";\n");

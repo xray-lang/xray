@@ -594,6 +594,25 @@ static bool fold_exact_integer_unary(XiValue *v, int64_t operand) {
     return true;
 }
 
+static bool fold_exact_integer_binary(XiValue *v, int64_t lhs, int64_t rhs) {
+    int64_t result;
+    if (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR) {
+        result = v->op == XI_BIT_ROTL ? xr_bits_exact_rotate_left(lhs, rhs, (uint8_t) v->aux_int)
+                                      : xr_bits_exact_rotate_right(lhs, rhs, (uint8_t) v->aux_int);
+    } else if (v->op == XI_BIT_MUL_HIGH) {
+        unsigned bits = v->aux_int == XR_NATIVE_U8      ? 8u
+                        : v->aux_int == XR_NATIVE_U16   ? 16u
+                        : v->aux_int == XR_NATIVE_U32   ? 32u
+                        : v->aux_int == XR_NATIVE_USIZE ? (unsigned) (sizeof(uintptr_t) * 8u)
+                                                        : 64u;
+        result = (int64_t) xr_uint_mul_high_bits((uint64_t) lhs, (uint64_t) rhs, bits);
+    } else {
+        return false;
+    }
+    rewrite_to_const_int(v, result);
+    return true;
+}
+
 XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_const_fold: NULL func");
     XiPassChange chg = xi_pass_no_change();
@@ -693,11 +712,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             int64_t lhs_i = 0, rhs_i = 0;
             if (const_int_value(lhs, &lhs_i) && const_int_value(rhs, &rhs_i)) {
                 int64_t result;
-                if (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR) {
-                    result = v->op == XI_BIT_ROTL
-                                 ? xr_bits_exact_rotate_left(lhs_i, rhs_i, (uint8_t) v->aux_int)
-                                 : xr_bits_exact_rotate_right(lhs_i, rhs_i, (uint8_t) v->aux_int);
-                    rewrite_to_const_int(v, result);
+                if (fold_exact_integer_binary(v, lhs_i, rhs_i)) {
                     chg.values_changed = true;
                     continue;
                 }
@@ -2038,6 +2053,8 @@ static bool sr_builtin_receiver_registry_matches(const XrType *receiver_type,
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
             return receiver_type && receiver_type->kind == XR_KIND_INT &&
                    !receiver_type->is_nullable;
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+            return xr_type_is_exact_unsigned_integer(receiver_type);
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver_type);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -2426,6 +2443,7 @@ static XrRep sr_arith_native_result_rep_depth(const XiValue *v, const XiRepPolic
         case XI_SHR:
         case XI_BIT_ROTL:
         case XI_BIT_ROTR:
+        case XI_BIT_MUL_HIGH:
         case XI_MOD: {
             if (v->nargs < 2)
                 return XR_REP_TAGGED;
@@ -2454,27 +2472,8 @@ static XrRep sr_arith_native_result_rep(const XiValue *v, const XiRepPolicy *pol
     return sr_arith_native_result_rep_depth(v, policy, 0);
 }
 
-static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
-    if (!v || !v->type)
-        return XR_REP_TAGGED;
-    XrRep memory_rep = XR_REP_TAGGED;
-    if (sr_def_rep_memory_op(v, &memory_rep))
-        return memory_rep;
-    switch (v->op) {
-        case XI_PARAM: {
-            if (sr_param_is_call_bound_place(v))
-                return XR_REP_RAWPTR;
-            if (sr_param_uses_default_sentinel(v))
-                return XR_REP_TAGGED;
-            /* Typed boundary params get concrete rep.  The AOT backend can
-             * use this directly instead of re-inferring from type->kind. */
-            return sr_type_native_boundary_rep(v->type);
-        }
-        case XI_CONST: {
-            if (v->type->kind == XR_KIND_NULL || v->type->kind == XR_KIND_STRING)
-                return XR_REP_TAGGED;
-            return sr_type_scalar_rep(v->type);
-        }
+static bool sr_op_has_arith_native_result(uint16_t op) {
+    switch (op) {
         case XI_ADD:
         case XI_SUB:
         case XI_MUL:
@@ -2492,8 +2491,36 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_BIT_BSWAP:
         case XI_BIT_POPCOUNT:
         case XI_BIT_CLZ:
-        case XI_BIT_CTZ: {
-            return sr_arith_native_result_rep(v, policy);
+        case XI_BIT_MUL_HIGH:
+        case XI_BIT_CTZ:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
+    if (!v || !v->type)
+        return XR_REP_TAGGED;
+    XrRep memory_rep = XR_REP_TAGGED;
+    if (sr_def_rep_memory_op(v, &memory_rep))
+        return memory_rep;
+    if (sr_op_has_arith_native_result(v->op))
+        return sr_arith_native_result_rep(v, policy);
+    switch (v->op) {
+        case XI_PARAM: {
+            if (sr_param_is_call_bound_place(v))
+                return XR_REP_RAWPTR;
+            if (sr_param_uses_default_sentinel(v))
+                return XR_REP_TAGGED;
+            /* Typed boundary params get concrete rep.  The AOT backend can
+             * use this directly instead of re-inferring from type->kind. */
+            return sr_type_native_boundary_rep(v->type);
+        }
+        case XI_CONST: {
+            if (v->type->kind == XR_KIND_NULL || v->type->kind == XR_KIND_STRING)
+                return XR_REP_TAGGED;
+            return sr_type_scalar_rep(v->type);
         }
         case XI_EQ:
         case XI_NE:
@@ -2819,6 +2846,7 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_BIT_BSWAP:
         case XI_BIT_POPCOUNT:
         case XI_BIT_CLZ:
+        case XI_BIT_MUL_HIGH:
         case XI_BIT_CTZ: {
             if ((user->op == XI_ADD || user->op == XI_SUB) && user->type &&
                 user->type->kind == XR_KIND_POINTER && arg_idx < user->nargs &&

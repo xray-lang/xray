@@ -139,6 +139,12 @@
   :vm-bytecode (driver xi_emit_exact_bit)
   :aot-c (driver xicgen_exact_bit))
 
+(lower xi.bit.mul-high
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_exact_bit)
+  :aot-c (driver xicgen_exact_bit))
+
 (lower xi.not
   :match (value-unary)
   :required-targets (vm-bytecode aot-c)
@@ -1024,6 +1030,12 @@
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_byte_slice_repeat)
   :aot-c (driver xicgen_byte_slice_repeat))
+
+(lower xi.span.window
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_span_window)
+  :aot-c (driver xicgen_span_window))
 
 (lower xi.span.as.bytes
   :match ()

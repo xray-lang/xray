@@ -292,6 +292,8 @@ static bool semantic_intrinsic_operand_is_readonly_place(const XaIntrinsicDesc *
         case XA_INTRINSIC_LOWERING_VEC_BIT_XOR:
         case XA_INTRINSIC_LOWERING_VEC_WIDEN_MUL:
             return true;
+        case XA_INTRINSIC_LOWERING_VEC_SHUFFLE:
+            return (desc->flags & XA_INTRINSIC_FLAG_UNZIP) != 0;
         default:
             return false;
     }
@@ -542,6 +544,33 @@ XR_FUNC void xi_emit_byte_slice_common_prefix(EmitCtx *ctx, XiValue *v, XiEmitRe
 
 XR_FUNC void xi_emit_byte_slice_repeat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_contiguous_window_op(ctx, v, dst, OP_BYTE_SLICE_REPEAT, 4);
+}
+
+XR_FUNC void xi_emit_span_window(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs != 3) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg src = reg_of(ctx, v->args[0]);
+    XiEmitReg start_src = reg_of(ctx, v->args[1]);
+    XiEmitReg count_src = reg_of(ctx, v->args[2]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint16_t span_slot = 0;
+    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSpanView), &span_slot))
+        return;
+    if (ctx->next_reg + 3 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg += 3;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, base, start_src, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (base + 1), count_src, 0));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 2), span_slot));
+    emit_inst(ctx, CREATE_ABC(OP_SPAN_WINDOW, dst, src, base));
 }
 
 XR_FUNC void xi_emit_span_as_bytes(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {

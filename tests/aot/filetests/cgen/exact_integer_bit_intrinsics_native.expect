@@ -5,6 +5,7 @@ c_contains=__builtin_bswap16
 c_contains=__builtin_popcountll
 c_contains=__builtin_clzll
 c_contains=__builtin_ctzll
+c_contains=xr_u64_mul_high
 c_not_contains=xr_bits_core_
 c_not_contains=xr_bits_exact_
 c_not_contains=xrt_method_

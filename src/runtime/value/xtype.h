@@ -306,6 +306,21 @@ static inline bool xr_type_is_exact_u8(const XrType *type) {
     return type && type->kind == XR_KIND_INT && type->native_width == XR_NATIVE_U8;
 }
 
+static inline bool xr_type_is_exact_unsigned_integer(const XrType *type) {
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    switch (type->native_width) {
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_USIZE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static inline const XrType *xr_type_contiguous_element_type(const XrType *type) {
     if (!type)
         return NULL;

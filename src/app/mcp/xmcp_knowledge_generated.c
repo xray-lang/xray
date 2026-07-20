@@ -2708,12 +2708,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     },
     {
         .name = "mapInto",
-        .signature = "(range: Range, output: Array<T>, body: (int): T,",
+        .signature = "(range: Range, output: Array<T>, body: (int): T, options: Options = Options()) -> Array<T>",
         .summary = "",
     },
     {
         .name = "reduce",
-        .signature = "(range: Range, initial: A, body: (int): A,",
+        .signature = "(range: Range, initial: A, body: (int): A, combine: (A, A) -> A, options: Options = Options()) -> A",
         .summary = "",
     },
 };
@@ -3104,7 +3104,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
         .summary = "",
     },
     {
+        .name = "U32x4.unzipEven",
+        .signature = "(other: in U32x4): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.unzipOdd",
+        .signature = "(other: in U32x4): U32x4",
+        .summary = "",
+    },
+    {
         .name = "U32x4.widenMulEven",
+        .signature = "(other: in U32x4): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.widenMulHigh",
+        .signature = "(other: in U32x4): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.widenMulLow",
         .signature = "(other: in U32x4): U64x2",
         .summary = "",
     },
@@ -7094,8 +7114,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Plan.reduce` | `(range: Range, initial: A, body: (S, int): A, combine: (A, A) -> A) -> A` |  |\n"
             "| `parallel.forEach` | `(range: Range, body: (int): (), options: Options = Options())` |  |\n"
             "| `parallel.map` | `(range: Range, body: (int): T, options: Options = Options()) -> Array<T>` |  |\n"
-            "| `parallel.mapInto` | `(range: Range, output: Array<T>, body: (int): T,` |  |\n"
-            "| `parallel.reduce` | `(range: Range, initial: A, body: (int): A,` |  |\n"
+            "| `parallel.mapInto` | `(range: Range, output: Array<T>, body: (int): T, options: Options = Options()) -> Array<T>` |  |\n"
+            "| `parallel.reduce` | `(range: Range, initial: A, body: (int): A, combine: (A, A) -> A, options: Options = Options()) -> A` |  |\n"
             "",
         .symbols = _symbols_parallel,
         .symbol_count = (int)(sizeof(_symbols_parallel) / sizeof(_symbols_parallel[0])),
@@ -7270,7 +7290,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U32x4.store` | `(output: Slice<uint32>, offset: int = 0): ()` |  |\n"
             "| `U32x4.sub` | `(other: in U32x4): U32x4` |  |\n"
             "| `U32x4.swapAdjacent` | `(): U32x4` |  |\n"
+            "| `U32x4.unzipEven` | `(other: in U32x4): U32x4` |  |\n"
+            "| `U32x4.unzipOdd` | `(other: in U32x4): U32x4` |  |\n"
             "| `U32x4.widenMulEven` | `(other: in U32x4): U64x2` |  |\n"
+            "| `U32x4.widenMulHigh` | `(other: in U32x4): U64x2` |  |\n"
+            "| `U32x4.widenMulLow` | `(other: in U32x4): U64x2` |  |\n"
             "| `U32x4.widenMulOdd` | `(other: in U32x4): U64x2` |  |\n"
             "| `U32x8` | `U32x8` |  |\n"
             "| `U32x8.fromLanes` | `(lanes: in [uint32; 8]): U32x8` |  |\n"

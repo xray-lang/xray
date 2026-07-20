@@ -352,6 +352,17 @@ static SccpCell eval_exact_bit(const XiValue *v, SccpCell a, SccpCell b) {
             return b.kind == SCCP_CONST_INT
                        ? sccp_int(xr_bits_exact_rotate_right(a.ival, b.ival, native_type))
                        : sccp_bot();
+        case XI_BIT_MUL_HIGH: {
+            if (b.kind != SCCP_CONST_INT)
+                return sccp_bot();
+            unsigned bits = native_type == XR_NATIVE_U8      ? 8u
+                            : native_type == XR_NATIVE_U16   ? 16u
+                            : native_type == XR_NATIVE_U32   ? 32u
+                            : native_type == XR_NATIVE_USIZE ? (unsigned) (sizeof(uintptr_t) * 8u)
+                                                             : 64u;
+            return sccp_int(
+                (int64_t) xr_uint_mul_high_bits((uint64_t) a.ival, (uint64_t) b.ival, bits));
+        }
         default:
             return sccp_bot();
     }
@@ -570,7 +581,7 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
          * pollute the lattice. */
         if (a.kind == SCCP_TOP || b.kind == SCCP_TOP)
             return sccp_top();
-        if (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR)
+        if (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR || v->op == XI_BIT_MUL_HIGH)
             return eval_exact_bit(v, a, b);
         if (is_compare_op(v->op))
             return eval_compare(v->op, a, b, sccp_compare_uses_unsigned(v));
@@ -869,6 +880,75 @@ static void sccp_set_unreachable(XiBlock *blk) {
     blk->succs[1] = NULL;
 }
 
+static bool sccp_compact_invalid_block_ids(XiFunc *f) {
+    if (f->next_block_id != f->nblocks) {
+        (void) xi_cfg_compact_blocks(f);
+        xi_cfg_invalidate(f);
+        return true;
+    }
+    for (uint32_t i = 0; i < f->nblocks; i++) {
+        XiBlock *blk = f->blocks[i];
+        if (!blk || blk->id == i)
+            continue;
+        (void) xi_cfg_compact_blocks(f);
+        xi_cfg_invalidate(f);
+        return true;
+    }
+    return false;
+}
+
+static bool sccp_remove_unreachable_blocks(SccpCtx *ctx, uint32_t *out_removed) {
+    XiFunc *f = ctx->func;
+    uint32_t n = ctx->block_count;
+    bool cfg_rewritten = false;
+
+    /* Some lowering paths add a predecessor only to make Braun SSA see
+     * definitions at an otherwise unreachable catch block. Such a predecessor
+     * is not a control-flow edge, so detach it after SCCP proves the block dead;
+     * otherwise compaction retains a half-dead block. */
+    for (uint32_t i = 0; i < n; i++) {
+        if (ctx->reachable[i])
+            continue;
+        XiBlock *dead = f->blocks[i];
+        if (!dead || dead == f->entry)
+            continue;
+        for (uint16_t s = 0; s < 2; s++) {
+            XiBlock *succ = dead->succs[s];
+            while (succ && xi_cfg_remove_pred(succ, dead))
+                cfg_rewritten = true;
+        }
+        if (dead->kind != XI_BLOCK_UNREACHABLE || dead->control || dead->succs[0] || dead->succs[1])
+            cfg_rewritten = true;
+        sccp_set_unreachable(dead);
+    }
+
+    for (uint32_t i = 0; i < n; i++) {
+        if (ctx->reachable[i])
+            continue;
+        XiBlock *dead = f->blocks[i];
+        if (!dead || dead == f->entry)
+            continue;
+        uint16_t p = 0;
+        while (p < dead->npreds) {
+            XiBlock *pred = dead->preds[p];
+            if (pred && (pred->succs[0] == dead || pred->succs[1] == dead)) {
+                p++;
+            } else if (pred && xi_cfg_remove_pred(dead, pred)) {
+                cfg_rewritten = true;
+            } else {
+                p++;
+            }
+        }
+    }
+
+    uint32_t removed = xi_cfg_compact_blocks(f);
+    if (removed > 0)
+        xi_cfg_invalidate(f);
+    if (out_removed)
+        *out_removed = removed;
+    return cfg_rewritten || removed > 0;
+}
+
 /* ========== Driver ========== */
 
 XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
@@ -876,21 +956,9 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
     if (f->nblocks == 0)
         return xi_pass_no_change();
 
-    bool compacted_at_entry = false;
-    for (uint32_t i = 0; i < f->nblocks; i++) {
-        XiBlock *blk = f->blocks[i];
-        if (!blk)
-            continue;
-        /* XI_BLOCK_UNREACHABLE is also the normal terminator kind for a
-         * reachable no-return block (throw/panic).  Do not pre-compact it
-         * as dead before SCCP has computed reachability. */
-        if (blk->id != i) {
-            uint32_t removed = xi_cfg_compact_blocks(f);
-            xi_cfg_invalidate(f);
-            compacted_at_entry = removed > 0;
-            break;
-        }
-    }
+    /* A stale block id means compaction mutates CFG metadata even when no
+     * blocks are physically removed, so report it as a CFG change. */
+    bool compacted_at_entry = sccp_compact_invalid_block_ids(f);
 
     uint32_t n = f->nblocks;
     uint32_t max_id = f->next_value_id;
@@ -987,26 +1055,8 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
     bool cfg_rewritten = false;
     rewrite_function(&ctx, &values_rewritten, &cfg_rewritten);
 
-    /* Remove unreachable blocks */
-    for (uint32_t i = 0; i < n; i++) {
-        if (ctx.reachable[i])
-            continue;
-        XiBlock *dead = f->blocks[i];
-        if (!dead || dead == f->entry)
-            continue;
-        for (uint16_t s = 0; s < 2; s++) {
-            XiBlock *succ = dead->succs[s];
-            if (!succ)
-                continue;
-            while (xi_cfg_remove_pred(succ, dead)) {
-            }
-        }
-        sccp_set_unreachable(dead);
-    }
-    uint32_t removed = xi_cfg_compact_blocks(f);
-    bool blocks_removed = removed > 0;
-    if (blocks_removed)
-        xi_cfg_invalidate(f);
+    uint32_t removed = 0;
+    bool dead_cfg_rewritten = sccp_remove_unreachable_blocks(&ctx, &removed);
 
     /* Cleanup */
     xr_free(ctx.cells);
@@ -1019,8 +1069,9 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
     if (values_rewritten) {
         chg.values_changed = true;
     }
-    if (cfg_rewritten || blocks_removed || compacted_at_entry) {
+    if (cfg_rewritten || dead_cfg_rewritten || compacted_at_entry) {
         chg.cfg_changed = true;
     }
+    chg.n_removed = removed;
     return chg;
 }

@@ -676,12 +676,13 @@ static bool verify_exact_bit_native_type(int64_t native_type) {
 static bool verify_exact_bit_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
                                       const XiValue *v) {
     bool rotate = v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR;
-    bool receiver_result = rotate || v->op == XI_BIT_BSWAP;
+    bool mul_high = v->op == XI_BIT_MUL_HIGH;
+    bool receiver_result = rotate || mul_high || v->op == XI_BIT_BSWAP;
     bool query = v->op == XI_BIT_POPCOUNT || v->op == XI_BIT_CLZ || v->op == XI_BIT_CTZ;
     if (!rotate && !receiver_result && !query)
         return true;
 
-    uint16_t expected_args = rotate ? 2 : 1;
+    uint16_t expected_args = (rotate || mul_high) ? 2 : 1;
     if (v->nargs != expected_args || !v->args[0] || !v->args[0]->type ||
         v->args[0]->type->kind != XR_KIND_INT || v->args[0]->type->is_nullable) {
         verr(ctx, "func '%s': v%u %s in b%u requires a non-null exact integer receiver", f->name,
@@ -698,6 +699,24 @@ static bool verify_exact_bit_contract(VerifyCtx *ctx, const XiFunc *f, const XiB
     if (rotate && (!v->args[1] || !v->args[1]->type || v->args[1]->type->kind != XR_KIND_INT ||
                    v->args[1]->type->is_nullable)) {
         verr(ctx, "func '%s': v%u %s in b%u requires an integer rotate count", f->name, v->id,
+             xi_op_name(v->op), blk->id);
+        return false;
+    }
+    if (mul_high &&
+        (v->aux_int != XR_NATIVE_U8 && v->aux_int != XR_NATIVE_U16 && v->aux_int != XR_NATIVE_U32 &&
+         v->aux_int != XR_NATIVE_U64 && v->aux_int != XR_NATIVE_USIZE)) {
+        verr(ctx, "func '%s': v%u %s in b%u requires an unsigned exact-width receiver", f->name,
+             v->id, xi_op_name(v->op), blk->id);
+        return false;
+    }
+    if (mul_high && !v->args[1]) {
+        /* The source method registry already proves the rhs exact-width type.
+         * Optimizer representation selection may legitimately turn an
+         * imported constant into UNKNOWN-typed GET_SHARED/UNBOX values.  From
+         * semantic Xi onward the stable intrinsic identity plus aux_int width
+         * is the proof consumed by VM/AOT, so only operand presence remains a
+         * stage-local invariant here. */
+        verr(ctx, "func '%s': v%u %s in b%u requires an rhs operand", f->name, v->id,
              xi_op_name(v->op), blk->id);
         return false;
     }
@@ -1584,7 +1603,8 @@ static void verify_lowered(VerifyCtx *ctx, const XiFunc *f) {
             } else if ((xi_op_class(v->op) == XI_GEN_CLASS_VECTOR &&
                         xi_vec_shape_is_explicit(v->aux_int)) ||
                        v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR || v->op == XI_BIT_BSWAP ||
-                       v->op == XI_BIT_POPCOUNT || v->op == XI_BIT_CLZ || v->op == XI_BIT_CTZ) {
+                       v->op == XI_BIT_POPCOUNT || v->op == XI_BIT_CLZ || v->op == XI_BIT_CTZ ||
+                       v->op == XI_BIT_MUL_HIGH) {
                 verr(ctx,
                      "func '%s': canonical semantic op v%u %s in b%u has no intrinsic identity",
                      f->name, v->id, xi_op_name(v->op), blk->id);

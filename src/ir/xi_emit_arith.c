@@ -209,7 +209,8 @@ XR_FUNC void xi_emit_bnot(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
 XR_FUNC void xi_emit_exact_bit(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     bool rotate = v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR;
-    uint16_t expected = rotate ? 2 : 1;
+    bool binary = rotate || v->op == XI_BIT_MUL_HIGH;
+    uint16_t expected = binary ? 2 : 1;
     if (v->nargs != expected || v->aux_int < 0 || v->aux_int > UINT8_MAX) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -221,13 +222,14 @@ XR_FUNC void xi_emit_exact_bit(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
                 : v->op == XI_BIT_POPCOUNT ? OP_BIT_POPCOUNT
                 : v->op == XI_BIT_CLZ      ? OP_BIT_CLZ
                 : v->op == XI_BIT_CTZ      ? OP_BIT_CTZ
+                : v->op == XI_BIT_MUL_HIGH ? OP_BIT_MUL_HIGH
                                            : OP_NOP;
     if (op == OP_NOP) {
         emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
         return;
     }
 
-    if (!rotate) {
+    if (!binary) {
         XiEmitReg src = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;

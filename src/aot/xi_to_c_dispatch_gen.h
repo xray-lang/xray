@@ -32,6 +32,7 @@
     X(BIT_POPCOUNT, "xi.bit.popcount", xicgen_exact_bit) \
     X(BIT_CLZ, "xi.bit.clz", xicgen_exact_bit) \
     X(BIT_CTZ, "xi.bit.ctz", xicgen_exact_bit) \
+    X(BIT_MUL_HIGH, "xi.bit.mul-high", xicgen_exact_bit) \
     X(NOT, "xi.not", xicgen_not) \
     X(SELECT, "xi.select", xicgen_select) \
     X(VEC_LOAD, "xi.vec.load", xicgen_vec) \
@@ -150,6 +151,7 @@
     X(BYTE_SLICE_COMPARE, "xi.byte.slice.compare", xicgen_byte_slice_compare) \
     X(BYTE_SLICE_COMMON_PREFIX, "xi.byte.slice.common.prefix", xicgen_byte_slice_common_prefix) \
     X(BYTE_SLICE_REPEAT, "xi.byte.slice.repeat", xicgen_byte_slice_repeat) \
+    X(SPAN_WINDOW, "xi.span.window", xicgen_span_window) \
     X(SPAN_AS_BYTES, "xi.span.as.bytes", xicgen_span_as_bytes) \
     X(SPAN_FILL, "xi.span.fill", xicgen_span_fill) \
     X(SPAN_COPY, "xi.span.copy", xicgen_span_copy) \

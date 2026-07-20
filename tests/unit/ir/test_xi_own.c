@@ -49,6 +49,7 @@ static XrType t_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType t_array = {.kind = XR_KIND_ARRAY, .id = 2, .frozen = true};
 static XrType t_str = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType t_any = {.kind = XR_KIND_UNKNOWN, .id = 4, .frozen = true};
+static XrType t_span = {.kind = XR_KIND_SPAN, .id = 5, .frozen = true};
 
 static XiFunc *make_func(const char *name, XrType *ret) {
     XiFunc *f = xi_func_new(name, ret);
@@ -70,6 +71,8 @@ static void test_type_is_rc(void) {
 
 static void test_use_policy(void) {
     ASSERT_EQ(xi_own_use_is_consuming(XI_ADD, 0), false, "ADD borrows operands");
+    ASSERT_EQ(xi_own_use_is_consuming(XI_TARGET_SIMD_BYTES, 0), false,
+              "TARGET_SIMD_BYTES borrows its static receiver");
     ASSERT_EQ(xi_own_use_is_consuming(XI_INDEX_GET, 0), false, "INDEX_GET borrows base");
     ASSERT_EQ(xi_own_use_is_consuming(XI_STORE_FIELD, 0), false, "STORE_FIELD borrows receiver");
     ASSERT_EQ(xi_own_use_is_consuming(XI_STORE_FIELD, 1), true,
@@ -80,6 +83,18 @@ static void test_use_policy(void) {
     ASSERT_EQ(xi_own_use_is_consuming(XI_CALL, 0), false, "CALL borrows callee");
     ASSERT_EQ(xi_own_use_is_consuming(XI_CALL, 1), true, "CALL consumes ordinary args");
     ASSERT_EQ(xi_own_use_is_consuming(XI_OP_COUNT, 0), true, "unknown op conservatively consumes");
+
+    XiValue string_value = {.op = XI_PARAM, .type = &t_str};
+    XiValue *string_byte_slice_args[] = {&string_value};
+    XiValue string_byte_slice = {
+        .op = XI_CALL_BUILTIN,
+        .type = &t_span,
+        .nargs = 1,
+        .args = string_byte_slice_args,
+        .aux = (void *) "string_byte_slice",
+    };
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&string_byte_slice, 0), false,
+              "string bytes view borrows its string owner");
 }
 
 /* ========== Test: dead value → drop at definition ========== */

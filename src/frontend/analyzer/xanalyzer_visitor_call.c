@@ -150,6 +150,8 @@ static bool xa_builtin_receiver_intrinsic_matches(XrType *receiver, XaBuiltinRec
     switch (kind) {
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
             return receiver && receiver->kind == XR_KIND_INT && !receiver->is_nullable;
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+            return xr_type_is_exact_unsigned_integer(receiver);
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -177,6 +179,8 @@ static XaIntrinsicId xa_builtin_receiver_method_intrinsic_id(XaBuiltinReceiverMe
             return XA_INTRINSIC_BITS_ROTATE_LEFT;
         case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_RIGHT:
             return XA_INTRINSIC_BITS_ROTATE_RIGHT;
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_UINT_MUL_HIGH:
+            return XA_INTRINSIC_BITS_MUL_HIGH;
         case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_LOAD:
             return XA_INTRINSIC_BYTE_SLICE_LOAD;
         case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_STORE:
@@ -197,6 +201,8 @@ static XaIntrinsicId xa_builtin_receiver_method_intrinsic_id(XaBuiltinReceiverMe
             return XA_INTRINSIC_POD_SLICE_PTR;
         case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_MUT_PTR:
             return XA_INTRINSIC_POD_SLICE_MUT_PTR;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_WINDOW:
+            return XA_INTRINSIC_POD_SLICE_WINDOW;
         case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_AS_BYTES:
             return XA_INTRINSIC_POD_SLICE_AS_BYTES;
         case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_FILL:
@@ -353,10 +359,10 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
     int class_tp_count = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
     const char **param_names = NULL;
     const char *param_names_buf[8] = {0};
-    bool is_parallel_plan_ctor = class_name && strcmp(class_name, "Plan") == 0 &&
-                                 ((class_links && class_links->module_name &&
-                                   strcmp(class_links->module_name, "parallel") == 0) ||
-                                  xa_class_info_is_parallel_plan(ctx, class_info));
+    bool is_parallel_plan_ctor =
+        xa_class_info_is_parallel_plan(ctx, class_info) ||
+        (class_name && xa_class_name_matches_mono_base(class_name, "Plan") && class_links &&
+         class_links->module_name && strcmp(class_links->module_name, "parallel") == 0);
     if (class_tp_count > 0 && type_args && type_arg_count == class_tp_count) {
         param_names = (class_tp_count <= 8)
                           ? param_names_buf
@@ -503,7 +509,8 @@ static XrType *xa_imported_semantic_class_instance_type(XaInferContext *ctx, Ast
                                                  instance->instance.type_args[0], false);
         XrType *saved_expected = ctx->expected_type;
         ctx->expected_type = init_type;
-        xa_visit_infer_expr(ctx, call->arguments[1]);
+        xa_visit_call_arg_with_parallel_context(ctx, call->arguments[1],
+                                                "parallel.Plan init callback");
         ctx->expected_type = saved_expected;
     }
     return instance;

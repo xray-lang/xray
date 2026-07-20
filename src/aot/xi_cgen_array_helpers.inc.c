@@ -3417,6 +3417,7 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
         case XI_BYTE_SLICE_STORE_F64:
         case XI_BYTE_SLICE_FILL:
         case XI_BYTE_SLICE_REPEAT:
+        case XI_SPAN_WINDOW:
         case XI_SPAN_AS_BYTES:
         case XI_SPAN_FILL:
         case XI_SPAN_REINTERPRET:

@@ -12,6 +12,7 @@
 #include "xaot_boundary.h"
 #include "xaot_class_native.h"
 #include "xaot_callable.h"
+#include "xaot_link.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
@@ -155,6 +156,9 @@ static void record_value_stats(XaotPrepareStats *stats, XaotValueKind kind) {
         case XAOT_VALUE_AGGREGATE:
             stats->values_aggregate++;
             break;
+        case XAOT_VALUE_VECTOR:
+            stats->values_vector++;
+            break;
         case XAOT_VALUE_VIEW:
             stats->values_view++;
             break;
@@ -237,6 +241,8 @@ static bool prepare_builtin_receiver_registry_matches(const XrType *receiver_typ
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
             return receiver_type && receiver_type->kind == XR_KIND_INT &&
                    !receiver_type->is_nullable;
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+            return xr_type_is_exact_unsigned_integer(receiver_type);
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver_type);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -1482,6 +1488,7 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
         case XI_BYTE_SLICE_STORE_F64:
         case XI_BYTE_SLICE_FILL:
         case XI_BYTE_SLICE_REPEAT:
+        case XI_SPAN_WINDOW:
         case XI_SPAN_AS_BYTES:
         case XI_SPAN_FILL:
         case XI_SPAN_REINTERPRET:
@@ -1898,6 +1905,12 @@ static bool prepare_span_access_kind_for_value(const XiValue *value, uint8_t *ou
         case XI_SPAN_REINTERPRET:
             *out_kind = XAOT_SPAN_ACCESS_REINTERPRET;
             return true;
+        case XI_VEC_LOAD:
+            *out_kind = XAOT_SPAN_ACCESS_VEC_LOAD;
+            return true;
+        case XI_VEC_STORE:
+            *out_kind = XAOT_SPAN_ACCESS_VEC_STORE;
+            return true;
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
             if (value->nargs != 2)
@@ -1979,6 +1992,7 @@ static bool prepare_span_value_writable_proven(const XaotBundle *bundle, const X
 
     switch ((XiOp) origin->op) {
         case XI_SLICE:
+        case XI_SPAN_WINDOW:
             if (origin->nargs < 1)
                 return false;
             if (origin->args[0] && origin->args[0]->type &&
@@ -2081,7 +2095,45 @@ static bool prepare_span_access_is_write(uint8_t kind) {
     return kind == XAOT_SPAN_ACCESS_INDEX_SET || kind == XAOT_SPAN_ACCESS_BYTE_STORE ||
            kind == XAOT_SPAN_ACCESS_BYTE_FILL || kind == XAOT_SPAN_ACCESS_BYTE_COPY ||
            kind == XAOT_SPAN_ACCESS_BYTE_REPEAT || kind == XAOT_SPAN_ACCESS_SPAN_FILL ||
-           kind == XAOT_SPAN_ACCESS_SPAN_COPY;
+           kind == XAOT_SPAN_ACCESS_SPAN_COPY || kind == XAOT_SPAN_ACCESS_VEC_STORE;
+}
+
+static const XiValue *prepare_span_access_receiver(const XiValue *value, uint8_t kind) {
+    if (!value)
+        return NULL;
+    if (kind == XAOT_SPAN_ACCESS_VEC_STORE)
+        return value->nargs >= 2 ? value->args[1] : NULL;
+    return value->nargs >= 1 ? value->args[0] : NULL;
+}
+
+/* A strict span.window(start, count) is a checked capability for exactly
+ * `count` elements.  A vector access at a constant relative offset can
+ * therefore reuse the window guard and address the original span directly.
+ * The verifier re-derives this plan before CGen; no unchecked source API or
+ * backend pattern guess is involved. */
+static bool prepare_vector_window_bounds_proven(const XiValue *value, uint8_t kind) {
+    const XiValue *receiver = unwrap_identity_value(prepare_span_access_receiver(value, kind));
+    const XiValue *offset = NULL;
+    const XiValue *count = NULL;
+    int64_t offset_value;
+    int64_t count_value;
+    uint8_t lanes;
+
+    if (!value || !receiver || receiver->op != XI_SPAN_WINDOW || receiver->nargs != 3 ||
+        !xi_vec_shape_is_explicit(value->aux_int))
+        return false;
+    offset = unwrap_identity_value(kind == XAOT_SPAN_ACCESS_VEC_STORE
+                                       ? (value->nargs >= 3 ? value->args[2] : NULL)
+                                       : (value->nargs >= 2 ? value->args[1] : NULL));
+    count = unwrap_identity_value(receiver->args[2]);
+    if (!offset || !count || offset->op != XI_CONST || count->op != XI_CONST || !offset->type ||
+        offset->type->kind != XR_KIND_INT || !count->type || count->type->kind != XR_KIND_INT)
+        return false;
+    offset_value = offset->aux_int;
+    count_value = count->aux_int;
+    lanes = xi_vec_shape_lanes(value->aux_int);
+    return lanes != 0 && offset_value >= 0 && count_value >= (int64_t) lanes &&
+           offset_value <= count_value - (int64_t) lanes;
 }
 
 static uint8_t prepare_span_reason_from_bounds_reason(uint8_t bounds_reason) {
@@ -2135,6 +2187,7 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
     uint32_t drop = 0;
     uint8_t reason = XAOT_SPAN_UNPROVEN_NONE;
     int64_t endian = XR_ENDIAN_NATIVE;
+    const XiValue *receiver;
 
     if (!out || !prepare_span_access_kind_for_value(value, &kind))
         return false;
@@ -2145,13 +2198,14 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
 
     if (!value || value->nargs < 1)
         return false;
-    if (!value->args[0] || !value->args[0]->type || value->args[0]->type->kind != XR_KIND_SPAN) {
+    receiver = prepare_span_access_receiver(value, kind);
+    if (!receiver || !receiver->type || receiver->type->kind != XR_KIND_SPAN) {
         if (prepare_span_access_is_index(kind))
             return false;
         reason = XAOT_SPAN_UNPROVEN_DYNAMIC_RECV;
         goto done;
     }
-    if (!prepare_span_elem_plan_for_value(bundle, value->args[0], &recv_elem)) {
+    if (!prepare_span_elem_plan_for_value(bundle, receiver, &recv_elem)) {
         reason = XAOT_SPAN_UNPROVEN_DYNAMIC_RECV;
         goto done;
     }
@@ -2161,7 +2215,7 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
     if (prepare_span_elem_is_pod(&recv_elem))
         evidence |= XAOT_SPAN_EV_RECV_POD;
     if (prepare_span_access_is_write(kind) &&
-        prepare_span_value_writable_proven(bundle, value->args[0], 0)) {
+        prepare_span_value_writable_proven(bundle, receiver, 0)) {
         evidence |= XAOT_SPAN_EV_WRITABLE;
         drop |= XAOT_SPAN_DROP_READONLY;
     }
@@ -2262,6 +2316,15 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
             drop |= XAOT_SPAN_DROP_TYPE | XAOT_SPAN_DROP_POD | XAOT_SPAN_DROP_HELPER;
             break;
         }
+        case XAOT_SPAN_ACCESS_VEC_LOAD:
+        case XAOT_SPAN_ACCESS_VEC_STORE:
+            if (prepare_vector_window_bounds_proven(value, kind)) {
+                evidence |= XAOT_SPAN_EV_RANGE_PROVEN | XAOT_SPAN_EV_NO_CLOBBER;
+                drop |= XAOT_SPAN_DROP_BOUNDS;
+            } else {
+                reason = XAOT_SPAN_UNPROVEN_RANGE;
+            }
+            break;
         default:
             reason = XAOT_SPAN_UNPROVEN_DYNAMIC_BOUNDARY;
             break;
@@ -3147,6 +3210,264 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
     return true;
 }
 
+static unsigned prepare_vector_lane_bytes(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_U8:
+            return 1;
+        case XR_NATIVE_U32:
+            return 4;
+        case XR_NATIVE_U64:
+            return 8;
+        default:
+            return 0;
+    }
+}
+
+static const char *prepare_vector_native_c_type(uint32_t features, uint8_t native_type,
+                                                uint8_t lanes) {
+    unsigned width = prepare_vector_lane_bytes(native_type) * (unsigned) lanes;
+    if (width == 16 && (features & XAOT_SIMD_FEATURE_NEON) != 0) {
+        if (native_type == XR_NATIVE_U8)
+            return "uint8x16_t";
+        if (native_type == XR_NATIVE_U32)
+            return "uint32x4_t";
+        if (native_type == XR_NATIVE_U64)
+            return "uint64x2_t";
+    }
+    if (width == 16 && (features & XAOT_SIMD_FEATURE_SSE2) != 0)
+        return "__m128i";
+    if (width == 32 && (features & XAOT_SIMD_FEATURE_AVX2) != 0)
+        return "__m256i";
+    return NULL;
+}
+
+static bool prepare_vector_native_op_supported(uint32_t features, const XiValue *value) {
+    if (!value || !xi_vec_shape_is_explicit(value->aux_int))
+        return false;
+    uint8_t lanes = xi_vec_shape_lanes(value->aux_int);
+    uint8_t native_type = xi_vec_shape_native_type(value->aux_int);
+    unsigned width = prepare_vector_lane_bytes(native_type) * (unsigned) lanes;
+    bool neon = (features & XAOT_SIMD_FEATURE_NEON) != 0;
+    bool x86 = (features & XAOT_SIMD_FEATURE_SSE2) != 0;
+    bool avx2 = (features & XAOT_SIMD_FEATURE_AVX2) != 0;
+    if (!prepare_vector_native_c_type(features, native_type, lanes))
+        return false;
+    switch ((XiOp) value->op) {
+        case XI_VEC_LOAD:
+        case XI_VEC_STORE:
+        case XI_VEC_SPLAT:
+        case XI_VEC_EXTRACT:
+        case XI_VEC_REPLACE:
+        case XI_VEC_BIT_AND:
+        case XI_VEC_BIT_OR:
+        case XI_VEC_BIT_XOR:
+        case XI_VEC_BIT_NOT:
+        case XI_VEC_REINTERPRET:
+        case XI_VEC_REDUCE_ADD:
+            return true;
+        case XI_VEC_ADD:
+        case XI_VEC_SUB:
+            return native_type != XR_NATIVE_U8 || neon || x86;
+        case XI_VEC_MUL:
+            if (native_type == XR_NATIVE_U64)
+                return false;
+            return neon || (native_type == XR_NATIVE_U32 && avx2);
+        case XI_VEC_SHL:
+        case XI_VEC_SHR:
+            return native_type == XR_NATIVE_U32 || native_type == XR_NATIVE_U64;
+        case XI_VEC_SHUFFLE:
+            if ((value->aux_int & XI_VEC_SHAPE_UNZIP) != 0)
+                return neon && width == 16 && native_type == XR_NATIVE_U32;
+            if (neon)
+                return width == 16;
+            if (!x86)
+                return false;
+            return native_type != XR_NATIVE_U8 || avx2;
+        case XI_VEC_WIDEN_MUL:
+            if ((value->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0)
+                return neon && native_type == XR_NATIVE_U64 && lanes == 2;
+            return native_type == XR_NATIVE_U64 && (lanes == 2 || (lanes == 4 && avx2));
+        default:
+            return false;
+    }
+}
+
+static bool prepare_vector_op_has_vector_result(const XiValue *value) {
+    if (!value)
+        return false;
+    switch ((XiOp) value->op) {
+        case XI_VEC_LOAD:
+        case XI_VEC_SPLAT:
+        case XI_VEC_REPLACE:
+        case XI_VEC_ADD:
+        case XI_VEC_SUB:
+        case XI_VEC_MUL:
+        case XI_VEC_BIT_AND:
+        case XI_VEC_BIT_OR:
+        case XI_VEC_BIT_XOR:
+        case XI_VEC_BIT_NOT:
+        case XI_VEC_SHL:
+        case XI_VEC_SHR:
+        case XI_VEC_REINTERPRET:
+        case XI_VEC_SHUFFLE:
+        case XI_VEC_WIDEN_MUL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static XaotValueRep prepare_vector_rep(const XaotValueRep *base, const XiValue *value,
+                                       uint32_t features) {
+    XaotValueRep rep = base ? *base : xaot_value_rep_for_value(value);
+    uint8_t native_type = xi_vec_shape_native_type(value->aux_int);
+    uint8_t lanes = xi_vec_shape_lanes(value->aux_int);
+    rep.kind = XAOT_VALUE_VECTOR;
+    rep.c_type = prepare_vector_native_c_type(features, native_type, lanes);
+    rep.vector_native_type = native_type;
+    rep.vector_lanes = lanes;
+    rep.vector_width_bytes = (uint8_t) (prepare_vector_lane_bytes(native_type) * (unsigned) lanes);
+    return rep;
+}
+
+static bool prepare_vector_reps_same(XaotValueRep a, XaotValueRep b) {
+    return a.kind == XAOT_VALUE_VECTOR && b.kind == XAOT_VALUE_VECTOR &&
+           a.vector_native_type == b.vector_native_type && a.vector_lanes == b.vector_lanes &&
+           a.vector_width_bytes == b.vector_width_bytes && a.c_type && b.c_type &&
+           strcmp(a.c_type, b.c_type) == 0;
+}
+
+static bool prepare_vector_propagate_identity_plan(XaotBundle *bundle, XaotValuePlan *plan) {
+    const XiValue *value = plan ? plan->value : NULL;
+    if (!value || (value->op != XI_COPY && value->op != XI_MOVE && value->op != XI_PHI) ||
+        value->nargs == 0)
+        return false;
+    const XaotValuePlan *first = xaot_bundle_find_value_plan(bundle, value->args[0]);
+    if (!first || first->rep.kind != XAOT_VALUE_VECTOR)
+        return false;
+    for (uint16_t i = 1; i < value->nargs; i++) {
+        const XaotValuePlan *incoming = xaot_bundle_find_value_plan(bundle, value->args[i]);
+        if (!incoming || !prepare_vector_reps_same(first->rep, incoming->rep))
+            return false;
+    }
+    if (prepare_vector_reps_same(plan->rep, first->rep))
+        return false;
+    plan->rep = first->rep;
+    plan->rep.type = value->type;
+    return true;
+}
+
+static bool prepare_vector_user_accepts_native(const XaotBundle *bundle, const XiValue *user) {
+    if (!bundle || !user)
+        return false;
+    if (user->op == XI_ERR_CHECK || user->op == XI_RETAIN || user->op == XI_RELEASE)
+        return true;
+    if (prepare_vector_native_op_supported(bundle->target_simd_features, user))
+        return true;
+    if (user->op == XI_COPY || user->op == XI_MOVE || user->op == XI_PHI) {
+        const XaotValuePlan *plan = xaot_bundle_find_value_plan(bundle, user);
+        return plan && plan->rep.kind == XAOT_VALUE_VECTOR;
+    }
+    return false;
+}
+
+static bool prepare_vector_value_has_unsupported_use(const XaotBundle *bundle, const XiFunc *func,
+                                                     const XiValue *value) {
+    if (!bundle || !func || !value)
+        return true;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        if (block->control == value)
+            return true;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                if (phi->value.args[ai] == value &&
+                    !prepare_vector_user_accepts_native(bundle, &phi->value))
+                    return true;
+            }
+        }
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *user = block->values[vi];
+            if (!user)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] == value && !prepare_vector_user_accepts_native(bundle, user))
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
+static bool prepare_vector_identity_inputs_still_native(const XaotBundle *bundle,
+                                                        const XiValue *value,
+                                                        XaotValueRep expected) {
+    if (!bundle || !value || (value->op != XI_COPY && value->op != XI_MOVE && value->op != XI_PHI))
+        return true;
+    for (uint16_t i = 0; i < value->nargs; i++) {
+        const XaotValuePlan *incoming = xaot_bundle_find_value_plan(bundle, value->args[i]);
+        if (!incoming || !prepare_vector_reps_same(expected, incoming->rep))
+            return false;
+    }
+    return true;
+}
+
+static void prepare_recount_value_stats(XaotBundle *bundle) {
+    if (!bundle)
+        return;
+    bundle->stats.values_total = 0;
+    bundle->stats.values_scalar = 0;
+    bundle->stats.values_tagged = 0;
+    bundle->stats.values_ptr = 0;
+    bundle->stats.values_aggregate = 0;
+    bundle->stats.values_vector = 0;
+    bundle->stats.values_view = 0;
+    bundle->stats.values_void = 0;
+    for (uint32_t i = 0; i < bundle->nvalue_plans; i++)
+        record_value_stats(&bundle->stats, bundle->value_plans[i].rep.kind);
+}
+
+static void prepare_target_vector_value_plans(XaotBundle *bundle) {
+    if (!bundle || bundle->target_simd_features == 0)
+        return;
+    for (uint32_t i = 0; i < bundle->nvalue_plans; i++) {
+        XaotValuePlan *plan = &bundle->value_plans[i];
+        const XiValue *value = plan->value;
+        const XaotFuncPlan *func_plan = xaot_bundle_find_func_plan(bundle, plan->func);
+        if (!func_plan || func_plan->abi.kind == XAOT_ABI_CORO)
+            continue;
+        if (prepare_vector_op_has_vector_result(value) &&
+            prepare_vector_native_op_supported(bundle->target_simd_features, value))
+            plan->rep = prepare_vector_rep(&plan->rep, value, bundle->target_simd_features);
+    }
+    for (uint32_t iteration = 0; iteration < bundle->nvalue_plans; iteration++) {
+        bool changed = false;
+        for (uint32_t i = 0; i < bundle->nvalue_plans; i++)
+            changed =
+                prepare_vector_propagate_identity_plan(bundle, &bundle->value_plans[i]) || changed;
+        if (!changed)
+            break;
+    }
+    for (uint32_t iteration = 0; iteration < bundle->nvalue_plans; iteration++) {
+        bool changed = false;
+        for (uint32_t i = 0; i < bundle->nvalue_plans; i++) {
+            XaotValuePlan *plan = &bundle->value_plans[i];
+            if (plan->rep.kind != XAOT_VALUE_VECTOR)
+                continue;
+            if (!prepare_vector_identity_inputs_still_native(bundle, plan->value, plan->rep) ||
+                prepare_vector_value_has_unsupported_use(bundle, plan->func, plan->value)) {
+                plan->rep = xaot_abi_native_value_rep(bundle, plan->func, plan->value);
+                changed = true;
+            }
+        }
+        if (!changed)
+            break;
+    }
+    prepare_recount_value_stats(bundle);
+}
+
 static bool prepare_apply_return_abi_value_plans(XaotBundle *bundle,
                                                  const XaotFuncPlan *func_plan) {
     XaotValueRep ret_rep;
@@ -4025,6 +4346,7 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
         if (!prepare_apply_aggregate_value_plans(bundle, func))
             return false;
     }
+    prepare_target_vector_value_plans(bundle);
     for (mi = 0; mi < bundle->nfunc_plans; mi++) {
         if (!prepare_func_boundary_steps(bundle, &bundle->func_plans[mi]))
             return false;

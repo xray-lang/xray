@@ -41,6 +41,7 @@
 (define-xi-op xi.target.simd.bytes
   :class constant
   :arity variadic
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -239,6 +240,17 @@
 (define-xi-op xi.bit.ctz
   :class bitwise
   :arity 1
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bit.mul-high
+  :class bitwise
+  :arity 2
   :own-use borrow
   :speculation safe
   :vn-kind pure
@@ -732,6 +744,16 @@
   :effects (side-effect may-throw memory-read memory-write)
   :requires (byte-slice bounds overlap-repeat)
   :observable (span-repeat)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.span.window
+  :class memory-read
+  :arity 3
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (may-throw memory-read)
+  :requires (span bounds)
+  :observable (span-window)
   :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.span.as.bytes

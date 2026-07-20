@@ -1922,7 +1922,7 @@ static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc
             const char *ctype = cg_coro_decl_ctype(ctx, f, v);
             fprintf(out, "    %s ", ctype);
             emit_vref(out, v);
-            if (cg_value_plan_is_aggregate(ctx, v)) {
+            if (cg_value_plan_is_aggregate(ctx, v) || cg_value_plan_is_vector(ctx, v)) {
                 fprintf(out, " = ");
                 emit_value_plan_zero_expr(ctx, out, v);
                 fprintf(out, ";\n");

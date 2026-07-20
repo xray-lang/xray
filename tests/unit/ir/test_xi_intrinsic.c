@@ -319,6 +319,13 @@ static void test_builtin_receiver_method_placement(void) {
         xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_POPCOUNT);
     ASSERT_TRUE(popcount && popcount->result == XA_BUILTIN_TYPE_INT,
                 "popcount must return language int");
+    const XaBuiltinReceiverMethodSpec *mul_high =
+        xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_EXACT_UINT_MUL_HIGH);
+    ASSERT_TRUE(mul_high && mul_high->receiver == XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER &&
+                    mul_high->result == XA_BUILTIN_TYPE_RECEIVER &&
+                    mul_high->params[0] == XA_BUILTIN_TYPE_RECEIVER &&
+                    mul_high->allocation == XA_BUILTIN_ALLOCATION_NO_HEAP,
+                "mulHigh must be unsigned-only, exact-width, receiver-preserving and no-heap");
 
     const char *u8_array_methods[] = {"appendFrom", "repeatFrom", NULL};
     for (int i = 0; u8_array_methods[i]; i++) {

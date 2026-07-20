@@ -2,6 +2,7 @@ var words: Array<uint32> = [305419896]
 var counts: Array<int> = [9]
 var halves: Array<int16> = [4660]
 var queryWords: Array<uint16> = [256]
+var wideWords: Array<uint64> = [0, 2]
 
 // Keep the operands behind runtime collection loads so the C-shape test
 // observes the intrinsic lowering instead of compile-time constant folding.
@@ -9,6 +10,9 @@ var word = words[0]
 var count = counts[0]
 var half = halves[0]
 var queryWord = queryWords[0]
+var wideWord = wideWords[0] - (1 as uint64)
+var wideFactor = wideWords[1]
 print(word.rotateLeft(count).rotateRight(-count))
 print(half.byteswap())
 print(queryWord.popcount() + queryWord.leadingZeros() + queryWord.trailingZeros())
+print(wideWord.mulHigh(wideFactor))

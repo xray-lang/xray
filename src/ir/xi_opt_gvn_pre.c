@@ -41,6 +41,7 @@
 #include "xi_evidence.h"
 #include "xi_analysis.h"
 #include "xi_effect.h"
+#include "xi_own.h"
 #include "xi_tbaa.h"
 #include "xi_memssa.h"
 #include "../base/xchecks.h"
@@ -51,6 +52,14 @@
 
 static bool gvn_is_eligible(const XiValue *v) {
     if (!v)
+        return false;
+    /* Owned RC results carry a distinct lifetime edge even when their value
+     * semantics compare equal.  Replacing one with a dominating leader after
+     * the Owned stage would also have to rebuild the leader's retain/release
+     * frontier.  GVN has no current ownership/lifetime proof for that rewrite,
+     * so fail closed instead of manufacturing a use-after-release. */
+    bool explicit_vector_value = v->op >= XI_VEC_LOAD && v->op <= XI_VEC_REDUCE_ADD;
+    if (!explicit_vector_value && xi_own_type_is_rc(v->type))
         return false;
     uint8_t vn_kind = xi_op_value_numbering_kind(v->op);
     if (vn_kind == XI_GEN_VN_NONE)

@@ -194,6 +194,36 @@ static XiFunc *func_tree_find_func_name(XiFunc *f, const char *name) {
     return NULL;
 }
 
+static int func_count_trivial_phis(const XiFunc *f) {
+    int count = 0;
+    if (!f)
+        return 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            const XiValue *unique = NULL;
+            bool trivial = true;
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                const XiValue *arg = phi->value.args[a];
+                if (!arg || arg == &phi->value || arg == unique)
+                    continue;
+                if (unique) {
+                    trivial = false;
+                    break;
+                }
+                unique = arg;
+            }
+            if (trivial && unique)
+                count++;
+        }
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        count += func_count_trivial_phis(f->children[i]);
+    return count;
+}
+
 static XiFunc *func_tree_find_xg_body(XiFunc *f, XgFuncId body_func_id) {
     if (!f || body_func_id == XG_NO_ID)
         return NULL;
@@ -428,6 +458,24 @@ TEST(while_loop) {
     assert(f != NULL);
     /* Should have: entry, cond, body, exit blocks */
     assert(f->nblocks >= 3);
+    xi_func_free(f);
+}
+
+TEST(loop_invariant_rc_trivial_phi_is_rewritten) {
+    XiFunc *f = lower_source("fn invariant(xs: Array<int>) -> int {\n"
+                             "    var i = 0\n"
+                             "    while (i < 2) {\n"
+                             "        print(len(xs))\n"
+                             "        i = i + 1\n"
+                             "    }\n"
+                             "    return len(xs)\n"
+                             "}\n"
+                             "print(invariant([1, 2]))\n");
+    assert(f != NULL);
+    XiFunc *invariant = func_tree_find_func_name(f, "invariant");
+    assert(invariant != NULL);
+    assert(func_count_trivial_phis(invariant) == 0 &&
+           "sealed loop headers must rewrite all users of trivial RC phis");
     xi_func_free(f);
 }
 
@@ -2613,6 +2661,7 @@ int main(void) {
     run_variable_assignment();
     run_if_else();
     run_while_loop();
+    run_loop_invariant_rc_trivial_phi_is_rewritten();
     run_for_loop();
     run_nested_if();
     run_bool_literals();

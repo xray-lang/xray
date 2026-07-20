@@ -21,6 +21,7 @@
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
+static XrType stub_string = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType stub_any = {.kind = XR_KIND_UNKNOWN, .id = 10, .frozen = true};
 
 static int tests_passed = 0;
@@ -1304,6 +1305,22 @@ TEST(const_same_value_not_gvnd) {
     xi_func_free(f);
 }
 
+TEST(rc_owned_result_not_gvnd_without_lifetime_proof) {
+    XiFunc *f = make_func("rc_owned_gvn", &stub_string);
+    XiBlock *entry = f->entry;
+    XiValue *input = xi_param(f, entry, 0, &stub_int);
+    XiValue *first = xi_unary(f, entry, XI_CONVERT, &stub_string, input);
+    XiValue *second = xi_unary(f, entry, XI_CONVERT, &stub_string, input);
+    xi_block_set_return(entry, second);
+
+    XiPassChange chg = xi_opt_gvn_pre(f);
+
+    assert(first->op == XI_CONVERT && second->op == XI_CONVERT &&
+           "GVN must not merge owned RC results without current lifetime evidence");
+    assert(!chg.values_changed && "the fail-closed RC case must not rewrite the graph");
+    xi_func_free(f);
+}
+
 TEST(zero_effect_op_without_vn_policy_not_eliminated) {
     XiFunc *f = make_func("is_not_vn", &stub_bool);
     XiBlock *entry = f->entry;
@@ -1867,6 +1884,7 @@ int main(void) {
     run_single_value_noop();
     run_phi_not_eliminated();
     run_const_same_value_not_gvnd();
+    run_rc_owned_result_not_gvnd_without_lifetime_proof();
     run_zero_effect_op_without_vn_policy_not_eliminated();
 
     /* 8. Verifier integration */

@@ -11,6 +11,7 @@
 #include "xaot_verify.h"
 #include "xaot_prepare.h"
 #include "xaot_callable.h"
+#include "xaot_link.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xhash.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -161,11 +162,96 @@ static bool verify_func_has_plan_recursive(const XaotBundle *bundle, const XiFun
     return true;
 }
 
-static bool verify_value_plan(const XaotValuePlan *plan, char *errbuf, size_t errbuf_len) {
+static bool verify_vector_result_op(const XiValue *value) {
+    if (!value)
+        return false;
+    switch ((XiOp) value->op) {
+        case XI_VEC_LOAD:
+        case XI_VEC_SPLAT:
+        case XI_VEC_REPLACE:
+        case XI_VEC_ADD:
+        case XI_VEC_SUB:
+        case XI_VEC_MUL:
+        case XI_VEC_BIT_AND:
+        case XI_VEC_BIT_OR:
+        case XI_VEC_BIT_XOR:
+        case XI_VEC_BIT_NOT:
+        case XI_VEC_SHL:
+        case XI_VEC_SHR:
+        case XI_VEC_REINTERPRET:
+        case XI_VEC_SHUFFLE:
+        case XI_VEC_WIDEN_MUL:
+        case XI_COPY:
+        case XI_MOVE:
+        case XI_PHI:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static unsigned verify_vector_lane_bytes(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_U8:
+            return 1;
+        case XR_NATIVE_U32:
+            return 4;
+        case XR_NATIVE_U64:
+            return 8;
+        default:
+            return 0;
+    }
+}
+
+static bool verify_vector_rep(const XaotBundle *bundle, const XaotValuePlan *plan, char *errbuf,
+                              size_t errbuf_len) {
+    const XaotValueRep *rep = &plan->rep;
+    const XiValue *value = plan->value;
+    const XaotFuncPlan *func_plan = xaot_bundle_find_func_plan(bundle, plan->func);
+    unsigned lane_bytes = verify_vector_lane_bytes(rep->vector_native_type);
+    unsigned width = lane_bytes * (unsigned) rep->vector_lanes;
+    bool identity = value->op == XI_COPY || value->op == XI_MOVE || value->op == XI_PHI;
+
+    if (!verify_vector_result_op(value))
+        return set_error(errbuf, errbuf_len, "AOT vector value plan has non-vector producer");
+    if (!func_plan || func_plan->abi.kind == XAOT_ABI_CORO)
+        return set_error(errbuf, errbuf_len, "AOT vector value plan crosses coroutine ABI");
+    if (!lane_bytes || !rep->vector_lanes || rep->vector_width_bytes != width ||
+        (width != 16 && width != 32))
+        return set_error(errbuf, errbuf_len, "AOT vector value plan has invalid lane shape");
+    if (!identity) {
+        if (!xi_vec_shape_is_explicit(value->aux_int) ||
+            xi_vec_shape_native_type(value->aux_int) != rep->vector_native_type ||
+            xi_vec_shape_lanes(value->aux_int) != rep->vector_lanes)
+            return set_error(errbuf, errbuf_len, "AOT vector value plan disagrees with Xi shape");
+    }
+    if (strcmp(rep->c_type, "__m256i") == 0) {
+        if (width != 32 || (bundle->target_simd_features & XAOT_SIMD_FEATURE_AVX2) == 0)
+            return set_error(errbuf, errbuf_len, "AOT AVX2 vector plan lacks target evidence");
+        return true;
+    }
+    if (strcmp(rep->c_type, "__m128i") == 0) {
+        if (width != 16 || (bundle->target_simd_features & XAOT_SIMD_FEATURE_SSE2) == 0)
+            return set_error(errbuf, errbuf_len, "AOT SSE2 vector plan lacks target evidence");
+        return true;
+    }
+    if ((bundle->target_simd_features & XAOT_SIMD_FEATURE_NEON) == 0 || width != 16)
+        return set_error(errbuf, errbuf_len, "AOT NEON vector plan lacks target evidence");
+    if ((rep->vector_native_type == XR_NATIVE_U8 && strcmp(rep->c_type, "uint8x16_t") == 0) ||
+        (rep->vector_native_type == XR_NATIVE_U32 && strcmp(rep->c_type, "uint32x4_t") == 0) ||
+        (rep->vector_native_type == XR_NATIVE_U64 && strcmp(rep->c_type, "uint64x2_t") == 0))
+        return true;
+    return set_error(errbuf, errbuf_len, "AOT vector value plan has invalid native C type");
+}
+
+static bool verify_value_plan(const XaotBundle *bundle, const XaotValuePlan *plan, char *errbuf,
+                              size_t errbuf_len) {
     if (!plan || !plan->value)
         return set_error(errbuf, errbuf_len, "AOT value plan has no Xi value");
     if (!plan->rep.c_type)
         return set_error(errbuf, errbuf_len, "AOT value plan is missing C type");
+    if (plan->rep.kind == XAOT_VALUE_VECTOR)
+        return verify_vector_rep(bundle, plan, errbuf, errbuf_len);
     return true;
 }
 
@@ -7475,7 +7561,7 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
             return false;
     }
     for (fi = 0; fi < bundle->nvalue_plans; fi++) {
-        if (!verify_value_plan(&bundle->value_plans[fi], errbuf, errbuf_len))
+        if (!verify_value_plan(bundle, &bundle->value_plans[fi], errbuf, errbuf_len))
             return false;
     }
     for (fi = 0; fi < bundle->ncontainer_plans; fi++) {

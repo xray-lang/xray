@@ -8030,6 +8030,7 @@ static bool body_sequence_registry_receiver_matches(const XgLocalType *local,
         return false;
     switch (receiver) {
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
             return false;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return local->sequence_kind == XG_SEQ_BYTES;

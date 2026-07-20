@@ -59,6 +59,8 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_BIT_ROTL;
         case XA_INTRINSIC_LOWERING_BIT_ROTR:
             return XI_BIT_ROTR;
+        case XA_INTRINSIC_LOWERING_BIT_MUL_HIGH:
+            return XI_BIT_MUL_HIGH;
         case XA_INTRINSIC_LOWERING_BIT_BSWAP:
             return XI_BIT_BSWAP;
         case XA_INTRINSIC_LOWERING_BIT_POPCOUNT:
@@ -84,6 +86,8 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_SPAN_REINTERPRET;
         case XA_INTRINSIC_LOWERING_SPAN_DATA_PTR:
             return XI_ARRAY_DATA_PTR;
+        case XA_INTRINSIC_LOWERING_SPAN_WINDOW:
+            return XI_SPAN_WINDOW;
         case XA_INTRINSIC_LOWERING_SPAN_AS_BYTES:
             return XI_SPAN_AS_BYTES;
         case XA_INTRINSIC_LOWERING_SPAN_FILL:
@@ -215,6 +219,18 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
             return set_error(error, error_size,
                              "canonical intrinsic id %u has invalid odd-lane flag %u",
                              value->xa_intrinsic_id, has_odd ? 1u : 0u);
+        bool expects_unzip = (desc->flags & XA_INTRINSIC_FLAG_UNZIP) != 0;
+        bool has_unzip = (value->aux_int & XI_VEC_SHAPE_UNZIP) != 0;
+        if (expects_unzip != has_unzip)
+            return set_error(error, error_size,
+                             "canonical intrinsic id %u has invalid unzip flag %u",
+                             value->xa_intrinsic_id, has_unzip ? 1u : 0u);
+        bool expects_half = (desc->flags & XA_INTRINSIC_FLAG_CONTIGUOUS_HALF) != 0;
+        bool has_half = (value->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0;
+        if (expects_half != has_half)
+            return set_error(error, error_size,
+                             "canonical intrinsic id %u has invalid contiguous-half flag %u",
+                             value->xa_intrinsic_id, has_half ? 1u : 0u);
     } else if (desc->family == XA_INTRINSIC_FAMILY_MEMORY) {
         if (desc->lowering == XA_INTRINSIC_LOWERING_SPAN_REINTERPRET && value->aux_int == 0)
             return set_error(error, error_size,

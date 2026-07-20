@@ -9,7 +9,14 @@
  */
 
 static bool cg_const_int_value(const XiValue *value, int64_t *out) {
-    const XiValue *v = cg_unwrap_identity_value(value);
+    const XiValue *v = value;
+    for (uint8_t depth = 0; depth < 4; depth++) {
+        v = cg_unwrap_identity_value(v);
+        if (!v || (v->op != XI_BOX && v->op != XI_UNBOX) || v->nargs != 1)
+            break;
+        v = v->args[0];
+    }
+    v = cg_unwrap_identity_value(v);
     if (!v || v->op != XI_CONST || !v->type || v->type->kind != XR_KIND_INT || !out)
         return false;
     *out = v->aux_int;

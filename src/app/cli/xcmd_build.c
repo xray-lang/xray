@@ -1589,11 +1589,11 @@ static void print_aot_prepare_stats(const XaotBuildResult *result) {
     const XaotPrepareStats *stats = &result->prepare_stats;
     printf("[xi-native] AOT prepare: functions=%u native=%u tagged=%u coro=%u values=%u "
            "boundaries=%u value_scalar=%u value_tagged=%u value_ptr=%u value_aggregate=%u "
-           "value_view=%u value_void=%u\n",
+           "value_vector=%u value_view=%u value_void=%u\n",
            stats->functions_total, stats->functions_native_abi, stats->functions_tagged_abi,
            stats->functions_coro_abi, stats->values_total, stats->boundary_count,
            stats->values_scalar, stats->values_tagged, stats->values_ptr, stats->values_aggregate,
-           stats->values_view, stats->values_void);
+           stats->values_vector, stats->values_view, stats->values_void);
 }
 
 /* ========== Per-module object cache (114: separate compilation) ==========
@@ -2530,6 +2530,27 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                     !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_LD_FLAG,
                                                    "-flto"))) {
             fprintf(stderr, "Error: failed to add LTO flags to AOT link manifest\n");
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
+        /* LLVM's AArch64 machine outliner can replace hot explicit-vector
+         * kernels with local calls. Disable it only for bundles that actually
+         * carry explicit SIMD; scalar/runtime bundles retain outlining and its
+         * code-size benefit. This is a verified bundle property combined with
+         * target/toolchain policy, not a source-function special case. */
+        bool clang_family = toolchain_plan && (toolchain_plan->kind == XR_CLI_TOOLCHAIN_CLANG ||
+                                               toolchain_plan->kind == XR_CLI_TOOLCHAIN_ZIG ||
+                                               (toolchain_plan->kind == XR_CLI_TOOLCHAIN_HOST &&
+                                                toolchain_plan->program &&
+                                                strstr(toolchain_plan->program, "clang") != NULL));
+        const char *target_arch = aot_result.link_manifest.target.arch;
+        bool aarch64_target = target_arch && (strcmp(target_arch, "aarch64") == 0 ||
+                                              strcmp(target_arch, "arm64") == 0);
+        if (clang_family && aarch64_target && aot_result.has_explicit_vector_ops &&
+            strcmp(opt_flag, "-Os") != 0 &&
+            !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
+                                           "-mno-outline")) {
+            fprintf(stderr, "Error: failed to disable speed-hostile AArch64 outlining\n");
             xaot_build_result_free(&aot_result);
             return 1;
         }

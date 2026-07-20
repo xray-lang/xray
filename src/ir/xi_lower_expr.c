@@ -2109,6 +2109,8 @@ static bool xi_lower_builtin_receiver_registry_matches(struct XrType *receiver_t
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
             return receiver_type && receiver_type->kind == XR_KIND_INT &&
                    !receiver_type->is_nullable;
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+            return xr_type_is_exact_unsigned_integer(receiver_type);
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver_type);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -4977,7 +4979,7 @@ static void lower_take_memory_intrinsic_evidence(XiLower *l, const AstNode *node
             kinds.bulk_op_kind = XG_BULK_REPEAT;
             break;
         default:
-            break;
+            return;
     }
     xi_lower_take_sequence_evidence_ids(l, node ? (uint32_t) node->line : 0, kinds, out_ids);
 }
@@ -5073,6 +5075,10 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     int64_t extra = 0;
     if ((desc->flags & XA_INTRINSIC_FLAG_ODD_LANES) != 0)
         extra |= XI_VEC_SHAPE_ODD_LANES;
+    if ((desc->flags & XA_INTRINSIC_FLAG_UNZIP) != 0)
+        extra |= XI_VEC_SHAPE_UNZIP;
+    if ((desc->flags & XA_INTRINSIC_FLAG_CONTIGUOUS_HALF) != 0)
+        extra |= XI_VEC_SHAPE_CONTIGUOUS_HALF;
     if (desc->lowering == XA_INTRINSIC_LOWERING_VEC_SHUFFLE &&
         !lower_intrinsic_shuffle_pattern(l, node, call, desc, &extra))
         return NULL;

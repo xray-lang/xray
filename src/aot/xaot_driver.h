@@ -120,10 +120,11 @@ typedef struct {
     char *evidence_cache_payloads[XG_EVIDENCE_CACHE_PHASE_COUNT]; /* phase payload dumps */
     char *c_export_header; /* public @c_export C declarations (malloc'd) */
     XaotLinkManifest link_manifest;
-    int total_compiled;      /* number of functions successfully transpiled */
-    int total_aot;           /* total AOT-eligible functions found */
-    int nmodules;            /* number of modules in the bundle */
-    XaotFeatureSet features; /* inferred feature set */
+    int total_compiled;           /* number of functions successfully transpiled */
+    int total_aot;                /* total AOT-eligible functions found */
+    int nmodules;                 /* number of modules in the bundle */
+    XaotFeatureSet features;      /* inferred feature set */
+    bool has_explicit_vector_ops; /* bundle contains target-planned explicit SIMD */
     XaotPrepareStats prepare_stats;
     XiCgenStats cgen_stats;
     XiCgenCoroFrameStats coro_frame_stats;

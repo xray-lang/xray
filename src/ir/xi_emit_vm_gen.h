@@ -33,6 +33,7 @@
     X(BIT_POPCOUNT, xi_emit_exact_bit) \
     X(BIT_CLZ, xi_emit_exact_bit) \
     X(BIT_CTZ, xi_emit_exact_bit) \
+    X(BIT_MUL_HIGH, xi_emit_exact_bit) \
     X(NOT, xi_emit_not) \
     X(SELECT, emit_select) \
     X(VEC_LOAD, xi_emit_semantic_intrinsic_call) \
@@ -184,6 +185,7 @@
     X(BYTE_SLICE_COMPARE, xi_emit_byte_slice_compare) \
     X(BYTE_SLICE_COMMON_PREFIX, xi_emit_byte_slice_common_prefix) \
     X(BYTE_SLICE_REPEAT, xi_emit_byte_slice_repeat) \
+    X(SPAN_WINDOW, xi_emit_span_window) \
     X(SPAN_AS_BYTES, xi_emit_span_as_bytes) \
     X(SPAN_FILL, xi_emit_span_fill) \
     X(SPAN_COPY, xi_emit_span_copy) \
