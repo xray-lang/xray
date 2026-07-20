@@ -37,6 +37,7 @@
 #include "../io/xio_runtime.h"  // xr_io_runtime_new / xr_io_runtime_free
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "../os/os_thread.h"
 #include "../os/os_time.h"
 

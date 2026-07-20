@@ -202,8 +202,15 @@ XR_FUNC bool xr_cli_toolchain_resolve_ex(XrCliToolchainKind requested,
     }
 
     memset(out, 0, sizeof(*out));
-    if (resolved == XR_CLI_TOOLCHAIN_AUTO)
-        resolved = target->is_native ? XR_CLI_TOOLCHAIN_HOST : XR_CLI_TOOLCHAIN_ZIG;
+    if (resolved == XR_CLI_TOOLCHAIN_AUTO) {
+        const char *env_zig = getenv("XRAY_ZIG");
+        bool has_bundled_zig = xr_cli_toolchain_find_bundled_zig(program_hint, out->program_storage,
+                                                                 sizeof(out->program_storage));
+        resolved = (!target->is_native || (zig_path && zig_path[0]) || (env_zig && env_zig[0]) ||
+                    has_bundled_zig)
+                       ? XR_CLI_TOOLCHAIN_ZIG
+                       : XR_CLI_TOOLCHAIN_HOST;
+    }
 
     if (!target->is_native && resolved != XR_CLI_TOOLCHAIN_ZIG) {
         xr_cli_tc_error(err, err_size, "cross target '%s' currently requires --toolchain zig",
