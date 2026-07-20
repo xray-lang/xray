@@ -1,46 +1,68 @@
 import yaml
+import { YamlValue } from yaml
+
+// Matching an ADT value into a scalar (string) is AOT-safe; returning an
+// unwrapped enum aggregate from a helper is not, so navigation below uses
+// local `var` bindings rather than YamlValue-returning helpers.
+fn kindOf(v: YamlValue) -> string {
+    return match (v) {
+        YamlValue.Null          -> "null",
+        YamlValue.Boolean(b)    -> "bool",
+        YamlValue.Integer(n)    -> "int",
+        YamlValue.Float(f)      -> "float",
+        YamlValue.String(s)     -> "string",
+        YamlValue.Binary(bytes) -> "binary",
+        YamlValue.Sequence(xs)  -> "seq",
+        YamlValue.Mapping(m)    -> "map",
+        YamlValue.Tagged(t)     -> "tagged",
+        YamlValue.Alias(a)      -> "alias"
+    }
+}
 
 var doc = yaml.parse("app:\n  name: xray\n  ports: [80, 443]\n  limits: {max: 100, timeout: 30}\nitems:\n  - id: 1\n    status: done\n  - {id: 2, status: pending}\n")
-print(doc["app"]["name"])
-print(doc["app"]["ports"][1])
-print(doc["app"]["limits"]["max"])
-print(len(doc["items"]))
-print(doc["items"][0]["status"])
-print(doc["items"][1]["id"])
+var app = yaml.get(doc, "app")!
+print(yaml.asString(yaml.get(app, "name")!) ?? "")
+var ports = yaml.get(app, "ports")!
+print(yaml.asInt(yaml.at(ports, 1)!) ?? -1)
+var limits = yaml.get(app, "limits")!
+print(yaml.asInt(yaml.get(limits, "max")!) ?? -1)
+var items = yaml.get(doc, "items")!
+print(yaml.length(items))
+var item0 = yaml.at(items, 0)!
+print(yaml.asString(yaml.get(item0, "status")!) ?? "")
+var item1 = yaml.at(items, 1)!
+print(yaml.asInt(yaml.get(item1, "id")!) ?? -1)
+print(kindOf(doc))
+print(kindOf(ports))
+print(yaml.keys(app).join(","))
 
 var aliases = yaml.parse("anchor: &val hello\nalias: *val")
-print(aliases["anchor"])
-print(aliases["alias"])
+print(yaml.asString(yaml.get(aliases, "anchor")!) ?? "")
+print(yaml.asString(yaml.get(aliases, "alias")!) ?? "")
 
 var block = yaml.parse("text: |-\n  line one\n  line two")
-var blockText = string(block["text"])
-if (blockText.contains("line one")) {
-    print("has-line")
-} else {
-    print("missing-line")
-}
-if (blockText.endsWith("\n")) {
-    print("has-newline")
-} else {
-    print("no-newline")
-}
+var blockText = yaml.asString(yaml.get(block, "text")!) ?? ""
+if (blockText.contains("line one")) { print("has-line") } else { print("missing-line") }
+if (blockText.endsWith("\n")) { print("has-newline") } else { print("no-newline") }
 
 var docs = yaml.parseAll("---\na: 1\n...\nb: 2")
 print(len(docs))
-print(docs[0]["a"])
-print(docs[1]["b"])
+print(yaml.asInt(yaml.get(docs[0], "a")!) ?? -1)
+print(yaml.asInt(yaml.get(docs[1], "b")!) ?? -1)
 
 var strict = yaml.parseStrict("name: Alice\nage: 30")
-print(strict["data"]["name"])
-print(len(strict["errors"]))
-print(strict["meta"]["anchors"])
+print(yaml.asString(yaml.get(strict, "name")!) ?? "")
 
-var out = yaml.stringify({name: "xray", version: 1, debug: false})
+var report = yaml.parseReport("name: Alice\nage: 30")
+print(len(report.diagnostics))
+print(report.anchors)
+
+var root = yaml.newMapping()
+yaml.mappingSet(root, "name", yaml.stringValue("xray"))
+yaml.mappingSet(root, "version", yaml.intValue(1))
+yaml.mappingSet(root, "debug", yaml.boolValue(false))
+var out = yaml.stringify(yaml.mappingValue(root))
 var reparsed = yaml.parse(out)
-print(reparsed["name"])
-print(reparsed["version"])
-if (reparsed["debug"] == true) {
-    print("debug-on")
-} else {
-    print("debug-off")
-}
+print(yaml.asString(yaml.get(reparsed, "name")!) ?? "")
+print(yaml.asInt(yaml.get(reparsed, "version")!) ?? -1)
+if (yaml.asBool(yaml.get(reparsed, "debug")!) ?? true) { print("debug-on") } else { print("debug-off") }

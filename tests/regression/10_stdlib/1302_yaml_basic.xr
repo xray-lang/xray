@@ -1,6 +1,14 @@
-// 1302_yaml_basic.xr - YAML module tests
+// 1302_yaml_basic.xr - YAML module tests (typed YamlValue ADT)
 
 import yaml
+import { YamlValue } from yaml
+
+// Typed access helpers (mirror the module-level accessor free functions).
+fn getV(v: YamlValue, k: string) -> YamlValue { return yaml.get(v, k)! }
+fn getInt(v: YamlValue, k: string) -> int { return yaml.asInt(yaml.get(v, k)!) ?? -1 }
+fn getStr(v: YamlValue, k: string) -> string { return yaml.asString(yaml.get(v, k)!) ?? "" }
+fn getBool(v: YamlValue, k: string) -> bool { return yaml.asBool(yaml.get(v, k)!) ?? false }
+fn atInt(v: YamlValue, i: int) -> int { return yaml.asInt(yaml.at(v, i)!) ?? -1 }
 
 // ===== Basic key-value =====
 
@@ -8,9 +16,9 @@ import yaml
 fn test_parse_basic() {
     var data = "name: Alice\nage: 30\nactive: true"
     var obj = yaml.parse(data)
-    assert_eq(obj["name"], "Alice")
-    assert_eq(obj["age"], 30)
-    assert_eq(obj["active"], true)
+    assert_eq(getStr(obj, "name"), "Alice")
+    assert_eq(getInt(obj, "age"), 30)
+    assert_eq(getBool(obj, "active"), true)
 }
 
 // ===== Nested mapping =====
@@ -19,9 +27,9 @@ fn test_parse_basic() {
 fn test_parse_nested() {
     var data = "server:\n  host: localhost\n  port: 8080"
     var obj = yaml.parse(data)
-    var server = obj["server"]
-    assert_eq(server["host"], "localhost")
-    assert_eq(server["port"], 8080)
+    var server = getV(obj, "server")
+    assert_eq(getStr(server, "host"), "localhost")
+    assert_eq(getInt(server, "port"), 8080)
 }
 
 // ===== Flow sequence =====
@@ -30,9 +38,9 @@ fn test_parse_nested() {
 fn test_parse_flow_sequence() {
     var data = "list: [1, 2, 3]"
     var obj = yaml.parse(data)
-    var list = obj["list"]
-    assert_eq(list[0], 1)
-    assert_eq(list[2], 3)
+    var list = getV(obj, "list")
+    assert_eq(atInt(list, 0), 1)
+    assert_eq(atInt(list, 2), 3)
 }
 
 // ===== Flow mapping =====
@@ -41,9 +49,9 @@ fn test_parse_flow_sequence() {
 fn test_parse_flow_mapping() {
     var data = "map: {a: 1, b: 2}"
     var obj = yaml.parse(data)
-    var map = obj["map"]
-    assert_eq(map["a"], 1)
-    assert_eq(map["b"], 2)
+    var map = getV(obj, "map")
+    assert_eq(getInt(map, "a"), 1)
+    assert_eq(getInt(map, "b"), 2)
 }
 
 // ===== Quoted strings =====
@@ -52,15 +60,17 @@ fn test_parse_flow_mapping() {
 fn test_parse_quoted_strings() {
     var data = "single: 'hello'\ndouble: \"world\""
     var obj = yaml.parse(data)
-    assert_eq(obj["single"], "hello")
-    assert_eq(obj["double"], "world")
+    assert_eq(getStr(obj, "single"), "hello")
+    assert_eq(getStr(obj, "double"), "world")
 }
 
 // ===== Stringify =====
 
 @test
 fn test_stringify() {
-    var config: Json = {"name": "xray", "version": 1}
-    var result = yaml.stringify(config)
+    var config = yaml.newMapping()
+    yaml.mappingSet(config, "name", yaml.stringValue("xray"))
+    yaml.mappingSet(config, "version", yaml.intValue(1))
+    var result = yaml.stringify(yaml.mappingValue(config))
     assert(len(result) > 0)
 }

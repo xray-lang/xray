@@ -2,27 +2,34 @@
 // Author: xingleixu@gmail.com
 // Test: Advanced YAML features - anchors, aliases, block scalars,
 //       multi-document, hex/octal, Unicode escapes, special values,
-//       stringify roundtrip with Json objects
+//       stringify roundtrip with typed YamlValue builders
 
 import yaml
+import { YamlValue } from yaml
+
+fn getV(v: YamlValue, k: string) -> YamlValue { return yaml.get(v, k)! }
+fn getInt(v: YamlValue, k: string) -> int { return yaml.asInt(yaml.get(v, k)!) ?? -1 }
+fn getStr(v: YamlValue, k: string) -> string { return yaml.asString(yaml.get(v, k)!) ?? "" }
+fn getBool(v: YamlValue, k: string) -> bool { return yaml.asBool(yaml.get(v, k)!) ?? false }
+fn getFloat(v: YamlValue, k: string) -> float { return yaml.asFloat(yaml.get(v, k)!) ?? 0.0 }
 
 // ===== Anchor and Alias =====
 
 @test
 fn test_anchor_alias() {
-    // Basic anchor/alias: scalar value
+    // Basic anchor/alias: scalar value (resolved inline)
     var data = "anchor: &val hello\nalias: *val"
     var obj = yaml.parse(data)
-    assert_eq(obj["anchor"], "hello")
-    assert_eq(obj["alias"], "hello")
+    assert_eq(getStr(obj, "anchor"), "hello")
+    assert_eq(getStr(obj, "alias"), "hello")
 }
 
 @test
 fn test_anchor_alias_number() {
     var data = "port: &p 8080\nbackup_port: *p"
     var obj = yaml.parse(data)
-    assert_eq(obj["port"], 8080)
-    assert_eq(obj["backup_port"], 8080)
+    assert_eq(getInt(obj, "port"), 8080)
+    assert_eq(getInt(obj, "backup_port"), 8080)
 }
 
 // ===== Literal Block Scalar =====
@@ -31,7 +38,7 @@ fn test_anchor_alias_number() {
 fn test_literal_block() {
     var data = "text: |\n  line one\n  line two\n  line three"
     var obj = yaml.parse(data)
-    var text = obj["text"]
+    var text = getStr(obj, "text")
     assert(len(text) > 0)
     assert(text.indexOf("line one") >= 0)
     assert(text.indexOf("line two") >= 0)
@@ -41,7 +48,7 @@ fn test_literal_block() {
 fn test_literal_block_strip() {
     var data = "text: |-\n  hello\n  world"
     var obj = yaml.parse(data)
-    var text = string(obj["text"])
+    var text = getStr(obj, "text")
     assert(len(text) > 0)
     // Strip mode: no trailing newline
     assert(text.slice(len(text) - 1, len(text)) != "\n")
@@ -51,7 +58,7 @@ fn test_literal_block_strip() {
 fn test_literal_block_keep() {
     var data = "text: |+\n  hello\n  world\n\n\n"
     var obj = yaml.parse(data)
-    var text = string(obj["text"])
+    var text = getStr(obj, "text")
     assert(len(text) > 0)
     // Keep mode: trailing newlines preserved
 }
@@ -62,7 +69,7 @@ fn test_literal_block_keep() {
 fn test_folded_block() {
     var data = "text: >\n  line one\n  line two\n  line three"
     var obj = yaml.parse(data)
-    var text = string(obj["text"])
+    var text = getStr(obj, "text")
     assert(len(text) > 0)
     // Folded: newlines become spaces
     assert(text.indexOf(" ") >= 0)
@@ -72,7 +79,7 @@ fn test_folded_block() {
 fn test_folded_block_strip() {
     var data = "text: >-\n  hello\n  world"
     var obj = yaml.parse(data)
-    var text = string(obj["text"])
+    var text = getStr(obj, "text")
     assert(len(text) > 0)
     assert(text.slice(len(text) - 1, len(text)) != "\n")
 }
@@ -85,7 +92,7 @@ fn test_parse_all() {
     var data = "first: 1\n...\nsecond: 2\n...\nthird: 3"
     var docs = yaml.parseAll(data)
     assert(len(docs) >= 1)
-    assert_eq(docs[0]["first"], 1)
+    assert_eq(getInt(docs[0], "first"), 1)
 }
 
 @test
@@ -94,8 +101,8 @@ fn test_parse_all_single() {
     var data = "---\na: 1\nb: 2"
     var docs = yaml.parseAll(data)
     assert(len(docs) >= 1)
-    assert_eq(docs[0]["a"], 1)
-    assert_eq(docs[0]["b"], 2)
+    assert_eq(getInt(docs[0], "a"), 1)
+    assert_eq(getInt(docs[0], "b"), 2)
 }
 
 // ===== Hex and Octal Numbers =====
@@ -104,21 +111,21 @@ fn test_parse_all_single() {
 fn test_hex_numbers() {
     var data = "hex: 0xFF"
     var obj = yaml.parse(data)
-    assert_eq(obj["hex"], 255)
+    assert_eq(getInt(obj, "hex"), 255)
 }
 
 @test
 fn test_hex_number_upper() {
     var data = "val: 0x1A"
     var obj = yaml.parse(data)
-    assert_eq(obj["val"], 26)
+    assert_eq(getInt(obj, "val"), 26)
 }
 
 @test
 fn test_octal_numbers() {
     var data = "oct: 0o77"
     var obj = yaml.parse(data)
-    assert_eq(obj["oct"], 63)
+    assert_eq(getInt(obj, "oct"), 63)
 }
 
 // ===== String that looks like hex but is not =====
@@ -128,14 +135,14 @@ fn test_string_not_hex() {
     var data = "word: cafe"
     var obj = yaml.parse(data)
     // "cafe" should be a string, not parsed as hex number
-    assert_eq(obj["word"], "cafe")
+    assert_eq(getStr(obj, "word"), "cafe")
 }
 
 @test
 fn test_string_abcdef() {
     var data = "word: abcdef"
     var obj = yaml.parse(data)
-    assert_eq(obj["word"], "abcdef")
+    assert_eq(getStr(obj, "word"), "abcdef")
 }
 
 // ===== Special Float Values =====
@@ -144,8 +151,8 @@ fn test_string_abcdef() {
 fn test_infinity() {
     var data = "pos: .inf\nneg: -.inf"
     var obj = yaml.parse(data)
-    assert(obj["pos"] > 999999999)
-    assert(obj["neg"] < -999999999)
+    assert(getFloat(obj, "pos") > 999999999.0)
+    assert(getFloat(obj, "neg") < -999999999.0)
 }
 
 @test
@@ -153,7 +160,8 @@ fn test_nan() {
     var data = "val: .nan"
     var obj = yaml.parse(data)
     // NaN != NaN
-    assert(obj["val"] != obj["val"])
+    var v = getFloat(obj, "val")
+    assert(v != v)
 }
 
 // ===== Tilde as null =====
@@ -162,7 +170,7 @@ fn test_nan() {
 fn test_tilde_null() {
     var data = "val: ~"
     var obj = yaml.parse(data)
-    assert_eq(obj["val"], null)
+    assert(yaml.isNull(getV(obj, "val")))
 }
 
 // ===== Empty mapping value =====
@@ -171,7 +179,7 @@ fn test_tilde_null() {
 fn test_empty_value() {
     var data = "key:"
     var obj = yaml.parse(data)
-    assert_eq(obj["key"], null)
+    assert(yaml.isNull(getV(obj, "key")))
 }
 
 // ===== Unicode escape in double-quoted strings =====
@@ -180,7 +188,7 @@ fn test_empty_value() {
 fn test_unicode_escape() {
     var data = "rune: \"\\u0041\""
     var obj = yaml.parse(data)
-    assert_eq(obj["rune"], "A")
+    assert_eq(getStr(obj, "rune"), "A")
 }
 
 @test
@@ -188,7 +196,7 @@ fn test_unicode_escape_multibyte() {
     var data = "rune: \"\\u00E9\""
     var obj = yaml.parse(data)
     // U+00E9 = é (2-byte UTF-8)
-    assert(len(obj["rune"]) > 0)
+    assert(len(getStr(obj, "rune")) > 0)
 }
 
 // ===== Escape sequences in double-quoted strings =====
@@ -197,54 +205,65 @@ fn test_unicode_escape_multibyte() {
 fn test_escape_sequences() {
     var data = "tab: \"hello\\tworld\"\nnl: \"line1\\nline2\""
     var obj = yaml.parse(data)
-    assert(obj["tab"].indexOf("\t") >= 0)
-    assert(obj["nl"].indexOf("\n") >= 0)
+    assert(getStr(obj, "tab").indexOf("\t") >= 0)
+    assert(getStr(obj, "nl").indexOf("\n") >= 0)
 }
 
-// ===== Stringify Json object =====
+// ===== Stringify typed YamlValue =====
 
 @test
-fn test_stringify_json() {
-    var config: Json = {name: "xray", version: 1, debug: false}
-    var result = yaml.stringify(config)
+fn test_stringify_value() {
+    var config = yaml.newMapping()
+    yaml.mappingSet(config, "name", yaml.stringValue("xray"))
+    yaml.mappingSet(config, "version", yaml.intValue(1))
+    yaml.mappingSet(config, "debug", yaml.boolValue(false))
+    var result = yaml.stringify(yaml.mappingValue(config))
     assert(len(result) > 0)
     // Roundtrip: parse the stringified result
     var parsed = yaml.parse(result)
-    assert_eq(parsed["name"], "xray")
-    assert_eq(parsed["version"], 1)
-    assert_eq(parsed["debug"], false)
+    assert_eq(getStr(parsed, "name"), "xray")
+    assert_eq(getInt(parsed, "version"), 1)
+    assert_eq(getBool(parsed, "debug"), false)
 }
 
 @test
-fn test_stringify_nested_json() {
-    var data: Json = {
-        server: {
-            host: "localhost",
-            port: 8080
-        },
-        features: ["auth", "logging"]
-    }
-    var result = yaml.stringify(data)
+fn test_stringify_nested_value() {
+    var server = yaml.newMapping()
+    yaml.mappingSet(server, "host", yaml.stringValue("localhost"))
+    yaml.mappingSet(server, "port", yaml.intValue(8080))
+    var features: Array<YamlValue> = []
+    features.push(yaml.stringValue("auth"))
+    features.push(yaml.stringValue("logging"))
+    var root = yaml.newMapping()
+    yaml.mappingSet(root, "server", yaml.mappingValue(server))
+    yaml.mappingSet(root, "features", yaml.sequenceValue(features))
+    var result = yaml.stringify(yaml.mappingValue(root))
     assert(len(result) > 0)
 }
 
 @test
-fn test_stringify_json_roundtrip() {
-    var original: Json = {a: 1, b: "hello", c: true, d: null}
-    var yaml_str = yaml.stringify(original)
+fn test_stringify_value_roundtrip() {
+    var original = yaml.newMapping()
+    yaml.mappingSet(original, "a", yaml.intValue(1))
+    yaml.mappingSet(original, "b", yaml.stringValue("hello"))
+    yaml.mappingSet(original, "c", yaml.boolValue(true))
+    yaml.mappingSet(original, "d", yaml.nullValue())
+    var yaml_str = yaml.stringify(yaml.mappingValue(original))
     var parsed = yaml.parse(yaml_str)
-    assert_eq(parsed["a"], 1)
-    assert_eq(parsed["b"], "hello")
-    assert_eq(parsed["c"], true)
-    assert_eq(parsed["d"], null)
+    assert_eq(getInt(parsed, "a"), 1)
+    assert_eq(getStr(parsed, "b"), "hello")
+    assert_eq(getBool(parsed, "c"), true)
+    assert(yaml.isNull(getV(parsed, "d")))
 }
 
-// ===== Stringify Map =====
+// ===== Stringify Mapping =====
 
 @test
-fn test_stringify_map() {
-    var m: Json = {"key1": "val1", "key2": 42}
-    var result = yaml.stringify(m)
+fn test_stringify_mapping() {
+    var m = yaml.newMapping()
+    yaml.mappingSet(m, "key1", yaml.stringValue("val1"))
+    yaml.mappingSet(m, "key2", yaml.intValue(42))
+    var result = yaml.stringify(yaml.mappingValue(m))
     assert(len(result) > 0)
 }
 
@@ -253,22 +272,21 @@ fn test_stringify_map() {
 @test
 fn test_empty_input() {
     var result = yaml.parse("")
-    assert_eq(result, null)
+    assert(yaml.isNull(result))
 }
 
 @test
 fn test_whitespace_only() {
     var result = yaml.parse("   \n\n  ")
-    assert_eq(result, null)
+    assert(yaml.isNull(result))
 }
 
 @test
 fn test_comment_only() {
     // Comments followed by empty lines are skipped
     var result = yaml.parse("# this is a comment\n")
-    // Parser may return non-null for partial comment lines
-    // Just verify no crash
-    assert(true)
+    // Parser returns Null for a comment-only document; just verify no crash
+    assert(yaml.isNull(result))
 }
 
 // ===== Mixed inline comments =====
@@ -277,8 +295,8 @@ fn test_comment_only() {
 fn test_inline_comments() {
     var data = "name: Alice # user name\nage: 30 # years"
     var obj = yaml.parse(data)
-    assert_eq(obj["name"], "Alice")
-    assert_eq(obj["age"], 30)
+    assert_eq(getStr(obj, "name"), "Alice")
+    assert_eq(getInt(obj, "age"), 30)
 }
 
 // ===== Negative numbers =====
@@ -287,8 +305,8 @@ fn test_inline_comments() {
 fn test_negative_numbers() {
     var data = "neg_int: -42\nneg_float: -3.14"
     var obj = yaml.parse(data)
-    assert_eq(obj["neg_int"], -42)
-    assert_eq(obj["neg_float"], -3.14)
+    assert_eq(getInt(obj, "neg_int"), -42)
+    assert_eq(getFloat(obj, "neg_float"), -3.14)
 }
 
 // ===== Quoted keys =====
@@ -298,7 +316,7 @@ fn test_flow_quoted_keys() {
     // Quoted keys work in flow mappings
     var data = "data: {\"key one\": 1, 'key two': 2}"
     var obj = yaml.parse(data)
-    var d = obj["data"]
-    assert_eq(d["key one"], 1)
-    assert_eq(d["key two"], 2)
+    var d = getV(obj, "data")
+    assert_eq(getInt(d, "key one"), 1)
+    assert_eq(getInt(d, "key two"), 2)
 }

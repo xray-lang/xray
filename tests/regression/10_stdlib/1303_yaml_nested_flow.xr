@@ -2,8 +2,19 @@
 // Author: xingleixu@gmail.com
 // Test: YAML nested flow structures (flow mapping + flow sequence combinations)
 // Regression: scan-ahead not stopping at flow indicators (fixed)
+// Typed YamlValue ADT access.
 
 import yaml
+import { YamlValue } from yaml
+
+fn getV(v: YamlValue, k: string) -> YamlValue { return yaml.get(v, k)! }
+fn getInt(v: YamlValue, k: string) -> int { return yaml.asInt(yaml.get(v, k)!) ?? -1 }
+fn getStr(v: YamlValue, k: string) -> string { return yaml.asString(yaml.get(v, k)!) ?? "" }
+fn getBool(v: YamlValue, k: string) -> bool { return yaml.asBool(yaml.get(v, k)!) ?? false }
+fn getFloat(v: YamlValue, k: string) -> float { return yaml.asFloat(yaml.get(v, k)!) ?? 0.0 }
+fn atV(v: YamlValue, i: int) -> YamlValue { return yaml.at(v, i)! }
+fn atInt(v: YamlValue, i: int) -> int { return yaml.asInt(yaml.at(v, i)!) ?? -1 }
+fn atStr(v: YamlValue, i: int) -> string { return yaml.asString(yaml.at(v, i)!) ?? "" }
 
 // ===== Flow mapping nested in flow mapping =====
 
@@ -11,10 +22,11 @@ import yaml
 fn test_nested_flow_mapping() {
     var data = "outer: {inner: {a: 1, b: 2}, c: 3}"
     var obj = yaml.parse(data)
-    var outer = obj["outer"]
-    assert_eq(outer["inner"]["a"], 1)
-    assert_eq(outer["inner"]["b"], 2)
-    assert_eq(outer["c"], 3)
+    var outer = getV(obj, "outer")
+    var inner = getV(outer, "inner")
+    assert_eq(getInt(inner, "a"), 1)
+    assert_eq(getInt(inner, "b"), 2)
+    assert_eq(getInt(outer, "c"), 3)
 }
 
 // ===== Flow sequence nested in flow mapping =====
@@ -23,11 +35,12 @@ fn test_nested_flow_mapping() {
 fn test_flow_sequence_in_flow_mapping() {
     var data = "config: {ports: [80, 443, 8080], host: localhost}"
     var obj = yaml.parse(data)
-    var cfg = obj["config"]
-    assert_eq(cfg["ports"][0], 80)
-    assert_eq(cfg["ports"][1], 443)
-    assert_eq(cfg["ports"][2], 8080)
-    assert_eq(cfg["host"], "localhost")
+    var cfg = getV(obj, "config")
+    var ports = getV(cfg, "ports")
+    assert_eq(atInt(ports, 0), 80)
+    assert_eq(atInt(ports, 1), 443)
+    assert_eq(atInt(ports, 2), 8080)
+    assert_eq(getStr(cfg, "host"), "localhost")
 }
 
 // ===== Flow mapping nested in flow sequence =====
@@ -36,11 +49,13 @@ fn test_flow_sequence_in_flow_mapping() {
 fn test_flow_mapping_in_flow_sequence() {
     var data = "items: [{name: alice, age: 30}, {name: bob, age: 25}]"
     var obj = yaml.parse(data)
-    var items = obj["items"]
-    assert_eq(items[0]["name"], "alice")
-    assert_eq(items[0]["age"], 30)
-    assert_eq(items[1]["name"], "bob")
-    assert_eq(items[1]["age"], 25)
+    var items = getV(obj, "items")
+    var i0 = atV(items, 0)
+    var i1 = atV(items, 1)
+    assert_eq(getStr(i0, "name"), "alice")
+    assert_eq(getInt(i0, "age"), 30)
+    assert_eq(getStr(i1, "name"), "bob")
+    assert_eq(getInt(i1, "age"), 25)
 }
 
 // ===== Flow sequence nested in flow sequence =====
@@ -49,11 +64,11 @@ fn test_flow_mapping_in_flow_sequence() {
 fn test_nested_flow_sequence() {
     var data = "matrix: [[1, 2, 3], [4, 5, 6], [7, 8, 9]]"
     var obj = yaml.parse(data)
-    var m = obj["matrix"]
-    assert_eq(m[0][0], 1)
-    assert_eq(m[0][2], 3)
-    assert_eq(m[1][1], 5)
-    assert_eq(m[2][2], 9)
+    var m = getV(obj, "matrix")
+    assert_eq(atInt(atV(m, 0), 0), 1)
+    assert_eq(atInt(atV(m, 0), 2), 3)
+    assert_eq(atInt(atV(m, 1), 1), 5)
+    assert_eq(atInt(atV(m, 2), 2), 9)
 }
 
 // ===== Multiple flow mappings at same level =====
@@ -62,9 +77,9 @@ fn test_nested_flow_sequence() {
 fn test_multiple_flow_mappings() {
     var data = "a: {x: 1}\nb: {y: 2}\nc: {z: 3}"
     var obj = yaml.parse(data)
-    assert_eq(obj["a"]["x"], 1)
-    assert_eq(obj["b"]["y"], 2)
-    assert_eq(obj["c"]["z"], 3)
+    assert_eq(getInt(getV(obj, "a"), "x"), 1)
+    assert_eq(getInt(getV(obj, "b"), "y"), 2)
+    assert_eq(getInt(getV(obj, "c"), "z"), 3)
 }
 
 // ===== Flow mapping with various value types =====
@@ -73,11 +88,11 @@ fn test_multiple_flow_mappings() {
 fn test_flow_mapping_mixed_values() {
     var data = "mix: {num: 42, str: hello, flag: true, nothing: null}"
     var obj = yaml.parse(data)
-    var mix = obj["mix"]
-    assert_eq(mix["num"], 42)
-    assert_eq(mix["str"], "hello")
-    assert_eq(mix["flag"], true)
-    assert_eq(mix["nothing"], null)
+    var mix = getV(obj, "mix")
+    assert_eq(getInt(mix, "num"), 42)
+    assert_eq(getStr(mix, "str"), "hello")
+    assert_eq(getBool(mix, "flag"), true)
+    assert(yaml.isNull(getV(mix, "nothing")))
 }
 
 // ===== Empty flow structures =====
@@ -86,8 +101,10 @@ fn test_flow_mapping_mixed_values() {
 fn test_empty_flow_structures() {
     var data = "empty_map: {}\nempty_list: []"
     var obj = yaml.parse(data)
-    assert(obj["empty_map"] != null)
-    assert(obj["empty_list"] != null)
+    assert(yaml.get(obj, "empty_map") != null)
+    assert(yaml.get(obj, "empty_list") != null)
+    assert_eq(yaml.length(getV(obj, "empty_map")), 0)
+    assert_eq(yaml.length(getV(obj, "empty_list")), 0)
 }
 
 // ===== Deeply nested flow =====
@@ -96,7 +113,7 @@ fn test_empty_flow_structures() {
 fn test_deep_nested_flow() {
     var data = "deep: {l1: {l2: {l3: 42}}}"
     var obj = yaml.parse(data)
-    assert_eq(obj["deep"]["l1"]["l2"]["l3"], 42)
+    assert_eq(getInt(getV(getV(getV(obj, "deep"), "l1"), "l2"), "l3"), 42)
 }
 
 // ===== Flow mapping with quoted keys =====
@@ -105,9 +122,9 @@ fn test_deep_nested_flow() {
 fn test_flow_mapping_quoted_keys() {
     var data = "data: {\"key one\": 1, 'key two': 2}"
     var obj = yaml.parse(data)
-    var d = obj["data"]
-    assert_eq(d["key one"], 1)
-    assert_eq(d["key two"], 2)
+    var d = getV(obj, "data")
+    assert_eq(getInt(d, "key one"), 1)
+    assert_eq(getInt(d, "key two"), 2)
 }
 
 // ===== Complex real-world-like YAML =====
@@ -116,15 +133,18 @@ fn test_flow_mapping_quoted_keys() {
 fn test_complex_yaml_config() {
     var data = "app:\n  name: myapp\n  version: 1\n  database:\n    host: localhost\n    port: 5432\n  features: [auth, logging, cache]\n  limits: {max_conn: 100, timeout: 30}"
     var obj = yaml.parse(data)
-    var app = obj["app"]
-    assert_eq(app["name"], "myapp")
-    assert_eq(app["version"], 1)
-    assert_eq(app["database"]["host"], "localhost")
-    assert_eq(app["database"]["port"], 5432)
-    assert_eq(app["features"][0], "auth")
-    assert_eq(app["features"][2], "cache")
-    assert_eq(app["limits"]["max_conn"], 100)
-    assert_eq(app["limits"]["timeout"], 30)
+    var app = getV(obj, "app")
+    assert_eq(getStr(app, "name"), "myapp")
+    assert_eq(getInt(app, "version"), 1)
+    var db = getV(app, "database")
+    assert_eq(getStr(db, "host"), "localhost")
+    assert_eq(getInt(db, "port"), 5432)
+    var features = getV(app, "features")
+    assert_eq(atStr(features, 0), "auth")
+    assert_eq(atStr(features, 2), "cache")
+    var limits = getV(app, "limits")
+    assert_eq(getInt(limits, "max_conn"), 100)
+    assert_eq(getInt(limits, "timeout"), 30)
 }
 
 // ===== Block sequence with flow mapping items =====
@@ -133,11 +153,13 @@ fn test_complex_yaml_config() {
 fn test_flow_in_block_sequence() {
     var data = "servers:\n  - {host: a.com, port: 80}\n  - {host: b.com, port: 443}"
     var obj = yaml.parse(data)
-    var servers = obj["servers"]
-    assert_eq(servers[0]["host"], "a.com")
-    assert_eq(servers[0]["port"], 80)
-    assert_eq(servers[1]["host"], "b.com")
-    assert_eq(servers[1]["port"], 443)
+    var servers = getV(obj, "servers")
+    var s0 = atV(servers, 0)
+    var s1 = atV(servers, 1)
+    assert_eq(getStr(s0, "host"), "a.com")
+    assert_eq(getInt(s0, "port"), 80)
+    assert_eq(getStr(s1, "host"), "b.com")
+    assert_eq(getInt(s1, "port"), 443)
 }
 
 // ===== Block sequence with nested block mappings =====
@@ -146,11 +168,11 @@ fn test_flow_in_block_sequence() {
 fn test_block_sequence_nested_mappings() {
     var data = "users:\n  - name: Alice\n    age: 30\n  - name: Bob\n    age: 25"
     var obj = yaml.parse(data)
-    var users = obj["users"]
-    assert_eq(users[0]["name"], "Alice")
-    assert_eq(users[0]["age"], 30)
-    assert_eq(users[1]["name"], "Bob")
-    assert_eq(users[1]["age"], 25)
+    var users = getV(obj, "users")
+    assert_eq(getStr(atV(users, 0), "name"), "Alice")
+    assert_eq(getInt(atV(users, 0), "age"), 30)
+    assert_eq(getStr(atV(users, 1), "name"), "Bob")
+    assert_eq(getInt(atV(users, 1), "age"), 25)
 }
 
 // ===== Block sequence with 3+ multi-line items =====
@@ -159,12 +181,12 @@ fn test_block_sequence_nested_mappings() {
 fn test_block_sequence_three_items() {
     var data = "tasks:\n  - id: 1\n    status: done\n  - id: 2\n    status: pending\n  - id: 3\n    status: active"
     var obj = yaml.parse(data)
-    var tasks = obj["tasks"]
-    assert_eq(len(tasks), 3)
-    assert_eq(tasks[0]["id"], 1)
-    assert_eq(tasks[0]["status"], "done")
-    assert_eq(tasks[1]["id"], 2)
-    assert_eq(tasks[2]["status"], "active")
+    var tasks = getV(obj, "tasks")
+    assert_eq(yaml.length(tasks), 3)
+    assert_eq(getInt(atV(tasks, 0), "id"), 1)
+    assert_eq(getStr(atV(tasks, 0), "status"), "done")
+    assert_eq(getInt(atV(tasks, 1), "id"), 2)
+    assert_eq(getStr(atV(tasks, 2), "status"), "active")
 }
 
 // ===== Block sequence with mixed inline and block items =====
@@ -173,11 +195,11 @@ fn test_block_sequence_three_items() {
 fn test_block_sequence_mixed_items() {
     var data = "items:\n  - simple\n  - {complex: true}\n  - name: nested\n    value: 42"
     var obj = yaml.parse(data)
-    var items = obj["items"]
-    assert_eq(items[0], "simple")
-    assert_eq(items[1]["complex"], true)
-    assert_eq(items[2]["name"], "nested")
-    assert_eq(items[2]["value"], 42)
+    var items = getV(obj, "items")
+    assert_eq(atStr(items, 0), "simple")
+    assert_eq(getBool(atV(items, 1), "complex"), true)
+    assert_eq(getStr(atV(items, 2), "name"), "nested")
+    assert_eq(getInt(atV(items, 2), "value"), 42)
 }
 
 // ===== Deeply nested block structure =====
@@ -186,7 +208,7 @@ fn test_block_sequence_mixed_items() {
 fn test_deep_block_nesting() {
     var data = "l1:\n  l2:\n    l3:\n      value: deep"
     var obj = yaml.parse(data)
-    assert_eq(obj["l1"]["l2"]["l3"]["value"], "deep")
+    assert_eq(getStr(getV(getV(getV(obj, "l1"), "l2"), "l3"), "value"), "deep")
 }
 
 // ===== Block sequence inside block sequence (via multiline) =====
@@ -195,10 +217,10 @@ fn test_deep_block_nesting() {
 fn test_block_mapping_with_multiple_sequences() {
     var data = "fruits: [apple, banana]\nvegs: [carrot, pea]"
     var obj = yaml.parse(data)
-    assert_eq(obj["fruits"][0], "apple")
-    assert_eq(obj["fruits"][1], "banana")
-    assert_eq(obj["vegs"][0], "carrot")
-    assert_eq(obj["vegs"][1], "pea")
+    assert_eq(atStr(getV(obj, "fruits"), 0), "apple")
+    assert_eq(atStr(getV(obj, "fruits"), 1), "banana")
+    assert_eq(atStr(getV(obj, "vegs"), 0), "carrot")
+    assert_eq(atStr(getV(obj, "vegs"), 1), "pea")
 }
 
 // ===== Real-world: docker-compose-like YAML =====
@@ -207,12 +229,14 @@ fn test_block_mapping_with_multiple_sequences() {
 fn test_docker_compose_like() {
     var data = "services:\n  web:\n    image: nginx\n    ports: [80, 443]\n  db:\n    image: postgres\n    ports: [5432]"
     var obj = yaml.parse(data)
-    var svc = obj["services"]
-    assert_eq(svc["web"]["image"], "nginx")
-    assert_eq(svc["web"]["ports"][0], 80)
-    assert_eq(svc["web"]["ports"][1], 443)
-    assert_eq(svc["db"]["image"], "postgres")
-    assert_eq(svc["db"]["ports"][0], 5432)
+    var svc = getV(obj, "services")
+    var web = getV(svc, "web")
+    assert_eq(getStr(web, "image"), "nginx")
+    assert_eq(atInt(getV(web, "ports"), 0), 80)
+    assert_eq(atInt(getV(web, "ports"), 1), 443)
+    var db = getV(svc, "db")
+    assert_eq(getStr(db, "image"), "postgres")
+    assert_eq(atInt(getV(db, "ports"), 0), 5432)
 }
 
 // ===== YAML multiline and special values =====
@@ -221,10 +245,10 @@ fn test_docker_compose_like() {
 fn test_yaml_special_values() {
     var data = "t1: true\nt2: false\nn1: null\nn2: ~\ni1: 42\nf1: 3.14"
     var obj = yaml.parse(data)
-    assert_eq(obj["t1"], true)
-    assert_eq(obj["t2"], false)
-    assert_eq(obj["n1"], null)
-    assert_eq(obj["n2"], null)
-    assert_eq(obj["i1"], 42)
-    assert_eq(obj["f1"], 3.14)
+    assert_eq(getBool(obj, "t1"), true)
+    assert_eq(getBool(obj, "t2"), false)
+    assert(yaml.isNull(getV(obj, "n1")))
+    assert(yaml.isNull(getV(obj, "n2")))
+    assert_eq(getInt(obj, "i1"), 42)
+    assert_eq(getFloat(obj, "f1"), 3.14)
 }

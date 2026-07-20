@@ -1,0 +1,5 @@
+// Guard: stringify consumes a typed `YamlValue`, not a `Json` document.
+import yaml
+
+var value: Json = { name: "xray", version: 1 }
+print(yaml.stringify(value))

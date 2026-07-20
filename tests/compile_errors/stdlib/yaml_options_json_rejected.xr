@@ -1,0 +1,6 @@
+// Guard: parse options are a typed `YamlOptions`, not an untyped `Json` bag.
+import yaml
+
+var opts: Json = { strict: true }
+var doc = yaml.parse("a: 1", opts)
+print(doc)
