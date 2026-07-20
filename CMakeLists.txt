@@ -9,7 +9,7 @@ if(POLICY CMP0091)
 endif()
 
 project(Xray
-    VERSION 0.9.1
+    VERSION 0.9.2
     DESCRIPTION "Xray Programming Language Interpreter"
     LANGUAGES C CXX ASM
 )
@@ -2379,19 +2379,6 @@ if(ENABLE_FUZZING)
 endif()
 
 # ============================================================================
-# Install Rules
-# ============================================================================
-
-install(TARGETS xray
-    RUNTIME DESTINATION bin
-)
-
-install(DIRECTORY stdlib/
-    DESTINATION lib/xray/stdlib
-    FILES_MATCHING PATTERN "*.xr"
-)
-
-# ============================================================================
 # Build Information Output
 # ============================================================================
 
@@ -2516,19 +2503,33 @@ install(TARGETS xray_aot_core xray_rt_coro xray_vm_runtime
     ARCHIVE DESTINATION lib
 )
 
-# Install header files (to include/xray directory)
-install(FILES
-    ${CMAKE_SOURCE_DIR}/include/xray.h
-    ${CMAKE_SOURCE_DIR}/include/xray_vm.h
-    ${CMAKE_SOURCE_DIR}/include/xray_export.h
-    ${CMAKE_SOURCE_DIR}/include/xray_version.h
+# Install the public C API headers.
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
     DESTINATION include/xray
+    FILES_MATCHING PATTERN "*.h"
+)
+
+# Generated AOT C includes xrt headers whose relative includes reach into the
+# shared runtime tree.  Keep that tree compiler-private and preserve its source
+# layout so an installed xray can compile without a source checkout.
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/
+    DESTINATION lib/xray/sdk/src
+    FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*.inc.c"
+        PATTERN "*.def"
 )
 
 # Install stdlib source files
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/stdlib/
     DESTINATION lib/xray/stdlib
     FILES_MATCHING PATTERN "*.xr"
+)
+
+install(FILES
+    ${CMAKE_SOURCE_DIR}/README.md
+    ${CMAKE_SOURCE_DIR}/LICENSE
+    DESTINATION .
 )
 
 if(XRAY_BUNDLE_ZIG)
