@@ -745,17 +745,37 @@ def lsp_kind_for_member(member):
     return "XLSP_SYM_PROPERTY"
 
 
-def effect_error_refs(member):
+def _effect_body(member):
     raw = (member.get('effect') or '').strip()
-    if not raw:
-        return []
     if raw.startswith('@errors(') and raw.endswith(')'):
         raw = raw[len('@errors('):-1].strip()
     if raw.startswith('errors(') and raw.endswith(')'):
         raw = raw[len('errors('):-1].strip()
+    return raw
+
+
+def effect_error_refs(member):
+    raw = _effect_body(member)
     if not raw or raw == 'nothrow':
         return []
     return [part.strip() for part in split_top_level_commas(raw) if part.strip()]
+
+
+def effect_is_nothrow(member):
+    """A member explicitly declared `nothrow` proves NO_THROW; the analyzer's
+    throw-effect bit is NO_THROW instead of the fail-closed MAY_THROW default."""
+    return _effect_body(member) == 'nothrow'
+
+
+def effect_contract_init(member, error_var=None, error_count=0):
+    """C initializer for XaEffectContract, mirroring the type-method path:
+    an explicit `nothrow` emits XA_EFFECT_CONTRACT_NOTHROW, an error list emits
+    XA_EFFECT_CONTRACT_ERRORS, and anything else stays MISSING (fail-closed)."""
+    if error_var:
+        return f"{{XA_EFFECT_CONTRACT_ERRORS, {error_var}, {error_count}}}"
+    if effect_is_nothrow(member):
+        return "{XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}"
+    return "{0}"
 
 
 def allocation_contract_init(member):
@@ -868,10 +888,11 @@ def generate_header(type_results, module_results):
                     is_method = "true" if '(' in m['signature'] else "false"
                     is_yieldable = "true" if m.get("vm_binding") == "yieldable" else "false"
                     effect = method_effect_vars.get(idx)
-                    effect_init = "{0}"
                     if effect:
                         var_name, errors = effect
-                        effect_init = f"{{XA_EFFECT_CONTRACT_ERRORS, {var_name}, {len(errors)}}}"
+                        effect_init = effect_contract_init(m, var_name, len(errors))
+                    else:
+                        effect_init = effect_contract_init(m)
                     allocation = allocation_contract_init(m)
                     lines.append(
                         f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
