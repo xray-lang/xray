@@ -1,0 +1,6 @@
+// Guard: nodes are a typed `XmlNode` ADT; the legacy `node["tag"]` Json-index
+// consumption form is gone.
+import xml
+
+var doc = xml.parse("<root/>")
+print(doc["tag"])

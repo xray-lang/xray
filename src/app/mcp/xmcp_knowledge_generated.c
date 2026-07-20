@@ -4736,53 +4736,188 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     {
+        .name = "XmlAttribute",
+        .signature = "XmlAttribute",
+        .summary = "",
+    },
+    {
+        .name = "XmlAttribute.constructor",
+        .signature = "(name: XmlName, value: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "XmlAttribute.name",
+        .signature = ": XmlName",
+        .summary = "",
+    },
+    {
+        .name = "XmlAttribute.value",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "XmlDiagnostic",
+        .signature = "XmlDiagnostic",
+        .summary = "",
+    },
+    {
+        .name = "XmlDiagnostic.column",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "XmlDiagnostic.constructor",
+        .signature = "(kind: XmlErrorKind, line: int, column: int, message: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "XmlDiagnostic.kind",
+        .signature = ": XmlErrorKind",
+        .summary = "",
+    },
+    {
+        .name = "XmlDiagnostic.line",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "XmlDiagnostic.message",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "XmlName",
+        .signature = "XmlName",
+        .summary = "",
+    },
+    {
+        .name = "XmlName.constructor",
+        .signature = "(prefix: string, local: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "XmlName.local",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "XmlName.prefix",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "XmlName.qualified",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "XmlParseReport",
+        .signature = "XmlParseReport",
+        .summary = "",
+    },
+    {
+        .name = "XmlParseReport.constructor",
+        .signature = "(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()",
+        .summary = "",
+    },
+    {
+        .name = "XmlParseReport.diagnostics",
+        .signature = ": Array<XmlDiagnostic>",
+        .summary = "",
+    },
+    {
+        .name = "XmlParseReport.doc",
+        .signature = ": XmlNode?",
+        .summary = "",
+    },
+    {
+        .name = "attr",
+        .signature = "(node: XmlNode, key: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "attributes",
+        .signature = "(node: XmlNode): Array<XmlAttribute>",
+        .summary = "",
+    },
+    {
         .name = "cdata",
-        .signature = "(content: string): Json",
+        .signature = "(content: string): XmlNode",
+        .summary = "",
+    },
+    {
+        .name = "children",
+        .signature = "(node: XmlNode): Array<XmlNode>",
         .summary = "",
     },
     {
         .name = "comment",
-        .signature = "(content: string): Json",
+        .signature = "(content: string): XmlNode",
         .summary = "",
     },
     {
         .name = "document",
-        .signature = "(): Json",
+        .signature = "(children: Array<XmlNode>? = null): XmlNode",
         .summary = "",
     },
     {
         .name = "element",
-        .signature = "(tag: string, attrsValue: Json = null): Json",
+        .signature = "(tag: string, attrs: Array<XmlAttribute>? = null, children: Array<XmlNode>? = null): XmlNode",
+        .summary = "",
+    },
+    {
+        .name = "namespace",
+        .signature = "(node: XmlNode, prefix: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "nodeText",
+        .signature = "(node: XmlNode): string?",
         .summary = "",
     },
     {
         .name = "parse",
-        .signature = "(data: string, options: Json = null): Json",
-        .summary = "",
-    },
-    {
-        .name = "parseDetailed",
-        .signature = "(data: string, options: Json = null): Json",
+        .signature = "(data: string, options: XmlOptions? = null): XmlNode",
         .summary = "",
     },
     {
         .name = "parseFile",
-        .signature = "(path: Path, options: Json = null): Json",
+        .signature = "(path: Path, options: XmlOptions? = null): XmlNode",
+        .summary = "",
+    },
+    {
+        .name = "parseReport",
+        .signature = "(data: string, options: XmlOptions? = null): XmlParseReport",
+        .summary = "",
+    },
+    {
+        .name = "qualifiedName",
+        .signature = "(node: XmlNode): XmlName?",
         .summary = "",
     },
     {
         .name = "stringify",
-        .signature = "(node: Json, options: Json = null): string",
+        .signature = "(node: XmlNode, options: XmlWriteOptions? = null): string",
+        .summary = "",
+    },
+    {
+        .name = "tag",
+        .signature = "(node: XmlNode): string?",
         .summary = "",
     },
     {
         .name = "text",
-        .signature = "(content: string): Json",
+        .signature = "(content: string): XmlNode",
+        .summary = "",
+    },
+    {
+        .name = "textContent",
+        .signature = "(node: XmlNode): string",
         .summary = "",
     },
     {
         .name = "writeFile",
-        .signature = "(path: Path, node: Json, options: Json = null): bool",
+        .signature = "(path: Path, node: XmlNode, options: XmlWriteOptions? = null): bool",
         .summary = "",
     },
 };
@@ -7804,16 +7939,43 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `xml.cdata` | `(content: string): Json` |  |\n"
-            "| `xml.comment` | `(content: string): Json` |  |\n"
-            "| `xml.document` | `(): Json` |  |\n"
-            "| `xml.element` | `(tag: string, attrsValue: Json = null): Json` |  |\n"
-            "| `xml.parse` | `(data: string, options: Json = null): Json` |  |\n"
-            "| `xml.parseDetailed` | `(data: string, options: Json = null): Json` |  |\n"
-            "| `xml.parseFile` | `(path: Path, options: Json = null): Json` |  |\n"
-            "| `xml.stringify` | `(node: Json, options: Json = null): string` |  |\n"
-            "| `xml.text` | `(content: string): Json` |  |\n"
-            "| `xml.writeFile` | `(path: Path, node: Json, options: Json = null): bool` |  |\n"
+            "| `XmlAttribute` | `XmlAttribute` |  |\n"
+            "| `XmlAttribute.constructor` | `(name: XmlName, value: string): ()` |  |\n"
+            "| `XmlAttribute.name` | `: XmlName` |  |\n"
+            "| `XmlAttribute.value` | `: string` |  |\n"
+            "| `XmlDiagnostic` | `XmlDiagnostic` |  |\n"
+            "| `XmlDiagnostic.column` | `: int` |  |\n"
+            "| `XmlDiagnostic.constructor` | `(kind: XmlErrorKind, line: int, column: int, message: string): ()` |  |\n"
+            "| `XmlDiagnostic.kind` | `: XmlErrorKind` |  |\n"
+            "| `XmlDiagnostic.line` | `: int` |  |\n"
+            "| `XmlDiagnostic.message` | `: string` |  |\n"
+            "| `XmlName` | `XmlName` |  |\n"
+            "| `XmlName.constructor` | `(prefix: string, local: string): ()` |  |\n"
+            "| `XmlName.local` | `: string` |  |\n"
+            "| `XmlName.prefix` | `: string` |  |\n"
+            "| `XmlName.qualified` | `(): string` |  |\n"
+            "| `XmlParseReport` | `XmlParseReport` |  |\n"
+            "| `XmlParseReport.constructor` | `(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()` |  |\n"
+            "| `XmlParseReport.diagnostics` | `: Array<XmlDiagnostic>` |  |\n"
+            "| `XmlParseReport.doc` | `: XmlNode?` |  |\n"
+            "| `xml.attr` | `(node: XmlNode, key: string): string?` |  |\n"
+            "| `xml.attributes` | `(node: XmlNode): Array<XmlAttribute>` |  |\n"
+            "| `xml.cdata` | `(content: string): XmlNode` |  |\n"
+            "| `xml.children` | `(node: XmlNode): Array<XmlNode>` |  |\n"
+            "| `xml.comment` | `(content: string): XmlNode` |  |\n"
+            "| `xml.document` | `(children: Array<XmlNode>? = null): XmlNode` |  |\n"
+            "| `xml.element` | `(tag: string, attrs: Array<XmlAttribute>? = null, children: Array<XmlNode>? = null): XmlNode` |  |\n"
+            "| `xml.namespace` | `(node: XmlNode, prefix: string): string?` |  |\n"
+            "| `xml.nodeText` | `(node: XmlNode): string?` |  |\n"
+            "| `xml.parse` | `(data: string, options: XmlOptions? = null): XmlNode` |  |\n"
+            "| `xml.parseFile` | `(path: Path, options: XmlOptions? = null): XmlNode` |  |\n"
+            "| `xml.parseReport` | `(data: string, options: XmlOptions? = null): XmlParseReport` |  |\n"
+            "| `xml.qualifiedName` | `(node: XmlNode): XmlName?` |  |\n"
+            "| `xml.stringify` | `(node: XmlNode, options: XmlWriteOptions? = null): string` |  |\n"
+            "| `xml.tag` | `(node: XmlNode): string?` |  |\n"
+            "| `xml.text` | `(content: string): XmlNode` |  |\n"
+            "| `xml.textContent` | `(node: XmlNode): string` |  |\n"
+            "| `xml.writeFile` | `(path: Path, node: XmlNode, options: XmlWriteOptions? = null): bool` |  |\n"
             "",
         .symbols = _symbols_xml,
         .symbol_count = (int)(sizeof(_symbols_xml) / sizeof(_symbols_xml[0])),

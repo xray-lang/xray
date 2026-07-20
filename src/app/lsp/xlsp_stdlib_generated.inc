@@ -621,18 +621,33 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: Json): Json", "", NULL, 0},
-    {"parseDetailed", XLSP_SYM_FUNCTION, "fn(data: string, options?: Json): Json", "", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: Path, options?: Json): Json", "", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(node: Json, options?: Json): string", "", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: Path, node: Json, options?: Json): bool", "", NULL, 0},
-    {"document", XLSP_SYM_FUNCTION, "fn(): Json", "", NULL, 0},
-    {"element", XLSP_SYM_FUNCTION, "fn(tag: string, attrsValue?: Json): Json", "", NULL, 0},
-    {"text", XLSP_SYM_FUNCTION, "fn(content: string): Json", "", NULL, 0},
-    {"comment", XLSP_SYM_FUNCTION, "fn(content: string): Json", "", NULL, 0},
-    {"cdata", XLSP_SYM_FUNCTION, "fn(content: string): Json", "", NULL, 0},
+    {"tag", XLSP_SYM_FUNCTION, "fn(node: XmlNode): string?", "", NULL, 0},
+    {"qualifiedName", XLSP_SYM_FUNCTION, "fn(node: XmlNode): XmlName?", "", NULL, 0},
+    {"attributes", XLSP_SYM_FUNCTION, "fn(node: XmlNode): Array<XmlAttribute>", "", NULL, 0},
+    {"attr", XLSP_SYM_FUNCTION, "fn(node: XmlNode, key: string): string?", "", NULL, 0},
+    {"namespace", XLSP_SYM_FUNCTION, "fn(node: XmlNode, prefix: string): string?", "", NULL, 0},
+    {"children", XLSP_SYM_FUNCTION, "fn(node: XmlNode): Array<XmlNode>", "", NULL, 0},
+    {"nodeText", XLSP_SYM_FUNCTION, "fn(node: XmlNode): string?", "", NULL, 0},
+    {"textContent", XLSP_SYM_FUNCTION, "fn(node: XmlNode): string", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: XmlOptions?): XmlNode", "", NULL, 0},
+    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string, options?: XmlOptions?): XmlParseReport", "", NULL, 0},
+    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: Path, options?: XmlOptions?): XmlNode", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(node: XmlNode, options?: XmlWriteOptions?): string", "", NULL, 0},
+    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: Path, node: XmlNode, options?: XmlWriteOptions?): bool", "", NULL, 0},
+    {"document", XLSP_SYM_FUNCTION, "fn(children?: Array<XmlNode>?): XmlNode", "", NULL, 0},
+    {"element", XLSP_SYM_FUNCTION, "fn(tag: string, attrs?: Array<XmlAttribute>?, children?: Array<XmlNode>?): XmlNode", "", NULL, 0},
+    {"text", XLSP_SYM_FUNCTION, "fn(content: string): XmlNode", "", NULL, 0},
+    {"comment", XLSP_SYM_FUNCTION, "fn(content: string): XmlNode", "", NULL, 0},
+    {"cdata", XLSP_SYM_FUNCTION, "fn(content: string): XmlNode", "", NULL, 0},
+    {"XmlName", XLSP_SYM_CLASS, "type XmlName", "Class type", NULL, 0},
+    {"XmlAttribute", XLSP_SYM_CLASS, "type XmlAttribute", "Class type", NULL, 0},
+    {"XmlNode", XLSP_SYM_CLASS, "type XmlNode", "Enum type", NULL, 0},
+    {"XmlErrorKind", XLSP_SYM_CLASS, "type XmlErrorKind", "Enum type", NULL, 0},
+    {"XmlDiagnostic", XLSP_SYM_CLASS, "type XmlDiagnostic", "Class type", NULL, 0},
+    {"XmlError", XLSP_SYM_CLASS, "type XmlError", "Enum type", NULL, 0},
+    {"XmlParseReport", XLSP_SYM_CLASS, "type XmlParseReport", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_XML_SYMBOL_COUNT 10
+#define GEN_XLSP_STDLIB_XML_SYMBOL_COUNT 25
 
 // yaml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_yaml_symbols[] = {

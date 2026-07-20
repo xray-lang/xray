@@ -1,38 +1,54 @@
 import xml
+import { XmlNode, XmlName, XmlAttribute } from xml
 
-var doc = xml.parse("<?xml version=\"1.0\"?><root xmlns=\"urn:x\" id=\"7\"><item>A&amp;B</item><![CDATA[<raw>]]></root>")
-print(doc["tag"])
-print(doc["attrs"]["id"])
-print(doc["namespaces"][""])
-print(len(doc["children"]))
-print(doc["children"][0]["children"][0]["text"])
-print(doc["children"][1]["type"])
-print(doc["children"][1]["text"])
-
-var cdataAsText = xml.parse("<root><![CDATA[plain]]></root>", { preserveCData: false })
-print(cdataAsText["children"][0]["type"])
-print(cdataAsText["children"][0]["text"])
-
-var comments = xml.parse("<root><!-- keep --><leaf/></root>", { preserveComments: true })
-print(len(comments["children"]))
-print(comments["children"][0]["type"])
-
-var detailed = xml.parseDetailed("<ok/>")
-print(detailed["doc"]["tag"])
-print(len(detailed["errors"]))
-
-var made = xml.element("entry", { id: "42", ignored: 7 })
-print(made["tag"])
-print(made["attrs"]["id"])
-if (Json.containsKey(made["attrs"], "ignored")) {
-    print("has-ignored")
-} else {
-    print("no-ignored")
+fn nodeKind(node: XmlNode) -> string {
+    return match (node) {
+        XmlNode.Document(kids)              -> "document",
+        XmlNode.Element(name, attrs, kids)  -> "element",
+        XmlNode.Text(s)                     -> "text",
+        XmlNode.Comment(s)                  -> "comment",
+        XmlNode.CData(s)                    -> "cdata",
+        XmlNode.ProcessingInstruction(t, d) -> "pi"
+    }
 }
 
-var textNode = xml.text("<hello>&")
-print(textNode["type"])
-print(textNode["text"])
+var doc = xml.parse("<?xml version=\"1.0\"?><root xmlns=\"urn:x\" id=\"7\"><item>A&amp;B</item><![CDATA[<raw>]]></root>")
+print(xml.tag(doc) ?? "")
+print(xml.attr(doc, "id") ?? "")
+print(xml.namespace(doc, "") ?? "")
+var kids = xml.children(doc)
+print(len(kids))
+print(xml.textContent(kids[0]))
+print(nodeKind(kids[1]))
+print(xml.nodeText(kids[1]) ?? "")
 
-var round = xml.stringify(xml.parse("<msg>Hello&lt;World</msg>"), { indent: 0, declaration: false })
+var cdataAsText = xml.parse("<root><![CDATA[plain]]></root>",
+    { preserveWhitespace: false, preserveComments: false, preserveCData: false, validateEntities: true })
+print(nodeKind(xml.children(cdataAsText)[0]))
+print(xml.textContent(cdataAsText))
+
+var comments = xml.parse("<root><!-- keep --><leaf/></root>",
+    { preserveWhitespace: false, preserveComments: true, preserveCData: true, validateEntities: true })
+print(len(xml.children(comments)))
+print(nodeKind(xml.children(comments)[0]))
+
+var report = xml.parseReport("<ok/>")
+if (report.doc != null) {
+    print(xml.tag(report.doc!) ?? "")
+}
+print(len(report.diagnostics))
+
+var made = xml.element("entry", [XmlAttribute(XmlName("", "id"), "42")], [xml.text("body")])
+print(xml.tag(made) ?? "")
+print(xml.attr(made, "id") ?? "")
+print(xml.textContent(made))
+print(xml.qualifiedName(made)!.qualified())
+
+var textNode = xml.text("<hello>&")
+print(nodeKind(textNode))
+print(xml.nodeText(textNode) ?? "")
+
+var round = xml.stringify(xml.parse("<msg>Hello&lt;World</msg>"),
+    { indent: 0, declaration: false, encoding: "UTF-8" })
 print(round)
+print(xml.stringify(made, { indent: 0, declaration: false, encoding: "UTF-8" }))

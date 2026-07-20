@@ -1,61 +1,58 @@
-// 1303_xml_basic.xr - XML module tests
+// 1308_xml_basic.xr - XML module tests (typed XmlNode ADT)
 
 import xml
+import { XmlNode, XmlName, XmlAttribute } from xml
 
 // ===== Basic parsing =====
 
 @test
 fn test_parse_basic() {
-    var data = "<root><item>Hello</item></root>"
-    var doc: Json = xml.parse(data) ?? {}
-    assert_eq(doc["tag"], "root")
+    var doc = xml.parse("<root><item>Hello</item></root>")
+    assert_eq(xml.tag(doc) ?? "", "root")
 }
 
 @test
 fn test_parse_children() {
-    var data = "<root><item>Hello</item></root>"
-    var doc: Json = xml.parse(data) ?? {}
-    var children = doc["children"]
+    var doc = xml.parse("<root><item>Hello</item></root>")
+    var children = xml.children(doc)
     assert_eq(len(children), 1)
-    assert_eq(children[0]["tag"], "item")
+    assert_eq(xml.tag(children[0]) ?? "", "item")
 }
 
 @test
 fn test_parse_text() {
-    var data = "<root><item>Hello</item></root>"
-    var doc: Json = xml.parse(data) ?? {}
-    var textNode = doc["children"][0]["children"][0]
-    assert_eq(textNode["text"], "Hello")
+    var doc = xml.parse("<root><item>Hello</item></root>")
+    var item = xml.children(doc)[0]
+    assert_eq(xml.textContent(item), "Hello")
 }
 
 // ===== Attributes =====
 
 @test
 fn test_parse_attrs() {
-    var data = "<user id=\"123\" name=\"Alice\"/>"
-    var doc: Json = xml.parse(data) ?? {}
-    var attrs = doc["attrs"]
-    assert_eq(attrs["id"], "123")
-    assert_eq(attrs["name"], "Alice")
+    var doc = xml.parse("<user id=\"123\" name=\"Alice\"/>")
+    assert_eq(xml.attr(doc, "id") ?? "", "123")
+    assert_eq(xml.attr(doc, "name") ?? "", "Alice")
 }
 
 // ===== Nested elements =====
 
 @test
 fn test_parse_deep_nesting() {
-    var data = "<root><a><b><c>deep</c></b></a></root>"
-    var doc: Json = xml.parse(data) ?? {}
-    var cNode = doc["children"][0]["children"][0]["children"][0]
-    assert_eq(cNode["tag"], "c")
+    var doc = xml.parse("<root><a><b><c>deep</c></b></a></root>")
+    var a = xml.children(doc)[0]
+    var b = xml.children(a)[0]
+    var c = xml.children(b)[0]
+    assert_eq(xml.tag(c) ?? "", "c")
+    assert_eq(xml.textContent(c), "deep")
 }
 
 // ===== Multiple children =====
 
 @test
 fn test_parse_multiple_children() {
-    var data = "<list><item>1</item><item>2</item><item>3</item></list>"
-    var doc: Json = xml.parse(data) ?? {}
-    assert_eq(len(doc["children"]), 3)
+    var doc = xml.parse("<list><item>1</item><item>2</item><item>3</item></list>")
+    assert_eq(len(xml.children(doc)), 3)
 }
 
 // ===== Create element =====
@@ -63,34 +60,32 @@ fn test_parse_multiple_children() {
 @test
 fn test_create_element() {
     var elem = xml.element("div")
-    assert_eq(elem["tag"], "div")
+    assert_eq(xml.tag(elem) ?? "", "div")
 }
 
 // ===== Empty element =====
 
 @test
 fn test_parse_empty_element() {
-    var data = "<empty/>"
-    var doc: Json = xml.parse(data) ?? {}
-    assert_eq(doc["tag"], "empty")
-    assert_eq(len(doc["children"]), 0)
+    var doc = xml.parse("<empty/>")
+    assert_eq(xml.tag(doc) ?? "", "empty")
+    assert_eq(len(xml.children(doc)), 0)
 }
 
 // ===== Comments =====
 
 @test
 fn test_parse_preserve_comments() {
-    var data = "<root><!-- comment --><item/></root>"
-    var doc: Json = xml.parse(data, { preserveComments: true }) ?? {}
-    assert_eq(len(doc["children"]), 2)
+    var doc = xml.parse("<root><!-- comment --><item/></root>",
+        { preserveWhitespace: false, preserveComments: true, preserveCData: true, validateEntities: true })
+    assert_eq(len(xml.children(doc)), 2)
 }
 
 // ===== Stringify =====
 
 @test
 fn test_stringify_compact() {
-    var data = "<msg>Hi</msg>"
-    var doc: Json = xml.parse(data) ?? {}
-    var str = xml.stringify(doc, { indent: 0, declaration: false })
+    var doc = xml.parse("<msg>Hi</msg>")
+    var str = xml.stringify(doc, { indent: 0, declaration: false, encoding: "UTF-8" })
     assert_eq(str, "<msg>Hi</msg>")
 }

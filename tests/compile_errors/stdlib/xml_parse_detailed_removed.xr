@@ -1,0 +1,6 @@
+// Guard: the legacy `parseDetailed(): Json` surface was removed in favour of
+// `parseReport(): XmlParseReport`.
+import xml
+
+var report = xml.parseDetailed("<ok/>")
+print(report)
