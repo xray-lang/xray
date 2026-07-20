@@ -6955,26 +6955,91 @@ static const XiValue *xicgen_stringbuilder_append_arg(const XiValue *v) {
     return cg_unwrap_identity_value(arg);
 }
 
+/* UTF-8 byte length of a Unicode scalar; 0 for surrogate / out-of-range code
+ * points. Mirrors xrt_rune_utf8_encode's accepted range so the compile-time
+ * reserve stays byte-exact with the runtime append. */
+static int xicgen_rune_scalar_utf8_len(int64_t cp) {
+    if (cp < 0)
+        return 0;
+    if (cp <= 0x7F)
+        return 1;
+    if (cp <= 0x7FF)
+        return 2;
+    if (cp <= 0xFFFF)
+        return (cp >= 0xD800 && cp <= 0xDFFF) ? 0 : 3;
+    if (cp <= 0x10FFFF)
+        return 4;
+    return 0;
+}
+
+/* Exact formatted byte length for a StringBuilder.append literal argument whose
+ * length is a compile-time constant: string, rune, bool, or null. out_is_string
+ * distinguishes the string fast path (append_string_no_grow) from the scalar
+ * path (append_scalar_no_grow). Kept in sync with the producer's
+ * body_string_builder_append_has_exact_count and the runtime formatting. */
+static bool xicgen_stringbuilder_exact_append_len(const XiValue *arg, int64_t *out_length,
+                                                  bool *out_is_string) {
+    if (!arg || arg->op != XI_CONST || !arg->type)
+        return false;
+    switch (arg->type->kind) {
+        case XR_KIND_STRING: {
+            const char *literal = xicgen_static_string_const(arg);
+            if (!literal)
+                return false;
+            size_t length = strlen(literal);
+            if (length > (size_t) INT64_MAX)
+                return false;
+            if (out_length)
+                *out_length = (int64_t) length;
+            if (out_is_string)
+                *out_is_string = true;
+            return true;
+        }
+        case XR_KIND_RUNE: {
+            int n = xicgen_rune_scalar_utf8_len(arg->aux_int);
+            if (n <= 0)
+                return false;
+            if (out_length)
+                *out_length = n;
+            if (out_is_string)
+                *out_is_string = false;
+            return true;
+        }
+        case XR_KIND_BOOL:
+            if (out_length)
+                *out_length = arg->aux_int ? 4 : 5;
+            if (out_is_string)
+                *out_is_string = false;
+            return true;
+        case XR_KIND_NULL:
+            if (out_length)
+                *out_length = 4;
+            if (out_is_string)
+                *out_is_string = false;
+            return true;
+        default:
+            return false;
+    }
+}
+
 static bool xicgen_stringbuilder_literal_append_plan(XiCgenCtx *ctx, const XiValue *v,
                                                      int64_t *out_length) {
     const XaotCapacityPlan *plan = xicgen_stringbuilder_capacity_plan(ctx, v);
     const XiValue *arg = xicgen_stringbuilder_append_arg(v);
-    const char *literal = xicgen_static_string_const(arg);
     const uint32_t required = XAOT_CAPACITY_EV_GLOBAL_ROW | XAOT_CAPACITY_EV_RECEIVER_TYPE |
                               XAOT_CAPACITY_EV_ELEM_TYPE | XAOT_CAPACITY_EV_EXACT_COUNT |
                               XAOT_CAPACITY_EV_MAY_GROW;
+    int64_t length = 0;
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs != 2 ||
         !xicgen_is_stringbuilder_receiver(v->args[0]) ||
         !cg_method_name_is(v, "append", cg_method_sym("append")) || !plan ||
         plan->sequence_kind != XG_SEQ_STRING_BUILDER || plan->op_kind != XG_CAPACITY_APPEND ||
         plan->action != XAOT_CAPACITY_RESERVE_ONCE || plan->count_expr_id == 0 ||
-        (plan->evidence & required) != required || !literal)
-        return false;
-    size_t length = strlen(literal);
-    if (length > (size_t) INT64_MAX)
+        (plan->evidence & required) != required ||
+        !xicgen_stringbuilder_exact_append_len(arg, &length, NULL))
         return false;
     if (out_length)
-        *out_length = (int64_t) length;
+        *out_length = length;
     return true;
 }
 
@@ -7110,6 +7175,10 @@ static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const Xi
 
     int64_t literal_length = 0;
     bool literal_plan = xicgen_stringbuilder_literal_append_plan(ctx, v, &literal_length);
+    bool literal_is_string = false;
+    if (literal_plan)
+        xicgen_stringbuilder_exact_append_len(xicgen_stringbuilder_append_arg(v), NULL,
+                                              &literal_is_string);
     (void) literal_length;
     if (v->xg_capacity_op_id != XG_NO_ID &&
         (!plan || plan->sequence_kind != XG_SEQ_STRING_BUILDER ||
@@ -7145,7 +7214,10 @@ static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const Xi
      * (e.g. a null literal), see through it to the original tagged source so the
      * builder appends the real value ("null") instead of its unboxed int (0). */
     const XiValue *append_arg = cg_unwrap_identity_value(v->args[1]);
-    fprintf(out, literal_plan ? "(xrt_strbuf_append_string_no_grow(" : "(xrt_strbuf_append(");
+    const char *append_fn = !literal_plan       ? "(xrt_strbuf_append("
+                            : literal_is_string ? "(xrt_strbuf_append_string_no_grow("
+                                                : "(xrt_strbuf_append_scalar_no_grow(";
+    fprintf(out, "%s", append_fn);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, append_arg, XR_REP_TAGGED);
