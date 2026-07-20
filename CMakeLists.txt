@@ -2387,6 +2387,32 @@ if(BUILD_TESTS)
         LABELS "regression;rc;vm"
         TIMEOUT 30
     )
+
+    # ========================================================================
+    # Task 220 — Verification asset governance gates (appended registrations)
+    # Design: xray-docs/tasks/220-semantic-contract-freeze-and-verification-
+    # asset-governance-cn.md. This section only registers tests; it adds no
+    # build targets.
+    # ========================================================================
+
+    # P1: independent AOT VM-vs-native suite adopted into CTest with a tombstone
+    # gate. Runs every tests/aot/{basic,modules,coro,negative} case and treats
+    # EXACTLY the cases in tests/aot/TOMBSTONES.tsv as expected failures; any
+    # other failure fails the gate (fail-closed). Allowed to be slower than the
+    # main gate.
+    add_test(
+        NAME aot_standalone_suite
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_AOT_TOMBSTONE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/TOMBSTONES.tsv
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_standalone_suite PROPERTIES
+        LABELS "aot;standalone;tombstone;task-220"
+        PROCESSORS 4
+        TIMEOUT 600
+    )
 endif()
 
 # Fuzzing tests (optional, requires Clang with libFuzzer)
