@@ -2572,6 +2572,22 @@ static void build_module_metadata(XiLower *l) {
     f->module = mod;
 }
 
+/* REPL values cross independently compiled submissions through runtime-owned
+ * shared slots, so their static type is intentionally erased at this boundary.
+ * Keep the erasure and slot bookkeeping in one canonical helper: declarations
+ * and versioned implicit results differ only in their storage index. */
+static void xi_lower_seed_repl_slot(XiLower *l, XrString *name, int slot,
+                                    uint16_t *next_shared_start) {
+    if (!l || !name || name->length == 0 || slot < 0 || !next_shared_start)
+        return;
+    int vid = xi_lower_var_create(l, 0, name->data, l->type_any);
+    if (vid < 0 || vid >= l->var_cap)
+        return;
+    l->shared_map[vid] = (int16_t) slot;
+    if (slot + 1 > (int) *next_shared_start)
+        *next_shared_start = (uint16_t) (slot + 1);
+}
+
 XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRuntime *isolate,
                                  bool repl_mode) {
     XR_CHECK(program != NULL, "xi_lower_program: typed program is NULL");
@@ -2619,26 +2635,12 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
     if (repl_syms) {
         for (int i = 0; i < repl_syms->count; i++) {
             XrReplSymbol *s = &repl_syms->symbols[i];
-            if (!s->name || s->name->length == 0)
-                continue;
-            int vid = xi_lower_var_create(&l, 0, s->name->data, l.type_any);
-            if (vid < 0 || vid >= l.var_cap)
-                continue;
-            l.shared_map[vid] = (int16_t) i;
-            if (i + 1 > (int) next_shared_start)
-                next_shared_start = (uint16_t) (i + 1);
+            xi_lower_seed_repl_slot(&l, s->name, i, &next_shared_start);
         }
         for (int i = 0; i < repl_syms->result_count; i++) {
             XrString *name = repl_syms->result_names[i];
-            if (!name || name->length == 0)
-                continue;
             int slot = repl_syms->count + i;
-            int vid = xi_lower_var_create(&l, 0, name->data, l.type_any);
-            if (vid < 0 || vid >= l.var_cap)
-                continue;
-            l.shared_map[vid] = (int16_t) slot;
-            if (slot + 1 > (int) next_shared_start)
-                next_shared_start = (uint16_t) (slot + 1);
+            xi_lower_seed_repl_slot(&l, name, slot, &next_shared_start);
         }
     }
 
