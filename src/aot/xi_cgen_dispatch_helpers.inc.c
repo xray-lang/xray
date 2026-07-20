@@ -4206,6 +4206,30 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         return;
     }
 
+    /* Default and shared-slot-held class constructors whose callee is a
+     * GET_SHARED class object are not recognized by cg_resolve_static_function_call
+     * above, but cg_class_native_ctor_call_data resolves them (including classes
+     * with only an implicit constructor). Route them to the native constructor
+     * expression before the indirect-call path below, which would otherwise treat
+     * the class object as a callable value. */
+    {
+        const XiFunc *ctor_target = NULL;
+        const char *ctor_prefix = NULL;
+        const XiClassData *ctor_cd =
+            cg_class_native_ctor_call_data(ctx, f, v, &ctor_target, &ctor_prefix);
+        if (ctor_cd) {
+            const char *cprefix = ctor_prefix ? ctor_prefix : call_prefix;
+            if (ctor_target) {
+                if (emit_class_native_constructor_expr(ctx, out, f, prefix, v, ctor_target,
+                                                       cprefix))
+                    return;
+            } else if (emit_class_native_default_constructor_expr(ctx, out, prefix, v, ctor_cd,
+                                                                  cprefix)) {
+                return;
+            }
+        }
+    }
+
     /* Indirect call through a closure value.  A function value carries a
      * canonical descriptor whose sync_entry is the boxed entry point
      * `XrValue (xrt_closure_t *, XrValue...)` (see emit_closure_new_expr), so

@@ -136,17 +136,123 @@ static XrType *class_method_analyzer_signature(XiLower *l, const ClassDeclNode *
     return (method_type && method_type->kind == XR_KIND_FUNCTION) ? method_type : NULL;
 }
 
+/* Resolve the analyzer class metadata for a class declaration. The hierarchy in
+ * XrClassInfo is linked across module boundaries, so this gives access to a
+ * cross-module base class and its fields during per-module lowering. */
+static XrClassInfo *class_info_for_decl(XiLower *l, const ClassDeclNode *cd) {
+    if (!l || !l->analyzer || !cd)
+        return NULL;
+    XaSymbol *class_sym =
+        cd->symbol_id ? xa_scope_lookup_by_id(l->analyzer->global_scope, cd->symbol_id) : NULL;
+    if (!class_sym && cd->name)
+        class_sym = xa_analyzer_lookup(l->analyzer, cd->name);
+    if (!class_sym && cd->name)
+        class_sym = xa_analyzer_lookup_deep(l->analyzer, cd->name);
+    XaSymbolLinks *class_links = class_sym ? xa_analyzer_get_links(l->analyzer, class_sym) : NULL;
+    return class_links ? class_links->class_info : NULL;
+}
+
+/* A class participates in polymorphic vtable dispatch when it has a parent
+ * (it is a subclass) or is extended by some subclass. Only such classes require
+ * the native heap type-id representation; keeping the check here lets the native
+ * layout admit string/tagged fields for them while non-polymorphic string
+ * classes stay on the boxed/map path (whose value-boundary ABI is unchanged). */
+static bool class_info_is_polymorphic(const XrClassInfo *info) {
+    return info && (info->has_subclass || info->base != NULL);
+}
+
+/* Append the native field layout for `info` (walking its base chain, base fields
+ * first) into `layout` starting at `*out_idx`. Returns false when any field is
+ * not representable in a native class instance, in which case the whole class
+ * must stay on the boxed/map path. Field native types match
+ * class_make_native_instance_layout so a cross-module base and its subclass
+ * agree on offsets. */
+static bool class_collect_native_fields_from_info(XiLower *l, XrClassInfo *info,
+                                                  XrAggregateLayout *layout, uint16_t *out_idx) {
+    if (!info)
+        return true;
+    if (info->base && !class_collect_native_fields_from_info(l, info->base, layout, out_idx))
+        return false;
+    const bool polymorphic = class_info_is_polymorphic(info);
+    for (int i = 0; i < info->field_count; i++) {
+        XaSymbol *fs = info->fields ? info->fields[i] : NULL;
+        if (!fs || !fs->name)
+            return false;
+        XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, fs);
+        XrType *type = links ? links->type : NULL;
+        if (!type || type->kind == XR_KIND_UNKNOWN || type->is_nullable)
+            return false;
+        int native = xr_type_kind_to_native(type->kind, type->native_width);
+        if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW ||
+                           type->kind == XR_KIND_SPAN))
+            native = XR_NATIVE_ARRAY_REF;
+        if (native < 0 && type->kind == XR_KIND_MAP)
+            native = XR_NATIVE_MAP_REF;
+        if (native < 0 && type->kind == XR_KIND_SET)
+            native = XR_NATIVE_SET_REF;
+        if (native < 0)
+            return false;
+        if (native == XR_NATIVE_STRING && !polymorphic)
+            return false;
+        if ((int) *out_idx >= XR_MAX_AGG_FIELDS)
+            return false;
+        layout->field_names[*out_idx] = arena_strdup(l->func, fs->name);
+        layout->fields[*out_idx].native_type = (uint8_t) native;
+        (*out_idx)++;
+    }
+    return true;
+}
+
+/* Build a native instance layout for a class from its analyzer metadata. Used
+ * for a cross-module base class whose per-module XiClassData is not visible to
+ * the current lowering context. */
+static XrAggregateLayout *class_make_native_layout_from_info(XiLower *l, XrClassInfo *info) {
+    if (!l || !l->func || !info)
+        return NULL;
+    int total = 0;
+    for (XrClassInfo *c = info; c; c = c->base)
+        total += c->field_count;
+    if (total < 0 || total > XR_MAX_AGG_FIELDS)
+        return NULL;
+    XrAggregateLayout *layout =
+        (XrAggregateLayout *) xi_func_arena_alloc(l->func, sizeof(XrAggregateLayout));
+    if (!layout)
+        return NULL;
+    layout->field_count = (uint16_t) total;
+    layout->field_names = NULL;
+    if (total > 0) {
+        layout->field_names = (const char **) xi_func_arena_alloc(
+            l->func, (uint32_t) (sizeof(const char *) * (size_t) total));
+        if (!layout->field_names)
+            return NULL;
+    }
+    uint16_t out_idx = 0;
+    if (!class_collect_native_fields_from_info(l, info, layout, &out_idx))
+        return NULL;
+    if (!xr_aggregate_layout_compute(layout, xi_lower_target_data_layout(l)))
+        return NULL;
+    return layout;
+}
+
 static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNode *cd,
                                                             uint16_t *out_inherited) {
     if (!l || !l->func || !l->isolate || !cd)
         return NULL;
 
     XiClassData *super_data = class_find_native_super(l, cd);
-    if ((cd->super_name || cd->super_module) && !super_data)
+    XrClassInfo *class_info = class_info_for_decl(l, cd);
+    XrAggregateLayout *super_layout = super_data ? super_data->instance_layout : NULL;
+    /* Cross-module base: its per-module XiClassData is not visible to this
+     * lowering context, so build the inherited layout from the analyzer's linked
+     * class hierarchy instead. */
+    if (!super_layout && (cd->super_name || cd->super_module) && class_info && class_info->base)
+        super_layout = class_make_native_layout_from_info(l, class_info->base);
+    if ((cd->super_name || cd->super_module) && !super_layout)
         return NULL;
-    uint16_t inherited = super_data ? super_data->instance_layout->field_count : 0;
+    uint16_t inherited = super_layout ? super_layout->field_count : 0;
     if (out_inherited)
         *out_inherited = inherited;
+    const bool polymorphic = class_info_is_polymorphic(class_info);
 
     int instance_fields = 0;
     for (int i = 0; i < cd->field_count; i++) {
@@ -174,11 +280,11 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
     }
 
     uint16_t out_idx = 0;
-    if (super_data && super_data->instance_layout) {
-        XrAggregateLayout *parent = super_data->instance_layout;
-        for (uint16_t i = 0; i < parent->field_count; i++) {
-            layout->field_names[out_idx] = parent->field_names ? parent->field_names[i] : NULL;
-            layout->fields[out_idx] = parent->fields[i];
+    if (super_layout) {
+        for (uint16_t i = 0; i < super_layout->field_count; i++) {
+            layout->field_names[out_idx] =
+                super_layout->field_names ? super_layout->field_names[i] : NULL;
+            layout->fields[out_idx] = super_layout->fields[i];
             out_idx++;
         }
     }
@@ -202,7 +308,18 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
             native = XR_NATIVE_MAP_REF;
         if (native < 0 && type->kind == XR_KIND_SET)
             native = XR_NATIVE_SET_REF;
-        if (native < 0 || native == XR_NATIVE_STRING)
+        if (native < 0)
+            return NULL;
+        /* Nullable/optional fields are laid out as generic tagged XrValue by the
+         * AOT class-field plan; keep such classes boxed to avoid a native_type
+         * mismatch at the class-field-plan boundary. */
+        if (type->is_nullable)
+            return NULL;
+        /* String (tagged) fields only enter the native layout for polymorphic
+         * classes, which require the heap type-id representation for vtable
+         * dispatch. Non-polymorphic string classes stay on the boxed/map path,
+         * whose value-boundary ABI (XrValue) is unchanged. */
+        if (native == XR_NATIVE_STRING && !polymorphic)
             return NULL;
         layout->field_names[out_idx] = arena_strdup(l->func, f->name);
         layout->fields[out_idx].native_type = (uint8_t) native;
