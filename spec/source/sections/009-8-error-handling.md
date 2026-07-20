@@ -338,26 +338,28 @@ fn fetch(url: string) -> string {
 #### 模式 1：enum 错误 + defer 资源清理
 
 ```xray
-enum ConnErr { Refused, Timeout, Reset }
+enum ConnErr { Refused, Timeout }
 
-fn fetchData(host: string) -> string {
-    var conn = connect(host)
-    defer conn.close()
+// 用一个极简的 "连接" 替身让示例自成一体。
+class Conn {
+    alive: bool
+    constructor(alive: bool) { this.alive = alive }
+    isAlive() -> bool { return this.alive }
+    close() { print("closed") }
+}
 
+fn fetchData(alive: bool) -> string {
+    var conn = Conn(alive)
+    defer conn.close()                 // 无论成功或抛错都会执行
     if (!conn.isAlive()) { throw ConnErr.Timeout }
-    return conn.read()
+    return "payload"
 }
 
 fn main() {
     try {
-        var data = fetchData("api.example.com")
-        print(data)
+        print(fetchData(true))         // => closed 然后 payload
     } catch (e: ConnErr) {
-        match (e) {
-            ConnErr.Refused -> print("connection refused"),
-            ConnErr.Timeout -> print("timeout"),
-            ConnErr.Reset -> print("connection reset"),
-        }
+        print("connection error")
     }
 }
 
@@ -367,23 +369,20 @@ main()
 #### 模式 2：throw + catch 用于库 API
 
 ```xray
-enum ConfigErr { BadJson(string), BadField(string) }
+enum ConfigErr { Missing(string) }
 
-fn parseConfig(text: string) -> Config {
-    var json = parseJson(text)
-    var port = json["port"].toInt()
-    if (port == null) { throw ConfigErr.BadField("port") }
-    return Config(port: port!)
+fn requirePort(cfg: Json) {
+    if (!Json.containsKey(cfg, "port")) { throw ConfigErr.Missing("port") }
+    print("port:", Json.get(cfg, "port"))
 }
 
 fn main() {
     try {
-        var cfg = parseConfig(configText)
-        startServer(cfg)
+        requirePort(Json.parse("{\"port\": 8080}"))   // => port: 8080
+        requirePort(Json.parse("{}"))                  // 抛出 ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
-            ConfigErr.BadJson(msg) -> print("invalid JSON:", msg),
-            ConfigErr.BadField(f) -> print("bad field:", f),
+            ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port
         }
     }
 }
@@ -819,26 +818,28 @@ Reference table:
 #### Pattern 1: enum errors + defer for resource cleanup
 
 ```xray
-enum ConnErr { Refused, Timeout, Reset }
+enum ConnErr { Refused, Timeout }
 
-fn fetchData(host: string) -> string {
-    var conn = connect(host)
-    defer conn.close()
+// A tiny stand-in "connection" so the example runs on its own.
+class Conn {
+    alive: bool
+    constructor(alive: bool) { this.alive = alive }
+    isAlive() -> bool { return this.alive }
+    close() { print("closed") }
+}
 
+fn fetchData(alive: bool) -> string {
+    var conn = Conn(alive)
+    defer conn.close()                 // runs whether we succeed or throw
     if (!conn.isAlive()) { throw ConnErr.Timeout }
-    return conn.read()
+    return "payload"
 }
 
 fn main() {
     try {
-        var data = fetchData("api.example.com")
-        print(data)
+        print(fetchData(true))         // => closed, then payload
     } catch (e: ConnErr) {
-        match (e) {
-            ConnErr.Refused -> print("connection refused"),
-            ConnErr.Timeout -> print("timeout"),
-            ConnErr.Reset -> print("connection reset"),
-        }
+        print("connection error")
     }
 }
 
@@ -848,23 +849,20 @@ main()
 #### Pattern 2: throw + catch for library APIs
 
 ```xray
-enum ConfigErr { BadJson(string), BadField(string) }
+enum ConfigErr { Missing(string) }
 
-fn parseConfig(text: string) -> Config {
-    var json = parseJson(text)
-    var port = json["port"].toInt()
-    if (port == null) { throw ConfigErr.BadField("port") }
-    return Config(port: port!)
+fn requirePort(cfg: Json) {
+    if (!Json.containsKey(cfg, "port")) { throw ConfigErr.Missing("port") }
+    print("port:", Json.get(cfg, "port"))
 }
 
 fn main() {
     try {
-        var cfg = parseConfig(configText)
-        startServer(cfg)
+        requirePort(Json.parse("{\"port\": 8080}"))   // => port: 8080
+        requirePort(Json.parse("{}"))                  // throws ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
-            ConfigErr.BadJson(msg) -> print("invalid JSON:", msg),
-            ConfigErr.BadField(f) -> print("bad field:", f),
+            ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port
         }
     }
 }
