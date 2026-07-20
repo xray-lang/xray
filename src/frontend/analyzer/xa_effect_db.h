@@ -103,6 +103,17 @@ XR_FUNC uint64_t xa_effect_db_error_type_key(const XaEffectDatabase *db, XaError
 XR_FUNC XrType *xa_effect_db_error_type_handle(const XaEffectDatabase *db, XaErrorTypeId type_id);
 XR_FUNC uint64_t xa_effect_db_error_variant_key(const XaEffectDatabase *db, XaErrorTypeId type_id,
                                                 XaErrorVariantId variant_id);
+/* Canonical human-readable names for deterministic query/manifest output
+ * (task 205 §7.2 / §11.1).  Names are display metadata; the stable key remains
+ * the cross-process identity.  First assignment wins and the DB owns the copy. */
+XR_FUNC void xa_effect_db_set_error_type_name(XaEffectDatabase *db, XaErrorTypeId type_id,
+                                              const char *name);
+XR_FUNC void xa_effect_db_set_error_variant_name(XaEffectDatabase *db, XaErrorTypeId type_id,
+                                                 XaErrorVariantId variant_id, const char *name);
+XR_FUNC const char *xa_effect_db_error_type_name(const XaEffectDatabase *db, XaErrorTypeId type_id);
+XR_FUNC const char *xa_effect_db_error_variant_name(const XaEffectDatabase *db,
+                                                    XaErrorTypeId type_id,
+                                                    XaErrorVariantId variant_id);
 
 XR_FUNC void xa_effect_summary_init(XaEffectSummary *summary);
 XR_FUNC void xa_effect_summary_clear(XaEffectSummary *summary);

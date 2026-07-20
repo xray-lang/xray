@@ -4,6 +4,7 @@
 
 #include "xa_effect_db.h"
 #include <stdio.h>
+#include <string.h>
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -513,6 +514,37 @@ TEST(diff_addition_dominates_removal_as_breaking) {
     xa_effect_db_free(db);
 }
 
+TEST(error_type_and_variant_names_round_trip) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x909u, NULL);
+    ASSERT(type != XA_ERROR_TYPE_NONE);
+    XaErrorVariantId v0 = xa_effect_db_register_error_variant(db, type, 0x9A0u);
+    XaErrorVariantId v1 = xa_effect_db_register_error_variant(db, type, 0x9A1u);
+    ASSERT(v0 != XA_ERROR_VARIANT_INVALID);
+    ASSERT(v1 != XA_ERROR_VARIANT_INVALID);
+
+    ASSERT(xa_effect_db_error_type_name(db, type) == NULL);
+    ASSERT(xa_effect_db_error_variant_name(db, type, v0) == NULL);
+
+    xa_effect_db_set_error_type_name(db, type, "std.fs::IoError");
+    xa_effect_db_set_error_variant_name(db, type, v0, "NotFound");
+    xa_effect_db_set_error_variant_name(db, type, v1, "PermissionDenied");
+
+    ASSERT(strcmp(xa_effect_db_error_type_name(db, type), "std.fs::IoError") == 0);
+    ASSERT(strcmp(xa_effect_db_error_variant_name(db, type, v0), "NotFound") == 0);
+    ASSERT(strcmp(xa_effect_db_error_variant_name(db, type, v1), "PermissionDenied") == 0);
+
+    /* First assignment wins; the DB owns a private copy. */
+    xa_effect_db_set_error_type_name(db, type, "shadowed");
+    ASSERT(strcmp(xa_effect_db_error_type_name(db, type), "std.fs::IoError") == 0);
+
+    /* Out-of-range variant name query is safe. */
+    ASSERT(xa_effect_db_error_variant_name(db, type, 99) == NULL);
+
+    xa_effect_db_free(db);
+}
+
 int main(void) {
     printf("Running effect database tests...\n");
     RUN_TEST(empty_complete_is_real_summary);
@@ -532,6 +564,7 @@ int main(void) {
     RUN_TEST(diff_incomplete_to_complete_is_improvement);
     RUN_TEST(diff_all_variants_widening_and_narrowing);
     RUN_TEST(diff_addition_dominates_removal_as_breaking);
+    RUN_TEST(error_type_and_variant_names_round_trip);
 
     printf("\n%d tests passed, %d failed\n", tests_passed, tests_failed);
     return tests_failed ? 1 : 0;

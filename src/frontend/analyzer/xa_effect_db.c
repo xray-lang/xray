@@ -19,12 +19,14 @@
 
 typedef struct XaErrorVariantInfo {
     uint64_t stable_key;
+    char *name;
 } XaErrorVariantInfo;
 
 typedef struct XaErrorTypeInfo {
     XaErrorTypeId id;
     uint64_t stable_key;
     XrType *type_handle;
+    char *qualified_name;
     XaErrorVariantInfo *variants;
     uint32_t variant_count;
     uint32_t variant_capacity;
@@ -172,8 +174,15 @@ void xa_effect_db_clear(XaEffectDatabase *db) {
     if (!db)
         return;
     for (uint32_t i = 0; i < db->error_type_count; i++) {
-        if (db->error_types[i].variants)
-            xr_free(db->error_types[i].variants);
+        XaErrorTypeInfo *info = &db->error_types[i];
+        for (uint32_t v = 0; v < info->variant_count; v++) {
+            if (info->variants[v].name)
+                xr_free(info->variants[v].name);
+        }
+        if (info->variants)
+            xr_free(info->variants);
+        if (info->qualified_name)
+            xr_free(info->qualified_name);
     }
     xr_free(db->error_types);
     db->error_types = NULL;
@@ -212,6 +221,17 @@ static uint64_t stable_key_text3(const char *prefix, const char *type_name,
     return key ? key : 1u;
 }
 
+static char *dup_cstr(const char *s) {
+    if (!s)
+        return NULL;
+    size_t len = strlen(s);
+    char *copy = (char *) xr_malloc(len + 1u);
+    if (!copy)
+        return NULL;
+    memcpy(copy, s, len + 1u);
+    return copy;
+}
+
 XaErrorTypeId xa_effect_db_register_error_type(XaEffectDatabase *db, uint64_t stable_type_key,
                                                XrType *type_handle) {
     if (!db || stable_type_key == 0)
@@ -241,12 +261,14 @@ XaErrorTypeId xa_effect_db_register_error_enum(XaEffectDatabase *db, XrType *enu
     const char *name = enum_type->enum_type.enum_name;
     XaErrorTypeId type_id =
         xa_effect_db_register_error_type(db, stable_key_text2("enum", name), enum_type);
+    xa_effect_db_set_error_type_name(db, type_id, name);
     const XrEnumLayout *layout = enum_type->enum_type.layout;
     if (type_id != XA_ERROR_TYPE_NONE && layout) {
         for (uint32_t i = 0; i < layout->variant_count; i++) {
             const char *variant_name = layout->variants[i].name;
-            xa_effect_db_register_error_variant(db, type_id,
-                                                stable_key_text3("variant", name, variant_name));
+            XaErrorVariantId variant_id = xa_effect_db_register_error_variant(
+                db, type_id, stable_key_text3("variant", name, variant_name));
+            xa_effect_db_set_error_variant_name(db, type_id, variant_id, variant_name);
         }
     }
     return type_id;
@@ -265,8 +287,39 @@ XaErrorVariantId xa_effect_db_register_error_variant(XaEffectDatabase *db, XaErr
                     info->variant_count + 1u))
         return XA_ERROR_VARIANT_INVALID;
     XaErrorVariantId id = info->variant_count;
-    info->variants[info->variant_count++].stable_key = stable_variant_key;
+    info->variants[id].stable_key = stable_variant_key;
+    info->variants[id].name = NULL;
+    info->variant_count++;
     return id;
+}
+
+void xa_effect_db_set_error_type_name(XaEffectDatabase *db, XaErrorTypeId type_id,
+                                      const char *name) {
+    XaErrorTypeInfo *info = db_type_info_mut(db, type_id);
+    if (!info || !name || info->qualified_name)
+        return;
+    info->qualified_name = dup_cstr(name);
+}
+
+void xa_effect_db_set_error_variant_name(XaEffectDatabase *db, XaErrorTypeId type_id,
+                                         XaErrorVariantId variant_id, const char *name) {
+    XaErrorTypeInfo *info = db_type_info_mut(db, type_id);
+    if (!info || variant_id >= info->variant_count || !name || info->variants[variant_id].name)
+        return;
+    info->variants[variant_id].name = dup_cstr(name);
+}
+
+const char *xa_effect_db_error_type_name(const XaEffectDatabase *db, XaErrorTypeId type_id) {
+    const XaErrorTypeInfo *info = db_type_info(db, type_id);
+    return info ? info->qualified_name : NULL;
+}
+
+const char *xa_effect_db_error_variant_name(const XaEffectDatabase *db, XaErrorTypeId type_id,
+                                            XaErrorVariantId variant_id) {
+    const XaErrorTypeInfo *info = db_type_info(db, type_id);
+    if (!info || variant_id >= info->variant_count)
+        return NULL;
+    return info->variants[variant_id].name;
 }
 
 uint64_t xa_effect_db_error_type_key(const XaEffectDatabase *db, XaErrorTypeId type_id) {
