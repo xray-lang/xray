@@ -74,6 +74,7 @@ export class RwLock<T> {
         this.value = v
     }
 
+    @no_suspend
     _lockCounter() {
         while (true) {
             var (_, ok) = this._rflag.compareExchange(false, true, Ordering.AcquireRelease)
@@ -170,6 +171,7 @@ export class Condvar {
         this._sem = Semaphore(0)
     }
 
+    @no_suspend
     _lockWaiters() {
         while (true) {
             var (_, ok) = this._wlock.compareExchange(false, true, Ordering.AcquireRelease)
@@ -213,6 +215,7 @@ export class Condvar {
 // `.value`, which needs an enum instance).
 import mem
 
+@no_suspend
 export fn fence(order: Ordering) {
     mem.fence(order as int)
 }

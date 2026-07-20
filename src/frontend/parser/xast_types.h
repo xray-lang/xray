@@ -258,6 +258,8 @@ typedef enum {
     ATTR_NO_ALLOC,      // @no_alloc — AOT function must not perform heap/runtime allocation
     ATTR_NO_THROW,      // @no_throw — asserted non-throwing: body (incl. transitive calls)
                         //             must be proven to raise no error (task 216)
+    ATTR_NO_SUSPEND,    // @no_suspend — asserted non-suspending: body (incl. transitive calls)
+                        //               must be proven to reach no suspend point (task 217)
     ATTR_INTRINSIC,     // compiler-owned @intrinsic("canonical.id") declaration metadata
     ATTR_DERIVE,        // @derive(...) — opt-in generated capability metadata
 } AttributeKind;

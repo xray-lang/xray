@@ -18,6 +18,7 @@
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_errorset.h"
 #include "xanalyzer_allocation.h"
+#include "xanalyzer_suspend.h"
 #include "xanalyzer_xrd.h"
 #include "xconsteval.h"
 #include "xtype_ref_resolve.h"
@@ -7612,6 +7613,7 @@ static void xa_validate_freestanding_payload_error_catches(XaAnalyzer *analyzer,
  *   Pass 2   -> Type inference and checking
  *   Pass 3   -> Error set inference (value-return error system)
  *   Pass 4   -> Allocation effect inference and @no_alloc validation
+ *   Pass 5   -> Suspend effect validation (@no_suspend / @interrupt / @c_export)
  * ========================================================================== */
 
 void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
@@ -7650,6 +7652,10 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     // Pass 4: Infer allocation effects from the typed, symbol-resolved AST.
     // This runs for check, VM and AOT; backends only consume the result.
     xa_infer_allocation_effects(analyzer, ast);
+
+    // Pass 5: Validate @no_suspend assertions (and the implicit @interrupt /
+    // @c_export boundaries) against the task-212 suspend effect. Fail-closed.
+    xa_verify_no_suspend(analyzer, ast);
 
     xa_validate_freestanding_payload_error_catches(analyzer, ast);
 

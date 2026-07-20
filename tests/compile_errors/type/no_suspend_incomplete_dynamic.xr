@@ -1,0 +1,11 @@
+// @no_suspend is fail-closed: an unresolved (indirect) call target makes the
+// suspend evidence incomplete, so the assertion cannot be proven and must be
+// rejected (task 217).
+@no_suspend
+fn viaCallback(cb: () -> ()) {
+    cb()
+}
+
+fn main() {
+    viaCallback(fn() {})
+}
