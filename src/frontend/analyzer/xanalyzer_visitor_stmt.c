@@ -8257,6 +8257,107 @@ static void xa_check_assignment_owned_alias_boundary(XaInferContext *ctx, AstNod
                                &loc);
 }
 
+/* Task 203: an `owned` root has exactly one owning binding/location; the only
+ * permitted aliases are scoped in/ref borrows.  Persisting a bare owned root
+ * (no `move`, no `copy`) into an aggregate literal, container element or object
+ * field would create a forbidden second owning root.  This extends the
+ * `var b = a` / `x = a` alias rule to aggregate/index/member store sites.
+ * A fresh owned value (function return, constructor) is NOT a second root, so
+ * only bare owned variable/parameter references trigger the diagnostic.
+ * Returns true when a diagnostic was emitted. */
+XR_FUNC bool xa_check_owned_second_root_stored_value(XaInferContext *ctx, AstNode *value_expr,
+                                                     AstNode *loc_node, const char *dest_desc) {
+    if (!ctx || !value_expr)
+        return false;
+    bool is_move = false;
+    AstNode *source = xa_shared_boundary_source(value_expr, &is_move);
+    if (!source || is_move)
+        return false;
+    XaSymbol *root = xa_lookup_shared_source_symbol(ctx, source);
+    if (!root || (root->kind != XA_SYM_VARIABLE && root->kind != XA_SYM_PARAMETER) ||
+        !root->is_owned)
+        return false;
+    AstNode *anchor = value_expr->line ? value_expr : (loc_node ? loc_node : value_expr);
+    XrLocation loc = {.file = ctx->file_path, .line = anchor->line, .column = anchor->column};
+    const char *src_name = source->as.variable.name ? source->as.variable.name : "?";
+    char msg[320];
+    snprintf(msg, sizeof(msg),
+             "storing owned value '%s' into %s would create a second owning root; use move %s or "
+             "copy(%s)",
+             src_name, dest_desc ? dest_desc : "a container", src_name, src_name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+    return true;
+}
+
+static void xa_check_owned_second_root_in_aggregate(XaInferContext *ctx, AstNode *expr,
+                                                    AstNode *loc_node) {
+    if (!ctx || !expr)
+        return;
+    expr = xa_storage_boundary_identity_source(expr);
+    if (!expr)
+        return;
+    switch (expr->type) {
+        case AST_ARRAY_LITERAL: {
+            ArrayLiteralNode *lit = &expr->as.array_literal;
+            if (lit->is_repeat) {
+                xa_check_owned_second_root_store(ctx, lit->repeat_value, loc_node,
+                                                 "an array element");
+                return;
+            }
+            for (int i = 0; i < lit->count; i++)
+                xa_check_owned_second_root_store(ctx, lit->elements[i], loc_node,
+                                                 "an array element");
+            return;
+        }
+        case AST_TUPLE_LITERAL: {
+            TupleLiteralNode *lit = &expr->as.tuple_literal;
+            for (int i = 0; i < lit->count; i++)
+                xa_check_owned_second_root_store(ctx, lit->elements[i], loc_node,
+                                                 "a tuple element");
+            return;
+        }
+        case AST_SET_LITERAL: {
+            SetLiteralNode *lit = &expr->as.set_literal;
+            for (int i = 0; i < lit->count; i++)
+                xa_check_owned_second_root_store(ctx, lit->elements[i], loc_node, "a set element");
+            return;
+        }
+        case AST_MAP_LITERAL: {
+            MapLiteralNode *lit = &expr->as.map_literal;
+            for (int i = 0; i < lit->count; i++) {
+                xa_check_owned_second_root_store(ctx, lit->keys[i], loc_node, "a map key");
+                xa_check_owned_second_root_store(ctx, lit->values[i], loc_node, "a map value");
+            }
+            return;
+        }
+        case AST_STRUCT_LITERAL: {
+            StructLiteralNode *lit = &expr->as.struct_literal;
+            for (int i = 0; i < lit->field_count; i++)
+                xa_check_owned_second_root_store(ctx, lit->field_values[i], loc_node,
+                                                 "a struct field");
+            return;
+        }
+        case AST_OBJECT_LITERAL: {
+            ObjectLiteralNode *lit = &expr->as.object_literal;
+            for (int i = 0; i < lit->count; i++)
+                xa_check_owned_second_root_store(ctx, lit->values[i], loc_node, "an object field");
+            return;
+        }
+        default:
+            return;
+    }
+}
+
+XR_FUNC void xa_check_owned_second_root_store(XaInferContext *ctx, AstNode *value_expr,
+                                              AstNode *loc_node, const char *dest_desc) {
+    if (!ctx || !value_expr)
+        return;
+    if (xa_check_owned_second_root_stored_value(ctx, value_expr, loc_node, dest_desc))
+        return;
+    xa_check_owned_second_root_in_aggregate(ctx, value_expr, loc_node);
+}
+
 /* ============================================================================
  * Pass 2: Statement Visitors
  * ============================================================================
@@ -8357,6 +8458,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         xa_check_const_initializer_alias_boundary(ctx, node, init_type);
         xa_check_const_owned_move_initializer_boundary(ctx, node, init_type);
         xa_check_var_owned_alias_initializer_boundary(ctx, node, init_type);
+        xa_check_owned_second_root_in_aggregate(ctx, var->initializer, node);
         xa_check_decl_return_storage_boundary(ctx, node);
 
         if (links->declared_type && !XR_TYPE_IS_UNKNOWN(links->declared_type)) {
@@ -8590,6 +8692,7 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     XrType *value_type = xa_visit_infer_expr(ctx, assign->value);
     ctx->expected_type = saved_expected;
     xa_check_assignment_owned_alias_boundary(ctx, node, value_type);
+    xa_check_owned_second_root_in_aggregate(ctx, assign->value, node);
     if ((sym->is_shared || (sym->scope && sym->scope->kind == XA_SCOPE_GLOBAL)) && value_type &&
         XR_TYPE_IS_POINTER(value_type)) {
         const char *context = sym->is_shared ? "store raw pointer borrow in shared binding"

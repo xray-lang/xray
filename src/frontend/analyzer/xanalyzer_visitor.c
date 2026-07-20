@@ -5903,6 +5903,12 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
             }
+            {
+                char member_dest[128];
+                snprintf(member_dest, sizeof(member_dest), "field '%s'",
+                         ms->member ? ms->member : "?");
+                xa_check_owned_second_root_store(ctx, ms->value, node, member_dest);
+            }
             if (XR_TYPE_HAS_OBJECT_SHAPE(obj_type) && obj_type->object.field_count > 0 &&
                 ms->member) {
                 int field_idx = object_shape_field_index_local(obj_type, ms->member);
@@ -6808,6 +6814,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
             }
+            xa_check_owned_second_root_store(ctx, is->value, node, "an index target");
             XaSymbol *in_param = xa_in_param_symbol_for_expr(ctx, is->array);
             if (in_param) {
                 XrLocation loc = {
