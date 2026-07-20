@@ -1,0 +1,26 @@
+// Deterministic text CPU kernel.
+//
+// Runs the case / trim / reverse / pad transforms over fixed inputs many times
+// and folds the resulting lengths into a checksum. text is pure Xray, so the
+// transforms and the checksum are identical across VM and AOT and stable across
+// runs.
+import text
+
+fn run(n: int) -> int {
+    var acc = 0
+    var i = 0
+    while (i < n) {
+        var a = text.upper("hello world")
+        var b = text.lower("HELLO WORLD")
+        var c = text.trim("   padded   ")
+        var d = text.reverseRunes("xray-lang")
+        var e = text.padStart("7", 5, "0")
+        acc = (acc + len(a) + len(b) + len(c) + len(d) + len(e)) % 1000000007
+        i = i + 1
+    }
+    return acc
+}
+
+print(run(50000))
+print(text.upper("ok"))
+print(text.reverseRunes("abc"))

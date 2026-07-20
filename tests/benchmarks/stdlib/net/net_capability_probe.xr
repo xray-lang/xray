@@ -1,0 +1,24 @@
+// Deterministic net-module micro-benchmark.
+//
+// The net module surface is otherwise socket/DNS I/O, which is neither
+// deterministic nor network-free. net.hasTLS() is a pure runtime capability
+// query (no sockets, no DNS): it reports the same compiled-in value in every
+// run and is identical across the VM and AOT backends of one build tree. The
+// loop folds the constant result into an invariant so the observable output is
+// always "true", independent of whether TLS was compiled in.
+import net
+
+fn run(n: int) -> int {
+    var hits = 0
+    var i = 0
+    while (i < n) {
+        if (net.hasTLS()) {
+            hits = hits + 1
+        }
+        i = i + 1
+    }
+    return hits
+}
+
+var hits = run(200000)
+print(hits == 200000 || hits == 0)

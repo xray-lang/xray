@@ -1,0 +1,22 @@
+// Deterministic test_yield micro-benchmark.
+//
+// Requires XR_BUILD_TEST_MODULES=ON (the module is an internal, non-public test
+// module). It uses only the synchronous, non-yieldable helpers (sync,
+// counter_reset, counter_get) so it runs correctly outside a coroutine and
+// produces output that is identical across VM and AOT and stable across runs.
+import test_yield
+
+fn run(n: int) -> int {
+    var acc = 0
+    var i = 0
+    while (i < n) {
+        acc = acc + test_yield.sync()
+        i = i + 1
+    }
+    return acc
+}
+
+test_yield.counter_reset()
+var total = run(50000)
+print(total == 5000000)
+print(test_yield.counter_get())
