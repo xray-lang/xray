@@ -1367,6 +1367,20 @@ static int report_analyzer_diagnostics(XaAnalyzer *analyzer, const char *fallbac
     return error_count;
 }
 
+/* Task 217 P3: does any function in this tree carry a @zero_cost contract?
+ * When so, the driver enables residue tracking even without --dump-residue so
+ * the AOT verifier can enforce the shape contract after codegen. */
+static bool xi_func_tree_has_zero_cost(const XiFunc *f) {
+    if (!f)
+        return false;
+    if (f->has_zero_cost_contract)
+        return true;
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        if (f->children && xi_func_tree_has_zero_cost(f->children[i]))
+            return true;
+    return false;
+}
+
 XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                        XaotBuildResult *result) {
     bool emit_plan_dump;
@@ -1906,7 +1920,13 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     xi_cgen_ctx_set_emit_main(cg_ctx, emit_program_main);
     xi_cgen_ctx_set_freestanding_profile(cg_ctx, profile == XAOT_BUILD_PROFILE_FREESTANDING);
     xi_cgen_ctx_set_type_name_profile(cg_ctx, type_name_profile);
-    xi_cgen_ctx_set_residue_tracking(cg_ctx, options->emit_residue_dump);
+    /* Enable residue tracking for --dump-residue, or whenever a @zero_cost
+     * contract must be verified after codegen (task 217 P2/P3). */
+    bool want_residue = options->emit_residue_dump;
+    for (int m = 0; m < nmodules && !want_residue; m++)
+        if (modules[m] && xi_func_tree_has_zero_cost(modules[m]->init))
+            want_residue = true;
+    xi_cgen_ctx_set_residue_tracking(cg_ctx, want_residue);
 
     /* --- Resolve cross-module imports for C codegen --- */
     xi_cgen_resolve_module_imports(cg_ctx, modules, nmodules);
@@ -2003,6 +2023,22 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     /* Task 217 P2: snapshot per-function residue before the ctx is released. */
     if (options->emit_residue_dump)
         residue_dump = xi_cgen_residue_dump(cg_ctx);
+    /* Task 217 P3: enforce @zero_cost shape contracts after codegen, before
+     * link.  Any forbidden R1–R6 residue in an annotated function is a compile
+     * error (fail-closed, no bypass switch). */
+    int zero_cost_violations = xi_cgen_verify_zero_cost(cg_ctx);
+    if (zero_cost_violations > 0) {
+        fprintf(stderr, "Error: %d function(s) violate their @zero_cost shape contract\n",
+                zero_cost_violations);
+        xi_cgen_ctx_free(cg_ctx);
+        for (int m = 0; m < n_sources; m++) {
+            xr_free(sources[m].name);
+            xr_free(sources[m].c_source);
+        }
+        xr_free(sources);
+        /* c_export_header is released by fail_free_ir. */
+        goto fail_free_ir;
+    }
     xi_cgen_ctx_free(cg_ctx);
 
     /* Build link features before freeing IR. Runtime capabilities, external

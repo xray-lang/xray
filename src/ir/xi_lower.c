@@ -1605,6 +1605,12 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
                 l.func->aot_naked = true;
             } else if (a->kind == ATTR_INTERRUPT) {
                 l.func->aot_interrupt_abi = arena_strdup(l.func, a->str_arg);
+            } else if (a->kind == ATTR_ZERO_COST) {
+                /* task 217 P3: AOT shape contract; the allow mask (exempted
+                 * residue categories) rides in derive_flags. Verified after
+                 * codegen, before link. */
+                l.func->has_zero_cost_contract = true;
+                l.func->zero_cost_allow_mask = a->derive_flags;
             }
         }
     }

@@ -179,6 +179,36 @@ static bool xr_derive_target_bit(Token token, uint32_t *bit_out) {
     return false;
 }
 
+/* Map a @zero_cost(allow: ...) category spelling to its allow-mask bit
+ * (task 217 §3.3).  Names are the user-facing category labels. */
+static bool xr_zero_cost_category_bit(Token token, uint32_t *bit_out) {
+    if (token.length == 7 && memcmp(token.start, "runtime", 7) == 0) {
+        *bit_out = XA_ZERO_COST_ALLOW_RUNTIME;
+        return true;
+    }
+    if (token.length == 5 && memcmp(token.start, "alloc", 5) == 0) {
+        *bit_out = XA_ZERO_COST_ALLOW_ALLOC;
+        return true;
+    }
+    if (token.length == 5 && memcmp(token.start, "error", 5) == 0) {
+        *bit_out = XA_ZERO_COST_ALLOW_ERROR;
+        return true;
+    }
+    if (token.length == 6 && memcmp(token.start, "bounds", 6) == 0) {
+        *bit_out = XA_ZERO_COST_ALLOW_BOUNDS;
+        return true;
+    }
+    if (token.length == 3 && memcmp(token.start, "box", 3) == 0) {
+        *bit_out = XA_ZERO_COST_ALLOW_BOX;
+        return true;
+    }
+    if (token.length == 5 && memcmp(token.start, "lanes", 5) == 0) {
+        *bit_out = XA_ZERO_COST_ALLOW_LANES;
+        return true;
+    }
+    return false;
+}
+
 // Parse single attribute: @test, @test(skip), @test(timeout: 30), etc.
 XrAttribute *xr_parse_single_attribute(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_single_attribute: NULL parser");
@@ -313,6 +343,48 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
             xr_parser_error(parser, "@interrupt requires an ABI string, e.g. @interrupt(\"irq\")");
         }
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @interrupt");
+    } else if (name_token.length == 9 && memcmp(name_token.start, "zero_cost", 9) == 0) {
+        /* @zero_cost / @zero_cost(allow: bounds, box, ...) — AOT shape contract
+         * (task 217 §3.3).  The optional allow list exempts residue categories;
+         * the bitmask lives in derive_flags and is consumed by the AOT verifier.
+         * A bare @zero_cost forbids every category. */
+        attr->kind = ATTR_ZERO_COST;
+        if (xr_parser_match(parser, TK_LPAREN)) {
+            xr_parser_consume(parser, TK_NAME, "expected 'allow' in @zero_cost(...)");
+            Token kw = parser->previous;
+            if (!(kw.length == 5 && memcmp(kw.start, "allow", 5) == 0))
+                xr_parser_error(parser, "@zero_cost only accepts 'allow: <categories>'");
+            xr_parser_consume(parser, TK_COLON, "expected ':' after 'allow'");
+            uint32_t seen_cats = 0;
+            do {
+                xr_parser_consume(
+                    parser, TK_NAME,
+                    "expected a residue category: runtime, alloc, error, bounds, box, or lanes");
+                Token cat = parser->previous;
+                uint32_t bit = 0;
+                char name_buf[32];
+                int n = cat.length < (int) sizeof(name_buf) - 1 ? cat.length
+                                                                : (int) sizeof(name_buf) - 1;
+                memcpy(name_buf, cat.start, (size_t) n);
+                name_buf[n] = '\0';
+                if (!xr_zero_cost_category_bit(cat, &bit)) {
+                    char msg[176];
+                    snprintf(msg, sizeof(msg),
+                             "unknown @zero_cost category '%s'; expected runtime, alloc, error, "
+                             "bounds, box, or lanes",
+                             name_buf);
+                    xr_parser_error(parser, msg);
+                } else if ((seen_cats & bit) != 0) {
+                    char msg[128];
+                    snprintf(msg, sizeof(msg), "duplicate @zero_cost category '%s'", name_buf);
+                    xr_parser_error(parser, msg);
+                } else {
+                    seen_cats |= bit;
+                    attr->derive_flags |= bit;
+                }
+            } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
+            xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @zero_cost");
+        }
     } else if (xa_assertion_attr_by_name(name_token.start, name_token.length) != NULL) {
         /* @no_alloc / @no_throw / ... — every assertion attribute is spelled and
          * kind-mapped from the shared registry (task 217 §3.1). */

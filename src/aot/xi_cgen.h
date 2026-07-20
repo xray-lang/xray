@@ -128,6 +128,13 @@ XR_FUNC const XiFuncResidue *xi_cgen_func_residues(const XiCgenCtx *ctx, size_t 
  * NULL only on allocation failure. */
 XR_FUNC char *xi_cgen_residue_dump(const XiCgenCtx *ctx);
 
+/* Verify every @zero_cost function's residue against its allow mask (task 217
+ * P3).  Emits an error[E0655] diagnostic per violating function to stderr
+ * (listing each forbidden residue category + missing evidence) and returns the
+ * number of violating functions (0 = all contracts hold).  Requires residue
+ * tracking to have been enabled before emission. */
+XR_FUNC int xi_cgen_verify_zero_cost(const XiCgenCtx *ctx);
+
 /* Generate a complete standalone C file (single-module fast path):
  *   #include "xrt.h" + forward decls + bodies + main()
  * Suitable for: cc -o out file.c */

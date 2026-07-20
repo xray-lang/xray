@@ -25,10 +25,21 @@ typedef struct XrAttribute XrAttribute;
 
 /* Which effect analysis proves an assertion holds (fail-closed source). */
 typedef enum XaAssertionProofSource {
-    XA_ASSERT_PROOF_ALLOC = 0,   /* allocation effect (task 207) */
-    XA_ASSERT_PROOF_THROW = 1,   /* error/throw effect (task 216) */
-    XA_ASSERT_PROOF_SUSPEND = 2, /* suspend effect (task 212) */
+    XA_ASSERT_PROOF_ALLOC = 0,      /* allocation effect (task 207) */
+    XA_ASSERT_PROOF_THROW = 1,      /* error/throw effect (task 216) */
+    XA_ASSERT_PROOF_SUSPEND = 2,    /* suspend effect (task 212) */
+    XA_ASSERT_PROOF_CGEN_SHAPE = 3, /* AOT codegen residue inventory (task 217) */
 } XaAssertionProofSource;
+
+/* @zero_cost(allow: ...) category bits.  Stored in XrAttribute.derive_flags for
+ * ATTR_ZERO_COST and consumed by the AOT residue verifier.  The bit index MUST
+ * match XiResidueCategory (xi_cgen.h): R1=0 .. R6=5, i.e. (1u << category). */
+#define XA_ZERO_COST_ALLOW_RUNTIME (1u << 0) /* R1 runtime-helper call */
+#define XA_ZERO_COST_ALLOW_ALLOC (1u << 1)   /* R2 heap allocation */
+#define XA_ZERO_COST_ALLOW_ERROR (1u << 2)   /* R3 pending-error check */
+#define XA_ZERO_COST_ALLOW_BOUNDS (1u << 3)  /* R4 bounds-panic branch */
+#define XA_ZERO_COST_ALLOW_BOX (1u << 4)     /* R5 XrValue box/unbox */
+#define XA_ZERO_COST_ALLOW_LANES (1u << 5)   /* R6 aggregate<->native round-trip */
 
 /* Compiler stage that enforces the contract. */
 typedef enum XaAssertionVerifyStage {

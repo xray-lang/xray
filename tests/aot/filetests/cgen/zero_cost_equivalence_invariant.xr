@@ -1,0 +1,22 @@
+// Task 217 equivalence invariant: @zero_cost never changes generated code, it
+// only adds a post-codegen residue check. plain_kernel and gated_kernel have
+// identical bodies; the only difference is the assertion, so their generated C
+// must be structurally identical (the shared body shape appears twice).
+fn plain_kernel(x: int, y: int) -> int {
+    return x * y + 1
+}
+
+@zero_cost
+fn gated_kernel(x: int, y: int) -> int {
+    return x * y + 1
+}
+
+@c_export("call_plain")
+fn call_plain(a: int) -> int {
+    return plain_kernel(a, a)
+}
+
+@c_export("call_gated")
+fn call_gated(a: int) -> int {
+    return gated_kernel(a, a)
+}
