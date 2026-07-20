@@ -1444,6 +1444,16 @@ static inline uint64_t xrt_hash_value(XrValue v) {
             return xr_hash_core_mix_u64(xrt_str_hash(v));
         case XR_TAG_BIGINT:
             return xrt_bigint_hash_value(v);
+        case XR_TAG_ENUM: {
+            /* Enum keys compare by ordinal (xrt_enum_key_eq requires equal
+             * member_index), and every enum-member access allocates a fresh box,
+             * so pointer identity is unstable. Hash by ordinal to keep the
+             * hash/eq contract for Map/Set keys and derived Hashable fields. */
+            uint32_t member_index = 0;
+            if (xrt_enum_key_parts(v, NULL, NULL, &member_index, NULL))
+                return xr_hash_core_mix_u64((uint64_t) member_index);
+            return xr_hash_core_mix_u64((uint64_t) (uintptr_t) v.ptr);
+        }
         case XR_TAG_NULL:
             return xr_hash_core_mix_u64(0x9e3779b97f4a7c15ull);
         case XR_TAG_AGG_REF:

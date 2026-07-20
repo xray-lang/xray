@@ -165,9 +165,54 @@ static void test_dense_enum_set_hit_and_mutation_fallback(void) {
     xrt_set_destroy(set);
 }
 
+static void test_generic_enum_key_hash_eq_consistency(void) {
+    /* Every enum-member access in generated code allocates a fresh box, so enum
+     * keys must hash by ordinal (xrt_hash_value) to match value equality
+     * (xrt_eq/xrt_enum_key_eq). Otherwise generic Map/Set keys and derived
+     * Hashable fields with an enum member would fail to dedup and look up. */
+    TestEnumBox green_a = {{0, 0}, NULL, "Color", "Green", 1, 0, 17};
+    TestEnumBox green_b = {{0, 0}, NULL, "Color", "Green", 1, 0, 17};
+    TestEnumBox green_c = {{0, 0}, NULL, "Color", "Green", 1, 0, 17};
+    TestEnumBox red = {{0, 0}, NULL, "Color", "Red", 0, 0, 17};
+    TestEnumBox green_other_layout = {{0, 0}, NULL, "Shade", "Green", 1, 0, 99};
+
+    XrValue va = test_enum_value(&green_a);
+    XrValue vb = test_enum_value(&green_b);
+
+    ASSERT_TRUE(va.ptr != vb.ptr, "independent enum boxes have distinct identities");
+    ASSERT_TRUE(xrt_eq(va, vb) != 0, "same enum member compares equal");
+    ASSERT_EQ_INT(xrt_hash_value(va), xrt_hash_value(vb),
+                  "same enum member hashes equal (hash/eq contract)");
+    ASSERT_TRUE(xrt_hash_value(va) != xrt_hash_value(test_enum_value(&red)),
+                "distinct ordinals hash apart");
+
+    XrValue map_value = xrt_map_new(0);
+    xrt_map_t *map = (xrt_map_t *) map_value.ptr;
+    xrt_map_set(map, va, XR_FROM_INT(100));
+    ASSERT_TRUE(xrt_map_has(map, vb), "generic map finds an equal enum key");
+    ASSERT_EQ_INT(xrt_map_get(map, vb).i, 100, "generic map returns the stored value");
+    xrt_map_set(map, test_enum_value(&green_c), XR_FROM_INT(200));
+    ASSERT_EQ_INT(xrt_map_len(map), 1, "equal enum key overwrites instead of duplicating");
+    ASSERT_EQ_INT(xrt_map_get(map, va).i, 200, "overwrite is observed through any equal box");
+    ASSERT_TRUE(!xrt_map_has(map, test_enum_value(&red)), "a different ordinal is a miss");
+    ASSERT_TRUE(!xrt_map_has(map, test_enum_value(&green_other_layout)),
+                "same ordinal from another enum layout does not alias");
+    xrt_map_destroy(map);
+
+    XrValue set_value = xrt_set_new(0);
+    xrt_set_t *set = (xrt_set_t *) set_value.ptr;
+    xrt_set_add(set, va);
+    ASSERT_TRUE(xrt_set_has(set, vb), "generic set finds an equal enum value");
+    ASSERT_TRUE(!xrt_set_add(set, test_enum_value(&green_c)),
+                "re-adding an equal enum value is a no-op");
+    ASSERT_EQ_INT(xrt_set_len(set), 1, "equal enum value does not duplicate in a set");
+    xrt_set_destroy(set);
+}
+
 int main(void) {
     test_dense_enum_map_hit_and_mutation_fallback();
     test_dense_enum_set_hit_and_mutation_fallback();
+    test_generic_enum_key_hash_eq_consistency();
 
     printf("test_xrt_dense_enum: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
