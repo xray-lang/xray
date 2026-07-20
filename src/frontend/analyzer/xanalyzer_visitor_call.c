@@ -28,6 +28,7 @@
 #include "xa_selection.h"
 #include "xaddressability.h"
 #include "xtype_ref_resolve.h"
+#include "../parser/xtype_ref.h"
 #include "xanalyzer_mono.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../module/xmodule_graph.h"
@@ -516,6 +517,131 @@ static XrType *xa_imported_semantic_class_instance_type(XaInferContext *ctx, Ast
     return instance;
 }
 
+/*
+ * task-221 gap C: synthesize a syntax-level XrTypeRef from a resolved XrType.
+ *
+ * Inferred generic-class construction in call form (`Cell(5)`) resolves its type
+ * arguments in the analyzer but, unlike the explicit new form (`Cell<int>(5)`),
+ * never records them on the AST node. Monomorphization (collect_instantiation_sites)
+ * and AOT cgen key off call->type_args, so the inferred instantiation is never
+ * specialized: cgen degrades to a map-backed object and calls a constructor that
+ * was never generated.
+ *
+ * The analyzer runs after parsing, so the parse arena is not available for
+ * ast_alloc. We instead build the XrTypeRef with xr_calloc — the same allocation
+ * strategy monomorphization already uses when it clones type-ref arrays — and
+ * point `name` at the persistent class/enum/type-param name (valid for the whole
+ * compile). Returns NULL for shapes we do not synthesize; the caller then skips
+ * the writeback and keeps prior behavior.
+ */
+static XrTypeRef *xa_synth_tref_from_type(const XrType *t) {
+    if (!t)
+        return NULL;
+    uint8_t kind;
+    const char *name = NULL;
+    int nch = 0;
+    XrTypeRef **children = NULL;
+    switch (t->kind) {
+        case XR_KIND_INT:
+            if (t->native_width != 0)
+                return NULL;
+            kind = XR_TREF_INT;
+            break;
+        case XR_KIND_FLOAT:
+            if (t->native_width != 0)
+                return NULL;
+            kind = XR_TREF_FLOAT;
+            break;
+        case XR_KIND_STRING:
+            kind = XR_TREF_STRING;
+            break;
+        case XR_KIND_BOOL:
+            kind = XR_TREF_BOOL;
+            break;
+        case XR_KIND_RUNE:
+            kind = XR_TREF_RUNE;
+            break;
+        case XR_KIND_TYPE_PARAM:
+            if (!t->type_param.name)
+                return NULL;
+            kind = XR_TREF_TYPE_PARAM;
+            name = t->type_param.name;
+            break;
+        case XR_KIND_ENUM:
+            if (!t->enum_type.enum_name)
+                return NULL;
+            kind = XR_TREF_NAMED;
+            name = t->enum_type.enum_name;
+            break;
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE: {
+            if (!t->instance.class_name)
+                return NULL;
+            name = t->instance.class_name;
+            int n = t->instance.type_arg_count;
+            if (n > 0 && t->instance.type_args) {
+                if (n > 255)
+                    return NULL;
+                children = (XrTypeRef **) xr_calloc((size_t) n, sizeof(XrTypeRef *));
+                if (!children)
+                    return NULL;
+                for (int i = 0; i < n; i++) {
+                    children[i] = xa_synth_tref_from_type(t->instance.type_args[i]);
+                    if (!children[i]) {
+                        xr_free(children);
+                        return NULL;
+                    }
+                }
+                nch = n;
+                kind = XR_TREF_GENERIC;
+            } else {
+                kind = XR_TREF_NAMED;
+            }
+            break;
+        }
+        default:
+            return NULL;
+    }
+    XrTypeRef *r = (XrTypeRef *) xr_calloc(1, sizeof(XrTypeRef));
+    if (!r) {
+        if (children)
+            xr_free(children);
+        return NULL;
+    }
+    r->kind = kind;
+    r->name = name;
+    r->nchildren = (uint8_t) nch;
+    r->children = children;
+    return r;
+}
+
+/*
+ * task-221 gap C: record inferred generic type arguments on the call node so
+ * monomorphization and AOT cgen specialize the call identically to the explicit
+ * form. Used for both inferred generic-class construction (`Cell(5)`) and
+ * inferred generic-function calls (`wrapIt(99)`). Only applies when no explicit
+ * type args were written and every inferred arg synthesizes; otherwise leaves
+ * the node untouched.
+ */
+void xa_writeback_inferred_type_args(CallExprNode *call, XrType **inferred, int type_param_count) {
+    if (!call || !inferred || type_param_count <= 0 || call->type_arg_count != 0)
+        return;
+    XrTypeRef **synth = (XrTypeRef **) xr_calloc((size_t) type_param_count, sizeof(XrTypeRef *));
+    if (!synth)
+        return;
+    for (int i = 0; i < type_param_count; i++) {
+        synth[i] = xa_synth_tref_from_type(inferred[i]);
+        if (!synth[i]) {
+            xr_free(synth);
+            return;
+        }
+    }
+    call->type_args = synth;
+    call->type_arg_count = type_param_count;
+    call->semantic_type_args = synth;
+    call->semantic_type_arg_count = type_param_count;
+}
+
 static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *node,
                                                   CallExprNode *call, const char *class_name,
                                                   XaSymbolLinks *class_links,
@@ -686,6 +812,8 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                             inst->is_value_type = true;
                         if (inst && semantic_type_id != XA_SEMANTIC_TYPE_NONE)
                             inst->semantic_type_id = (uint32_t) semantic_type_id;
+                        if (inst)
+                            xa_writeback_inferred_type_args(call, inferred, type_param_count);
                         if (inferred != inferred_buf)
                             xr_free(inferred);
                         if (inst)
@@ -5803,10 +5931,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Apply type substitution for generic function calls
+    // Apply type substitution for generic function calls. Write inferred type
+    // args back only for locally-defined generic functions; imported ones (e.g.
+    // parallel.reduce) are lowered by dedicated cgen intrinsics that require the
+    // call to remain in inferred (type_arg_count == 0) form.
     if (return_type && fn_links) {
-        return_type = xa_substitute_generic_call(ctx, fn_links, callee_type, return_type, call,
-                                                 arg_count, effective_arg_types);
+        return_type =
+            xa_substitute_generic_call(ctx, fn_links, callee_type, return_type, call, arg_count,
+                                       effective_arg_types, fn_sym && !fn_sym->is_imported);
     }
 
     XrType *math_shape_type =
@@ -5855,10 +5987,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 if (method_sym && method_sym->kind == XA_SYM_METHOD) {
                     XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
                     if (method_links) {
-                        // Apply method's own type parameters
+                        // Apply method's own type parameters. Method-call inferred
+                        // writeback is not needed for the gap C shapes (they rely
+                        // on class-construction writeback plus mono's method-body
+                        // fixpoint), so keep it disabled here.
                         return_type =
                             xa_substitute_generic_call(ctx, method_links, callee_type, return_type,
-                                                       call, arg_count, effective_arg_types);
+                                                       call, arg_count, effective_arg_types, false);
 
                         // Also apply class type parameters substitution
                         int class_type_param_count =

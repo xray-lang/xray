@@ -1076,6 +1076,32 @@ static const char *xa_mono_collector_lookup(XaMonoCollector *c, const char *gene
     return result;
 }
 
+// task-221 gap C: rewrite a type annotation naming a monomorphized generic
+// instance (e.g. RouteMatch<int>) to its mangled name (RouteMatch$i64), so a
+// specialized method/function's declared return/param/var types match the
+// specialized values its body constructs. Recurses into nested type arguments
+// first. The mangled name is owned by the collector and lives for the compile.
+static void mono_rewrite_type_ref(XrTypeRef *tref, XaMonoCollector *collector) {
+    if (!tref)
+        return;
+    for (int i = 0; i < tref->nchildren; i++)
+        mono_rewrite_type_ref(tref->children[i], collector);
+    if (tref->kind == XR_TREF_GENERIC && tref->name && tref->nchildren > 0) {
+        const char *mangled =
+            xa_mono_collector_lookup(collector, tref->name, tref->children, tref->nchildren);
+        if (mangled) {
+            // The collector's mangled_name is freed when the mono pass ends, but
+            // this type ref must survive into post-monomorphization analysis and
+            // cgen; copy it (compile-lifetime, matching inject_mono_decls' clone
+            // naming via xr_strdup).
+            tref->kind = XR_TREF_NAMED;
+            tref->name = xr_strdup(mangled);
+            tref->children = NULL;
+            tref->nchildren = 0;
+        }
+    }
+}
+
 /* ========== Mono Pass Collect + Instantiate + Rewrite ========== */
 
 // Generic declaration registry: maps generic name → AST node
@@ -1481,6 +1507,32 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             collect_instantiation_sites(node->as.function_decl.body, registry, collector,
                                         import_aliases, local_only);
             break;
+        case AST_METHOD_DECL:
+            collect_instantiation_sites(node->as.method_decl.body, registry, collector,
+                                        import_aliases, local_only);
+            for (int i = 0; i < node->as.method_decl.base_arg_count; i++)
+                collect_instantiation_sites(node->as.method_decl.base_args[i], registry, collector,
+                                            import_aliases, local_only);
+            break;
+        case AST_CLASS_DECL: {
+            // task-221 gap C: recurse into class method/field bodies so generic
+            // constructions inside methods are collected. Only descend into
+            // non-generic classes and already-monomorphized clones
+            // (type_param_count == 0); a generic skeleton's method bodies still
+            // reference the class type params (e.g. RouteMatch<T>), which must be
+            // specialized via the enclosing class's clone, not collected as bare
+            // type-parameter instantiations.
+            ClassDeclNode *cd = &node->as.class_decl;
+            if (cd->type_param_count == 0) {
+                for (int i = 0; i < cd->method_count; i++)
+                    collect_instantiation_sites(cd->methods[i], registry, collector, import_aliases,
+                                                local_only);
+                for (int i = 0; i < cd->field_count; i++)
+                    collect_instantiation_sites(cd->fields[i], registry, collector, import_aliases,
+                                                local_only);
+            }
+            break;
+        }
         case AST_PRINT_STMT:
             for (int i = 0; i < node->as.print_stmt.expr_count; i++)
                 collect_instantiation_sites(node->as.print_stmt.exprs[i], registry, collector,
@@ -1750,6 +1802,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         case AST_CONST_DECL:
         case AST_SHARED_DECL:
         case AST_OWNED_DECL:
+            mono_rewrite_type_ref(node->as.var_decl.type_annotation, collector);
             rewrite_call_sites(node->as.var_decl.initializer, registry, collector, import_aliases);
             break;
         case AST_ASSIGNMENT:
@@ -1782,8 +1835,37 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
+            mono_rewrite_type_ref(node->as.function_decl.return_type, collector);
+            for (int i = 0; i < node->as.function_decl.param_count; i++)
+                if (node->as.function_decl.params[i])
+                    mono_rewrite_type_ref(node->as.function_decl.params[i]->type, collector);
             rewrite_call_sites(node->as.function_decl.body, registry, collector, import_aliases);
             break;
+        case AST_METHOD_DECL:
+            mono_rewrite_type_ref(node->as.method_decl.return_type, collector);
+            for (int i = 0; i < node->as.method_decl.param_count; i++)
+                if (node->as.method_decl.params[i])
+                    mono_rewrite_type_ref(node->as.method_decl.params[i]->type, collector);
+            rewrite_call_sites(node->as.method_decl.body, registry, collector, import_aliases);
+            for (int i = 0; i < node->as.method_decl.base_arg_count; i++)
+                rewrite_call_sites(node->as.method_decl.base_args[i], registry, collector,
+                                   import_aliases);
+            break;
+        case AST_CLASS_DECL: {
+            // task-221 gap C: rewrite generic call sites inside class method/field
+            // bodies (e.g. a monomorphized Router$i64.wrap constructing
+            // RouteMatch<int> must become RouteMatch$i64). Mirror the collect
+            // pass: only descend into non-generic classes and monomorphized
+            // clones (type_param_count == 0); generic skeletons are not emitted.
+            ClassDeclNode *cd = &node->as.class_decl;
+            if (cd->type_param_count == 0) {
+                for (int i = 0; i < cd->method_count; i++)
+                    rewrite_call_sites(cd->methods[i], registry, collector, import_aliases);
+                for (int i = 0; i < cd->field_count; i++)
+                    rewrite_call_sites(cd->fields[i], registry, collector, import_aliases);
+            }
+            break;
+        }
         case AST_PRINT_STMT:
             for (int i = 0; i < node->as.print_stmt.expr_count; i++)
                 rewrite_call_sites(node->as.print_stmt.exprs[i], registry, collector,
@@ -1842,7 +1924,8 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
 
 // Inject monomorphized function declarations into the program AST
 static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
-                              XaMonoCollector *collector, XrVMRuntime *isolate) {
+                              XaMonoCollector *collector, const XaMonoImportAliases *import_aliases,
+                              XrVMRuntime *isolate) {
     if (!root || root->type != AST_PROGRAM || collector->count == 0)
         return;
 
@@ -1971,6 +2054,15 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         }
         prog->statements[insert_pos] = cloned;
         prog->count++;
+
+        // task-221 gap C (nested monomorphization fixpoint): a specialized clone
+        // may itself construct other generics parameterized by the now-concrete
+        // type args (e.g. Router<int>.wrap building RouteMatch<int>). Collect
+        // those nested instantiations so this loop — which runs while
+        // collector->count keeps growing — injects them too. collector_add
+        // dedups by mangled name, so the fixpoint terminates.
+        if (import_aliases)
+            collect_instantiation_sites(cloned, registry, collector, import_aliases, false);
     }
 }
 
@@ -2023,8 +2115,11 @@ static void xa_mono_pass_internal(AstNode *root, AstNode **external_roots, int e
     if (collector.count == 0)
         goto cleanup;
 
-    // Phase 3: Clone + substitute + inject monomorphized versions
-    inject_mono_decls(root, &registry, &collector, isolate);
+    // Phase 3: Clone + substitute + inject monomorphized versions. Passing the
+    // import aliases lets injection collect nested generic instantiations from
+    // each specialized clone (fixpoint), so generics constructed inside generic
+    // methods/functions are specialized too.
+    inject_mono_decls(root, &registry, &collector, &root_imports, isolate);
 
     // Phase 4: Rewrite call sites to use mangled names
     rewrite_call_sites(root, &registry, &collector, &root_imports);

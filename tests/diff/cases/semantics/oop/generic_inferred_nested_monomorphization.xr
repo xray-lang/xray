@@ -1,0 +1,46 @@
+// task-221 gap C guard: the four monomorphization shapes that previously
+// degraded to map-backed objects (and called never-emitted constructors/methods)
+// on native AOT must now produce identical results on VM and native AOT:
+//   1. inferred generic construction (Box(x) with no explicit <T>)
+//   2. a generic function returning a generic instance (wrap<T>() -> Box<T>)
+//   3. a generic method constructing another generic parameterized by the
+//      enclosing type parameter (Container<T>.boxed() -> Box<T>)
+//   4. multi-parameter generics constructed inside a generic method
+//      (Container<T>.paired() -> Pair<T, T>)
+
+class Box<T> {
+    v: T
+    constructor(v: T) { this.v = v }
+    get() -> T { return this.v }
+}
+
+class Pair<A, B> {
+    a: A
+    b: B
+    constructor(a: A, b: B) { this.a = a; this.b = b }
+}
+
+fn wrap<T>(x: T) -> Box<T> {
+    return Box(x)
+}
+
+class Container<T> {
+    item: T
+    constructor(item: T) { this.item = item }
+    boxed() -> Box<T> { return Box(this.item) }
+    paired(other: T) -> Pair<T, T> { return Pair(this.item, other) }
+}
+
+var b = wrap(99)
+print(b.get())
+
+var bs = wrap("hi")
+print(bs.get())
+
+var ci = Container(7)
+print(ci.boxed().get())
+print(ci.paired(8).b)
+
+var cs = Container("x")
+print(cs.boxed().get())
+print(cs.paired("y").a)

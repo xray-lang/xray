@@ -2890,7 +2890,7 @@ XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_type, const
 // then substitutes into return_type. Returns the substituted type.
 XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, XrType *callee_type,
                                    XrType *return_type, CallExprNode *call, int arg_count,
-                                   XrType **effective_arg_types) {
+                                   XrType **effective_arg_types, bool writeback_inferred) {
     XR_DCHECK(ctx != NULL, "substitute_generic_call: NULL ctx");
     XR_DCHECK(links != NULL, "substitute_generic_call: NULL links");
     int type_param_count = xa_symbol_links_get_type_param_count(links);
@@ -2969,6 +2969,25 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
     if (actual_count > 0) {
         return_type = xr_type_substitute(ctx->analyzer->isolate, return_type, param_names,
                                          actual_types, actual_count);
+    }
+
+    // task-221 gap C: for an inferred generic call (no explicit type args), record
+    // the inferred type arguments on the call node so monomorphization and AOT
+    // cgen specialize it exactly like the explicit form. Requires every param to
+    // have been inferred to a concrete type; skip otherwise. Gated by
+    // writeback_inferred: imported generic functions (e.g. parallel.reduce, which
+    // cgen lowers via a native intrinsic rather than ordinary monomorphization)
+    // must keep type_arg_count == 0 so their special-casing still applies.
+    if (writeback_inferred && call->type_arg_count == 0 && actual_count == type_param_count) {
+        bool all_inferred = true;
+        for (int i = 0; i < actual_count; i++) {
+            if (!actual_types[i]) {
+                all_inferred = false;
+                break;
+            }
+        }
+        if (all_inferred)
+            xa_writeback_inferred_type_args(call, actual_types, actual_count);
     }
 
     xr_free(param_names);
