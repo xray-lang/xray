@@ -1696,22 +1696,37 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
 
         case XI_VEC_SHUFFLE:
             if ((v->aux_int & XI_VEC_SHAPE_UNZIP) != 0) {
-                if (!neon || v->nargs != 2 || native_type != XR_NATIVE_U32 || lanes != 4 ||
+                if ((!neon && !x86) || v->nargs != 2 || native_type != XR_NATIVE_U32 ||
+                    lanes != 4 ||
                     (!native_result && !xicgen_vec_result_aggregate(ctx, v, &result_type)))
                     return false;
                 fprintf(out, "({ ");
                 if (!native_result)
                     fprintf(out, "%s _r; ", result_type);
-                fprintf(out, "uint32x4_t _a = ");
-                xicgen_emit_vec_native_load(ctx, out, v->args[0], XR_NATIVE_U32, true, false);
-                fprintf(out, ", _b = ");
-                xicgen_emit_vec_native_load(ctx, out, v->args[1], XR_NATIVE_U32, true, false);
-                fprintf(out, "; uint32x4_t _v = %s(_a, _b); ",
-                        (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? "vuzp2q_u32" : "vuzp1q_u32");
+                if (neon) {
+                    fprintf(out, "uint32x4_t _a = ");
+                    xicgen_emit_vec_native_load(ctx, out, v->args[0], XR_NATIVE_U32, true, false);
+                    fprintf(out, ", _b = ");
+                    xicgen_emit_vec_native_load(ctx, out, v->args[1], XR_NATIVE_U32, true, false);
+                    fprintf(out, "; uint32x4_t _v = %s(_a, _b); ",
+                            (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? "vuzp2q_u32"
+                                                                       : "vuzp1q_u32");
+                } else {
+                    fprintf(out, "__m128i _a = ");
+                    xicgen_emit_vec_native_load(ctx, out, v->args[0], XR_NATIVE_U32, false, false);
+                    fprintf(out, ", _b = ");
+                    xicgen_emit_vec_native_load(ctx, out, v->args[1], XR_NATIVE_U32, false, false);
+                    fprintf(out,
+                            "; _a = _mm_shuffle_epi32(_a, %uu); "
+                            "_b = _mm_shuffle_epi32(_b, %uu); "
+                            "__m128i _v = _mm_unpacklo_epi64(_a, _b); ",
+                            (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 221u : 136u,
+                            (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 221u : 136u);
+                }
                 if (native_result) {
                     fprintf(out, "_v; })");
                 } else {
-                    xicgen_emit_vec_native_store(out, "_r._lanes", native_type, true, false, "_v");
+                    xicgen_emit_vec_native_store(out, "_r._lanes", native_type, neon, false, "_v");
                     fprintf(out, "; _r; })");
                 }
                 return true;
@@ -1857,6 +1872,7 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                 fprintf(out, "%s _a = ", wide ? "__m256i" : "__m128i");
                 xicgen_emit_vec_native_load(ctx, out, v->args[0], XR_NATIVE_U32, false, wide);
                 bool adjacent_pair = xicgen_vec_widen_mul_is_adjacent_pair(v);
+                bool contiguous_half = (v->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0;
                 if (adjacent_pair) {
                     fprintf(out, wide ? "; __m256i _b = _mm256_srli_epi64(_a, 32)"
                                       : "; __m128i _b = _mm_srli_epi64(_a, 32)");
@@ -1864,7 +1880,15 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
                     fprintf(out, ", _b = ");
                     xicgen_emit_vec_native_load(ctx, out, v->args[1], XR_NATIVE_U32, false, wide);
                 }
-                if (!adjacent_pair && (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0)
+                if (contiguous_half) {
+                    const char *unpack = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0
+                                             ? "_mm_unpackhi_epi32"
+                                             : "_mm_unpacklo_epi32";
+                    fprintf(out,
+                            "; __m128i _z = _mm_setzero_si128(); "
+                            "_a = %s(_a, _z); _b = %s(_b, _z)",
+                            unpack, unpack);
+                } else if (!adjacent_pair && (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0)
                     fprintf(out, wide ? "; _a = _mm256_srli_epi64(_a, 32); _b = "
                                         "_mm256_srli_epi64(_b, 32)"
                                       : "; _a = _mm_srli_epi64(_a, 32); _b = "

@@ -1,0 +1,6 @@
+args=--target x86_64-linux-musl --simd sse2 --dump-xaot-plan
+c_contains=_mm_shuffle_epi32(
+c_contains=_mm_unpacklo_epi64(
+c_contains=_mm_unpacklo_epi32(
+c_contains=_mm_unpackhi_epi32(
+c_contains=_mm_mul_epu32(

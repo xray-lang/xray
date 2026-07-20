@@ -3277,7 +3277,7 @@ static bool prepare_vector_native_op_supported(uint32_t features, const XiValue 
             return native_type == XR_NATIVE_U32 || native_type == XR_NATIVE_U64;
         case XI_VEC_SHUFFLE:
             if ((value->aux_int & XI_VEC_SHAPE_UNZIP) != 0)
-                return neon && width == 16 && native_type == XR_NATIVE_U32;
+                return (neon || x86) && width == 16 && native_type == XR_NATIVE_U32;
             if (neon)
                 return width == 16;
             if (!x86)
@@ -3285,7 +3285,7 @@ static bool prepare_vector_native_op_supported(uint32_t features, const XiValue 
             return native_type != XR_NATIVE_U8 || avx2;
         case XI_VEC_WIDEN_MUL:
             if ((value->aux_int & XI_VEC_SHAPE_CONTIGUOUS_HALF) != 0)
-                return neon && native_type == XR_NATIVE_U64 && lanes == 2;
+                return (neon || x86) && native_type == XR_NATIVE_U64 && lanes == 2;
             return native_type == XR_NATIVE_U64 && (lanes == 2 || (lanes == 4 && avx2));
         default:
             return false;
