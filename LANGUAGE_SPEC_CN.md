@@ -3533,6 +3533,22 @@ class PanicInfo {
 
 用户代码一般不直接构造 `PanicInfo`——业务错误用 `throw <enum>`。
 
+**在 `catch panic` 中读取 panic 信息**：`catch panic (p)` 会把 `PanicInfo` 对象绑定到 `p`，可读取 `message`、`code`、`stack` 等字段：
+
+```xray
+fn main() {
+    var arr: Array<int> = [1, 2, 3]
+    try {
+        print(arr[10])                       // 越界 → panic
+    } catch panic (p) {
+        print("message:", p.message)         // array index out of range: 10 (length 3)
+        print("code:", p.code)               // 430
+    }
+}
+
+main()
+```
+
 ### 8.3 `defer` — 资源清理
 
 `defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
@@ -3678,6 +3694,79 @@ fn safeDivide(a: int, b: int) -> string {
         return "error: division by zero"
     }
 }
+```
+
+### 8.7 完整可运行示例
+
+以下均为自包含、可直接运行并通过 `xray check` 验证的完整程序（注释标注了真实输出）。
+
+#### 示例 1：`throw` / `catch` / `match`
+
+```xray
+enum ParseErr { Empty, BadChar(string) }
+
+fn parseDigit(s: string) -> int {
+    if (len(s) == 0) { throw ParseErr.Empty }
+    if (s == "x") { throw ParseErr.BadChar(s) }
+    return 42
+}
+
+fn main() {
+    try {
+        print(parseDigit(""))
+    } catch (e: ParseErr) {
+        match (e) {
+            ParseErr.Empty -> print("empty input"),        // => empty input
+            ParseErr.BadChar(c) -> print("bad char:", c),
+        }
+    }
+}
+
+main()
+```
+
+#### 示例 2：`defer` 的 LIFO 顺序与异常路径
+
+```xray
+enum E { Boom }
+
+fn work() {
+    defer print("defer 1")
+    defer print("defer 2")
+    print("body")
+    throw E.Boom                             // 抛错时 defer 仍会执行
+}
+
+fn main() {
+    try { work() } catch (e) { print("caught") }
+}
+
+main()
+```
+
+输出（`defer` 按 LIFO 逆序执行）：
+
+```
+body
+defer 2
+defer 1
+caught
+```
+
+#### 示例 3：`catch panic` 兜底并读取故障信息
+
+```xray
+fn main() {
+    var arr: Array<int> = [1, 2, 3]
+    try {
+        print(arr[10])
+    } catch panic (p) {
+        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // => code: 430
+    }
+}
+
+main()
 ```
 
 ---

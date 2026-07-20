@@ -3540,6 +3540,22 @@ class PanicInfo {
 
 User code generally does not construct `PanicInfo` directly — use `throw <enum>` for business errors.
 
+**Reading panic details in `catch panic`**: `catch panic (p)` binds the `PanicInfo` object to `p`, so you can read `message`, `code`, `stack`, and the other fields:
+
+```xray
+fn main() {
+    var arr: Array<int> = [1, 2, 3]
+    try {
+        print(arr[10])                       // out of bounds → panic
+    } catch panic (p) {
+        print("message:", p.message)         // array index out of range: 10 (length 3)
+        print("code:", p.code)               // 430
+    }
+}
+
+main()
+```
+
 ### 8.3 `defer` — resource cleanup
 
 `defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
@@ -3685,6 +3701,79 @@ fn safeDivide(a: int, b: int) -> string {
         return "error: division by zero"
     }
 }
+```
+
+### 8.7 Worked Examples
+
+These are self-contained programs that run as-is and pass `xray check` (comments show the real output).
+
+#### Example 1: `throw` / `catch` / `match`
+
+```xray
+enum ParseErr { Empty, BadChar(string) }
+
+fn parseDigit(s: string) -> int {
+    if (len(s) == 0) { throw ParseErr.Empty }
+    if (s == "x") { throw ParseErr.BadChar(s) }
+    return 42
+}
+
+fn main() {
+    try {
+        print(parseDigit(""))
+    } catch (e: ParseErr) {
+        match (e) {
+            ParseErr.Empty -> print("empty input"),        // => empty input
+            ParseErr.BadChar(c) -> print("bad char:", c),
+        }
+    }
+}
+
+main()
+```
+
+#### Example 2: `defer` order (LIFO) on the error path
+
+```xray
+enum E { Boom }
+
+fn work() {
+    defer print("defer 1")
+    defer print("defer 2")
+    print("body")
+    throw E.Boom                             // defers still run when throwing
+}
+
+fn main() {
+    try { work() } catch (e) { print("caught") }
+}
+
+main()
+```
+
+Output (`defer` runs in LIFO order):
+
+```
+body
+defer 2
+defer 1
+caught
+```
+
+#### Example 3: `catch panic` with fault details
+
+```xray
+fn main() {
+    var arr: Array<int> = [1, 2, 3]
+    try {
+        print(arr[10])
+    } catch panic (p) {
+        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // => code: 430
+    }
+}
+
+main()
 ```
 
 ---
