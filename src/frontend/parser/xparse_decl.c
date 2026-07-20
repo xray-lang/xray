@@ -15,6 +15,7 @@
 
 #include "xparse_internal.h"
 #include "xtype_ref.h"
+#include "xa_assertion_attr.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include "../../base/xutf8.h"
@@ -312,10 +313,10 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
             xr_parser_error(parser, "@interrupt requires an ABI string, e.g. @interrupt(\"irq\")");
         }
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @interrupt");
-    } else if (name_token.length == 8 && memcmp(name_token.start, "no_alloc", 8) == 0) {
-        attr->kind = ATTR_NO_ALLOC;
-    } else if (name_token.length == 8 && memcmp(name_token.start, "no_throw", 8) == 0) {
-        attr->kind = ATTR_NO_THROW;
+    } else if (xa_assertion_attr_by_name(name_token.start, name_token.length) != NULL) {
+        /* @no_alloc / @no_throw / ... — every assertion attribute is spelled and
+         * kind-mapped from the shared registry (task 217 §3.1). */
+        attr->kind = xa_assertion_attr_by_name(name_token.start, name_token.length)->kind;
     } else if (name_token.length == 9 && memcmp(name_token.start, "intrinsic", 9) == 0) {
         attr->kind = ATTR_INTRINSIC;
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after @intrinsic");
@@ -432,6 +433,72 @@ static AstNode *mark_direct_visibility(AstNode *declaration, bool is_exported) {
     return declaration;
 }
 
+/* Reject a repeated assertion attribute (e.g. `@no_alloc @no_alloc fn`).  The
+ * registry decides which kinds are assertions, so no per-attribute branch is
+ * needed here. */
+bool xr_parser_reject_duplicate_assertion_attrs(Parser *parser, XrAttribute **attrs, int count) {
+    for (int i = 0; i < count; i++) {
+        if (!attrs[i])
+            continue;
+        const XaAssertionAttrInfo *info = xa_assertion_attr_by_kind(attrs[i]->kind);
+        if (!info)
+            continue;
+        for (int j = 0; j < i; j++) {
+            if (attrs[j] && attrs[j]->kind == attrs[i]->kind) {
+                char msg[96];
+                snprintf(msg, sizeof(msg), "duplicate @%s assertion attribute", info->name);
+                xr_parser_error(parser, msg);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/* Declaration-site validation for assertion attributes: they may only modify a
+ * function item (methods flow through the OOP parser), and may not repeat. */
+bool xr_parser_reject_invalid_assertion_attrs(Parser *parser, XrAttribute **attrs, int count,
+                                              bool target_is_fn) {
+    for (int i = 0; i < count; i++) {
+        if (!attrs[i])
+            continue;
+        const XaAssertionAttrInfo *info = xa_assertion_attr_by_kind(attrs[i]->kind);
+        if (!info)
+            continue;
+        bool allows_fn = (info->positions & XA_ASSERT_POS_FN) != 0;
+        if (!target_is_fn || !allows_fn) {
+            char msg[96];
+            snprintf(msg, sizeof(msg), "@%s can only annotate a function", info->name);
+            xr_parser_error(parser, msg);
+            return false;
+        }
+    }
+    return xr_parser_reject_duplicate_assertion_attrs(parser, attrs, count);
+}
+
+/* Member-position validation shared by class/struct methods and fields: an
+ * attribute must be an assertion attribute usable on a method, or the
+ * compiler-owned @intrinsic identity. */
+bool xr_parser_validate_member_attr(Parser *parser, XrAttribute *attr) {
+    if (!attr)
+        return true;
+    if (attr->kind == ATTR_INTRINSIC ||
+        xa_assertion_attr_allows_position(attr->kind, XA_ASSERT_POS_METHOD))
+        return true;
+    xr_parser_error(
+        parser, "only assertion attributes and the compiler @intrinsic attribute can annotate a "
+                "method");
+    return false;
+}
+
+/* Enum-method position validation: assertion attributes only (no @intrinsic). */
+bool xr_parser_validate_enum_method_attr(Parser *parser, XrAttribute *attr) {
+    if (attr && xa_assertion_attr_allows_position(attr->kind, XA_ASSERT_POS_METHOD))
+        return true;
+    xr_parser_error(parser, "only assertion attributes can annotate an enum method");
+    return false;
+}
+
 // Parse attributed declaration: @test fn ..., @native class ..., etc.
 static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     XrAttribute **attributes = NULL;
@@ -455,8 +522,6 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     bool is_c_export = attrs_has(attributes, attr_count, ATTR_C_EXPORT);
     bool is_naked = attrs_has(attributes, attr_count, ATTR_NAKED);
     bool is_interrupt = attrs_has(attributes, attr_count, ATTR_INTERRUPT);
-    bool is_no_alloc = attrs_has(attributes, attr_count, ATTR_NO_ALLOC);
-    bool is_no_throw = attrs_has(attributes, attr_count, ATTR_NO_THROW);
     bool has_symbol_layout_attr = attrs_has_symbol_layout_attr(attributes, attr_count);
     uint32_t derive_flags = attrs_derive_flags(attributes, attr_count);
     if (is_c_export && parser->scope_depth > 0) {
@@ -469,14 +534,12 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
                         "data declaration");
         return NULL;
     }
-    if (is_no_alloc && !xr_parser_check(parser, TK_FN)) {
-        xr_parser_error(parser, "@no_alloc can only annotate a function");
+    /* Assertion attributes (@no_alloc/@no_throw/...) at a declaration site only
+     * modify a function item; methods flow through the OOP parser.  Positions
+     * and duplicate diagnostics both come from the shared registry. */
+    if (!xr_parser_reject_invalid_assertion_attrs(parser, attributes, attr_count,
+                                                  xr_parser_check(parser, TK_FN)))
         return NULL;
-    }
-    if (is_no_throw && !xr_parser_check(parser, TK_FN)) {
-        xr_parser_error(parser, "@no_throw can only annotate a function");
-        return NULL;
-    }
     if (is_naked && !xr_parser_check(parser, TK_FN)) {
         xr_parser_error(parser, "@naked can only annotate a function");
         return NULL;

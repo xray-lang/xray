@@ -16,6 +16,7 @@
 
 #include "xfmt_internal.h"
 #include "xfmt_literal.h"
+#include "../parser/xa_assertion_attr.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../shared/xr_derive_flags.h"
 #include <string.h>
@@ -23,6 +24,14 @@
 static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
     if (!ctx || !attr)
         return;
+    /* Assertion attributes (@no_alloc/@no_throw/...) spell themselves from the
+     * shared registry so the formatter needs no per-attribute branch. */
+    const XaAssertionAttrInfo *assertion = xa_assertion_attr_by_kind(attr->kind);
+    if (assertion) {
+        xfmt_write_char(ctx, '@');
+        xfmt_write_str(ctx, assertion->name);
+        return;
+    }
     switch (attr->kind) {
         case ATTR_TEST:
             xfmt_write_str(ctx, "@test");
@@ -47,12 +56,6 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
             break;
         case ATTR_NATIVE:
             xfmt_write_str(ctx, "@native");
-            break;
-        case ATTR_NO_ALLOC:
-            xfmt_write_str(ctx, "@no_alloc");
-            break;
-        case ATTR_NO_THROW:
-            xfmt_write_str(ctx, "@no_throw");
             break;
         case ATTR_INTRINSIC:
             xfmt_write_str(ctx, "@intrinsic(");

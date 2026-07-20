@@ -10,6 +10,7 @@
 
 #include "xanalyzer_allocation.h"
 #include "xa_alloc_effect.h"
+#include "../parser/xa_assertion_attr.h"
 #include "xa_selection.h"
 #include "xanalyzer.h"
 #include "xanalyzer_ast_visitor.h"
@@ -128,22 +129,7 @@ static const char *alloc_function_name(AstNode *node, XaSymbol *symbol) {
 }
 
 static bool alloc_function_has_contract(AstNode *node) {
-    if (!node)
-        return false;
-    XrAttribute **attributes = NULL;
-    int attr_count = 0;
-    if (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR) {
-        attributes = node->as.function_decl.attributes;
-        attr_count = node->as.function_decl.attr_count;
-    } else if (node->type == AST_METHOD_DECL) {
-        attributes = node->as.method_decl.attributes;
-        attr_count = node->as.method_decl.attr_count;
-    }
-    for (int i = 0; i < attr_count; i++) {
-        if (attributes[i] && attributes[i]->kind == ATTR_NO_ALLOC)
-            return true;
-    }
-    return false;
+    return xa_decl_has_attribute(node, ATTR_NO_ALLOC);
 }
 
 static XaAllocFunctionRow *alloc_row_for_symbol(XaAllocPass *pass, XaSymbol *symbol) {

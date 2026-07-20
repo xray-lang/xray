@@ -708,14 +708,12 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         XrAttribute *attribute = xr_parse_single_attribute(parser);
         if (!attribute)
             return NULL;
-        if (attribute->kind != ATTR_NO_ALLOC && attribute->kind != ATTR_NO_THROW &&
-            attribute->kind != ATTR_INTRINSIC) {
-            xr_parser_error(
-                parser, "only @no_alloc, @no_throw and compiler @intrinsic can annotate a method");
+        if (!xr_parser_validate_member_attr(parser, attribute))
             return NULL;
-        }
         XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attribute);
     }
+    if (!xr_parser_reject_duplicate_assertion_attrs(parser, attributes, attr_count))
+        return NULL;
 
     // Parse access modifiers (optional)
     bool is_private = false;
@@ -892,7 +890,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         AstNode *field = xr_ast_field_decl(parser->compiler_session, name, field_type, is_private,
                                            is_static, initializer, name_line);
         if (attr_count > 0) {
-            xr_parser_error(parser, "@no_alloc/@no_throw can only annotate a function or method");
+            xr_parser_error(parser,
+                            "attributes can only annotate a function or method, not a field");
             return NULL;
         }
         if (field) {
@@ -2214,12 +2213,12 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
             XrAttribute *attribute = xr_parse_single_attribute(parser);
             if (!attribute)
                 break;
-            if (attribute->kind != ATTR_NO_ALLOC && attribute->kind != ATTR_NO_THROW) {
-                xr_parser_error(parser, "only @no_alloc and @no_throw can annotate an enum method");
+            if (!xr_parser_validate_enum_method_attr(parser, attribute))
                 break;
-            }
             XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attribute);
         }
+        if (!xr_parser_reject_duplicate_assertion_attrs(parser, attributes, attr_count))
+            break;
 
         bool is_static = false;
         if (xr_parser_match(parser, TK_STATIC)) {

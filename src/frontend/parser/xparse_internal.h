@@ -180,6 +180,13 @@ XR_FUNC AstNode *xr_parse_throw_statement(Parser *parser);
 
 XR_FUNC AstNode *xr_parse_declaration(Parser *parser);
 XR_FUNC XrAttribute *xr_parse_single_attribute(Parser *parser);
+/* Shared assertion-attribute validation (task 217 registry-driven). */
+XR_FUNC bool xr_parser_reject_duplicate_assertion_attrs(Parser *parser, XrAttribute **attrs,
+                                                        int count);
+XR_FUNC bool xr_parser_reject_invalid_assertion_attrs(Parser *parser, XrAttribute **attrs,
+                                                      int count, bool target_is_fn);
+XR_FUNC bool xr_parser_validate_member_attr(Parser *parser, XrAttribute *attr);
+XR_FUNC bool xr_parser_validate_enum_method_attr(Parser *parser, XrAttribute *attr);
 XR_FUNC AstNode *xr_parse_var_declaration(Parser *parser, int is_const);
 XR_FUNC AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const);
 XR_FUNC AstNode *xr_parse_shared_declaration(Parser *parser);

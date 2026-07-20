@@ -24,6 +24,7 @@
 #include "xanalyzer_errorset.h"
 #include "xanalyzer_builtins.h"
 #include "xanalyzer_visitor.h"
+#include "../parser/xa_assertion_attr.h"
 #include "xa_effect_db.h"
 #include "xa_selection.h"
 #include "xtype_ref_resolve.h"
@@ -4287,22 +4288,7 @@ static void collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **o
 /* ========== @no_throw Assertion (task 216) ========== */
 
 static bool es_function_has_no_throw_attr(AstNode *node) {
-    if (!node)
-        return false;
-    XrAttribute **attributes = NULL;
-    int attr_count = 0;
-    if (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR) {
-        attributes = node->as.function_decl.attributes;
-        attr_count = node->as.function_decl.attr_count;
-    } else if (node->type == AST_METHOD_DECL) {
-        attributes = node->as.method_decl.attributes;
-        attr_count = node->as.method_decl.attr_count;
-    }
-    for (int i = 0; i < attr_count; i++) {
-        if (attributes[i] && attributes[i]->kind == ATTR_NO_THROW)
-            return true;
-    }
-    return false;
+    return xa_decl_has_attribute(node, ATTR_NO_THROW);
 }
 
 static const char *es_function_decl_name(AstNode *node, XaSymbol *sym) {
