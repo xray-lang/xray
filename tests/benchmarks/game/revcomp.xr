@@ -26,8 +26,7 @@ fn printFormatted(seq: string) {
 
 // 处理 FASTA 输入（使用 StringBuilder 优化）
 fn processFasta(input: string) {
-    var lines = input.split("
-")
+    var lines = input.split("\n")
     var header = ""
     var seqBuilder = StringBuilder()
     var i = 0
@@ -61,8 +60,7 @@ fn processFasta(input: string) {
 fn generateFasta(n: int): string {
     var alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
     var sb = StringBuilder()
-    sb.append(">ONE Homo sapiens alu
-")
+    sb.append(">ONE Homo sapiens alu\n")
     var i = 0
     while (i < n) {
         var start = i % len(alu)
@@ -71,12 +69,10 @@ fn generateFasta(n: int): string {
             end = len(alu)
         }
         sb.append(alu.slice(start, end))
-        sb.append("
-")
+        sb.append("\n")
         i = i + 60
     }
-    sb.append(">TWO IUB ambiguity codes
-")
+    sb.append(">TWO IUB ambiguity codes\n")
     var iub = "ACGTMRWSYKVHDBN"
     i = 0
     while (i < n / 3) {
@@ -85,8 +81,7 @@ fn generateFasta(n: int): string {
             sb.append(iub.runes().nth((i + j) % len(iub)))
             j = j + 1
         }
-        sb.append("
-")
+        sb.append("\n")
         i = i + 60
     }
     return sb.toString()

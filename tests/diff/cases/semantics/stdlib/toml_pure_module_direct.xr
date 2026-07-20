@@ -1,5 +1,5 @@
 import toml
-import { TomlValue } from toml
+import { TomlValue, TomlErrorKind, TomlDiagnostic } from toml
 
 fn field(value: TomlValue, key: string) -> TomlValue {
     return toml.get(value, key)!
@@ -42,7 +42,19 @@ print(asString(field(item(productList, 1), "name")))
 
 var report = toml.parseReport("name = \"Alice\"\nname = \"Bob\"")
 print(len(report.errors) > 0)
+var diag: TomlDiagnostic = report.errors[0]
+print(typeName(diag))
+print(diag.kind == TomlErrorKind.DuplicateKey)
+print(diag.line)
+print(diag.message)
 print(asString(field(report.data, "name")))
+
+var syntaxReport = toml.parseReport("x = [1, 2")
+print(syntaxReport.errors[0].kind == TomlErrorKind.SyntaxError)
+
+var cleanReport = toml.parseReport("name = \"Alice\"\nage = 30")
+print(len(cleanReport.errors))
+print(cleanReport.lines > 0)
 
 var config = toml.newTable()
 toml.tableSet(config, "name", toml.stringValue("xray"))

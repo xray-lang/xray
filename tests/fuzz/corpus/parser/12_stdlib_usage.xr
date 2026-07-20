@@ -80,7 +80,7 @@ let encoded_comp = url.encodeComponent("hello world")
 let decoded_comp = url.decodeComponent(encoded_comp)
 // Log module
 import log
-log.setLevel(log.DEBUG)
+log.setLevel(log.LogLevel.Debug)
 log.info("Application started")
 log.warn("Warning message")
 log.error("Error occurred")

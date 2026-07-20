@@ -251,5 +251,4 @@ test_balanced_producer_consumer()
 test_semaphore_pattern()
 test_deadlock_pattern_detection()
 test_bidirectional_communication()
-print("
-🎉 测试10全部通过：死锁场景处理正确！")
+print("\n🎉 测试10全部通过：死锁场景处理正确！")

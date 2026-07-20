@@ -77,6 +77,7 @@
 #define KOP_GLOBAL_SET XR_OPF_REG_IN, XR_OPF_GLOBAL_IDX, XR_OPF_NONE
 #define KOP_ABx_LAYOUT XR_OPF_REG_OUT, XR_OPF_LIT, XR_OPF_NONE
 #define KOP_ABx_LIT XR_OPF_REG_OUT, XR_OPF_LIT, XR_OPF_NONE
+#define KOP_ABx_INOUT_LIT XR_OPF_REG_INOUT, XR_OPF_LIT, XR_OPF_NONE
 #define KOP_CALL XR_OPF_REG_BASE, XR_OPF_LIT, XR_OPF_LIT
 #define KOP_CALL_KEEP XR_OPF_REG_BASE, XR_OPF_LIT, XR_OPF_REG_OUT
 #define KOP_RETURN XR_OPF_REG_BASE, XR_OPF_LIT, XR_OPF_NONE
@@ -132,6 +133,7 @@
     _(SHR_U, FMT_ABC, KOP_ABC_BIN, "R[A] = (uint64)R[B] >> R[C]")                                  \
     _(BIT_ROTL, FMT_ABC, KOP_ABC_OUT_BASE_LIT, "R[A] = exact_rotl(R[B], R[B+1], native_type=C)")   \
     _(BIT_ROTR, FMT_ABC, KOP_ABC_OUT_BASE_LIT, "R[A] = exact_rotr(R[B], R[B+1], native_type=C)")   \
+    _(BIT_MUL_HIGH, FMT_ABC, KOP_ABC_OUT_BASE_LIT, "R[A] = exact_mulhigh(R[B], R[B+1], nt=C)")     \
     _(BIT_BSWAP, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = exact_bswap(R[B], native_type=C)")              \
     _(BIT_POPCOUNT, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = exact_popcount(R[B], native_type=C)")        \
     _(BIT_CLZ, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = exact_clz(R[B], native_type=C)")                  \
@@ -376,6 +378,8 @@
     _(AGG_COPY, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = memcpy aggregate R[B] into struct_area slot C")  \
     _(FIXED_ARRAY_NEW, FMT_ABC, KOP_ABC_OUT_LIT_K,                                                 \
       "R[A] = fixed array ref in struct_area slot B, metadata K[C]")                               \
+    _(FIXED_BYTES_CONST, FMT_ABx, KOP_ABx_INOUT_LIT,                                               \
+      "R[A] string payload -> byte array ref in struct_area slot Bx")                              \
     _(PTR_LOAD, FMT_ABC, KOP_SPECIAL, "R[A] = load(R[A+1], endian=R[A+2]), B = XrFFIType/flags")   \
     _(PTR_STORE, FMT_ABC, KOP_SPECIAL, "store(R[A], R[A+1], endian=R[A+2]), B = XrFFIType/flags")  \
     _(PTR_COPY_NONOVERLAP, FMT_ABC, KOP_ABC_INPLACE, "memcpy(R[A], R[B], R[C] * elem_size)")       \

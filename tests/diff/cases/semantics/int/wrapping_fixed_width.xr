@@ -1,0 +1,27 @@
+// anchor: int-wrapping-fixed-width
+// R2-2 回归：定宽整数 wrapping* 必须按接收者宽度环绕，且 VM/AOT 一致。
+var a: int32 = 2147483647
+print(a.wrappingAdd(1))
+var b: uint8 = 255
+print(b.wrappingAdd(1))
+var c: int8 = -128
+print(c.wrappingSub(1))
+var d: uint32 = 4294967295
+print(d.wrappingMul(2))
+var e: uint64 = 18446744073709551615
+print(e.wrappingAdd(1))
+var f: int = 9223372036854775807
+print(f.wrappingAdd(1))
+var g: int16 = 32767
+print(g.wrappingAdd(1))
+var h: uint16 = 65535
+print(h.wrappingAdd(1))
+var i: int32 = 2147483640
+print(i.wrappingAdd(10).wrappingAdd(0))
+print(i.wrappingAdd(10) == i + 10)
+
+// 普通 int 的其余方法族语义不变
+var j: int = 9223372036854775807
+print(j.checkedAdd(1))
+print(j.saturatingAdd(1))
+print(j.addOverflows(1))

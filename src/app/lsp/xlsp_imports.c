@@ -15,6 +15,7 @@
 #include "xlsp_cache.h"
 #include "../../base/xhash.h"
 #include "../../frontend/lexer/xlex.h"
+#include "../../frontend/lexer/xquoted_literal.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -102,20 +103,30 @@ static char *extract_module_name(const char *path) {
     const char *last_slash = strrchr(path, '/');
     const char *name = last_slash ? last_slash + 1 : path;
 
-    // Remove quotes if present
-    if (name[0] == '"' || name[0] == '\'')
-        name++;
-
     size_t len = strlen(name);
-    if (len > 0 && (name[len - 1] == '"' || name[len - 1] == '\'')) {
-        len--;
-    }
 
     char *result = xr_malloc(len + 1);
     memcpy(result, name, len);
     result[len] = '\0';
 
     return result;
+}
+
+static char *decode_import_path_token(const Token *token) {
+    XrQuotedPayload payload = {0};
+    const char *error = NULL;
+    bool decode_escapes = token->escape_mode == XR_LITERAL_ESCAPED;
+    if (!xr_quoted_payload_decode(token, decode_escapes, &payload, &error))
+        return NULL;
+    if (memchr(payload.bytes, '\0', payload.length) != NULL) {
+        xr_quoted_payload_free(&payload);
+        return NULL;
+    }
+    char *path = xr_malloc(payload.length + 1);
+    memcpy(path, payload.bytes, payload.length);
+    path[payload.length] = '\0';
+    xr_quoted_payload_free(&payload);
+    return path;
 }
 
 XlspImportInfo *xlsp_parse_imports(const char *content, const char *doc_uri) {
@@ -147,7 +158,7 @@ XlspImportInfo *xlsp_parse_imports(const char *content, const char *doc_uri) {
             // import "path" or import identifier
             if (next.type == TK_LITERAL_STRING) {
                 // Local/package import: import "./utils"
-                import_path = strndup(next.start + 1, next.length - 2);  // Remove quotes
+                import_path = decode_import_path_token(&next);
             } else if (next.type == TK_NAME) {
                 // Stdlib import: import time
                 import_path = strndup(next.start, next.length);

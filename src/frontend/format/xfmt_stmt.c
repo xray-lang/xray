@@ -322,8 +322,9 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_newline(ctx);
             ctx->indent_level++;
             xfmt_write_indent(ctx);
-            xfmt_emit_string(ctx, node->as.global_asm.text,
-                             node->as.global_asm.text ? (int) strlen(node->as.global_asm.text) : 0);
+            xfmt_emit_escaped_inline_string(
+                ctx, node->as.global_asm.text,
+                node->as.global_asm.text ? (int) strlen(node->as.global_asm.text) : 0);
             xfmt_write_newline(ctx);
             ctx->indent_level--;
             xfmt_write_indent(ctx);

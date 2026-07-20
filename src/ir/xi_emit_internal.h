@@ -125,7 +125,7 @@ typedef struct {
     /* Struct-area slot allocator: tracks byte offset for OP_AGG_NEW.
      * Each struct occupies ceil16(xr_aggregate_layout_storage_size(layout)) bytes.
      * Proto->struct_area_size is set to this at end of emit. */
-    uint16_t struct_area_offset; /* running byte offset (in 16-byte units) */
+    uint32_t struct_area_offset; /* running byte offset (in 16-byte units) */
 
     /* Block linearization */
     XiBlock **rpo_order; /* blocks in RPO order */
@@ -200,6 +200,8 @@ XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const struct XrAggrega
                                             uint16_t *slot_out);
 XR_FUNC bool xi_emit_alloc_struct_area_bytes(EmitCtx *ctx, uint32_t bytes_needed,
                                              uint16_t *slot_out);
+XR_FUNC bool xi_emit_alloc_struct_area_bytes_wide(EmitCtx *ctx, uint32_t bytes_needed,
+                                                  uint32_t *slot_out);
 XR_FUNC void free_reg(EmitCtx *ctx, XiEmitReg reg);
 XR_FUNC XiEmitReg reg_of(EmitCtx *ctx, const XiValue *v);
 XR_FUNC XiEmitReg reg_of_cell_deref(EmitCtx *ctx, const XiValue *v);
@@ -332,6 +334,7 @@ XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_fixed_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_fixed_bytes_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_index_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_index_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);

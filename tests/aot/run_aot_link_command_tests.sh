@@ -4450,22 +4450,22 @@ else
     sed 's/^/      /' "$ENC_LOG" | sed -n '1,120p'
 fi
 
-LOG_CONST_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_log_constants.xr"
-LOG_CONST_BIN="$WORK/core_log_constants"
-LOG_CONST_LOG="$WORK/core_log_constants.log"
-if build_native "$LOG_CONST_SRC" "$LOG_CONST_BIN" "$LOG_CONST_LOG"; then
-    expect_log_contains "$LOG_CONST_LOG" "Link command:" "core-log-constants: emitted link command"
-    expect_log_not_contains "$LOG_CONST_LOG" "-lxray_core" "core-log-constants: does not link xray_core"
-    expect_log_not_contains "$LOG_CONST_LOG" "-lxray_aot_core" "core-log-constants: does not link AOT core"
-    expect_log_not_contains "$LOG_CONST_LOG" "-lpthread" "core-log-constants: does not link pthread"
-    expect_log_not_contains "$LOG_CONST_LOG" "-lz" "core-log-constants: does not link zlib"
-    expect_log_not_contains "$LOG_CONST_LOG" "-lssl" "core-log-constants: does not link ssl"
-    expect_log_not_contains "$LOG_CONST_LOG" "-lcrypto" "core-log-constants: does not link crypto"
-    expect_log_contains "$LOG_CONST_LOG" "-lm" "core-log-constants: links math lib only"
-    expect_output "$LOG_CONST_BIN" $'10\n20\n30\n40\n50\ntrue\ntrue' "core-log-constants: binary output"
+LOG_LEVEL_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_log_level_enum.xr"
+LOG_LEVEL_BIN="$WORK/core_log_level_enum"
+LOG_LEVEL_LOG="$WORK/core_log_level_enum.log"
+if build_native "$LOG_LEVEL_SRC" "$LOG_LEVEL_BIN" "$LOG_LEVEL_LOG"; then
+    expect_log_contains "$LOG_LEVEL_LOG" "Link command:" "core-log-level-enum: emitted link command"
+    expect_log_not_contains "$LOG_LEVEL_LOG" "-lxray_core" "core-log-level-enum: does not link xray_core"
+    expect_log_not_contains "$LOG_LEVEL_LOG" "-lxray_aot_core" "core-log-level-enum: does not link AOT core"
+    expect_log_not_contains "$LOG_LEVEL_LOG" "-lpthread" "core-log-level-enum: does not link pthread"
+    expect_log_not_contains "$LOG_LEVEL_LOG" "-lz" "core-log-level-enum: does not link zlib"
+    expect_log_not_contains "$LOG_LEVEL_LOG" "-lssl" "core-log-level-enum: does not link ssl"
+    expect_log_not_contains "$LOG_LEVEL_LOG" "-lcrypto" "core-log-level-enum: does not link crypto"
+    expect_log_contains "$LOG_LEVEL_LOG" "-lm" "core-log-level-enum: links math lib only"
+    expect_output "$LOG_LEVEL_BIN" $'true\ntrue\nfalse\ntrue\nLogLevel.Debug\nLogLevel.Fatal\nfalse' "core-log-level-enum: binary output"
 else
-    record_fail "core-log-constants: build failed"
-    sed 's/^/      /' "$LOG_CONST_LOG" | sed -n '1,120p'
+    record_fail "core-log-level-enum: build failed"
+    sed 's/^/      /' "$LOG_LEVEL_LOG" | sed -n '1,120p'
 fi
 
 BASE64_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_base64.xr"

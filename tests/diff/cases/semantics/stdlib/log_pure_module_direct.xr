@@ -1,25 +1,26 @@
 import io
 import log
+import { LogFormat, LogLevel } from log
 import path
 
 var logPath = path.from("/tmp/xray_log_pure_module_direct.txt")
 io.writeFile(logPath, "")
 
-print(log.DEBUG)
-print(log.INFO)
-print(log.WARN)
-print(log.ERROR)
-print(log.FATAL)
+print(LogLevel.Debug)
+print(LogLevel.Info)
+print(LogLevel.Warn)
+print(LogLevel.Error)
+print(LogLevel.Fatal)
 
 log.setOutput(logPath)
-log.setLevel(log.DEBUG)
+log.setLevel(LogLevel.Debug)
 log.info("server started", "port", 8080, "host", "localhost")
 
 var child = log.child("module", "http")
 print(typeName(child))
 child.warn("slow response", "ms", 42)
 
-log.setFormat("json")
+log.setFormat(LogFormat.Json)
 child = child.child("route", "/api")
 child.error("request failed", "code", 500)
 

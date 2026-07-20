@@ -14,10 +14,9 @@
  *   containing a literal `"`, `\`, newline, or control byte became a
  *   syntax error, and backtick templates simply do not lex any more.
  *
- *   xfmt_literal.c now re-escapes payloads properly. Since the AST
- *   does not retain raw-vs-non-raw style, raw strings are
- *   canonicalised to ordinary double-quoted strings (canonical form >
- *   lexeme preservation, per the project principle).
+ *   xfmt_literal.c now re-escapes payloads properly. The AST retains
+ *   escape mode and source form, so the formatter preserves raw and
+ *   block semantics while choosing a safe variable-length fence.
  *
  *   This test pins the round-trip property:
  *
@@ -27,9 +26,8 @@
  *   i.e. format-on-AST is a fixed point. We test it on:
  *     - hand-crafted edge-case payloads (every escapable byte, mixed
  *       quotes / backslashes, embedded `${`, multi-byte UTF-8);
- *     - raw-string sources whose payloads contain bytes that ONLY
- *       lex inside raw strings (literal backslash, literal `${`),
- *       exercising the canonical rewrite's re-escaping;
+ *     - raw-string sources whose payloads contain literal backslashes;
+ *     - block strings and compact b/br/c/cr byte literals;
  *     - template strings carrying interpolations with parens, dots,
  *       arithmetic, and `$` literals;
  *     - 64 deterministic random payloads (seeded, reproducible).
@@ -179,10 +177,8 @@ TEST(regular_string_round_trip_basic) {
     }
 }
 
-TEST(raw_string_canonicalised_to_double_quoted) {
-    // Payloads that are LEGAL inside a raw string but require
-    // re-escaping when emitted as a regular string. The parser
-    // accepts the raw form; the formatter must rewrite it.
+TEST(raw_string_form_is_preserved) {
+    // The raw prefix is semantic source-form metadata and must survive.
     static const char *kRawPayloads[] = {
         "abc",                    // plain ASCII -- trivial
         "with \\n inside",        // literal `\n` (two chars), not a newline
@@ -193,11 +189,9 @@ TEST(raw_string_canonicalised_to_double_quoted) {
     int n = (int) (sizeof(kRawPayloads) / sizeof(kRawPayloads[0]));
     for (int i = 0; i < n; i++) {
         char *src = build_raw_let(kRawPayloads[i]);
-        char *out = assert_round_trip(src, "raw_canonical");
+        char *out = assert_round_trip(src, "raw_preserved");
         ASSERT_NOT_NULL(out);
-        // Canonical-form contract: no `r"` survives the format pass.
-        ASSERT_FALSE(strstr(out, " r\"") != NULL);
-        ASSERT_FALSE(strstr(out, "=r\"") != NULL);
+        ASSERT_TRUE(strstr(out, " r\"") != NULL || strstr(out, "=r\"") != NULL);
         free(out);
         free(src);
     }
@@ -324,10 +318,10 @@ TEST(random_regular_string_round_trip) {
     ASSERT_EQ_INT(verified, RANDOM_CASE_COUNT);
 }
 
-TEST(random_raw_string_canonicalisation) {
+TEST(random_raw_string_round_trip) {
     // Same alphabet, but injected as a raw-string payload. Raw
     // accepts bytes the regular form would reject (literal `\`),
-    // so this lane stresses the canonicalisation pipeline.
+    // so this lane stresses raw-form preservation.
     unsigned int state = 0xc2b2ae35u;
     char payload[RANDOM_PAYLOAD_MAX + 1];
 
@@ -343,8 +337,7 @@ TEST(random_raw_string_canonicalisation) {
         char *src = build_raw_let(payload);
         char *out = assert_round_trip(src, "random_raw");
         ASSERT_NOT_NULL(out);
-        // Canonical form: the formatted output must NOT use `r"`.
-        ASSERT_FALSE(strstr(out, " r\"") != NULL);
+        ASSERT_TRUE(strstr(out, " r\"") != NULL || strstr(out, "=r\"") != NULL);
         free(out);
         free(src);
         verified++;
@@ -355,6 +348,79 @@ TEST(random_raw_string_canonicalisation) {
     ASSERT_TRUE(verified >= RANDOM_CASE_COUNT / 2);
 }
 
+TEST(block_and_fixed_bytes_round_trip) {
+    const char *src = "var text = r\"\"\"\n"
+                      "<div title=\"x\">${literal}\\n</div>\n"
+                      "\"\"\"\n"
+                      "var escaped = \"\"\"\n"
+                      "line with \"quotes\" and \\n\n"
+                      "\"\"\"\n"
+                      "var bytes = br\"\"\"\n"
+                      "echo ${HOME} \\n\n"
+                      "\"\"\"\n"
+                      "var cbytes = cr\"\"\"\n"
+                      "puts\n"
+                      "\"\"\"\n";
+    char *out = assert_round_trip(src, "block_and_bytes");
+    ASSERT_NOT_NULL(out);
+    ASSERT_TRUE(strstr(out, "r\"\"\"") != NULL);
+    ASSERT_TRUE(strstr(out, "br\"\"\"") != NULL);
+    ASSERT_TRUE(strstr(out, "cr\"\"\"") != NULL);
+    free(out);
+}
+
+TEST(block_closer_stays_on_own_line_before_punctuation) {
+    const char *src = "var values = [r\"\"\"\n"
+                      "alpha\n"
+                      "\"\"\"\n"
+                      ", br\"\"\"\n"
+                      "beta\n"
+                      "\"\"\"\n"
+                      "]\n";
+    char *out = assert_round_trip(src, "block_punctuation");
+    ASSERT_NOT_NULL(out);
+    ASSERT_FALSE(strstr(out, "\"\"\",") != NULL);
+    ASSERT_FALSE(strstr(out, "\"\"\"]") != NULL);
+    free(out);
+}
+
+TEST(block_formatter_raises_quote_count_for_quote_only_payload_line) {
+    const char *src = "var text = r\"\"\"\"\n"
+                      "before\n"
+                      "\"\"\"\n"
+                      "after\n"
+                      "\"\"\"\"\n"
+                      "var bytes = br\"\"\"\"\n"
+                      "\"\"\"\n"
+                      "\"\"\"\"\n";
+    char *first = assert_round_trip(src, "block_quote_collision");
+    ASSERT_NOT_NULL(first);
+    ASSERT_TRUE(strstr(first, "r\"\"\"\"\n") != NULL);
+    ASSERT_TRUE(strstr(first, "br\"\"\"\"\n") != NULL);
+    ASSERT_TRUE(strstr(first, "\nbefore\n\"\"\"\nafter\n") != NULL);
+
+    char *third = parse_and_format(first);
+    ASSERT_NOT_NULL(third);
+    ASSERT_STR_EQ(first, third);
+    free(third);
+    free(first);
+}
+
+TEST(indented_block_template_keeps_margin_outside_interpolation) {
+    const char *src = "fn render() {\n"
+                      "    var name = \"Alice\"\n"
+                      "    var text = \"\"\"\n"
+                      "    Hello,\n"
+                      "    ${name}!\n"
+                      "    \"\"\"\n"
+                      "}\n";
+    char *out = assert_round_trip(src, "indented_block_template");
+    ASSERT_NOT_NULL(out);
+    ASSERT_TRUE(strstr(out, "\n    ${name}!\n    \"\"\"") != NULL);
+    ASSERT_FALSE(strstr(out, "${    name}") != NULL);
+    free(out);
+}
+
 /* ====================================================================== */
 /* Driver                                                                  */
 /* ====================================================================== */
@@ -363,10 +429,14 @@ TEST_MAIN_BEGIN()
 setup();
 RUN_TEST_SUITE("string / template round-trip");
 RUN_TEST(regular_string_round_trip_basic);
-RUN_TEST(raw_string_canonicalised_to_double_quoted);
+RUN_TEST(raw_string_form_is_preserved);
 RUN_TEST(template_string_round_trip);
 RUN_TEST(idempotence_after_two_passes);
 RUN_TEST(random_regular_string_round_trip);
-RUN_TEST(random_raw_string_canonicalisation);
+RUN_TEST(random_raw_string_round_trip);
+RUN_TEST(block_and_fixed_bytes_round_trip);
+RUN_TEST(block_closer_stays_on_own_line_before_punctuation);
+RUN_TEST(block_formatter_raises_quote_count_for_quote_only_payload_line);
+RUN_TEST(indented_block_template_keeps_margin_outside_interpolation);
 teardown();
 TEST_MAIN_END()

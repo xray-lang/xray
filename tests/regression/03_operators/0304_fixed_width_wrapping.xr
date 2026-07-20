@@ -1,0 +1,117 @@
+// 0304_fixed_width_wrapping.xr
+// 作者：xingleixu@gmail.com
+// 测试：定宽整数 wrappingAdd/Sub/Mul 按接收者宽度环绕（R2-2 回归）
+// 背景：这族方法曾一律按 int64 计算，丢失接收者静态宽度
+// （int32 max.wrappingAdd(1) 曾返回 2147483648 而非 -2147483648）。
+// 现在 wrapping* 在 lowering 层降为算术运算 + 接收者宽度 narrow，
+// 与运算符 `+`/`-`/`*` 的定宽环绕语义（规范 §2.3）严格一致。
+
+// ===== int8 / uint8 =====
+
+@test
+fn test_int8_wrapping() {
+    var a: int8 = 127
+    assert_eq(a.wrappingAdd(1), -128)
+    var b: int8 = -128
+    assert_eq(b.wrappingSub(1), 127)
+    var c: int8 = 64
+    assert_eq(c.wrappingMul(2), -128)
+}
+
+@test
+fn test_uint8_wrapping() {
+    var a: uint8 = 255
+    assert_eq(a.wrappingAdd(1), 0)
+    var b: uint8 = 0
+    assert_eq(b.wrappingSub(1), 255)
+    var c: uint8 = 200
+    assert_eq(c.wrappingAdd(100), 44)
+    var d: uint8 = 16
+    assert_eq(d.wrappingMul(16), 0)
+}
+
+// ===== int16 / uint16 =====
+
+@test
+fn test_int16_wrapping() {
+    var a: int16 = 32767
+    assert_eq(a.wrappingAdd(1), -32768)
+    var b: int16 = -32768
+    assert_eq(b.wrappingSub(1), 32767)
+}
+
+@test
+fn test_uint16_wrapping() {
+    var a: uint16 = 65535
+    assert_eq(a.wrappingAdd(1), 0)
+    var b: uint16 = 256
+    assert_eq(b.wrappingMul(256), 0)
+}
+
+// ===== int32 / uint32 =====
+
+@test
+fn test_int32_wrapping() {
+    var a: int32 = 2147483647
+    assert_eq(a.wrappingAdd(1), -2147483648)
+    var b: int32 = -2147483648
+    assert_eq(b.wrappingSub(1), 2147483647)
+    var c: int32 = 65536
+    assert_eq(c.wrappingMul(65536), 0)
+    // 与运算符语义一致
+    assert_eq(a.wrappingAdd(1), a + 1)
+}
+
+@test
+fn test_uint32_wrapping() {
+    var a: uint32 = 4294967295
+    assert_eq(a.wrappingAdd(1), 0)
+    assert_eq(a.wrappingMul(2), 4294967294)
+    var b: uint32 = 0
+    assert_eq(b.wrappingSub(1), 4294967295)
+}
+
+// ===== int / int64 / uint64（64 位语义不变）=====
+
+@test
+fn test_int64_wrapping() {
+    var a: int = 9223372036854775807
+    assert_eq(a.wrappingAdd(1), -9223372036854775808)
+    var b: int64 = -9223372036854775808
+    assert_eq(b.wrappingSub(1), 9223372036854775807)
+    assert_eq((5).wrappingAdd(3), 8)
+}
+
+@test
+fn test_uint64_wrapping() {
+    var a: uint64 = 18446744073709551615
+    assert_eq(a.wrappingAdd(1), 0)
+    var b: uint64 = 0
+    assert_eq(b.wrappingSub(1), 18446744073709551615)
+}
+
+// ===== 结果保持接收者宽度（可继续链式定宽运算）=====
+
+@test
+fn test_wrapping_result_width() {
+    var a: int32 = 2147483640
+    var r = a.wrappingAdd(10)
+    assert_eq(r, -2147483646)
+    // r 是 int32：继续 wrapping 仍按 32 位环绕
+    assert_eq(r.wrappingSub(10), 2147483640)
+    var chained = a.wrappingAdd(10).wrappingAdd(0)
+    assert_eq(chained, -2147483646)
+}
+
+// ===== 普通 int 语义完全不受影响 =====
+
+@test
+fn test_plain_int_families_unchanged() {
+    var a: int = 9223372036854775807
+    assert_eq(a.checkedAdd(1), null)
+    assert_eq(a.saturatingAdd(1), 9223372036854775807)
+    assert_eq(a.addOverflows(1), true)
+    assert_eq((5).checkedAdd(1), 6)
+}
+
+print("=== fixed-width wrapping tests completed ===")

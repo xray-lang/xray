@@ -70,6 +70,7 @@ static bool is_expression_node(AstNodeType t) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
+        case AST_FIXED_BYTES_LITERAL:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:
@@ -590,6 +591,7 @@ TEST(literals_and_arithmetic) {
                             "var c = \"hello\"\n"
                             "var d = true\n"
                             "var e = null\n"
+                            "var bytes = br\"compact\"\n"
                             "var f = a + b * 2 - 1\n"
                             "var g = a % 3\n",
                             "literals_and_arithmetic");

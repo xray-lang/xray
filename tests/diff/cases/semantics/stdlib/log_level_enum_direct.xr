@@ -1,0 +1,27 @@
+// Typed log level/format enums must behave identically on VM and AOT.
+import log
+import { LogFormat, LogLevel } from log
+
+print(LogLevel.Debug)
+print(LogLevel.Info)
+print(LogLevel.Warn)
+print(LogLevel.Error)
+print(LogLevel.Fatal)
+print(LogFormat.Text)
+print(LogFormat.Json)
+
+print(LogLevel.Debug == LogLevel.Debug)
+print(LogLevel.Warn == LogLevel.Error)
+
+log.setLevel(LogLevel.Warn)
+print(log.isEnabled(LogLevel.Debug))
+print(log.isEnabled(LogLevel.Info))
+print(log.isEnabled(LogLevel.Warn))
+print(log.isEnabled(LogLevel.Fatal))
+
+log.setLevel(LogLevel.Info)
+print(log.isEnabled(LogLevel.Info))
+
+var stored: Array<LogLevel> = [LogLevel.Fatal, LogLevel.Debug]
+print(stored[0])
+print(len(stored))

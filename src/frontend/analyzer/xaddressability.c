@@ -263,8 +263,7 @@ bool xa_pointer_provenance_for_expr(XaInferContext *ctx, AstNode *expr, XaPointe
     if (direct->type == AST_CALL_EXPR) {
         AstNode *receiver = NULL;
         if (pointer_projection_receiver(ctx, direct, &receiver)) {
-            if (receiver->type == AST_ARRAY_LITERAL &&
-                receiver->as.array_literal.is_fixed_bytes_literal) {
+            if (receiver->type == AST_FIXED_BYTES_LITERAL) {
                 pointer_set_static_literal(out, direct, pointer_type);
                 return true;
             }

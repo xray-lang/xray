@@ -1,0 +1,1 @@
+var bytes = c"before\0after"

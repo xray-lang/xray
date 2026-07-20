@@ -8,40 +8,47 @@ import text
 import io
 import os
 
-export const DEBUG = 10
-export const INFO = 20
-export const WARN = 30
-export const ERROR = 40
-export const FATAL = 50
+export enum LogLevel {
+    Debug,
+    Info,
+    Warn,
+    Error,
+    Fatal
+}
+
+export enum LogFormat {
+    Text,
+    Json
+}
 
 const _QUEUE_LIMIT = 256
 
-var _level = INFO
-var _format = "text"
+var _level = LogLevel.Info
+var _format = LogFormat.Text
 var _output: Path? = null
 var _source = false
 var _async = false
 var _asyncQueue: Array<string> = []
 var _dropped = 0
 
-fn _levelName(level: int) -> string {
-    if (level == DEBUG) { return "DEBUG" }
-    if (level == INFO) { return "INFO" }
-    if (level == WARN) { return "WARN" }
-    if (level == ERROR) { return "ERROR" }
-    if (level == FATAL) { return "FATAL" }
-    return "UNKNOWN"
+fn _levelValue(level: LogLevel) -> int {
+    return match (level) {
+        LogLevel.Debug -> 0,
+        LogLevel.Info  -> 1,
+        LogLevel.Warn  -> 2,
+        LogLevel.Error -> 3,
+        LogLevel.Fatal -> 4
+    }
 }
 
-fn _parseLevel(value: Json) -> int {
-    if (typeName(value) == "int") { return value as int }
-    var name = text.lower(string(value))
-    if (name == "debug") { return DEBUG }
-    if (name == "info") { return INFO }
-    if (name == "warn" || name == "warning") { return WARN }
-    if (name == "error") { return ERROR }
-    if (name == "fatal") { return FATAL }
-    return INFO
+fn _levelName(level: LogLevel) -> string {
+    return match (level) {
+        LogLevel.Debug -> "DEBUG",
+        LogLevel.Info  -> "INFO",
+        LogLevel.Warn  -> "WARN",
+        LogLevel.Error -> "ERROR",
+        LogLevel.Fatal -> "FATAL"
+    }
 }
 
 fn _jsonEscape(s: string) -> string {
@@ -120,9 +127,9 @@ fn _appendJsonAttrs(out: StringBuilder, args: Array<Json>, start: int) {
     }
 }
 
-fn _formatLine(logger: Logger, level: int, args: Array<Json>) -> string {
+fn _formatLine(logger: Logger, level: LogLevel, args: Array<Json>) -> string {
     var msg = _message(args)
-    if (logger.format == "json") {
+    if (logger.format == LogFormat.Json) {
         var out = StringBuilder()
         out.append("{\"level\":")
         out.append(_jsonEscape(_levelName(level)))
@@ -177,8 +184,8 @@ fn _emit(logger: Logger, line: string) {
     }
 }
 
-fn _logAt(logger: Logger, level: int, args: Array<Json>) {
-    if (level < logger.level) { return }
+fn _logAt(logger: Logger, level: LogLevel, args: Array<Json>) {
+    if (_levelValue(level) < _levelValue(logger.level)) { return }
     _emit(logger, _formatLine(logger, level, args))
 }
 
@@ -221,8 +228,8 @@ fn _makeChild(parent: Logger, fields: Array<Json>) -> Logger {
 }
 
 export class Logger {
-    level: int
-    format: string
+    level: LogLevel
+    format: LogFormat
     output: Path?
     source: bool
     asyncMode: bool
@@ -230,8 +237,8 @@ export class Logger {
     textContext: string
 
     constructor(
-        level: int = INFO,
-        format: string = "text",
+        level: LogLevel = LogLevel.Info,
+        format: LogFormat = LogFormat.Text,
         output: Path? = null,
         source: bool = false,
         asyncMode: bool = false,
@@ -248,23 +255,23 @@ export class Logger {
     }
 
     debug(...args: Json) {
-        _logAt(this, DEBUG, args)
+        _logAt(this, LogLevel.Debug, args)
     }
 
     info(...args: Json) {
-        _logAt(this, INFO, args)
+        _logAt(this, LogLevel.Info, args)
     }
 
     warn(...args: Json) {
-        _logAt(this, WARN, args)
+        _logAt(this, LogLevel.Warn, args)
     }
 
     error(...args: Json) {
-        _logAt(this, ERROR, args)
+        _logAt(this, LogLevel.Error, args)
     }
 
     fatal(...args: Json) {
-        _logAt(this, FATAL, args)
+        _logAt(this, LogLevel.Fatal, args)
         flush()
         os.exit(1)
     }
@@ -275,38 +282,33 @@ export class Logger {
 }
 
 export fn debug(...args: Json) {
-    _logAt(_rootLogger(), DEBUG, args)
+    _logAt(_rootLogger(), LogLevel.Debug, args)
 }
 
 export fn info(...args: Json) {
-    _logAt(_rootLogger(), INFO, args)
+    _logAt(_rootLogger(), LogLevel.Info, args)
 }
 
 export fn warn(...args: Json) {
-    _logAt(_rootLogger(), WARN, args)
+    _logAt(_rootLogger(), LogLevel.Warn, args)
 }
 
 export fn error(...args: Json) {
-    _logAt(_rootLogger(), ERROR, args)
+    _logAt(_rootLogger(), LogLevel.Error, args)
 }
 
 export fn fatal(...args: Json) {
-    _logAt(_rootLogger(), FATAL, args)
+    _logAt(_rootLogger(), LogLevel.Fatal, args)
     flush()
     os.exit(1)
 }
 
-export fn setLevel(level: Json) {
-    _level = _parseLevel(level)
+export fn setLevel(level: LogLevel) {
+    _level = level
 }
 
-export fn setFormat(format: string) {
-    var f = text.lower(format)
-    if (f == "json") {
-        _format = "json"
-    } else {
-        _format = "text"
-    }
+export fn setFormat(format: LogFormat) {
+    _format = format
 }
 
 export fn setOutput(path: Path) {
@@ -314,8 +316,8 @@ export fn setOutput(path: Path) {
     _output = path
 }
 
-export fn isEnabled(level: int) -> bool {
-    return level >= _level
+export fn isEnabled(level: LogLevel) -> bool {
+    return _levelValue(level) >= _levelValue(_level)
 }
 
 export fn enableSource(enabled: bool = true) {

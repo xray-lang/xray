@@ -74,5 +74,4 @@ test_const_string()
 test_const_array()
 test_const_map()
 test_primitive_types()
-print("
-🎉 测试2全部通过：Channel const 零拷贝正确！")
+print("\n🎉 测试2全部通过：Channel const 零拷贝正确！")

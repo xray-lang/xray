@@ -169,5 +169,6 @@ XVM_EXACT_BIT_UNARY_CASE(OP_BIT_CTZ, xr_bits_exact_trailing_zeros)
 
 XVM_EXACT_BIT_ROTATE_CASE(OP_BIT_ROTL, xr_bits_exact_rotate_left)
 XVM_EXACT_BIT_ROTATE_CASE(OP_BIT_ROTR, xr_bits_exact_rotate_right)
+XVM_EXACT_BIT_ROTATE_CASE(OP_BIT_MUL_HIGH, xr_bits_exact_mul_high)
 
 #undef XVM_EXACT_BIT_ROTATE_CASE

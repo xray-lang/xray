@@ -211,7 +211,7 @@ static bool vm_rescue_array_ref_to_ret_arena(XrVMContext *vm_ctx, XrValue *slot)
         return true;
 
     uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(*slot);
-    uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(*slot);
+    uint32_t elem_count = XR_ARRAY_REF_ELEM_COUNT(*slot);
     uint8_t elem_size = xr_native_type_size(xr_target_data_layout_host(), elem_type);
     if (elem_size == 0 || elem_count == 0)
         return false;
@@ -255,7 +255,7 @@ static bool vm_copy_array_ref_to_fixed_heap(XrVMRuntime *isolate, XrValue *slot)
         return true;
 
     uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(*slot);
-    uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(*slot);
+    uint32_t elem_count = XR_ARRAY_REF_ELEM_COUNT(*slot);
     uint8_t elem_size = xr_native_type_size(xr_target_data_layout_host(), elem_type);
     if (elem_size == 0 || elem_count == 0)
         return false;
@@ -674,7 +674,7 @@ startfunc:
                 VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to allocate struct_areas (cap=%d)",
                                  cap);
             }
-            uint16_t *caps = (uint16_t *) xr_calloc(cap, sizeof(uint16_t));
+            uint32_t *caps = (uint32_t *) xr_calloc(cap, sizeof(uint32_t));
             if (!caps) {
                 xr_free(areas);
                 VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
@@ -697,18 +697,18 @@ startfunc:
                                  new_cap);
             }
             vm_ctx->struct_areas = new_areas;
-            uint16_t *new_caps =
-                (uint16_t *) xr_realloc(vm_ctx->struct_area_caps, new_cap * sizeof(uint16_t));
+            uint32_t *new_caps =
+                (uint32_t *) xr_realloc(vm_ctx->struct_area_caps, new_cap * sizeof(uint32_t));
             if (!new_caps) {
                 VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to grow struct_area_caps to cap=%d",
                                  new_cap);
             }
             vm_ctx->struct_area_caps = new_caps;
             memset(vm_ctx->struct_areas + old_cap, 0, (new_cap - old_cap) * sizeof(uint8_t *));
-            memset(vm_ctx->struct_area_caps + old_cap, 0, (new_cap - old_cap) * sizeof(uint16_t));
+            memset(vm_ctx->struct_area_caps + old_cap, 0, (new_cap - old_cap) * sizeof(uint32_t));
             vm_ctx->struct_areas_cap = new_cap;
         }
-        uint16_t need = cl->proto->struct_area_size;
+        uint32_t need = cl->proto->struct_area_size;
         if (vm_ctx->struct_area_caps[_sa_idx] < need) {
             xr_free(vm_ctx->struct_areas[_sa_idx]);
             uint8_t *area = (uint8_t *) xr_calloc(1, need);

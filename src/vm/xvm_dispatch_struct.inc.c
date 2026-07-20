@@ -243,3 +243,26 @@ vmcase(OP_FIXED_ARRAY_NEW) {
     R(a) = xr_array_ref(array_ptr, elem_native_type, elem_count);
     vmbreak;
 }
+
+vmcase(OP_FIXED_BYTES_CONST) {
+    /* A = string payload in / fixed-array ref out, Bx = 16-byte storage slot. */
+    TRACE_EXECUTION();
+    int a = GETARG_A(i);
+    int bx = GETARG_Bx(i);
+    if (XR_UNLIKELY(!XR_IS_STRING(R(a)))) {
+        VM_RUNTIME_ERROR(XR_ERR_RUNTIME, "invalid fixed byte payload");
+    }
+    XrString *payload = XR_TO_STRING(R(a));
+    if (XR_UNLIKELY(!payload || payload->length > XR_ARRAY_REF_MAX_COUNT)) {
+        VM_RUNTIME_ERROR(XR_ERR_RUNTIME, "fixed byte payload is too large");
+    }
+    XR_DCHECK(vm_ctx->struct_areas && vm_ctx->struct_areas[VM_FRAME_COUNT - 1],
+              "OP_FIXED_BYTES_CONST requires allocated struct_area");
+    uint8_t *array_ptr = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + (uint32_t) bx * 16u;
+    if (payload->length > 0)
+        memcpy(array_ptr, payload->data, payload->length);
+    else
+        array_ptr[0] = 0;
+    R(a) = xr_array_ref(array_ptr, XR_NATIVE_U8, (uint32_t) payload->length);
+    vmbreak;
+}

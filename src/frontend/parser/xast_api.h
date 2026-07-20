@@ -24,7 +24,13 @@ XR_FUNC AstNode *xr_ast_literal_int_bits(XrCompilerSession *session, uint64_t bi
                                          bool overflows_i64, int line);
 XR_FUNC AstNode *xr_ast_literal_float(XrCompilerSession *session, xr_Number value, int line);
 XR_FUNC AstNode *xr_ast_literal_bigint(XrCompilerSession *session, const char *value, int line);
-XR_FUNC AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, int line);
+XR_FUNC AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value,
+                                       XrLiteralEscapeMode escape_mode,
+                                       XrLiteralSourceForm source_form, int line);
+XR_FUNC AstNode *xr_ast_fixed_bytes_literal(XrCompilerSession *session, const uint8_t *payload,
+                                            size_t payload_length, bool append_nul,
+                                            XrLiteralEscapeMode escape_mode,
+                                            XrLiteralSourceForm source_form, int line);
 XR_FUNC AstNode *xr_ast_literal_rune(XrCompilerSession *session, uint32_t value, int line);
 XR_FUNC AstNode *xr_ast_literal_regex(XrCompilerSession *session, const char *pattern,
                                       const char *flags, int line);
@@ -32,7 +38,8 @@ XR_FUNC AstNode *xr_ast_literal_null(XrCompilerSession *session, int line);
 XR_FUNC AstNode *xr_ast_literal_bool(XrCompilerSession *session, int value, int line);
 
 XR_FUNC AstNode *xr_ast_template_string(XrCompilerSession *session, AstNode **parts, int part_count,
-                                        int line);
+                                        XrLiteralEscapeMode escape_mode,
+                                        XrLiteralSourceForm source_form, int line);
 
 XR_FUNC AstNode *xr_ast_binary(XrCompilerSession *session, AstNodeType type, AstNode *left,
                                AstNode *right, int line);

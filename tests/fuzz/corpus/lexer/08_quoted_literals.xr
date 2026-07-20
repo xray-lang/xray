@@ -1,0 +1,20 @@
+"" r"" b"" br"" c"" cr""
+"escaped ${r\"nested\"}"
+r"raw \\ ${br\"${fixed}\"}"
+b"\x00\xff${literal}"
+br"\\x41 ${literal}"
+c"symbol"
+cr"raw\\symbol"
+"""
+zero margin " quotes
+"""
+    r""""
+    <div class="card">${name}</div>
+    """
+    """"
+br"""
+${HOME} \\ path
+"""
+cr""""
+q"""
+""""

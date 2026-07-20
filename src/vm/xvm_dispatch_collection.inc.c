@@ -479,7 +479,7 @@ vmcase(OP_ARRAY_GET) {
     // Struct inline fixed array dynamic index
     if (XR_IS_ARRAY_REF(obj_val)) {
         uint8_t etype = XR_ARRAY_REF_ELEM_TYPE(obj_val);
-        uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
+        uint32_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
         int64_t idx = XR_TO_INT(R(c));
         if ((uint64_t) idx < (uint64_t) ecount) {
             uint8_t *bp = (uint8_t *) obj_val.ptr;
@@ -584,7 +584,7 @@ vmcase(OP_ARRAY_GETC) {
     // Struct inline fixed array constant index
     if (XR_IS_ARRAY_REF(obj_val)) {
         uint8_t etype = XR_ARRAY_REF_ELEM_TYPE(obj_val);
-        uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
+        uint32_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
         if ((unsigned) c < (unsigned) ecount) {
             uint8_t *base_ptr = (uint8_t *) obj_val.ptr;
             uint8_t es = xr_native_type_size(xr_target_data_layout_host(), etype);
@@ -703,7 +703,7 @@ vmcase(OP_ARRAY_SET) {
     // Struct inline fixed array dynamic index write
     if (XR_IS_ARRAY_REF(obj_val)) {
         uint8_t etype = XR_ARRAY_REF_ELEM_TYPE(obj_val);
-        uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
+        uint32_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
         int64_t idx = XR_TO_INT(R(b));
         if ((uint64_t) idx < (uint64_t) ecount) {
             uint8_t *bp = (uint8_t *) obj_val.ptr;
@@ -819,7 +819,7 @@ vmcase(OP_ARRAY_SETC) {
     // Struct inline fixed array constant index write
     if (XR_IS_ARRAY_REF(obj_val)) {
         uint8_t etype = XR_ARRAY_REF_ELEM_TYPE(obj_val);
-        uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
+        uint32_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
         if ((unsigned) b < (unsigned) ecount) {
             uint8_t *bp = (uint8_t *) obj_val.ptr;
             uint8_t es = xr_native_type_size(xr_target_data_layout_host(), etype);
@@ -2108,7 +2108,7 @@ vmcase(OP_INDEX_GET) {
     // Fast path: struct inline fixed array ([T; N])
     if (XR_IS_ARRAY_REF(obj_val) && XR_IS_INT(key_val)) {
         uint8_t etype = XR_ARRAY_REF_ELEM_TYPE(obj_val);
-        uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
+        uint32_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
         int64_t idx = XR_TO_INT(key_val);
         if ((uint64_t) idx < (uint64_t) ecount) {
             uint8_t *base_ptr = (uint8_t *) obj_val.ptr;
@@ -2284,7 +2284,7 @@ vmcase(OP_INDEX_SET) {
     // Fast path: struct inline fixed array ([T; N])
     if (XR_IS_ARRAY_REF(obj_val) && XR_IS_INT(key_val)) {
         uint8_t etype = XR_ARRAY_REF_ELEM_TYPE(obj_val);
-        uint16_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
+        uint32_t ecount = XR_ARRAY_REF_ELEM_COUNT(obj_val);
         int64_t idx = XR_TO_INT(key_val);
         if ((uint64_t) idx < (uint64_t) ecount) {
             uint8_t *base_ptr = (uint8_t *) obj_val.ptr;
@@ -2476,7 +2476,7 @@ vmcase(OP_SLICE) {
                              "fixed array slices can only produce Span views");
         }
         uint8_t native_type = XR_ARRAY_REF_ELEM_TYPE(source);
-        uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(source);
+        uint32_t elem_count = XR_ARRAY_REF_ELEM_COUNT(source);
         xr_array_normalize_slice(elem_count, &start, &end);
         uint8_t elem_size = xr_native_type_size(xr_target_data_layout_host(), native_type);
         XrSpanView *span = VM_SPAN_SLOT(R(c + 2));

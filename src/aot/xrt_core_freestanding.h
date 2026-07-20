@@ -212,7 +212,8 @@ typedef struct XrValue {
 #define XR_IS_SET(v) ((v).tag == XR_TAG_PTR && (v).heap_type == XR_TSET)
 #define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_AGG_REF && (v).ext != 0)
 #define XR_ARRAY_REF_ELEM_TYPE(v) ((uint8_t) ((v).ext & 0xFF))
-#define XR_ARRAY_REF_ELEM_COUNT(v) ((uint16_t) ((v).ext >> 8))
+#define XR_ARRAY_REF_MAX_COUNT UINT32_C(0x00FFFFFF)
+#define XR_ARRAY_REF_ELEM_COUNT(v) ((uint32_t) ((v).ext >> 8))
 
 #define XRT_STR_LITERAL 0x1u
 
@@ -318,7 +319,7 @@ static inline XrValue xr_aggregate_ref(void *p, uint16_t storage_size) {
     return r;
 }
 
-static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint16_t elem_count) {
+static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint32_t elem_count) {
     XrValue r = {0};
     r.tag = XR_TAG_AGG_REF;
     r.ext = ((uint32_t) elem_count << 8) | elem_native_type;
@@ -1298,7 +1299,7 @@ static inline void xrt_fixed_array_set(void *base, uint8_t native_type, int64_t 
 static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
     if (XR_IS_ARRAY_REF(obj) && XR_IS_INT(key)) {
         int64_t idx = key.i;
-        uint16_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
+        uint32_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
         if (XR_LIKELY(idx >= 0 && idx < count))
             return xrt_fixed_array_get(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx);
         xrt_fixed_index_oob(idx, count);
@@ -1339,7 +1340,7 @@ static inline XrValue xrt_enum_box_ordinal(XrValue obj) {
 static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
     if (XR_IS_ARRAY_REF(obj) && XR_IS_INT(key)) {
         int64_t idx = key.i;
-        uint16_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
+        uint32_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
         if (XR_LIKELY(idx >= 0 && idx < count)) {
             xrt_fixed_array_set(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx, val);
             return;

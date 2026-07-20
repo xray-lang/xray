@@ -1,30 +1,31 @@
 // Test log module child logger functionality
 
 import log
+import { LogFormat, LogLevel } from log
 
 @test
 fn test_child_logger_creation() {
-    log.setLevel(log.DEBUG)
+    log.setLevel(LogLevel.Debug)
     var httpLog = log.child("module", "http", "version", "1.0")
     assert_eq(typeName(httpLog), "Logger")
 }
 
 @test
 fn test_child_logger_methods() {
-    log.setLevel(log.DEBUG)
-    log.setFormat("json")
+    log.setLevel(LogLevel.Debug)
+    log.setFormat(LogFormat.Json)
     var httpLog = log.child("module", "http")
     httpLog.debug("debug from child")
     httpLog.info("request received", "path", "/api")
     httpLog.warn("slow response")
     httpLog.error("connection failed")
-    log.setFormat("text")
+    log.setFormat(LogFormat.Text)
     assert(true)
 }
 
 @test
 fn test_nested_child_logger() {
-    log.setLevel(log.DEBUG)
+    log.setLevel(LogLevel.Debug)
     var httpLog = log.child("module", "http")
     var dbLog = httpLog.child("component", "database")
     assert_eq(typeName(dbLog), "Logger")

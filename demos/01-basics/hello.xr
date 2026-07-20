@@ -15,7 +15,9 @@ print("Line 1")
 print("Line 2")
 
 // Multi-line string
-var message = "This is
+var message = """
+This is
 a multi-line
-string"
+string
+"""
 print(message)

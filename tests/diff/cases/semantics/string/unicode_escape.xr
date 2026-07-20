@@ -1,0 +1,19 @@
+// anchor: string-unicode-escape
+// R2-1 回归：string 字面量 \uXXXX 与 \u{...} 转义在 VM/AOT 必须一致解码。
+print("\u{48}\u{49}")
+print("\u{4E16}\u{754C}")
+print("\u{1F600}")
+print("\u4F60\u597D")
+print("\u20AC\u0041")
+print(len("\u{1F600}"))
+print(len("\u{1F600}".bytes()))
+print("\u{4E16}".runes().nth(0) == '\u{4E16}')
+print("\u{10FFFF}".runes().nth(0).toUInt32())
+
+var n = 7
+print("t:${n}\u{2764}\x41")
+print("\u{48}${n}\u4E16")
+
+var raw = r"\u{48}"
+print(len(raw))
+print(raw)

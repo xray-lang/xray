@@ -212,22 +212,19 @@ static const XlspSymbolInfo g_xlsp_stdlib_log_symbols[] = {
     {"warn", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
     {"error", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
     {"fatal", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
-    {"setLevel", XLSP_SYM_FUNCTION, "fn(level: Json): ()", "", NULL, 0},
-    {"setFormat", XLSP_SYM_FUNCTION, "fn(format: string): ()", "", NULL, 0},
+    {"setLevel", XLSP_SYM_FUNCTION, "fn(level: LogLevel): ()", "", NULL, 0},
+    {"setFormat", XLSP_SYM_FUNCTION, "fn(format: LogFormat): ()", "", NULL, 0},
     {"setOutput", XLSP_SYM_FUNCTION, "fn(path: Path): ()", "", NULL, 0},
-    {"isEnabled", XLSP_SYM_FUNCTION, "fn(level: int): bool", "", NULL, 0},
+    {"isEnabled", XLSP_SYM_FUNCTION, "fn(level: LogLevel): bool", "", NULL, 0},
     {"enableSource", XLSP_SYM_FUNCTION, "fn(enabled?: bool): ()", "", NULL, 0},
     {"enableAsync", XLSP_SYM_FUNCTION, "fn(enabled?: bool): ()", "", NULL, 0},
     {"flush", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
     {"child", XLSP_SYM_FUNCTION, "fn(...fields: Json): Logger", "", NULL, 0},
-    {"DEBUG", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
-    {"INFO", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
-    {"WARN", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
-    {"ERROR", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
-    {"FATAL", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
+    {"LogLevel", XLSP_SYM_CLASS, "type LogLevel", "Enum type", NULL, 0},
+    {"LogFormat", XLSP_SYM_CLASS, "type LogFormat", "Enum type", NULL, 0},
     {"Logger", XLSP_SYM_CLASS, "type Logger", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_LOG_SYMBOL_COUNT 19
+#define GEN_XLSP_STDLIB_LOG_SYMBOL_COUNT 16
 
 // math module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_math_symbols[] = {
@@ -561,9 +558,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_toml_symbols[] = {
     {"TomlArray", XLSP_SYM_CLASS, "type TomlArray", "Class type", NULL, 0},
     {"TomlTable", XLSP_SYM_CLASS, "type TomlTable", "Class type", NULL, 0},
     {"TomlValue", XLSP_SYM_CLASS, "type TomlValue", "Class type", NULL, 0},
+    {"TomlErrorKind", XLSP_SYM_CLASS, "type TomlErrorKind", "Enum type", NULL, 0},
+    {"TomlDiagnostic", XLSP_SYM_CLASS, "type TomlDiagnostic", "Class type", NULL, 0},
     {"TomlParseReport", XLSP_SYM_CLASS, "type TomlParseReport", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_TOML_SYMBOL_COUNT 31
+#define GEN_XLSP_STDLIB_TOML_SYMBOL_COUNT 33
 
 // url module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_url_symbols[] = {

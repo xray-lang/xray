@@ -76,5 +76,4 @@ fn test_nested_isolation() {
 test_array_isolation()
 test_map_isolation()
 test_nested_isolation()
-print("
-🎉 测试1全部通过：Channel 深拷贝隔离正确！")
+print("\n🎉 测试1全部通过：Channel 深拷贝隔离正确！")

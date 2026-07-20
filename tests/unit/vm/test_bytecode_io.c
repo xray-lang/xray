@@ -219,7 +219,7 @@ TEST(bytecode_roundtrips_struct_area_size) {
 
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
-    proto->struct_area_size = 48;
+    proto->struct_area_size = 1024u * 1024u;
 
     size_t size = 0;
     uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
@@ -229,7 +229,7 @@ TEST(bytecode_roundtrips_struct_area_size) {
     XrProto *roundtrip = xr_bytecode_read(iso, bytes, size, &error);
     ASSERT_NOT_NULL(roundtrip);
     ASSERT_EQ_INT(error, XR_BC_OK);
-    ASSERT_EQ_UINT(roundtrip->struct_area_size, 48);
+    ASSERT_EQ_UINT(roundtrip->struct_area_size, 1024u * 1024u);
 
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);

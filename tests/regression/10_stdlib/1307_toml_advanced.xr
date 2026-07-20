@@ -1,7 +1,7 @@
 // 1307_toml_advanced.xr - typed TOML module tests
 
 import toml
-import { TomlDateTime, TomlValue } from toml
+import { TomlDateTime, TomlValue, TomlErrorKind, TomlDiagnostic } from toml
 
 fn field(value: TomlValue, key: string) -> TomlValue {
     return toml.get(value, key)!
@@ -138,6 +138,18 @@ fn test_parse_report() {
 fn test_duplicate_key_report() {
     var report = toml.parseReport("name = \"Alice\"\nname = \"Bob\"")
     assert(len(report.errors) > 0)
+    var diag: TomlDiagnostic = report.errors[0]
+    assert_eq(typeName(diag), "TomlDiagnostic")
+    assert(diag.kind == TomlErrorKind.DuplicateKey)
+    assert(diag.line > 0)
+    assert(len(diag.message) > 0)
+}
+
+@test
+fn test_syntax_error_report() {
+    var report = toml.parseReport("x = [1, 2")
+    assert(len(report.errors) > 0)
+    assert(report.errors[0].kind == TomlErrorKind.SyntaxError)
 }
 
 @test

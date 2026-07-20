@@ -111,5 +111,4 @@ test_closure_capture()
 test_closure_in_go()
 test_multiple_closures()
 test_nested_closure()
-print("
-🎉 测试4全部通过：闭包 upvalue 正确！")
+print("\n🎉 测试4全部通过：闭包 upvalue 正确！")

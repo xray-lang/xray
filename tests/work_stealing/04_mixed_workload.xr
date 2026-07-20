@@ -66,18 +66,15 @@ for (var i = 0; i < len(io_tasks); i++) {
 }
 var total_time = time.monotonic() - start_time
 /* 结果 */
-print("
-结果:")
+print("\n结果:")
 print("  CPU 密集型完成: " + string(cpu_completed))
 print("  IO 密集型完成: " + string(io_completed))
 print("  总耗时: " + string(total_time) + " ms")
 /* 验证 */
 if (cpu_completed == CPU_COROS && io_completed == IO_COROS) {
-    print("
-✓ 混合负载测试通过")
+    print("\n✓ 混合负载测试通过")
 } else {
-    print("
-✗ 测试失败")
+    print("\n✗ 测试失败")
     throw WsErr.Failed("混合负载测试失败")
 }
 /* 性能分析：总时间应该接近 IO 等待时间，而不是 CPU + IO */

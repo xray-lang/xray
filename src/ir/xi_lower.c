@@ -1969,6 +1969,20 @@ static XrCtValue *copy_ct_value_to_func(XiFunc *func, const XrCtValue *src) {
         case XR_CT_FIXED_ARRAY: {
             int count = src->as.fixed_array_val.count;
             dst->as.fixed_array_val.elements = NULL;
+            dst->as.fixed_array_val.byte_blob = NULL;
+            dst->as.fixed_array_val.is_byte_blob = src->as.fixed_array_val.is_byte_blob;
+            if (src->as.fixed_array_val.is_byte_blob) {
+                uint8_t *bytes =
+                    (uint8_t *) xi_func_arena_alloc(func, (uint32_t) (count > 0 ? count : 1));
+                if (!bytes)
+                    return NULL;
+                if (count > 0)
+                    memcpy(bytes, src->as.fixed_array_val.byte_blob, (size_t) count);
+                else
+                    bytes[0] = 0;
+                dst->as.fixed_array_val.byte_blob = bytes;
+                break;
+            }
             if (count > 0) {
                 XrCtValue *elements = (XrCtValue *) xi_func_arena_alloc(
                     func, (uint32_t) ((size_t) count * sizeof(XrCtValue)));

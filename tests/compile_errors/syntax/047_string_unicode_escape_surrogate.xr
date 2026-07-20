@@ -1,0 +1,5 @@
+// 047_string_unicode_escape_surrogate.xr
+// Expected: Compile error - unicode escape must reject UTF-16 surrogates
+// (U+D800..U+DFFF are not Unicode scalar values; same rule as rune literals)
+var s = "\u{D800}"
+print(s)

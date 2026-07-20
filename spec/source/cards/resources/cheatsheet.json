@@ -19,6 +19,11 @@
     },
     {
       "heading_level": 2,
+      "heading": "Quoted literals",
+      "markdown": "`\"...\"` / `r\"...\"`: escaped / raw strings (both interpolate `${...}`)\n\n`b\"...\"` / `br\"...\"`: escaped / raw `[byte; L]`\n\n`c\"...\"` / `cr\"...\"`: escaped / raw `[byte; L+1]` with appended NUL\n\nOne quote is inline, two quotes are empty, and `Q >= 3` is block form. A block opener is followed immediately by a newline and its exact-count closer is alone on a line."
+    },
+    {
+      "heading_level": 2,
       "heading": "Control flow",
       "fences": [
         "stmt-if",

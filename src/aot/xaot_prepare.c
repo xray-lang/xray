@@ -3135,6 +3135,26 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
     return true;
 }
 
+static bool prepare_func_fixed_bytes_plans(XaotBundle *bundle, const XiFunc *func) {
+    if (!bundle || !func)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || (value->op != XI_FIXED_BYTES_CONST && value->op != XI_STATIC_BYTES_PTR))
+                continue;
+            if (!xaot_bundle_add_fixed_bytes_plan(bundle, func, value)) {
+                bundle->error_msg = "failed to derive AOT fixed-bytes plan";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 static bool prepare_apply_return_abi_value_plans(XaotBundle *bundle,
                                                  const XaotFuncPlan *func_plan) {
     XaotValueRep ret_rep;
@@ -3874,6 +3894,8 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     body = prepare_find_body_summary_for_func(bundle, func, module_index, is_module_init);
 
     if (!prepare_func_values(bundle, func))
+        return false;
+    if (!prepare_func_fixed_bytes_plans(bundle, func))
         return false;
     if (!prepare_apply_return_abi_value_plans(bundle, plan))
         return false;

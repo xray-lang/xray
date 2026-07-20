@@ -272,7 +272,7 @@ static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
 }
 
 static Token make_token(Scanner *scanner, XrTokenType type) {
-    Token token;
+    Token token = {0};
     token.type = type;
     token.start = scanner->start;
     token.length = (int) (scanner->current - scanner->start);
@@ -295,7 +295,7 @@ static Token make_token(Scanner *scanner, XrTokenType type) {
 }
 
 static Token error_token(Scanner *scanner, const char *message) {
-    Token token;
+    Token token = {0};
     token.type = TK_ERROR;
     // L-03: error_message carries the diagnostic; start still points into the
     // source buffer at the offending character so editors can place a caret.
@@ -457,24 +457,9 @@ static XrTokenType identifier_type(Scanner *scanner) {
     return TK_NAME;
 }
 
-static Token raw_string_with_quote(Scanner *scanner, char quote);
-
 static Token identifier(Scanner *scanner) {
     while (XR_IS_IDENT(peek(scanner))) {
         advance(scanner);
-    }
-    // Detect raw string prefix: single 'r' followed by double quote.
-    int len = (int) (scanner->current - scanner->start);
-    if (len == 1 && scanner->start[0] == 'r') {
-        char next = peek(scanner);
-        if (next == '"') {
-            advance(scanner);
-            return raw_string_with_quote(scanner, next);
-        }
-        if (next == '\'') {
-            advance(scanner);
-            return error_token(scanner, "single-quoted raw strings were removed; use r\"...\"");
-        }
     }
     return make_token(scanner, identifier_type(scanner));
 }
@@ -609,40 +594,153 @@ static void note_scanned_newline(Scanner *scanner) {
 
 static bool scan_interpolation_expr(Scanner *scanner);
 
-static bool scan_string_body(Scanner *scanner, char quote, bool is_raw, bool *has_interpolation) {
+typedef enum {
+    XR_QUOTED_SCAN_OK = 0,
+    XR_QUOTED_SCAN_UNTERMINATED,
+    XR_QUOTED_SCAN_INLINE_NEWLINE,
+    XR_QUOTED_SCAN_BLOCK_OPEN,
+    XR_QUOTED_SCAN_BLOCK_CLOSE_TRAILING,
+    XR_QUOTED_SCAN_BLOCK_UNTERMINATED,
+    XR_QUOTED_SCAN_BARE_CR,
+    XR_QUOTED_SCAN_INTERPOLATION,
+} XrQuotedScanResult;
+
+static bool consume_quoted_newline(Scanner *scanner) {
+    if (peek(scanner) == '\n') {
+        advance(scanner);
+    } else if (peek(scanner) == '\r' && peek_next(scanner) == '\n') {
+        advance(scanner);
+        advance(scanner);
+    } else {
+        return false;
+    }
+    scanner->line++;
+    scanner->line_start = scanner->current;
+    return true;
+}
+
+static XrQuotedScanResult scan_quoted_inline(Scanner *scanner, XrQuotedLiteralKind kind,
+                                             XrLiteralEscapeMode escape_mode,
+                                             bool *has_interpolation) {
     while (!is_at_end(scanner)) {
         char c = peek(scanner);
-        if (c == quote) {
+        if (c == '"') {
             advance(scanner);
-            return true;
+            return XR_QUOTED_SCAN_OK;
         }
-        if (!is_raw && c == '\\') {
+        if (c == '\n' || c == '\r')
+            return XR_QUOTED_SCAN_INLINE_NEWLINE;
+        if (escape_mode == XR_LITERAL_ESCAPED && c == '\\') {
             advance(scanner);
-            if (!is_at_end(scanner)) {
-                if (peek(scanner) == '\n') {
-                    note_scanned_newline(scanner);
-                }
+            if (is_at_end(scanner) || peek(scanner) == '\n' || peek(scanner) == '\r')
+                return XR_QUOTED_SCAN_INLINE_NEWLINE;
+            advance(scanner);
+            continue;
+        }
+        if (kind == XR_QUOTED_STRING && c == '$' && peek_next(scanner) == '{') {
+            if (has_interpolation)
+                *has_interpolation = true;
+            advance(scanner);
+            advance(scanner);
+            if (!scan_interpolation_expr(scanner))
+                return XR_QUOTED_SCAN_INTERPOLATION;
+            continue;
+        }
+        advance(scanner);
+    }
+    return XR_QUOTED_SCAN_UNTERMINATED;
+}
+
+typedef enum {
+    XR_BLOCK_CLOSE_NONE = 0,
+    XR_BLOCK_CLOSE_OK,
+    XR_BLOCK_CLOSE_TRAILING,
+} XrBlockCloseResult;
+
+static XrBlockCloseResult scan_block_closer(Scanner *scanner, int quote_count) {
+    if (scanner->current != scanner->line_start)
+        return XR_BLOCK_CLOSE_NONE;
+    const char *probe = scanner->current;
+    while (probe < scanner->end && (*probe == ' ' || *probe == '\t'))
+        probe++;
+    int found = 0;
+    while (probe < scanner->end && *probe == '"') {
+        found++;
+        probe++;
+    }
+    if (found != quote_count)
+        return XR_BLOCK_CLOSE_NONE;
+    if (probe < scanner->end && *probe != '\n' &&
+        !(*probe == '\r' && probe + 1 < scanner->end && probe[1] == '\n')) {
+        return XR_BLOCK_CLOSE_TRAILING;
+    }
+    scanner->current = probe;
+    return XR_BLOCK_CLOSE_OK;
+}
+
+static XrQuotedScanResult scan_quoted_block(Scanner *scanner, XrQuotedLiteralKind kind,
+                                            XrLiteralEscapeMode escape_mode, int quote_count,
+                                            bool *has_interpolation) {
+    if (!consume_quoted_newline(scanner))
+        return peek(scanner) == '\r' ? XR_QUOTED_SCAN_BARE_CR : XR_QUOTED_SCAN_BLOCK_OPEN;
+    while (!is_at_end(scanner)) {
+        XrBlockCloseResult close = scan_block_closer(scanner, quote_count);
+        if (close == XR_BLOCK_CLOSE_OK)
+            return XR_QUOTED_SCAN_OK;
+        if (close == XR_BLOCK_CLOSE_TRAILING)
+            return XR_QUOTED_SCAN_BLOCK_CLOSE_TRAILING;
+        char c = peek(scanner);
+        if (c == '\n' || c == '\r') {
+            if (!consume_quoted_newline(scanner))
+                return XR_QUOTED_SCAN_BARE_CR;
+            continue;
+        }
+        if (escape_mode == XR_LITERAL_ESCAPED && c == '\\') {
+            advance(scanner);
+            if (is_at_end(scanner))
+                return XR_QUOTED_SCAN_UNTERMINATED;
+            if (peek(scanner) == '\n' || peek(scanner) == '\r') {
+                if (!consume_quoted_newline(scanner))
+                    return XR_QUOTED_SCAN_BARE_CR;
+            } else {
                 advance(scanner);
             }
             continue;
         }
-        if (c == '$' && peek_next(scanner) == '{') {
-            if (has_interpolation) {
+        if (kind == XR_QUOTED_STRING && c == '$' && peek_next(scanner) == '{') {
+            if (has_interpolation)
                 *has_interpolation = true;
-            }
             advance(scanner);
             advance(scanner);
-            if (!scan_interpolation_expr(scanner)) {
-                return false;
-            }
+            if (!scan_interpolation_expr(scanner))
+                return XR_QUOTED_SCAN_INTERPOLATION;
             continue;
-        }
-        if (c == '\n') {
-            note_scanned_newline(scanner);
         }
         advance(scanner);
     }
-    return false;
+    return XR_QUOTED_SCAN_BLOCK_UNTERMINATED;
+}
+
+static XrQuotedScanResult scan_quoted_body(Scanner *scanner, XrQuotedLiteralKind kind,
+                                           XrLiteralEscapeMode escape_mode,
+                                           XrLiteralSourceForm *source_form, int *quote_count,
+                                           bool *has_interpolation) {
+    int count = 1;
+    while (!is_at_end(scanner) && peek(scanner) == '"') {
+        advance(scanner);
+        count++;
+    }
+    *quote_count = count;
+    if (count == 2) {
+        *source_form = XR_LITERAL_INLINE;
+        return XR_QUOTED_SCAN_OK;
+    }
+    if (count >= 3) {
+        *source_form = XR_LITERAL_BLOCK;
+        return scan_quoted_block(scanner, kind, escape_mode, count, has_interpolation);
+    }
+    *source_form = XR_LITERAL_INLINE;
+    return scan_quoted_inline(scanner, kind, escape_mode, has_interpolation);
 }
 
 static bool scan_line_comment_in_template_expr(Scanner *scanner) {
@@ -677,16 +775,53 @@ static bool scan_block_comment_in_template_expr(Scanner *scanner) {
     return depth == 0;
 }
 
+static bool scan_nested_quoted_literal(Scanner *scanner) {
+    XrQuotedLiteralKind kind = XR_QUOTED_NONE;
+    XrLiteralEscapeMode escape_mode = XR_LITERAL_ESCAPED;
+    int prefix_length = 0;
+    const char *p = scanner->current;
+    if (p < scanner->end && *p == '"') {
+        kind = XR_QUOTED_STRING;
+    } else if (p + 1 < scanner->end && p[0] == 'r' && p[1] == '"') {
+        kind = XR_QUOTED_STRING;
+        escape_mode = XR_LITERAL_RAW;
+        prefix_length = 1;
+    } else if (p + 1 < scanner->end && p[0] == 'b' && p[1] == '"') {
+        kind = XR_QUOTED_BYTES;
+        prefix_length = 1;
+    } else if (p + 2 < scanner->end && p[0] == 'b' && p[1] == 'r' && p[2] == '"') {
+        kind = XR_QUOTED_BYTES;
+        escape_mode = XR_LITERAL_RAW;
+        prefix_length = 2;
+    } else if (p + 1 < scanner->end && p[0] == 'c' && p[1] == '"') {
+        kind = XR_QUOTED_C_BYTES;
+        prefix_length = 1;
+    } else if (p + 2 < scanner->end && p[0] == 'c' && p[1] == 'r' && p[2] == '"') {
+        kind = XR_QUOTED_C_BYTES;
+        escape_mode = XR_LITERAL_RAW;
+        prefix_length = 2;
+    }
+    if (kind == XR_QUOTED_NONE)
+        return false;
+    scanner->current += prefix_length;
+    advance(scanner);
+    XrLiteralSourceForm form = XR_LITERAL_INLINE;
+    int quote_count = 0;
+    return scan_quoted_body(scanner, kind, escape_mode, &form, &quote_count, NULL) ==
+           XR_QUOTED_SCAN_OK;
+}
+
 static bool scan_interpolation_expr(Scanner *scanner) {
     int brace_depth = 1;
     while (!is_at_end(scanner)) {
         char c = peek(scanner);
-        if (c == '"') {
-            advance(scanner);
-            if (!scan_string_body(scanner, c, false, NULL)) {
+        if (c == '"' ||
+            ((c == 'r' || c == 'b' || c == 'c') && scanner->current + 1 < scanner->end)) {
+            const char *before = scanner->current;
+            if (scan_nested_quoted_literal(scanner))
+                continue;
+            if (scanner->current != before)
                 return false;
-            }
-            continue;
         }
         if (c == '\'') {
             advance(scanner);
@@ -702,18 +837,9 @@ static bool scan_interpolation_expr(Scanner *scanner) {
                         advance(scanner);
                     continue;
                 }
-                if (q == '\n') {
-                    note_scanned_newline(scanner);
-                }
+                if (q == '\n' || q == '\r')
+                    return false;
                 advance(scanner);
-            }
-            continue;
-        }
-        if (c == 'r' && peek_next(scanner) == '"') {
-            advance(scanner);
-            char raw_quote = advance(scanner);
-            if (!scan_string_body(scanner, raw_quote, true, NULL)) {
-                return false;
             }
             continue;
         }
@@ -748,27 +874,53 @@ static bool scan_interpolation_expr(Scanner *scanner) {
     return false;
 }
 
-// Detects ${} interpolation: returns TK_TEMPLATE_STRING when found.
-static Token string_with_quote(Scanner *scanner, char quote) {
-    bool has_interpolation = false;
-    if (!scan_string_body(scanner, quote, false, &has_interpolation)) {
-        return error_token(scanner, "Unterminated string");
+static const char *quoted_scan_error(XrQuotedScanResult result) {
+    switch (result) {
+        case XR_QUOTED_SCAN_INLINE_NEWLINE:
+            return "inline quoted literal cannot contain a physical newline";
+        case XR_QUOTED_SCAN_BLOCK_OPEN:
+            return "block opening delimiter must be followed immediately by a newline";
+        case XR_QUOTED_SCAN_BLOCK_CLOSE_TRAILING:
+            return "block closing delimiter must be the only token on its line";
+        case XR_QUOTED_SCAN_BLOCK_UNTERMINATED:
+            return "unterminated block quoted literal";
+        case XR_QUOTED_SCAN_BARE_CR:
+            return "bare carriage return is not allowed in a quoted literal";
+        case XR_QUOTED_SCAN_INTERPOLATION:
+            return "unterminated interpolation in quoted literal";
+        case XR_QUOTED_SCAN_UNTERMINATED:
+        default:
+            return "unterminated quoted literal";
     }
-    return make_token(scanner, has_interpolation ? TK_TEMPLATE_STRING : TK_LITERAL_STRING);
 }
 
-static Token string(Scanner *scanner) {
-    return string_with_quote(scanner, '"');
-}
-
-static Token fixed_byte_string(Scanner *scanner, XrTokenType type) {
-    advance(scanner);  // opening quote after b/c prefix
+static Token quoted_literal(Scanner *scanner, XrQuotedLiteralKind kind,
+                            XrLiteralEscapeMode escape_mode, int prefix_length) {
+    XrLiteralSourceForm form = XR_LITERAL_INLINE;
+    int quote_count = 0;
     bool has_interpolation = false;
-    if (!scan_string_body(scanner, '"', false, &has_interpolation))
-        return error_token(scanner, "Unterminated byte literal");
-    if (has_interpolation)
-        return error_token(scanner, "b/c literals do not support interpolation");
-    return make_token(scanner, type);
+    XrQuotedScanResult result =
+        scan_quoted_body(scanner, kind, escape_mode, &form, &quote_count, &has_interpolation);
+    if (result != XR_QUOTED_SCAN_OK)
+        return error_token(scanner, quoted_scan_error(result));
+
+    XrTokenType type = TK_LITERAL_STRING;
+    if (kind == XR_QUOTED_BYTES) {
+        type = TK_LITERAL_BYTE_STRING;
+    } else if (kind == XR_QUOTED_C_BYTES) {
+        type = TK_LITERAL_C_STRING;
+    } else if (escape_mode == XR_LITERAL_RAW) {
+        type = has_interpolation ? TK_RAW_TEMPLATE_STRING : TK_RAW_STRING;
+    } else if (has_interpolation) {
+        type = TK_TEMPLATE_STRING;
+    }
+    Token token = make_token(scanner, type);
+    token.quoted_kind = kind;
+    token.escape_mode = escape_mode;
+    token.source_form = form;
+    token.prefix_length = prefix_length;
+    token.quote_count = quote_count;
+    return token;
 }
 
 static Token rune_literal(Scanner *scanner) {
@@ -791,15 +943,6 @@ static Token rune_literal(Scanner *scanner) {
         advance(scanner);
     }
     return error_token(scanner, "Unterminated rune literal");
-}
-
-// Raw string: r"..." (no escape processing, but ${} interpolation)
-static Token raw_string_with_quote(Scanner *scanner, char quote) {
-    bool has_interpolation = false;
-    if (!scan_string_body(scanner, quote, true, &has_interpolation)) {
-        return error_token(scanner, "Unterminated raw string");
-    }
-    return make_token(scanner, has_interpolation ? TK_RAW_TEMPLATE_STRING : TK_RAW_STRING);
 }
 
 // Backtick template strings are deprecated — use "" or '' with ${} instead
@@ -911,10 +1054,31 @@ Token xr_scanner_scan(Scanner *scanner) {
 
     char c = advance(scanner);
 
-    if (c == 'b' && peek(scanner) == '"')
-        return fixed_byte_string(scanner, TK_LITERAL_BYTE_STRING);
-    if (c == 'c' && peek(scanner) == '"')
-        return fixed_byte_string(scanner, TK_LITERAL_C_STRING);
+    if (c == 'r' && scanner->current + 1 < scanner->end &&
+        (scanner->current[0] == 'b' || scanner->current[0] == 'c') && scanner->current[1] == '"') {
+        scanner->current += 2;
+        return error_token(scanner, "raw fixed-byte prefixes are br/cr, not rb/rc");
+    }
+    if ((c == 'b' || c == 'c') && scanner->current + 1 < scanner->end &&
+        scanner->current[0] == 'r' && scanner->current[1] == '"') {
+        advance(scanner);
+        advance(scanner);
+        return quoted_literal(scanner, c == 'b' ? XR_QUOTED_BYTES : XR_QUOTED_C_BYTES,
+                              XR_LITERAL_RAW, 2);
+    }
+    if ((c == 'r' || c == 'b' || c == 'c') && peek(scanner) == '"') {
+        advance(scanner);
+        XrQuotedLiteralKind kind = XR_QUOTED_STRING;
+        if (c == 'b')
+            kind = XR_QUOTED_BYTES;
+        else if (c == 'c')
+            kind = XR_QUOTED_C_BYTES;
+        return quoted_literal(scanner, kind, c == 'r' ? XR_LITERAL_RAW : XR_LITERAL_ESCAPED, 1);
+    }
+    if (c == 'r' && peek(scanner) == '\'') {
+        advance(scanner);
+        return error_token(scanner, "single-quoted raw strings were removed; use r\"...\"");
+    }
 
     // Identifier or keyword (ASCII alpha, underscore, or UTF-8 lead byte)
     if (XR_IS_ALPHA(c) || c == '_' || (unsigned char) c >= 0x80) {
@@ -1052,7 +1216,7 @@ Token xr_scanner_scan(Scanner *scanner) {
             }
             return make_token(scanner, TK_QUESTION);
         case '"':
-            return string(scanner);
+            return quoted_literal(scanner, XR_QUOTED_STRING, XR_LITERAL_ESCAPED, 0);
         case '\'':
             return rune_literal(scanner);
         case '`':

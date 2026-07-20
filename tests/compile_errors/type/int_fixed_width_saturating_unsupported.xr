@@ -1,0 +1,9 @@
+// 050_fixed_width_saturating_unsupported.xr
+// Expected: Compile error - saturating*/`*Overflows` on fixed-width receivers
+// are rejected (R2-2 stopgap); uint64 is fixed-width too (the runtime binding
+// is signed-int64 and would invert the saturation/overflow semantics).
+fn main() {
+    var a: uint64 = 18446744073709551615
+    print(a.saturatingAdd(1))
+}
+main()

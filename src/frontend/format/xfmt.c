@@ -58,6 +58,15 @@ void xfmt_ensure_capacity(XrFmtContext *ctx, size_t additional) {
 }
 
 void xfmt_write_char(XrFmtContext *ctx, char c) {
+    if (ctx->block_literal_closed) {
+        if (c == ' ' || c == '\t')
+            return;
+        ctx->block_literal_closed = false;
+        if (c != '\n') {
+            xfmt_write_char(ctx, '\n');
+            xfmt_write_indent(ctx);
+        }
+    }
     xfmt_ensure_capacity(ctx, 1);
     ctx->output[ctx->length++] = c;
     ctx->output[ctx->length] = '\0';
@@ -76,6 +85,20 @@ void xfmt_write_str(XrFmtContext *ctx, const char *str) {
     size_t len = strlen(str);
     if (len == 0)
         return;
+    if (ctx->block_literal_closed) {
+        size_t skip = 0;
+        while (skip < len && (str[skip] == ' ' || str[skip] == '\t'))
+            skip++;
+        if (skip == len)
+            return;
+        ctx->block_literal_closed = false;
+        if (str[skip] != '\n') {
+            xfmt_write_char(ctx, '\n');
+            xfmt_write_indent(ctx);
+        }
+        str += skip;
+        len -= skip;
+    }
     xfmt_ensure_capacity(ctx, len);
     memcpy(ctx->output + ctx->length, str, len);
     ctx->length += len;
@@ -137,6 +160,7 @@ void xfmt_snapshot(XrFmtContext *ctx, XfmtSnapshot *snap) {
     snap->column = ctx->column;
     snap->line_start = ctx->line_start;
     snap->indent_level = ctx->indent_level;
+    snap->block_literal_closed = ctx->block_literal_closed;
 }
 
 void xfmt_rollback(XrFmtContext *ctx, const XfmtSnapshot *snap) {
@@ -145,6 +169,7 @@ void xfmt_rollback(XrFmtContext *ctx, const XfmtSnapshot *snap) {
     ctx->column = snap->column;
     ctx->line_start = snap->line_start;
     ctx->indent_level = snap->indent_level;
+    ctx->block_literal_closed = snap->block_literal_closed;
 }
 
 bool xfmt_fits_on_line(XrFmtContext *ctx, const XfmtSnapshot *snap) {
@@ -169,6 +194,7 @@ void xfmt_init(XrFmtContext *ctx, XrFmtConfig *config, XrVMRuntime *X) {
     ctx->indent_level = 0;
     ctx->line_start = 1;
     ctx->column = 0;
+    ctx->block_literal_closed = false;
     ctx->config = config ? config : &xfmt_default_config;
     ctx->X = X;
 }

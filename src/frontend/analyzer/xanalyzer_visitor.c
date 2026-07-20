@@ -732,6 +732,7 @@ static bool xa_out_da_expr_may_throw(XaInferContext *ctx, AstNode *node, int dep
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
+        case AST_FIXED_BYTES_LITERAL:
         case AST_LITERAL_RUNE:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:
@@ -4083,6 +4084,7 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_RUNE:
         case AST_LITERAL_STRING:
+        case AST_FIXED_BYTES_LITERAL:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:
@@ -4847,8 +4849,11 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_in_stmt(XaInferContext *c
                  collection_type->container.element_type)
             element_type = collection_type->container.element_type;
     }
-    if (!element_type && collection.as.fixed_array_val.count > 0)
+    if (!element_type && collection.as.fixed_array_val.count > 0 &&
+        !collection.as.fixed_array_val.is_byte_blob)
         element_type = xa_type_from_ct_value(ctx, &collection.as.fixed_array_val.elements[0]);
+    if (!element_type && collection.as.fixed_array_val.is_byte_blob)
+        element_type = xr_type_new_int_width(ctx->analyzer->isolate, XR_NATIVE_U8);
     if (!element_type)
         element_type = xr_type_new_unknown(ctx->analyzer->isolate);
 
@@ -4869,7 +4874,15 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_in_stmt(XaInferContext *c
     int count = collection.as.fixed_array_val.count;
     for (int i = 0; i < count; i++) {
         XrCtValue index_value = {.kind = XR_CT_INT, .as.int_val = i};
-        XrCtValue *element = &collection.as.fixed_array_val.elements[i];
+        XrCtValue byte_element = {0};
+        XrCtValue *element = NULL;
+        if (collection.as.fixed_array_val.is_byte_blob) {
+            byte_element.kind = XR_CT_INT;
+            byte_element.as.int_val = collection.as.fixed_array_val.byte_blob[i];
+            element = &byte_element;
+        } else {
+            element = &collection.as.fixed_array_val.elements[i];
+        }
         if (fi->is_keyvalue) {
             xa_set_comptime_for_in_symbol_value(ctx, item_sym, &index_value, item_type);
             xa_set_comptime_for_in_symbol_value(ctx, value_sym, element, value_type);
@@ -5136,6 +5149,13 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         case AST_LITERAL_STRING:
             result = xr_type_new_string(NULL);
             break;
+        case AST_FIXED_BYTES_LITERAL: {
+            XrType *byte_type = xr_type_new_int_width(ctx->analyzer->isolate, XR_NATIVE_U8);
+            size_t length = node->as.fixed_bytes_literal.payload_length +
+                            (node->as.fixed_bytes_literal.append_nul ? 1u : 0u);
+            result = xr_type_new_fixed_array(ctx->analyzer->isolate, byte_type, (int) length);
+            break;
+        }
         case AST_TEMPLATE_STRING:
             xa_freestanding_report_unavailable(ctx, node, "template string",
                                                "string interpolation allocates formatted text");

@@ -235,6 +235,8 @@ static bool xa_freestanding_top_const_root_fixed_array_allowed(const XrCtValue *
     if (xa_freestanding_top_const_root_string_fixed_array_allowed(value))
         return true;
     const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
+    if (array->is_byte_blob)
+        return array->count >= 0 && (array->count == 0 || array->byte_blob != NULL);
     if (array->count <= 0 || !array->elements)
         return false;
     for (int i = 0; i < array->count; i++) {
@@ -261,6 +263,8 @@ static bool xa_freestanding_top_const_aggregate_value_allowed(const XrCtValue *v
     switch (value->kind) {
         case XR_CT_FIXED_ARRAY: {
             const XrCtFixedArrayValue *array = &value->as.fixed_array_val;
+            if (array->is_byte_blob)
+                return array->count >= 0 && (array->count == 0 || array->byte_blob != NULL);
             if (array->count <= 0 || !array->elements)
                 return false;
             for (int i = 0; i < array->count; i++) {
@@ -1109,6 +1113,9 @@ static bool xa_lifecycle_lint_non_empty_collection_expr(XaInferContext *ctx, Ast
         case AST_LITERAL_STRING:
             return expr->as.literal.raw_value.string_val &&
                    expr->as.literal.raw_value.string_val[0] != '\0';
+        case AST_FIXED_BYTES_LITERAL:
+            return expr->as.fixed_bytes_literal.payload_length > 0 ||
+                   expr->as.fixed_bytes_literal.append_nul;
         default:
             return false;
     }
@@ -1538,6 +1545,7 @@ static void xa_thread_lint_scan_expr(XaThreadHandleLintState *states, AstNode *e
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
+        case AST_FIXED_BYTES_LITERAL:
         case AST_LITERAL_RUNE:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:
@@ -4335,6 +4343,7 @@ static void xa_os_resource_lint_scan_expr(XaOsResourceLintState *states, AstNode
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
+        case AST_FIXED_BYTES_LITERAL:
         case AST_LITERAL_RUNE:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:

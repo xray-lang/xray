@@ -47,6 +47,8 @@ typedef struct UnaryNode {
 // Literal node
 typedef struct LiteralNode {
     LiteralKind kind;
+    XrLiteralEscapeMode escape_mode;
+    XrLiteralSourceForm source_form;
     /* Integer literals keep their original 64-bit bit pattern so uint64
      * contexts can distinguish 0xffff_ffff_ffff_ffff from a parse-time
      * signed overflow. raw_value.int_val remains the signed view used by
@@ -66,6 +68,14 @@ typedef struct LiteralNode {
         } regex;
     } raw_value;
 } LiteralNode;
+
+typedef struct FixedBytesLiteralNode {
+    const uint8_t *payload;
+    size_t payload_length;
+    bool append_nul;
+    XrLiteralEscapeMode escape_mode;
+    XrLiteralSourceForm source_form;
+} FixedBytesLiteralNode;
 
 // Attribute node (test framework + FFI)
 typedef struct XrAttribute {

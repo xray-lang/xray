@@ -313,6 +313,16 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.literal = node->as.literal;
             n->as.literal.raw_value.string_val = clone_str(node->as.literal.raw_value.string_val);
             break;
+        case AST_FIXED_BYTES_LITERAL:
+            n->as.fixed_bytes_literal = node->as.fixed_bytes_literal;
+            if (node->as.fixed_bytes_literal.payload_length > 0) {
+                uint8_t *payload =
+                    (uint8_t *) xr_malloc(node->as.fixed_bytes_literal.payload_length);
+                memcpy(payload, node->as.fixed_bytes_literal.payload,
+                       node->as.fixed_bytes_literal.payload_length);
+                n->as.fixed_bytes_literal.payload = payload;
+            }
+            break;
         case AST_LITERAL_BIGINT:
             n->as.literal = node->as.literal;
             n->as.literal.raw_value.bigint_val = clone_str(node->as.literal.raw_value.bigint_val);

@@ -14,6 +14,8 @@
 
 #include "xparse_internal.h"
 #include "../../base/xchecks.h"
+#include "../../base/xutf8.h"
+#include "../lexer/xquoted_literal.h"
 
 /*
  * Validate an import specifier and report errors for disallowed patterns.
@@ -49,16 +51,24 @@ static bool validate_import_specifier(Parser *parser, const char *path) {
     return true;
 }
 
-/*
- * Extract path content from double-quoted string
- * Input: "path/to/module" (with quotes)
- * Output: path/to/module (without quotes)
- */
 static char *extract_quoted_path(Parser *parser) {
-    int len = parser->previous.length - 2;  // Remove two quotes
-    char *path = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
-    memcpy(path, parser->previous.start + 1, len);
-    path[len] = '\0';
+    XrQuotedPayload payload = {0};
+    const char *error = NULL;
+    bool decode_escapes = parser->previous.escape_mode == XR_LITERAL_ESCAPED;
+    if (!xr_quoted_payload_decode(&parser->previous, decode_escapes, &payload, &error)) {
+        xr_parser_error_at_previous(parser, error ? error : "invalid import path literal");
+        return NULL;
+    }
+    if (memchr(payload.bytes, '\0', payload.length) != NULL ||
+        !xr_utf8_validate((const char *) payload.bytes, payload.length)) {
+        xr_quoted_payload_free(&payload);
+        xr_parser_error_at_previous(parser, "import path must be valid UTF-8 without NUL bytes");
+        return NULL;
+    }
+    char *path = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
+    memcpy(path, payload.bytes, payload.length);
+    path[payload.length] = '\0';
+    xr_quoted_payload_free(&payload);
     return path;
 }
 
@@ -250,6 +260,8 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
         if (xr_parser_check(parser, TK_LITERAL_STRING)) {
             xr_parser_advance(parser);
             module_name = extract_quoted_path(parser);
+            if (!module_name)
+                return NULL;
             if (!validate_import_specifier(parser, module_name))
                 return NULL;
             is_quoted = true;
@@ -264,6 +276,8 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
     else if (xr_parser_check(parser, TK_LITERAL_STRING)) {
         xr_parser_advance(parser);
         module_name = extract_quoted_path(parser);
+        if (!module_name)
+            return NULL;
         if (!validate_import_specifier(parser, module_name))
             return NULL;
         is_quoted = true;
@@ -338,11 +352,9 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
             return NULL;
         }
 
-        // Extract path
-        size_t len = parser->previous.length - 2;  // Remove quotes
-        char *from_path = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
-        memcpy(from_path, parser->previous.start + 1, len);
-        from_path[len] = '\0';
+        char *from_path = extract_quoted_path(parser);
+        if (!from_path)
+            return NULL;
 
         // xr_ast_export_reexport strdups from_path; release our copy.
         AstNode *node =
@@ -416,10 +428,11 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
                 free_reexport_members(members, count);
                 return NULL;
             }
-            size_t path_len = parser->previous.length - 2;
-            char *from_path = (char *) ast_alloc(parser->compiler_session, (size_t) path_len + 1);
-            memcpy(from_path, parser->previous.start + 1, path_len);
-            from_path[path_len] = '\0';
+            char *from_path = extract_quoted_path(parser);
+            if (!from_path) {
+                free_reexport_members(members, count);
+                return NULL;
+            }
             AstNode *node = xr_ast_export_reexport(parser->compiler_session, from_path, members,
                                                    count, false, line);
             return node;

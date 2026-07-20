@@ -15,6 +15,7 @@ xray demos/01-basics/hello.xr
 | File | Topics |
 |------|--------|
 | [hello.xr](01-basics/hello.xr) | print, string interpolation |
+| [quoted_literals.xr](01-basics/quoted_literals.xr) | inline/raw strings, variable-quote blocks, `b/br/c/cr` fixed bytes |
 | [variables.xr](01-basics/variables.xr) | var, const, types, nullable, destructuring |
 | [functions.xr](01-basics/functions.xr) | fn, arrow functions, default params, rest params, recursion |
 | [tuples.xr](01-basics/tuples.xr) | tuple literals, `.N` access, destructure, match patterns, spread, generics |

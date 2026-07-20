@@ -220,6 +220,26 @@ typedef enum {
     TK_ERROR  // error
 } XrTokenType;
 
+// Orthogonal facts shared by every double-quoted literal family. Token type
+// carries the semantic value lane; these fields carry spelling decisions that
+// the parser and formatter must preserve.
+typedef enum {
+    XR_QUOTED_NONE = 0,
+    XR_QUOTED_STRING,
+    XR_QUOTED_BYTES,
+    XR_QUOTED_C_BYTES,
+} XrQuotedLiteralKind;
+
+typedef enum {
+    XR_LITERAL_ESCAPED = 0,
+    XR_LITERAL_RAW,
+} XrLiteralEscapeMode;
+
+typedef enum {
+    XR_LITERAL_INLINE = 0,
+    XR_LITERAL_BLOCK,
+} XrLiteralSourceForm;
+
 // Token structure
 //
 // Position contract (L-02):
@@ -241,6 +261,11 @@ typedef struct Token {
     const char *error_message;  // Diagnostic text for TK_ERROR tokens; NULL otherwise.
     XrTrivia *leading_trivia;   // Comments before this token
     XrTrivia *trailing_trivia;  // Inline comment after this token (same line)
+    XrQuotedLiteralKind quoted_kind;
+    XrLiteralEscapeMode escape_mode;
+    XrLiteralSourceForm source_form;
+    int prefix_length;
+    int quote_count;
 } Token;
 
 // Scanner state

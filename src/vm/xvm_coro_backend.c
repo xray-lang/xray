@@ -493,6 +493,11 @@ static bool vm_entry_copy_args(XrCoroutine *coro, XrVMRuntime *X, XrVmCoroState 
     for (int i = 0; i < arg_count; i++) {
         uint8_t mode = arg_modes ? arg_modes[i] : XR_TRANSFER_SHARE;
         dst[i] = vm_entry_transfer_arg(coro, X, args[i], mode, copy_args);
+        /* A pointer arg can only become null when the deep copy failed
+         * (depth bound R2-6 / OOM). Fail the spawn instead of handing the
+         * child a silent null. */
+        if (XR_IS_NULL(dst[i]) && XR_IS_PTR(args[i]))
+            return false;
     }
     return true;
 }

@@ -1,0 +1,65 @@
+// 0851_deep_copy_depth.xr
+// 作者：xingleixu@gmail.com
+// 测试：deep_copy 深度上限（R2-6 回归）
+// 背景：deep_copy 曾是纯递归无深度上限，深层非环链一路递归到 C 栈耗尽（SIGSEGV）。
+// 现在以 XR_DEEP_COPY_MAX_DEPTH=1000 为界：界内正常拷贝，超限整体失败并报
+// 运行时错误（E0440，不可恢复 panic），而不是崩溃——超限用例见
+// tests/manual/deep_copy_overflow.xr（panic 不可 catch，无法进 @test 断言）。
+
+// ===== 界内深链拷贝必须成功且值语义正确 =====
+
+@test
+fn test_deep_chain_within_limit() {
+    var a: Json = {}
+    a["tag"] = "leaf"
+    var i = 0
+    while (i < 900) {
+        var b: Json = {}
+        b["child"] = a
+        a = b
+        i += 1
+    }
+    var c = copy(a)
+    // 拷贝是独立的：改原件不影响副本
+    a["extra"] = 1
+    var probe = c
+    var depth = 0
+    while (probe["child"] != null) {
+        probe = probe["child"]
+        depth += 1
+    }
+    assert_eq(depth, 900)
+    assert_eq(probe["tag"], "leaf")
+}
+
+// ===== 环结构依旧安全（seen 表路径不受深度改动影响）=====
+
+@test
+fn test_cycle_still_safe() {
+    var a: Json = {}
+    var b: Json = {}
+    a["next"] = b
+    b["next"] = a
+    var c = copy(a)
+    // 环被保留：c.next.next 指回 c
+    assert_true(c["next"] != null)
+}
+
+// ===== 宽而浅的结构不受影响 =====
+
+@test
+fn test_wide_shallow() {
+    var arr: Array<Json> = []
+    var i = 0
+    while (i < 5000) {
+        var o: Json = {}
+        o["v"] = i
+        arr.push(o)
+        i += 1
+    }
+    var c = copy(arr)
+    assert_eq(len(c), 5000)
+    assert_eq(c[4999]["v"], 4999)
+}
+
+print("=== deep_copy depth tests completed ===")

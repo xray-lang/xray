@@ -71,5 +71,4 @@ test_primitive_param()
 test_const_array_param()
 test_multiple_params()
 test_string_param()
-print("
-🎉 测试3全部通过：协程参数隔离正确！")
+print("\n🎉 测试3全部通过：协程参数隔离正确！")

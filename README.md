@@ -127,6 +127,8 @@ print(greet(user.name))
 
 The range operator `a..b` excludes `b`; `a..=b` includes it. Collection literals use `[value]` for arrays, `#[value]` for sets, and `#{ key: value }` for maps. A record literal such as `{ "name": "alice", "score": 95 }` is checked against its structural type.
 
+Quoted literals use one quote for single-line inline text, two quotes for an empty payload, and three or more quotes for blocks whose opener is followed immediately by a newline and whose exact-count closer occupies its own line. Use no prefix / `r` for strings, `b/br` for fixed bytes, and `c/cr` for fixed C bytes with an appended NUL; `r/br/cr` preserve backslashes.
+
 ### Concurrency and data transfer
 
 Heap-backed execution-local values do not cross a coroutine or channel boundary implicitly. Use `copy(value)` for an independent graph, `move value` to transfer an owned source, or `shared` for shared identity. Scalars, strings, channels, tasks, atomics, and already-shared identities can cross directly.

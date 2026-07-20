@@ -244,5 +244,4 @@ test_coro_error_capture()
 test_coro_named_batch()
 test_coro_chain()
 test_execution_trace()
-print("
-🎉 测试11全部通过：协程监控与调试正确！")
+print("\n🎉 测试11全部通过：协程监控与调试正确！")

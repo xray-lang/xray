@@ -144,9 +144,10 @@ static bool cg_type_is_byte_slice(const XrType *type) {
     return xr_type_is_u8_span(type);
 }
 
-static bool cg_fixed_array_type_info(const XrType *type, uint8_t *native_out, uint16_t *count_out) {
+static bool cg_fixed_array_type_info(const XrType *type, uint8_t *native_out, uint32_t *count_out) {
     if (!type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
-        type->fixed_array.length <= 0 || type->fixed_array.length > UINT16_MAX)
+        type->fixed_array.length < 0 ||
+        (uint64_t) type->fixed_array.length > XR_ARRAY_REF_MAX_COUNT)
         return false;
     XrType *elem = type->fixed_array.element_type;
     int native = xr_type_kind_to_native(elem->kind, elem->native_width);
@@ -157,7 +158,7 @@ static bool cg_fixed_array_type_info(const XrType *type, uint8_t *native_out, ui
     if (native_out)
         *native_out = (uint8_t) native;
     if (count_out)
-        *count_out = (uint16_t) type->fixed_array.length;
+        *count_out = (uint32_t) type->fixed_array.length;
     return true;
 }
 
@@ -677,7 +678,7 @@ static void emit_value_as_rep(FILE *out, const XiValue *v, XrRep target_rep) {
     if (target_rep == XR_REP_TAGGED && (from_rep == XR_REP_PTR || from_rep == XR_REP_RAWPTR) && v &&
         v->type && v->type->kind == XR_KIND_FIXED_ARRAY) {
         uint8_t native = XR_NATIVE_VALUE;
-        uint16_t count = 0;
+        uint32_t count = 0;
         if (cg_fixed_array_type_info(v->type, &native, &count)) {
             fprintf(out, "xr_array_ref((void *)(");
             emit_vref(out, v);
@@ -742,7 +743,7 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
     if (target_rep == XR_REP_TAGGED && (from_rep == XR_REP_PTR || from_rep == XR_REP_RAWPTR) && v &&
         v->type && v->type->kind == XR_KIND_FIXED_ARRAY) {
         uint8_t native = XR_NATIVE_VALUE;
-        uint16_t count = 0;
+        uint32_t count = 0;
         if (cg_fixed_array_type_info(v->type, &native, &count)) {
             fprintf(out, "xr_array_ref((void *)(");
             emit_vref(out, v);

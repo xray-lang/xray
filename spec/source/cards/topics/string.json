@@ -1,7 +1,7 @@
 {
   "id": "string",
   "title": "String",
-  "spec_anchor": "#315-字符串插值",
+  "spec_anchor": "#165-字符串字面量",
   "aliases": [
     "strings",
     "string_methods",
@@ -9,6 +9,15 @@
     "template"
   ],
   "sections": [
+    {
+      "heading": "Quoted literals",
+      "before_text": "Use no prefix / `r` for valid UTF-8 strings, `b/br` for `[byte; L]`, and `c/cr` for `[byte; L+1]` with an appended NUL. `r/br/cr` preserve backslashes; interpolation remains enabled only for no prefix / `r`.",
+      "code": [
+        "r\"\"\"\n<div class=\"card\">\n  ${title}\n</div>\n\"\"\"",
+        "br\"C:\\\\raw\\\\path\"\ncr\"asset-name\""
+      ],
+      "after_text": "One quote is single-line inline form, two quotes encode an empty payload, and three or more quotes form a block. A block opener is followed immediately by a newline; its exact-count closer occupies its own line. Increase the quote count when a quote-only payload line would collide."
+    },
     {
       "heading": "String interpolation",
       "fences": [

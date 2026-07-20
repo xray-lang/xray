@@ -974,6 +974,14 @@ static void xicgen_exact_bit(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
             fprintf(out, ")");
         }
         fprintf(out, ")))");
+    } else if (v->op == XI_BIT_MUL_HIGH && v->nargs == 2) {
+        /* Constant native_type lets clang fold the width switch and emit a
+         * single umulh/smulh (AArch64) or mul/imul high word (x86-64). */
+        fprintf(out, "xr_bits_exact_mul_high(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ", %uu)", (unsigned) native_type);
     } else {
         if (ctx)
             ctx->error = true;
@@ -1442,6 +1450,40 @@ static bool xicgen_emit_vec_native(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
             fprintf(out, "; _r; })");
             return true;
 
+        case XI_VEC_UNZIP:
+            /* Two-input 32-bit deinterleave. NEON maps directly to uzp1/uzp2;
+             * x86 falls back to the scalar lane expansion. */
+            if (v->nargs != 2 || native_type != XR_NATIVE_U32 || lanes != 4 || !neon ||
+                !xicgen_vec_result_aggregate(ctx, v, &result_type))
+                return false;
+            fprintf(out, "({ %s _r; uint32x4_t _a = vld1q_u32((const uint32_t *)", result_type);
+            xicgen_emit_vec_lanes(out, v->args[0]);
+            fprintf(out, "), _b = vld1q_u32((const uint32_t *)");
+            xicgen_emit_vec_lanes(out, v->args[1]);
+            fprintf(out, "); uint32x4_t _v = %s(_a, _b); ",
+                    (v->aux_int & XI_VEC_SHAPE_ODD_LANES) ? "vuzp2q_u32" : "vuzp1q_u32");
+            xicgen_emit_vec_native_store(out, "_r._lanes", XR_NATIVE_U32, true, false, "_v");
+            fprintf(out, "; _r; })");
+            return true;
+
+        case XI_VEC_WIDEN_MUL_HALF:
+            /* Widening multiply of a contiguous 32-bit half. NEON maps to
+             * umull (low) / umull2 (high); x86 falls back to scalar. */
+            if (v->nargs != 2 || native_type != XR_NATIVE_U64 || lanes != 2 || !neon ||
+                !xicgen_vec_result_aggregate(ctx, v, &result_type))
+                return false;
+            fprintf(out, "({ %s _r; uint32x4_t _a = vld1q_u32((const uint32_t *)", result_type);
+            xicgen_emit_vec_lanes(out, v->args[0]);
+            fprintf(out, "), _b = vld1q_u32((const uint32_t *)");
+            xicgen_emit_vec_lanes(out, v->args[1]);
+            fprintf(out, "); uint64x2_t _v = %s; ",
+                    (v->aux_int & XI_VEC_SHAPE_ODD_LANES)
+                        ? "vmull_u32(vget_high_u32(_a), vget_high_u32(_b))"
+                        : "vmull_u32(vget_low_u32(_a), vget_low_u32(_b))");
+            xicgen_emit_vec_native_store(out, "_r._lanes", XR_NATIVE_U64, true, false, "_v");
+            fprintf(out, "; _r; })");
+            return true;
+
         case XI_VEC_REDUCE_ADD:
             if (v->nargs != 1 || native_type != XR_NATIVE_U64)
                 return false;
@@ -1670,6 +1712,47 @@ static void xicgen_vec(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
                 fprintf(out, "[%uu]; ", src);
             }
             fprintf(out, "_r; })");
+            return;
+
+        case XI_VEC_UNZIP:
+            if (v->nargs != 2 || native_type != XR_NATIVE_U32 || lanes != 4 ||
+                !xicgen_vec_result_aggregate(ctx, v, &result_type)) {
+                xicgen_vec_error(ctx, out, v, "unzip requires u32x4 inputs");
+                return;
+            }
+            {
+                unsigned odd = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 1u : 0u;
+                fprintf(out, "({ %s _r; ", result_type);
+                for (uint8_t lane = 0; lane < 4; lane++) {
+                    unsigned which = lane < 2 ? 0u : 1u;
+                    unsigned src = (lane % 2u) * 2u + odd;
+                    fprintf(out, "_r._lanes[%uu] = ", (unsigned) lane);
+                    xicgen_emit_vec_lanes(out, v->args[which]);
+                    fprintf(out, "[%uu]; ", src);
+                }
+                fprintf(out, "_r; })");
+            }
+            return;
+
+        case XI_VEC_WIDEN_MUL_HALF:
+            if (v->nargs != 2 || native_type != XR_NATIVE_U64 || lanes != 2 ||
+                !xicgen_vec_result_aggregate(ctx, v, &result_type)) {
+                xicgen_vec_error(ctx, out, v, "widen-mul-half requires u32x4 -> u64x2");
+                return;
+            }
+            {
+                unsigned base = (v->aux_int & XI_VEC_SHAPE_ODD_LANES) != 0 ? 2u : 0u;
+                fprintf(out, "({ %s _r; ", result_type);
+                for (uint8_t lane = 0; lane < 2; lane++) {
+                    unsigned src = base + lane;
+                    fprintf(out, "_r._lanes[%uu] = (uint64_t)", (unsigned) lane);
+                    xicgen_emit_vec_lanes(out, v->args[0]);
+                    fprintf(out, "[%uu] * (uint64_t)", src);
+                    xicgen_emit_vec_lanes(out, v->args[1]);
+                    fprintf(out, "[%uu]; ", src);
+                }
+                fprintf(out, "_r; })");
+            }
             return;
 
         case XI_VEC_REDUCE_ADD:
@@ -6163,6 +6246,17 @@ static bool xicgen_emit_planned_vtable_method(XiCgenCtx *ctx, FILE *out, const X
             emit_codegen_abort_expr(out);
             return true;
         }
+        /* R2-3: classes whose constructors fall back to the map-backed
+         * instance form (xicgen_emit_map_instance_alloc) carry only a
+         * class-name string — no registered type id — so the exact-tid probe
+         * alone can never match them and the dispatch aborted on every
+         * polymorphic call. Match the map form by exact class name too, the
+         * same dual-form identity rule the user-hash machinery already uses
+         * (xrt_user_hash_eq_exact). Native-form instances keep matching via
+         * the tid probe. */
+        fprintf(out, ") || xrt_map_backed_class_exact(_xr_vt_recv_%u, ", v->id);
+        xicgen_emit_c_string_literal(out,
+                                     target_class->class_name ? target_class->class_name : "?");
         fprintf(out, ")) { ");
         if (void_like) {
             fprintf(out, "(void)(");
@@ -8637,10 +8731,10 @@ static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 }
 
 static bool xicgen_fixed_array_new_info(const XiValue *v, uint8_t *native_out,
-                                        uint16_t *count_out) {
+                                        uint32_t *count_out) {
     if (!v || !v->type || v->type->kind != XR_KIND_FIXED_ARRAY ||
-        !v->type->fixed_array.element_type || v->type->fixed_array.length <= 0 ||
-        v->type->fixed_array.length > UINT16_MAX)
+        !v->type->fixed_array.element_type || v->type->fixed_array.length < 0 ||
+        (uint64_t) v->type->fixed_array.length > XR_ARRAY_REF_MAX_COUNT)
         return false;
     XrType *elem = v->type->fixed_array.element_type;
     int native = xr_type_kind_to_native(elem->kind, elem->native_width);
@@ -8649,7 +8743,7 @@ static bool xicgen_fixed_array_new_info(const XiValue *v, uint8_t *native_out,
     if (native_out)
         *native_out = (uint8_t) native;
     if (count_out)
-        *count_out = (uint16_t) v->type->fixed_array.length;
+        *count_out = (uint32_t) v->type->fixed_array.length;
     return true;
 }
 
@@ -8659,12 +8753,26 @@ static void xicgen_fixed_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) f;
     (void) prefix;
     uint8_t native = 0;
-    uint16_t count = 0;
+    uint32_t count = 0;
     if (!xicgen_fixed_array_new_info(v, &native, &count)) {
         emit_codegen_abort_expr(out);
         return;
     }
     fprintf(out, "xr_array_ref(_fa%u, %u, %u)", v->id, (unsigned) native, (unsigned) count);
+}
+
+static void xicgen_fixed_bytes_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                     const char *prefix) {
+    if (!v || v->aux_int < 0 || (uint64_t) v->aux_int > XR_ARRAY_REF_MAX_COUNT ||
+        (v->aux_int > 0 && !v->aux) || !v->type || v->type->kind != XR_KIND_FIXED_ARRAY ||
+        v->type->fixed_array.length != v->aux_int || !v->type->fixed_array.element_type ||
+        xr_type_kind_to_native(v->type->fixed_array.element_type->kind,
+                               v->type->fixed_array.element_type->native_width) != XR_NATIVE_U8) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    xicgen_fixed_array_new(ctx, out, f, v, prefix);
 }
 
 static void xicgen_template_shift(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -11324,17 +11432,20 @@ static void xicgen_static_bytes_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
         return;
     }
 
-    const uint8_t *bytes = (const uint8_t *) v->aux;
+    const XaotFixedBytesPlan *plan = xaot_bundle_find_fixed_bytes_plan(cg_ctx_aot_bundle(ctx), v);
+    const XaotFixedBytesBlob *blob =
+        plan ? xaot_bundle_find_fixed_bytes_blob(cg_ctx_aot_bundle(ctx), plan->blob_id) : NULL;
+    if (!plan || !blob || plan->action != XAOT_FIXED_BYTES_READONLY_PTR ||
+        plan->length != (uint32_t) v->aux_int || blob->length != plan->length) {
+        fprintf(stderr, "[xi_cgen] ERROR: static byte pointer has no verified blob plan\n");
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_RAWPTR, cg_value_plan_storage_rep(ctx, v));
-    fprintf(out, "(void *)((const uint8_t *)(");
-    if (v->aux_int == 0) {
-        fprintf(out, "\"\"");
-    } else {
-        for (int64_t i = 0; i < v->aux_int; i++)
-            fprintf(out, "\"\\x%02x\"", (unsigned) bytes[i]);
-    }
-    fprintf(out, "))");
+    fprintf(out, "(void *)((const uint8_t *)_xbytes_%u)", plan->blob_id);
     emit_conversion_suffix(out, conv_suffix);
 }
 

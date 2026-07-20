@@ -14,6 +14,7 @@
 #include "../base/xmemstream.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../ir/xi_op_name.h"
+#include "../runtime/value/xvalue.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
@@ -4202,6 +4203,9 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     }
     xr_free(bundle->extern_decls);
     xr_free(bundle->value_plans);
+    xr_free(bundle->fixed_bytes_plans);
+    xr_free(bundle->fixed_bytes_blobs);
+    xr_free(bundle->fixed_bytes_blob_index);
     xr_free(bundle->container_plans);
     for (i = 0; i < bundle->nenum_plans; i++)
         xaot_enum_plan_free(&bundle->enum_plans[i]);
@@ -4219,6 +4223,7 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xaot_bundle_clear_global_lowered_plans(bundle);
     xr_free(bundle->boundary_steps);
     xaot_ptr_index_free(&bundle->value_index);
+    xaot_ptr_index_free(&bundle->fixed_bytes_index);
     xaot_ptr_index_free(&bundle->func_index);
     xaot_ptr_index_free(&bundle->array_storage_index);
     xaot_ptr_index_free(&bundle->array_cache_index);
@@ -5189,6 +5194,138 @@ XR_FUNC XaotValuePlan *xaot_bundle_find_value_plan_mut(XaotBundle *bundle, const
     if (xaot_ptr_index_get(&bundle->value_index, value, &idx) && idx < bundle->nvalue_plans)
         return &bundle->value_plans[idx];
     return NULL;
+}
+
+static uint64_t xaot_fixed_bytes_hash(const uint8_t *data, uint32_t length) {
+    uint64_t hash = UINT64_C(1469598103934665603);
+    for (uint32_t i = 0; i < length; i++) {
+        hash ^= data[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    hash ^= length;
+    hash *= UINT64_C(1099511628211);
+    return hash;
+}
+
+XR_FUNC bool xaot_fixed_bytes_plan_derive(const XiFunc *func, const XiValue *value,
+                                          XaotFixedBytesPlan *out) {
+    if (!func || !value || !out || value->nargs != 0 || value->aux_int < 0 ||
+        (uint64_t) value->aux_int > UINT32_MAX || !value->aux)
+        return false;
+
+    memset(out, 0, sizeof(*out));
+    out->func = func;
+    out->value = value;
+    out->length = (uint32_t) value->aux_int;
+    out->evidence = XAOT_FIXED_BYTES_EV_EXACT_OP | XAOT_FIXED_BYTES_EV_EXACT_LENGTH |
+                    XAOT_FIXED_BYTES_EV_BYTE_LAYOUT | XAOT_FIXED_BYTES_EV_CANONICAL_BLOB;
+
+    if (value->op == XI_FIXED_BYTES_CONST) {
+        const XrType *type = value->type;
+        if (!type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
+            type->fixed_array.length != value->aux_int ||
+            (uint64_t) value->aux_int > XR_ARRAY_REF_MAX_COUNT ||
+            xr_type_kind_to_native(type->fixed_array.element_type->kind,
+                                   type->fixed_array.element_type->native_width) != XR_NATIVE_U8)
+            return false;
+        out->action = XAOT_FIXED_BYTES_VALUE_COPY;
+        return true;
+    }
+    if (value->op == XI_STATIC_BYTES_PTR && value->type && XR_TYPE_IS_POINTER(value->type)) {
+        out->action = XAOT_FIXED_BYTES_READONLY_PTR;
+        return true;
+    }
+    return false;
+}
+
+static bool xaot_fixed_bytes_blob_index_rehash(XaotBundle *bundle, uint32_t new_cap) {
+    uint32_t *index = (uint32_t *) xr_calloc(new_cap, sizeof(uint32_t));
+    if (!index)
+        return false;
+    uint32_t mask = new_cap - 1;
+    for (uint32_t i = 0; i < bundle->nfixed_bytes_blobs; i++) {
+        uint32_t slot = (uint32_t) bundle->fixed_bytes_blobs[i].hash & mask;
+        while (index[slot] != 0)
+            slot = (slot + 1) & mask;
+        index[slot] = i + 1;
+    }
+    xr_free(bundle->fixed_bytes_blob_index);
+    bundle->fixed_bytes_blob_index = index;
+    bundle->fixed_bytes_blob_index_cap = new_cap;
+    return true;
+}
+
+static uint32_t xaot_bundle_intern_fixed_bytes_blob(XaotBundle *bundle, const uint8_t *data,
+                                                    uint32_t length) {
+    uint64_t hash = xaot_fixed_bytes_hash(data, length);
+    if (bundle->fixed_bytes_blob_index_cap == 0 && !xaot_fixed_bytes_blob_index_rehash(bundle, 16))
+        return 0;
+    if ((bundle->nfixed_bytes_blobs + 1) * 4 >= bundle->fixed_bytes_blob_index_cap * 3 &&
+        !xaot_fixed_bytes_blob_index_rehash(bundle, bundle->fixed_bytes_blob_index_cap * 2))
+        return 0;
+
+    uint32_t mask = bundle->fixed_bytes_blob_index_cap - 1;
+    uint32_t slot = (uint32_t) hash & mask;
+    while (bundle->fixed_bytes_blob_index[slot] != 0) {
+        uint32_t blob_id = bundle->fixed_bytes_blob_index[slot];
+        const XaotFixedBytesBlob *blob = &bundle->fixed_bytes_blobs[blob_id - 1];
+        if (blob->hash == hash && blob->length == length &&
+            (length == 0 || memcmp(blob->data, data, length) == 0)) {
+            bundle->stats.fixed_bytes_dedup_hits++;
+            return blob_id;
+        }
+        slot = (slot + 1) & mask;
+    }
+
+    if (!reserve_plan_array((void **) &bundle->fixed_bytes_blobs, &bundle->fixed_bytes_blob_cap,
+                            bundle->nfixed_bytes_blobs + 1, sizeof(XaotFixedBytesBlob), 16))
+        return 0;
+    XaotFixedBytesBlob *blob = &bundle->fixed_bytes_blobs[bundle->nfixed_bytes_blobs];
+    blob->data = data;
+    blob->length = length;
+    blob->hash = hash;
+    uint32_t blob_id = ++bundle->nfixed_bytes_blobs;
+    bundle->fixed_bytes_blob_index[slot] = blob_id;
+    bundle->stats.fixed_bytes_blobs++;
+    return blob_id;
+}
+
+XR_FUNC XaotFixedBytesPlan *xaot_bundle_add_fixed_bytes_plan(XaotBundle *bundle, const XiFunc *func,
+                                                             const XiValue *value) {
+    XaotFixedBytesPlan derived;
+    if (!bundle || !xaot_fixed_bytes_plan_derive(func, value, &derived))
+        return NULL;
+    uint32_t blob_id =
+        xaot_bundle_intern_fixed_bytes_blob(bundle, (const uint8_t *) value->aux, derived.length);
+    if (blob_id == 0)
+        return NULL;
+    if (!reserve_plan_array((void **) &bundle->fixed_bytes_plans, &bundle->fixed_bytes_plan_cap,
+                            bundle->nfixed_bytes_plans + 1, sizeof(XaotFixedBytesPlan), 16))
+        return NULL;
+    XaotFixedBytesPlan *plan = &bundle->fixed_bytes_plans[bundle->nfixed_bytes_plans];
+    *plan = derived;
+    plan->blob_id = blob_id;
+    if (!xaot_ptr_index_put(&bundle->fixed_bytes_index, value, bundle->nfixed_bytes_plans))
+        return NULL;
+    bundle->nfixed_bytes_plans++;
+    bundle->stats.fixed_bytes_values++;
+    return plan;
+}
+
+XR_FUNC const XaotFixedBytesPlan *xaot_bundle_find_fixed_bytes_plan(const XaotBundle *bundle,
+                                                                    const XiValue *value) {
+    uint32_t idx;
+    if (bundle && value && xaot_ptr_index_get(&bundle->fixed_bytes_index, value, &idx) &&
+        idx < bundle->nfixed_bytes_plans)
+        return &bundle->fixed_bytes_plans[idx];
+    return NULL;
+}
+
+XR_FUNC const XaotFixedBytesBlob *xaot_bundle_find_fixed_bytes_blob(const XaotBundle *bundle,
+                                                                    uint32_t blob_id) {
+    if (!bundle || blob_id == 0 || blob_id > bundle->nfixed_bytes_blobs)
+        return NULL;
+    return &bundle->fixed_bytes_blobs[blob_id - 1];
 }
 
 XR_FUNC XaotContainerTypePlan *xaot_bundle_add_container_plan(XaotBundle *bundle,
@@ -8051,6 +8188,22 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
         }
     }
 
+    for (uint32_t bi = 0; bi < bundle->nfixed_bytes_blobs; bi++) {
+        const XaotFixedBytesBlob *blob = &bundle->fixed_bytes_blobs[bi];
+        fprintf(out, "fixed-bytes-blob %u id=%u length=%u hash=%016" PRIx64 "\n", bi, bi + 1,
+                blob->length, blob->hash);
+    }
+    for (uint32_t pi = 0; pi < bundle->nfixed_bytes_plans; pi++) {
+        const XaotFixedBytesPlan *plan = &bundle->fixed_bytes_plans[pi];
+        fprintf(out,
+                "fixed-bytes-plan %u func=%s value=v%u blob=%u length=%u action=%s "
+                "evidence=0x%x\n",
+                pi, safe_str(plan->func ? plan->func->name : NULL),
+                plan->value ? plan->value->id : 0, plan->blob_id, plan->length,
+                plan->action == XAOT_FIXED_BYTES_VALUE_COPY ? "value-copy" : "readonly-ptr",
+                plan->evidence);
+    }
+
     for (uint32_t ci = 0; ci < bundle->ncontainer_plans; ci++) {
         const XaotContainerPlan *cp = &bundle->container_plans[ci].plan;
         fprintf(out, "container %u kind=%s flags=0x%x", ci, xaot_container_kind_name(cp->kind),
@@ -8272,6 +8425,9 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
             bundle->stats.array_storage_mutable);
     fprintf(out, "array-cache-stats total=%u read=%u mutable=%u\n", bundle->stats.array_cache_total,
             bundle->stats.array_cache_read, bundle->stats.array_cache_mutable);
+    fprintf(out, "fixed-bytes-stats values=%u blobs=%u dedup-hits=%u\n",
+            bundle->stats.fixed_bytes_values, bundle->stats.fixed_bytes_blobs,
+            bundle->stats.fixed_bytes_dedup_hits);
 
     if (ferror(out)) {
         (void) xr_close_memstream(out, &buf, &bufsz);

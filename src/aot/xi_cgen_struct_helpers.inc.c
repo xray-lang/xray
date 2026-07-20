@@ -2619,7 +2619,7 @@ static bool cg_fixed_array_const_index(const XiValue *v, int64_t *out) {
 
 static bool cg_fixed_array_control_proves_index_lt_count(const XiValue *control,
                                                          const XiValue *index,
-                                                         uint16_t elem_count) {
+                                                         uint32_t elem_count) {
     const XiValue *v = cg_unwrap_identity_value(control);
     int64_t bound = 0;
     return v && v->op == XI_LT && v->nargs >= 2 && cg_array_same_value(v->args[0], index) &&
@@ -2627,7 +2627,7 @@ static bool cg_fixed_array_control_proves_index_lt_count(const XiValue *control,
            bound <= (int64_t) elem_count;
 }
 
-static bool cg_fixed_array_index_bounds_proven(const XiValue *access, uint16_t elem_count) {
+static bool cg_fixed_array_index_bounds_proven(const XiValue *access, uint32_t elem_count) {
     if (!access || access->nargs < 2)
         return false;
     int64_t idx = 0;

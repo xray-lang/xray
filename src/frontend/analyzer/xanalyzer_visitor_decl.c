@@ -48,6 +48,7 @@
 #include "../../base/xchecks.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../runtime/value/xstruct_layout.h"
+#include <limits.h>
 
 static int xa_fixed_array_elem_native_lane(XrType *elem) {
     if (!elem || elem->is_nullable)
@@ -2487,6 +2488,15 @@ static XrType *xa_infer_return_record_type(XrVMRuntime *X, FunctionDeclNode *fn)
             case AST_LITERAL_STRING:
                 types[idx] = xr_type_new_string(NULL);
                 break;
+            case AST_FIXED_BYTES_LITERAL: {
+                size_t length = val->as.fixed_bytes_literal.payload_length +
+                                (val->as.fixed_bytes_literal.append_nul ? 1u : 0u);
+                if (length > INT_MAX)
+                    return NULL;
+                XrType *byte_type = xr_type_new_int_width(X, XR_NATIVE_U8);
+                types[idx] = xr_type_new_fixed_array(X, byte_type, (int) length);
+                break;
+            }
             case AST_LITERAL_TRUE:
             case AST_LITERAL_FALSE:
                 types[idx] = xr_type_new_bool(NULL);

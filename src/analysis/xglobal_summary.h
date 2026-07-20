@@ -59,7 +59,9 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 29,
+    /* 31: sequence-element class tracking feeds for-in/index receivers into
+     * callsite summaries (R2-3) — plans differ for identical sources. */
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 31,
 };
 
 typedef enum XgBuildProfile {

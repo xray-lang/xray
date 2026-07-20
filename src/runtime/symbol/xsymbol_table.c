@@ -301,6 +301,7 @@ static const char *xr_builtin_symbol_names[] = {
     "mutPtr",
     "asMutBytes",
     "borrowPtr",
+    "mulHigh",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \
@@ -350,6 +351,7 @@ XrSymbolTable *xr_symbol_table_create(void) {
     }
     memset(table->id_to_name, 0, sizeof(const char *) * (size_t) table->capacity);
 
+    xr_rwlock_init(&table->lock);
     return table;
 }
 
@@ -357,6 +359,7 @@ void xr_symbol_table_destroy(XrSymbolTable *table) {
     if (!table)
         return;
 
+    // Teardown runs after all workers joined — no lock needed for the walk.
     // Builtin names are NOT freed (they point to string literals).
     // Only free user-registered symbol names.
     for (int i = table->builtin_count; i < table->count; i++) {
@@ -365,6 +368,7 @@ void xr_symbol_table_destroy(XrSymbolTable *table) {
     }
     xr_free(table->id_to_name);
     xr_hashmap_free(table->name_to_id);
+    xr_rwlock_destroy(&table->lock);
     xr_free(table);
 }
 
@@ -375,13 +379,16 @@ bool xr_symbol_table_init_builtins(XrSymbolTable *table) {
     XR_CHECK(BUILTIN_NAME_COUNT == SYMBOL_BUILTIN_COUNT - 1,
              "symbol table: builtin name count mismatch");
 
+    xr_rwlock_wrlock(&table->lock);
     for (int i = 0; i < BUILTIN_NAME_COUNT; i++) {
         const char *name = xr_builtin_symbol_names[i];
         SymbolId expected_id = i + 1;
 
         // Store directly — no strdup needed for string literals
-        if (!xr_hashmap_set(table->name_to_id, name, (void *) (intptr_t) expected_id))
+        if (!xr_hashmap_set(table->name_to_id, name, (void *) (intptr_t) expected_id)) {
+            xr_rwlock_wrunlock(&table->lock);
             return false;
+        }
         table->id_to_name[table->count] = name;
         table->count++;
 
@@ -389,20 +396,35 @@ bool xr_symbol_table_init_builtins(XrSymbolTable *table) {
     }
 
     table->builtin_count = table->count;
+    xr_rwlock_wrunlock(&table->lock);
     return true;
 }
 
+static SymbolId symbol_lookup_unlocked(XrSymbolTable *table, const char *name) {
+    void *value = xr_hashmap_get(table->name_to_id, name);
+    return value ? (SymbolId) (intptr_t) value : SYMBOL_INVALID;
+}
+
+/* Registration is isolate-shared and reachable from parallel worker threads
+ * (dynamic Json keys → xr_json_set_by_key → here), so it serializes on the
+ * table write lock; the existing-symbol check re-runs under the lock so two
+ * racing registrations of the same name agree on one id (R2-4). */
 SymbolId xr_symbol_register_in_table(XrSymbolTable *table, const char *name) {
     if (!table || !name)
         return SYMBOL_INVALID;
 
-    SymbolId existing = xr_symbol_lookup_in_table(table, name);
-    if (existing != SYMBOL_INVALID)
+    xr_rwlock_wrlock(&table->lock);
+    SymbolId existing = symbol_lookup_unlocked(table, name);
+    if (existing != SYMBOL_INVALID) {
+        xr_rwlock_wrunlock(&table->lock);
         return existing;
+    }
 
     if (table->count >= table->capacity) {
-        if (!expand_capacity(table))
+        if (!expand_capacity(table)) {
+            xr_rwlock_wrunlock(&table->lock);
             return SYMBOL_INVALID;
+        }
     }
 
     SymbolId new_id = table->count + 1;
@@ -410,20 +432,24 @@ SymbolId xr_symbol_register_in_table(XrSymbolTable *table, const char *name) {
 
     size_t name_len = strlen(name);
     char *name_copy = (char *) xr_malloc(name_len + 1);
-    if (!name_copy)
+    if (!name_copy) {
+        xr_rwlock_wrunlock(&table->lock);
         return SYMBOL_INVALID;
+    }
     memcpy(name_copy, name, name_len + 1);
 
     if (!xr_hashmap_set(table->name_to_id, name_copy, (void *) (intptr_t) new_id)) {
         // Failing to index the name would let a later register() hand out a
         // second id for the same string, breaking symbol identity.
         xr_free(name_copy);
+        xr_rwlock_wrunlock(&table->lock);
         return SYMBOL_INVALID;
     }
     table->id_to_name[table->count] = name_copy;
     table->count++;
     XR_DCHECK(table->count <= table->capacity, "symbol_register: count > capacity");
 
+    xr_rwlock_wrunlock(&table->lock);
     return new_id;
 }
 
@@ -431,20 +457,24 @@ SymbolId xr_symbol_lookup_in_table(XrSymbolTable *table, const char *name) {
     if (!table || !name)
         return SYMBOL_INVALID;
 
-    void *value = xr_hashmap_get(table->name_to_id, name);
-    if (!value)
-        return SYMBOL_INVALID;
-
-    return (SymbolId) (intptr_t) value;
+    xr_rwlock_rdlock(&table->lock);
+    SymbolId id = symbol_lookup_unlocked(table, name);
+    xr_rwlock_rdunlock(&table->lock);
+    return id;
 }
 
 const char *xr_symbol_get_name_in_table(XrSymbolTable *table, SymbolId id) {
     if (!table)
         return NULL;
     int index = id - 1;
-    if (index < 0 || index >= table->count)
-        return NULL;
-    return table->id_to_name[index];
+    xr_rwlock_rdlock(&table->lock);
+    // count and the id_to_name pointer both mutate under the write lock
+    // (expand_capacity reallocs the array), so the bounds check and the
+    // element read must share one read-locked section. The returned string
+    // pointer itself is stable until table destroy.
+    const char *name = (index < 0 || index >= table->count) ? NULL : table->id_to_name[index];
+    xr_rwlock_rdunlock(&table->lock);
+    return name;
 }
 
 /* ========== Builtin Symbol Fast Lookup (O(1) hash, const table) ========== */

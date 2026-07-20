@@ -18,8 +18,7 @@ fn generateFasta(n: int): string {
     var alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
     var sb = StringBuilder()
     // 生成 ONE 序列
-    sb.append(">ONE Homo sapiens alu
-")
+    sb.append(">ONE Homo sapiens alu\n")
     var aluLen = len(alu)
     var i = 0
     while (i < n * 2) {
@@ -29,13 +28,11 @@ fn generateFasta(n: int): string {
             end = aluLen
         }
         sb.append(alu.slice(start, end))
-        sb.append("
-")
+        sb.append("\n")
         i = i + 60
     }
     // 生成 TWO 序列
-    sb.append(">TWO IUB ambiguity codes
-")
+    sb.append(">TWO IUB ambiguity codes\n")
     var iub = "acBDGHKMNRSVWY"
     var iubLen = len(iub)
     i = 0
@@ -47,13 +44,11 @@ fn generateFasta(n: int): string {
             j++
         }
         sb.append(line.toString())
-        sb.append("
-")
+        sb.append("\n")
         i = i + 60
     }
     // 生成 THREE 序列
-    sb.append(">THREE Homo sapiens frequency
-")
+    sb.append(">THREE Homo sapiens frequency\n")
     var bases = "acgt"
     i = 0
     while (i < n * 5) {
@@ -64,8 +59,7 @@ fn generateFasta(n: int): string {
             j++
         }
         sb.append(line.toString())
-        sb.append("
-")
+        sb.append("\n")
         i = i + 60
     }
     return sb.toString()
@@ -80,9 +74,7 @@ fn main() {
     var data = generateFasta(n)
     var initialLen = len(data.bytes())
     // 步骤 1：移除 FASTA 描述行和换行符
-    var cleanPattern = regex.compile("^>.*
-|
-",     "m")
+    var cleanPattern = regex.compile("^>.*\n|\n", "m")
     var cleaned = regex.replaceAll(cleanPattern, data, "")
     var cleanedLen = len(cleaned.bytes())
     // 步骤 2：计数 9 个 DNA 模式

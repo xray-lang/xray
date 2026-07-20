@@ -2929,6 +2929,7 @@ static bool stmt_shared_init_direct_alloc_safe(AstNode *node) {
         case AST_LITERAL_RUNE:
         case AST_LITERAL_NULL:
         case AST_LITERAL_STRING:
+        case AST_FIXED_BYTES_LITERAL:
             return true;
         case AST_ARRAY_LITERAL: {
             ArrayLiteralNode *arr = &node->as.array_literal;

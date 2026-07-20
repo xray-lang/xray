@@ -219,7 +219,14 @@ static bool rewrite_to_const_literal(XiValue *v, const XiConstLiteral *lit) {
             return false;
     }
     v->op = XI_CONST;
-    v->type = lit->type ? lit->type : v->type;
+    /* Preserve the read's declared type. A folded shared const must not lose the
+     * width/signedness of the binding: e.g. a `uint64` const folded to a signed
+     * `int` would make a later PTR_STORE into a uint64 slot fail verify
+     * (value maps to I64 while the store aux is U64). rewrite_to_const_int
+     * already preserves the value's type; do the same here. Fall back to the
+     * literal's recorded type only when the read carried no type. */
+    if (!v->type)
+        v->type = lit->type;
     v->nargs = 0;
     v->aux = NULL;
     v->aux_int = 0;
@@ -685,10 +692,12 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             int64_t lhs_i = 0, rhs_i = 0;
             if (const_int_value(lhs, &lhs_i) && const_int_value(rhs, &rhs_i)) {
                 int64_t result;
-                if (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR) {
+                if (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR || v->op == XI_BIT_MUL_HIGH) {
                     result = v->op == XI_BIT_ROTL
                                  ? xr_bits_exact_rotate_left(lhs_i, rhs_i, (uint8_t) v->aux_int)
-                                 : xr_bits_exact_rotate_right(lhs_i, rhs_i, (uint8_t) v->aux_int);
+                             : v->op == XI_BIT_ROTR
+                                 ? xr_bits_exact_rotate_right(lhs_i, rhs_i, (uint8_t) v->aux_int)
+                                 : xr_bits_exact_mul_high(lhs_i, rhs_i, (uint8_t) v->aux_int);
                     rewrite_to_const_int(v, result);
                     chg.values_changed = true;
                     continue;
@@ -2407,6 +2416,7 @@ static XrRep sr_arith_native_result_rep_depth(const XiValue *v, const XiRepPolic
         case XI_SHR:
         case XI_BIT_ROTL:
         case XI_BIT_ROTR:
+        case XI_BIT_MUL_HIGH:
         case XI_MOD: {
             if (v->nargs < 2)
                 return XR_REP_TAGGED;
@@ -2470,6 +2480,7 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_SHR:
         case XI_BIT_ROTL:
         case XI_BIT_ROTR:
+        case XI_BIT_MUL_HIGH:
         case XI_BIT_BSWAP:
         case XI_BIT_POPCOUNT:
         case XI_BIT_CLZ:
@@ -2790,6 +2801,7 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_SHR:
         case XI_BIT_ROTL:
         case XI_BIT_ROTR:
+        case XI_BIT_MUL_HIGH:
         case XI_BIT_BSWAP:
         case XI_BIT_POPCOUNT:
         case XI_BIT_CLZ:

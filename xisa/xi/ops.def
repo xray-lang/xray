@@ -193,6 +193,19 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+; High half of the full 2W-bit product. aux_int carries the receiver's
+; XrNativeType, same exact-width contract as the rotates.
+(define-xi-op xi.bit.mul.high
+  :class bitwise
+  :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.bit.bswap
   :class bitwise
   :arity 1
@@ -962,6 +975,16 @@
   :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.fixed.array.new
+  :class allocation
+  :arity 0
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+; Compact fixed-byte array literal. aux points at the complete byte payload,
+; including the synthetic C terminator when present; aux_int is its length.
+(define-xi-op xi.fixed.bytes.const
   :class allocation
   :arity 0
   :effects (side-effect memory-write allocates)
@@ -2145,6 +2168,31 @@
   :targets (aot-c aot-verify))
 
 (define-xi-op xi.vec.widen.mul
+  :class vector
+  :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+; Two-input 32-bit deinterleave (NEON uzp1/uzp2). ODD_LANES selects odd lanes.
+(define-xi-op xi.vec.unzip
+  :class vector
+  :arity 2
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-c aot-verify))
+
+; Widening multiply of a contiguous 32-bit half (NEON umull/umull2).
+; ODD_LANES selects the high half.
+(define-xi-op xi.vec.widen.mul.half
   :class vector
   :arity 2
   :own-use borrow

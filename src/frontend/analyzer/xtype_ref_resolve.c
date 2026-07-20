@@ -151,6 +151,20 @@ static XrCtValue *ct_alloc_values(XaAnalyzer *analyzer, int count, const char **
     return values;
 }
 
+static uint8_t *ct_alloc_bytes(XaAnalyzer *analyzer, size_t count, const char **err) {
+    XrArena *arena = ct_value_arena(analyzer);
+    if (!arena) {
+        if (err)
+            *err = "consteval storage is unavailable";
+        return NULL;
+    }
+    uint8_t *bytes =
+        (uint8_t *) xr_arena_alloc_array(arena, sizeof(uint8_t), count > 0 ? count : 1);
+    if (!bytes && err)
+        *err = "out of memory while evaluating compile-time bytes";
+    return bytes;
+}
+
 static const char **ct_alloc_field_names(XaAnalyzer *analyzer, int count, const char **err) {
     if (count <= 0)
         return NULL;
@@ -171,6 +185,7 @@ static const char **ct_alloc_field_names(XaAnalyzer *analyzer, int count, const 
 }
 
 static bool ct_element_lists_equal(const XrCtElementListValue *a, const XrCtElementListValue *b);
+static bool ct_fixed_arrays_equal(const XrCtFixedArrayValue *a, const XrCtFixedArrayValue *b);
 static bool ct_struct_values_equal(const XrCtStructValue *a, const XrCtStructValue *b);
 
 static bool ct_values_equal(const XrCtValue *a, const XrCtValue *b, bool *out) {
@@ -206,7 +221,7 @@ static bool ct_values_equal(const XrCtValue *a, const XrCtValue *b, bool *out) {
             *out = true;
             return true;
         case XR_CT_FIXED_ARRAY:
-            *out = ct_element_lists_equal(&a->as.fixed_array_val, &b->as.fixed_array_val);
+            *out = ct_fixed_arrays_equal(&a->as.fixed_array_val, &b->as.fixed_array_val);
             return true;
         case XR_CT_TUPLE:
             *out = ct_element_lists_equal(&a->as.tuple_val, &b->as.tuple_val);
@@ -225,6 +240,33 @@ static bool ct_element_lists_equal(const XrCtElementListValue *a, const XrCtElem
     for (int i = 0; i < a->count; i++) {
         bool elem_eq = false;
         if (!ct_values_equal(&a->elements[i], &b->elements[i], &elem_eq) || !elem_eq)
+            return false;
+    }
+    return true;
+}
+
+static bool ct_fixed_arrays_equal(const XrCtFixedArrayValue *a, const XrCtFixedArrayValue *b) {
+    if (!a || !b || a->count != b->count)
+        return false;
+    if (a->is_byte_blob && b->is_byte_blob)
+        return a->count == 0 || memcmp(a->byte_blob, b->byte_blob, (size_t) a->count) == 0;
+    for (int i = 0; i < a->count; i++) {
+        XrCtValue av = {0};
+        XrCtValue bv = {0};
+        if (a->is_byte_blob) {
+            av.kind = XR_CT_INT;
+            av.as.int_val = a->byte_blob[i];
+        } else {
+            av = a->elements[i];
+        }
+        if (b->is_byte_blob) {
+            bv.kind = XR_CT_INT;
+            bv.as.int_val = b->byte_blob[i];
+        } else {
+            bv = b->elements[i];
+        }
+        bool equal = false;
+        if (!ct_values_equal(&av, &bv, &equal) || !equal)
             return false;
     }
     return true;
@@ -277,6 +319,8 @@ static bool ct_eval_array_literal(XaAnalyzer *analyzer, const AstNode *expr, XrC
         out->kind = XR_CT_FIXED_ARRAY;
         out->as.fixed_array_val.elements = values;
         out->as.fixed_array_val.count = count;
+        out->as.fixed_array_val.byte_blob = NULL;
+        out->as.fixed_array_val.is_byte_blob = false;
         return true;
     }
 
@@ -300,6 +344,31 @@ static bool ct_eval_array_literal(XaAnalyzer *analyzer, const AstNode *expr, XrC
     out->kind = XR_CT_FIXED_ARRAY;
     out->as.fixed_array_val.elements = values;
     out->as.fixed_array_val.count = arr->count;
+    out->as.fixed_array_val.byte_blob = NULL;
+    out->as.fixed_array_val.is_byte_blob = false;
+    return true;
+}
+
+static bool ct_eval_fixed_bytes_literal(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *out,
+                                        const char **err) {
+    const FixedBytesLiteralNode *literal = &expr->as.fixed_bytes_literal;
+    size_t total = literal->payload_length + (literal->append_nul ? 1u : 0u);
+    if (total > INT_MAX)
+        return ct_fail(err, "fixed byte literal exceeds consteval length limit");
+    uint8_t *bytes = ct_alloc_bytes(analyzer, total, err);
+    if (!bytes)
+        return false;
+    if (literal->payload_length > 0)
+        memcpy(bytes, literal->payload, literal->payload_length);
+    if (literal->append_nul)
+        bytes[literal->payload_length] = 0;
+    else if (total == 0)
+        bytes[0] = 0;
+    out->kind = XR_CT_FIXED_ARRAY;
+    out->as.fixed_array_val.elements = NULL;
+    out->as.fixed_array_val.count = (int) total;
+    out->as.fixed_array_val.byte_blob = bytes;
+    out->as.fixed_array_val.is_byte_blob = true;
     return true;
 }
 
@@ -456,7 +525,12 @@ static bool ct_eval_index_get(XaAnalyzer *analyzer, const AstNode *expr, XrCtVal
         return ct_fail(err, "fixed array consteval index is out of range");
 
     int slot = (int) index.as.int_val;
-    *out = array.as.fixed_array_val.elements[slot];
+    if (array.as.fixed_array_val.is_byte_blob) {
+        out->kind = XR_CT_INT;
+        out->as.int_val = array.as.fixed_array_val.byte_blob[slot];
+    } else {
+        *out = array.as.fixed_array_val.elements[slot];
+    }
     return true;
 }
 
@@ -776,6 +850,9 @@ static bool ct_eval_impl(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue *o
             out->kind = XR_CT_STRING;
             out->as.string_val = expr->as.literal.raw_value.string_val;
             ok = true;
+            break;
+        case AST_FIXED_BYTES_LITERAL:
+            ok = ct_eval_fixed_bytes_literal(analyzer, expr, out, err);
             break;
         case AST_LITERAL_RUNE:
             out->kind = XR_CT_CHAR;

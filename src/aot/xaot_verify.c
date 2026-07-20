@@ -7404,6 +7404,95 @@ static bool verify_func_transfer_plans_recursive(const XaotBundle *bundle, const
     return true;
 }
 
+static uint64_t verify_fixed_bytes_hash(const uint8_t *data, uint32_t length) {
+    uint64_t hash = UINT64_C(1469598103934665603);
+    for (uint32_t i = 0; i < length; i++) {
+        hash ^= data[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    hash ^= length;
+    hash *= UINT64_C(1099511628211);
+    return hash;
+}
+
+static bool verify_fixed_bytes_plan(const XaotBundle *bundle, const XaotFixedBytesPlan *plan,
+                                    char *errbuf, size_t errbuf_len) {
+    XaotFixedBytesPlan derived;
+    if (!bundle || !plan || !plan->func || !plan->value)
+        return set_error(errbuf, errbuf_len, "AOT fixed-bytes plan is invalid");
+    if (!xaot_bundle_find_func_plan(bundle, plan->func) ||
+        !xaot_bundle_find_value_plan(bundle, plan->value))
+        return set_error(errbuf, errbuf_len, "AOT fixed-bytes plan lacks func/value plan");
+    if (xaot_bundle_find_fixed_bytes_plan(bundle, plan->value) != plan)
+        return set_error(errbuf, errbuf_len, "AOT fixed-bytes plan index mismatch");
+    if (!xaot_fixed_bytes_plan_derive(plan->func, plan->value, &derived))
+        return set_error(errbuf, errbuf_len, "AOT fixed-bytes plan no longer re-derives");
+    if (plan->length != derived.length || plan->action != derived.action ||
+        plan->evidence != derived.evidence)
+        return set_error(errbuf, errbuf_len, "AOT fixed-bytes plan facts are stale");
+
+    const XaotFixedBytesBlob *blob = xaot_bundle_find_fixed_bytes_blob(bundle, plan->blob_id);
+    if (!blob || !blob->data || blob->length != plan->length ||
+        blob->hash != verify_fixed_bytes_hash(blob->data, blob->length) ||
+        (blob->length > 0 && memcmp(blob->data, plan->value->aux, blob->length) != 0))
+        return set_error(errbuf, errbuf_len, "AOT fixed-bytes canonical blob is stale");
+
+    if (plan->action == XAOT_FIXED_BYTES_READONLY_PTR) {
+        const XaotAddressPlan *address = xaot_address_plan_find(bundle, plan->value);
+        if (!address || address->provenance.origin != XR_POINTER_ORIGIN_STATIC ||
+            address->provenance.owner != XR_STORAGE_MODULE ||
+            address->provenance.mutability != XR_STORAGE_READONLY ||
+            address->provenance.address_identity != XR_ADDRESS_MODULE_STABLE ||
+            address->provenance.escape != XR_POINTER_ESCAPE_STABLE)
+            return set_error(errbuf, errbuf_len,
+                             "AOT fixed-bytes readonly pointer lacks address proof");
+    }
+    return true;
+}
+
+static bool verify_fixed_bytes_plans(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
+    uint32_t candidates = 0;
+    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+        const XiFunc *func = bundle->func_plans[fi].func;
+        if (!func)
+            continue;
+        for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+            const XiBlock *block = func->blocks[bi];
+            if (!block)
+                continue;
+            for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+                const XiValue *value = block->values[vi];
+                if (!value ||
+                    (value->op != XI_FIXED_BYTES_CONST && value->op != XI_STATIC_BYTES_PTR))
+                    continue;
+                candidates++;
+                if (!xaot_bundle_find_fixed_bytes_plan(bundle, value))
+                    return set_error(errbuf, errbuf_len,
+                                     "AOT fixed-bytes Xi value has no prepared plan");
+            }
+        }
+    }
+    if (candidates != bundle->nfixed_bytes_plans)
+        return set_error(errbuf, errbuf_len, "AOT fixed-bytes plan count does not match IR");
+    for (uint32_t i = 0; i < bundle->nfixed_bytes_plans; i++) {
+        if (!verify_fixed_bytes_plan(bundle, &bundle->fixed_bytes_plans[i], errbuf, errbuf_len))
+            return false;
+    }
+    for (uint32_t i = 0; i < bundle->nfixed_bytes_blobs; i++) {
+        const XaotFixedBytesBlob *left = &bundle->fixed_bytes_blobs[i];
+        if (!left->data || left->hash != verify_fixed_bytes_hash(left->data, left->length))
+            return set_error(errbuf, errbuf_len, "AOT fixed-bytes blob hash is stale");
+        for (uint32_t j = 0; j < i; j++) {
+            const XaotFixedBytesBlob *right = &bundle->fixed_bytes_blobs[j];
+            if (left->hash == right->hash && left->length == right->length &&
+                (left->length == 0 || memcmp(left->data, right->data, left->length) == 0))
+                return set_error(errbuf, errbuf_len,
+                                 "AOT fixed-bytes blob pool contains a duplicate");
+        }
+    }
+    return true;
+}
+
 XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, char *errbuf,
                                 size_t errbuf_len) {
     uint32_t mi;
@@ -7424,6 +7513,8 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
     if (!verify_global_evidence_plan(bundle, errbuf, errbuf_len))
         return false;
     if (!verify_extern_registry(bundle, errbuf, errbuf_len))
+        return false;
+    if (!verify_fixed_bytes_plans(bundle, errbuf, errbuf_len))
         return false;
 
     for (mi = 0; mi < bundle->nmodules; mi++) {

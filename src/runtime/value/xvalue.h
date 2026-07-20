@@ -248,9 +248,11 @@ static inline void *xr_to_struct_ptr(XrValue v) {
     return v.ptr;
 }
 /* Construct an array ref within an aggregate: ptr points to array data start,
- * ext encodes (elem_count << 8) | elem_native_type.
+ * ext encodes a 24-bit element count and an 8-bit native element type.
  * Uses XR_TAG_AGG_REF with ext != 0 to distinguish from nested aggregate refs. */
-static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint16_t elem_count) {
+#define XR_ARRAY_REF_MAX_COUNT UINT32_C(0x00FFFFFF)
+
+static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint32_t elem_count) {
     XrValue v = {0};
     v.tag = XR_TAG_AGG_REF;
     v.heap_type = 0;
@@ -260,7 +262,7 @@ static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint16_t
 }
 #define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_AGG_REF && (v).ext != 0)
 #define XR_ARRAY_REF_ELEM_TYPE(v) ((uint8_t) ((v).ext & 0xFF))
-#define XR_ARRAY_REF_ELEM_COUNT(v) ((uint16_t) ((v).ext >> 8))
+#define XR_ARRAY_REF_ELEM_COUNT(v) ((uint32_t) ((v).ext >> 8))
 
 static inline uint16_t xr_aggregate_layout_id(XrValue v) {
     return v.heap_type;

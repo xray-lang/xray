@@ -17,6 +17,14 @@
  *   - Enum constants are multi-isolate safe (no global mutable state)
  *   - Table-driven registration eliminates duplicate/zombie symbols
  *   - Compile-time IDs enable switch-case optimization
+ *
+ * THREADING (R2-4):
+ *   The table is isolate-shared metadata. Runtime registration happens on
+ *   parallel worker threads (e.g. dynamic Json keys via xr_json_set_by_key),
+ *   so every access goes through the embedded rwlock: register takes the
+ *   write lock (cold path), lookup/get_name take the read lock. Same model
+ *   as the global string pool (R1 P1-4). Returned name pointers stay valid
+ *   after unlock — names are only freed at table destroy.
  */
 
 #ifndef XSYMBOL_TABLE_H
@@ -26,6 +34,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "../../base/xhashmap.h"
+#include "../../os/os_thread.h"
 
 /* ========== Symbol ID Type ========== */
 
@@ -334,6 +343,7 @@ enum {
     SYMBOL_MUT_PTR,
     SYMBOL_AS_MUT_BYTES,
     SYMBOL_BORROW_PTR,
+    SYMBOL_MUL_HIGH,
 
     SYMBOL_BUILTIN_COUNT  // sentinel
 };
@@ -350,6 +360,7 @@ typedef struct XrSymbolTable {
     int capacity;
     int count;
     int builtin_count;
+    xr_rwlock_t lock;  // guards all fields above (rd: lookup/get_name, wr: register)
 } XrSymbolTable;
 
 /* ========== Symbol Table API ========== */

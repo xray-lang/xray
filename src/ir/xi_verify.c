@@ -674,12 +674,14 @@ static bool verify_exact_bit_native_type(int64_t native_type) {
 static bool verify_exact_bit_contract(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk,
                                       const XiValue *v) {
     bool rotate = v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR;
-    bool receiver_result = rotate || v->op == XI_BIT_BSWAP;
+    bool mul_high = v->op == XI_BIT_MUL_HIGH;
+    bool two_arg = rotate || mul_high;
+    bool receiver_result = two_arg || v->op == XI_BIT_BSWAP;
     bool query = v->op == XI_BIT_POPCOUNT || v->op == XI_BIT_CLZ || v->op == XI_BIT_CTZ;
-    if (!rotate && !receiver_result && !query)
+    if (!two_arg && !receiver_result && !query)
         return true;
 
-    uint16_t expected_args = rotate ? 2 : 1;
+    uint16_t expected_args = two_arg ? 2 : 1;
     if (v->nargs != expected_args || !v->args[0] || !v->args[0]->type ||
         v->args[0]->type->kind != XR_KIND_INT || v->args[0]->type->is_nullable) {
         verr(ctx, "func '%s': v%u %s in b%u requires a non-null exact integer receiver", f->name,
@@ -693,11 +695,18 @@ static bool verify_exact_bit_contract(VerifyCtx *ctx, const XiFunc *f, const XiB
              (unsigned) v->args[0]->type->native_width);
         return false;
     }
-    if (rotate && (!v->args[1] || !v->args[1]->type || v->args[1]->type->kind != XR_KIND_INT ||
-                   v->args[1]->type->is_nullable)) {
-        verr(ctx, "func '%s': v%u %s in b%u requires an integer rotate count", f->name, v->id,
-             xi_op_name(v->op), blk->id);
-        return false;
+    /* The second operand is an integer value; accept XR_KIND_UNKNOWN because
+     * module-level const operands load through GET_SHARED as polymorphic `any`
+     * (the same relaxation MUL and the Endian operand check already allow). */
+    if (two_arg) {
+        const XrType *t1 = v->args[1] ? v->args[1]->type : NULL;
+        bool ok = t1 && ((t1->kind == XR_KIND_INT && !t1->is_nullable) ||
+                         t1->kind == XR_KIND_UNKNOWN);
+        if (!ok) {
+            verr(ctx, "func '%s': v%u %s in b%u requires an integer second operand", f->name,
+                 v->id, xi_op_name(v->op), blk->id);
+            return false;
+        }
     }
     if (receiver_result && !xr_type_equals((XrType *) v->type, (XrType *) v->args[0]->type)) {
         verr(ctx, "func '%s': v%u %s in b%u must preserve the exact receiver type", f->name, v->id,

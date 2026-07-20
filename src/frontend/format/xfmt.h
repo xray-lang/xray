@@ -52,14 +52,15 @@ extern XrFmtConfig xfmt_default_config;
 
 // Format context
 typedef struct XrFmtContext {
-    char *output;         // Output buffer
-    size_t capacity;      // Buffer capacity
-    size_t length;        // Current length
-    int indent_level;     // Current indent level
-    int line_start;       // At line start flag
-    int column;           // Current column (for line length tracking)
-    XrFmtConfig *config;  // Configuration
-    XrVMRuntime *X;       // Isolate for type printing
+    char *output;               // Output buffer
+    size_t capacity;            // Buffer capacity
+    size_t length;              // Current length
+    int indent_level;           // Current indent level
+    int line_start;             // At line start flag
+    int column;                 // Current column (for line length tracking)
+    bool block_literal_closed;  // Next non-space token must start on a new line
+    XrFmtConfig *config;        // Configuration
+    XrVMRuntime *X;             // Isolate for type printing
 } XrFmtContext;
 
 // Initialize formatter context

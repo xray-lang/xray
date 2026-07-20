@@ -3,8 +3,6 @@
 XR_FUNC void xi_cgen_emit_str_literal_defs(XiCgenCtx *ctx, FILE *out) {
     XR_DCHECK(ctx != NULL, "xi_cgen_emit_str_literal_defs: NULL ctx");
     XR_DCHECK(out != NULL, "xi_cgen_emit_str_literal_defs: NULL output");
-    if (ctx->nstrlit == 0)
-        return;
     for (int i = 0; i < ctx->nstrlit; i++) {
         const CgStrLit *lit = ctx->strlit_list[i];
         /* Hash precomputed with the runtime's shared primitive:
@@ -17,7 +15,22 @@ XR_FUNC void xi_cgen_emit_str_literal_defs(XiCgenCtx *ctx, FILE *out) {
         emit_c_string_literal_bytes(out, lit->str, lit->len);
         fprintf(out, "};\n");
     }
-    fprintf(out, "\n");
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (bundle) {
+        for (uint32_t i = 0; i < bundle->nfixed_bytes_blobs; i++) {
+            const XaotFixedBytesBlob *blob = &bundle->fixed_bytes_blobs[i];
+            fprintf(out, "static const char _xbytes_%u", i + 1);
+            if (blob->length == 0) {
+                fprintf(out, "[1] = {0};\n");
+                continue;
+            }
+            fprintf(out, "[] = ");
+            emit_c_string_literal_bytes(out, (const char *) blob->data, blob->length);
+            fprintf(out, ";\n");
+        }
+    }
+    if (ctx->nstrlit > 0 || (bundle && bundle->nfixed_bytes_blobs > 0))
+        fprintf(out, "\n");
 }
 
 typedef struct CgBuiltinInitPlan {

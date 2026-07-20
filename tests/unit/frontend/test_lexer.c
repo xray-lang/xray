@@ -446,15 +446,15 @@ TEST(lexer_multiline_string_start_position) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "\"line1\nline2\nline3\"\nx");
+    xr_scanner_init(&scanner, "\"\"\"\nline1\nline2\nline3\n\"\"\"\nx");
     t = xr_scanner_scan(&scanner);  // string token starts on line 1
     ASSERT_EQ_INT(t.type, TK_LITERAL_STRING);
     ASSERT_EQ_INT(t.line, 1);
     ASSERT_EQ_INT(t.column, 1);
 
-    t = xr_scanner_scan(&scanner);  // x on line 4
+    t = xr_scanner_scan(&scanner);  // x on line 6
     ASSERT_EQ_INT(t.type, TK_NAME);
-    ASSERT_EQ_INT(t.line, 4);
+    ASSERT_EQ_INT(t.line, 6);
     ASSERT_EQ_INT(t.column, 1);
 }
 
@@ -462,16 +462,73 @@ TEST(lexer_multiline_raw_string_start_position) {
     Scanner scanner;
     Token t;
 
-    xr_scanner_init(&scanner, "  r\"abc\ndef\"\nx");
+    xr_scanner_init(&scanner, "  r\"\"\"\nabc\ndef\n\"\"\"\nx");
     t = xr_scanner_scan(&scanner);  // raw string starts on line 1, col 3
     ASSERT_EQ_INT(t.type, TK_RAW_STRING);
     ASSERT_EQ_INT(t.line, 1);
     ASSERT_EQ_INT(t.column, 3);
 
-    t = xr_scanner_scan(&scanner);  // x on line 3
+    t = xr_scanner_scan(&scanner);  // x on line 5
     ASSERT_EQ_INT(t.type, TK_NAME);
-    ASSERT_EQ_INT(t.line, 3);
+    ASSERT_EQ_INT(t.line, 5);
     ASSERT_EQ_INT(t.column, 1);
+}
+
+TEST(lexer_quoted_literal_prefix_metadata) {
+    struct {
+        const char *source;
+        XrTokenType type;
+        XrQuotedLiteralKind kind;
+        XrLiteralEscapeMode escape_mode;
+        int prefix_length;
+    } cases[] = {
+        {"\"x\"", TK_LITERAL_STRING, XR_QUOTED_STRING, XR_LITERAL_ESCAPED, 0},
+        {"r\"x\"", TK_RAW_STRING, XR_QUOTED_STRING, XR_LITERAL_RAW, 1},
+        {"b\"x\"", TK_LITERAL_BYTE_STRING, XR_QUOTED_BYTES, XR_LITERAL_ESCAPED, 1},
+        {"br\"x\"", TK_LITERAL_BYTE_STRING, XR_QUOTED_BYTES, XR_LITERAL_RAW, 2},
+        {"c\"x\"", TK_LITERAL_C_STRING, XR_QUOTED_C_BYTES, XR_LITERAL_ESCAPED, 1},
+        {"cr\"x\"", TK_LITERAL_C_STRING, XR_QUOTED_C_BYTES, XR_LITERAL_RAW, 2},
+    };
+    int count = (int) (sizeof(cases) / sizeof(cases[0]));
+    for (int i = 0; i < count; i++) {
+        Token t = scan_single(cases[i].source);
+        ASSERT_EQ_INT(t.type, cases[i].type);
+        ASSERT_EQ_INT(t.quoted_kind, cases[i].kind);
+        ASSERT_EQ_INT(t.escape_mode, cases[i].escape_mode);
+        ASSERT_EQ_INT(t.source_form, XR_LITERAL_INLINE);
+        ASSERT_EQ_INT(t.prefix_length, cases[i].prefix_length);
+        ASSERT_EQ_INT(t.quote_count, 1);
+    }
+}
+
+TEST(lexer_variable_quote_blocks) {
+    Token t = scan_single("r\"\"\"\n<div title=\"x\">\n\"\"\"");
+    ASSERT_EQ_INT(t.type, TK_RAW_STRING);
+    ASSERT_EQ_INT(t.source_form, XR_LITERAL_BLOCK);
+    ASSERT_EQ_INT(t.quote_count, 3);
+
+    t = scan_single("br\"\"\"\"\n\"\"\"\n\"\"\"\"");
+    ASSERT_EQ_INT(t.type, TK_LITERAL_BYTE_STRING);
+    ASSERT_EQ_INT(t.escape_mode, XR_LITERAL_RAW);
+    ASSERT_EQ_INT(t.quote_count, 4);
+}
+
+TEST(lexer_empty_quote_runs_and_fixed_byte_dollar) {
+    Token t = scan_single("cr\"\"");
+    ASSERT_EQ_INT(t.type, TK_LITERAL_C_STRING);
+    ASSERT_EQ_INT(t.quote_count, 2);
+
+    t = scan_single("br\"${HOME}\"");
+    ASSERT_EQ_INT(t.type, TK_LITERAL_BYTE_STRING);
+    ASSERT_EQ_INT(t.escape_mode, XR_LITERAL_RAW);
+}
+
+TEST(lexer_variable_quote_rejections) {
+    ASSERT_EQ_INT(scan_single("\"line 1\nline 2\"").type, TK_ERROR);
+    ASSERT_EQ_INT(scan_single("\"\"\"same line\"\"\"").type, TK_ERROR);
+    ASSERT_EQ_INT(scan_single("\"\"\"\nbody\n\"\"\";").type, TK_ERROR);
+    ASSERT_EQ_INT(scan_single("rb\"x\"").type, TK_ERROR);
+    ASSERT_EQ_INT(scan_single("rc\"x\"").type, TK_ERROR);
 }
 
 // After consuming a multi-line block comment, the next token's line/column
@@ -749,6 +806,10 @@ static void run_all_tests(void) {
     RUN_TEST(lexer_multiline_string_start_position);
     RUN_TEST(lexer_multiline_raw_string_start_position);
     RUN_TEST(lexer_multiline_block_comment_position);
+    RUN_TEST(lexer_quoted_literal_prefix_metadata);
+    RUN_TEST(lexer_variable_quote_blocks);
+    RUN_TEST(lexer_empty_quote_runs_and_fixed_byte_dollar);
+    RUN_TEST(lexer_variable_quote_rejections);
 
     RUN_TEST_SUITE("Keyword-Prefix Identifiers (L-01)");
     RUN_TEST(lexer_keyword_prefix_identifiers);

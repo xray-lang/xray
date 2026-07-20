@@ -1737,26 +1737,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     {
-        .name = "DEBUG",
-        .signature = ": int",
-        .summary = "",
-    },
-    {
-        .name = "ERROR",
-        .signature = ": int",
-        .summary = "",
-    },
-    {
-        .name = "FATAL",
-        .signature = ": int",
-        .summary = "",
-    },
-    {
-        .name = "INFO",
-        .signature = ": int",
-        .summary = "",
-    },
-    {
         .name = "Logger",
         .signature = "Logger",
         .summary = "",
@@ -1788,7 +1768,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.format",
-        .signature = ": string",
+        .signature = ": LogFormat",
         .summary = "",
     },
     {
@@ -1803,7 +1783,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.level",
-        .signature = ": int",
+        .signature = ": LogLevel",
         .summary = "",
     },
     {
@@ -1824,11 +1804,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     {
         .name = "Logger.warn",
         .signature = "(...args: Json): ()",
-        .summary = "",
-    },
-    {
-        .name = "WARN",
-        .signature = ": int",
         .summary = "",
     },
     {
@@ -1873,17 +1848,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "isEnabled",
-        .signature = "(level: int): bool",
+        .signature = "(level: LogLevel): bool",
         .summary = "",
     },
     {
         .name = "setFormat",
-        .signature = "(format: string): ()",
+        .signature = "(format: LogFormat): ()",
         .summary = "",
     },
     {
         .name = "setLevel",
-        .signature = "(level: Json): ()",
+        .signature = "(level: LogLevel): ()",
         .summary = "",
     },
     {
@@ -3104,7 +3079,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
         .summary = "",
     },
     {
+        .name = "U32x4.unzipEven",
+        .signature = "(other: in U32x4): U32x4",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.unzipOdd",
+        .signature = "(other: in U32x4): U32x4",
+        .summary = "",
+    },
+    {
         .name = "U32x4.widenMulEven",
+        .signature = "(other: in U32x4): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.widenMulHigh",
+        .signature = "(other: in U32x4): U64x2",
+        .summary = "",
+    },
+    {
+        .name = "U32x4.widenMulLow",
         .signature = "(other: in U32x4): U64x2",
         .summary = "",
     },
@@ -3902,6 +3897,36 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
         .summary = "",
     },
     {
+        .name = "TomlDiagnostic",
+        .signature = "TomlDiagnostic",
+        .summary = "",
+    },
+    {
+        .name = "TomlDiagnostic.column",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "TomlDiagnostic.constructor",
+        .signature = "(kind: TomlErrorKind, line: int, column: int, message: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "TomlDiagnostic.kind",
+        .signature = ": TomlErrorKind",
+        .summary = "",
+    },
+    {
+        .name = "TomlDiagnostic.line",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "TomlDiagnostic.message",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
         .name = "TomlFloat",
         .signature = "TomlFloat",
         .summary = "",
@@ -3933,7 +3958,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlParseReport.constructor",
-        .signature = "(data: TomlValue, errors: Array<Json>, lines: int, keys: int): ()",
+        .signature = "(data: TomlValue, errors: Array<TomlDiagnostic>, lines: int, keys: int): ()",
         .summary = "",
     },
     {
@@ -3943,7 +3968,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlParseReport.errors",
-        .signature = ": Array<Json>",
+        .signature = ": Array<TomlDiagnostic>",
         .summary = "",
     },
     {
@@ -5868,9 +5893,24 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
         .title = "String",
         .aliases_csv = "strings,string_methods,interpolation,template",
         .body =
-            "[Language reference](#315-\xe5\xad\x97\xe7\xac\xa6\xe4\xb8\xb2\xe6\x8f\x92\xe5\x80\xbc)\n"
+            "[Language reference](#165-\xe5\xad\x97\xe7\xac\xa6\xe4\xb8\xb2\xe5\xad\x97\xe9\x9d\xa2\xe9\x87\x8f)\n"
             "\n"
             "## String\n"
+            "\n"
+            "### Quoted literals\n"
+            "Use no prefix / `r` for valid UTF-8 strings, `b/br` for `[byte; L]`, and `c/cr` for `[byte; L+1]` with an appended NUL. `r/br/cr` preserve backslashes; interpolation remains enabled only for no prefix / `r`.\n"
+            "```xray\n"
+            "r\"\"\"\n"
+            "<div class=\"card\">\n"
+            "  ${title}\n"
+            "</div>\n"
+            "\"\"\"\n"
+            "```\n"
+            "```xray\n"
+            "br\"C:\\\\raw\\\\path\"\n"
+            "cr\"asset-name\"\n"
+            "```\n"
+            "One quote is single-line inline form, two quotes encode an empty payload, and three or more quotes form a block. A block opener is followed immediately by a newline; its exact-count closer occupies its own line. Increase the quote count when a quote-only payload line would collide.\n"
             "\n"
             "### String interpolation\n"
             "```xray\n"
@@ -6758,25 +6798,20 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `log.DEBUG` | `: int` |  |\n"
-            "| `log.ERROR` | `: int` |  |\n"
-            "| `log.FATAL` | `: int` |  |\n"
-            "| `log.INFO` | `: int` |  |\n"
             "| `Logger` | `Logger` |  |\n"
             "| `Logger.asyncMode` | `: bool` |  |\n"
             "| `Logger.child` | `(...fields: Json): Logger` |  |\n"
             "| `Logger.debug` | `(...args: Json): ()` |  |\n"
             "| `Logger.error` | `(...args: Json): ()` |  |\n"
             "| `Logger.fatal` | `(...args: Json): ()` |  |\n"
-            "| `Logger.format` | `: string` |  |\n"
+            "| `Logger.format` | `: LogFormat` |  |\n"
             "| `Logger.info` | `(...args: Json): ()` |  |\n"
             "| `Logger.jsonContext` | `: string` |  |\n"
-            "| `Logger.level` | `: int` |  |\n"
+            "| `Logger.level` | `: LogLevel` |  |\n"
             "| `Logger.output` | `: Path?` |  |\n"
             "| `Logger.source` | `: bool` |  |\n"
             "| `Logger.textContext` | `: string` |  |\n"
             "| `Logger.warn` | `(...args: Json): ()` |  |\n"
-            "| `log.WARN` | `: int` |  |\n"
             "| `log.child` | `(...fields: Json): Logger` |  |\n"
             "| `log.debug` | `(...args: Json): ()` |  |\n"
             "| `log.enableAsync` | `(enabled: bool = true): ()` |  |\n"
@@ -6785,9 +6820,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `log.fatal` | `(...args: Json): ()` |  |\n"
             "| `log.flush` | `(): ()` |  |\n"
             "| `log.info` | `(...args: Json): ()` |  |\n"
-            "| `log.isEnabled` | `(level: int): bool` |  |\n"
-            "| `log.setFormat` | `(format: string): ()` |  |\n"
-            "| `log.setLevel` | `(level: Json): ()` |  |\n"
+            "| `log.isEnabled` | `(level: LogLevel): bool` |  |\n"
+            "| `log.setFormat` | `(format: LogFormat): ()` |  |\n"
+            "| `log.setLevel` | `(level: LogLevel): ()` |  |\n"
             "| `log.setOutput` | `(path: Path): ()` |  |\n"
             "| `log.warn` | `(...args: Json): ()` |  |\n"
             "",
@@ -7270,7 +7305,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U32x4.store` | `(output: Slice<uint32>, offset: int = 0): ()` |  |\n"
             "| `U32x4.sub` | `(other: in U32x4): U32x4` |  |\n"
             "| `U32x4.swapAdjacent` | `(): U32x4` |  |\n"
+            "| `U32x4.unzipEven` | `(other: in U32x4): U32x4` |  |\n"
+            "| `U32x4.unzipOdd` | `(other: in U32x4): U32x4` |  |\n"
             "| `U32x4.widenMulEven` | `(other: in U32x4): U64x2` |  |\n"
+            "| `U32x4.widenMulHigh` | `(other: in U32x4): U64x2` |  |\n"
+            "| `U32x4.widenMulLow` | `(other: in U32x4): U64x2` |  |\n"
             "| `U32x4.widenMulOdd` | `(other: in U32x4): U64x2` |  |\n"
             "| `U32x8` | `U32x8` |  |\n"
             "| `U32x8.fromLanes` | `(lanes: in [uint32; 8]): U32x8` |  |\n"
@@ -7545,15 +7584,21 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `TomlDateTime.raw` | `: string` |  |\n"
             "| `TomlDateTime.toISOString` | `(): string` |  |\n"
             "| `TomlDateTime.toString` | `(): string` |  |\n"
+            "| `TomlDiagnostic` | `TomlDiagnostic` |  |\n"
+            "| `TomlDiagnostic.column` | `: int` |  |\n"
+            "| `TomlDiagnostic.constructor` | `(kind: TomlErrorKind, line: int, column: int, message: string): ()` |  |\n"
+            "| `TomlDiagnostic.kind` | `: TomlErrorKind` |  |\n"
+            "| `TomlDiagnostic.line` | `: int` |  |\n"
+            "| `TomlDiagnostic.message` | `: string` |  |\n"
             "| `TomlFloat` | `TomlFloat` |  |\n"
             "| `TomlFloat.constructor` | `(value: float, text: string = \"\"): ()` |  |\n"
             "| `TomlFloat.text` | `: string` |  |\n"
             "| `TomlFloat.toString` | `(): string` |  |\n"
             "| `TomlFloat.value` | `: float` |  |\n"
             "| `TomlParseReport` | `TomlParseReport` |  |\n"
-            "| `TomlParseReport.constructor` | `(data: TomlValue, errors: Array<Json>, lines: int, keys: int): ()` |  |\n"
+            "| `TomlParseReport.constructor` | `(data: TomlValue, errors: Array<TomlDiagnostic>, lines: int, keys: int): ()` |  |\n"
             "| `TomlParseReport.data` | `: TomlValue` |  |\n"
-            "| `TomlParseReport.errors` | `: Array<Json>` |  |\n"
+            "| `TomlParseReport.errors` | `: Array<TomlDiagnostic>` |  |\n"
             "| `TomlParseReport.keys` | `: int` |  |\n"
             "| `TomlParseReport.lines` | `: int` |  |\n"
             "| `TomlTable` | `TomlTable` |  |\n"
@@ -7850,6 +7895,15 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "`int`, `float`, `string`, `bool`, `()` | `Array<T>`, `Map<K,V>`, `Set<T>`\n"
     "\n"
     "`T?` for nullable values | `A | B` for unions | `Json`, `Array<byte>`, `BigInt`, `Channel<T>`, `Atomic<T>`\n"
+    "\n"
+    "## Quoted literals\n"
+    "`\"...\"` / `r\"...\"`: escaped / raw strings (both interpolate `${...}`)\n"
+    "\n"
+    "`b\"...\"` / `br\"...\"`: escaped / raw `[byte; L]`\n"
+    "\n"
+    "`c\"...\"` / `cr\"...\"`: escaped / raw `[byte; L+1]` with appended NUL\n"
+    "\n"
+    "One quote is inline, two quotes are empty, and `Q >= 3` is block form. A block opener is followed immediately by a newline and its exact-count closer is alone on a line.\n"
     "\n"
     "## Control flow\n"
     "```xray\n"

@@ -126,7 +126,9 @@ fn test_null_interpolation() {
 @test
 fn test_multiline() {
     var name = "Alice"
-    var s = "Hello,
-${name}!"
+    var s = """
+Hello,
+${name}!
+"""
     assert_eq(s.contains("Alice"), true)
 }

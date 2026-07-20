@@ -62,20 +62,20 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
             break;
         case ATTR_LINK_NAME:
             xfmt_write_str(ctx, "@link_name(");
-            xfmt_emit_string(ctx, attr->str_arg ? attr->str_arg : "",
-                             attr->str_arg ? (int) strlen(attr->str_arg) : 0);
+            xfmt_emit_escaped_inline_string(ctx, attr->str_arg ? attr->str_arg : "",
+                                            attr->str_arg ? (int) strlen(attr->str_arg) : 0);
             xfmt_write_char(ctx, ')');
             break;
         case ATTR_C_EXPORT:
             xfmt_write_str(ctx, "@c_export(");
-            xfmt_emit_string(ctx, attr->str_arg ? attr->str_arg : "",
-                             attr->str_arg ? (int) strlen(attr->str_arg) : 0);
+            xfmt_emit_escaped_inline_string(ctx, attr->str_arg ? attr->str_arg : "",
+                                            attr->str_arg ? (int) strlen(attr->str_arg) : 0);
             xfmt_write_char(ctx, ')');
             break;
         case ATTR_SECTION:
             xfmt_write_str(ctx, "@section(");
-            xfmt_emit_string(ctx, attr->str_arg ? attr->str_arg : "",
-                             attr->str_arg ? (int) strlen(attr->str_arg) : 0);
+            xfmt_emit_escaped_inline_string(ctx, attr->str_arg ? attr->str_arg : "",
+                                            attr->str_arg ? (int) strlen(attr->str_arg) : 0);
             xfmt_write_char(ctx, ')');
             break;
         case ATTR_WEAK:
@@ -89,8 +89,8 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
             break;
         case ATTR_INTERRUPT:
             xfmt_write_str(ctx, "@interrupt(");
-            xfmt_emit_string(ctx, attr->str_arg ? attr->str_arg : "",
-                             attr->str_arg ? (int) strlen(attr->str_arg) : 0);
+            xfmt_emit_escaped_inline_string(ctx, attr->str_arg ? attr->str_arg : "",
+                                            attr->str_arg ? (int) strlen(attr->str_arg) : 0);
             xfmt_write_char(ctx, ')');
             break;
         case ATTR_DERIVE: {
@@ -223,12 +223,12 @@ void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_indent(ctx);
         xfmt_write_str(ctx, "extern ");
         const char *abi = extern_attr->str_arg ? extern_attr->str_arg : "C";
-        xfmt_emit_string(ctx, abi, (int) strlen(abi));
+        xfmt_emit_escaped_inline_string(ctx, abi, (int) strlen(abi));
         const XrAttribute *library_attr = link_attr ? link_attr : dylib_attr;
         if (library_attr) {
             xfmt_write_str(ctx, link_attr ? " link(" : " dylib(");
             const char *library = library_attr->str_arg ? library_attr->str_arg : "";
-            xfmt_emit_string(ctx, library, (int) strlen(library));
+            xfmt_emit_escaped_inline_string(ctx, library, (int) strlen(library));
             xfmt_write_char(ctx, ')');
         }
         xfmt_write_str(ctx, " {");

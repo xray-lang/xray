@@ -1,0 +1,32 @@
+var name = "Xray"
+var escaped = """
+hello "${name}"
+
+"""
+var raw = r"""
+${name}\n"""
+"""
+var bytes = b"""
+A\0B
+"""
+var raw_bytes = br"""
+A\n
+"""
+var c_bytes = c"""
+ok
+"""
+var c_raw_bytes = cr"""
+ok
+"""
+print(escaped)
+print(raw)
+print(len(bytes))
+print(bytes[0])
+print(bytes[1])
+print(bytes[2])
+print(len(raw_bytes))
+print(raw_bytes[1])
+print(len(c_bytes))
+print(c_bytes[2])
+print(len(c_raw_bytes))
+print(c_raw_bytes[2])

@@ -34,7 +34,12 @@ typedef struct XrCtElementListValue {
     int count;
 } XrCtElementListValue;
 
-typedef XrCtElementListValue XrCtFixedArrayValue;
+typedef struct XrCtFixedArrayValue {
+    XrCtValue *elements;
+    int count;
+    const uint8_t *byte_blob;
+    bool is_byte_blob;
+} XrCtFixedArrayValue;
 typedef XrCtElementListValue XrCtTupleValue;
 
 typedef struct XrCtStructValue {

@@ -687,18 +687,24 @@ void xr_runtime_stop(XrRuntime *runtime) {
     XR_DCHECK(runtime != NULL, "runtime_stop: NULL runtime");
     atomic_store(&runtime->running, false);
 
-    // Fast path: worker/sysmon startup was never requested
-    if (!atomic_load(&runtime->threads_started)) {
-        return;
+    /* Claim join ownership (R2-7): the worker thread handles may be consumed
+     * exactly once, but three paths historically joined them — this stop,
+     * a second stop from xr_scheduler_runtime_delete right after an explicit
+     * stop (xvm_multicore_destroy does stop→delete→stop), and
+     * xr_runtime_main_thread_run's tail. pthread_join on an already-joined
+     * handle is UB (TSan CHECK abort). The exchange makes whichever path gets
+     * here first the single joiner; everyone else early-returns. */
+    bool claim = true;
+    if (!atomic_compare_exchange_strong(&runtime->threads_started, &claim, false)) {
+        return;  // never started, or another path already joined
     }
 
     // Wake netpoll thread
     if (atomic_load(&runtime->netpoll.inited)) {
         xr_netpoll_break(&runtime->netpoll);
     }
-    if (atomic_load_explicit(&runtime->sysmon_started, memory_order_acquire)) {
+    if (atomic_exchange_explicit(&runtime->sysmon_started, false, memory_order_acq_rel)) {
         xr_thread_join(runtime->sysmon_thread, NULL);
-        atomic_store_explicit(&runtime->sysmon_started, false, memory_order_release);
     }
 
     // Wake all Workers to check running flag and exit

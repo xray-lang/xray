@@ -494,7 +494,9 @@ static inline uint8_t xrt_value_kind(XrValue v) {
     return v.tag;
 }
 
-static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint16_t elem_count) {
+#define XR_ARRAY_REF_MAX_COUNT UINT32_C(0x00FFFFFF)
+
+static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint32_t elem_count) {
     XrValue r = {0};
     r.tag = XR_TAG_AGG_REF;
     r.ext = ((uint32_t) elem_count << 8) | elem_native_type;
@@ -502,7 +504,7 @@ static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint16_t
     return r;
 }
 
-static inline XrValue xr_array_ref_owned(void *ptr, uint8_t elem_native_type, uint16_t elem_count) {
+static inline XrValue xr_array_ref_owned(void *ptr, uint8_t elem_native_type, uint32_t elem_count) {
     XrValue r = xr_array_ref(ptr, elem_native_type, elem_count);
     r.flags = XRT_VALUE_FLAG_ARRAY_REF_OWNED;
     return r;
@@ -510,7 +512,7 @@ static inline XrValue xr_array_ref_owned(void *ptr, uint8_t elem_native_type, ui
 
 #define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_AGG_REF && (v).ext != 0)
 #define XR_ARRAY_REF_ELEM_TYPE(v) ((uint8_t) ((v).ext & 0xFF))
-#define XR_ARRAY_REF_ELEM_COUNT(v) ((uint16_t) ((v).ext >> 8))
+#define XR_ARRAY_REF_ELEM_COUNT(v) ((uint32_t) ((v).ext >> 8))
 
 static inline XrValue xr_mkf64(double v, uint8_t tag) {
     XrValue r = {0};

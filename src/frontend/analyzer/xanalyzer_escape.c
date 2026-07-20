@@ -799,6 +799,7 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
+        case AST_FIXED_BYTES_LITERAL:
         case AST_LITERAL_RUNE:
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:

@@ -118,5 +118,4 @@ fn test_large_data_broadcast() {
 test_simple_broadcast()
 test_config_broadcast()
 test_large_data_broadcast()
-print("
-🎉 测试7全部通过：广播模式正确！")
+print("\n🎉 测试7全部通过：广播模式正确！")

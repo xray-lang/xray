@@ -1,0 +1,5 @@
+import toml
+
+var report = toml.parseReport("name = \"Alice\"\nname = \"Bob\"")
+var legacy: Array<Json> = report.errors
+print(len(legacy))

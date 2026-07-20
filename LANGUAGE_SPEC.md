@@ -322,12 +322,12 @@ null
 
 #### 1.6.5 String Literals
 
-Xray supports two flavors of string literals: **escaped** and **raw**. Strings use double quotes only; single quotes are reserved for `rune` literals. Backtick strings are not part of the current grammar — the lexer rejects them.
+Xray quoted literals use double quotes only; single quotes are reserved for `rune`, and backtick strings do not exist. The literal prefix, escape mode, and delimiter form are orthogonal dimensions; the unified rules follow below.
 
-##### Plain strings (double quotes)
+##### Inline escaped strings (Q = 1)
 
 ```ebnf
-StringLiteral ::= '"' StrChar* '"'
+InlineEscapedString ::= '"' StrChar* '"'
 StrChar ::= any character that is not a double quote, backslash, or newline
           | EscapeSeq
           | Interpolation
@@ -338,7 +338,7 @@ EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
 Interpolation ::= '${' Expression '}'
 ```
 
-- Strings may span multiple lines; line breaks are part of the string.
+- An inline literal cannot cross a physical line; use an escape or block form for line breaks.
 - Literals containing interpolation produce `TK_TEMPLATE_STRING` internally; literals without interpolation produce `TK_LITERAL_STRING`.
 - `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings / rune literals are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`.
 
@@ -352,10 +352,10 @@ Interpolation ::= '${' Expression '}'
 
 Interpolation expressions may themselves contain nested interpolation; `}` characters inside nested strings do not close the outer `${...}`.
 
-##### Raw strings (`r` prefix)
+##### Inline raw strings (`r` prefix, Q = 1)
 
 ```ebnf
-RawString ::= 'r' '"' RawChar* '"'
+InlineRawString ::= 'r' '"' RawChar* '"'
 RawChar ::= any character except double quote (including `\`, which is not processed)
 ```
 
@@ -368,6 +368,59 @@ RawChar ::= any character except double quote (including `\`, which is not proce
 r"C:\path\to\file"          // literal contains two backslashes
 r"C:\Users\${USER}"         // backslash is not escaped, but ${USER} still interpolates
 ```
+
+##### Unified prefixes and variable quote delimiters
+
+```ebnf
+QuotedLiteral ::= LiteralPrefix InlineQuoted | LiteralPrefix BlockQuoted
+LiteralPrefix ::= '' | 'r' | 'b' | 'br' | 'c' | 'cr'
+InlineQuoted ::= '"' InlinePayload* '"' | '""'
+BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
+QuoteRun ::= '"'{Q}                         // Q >= 3
+BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
+```
+
+- No prefix / `r` produces a valid UTF-8 `string`; no prefix processes escapes, while `r` preserves backslashes literally.
+- `b/br` produces `[byte; L]`; `c/cr` produces `[byte; L+1]` with an appended NUL. `b/c` processes escapes, while `br/cr` preserves raw bytes.
+- `${...}` interpolates only in the no-prefix / `r` family. It is always ordinary payload bytes in `b/br/c/cr`.
+- The only prefixes are no prefix, `r`, `b`, `br`, `c`, and `cr`; `rb/rc` are not aliases. A prefix must immediately precede the quote run.
+- `c/cr` rejects every interior NUL after escape decoding, newline normalization, and margin removal.
+
+```xray
+"Hello, ${name}!"
+r"C:\\path\\${name}"   // backslashes are raw; interpolation remains active
+b"\\x89PNG"              // escaped [byte; 4]
+br"${HOME}\\bin"         // raw bytes; `${HOME}` does not interpolate
+c"puts"                   // [byte; 5], ending in the appended NUL
+cr"C:\\assets"           // raw C bytes + appended NUL
+```
+
+One quote is the inline delimiter. Two consecutive quotes represent only an empty payload in the selected prefix family and never open a block:
+
+```xray
+"" r"" b"" br"" c"" cr""
+```
+
+Three or more consecutive quotes form a block delimiter. The opener must be followed immediately by LF or CRLF. The closer must start on its own line and may contain only “margin + exactly the opener's quote count + line ending or EOF”. No trailing whitespace, comment, comma, semicolon, or bracket is allowed on the closer line; subsequent tokens start on the next line.
+
+```xray
+const HTML = r"""
+<div class="card">
+  ${title}
+</div>
+"""
+
+const SCRIPT = br""""
+echo ${HOME}
+"""
+""""
+```
+
+The structural newline after the opener and before the closer is not part of the value. CRLF inside the body normalizes to LF. Spaces/tabs before the closer define the margin; every non-empty body line must begin with that exact byte prefix, which is removed from the payload. Tabs and spaces are not compared by visual columns.
+
+Only a complete standalone quote-only line matching the closer shape ends the block; ordinary quote runs within body lines are content. If the body needs a line that conflicts with the current closer, the author or formatter increases `Q`. The formatter preserves the prefix and inline/block form but selects the smallest safe `Q >= 3`.
+
+Interpolation expressions are scanned in expression mode with balanced braces; nested quoted literals and rune literals are skipped as units, so same-quote nesting is legal. The fixed-byte family never enters interpolation scanning.
 
 #### 1.6.6 `rune` Literals
 
@@ -5405,8 +5458,15 @@ Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 
 BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
 
-StringLiteral ::= '"' StringChar* '"'
-RawStringLiteral ::= 'r' '"' [^"]* '"'
+QuotedLiteral ::= StringLiteral | FixedByteLiteral
+StringLiteral ::= StringPrefix (InlineQuoted | BlockQuoted)
+FixedByteLiteral ::= FixedBytePrefix (InlineQuoted | BlockQuoted)
+StringPrefix ::= '' | 'r'
+FixedBytePrefix ::= 'b' | 'br' | 'c' | 'cr'
+InlineQuoted ::= '"' InlinePayload* '"' | '""'
+BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
+QuoteRun ::= '"'{Q}                         // Q >= 3
+BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 RegexLiteral ::= '/' RegexBody '/' RegexFlag*
@@ -5477,7 +5537,7 @@ PostfixOp   ::= '(' ArgList? ')'              // call
              |  '!'                            // force unwrap
 
 Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
-         |  StringLiteral | RawStringLiteral | CharLiteral | RegexLiteral
+         |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit

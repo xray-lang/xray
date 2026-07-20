@@ -258,7 +258,7 @@ typedef struct XrProto {
     int numparams;              // parameter count
     int min_params;             // minimum required params (for default params)
     int num_globals;            // global variable count
-    uint16_t struct_area_size;  // bytes needed for struct_area in stack frame (0 = none)
+    uint32_t struct_area_size;  // bytes needed for struct_area in stack frame (0 = none)
 
     int shared_offset;                // per-module shared variable offset into isolate->vm.shared
     int shared_count;                 // top-level shared slots required by this proto tree

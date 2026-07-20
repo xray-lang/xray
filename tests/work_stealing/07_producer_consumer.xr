@@ -78,18 +78,15 @@ for (var i = 0; i < len(consumers); i++) {
 }
 var elapsed = time.monotonic() - start_time
 /* 结果 */
-print("
-结果:")
+print("\n结果:")
 print("  生产数量: " + string(total_produced))
 print("  消费数量: " + string(total_consumed))
 print("  耗时: " + string(elapsed) + " ms")
 /* 验证 */
 var expected = PRODUCER_COUNT * ITEMS_PER_PRODUCER
 if (total_produced == expected && total_consumed == expected) {
-    print("
-✓ 生产者消费者测试通过")
+    print("\n✓ 生产者消费者测试通过")
 } else {
-    print("
-✗ 测试失败")
+    print("\n✗ 测试失败")
 }
 print("========== 测试7 完成 ==========")

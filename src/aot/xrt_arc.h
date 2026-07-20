@@ -404,14 +404,14 @@ static inline XrValue xrt_array_ref_to_owned(XrValue v) {
         return v;
     }
     uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(v);
-    uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(v);
+    uint32_t elem_count = XR_ARRAY_REF_ELEM_COUNT(v);
     size_t elem_size = xrt_value_native_type_size(elem_type);
     size_t size = elem_size * (size_t) elem_count;
     void *dst = xrt_arc_alloc(size);
     if (elem_type == XR_NATIVE_VALUE) {
         XrValue *dst_values = (XrValue *) dst;
         const XrValue *src_values = (const XrValue *) v.ptr;
-        for (uint16_t i = 0; i < elem_count; i++)
+        for (uint32_t i = 0; i < elem_count; i++)
             dst_values[i] = xrt_value_to_owned(src_values[i]);
     } else {
         memcpy(dst, v.ptr, size);
@@ -427,8 +427,8 @@ static inline void xrt_array_ref_release_owned(XrValue v) {
         return;
     if (!(hdr->extra & XR_OBJ_STORAGE_BUMP) && XR_ARRAY_REF_ELEM_TYPE(v) == XR_NATIVE_VALUE) {
         XrValue *values = (XrValue *) v.ptr;
-        uint16_t count = XR_ARRAY_REF_ELEM_COUNT(v);
-        for (uint16_t i = 0; i < count; i++)
+        uint32_t count = XR_ARRAY_REF_ELEM_COUNT(v);
+        for (uint32_t i = 0; i < count; i++)
             xrt_release(values[i]);
     }
     xrt_finalize_one(hdr);

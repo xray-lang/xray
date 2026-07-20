@@ -1,45 +1,46 @@
 // 1200_log_basic.xr - Log module tests
 
 import log
+import { LogFormat, LogLevel } from log
 
-// ===== Level constants =====
+// ===== Typed levels =====
 
 @test
-fn test_log_level_constants() {
-    assert_eq(log.DEBUG, 10)
-    assert_eq(log.INFO, 20)
-    assert_eq(log.WARN, 30)
-    assert_eq(log.ERROR, 40)
-    assert_eq(log.FATAL, 50)
+fn test_log_level_ordering() {
+    assert_eq(log.isEnabled(LogLevel.Fatal), true)
+    assert_eq(LogLevel.Debug == LogLevel.Debug, true)
+    assert_eq(LogLevel.Debug == LogLevel.Info, false)
 }
 
 // ===== isEnabled =====
 
 @test
 fn test_is_enabled_default() {
-    // Default level is INFO
-    assert_eq(log.isEnabled(log.INFO), true)
-    assert_eq(log.isEnabled(log.ERROR), true)
+    // Default level is Info
+    assert_eq(log.isEnabled(LogLevel.Info), true)
+    assert_eq(log.isEnabled(LogLevel.Error), true)
+    assert_eq(log.isEnabled(LogLevel.Debug), false)
 }
 
 @test
 fn test_set_level() {
-    log.setLevel(log.DEBUG)
-    assert_eq(log.isEnabled(log.DEBUG), true)
+    log.setLevel(LogLevel.Debug)
+    assert_eq(log.isEnabled(LogLevel.Debug), true)
     // Restore default
-    log.setLevel(log.INFO)
+    log.setLevel(LogLevel.Info)
+    assert_eq(log.isEnabled(LogLevel.Debug), false)
 }
 
 // ===== Log output (should not crash) =====
 
 @test
 fn test_log_functions() {
-    log.setLevel(log.DEBUG)
+    log.setLevel(LogLevel.Debug)
     log.debug("debug message")
     log.info("info message")
     log.warn("warning message")
     log.error("error message")
-    log.setLevel(log.INFO)
+    log.setLevel(LogLevel.Info)
 }
 
 @test
@@ -51,7 +52,7 @@ fn test_log_with_attrs() {
 
 @test
 fn test_log_json_format() {
-    log.setFormat("json")
+    log.setFormat(LogFormat.Json)
     log.info("json format test", "key", "value")
-    log.setFormat("text")
+    log.setFormat(LogFormat.Text)
 }

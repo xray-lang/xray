@@ -105,6 +105,16 @@ XR_FUNC const char *xa_builtin_get_member_doc(XrType *type, const char *member_n
 XR_FUNC XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type,
                                                   const char *method_name);
 
+// R2-2 stopgap: overflow-control methods on fixed-width int receivers.
+// checked*/saturating*/*Overflows still compute at int64 width in both
+// runtimes, so a fixed-width receiver would silently get int64 overflow
+// boundaries; reject them at compile time until a width-carrying lowering
+// lands. wrappingAdd/Sub/Mul ARE width-lowered (IR arith + receiver-width
+// narrow) and stay allowed. Returns true when the call must be rejected and
+// fills msg with the diagnostic text.
+XR_FUNC bool xa_builtin_int_overflow_method_unsupported(XrType *receiver, const char *method_name,
+                                                        char *msg, size_t msg_cap);
+
 // Check if member is a method
 XR_FUNC bool xa_builtin_is_method(XrType *type, const char *member_name);
 

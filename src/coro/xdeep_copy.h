@@ -91,6 +91,14 @@ typedef struct XrSeenArena {
 
 struct XrCoroHeap;
 
+/* Recursion bound for the deep-copy walk (R2-6). The seen table makes cycles
+ * safe, but acyclic chains miss it on every level and would otherwise recurse
+ * until the C stack is exhausted (SIGSEGV). Aligned with the parser's
+ * 1000-level nesting cap; deep_eq/json_serde use 256. When the bound is hit
+ * the WHOLE copy fails (entry points return XR_NULL_VAL) — a truncated graph
+ * is never handed back. */
+#define XR_DEEP_COPY_MAX_DEPTH 1000
+
 typedef struct XrCopyContext {
     struct XrRuntimeCore *core;
     struct XrFixedHeap *dst_fixed_heap;  // fixed heap fallback
@@ -102,6 +110,8 @@ typedef struct XrCopyContext {
     int bucket_count;
     int objects_copied;
     XrSeenArena *arena_head;  // arena block list for seen entries
+    int depth;                // current recursion depth (bounded by XR_DEEP_COPY_MAX_DEPTH)
+    bool depth_exceeded;      // set once the bound is hit; whole copy fails
 } XrCopyContext;
 
 XR_FUNC void xr_copy_context_init_core(XrCopyContext *ctx, struct XrRuntimeCore *core,

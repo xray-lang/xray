@@ -109,6 +109,12 @@
   :vm-bytecode (driver xi_emit_exact_bit)
   :aot-c (driver xicgen_exact_bit))
 
+(lower xi.bit.mul.high
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_exact_bit)
+  :aot-c (driver xicgen_exact_bit))
+
 (lower xi.bit.bswap
   :match ()
   :required-targets (vm-bytecode aot-c)
@@ -226,6 +232,16 @@
   :aot-c (driver xicgen_vec))
 
 (lower xi.vec.widen.mul
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.unzip
+  :match ()
+  :required-targets (aot-c)
+  :aot-c (driver xicgen_vec))
+
+(lower xi.vec.widen.mul.half
   :match ()
   :required-targets (aot-c)
   :aot-c (driver xicgen_vec))
@@ -859,6 +875,12 @@
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_fixed_array_new)
   :aot-c (driver xicgen_fixed_array_new))
+
+(lower xi.fixed.bytes.const
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_fixed_bytes_const)
+  :aot-c (driver xicgen_fixed_bytes_const))
 
 (lower xi.scope.enter
   :match ()

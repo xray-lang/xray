@@ -14,6 +14,8 @@
 
 #include "xparse_internal.h"
 #include "../../base/xchecks.h"
+#include "../../base/xutf8.h"
+#include "../lexer/xquoted_literal.h"
 
 /*
  * Parse go expression
@@ -59,17 +61,27 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
                     goto fail;
                 }
 
-                // Extract string value (remove quotes)
                 Token str_token = parser->current;
                 xr_parser_advance(parser);
-
-                // Copy string into the parse arena; subsequent 'name:' options
-                // simply overwrite the pointer (old buffers are bulk-released
-                // with the arena).
-                int str_len = str_token.length - 2;  // Remove quotes
-                char *str_copy = (char *) ast_alloc(parser->compiler_session, (size_t) str_len + 1);
-                memcpy(str_copy, str_token.start + 1, str_len);
-                str_copy[str_len] = '\0';
+                XrQuotedPayload payload = {0};
+                const char *error = NULL;
+                bool decode_escapes = str_token.escape_mode == XR_LITERAL_ESCAPED;
+                if (!xr_quoted_payload_decode(&str_token, decode_escapes, &payload, &error)) {
+                    xr_parser_error_at_previous(parser,
+                                                error ? error : "invalid coroutine name literal");
+                    goto fail;
+                }
+                if (memchr(payload.bytes, '\0', payload.length) != NULL ||
+                    !xr_utf8_validate((const char *) payload.bytes, payload.length)) {
+                    xr_quoted_payload_free(&payload);
+                    xr_parser_error_at_previous(
+                        parser, "coroutine name must be valid UTF-8 without NUL bytes");
+                    goto fail;
+                }
+                char *str_copy = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
+                memcpy(str_copy, payload.bytes, payload.length);
+                str_copy[payload.length] = '\0';
+                xr_quoted_payload_free(&payload);
                 name = str_copy;
             } else {
                 xr_parser_error(parser, "go(...) only supports name: option");

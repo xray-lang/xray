@@ -67,6 +67,7 @@ static bool is_simple_expr(const AstNode *node) {
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_STRING:
+        case AST_FIXED_BYTES_LITERAL:
         case AST_LITERAL_RUNE:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
@@ -961,6 +962,7 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_STRING:
+        case AST_FIXED_BYTES_LITERAL:
         case AST_LITERAL_RUNE:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:

@@ -184,61 +184,6 @@ static ParseRule rules[] = {
     [TK_ERROR] = {NULL, NULL, PREC_NONE},
 };
 
-/* ========== Escape Processing ========== */
-
-// Process escape sequences in string content, write to out buffer.
-// out must have at least src_len+1 bytes. Returns output length (excluding NUL).
-size_t xr_process_escapes(const char *src, size_t src_len, char *out) {
-    size_t dst = 0;
-    for (size_t i = 0; i < src_len; i++) {
-        if (src[i] == '\\' && i + 1 < src_len) {
-            i++;
-            switch (src[i]) {
-                case 'n':
-                    out[dst++] = '\n';
-                    break;
-                case 'r':
-                    out[dst++] = '\r';
-                    break;
-                case 't':
-                    out[dst++] = '\t';
-                    break;
-                case '\\':
-                    out[dst++] = '\\';
-                    break;
-                case '"':
-                    out[dst++] = '"';
-                    break;
-                case '\'':
-                    out[dst++] = '\'';
-                    break;
-                case 'b':
-                    out[dst++] = '\b';
-                    break;
-                case 'f':
-                    out[dst++] = '\f';
-                    break;
-                case '0':
-                    out[dst++] = '\0';
-                    break;
-                case '$':
-                    out[dst++] = '$';
-                    break;
-                case '`':
-                    out[dst++] = '`';
-                    break;
-                default:
-                    out[dst++] = '\\';
-                    out[dst++] = src[i];
-                    break;
-            }
-        } else {
-            out[dst++] = src[i];
-        }
-    }
-    return dst;
-}
-
 /* ========== Helpers ========== */
 
 // Get parse rule for a token type

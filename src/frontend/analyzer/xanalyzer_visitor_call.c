@@ -4379,6 +4379,20 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             fn_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
         xa_check_threadlocal_suspend_context(ctx, node, callee_obj_type, method_name);
 
+        /* R2-2 stopgap: checked/saturating/overflows methods on fixed-width
+         * int receivers would silently evaluate at int64 boundaries. */
+        {
+            char ofw_msg[320];
+            if (xa_builtin_int_overflow_method_unsupported(callee_obj_type, method_name, ofw_msg,
+                                                           sizeof(ofw_msg))) {
+                XrLocation ofw_loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, ofw_msg, &ofw_loc);
+                return xr_type_new_error(ctx->analyzer->isolate);
+            }
+        }
+
         if (xa_method_call_creates_span_borrow(callee_obj_type, method_name) &&
             !ctx->allow_view_expr_for_copy) {
             xa_check_span_borrow_source_stable(ctx, call->callee, ma->object, method_name);
@@ -5225,6 +5239,17 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             (!return_type || XR_TYPE_IS_UNKNOWN(return_type) || XR_TYPE_IS_JSON(return_type))) {
             return_type = builtin_return_type;
         }
+    }
+
+    /* R2-2: wrapping* on a fixed-width int receiver is width-lowered to the
+     * arithmetic ops, so the result keeps the receiver's width
+     * (int32.wrappingAdd -> int32), not the plain `int` from the native
+     * class signature. */
+    if (method_name && callee_obj_type && XR_TYPE_IS_INT(callee_obj_type) &&
+        !callee_obj_type->is_nullable && callee_obj_type->native_width != XR_NATIVE_I64 &&
+        (strcmp(method_name, "wrappingAdd") == 0 || strcmp(method_name, "wrappingSub") == 0 ||
+         strcmp(method_name, "wrappingMul") == 0)) {
+        return_type = callee_obj_type;
     }
 
     // G2: Override return type for container methods using callback return type

@@ -217,12 +217,12 @@ null
 
 #### 1.6.5 字符串字面量
 
-xray 支持两类字符串字面量：**带转义** 和 **原始字符串**。字符串只使用双引号；单引号专用于 `rune` 字面量。反引号字符串不属于当前语法——lexer 直接报错。
+Xray 的 quoted literal 只使用双引号；单引号专用于 `rune`，反引号字符串不存在。literal prefix、escape mode 与 delimiter form 是正交维度；完整的统一规则见下文。
 
-##### 普通字符串（双引号）
+##### Inline escaped string（Q = 1）
 
 ```ebnf
-StringLiteral ::= '"' StrChar* '"'
+InlineEscapedString ::= '"' StrChar* '"'
 StrChar ::= 任何非双引号、非反斜杠、非换行符
           | EscapeSeq
           | Interpolation
@@ -233,7 +233,7 @@ EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
 Interpolation ::= '${' Expression '}'
 ```
 
-- 字符串可跨行；行结尾包含在字符串中。
+- inline literal 不能跨物理行；需要换行时使用 escape 或 block form。
 - 包含插值的字面量在 lexer 内部产出 `TK_TEMPLATE_STRING`；不含插值的产出 `TK_LITERAL_STRING`。
 - `${...}` 内按表达式模式扫描：大括号按深度配对，内部字符串 / raw string / rune 字面量会被整体跳过，因此允许同种引号嵌套，例如 `"${m["k"]}"` 与 `"${"a}b"}"`。
 
@@ -247,22 +247,75 @@ Interpolation ::= '${' Expression '}'
 
 插值表达式可以继续包含嵌套插值；内层字符串中的 `}` 不会结束外层 `${...}`。
 
-##### 原始字符串（`r` 前缀）
+##### Inline raw string（`r` prefix，Q = 1）
 
 ```ebnf
-RawString ::= 'r' '"' RawChar* '"'
+InlineRawString ::= 'r' '"' RawChar* '"'
 RawChar ::= 任何非双引号字符（包括 `\`，不做转义处理）
 ```
 
 - **不**处理任何转义（`\n`、`\t` 等保持原样）。
 - 仍然支持 `${...}` 插值。
 - 标识符 `r` 单独使用时仍为普通标识符（`TK_NAME`），仅当后紧接双引号才识别为原始字符串前缀。
-- raw string 使用 `r"..."`；单引号字符串仍按普通转义规则解析。
+- raw string 使用 `r"..."`；单引号只解析为 `rune`。
 
 ```xray
 r"C:\path\to\file"          // 字面量包含两个反斜杠
 r"C:\Users\${USER}"         // 反斜杠不转义，但 ${USER} 仍插值
 ```
+
+##### 统一 prefix 与可变 quote delimiter
+
+```ebnf
+QuotedLiteral ::= LiteralPrefix InlineQuoted | LiteralPrefix BlockQuoted
+LiteralPrefix ::= '' | 'r' | 'b' | 'br' | 'c' | 'cr'
+InlineQuoted ::= '"' InlinePayload* '"' | '""'
+BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
+QuoteRun ::= '"'{Q}                         // Q >= 3
+BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
+```
+
+- 无 prefix / `r` 产生合法 UTF-8 `string`；无 prefix 处理 escape，`r` 保留反斜杠原文。
+- `b/br` 产生 `[byte; L]`；`c/cr` 产生 `[byte; L+1]` 并自动追加 NUL。`b/c` 处理 escape，`br/cr` 保留原始 bytes。
+- `${...}` 只在无 prefix / `r` 中插值；在 `b/br/c/cr` 中永远是普通 payload bytes。
+- 只接受无 prefix、`r`、`b`、`br`、`c`、`cr`；`rb/rc` 不是 alias。prefix 必须无空格紧接 quote run。
+- `c/cr` 在 escape、换行规范化与 margin 移除后拒绝任何 interior NUL。
+
+```xray
+"Hello, ${name}!"
+r"C:\\path\\${name}"   // 反斜杠原样，仍插值
+b"\\x89PNG"              // escaped [byte; 4]
+br"${HOME}\\bin"         // raw bytes；`${HOME}` 不插值
+c"puts"                   // [byte; 5]，最后一项是 appended NUL
+cr"C:\\assets"           // raw C bytes + appended NUL
+```
+
+一个双引号是 inline delimiter；两个连续双引号只表示当前 prefix family 的空 payload，不是 block opener：
+
+```xray
+"" r"" b"" br"" c"" cr""
+```
+
+三个及以上连续双引号形成 block delimiter。opener 后必须立即是 LF 或 CRLF；closer 必须从自己的行开始，形状只能是“margin + 与 opener 完全相同数量的双引号 + 换行或 EOF”。closer 行不能有尾随空白、注释、逗号、分号或括号；后续 token 从下一行开始。
+
+```xray
+const HTML = r"""
+<div class="card">
+  ${title}
+</div>
+"""
+
+const SCRIPT = br""""
+echo ${HOME}
+"""
+""""
+```
+
+opener 后与 closer 前的结构性换行不进入结果值。正文 CRLF 统一为 LF。closer 前的 spaces/tabs 是 margin；每个非空正文行必须以完全相同的 byte prefix 开头，移除后才形成 payload。tabs 与 spaces 不按可视列等价。
+
+只有形状完整匹配的独立 quote-only 行才结束 block；正文内普通 quote run 都是内容。若正文需要一条与当前 closer 冲突的行，作者或 formatter 增加 `Q`。formatter 保留 prefix 与 inline/block form，但会选择最小安全 `Q >= 3`。
+
+插值表达式按表达式模式扫描并配对大括号；内部 quoted literal 与 rune literal 会被整体跳过，因此允许同种引号嵌套。fixed-byte family 不进入插值扫描器。
 
 #### 1.6.6 `rune` 字面量
 
@@ -609,12 +662,12 @@ null
 
 #### 1.6.5 String Literals
 
-Xray supports two flavors of string literals: **escaped** and **raw**. Strings use double quotes only; single quotes are reserved for `rune` literals. Backtick strings are not part of the current grammar — the lexer rejects them.
+Xray quoted literals use double quotes only; single quotes are reserved for `rune`, and backtick strings do not exist. The literal prefix, escape mode, and delimiter form are orthogonal dimensions; the unified rules follow below.
 
-##### Plain strings (double quotes)
+##### Inline escaped strings (Q = 1)
 
 ```ebnf
-StringLiteral ::= '"' StrChar* '"'
+InlineEscapedString ::= '"' StrChar* '"'
 StrChar ::= any character that is not a double quote, backslash, or newline
           | EscapeSeq
           | Interpolation
@@ -625,7 +678,7 @@ EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
 Interpolation ::= '${' Expression '}'
 ```
 
-- Strings may span multiple lines; line breaks are part of the string.
+- An inline literal cannot cross a physical line; use an escape or block form for line breaks.
 - Literals containing interpolation produce `TK_TEMPLATE_STRING` internally; literals without interpolation produce `TK_LITERAL_STRING`.
 - `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings / rune literals are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`.
 
@@ -639,10 +692,10 @@ Interpolation ::= '${' Expression '}'
 
 Interpolation expressions may themselves contain nested interpolation; `}` characters inside nested strings do not close the outer `${...}`.
 
-##### Raw strings (`r` prefix)
+##### Inline raw strings (`r` prefix, Q = 1)
 
 ```ebnf
-RawString ::= 'r' '"' RawChar* '"'
+InlineRawString ::= 'r' '"' RawChar* '"'
 RawChar ::= any character except double quote (including `\`, which is not processed)
 ```
 
@@ -655,6 +708,59 @@ RawChar ::= any character except double quote (including `\`, which is not proce
 r"C:\path\to\file"          // literal contains two backslashes
 r"C:\Users\${USER}"         // backslash is not escaped, but ${USER} still interpolates
 ```
+
+##### Unified prefixes and variable quote delimiters
+
+```ebnf
+QuotedLiteral ::= LiteralPrefix InlineQuoted | LiteralPrefix BlockQuoted
+LiteralPrefix ::= '' | 'r' | 'b' | 'br' | 'c' | 'cr'
+InlineQuoted ::= '"' InlinePayload* '"' | '""'
+BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
+QuoteRun ::= '"'{Q}                         // Q >= 3
+BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
+```
+
+- No prefix / `r` produces a valid UTF-8 `string`; no prefix processes escapes, while `r` preserves backslashes literally.
+- `b/br` produces `[byte; L]`; `c/cr` produces `[byte; L+1]` with an appended NUL. `b/c` processes escapes, while `br/cr` preserves raw bytes.
+- `${...}` interpolates only in the no-prefix / `r` family. It is always ordinary payload bytes in `b/br/c/cr`.
+- The only prefixes are no prefix, `r`, `b`, `br`, `c`, and `cr`; `rb/rc` are not aliases. A prefix must immediately precede the quote run.
+- `c/cr` rejects every interior NUL after escape decoding, newline normalization, and margin removal.
+
+```xray
+"Hello, ${name}!"
+r"C:\\path\\${name}"   // backslashes are raw; interpolation remains active
+b"\\x89PNG"              // escaped [byte; 4]
+br"${HOME}\\bin"         // raw bytes; `${HOME}` does not interpolate
+c"puts"                   // [byte; 5], ending in the appended NUL
+cr"C:\\assets"           // raw C bytes + appended NUL
+```
+
+One quote is the inline delimiter. Two consecutive quotes represent only an empty payload in the selected prefix family and never open a block:
+
+```xray
+"" r"" b"" br"" c"" cr""
+```
+
+Three or more consecutive quotes form a block delimiter. The opener must be followed immediately by LF or CRLF. The closer must start on its own line and may contain only “margin + exactly the opener's quote count + line ending or EOF”. No trailing whitespace, comment, comma, semicolon, or bracket is allowed on the closer line; subsequent tokens start on the next line.
+
+```xray
+const HTML = r"""
+<div class="card">
+  ${title}
+</div>
+"""
+
+const SCRIPT = br""""
+echo ${HOME}
+"""
+""""
+```
+
+The structural newline after the opener and before the closer is not part of the value. CRLF inside the body normalizes to LF. Spaces/tabs before the closer define the margin; every non-empty body line must begin with that exact byte prefix, which is removed from the payload. Tabs and spaces are not compared by visual columns.
+
+Only a complete standalone quote-only line matching the closer shape ends the block; ordinary quote runs within body lines are content. If the body needs a line that conflicts with the current closer, the author or formatter increases `Q`. The formatter preserves the prefix and inline/block form but selects the smallest safe `Q >= 3`.
+
+Interpolation expressions are scanned in expression mode with balanced braces; nested quoted literals and rune literals are skipped as units, so same-quote nesting is legal. The fixed-byte family never enters interpolation scanning.
 
 #### 1.6.6 `rune` Literals
 

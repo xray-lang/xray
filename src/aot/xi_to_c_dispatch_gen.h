@@ -27,6 +27,7 @@
     X(BNOT, "xi.bnot", xicgen_bnot) \
     X(BIT_ROTL, "xi.bit.rotl", xicgen_exact_bit) \
     X(BIT_ROTR, "xi.bit.rotr", xicgen_exact_bit) \
+    X(BIT_MUL_HIGH, "xi.bit.mul.high", xicgen_exact_bit) \
     X(BIT_BSWAP, "xi.bit.bswap", xicgen_exact_bit) \
     X(BIT_POPCOUNT, "xi.bit.popcount", xicgen_exact_bit) \
     X(BIT_CLZ, "xi.bit.clz", xicgen_exact_bit) \
@@ -50,6 +51,8 @@
     X(VEC_REINTERPRET, "xi.vec.reinterpret", xicgen_vec) \
     X(VEC_SHUFFLE, "xi.vec.shuffle", xicgen_vec) \
     X(VEC_WIDEN_MUL, "xi.vec.widen.mul", xicgen_vec) \
+    X(VEC_UNZIP, "xi.vec.unzip", xicgen_vec) \
+    X(VEC_WIDEN_MUL_HALF, "xi.vec.widen.mul.half", xicgen_vec) \
     X(VEC_REDUCE_ADD, "xi.vec.reduce.add", xicgen_vec) \
     X(GET_SHARED, "xi.get.shared", xicgen_get_shared) \
     X(SET_SHARED, "xi.set.shared", xicgen_set_shared) \
@@ -128,6 +131,7 @@
     X(AGG_GET, "xi.agg.get", xicgen_struct_get) \
     X(AGG_SET, "xi.agg.set", xicgen_struct_set) \
     X(FIXED_ARRAY_NEW, "xi.fixed.array.new", xicgen_fixed_array_new) \
+    X(FIXED_BYTES_CONST, "xi.fixed.bytes.const", xicgen_fixed_bytes_const) \
     X(TUPLE_NEW, "xi.tuple.new", xicgen_tuple_new) \
     X(TUPLE_GET, "xi.tuple.get", xicgen_tuple_get) \
     X(BYTE_SLICE_LOAD_U16, "xi.byte.slice.load.u16", xicgen_byte_slice_load_u16) \

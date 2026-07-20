@@ -282,6 +282,7 @@ typedef enum {
     XI_SHR,  /* >> */
     XI_BIT_ROTL,
     XI_BIT_ROTR,
+    XI_BIT_MUL_HIGH,
     XI_BIT_BSWAP,
     XI_BIT_POPCOUNT,
     XI_BIT_CLZ,
@@ -391,6 +392,7 @@ typedef enum {
     XI_AGG_SET,         /* write field: args[0]=struct, args[1]=val, aux_int=field_idx,
                               aux=XrAggregateLayout* */
     XI_FIXED_ARRAY_NEW, /* allocate fixed array in frame storage: type=[T; N], aux_int=native */
+    XI_FIXED_BYTES_CONST, /* compact byte payload copied into fixed-array frame storage */
 
     /* Json / Allocation */
     XI_JSON_NEW,     /* Create Json object: aux=field_count, aux_ptr=field_names[] */
@@ -598,6 +600,8 @@ typedef enum {
     XI_VEC_REINTERPRET,
     XI_VEC_SHUFFLE,
     XI_VEC_WIDEN_MUL,
+    XI_VEC_UNZIP,
+    XI_VEC_WIDEN_MUL_HALF,
     XI_VEC_REDUCE_ADD,
 
     XI_OP_COUNT /* sentinel */

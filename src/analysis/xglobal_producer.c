@@ -138,6 +138,11 @@ struct XgLocalType {
     uint8_t sequence_kind;
     uint32_t sequence_elem_type_key;
     XgInterfaceId sequence_elem_interface_id;
+    /* R2-3: element CLASS of Array<C>/sequence locals. Lets for-in items and
+     * a[i] receivers resolve their static class so polymorphic method calls
+     * get a dispatch plan instead of silently falling back to a static
+     * direct bind in the AOT backend. */
+    XgClassId sequence_elem_class_id;
     uint32_t sequence_storage_id;
     bool sequence_elem_managed_ref;
     XgJsonShapeId sequence_elem_json_shape_id;
@@ -1922,6 +1927,7 @@ static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol
     row->sequence_kind = 0;
     row->sequence_elem_type_key = 0;
     row->sequence_elem_interface_id = XG_NO_ID;
+    row->sequence_elem_class_id = XG_NO_ID;
     row->sequence_elem_managed_ref = false;
     row->sequence_elem_json_shape_id = XG_NO_ID;
     row->sequence_elem_json_shape_literal = NULL;
@@ -2014,6 +2020,7 @@ static void body_assign_local(XgBodyCollect *bc, const char *name, uint32_t symb
     row->map_key_type_key = 0;
     row->map_value_type_key = 0;
     row->sequence_elem_interface_id = XG_NO_ID;
+    row->sequence_elem_class_id = XG_NO_ID;
     row->sequence_elem_json_shape_id = XG_NO_ID;
     row->sequence_elem_json_shape_literal = NULL;
 }
@@ -2408,6 +2415,12 @@ static XgClassId body_resolve_expr_class(XgBodyCollect *bc, const AstNode *expr)
             const XgClassFieldSummary *field = body_find_class_field_in_hierarchy(
                 bc, receiver_class, field_name ? hash_name32(field_name) : 0);
             return field ? field->target_class_id : XG_NO_ID;
+        }
+        case AST_INDEX_GET: {
+            /* a[i] on a tracked Array<C> local: the element class (R2-3,
+             * mirrors the interface resolution below). */
+            XgLocalType *local = body_lookup_local_sequence(bc, expr->as.index_get.array);
+            return local ? local->sequence_elem_class_id : XG_NO_ID;
         }
         case AST_GROUPING:
             return body_resolve_expr_class(bc, expr->as.grouping);
@@ -7110,6 +7123,7 @@ static void body_bind_sequence_local(XgBodyCollect *bc, const char *name, uint8_
     row->sequence_elem_type_key = elem_type_key;
     row->sequence_elem_interface_id =
         producer_lookup_interface_from_tref(bc->producer, elem_type_ref);
+    row->sequence_elem_class_id = producer_lookup_class_from_tref(bc->producer, elem_type_ref);
     row->sequence_storage_id = 0;
     row->sequence_elem_managed_ref = body_type_ref_is_managed_storage_ref(elem_type_ref);
     row->sequence_elem_json_shape_id = XG_NO_ID;
@@ -7149,6 +7163,7 @@ static void body_bind_sequence_local_from_source(XgBodyCollect *bc, const char *
     row->sequence_kind = source->sequence_kind;
     row->sequence_elem_type_key = source->sequence_elem_type_key;
     row->sequence_elem_interface_id = source->sequence_elem_interface_id;
+    row->sequence_elem_class_id = source->sequence_elem_class_id;
     row->sequence_storage_id = source->sequence_storage_id;
     row->sequence_elem_managed_ref = source->sequence_elem_managed_ref;
     row->sequence_elem_json_shape_id = source->sequence_elem_json_shape_id;
@@ -7171,6 +7186,8 @@ static void body_inherit_sequence_source_metadata(XgBodyCollect *bc, const char 
         row->sequence_elem_type_key = source->sequence_elem_type_key;
     if (row->sequence_elem_interface_id == XG_NO_ID)
         row->sequence_elem_interface_id = source->sequence_elem_interface_id;
+    if (row->sequence_elem_class_id == XG_NO_ID)
+        row->sequence_elem_class_id = source->sequence_elem_class_id;
     row->sequence_storage_id = source->sequence_storage_id;
     row->sequence_elem_managed_ref = source->sequence_elem_managed_ref;
     row->sequence_elem_json_shape_id = source->sequence_elem_json_shape_id;
@@ -7262,6 +7279,7 @@ static void body_clear_sequence_local(XgBodyCollect *bc, const char *name) {
     row->sequence_kind = 0;
     row->sequence_elem_type_key = 0;
     row->sequence_elem_interface_id = XG_NO_ID;
+    row->sequence_elem_class_id = XG_NO_ID;
     row->sequence_storage_id = 0;
     row->sequence_elem_managed_ref = false;
     row->sequence_elem_json_shape_id = XG_NO_ID;
@@ -9439,6 +9457,18 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 producer_lookup_interface_from_tref(bc->producer, node->as.for_in_stmt.item_type);
             uint32_t item_type_key =
                 node->as.for_in_stmt.item_type ? hash_tref32(node->as.for_in_stmt.item_type) : 0;
+            /* Untyped for-in item over a tracked Array<C>: inherit the element
+             * class so method calls on the item resolve their receiver and
+             * get a dispatch plan (R2-3: without it the AOT backend silently
+             * bound the base-class method for polymorphic loop receivers). */
+            if (item_class == XG_NO_ID) {
+                const XgLocalType *seq = body_lookup_local_sequence(bc, collection);
+                if (seq) {
+                    item_class = seq->sequence_elem_class_id;
+                    if (item_interface == XG_NO_ID)
+                        item_interface = seq->sequence_elem_interface_id;
+                }
+            }
             bc->capability_bits |= body_capabilities_for_type_ref(node->as.for_in_stmt.item_type);
             bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             walk_body_for_calls(bc, node->as.for_in_stmt.collection);

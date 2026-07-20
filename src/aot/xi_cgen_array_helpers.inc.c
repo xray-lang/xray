@@ -38,7 +38,7 @@ typedef struct CgFixedArrayLaneInfo {
     const char *ctype;
     XrRep rep;
     uint8_t native_type;
-    uint16_t count;
+    uint32_t count;
 } CgFixedArrayLaneInfo;
 
 typedef struct CgStaticFixedStructArrayInfo {
@@ -66,7 +66,8 @@ typedef struct CgStaticFixedCubeInfo {
 
 static bool cg_fixed_array_lane_info_from_type(const XrType *type, CgFixedArrayLaneInfo *out) {
     if (!type || type->kind != XR_KIND_FIXED_ARRAY || !type->fixed_array.element_type ||
-        type->fixed_array.length <= 0 || type->fixed_array.length > UINT16_MAX || !out)
+        type->fixed_array.length < 0 ||
+        (uint64_t) type->fixed_array.length > XR_ARRAY_REF_MAX_COUNT || !out)
         return false;
     XrType *elem = type->fixed_array.element_type;
     int native = xr_type_kind_to_native(elem->kind, elem->native_width);
@@ -77,7 +78,7 @@ static bool cg_fixed_array_lane_info_from_type(const XrType *type, CgFixedArrayL
         .ctype = cg_struct_native_c_type((uint8_t) native),
         .rep = cg_struct_native_rep((uint8_t) native),
         .native_type = (uint8_t) native,
-        .count = (uint16_t) type->fixed_array.length,
+        .count = (uint32_t) type->fixed_array.length,
     };
     return true;
 }
@@ -86,7 +87,7 @@ static bool cg_fixed_array_lane_info_from_value(const XiValue *value, CgFixedArr
     const XiValue *v = cg_unwrap_identity_value(value);
     if (!v || !cg_fixed_array_lane_info_from_type(v->type, out))
         return false;
-    if (v->op == XI_FIXED_ARRAY_NEW)
+    if (v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST)
         out->stack_origin = v;
     return true;
 }
@@ -128,7 +129,18 @@ static bool cg_freestanding_static_fixed_array_literal_in_module(XiCgenCtx *ctx,
         (info.rep == XR_REP_TAGGED && info.native_type != XR_NATIVE_STRING))
         return false;
     const XrCtFixedArrayValue *array = &lit->ct_value->as.fixed_array_val;
-    if (array->count != (int) info.count || array->count <= 0 || !array->elements)
+    if (array->count != (int) info.count)
+        return false;
+    if (array->is_byte_blob) {
+        if (info.native_type != XR_NATIVE_U8 || (array->count > 0 && !array->byte_blob))
+            return false;
+        if (out_info)
+            *out_info = info;
+        if (out_value)
+            *out_value = lit->ct_value;
+        return true;
+    }
+    if (array->count <= 0 || !array->elements)
         return false;
     for (int i = 0; i < array->count; i++) {
         if (!cg_ct_static_fixed_array_value_supported(&array->elements[i], &info))
@@ -638,7 +650,7 @@ static bool cg_emit_freestanding_static_fixed_struct_array_defs(XiCgenCtx *ctx, 
         cg_emit_static_fixed_struct_array_type(out, info.layout, prefix);
         fprintf(out, " ");
         cg_emit_static_fixed_array_name(ctx, out, module, slot);
-        fprintf(out, "[%u]", (unsigned) info.count);
+        fprintf(out, "[%u]", (unsigned) (info.count > 0 ? info.count : 1));
         emit_aot_const_data_attrs(out, lit);
         fprintf(out, " = {");
         for (int i = 0; i < array->count; i++) {
@@ -1495,7 +1507,11 @@ static bool cg_emit_freestanding_static_fixed_array_defs(XiCgenCtx *ctx, FILE *o
         for (int i = 0; i < array->count; i++) {
             if (i > 0)
                 fprintf(out, ", ");
-            cg_emit_static_fixed_array_value(ctx, out, &info, &array->elements[i]);
+            if (array->is_byte_blob) {
+                fprintf(out, "0x%02X", (unsigned) array->byte_blob[i]);
+            } else {
+                cg_emit_static_fixed_array_value(ctx, out, &info, &array->elements[i]);
+            }
         }
         fprintf(out, "};\n");
         emitted = true;

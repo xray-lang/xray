@@ -1,0 +1,17 @@
+// deep_copy_overflow.xr — R2-6 手动验证用例
+// 期望：copy() 报运行时错误 E0440（object graph exceeds max deep-copy depth），
+// 进程以错误码退出但【不得 SIGSEGV】。修复前该用例段错误（exit=139）。
+//
+// 运行：build/xray tests/manual/deep_copy_overflow.xr; echo "exit=$?"
+// 期望输出：built / Uncaught PanicInfo [440] ... / exit=1
+var a: Json = {}
+var i = 0
+while (i < 200000) {
+    var b: Json = {}
+    b["child"] = a
+    a = b
+    i += 1
+}
+print("built")
+var c = copy(a)
+print("UNREACHABLE: copy should have failed")

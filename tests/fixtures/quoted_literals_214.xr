@@ -1,0 +1,22 @@
+var escaped = b"A\x00\xFF"
+var escaped_copy = b"A\x00\xFF"
+var c_escaped = c"ok"
+var raw_block = br"""
+${HOME} \\ path
+"""
+var c_raw_block = cr""""
+q"""
+""""
+
+print(len(escaped))
+print(escaped[0])
+print(escaped[1])
+print(escaped[2])
+print(escaped_copy[2])
+print(len(c_escaped))
+print(c_escaped[2])
+print(len(raw_block))
+print(raw_block[0])
+print(raw_block[1])
+print(len(c_raw_block))
+print(c_raw_block[len(c_raw_block) - 1])

@@ -153,7 +153,7 @@ typedef struct XrVMContext {
 
     // Per-frame struct storage (lazy-allocated, grows with frame depth)
     uint8_t **struct_areas;      // struct data pointers per frame
-    uint16_t *struct_area_caps;  // allocated capacity per frame
+    uint32_t *struct_area_caps;  // allocated capacity per frame
     int struct_areas_cap;        // number of slots in struct_areas/struct_area_caps
 
     // Struct return arena: when a method returns a struct_ref pointing to its

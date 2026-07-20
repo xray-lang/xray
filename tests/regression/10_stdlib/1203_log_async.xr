@@ -1,10 +1,11 @@
 // Test log module async write mode
 
 import log
+import { LogLevel } from log
 
 @test
 fn test_async_mode() {
-    log.setLevel(log.DEBUG)
+    log.setLevel(LogLevel.Debug)
     log.enableAsync(true)
     log.info("async message 1")
     log.debug("async message 2")

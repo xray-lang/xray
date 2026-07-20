@@ -95,11 +95,11 @@ static inline void xrt_fixed_array_set(void *base, uint8_t native_type, int64_t 
 }
 
 static inline void xrt_fixed_array_copy(void *dst, XrValue src, uint8_t native_type,
-                                        uint16_t elem_count) {
+                                        uint32_t elem_count) {
     size_t elem_size = xrt_value_native_type_size(native_type);
     int64_t count = 0;
     if (XR_IS_ARRAY_REF(src)) {
-        uint16_t src_count = XR_ARRAY_REF_ELEM_COUNT(src);
+        uint32_t src_count = XR_ARRAY_REF_ELEM_COUNT(src);
         count = src_count < elem_count ? src_count : elem_count;
         if (XR_ARRAY_REF_ELEM_TYPE(src) == native_type) {
             memcpy(dst, src.ptr, (size_t) count * elem_size);
@@ -179,7 +179,7 @@ static inline int xrt_utf8_decode_scalar(const unsigned char *p, const unsigned 
 static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
     if (XR_IS_ARRAY_REF(obj) && key.tag == XR_TAG_I64) {
         int64_t idx = key.i;
-        uint16_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
+        uint32_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
         if (XR_LIKELY(idx >= 0 && idx < count))
             return xrt_fixed_array_get(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx);
         xrt_fixed_index_oob(idx, count);
@@ -220,7 +220,7 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
 static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
     if (XR_IS_ARRAY_REF(obj) && key.tag == XR_TAG_I64) {
         int64_t idx = key.i;
-        uint16_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
+        uint32_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
         if (XR_LIKELY(idx >= 0 && idx < count)) {
             xrt_fixed_array_set(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx, val);
             return;

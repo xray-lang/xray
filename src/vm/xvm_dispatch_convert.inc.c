@@ -389,6 +389,13 @@ vmcase(OP_COPY) {
         R(a) = xr_deep_copy_explicit_to_storage(isolate, _src, (uint8_t) storage_mode);
     else
         R(a) = xr_deep_copy_explicit_to_coro(isolate, _src, (XrCoroutine *) vm_ctx->current_coro);
+    /* Deep copy fails whole (returns null for a non-null source) when the
+     * graph exceeds XR_DEEP_COPY_MAX_DEPTH or allocation fails (R2-6);
+     * surface it instead of silently materializing null. */
+    if (XR_IS_NULL(R(a)) && !XR_IS_NULL(_src))
+        VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW,
+                         "copy() failed: object graph exceeds max deep-copy depth (1000) or out "
+                         "of memory");
     vmbreak;
 }
 

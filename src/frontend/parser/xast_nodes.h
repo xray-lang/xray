@@ -63,6 +63,7 @@ struct AstNode {
 
     union {
         LiteralNode literal;
+        FixedBytesLiteralNode fixed_bytes_literal;
         BinaryNode binary;
         UnaryNode unary;
         AstNode *grouping;

@@ -28,6 +28,7 @@
     X(BNOT, xi_emit_bnot) \
     X(BIT_ROTL, xi_emit_exact_bit) \
     X(BIT_ROTR, xi_emit_exact_bit) \
+    X(BIT_MUL_HIGH, xi_emit_exact_bit) \
     X(BIT_BSWAP, xi_emit_exact_bit) \
     X(BIT_POPCOUNT, xi_emit_exact_bit) \
     X(BIT_CLZ, xi_emit_exact_bit) \
@@ -141,6 +142,7 @@
     X(AGG_GET, xi_emit_struct_get) \
     X(AGG_SET, xi_emit_struct_set) \
     X(FIXED_ARRAY_NEW, xi_emit_fixed_array_new) \
+    X(FIXED_BYTES_CONST, xi_emit_fixed_bytes_const) \
     X(SCOPE_ENTER, xi_emit_scope_enter) \
     X(SCOPE_EXIT, xi_emit_scope_exit) \
     X(REGEX_COMPILE, xi_emit_regex_compile) \

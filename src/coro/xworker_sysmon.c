@@ -243,11 +243,13 @@ int xr_runtime_main_thread_run(XrRuntime *runtime, XrCoroutine *main_coro) {
     // Re-entry support (REPL): if runtime was stopped by previous main coro completion,
     // rejoin dead threads and restart state for next run.
     if (!atomic_load(&runtime->running)) {
-        // Only join threads if they were started in previous run
-        if (atomic_load(&runtime->threads_started)) {
-            if (atomic_load_explicit(&runtime->sysmon_started, memory_order_acquire)) {
+        // Only join threads if they were started in the previous run AND
+        // nobody consumed the handles yet (R2-7: single-joiner claim shared
+        // with xr_runtime_stop and this function's tail).
+        bool claim = true;
+        if (atomic_compare_exchange_strong(&runtime->threads_started, &claim, false)) {
+            if (atomic_exchange_explicit(&runtime->sysmon_started, false, memory_order_acq_rel)) {
                 xr_thread_join(runtime->sysmon_thread, NULL);
-                atomic_store_explicit(&runtime->sysmon_started, false, memory_order_release);
             }
             for (int i = 1; i < runtime->worker_count; i++) {
                 XrMachine *wm = runtime->workers[i].m;
@@ -307,19 +309,21 @@ int xr_runtime_main_thread_run(XrRuntime *runtime, XrCoroutine *main_coro) {
 
     // Join worker threads before returning — prevents use-after-free when
     // caller frees protos while workers still execute coroutine bytecode.
-    if (atomic_load(&runtime->threads_started)) {
-        if (atomic_load_explicit(&runtime->sysmon_started, memory_order_acquire)) {
-            xr_thread_join(runtime->sysmon_thread, NULL);
-            atomic_store_explicit(&runtime->sysmon_started, false, memory_order_release);
+    // Single-joiner claim (R2-7): consuming threads_started up front means a
+    // later xr_runtime_stop (teardown calls stop → delete → stop) can never
+    // re-join the handles this block already consumed.
+    {
+        bool claim = true;
+        if (atomic_compare_exchange_strong(&runtime->threads_started, &claim, false)) {
+            if (atomic_exchange_explicit(&runtime->sysmon_started, false, memory_order_acq_rel)) {
+                xr_thread_join(runtime->sysmon_thread, NULL);
+            }
+            for (int i = 1; i < runtime->worker_count; i++) {
+                XrMachine *wm = runtime->workers[i].m;
+                if (wm)
+                    xr_thread_join(wm->thread, NULL);
+            }
         }
-        for (int i = 1; i < runtime->worker_count; i++) {
-            XrMachine *wm = runtime->workers[i].m;
-            if (wm)
-                xr_thread_join(wm->thread, NULL);
-        }
-        // Mark threads as joined so next run doesn't double-join
-        atomic_store(&runtime->sysmon_started, false);
-        atomic_store(&runtime->threads_started, false);
     }
 
     // Cleanup TLS

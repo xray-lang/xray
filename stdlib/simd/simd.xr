@@ -282,6 +282,26 @@ export struct U32x4 align(16) {
     }
 
     @no_alloc
+    unzipEven(other: in U32x4) -> U32x4 {
+        return U32x4{_lanes: [this._lanes[0], this._lanes[2], other._lanes[0], other._lanes[2]]}
+    }
+
+    @no_alloc
+    unzipOdd(other: in U32x4) -> U32x4 {
+        return U32x4{_lanes: [this._lanes[1], this._lanes[3], other._lanes[1], other._lanes[3]]}
+    }
+
+    @no_alloc
+    widenMulLow(other: in U32x4) -> U64x2 {
+        return U64x2.fromLanes([(this._lanes[0] as uint64) * (other._lanes[0] as uint64), (this._lanes[1] as uint64) * (other._lanes[1] as uint64)])
+    }
+
+    @no_alloc
+    widenMulHigh(other: in U32x4) -> U64x2 {
+        return U64x2.fromLanes([(this._lanes[2] as uint64) * (other._lanes[2] as uint64), (this._lanes[3] as uint64) * (other._lanes[3] as uint64)])
+    }
+
+    @no_alloc
     reinterpretU8() -> U8x16 {
         var lanes: [byte; 16] = [0; 16]
         var i = 0

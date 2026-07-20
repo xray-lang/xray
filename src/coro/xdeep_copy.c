@@ -73,6 +73,8 @@ static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core,
     ctx->bucket_count = 0;
     ctx->objects_copied = 0;
     ctx->arena_head = NULL;
+    ctx->depth = 0;
+    ctx->depth_exceeded = false;
 }
 
 void xr_copy_context_init_core(XrCopyContext *ctx, XrRuntimeCore *core,
@@ -789,7 +791,7 @@ static XrValue xr_deep_copy_array_ref_with_ctx(XrCopyContext *ctx, XrValue value
         return value;
 
     uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(value);
-    uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(value);
+    uint32_t elem_count = XR_ARRAY_REF_ELEM_COUNT(value);
     uint8_t elem_size = xr_native_type_size(xr_target_data_layout_host(), elem_type);
     if (elem_size == 0 || elem_count == 0)
         return value;
@@ -806,7 +808,7 @@ static XrValue xr_deep_copy_array_ref_with_ctx(XrCopyContext *ctx, XrValue value
     if (elem_type == XR_NATIVE_VALUE) {
         const XrValue *src_values = (const XrValue *) value.ptr;
         XrValue *dst_values = (XrValue *) dst;
-        for (uint16_t i = 0; i < elem_count; i++)
+        for (uint32_t i = 0; i < elem_count; i++)
             dst_values[i] = xr_deep_copy_with_ctx(ctx, src_values[i]);
     } else {
         memcpy(dst, value.ptr, byte_count);
@@ -814,10 +816,31 @@ static XrValue xr_deep_copy_array_ref_with_ctx(XrCopyContext *ctx, XrValue value
     return xr_array_ref(dst, elem_type, elem_count);
 }
 
+/* Central recursion guard (R2-6): every per-type copy hook recurses back
+ * through xr_deep_copy_with_ctx, so bounding the depth here covers the whole
+ * walk. On the bound being hit the flag is latched and NULL is returned; the
+ * outermost frame (depth back at 0) then discards any partial graph and
+ * reports failure as XR_NULL_VAL, matching the alloc-failure convention.
+ * Partial allocations follow the same fate as mid-graph OOM: region-heap
+ * copies are reclaimed with the coroutine heap, RC copies at heap teardown. */
+static inline XrValue deep_copy_dispatch_bounded(XrCopyContext *ctx, XrValue value,
+                                                 XrObjDeepCopyFn fn, XrObjHeader *obj) {
+    if (ctx->depth >= XR_DEEP_COPY_MAX_DEPTH) {
+        ctx->depth_exceeded = true;
+        return XR_NULL_VAL;
+    }
+    ctx->depth++;
+    XrValue result = fn ? fn(ctx, obj) : xr_deep_copy_array_ref_with_ctx(ctx, value);
+    ctx->depth--;
+    if (ctx->depth == 0 && ctx->depth_exceeded)
+        return XR_NULL_VAL;  // never hand back a truncated graph
+    return result;
+}
+
 XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     XR_DCHECK(ctx != NULL, "deep_copy_with_ctx: NULL context");
     if (XR_IS_ARRAY_REF(value))
-        return xr_deep_copy_array_ref_with_ctx(ctx, value);
+        return deep_copy_dispatch_bounded(ctx, value, NULL, NULL);
     if (!XR_IS_PTR(value))
         return value;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
@@ -850,7 +873,9 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     // TEXCEPTION, TERROR). Strings have a hook because short runtime strings
     // are coroutine-local and must be promoted before crossing a boundary.
     XrObjDeepCopyFn fn = xr_obj_deep_copy_ops[type];
-    return fn ? fn(ctx, obj) : value;
+    if (!fn)
+        return value;
+    return deep_copy_dispatch_bounded(ctx, value, fn, obj);
 }
 
 XrValue xr_deep_copy_core(XrRuntimeCore *core, XrValue value, XrFixedHeap *dst_fixed_heap) {
@@ -1073,6 +1098,8 @@ XrValue xr_deep_copy_array(struct XrVMRuntime *X, struct XrArray *array,
     XrCopyContext ctx;
     xr_copy_context_init(&ctx, X, dst_fixed_heap);
     XrValue result = xr_deep_copy_array_with_ctx(&ctx, (XrObjHeader *) array);
+    if (ctx.depth_exceeded)
+        result = XR_NULL_VAL;
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -1087,6 +1114,8 @@ XrValue xr_deep_copy_map(struct XrVMRuntime *X, struct XrMap *map,
     XrCopyContext ctx;
     xr_copy_context_init(&ctx, X, dst_fixed_heap);
     XrValue result = xr_deep_copy_map_with_ctx(&ctx, (XrObjHeader *) map);
+    if (ctx.depth_exceeded)
+        result = XR_NULL_VAL;
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -1101,6 +1130,8 @@ XrValue xr_deep_copy_closure(struct XrVMRuntime *X, struct XrClosure *closure,
     XrCopyContext ctx;
     xr_copy_context_init(&ctx, X, dst_fixed_heap);
     XrValue result = xr_deep_copy_closure_with_ctx(&ctx, (XrObjHeader *) closure);
+    if (ctx.depth_exceeded)
+        result = XR_NULL_VAL;
     xr_copy_context_cleanup(&ctx);
     return result;
 }

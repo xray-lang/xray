@@ -45,8 +45,7 @@ done = true
 time.sleep(20)
 /* 给协程时间响应 done 标志 */
 /* 分析结果 */
-print("
-各协程执行次数:")
+print("\n各协程执行次数:")
 var total = 0
 var min_count = counts[0]
 var max_count = counts[0]
@@ -61,8 +60,7 @@ for (var i = 0; i < CORO_COUNT; i++) {
     }
 }
 var avg = total / CORO_COUNT
-print("
-统计:")
+print("\n统计:")
 print("  总执行次数: " + string(total))
 print("  平均: " + string(avg))
 print("  最小: " + string(min_count))
@@ -75,11 +73,9 @@ if (min_count > 0) {
 print("  最大/最小比: " + string(ratio))
 /* 验证公平性：比例不应超过 10 倍 */
 if (ratio <= 10) {
-    print("
-✓ 公平性测试通过：执行次数相对均衡")
+    print("\n✓ 公平性测试通过：执行次数相对均衡")
 } else {
-    print("
-⚠ 公平性警告：执行次数差异较大")
+    print("\n⚠ 公平性警告：执行次数差异较大")
 }
 /* 验证所有协程都执行了 */
 var all_executed = true

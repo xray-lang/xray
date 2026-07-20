@@ -89,6 +89,33 @@ typedef struct XaotValuePlan {
     XaotValueRep rep;
 } XaotValuePlan;
 
+typedef enum XaotFixedBytesAction {
+    XAOT_FIXED_BYTES_VALUE_COPY = 1,
+    XAOT_FIXED_BYTES_READONLY_PTR = 2,
+} XaotFixedBytesAction;
+
+enum {
+    XAOT_FIXED_BYTES_EV_EXACT_OP = 1u << 0,
+    XAOT_FIXED_BYTES_EV_EXACT_LENGTH = 1u << 1,
+    XAOT_FIXED_BYTES_EV_BYTE_LAYOUT = 1u << 2,
+    XAOT_FIXED_BYTES_EV_CANONICAL_BLOB = 1u << 3,
+};
+
+typedef struct XaotFixedBytesBlob {
+    const uint8_t *data;
+    uint32_t length;
+    uint64_t hash;
+} XaotFixedBytesBlob;
+
+typedef struct XaotFixedBytesPlan {
+    const XiFunc *func;
+    const XiValue *value;
+    uint32_t blob_id; /* 1-based index into fixed_bytes_blobs */
+    uint32_t length;
+    uint32_t evidence;
+    uint8_t action;
+} XaotFixedBytesPlan;
+
 typedef struct XaotContainerTypePlan {
     XaotContainerPlan plan;
 } XaotContainerTypePlan;
@@ -1586,6 +1613,9 @@ typedef struct XaotPrepareStats {
     uint32_t array_cache_total;
     uint32_t array_cache_read;
     uint32_t array_cache_mutable;
+    uint32_t fixed_bytes_values;
+    uint32_t fixed_bytes_blobs;
+    uint32_t fixed_bytes_dedup_hits;
 } XaotPrepareStats;
 
 typedef struct XaotBundle {
@@ -1617,6 +1647,14 @@ typedef struct XaotBundle {
     XaotValuePlan *value_plans;
     uint32_t nvalue_plans;
     uint32_t value_plan_cap;
+    XaotFixedBytesPlan *fixed_bytes_plans;
+    uint32_t nfixed_bytes_plans;
+    uint32_t fixed_bytes_plan_cap;
+    XaotFixedBytesBlob *fixed_bytes_blobs;
+    uint32_t nfixed_bytes_blobs;
+    uint32_t fixed_bytes_blob_cap;
+    uint32_t *fixed_bytes_blob_index; /* open-addressed table of 1-based blob ids */
+    uint32_t fixed_bytes_blob_index_cap;
     XaotContainerTypePlan *container_plans;
     uint32_t ncontainer_plans;
     uint32_t container_plan_cap;
@@ -1757,6 +1795,7 @@ typedef struct XaotBundle {
     uint32_t nboundary_steps;
     uint32_t boundary_step_cap;
     XaotPtrIndex value_index;             /* XiValue* -> value_plans row */
+    XaotPtrIndex fixed_bytes_index;       /* XiValue* -> fixed_bytes_plans row */
     XaotPtrIndex func_index;              /* XiFunc*  -> func_plans row */
     XaotPtrIndex array_storage_index;     /* XiValue* (value) -> array_storage_plans row */
     XaotPtrIndex array_cache_index;       /* XiValue* (value) -> array_cache_plans row */
@@ -1878,6 +1917,14 @@ XR_FUNC XaotValuePlan *xaot_bundle_add_value_plan(XaotBundle *bundle, const XiFu
 XR_FUNC const XaotValuePlan *xaot_bundle_find_value_plan(const XaotBundle *bundle,
                                                          const XiValue *value);
 XR_FUNC XaotValuePlan *xaot_bundle_find_value_plan_mut(XaotBundle *bundle, const XiValue *value);
+XR_FUNC bool xaot_fixed_bytes_plan_derive(const XiFunc *func, const XiValue *value,
+                                          XaotFixedBytesPlan *out);
+XR_FUNC XaotFixedBytesPlan *xaot_bundle_add_fixed_bytes_plan(XaotBundle *bundle, const XiFunc *func,
+                                                             const XiValue *value);
+XR_FUNC const XaotFixedBytesPlan *xaot_bundle_find_fixed_bytes_plan(const XaotBundle *bundle,
+                                                                    const XiValue *value);
+XR_FUNC const XaotFixedBytesBlob *xaot_bundle_find_fixed_bytes_blob(const XaotBundle *bundle,
+                                                                    uint32_t blob_id);
 XR_FUNC XaotContainerTypePlan *xaot_bundle_add_container_plan(XaotBundle *bundle,
                                                               const XrType *type);
 XR_FUNC const XaotContainerTypePlan *xaot_bundle_find_container_plan(const XaotBundle *bundle,

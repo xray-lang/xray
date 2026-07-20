@@ -369,6 +369,29 @@ XR_FUNC void xi_emit_fixed_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_FIXED_ARRAY_NEW, dst, slot, karg));
 }
 
+XR_FUNC void xi_emit_fixed_bytes_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (!ctx || !v || v->nargs != 0 || v->aux_int < 0 ||
+        (uint64_t) v->aux_int > XR_ARRAY_REF_MAX_COUNT || (v->aux_int > 0 && !v->aux) || !v->type ||
+        v->type->kind != XR_KIND_FIXED_ARRAY || v->type->fixed_array.length != v->aux_int ||
+        !v->type->fixed_array.element_type ||
+        xr_type_kind_to_native(v->type->fixed_array.element_type->kind,
+                               v->type->fixed_array.element_type->native_width) != XR_NATIVE_U8) {
+        if (ctx)
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    uint32_t bytes = (uint32_t) (v->aux_int > 0 ? v->aux_int : 1);
+    uint32_t slot = 0;
+    if (!xi_emit_alloc_struct_area_bytes_wide(ctx, bytes, &slot))
+        return;
+    int kidx = add_const_string_n(ctx, (const char *) v->aux, (size_t) v->aux_int);
+    if (ctx->status != XI_EMIT_OK || kidx < 0)
+        return;
+    emit_inst(ctx, CREATE_ABx(OP_LOADK, dst, (uint32_t) kidx));
+    emit_inst(ctx, CREATE_ABx(OP_FIXED_BYTES_CONST, dst, slot));
+}
+
 /* Index get */
 XR_FUNC void xi_emit_index_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 2) {

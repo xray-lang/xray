@@ -35,8 +35,15 @@ Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 
 BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
 
-StringLiteral ::= '"' StringChar* '"'
-RawStringLiteral ::= 'r' '"' [^"]* '"'
+QuotedLiteral ::= StringLiteral | FixedByteLiteral
+StringLiteral ::= StringPrefix (InlineQuoted | BlockQuoted)
+FixedByteLiteral ::= FixedBytePrefix (InlineQuoted | BlockQuoted)
+StringPrefix ::= '' | 'r'
+FixedBytePrefix ::= 'b' | 'br' | 'c' | 'cr'
+InlineQuoted ::= '"' InlinePayload* '"' | '""'
+BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
+QuoteRun ::= '"'{Q}                         // Q >= 3
+BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 RegexLiteral ::= '/' RegexBody '/' RegexFlag*
@@ -107,7 +114,7 @@ PostfixOp   ::= '(' ArgList? ')'              // call
              |  '!'                            // force unwrap
 
 Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
-         |  StringLiteral | RawStringLiteral | CharLiteral | RegexLiteral
+         |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
@@ -357,8 +364,15 @@ Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 
 BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
 
-StringLiteral ::= '"' StringChar* '"'
-RawStringLiteral ::= 'r' '"' [^"]* '"'
+QuotedLiteral ::= StringLiteral | FixedByteLiteral
+StringLiteral ::= StringPrefix (InlineQuoted | BlockQuoted)
+FixedByteLiteral ::= FixedBytePrefix (InlineQuoted | BlockQuoted)
+StringPrefix ::= '' | 'r'
+FixedBytePrefix ::= 'b' | 'br' | 'c' | 'cr'
+InlineQuoted ::= '"' InlinePayload* '"' | '""'
+BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
+QuoteRun ::= '"'{Q}                         // Q >= 3
+BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 RegexLiteral ::= '/' RegexBody '/' RegexFlag*
@@ -429,7 +443,7 @@ PostfixOp   ::= '(' ArgList? ')'              // call
              |  '!'                            // force unwrap
 
 Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
-         |  StringLiteral | RawStringLiteral | CharLiteral | RegexLiteral
+         |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit

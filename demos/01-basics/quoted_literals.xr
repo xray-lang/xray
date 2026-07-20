@@ -1,0 +1,22 @@
+// Quoted literals: inline, raw, fixed bytes, and variable-quote blocks.
+
+var title = "Xray"
+var page = r"""
+<section class="card">
+  <h1>${title}</h1>
+  <p>Backslashes stay raw: C:\assets\page.html</p>
+</section>
+"""
+
+var shell = br""""
+echo ${HOME}
+"""
+""""
+
+var magic = b"\x89PNG"
+var symbol = cr"puts"
+
+print(page)
+print(len(shell))
+print(magic[0])
+print(len(symbol))

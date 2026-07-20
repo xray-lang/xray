@@ -351,6 +351,10 @@ static SccpCell eval_exact_bit(const XiValue *v, SccpCell a, SccpCell b) {
             return b.kind == SCCP_CONST_INT
                        ? sccp_int(xr_bits_exact_rotate_right(a.ival, b.ival, native_type))
                        : sccp_bot();
+        case XI_BIT_MUL_HIGH:
+            return b.kind == SCCP_CONST_INT
+                       ? sccp_int(xr_bits_exact_mul_high(a.ival, b.ival, native_type))
+                       : sccp_bot();
         default:
             return sccp_bot();
     }
@@ -569,7 +573,7 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
          * pollute the lattice. */
         if (a.kind == SCCP_TOP || b.kind == SCCP_TOP)
             return sccp_top();
-        if (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR)
+        if (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR || v->op == XI_BIT_MUL_HIGH)
             return eval_exact_bit(v, a, b);
         if (is_compare_op(v->op))
             return eval_compare(v->op, a, b, sccp_compare_uses_unsigned(v));

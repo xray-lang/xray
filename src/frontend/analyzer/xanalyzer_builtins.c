@@ -261,6 +261,44 @@ bool xa_builtin_is_method(XrType *type, const char *member_name) {
     return m ? m->is_method : false;
 }
 
+/* R2-2 stopgap: see xanalyzer_builtins.h. The runtime bindings for the
+ * checked/saturating/overflows families evaluate at int64 width (VM native
+ * cfuncs and AOT xrt_method dispatch both see a widened i64 value), so on a
+ * fixed-width receiver they would silently use the WRONG overflow boundary
+ * (int32.checkedAdd reports no overflow at 2^31) and even invert the safety
+ * contract the methods exist for. Until a width-carrying lowering exists,
+ * fail the compile with an actionable message instead.
+ *
+ * Nullable fixed-width receivers are NOT special-cased: `int32?` follows the
+ * language-wide nullable-widening rule (its value semantics are plain `int`,
+ * e.g. `(a!) + 1` computes at int64), so the int64 method semantics are
+ * consistent there. */
+bool xa_builtin_int_overflow_method_unsupported(XrType *receiver, const char *method_name,
+                                                char *msg, size_t msg_cap) {
+    if (!receiver || !method_name || receiver->kind != XR_KIND_INT || receiver->is_nullable)
+        return false;
+    if (receiver->native_width == XR_NATIVE_I64)
+        return false;  // plain int / explicit int64: int64 semantics are exact
+
+    static const char *const blocked[] = {
+        "checkedAdd",    "checkedSub",   "checkedMul",   "saturatingAdd", "saturatingSub",
+        "saturatingMul", "addOverflows", "subOverflows", "mulOverflows",
+    };
+    for (size_t i = 0; i < sizeof(blocked) / sizeof(blocked[0]); i++) {
+        if (strcmp(method_name, blocked[i]) == 0) {
+            if (msg && msg_cap > 0)
+                snprintf(msg, msg_cap,
+                         "'%s' is not supported on fixed-width integer receivers yet: the runtime "
+                         "computes it at int64 width, which would silently use the wrong overflow "
+                         "boundary; convert the receiver with int(...) first if int64 semantics "
+                         "are intended, or use wrappingAdd/wrappingSub/wrappingMul (width-exact)",
+                         method_name);
+            return true;
+        }
+    }
+    return false;
+}
+
 // Get method return type with generic substitution
 XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type,
                                           const char *method_name) {

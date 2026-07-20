@@ -261,4 +261,57 @@ static inline int64_t xr_bits_exact_rotate_right(int64_t x, int64_t n, uint8_t n
     return xr_bits_exact_restore(out, native_type);
 }
 
+/* High 64 bits of the unsigned 128-bit product. Prefers the compiler's native
+ * wide multiply so AArch64 emits umulh and x86-64 emits mulx/mul high; the
+ * portable 32x32 fallback keeps the header freestanding on toolchains without
+ * __int128 or the MSVC intrinsic. */
+static inline uint64_t xr_bits_umulh64(uint64_t a, uint64_t b) {
+#if defined(__SIZEOF_INT128__)
+    return (uint64_t) (((unsigned __int128) a * (unsigned __int128) b) >> 64);
+#elif defined(_MSC_VER) && !defined(__clang__)
+    return __umulh(a, b);
+#else
+    uint64_t al = a & UINT64_C(0xffffffff), ah = a >> 32;
+    uint64_t bl = b & UINT64_C(0xffffffff), bh = b >> 32;
+    uint64_t ll = al * bl, lh = al * bh, hl = ah * bl, hh = ah * bh;
+    uint64_t cross = (ll >> 32) + (lh & UINT64_C(0xffffffff)) + (hl & UINT64_C(0xffffffff));
+    return hh + (lh >> 32) + (hl >> 32) + (cross >> 32);
+#endif
+}
+
+/* High 64 bits of the signed 128-bit product (AArch64 smulh / x86-64 imul high). */
+static inline int64_t xr_bits_smulh64(int64_t a, int64_t b) {
+#if defined(__SIZEOF_INT128__)
+    return (int64_t) (uint64_t) (((__int128) a * (__int128) b) >> 64);
+#elif defined(_MSC_VER) && !defined(__clang__)
+    return __mulh(a, b);
+#else
+    uint64_t hi = xr_bits_umulh64((uint64_t) a, (uint64_t) b);
+    if (a < 0)
+        hi -= (uint64_t) b;
+    if (b < 0)
+        hi -= (uint64_t) a;
+    return (int64_t) hi;
+#endif
+}
+
+/* High half of the full 2W-bit product of two exact-width receivers. Unsigned
+ * receivers take the unsigned product, signed receivers the signed product; the
+ * result follows the exact-width int64 payload convention. */
+static inline int64_t xr_bits_exact_mul_high(int64_t a, int64_t b, uint8_t native_type) {
+    uint8_t width = xr_bits_exact_width(native_type);
+    int is_signed = xr_bits_exact_is_signed(native_type);
+    if (width >= 64)
+        return is_signed ? xr_bits_smulh64(a, b)
+                         : (int64_t) xr_bits_umulh64((uint64_t) a, (uint64_t) b);
+    if (is_signed) {
+        int64_t sa = xr_bits_exact_restore(xr_bits_exact_pattern(a, native_type), native_type);
+        int64_t sb = xr_bits_exact_restore(xr_bits_exact_pattern(b, native_type), native_type);
+        return xr_bits_exact_restore((uint64_t) ((sa * sb) >> width), native_type);
+    }
+    uint64_t ua = xr_bits_exact_pattern(a, native_type);
+    uint64_t ub = xr_bits_exact_pattern(b, native_type);
+    return xr_bits_exact_restore((ua * ub) >> width, native_type);
+}
+
 #endif  // XRAY_SHARED_XR_BITS_CORE_H

@@ -133,5 +133,4 @@ fn test_parallel_pipeline() {
 test_simple_pipeline()
 test_transform_pipeline()
 test_parallel_pipeline()
-print("
-🎉 测试8全部通过：流水线处理正确！")
+print("\n🎉 测试8全部通过：流水线处理正确！")

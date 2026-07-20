@@ -55,6 +55,7 @@ typedef struct XfmtSnapshot {
     int column;
     int line_start;
     int indent_level;
+    bool block_literal_closed;
 } XfmtSnapshot;
 
 XR_FUNC void xfmt_snapshot(XrFmtContext *ctx, XfmtSnapshot *snap);

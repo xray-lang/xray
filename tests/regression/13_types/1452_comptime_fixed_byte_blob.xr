@@ -1,0 +1,25 @@
+const BYTE_BLOB = b"\x00A\xFF"
+const BYTE_BLOB_SAME = b"\x00A\xFF"
+const BYTE_BLOB_OTHER = br"xyz"
+
+comptime {
+    compile_assert(BYTE_BLOB[0] == 0, "compact byte blob index 0")
+    compile_assert(BYTE_BLOB[1] == 65, "compact byte blob index 1")
+    compile_assert(BYTE_BLOB[2] == 255, "compact byte blob index 2")
+    compile_assert(BYTE_BLOB == BYTE_BLOB_SAME, "compact byte blob equality")
+    compile_assert(BYTE_BLOB != BYTE_BLOB_OTHER, "compact byte blob inequality")
+
+    var sum = comptime 0
+    for (index, value in BYTE_BLOB) {
+        sum += index + value
+    }
+    compile_assert(sum == 323, "compact byte blob comptime for-in")
+}
+
+@test
+fn test_comptime_fixed_byte_blob_materialization() {
+    var copied: [byte; 3] = comptime BYTE_BLOB
+    assert_eq(copied[0], 0)
+    assert_eq(copied[1], 65)
+    assert_eq(copied[2], 255)
+}

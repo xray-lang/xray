@@ -43,6 +43,18 @@ static inline uint64_t hash_string_into(const char *str, uint64_t hash) {
     return hash;
 }
 
+static uint64_t hash_bytes_into(const uint8_t *bytes, size_t length, uint64_t hash) {
+    for (int i = 0; i < 8; i++) {
+        hash ^= (length >> (i * 8)) & 0xFFu;
+        hash *= XR_FNV64_PRIME;
+    }
+    for (size_t i = 0; i < length; i++) {
+        hash ^= bytes[i];
+        hash *= XR_FNV64_PRIME;
+    }
+    return hash;
+}
+
 // Hash an integer into the running hash
 static inline uint64_t hash_int_into(int64_t val, uint64_t hash) {
     for (int i = 0; i < 8; i++) {
@@ -86,6 +98,15 @@ static uint64_t hash_ast_node(AstNode *node, uint64_t hash) {
         } break;
         case AST_LITERAL_STRING:
             hash = hash_string_into(node->as.literal.raw_value.string_val, hash);
+            hash = hash_int_into(node->as.literal.escape_mode, hash);
+            hash = hash_int_into(node->as.literal.source_form, hash);
+            break;
+        case AST_FIXED_BYTES_LITERAL:
+            hash = hash_bytes_into(node->as.fixed_bytes_literal.payload,
+                                   node->as.fixed_bytes_literal.payload_length, hash);
+            hash = hash_int_into(node->as.fixed_bytes_literal.append_nul ? 1 : 0, hash);
+            hash = hash_int_into(node->as.fixed_bytes_literal.escape_mode, hash);
+            hash = hash_int_into(node->as.fixed_bytes_literal.source_form, hash);
             break;
         case AST_LITERAL_RUNE:
             hash = hash_int_into((int64_t) node->as.literal.raw_value.rune_val, hash);

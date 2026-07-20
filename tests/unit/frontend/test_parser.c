@@ -103,6 +103,140 @@ TEST(parser_string_literal) {
     teardown();
 }
 
+TEST(parser_block_string_normalizes_crlf_and_margin) {
+    setup();
+    AstNode *stmt = parse_first("var s = \"\"\"\r\n"
+                                "    alpha\r\n"
+                                "    beta\r\n"
+                                "    \"\"\"\r\n");
+    AstNode *expr = stmt->as.var_decl.initializer;
+    ASSERT_EQ_INT(expr->type, AST_LITERAL_STRING);
+    ASSERT_STR_EQ(expr->as.literal.raw_value.string_val, "alpha\nbeta");
+    ASSERT_EQ_INT(expr->as.literal.escape_mode, XR_LITERAL_ESCAPED);
+    ASSERT_EQ_INT(expr->as.literal.source_form, XR_LITERAL_BLOCK);
+    teardown();
+}
+
+TEST(parser_non_expression_string_consumers_use_shared_decoder) {
+    setup();
+    AstNode *program = parse_ok("import \"\"\"\n"
+                                "    ./module\n"
+                                "    \"\"\"\n"
+                                "export * from \"\"\"\n"
+                                "    ./dependency\n"
+                                "    \"\"\"\n"
+                                "asm {\n"
+                                "    \"\"\"\n"
+                                "    mov \\\"x\\\"\n"
+                                "    \"\"\"\n"
+                                "}\n");
+    ASSERT_EQ_INT(program->as.program.count, 3);
+    AstNode *import = program->as.program.statements[0];
+    ASSERT_EQ_INT(import->type, AST_IMPORT_STMT);
+    ASSERT_STR_EQ(import->as.import_stmt.module_name, "./module");
+    AstNode *reexport = program->as.program.statements[1];
+    ASSERT_EQ_INT(reexport->type, AST_EXPORT_STMT);
+    ASSERT_STR_EQ(reexport->as.export_stmt.from_path, "./dependency");
+    AstNode *global_asm = program->as.program.statements[2];
+    ASSERT_EQ_INT(global_asm->type, AST_GLOBAL_ASM);
+    ASSERT_STR_EQ(global_asm->as.global_asm.text, "mov \"x\"");
+    teardown();
+}
+
+TEST(parser_block_object_key_and_coroutine_name_use_shared_decoder) {
+    setup();
+    AstNode *program = parse_ok("var object = {\n"
+                                "    \"\"\"\n"
+                                "    key\n"
+                                "    \"\"\"\n"
+                                "    : 1\n"
+                                "}\n"
+                                "var task = go(name: \"\"\"\n"
+                                "    worker\n"
+                                "    \"\"\"\n"
+                                ") work()\n");
+    AstNode *object = program->as.program.statements[0]->as.var_decl.initializer;
+    ASSERT_EQ_INT(object->type, AST_OBJECT_LITERAL);
+    ASSERT_EQ_INT(object->as.object_literal.count, 1);
+    ASSERT_STR_EQ(object->as.object_literal.keys[0]->as.literal.raw_value.string_val, "key");
+    ASSERT_EQ_INT(object->as.object_literal.keys[0]->as.literal.source_form, XR_LITERAL_BLOCK);
+    AstNode *go_expr = program->as.program.statements[1]->as.var_decl.initializer;
+    ASSERT_EQ_INT(go_expr->type, AST_GO_EXPR);
+    ASSERT_STR_EQ(go_expr->as.go_expr.name, "worker");
+    teardown();
+}
+
+TEST(parser_fixed_bytes_are_one_compact_payload_node) {
+    setup();
+    AstNode *stmt = parse_first("var bytes = br\"\"\"\"\n"
+                                "    ${HOME}\\path\n"
+                                "    \"\"\"\n"
+                                "    \"\"\"\"\n");
+    AstNode *expr = stmt->as.var_decl.initializer;
+    static const uint8_t expected[] = "${HOME}\\path\n\"\"\"";
+    ASSERT_EQ_INT(expr->type, AST_FIXED_BYTES_LITERAL);
+    ASSERT_EQ_UINT(expr->as.fixed_bytes_literal.payload_length, sizeof(expected) - 1);
+    ASSERT_TRUE(memcmp(expr->as.fixed_bytes_literal.payload, expected, sizeof(expected) - 1) == 0);
+    ASSERT_FALSE(expr->as.fixed_bytes_literal.append_nul);
+    ASSERT_EQ_INT(expr->as.fixed_bytes_literal.escape_mode, XR_LITERAL_RAW);
+    ASSERT_EQ_INT(expr->as.fixed_bytes_literal.source_form, XR_LITERAL_BLOCK);
+    teardown();
+}
+
+TEST(parser_c_literal_retains_nul_policy_without_element_ast) {
+    setup();
+    AstNode *stmt = parse_first("var bytes = c\"A\\xFF\"");
+    AstNode *expr = stmt->as.var_decl.initializer;
+    static const uint8_t expected[] = {'A', 0xFF};
+    ASSERT_EQ_INT(expr->type, AST_FIXED_BYTES_LITERAL);
+    ASSERT_EQ_UINT(expr->as.fixed_bytes_literal.payload_length, sizeof(expected));
+    ASSERT_TRUE(memcmp(expr->as.fixed_bytes_literal.payload, expected, sizeof(expected)) == 0);
+    ASSERT_TRUE(expr->as.fixed_bytes_literal.append_nul);
+    ASSERT_EQ_INT(expr->as.fixed_bytes_literal.escape_mode, XR_LITERAL_ESCAPED);
+    ASSERT_EQ_INT(expr->as.fixed_bytes_literal.source_form, XR_LITERAL_INLINE);
+    teardown();
+}
+
+TEST(parser_q2_is_empty_for_every_prefix_family) {
+    setup();
+    AstNode *program = parse_ok("var s = \"\"\n"
+                                "var r0 = r\"\"\n"
+                                "var b0 = b\"\"\n"
+                                "var br0 = br\"\"\n"
+                                "var c0 = c\"\"\n"
+                                "var cr0 = cr\"\"\n");
+    ASSERT_EQ_INT(program->as.program.count, 6);
+    for (int i = 0; i < 6; i++) {
+        AstNode *literal = program->as.program.statements[i]->as.var_decl.initializer;
+        if (i < 2) {
+            ASSERT_EQ_INT(literal->type, AST_LITERAL_STRING);
+            ASSERT_STR_EQ(literal->as.literal.raw_value.string_val, "");
+        } else {
+            ASSERT_EQ_INT(literal->type, AST_FIXED_BYTES_LITERAL);
+            ASSERT_EQ_UINT(literal->as.fixed_bytes_literal.payload_length, 0);
+        }
+    }
+    teardown();
+}
+
+TEST(parser_template_interpolation_skips_nested_variable_quote_block) {
+    setup();
+    AstNode *stmt = parse_first("var s = \"\"\"\n"
+                                "value=${len(br\"\"\"\n"
+                                "abc\n"
+                                "\"\"\"\n"
+                                ")}\n"
+                                "\"\"\"\n");
+    AstNode *expr = stmt->as.var_decl.initializer;
+    ASSERT_EQ_INT(expr->type, AST_TEMPLATE_STRING);
+    ASSERT_EQ_INT(expr->as.template_str.part_count, 2);
+    ASSERT_EQ_INT(expr->as.template_str.parts[1]->type, AST_CALL_EXPR);
+    AstNode *arg = expr->as.template_str.parts[1]->as.call_expr.arguments[0];
+    ASSERT_EQ_INT(arg->type, AST_FIXED_BYTES_LITERAL);
+    ASSERT_EQ_UINT(arg->as.fixed_bytes_literal.payload_length, 3);
+    teardown();
+}
+
 TEST(parser_bool_literal) {
     setup();
     AstNode *stmt = parse_first("true");
@@ -1042,6 +1176,13 @@ int main(void) {
     RUN_TEST(parser_int_literal);
     RUN_TEST(parser_float_literal);
     RUN_TEST(parser_string_literal);
+    RUN_TEST(parser_block_string_normalizes_crlf_and_margin);
+    RUN_TEST(parser_non_expression_string_consumers_use_shared_decoder);
+    RUN_TEST(parser_block_object_key_and_coroutine_name_use_shared_decoder);
+    RUN_TEST(parser_fixed_bytes_are_one_compact_payload_node);
+    RUN_TEST(parser_c_literal_retains_nul_policy_without_element_ast);
+    RUN_TEST(parser_q2_is_empty_for_every_prefix_family);
+    RUN_TEST(parser_template_interpolation_skips_nested_variable_quote_block);
     RUN_TEST(parser_bool_literal);
     RUN_TEST(parser_null_literal);
 

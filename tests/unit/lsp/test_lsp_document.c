@@ -17,6 +17,7 @@
 #include "../../../src/app/lsp/xlsp_code_action.h"
 #include "../../../src/app/lsp/xlsp_completion.h"
 #include "../../../src/app/lsp/xlsp_inlay_hints.h"
+#include "../../../src/app/lsp/xlsp_imports.h"
 #include "../../../src/app/lsp/xlsp_semantic_tokens.h"
 #include "../../../src/base/xjson.h"
 #include "../test_win_compat.h"
@@ -122,6 +123,18 @@ static bool content_position_of_nth(const char *content, const char *needle, int
     if (out_col)
         *out_col = col;
     return true;
+}
+
+TEST(block_import_path_uses_shared_quoted_literal_decoder) {
+    const char *content = "import \"\"\"\n"
+                          "    ./nested/module\n"
+                          "    \"\"\"\n";
+    XlspImportInfo *imports = xlsp_parse_imports(content, "file:///tmp/xray214/main.xr");
+    ASSERT(imports != NULL);
+    ASSERT_STR_EQ(imports->import_path, "./nested/module");
+    ASSERT_STR_EQ(imports->module_name, "module");
+    ASSERT(imports->next == NULL);
+    xlsp_free_imports(imports);
 }
 
 static bool semantic_token_exists(XlspSemanticTokensResult *tokens, int line, int col,
@@ -782,6 +795,43 @@ TEST(param_mode_semantic_tokens_mark_modes_and_call_access) {
     xlsp_server_free(server);
 }
 
+TEST(block_quoted_literals_preserve_lsp_positions_and_semantic_boundaries) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    const char *content = "var page = r\"\"\"\n"
+                          "<div title=\"quoted\">{ not_xray }</div>\n"
+                          "\"\"\"\n"
+                          "var bytes = br\"\"\"\"\n"
+                          "${HOME} // literal { bytes }\n"
+                          "\"\"\"\"\n"
+                          "var after = 7\n";
+    XrLspDocument *doc =
+        xlsp_document_open(server, "file:///quoted_literal_positions.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+    ASSERT(doc->ast != NULL);
+
+    int after_line = -1;
+    int after_col = -1;
+    ASSERT(content_position_of_nth(content, "after", 1, &after_line, &after_col));
+    XrLspPosition after_pos = {after_line, after_col};
+    uint32_t after_offset = xlsp_position_to_offset(doc, after_pos);
+    XrLspPosition roundtrip = xlsp_offset_to_position(doc, after_offset);
+    ASSERT_EQ(roundtrip.line, (uint32_t) after_line);
+    ASSERT_EQ(roundtrip.character, (uint32_t) after_col);
+
+    XlspSemanticTokensResult *tokens = xlsp_analyze_semantic_tokens(doc);
+    ASSERT(tokens != NULL);
+    ASSERT(semantic_token_exists(tokens, after_line, after_col, "after", XLSP_TOKEN_VARIABLE));
+    for (int i = 0; i < tokens->count; i++) {
+        ASSERT(tokens->tokens[i].line != 1);
+        ASSERT(tokens->tokens[i].line != 4);
+    }
+
+    xlsp_semantic_tokens_free(tokens);
+    xlsp_server_free(server);
+}
+
 TEST(param_mode_inlay_hints_describe_modes) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
@@ -961,6 +1011,8 @@ int main(int argc, char **argv) {
     RUN_TEST(exact_integer_bit_builtins_use_receiver_specialized_registry);
     RUN_TEST(param_mode_user_function_lsp_display);
     RUN_TEST(param_mode_semantic_tokens_mark_modes_and_call_access);
+    RUN_TEST(block_quoted_literals_preserve_lsp_positions_and_semantic_boundaries);
+    RUN_TEST(block_import_path_uses_shared_quoted_literal_decoder);
     RUN_TEST(param_mode_inlay_hints_describe_modes);
 
     printf("\nCode action concurrency quick-fix tests:\n");

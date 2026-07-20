@@ -17,8 +17,7 @@ fn test_unicode_values() {
 
 @test
 fn test_special_string_values() {
-    var obj = { "empty": "", "spaces": "  ", "newline": "line1
-line2",     "tab": "col1	col2" }
+    var obj = { "empty": "", "spaces": "  ", "newline": "line1\nline2", "tab": "col1	col2" }
     assert_eq(obj.empty, "")
     assert_eq(obj.spaces, "  ")
 }

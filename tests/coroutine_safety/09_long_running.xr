@@ -180,5 +180,4 @@ test_cancel_running_coro()
 test_multiple_long_running()
 test_yield_behavior()
 test_nested_loops()
-print("
-🎉 测试9全部通过：长时间运行与抢占调度正确！")
+print("\n🎉 测试9全部通过：长时间运行与抢占调度正确！")

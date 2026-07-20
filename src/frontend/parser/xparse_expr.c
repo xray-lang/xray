@@ -20,6 +20,7 @@
 #include "../../base/xutf8.h"
 #include "../../runtime/xisolate_api.h"
 #include "../xdiag_fmt.h"
+#include "../lexer/xquoted_literal.h"
 
 #include <stdint.h>
 
@@ -231,50 +232,54 @@ AstNode *xr_parse_literal(Parser *parser) {
             return node;
         }
 
-        case TK_LITERAL_STRING: {
-            const char *src = parser->previous.start + 1;
-            size_t src_len = parser->previous.length - 2;
-            for (size_t i = 0; i + 1 < src_len; i++) {
-                if (src[i] == '\\' && src[i + 1] == '0')
-                    xr_parser_error_at_previous(
-                        parser, "string literals cannot contain byte escapes; use b\"...\"");
+        case TK_LITERAL_STRING:
+        case TK_RAW_STRING: {
+            XrQuotedPayload payload = {0};
+            const char *error = NULL;
+            bool decode_escapes = parser->previous.escape_mode == XR_LITERAL_ESCAPED;
+            if (!xr_quoted_payload_decode(&parser->previous, decode_escapes, &payload, &error)) {
+                xr_parser_error_at_previous(parser, error ? error : "invalid string literal");
+                return NULL;
             }
-            char *str = (char *) xr_malloc(src_len + 1);
-            size_t dst_pos = xr_process_escapes(src, src_len, str);
-            str[dst_pos] = '\0';
-            if (!xr_utf8_validate(str, dst_pos))
+            if (memchr(payload.bytes, '\0', payload.length) != NULL) {
+                xr_quoted_payload_free(&payload);
+                xr_parser_error_at_previous(
+                    parser, "string literals cannot contain byte escapes; use b\"...\"");
+                return NULL;
+            }
+            if (!xr_utf8_validate((const char *) payload.bytes, payload.length)) {
+                xr_quoted_payload_free(&payload);
                 xr_parser_error_at_previous(parser, "string literal must be valid UTF-8");
-            AstNode *node =
-                xr_ast_literal_string(parser->compiler_session, str, parser->previous.line);
+                return NULL;
+            }
+            AstNode *node = xr_ast_literal_string(
+                parser->compiler_session, (const char *) payload.bytes,
+                parser->previous.escape_mode, parser->previous.source_form, parser->previous.line);
             node->column = column;
-            xr_free(str);
+            xr_quoted_payload_free(&payload);
             return node;
         }
 
         case TK_LITERAL_BYTE_STRING:
         case TK_LITERAL_C_STRING: {
-            bool nul_terminated = parser->previous.type == TK_LITERAL_C_STRING;
-            const char *src = parser->previous.start + 2;
-            size_t src_len = (size_t) parser->previous.length - 3;
-            char *bytes = (char *) xr_malloc(src_len + 1);
-            size_t byte_len = xr_process_escapes(src, src_len, bytes);
-            if (nul_terminated && memchr(bytes, '\0', byte_len) != NULL)
+            bool append_nul = parser->previous.type == TK_LITERAL_C_STRING;
+            XrQuotedPayload payload = {0};
+            const char *error = NULL;
+            bool decode_escapes = parser->previous.escape_mode == XR_LITERAL_ESCAPED;
+            if (!xr_quoted_payload_decode(&parser->previous, decode_escapes, &payload, &error)) {
+                xr_parser_error_at_previous(parser, error ? error : "invalid byte literal");
+                return NULL;
+            }
+            if (append_nul && memchr(payload.bytes, '\0', payload.length) != NULL) {
+                xr_quoted_payload_free(&payload);
                 xr_parser_error_at_previous(parser, "c literal cannot contain an interior NUL");
-            int count = (int) byte_len + (nul_terminated ? 1 : 0);
-            AstNode **elements =
-                count > 0 ? (AstNode **) xr_malloc(sizeof(AstNode *) * count) : NULL;
-            for (int i = 0; i < (int) byte_len; i++)
-                elements[i] = xr_ast_literal_int(parser->compiler_session, (unsigned char) bytes[i],
-                                                 parser->previous.line);
-            if (nul_terminated)
-                elements[count - 1] =
-                    xr_ast_literal_int(parser->compiler_session, 0, parser->previous.line);
-            AstNode *node = xr_ast_array_literal(parser->compiler_session, elements, count,
-                                                 parser->previous.line);
-            node->as.array_literal.is_fixed_bytes_literal = true;
+                return NULL;
+            }
+            AstNode *node = xr_ast_fixed_bytes_literal(
+                parser->compiler_session, payload.bytes, payload.length, append_nul,
+                parser->previous.escape_mode, parser->previous.source_form, parser->previous.line);
             node->column = column;
-            xr_free(elements);
-            xr_free(bytes);
+            xr_quoted_payload_free(&payload);
             return node;
         }
 
@@ -288,22 +293,6 @@ AstNode *xr_parse_literal(Parser *parser) {
             AstNode *node =
                 xr_ast_literal_rune(parser->compiler_session, cp, parser->previous.line);
             node->column = column;
-            return node;
-        }
-
-        case TK_RAW_STRING: {
-            // r"content" - no escape processing
-            const char *src = parser->previous.start + 2;
-            size_t src_len = parser->previous.length - 3;
-            char *str = (char *) xr_malloc(src_len + 1);
-            memcpy(str, src, src_len);
-            str[src_len] = '\0';
-            if (!xr_utf8_validate(str, src_len))
-                xr_parser_error_at_previous(parser, "raw string literal must be valid UTF-8");
-            AstNode *node =
-                xr_ast_literal_string(parser->compiler_session, str, parser->previous.line);
-            node->column = column;
-            xr_free(str);
             return node;
         }
 
@@ -472,45 +461,78 @@ AstNode *xr_parse_comptime_expr(Parser *parser) {
 // Helper: create string literal node from a template string part.
 // For normal template strings, applies escape processing.
 // For raw template strings, copies verbatim.
-static AstNode *make_template_part(Parser *parser, const char *src, int len, bool is_raw) {
+static AstNode *make_template_part(Parser *parser, const char *src, int len, bool is_raw,
+                                   XrLiteralSourceForm source_form) {
     char *buf = (char *) xr_malloc(len + 1);
     size_t out_len;
     if (is_raw) {
         memcpy(buf, src, len);
-        out_len = len;
+        out_len = (size_t) len;
     } else {
-        out_len = xr_process_escapes(src, len, buf);
+        // Same decoder as plain string literals (xr_quoted_payload_decode)
+        // so escape semantics cannot drift between the two surfaces.
+        const char *error = NULL;
+        if (!xr_escaped_bytes_decode((const uint8_t *) src, (size_t) len, (uint8_t *) buf, &out_len,
+                                     &error)) {
+            xr_free(buf);
+            xr_parser_error_at_previous(parser,
+                                        error ? error : "invalid escape in template string");
+            return NULL;
+        }
+        if (memchr(buf, '\0', out_len) != NULL) {
+            xr_free(buf);
+            xr_parser_error_at_previous(
+                parser, "string literals cannot contain byte escapes; use b\"...\"");
+            return NULL;
+        }
     }
     buf[out_len] = '\0';
-    AstNode *node = xr_ast_literal_string(parser->compiler_session, buf, parser->previous.line);
+    AstNode *node = xr_ast_literal_string(parser->compiler_session, buf,
+                                          is_raw ? XR_LITERAL_RAW : XR_LITERAL_ESCAPED, source_form,
+                                          parser->previous.line);
     xr_free(buf);
     return node;
 }
 
-static bool template_find_expr_end(const char *src, int len, int expr_start, int *expr_end);
-
-static bool template_skip_string(const char *src, int len, int *pos, char quote, bool is_raw) {
+static bool template_skip_rune(const char *src, int len, int *pos) {
     while (*pos < len) {
         char c = src[*pos];
-        if (c == quote) {
+        if (c == '\'') {
             (*pos)++;
             return true;
         }
-        if (!is_raw && c == '\\') {
+        if (c == '\\') {
             *pos += (*pos + 1 < len) ? 2 : 1;
-            continue;
-        }
-        if (c == '$' && *pos + 1 < len && src[*pos + 1] == '{') {
-            int nested_end = -1;
-            if (!template_find_expr_end(src, len, *pos, &nested_end)) {
-                return false;
-            }
-            *pos = nested_end + 1;
             continue;
         }
         (*pos)++;
     }
     return false;
+}
+
+static bool template_skip_quoted_token(const char *src, int len, int *pos) {
+    if (!src || !pos || *pos < 0 || *pos >= len)
+        return false;
+    char lead = src[*pos];
+    if (lead != '"' && lead != 'r' && lead != 'b' && lead != 'c')
+        return false;
+    Scanner scanner;
+    xr_scanner_init(&scanner, src + *pos);
+    Token token = xr_scanner_scan(&scanner);
+    switch (token.type) {
+        case TK_LITERAL_STRING:
+        case TK_LITERAL_BYTE_STRING:
+        case TK_LITERAL_C_STRING:
+        case TK_TEMPLATE_STRING:
+        case TK_RAW_STRING:
+        case TK_RAW_TEMPLATE_STRING:
+            if (token.start != src + *pos || token.length <= 0 || *pos + token.length > len)
+                return false;
+            *pos += token.length;
+            return true;
+        default:
+            return false;
+    }
 }
 
 static void template_skip_line_comment(const char *src, int len, int *pos) {
@@ -543,17 +565,11 @@ static bool template_find_expr_end(const char *src, int len, int expr_start, int
     int j = expr_start + 2;
     while (j < len && brace_count > 0) {
         char c = src[j];
-        if (c == '"' || c == '\'') {
-            j++;
-            if (!template_skip_string(src, len, &j, c, false)) {
-                return false;
-            }
+        if (template_skip_quoted_token(src, len, &j))
             continue;
-        }
-        if (c == 'r' && j + 1 < len && (src[j + 1] == '"' || src[j + 1] == '\'')) {
-            char raw_quote = src[j + 1];
-            j += 2;
-            if (!template_skip_string(src, len, &j, raw_quote, true)) {
+        if (c == '\'') {
+            j++;
+            if (!template_skip_rune(src, len, &j)) {
                 return false;
             }
             continue;
@@ -590,10 +606,17 @@ static bool template_find_expr_end(const char *src, int len, int expr_start, int
 // Parse template string: "Hello, ${name}!" or r"raw ${name}"
 AstNode *xr_parse_template_string(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_template_string: NULL parser");
-    bool is_raw = (parser->previous.type == TK_RAW_TEMPLATE_STRING);
-    int skip = is_raw ? 2 : 1;  // r" vs "
-    const char *tmpl = parser->previous.start + skip;
-    int tmpl_len = parser->previous.length - skip - 1;
+    bool is_raw = parser->previous.escape_mode == XR_LITERAL_RAW;
+    XrLiteralSourceForm source_form = parser->previous.source_form;
+    XrQuotedPayload payload = {0};
+    const char *decode_error = NULL;
+    if (!xr_quoted_payload_decode(&parser->previous, false, &payload, &decode_error)) {
+        xr_parser_error_at_previous(parser,
+                                    decode_error ? decode_error : "invalid template string");
+        return NULL;
+    }
+    const char *tmpl = (const char *) payload.bytes;
+    int tmpl_len = (int) payload.length;
     AstNode **parts = NULL;
     int part_count = 0;
     int part_capacity = 4;
@@ -601,6 +624,7 @@ AstNode *xr_parse_template_string(Parser *parser) {
     parts = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
                                          (size_t) part_capacity);
     if (!parts) {
+        xr_quoted_payload_free(&payload);
         xr_parser_error(parser, "memory allocation failed");
         return NULL;
     }
@@ -623,7 +647,12 @@ AstNode *xr_parse_template_string(Parser *parser) {
         if (expr_start == -1) {
             // No more interpolations, rest is string
             if (i < tmpl_len) {
-                AstNode *str_node = make_template_part(parser, tmpl + i, tmpl_len - i, is_raw);
+                AstNode *str_node =
+                    make_template_part(parser, tmpl + i, tmpl_len - i, is_raw, source_form);
+                if (!str_node) {
+                    xr_quoted_payload_free(&payload);
+                    return NULL;
+                }
                 XR_PARSE_PUSH(parser, parts, part_count, part_capacity, str_node);
             }
             break;
@@ -631,12 +660,18 @@ AstNode *xr_parse_template_string(Parser *parser) {
 
         // Add string part before ${
         if (expr_start > i) {
-            AstNode *str_node = make_template_part(parser, tmpl + i, expr_start - i, is_raw);
+            AstNode *str_node =
+                make_template_part(parser, tmpl + i, expr_start - i, is_raw, source_form);
+            if (!str_node) {
+                xr_quoted_payload_free(&payload);
+                return NULL;
+            }
             XR_PARSE_PUSH(parser, parts, part_count, part_capacity, str_node);
         }
 
         int expr_end = -1;
         if (!template_find_expr_end(tmpl, tmpl_len, expr_start, &expr_end)) {
+            xr_quoted_payload_free(&payload);
             xr_parser_error(parser, "missing closing } in template string");
             return NULL;
         }
@@ -650,6 +685,13 @@ AstNode *xr_parse_template_string(Parser *parser) {
 
             Scanner expr_scanner;
             xr_scanner_init(&expr_scanner, expr_code);
+            int expr_line = parser->previous.line + (source_form == XR_LITERAL_BLOCK ? 1 : 0);
+            for (int p = 0; p < expr_start + 2; p++) {
+                if (tmpl[p] == '\n')
+                    expr_line++;
+            }
+            expr_scanner.line = expr_line;
+            expr_scanner.start_line = expr_line;
 
             Parser expr_parser;
             memset(&expr_parser, 0, sizeof(expr_parser));
@@ -661,22 +703,34 @@ AstNode *xr_parse_template_string(Parser *parser) {
             xr_parser_advance(&expr_parser);
             AstNode *expr_node = xr_parse_expression(&expr_parser);
 
+            if (expr_parser.had_error || !xr_parser_check(&expr_parser, TK_EOF)) {
+                expr_node = NULL;
+                xr_parser_error(parser, "invalid expression in template string");
+            }
+
             xr_free(expr_code);
 
-            if (expr_node) {
-                XR_PARSE_PUSH(parser, parts, part_count, part_capacity, expr_node);
+            if (!expr_node) {
+                xr_quoted_payload_free(&payload);
+                return NULL;
             }
+            XR_PARSE_PUSH(parser, parts, part_count, part_capacity, expr_node);
         }
 
         i = expr_end + 1;  // Skip }
     }
 
     if (part_count == 0) {
-        return xr_ast_literal_string(parser->compiler_session, "", parser->previous.line);
+        xr_quoted_payload_free(&payload);
+        return xr_ast_literal_string(parser->compiler_session, "",
+                                     is_raw ? XR_LITERAL_RAW : XR_LITERAL_ESCAPED, source_form,
+                                     parser->previous.line);
     }
 
-    AstNode *node =
-        xr_ast_template_string(parser->compiler_session, parts, part_count, parser->previous.line);
+    AstNode *node = xr_ast_template_string(parser->compiler_session, parts, part_count,
+                                           is_raw ? XR_LITERAL_RAW : XR_LITERAL_ESCAPED,
+                                           source_form, parser->previous.line);
+    xr_quoted_payload_free(&payload);
     return node;
 }
 

@@ -95,7 +95,6 @@ typedef struct ArrayLiteralNode {
     AstNode *repeat_value;
     AstNode *repeat_count;
     bool is_repeat;
-    bool is_fixed_bytes_literal;
 } ArrayLiteralNode;
 
 // Tuple literal node — `()`, `(x,)`, `(a, b, ...)`.
@@ -153,6 +152,8 @@ typedef struct MemberSetNode {
 typedef struct TemplateStringNode {
     AstNode **parts;
     int part_count;
+    XrLiteralEscapeMode escape_mode;
+    XrLiteralSourceForm source_form;
 } TemplateStringNode;
 
 // Object / Map / Set literals

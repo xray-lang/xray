@@ -51,6 +51,9 @@ typedef enum {
     AST_LITERAL_TRUE,    // true
     AST_LITERAL_FALSE,   // false
 
+    // Compact quoted byte payload (not backed by the generic LiteralNode union lane).
+    AST_FIXED_BYTES_LITERAL,  // b/br/c/cr quoted fixed byte array
+
     // Template string
     AST_TEMPLATE_STRING,  // `Hello, ${name}!`
 

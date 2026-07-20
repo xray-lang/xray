@@ -1,0 +1,43 @@
+// anchor: oop-polymorphic-dispatch-runtime
+// R2-3 回归：基类静态类型持有子类实例时，虚方法必须调到子类重写。
+// 覆盖曾经静默错误/abort 的三类接收者：基类局部变量、for-in 循环元素、
+// 数组索引元素；以及函数参数与三层类型混合。
+// （本用例带 .expected 绝对断言，防止 VM/AOT "一致错" 再次隐形。）
+class Animal {
+    name: string
+    constructor(n: string) { this.name = n }
+    speak() -> string { return "generic" }
+}
+class Dog extends Animal {
+    constructor(n: string) { super(n) }
+    speak() -> string { return "bark" }
+}
+class Cat extends Animal {
+    constructor(n: string) { super(n) }
+    speak() -> string { return "meow" }
+}
+
+fn describe(a: Animal) -> string {
+    return a.speak()
+}
+
+fn main() {
+    var d = Dog("rex")
+    print(d.speak())
+
+    var a: Animal = Dog("fido")
+    print(a.speak())
+
+    var zoo: Array<Animal> = [Dog("x"), Cat("y"), Animal("z")]
+    for (an in zoo) {
+        print(an.speak())
+    }
+
+    print(zoo[0].speak())
+    print(zoo[1].speak())
+    print(zoo[2].speak())
+
+    print(describe(Cat("c")))
+    print(describe(zoo[0]))
+}
+main()

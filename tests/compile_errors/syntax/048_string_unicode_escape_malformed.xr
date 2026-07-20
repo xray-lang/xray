@@ -1,0 +1,4 @@
+// 048_string_unicode_escape_malformed.xr
+// Expected: Compile error - \u{} requires at least one hex digit
+var s = "\u{}"
+print(s)

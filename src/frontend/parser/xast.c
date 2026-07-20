@@ -112,12 +112,32 @@ AstNode *xr_ast_literal_bigint(XrCompilerSession *session, const char *value, in
 }
 
 // Create string literal node
-AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, int line) {
+AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value,
+                               XrLiteralEscapeMode escape_mode, XrLiteralSourceForm source_form,
+                               int line) {
     AstNode *node = alloc_node(session, AST_LITERAL_STRING, line);
     node->as.literal.kind = LITERAL_KIND_STRING;
-
+    node->as.literal.escape_mode = escape_mode;
+    node->as.literal.source_form = source_form;
     node->as.literal.raw_value.string_val = ast_strdup(session, value);
+    return node;
+}
 
+AstNode *xr_ast_fixed_bytes_literal(XrCompilerSession *session, const uint8_t *payload,
+                                    size_t payload_length, bool append_nul,
+                                    XrLiteralEscapeMode escape_mode,
+                                    XrLiteralSourceForm source_form, int line) {
+    AstNode *node = alloc_node(session, AST_FIXED_BYTES_LITERAL, line);
+    uint8_t *copy = NULL;
+    if (payload_length > 0) {
+        copy = (uint8_t *) ast_alloc_array(session, sizeof(uint8_t), payload_length);
+        memcpy(copy, payload, payload_length);
+    }
+    node->as.fixed_bytes_literal.payload = copy;
+    node->as.fixed_bytes_literal.payload_length = payload_length;
+    node->as.fixed_bytes_literal.append_nul = append_nul;
+    node->as.fixed_bytes_literal.escape_mode = escape_mode;
+    node->as.fixed_bytes_literal.source_form = source_form;
     return node;
 }
 
@@ -155,6 +175,7 @@ AstNode *xr_ast_literal_null(XrCompilerSession *session, int line) {
 // parts: array of string fragments and expressions (alternating)
 // part_count: number of parts
 AstNode *xr_ast_template_string(XrCompilerSession *session, AstNode **parts, int part_count,
+                                XrLiteralEscapeMode escape_mode, XrLiteralSourceForm source_form,
                                 int line) {
     AstNode *node = alloc_node(session, AST_TEMPLATE_STRING, line);
 
@@ -165,6 +186,8 @@ AstNode *xr_ast_template_string(XrCompilerSession *session, AstNode **parts, int
         node->as.template_str.parts[i] = parts[i];
     }
     node->as.template_str.part_count = part_count;
+    node->as.template_str.escape_mode = escape_mode;
+    node->as.template_str.source_form = source_form;
 
     return node;
 }
@@ -721,7 +744,6 @@ AstNode *xr_ast_array_literal(XrCompilerSession *session, AstNode **elements, in
     AstNode *node = alloc_node(session, AST_ARRAY_LITERAL, line);
     node->as.array_literal.count = count;
     node->as.array_literal.is_repeat = false;
-    node->as.array_literal.is_fixed_bytes_literal = false;
     node->as.array_literal.repeat_value = NULL;
     node->as.array_literal.repeat_count = NULL;
 
@@ -749,7 +771,6 @@ AstNode *xr_ast_array_repeat_literal(XrCompilerSession *session, AstNode *value,
     node->as.array_literal.repeat_value = value;
     node->as.array_literal.repeat_count = count;
     node->as.array_literal.is_repeat = true;
-    node->as.array_literal.is_fixed_bytes_literal = false;
     return node;
 }
 
@@ -1457,6 +1478,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "LiteralFloat";
         case AST_LITERAL_STRING:
             return "LiteralString";
+        case AST_FIXED_BYTES_LITERAL:
+            return "FixedBytesLiteral";
         case AST_LITERAL_RUNE:
             return "LiteralChar";
         case AST_LITERAL_REGEX:
@@ -1660,6 +1683,10 @@ void xr_ast_print(AstNode *node, int indent) {
             break;
         case AST_LITERAL_STRING:
             printf("(\"%s\")", node->as.literal.raw_value.string_val);  // Print C string
+            break;
+        case AST_FIXED_BYTES_LITERAL:
+            printf("(%zu bytes%s)", node->as.fixed_bytes_literal.payload_length,
+                   node->as.fixed_bytes_literal.append_nul ? ", C" : "");
             break;
         case AST_LITERAL_RUNE: {
             char buf[5] = {0};

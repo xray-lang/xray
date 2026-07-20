@@ -17,10 +17,12 @@
 #include "xtype_ref.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
+#include "../../base/xutf8.h"
 #include "../../runtime/xerror_codes.h"
 #include "../../runtime/xisolate_api.h"
 #include "xtype_scope.h"
 #include "../xdiag_fmt.h"
+#include "../lexer/xquoted_literal.h"
 
 static bool current_can_start_top_level_after_recovery(Parser *parser) {
     return xr_parser_check(parser, TK_AT) || xr_parser_check(parser, TK_CLASS) ||
@@ -39,12 +41,24 @@ static bool current_can_start_top_level_after_recovery(Parser *parser) {
 // stripped) into an arena-allocated, NUL-terminated string. Used for
 // string arguments carried by internal attributes synthesized from extern blocks.
 static const char *xr_attr_string_arg(Parser *parser) {
-    Token t = parser->previous;
-    size_t len = t.length >= 2 ? (size_t) (t.length - 2) : 0;
-    char *s = (char *) ast_alloc(parser->compiler_session, len + 1);
-    if (len > 0)
-        memcpy(s, t.start + 1, len);
-    s[len] = '\0';
+    XrQuotedPayload payload = {0};
+    const char *error = NULL;
+    bool decode_escapes = parser->previous.escape_mode == XR_LITERAL_ESCAPED;
+    if (!xr_quoted_payload_decode(&parser->previous, decode_escapes, &payload, &error)) {
+        xr_parser_error_at_previous(parser, error ? error : "invalid attribute string literal");
+        return NULL;
+    }
+    if (memchr(payload.bytes, '\0', payload.length) != NULL ||
+        !xr_utf8_validate((const char *) payload.bytes, payload.length)) {
+        xr_quoted_payload_free(&payload);
+        xr_parser_error_at_previous(parser,
+                                    "attribute string must be valid UTF-8 without NUL bytes");
+        return NULL;
+    }
+    char *s = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
+    memcpy(s, payload.bytes, payload.length);
+    s[payload.length] = '\0';
+    xr_quoted_payload_free(&payload);
     return s;
 }
 
@@ -62,15 +76,18 @@ typedef struct XrParsedGlobalAsmFragment {
 } XrParsedGlobalAsmFragment;
 
 static XrParsedGlobalAsmFragment xr_decode_previous_string_literal(Parser *parser) {
-    Token t = parser->previous;
-    size_t src_len = t.length >= 2 ? (size_t) (t.length - 2) : 0;
-    const char *src = t.start + 1;
-    char *tmp = (char *) xr_malloc(src_len + 1);
-    XR_CHECK(tmp != NULL, "parser: global asm string decode OOM");
-    size_t len = xr_process_escapes(src, src_len, tmp);
-    tmp[len] = '\0';
-    char *text = ast_strdup(parser->compiler_session, tmp);
-    xr_free(tmp);
+    XrQuotedPayload payload = {0};
+    const char *error = NULL;
+    bool decode_escapes = parser->previous.escape_mode == XR_LITERAL_ESCAPED;
+    if (!xr_quoted_payload_decode(&parser->previous, decode_escapes, &payload, &error)) {
+        xr_parser_error_at_previous(parser, error ? error : "invalid global asm literal");
+        return (XrParsedGlobalAsmFragment) {0};
+    }
+    char *text = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
+    memcpy(text, payload.bytes, payload.length);
+    text[payload.length] = '\0';
+    size_t len = payload.length;
+    xr_quoted_payload_free(&payload);
     return (XrParsedGlobalAsmFragment) {.text = text, .len = len};
 }
 
@@ -94,6 +111,8 @@ static AstNode *xr_parse_global_asm_declaration(Parser *parser) {
         }
         xr_parser_advance(parser);
         XrParsedGlobalAsmFragment fragment = xr_decode_previous_string_literal(parser);
+        if (!fragment.text)
+            return NULL;
         XR_PARSE_PUSH(parser, fragments, fragment_count, fragment_capacity, fragment);
     }
 
@@ -1415,12 +1434,26 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         else if (xr_parser_check(parser, TK_LITERAL_STRING)) {
             Token key_token = parser->current;
             xr_parser_advance(parser);
-
-            char *key_str =
-                (char *) ast_alloc(parser->compiler_session, (size_t) key_token.length - 1);
-            memcpy(key_str, key_token.start + 1, key_token.length - 2);
-            key_str[key_token.length - 2] = '\0';
-            key = xr_ast_literal_string(parser->compiler_session, key_str, line);
+            XrQuotedPayload payload = {0};
+            const char *error = NULL;
+            bool decode_escapes = key_token.escape_mode == XR_LITERAL_ESCAPED;
+            if (!xr_quoted_payload_decode(&key_token, decode_escapes, &payload, &error)) {
+                xr_parser_error_at_previous(parser, error ? error : "invalid object key literal");
+                return xr_ast_literal_null(parser->compiler_session, line);
+            }
+            if (memchr(payload.bytes, '\0', payload.length) != NULL ||
+                !xr_utf8_validate((const char *) payload.bytes, payload.length)) {
+                xr_quoted_payload_free(&payload);
+                xr_parser_error_at_previous(parser,
+                                            "object key must be valid UTF-8 without NUL bytes");
+                return xr_ast_literal_null(parser->compiler_session, line);
+            }
+            char *key_str = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
+            memcpy(key_str, payload.bytes, payload.length);
+            key_str[payload.length] = '\0';
+            key = xr_ast_literal_string(parser->compiler_session, key_str, key_token.escape_mode,
+                                        key_token.source_form, line);
+            xr_quoted_payload_free(&payload);
             is_computed = false;
         }
         // Numeric literal as key: only Map allows this, and Map literals must
@@ -1448,7 +1481,8 @@ AstNode *xr_parse_object_literal(Parser *parser) {
                 (char *) ast_alloc(parser->compiler_session, (size_t) key_token.length + 1);
             memcpy(key_str, key_token.start, key_token.length);
             key_str[key_token.length] = '\0';
-            key = xr_ast_literal_string(parser->compiler_session, key_str, line);
+            key = xr_ast_literal_string(parser->compiler_session, key_str, XR_LITERAL_ESCAPED,
+                                        XR_LITERAL_INLINE, line);
             is_computed = false;
             if (key_token.type == TK_NAME)
                 shorthand_name = key_str;

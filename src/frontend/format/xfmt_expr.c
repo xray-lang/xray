@@ -42,10 +42,11 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_char(ctx, 'n');
             break;
         case AST_LITERAL_STRING: {
-            // Re-escape via xfmt_emit_string so quotes / backslashes /
-            // control bytes round-trip through the parser.
-            const char *s = node->as.literal.raw_value.string_val;
-            xfmt_emit_string(ctx, s, s ? (int) strlen(s) : 0);
+            xfmt_emit_string_literal(ctx, node);
+            break;
+        }
+        case AST_FIXED_BYTES_LITERAL: {
+            xfmt_emit_fixed_bytes_literal(ctx, node);
             break;
         }
         case AST_LITERAL_RUNE: {
@@ -358,6 +359,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
+        case AST_FIXED_BYTES_LITERAL:
         case AST_LITERAL_RUNE:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:

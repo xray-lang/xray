@@ -104,5 +104,4 @@ fn test_multi_consumer() {
 test_single_producer_consumer()
 test_multi_producer()
 test_multi_consumer()
-print("
-🎉 测试6全部通过：生产者-消费者模式正确！")
+print("\n🎉 测试6全部通过：生产者-消费者模式正确！")

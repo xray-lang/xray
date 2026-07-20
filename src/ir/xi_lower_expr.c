@@ -2242,8 +2242,44 @@ static uint16_t xi_lower_exact_integer_bit_op(struct XrType *receiver_type, cons
         if (xi_lower_receiver_method_matches(receiver_type, method,
                                              XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_RIGHT))
             return XI_BIT_ROTR;
+        if (xi_lower_receiver_method_matches(receiver_type, method,
+                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_MUL_HIGH))
+            return XI_BIT_MUL_HIGH;
     }
     return XI_OP_COUNT;
+}
+
+/* R2-2: wrappingAdd/Sub/Mul are spec-defined as "explicit default two's-
+ * complement wrap" — exactly the semantics ADD/SUB/MUL already implement per
+ * receiver width (§2.3: fixed-width arithmetic wraps at its width). Lowering
+ * the method to the operator + the receiver-width narrow makes the family
+ * width-exact on every int receiver and on both backends; the runtime method
+ * fallback computes at int64 and would silently lose the width. */
+static uint16_t xi_lower_int_wrapping_method_op(struct XrType *receiver_type, const char *method,
+                                                int arg_count) {
+    if (arg_count != 1 || !method || !receiver_type || receiver_type->kind != XR_KIND_INT ||
+        receiver_type->is_nullable)
+        return XI_OP_COUNT;
+    if (strcmp(method, "wrappingAdd") == 0)
+        return XI_ADD;
+    if (strcmp(method, "wrappingSub") == 0)
+        return XI_SUB;
+    if (strcmp(method, "wrappingMul") == 0)
+        return XI_MUL;
+    return XI_OP_COUNT;
+}
+
+static XiValue *xi_lower_int_wrapping_method(XiLower *l, AstNode *node, uint16_t op, XiValue *recv,
+                                             XiValue *arg) {
+    /* Same IR shape as `recv <op> arg` on the receiver's type: the binary op
+     * followed by the width narrow (no-op for int/int64). Truncating the
+     * int64 result is exact for every receiver width and any int arg width:
+     * (a op b) mod 2^64 then mod 2^w == (a op b) mod 2^w. */
+    XiValue *raw = xi_binary(l->func, l->cur_block, op, recv->type, recv, arg);
+    if (!raw)
+        return NULL;
+    raw->line = (uint32_t) node->line;
+    return xi_lower_wrap_if_needed(l, node, raw, recv->type, op);
 }
 
 static bool xi_lower_receiver_method_arg_count_matches(const XaBuiltinReceiverMethodSpec *spec,
@@ -2804,33 +2840,27 @@ static XiValue *lower_fixed_array_literal(XiLower *l, AstNode *node, ArrayLitera
 
 static XiValue *lower_static_bytes_literal_ptr(XiLower *l, AstNode *call_node,
                                                AstNode *literal_node) {
-    if (!l || !call_node || !literal_node || literal_node->type != AST_ARRAY_LITERAL ||
-        !literal_node->as.array_literal.is_fixed_bytes_literal)
+    if (!l || !call_node || !literal_node || literal_node->type != AST_FIXED_BYTES_LITERAL)
         return NULL;
 
-    ArrayLiteralNode *literal = &literal_node->as.array_literal;
-    int count = literal->count;
-    if (count < 0) {
+    FixedBytesLiteralNode *literal = &literal_node->as.fixed_bytes_literal;
+    size_t payload_length = literal->payload_length;
+    size_t total_length = payload_length + (literal->append_nul ? 1u : 0u);
+    if (total_length > INT_MAX) {
         l->had_error = true;
         return NULL;
     }
 
+    int count = (int) total_length;
     uint32_t alloc_size = (uint32_t) (count > 0 ? count : 1);
     uint8_t *bytes = (uint8_t *) xi_func_arena_alloc(l->func, alloc_size);
     if (!bytes)
         return NULL;
-    for (int i = 0; i < count; i++) {
-        AstNode *element = literal->elements ? literal->elements[i] : NULL;
-        if (!element || element->type != AST_LITERAL_INT ||
-            element->as.literal.raw_value.int_val < 0 ||
-            element->as.literal.raw_value.int_val > UINT8_MAX) {
-            fprintf(stderr, "[LOWER] malformed byte literal at line %d\n", (int) call_node->line);
-            l->had_error = true;
-            return NULL;
-        }
-        bytes[i] = (uint8_t) element->as.literal.raw_value.int_val;
-    }
-    if (count == 0)
+    if (payload_length > 0)
+        memcpy(bytes, literal->payload, payload_length);
+    if (literal->append_nul)
+        bytes[payload_length] = 0;
+    else if (count == 0)
         bytes[0] = 0;
 
     struct XrType *result_type = xi_lower_node_type(l, call_node);
@@ -2841,6 +2871,37 @@ static XiValue *lower_static_bytes_literal_ptr(XiLower *l, AstNode *call_node,
     address->aux_int = count;
     address->line = (uint32_t) call_node->line;
     return address;
+}
+
+static XiValue *lower_fixed_bytes_literal(XiLower *l, AstNode *node) {
+    if (!l || !node || node->type != AST_FIXED_BYTES_LITERAL)
+        return NULL;
+    FixedBytesLiteralNode *literal = &node->as.fixed_bytes_literal;
+    size_t total_length = literal->payload_length + (literal->append_nul ? 1u : 0u);
+    if (total_length > INT_MAX) {
+        l->had_error = true;
+        return NULL;
+    }
+    uint32_t alloc_size = (uint32_t) (total_length > 0 ? total_length : 1);
+    uint8_t *bytes = (uint8_t *) xi_func_arena_alloc(l->func, alloc_size);
+    if (!bytes)
+        return NULL;
+    if (literal->payload_length > 0)
+        memcpy(bytes, literal->payload, literal->payload_length);
+    if (literal->append_nul)
+        bytes[literal->payload_length] = 0;
+    else if (total_length == 0)
+        bytes[0] = 0;
+
+    XiValue *value =
+        xi_value_new(l->func, l->cur_block, XI_FIXED_BYTES_CONST, xi_lower_node_type(l, node), 0);
+    if (!value)
+        return NULL;
+    value->aux = bytes;
+    value->aux_int = (int64_t) total_length;
+    value->flags |= XI_FLAG_SIDE_EFFECT;
+    value->line = (uint32_t) node->line;
+    return value;
 }
 
 static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
@@ -2984,6 +3045,32 @@ static XiValue *lower_ct_fixed_array_value(XiLower *l, AstNode *node, const XrCt
                 (int) node->line);
         l->had_error = true;
         return NULL;
+    }
+
+    if (value->as.fixed_array_val.is_byte_blob) {
+        if (native != XR_NATIVE_U8 || (count > 0 && !value->as.fixed_array_val.byte_blob)) {
+            fprintf(stderr, "[LOWER] compact fixed bytes require byte element type at line %d\n",
+                    (int) node->line);
+            l->had_error = true;
+            return NULL;
+        }
+        uint8_t *bytes =
+            (uint8_t *) xi_func_arena_alloc(l->func, (uint32_t) (count > 0 ? count : 1));
+        if (!bytes)
+            return NULL;
+        if (count > 0)
+            memcpy(bytes, value->as.fixed_array_val.byte_blob, (size_t) count);
+        else
+            bytes[0] = 0;
+        XiValue *compact =
+            xi_value_new(l->func, l->cur_block, XI_FIXED_BYTES_CONST, target_type, 0);
+        if (!compact)
+            return NULL;
+        compact->aux = bytes;
+        compact->aux_int = count;
+        compact->flags |= XI_FLAG_SIDE_EFFECT;
+        compact->line = (uint32_t) node->line;
+        return compact;
     }
 
     int alloc_n = count > 0 ? count : 1;
@@ -5278,8 +5365,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         struct XrType *method_receiver_type = ma->object ? xi_lower_node_type(l, ma->object) : NULL;
 
         if (ma->name && strcmp(ma->name, "ptr") == 0 && call->arg_count == 0 && ma->object &&
-            ma->object->type == AST_ARRAY_LITERAL &&
-            ma->object->as.array_literal.is_fixed_bytes_literal) {
+            ma->object->type == AST_FIXED_BYTES_LITERAL) {
             return lower_static_bytes_literal_ptr(l, node, ma->object);
         }
 
@@ -5371,6 +5457,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->aux_int = recv->type->native_width;
             v->line = (uint32_t) node->line;
             return v;
+        }
+
+        uint16_t wrap_arith_op = xi_lower_int_wrapping_method_op(recv->type, ma->name, n);
+        if (wrap_arith_op != XI_OP_COUNT && arg_vals[0] && arg_vals[0]->type &&
+            XR_TYPE_IS_INT(arg_vals[0]->type)) {
+            return xi_lower_int_wrapping_method(l, node, wrap_arith_op, recv, arg_vals[0]);
         }
 
         if (xi_lower_receiver_method_call_matches(recv->type, ma->name, n,
@@ -8822,6 +8914,8 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         case AST_LITERAL_NULL:
         case AST_LITERAL_STRING:
             return lower_literal(l, node);
+        case AST_FIXED_BYTES_LITERAL:
+            return lower_fixed_bytes_literal(l, node);
 
         /* Binary operations */
         case AST_BINARY_ADD:

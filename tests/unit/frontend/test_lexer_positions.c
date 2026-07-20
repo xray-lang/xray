@@ -21,8 +21,8 @@
  *
  *     1. A single-line token reports its 1-indexed start line and
  *        column.
- *     2. A multi-line string reports the line/column where the
- *        opening `"` was, NOT where the closing `"` ended.
+ *     2. A block string reports the line/column where the opening
+ *        quote run was, NOT where the closing quote run ended.
  *     3. The token AFTER a multi-line string reports a position on
  *        the line it actually starts on (i.e. lexer's line_start was
  *        synchronised correctly inside the string body).
@@ -85,9 +85,8 @@ TEST(token_on_second_line) {
 }
 
 TEST(multiline_string_reports_start_position) {
-    // The string starts on line 1 column 1; the closing quote is
-    // on line 3. Pre-L-02 this used to report line 3.
-    const char *src = "\"line1\nline2\nline3\"";
+    // The block starts on line 1 column 1; the closer is on line 5.
+    const char *src = "\"\"\"\nline1\nline2\nline3\n\"\"\"";
     Scanner s;
     xr_scanner_init(&s, src);
     Token t = xr_scanner_scan(&s);
@@ -98,9 +97,8 @@ TEST(multiline_string_reports_start_position) {
 }
 
 TEST(token_after_multiline_string_uses_correct_line) {
-    // After a 3-line string, the next token must report line 3
-    // (the closing quote's line) and the column relative to it.
-    const char *src = "\"a\nb\nc\" + 1";
+    // A block closer is isolated; the next token starts on line 6.
+    const char *src = "\"\"\"\na\nb\nc\n\"\"\"\n+ 1";
     Scanner s;
     xr_scanner_init(&s, src);
     Token str = xr_scanner_scan(&s);
@@ -110,14 +108,13 @@ TEST(token_after_multiline_string_uses_correct_line) {
     ASSERT_EQ_INT(str.type, TK_LITERAL_STRING);
     ASSERT_EQ_INT(str.line, 1);
 
-    // Line 3 is `c" + 1`: c@1, "@2, space@3, +@4, space@5, 1@6.
     ASSERT_EQ_INT(plus.type, TK_PLUS);
-    ASSERT_EQ_INT(plus.line, 3);
-    ASSERT_EQ_INT(plus.column, 4);
+    ASSERT_EQ_INT(plus.line, 6);
+    ASSERT_EQ_INT(plus.column, 1);
 
     ASSERT_EQ_INT(one.type, TK_LITERAL_INT);
-    ASSERT_EQ_INT(one.line, 3);
-    ASSERT_EQ_INT(one.column, 6);
+    ASSERT_EQ_INT(one.line, 6);
+    ASSERT_EQ_INT(one.column, 3);
 }
 
 TEST(token_after_multiline_block_comment) {
@@ -138,7 +135,7 @@ TEST(token_after_multiline_block_comment) {
 TEST(template_string_reports_start_position) {
     // Template strings are also multi-token internally; the START
     // (the leading `"`) determines the reported position.
-    const char *src = "\"a${1}\nb\"";
+    const char *src = "\"\"\"\na${1}\nb\n\"\"\"";
     Token t = scan_nth(src, 0);
 
     // First token of a template is the literal-string segment;

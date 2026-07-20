@@ -201,6 +201,18 @@ static bool lower_instance_call(const XaotBundle *bundle, const XiModule *module
         op = XI_VEC_WIDEN_MUL;
         result = (XiSimdShape) {(uint8_t) (input.lanes / 2), XR_NATIVE_U64};
         extra = XI_VEC_SHAPE_ODD_LANES;
+    } else if (strcmp(method, "unzipEven") == 0 && nargs == 2) {
+        op = XI_VEC_UNZIP;
+    } else if (strcmp(method, "unzipOdd") == 0 && nargs == 2) {
+        op = XI_VEC_UNZIP;
+        extra = XI_VEC_SHAPE_ODD_LANES;
+    } else if (strcmp(method, "widenMulLow") == 0 && nargs == 2) {
+        op = XI_VEC_WIDEN_MUL_HALF;
+        result = (XiSimdShape) {(uint8_t) (input.lanes / 2), XR_NATIVE_U64};
+    } else if (strcmp(method, "widenMulHigh") == 0 && nargs == 2) {
+        op = XI_VEC_WIDEN_MUL_HALF;
+        result = (XiSimdShape) {(uint8_t) (input.lanes / 2), XR_NATIVE_U64};
+        extra = XI_VEC_SHAPE_ODD_LANES;
     } else if (strcmp(method, "reinterpretU8") == 0 && nargs == 1) {
         op = XI_VEC_REINTERPRET;
         unsigned bytes = input.lanes * (input.native_type == XR_NATIVE_U8    ? 1u

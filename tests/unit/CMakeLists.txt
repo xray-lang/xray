@@ -147,6 +147,7 @@ add_xray_unit_test(test_symbol symbol/test_symbol.c)
 
 add_xray_unit_test(test_xi ir/test_xi.c)
 add_xray_unit_test(test_xi_lower ir/test_xi_lower.c)
+add_xray_unit_test(test_quoted_literal_scaling ir/test_quoted_literal_scaling.c)
 add_xray_unit_test(test_xi_lowering_gen ir/test_xi_lowering_gen.c)
 add_xray_unit_test(test_xi_opt ir/test_xi_opt.c)
 add_xray_unit_test(test_xi_analysis ir/test_xi_analysis.c)

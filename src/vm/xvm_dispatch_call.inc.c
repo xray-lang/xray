@@ -946,7 +946,7 @@ vmcase(OP_RETURN1) {
         if (vm_ctx->struct_areas && sa_idx < vm_ctx->struct_areas_cap) {
             uint8_t *sa = vm_ctx->struct_areas[sa_idx];
             uint8_t *sptr = (uint8_t *) ret_val.ptr;
-            uint16_t sa_cap = vm_ctx->struct_area_caps[sa_idx];
+            uint32_t sa_cap = vm_ctx->struct_area_caps[sa_idx];
             if (sa && sptr >= sa && sptr < sa + sa_cap) {
                 XrAggregateLayout *layout = xr_vm_struct_ref_layout(isolate, ret_val);
                 if (layout) {

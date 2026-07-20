@@ -68,15 +68,50 @@ XR_FUNC bool xi_emit_alloc_struct_area_bytes(EmitCtx *ctx, uint32_t bytes_needed
     }
 
     uint32_t slot = ctx->struct_area_offset;
+    if (bytes_needed > UINT32_MAX - 15u) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return false;
+    }
     uint32_t slots_needed = (bytes_needed + 15u) / 16u;
+    if (slots_needed > UINT32_MAX - slot) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return false;
+    }
     uint32_t next = slot + slots_needed;
-    if (slot > MAXARG_C || next > UINT16_MAX) {
+    if (slot > MAXARG_C || next > UINT32_MAX / 16u) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return false;
     }
 
-    ctx->struct_area_offset = (uint16_t) next;
+    ctx->struct_area_offset = next;
     *slot_out = (uint16_t) slot;
+    return true;
+}
+
+XR_FUNC bool xi_emit_alloc_struct_area_bytes_wide(EmitCtx *ctx, uint32_t bytes_needed,
+                                                  uint32_t *slot_out) {
+    if (!ctx || bytes_needed == 0 || !slot_out) {
+        if (ctx)
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return false;
+    }
+    uint32_t slot = ctx->struct_area_offset;
+    if (bytes_needed > UINT32_MAX - 15u) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return false;
+    }
+    uint32_t slots_needed = (bytes_needed + 15u) / 16u;
+    if (slots_needed > UINT32_MAX - slot) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return false;
+    }
+    uint32_t next = slot + slots_needed;
+    if (slot > MAXARG_Bx || next > UINT32_MAX / 16u) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return false;
+    }
+    ctx->struct_area_offset = next;
+    *slot_out = slot;
     return true;
 }
 
@@ -997,7 +1032,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     ctx.proto->entry_type = f->entry_type;
     ctx.proto->min_params = f->min_params;
     /* Set struct_area_size for VM per-frame struct allocation */
-    ctx.proto->struct_area_size = (uint16_t) (ctx.struct_area_offset * 16);
+    ctx.proto->struct_area_size = ctx.struct_area_offset * 16u;
     ctx.proto->test_attr = f->test_attr;
     ctx.proto->test_timeout = f->test_timeout;
     ctx.proto->is_extern = f->is_extern;

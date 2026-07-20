@@ -1,0 +1,12 @@
+import log
+import { LogLevel } from "log"
+
+log.setLevel(LogLevel.Debug)
+print(log.isEnabled(LogLevel.Debug))
+print(log.isEnabled(LogLevel.Fatal))
+log.setLevel(LogLevel.Error)
+print(log.isEnabled(LogLevel.Warn))
+print(log.isEnabled(LogLevel.Error))
+print(LogLevel.Debug)
+print(LogLevel.Fatal)
+print(LogLevel.Debug == LogLevel.Fatal)

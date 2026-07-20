@@ -218,13 +218,38 @@ export class TomlValue {
     }
 }
 
+export enum TomlErrorKind {
+    SyntaxError,
+    InvalidKey,
+    InvalidValue,
+    InvalidNumber,
+    InvalidEscape,
+    UnterminatedString,
+    DuplicateKey,
+    TableConflict
+}
+
+export class TomlDiagnostic {
+    kind: TomlErrorKind
+    line: int
+    column: int
+    message: string
+
+    constructor(kind: TomlErrorKind, line: int, column: int, message: string) {
+        this.kind = kind
+        this.line = line
+        this.column = column
+        this.message = message
+    }
+}
+
 export class TomlParseReport {
     data: TomlValue
-    errors: Array<Json>
+    errors: Array<TomlDiagnostic>
     lines: int
     keys: int
 
-    constructor(data: TomlValue, errors: Array<Json>, lines: int, keys: int) {
+    constructor(data: TomlValue, errors: Array<TomlDiagnostic>, lines: int, keys: int) {
         this.data = data
         this.errors = errors
         this.lines = lines
@@ -293,15 +318,6 @@ fn _isValueTerminator(c: string) -> bool {
            c == "]" || c == "}"
 }
 
-fn _errorObject(typ: string, line: int, column: int, message: string) -> Json {
-    return {
-        type: typ,
-        line: line,
-        row: -1,
-        column: column,
-        message: message
-    }
-}
 
 class TomlParser {
     data: string
@@ -311,7 +327,7 @@ class TomlParser {
     root: TomlValue
     rootTable: TomlTable
     current: TomlTable
-    errors: Array<Json>
+    errors: Array<TomlDiagnostic>
     definedTables: Map<string, bool>
     keyCount: int
 
@@ -357,15 +373,15 @@ class TomlParser {
         return c
     }
 
-    addError(typ: string, message: string) {
-        this.errors.push(_errorObject(typ, this.line, this.column, message))
+    addError(kind: TomlErrorKind, message: string) {
+        this.errors.push(TomlDiagnostic(kind, this.line, this.column, message))
     }
 
     addExpected(expected: string) {
         if (this.atEnd()) {
-            this.addError("SyntaxError", "Expected " + expected + " but reached end of input")
+            this.addError(TomlErrorKind.SyntaxError, "Expected " + expected + " but reached end of input")
         } else {
-            this.addError("SyntaxError", "Expected " + expected + " but got '" + this.peek() + "'")
+            this.addError(TomlErrorKind.SyntaxError, "Expected " + expected + " but got '" + this.peek() + "'")
         }
     }
 
@@ -405,7 +421,7 @@ class TomlParser {
             this.advance()
         }
         if (this.pos == start) {
-            this.addError("InvalidKey", "Expected key name")
+            this.addError(TomlErrorKind.InvalidKey, "Expected key name")
             return ""
         }
         return this.data.slice(start, this.pos)
@@ -441,7 +457,7 @@ class TomlParser {
                 break
             }
             if (!multiline && (this.peek() == "\n" || this.peek() == "\r")) {
-                this.addError("UnterminatedString", "Unterminated string")
+                this.addError(TomlErrorKind.UnterminatedString, "Unterminated string")
                 return out.toString()
             }
 
@@ -478,7 +494,7 @@ class TomlParser {
                         this.advance()
                     }
                     if (!ok || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF) {
-                        this.addError("InvalidEscape", "Invalid Unicode codepoint")
+                        this.addError(TomlErrorKind.InvalidEscape, "Invalid Unicode codepoint")
                     } else if (cp < 128) {
                         out.append("?")
                     } else {
@@ -530,7 +546,7 @@ class TomlParser {
                 break
             }
             if (!multiline && (this.peek() == "\n" || this.peek() == "\r")) {
-                this.addError("UnterminatedString", "Unterminated string")
+                this.addError(TomlErrorKind.UnterminatedString, "Unterminated string")
                 return out.toString()
             }
             out.append(this.advance())
@@ -607,12 +623,12 @@ class TomlParser {
         if (s.contains(".") || s.contains("e") || s.contains("E")) {
             var f = strconv.parseFloat(s)
             if (f != null) { return TomlValue.Float(TomlFloat(f!, s)) }
-            this.addError("InvalidNumber", "Invalid number")
+            this.addError(TomlErrorKind.InvalidNumber, "Invalid number")
             return TomlValue.Float(TomlFloat(0.0, "0.0"))
         }
         var i = strconv.parseInt(s)
         if (i != null) { return TomlValue.Int(i!) }
-        this.addError("InvalidNumber", "Invalid number")
+        this.addError(TomlErrorKind.InvalidNumber, "Invalid number")
         return TomlValue.Int(0)
     }
 
@@ -683,7 +699,7 @@ class TomlParser {
     parseValue() -> TomlValue {
         this.skipWs()
         if (this.atEnd()) {
-            this.addError("SyntaxError", "Expected value")
+            this.addError(TomlErrorKind.SyntaxError, "Expected value")
             return TomlValue.String("")
         }
         var c = this.peek()
@@ -711,7 +727,7 @@ class TomlParser {
             raw == "+nan" || raw == "-nan" || len(raw) > 0) {
             return this.parseNumberLiteral(raw)
         }
-        this.addError("InvalidValue", "Invalid value")
+        this.addError(TomlErrorKind.InvalidValue, "Invalid value")
         return TomlValue.String("")
     }
 
@@ -735,7 +751,7 @@ class TomlParser {
         }
         var last = keys[len(keys) - 1]
         if (current.containsKey(last)) {
-            this.addError("DuplicateKey", "Duplicate key")
+            this.addError(TomlErrorKind.DuplicateKey, "Duplicate key")
             return
         }
         current.set(last, value)
@@ -754,7 +770,7 @@ class TomlParser {
     getOrCreateTable(keys: Array<string>) -> TomlTable {
         var path = this.tablePath(keys)
         if (this.definedTables.containsKey(path)) {
-            this.addError("DuplicateKey", "Table already defined")
+            this.addError(TomlErrorKind.DuplicateKey, "Table already defined")
         }
         this.definedTables.set(path, true)
 
@@ -769,7 +785,7 @@ class TomlParser {
             } else if (existing!.kind == "table") {
                 current = existing!.asTable()!
             } else {
-                this.addError("TableConflict", "Table definition conflict")
+                this.addError(TomlErrorKind.TableConflict, "Table definition conflict")
                 return this.rootTable
             }
         }

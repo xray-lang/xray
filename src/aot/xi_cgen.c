@@ -6025,9 +6025,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
 
-    if (v->op == XI_FIXED_ARRAY_NEW) {
+    if (v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST) {
         uint8_t native = 0;
-        uint16_t count = 0;
+        uint32_t count = 0;
         if (!xicgen_fixed_array_new_info(v, &native, &count)) {
             ctx->error = true;
             fprintf(out, "    XrValue ");
@@ -6037,9 +6037,30 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         }
         if (!ctx->pre_decl_all) {
             fprintf(out, "    %s _fa%u[%u];\n", cg_struct_native_c_type(native), v->id,
-                    (unsigned) count);
+                    (unsigned) (count > 0 ? count : 1));
         }
-        fprintf(out, "    memset(_fa%u, 0, sizeof(_fa%u));\n", v->id, v->id);
+        const XaotFixedBytesPlan *fixed_bytes_plan = NULL;
+        const XaotFixedBytesBlob *fixed_bytes_blob = NULL;
+        if (v->op == XI_FIXED_BYTES_CONST) {
+            fixed_bytes_plan = xaot_bundle_find_fixed_bytes_plan(cg_ctx_aot_bundle(ctx), v);
+            fixed_bytes_blob = fixed_bytes_plan
+                                   ? xaot_bundle_find_fixed_bytes_blob(cg_ctx_aot_bundle(ctx),
+                                                                       fixed_bytes_plan->blob_id)
+                                   : NULL;
+            if (!fixed_bytes_plan || !fixed_bytes_blob ||
+                fixed_bytes_plan->action != XAOT_FIXED_BYTES_VALUE_COPY ||
+                fixed_bytes_plan->length != count || fixed_bytes_blob->length != count) {
+                fprintf(stderr, "[xi_cgen] ERROR: fixed byte value has no verified copy plan\n");
+                ctx->error = true;
+                return;
+            }
+        }
+        if (v->op == XI_FIXED_BYTES_CONST && count > 0) {
+            fprintf(out, "    memcpy(_fa%u, _xbytes_%u, %u);\n", v->id, fixed_bytes_plan->blob_id,
+                    (unsigned) count);
+        } else {
+            fprintf(out, "    memset(_fa%u, 0, sizeof(_fa%u));\n", v->id, v->id);
+        }
         if (ctx->pre_decl_all) {
             fprintf(out, "    ");
             emit_vref(out, v);
@@ -6972,12 +6993,12 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                 const XiValue *v = blk->values[vi];
                 if (cg_value_skips_predecl(ctx, f, v))
                     continue;
-                if (v->op == XI_FIXED_ARRAY_NEW) {
+                if (v->op == XI_FIXED_ARRAY_NEW || v->op == XI_FIXED_BYTES_CONST) {
                     uint8_t native = 0;
-                    uint16_t count = 0;
+                    uint32_t count = 0;
                     if (xicgen_fixed_array_new_info(v, &native, &count)) {
                         fprintf(out, "    %s _fa%u[%u];\n", cg_struct_native_c_type(native), v->id,
-                                (unsigned) count);
+                                (unsigned) (count > 0 ? count : 1));
                     }
                 }
                 XrRep rep = cg_value_plan_storage_rep(ctx, v);
