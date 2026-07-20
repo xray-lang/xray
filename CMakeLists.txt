@@ -1471,10 +1471,11 @@ if(BUILD_TESTS)
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    math(EXPR HTTP_STATIC_ROUTE_TIMEOUT "90 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(http_static_route_full_parse PROPERTIES
         LABELS "vm;aot;http;stdlib;regression"
         PROCESSORS 1
-        TIMEOUT 90
+        TIMEOUT ${HTTP_STATIC_ROUTE_TIMEOUT}
     )
 
     add_test(
