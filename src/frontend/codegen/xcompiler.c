@@ -91,6 +91,12 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
         }
     }
 
+    /* Interactive frontends may elaborate syntax that depends on inferred
+     * types after the first analysis pass. The ordinary second analysis below
+     * then treats the elaborated AST as the sole lowering input. */
+    if (ctx->post_analyze_hook)
+        ctx->post_analyze_hook(ctx, ast, ctx->post_analyze_user_data);
+
     /* Monomorphization: clone generic functions/structs for each concrete type */
     xa_mono_pass(ast, ctx->X);
 

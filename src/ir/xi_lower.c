@@ -2628,6 +2628,18 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
             if (i + 1 > (int) next_shared_start)
                 next_shared_start = (uint16_t) (i + 1);
         }
+        for (int i = 0; i < repl_syms->result_count; i++) {
+            XrString *name = repl_syms->result_names[i];
+            if (!name || name->length == 0)
+                continue;
+            int slot = repl_syms->count + i;
+            int vid = xi_lower_var_create(&l, 0, name->data, l.type_any);
+            if (vid < 0 || vid >= l.var_cap)
+                continue;
+            l.shared_map[vid] = (int16_t) slot;
+            if (slot + 1 > (int) next_shared_start)
+                next_shared_start = (uint16_t) (slot + 1);
+        }
     }
 
     /* Pre-scan: register every top-level declaration and assign it a

@@ -490,6 +490,9 @@ XaScope *xa_scope_new(XaScopeKind kind, XaScope *parent) {
     scope->kind = kind;
     scope->parent = parent;
     scope->symbols = xr_hashmap_new();
+    scope->aliases = xr_hashmap_new();
+    XR_CHECK(scope->symbols != NULL && scope->aliases != NULL,
+             "scope maps allocation failed (out of memory)");
 
     // Add to parent's children
     if (parent) {
@@ -521,6 +524,7 @@ void xa_scope_free(XaScope *scope) {
 
     // Free symbol map
     xr_hashmap_free(scope->symbols);
+    xr_hashmap_free(scope->aliases);
 
     xr_free(scope);
 }
@@ -547,11 +551,28 @@ bool xa_scope_remove_symbol(XaScope *scope, const char *name) {
     return xr_hashmap_delete(scope->symbols, name);
 }
 
+// Bind a lookup-only alias to an existing symbol. The alias does not own the
+// symbol and does not appear in xa_scope_get_all_symbols().
+void xa_scope_set_alias(XaScope *scope, const char *alias, XaSymbol *symbol) {
+    if (!scope || !scope->aliases || !alias || !symbol)
+        return;
+    XR_CHECK(xr_hashmap_set(scope->aliases, alias, symbol),
+             "scope alias insert failed (out of memory)");
+}
+
+bool xa_scope_remove_alias(XaScope *scope, const char *alias) {
+    if (!scope || !scope->aliases || !alias)
+        return false;
+    return xr_hashmap_delete(scope->aliases, alias);
+}
+
 // Look up symbol (search up through parent scopes)
 XaSymbol *xa_scope_lookup(XaScope *scope, const char *name) {
     XR_DCHECK(name != NULL, "scope_lookup: NULL name");
     while (scope) {
         XaSymbol *sym = xr_hashmap_get(scope->symbols, name);
+        if (!sym && scope->aliases)
+            sym = xr_hashmap_get(scope->aliases, name);
         if (sym)
             return sym;
         scope = scope->parent;
@@ -563,7 +584,10 @@ XaSymbol *xa_scope_lookup(XaScope *scope, const char *name) {
 XaSymbol *xa_scope_lookup_local(XaScope *scope, const char *name) {
     if (!scope)
         return NULL;
-    return xr_hashmap_get(scope->symbols, name);
+    XaSymbol *sym = xr_hashmap_get(scope->symbols, name);
+    if (!sym && scope->aliases)
+        sym = xr_hashmap_get(scope->aliases, name);
+    return sym;
 }
 
 // Check if child_scope is a descendant of (or equal to) ancestor_scope

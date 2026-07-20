@@ -21,6 +21,9 @@
 
 typedef struct XrClassDescriptor XrClassDescriptor;
 
+typedef void (*XrCompilerPostAnalyzeHook)(struct XrCompilerContext *ctx, AstNode *ast,
+                                          void *user_data);
+
 typedef enum {
     CONST_INT,
     CONST_FLOAT,
@@ -61,6 +64,8 @@ struct XrCompilerContext {
     bool had_error;
     bool panic_mode;
     bool repl_mode;  // REPL: emit OP_GETGLOBAL/OP_SETGLOBAL, skip shared slot allocation
+    XrCompilerPostAnalyzeHook post_analyze_hook;
+    void *post_analyze_user_data;
     int max_globals;
 
     // Enum type names for type inference

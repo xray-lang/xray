@@ -67,6 +67,8 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrCompilerSession *sessio
     ctx->had_error = false;
     ctx->panic_mode = false;
     ctx->repl_mode = false;
+    ctx->post_analyze_hook = NULL;
+    ctx->post_analyze_user_data = NULL;
     ctx->max_globals = MAX_GLOBALS;
 
     ctx->enum_type_names = NULL;
@@ -155,6 +157,8 @@ void xr_compiler_context_reset(XrCompilerContext *ctx) {
     ctx->global_var_count = 0;
     ctx->had_error = false;
     ctx->panic_mode = false;
+    ctx->post_analyze_hook = NULL;
+    ctx->post_analyze_user_data = NULL;
 }
 
 int xr_compiler_ctx_get_or_add_global(XrCompilerContext *ctx, XrString *name) {
