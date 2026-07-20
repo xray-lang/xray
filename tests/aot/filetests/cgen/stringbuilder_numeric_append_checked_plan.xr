@@ -1,0 +1,10 @@
+fn build() -> string {
+    var sb = StringBuilder()
+    sb.append("i=")
+    sb.append(42)
+    sb.append(" f=")
+    sb.append(3.5)
+    return sb.toString()
+}
+
+print(build())
