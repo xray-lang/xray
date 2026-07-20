@@ -4316,6 +4316,26 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
             break;
     }
 
+    /* Phase 3: publish the typed throw-effect bit (task 216). After the fixpoint
+     * each function symbol's interned summary is authoritative. Derive the bit
+     * fail-closed — NO_THROW only when the summary is complete AND its escaping
+     * error set is empty — and mirror it onto both the symbol and its function
+     * type so IR lowering can decide error-check emission constructively by
+     * callee effect. The error *set* stays in the effect DB and never enters the
+     * type. */
+    for (int i = 0; i < func_count; i++) {
+        XaSymbol *sym = funcs[i].sym;
+        if (!sym)
+            continue;
+        const XaEffectSummary *summary =
+            xa_effect_db_get(analyzer->effect_db, sym->links.effect_id);
+        XrFnThrowEffect effect =
+            xa_effect_summary_is_nothrow(summary) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW;
+        sym->links.throw_effect = effect;
+        if (sym->links.type && sym->links.type->kind == XR_KIND_FUNCTION)
+            xr_type_function_set_throw_effect(sym->links.type, effect);
+    }
+
 cleanup:
     xr_free(funcs);
     xr_free(ctx.function_return_targets);

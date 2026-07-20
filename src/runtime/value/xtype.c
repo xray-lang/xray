@@ -730,6 +730,9 @@ XrType *xr_type_new_function(XrVMRuntime *X, XrType **param_types, int param_cou
     type->function.min_params = param_count;  // Default: all params required
     type->function.return_type = return_type;
     type->function.is_variadic = is_variadic;
+    // Fail-closed default (task 216): a function type is assumed to possibly
+    // throw until the analyzer proves otherwise after the effect-DB fixpoint.
+    type->function.throw_effect = XR_FN_EFFECT_MAY_THROW;
     return type;
 }
 
@@ -1157,6 +1160,7 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
             copy->function.return_type = type->function.return_type;
             copy->function.is_variadic = type->function.is_variadic;
             copy->function.is_c_abi = type->function.is_c_abi;
+            copy->function.throw_effect = type->function.throw_effect;  // task 216
             if (type->function.type_param_count > 0 && type->function.type_param_names) {
                 xr_type_set_function_type_params(
                     X, copy, type->function.type_param_names, type->function.type_param_constraints,

@@ -1031,6 +1031,82 @@ static bool write_text_file(const char *path, const char *content) {
     return fclose(f) == 0;
 }
 
+static XaSymbol *analyzer_function_symbol(XaAnalyzer *analyzer, const char *name) {
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, name);
+    if (!sym)
+        sym = xa_analyzer_lookup_in_scope(analyzer, name, analyzer->global_scope);
+    if (!sym)
+        sym = xa_analyzer_lookup_deep(analyzer, name);
+    return sym;
+}
+
+/* Task 216 P0 invariant: the typed throw-effect bit published on each function
+ * symbol (and mirrored onto its function type) must agree with the analyzer's
+ * effect summary — NO_THROW iff the summary is complete with an empty escaping
+ * set, MAY_THROW otherwise (fail-closed). Pass expected = -1 to check only the
+ * bit<->summary and symbol<->type consistency without pinning an expectation.
+ * This guards the publication path against drift between the effect DB (the set
+ * truth source) and the type-system bit. */
+static void check_throw_effect_consistency(XaAnalyzer *a, const char *name, int expected) {
+    XaSymbol *sym = analyzer_function_symbol(a, name);
+    if (!sym) {
+        printf("FAILED: throw-effect symbol '%s' not found\n", name);
+        tests_failed++;
+        return;
+    }
+    const XaEffectSummary *summary = analyzer_function_effect_summary(a, name);
+    XrFnThrowEffect from_summary =
+        xa_effect_summary_is_nothrow(summary) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW;
+    if (sym->links.throw_effect != from_summary) {
+        printf("FAILED: '%s' symbol throw bit %d != summary-derived %d\n", name,
+               (int) sym->links.throw_effect, (int) from_summary);
+        tests_failed++;
+        return;
+    }
+    if (sym->links.type && sym->links.type->kind == XR_KIND_FUNCTION &&
+        sym->links.type->function.throw_effect != sym->links.throw_effect) {
+        printf("FAILED: '%s' function-type throw bit %d != symbol bit %d\n", name,
+               (int) sym->links.type->function.throw_effect, (int) sym->links.throw_effect);
+        tests_failed++;
+        return;
+    }
+    if (expected >= 0 && sym->links.throw_effect != (XrFnThrowEffect) expected) {
+        printf("FAILED: '%s' throw effect %d != expected %d\n", name, (int) sym->links.throw_effect,
+               expected);
+        tests_failed++;
+        return;
+    }
+}
+
+TEST(analyzer_throw_effect_bit_matches_effect_summary) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum IoErr { Boom }\n"
+                         "fn pureAdd(x: int, y: int) -> int { return x + y }\n"
+                         "fn throwsDirect() { throw IoErr.Boom }\n"
+                         "fn propagates() { throwsDirect() }\n"
+                         "fn guarded() { try { throwsDirect() } catch (e: IoErr) {} }\n"
+                         "fn viaDynamic(f: () -> ()) { f() }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "throw_effect_bit.xr", program);
+
+    /* Pure arithmetic: proven NO_THROW. */
+    check_throw_effect_consistency(a, "pureAdd", XR_FN_EFFECT_NO_THROW);
+    /* Direct throw and its transitive propagation: MAY_THROW. */
+    check_throw_effect_consistency(a, "throwsDirect", XR_FN_EFFECT_MAY_THROW);
+    check_throw_effect_consistency(a, "propagates", XR_FN_EFFECT_MAY_THROW);
+    /* Catch subtraction that fully consumes the escaping set: check the
+     * invariant without pinning (behaviour owned by the error-set pass). */
+    check_throw_effect_consistency(a, "guarded", -1);
+    /* Dynamic (function-value) call is incomplete → fail-closed MAY_THROW. */
+    check_throw_effect_consistency(a, "viaDynamic", XR_FN_EFFECT_MAY_THROW);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_records_direct_throw_variant) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -5435,6 +5511,7 @@ int main(void) {
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
     RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);
+    RUN_TEST(analyzer_throw_effect_bit_matches_effect_summary);
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_error_effect_propagates_const_function_value_aliases);
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
