@@ -7940,10 +7940,30 @@ static bool body_counted_loop_push_no_clobber_is_proven(const XgBodyCollect *bc,
     return body_sequence_storage_alias_count(bc, local) == 1;
 }
 
+static bool body_rune_scalar_is_utf8_encodable(uint32_t cp) {
+    return cp <= 0x10FFFFu && !(cp >= 0xD800u && cp <= 0xDFFFu);
+}
+
+/* A StringBuilder.append argument has a compile-time-exact byte length when it
+ * is a string literal or a scalar literal whose formatted UTF-8 length is fixed
+ * (rune / bool / null). Integer and float literals are intentionally excluded
+ * because their formatted width is decided by runtime numeric formatting. Kept
+ * in sync with xi_cgen's xicgen_stringbuilder_exact_append_len. */
 static bool body_string_builder_append_has_exact_count(const XgLocalType *local,
                                                        const AstNode *value) {
-    return local && local->sequence_kind == XG_SEQ_STRING_BUILDER && value &&
-           value->type == AST_LITERAL_STRING && value->node_id != 0;
+    if (!local || local->sequence_kind != XG_SEQ_STRING_BUILDER || !value || value->node_id == 0)
+        return false;
+    switch ((AstNodeType) value->type) {
+        case AST_LITERAL_STRING:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_LITERAL_NULL:
+            return true;
+        case AST_LITERAL_RUNE:
+            return body_rune_scalar_is_utf8_encodable(value->as.literal.raw_value.rune_val);
+        default:
+            return false;
+    }
 }
 
 static bool body_expr_is_zero_fill_literal(const AstNode *value) {

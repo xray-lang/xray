@@ -1139,6 +1139,48 @@ static inline void xrt_strbuf_append_string_no_grow(XrValue sbv, XrValue val) {
     sb->buf[sb->len] = 0;
 }
 
+/* No-grow append for non-string scalar literals whose formatted UTF-8 byte
+ * length is a compile-time constant (rune / bool / null). The exact capacity
+ * has already been reserved once for the known-append chain, so this proves the
+ * capacity instead of growing. Kept in sync with the rune/bool/null formatting
+ * branches of xrt_strbuf_append and with the compile-time length computed in
+ * xi_cgen (xicgen_stringbuilder_exact_append_len). */
+static inline void xrt_strbuf_append_scalar_no_grow(XrValue sbv, XrValue val) {
+    xrt_strbuf_t *sb = (xrt_strbuf_t *) sbv.ptr;
+    char tmp[4];
+    const char *src;
+    int64_t n;
+    if (XR_UNLIKELY(!sb || sb->len < 0 || sb->cap <= 0 || sb->len >= sb->cap)) {
+        fprintf(stderr, "xrt_strbuf_append_scalar_no_grow: invalid proven append\n");
+        abort();
+    }
+    if (val.tag == XR_TAG_RUNE) {
+        int enc = xrt_rune_utf8_encode(XR_TO_RUNE(val), tmp);
+        if (XR_UNLIKELY(enc <= 0)) {
+            fprintf(stderr, "xrt_strbuf_append_scalar_no_grow: invalid rune append\n");
+            abort();
+        }
+        src = tmp;
+        n = enc;
+    } else if (val.tag == XR_TAG_BOOL) {
+        src = val.i ? "true" : "false";
+        n = val.i ? 4 : 5;
+    } else if (val.tag == XR_TAG_NULL) {
+        src = "null";
+        n = 4;
+    } else {
+        fprintf(stderr, "xrt_strbuf_append_scalar_no_grow: unsupported no-grow scalar tag\n");
+        abort();
+    }
+    if (XR_UNLIKELY(n > sb->cap - sb->len - 1)) {
+        fprintf(stderr, "xrt_strbuf_append_scalar_no_grow: capacity proof violated\n");
+        abort();
+    }
+    memcpy(sb->buf + sb->len, src, (size_t) n);
+    sb->len += n;
+    sb->buf[sb->len] = 0;
+}
+
 static inline void xrt_strbuf_append(XrValue sbv, XrValue val) {
     xrt_strbuf_t *sb = (xrt_strbuf_t *) sbv.ptr;
     if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC) {
