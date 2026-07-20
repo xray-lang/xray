@@ -2,25 +2,25 @@
 
 @native
 class int {
-    abs() -> int @no_alloc
-    toString() -> string @may_alloc
-    toBigInt() -> BigInt @may_alloc
-    toFloat() -> float @no_alloc
-    toHex() -> string @may_alloc
-    max(other: int) -> int @no_alloc
-    min(other: int) -> int @no_alloc
-    sqrt() -> float @no_alloc
-    pow(exp: float) -> float @no_alloc
-    checkedAdd(other: int) -> int? @no_alloc
-    checkedSub(other: int) -> int? @no_alloc
-    checkedMul(other: int) -> int? @no_alloc
-    saturatingAdd(other: int) -> int @no_alloc
-    saturatingSub(other: int) -> int @no_alloc
-    saturatingMul(other: int) -> int @no_alloc
-    wrappingAdd(other: int) -> int @no_alloc
-    wrappingSub(other: int) -> int @no_alloc
-    wrappingMul(other: int) -> int @no_alloc
-    addOverflows(other: int) -> bool @no_alloc
-    subOverflows(other: int) -> bool @no_alloc
-    mulOverflows(other: int) -> bool @no_alloc
+    abs() -> int @nothrow @no_alloc
+    toString() -> string @nothrow @may_alloc
+    toBigInt() -> BigInt @nothrow @may_alloc
+    toFloat() -> float @nothrow @no_alloc
+    toHex() -> string @nothrow @may_alloc
+    max(other: int) -> int @nothrow @no_alloc
+    min(other: int) -> int @nothrow @no_alloc
+    sqrt() -> float @nothrow @no_alloc
+    pow(exp: float) -> float @nothrow @no_alloc
+    checkedAdd(other: int) -> int? @nothrow @no_alloc
+    checkedSub(other: int) -> int? @nothrow @no_alloc
+    checkedMul(other: int) -> int? @nothrow @no_alloc
+    saturatingAdd(other: int) -> int @nothrow @no_alloc
+    saturatingSub(other: int) -> int @nothrow @no_alloc
+    saturatingMul(other: int) -> int @nothrow @no_alloc
+    wrappingAdd(other: int) -> int @nothrow @no_alloc
+    wrappingSub(other: int) -> int @nothrow @no_alloc
+    wrappingMul(other: int) -> int @nothrow @no_alloc
+    addOverflows(other: int) -> bool @nothrow @no_alloc
+    subOverflows(other: int) -> bool @nothrow @no_alloc
+    mulOverflows(other: int) -> bool @nothrow @no_alloc
 }

@@ -41,7 +41,7 @@ static const char xr_native_def_bigint[] =
 
 static const char xr_native_def_bool[] =
     "// Built-in bool type — implementation in src/runtime/value/xbool_methods.c\n\n@native\nclass "
-    "bool {\n    toString() -> string @may_alloc\n}\n";
+    "bool {\n    toString() -> string @nothrow @may_alloc\n}\n";
 
 static const char xr_native_def_channel[] =
     "// Built-in Channel<T> type — implementation in src/runtime/coro/xchannel_methods.c\n\nenum "
@@ -72,24 +72,28 @@ static const char xr_native_def_eventcount[] =
 
 static const char xr_native_def_float[] =
     "// Built-in float type — implementation in "
-    "src/runtime/value/xfloat_methods.c\n\n@native\nclass float {\n    abs() -> float @no_alloc\n  "
-    "  toString() -> string @may_alloc\n    toFixed(decimals?: int) -> string @may_alloc\n    "
-    "toInt() -> int @no_alloc\n    floor() -> int @no_alloc\n    ceil() -> int @no_alloc\n    "
-    "round() -> int @no_alloc\n    sqrt() -> float @no_alloc\n    pow(exp: float) -> float "
-    "@no_alloc\n    isNaN() -> bool @no_alloc\n}\n";
+    "src/runtime/value/xfloat_methods.c\n\n@native\nclass float {\n    abs() -> float @nothrow "
+    "@no_alloc\n    toString() -> string @nothrow @may_alloc\n    toFixed(decimals?: int) -> "
+    "string @nothrow @may_alloc\n    toInt() -> int @nothrow @no_alloc\n    floor() -> int "
+    "@nothrow @no_alloc\n    ceil() -> int @nothrow @no_alloc\n    round() -> int @nothrow "
+    "@no_alloc\n    sqrt() -> float @nothrow @no_alloc\n    pow(exp: float) -> float @nothrow "
+    "@no_alloc\n    isNaN() -> bool @nothrow @no_alloc\n}\n";
 
 static const char xr_native_def_int[] =
     "// Built-in int type — implementation in src/runtime/value/xint_methods.c\n\n@native\nclass "
-    "int {\n    abs() -> int @no_alloc\n    toString() -> string @may_alloc\n    toBigInt() -> "
-    "BigInt @may_alloc\n    toFloat() -> float @no_alloc\n    toHex() -> string @may_alloc\n    "
-    "max(other: int) -> int @no_alloc\n    min(other: int) -> int @no_alloc\n    sqrt() -> float "
-    "@no_alloc\n    pow(exp: float) -> float @no_alloc\n    checkedAdd(other: int) -> int? "
-    "@no_alloc\n    checkedSub(other: int) -> int? @no_alloc\n    checkedMul(other: int) -> int? "
-    "@no_alloc\n    saturatingAdd(other: int) -> int @no_alloc\n    saturatingSub(other: int) -> "
-    "int @no_alloc\n    saturatingMul(other: int) -> int @no_alloc\n    wrappingAdd(other: int) -> "
-    "int @no_alloc\n    wrappingSub(other: int) -> int @no_alloc\n    wrappingMul(other: int) -> "
-    "int @no_alloc\n    addOverflows(other: int) -> bool @no_alloc\n    subOverflows(other: int) "
-    "-> bool @no_alloc\n    mulOverflows(other: int) -> bool @no_alloc\n}\n";
+    "int {\n    abs() -> int @nothrow @no_alloc\n    toString() -> string @nothrow @may_alloc\n    "
+    "toBigInt() -> BigInt @nothrow @may_alloc\n    toFloat() -> float @nothrow @no_alloc\n    "
+    "toHex() -> string @nothrow @may_alloc\n    max(other: int) -> int @nothrow @no_alloc\n    "
+    "min(other: int) -> int @nothrow @no_alloc\n    sqrt() -> float @nothrow @no_alloc\n    "
+    "pow(exp: float) -> float @nothrow @no_alloc\n    checkedAdd(other: int) -> int? @nothrow "
+    "@no_alloc\n    checkedSub(other: int) -> int? @nothrow @no_alloc\n    checkedMul(other: int) "
+    "-> int? @nothrow @no_alloc\n    saturatingAdd(other: int) -> int @nothrow @no_alloc\n    "
+    "saturatingSub(other: int) -> int @nothrow @no_alloc\n    saturatingMul(other: int) -> int "
+    "@nothrow @no_alloc\n    wrappingAdd(other: int) -> int @nothrow @no_alloc\n    "
+    "wrappingSub(other: int) -> int @nothrow @no_alloc\n    wrappingMul(other: int) -> int "
+    "@nothrow @no_alloc\n    addOverflows(other: int) -> bool @nothrow @no_alloc\n    "
+    "subOverflows(other: int) -> bool @nothrow @no_alloc\n    mulOverflows(other: int) -> bool "
+    "@nothrow @no_alloc\n}\n";
 
 static const char xr_native_def_json[] =
     "// Built-in Json type — implementation in "
@@ -151,9 +155,10 @@ static const char xr_native_def_resultgroup[] =
 
 static const char xr_native_def_rune[] =
     "// Built-in Unicode scalar type. A rune is always a valid Unicode scalar "
-    "value.\n\n@native\nclass rune {\n    toUInt32() -> uint32 @no_alloc\n    toString() -> string "
-    "@may_alloc\n    isLetter() -> bool @no_alloc\n    isNumber() -> bool @no_alloc\n    "
-    "isAlphanumeric() -> bool @no_alloc\n    isWhitespace() -> bool @no_alloc\n}\n";
+    "value.\n\n@native\nclass rune {\n    toUInt32() -> uint32 @nothrow @no_alloc\n    toString() "
+    "-> string @nothrow @may_alloc\n    isLetter() -> bool @nothrow @no_alloc\n    isNumber() -> "
+    "bool @nothrow @no_alloc\n    isAlphanumeric() -> bool @nothrow @no_alloc\n    isWhitespace() "
+    "-> bool @nothrow @no_alloc\n}\n";
 
 static const char xr_native_def_semaphore[] =
     "// Built-in Semaphore type; implemented by the runtime.\n\n@native\nclass Semaphore {\n    "
@@ -183,18 +188,20 @@ static const char xr_native_def_string[] =
     "StringSliceError {\n    InvalidByteRange\n}\n\n@native\nclass string {\n    static "
     "fromUtf8(bytes: Slice<byte>) -> string @errors(Utf8Error.InvalidUtf8) @may_alloc\n    static "
     "fromUtf8Lossy(bytes: Slice<byte>) -> string @nothrow @may_alloc\n    static fromRune(value: "
-    "rune) -> string @may_alloc\n    static join(parts: Array<string>, separator?: string) -> "
-    "string @may_alloc\n    contains(search: string) -> bool @no_alloc\n    indexOf(search: "
-    "string, start?: int) -> int @no_alloc\n    lastIndexOf(search: string) -> int @no_alloc\n    "
-    "slice(start: int, end?: int) -> string @may_alloc\n    sliceBytes(start: int, end: int) -> "
-    "string @errors(StringSliceError.InvalidByteRange) @may_alloc\n    toString() -> string "
-    "@no_alloc\n    split(separator: string, limit?: int) -> Array<string> @may_alloc\n    "
-    "replace(search: string, replacement: string) -> string @may_alloc\n    replaceAll(search: "
-    "string, replacement: string) -> string @may_alloc\n    repeat(count: int) -> string "
-    "@may_alloc\n    startsWith(search: string) -> bool @no_alloc\n    endsWith(search: string) -> "
-    "bool @no_alloc\n    // Owned UTF-8 byte bridge.\n    copyBytes() -> Array<byte> @may_alloc\n  "
-    "  // Borrowed UTF-8 bytes; readonly because strings are immutable.\n    // @lowered\n    "
-    "bytes() -> Slice<byte> @no_alloc\n    runes() -> Iterator<rune> @may_alloc\n}\n";
+    "rune) -> string @nothrow @may_alloc\n    static join(parts: Array<string>, separator?: "
+    "string) -> string @nothrow @may_alloc\n    contains(search: string) -> bool @nothrow "
+    "@no_alloc\n    indexOf(search: string, start?: int) -> int @nothrow @no_alloc\n    "
+    "lastIndexOf(search: string) -> int @nothrow @no_alloc\n    slice(start: int, end?: int) -> "
+    "string @may_alloc\n    sliceBytes(start: int, end: int) -> string "
+    "@errors(StringSliceError.InvalidByteRange) @may_alloc\n    toString() -> string @nothrow "
+    "@no_alloc\n    split(separator: string, limit?: int) -> Array<string> @nothrow @may_alloc\n   "
+    " replace(search: string, replacement: string) -> string @nothrow @may_alloc\n    "
+    "replaceAll(search: string, replacement: string) -> string @nothrow @may_alloc\n    "
+    "repeat(count: int) -> string @nothrow @may_alloc\n    startsWith(search: string) -> bool "
+    "@nothrow @no_alloc\n    endsWith(search: string) -> bool @nothrow @no_alloc\n    // Owned "
+    "UTF-8 byte bridge.\n    copyBytes() -> Array<byte> @nothrow @may_alloc\n    // Borrowed UTF-8 "
+    "bytes; readonly because strings are immutable.\n    // @lowered\n    bytes() -> Slice<byte> "
+    "@no_alloc\n    runes() -> Iterator<rune> @nothrow @may_alloc\n}\n";
 
 static const char xr_native_def_stringbuilder[] =
     "// Built-in StringBuilder type — implementation in "

@@ -2,5 +2,5 @@
 
 @native
 class bool {
-    toString() -> string @may_alloc
+    toString() -> string @nothrow @may_alloc
 }
