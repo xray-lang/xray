@@ -130,6 +130,30 @@ XR_FUNC bool xa_effect_summary_is_nothrow(const XaEffectSummary *summary);
 XR_FUNC uint64_t xa_effect_summary_fingerprint(const XaEffectDatabase *db,
                                                const XaEffectSummary *summary);
 
+/* Public effect API-diff (task 205 §11.2).  Compares two summaries of the same
+ * exported entity by stable error keys and completeness.  BREAKING dominates
+ * IMPROVEMENT dominates COMPATIBLE so release gates can reject regressions. */
+typedef enum XaEffectDiffKind {
+    XA_EFFECT_DIFF_COMPATIBLE = 0,
+    XA_EFFECT_DIFF_IMPROVEMENT = 1,
+    XA_EFFECT_DIFF_BREAKING = 2,
+} XaEffectDiffKind;
+
+typedef struct XaEffectDiff {
+    XaEffectDiffKind kind;
+    bool added_escaping;   /* after escapes an error the before summary did not */
+    bool removed_escaping; /* before escaped an error the after summary does not */
+    bool became_incomplete;
+    bool became_complete;
+    bool widened_unknown;  /* after has unknown reasons absent from before */
+    bool narrowed_unknown; /* before has unknown reasons absent from after */
+} XaEffectDiff;
+
+XR_FUNC XaEffectDiffKind xa_effect_summary_diff(const XaEffectDatabase *db,
+                                                const XaEffectSummary *before,
+                                                const XaEffectSummary *after,
+                                                XaEffectDiff *out_diff);
+
 XR_FUNC XaEffectId xa_effect_db_intern(XaEffectDatabase *db, const XaEffectSummary *summary);
 XR_FUNC const XaEffectSummary *xa_effect_db_get(const XaEffectDatabase *db, XaEffectId id);
 XR_FUNC uint32_t xa_effect_db_summary_count(const XaEffectDatabase *db);

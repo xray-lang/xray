@@ -318,6 +318,201 @@ TEST(summary_subtract_type_and_clear_escaping_preserve_incomplete) {
     xa_effect_db_free(db);
 }
 
+TEST(diff_identical_summaries_are_compatible) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA0u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    ASSERT(xa_effect_summary_add_variant(db, &before, type, 0));
+    ASSERT(xa_effect_summary_add_variant(db, &after, type, 0));
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_COMPATIBLE);
+    ASSERT(!diff.added_escaping);
+    ASSERT(!diff.removed_escaping);
+    ASSERT(!diff.became_incomplete);
+    ASSERT(!diff.became_complete);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_added_escaping_variant_is_breaking) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA0u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA1u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    ASSERT(xa_effect_summary_add_variant(db, &before, type, 0));
+    ASSERT(xa_effect_summary_add_variant(db, &after, type, 0));
+    ASSERT(xa_effect_summary_add_variant(db, &after, type, 1));
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(diff.added_escaping);
+    ASSERT(!diff.removed_escaping);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_removed_escaping_variant_is_improvement) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA0u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA1u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    ASSERT(xa_effect_summary_add_variant(db, &before, type, 0));
+    ASSERT(xa_effect_summary_add_variant(db, &before, type, 1));
+    ASSERT(xa_effect_summary_add_variant(db, &after, type, 0));
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_IMPROVEMENT);
+    ASSERT(!diff.added_escaping);
+    ASSERT(diff.removed_escaping);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_added_new_error_type_is_breaking) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId a = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    XaErrorTypeId b = xa_effect_db_register_error_type(db, 0x222u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, a, 0xA0u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, b, 0xB0u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    ASSERT(xa_effect_summary_add_variant(db, &before, a, 0));
+    ASSERT(xa_effect_summary_add_variant(db, &after, a, 0));
+    ASSERT(xa_effect_summary_add_variant(db, &after, b, 0));
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(diff.added_escaping);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_complete_to_incomplete_is_breaking) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    xa_effect_summary_mark_incomplete(&after, XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(diff.became_incomplete);
+    ASSERT(diff.widened_unknown);
+    ASSERT(!diff.became_complete);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_incomplete_to_complete_is_improvement) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    xa_effect_summary_mark_incomplete(&before, XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_IMPROVEMENT);
+    ASSERT(diff.became_complete);
+    ASSERT(diff.narrowed_unknown);
+    ASSERT(!diff.became_incomplete);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_all_variants_widening_and_narrowing) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA0u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA1u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary specific;
+    XaEffectSummary all;
+    xa_effect_summary_init(&specific);
+    xa_effect_summary_init(&all);
+    ASSERT(xa_effect_summary_add_variant(db, &specific, type, 0));
+    ASSERT(xa_effect_summary_add_all_variants(db, &all, type));
+
+    XaEffectDiff widening;
+    ASSERT(xa_effect_summary_diff(db, &specific, &all, &widening) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(widening.added_escaping);
+    ASSERT(!widening.removed_escaping);
+
+    XaEffectDiff narrowing;
+    ASSERT(xa_effect_summary_diff(db, &all, &specific, &narrowing) == XA_EFFECT_DIFF_IMPROVEMENT);
+    ASSERT(narrowing.removed_escaping);
+    ASSERT(!narrowing.added_escaping);
+
+    xa_effect_summary_clear(&specific);
+    xa_effect_summary_clear(&all);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_addition_dominates_removal_as_breaking) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA0u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA1u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    ASSERT(xa_effect_summary_add_variant(db, &before, type, 1));
+    ASSERT(xa_effect_summary_add_variant(db, &after, type, 0));
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(diff.added_escaping);
+    ASSERT(diff.removed_escaping);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
 int main(void) {
     printf("Running effect database tests...\n");
     RUN_TEST(empty_complete_is_real_summary);
@@ -329,6 +524,14 @@ int main(void) {
     RUN_TEST(provenance_roots_merge_without_changing_semantic_identity);
     RUN_TEST(error_type_handle_is_bound_by_stable_key);
     RUN_TEST(summary_subtract_type_and_clear_escaping_preserve_incomplete);
+    RUN_TEST(diff_identical_summaries_are_compatible);
+    RUN_TEST(diff_added_escaping_variant_is_breaking);
+    RUN_TEST(diff_removed_escaping_variant_is_improvement);
+    RUN_TEST(diff_added_new_error_type_is_breaking);
+    RUN_TEST(diff_complete_to_incomplete_is_breaking);
+    RUN_TEST(diff_incomplete_to_complete_is_improvement);
+    RUN_TEST(diff_all_variants_widening_and_narrowing);
+    RUN_TEST(diff_addition_dominates_removal_as_breaking);
 
     printf("\n%d tests passed, %d failed\n", tests_passed, tests_failed);
     return tests_failed ? 1 : 0;

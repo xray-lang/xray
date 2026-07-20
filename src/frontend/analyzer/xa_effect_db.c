@@ -667,6 +667,144 @@ uint64_t xa_effect_summary_fingerprint(const XaEffectDatabase *db, const XaEffec
     return h ? h : 1u;
 }
 
+/* Collects the sorted, de-duplicated stable variant keys escaping for one type
+ * set.  `all_variants` sets expand to the currently registered variant universe
+ * of the error type; specific sets expand to the escaping bits only. */
+static uint64_t *collect_variant_keys(const XaEffectDatabase *db, const XaErrorTypeSet *set,
+                                      uint32_t *out_count) {
+    if (out_count)
+        *out_count = 0;
+    if (!set)
+        return NULL;
+    const XaErrorTypeInfo *info = db_type_info(db, set->type_id);
+    uint32_t count = 0;
+    if (set->all_variants) {
+        count = info ? info->variant_count : 0;
+    } else {
+        for (uint32_t word = 0; word < set->variants.word_count; word++) {
+            uint64_t bits = set->variants.words[word];
+            while (bits) {
+                count++;
+                bits &= bits - 1u;
+            }
+        }
+    }
+    if (count == 0)
+        return NULL;
+    uint64_t *keys = (uint64_t *) xr_malloc((size_t) count * sizeof(uint64_t));
+    if (!keys)
+        return NULL;
+    uint32_t out = 0;
+    if (set->all_variants) {
+        for (uint32_t i = 0; i < count; i++)
+            keys[out++] = info->variants[i].stable_key;
+    } else {
+        for (uint32_t word = 0; word < set->variants.word_count; word++) {
+            uint64_t bits = set->variants.words[word];
+            for (uint32_t bit = 0; bit < 64u; bit++) {
+                if ((bits & (UINT64_C(1) << bit)) == 0)
+                    continue;
+                uint32_t variant_id = word * 64u + bit;
+                uint64_t key = xa_effect_db_error_variant_key(db, set->type_id, variant_id);
+                keys[out++] = key ? key : fallback_variant_key(set->stable_type_key, variant_id);
+            }
+        }
+    }
+    if (out > 1)
+        qsort(keys, out, sizeof(uint64_t), cmp_u64);
+    if (out_count)
+        *out_count = out;
+    return keys;
+}
+
+static void diff_specific_variant_sets(const XaEffectDatabase *db, const XaErrorTypeSet *before,
+                                       const XaErrorTypeSet *after, XaEffectDiff *diff) {
+    uint32_t bc = 0;
+    uint32_t ac = 0;
+    uint64_t *bk = collect_variant_keys(db, before, &bc);
+    uint64_t *ak = collect_variant_keys(db, after, &ac);
+    uint32_t x = 0;
+    uint32_t y = 0;
+    while (x < bc || y < ac) {
+        if (x < bc && (y >= ac || bk[x] < ak[y])) {
+            diff->removed_escaping = true;
+            x++;
+        } else if (y < ac && (x >= bc || ak[y] < bk[x])) {
+            diff->added_escaping = true;
+            y++;
+        } else {
+            x++;
+            y++;
+        }
+    }
+    xr_free(bk);
+    xr_free(ak);
+}
+
+XaEffectDiffKind xa_effect_summary_diff(const XaEffectDatabase *db, const XaEffectSummary *before,
+                                        const XaEffectSummary *after, XaEffectDiff *out_diff) {
+    XaEffectDiff diff;
+    memset(&diff, 0, sizeof(diff));
+
+    XaEffectSummary empty;
+    xa_effect_summary_init(&empty);
+    if (!before)
+        before = &empty;
+    if (!after)
+        after = &empty;
+
+    /* Both escaping sets are kept sorted by stable_type_key, so a merge join
+     * detects newly escaping / no-longer escaping typed errors by stable key. */
+    uint32_t bi = 0;
+    uint32_t ai = 0;
+    while (bi < before->escaping.count || ai < after->escaping.count) {
+        const XaErrorTypeSet *bs = bi < before->escaping.count ? &before->escaping.types[bi] : NULL;
+        const XaErrorTypeSet *as = ai < after->escaping.count ? &after->escaping.types[ai] : NULL;
+        if (bs && (!as || bs->stable_type_key < as->stable_type_key)) {
+            diff.removed_escaping = true;
+            bi++;
+            continue;
+        }
+        if (as && (!bs || as->stable_type_key < bs->stable_type_key)) {
+            diff.added_escaping = true;
+            ai++;
+            continue;
+        }
+        if (bs->all_variants && as->all_variants) {
+            /* identical full coverage */
+        } else if (!bs->all_variants && as->all_variants) {
+            diff.added_escaping = true;
+        } else if (bs->all_variants && !as->all_variants) {
+            diff.removed_escaping = true;
+        } else {
+            diff_specific_variant_sets(db, bs, as, &diff);
+        }
+        bi++;
+        ai++;
+    }
+
+    if (before->completeness == XA_EFFECT_COMPLETE && after->completeness == XA_EFFECT_INCOMPLETE)
+        diff.became_incomplete = true;
+    if (before->completeness == XA_EFFECT_INCOMPLETE && after->completeness == XA_EFFECT_COMPLETE)
+        diff.became_complete = true;
+    if ((after->unknown_reasons & ~before->unknown_reasons) != 0)
+        diff.widened_unknown = true;
+    if ((before->unknown_reasons & ~after->unknown_reasons) != 0)
+        diff.narrowed_unknown = true;
+
+    if (diff.added_escaping || diff.became_incomplete || diff.widened_unknown)
+        diff.kind = XA_EFFECT_DIFF_BREAKING;
+    else if (diff.removed_escaping || diff.became_complete || diff.narrowed_unknown)
+        diff.kind = XA_EFFECT_DIFF_IMPROVEMENT;
+    else
+        diff.kind = XA_EFFECT_DIFF_COMPATIBLE;
+
+    xa_effect_summary_clear(&empty);
+    if (out_diff)
+        *out_diff = diff;
+    return diff.kind;
+}
+
 static bool summary_copy(XaEffectSummary *dst, const XaEffectSummary *src) {
     xa_effect_summary_init(dst);
     dst->completeness = src->completeness;
