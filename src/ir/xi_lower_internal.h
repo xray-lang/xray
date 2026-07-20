@@ -226,10 +226,14 @@ XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, struct AstNode *node, X
 
 /* ========== Error Propagation (xi_lower_misc.c) ========== */
 
-/* Insert error channel check after a fallible call.  If inside a try
- * block, jumps to the current catch target.  Otherwise propagates by
- * writing error + returning from the function. */
-XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node);
+/* Insert error channel check after a producer that may raise (task 216).
+ *
+ * The check is generated CONSTRUCTIVELY by callee effect: `producer_may_throw`
+ * must be false only when the producer is proven NO_THROW, in which case no
+ * XI_ERR_CHECK node is emitted at all (the check could never fire). When true,
+ * behaves as before — inside a try block it branches to the current catch
+ * target; otherwise it propagates by writing the error and returning. */
+XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool producer_may_throw);
 
 /* Re-propagate a materialized error value through the value channel,
  * running any finally blocks it escapes (see xi_lower_stmt.c). */

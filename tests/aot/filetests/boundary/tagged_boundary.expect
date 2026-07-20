@@ -11,9 +11,9 @@ contains=boundary 0 kind=func-abi func=<main> value=- input=- reason=module-init
 regex=  value v[0-9]+ op=CALL kind=ptr rep=ptr c_type=void \*
 contains=reason=box
 contains=  value v0 op=CLASS_CREATE kind=tagged rep=tagged c_type=XrValue
-c_regex=static xrt_native_tagged_boundary_[0-9a-f]+_Counter \* tagged_boundary_[0-9a-f]+_make_counter_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
+c_regex=static xrt_native_tagged_boundary_[0-9a-f]+_Counter \* tagged_boundary_[0-9a-f]+_constructor_[0-9]+\(xrt_closure_t \*_cl, xrt_native_tagged_boundary_[0-9a-f]+_Counter \*p0, int64_t p1\)
 c_regex=static int64_t tagged_boundary_[0-9a-f]+_read_counter_[0-9]+\(xrt_closure_t \*_cl, xrt_native_tagged_boundary_[0-9a-f]+_Counter \*p0\)
-c_regex=void \* v[0-9]+ = tagged_boundary_[0-9a-f]+_make_counter_[0-9]+\(NULL, v[0-9]+\)
+c_regex=tagged_boundary_[0-9a-f]+_constructor_[0-9]+\(NULL, _inst, INT64_C\(41\)\)
 c_regex=xrt_shared\[[0-9]+\] = \(\{ XrValue _xsv = xrt_box_obj\(v[0-9]+\)
 c_regex=tagged_boundary_[0-9a-f]+_read_counter_[0-9]+\(NULL, \(v[0-9]+\)\.ptr\)
 c_regex=tagged_boundary_[0-9a-f]+_bump_[0-9]+\(NULL, \(\(xrt_native_tagged_boundary_[0-9a-f]+_Counter\*\)v[0-9]+\)\)

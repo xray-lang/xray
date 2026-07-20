@@ -4273,6 +4273,38 @@ static bool lower_apply_call_writebacks(XiLower *l, const XiCallPlan *plan,
     return true;
 }
 
+/* Task 216 P1: whether a call's callee may raise into the error channel.
+ * Fail-closed — report false (nothrow) only when the callee is provably
+ * NO_THROW, so an error check is elided only where it could never fire. For a
+ * direct named call we consult the resolved function symbol's published bit;
+ * otherwise we fall back to the static callee function type (which defaults to
+ * the fail-closed MAY_THROW). */
+static bool lower_call_callee_may_throw(XiLower *l, CallExprNode *call,
+                                        struct XrType *callee_type) {
+    struct XrType *fn_type = NULL;
+    if (l && l->analyzer && call && call->callee && call->callee->type == AST_VARIABLE) {
+        XaSymbol *sym =
+            xa_scope_lookup_by_id(l->analyzer->global_scope, call->callee->as.variable.symbol_id);
+        XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
+        if (links && links->type && links->type->kind == XR_KIND_FUNCTION)
+            fn_type = links->type;
+    }
+    if (!fn_type && callee_type && callee_type->kind == XR_KIND_FUNCTION)
+        fn_type = callee_type;
+    return !(fn_type && fn_type->function.throw_effect == XR_FN_EFFECT_NO_THROW);
+}
+
+/* Apply the constructive error-check decision to a freshly emitted call value:
+ * when the callee is proven NO_THROW no XI_ERR_CHECK node is generated at all
+ * (the check could never fire). The call value keeps its conservative
+ * XI_FLAG_MAY_THROW so optimizer analyses and the existing backend proven-nothrow
+ * recovery stay well-defined; only the error-channel check node is elided. */
+static void lower_call_emit_err_check(XiLower *l, XiValue *call_v, AstNode *node,
+                                      CallExprNode *call, struct XrType *callee_type) {
+    (void) call_v;
+    xi_lower_insert_err_check(l, node, lower_call_callee_may_throw(l, call, callee_type));
+}
+
 static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode *call,
                                          XiValue *callee_val, struct XrType *callee_type) {
     if (!callee_val)
@@ -4435,7 +4467,7 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     v->call_plan = call_plan;
 
     xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
-    xi_lower_insert_err_check(l, node);
+    lower_call_emit_err_check(l, v, node, call, callee_type);
     if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
         return NULL;
     return v;
@@ -4540,7 +4572,7 @@ static XiValue *lower_enum_method_direct_call(XiLower *l, AstNode *node, CallExp
         v->args[out + i] = args.items[i];
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
-    xi_lower_insert_err_check(l, node);
+    lower_call_emit_err_check(l, v, node, call, sel->result_type);
     return v;
 }
 
@@ -4785,7 +4817,7 @@ static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprN
     v->line = (uint32_t) node->line;
     v->xa_intrinsic_id = (uint32_t) intrinsic_id;
     v->flags = xi_op_default_effects((XiOp) v->op);
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     return byte_slice_typed_load ? lower_byte_slice_typed_signed_load_narrow(l, node, v, target)
                                  : v;
 }
@@ -4893,7 +4925,7 @@ static XiValue *lower_channel_send_boundary_call(XiLower *l, AstNode *node, Call
         v->flags |= XI_FLAG_MAY_SUSPEND;
     v->line = (uint32_t) node->line;
     xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     return v;
 }
 
@@ -5200,7 +5232,7 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     if (desc->effect == XA_INTRINSIC_EFFECT_MAY_THROW ||
         desc->effect == XA_INTRINSIC_EFFECT_READ_MAY_THROW ||
         desc->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW)
-        xi_lower_insert_err_check(l, node);
+        xi_lower_insert_err_check(l, node, true);
     return value;
 }
 
@@ -5309,7 +5341,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
                 v->line = (uint32_t) node->line;
                 xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                xi_lower_insert_err_check(l, node);
+                xi_lower_insert_err_check(l, node, true);
                 return v;
             }
         }
@@ -5837,7 +5869,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, method_key_access_ordinal,
                                     method_key_access_op);
 
-        xi_lower_insert_err_check(l, node);
+        xi_lower_insert_err_check(l, node, true);
         if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
             return NULL;
         if (!lower_apply_one_call_writeback(l, &receiver_writeback, (int) node->line))
@@ -6561,7 +6593,7 @@ static XiValue *parallel_call_make_for_each(XiLower *l, AstNode *node, AstNode *
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     return par;
 }
 
@@ -6646,7 +6678,7 @@ static XiValue *parallel_call_make_map(XiLower *l, AstNode *node, AstNode *range
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
 
     if (!into_array)
         return par;
@@ -6771,7 +6803,7 @@ static XiValue *parallel_call_make_reduce(XiLower *l, AstNode *node, AstNode *ra
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     return par;
 }
 
@@ -6860,7 +6892,7 @@ static XiValue *lower_parallel_plan_lifecycle_call(XiLower *l, AstNode *node, Xi
     v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     v->lowering_flags |= XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE;
     v->line = (uint32_t) (node ? node->line : 0);
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     return v;
 }
 
@@ -7048,7 +7080,7 @@ static XiValue *parallel_plan_call_make_for_each(XiLower *l, AstNode *node, XiVa
     par->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
 
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
     return par;
 }
@@ -7165,7 +7197,7 @@ static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
 
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
 
     if (!into_array)
@@ -7320,7 +7352,7 @@ static XiValue *parallel_plan_call_make_reduce(XiLower *l, AstNode *node, XiValu
                   XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
     par->line = (uint32_t) node->line;
 
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
     return par;
 }
@@ -7710,7 +7742,7 @@ generic_constructor:;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;
     xi_lower_bind_callsite_id(l, call, xi_lower_source_node_id(l, node));
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
         return NULL;
     return call;
@@ -8707,7 +8739,7 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;
     xi_lower_bind_callsite_id(l, call, xi_lower_source_node_id(l, node));
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     if (!lower_apply_call_writebacks(l, call_plan, writebacks, (int) node->line))
         return NULL;
     return call;

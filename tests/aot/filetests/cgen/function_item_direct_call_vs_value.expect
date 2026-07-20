@@ -1,6 +1,6 @@
 c_not_regex=function_item_direct_call_vs_value_[0-9a-f]+_inc_item_[0-9]+
 c_regex=function_item_direct_call_vs_value_[0-9a-f]+_xray_item_call_[0-9]+
-c_contains=(uint64_t)(v0) + (uint64_t)(v5)
+c_contains=(uint64_t)(v0) + (uint64_t)(v4)
 c_regex=function_item_direct_call_vs_value_[0-9a-f]+_xray_value_call_[0-9]+
 c_regex=static const XrAotCallableDesc _xr_callable_[0-9]+ = \{.*\.sync_entry=\(void\*\)function_item_direct_call_vs_value_[0-9a-f]+___anonymous__
 c_regex=xrt_closure_new\(&_xr_callable_[0-9]+, 0\)
