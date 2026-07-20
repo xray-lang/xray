@@ -2198,6 +2198,22 @@ bool xa_type_is_default_initializable(XaInferContext *ctx, XrType *type) {
     return xa_type_is_default_initializable_depth(ctx, type, 0);
 }
 
+/* True when a struct field is a generic value-struct instance (e.g. `Box<int>`)
+ * whose concrete monomorphized instance has not been registered yet. This
+ * happens during the first analysis pass, before the mono pass materializes
+ * `Box$i64`. The caller defers the aggregate layout to the post-mono
+ * re-analysis (see xa_visit_collect_class) instead of rejecting the field. */
+static bool xa_field_is_pending_generic_value_struct(XaInferContext *ctx, const XrType *ft,
+                                                     const char *field_class_name) {
+    if (!ctx || !ctx->analyzer || !ft || !field_class_name)
+        return false;
+    if (ft->kind != XR_KIND_INSTANCE || ft->instance.type_arg_count <= 0)
+        return false;
+    XaSymbol *head_sym = xa_analyzer_lookup(ctx->analyzer, field_class_name);
+    XaSymbolLinks *head_links = head_sym ? xa_analyzer_get_links(ctx->analyzer, head_sym) : NULL;
+    return head_links && head_links->type && head_links->type->is_value_type;
+}
+
 // Phase 1: Collect function declaration only (symbol, not body).
 // Cross-TU: called from xa_visit_collect_statements_with_hoisting() in
 // xanalyzer_visitor.c during the hoisting pass.
@@ -2207,8 +2223,20 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
 
     FunctionDeclNode *fn = &node->as.function_decl;
 
-    // Create function symbol
-    XaSymbol *sym = xa_symbol_new(fn->name, XA_SYM_FUNCTION);
+    // Create the function symbol, or reuse it on the post-monomorphization
+    // re-analysis. Reusing keeps the symbol id stable so already-resolved call
+    // sites (which cache callee->symbol_id) observe the refreshed signature.
+    // This matters for generic value-struct parameters and return types: the
+    // first analysis resolves `Box<int>` to a generic instance, and the second
+    // analysis (after the mono pass materializes `Box$i64`) re-resolves it to
+    // the concrete monomorphized instance. Without a stable symbol the caller
+    // would keep reading the stale first-pass signature and reject the argument
+    // or mistype the result.
+    XaSymbol *sym = NULL;
+    if (fn->symbol_id != 0)
+        sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope, fn->symbol_id);
+    if (!sym || sym->kind != XA_SYM_FUNCTION)
+        sym = xa_symbol_new(fn->name, XA_SYM_FUNCTION);
     sym->location.line = node->line;
     sym->is_const = true;
     sym->is_exported = node->is_exported;
@@ -3314,8 +3342,27 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
      * same declaration.  Once the class scope exists, its fields/methods and
      * layout are already complete; collecting them again duplicates physical
      * fields and silently doubles struct size. */
-    if (info && info->scope)
+    if (info && info->scope) {
+        /* Deferred-layout recompute: a fixed-layout aggregate that references a
+         * generic value struct (e.g. a `Box<int>` field) is collected during
+         * the first analysis pass, before the mono pass materializes the
+         * concrete `Box$i64`. Its layout was deferred (left NULL). Now that the
+         * concrete instance exists, re-collect the aggregate fresh so the layout
+         * is built against the concrete nested layout. Resetting the member
+         * counts keeps the arrays/maps but lets the re-collection overwrite them
+         * (member_list_append + hashmap_set are index-0/overwrite based). */
+        bool is_nongeneric_aggregate =
+            is_aggregate_decl && (!is_struct_decl || node->as.struct_decl.type_param_count == 0);
+        if (is_nongeneric_aggregate && !info->struct_layout && info->field_count > 0) {
+            info->scope = NULL;
+            info->field_count = 0;
+            info->method_count = 0;
+            info->static_field_count = 0;
+            info->static_method_count = 0;
+            xa_visit_collect_class(ctx, node);
+        }
         return;
+    }
     if (!info) {
         info = xa_class_info_new(cls->name);
         info->explicit_final = cls->explicit_final;
@@ -3782,6 +3829,16 @@ skip_interfaces:
                         layout_valid = false;
                         break;
                     }
+                } else if (xa_field_is_pending_generic_value_struct(ctx, ft, field_class_name)) {
+                    /* Generic value-struct field (e.g. `Box<int>`) whose concrete
+                     * monomorphized instance is not registered yet: the mono pass
+                     * runs after this first analysis. Defer the aggregate layout
+                     * (discard the partial layout silently, no diagnostic). The
+                     * post-mono re-analysis re-collects this struct once the
+                     * concrete `Box$i64` layout exists — see the deferred-layout
+                     * recompute at the top of xa_visit_collect_class. */
+                    layout_valid = false;
+                    break;
                 } else {
                     XrLocation loc = {.file = ctx->file_path, .line = node->line};
                     char msg[256];

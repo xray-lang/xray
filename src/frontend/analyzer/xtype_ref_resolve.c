@@ -1653,6 +1653,38 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
     return result;
 }
 
+/* Generic value-struct annotations (e.g. `Box<int>`) must resolve to the same
+ * monomorphized concrete instance that the corresponding struct literal
+ * `Box<int>{...}` produces after the mono pass (`Box$i64`). Resolving the
+ * annotation to the mangled instance lets `xr_type_equals` match the two by
+ * class_ref identity instead of rejecting `Box$i64` vs `Box<int>`; it also lets
+ * struct field-layout validation see a concrete nested aggregate. The mangled
+ * name is computed with the exact same helper the mono pass uses for the
+ * literal, so annotation and initializer land on one canonical type. Returns
+ * NULL when the concrete instantiation has not been registered (annotation-only
+ * usage that the mono pass never materialized), so the caller falls back to the
+ * generic-instance form. */
+static XrType *resolve_generic_value_struct_mono_instance(XaAnalyzer *analyzer,
+                                                          const XrTypeRef *tref) {
+    if (!analyzer || !tref || !tref->name || tref->nchildren <= 0)
+        return NULL;
+    char *mangled = xr_mono_mangle(tref->name, (XrTypeRef **) tref->children, tref->nchildren);
+    if (!mangled)
+        return NULL;
+    XrType *result = NULL;
+    XaSymbol *mono_sym = resolve_type_symbol(analyzer, mangled);
+    if (mono_sym && mono_sym->kind == XA_SYM_CLASS) {
+        XaSymbolLinks *mono_links = xa_analyzer_get_links(analyzer, mono_sym);
+        if (mono_links && mono_links->class_info) {
+            result = xr_type_new_instance(analyzer->isolate, mono_links->class_info);
+            if (result)
+                result->is_value_type = true;
+        }
+    }
+    xr_free(mangled);
+    return result;
+}
+
 XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {
     if (!tref)
         return xr_type_new_error(NULL);
@@ -1721,6 +1753,19 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                     if (args != stack_args)
                         xr_free(args);
                     return xr_type_new_error(NULL);
+                }
+                /* A generic value struct annotation resolves to its
+                 * monomorphized concrete instance so it is the same canonical
+                 * type as the corresponding struct literal. Nominal classes
+                 * keep their generic-instance identity (handled below). */
+                if (head->is_value_type &&
+                    (head->kind == XR_KIND_CLASS || head->kind == XR_KIND_INSTANCE)) {
+                    XrType *mono = resolve_generic_value_struct_mono_instance(analyzer, tref);
+                    if (mono) {
+                        if (args != stack_args)
+                            xr_free(args);
+                        return mono;
+                    }
                 }
                 XrType *result =
                     head->kind == XR_KIND_INTERFACE
