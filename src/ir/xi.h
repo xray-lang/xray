@@ -1365,6 +1365,13 @@ typedef struct XiFunc {
     bool allocation_effect_complete;
     bool has_no_alloc_contract;
 
+    /* Task 217 @zero_cost shape contract (verified at the AOT backend stage:
+     * the generated code must carry no forbidden residue category).  The allow
+     * mask exempts individual categories via `@zero_cost(allow: ...)`; a zeroed
+     * mask forbids every category. */
+    bool has_zero_cost_contract;
+    uint32_t zero_cost_allow_mask; /* bitmask of (1u << XiResidueCategory) */
+
     /* True when params[0] is a borrowed method receiver. */
     bool receiver_borrowed;
 

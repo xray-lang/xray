@@ -111,6 +111,8 @@ static const XrCliOptionSpec build_options[] = {
     {"dump-xi-evidence", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Dump subject-bound local Xi evidence"},
     {"dump-link-manifest", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Dump AOT link manifest"},
+    {"dump-residue", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Dump per-function abstraction-cost residue (task 217)"},
     {"dump-link-command", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Dump resolved AOT link command"},
     {"dry-run-link", 0, XR_CLI_VALUE_NONE, false, false, NULL,

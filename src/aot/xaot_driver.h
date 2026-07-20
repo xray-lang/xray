@@ -115,6 +115,7 @@ typedef struct {
     char *plan_dump;            /* stable AOT prepare plan dump (malloc'd) */
     char *global_evidence_dump; /* global evidence dump (malloc'd) */
     char *local_evidence_dump;  /* subject-bound Xi evidence dump (malloc'd) */
+    char *residue_dump;         /* task 217 per-function residue TSV (malloc'd) */
     XgEvidenceCacheManifest evidence_cache_manifest;
     bool has_evidence_cache_manifest;
     char *evidence_cache_payloads[XG_EVIDENCE_CACHE_PHASE_COUNT]; /* phase payload dumps */
@@ -144,6 +145,7 @@ typedef struct XaotBuildOptions {
     bool emit_program_main;
     bool emit_global_evidence_dump;
     bool emit_local_evidence_dump;
+    bool emit_residue_dump; /* task 217 --dump-residue */
     const char *evidence_cache_dir;
     bool evidence_cache_rebuild;
     bool evidence_cache_verbose;

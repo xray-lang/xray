@@ -52,6 +52,51 @@ typedef struct XiCgenStats {
     uint32_t xi_unbox_ops;
 } XiCgenStats;
 
+/* Per-function abstraction-cost residue categories (task 217 §3.3, R1–R6).
+ * These are the shapes @zero_cost forbids in the generated AOT code; the
+ * enum order is the stable dump/diagnostic order and doubles as the allow-mask
+ * bit index (1u << category). */
+typedef enum XiResidueCategory {
+    XI_RESIDUE_R1_RUNTIME_CALL = 0, /* non-whitelisted xrt_* runtime helper call */
+    XI_RESIDUE_R2_HEAP_ALLOC,       /* heap / runtime allocation */
+    XI_RESIDUE_R3_PENDING_ERROR,    /* pending-error check branch */
+    XI_RESIDUE_R4_BOUNDS_PANIC,     /* bounds-panic branch (missing range evidence) */
+    XI_RESIDUE_R5_BOX_UNBOX,        /* XrValue box / unbox */
+    XI_RESIDUE_R6_LANES_ROUNDTRIP,  /* aggregate<->native vector round-trip (_lanes) */
+    XI_RESIDUE_CATEGORY_COUNT,
+} XiResidueCategory;
+
+/* One recorded residue occurrence: the source line that produced it plus a
+ * static missing-evidence hint whose vocabulary matches task-213 evidence
+ * diagnostics (range / escape / effect). */
+typedef struct XiResidueEntry {
+    uint8_t category; /* XiResidueCategory */
+    uint32_t line;    /* source line (0 = unknown) */
+    /* owned: static string literal (indefinite lifetime, never dangles) */
+    const char *reason;
+} XiResidueEntry;
+
+/* Per-function residue record.  func_name / source_file are borrowed from the
+ * XiFunc / XiModule arena; residue records are produced and consumed
+ * (--dump-residue + @zero_cost verify) within a single build, before IR/module
+ * teardown, so the borrow never outlives its backing store. */
+typedef struct XiFuncResidue {
+    /* owned: XiFunc.name / XiModule.path arena; build-scoped, consumed pre-teardown */
+    const char *func_name;
+    /* owned: XiModule.path arena; build-scoped, consumed pre-teardown */
+    const char *source_file;
+    uint32_t counts[XI_RESIDUE_CATEGORY_COUNT];
+    XiResidueEntry *entries;
+    uint32_t nentries;
+    uint32_t entries_cap;
+    bool has_zero_cost;            /* function carries @zero_cost */
+    uint32_t zero_cost_allow_mask; /* bitmask of exempted categories (1u<<category) */
+} XiFuncResidue;
+
+/* Stable short ("R1") and human labels for a residue category. */
+XR_FUNC const char *xi_residue_category_short(XiResidueCategory category);
+XR_FUNC const char *xi_residue_category_label(XiResidueCategory category);
+
 typedef enum XiCgenTypeNameProfile {
     XI_CGEN_TYPE_NAMES_NONE = 0,
     XI_CGEN_TYPE_NAMES_PUBLIC,
@@ -66,9 +111,22 @@ XR_FUNC void xi_cgen_ctx_set_target(XiCgenCtx *ctx, const XaotTarget *target, bo
 XR_FUNC void xi_cgen_ctx_set_emit_main(XiCgenCtx *ctx, bool emit_main);
 XR_FUNC void xi_cgen_ctx_set_freestanding_profile(XiCgenCtx *ctx, bool freestanding);
 XR_FUNC void xi_cgen_ctx_set_type_name_profile(XiCgenCtx *ctx, XiCgenTypeNameProfile profile);
+/* Enable per-function residue capture/scan (task 217 P2/P3).  Off by default so
+ * ordinary builds pay no capture overhead. */
+XR_FUNC void xi_cgen_ctx_set_residue_tracking(XiCgenCtx *ctx, bool enabled);
 XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx);
 XR_FUNC XiCgenCoroFrameStats xi_cgen_coro_frame_stats(const XiCgenCtx *ctx);
 XR_FUNC XiCgenStats xi_cgen_stats(const XiCgenCtx *ctx);
+
+/* Per-function residue records collected while emitting bodies (task 217 P2).
+ * Returns the internal array (owned by ctx, valid until xi_cgen_ctx_free) and
+ * writes its length to *count.  NULL/0 when no bodies were emitted. */
+XR_FUNC const XiFuncResidue *xi_cgen_func_residues(const XiCgenCtx *ctx, size_t *count);
+
+/* Render the collected per-function residue records as a TSV (task 217 P2
+ * --dump-residue).  Caller frees the malloc'd string with xr_free.  Returns
+ * NULL only on allocation failure. */
+XR_FUNC char *xi_cgen_residue_dump(const XiCgenCtx *ctx);
 
 /* Generate a complete standalone C file (single-module fast path):
  *   #include "xrt.h" + forward decls + bodies + main()

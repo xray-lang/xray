@@ -1652,6 +1652,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     char *plan_dump = NULL;
     char *global_evidence_dump = NULL;
     char *local_evidence_dump = NULL;
+    char *residue_dump = NULL;
     char *evidence_cache_payloads[XG_EVIDENCE_CACHE_PHASE_COUNT];
     XgEvidenceCacheManifest evidence_cache_manifest;
     bool evidence_cache_manifest_valid = false;
@@ -1905,6 +1906,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     xi_cgen_ctx_set_emit_main(cg_ctx, emit_program_main);
     xi_cgen_ctx_set_freestanding_profile(cg_ctx, profile == XAOT_BUILD_PROFILE_FREESTANDING);
     xi_cgen_ctx_set_type_name_profile(cg_ctx, type_name_profile);
+    xi_cgen_ctx_set_residue_tracking(cg_ctx, options->emit_residue_dump);
 
     /* --- Resolve cross-module imports for C codegen --- */
     xi_cgen_resolve_module_imports(cg_ctx, modules, nmodules);
@@ -1998,6 +2000,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         xr_free(sources);
         goto fail_free_ir;
     }
+    /* Task 217 P2: snapshot per-function residue before the ctx is released. */
+    if (options->emit_residue_dump)
+        residue_dump = xi_cgen_residue_dump(cg_ctx);
     xi_cgen_ctx_free(cg_ctx);
 
     /* Build link features before freeing IR. Runtime capabilities, external
@@ -2048,6 +2053,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     global_evidence_dump = NULL;
     result->local_evidence_dump = local_evidence_dump;
     local_evidence_dump = NULL;
+    result->residue_dump = residue_dump;
+    residue_dump = NULL;
     result->evidence_cache_manifest = evidence_cache_manifest;
     result->has_evidence_cache_manifest = evidence_cache_manifest_valid;
     for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++) {
@@ -2083,6 +2090,7 @@ fail_free_ir:
     xr_free(plan_dump);
     xr_free(global_evidence_dump);
     xr_free(local_evidence_dump);
+    xr_free(residue_dump);
     for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++)
         xr_free(evidence_cache_payloads[i]);
     xr_free(c_export_header);
@@ -2151,6 +2159,7 @@ XR_FUNC void xaot_build_result_free(XaotBuildResult *result) {
     xr_free(result->plan_dump);
     xr_free(result->global_evidence_dump);
     xr_free(result->local_evidence_dump);
+    xr_free(result->residue_dump);
     for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++)
         xr_free(result->evidence_cache_payloads[i]);
     xr_free(result->c_export_header);

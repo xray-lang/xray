@@ -665,6 +665,13 @@ struct XiCgenCtx {
     XiCgenTypeNameProfile type_name_profile;
     bool error; /* set on fatal codegen errors (unknown builtin, etc.) */
     XiCgenStats stats;
+    /* Per-function abstraction-cost residue records (task 217 P2).  Grown as
+     * each body is emitted; consumed by --dump-residue and @zero_cost verify.
+     * want_residue gates the per-function C capture (off = no overhead). */
+    bool want_residue;
+    XiFuncResidue *func_residues;
+    size_t nfunc_residues;
+    size_t func_residues_cap;
     XiCgenCoroFrameStats coro_frame_stats;
     const XaotBundle *aot_bundle;
     const XaotTarget *target;
@@ -7192,6 +7199,205 @@ static void cg_record_ir_conversion_stats(XiCgenCtx *ctx, const XiFunc *f) {
     }
 }
 
+/* ===== task 217 P2: per-function abstraction-cost residue (R1–R6) =====
+ *
+ * Residue is a property of the *generated code*.  Each emitted function body is
+ * captured into a scratch stream (xi_cgen_func) and scanned here.  Measuring the
+ * C text — rather than re-deriving the emitter's elision decisions from the IR —
+ * is the same methodology the port shape gate uses, so the counts reflect
+ * exactly what lands in the C unit: a bounds/error/view check the emitter proved
+ * away is simply not present to be counted.  (@zero_cost verifies before the C
+ * compiler runs, so this is a pre-clang, and therefore conservative, view.) */
+
+static XiFuncResidue *cg_residue_begin(XiCgenCtx *ctx, const XiFunc *f) {
+    if (ctx->nfunc_residues == ctx->func_residues_cap) {
+        size_t ncap = ctx->func_residues_cap ? ctx->func_residues_cap * 2 : 32;
+        XiFuncResidue *grown =
+            (XiFuncResidue *) xr_realloc(ctx->func_residues, ncap * sizeof(*grown));
+        if (!grown)
+            return NULL;
+        ctx->func_residues = grown;
+        ctx->func_residues_cap = ncap;
+    }
+    XiFuncResidue *r = &ctx->func_residues[ctx->nfunc_residues++];
+    memset(r, 0, sizeof(*r));
+    r->func_name = f->name ? f->name : "?";
+    r->source_file = (ctx->module && ctx->module->path) ? ctx->module->path : f->source_file;
+    r->has_zero_cost = f->has_zero_cost_contract;
+    r->zero_cost_allow_mask = f->zero_cost_allow_mask;
+    return r;
+}
+
+static void cg_residue_add(XiFuncResidue *r, XiResidueCategory cat, uint32_t count, uint32_t line,
+                           const char *reason) {
+    if (!r || cat >= XI_RESIDUE_CATEGORY_COUNT || count == 0)
+        return;
+    r->counts[cat] += count;
+    if (r->nentries == r->entries_cap) {
+        uint32_t ncap = r->entries_cap ? r->entries_cap * 2 : 8;
+        XiResidueEntry *grown = (XiResidueEntry *) xr_realloc(r->entries, ncap * sizeof(*grown));
+        if (!grown)
+            return; /* count already bumped; drop per-entry detail under OOM */
+        r->entries = grown;
+        r->entries_cap = ncap;
+    }
+    XiResidueEntry *e = &r->entries[r->nentries++];
+    e->category = (uint8_t) cat;
+    e->line = line;
+    e->reason = reason;
+}
+
+static bool cg_residue_ident_char(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+}
+
+/* Count NUL-terminated substring occurrences. */
+static uint32_t cg_scan_count(const char *text, const char *needle) {
+    uint32_t n = 0;
+    size_t nl = strlen(needle);
+    if (!nl)
+        return 0;
+    for (const char *p = text; (p = strstr(p, needle)) != NULL; p += nl)
+        n++;
+    return n;
+}
+
+static bool cg_name_matches(const char *s, size_t n, const char *lit) {
+    return strlen(lit) == n && memcmp(s, lit, n) == 0;
+}
+
+/* Runtime helpers that lower to native instructions or belong to another
+ * residue category (alloc/bounds/pending/box) or the whitelisted panic cold
+ * path / mem.* primitives.  Everything else is genuine R1 residue (fail-closed:
+ * an unrecognised xrt_* call still counts). */
+static bool cg_r1_call_is_whitelisted(const char *s, size_t n) {
+    static const char *const wl[] = {
+        /* scalar arithmetic / comparison / bit helpers -> native insns */
+        "xrt_div",
+        "xrt_int_div",
+        "xrt_mod",
+        "xrt_int_mod",
+        "xrt_neg",
+        "xrt_abs",
+        "xrt_le",
+        "xrt_lt",
+        "xrt_ge",
+        "xrt_gt",
+        "xrt_eq",
+        "xrt_ne",
+        "xrt_cmp",
+        "xrt_shl",
+        "xrt_shr",
+        "xrt_sar",
+        "xrt_rotl",
+        "xrt_rotr",
+        "xrt_min",
+        "xrt_max",
+        "xrt_pow_int",
+        /* span descriptor field accessors (not runtime views) */
+        "xrt_span_empty",
+        "xrt_span_len",
+        "xrt_span_length",
+        "xrt_span_data",
+        "xrt_span_is_readonly",
+        "xrt_span_elem_size",
+        "xrt_value_native_type_size",
+        /* accounted in dedicated categories (kept out of R1 double-counting) */
+        "xrt_has_pending_error",
+        "xrt_index_oob",
+        "xrt_fixed_index_oob",
+        "xrt_box_obj",
+        /* whitelisted panic cold path + explicit mem.* primitives (doc §3.3) */
+        "xrt_throw_error",
+        "xrt_panic",
+        "xrt_abort",
+        "xrt_type_no_index",
+        "xrt_mem_copy",
+        "xrt_mem_move",
+        "xrt_mem_set",
+        "xrt_mem_compare",
+    };
+    if (n < 4 || memcmp(s, "xrt_", 4) != 0)
+        return true; /* not an xrt_ helper: never R1 */
+    for (size_t i = 0; i < sizeof(wl) / sizeof(wl[0]); i++)
+        if (cg_name_matches(s, n, wl[i]))
+            return true;
+    return false;
+}
+
+/* R1: non-whitelisted xrt_* runtime-helper call tokens in the body. */
+static uint32_t cg_scan_r1_runtime_calls(const char *text) {
+    uint32_t n = 0;
+    for (const char *p = strstr(text, "xrt_"); p; p = strstr(p + 4, "xrt_")) {
+        /* Token must start at a non-identifier boundary. */
+        if (p != text && cg_residue_ident_char(p[-1]))
+            continue;
+        const char *q = p;
+        while (cg_residue_ident_char(*q))
+            q++;
+        if (*q != '(')
+            continue; /* a type/name reference, not a call */
+        size_t len = (size_t) (q - p);
+        /* Allocation helpers belong to R2, not R1. */
+        if (cg_name_matches(p, len, "xrt_array_new") ||
+            cg_name_matches(p, len, "xrt_array_with_capacity") ||
+            cg_name_matches(p, len, "xrt_map_new") || cg_name_matches(p, len, "xrt_set_new") ||
+            cg_name_matches(p, len, "xrt_tuple_new") ||
+            cg_name_matches(p, len, "xrt_closure_new") || cg_name_matches(p, len, "xrt_json_new") ||
+            cg_name_matches(p, len, "xrt_str_concat") || cg_name_matches(p, len, "xrt_gc_alloc") ||
+            cg_name_matches(p, len, "xrt_alloc"))
+            continue;
+        if (!cg_r1_call_is_whitelisted(p, len))
+            n++;
+    }
+    return n;
+}
+
+/* Scan one function's captured C body for residue and record it against f. */
+static void cg_scan_function_residue(XiCgenCtx *ctx, const XiFunc *f, const char *body) {
+    if (!ctx || !f || !body)
+        return;
+    XiFuncResidue *r = cg_residue_begin(ctx, f);
+    if (!r)
+        return;
+    uint32_t line = (f->nblocks && f->blocks && f->blocks[0] && f->blocks[0]->nvalues &&
+                     f->blocks[0]->values && f->blocks[0]->values[0])
+                        ? f->blocks[0]->values[0]->line
+                        : 0;
+
+    /* R2 heap allocation. */
+    uint32_t r2 = cg_scan_count(body, "xrt_array_new(") +
+                  cg_scan_count(body, "xrt_array_with_capacity(") +
+                  cg_scan_count(body, "xrt_map_new(") + cg_scan_count(body, "xrt_set_new(") +
+                  cg_scan_count(body, "xrt_tuple_new(") + cg_scan_count(body, "xrt_closure_new(") +
+                  cg_scan_count(body, "xrt_json_new(") + cg_scan_count(body, "xrt_str_concat(") +
+                  cg_scan_count(body, "xrt_gc_alloc(") + cg_scan_count(body, "xrt_alloc(");
+    cg_residue_add(r, XI_RESIDUE_R2_HEAP_ALLOC, r2, line,
+                   "heap allocation not elided (escape evidence incomplete)");
+
+    /* R3 pending-error check. */
+    cg_residue_add(r, XI_RESIDUE_R3_PENDING_ERROR, cg_scan_count(body, "xrt_has_pending_error"),
+                   line, "callee throw effect not proven absent");
+
+    /* R4 bounds-panic branch. */
+    uint32_t r4 = cg_scan_count(body, "xrt_index_oob") + cg_scan_count(body, "xrt_fixed_index_oob");
+    cg_residue_add(r, XI_RESIDUE_R4_BOUNDS_PANIC, r4, line,
+                   "index lacks range evidence (window proof missing)");
+
+    /* R5 XrValue box/unbox (out-of-line boxing helpers). */
+    uint32_t r5 =
+        cg_scan_count(body, "xrt_box_obj(") + cg_scan_count(body, "xrt_enum_aggregate_box(");
+    cg_residue_add(r, XI_RESIDUE_R5_BOX_UNBOX, r5, line, "value boxed into XrValue (tagged ABI)");
+
+    /* R6 aggregate<->native vector round-trip. */
+    cg_residue_add(r, XI_RESIDUE_R6_LANES_ROUNDTRIP, cg_scan_count(body, "_lanes"), line,
+                   "vector value spilled to lane aggregate (native SSA not planned)");
+
+    /* R1 non-whitelisted runtime-helper call. */
+    cg_residue_add(r, XI_RESIDUE_R1_RUNTIME_CALL, cg_scan_r1_runtime_calls(body), line,
+                   "runtime-helper call not elided (effect/escape evidence incomplete)");
+}
+
 static void cg_record_function_stats(XiCgenCtx *ctx, const XiFunc *f, bool typed_abi,
                                      bool native_receiver, bool coro_abi) {
     if (!ctx || !f)
@@ -8737,12 +8943,34 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     f->phi_coalesce_count = 0;
 
     if (needs_aot_coro) {
-        xi_cgen_coro_func(ctx, out, f, prefix);
+        char *coro_buf = NULL;
+        size_t coro_sz = 0;
+        FILE *coro_cap = ctx->want_residue ? xr_open_memstream(&coro_buf, &coro_sz) : NULL;
+        xi_cgen_coro_func(ctx, coro_cap ? coro_cap : out, f, prefix);
+        if (coro_cap) {
+            xr_close_memstream(coro_cap, &coro_buf, &coro_sz);
+            cg_scan_function_residue(ctx, f, coro_buf ? coro_buf : "");
+            if (coro_buf)
+                fwrite(coro_buf, 1, coro_sz, out);
+            xr_free(coro_buf);
+        }
         if (!error_before_function && ctx->error)
             fprintf(stderr, "[xi_cgen] ERROR: C generation failed in coroutine '%s'\n",
                     f->name ? f->name : "?");
         return;
     }
+
+    /* Capture the core function body (signature .. closing brace) into a scratch
+     * stream so the residue scanner sees exactly this function's C, matching the
+     * port shape gate's per-function extraction.  Adapters/stubs emitted after
+     * the body go straight to the real stream and are not part of the core
+     * function's residue. */
+    FILE *body_real_out = out;
+    char *body_cap_buf = NULL;
+    size_t body_cap_sz = 0;
+    FILE *body_cap = ctx->want_residue ? xr_open_memstream(&body_cap_buf, &body_cap_sz) : NULL;
+    if (body_cap)
+        out = body_cap;
 
     /* Function signature.  Closure children with captures receive a hidden
      * first parameter xrt_closure_t *_cl for per-closure upvalue access. A
@@ -8795,6 +9023,16 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
         emit_fallthrough_return(ctx, out, f, prefix);
 
     fprintf(out, "}\n\n");
+
+    /* End core-body capture: scan for residue, then flush it through. */
+    if (body_cap) {
+        xr_close_memstream(body_cap, &body_cap_buf, &body_cap_sz);
+        cg_scan_function_residue(ctx, f, body_cap_buf ? body_cap_buf : "");
+        if (body_cap_buf)
+            fwrite(body_cap_buf, 1, body_cap_sz, body_real_out);
+        xr_free(body_cap_buf);
+        out = body_real_out;
+    }
 
     emit_cfn_stub_definition(ctx, out, f, prefix);
     emit_c_export_stub_definition(ctx, out, f, prefix);
