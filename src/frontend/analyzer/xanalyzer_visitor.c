@@ -1925,6 +1925,24 @@ static bool xa_enum_error_type_has_payload(XaAnalyzer *analyzer, XrType *type) {
     return links && links->enum_info && links->enum_info->is_payload_enum;
 }
 
+/* Retire an enum layout replaced by re-analysis so cached XrType copies that
+ * still reference it stay valid until the analyzer is destroyed. */
+static void xa_retire_enum_layout(XaAnalyzer *analyzer, void *layout) {
+    if (!analyzer || !layout)
+        return;
+    if (analyzer->retired_enum_layout_count >= analyzer->retired_enum_layout_cap) {
+        size_t new_cap =
+            analyzer->retired_enum_layout_cap ? analyzer->retired_enum_layout_cap * 2 : 8;
+        void **grown =
+            (void **) xr_realloc(analyzer->retired_enum_layouts, new_cap * sizeof(void *));
+        if (!grown)
+            return;
+        analyzer->retired_enum_layouts = grown;
+        analyzer->retired_enum_layout_cap = new_cap;
+    }
+    analyzer->retired_enum_layouts[analyzer->retired_enum_layout_count++] = layout;
+}
+
 static void xa_report_non_enum_catch_type(XaInferContext *ctx, XrCatchClause *cc, XrType *type) {
     if (!ctx || !ctx->analyzer || !cc || !type || XR_TYPE_IS_UNKNOWN(type) ||
         xa_is_enum_error_type(type))
@@ -3711,6 +3729,10 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                     }
                 }
                 if (links->enum_info) {
+                    /* Retire (not free) the old layout: cached XrType copies
+                     * still read it during the post-monomorphization pass. */
+                    xa_retire_enum_layout(ctx->analyzer, links->enum_info->layout);
+                    links->enum_info->layout = NULL;
                     xa_enum_info_free(links->enum_info);
                     links->enum_info = NULL;
                 }

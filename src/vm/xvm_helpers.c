@@ -203,52 +203,86 @@ XR_FUNC bool xr_vm_struct_read_field_value(XrVMRuntime *isolate, uint8_t *fp,
         return false;
 
     switch (field->native_type) {
-        case XR_NATIVE_I64:
-            *out = XR_FROM_INT(*(int64_t *) fp);
+        case XR_NATIVE_I64: {
+            int64_t v;
+            memcpy(&v, fp, sizeof v);
+            *out = XR_FROM_INT(v);
             return true;
-        case XR_NATIVE_U64:
-            *out = XR_FROM_INT((int64_t) *(uint64_t *) fp);
+        }
+        case XR_NATIVE_U64: {
+            uint64_t v;
+            memcpy(&v, fp, sizeof v);
+            *out = XR_FROM_INT((int64_t) v);
             return true;
-        case XR_NATIVE_ISIZE:
-            *out = XR_FROM_INT((int64_t) *(ptrdiff_t *) fp);
+        }
+        case XR_NATIVE_ISIZE: {
+            ptrdiff_t v;
+            memcpy(&v, fp, sizeof v);
+            *out = XR_FROM_INT((int64_t) v);
             return true;
-        case XR_NATIVE_USIZE:
-            *out = XR_FROM_INT((int64_t) *(size_t *) fp);
+        }
+        case XR_NATIVE_USIZE: {
+            size_t v;
+            memcpy(&v, fp, sizeof v);
+            *out = XR_FROM_INT((int64_t) v);
             return true;
-        case XR_NATIVE_POINTER:
-            *out = XR_FROM_INT((int64_t) (uintptr_t) *(void **) fp);
+        }
+        case XR_NATIVE_POINTER: {
+            void *v;
+            memcpy(&v, fp, sizeof v);
+            *out = XR_FROM_INT((int64_t) (uintptr_t) v);
             return true;
-        case XR_NATIVE_F64:
-            *out = XR_FROM_FLOAT(*(double *) fp);
+        }
+        case XR_NATIVE_F64: {
+            double v;
+            memcpy(&v, fp, sizeof v);
+            *out = XR_FROM_FLOAT(v);
             return true;
+        }
         case XR_NATIVE_BOOL:
             out->descriptor = 0;
             out->i = *(uint8_t *) fp ? 1 : 0;
             out->tag = XR_TAG_BOOL;
             return true;
-        case XR_NATIVE_I32:
-            *out = XR_FROM_INT((int64_t) *(int32_t *) fp);
+        case XR_NATIVE_I32: {
+            int32_t v;
+            memcpy(&v, fp, sizeof v);
+            *out = XR_FROM_INT((int64_t) v);
             return true;
-        case XR_NATIVE_U32:
-            *out = XR_FROM_INT((int64_t) *(uint32_t *) fp);
+        }
+        case XR_NATIVE_U32: {
+            uint32_t v;
+            memcpy(&v, fp, sizeof v);
+            *out = XR_FROM_INT((int64_t) v);
             return true;
-        case XR_NATIVE_I16:
-            *out = XR_FROM_INT((int64_t) *(int16_t *) fp);
+        }
+        case XR_NATIVE_I16: {
+            int16_t v;
+            memcpy(&v, fp, sizeof v);
+            *out = XR_FROM_INT((int64_t) v);
             return true;
-        case XR_NATIVE_U16:
-            *out = XR_FROM_INT((int64_t) *(uint16_t *) fp);
+        }
+        case XR_NATIVE_U16: {
+            uint16_t v;
+            memcpy(&v, fp, sizeof v);
+            *out = XR_FROM_INT((int64_t) v);
             return true;
+        }
         case XR_NATIVE_I8:
             *out = XR_FROM_INT((int64_t) *(int8_t *) fp);
             return true;
         case XR_NATIVE_U8:
             *out = XR_FROM_INT((int64_t) *(uint8_t *) fp);
             return true;
-        case XR_NATIVE_F32:
-            *out = XR_FROM_FLOAT((double) *(float *) fp);
+        case XR_NATIVE_F32: {
+            float v;
+            memcpy(&v, fp, sizeof v);
+            *out = XR_FROM_FLOAT((double) v);
             return true;
+        }
         case XR_NATIVE_STRING: {
-            XrString *s = *(XrString **) fp;
+            XrString *s;
+            memcpy(&s, fp, sizeof s);
             *out = s ? XR_FROM_STR(s) : xr_null();
             return true;
         }
@@ -280,51 +314,75 @@ XR_FUNC bool xr_vm_struct_write_field_value(XrVMRuntime *isolate, uint8_t *fp,
         return false;
 
     switch (field->native_type) {
-        case XR_NATIVE_I64:
-            *(int64_t *) fp = XR_TO_INT(src);
+        case XR_NATIVE_I64: {
+            int64_t v = XR_TO_INT(src);
+            memcpy(fp, &v, sizeof v);
             return true;
-        case XR_NATIVE_U64:
-            *(uint64_t *) fp = (uint64_t) XR_TO_INT(src);
+        }
+        case XR_NATIVE_U64: {
+            uint64_t v = (uint64_t) XR_TO_INT(src);
+            memcpy(fp, &v, sizeof v);
             return true;
-        case XR_NATIVE_ISIZE:
-            *(ptrdiff_t *) fp = (ptrdiff_t) XR_TO_INT(src);
+        }
+        case XR_NATIVE_ISIZE: {
+            ptrdiff_t v = (ptrdiff_t) XR_TO_INT(src);
+            memcpy(fp, &v, sizeof v);
             return true;
-        case XR_NATIVE_USIZE:
-            *(size_t *) fp = (size_t) XR_TO_INT(src);
+        }
+        case XR_NATIVE_USIZE: {
+            size_t v = (size_t) XR_TO_INT(src);
+            memcpy(fp, &v, sizeof v);
             return true;
-        case XR_NATIVE_POINTER:
-            *(void **) fp = (void *) (uintptr_t) XR_TO_INT(src);
+        }
+        case XR_NATIVE_POINTER: {
+            void *v = (void *) (uintptr_t) XR_TO_INT(src);
+            memcpy(fp, &v, sizeof v);
             return true;
-        case XR_NATIVE_F64:
-            *(double *) fp = XR_TO_FLOAT(src);
+        }
+        case XR_NATIVE_F64: {
+            double v = XR_TO_FLOAT(src);
+            memcpy(fp, &v, sizeof v);
             return true;
+        }
         case XR_NATIVE_BOOL:
             *(uint8_t *) fp = (uint8_t) src.i;
             return true;
-        case XR_NATIVE_I32:
-            *(int32_t *) fp = (int32_t) XR_TO_INT(src);
+        case XR_NATIVE_I32: {
+            int32_t v = (int32_t) XR_TO_INT(src);
+            memcpy(fp, &v, sizeof v);
             return true;
-        case XR_NATIVE_U32:
-            *(uint32_t *) fp = (uint32_t) XR_TO_INT(src);
+        }
+        case XR_NATIVE_U32: {
+            uint32_t v = (uint32_t) XR_TO_INT(src);
+            memcpy(fp, &v, sizeof v);
             return true;
-        case XR_NATIVE_I16:
-            *(int16_t *) fp = (int16_t) XR_TO_INT(src);
+        }
+        case XR_NATIVE_I16: {
+            int16_t v = (int16_t) XR_TO_INT(src);
+            memcpy(fp, &v, sizeof v);
             return true;
-        case XR_NATIVE_U16:
-            *(uint16_t *) fp = (uint16_t) XR_TO_INT(src);
+        }
+        case XR_NATIVE_U16: {
+            uint16_t v = (uint16_t) XR_TO_INT(src);
+            memcpy(fp, &v, sizeof v);
             return true;
+        }
         case XR_NATIVE_I8:
             *(int8_t *) fp = (int8_t) XR_TO_INT(src);
             return true;
         case XR_NATIVE_U8:
             *(uint8_t *) fp = (uint8_t) XR_TO_INT(src);
             return true;
-        case XR_NATIVE_F32:
-            *(float *) fp = (float) XR_TO_FLOAT(src);
+        case XR_NATIVE_F32: {
+            float v = (float) XR_TO_FLOAT(src);
+            memcpy(fp, &v, sizeof v);
             return true;
-        case XR_NATIVE_STRING:
-            *(XrString **) fp = (XrString *) src.ptr;
+        }
+        case XR_NATIVE_STRING: {
+            XrString *v = (XrString *) src.ptr;
+            memcpy(fp, &v, sizeof v);
             return true;
+        }
         case XR_NATIVE_NESTED_AGGREGATE:
             if (XR_IS_AGG_REF(src)) {
                 uint8_t *src_ptr = (uint8_t *) xr_to_struct_ptr(src);

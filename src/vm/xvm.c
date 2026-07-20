@@ -261,9 +261,16 @@ static bool vm_copy_array_ref_to_fixed_heap(XrVMRuntime *isolate, XrValue *slot)
         return false;
 
     size_t bytes = (size_t) elem_size * (size_t) elem_count;
-    if (bytes > UINT32_MAX - sizeof(XrObjHeader))
+    if (bytes > UINT32_MAX - sizeof(XrObjHeader) - 1u)
         return false;
-    size_t total = sizeof(XrObjHeader) + bytes;
+    /* Reserve one extra byte and NUL-terminate the copied payload. A fixed byte
+     * buffer's data pointer (b"..".ptr() / Ptr<byte>) is handed to C string APIs
+     * across the FFI boundary, so it must read as a valid NUL-terminated C
+     * string. The AOT backend already guarantees this (byte literals emit as
+     * `static const char[] = "..."`); without the terminator the VM copy is one
+     * byte short and libffi's callee strlen() runs past the allocation. The
+     * trailing NUL is invisible to array consumers, which use elem_count. */
+    size_t total = sizeof(XrObjHeader) + bytes + 1u;
     XrObjHeader *storage =
         (XrObjHeader *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate), total, XR_TBLOB);
     if (!storage)
@@ -271,6 +278,7 @@ static bool vm_copy_array_ref_to_fixed_heap(XrVMRuntime *isolate, XrValue *slot)
 
     uint8_t *data = (uint8_t *) storage + sizeof(XrObjHeader);
     memcpy(data, slot->ptr, bytes);
+    data[bytes] = 0;
     slot->ptr = data;
     return true;
 }

@@ -22,6 +22,7 @@
 #include "xa_resolved_call.h"
 #include "xa_selection.h"
 #include "../../runtime/value/xtype_internal.h"
+#include "../../runtime/value/xenum_layout.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xast_types.h"
@@ -397,6 +398,15 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
 void xa_analyzer_free(XaAnalyzer *analyzer) {
     if (!analyzer)
         return;
+
+    /* Release enum layouts retired by re-analysis (kept alive so cached
+     * XrType copies stayed valid across the second analysis pass). */
+    for (size_t i = 0; i < analyzer->retired_enum_layout_count; i++)
+        xr_enum_layout_free((XrEnumLayout *) analyzer->retired_enum_layouts[i]);
+    xr_free(analyzer->retired_enum_layouts);
+    analyzer->retired_enum_layouts = NULL;
+    analyzer->retired_enum_layout_count = 0;
+    analyzer->retired_enum_layout_cap = 0;
 
     xa_scope_free(analyzer->global_scope);
 

@@ -396,6 +396,15 @@ if(ENABLE_SANITIZERS)
     add_link_options(-fsanitize=address,undefined)
 endif()
 
+# Sanitizer builds (ASan/UBSan/TSan/MSan) run compile-heavy stdlib/AOT tests
+# 5-9x slower, so scale their CTest timeouts to avoid spurious sanitizer-only
+# timeouts. Non-sanitizer builds keep the tight timeouts as a real perf guard.
+if(ENABLE_SANITIZERS OR ENABLE_TSAN OR ENABLE_MSAN)
+    set(XR_TEST_TIMEOUT_SCALE 8)
+else()
+    set(XR_TEST_TIMEOUT_SCALE 1)
+endif()
+
 # Debug options
 option(XR_DEBUG_REGS "Enable register bounds checking (for development)" OFF)
 option(XR_DEBUG_COMPILER "Enable compiler debug assertions (for development)" OFF)
@@ -1435,10 +1444,11 @@ if(BUILD_TESTS)
                 ${XRAY_PYTHON}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    math(EXPR STDLIB_EMBED_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(stdlib_embedded_layout PROPERTIES
         LABELS "vm;aot;stdlib;embed;regression"
         PROCESSORS 1
-        TIMEOUT 120
+        TIMEOUT ${STDLIB_EMBED_TIMEOUT}
     )
 
     add_test(
@@ -2176,10 +2186,11 @@ if(BUILD_TESTS)
                 --xray $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    math(EXPR AOT_MANIFEST_SWEEP_TIMEOUT "180 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(aot_manifest_sweep PROPERTIES
         LABELS "aot;link;manifest;smoke"
         PROCESSORS 1
-        TIMEOUT 180
+        TIMEOUT ${AOT_MANIFEST_SWEEP_TIMEOUT}
     )
 
     # Isolate/runtime split guard (132/M0 + 133/I0/I4): AOT binaries must stay
@@ -2282,10 +2293,11 @@ if(BUILD_TESTS)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_errors/run_compile_error_tests.sh
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    math(EXPR COMPILE_ERROR_TESTS_TIMEOUT "60 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(compile_error_tests PROPERTIES
         LABELS "frontend;negative;regression"
         PROCESSORS 2
-        TIMEOUT 60
+        TIMEOUT ${COMPILE_ERROR_TESTS_TIMEOUT}
     )
 
     # Borrow/ownership instrumentation: keep a machine-parseable Xi

@@ -693,7 +693,7 @@ static bool ct_eval_binary(XaAnalyzer *analyzer, const AstNode *expr, XrCtValue 
                 case AST_BINARY_LSHIFT:
                     if (l < 0 || r < 0 || r >= 63)
                         return ct_fail(err, "bit shift is out of range");
-                    out->as.int_val = l << r;
+                    out->as.int_val = (int64_t) ((uint64_t) l << r);
                     return true;
                 case AST_BINARY_RSHIFT:
                     if (r < 0 || r >= 63)

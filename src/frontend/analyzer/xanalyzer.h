@@ -184,6 +184,16 @@ struct XaAnalyzer {
      * compile-unit identity for graph-less bootstrap compilation. */
     bool current_module_is_stdlib;
     const char *current_module_canonical;
+
+    /* Enum layouts replaced by the post-monomorphization re-analysis pass.
+     * XrType copies (catch error types, function-signature error types, ...)
+     * cache the raw layout pointer and are still read during the second pass,
+     * so a replaced layout must outlive its rebuilt XaEnumInfo and is freed
+     * only when the analyzer is destroyed. Stored as void* to keep this public
+     * header independent of the runtime layout type. */
+    void **retired_enum_layouts;
+    size_t retired_enum_layout_count;
+    size_t retired_enum_layout_cap;
 };
 
 // API: Analyzer lifecycle
