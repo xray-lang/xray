@@ -188,6 +188,8 @@ add_xray_unit_test(test_xi_call_specialize ir/test_xi_call_specialize.c)
 add_xray_unit_test(test_xi_comptime ir/test_xi_comptime.c)
 add_xray_unit_test(test_xi_lto aot/test_xi_lto.c)
 add_xray_unit_test(test_xaot_driver aot/test_xaot_driver.c)
+add_xray_unit_test(test_cgen_verify_output aot/test_cgen_verify_output.c)
+set_tests_properties(test_cgen_verify_output PROPERTIES LABELS "aot;cgen;task-218")
 add_xray_unit_test(test_xi_backend_plan_contract aot/test_xi_backend_plan_contract.c)
 add_xray_unit_test(test_xrt_array aot/test_xrt_array.c)
 add_xray_unit_test(test_xrt_boolmap aot/test_xrt_boolmap.c)
@@ -230,6 +232,8 @@ add_xray_unit_test(test_mutex base/test_mutex.c)
 add_xray_unit_test(test_intmap base/test_intmap.c)
 add_xray_unit_test(test_mem_profiler base/test_mem_profiler.c)
 add_xray_unit_test(test_xmalloc base/test_xmalloc.c)
+add_xray_unit_test(test_process_shutdown base/test_process_shutdown.c)
+set_tests_properties(test_process_shutdown PROPERTIES LABELS "runtime;memory;task-218")
 
 # ============================================================================
 # coro/ — MPSC queue, work-stealing queue

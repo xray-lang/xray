@@ -836,6 +836,10 @@ XR_FUNC XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **pa
 // API: Initialize process-level type singletons (call once at startup)
 XR_FUNC void xr_type_global_init(void);
 
+// Release process-level type-system state (borrowed current type pool).
+// Called via xr_process_shutdown() in test/tool builds. Idempotent.
+XR_FUNC void xr_type_global_shutdown(void);
+
 // API: Set current type pool (called by XaAnalyzer before analysis)
 // This eliminates global state - each analyzer has its own pool
 XR_FUNC void xr_type_set_current_pool(XrTypePool *pool, uint32_t *id_counter);

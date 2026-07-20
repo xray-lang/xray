@@ -1,0 +1,29 @@
+# Task 218 defense line 4 — LeakSanitizer suppressions.
+#
+# RULES:
+#   * Every suppression MUST carry a one-line justification.
+#   * The suppression count is inventory: it only ever shrinks. A leak that can
+#     be released belongs in xr_process_shutdown(), not here.
+#   * LeakSanitizer only runs under ASan on Linux. Apple/Homebrew clang on
+#     macOS ships ASan WITHOUT a leak detector, so this file is consumed by the
+#     lsan_strict lane on Linux CI only (see scripts/run_lsan_strict.sh).
+#
+# Format: `leak:<substring of a frame's function/file>` (see LSan docs).
+
+# --- Genuinely unreleasable: OS / libc one-time allocations reclaimed at exit.
+leak:__cxa_thread_atexit_impl
+# ^ glibc thread-local dtor registry; owned by libc, freed by the OS on exit.
+leak:dyld
+# ^ dynamic loader bookkeeping; not owned by the process.
+
+# --- Cross-boundary debt (owned by task 218 P1 / other src/ areas).
+#     These registries live OUTSIDE this task's editable surface
+#     (src/frontend, src/analysis) and cannot be released from src/runtime.
+#     They are released as those layers adopt xr_process_shutdown(); each entry
+#     is a standing TODO whose removal is tracked by P1.
+leak:xanalyzer_xrd
+# ^ frontend XRD module cache (g_xrd_modules linked list in
+#   src/frontend/analyzer/xanalyzer_xrd.c). Process-global; P1 to migrate.
+leak:xanalyzer_symbol
+# ^ analyzer thread-local symbol registry (g_symbol_registry in
+#   src/frontend/analyzer/xanalyzer_symbol.c). Thread-local; P1 to migrate.
