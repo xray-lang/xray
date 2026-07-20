@@ -1,0 +1,11 @@
+// @no_throw is fail-closed: an unresolved (indirect) call makes the effect
+// incomplete, so the assertion cannot be proven and must be rejected
+// (task 216).
+@no_throw
+fn viaCallback(cb: () -> ()) {
+    cb()
+}
+
+fn main() {
+    viaCallback(fn() {})
+}

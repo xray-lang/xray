@@ -168,6 +168,10 @@ struct XaSymbolLinks {
     uint64_t alloc_fingerprint;
     bool alloc_effect_complete;
     bool has_no_alloc_contract;
+    // @no_throw assertion (task 216): the definition asserts it raises no error;
+    // the analyzer verifies the effect summary is complete with an empty escaping
+    // set after the effect-DB fixpoint, else it is a compile error.
+    bool has_no_throw_contract;
 
     // Call-site inferred parameter types (for unannotated params)
     // Populated by xa_visit_call when callee has unannotated parameters.

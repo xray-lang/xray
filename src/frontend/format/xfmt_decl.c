@@ -51,6 +51,9 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
         case ATTR_NO_ALLOC:
             xfmt_write_str(ctx, "@no_alloc");
             break;
+        case ATTR_NO_THROW:
+            xfmt_write_str(ctx, "@no_throw");
+            break;
         case ATTR_INTRINSIC:
             xfmt_write_str(ctx, "@intrinsic(");
             xfmt_emit_escaped_inline_string(ctx, attr->str_arg ? attr->str_arg : "",

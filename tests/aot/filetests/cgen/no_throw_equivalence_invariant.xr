@@ -1,0 +1,22 @@
+// Task 216 equivalence invariant: on a provably-nothrow direct call, adding
+// @no_throw does not change the generated C. plain_calc and asserted_calc have
+// identical bodies; the only difference is the assertion. Their generated C must
+// be structurally identical, and neither must emit an error-channel check.
+fn plain_calc(x: int, y: int) -> int {
+    return x * y + 1
+}
+
+@no_throw
+fn asserted_calc(x: int, y: int) -> int {
+    return x * y + 1
+}
+
+@c_export("xray_call_plain")
+fn xray_call_plain(a: int) -> int {
+    return plain_calc(a, a)
+}
+
+@c_export("xray_call_asserted")
+fn xray_call_asserted(a: int) -> int {
+    return asserted_calc(a, a)
+}

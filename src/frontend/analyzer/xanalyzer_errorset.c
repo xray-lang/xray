@@ -4284,6 +4284,97 @@ static void collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **o
     }
 }
 
+/* ========== @no_throw Assertion (task 216) ========== */
+
+static bool es_function_has_no_throw_attr(AstNode *node) {
+    if (!node)
+        return false;
+    XrAttribute **attributes = NULL;
+    int attr_count = 0;
+    if (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR) {
+        attributes = node->as.function_decl.attributes;
+        attr_count = node->as.function_decl.attr_count;
+    } else if (node->type == AST_METHOD_DECL) {
+        attributes = node->as.method_decl.attributes;
+        attr_count = node->as.method_decl.attr_count;
+    }
+    for (int i = 0; i < attr_count; i++) {
+        if (attributes[i] && attributes[i]->kind == ATTR_NO_THROW)
+            return true;
+    }
+    return false;
+}
+
+static const char *es_function_decl_name(AstNode *node, XaSymbol *sym) {
+    if (node) {
+        if ((node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR) &&
+            node->as.function_decl.name)
+            return node->as.function_decl.name;
+        if (node->type == AST_METHOD_DECL && node->as.method_decl.name)
+            return node->as.method_decl.name;
+    }
+    return (sym && sym->name) ? sym->name : "?";
+}
+
+static const char *es_unknown_reason_text(XaUnknownReasonSet reasons) {
+    if (reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH)
+        return "an open virtual dispatch target is not closed";
+    if (reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET)
+        return "an indirect call target is unknown";
+    if (reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING)
+        return "a native callee has no declared throw effect";
+    if (reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT)
+        return "an imported callee effect is missing";
+    if (reasons & XA_UNKNOWN_UNRESOLVED_CALLEE)
+        return "a callee effect is unresolved";
+    if (reasons & XA_UNKNOWN_ANALYSIS_LIMIT)
+        return "the effect analysis limit was reached";
+    if (reasons & XA_UNKNOWN_INVALID_PROGRAM)
+        return "the function contains prior semantic errors";
+    return "its escaping effect could not be proven empty";
+}
+
+/* Emit the definition-site @no_throw diagnostic (fail-closed): the summary must
+ * be complete with an empty escaping set. Lists the escaping error enums and any
+ * incompleteness reason so the author sees why the assertion failed. */
+static void es_report_no_throw_violation(XaAnalyzer *analyzer, AstNode *node, XaSymbol *sym,
+                                         const XaEffectSummary *summary) {
+    const char *name = es_function_decl_name(node, sym);
+    char errset[512];
+    size_t off = 0;
+    errset[0] = '\0';
+    if (summary) {
+        for (uint32_t i = 0; i < summary->escaping.count && off + 1 < sizeof(errset); i++) {
+            XrType *t = xa_effect_db_error_type_handle(analyzer->effect_db,
+                                                       summary->escaping.types[i].type_id);
+            const char *en = (t && XR_TYPE_IS_ENUM(t)) ? t->enum_type.enum_name : NULL;
+            if (!en)
+                continue;
+            int n = snprintf(errset + off, sizeof(errset) - off, "%s%s", off ? ", " : "", en);
+            if (n > 0)
+                off += (size_t) n;
+        }
+    }
+    bool incomplete = !summary || summary->completeness != XA_EFFECT_COMPLETE ||
+                      summary->unknown_reasons != XA_UNKNOWN_NONE;
+    char message[768];
+    if (off > 0 && incomplete) {
+        snprintf(message, sizeof(message),
+                 "@no_throw contract is not satisfied for '%s': may throw {%s}, and %s", name,
+                 errset, es_unknown_reason_text(summary ? summary->unknown_reasons : 0));
+    } else if (off > 0) {
+        snprintf(message, sizeof(message),
+                 "@no_throw contract is not satisfied for '%s': may throw {%s}", name, errset);
+    } else {
+        snprintf(message, sizeof(message), "@no_throw contract cannot be proven for '%s': %s", name,
+                 es_unknown_reason_text(summary ? summary->unknown_reasons : 0));
+    }
+    XrLocation location = {.file = sym ? sym->links.file_path : NULL,
+                           .line = node ? (uint32_t) node->line : 0,
+                           .column = 0};
+    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, message, &location);
+}
+
 /* ========== Public Entry Point ========== */
 
 void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
@@ -4334,6 +4425,13 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
         sym->links.throw_effect = effect;
         if (sym->links.type && sym->links.type->kind == XR_KIND_FUNCTION)
             xr_type_function_set_throw_effect(sym->links.type, effect);
+        /* @no_throw assertion: verify the definition is provably nothrow
+         * (fail-closed — incomplete or non-empty escaping set is an error). */
+        if (es_function_has_no_throw_attr(funcs[i].node)) {
+            sym->links.has_no_throw_contract = true;
+            if (effect != XR_FN_EFFECT_NO_THROW)
+                es_report_no_throw_violation(analyzer, funcs[i].node, sym, summary);
+        }
     }
 
 cleanup:

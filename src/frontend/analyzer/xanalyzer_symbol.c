@@ -1145,6 +1145,7 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     dst->alloc_fingerprint = src->alloc_fingerprint;
     dst->alloc_effect_complete = src->alloc_effect_complete;
     dst->has_no_alloc_contract = src->has_no_alloc_contract;
+    dst->has_no_throw_contract = src->has_no_throw_contract;
 
     if (src->type_param_count > 0) {
         xa_symbol_links_set_type_params(dst, src->type_param_names, src->type_param_constraints,
