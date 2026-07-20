@@ -117,6 +117,17 @@ jobs:
       shell: pwsh
       run: |
         cmake --install build --config Release --prefix dist
+        # Keep the MSVC archives available for embedders, but out of the
+        # default -L search directory. Zig prefers the .lib spelling on
+        # Windows, which would otherwise select the MSVC archive instead of
+        # the self-contained GNU ABI archive copied below.
+        New-Item -ItemType Directory -Path dist\lib\msvc -Force | Out-Null
+        foreach ($archive in @('xray_rt_coro.lib', 'xray_aot_core.lib')) {
+          $installed = Join-Path 'dist\lib' $archive
+          if (Test-Path $installed) {
+            Move-Item $installed dist\lib\msvc\ -Force
+          }
+        }
         Copy-Item build-zig-sdk\libxray_rt_coro.a dist\lib\ -Force
         Copy-Item build-zig-sdk\libxray_aot_core.a dist\lib\ -Force
         $buildExe = @('build\Release\xray.exe', 'build\xray.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1
