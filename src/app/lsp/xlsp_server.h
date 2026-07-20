@@ -253,7 +253,6 @@ struct XrLspServer {
     bool indexing_in_progress;
     int files_indexed;
     int files_total;
-    void *index_task_data;  // For incremental indexing
 
     // Method dispatch table (per-server instead of global)
     MethodHashEntry *method_hash_table[METHOD_HASH_SIZE];

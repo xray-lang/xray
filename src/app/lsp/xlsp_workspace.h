@@ -21,27 +21,12 @@
 
 typedef struct XrLspServer XrLspServer;
 
-// Data for background indexing task
-typedef struct XrLspIndexTaskData {
-    XrLspServer *server;
-    char *root_path;
-    char **files;
-    int file_count;
-    int current_file;
-} XrLspIndexTaskData;
-
 // Start background workspace indexing
 XR_FUNC void xlsp_workspace_start_background_index(XrLspServer *server, const char *root_path);
 
 // Start background indexing for multiple roots (all scanned into one batch)
 XR_FUNC void xlsp_workspace_start_background_index_roots(XrLspServer *server, const char **roots,
                                                          int root_count);
-
-// Background task execute function (runs in worker thread)
-XR_FUNC void xlsp_workspace_index_task_execute(void *data);
-
-// Background task completion (runs in main thread)
-XR_FUNC void xlsp_workspace_index_task_complete(void *data, void *result);
 
 // Index a single file by path (for file watcher updates)
 XR_FUNC void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char *path);
