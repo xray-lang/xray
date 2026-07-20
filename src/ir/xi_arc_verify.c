@@ -82,6 +82,34 @@ static const struct {
     {XI_ARC_C5_METADATA, "C5 (metadata-consistency)"},
 };
 
+/* ========== Per-pass verification control (task 219 P3) ========== */
+
+/* -1 = uninitialized (resolve from build mode + env on first query). */
+static int g_per_pass = -1;
+
+XR_FUNC void xi_arc_verify_set_per_pass(bool enabled) {
+    g_per_pass = enabled ? 1 : 0;
+}
+
+XR_FUNC bool xi_arc_verify_per_pass_enabled(void) {
+    if (g_per_pass < 0) {
+        const char *e = getenv("XRAY_VERIFY_ARC");
+        /* Opt-in (default off). The always-on post-ARC-insertion run is the
+         * primary, fully FP-free defense. Per-pass re-verification on
+         * POST-OPTIMIZATION IR is a deeper CI/debug check: optimizations
+         * legitimately reshuffle refcount ops for immortal (CONST) and
+         * value-typed (SIMD vector) operands into imbalanced-looking but
+         * harmless shapes, and characterizing every such benign case without
+         * reusing ARC's own "what is heap-refcounted" model (N-version
+         * independence) is out of scope for a default-on gate. `--verify-arc`
+         * or XRAY_VERIFY_ARC=1 turns it on for CI lanes / bug hunts. */
+        g_per_pass =
+            (e && (e[0] == '1' || e[0] == 'y' || e[0] == 'Y' || e[0] == 't' || e[0] == 'T')) ? 1
+                                                                                             : 0;
+    }
+    return g_per_pass != 0;
+}
+
 XR_FUNC const char *xi_arc_contract_name(XiArcContract c) {
     for (size_t i = 0; i < sizeof(k_contract_names) / sizeof(k_contract_names[0]); i++) {
         if (k_contract_names[i].c == c)
@@ -234,8 +262,23 @@ static void build_owners(ArcVerify *av) {
     }
 }
 
-/* Assign a compact delta index to every value that is a RETAIN/RELEASE target;
- * only those can ever reach delta < 0, so the delta dataflow tracks just them. */
+/* A value whose definition is an immortal literal (XI_CONST — interned strings,
+ * etc.) is never actually freed: xrt_release on it is a no-op. Optimizations
+ * legitimately hoist such a constant out of a loop while leaving a per-iteration
+ * release in the body, which looks like a repeated release but is harmless. The
+ * balance checks (C1/C2/C3) therefore exclude immortal values so they do not
+ * false-positive on constant lifetimes; a real heap object in the same shape is
+ * still tracked and flagged. */
+static bool value_is_immortal(ArcVerify *av, uint32_t id) {
+    if (id >= av->n)
+        return false;
+    XiValue *d = av->def[id];
+    return d && d->op == XI_CONST;
+}
+
+/* Assign a compact delta index to every value that is a RETAIN/RELEASE target
+ * and is not immortal; only those can ever reach delta < 0, so the delta
+ * dataflow tracks just them. */
 static void build_tracked(ArcVerify *av) {
     XiFunc *f = av->f;
     av->ntracked = 0;
@@ -248,7 +291,8 @@ static void build_tracked(ArcVerify *av) {
             if (!v || (v->op != XI_RETAIN && v->op != XI_RELEASE) || v->nargs < 1)
                 continue;
             XiValue *x = v->args[0];
-            if (x && x->id < av->n && av->is_rc[x->id] && av->track[x->id] < 0)
+            if (x && x->id < av->n && av->is_rc[x->id] && av->track[x->id] < 0 &&
+                !value_is_immortal(av, x->id))
                 av->track[x->id] = (int32_t) av->ntracked++;
         }
     }

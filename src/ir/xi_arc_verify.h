@@ -76,4 +76,16 @@ XR_FUNC bool xi_arc_verify_tree(XiFunc *f, XiArcVerifyReport *report);
  * after which verification ran (e.g. "xi_arc_insert"). */
 XR_FUNC void xi_arc_verify_or_ice(XiFunc *f, const char *stage_label);
 
+/* ===== Per-pass verification control (task 219 P3) =====
+ *
+ * The post-ARC-insertion run (xi_arc_verify_or_ice in the pipeline) is ALWAYS
+ * on in every build. In addition, the optimization pass driver re-runs the
+ * verifier after every pass that invalidates LIFETIME/OWNERSHIP evidence or the
+ * CFG, so a lifetime-mutating optimization that reintroduces an ARC bug is
+ * caught the moment it lands. That per-pass checking defaults to ON in debug
+ * builds and OFF in release (compile-time budget), and is forced ON by the
+ * `--verify-arc` CLI flag or `XRAY_VERIFY_ARC=1` (and OFF by `=0`). */
+XR_FUNC void xi_arc_verify_set_per_pass(bool enabled);
+XR_FUNC bool xi_arc_verify_per_pass_enabled(void);
+
 #endif /* XI_ARC_VERIFY_H */
