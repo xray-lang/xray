@@ -18,6 +18,7 @@
 #include "xlsp_cache.h"
 #include "xlsp_imports.h"
 #include "xlsp_utils.h"
+#include "xlsp_symbol_index.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 
@@ -78,6 +79,11 @@ void xlsp_handle_ws_did_change_watched_files(XrLspServer *server, XrJsonValue *p
                 // Remove from analyzer so stale symbols don't linger
                 if (server->workspace_analyzer) {
                     xa_analyzer_remove_file(server->workspace_analyzer, del_path);
+                }
+
+                // Drop the file from the shallow workspace symbol index too.
+                if (server->symbol_index) {
+                    xlsp_symbol_index_remove_file(server->symbol_index, uri);
                 }
 
                 lsp_log("Purged state for deleted file: %s", del_path);

@@ -205,6 +205,16 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
     }
 }
 
+XrLspIndexSymbol *xlsp_index_symbols_from_ast(struct AstNode *ast) {
+    if (!ast)
+        return NULL;
+    // extract_symbols() prepends into result->symbols; borrow a stack result so
+    // callers get an owning list without a full XrLspIndexResult.
+    XrLspIndexResult tmp = {0};
+    extract_symbols(&tmp, (AstNode *) ast, false);
+    return tmp.symbols;
+}
+
 // ============================================================================
 // File Parsing (in worker thread)
 // ============================================================================
@@ -578,6 +588,14 @@ void xlsp_index_symbol_free(XrLspIndexSymbol *sym) {
     xr_free(sym->name);
     xr_free(sym->type_str);
     xr_free(sym);
+}
+
+void xlsp_index_symbol_free_list(XrLspIndexSymbol *list) {
+    while (list) {
+        XrLspIndexSymbol *next = list->next;
+        xlsp_index_symbol_free(list);
+        list = next;
+    }
 }
 
 void xlsp_index_result_free(XrLspIndexResult *result) {

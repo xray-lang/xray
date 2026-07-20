@@ -23,10 +23,10 @@
 #include <string.h>
 #include <limits.h>
 #include "../../base/xfileio.h"
-#include "../../base/xhashmap.h"
 #include "../../base/xmalloc.h"
 #include "../../os/os_time.h"
 #include "xlsp_analysis.h"
+#include "xlsp_symbol_index.h"
 
 // lsp_log declared in xlsp_server.h (included via xlsp_workspace.h)
 // ============================================================================
@@ -305,6 +305,14 @@ void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char 
         lsp_log("Indexed file: %s (hash: %llx)", path, (unsigned long long) content_hash);
     }
 
+    // Keep the shallow workspace symbol index current for this file (covers
+    // watched-file create/change of unopened files).
+    if (ast && server->symbol_index) {
+        XrLspIndexSymbol *shallow = xlsp_index_symbols_from_ast(ast);
+        xlsp_symbol_index_replace_file(server->symbol_index, uri, shallow);
+        xlsp_index_symbol_free_list(shallow);
+    }
+
     xr_arena_destroy(&arena);
     xr_free(content);
 }
@@ -353,13 +361,14 @@ void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexResult *r
         }
 
         // ================================================================
-        // Enqueue for budgeted main-thread analysis instead of
-        // blocking the merge loop with synchronous per-file I/O.
+        // Merge the worker's shallow symbols straight into the global index.
+        // No main-thread re-parse/analyze: closed files are shallow-only
+        // (full type analysis happens on demand when a file is opened).
         // ================================================================
-        if (result->path && result->uri) {
-            xlsp_enqueue_analysis(server, result->uri, result->path);
-
-            // Count symbols from worker-side shallow extraction
+        if (result->uri) {
+            if (server->symbol_index) {
+                xlsp_symbol_index_replace_file(server->symbol_index, result->uri, result->symbols);
+            }
             for (XrLspIndexSymbol *sym = result->symbols; sym; sym = sym->next) {
                 symbols_added++;
             }
@@ -391,13 +400,11 @@ void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexResult *r
         if (submitted > 0 && submitted == completed) {
             server->indexing_in_progress = false;
 
-            // Log final symbol count
-            int total_symbols = 0;
-            if (server->workspace_analyzer && server->workspace_analyzer->global_scope) {
-                total_symbols = xa_scope_count_symbols(server->workspace_analyzer->global_scope);
-            }
+            // Report the shallow index size: under Approach A closed files live
+            // in the workspace symbol index, not the (open-files-only) analyzer.
+            int total_symbols = (int) xlsp_symbol_index_entry_count(server->symbol_index);
 
-            lsp_log("[IndexPool] Background indexing complete: %d files, %d global symbols",
+            lsp_log("[IndexPool] Background indexing complete: %d files, %d indexed symbols",
                     completed, total_symbols);
 
             // End progress with success message
@@ -437,8 +444,8 @@ void xlsp_workspace_start_background_index(XrLspServer *server, const char *root
     if (!server || !root_path)
         return;
 
-    // If indexing is already running, scan files and enqueue them into the
-    // pending analysis queue so they get processed after the current batch.
+    // If indexing is already running, scan this root and hand its files to the
+    // parallel pool so they get shallow-indexed alongside the current batch.
     if (server->indexing_in_progress) {
         int capacity = 64;
         char **files = xr_malloc(capacity * sizeof(char *));
@@ -448,18 +455,16 @@ void xlsp_workspace_start_background_index(XrLspServer *server, const char *root
 
         find_xr_files_with_config(root_path, &files, &file_count, &capacity, &server->config);
 
-        for (int i = 0; i < file_count; i++) {
-            char uri[XLSP_MAX_PATH + 8];
-            snprintf(uri, sizeof(uri), "file://%s", files[i]);
-            xlsp_enqueue_analysis(server, uri, files[i]);
-            xr_free(files[i]);
-        }
-        xr_free(files);
-
-        if (file_count > 0) {
-            lsp_log("[IndexPool] Queued %d files from %s (indexing in progress)", file_count,
+        if (file_count > 0 && server->index_pool) {
+            xlsp_index_pool_submit_batch(server->index_pool, files, file_count);
+            server->files_total += file_count;
+            lsp_log("[IndexPool] Queued %d more files from %s (indexing in progress)", file_count,
                     root_path);
         }
+
+        for (int i = 0; i < file_count; i++)
+            xr_free(files[i]);
+        xr_free(files);
         return;
     }
 
@@ -572,110 +577,6 @@ void xlsp_workspace_start_background_index_roots(XrLspServer *server, const char
     xr_free(files);
 }
 
-// ============================================================================
-// Pending Analysis Queue — budgeted main-thread drain
-// ============================================================================
-
-void xlsp_enqueue_analysis(XrLspServer *server, const char *uri, const char *path) {
-    if (!server || !uri || !path)
-        return;
-
-    // O(1) dedup via companion hash set.
-    if (!server->pending_analysis_set) {
-        server->pending_analysis_set = xr_hashmap_new();
-    }
-    if (server->pending_analysis_set && xr_hashmap_has(server->pending_analysis_set, path)) {
-        return;  // Already queued
-    }
-
-    // Grow the ring when full, re-linearising from the current head.
-    if (server->pending_analysis_count >= server->pending_analysis_capacity) {
-        int old_cap = server->pending_analysis_capacity;
-        int new_cap = old_cap == 0 ? 64 : old_cap * 2;
-        XlspPendingAnalysis *tmp = xr_malloc((size_t) new_cap * sizeof(XlspPendingAnalysis));
-        if (!tmp)
-            return;
-        for (int i = 0; i < server->pending_analysis_count; i++) {
-            tmp[i] = server->pending_analysis[(server->pending_analysis_head + i) % old_cap];
-        }
-        xr_free(server->pending_analysis);
-        server->pending_analysis = tmp;
-        server->pending_analysis_head = 0;
-        server->pending_analysis_capacity = new_cap;
-    }
-
-    int tail = (server->pending_analysis_head + server->pending_analysis_count) %
-               server->pending_analysis_capacity;
-    server->pending_analysis[tail].uri = xr_strdup(uri);
-    server->pending_analysis[tail].path = xr_strdup(path);
-    server->pending_analysis_count++;
-
-    // The dedup set borrows the slot's owned path pointer as its key (the map
-    // never copies keys). The entry is deleted before the path is freed on pop,
-    // and ring growth copies the pointer verbatim, so the key stays valid.
-    if (server->pending_analysis_set && server->pending_analysis[tail].path) {
-        xr_hashmap_set(server->pending_analysis_set, server->pending_analysis[tail].path,
-                       (void *) (uintptr_t) 1);
-    }
-}
-
-int xlsp_drain_pending_analysis(XrLspServer *server) {
-    if (!server || server->pending_analysis_count == 0)
-        return 0;
-
-    uint64_t now_ms = xr_time_monotonic_ms();
-    uint64_t deadline = now_ms + ANALYSIS_DRAIN_BUDGET_MS;
-    int processed = 0;
-
-    while (server->pending_analysis_count > 0) {
-        // Pop from front in O(1).
-        XlspPendingAnalysis entry = server->pending_analysis[server->pending_analysis_head];
-        server->pending_analysis_head =
-            (server->pending_analysis_head + 1) % server->pending_analysis_capacity;
-        server->pending_analysis_count--;
-
-        // Drop the dedup entry before freeing the path it keys on.
-        if (server->pending_analysis_set)
-            xr_hashmap_delete(server->pending_analysis_set, entry.path);
-
-        // Analyse on main thread
-        xlsp_workspace_index_file(server, entry.uri, entry.path);
-        xr_free(entry.uri);
-        xr_free(entry.path);
-        processed++;
-
-        // Respect time budget
-        now_ms = xr_time_monotonic_ms();
-        if (now_ms >= deadline)
-            break;
-    }
-
-    if (processed > 0) {
-        lsp_log("[Drain] Analysed %d files, %d remaining", processed,
-                server->pending_analysis_count);
-    }
-    return processed;
-}
-
-void xlsp_free_pending_analysis(XrLspServer *server) {
-    if (!server)
-        return;
-    for (int i = 0; i < server->pending_analysis_count; i++) {
-        int idx = (server->pending_analysis_head + i) % server->pending_analysis_capacity;
-        xr_free(server->pending_analysis[idx].uri);
-        xr_free(server->pending_analysis[idx].path);
-    }
-    xr_free(server->pending_analysis);
-    server->pending_analysis = NULL;
-    server->pending_analysis_count = 0;
-    server->pending_analysis_capacity = 0;
-    server->pending_analysis_head = 0;
-    if (server->pending_analysis_set) {
-        xr_hashmap_free(server->pending_analysis_set);
-        server->pending_analysis_set = NULL;
-    }
-}
-
 // Purge all analyzer/cache state for files under a path prefix
 void xlsp_workspace_purge_prefix(XrLspServer *server, const char *path_prefix) {
     if (!server || !path_prefix)
@@ -699,6 +600,11 @@ void xlsp_workspace_purge_prefix(XrLspServer *server, const char *path_prefix) {
 
     // Invalidate exports cache for files under this prefix
     xlsp_exports_cache_remove_prefix(server, path_prefix);
+
+    // Drop shallow workspace-symbol entries for files under this folder.
+    if (server->symbol_index) {
+        xlsp_symbol_index_remove_prefix(server->symbol_index, path_prefix);
+    }
 
     lsp_log("[Workspace] Purged state for prefix: %s (len=%zu)", path_prefix, prefix_len);
 }
@@ -732,8 +638,6 @@ void xlsp_workspace_maybe_rebuild_analyzer(XrLspServer *server) {
     if (server->indexing_in_progress)
         return;
     if (server->index_pool && !xlsp_index_pool_is_idle(server->index_pool))
-        return;
-    if (server->pending_analysis_count > 0)
         return;
 
     size_t bytes = xa_analyzer_type_pool_bytes(server->workspace_analyzer);
@@ -770,12 +674,10 @@ void xlsp_workspace_maybe_rebuild_analyzer(XrLspServer *server) {
     xa_analyzer_free(server->workspace_analyzer);
     server->workspace_analyzer = fresh;
 
-    // The old pending queue references the pre-rebuild world; drop it and let
-    // the fresh background index below repopulate closed files.
-    xlsp_free_pending_analysis(server);
-
     // Re-analyze open documents right away so active editing keeps working
-    // against a populated analyzer.
+    // against a populated analyzer. The shallow symbol index survives the
+    // rebuild untouched (it holds no type-pool memory), so workspace-wide
+    // features keep working; the fresh background index below refreshes it.
     if (server->doc_table) {
         XrLspDocTable *table = server->doc_table;
         for (int i = 0; i < table->bucket_count; i++) {

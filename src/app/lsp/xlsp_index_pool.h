@@ -164,4 +164,13 @@ XR_FUNC void xlsp_index_result_free_list(XrLspIndexResult *list);
 // Free a single symbol
 XR_FUNC void xlsp_index_symbol_free(XrLspIndexSymbol *sym);
 
+// Free a whole XrLspIndexSymbol linked list.
+XR_FUNC void xlsp_index_symbol_free_list(XrLspIndexSymbol *list);
+
+// Extract shallow symbols from an AST into a fresh linked list. Shared by the
+// worker parse path and the LSP live-index refresh for open documents. The
+// caller owns the returned list (free with xlsp_index_symbol_free_list).
+struct AstNode;
+XR_FUNC XrLspIndexSymbol *xlsp_index_symbols_from_ast(struct AstNode *ast);
+
 #endif  // XLSP_INDEX_POOL_H

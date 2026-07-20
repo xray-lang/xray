@@ -108,15 +108,6 @@ typedef struct XrLspIndexPool XrLspIndexPool;
 // Maximum workspace folders
 #define MAX_WORKSPACE_FOLDERS 16
 
-// Per-tick time budget (ms) for draining pending background analysis
-#define ANALYSIS_DRAIN_BUDGET_MS 5
-
-// Pending analysis entry (file waiting for main-thread re-analysis)
-typedef struct XlspPendingAnalysis {
-    char *uri;
-    char *path;
-} XlspPendingAnalysis;
-
 // Maximum pending requests to track (for cancellation support)
 #define MAX_PENDING_REQUESTS 64
 
@@ -280,15 +271,12 @@ struct XrLspServer {
     int pending_diag_count;
     int pending_diag_capacity;
 
-    // Pending background analysis queue: a ring buffer (O(1) push/pop) paired
-    // with a hash set for O(1) dedup, so first-time indexing of a huge
-    // workspace stays O(n) instead of the old O(n^2) (front-shift + linear
-    // dedup scan on every file).
-    XlspPendingAnalysis *pending_analysis;   // ring storage
-    int pending_analysis_head;               // index of the front element
-    int pending_analysis_count;              // number of live elements
-    int pending_analysis_capacity;           // ring capacity
-    struct XrHashMap *pending_analysis_set;  // path -> marker, dedup membership
+    // Shallow, workspace-wide symbol index (names/kinds/locations only).
+    // Populated in parallel by the index-pool workers for closed files and by
+    // the live parse path for open documents. Powers workspace/symbol, the
+    // go-to-definition fallback for closed files, and completion augmentation
+    // without forcing full main-thread analysis of every workspace file.
+    struct XlspSymbolIndex *symbol_index;
 
     // Request cancellation support ($/cancelRequest)
     XlspPendingRequests pending_requests;

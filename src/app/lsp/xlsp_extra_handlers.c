@@ -12,11 +12,46 @@
 #include "xlsp_ast_utils.h"
 #include "xlsp_analysis.h"
 #include "xlsp_imports.h"
+#include "xlsp_symbol_index.h"
 #include "../../frontend/analyzer/xanalyzer.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include "../../base/xmalloc.h"
+
+// Workspace-symbol collection over the shallow global index.
+#define XLSP_WORKSPACE_SYMBOL_LIMIT 100
+
+typedef struct {
+    XrJsonValue *symbols;  // output JSON array
+    const char *query;     // substring filter ("" = all)
+    int added;
+} XlspWorkspaceSymbolCtx;
+
+static void xlsp_workspace_symbol_collect(const XlspIndexEntry *entry, void *ctx_) {
+    XlspWorkspaceSymbolCtx *ctx = (XlspWorkspaceSymbolCtx *) ctx_;
+    if (ctx->added >= XLSP_WORKSPACE_SYMBOL_LIMIT)
+        return;
+    if (!entry->name || !entry->uri)
+        return;
+    if (ctx->query[0] && !strstr(entry->name, ctx->query))
+        return;
+
+    XrJsonValue *sym = xjson_new_object();
+    xjson_object_set(sym, "name", xjson_new_string(entry->name));
+    // XrLspSymbolKind enum values are exactly the LSP SymbolKind numbers.
+    xjson_object_set(sym, "kind", xjson_new_number((int) entry->kind));
+
+    XrJsonValue *loc = xjson_new_object();
+    xjson_object_set(loc, "uri", xjson_new_string(entry->uri));
+    xjson_object_set(loc, "range",
+                     xjson_make_range(entry->line, entry->column, entry->line,
+                                      entry->column + (int) strlen(entry->name)));
+    xjson_object_set(sym, "location", loc);
+
+    xjson_array_push(ctx->symbols, sym);
+    ctx->added++;
+}
 
 // ============================================================================
 // Document Highlight
@@ -50,49 +85,12 @@ XrJsonValue *xlsp_handle_workspace_symbol(XrLspServer *server, XrJsonValue *para
 
     XrJsonValue *symbols = xjson_new_array();
 
-    if (server->workspace_analyzer && server->workspace_analyzer->global_scope) {
-        int count;
-        XaSymbol **all_symbols =
-            xa_scope_get_all_symbols(server->workspace_analyzer->global_scope, &count);
-
-        int added = 0;
-        for (int i = 0; i < count && added < 100; i++) {
-            XaSymbol *s = all_symbols[i];
-            if (!s || !s->name)
-                continue;
-
-            if (query[0] && !strstr(s->name, query))
-                continue;
-
-            XrJsonValue *sym = xjson_new_object();
-            xjson_object_set(sym, "name", xjson_new_string(s->name));
-
-            int kind = LSP_SYMBOL_VARIABLE;
-            if (s->kind == XA_SYM_FUNCTION || s->kind == XA_SYM_METHOD)
-                kind = LSP_SYMBOL_FUNCTION;
-            if (s->kind == XA_SYM_CLASS)
-                kind = LSP_SYMBOL_CLASS;
-            if (s->is_const)
-                kind = LSP_SYMBOL_CONSTANT;
-            xjson_object_set(sym, "kind", xjson_new_number(kind));
-
-            XrJsonValue *loc = xjson_new_object();
-            if (s->location.file) {
-                xjson_object_set(loc, "uri", xjson_new_string(s->location.file));
-            }
-            int start_line = s->location.line > 0 ? s->location.line - 1 : 0;
-            int start_col = s->location.column > 0 ? s->location.column - 1 : 0;
-            int end_line = s->location.end_line > 0 ? s->location.end_line - 1 : start_line;
-            int end_col = s->location.end_column > 0 ? s->location.end_column - 1 : 0;
-            xjson_object_set(loc, "range",
-                             xjson_make_range(start_line, start_col, end_line, end_col));
-            xjson_object_set(sym, "location", loc);
-
-            xjson_array_push(symbols, sym);
-            added++;
-        }
-
-        xr_free(all_symbols);
+    // The shallow index spans the whole workspace (closed files from the
+    // parallel background index + open files from the live parse path), so
+    // workspace/symbol covers every file, not only those the analyzer loaded.
+    if (server->symbol_index) {
+        XlspWorkspaceSymbolCtx ctx = {.symbols = symbols, .query = query, .added = 0};
+        xlsp_symbol_index_foreach(server->symbol_index, xlsp_workspace_symbol_collect, &ctx);
     }
 
     return symbols;

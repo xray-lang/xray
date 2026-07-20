@@ -13,6 +13,7 @@
 #include "xlsp_ast_utils.h"
 #include "xlsp_workspace.h"
 #include "xlsp_index_pool.h"
+#include "xlsp_symbol_index.h"
 #include "../../base/xjson.h"
 #include "xlsp_cache.h"
 #include "../../frontend/analyzer/xanalyzer.h"
@@ -355,6 +356,12 @@ XrLspServer *xlsp_server_new(void) {
         lsp_log("Warning: Failed to create workspace analyzer");
     }
 
+    // Shallow workspace-wide symbol index (parallel-populated, no type memory).
+    server->symbol_index = xlsp_symbol_index_new();
+    if (!server->symbol_index) {
+        lsp_log("Warning: Failed to create workspace symbol index");
+    }
+
     // Create background task system.
     // Pass the log-server init hook so the worker thread shares the same
     // log file / stderr routing as the main loop. The hook is installed
@@ -456,8 +463,11 @@ void xlsp_server_free(XrLspServer *server) {
     // Free pending diagnostics queue
     xr_free(server->pending_diag);
 
-    // Free pending analysis queue
-    xlsp_free_pending_analysis(server);
+    // Free the shallow workspace symbol index
+    if (server->symbol_index) {
+        xlsp_symbol_index_free(server->symbol_index);
+        server->symbol_index = NULL;
+    }
 
     // Release any still-live string ids in the pending-request ring
     // buffer. After a clean shutdown the ring is usually empty, but
@@ -1572,9 +1582,6 @@ int xlsp_server_run(XrLspServer *server) {
             }
             xlsp_workspace_poll_index_results(server);
         }
-
-        // Drain pending background analysis (budgeted: ≤5ms per tick)
-        xlsp_drain_pending_analysis(server);
 
         // Check debounced diagnostic deadlines (every loop iteration)
         flush_pending_diagnostics(server);
