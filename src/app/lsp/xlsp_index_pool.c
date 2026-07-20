@@ -384,8 +384,18 @@ XrLspIndexPool *xlsp_index_pool_new(XrLspServer *server) {
 
     atomic_store(&pool->running, true);
 
+    // Size the pool to the host CPU count so large machines parallelise the
+    // parse pass, but leave one core for the main LSP loop and cap at the
+    // fixed array bound. Always keep at least 2 workers for small machines.
+    unsigned int cpus = xr_os_cpu_count();
+    int desired = cpus > 1 ? (int) cpus - 1 : 1;
+    if (desired < 2)
+        desired = 2;
+    if (desired > XLSP_INDEX_POOL_MAX_WORKERS)
+        desired = XLSP_INDEX_POOL_MAX_WORKERS;
+
     // Start worker threads
-    pool->worker_count = XLSP_INDEX_POOL_SIZE;
+    pool->worker_count = desired;
     for (int i = 0; i < pool->worker_count; i++) {
         pool->workers[i].worker_id = i;
         pool->workers[i].pool = pool;

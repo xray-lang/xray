@@ -280,10 +280,15 @@ struct XrLspServer {
     int pending_diag_count;
     int pending_diag_capacity;
 
-    // Pending background analysis queue (budgeted drain per tick)
-    XlspPendingAnalysis *pending_analysis;
-    int pending_analysis_count;
-    int pending_analysis_capacity;
+    // Pending background analysis queue: a ring buffer (O(1) push/pop) paired
+    // with a hash set for O(1) dedup, so first-time indexing of a huge
+    // workspace stays O(n) instead of the old O(n^2) (front-shift + linear
+    // dedup scan on every file).
+    XlspPendingAnalysis *pending_analysis;   // ring storage
+    int pending_analysis_head;               // index of the front element
+    int pending_analysis_count;              // number of live elements
+    int pending_analysis_capacity;           // ring capacity
+    struct XrHashMap *pending_analysis_set;  // path -> marker, dedup membership
 
     // Request cancellation support ($/cancelRequest)
     XlspPendingRequests pending_requests;
@@ -299,6 +304,13 @@ struct XrLspServer {
     // Kept here (not as a file-scope mutable global) so multiple servers —
     // including test harnesses — don't collide on "xlsp-progress-N".
     int progress_token_counter;
+
+    // Long-session memory bound for the workspace analyzer's type pool.
+    // Holds the pool size (bytes) measured right after the last clean
+    // (re)build/index once the server settled to idle. 0 means "not yet
+    // established". xlsp_workspace_maybe_rebuild_analyzer() rebuilds the
+    // analyzer when the live pool grows past an adaptive multiple of this.
+    size_t analyzer_pool_baseline_bytes;
 };
 
 // Create and destroy server

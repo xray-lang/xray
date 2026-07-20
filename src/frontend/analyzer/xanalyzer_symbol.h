@@ -306,6 +306,9 @@ XR_FUNC XaSymbol *xa_scope_lookup(XaScope *scope, const char *name);
 XR_FUNC XaSymbol *xa_scope_lookup_local(XaScope *scope, const char *name);
 XR_FUNC XaSymbol *xa_scope_lookup_by_id(XaScope *scope, uint32_t id);
 XR_FUNC XaSymbol **xa_scope_get_all_symbols(XaScope *scope, int *count);
+// Count symbols directly in this scope (non-recursive) without materialising
+// the array. Use this when only the count is needed (e.g. progress logging).
+XR_FUNC int xa_scope_count_symbols(XaScope *scope);
 
 // API: Scope hierarchy (for LSP rename)
 XR_FUNC bool xa_scope_is_descendant(XaScope *child, XaScope *ancestor);

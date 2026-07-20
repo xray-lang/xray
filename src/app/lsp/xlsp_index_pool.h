@@ -68,7 +68,10 @@ typedef struct XrLspIndexResult {
 // Index Worker Pool
 // ============================================================================
 
-#define XLSP_INDEX_POOL_SIZE 4  // Number of worker threads
+// Upper bound on indexing worker threads. The live worker_count is chosen at
+// pool creation from the host CPU count (see xlsp_index_pool_new), so large
+// machines parallelise the parse pass while the array size stays fixed.
+#define XLSP_INDEX_POOL_MAX_WORKERS 16
 
 // Work item for the pool
 typedef struct XrLspIndexWork {
@@ -88,7 +91,7 @@ typedef struct XrLspIndexWorker {
 // Index pool state
 typedef struct XrLspIndexPool {
     // Workers
-    XrLspIndexWorker workers[XLSP_INDEX_POOL_SIZE];
+    XrLspIndexWorker workers[XLSP_INDEX_POOL_MAX_WORKERS];
     int worker_count;
 
     // Work queue (MPMC with mutex for simplicity)

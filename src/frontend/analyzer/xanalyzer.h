@@ -184,11 +184,30 @@ struct XaAnalyzer {
      * compile-unit identity for graph-less bootstrap compilation. */
     bool current_module_is_stdlib;
     const char *current_module_canonical;
+
+    /* Enum layouts replaced by the post-monomorphization re-analysis pass.
+     * XrType copies (catch error types, function-signature error types, ...)
+     * cache the raw layout pointer and are still read during the second pass,
+     * so a replaced layout must outlive its rebuilt XaEnumInfo and is freed
+     * only when the analyzer is destroyed. Stored as void* to keep this public
+     * header independent of the runtime layout type. */
+    void **retired_enum_layouts;
+    size_t retired_enum_layout_count;
+    size_t retired_enum_layout_cap;
 };
 
 // API: Analyzer lifecycle
 XR_FUNC XaAnalyzer *xa_analyzer_new(XrCompilerSession *session);
 XR_FUNC void xa_analyzer_free(XaAnalyzer *analyzer);
+
+// Current retained bytes in the analyzer's type-pool arena.
+//
+// The pool grows monotonically under repeated xa_analyzer_refresh_file():
+// re-analysis frees the old XaSymbol structs but their XrType objects were
+// bump-allocated from this arena, which can only be freed wholesale. Long-lived
+// hosts (the LSP) poll this to decide when a full analyzer rebuild is worth the
+// cost to reclaim the accumulated type garbage.
+XR_FUNC size_t xa_analyzer_type_pool_bytes(const XaAnalyzer *analyzer);
 
 // API: Configuration
 XR_FUNC void xa_analyzer_set_strict_null(XaAnalyzer *analyzer, bool enable);

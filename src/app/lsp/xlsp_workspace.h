@@ -65,6 +65,12 @@ XR_FUNC void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexR
 // Purge all analyzer/cache state for files under a path prefix
 XR_FUNC void xlsp_workspace_purge_prefix(XrLspServer *server, const char *path_prefix);
 
+// Long-session memory bound: rebuild the workspace analyzer from scratch when
+// its type pool has accumulated too much reclaimable garbage. No-op unless the
+// server is idle (not indexing, pool idle, drain empty) and the pool has grown
+// past an adaptive threshold. Safe to call every main-loop tick.
+XR_FUNC void xlsp_workspace_maybe_rebuild_analyzer(XrLspServer *server);
+
 // Pending analysis queue helpers
 XR_FUNC void xlsp_enqueue_analysis(XrLspServer *server, const char *uri, const char *path);
 XR_FUNC int xlsp_drain_pending_analysis(XrLspServer *server);

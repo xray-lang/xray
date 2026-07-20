@@ -17,6 +17,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
 #include <ctype.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -31,6 +32,28 @@
 #define XMCP_QUERY_TOKEN_MAX 64
 #define XMCP_QUERY_MODULE_MAX 64
 #define XMCP_QUERY_SYMBOL_MAX 128
+
+/* Bounded formatted append into buf[*len .. cap).
+ *
+ * snprintf() returns the number of bytes it *would* have written, which can
+ * exceed the space actually available. The old code accumulated that raw
+ * return value into *len, so a single long field could push *len past cap and
+ * make the next `cap - *len` subtraction underflow (size_t) into a huge value,
+ * turning the following snprintf into an out-of-bounds write. This helper clamps
+ * *len to at most cap-1 so the running offset is always a valid index and the
+ * buffer simply stops growing once full. */
+static void kb_appendf(char *buf, size_t cap, size_t *len, const char *fmt, ...) {
+    if (!buf || cap == 0 || *len >= cap)
+        return;
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf + *len, cap - *len, fmt, ap);
+    va_end(ap);
+    if (n < 0)
+        return;
+    size_t avail = cap - *len;
+    *len += ((size_t) n < avail) ? (size_t) n : (avail - 1);
+}
 
 static bool icontains(const char *haystack, const char *needle) {
     if (!haystack || !needle)
@@ -255,8 +278,8 @@ static void append_available_modules(char *buf, size_t cap, size_t *len, XmcpKno
         if (strcasecmp(kb->modules[i].name, "json") == 0)
             continue;
         if (emitted > 0)
-            *len += (size_t) snprintf(buf + *len, cap - *len, ", ");
-        *len += (size_t) snprintf(buf + *len, cap - *len, "%s", kb->modules[i].name);
+            kb_appendf(buf, cap, len, ", ");
+        kb_appendf(buf, cap, len, "%s", kb->modules[i].name);
         emitted++;
     }
 }
@@ -451,43 +474,38 @@ char *xmcp_knowledge_search_stdlib(XmcpKnowledge *kb, const char *query, const c
     if (!text)
         return NULL;
     size_t len = 0;
-    len += (size_t) snprintf(text + len, cap - len, "# Standard Library Search: \"%s\"\n\n", query);
+    kb_appendf(text, cap, &len, "# Standard Library Search: \"%s\"\n\n", query);
 
     if (result.match_count == 0) {
-        len += (size_t) snprintf(text + len, cap - len, "No modules found matching \"%s\".\n\n",
-                                 query);
-        len += (size_t) snprintf(text + len, cap - len, "Available modules: ");
+        kb_appendf(text, cap, &len, "No modules found matching \"%s\".\n\n", query);
+        kb_appendf(text, cap, &len, "Available modules: ");
         append_available_modules(text, cap, &len, kb);
-        len += (size_t) snprintf(text + len, cap - len, "\n");
+        kb_appendf(text, cap, &len, "\n");
         return text;
     }
 
     for (int i = 0; i < result.match_count; i++) {
         const XmcpStdlibMatch *m = &result.matches[i];
         if (m->symbol) {
-            len += (size_t) snprintf(text + len, cap - len, "## %s.%s\n\n", m->module->name,
-                                     m->symbol->name);
-            len += (size_t) snprintf(text + len, cap - len, "Signature: `%s%s`\n\n",
-                                     m->symbol->name, m->symbol->signature);
+            kb_appendf(text, cap, &len, "## %s.%s\n\n", m->module->name, m->symbol->name);
+            kb_appendf(text, cap, &len, "Signature: `%s%s`\n\n", m->symbol->name,
+                       m->symbol->signature);
             if (m->symbol->summary && m->symbol->summary[0] != '\0')
-                len += (size_t) snprintf(text + len, cap - len, "%s\n\n", m->symbol->summary);
+                kb_appendf(text, cap, &len, "%s\n\n", m->symbol->summary);
         } else {
             if (strcmp(m->module->name, "json") == 0) {
-                len += (size_t) snprintf(text + len, cap - len, "## Built-in: Json\n\n");
-                len += (size_t) snprintf(text + len, cap - len,
-                                         "Use directly: `Json.parse()` / `Json.stringify()`\n\n");
+                kb_appendf(text, cap, &len, "## Built-in: Json\n\n");
+                kb_appendf(text, cap, &len,
+                           "Use directly: `Json.parse()` / `Json.stringify()`\n\n");
             } else {
-                len +=
-                    (size_t) snprintf(text + len, cap - len, "## Module: %s\n\n", m->module->name);
-                len += (size_t) snprintf(text + len, cap - len, "Import: `import %s`\n\n",
-                                         m->module->name);
+                kb_appendf(text, cap, &len, "## Module: %s\n\n", m->module->name);
+                kb_appendf(text, cap, &len, "Import: `import %s`\n\n", m->module->name);
             }
-            len += (size_t) snprintf(text + len, cap - len, "%s\n\n", m->module->summary);
+            kb_appendf(text, cap, &len, "%s\n\n", m->module->summary);
         }
         if (len > cap - 512) {
-            len += (size_t) snprintf(text + len, cap - len,
-                                     "\n_(truncated: %d of %d matches shown)_\n", i + 1,
-                                     result.match_count);
+            kb_appendf(text, cap, &len, "\n_(truncated: %d of %d matches shown)_\n", i + 1,
+                       result.match_count);
             break;
         }
     }
