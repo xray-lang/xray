@@ -16,8 +16,11 @@
 
 #include "../os_fd.h"
 
-#include <io.h>
 #include <stdio.h>
+
+#if !defined(_MSC_VER)
+int __cdecl _isatty(int fd);
+#endif
 
 int xr_stdin_fd(void) {
     return _fileno(stdin);

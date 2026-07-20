@@ -536,6 +536,33 @@ static bool xaot_cli_link_ld_flag_supported(const XrCliBuildTarget *target, cons
     return true;
 }
 
+static bool xaot_cli_link_add_target_cpu_flag(XaotCliLinkCommand *cmd,
+                                              const XrCliBuildTarget *target, char *err,
+                                              size_t err_size);
+
+static bool xaot_cli_link_add_zig_target(XaotCliLinkCommand *cmd, const XrCliBuildTarget *target,
+                                         char *err, size_t err_size) {
+    const char *triple = NULL;
+
+    if (!target)
+        return true;
+    if (!target->is_native) {
+        triple = target->zig_triple;
+#if defined(XR_OS_WINDOWS)
+    } else {
+        /* Bundled Zig is self-contained for the GNU Windows ABI. Its default
+         * native MSVC ABI still requires separately installed MSVC SDK libs. */
+        triple = "x86_64-windows-gnu";
+#endif
+    }
+    if (!triple || !triple[0])
+        return true;
+    if (!xaot_cli_link_add_arg(cmd, "-target", err, err_size) ||
+        !xaot_cli_link_add_arg(cmd, triple, err, err_size))
+        return false;
+    return target->is_native || xaot_cli_link_add_target_cpu_flag(cmd, target, err, err_size);
+}
+
 static void xaot_cli_manifest_remove_string(char ***items, uint32_t *count, const char *value) {
     uint32_t i;
 
@@ -852,12 +879,8 @@ static bool xaot_cli_build_compile_command(const XrCliToolchainPlan *plan,
     if (plan->kind == XR_CLI_TOOLCHAIN_ZIG) {
         if (!xaot_cli_link_add_arg(cmd, "cc", err, err_size))
             return false;
-        if (!target->is_native) {
-            if (!xaot_cli_link_add_arg(cmd, "-target", err, err_size) ||
-                !xaot_cli_link_add_arg(cmd, target->zig_triple, err, err_size) ||
-                !xaot_cli_link_add_target_cpu_flag(cmd, target, err, err_size))
-                return false;
-        }
+        if (!xaot_cli_link_add_zig_target(cmd, target, err, err_size))
+            return false;
     }
     if (!xaot_cli_link_add_arg(cmd, opt_flag, err, err_size) ||
         !xaot_cli_link_add_arg(cmd, "-ffp-contract=off", err, err_size) ||
@@ -1006,12 +1029,8 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
     if (plan->kind == XR_CLI_TOOLCHAIN_ZIG) {
         if (!xaot_cli_link_add_arg(cmd, "cc", err, err_size))
             return false;
-        if (!target->is_native) {
-            if (!xaot_cli_link_add_arg(cmd, "-target", err, err_size) ||
-                !xaot_cli_link_add_arg(cmd, target->zig_triple, err, err_size) ||
-                !xaot_cli_link_add_target_cpu_flag(cmd, target, err, err_size))
-                return false;
-        }
+        if (!xaot_cli_link_add_zig_target(cmd, target, err, err_size))
+            return false;
     }
     if (!xaot_cli_link_add_arg(cmd, opt_flag, err, err_size) ||
         !xaot_cli_link_add_arg(cmd, "-ffp-contract=off", err, err_size))
