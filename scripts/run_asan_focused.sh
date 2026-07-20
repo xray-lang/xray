@@ -44,15 +44,14 @@ CTEST_REGEX="${XR_ASAN_CTEST_REGEX:-^test_}"
 # (slowdown, cache mismatch) rather than any memory bug. The ordinary ctest run
 # still covers VM/native ABI parity. The pure C unit tests remain in scope.
 CTEST_EXCLUDE="${XR_ASAN_CTEST_EXCLUDE:-native_error_abi|param_mode_diagnostics|param_contract}"
-# Fast backend-diff subset. The `layout` and `mem` task-190 case sets are
-# ASan-clean today. The `extern` (FFI) set is intentionally NOT in the default
-# subset: under ASan it reliably reproduces a *pre-existing* heap-buffer-overflow
-# in the VM's libffi call marshalling (READ via strlen in ffi_call_SYSV on
-# tests/diff/cases/semantics/ffi/extern_scalar_descriptor_matrix.xr). That bug
-# lives in src/vm (FFI), i.e. outside task 218's editable surface — it is a real
-# finding for the VM owner / P1. Re-add `extern` here once it is fixed:
-#   XR_ASAN_DIFF_REGEX='task190_.*_backend_diff'
-DIFF_REGEX="${XR_ASAN_DIFF_REGEX:-task190_(layout|mem)_backend_diff}"
+# Fast backend-diff subset. The `layout`, `mem`, and `extern` task-190 case
+# sets are ASan-clean. The `extern` (FFI) set's earlier heap-buffer-overflow was
+# a test-case defect, not a compiler bug: extern_scalar_descriptor_matrix.xr
+# passed a 3-byte, non-NUL-terminated byte literal to C strlen, an out-of-bounds
+# read by construction (byte literals are exactly-N-byte arrays, not C strings).
+# The case now NUL-terminates that input, so the FFI marshalling is well-formed
+# and the whole task-190 diff surface runs under ASan.
+DIFF_REGEX="${XR_ASAN_DIFF_REGEX:-task190_.*_backend_diff}"
 XXHASH_MAIN="${XR_ASAN_XXHASH_MAIN:-${ROOT}/../../xray-ports/ports/xxhash/src/main.xr}"
 
 # Sanitizer runtime config. Leaks are handled by the lsan_strict lane; keep
