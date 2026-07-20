@@ -1865,6 +1865,23 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    # Task 218 defense line 1: cross-lifetime borrow inventory. RECORD mode
+    # (diffs against the committed baseline but never fails the build). P1
+    # drives the categories to zero and then flips this gate fail-closed by
+    # adding --max-category NAME=0 arguments.
+    add_test(
+        NAME meta_ownership_inventory
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_meta_ownership.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --baseline ${CMAKE_CURRENT_SOURCE_DIR}/scripts/meta_ownership_baseline.json
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(meta_ownership_inventory PROPERTIES
+        LABELS "aot;ir;metadata;memory;task-218"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
     add_test(
         NAME source_unknown_convergence_inventory
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_source_unknown_convergence.py
