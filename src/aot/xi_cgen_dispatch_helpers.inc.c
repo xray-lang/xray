@@ -524,8 +524,7 @@ static bool xicgen_emit_adt_field_load(XiCgenCtx *ctx, FILE *out, const XiValue 
         return true;
     }
 
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
     fprintf(out, "xrt_enum_field_get(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", %" PRId64 ")", v->aux_int);
@@ -5742,8 +5741,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
             return;
         }
         bool is_json = v->args[0] && XR_TYPE_HAS_OBJECT_SHAPE(v->args[0]->type);
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+        const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
         fprintf(out, "%s(", is_json ? "xrt_json_clone_for_coro" : "xrt_value_clone_for_coro");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
@@ -5939,8 +5937,7 @@ static bool xicgen_emit_net_handle_method(XiCgenCtx *ctx, FILE *out, const XiFun
     if (!helper)
         return false;
 
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
     fprintf(out, "%s(", helper);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ")");
@@ -9992,8 +9989,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     if (!field && v->aux_int >= 0) {
         if (xicgen_emit_adt_field_load(ctx, out, v))
             return;
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+        const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
         fprintf(out, "xrt_index_get(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", XR_FROM_INT(%" PRId64 "))", v->aux_int);
@@ -10123,8 +10119,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     int sym = cg_method_sym(field);
     const XiValue *receiver = xicgen_getprop_receiver_value(ctx, v->args[0]);
     if (sym >= 0 && !map_backed_class_field && !json_receiver) {
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+        const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
         fprintf(out, "xrt_getprop(");
         emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
         fprintf(out, ", %d)", sym);
@@ -10143,8 +10138,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                 return;
             }
         }
-        const char *conv_suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+        const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
         if (json_receiver) {
             fprintf(out, "xrt_json_get_name_owned(");
             emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
@@ -10243,8 +10237,7 @@ static bool xicgen_emit_map_index_get_builtin_hash_eq(XiCgenCtx *ctx, FILE *out,
         v->args[0]->type->kind != XR_KIND_MAP ||
         !cg_key_access_plan_uses_builtin_hash_eq_backend(ctx, plan))
         return false;
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
     fprintf(out, "xrt_map_index_get_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
@@ -10275,8 +10268,7 @@ static bool xicgen_emit_map_index_get_prehashed(XiCgenCtx *ctx, FILE *out, const
     if (!v || v->nargs < 2 || !v->args[0] || !v->args[0]->type ||
         v->args[0]->type->kind != XR_KIND_MAP || !xicgen_map_index_plan_is_prehashed(plan))
         return false;
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
     fprintf(out, "xrt_map_index_get_prehashed_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
@@ -10291,8 +10283,7 @@ static bool xicgen_emit_map_index_get_bool_direct(XiCgenCtx *ctx, FILE *out, con
     if (!v || v->nargs < 2 || !v->args[0] || !v->args[0]->type ||
         v->args[0]->type->kind != XR_KIND_MAP || !xicgen_map_index_plan_is_bool_direct(plan))
         return false;
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
     fprintf(out, "xrt_boolmap_index_get_v((xrt_boolmap_t*)");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
@@ -10307,8 +10298,7 @@ static bool xicgen_emit_map_index_get_small_scan(XiCgenCtx *ctx, FILE *out, cons
     if (!v || v->nargs < 2 || !v->args[0] || !v->args[0]->type ||
         v->args[0]->type->kind != XR_KIND_MAP || !xicgen_map_index_plan_is_small_scan(plan))
         return false;
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
     fprintf(out, "xrt_map_index_get_small_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
@@ -10328,8 +10318,7 @@ static bool xicgen_emit_map_index_get_dense_index(XiCgenCtx *ctx, FILE *out, con
         emit_codegen_abort_expr(out);
         return true;
     }
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
     fprintf(out, dense_enum ? "xrt_map_index_get_dense_enum_owned("
                             : "xrt_map_index_get_dense_i64_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
@@ -10354,8 +10343,7 @@ static bool xicgen_emit_map_index_get_user_hash_eq(XiCgenCtx *ctx, FILE *out, co
         }
         return false;
     }
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
     fprintf(out, "xrt_map_index_get_user_hash_eq_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
@@ -10383,8 +10371,7 @@ static bool xicgen_emit_map_index_get_derived_hash_eq(XiCgenCtx *ctx, FILE *out,
         }
         return false;
     }
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
     fprintf(out, "xrt_map_index_get_user_hash_eq_owned(");
     xicgen_emit_map_ptr_from_tagged(ctx, out, v->args[0]);
     fprintf(out, ", ");
@@ -10516,8 +10503,7 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
             return;
         }
     }
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
     fprintf(out, "xrt_index_get(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");

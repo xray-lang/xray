@@ -1,0 +1,55 @@
+// anchor: enum-dynamic-read-aggregate
+//
+// Regression guard: reading an enum value back from dynamic storage (class field
+// getprop, dynamic Array<enum> index load, nested recursion) and using it as a
+// typed enum aggregate must round-trip identically on VM and native AOT. The
+// unified native class representation exposed a cgen defect where the boxed enum
+// XrValue produced by getprop / index load was assigned straight into the enum
+// aggregate struct without <Enum>_from_base(xrt_value_to_enum_aggregate(...)),
+// failing AOT C compilation ("initializing '...enum...' with XrValue"). This
+// blocked the stdlib XmlNode / YamlValue ADTs whose parsers store nodes in class
+// fields and Array<Node> payloads.
+
+enum Node {
+    Leaf(int),
+    Branch(Array<Node>)
+}
+
+class Tree {
+    root: Node
+    kids: Array<Node>
+    constructor(root: Node) {
+        this.root = root
+        this.kids = []
+    }
+    getRoot() -> Node { return this.root }         // getprop returns enum
+    at(i: int) -> Node { return this.kids[i] }     // dynamic Array<enum> index load
+}
+
+fn describe(n: Node) -> int {
+    return match (n) {
+        Node.Leaf(v) -> v,
+        Node.Branch(a) -> len(a)
+    }
+}
+
+var t = Tree(Node.Leaf(7))
+t.kids.push(Node.Leaf(1))
+t.kids.push(Node.Branch([Node.Leaf(2), Node.Leaf(3)]))
+
+print(describe(t.getRoot()))
+print(describe(t.at(0)))
+print(describe(t.at(1)))
+
+// nested: read a Branch's inner Array<Node> element back out
+var emptyNodes: Array<Node> = []
+var branch = t.at(1)
+var inner = match (branch) { Node.Branch(a) -> a, Node.Leaf(v) -> emptyNodes }
+print(len(inner))
+print(describe(inner[0]))
+print(describe(inner[1]))
+
+// enum stored and re-read through a plain local Array<Node>
+var pool: Array<Node> = [Node.Leaf(10), Node.Branch([Node.Leaf(11)])]
+print(describe(pool[0]))
+print(describe(pool[1]))
