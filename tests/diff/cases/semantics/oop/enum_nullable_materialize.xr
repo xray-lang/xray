@@ -1,0 +1,58 @@
+// anchor: enum-nullable-materialize
+//
+// Regression guard: a nullable typed enum (E?) must materialize as a boxed
+// TAGGED value (null = XR_NULL_VAL, non-null = boxed enum) on both VM and native
+// AOT. The compact enum aggregate rep has no room for a null sentinel; before
+// the fix, `var x: E? = null` / `return null` / `field!` in an E? context emitted
+// `<Enum>_struct v = XR_NULL_VAL;` and failed native C compilation. This blocked
+// the stdlib XmlNode / YamlValue ADTs whose parsers return XmlNode? and store
+// XmlNode? report fields.
+//
+// Enum variants are constructed only in typed (annotated / return) contexts to
+// avoid the separate frontend gap where `E.Variant(...)` in an argument position
+// is misjudged null when the module also mentions E? (tracked in known_bugs).
+
+enum E {
+    A(int),
+    B
+}
+
+class Box {
+    node: E?
+    constructor() { this.node = null }
+    set(v: E?) { this.node = v }
+    get() -> E? { return this.node }
+}
+
+fn make(b: bool) -> E? {
+    if (b) { return null }
+    return E.A(5)
+}
+
+fn describe(e: E?) -> int {
+    if (e == null) { return -1 }
+    return match (e!) { E.A(v) -> v, E.B -> 0 }
+}
+
+// local materialization (typed contexts)
+var x: E? = null
+print(x == null)
+var y: E = E.A(9)
+print(describe(y))
+
+// return materialization
+print(make(false) == null)
+print(make(true) == null)
+print(describe(make(false)))
+print(describe(make(true)))
+
+// field store/load + unwrap (construct via typed locals, store variables)
+var box = Box()
+print(box.get() == null)
+var bVal: E = E.B
+box.set(bVal)
+print(box.get() == null)
+print(describe(box.get()))
+var aVal: E = E.A(42)
+box.set(aVal)
+print(describe(box.get()!))

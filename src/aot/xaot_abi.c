@@ -201,6 +201,14 @@ static bool abi_type_can_use_typed_boundary(const XaotBundle *bundle, const XrTy
 }
 
 static const XaotEnumPlan *adt_enum_plan_for_type(const XaotBundle *bundle, const XrType *type) {
+    /* A nullable enum (E?) cannot use the compact aggregate representation: the
+     * enum struct has no room for a null sentinel, so materializing null into it
+     * (var x: E? = null; return null; field!) would assign XR_NULL_VAL straight
+     * into the struct. Fall back to the boxed TAGGED rep, which represents null
+     * as XR_NULL_VAL and non-null as a boxed enum value (mirrors how
+     * struct_layout_for_type excludes nullable class/instance types). */
+    if (type && type->is_nullable)
+        return NULL;
     const XaotEnumPlan *plan = xaot_bundle_find_enum_plan_for_type(bundle, type);
     return (plan && plan->scalar_action == XAOT_ENUM_SCALAR_COMPACT_AGGREGATE) ? plan : NULL;
 }
