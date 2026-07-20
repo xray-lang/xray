@@ -3,7 +3,9 @@
  */
 
 #include "xa_effect_db.h"
+#include "xmalloc.h"
 #include <stdio.h>
+#include <string.h>
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -318,6 +320,354 @@ TEST(summary_subtract_type_and_clear_escaping_preserve_incomplete) {
     xa_effect_db_free(db);
 }
 
+TEST(diff_identical_summaries_are_compatible) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA0u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    ASSERT(xa_effect_summary_add_variant(db, &before, type, 0));
+    ASSERT(xa_effect_summary_add_variant(db, &after, type, 0));
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_COMPATIBLE);
+    ASSERT(!diff.added_escaping);
+    ASSERT(!diff.removed_escaping);
+    ASSERT(!diff.became_incomplete);
+    ASSERT(!diff.became_complete);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_added_escaping_variant_is_breaking) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA0u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA1u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    ASSERT(xa_effect_summary_add_variant(db, &before, type, 0));
+    ASSERT(xa_effect_summary_add_variant(db, &after, type, 0));
+    ASSERT(xa_effect_summary_add_variant(db, &after, type, 1));
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(diff.added_escaping);
+    ASSERT(!diff.removed_escaping);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_removed_escaping_variant_is_improvement) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA0u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA1u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    ASSERT(xa_effect_summary_add_variant(db, &before, type, 0));
+    ASSERT(xa_effect_summary_add_variant(db, &before, type, 1));
+    ASSERT(xa_effect_summary_add_variant(db, &after, type, 0));
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_IMPROVEMENT);
+    ASSERT(!diff.added_escaping);
+    ASSERT(diff.removed_escaping);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_added_new_error_type_is_breaking) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId a = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    XaErrorTypeId b = xa_effect_db_register_error_type(db, 0x222u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, a, 0xA0u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, b, 0xB0u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    ASSERT(xa_effect_summary_add_variant(db, &before, a, 0));
+    ASSERT(xa_effect_summary_add_variant(db, &after, a, 0));
+    ASSERT(xa_effect_summary_add_variant(db, &after, b, 0));
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(diff.added_escaping);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_complete_to_incomplete_is_breaking) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    xa_effect_summary_mark_incomplete(&after, XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(diff.became_incomplete);
+    ASSERT(diff.widened_unknown);
+    ASSERT(!diff.became_complete);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_incomplete_to_complete_is_improvement) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    xa_effect_summary_mark_incomplete(&before, XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_IMPROVEMENT);
+    ASSERT(diff.became_complete);
+    ASSERT(diff.narrowed_unknown);
+    ASSERT(!diff.became_incomplete);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_all_variants_widening_and_narrowing) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA0u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA1u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary specific;
+    XaEffectSummary all;
+    xa_effect_summary_init(&specific);
+    xa_effect_summary_init(&all);
+    ASSERT(xa_effect_summary_add_variant(db, &specific, type, 0));
+    ASSERT(xa_effect_summary_add_all_variants(db, &all, type));
+
+    XaEffectDiff widening;
+    ASSERT(xa_effect_summary_diff(db, &specific, &all, &widening) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(widening.added_escaping);
+    ASSERT(!widening.removed_escaping);
+
+    XaEffectDiff narrowing;
+    ASSERT(xa_effect_summary_diff(db, &all, &specific, &narrowing) == XA_EFFECT_DIFF_IMPROVEMENT);
+    ASSERT(narrowing.removed_escaping);
+    ASSERT(!narrowing.added_escaping);
+
+    xa_effect_summary_clear(&specific);
+    xa_effect_summary_clear(&all);
+    xa_effect_db_free(db);
+}
+
+TEST(diff_addition_dominates_removal_as_breaking) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA0u) != XA_ERROR_VARIANT_INVALID);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xA1u) != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    ASSERT(xa_effect_summary_add_variant(db, &before, type, 1));
+    ASSERT(xa_effect_summary_add_variant(db, &after, type, 0));
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(diff.added_escaping);
+    ASSERT(diff.removed_escaping);
+
+    xa_effect_summary_clear(&before);
+    xa_effect_summary_clear(&after);
+    xa_effect_db_free(db);
+}
+
+TEST(error_type_and_variant_names_round_trip) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x909u, NULL);
+    ASSERT(type != XA_ERROR_TYPE_NONE);
+    XaErrorVariantId v0 = xa_effect_db_register_error_variant(db, type, 0x9A0u);
+    XaErrorVariantId v1 = xa_effect_db_register_error_variant(db, type, 0x9A1u);
+    ASSERT(v0 != XA_ERROR_VARIANT_INVALID);
+    ASSERT(v1 != XA_ERROR_VARIANT_INVALID);
+
+    ASSERT(xa_effect_db_error_type_name(db, type) == NULL);
+    ASSERT(xa_effect_db_error_variant_name(db, type, v0) == NULL);
+
+    xa_effect_db_set_error_type_name(db, type, "std.fs::IoError");
+    xa_effect_db_set_error_variant_name(db, type, v0, "NotFound");
+    xa_effect_db_set_error_variant_name(db, type, v1, "PermissionDenied");
+
+    ASSERT(strcmp(xa_effect_db_error_type_name(db, type), "std.fs::IoError") == 0);
+    ASSERT(strcmp(xa_effect_db_error_variant_name(db, type, v0), "NotFound") == 0);
+    ASSERT(strcmp(xa_effect_db_error_variant_name(db, type, v1), "PermissionDenied") == 0);
+
+    /* First assignment wins; the DB owns a private copy. */
+    xa_effect_db_set_error_type_name(db, type, "shadowed");
+    ASSERT(strcmp(xa_effect_db_error_type_name(db, type), "std.fs::IoError") == 0);
+
+    /* Out-of-range variant name query is safe. */
+    ASSERT(xa_effect_db_error_variant_name(db, type, 99) == NULL);
+
+    xa_effect_db_free(db);
+}
+
+TEST(json_empty_complete_summary_is_canonical) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+
+    char *json = xa_effect_summary_to_json(db, &summary, "app::boot");
+    ASSERT(json != NULL);
+    ASSERT(strstr(json, "\"schema\":\"xray.error-effect.v1\"") != NULL);
+    ASSERT(strstr(json, "\"symbol\":\"app::boot\"") != NULL);
+    ASSERT(strstr(json, "\"complete\":true") != NULL);
+    ASSERT(strstr(json, "\"errors\":[]") != NULL);
+    ASSERT(strstr(json, "\"unknownReasons\":[]") != NULL);
+    ASSERT(strstr(json, "\"fingerprint\":\"0x") != NULL);
+
+    xr_free(json);
+    xa_effect_summary_clear(&summary);
+    xa_effect_db_free(db);
+}
+
+TEST(json_named_variants_are_labeled) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    XaErrorVariantId v0 = xa_effect_db_register_error_variant(db, type, 0xA0u);
+    XaErrorVariantId v1 = xa_effect_db_register_error_variant(db, type, 0xA1u);
+    ASSERT(v0 != XA_ERROR_VARIANT_INVALID);
+    ASSERT(v1 != XA_ERROR_VARIANT_INVALID);
+    xa_effect_db_set_error_type_name(db, type, "std.fs::IoError");
+    xa_effect_db_set_error_variant_name(db, type, v0, "NotFound");
+    xa_effect_db_set_error_variant_name(db, type, v1, "PermissionDenied");
+
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    ASSERT(xa_effect_summary_add_variant(db, &summary, type, v0));
+    ASSERT(xa_effect_summary_add_variant(db, &summary, type, v1));
+
+    char *json = xa_effect_summary_to_json(db, &summary, NULL);
+    ASSERT(json != NULL);
+    ASSERT(strstr(json, "\"symbol\":") == NULL);
+    ASSERT(strstr(json, "\"type\":\"std.fs::IoError\"") != NULL);
+    ASSERT(strstr(json, "\"variant\":\"NotFound\"") != NULL);
+    ASSERT(strstr(json, "\"variant\":\"PermissionDenied\"") != NULL);
+
+    xr_free(json);
+    xa_effect_summary_clear(&summary);
+    xa_effect_db_free(db);
+}
+
+TEST(json_all_variants_marks_all) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x222u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xB0u) != XA_ERROR_VARIANT_INVALID);
+    xa_effect_db_set_error_type_name(db, type, "app::ParseError");
+
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    ASSERT(xa_effect_summary_add_all_variants(db, &summary, type));
+
+    char *json = xa_effect_summary_to_json(db, &summary, NULL);
+    ASSERT(json != NULL);
+    ASSERT(strstr(json, "\"type\":\"app::ParseError\"") != NULL);
+    ASSERT(strstr(json, "\"allVariants\":true") != NULL);
+    ASSERT(strstr(json, "\"variant\":") == NULL);
+
+    xr_free(json);
+    xa_effect_summary_clear(&summary);
+    xa_effect_db_free(db);
+}
+
+TEST(json_incomplete_lists_reasons_in_fixed_order) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+    xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH);
+
+    char *json = xa_effect_summary_to_json(db, &summary, NULL);
+    ASSERT(json != NULL);
+    ASSERT(strstr(json, "\"complete\":false") != NULL);
+    const char *open = strstr(json, "openVirtualDispatch");
+    const char *dyn = strstr(json, "dynamicCallTarget");
+    ASSERT(open != NULL);
+    ASSERT(dyn != NULL);
+    /* Reasons are emitted in fixed bit order regardless of mark order. */
+    ASSERT(open < dyn);
+
+    xr_free(json);
+    xa_effect_summary_clear(&summary);
+    xa_effect_db_free(db);
+}
+
+TEST(json_sorts_variants_by_stable_key) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x333u, NULL);
+    /* v0 has the larger stable key, v1 the smaller: output must be key-sorted. */
+    XaErrorVariantId v0 = xa_effect_db_register_error_variant(db, type, 0xB0u);
+    XaErrorVariantId v1 = xa_effect_db_register_error_variant(db, type, 0xA0u);
+    ASSERT(v0 != XA_ERROR_VARIANT_INVALID);
+    ASSERT(v1 != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    ASSERT(xa_effect_summary_add_variant(db, &summary, type, v0));
+    ASSERT(xa_effect_summary_add_variant(db, &summary, type, v1));
+
+    char *json = xa_effect_summary_to_json(db, &summary, NULL);
+    ASSERT(json != NULL);
+    const char *lo = strstr(json, "0x00000000000000a0");
+    const char *hi = strstr(json, "0x00000000000000b0");
+    ASSERT(lo != NULL);
+    ASSERT(hi != NULL);
+    ASSERT(lo < hi);
+
+    xr_free(json);
+    xa_effect_summary_clear(&summary);
+    xa_effect_db_free(db);
+}
+
 int main(void) {
     printf("Running effect database tests...\n");
     RUN_TEST(empty_complete_is_real_summary);
@@ -329,6 +679,20 @@ int main(void) {
     RUN_TEST(provenance_roots_merge_without_changing_semantic_identity);
     RUN_TEST(error_type_handle_is_bound_by_stable_key);
     RUN_TEST(summary_subtract_type_and_clear_escaping_preserve_incomplete);
+    RUN_TEST(diff_identical_summaries_are_compatible);
+    RUN_TEST(diff_added_escaping_variant_is_breaking);
+    RUN_TEST(diff_removed_escaping_variant_is_improvement);
+    RUN_TEST(diff_added_new_error_type_is_breaking);
+    RUN_TEST(diff_complete_to_incomplete_is_breaking);
+    RUN_TEST(diff_incomplete_to_complete_is_improvement);
+    RUN_TEST(diff_all_variants_widening_and_narrowing);
+    RUN_TEST(diff_addition_dominates_removal_as_breaking);
+    RUN_TEST(error_type_and_variant_names_round_trip);
+    RUN_TEST(json_empty_complete_summary_is_canonical);
+    RUN_TEST(json_named_variants_are_labeled);
+    RUN_TEST(json_all_variants_marks_all);
+    RUN_TEST(json_incomplete_lists_reasons_in_fixed_order);
+    RUN_TEST(json_sorts_variants_by_stable_key);
 
     printf("\n%d tests passed, %d failed\n", tests_passed, tests_failed);
     return tests_failed ? 1 : 0;
