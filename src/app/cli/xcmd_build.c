@@ -27,6 +27,7 @@
 #include "../../module/xbundle.h"
 #include "../../module/xproject.h"
 #include "../../aot/xaot_driver.h"
+#include "../../ir/xi_arc_verify.h"
 #include "../../base/xfileio.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
@@ -1301,7 +1302,7 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             bool dump_xaot_plan, bool dump_global_evidence, bool dump_xi_evidence,
                             bool dump_link_manifest, bool dump_link_command, bool dry_run_link,
                             const char *c_header, bool keep_c, const char *cache_dir_arg,
-                            bool rebuild, bool lto, const XrCliBuildTarget *target,
+                            bool rebuild, bool lto, bool rc_guard, const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan,
                             const XrTargetConfig *target_config, const char *objcopy_output);
 
@@ -1335,6 +1336,12 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     const char *cache_dir_arg = xr_cli_opt_string(&inv->options, "cache-dir", NULL);
     bool rebuild = xr_cli_opt_bool(&inv->options, "rebuild");
     bool lto = xr_cli_opt_bool(&inv->options, "lto");
+    bool rc_guard = xr_cli_opt_bool(&inv->options, "rc-guard");
+    /* Task 219: --verify-arc forces the RC/ownership verifier on after every
+     * lifetime/CFG-invalidating optimization pass (post-ARC single run stays
+     * always-on regardless). Accepted both here and as a global flag. */
+    if (xr_cli_opt_bool(&inv->options, "verify-arc"))
+        xi_arc_verify_set_per_pass(true);
     bool verbose = xr_cli_opt_bool(&inv->options, "verbose") || (inv->ctx && inv->ctx->verbose);
     bool opt_fast = build_opt_level_is_fast(opt_level);
     XrProject *project = NULL;
@@ -1576,7 +1583,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
             debug_symbols, shared_library, profile, type_name_profile, sysroot, linker_script,
             verbose, dump_xaot_plan, dump_global_evidence, dump_xi_evidence, dump_link_manifest,
             dump_link_command, dry_run_link, c_header, keep_c, cache_dir_arg, rebuild,
-            effective_lto, &target, &toolchain_plan, target_config, objcopy_output);
+            effective_lto, rc_guard, &target, &toolchain_plan, target_config, objcopy_output);
         CMD_BUILD_RETURN(rc);
     }
     rc = cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
@@ -2509,7 +2516,7 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             bool dump_xaot_plan, bool dump_global_evidence, bool dump_xi_evidence,
                             bool dump_link_manifest, bool dump_link_command, bool dry_run_link,
                             const char *c_header, bool keep_c, const char *cache_dir_arg,
-                            bool rebuild, bool lto, const XrCliBuildTarget *target,
+                            bool rebuild, bool lto, bool rc_guard, const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan,
                             const XrTargetConfig *target_config, const char *objcopy_output) {
     XaotBuildResult aot_result;
@@ -2580,6 +2587,14 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         if (!xaot_cli_add_build_sanitizer_flags(&aot_result.link_manifest, target, normalize_err,
                                                 sizeof(normalize_err))) {
             fprintf(stderr, "Error: %s\n", normalize_err);
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
+        /* Task 219 --rc-guard: compile the generated C with the RC guard macro
+         * so xrt_arc.h poisons released objects and aborts on use-after-release. */
+        if (rc_guard && !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
+                                                       "-DXR_RC_GUARD")) {
+            fprintf(stderr, "Error: failed to add --rc-guard compile flag\n");
             xaot_build_result_free(&aot_result);
             return 1;
         }

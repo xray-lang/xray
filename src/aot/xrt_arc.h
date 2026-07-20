@@ -292,6 +292,52 @@ static inline int xrt_arc_value_has_header(XrValue v) {
            v.tag == XR_TAG_BUFFER || v.tag == XR_TAG_NET_CONN || v.tag == XR_TAG_NET_LISTENER;
 }
 
+/* ========== --rc-guard debug codegen (task 219 P4) ==========
+ *
+ * When compiled with -DXR_RC_GUARD (the `--rc-guard` build flag), a released
+ * object is POISONED and quarantined instead of freed: its header stores a
+ * poison marker. Any later retain/release — and any access point the codegen
+ * wraps with xrt_rc_guard_check — aborts on first touch, converting a silent
+ * use-after-release / double-free (the task-219 incident class that escapes
+ * static verification via dynamic/FFI paths) into a deterministic first-crime
+ * crash with the object address. Debug-only: quarantined objects are leaked, so
+ * this is never enabled in release builds (zero overhead when the macro is off).
+ * Combines with the 218 asan_focused lane. */
+#ifdef XR_RC_GUARD
+#define XRT_RC_GUARD_POISON 0xDEADF0FDu
+
+static inline void xrt_rc_guard_poison(XrObjHeader *hdr) {
+    if (hdr)
+        hdr->_rsv = XRT_RC_GUARD_POISON;
+}
+
+static inline int xrt_rc_guard_is_poisoned(XrValue v) {
+    if (!xrt_arc_value_has_header(v))
+        return 0;
+    XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
+    return hdr && hdr->_rsv == XRT_RC_GUARD_POISON;
+}
+
+static inline void xrt_rc_guard_fail(const char *site, void *ptr) {
+    fprintf(stderr,
+            "\n[rc-guard] use-after-release: '%s' touched released (poisoned) object %p\n"
+            "  the object was freed by an earlier xrt_release; this access would read/free\n"
+            "  memory that ARC already reclaimed. (task 219 --rc-guard)\n",
+            site ? site : "<access>", ptr);
+    abort();
+}
+
+/* Access-point guard: codegen may wrap any xrt_* object access with this in
+ * guard mode. Aborts if the object was already released. */
+static inline void xrt_rc_guard_check(XrValue v, const char *site) {
+    if (xrt_rc_guard_is_poisoned(v))
+        xrt_rc_guard_fail(site, v.ptr);
+}
+#else
+#define xrt_rc_guard_poison(hdr) ((void) 0)
+#define xrt_rc_guard_check(v, site) ((void) 0)
+#endif
+
 /* ARC retain: acquire a new owning reference (0-based: rc++ adds one ref).
  * Called by generated code for values with escape > NO_ESCAPE.
  * No-op for values that do not carry an XrObjHeader. */
@@ -303,6 +349,10 @@ static inline void xrt_retain(XrValue v) {
     if (!xrt_arc_value_has_header(v))
         return;
     XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
+#ifdef XR_RC_GUARD
+    if (hdr->_rsv == XRT_RC_GUARD_POISON)
+        xrt_rc_guard_fail("xrt_retain", v.ptr); /* retain of a released object */
+#endif
     if (hdr->extra & XR_OBJ_STORAGE_BUMP)
         return; /* bump objects: freed in bulk */
     atomic_fetch_add_explicit(&hdr->refcount, 1, memory_order_relaxed);
@@ -352,6 +402,15 @@ static inline void xrt_finalize_one(XrObjHeader *hdr) {
         else
             xrt_dispatch_destructor(hdr->type, obj);
     }
+#ifdef XR_RC_GUARD
+    /* --rc-guard: quarantine instead of freeing so a later touch is caught.
+     * The destructor above has already released children; stamp the poison
+     * marker last (it overwrites _rsv, which the dtor dispatch just consumed). */
+    if (!(hdr->extra & XR_OBJ_STORAGE_STACK)) {
+        xrt_rc_guard_poison(hdr);
+        return;
+    }
+#endif
     if (!(hdr->extra & XR_OBJ_STORAGE_STACK))
         XRT_FREE(hdr);
 }
@@ -368,6 +427,10 @@ static inline void xrt_release(XrValue v) {
     if (!xrt_arc_value_has_header(v))
         return;
     XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
+#ifdef XR_RC_GUARD
+    if (hdr->_rsv == XRT_RC_GUARD_POISON)
+        xrt_rc_guard_fail("xrt_release", v.ptr); /* double release of a freed object */
+#endif
     if (!xrt_rc_claim_release_last(hdr))
         return;
 
