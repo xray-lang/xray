@@ -1901,6 +1901,20 @@ if(BUILD_TESTS)
             RUN_SERIAL TRUE
             TIMEOUT 2400
         )
+
+        # Task 218 defense line 4: strict LeakSanitizer lane. LSan runs only on
+        # Linux; the script skips cleanly elsewhere. Uses scripts/lsan.supp and
+        # xr_process_shutdown() for process-global registry release.
+        add_test(
+            NAME lsan_strict
+            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_lsan_strict.sh
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(lsan_strict PROPERTIES
+            LABELS "sanitizer;lsan;leak;task-218"
+            RUN_SERIAL TRUE
+            TIMEOUT 2400
+        )
     endif()
 
     add_test(

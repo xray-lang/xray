@@ -146,6 +146,15 @@ void xr_type_global_init(void) {
     xr_once_call(&g_types_once, xr_type_global_init_once);
 }
 
+// Release process-level type-system state (task 218 defense line 4).
+// The basic-type singletons are static storage (nothing to free), but the
+// per-thread "current type pool" is a *borrowed* pointer into analyzer/isolate
+// memory. Clearing it on shutdown guarantees no stale cross-lifetime borrow
+// (R-OWN-1) outlives the pool it points at. Idempotent.
+void xr_type_global_shutdown(void) {
+    g_current_type_pool = NULL;
+}
+
 // Set the analyzer/current type pool for no-isolate type helpers.
 void xr_type_set_current_pool(XrTypePool *pool, uint32_t *id_counter) {
     (void) id_counter;  // ID counter now managed by pool itself

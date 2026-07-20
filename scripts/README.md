@@ -27,6 +27,7 @@
 | `scripts/check_param_mode_convergence.py` | 206：`value/in/ref/out` 参数契约、调用授权、`move/copy` 来源动作与旧 `XR_PARAM_*`/并行数组 residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 | `scripts/check_meta_ownership.py` | 218：编译器元级跨生命周期借用审计，分类 A `AST_PTR_INTO_IR`、B `PTR_ACROSS_GROWTH`、C `CGEN_BORROWED_NAME`（R-OWN-1..3） | `--root <repo>`；可选 `--json`、`--counts-json`、`--baseline <json>`、`--max-category NAME=N`、`--write-baseline <json>` | RECORD 模式：对照 `scripts/meta_ownership_baseline.json` 打印漂移但恒退出 0；CTest `meta_ownership_inventory`；P1 归零后用 `--max-category NAME=0` 切 fail-closed | < 2s |
 | `scripts/run_asan_focused.sh` | 218 防线 2：ASan+UBSan 聚焦门禁——C 单测 + 快速 backend-diff 子集（task190）+ xxhash 端口 `main.xr` 全量 AOT 编译（只发射 C，不跑）。`detect_leaks=0`（泄漏归 lsan_strict） | env: `XR_ASAN_JOBS`、`XR_ASAN_CTEST_REGEX`、`XR_ASAN_CTEST_EXCLUDE`、`XR_ASAN_DIFF_REGEX`、`XR_ASAN_XXHASH_MAIN`、`XR_ASAN_SKIP_BUILD` | 任一失败=非0；全绿=0；CTest `asan_focused`（需 `-DXR_ENABLE_SANITIZER_LANES=ON`） | 增量测试面 <10min（全量 ASan 自举另计） |
+| `scripts/run_lsan_strict.sh` | 218 防线 4：严格 LeakSanitizer lane——ASan+LSan（`detect_leaks=1`）跑单测面，配 `scripts/lsan.supp`。LSan 仅 Linux 支持，macOS 上明确跳过 | env: `XR_LSAN_JOBS`、`XR_LSAN_BUILD_DIR`、`XR_LSAN_CTEST_REGEX` | 非 Linux=0（跳过）；Linux 有泄漏=非0；CTest `lsan_strict`（需 `-DXR_ENABLE_SANITIZER_LANES=ON`） | Linux CI 数分钟 |
 ## 详细说明
 
 ### `run_mem_stress.sh`

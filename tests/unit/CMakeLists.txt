@@ -231,6 +231,8 @@ add_xray_unit_test(test_mutex base/test_mutex.c)
 add_xray_unit_test(test_intmap base/test_intmap.c)
 add_xray_unit_test(test_mem_profiler base/test_mem_profiler.c)
 add_xray_unit_test(test_xmalloc base/test_xmalloc.c)
+add_xray_unit_test(test_process_shutdown base/test_process_shutdown.c)
+set_tests_properties(test_process_shutdown PROPERTIES LABELS "runtime;memory;task-218")
 
 # ============================================================================
 # coro/ — MPSC queue, work-stealing queue
