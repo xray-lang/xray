@@ -1063,9 +1063,19 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
              * They still propagate borrowed raw pointers and Span views. If
              * they are omitted here, the incoming projection is counted only
              * as an edge use and its owner can be dropped before the phi's
-             * downstream uses (most visibly at a loop header). */
+             * downstream uses (most visibly at a loop header).
+             *
+             * A non-dominated join is different: the phi merges independent
+             * owners from mutually exclusive paths, so it is an ownership
+             * transfer boundary for this incoming value. Extending one
+             * branch-local owner through that phi would place its death drop
+             * in a block where the owner was never defined. Only propagate
+             * the borrow closure when the original owner dominates the phi;
+             * the incoming edge remains a consuming transfer otherwise. */
             for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
                 XiValue *u = &phi->value;
+                if (target->block && !xi_dominates(target->block, blk))
+                    continue;
                 if (!arc_raw_pointer_borrow_flows_to_user(member, u) &&
                     !arc_span_view_borrow_flows_to_user(member, u))
                     continue;
