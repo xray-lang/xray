@@ -1871,15 +1871,19 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    # Task 218 defense line 1: cross-lifetime borrow inventory. RECORD mode
-    # (diffs against the committed baseline but never fails the build). P1
-    # drives the categories to zero and then flips this gate fail-closed by
-    # adding --max-category NAME=0 arguments.
+    # Task 218 defense line 1: cross-lifetime borrow inventory. P1 drove every
+    # category to zero (CGEN_BORROWED_NAME fields are now either arena/pool/
+    # static-literal owned or carry an explicit `owned:` justification), so the
+    # gate is now FAIL-CLOSED: any new unannotated cross-lifetime borrow makes
+    # this test fail. The baseline diff stays on for a readable regression report.
     add_test(
         NAME meta_ownership_inventory
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_meta_ownership.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
                 --baseline ${CMAKE_CURRENT_SOURCE_DIR}/scripts/meta_ownership_baseline.json
+                --max-category AST_PTR_INTO_IR=0
+                --max-category PTR_ACROSS_GROWTH=0
+                --max-category CGEN_BORROWED_NAME=0
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(meta_ownership_inventory PROPERTIES

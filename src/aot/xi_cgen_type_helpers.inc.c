@@ -112,7 +112,7 @@ static const char *cg_thread_field_helper(const char *field) {
 }
 
 typedef struct CgSetElemInfo {
-    const char *elem_name;
+    const char *elem_name; /* owned: static element-kind token literal */
     XrRep rep;
 } CgSetElemInfo;
 

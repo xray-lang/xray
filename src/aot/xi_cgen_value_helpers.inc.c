@@ -354,13 +354,13 @@ static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed)
 }
 
 typedef struct CgPreludeEnumMember {
-    const char *name;
+    const char *name; /* owned: static prelude enum member literal (compiler-owned descriptor) */
     bool has_payload;
 } CgPreludeEnumMember;
 
 typedef struct CgPreludeEnumData {
     int builtin_index;
-    const char *enum_name;
+    const char *enum_name; /* owned: static prelude enum name literal */
     const CgPreludeEnumMember *members;
     uint32_t member_count;
 } CgPreludeEnumData;

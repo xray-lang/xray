@@ -12,7 +12,7 @@ typedef struct {
     const XiClassData *class_data;
     const XiFunc *func;
     const XrAggregateLayout *layout;
-    const char *class_name;
+    const char *class_name; /* owned: XiClassData class name via xaot plan (Xi arena) */
     bool is_constructor;
 } CgClassNativeFunc;
 

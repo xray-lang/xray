@@ -1754,15 +1754,15 @@ typedef struct CgUserHashEqDirectPlan {
     const XiClassData *key_class;
     const XiFunc *hash_func;
     const XiFunc *eq_func;
-    const char *hash_prefix;
-    const char *eq_prefix;
+    const char *hash_prefix; /* owned: XiModule C-name prefix (Xi arena)/NULL; local plan */
+    const char *eq_prefix;   /* owned: XiModule C-name prefix (Xi arena)/NULL; local plan */
 } CgUserHashEqDirectPlan;
 
 typedef struct CgDerivedHashEqPlan {
     const XaotHashEqPlan *hash_eq_plan;
     const XaotDerivedEqHashPlan *derived_plan;
     const XiClassData *key_class;
-    const char *class_prefix;
+    const char *class_prefix; /* owned: XiModule C-name prefix (Xi arena)/NULL; local plan */
 } CgDerivedHashEqPlan;
 
 static bool cg_derived_hash_eq_plan(XiCgenCtx *ctx, const XaotKeyAccessPlan *key_plan,
@@ -5178,7 +5178,7 @@ typedef struct {
     bool invalid;
     const XiValue *ctor_call;
     const XiFunc *ctor;
-    const char *ctor_prefix;
+    const char *ctor_prefix; /* owned: XiModule prefix (Xi arena)/NULL from ctor_call_data */
     const XiClassData *class_data;
 } CgSharedNativeCtorCandidate;
 

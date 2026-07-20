@@ -30,18 +30,20 @@ typedef enum {
 #define CG_AOT_STDLIB_VARIADIC UINT16_MAX
 
 typedef struct CgAotStdlibMethod {
-    const char *module; /* stdlib module identifier (e.g. "path") */
-    const char *method; /* method name (e.g. "isAbsolute") */
+    /* All const char* rows below are owned: static string literals from the
+     * generated xstdlib_aot_methods_generated.inc.c table (program lifetime). */
+    const char *module; /* owned: static literal; stdlib module identifier (e.g. "path") */
+    const char *method; /* owned: static literal; method name (e.g. "isAbsolute") */
     uint16_t argc;      /* argument count excluding the receiver */
-    const char *shim;   /* xr_aot_<module>_<method> runtime symbol */
+    const char *shim;   /* owned: static literal; xr_aot_<module>_<method> runtime symbol */
     /* One character per argument describing how it is passed to the shim:
      *   's' = string, lowered to specialized (const char *data, int64_t len)
      *   'p' = Path owner, lowered to specialized (const char *data, int64_t len)
      *   'v' = tagged XrValue passed as-is
      *   '*' = variadic strings, lowered to (argc, data[], len[]) */
-    const char *arg_spec;
+    const char *arg_spec; /* owned: static literal (generated table) */
     CgAotRetKind ret_kind;
-    const char *extern_decl; /* forward declaration emitted into generated C */
+    const char *extern_decl; /* owned: static literal; forward decl emitted into generated C */
 } CgAotStdlibMethod;
 
 #include "xstdlib_aot_methods_generated.inc.c"

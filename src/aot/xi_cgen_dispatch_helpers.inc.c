@@ -5554,8 +5554,8 @@ static bool xicgen_emit_math_raw_expr(FILE *out, const XiValue *v, const char *n
     }
 
     struct {
-        const char *name;
-        const char *c_name;
+        const char *name;   /* owned: static string literal (table below) */
+        const char *c_name; /* owned: static string literal (libm symbol) */
         uint16_t nargs;
         bool returns_int;
     } table[] = {

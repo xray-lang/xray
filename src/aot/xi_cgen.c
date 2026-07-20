@@ -495,18 +495,18 @@ static bool cg_value_is_module_import(const XiFunc *f, const XiValue *v, const c
 #define CG_MAX_CLASS_FIELD_CACHE 16
 #define CG_MAX_CLASS_FIELD_CACHE_ALIASES 32
 typedef struct {
-    const char *class_name; /* owning class (e.g. "Rect") */
-    const char *name;       /* method name (e.g. "area") */
+    const char *class_name; /* owned: XiClassData.class_name (Xi arena); owning class "Rect" */
+    const char *name;       /* owned: XiFunc/method name (Xi arena); e.g. "area" */
     const XiFunc *func;
-    const char *module_prefix; /* C function name prefix (NULL = current module) */
+    const char *module_prefix; /* owned: CgImportEntry.target_mod_name (Xi arena) or NULL */
     const XiClassData *class_data;
     const XrAggregateLayout *instance_layout;
 } CgMethodEntry;
 
 typedef struct {
-    const char *module_path;         /* import source (e.g. "./math_lib") */
-    const char *member_name;         /* exported name (e.g. "square") */
-    const char *target_mod_name;     /* C identifier prefix (e.g. "math_lib") */
+    const char *module_path;         /* owned: heap import path, freed at AOT process exit */
+    const char *member_name;         /* owned: XiModuleExport.name (Xi arena) */
+    const char *target_mod_name;     /* owned: XiModule.name (Xi arena); C ident prefix */
     int shared_slot;                 /* slot in target's xrt_shared_<mod>[] */
     const XiFunc *target_func;       /* XiFunc* if this export is a function (for direct calls) */
     const XiClassData *target_class; /* XiClassData* if this export is a class */
@@ -515,7 +515,8 @@ typedef struct {
 } CgImportEntry;
 
 typedef struct {
-    const char *name;
+    const char
+        *name; /* owned: XrAggregateLayout field name (type pool); cache reset per function */
     const XrType *type;
     XrRep rep;
     bool dirty;
@@ -538,14 +539,14 @@ typedef struct {
     bool active;
     const XiClassData *class_data;
     const XiFunc *ctor;
-    const char *ctor_prefix;
+    const char *ctor_prefix; /* owned: XiModule prefix (Xi arena) or NULL; see ctor_call_data */
     const XiValue *ctor_call;
 } CgSharedNativeInstance;
 
 typedef struct {
     bool active;
     const XiModule *module;
-    const char *module_name;
+    const char *module_name; /* owned: n/a (zero-initialized, never assigned a live borrow) */
     int module_index;
     int slot;
     const XiClassData *class_data;
@@ -650,7 +651,10 @@ struct XiCgenCtx {
     uint32_t *phi_repr;
     uint32_t phi_repr_cap;
     bool phi_repr_active;
-    const char *shared_name;
+    /* Static "xrt_shared" literal, or a function-local buffer that is reset back
+     * to the static literal before that function returns (see
+     * cg_emit_module_definitions); never escapes as a dangling stack pointer. */
+    const char *shared_name; /* owned: static literal / contained fn-local buffer (see above) */
     CgImportEntry *imports;
     int imports_cap;
     int nimports;
@@ -1623,7 +1627,7 @@ static void emit_fname_suffix(XiCgenCtx *ctx, FILE *out, const char *prefix, con
 
 typedef struct {
     const XiFunc *func;
-    const char *prefix;
+    const char *prefix; /* owned: C-name prefix (Xi arena/static); local struct, emit-scope only */
     bool is_class_constructor;
     const XiClassData *class_data;
 } CgStaticFunctionCall;
@@ -4644,7 +4648,7 @@ typedef struct CgClassNativeRefStackReturn {
     const XiValue *return_call;
     const XiClassData *class_data;
     const XiFunc *ctor;
-    const char *ctor_prefix;
+    const char *ctor_prefix; /* owned: XiModule prefix (Xi arena)/NULL; local struct, emit-scope */
 } CgClassNativeRefStackReturn;
 
 static bool cg_func_has_defer_stmt(const XiFunc *f) {
@@ -4922,8 +4926,8 @@ static bool func_needs_fallthrough_return(const XiFunc *f) {
 #include "xi_cgen_stmt_dispatch_helpers.inc.c"
 
 typedef struct CgDebugSourceVarInfo {
-    const char *name;
-    const char *ctype;
+    const char *name;  /* owned: Xi source-var name (Xi arena); local struct, emit-scope only */
+    const char *ctype; /* owned: static ctype literal or points into ctype_buf below */
     char ctype_buf[160];
     XrRep rep;
     bool is_vector;
@@ -7920,7 +7924,7 @@ static void emit_c_export_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc
 
 typedef struct CgCExportStructTypedef {
     const XrAggregateLayout *layout;
-    const char *prefix;
+    const char *prefix; /* owned: export C-name prefix (Xi arena/static); local, emit-scope only */
     char c_name[128];
 } CgCExportStructTypedef;
 

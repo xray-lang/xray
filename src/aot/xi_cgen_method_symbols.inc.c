@@ -12,7 +12,7 @@ static int cg_method_sym(const char *name) {
     if (!name)
         return -1;
     static const struct {
-        const char *name;
+        const char *name; /* owned: static literal from xi_method_sym.def display names */
         int sym;
     } map[] = {
 #define XI_METHOD_SYM(aot_name, id, rt_name, display_name) {display_name, XRT_SYM_##aot_name},
