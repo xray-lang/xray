@@ -1777,6 +1777,16 @@ bool xr_type_equals(XrType *a, XrType *b) {
         return xr_type_equals(a->map.key_type, b->map.key_type) &&
                xr_type_equals(a->map.value_type, b->map.value_type);
     }
+    if (a->kind == XR_KIND_ENUM) {
+        // Enum identity is nominal: two enums are the same type only when they
+        // share a name. Generic enums are type-erased at runtime, so the shared
+        // enum name is the full identity here. Without this branch the trailing
+        // `return true` would make every enum equal to every other enum, letting
+        // unrelated enums assign into and cast to one another.
+        if (!a->enum_type.enum_name || !b->enum_type.enum_name)
+            return a->enum_type.enum_name == b->enum_type.enum_name;
+        return strcmp(a->enum_type.enum_name, b->enum_type.enum_name) == 0;
+    }
     if (a->kind == XR_KIND_INSTANCE || a->kind == XR_KIND_CLASS) {
         // Compare class references first
         if (a->instance.class_ref && b->instance.class_ref &&

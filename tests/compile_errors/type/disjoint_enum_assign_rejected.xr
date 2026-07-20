@@ -1,0 +1,7 @@
+// Two unrelated enums are distinct nominal types: a value of one enum is not
+// assignable to a variable annotated with another enum.
+enum Color { Red, Green, Blue }
+enum Suit { Hearts, Spades }
+
+var value: Suit = Color.Red
+print(value)
