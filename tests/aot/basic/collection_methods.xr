@@ -2,6 +2,15 @@ import text
 
 // AOT test: collection methods (B.5)
 
+// Slice is a borrowed view and cannot bind at module scope; exercise it
+// inside a function where the view stays local to its owner.
+fn print_slice(src: Array<int>) {
+    var sub: Slice<int> = src[1:3]
+    print(len(sub))         // 2
+    print(sub[0])             // 20
+    print(sub[1])             // 30
+}
+
 // --- String methods ---
 var s = "  Hello World  "
 print(text.trim(s))           // Hello World
@@ -46,10 +55,7 @@ print(arr.contains(20))   // true
 print(arr.contains(99))   // false
 
 // slice expression
-var sub: Slice<int> = arr[1:3]
-print(len(sub))         // 2
-print(sub[0])             // 20
-print(sub[1])             // 30
+print_slice(arr)
 
 // join
 print([1, 2, 3].join(", "))  // 1, 2, 3
