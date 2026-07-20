@@ -3319,12 +3319,91 @@ static const XiValue *cg_class_native_receiver_value(const XiCgenCtx *ctx, const
     return cg_class_native_receiver_value_depth(ctx, f, v, 0);
 }
 
+/* Whether a use `u` (with the native receiver at operand index `arg_idx`)
+ * consumes the receiver structurally, i.e. through the typed `p0` parameter
+ * rather than the receiver's SSA name. Structural uses (field access base,
+ * method-call receiver, elided retain/release, and identity aliases whose own
+ * uses are scanned separately) never emit `v0`, so the `v0 = p0` alias can stay
+ * elided. Every other use (return this / pass this as an argument / capture this
+ * into a closure / compare this / store this) reads `v0`, which forces the alias
+ * to be materialized. */
+static bool cg_class_native_receiver_use_is_structural(const XiCgenCtx *ctx, const XiFunc *f,
+                                                       const XiValue *u, uint16_t arg_idx) {
+    if (!u)
+        return false;
+    switch ((XiOp) u->op) {
+        case XI_LOAD_FIELD:
+        case XI_STORE_FIELD:
+            return arg_idx == 0;
+        case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
+            return arg_idx == 0;
+        case XI_RETAIN:
+        case XI_RELEASE:
+            return true;
+        default:
+            return cg_class_native_is_identity_alias(u);
+    }
+}
+
+/* Scan the whole function for a use of the native receiver that reads it as a
+ * first-class value. Identity aliases (copy/move/box/unbox) of the receiver are
+ * transparent to receiver detection, so this catches `return this`,
+ * `defer { this.x }` closure capture, passing `this` as an argument, etc. Used
+ * to decide whether the receiver's `v0 = p0` alias must be materialized instead
+ * of elided. */
+static bool cg_class_native_receiver_escapes_as_value(const XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f || !cg_class_func_uses_native_receiver(ctx, f))
+        return false;
+    /* A constructor's implicit return of the receiver is emitted as `return p0`
+     * directly, so it never reads the receiver's SSA name. Other receiver-value
+     * uses inside a constructor (capture / arg) are still detected below. */
+    const bool is_constructor = cg_class_native_func(ctx, f).is_constructor;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks ? f->blocks[bi] : NULL;
+        if (!blk)
+            continue;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (cg_class_native_receiver_value(ctx, f, &phi->value))
+                continue; /* phi is itself a receiver alias; its uses are scanned */
+            for (uint16_t i = 0; i < phi->value.nargs; i++) {
+                const XiValue *arg = phi->value.args ? phi->value.args[i] : NULL;
+                if (arg && arg != &phi->value && cg_class_native_receiver_value(ctx, f, arg))
+                    return true;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *u = blk->values[vi];
+            if (!u)
+                continue;
+            for (uint16_t i = 0; i < u->nargs; i++) {
+                const XiValue *arg = u->args ? u->args[i] : NULL;
+                if (arg && cg_class_native_receiver_value(ctx, f, arg) &&
+                    !cg_class_native_receiver_use_is_structural(ctx, f, u, i))
+                    return true;
+            }
+        }
+        if (blk->control && cg_class_native_receiver_value(ctx, f, blk->control) &&
+            !(is_constructor && blk->kind == XI_BLOCK_RETURN))
+            return true; /* return this / branch on this */
+    }
+    return false;
+}
+
 static bool cg_class_native_value_stmt_is_elided(const XiCgenCtx *ctx, const XiFunc *f,
                                                  const XiValue *v) {
     if (!v || !cg_class_func_uses_native_receiver(ctx, f))
         return false;
-    if (v->op == XI_PARAM && v->aux_int == 0)
-        return true;
+    if (v->op == XI_PARAM && v->aux_int == 0) {
+        /* The receiver is normally reachable only as the typed `p0` param, so its
+         * `v0 = p0` alias is elided. When `this` flows as a value (return this /
+         * capture / arg), the alias must be materialized so the value reference
+         * resolves. Coroutine bodies materialize the receiver through the frame
+         * path, so leave their elision untouched. */
+        if (cg_func_needs_aot_coro_ctx(ctx, f))
+            return true;
+        return !cg_class_native_receiver_escapes_as_value(ctx, f);
+    }
     if (cg_class_native_is_identity_alias(v) && v->nargs >= 1 &&
         cg_class_native_receiver_value(ctx, f, v->args[0]))
         return true;
@@ -4831,6 +4910,12 @@ static bool cg_class_shared_native_method_call_accepts_class(XiCgenCtx *ctx, con
     if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
         !cg_class_func_uses_native_receiver(ctx, mfunc))
         return false;
+    /* A method that leaks its receiver as a value (return this / capture this /
+     * pass this as an arg) would expose the raw shared-native storage as a boxed
+     * heap object, which has no valid instance header. Keep such instances on the
+     * boxable heap path instead of the static shared-native struct. */
+    if (cg_class_native_receiver_escapes_as_value(ctx, mfunc))
+        return false;
     CgClassNativeFunc target_info = cg_class_native_func(ctx, mfunc);
     return cg_class_native_can_pass_instance_as(ctx, source, target_info.class_data);
 }
@@ -4866,6 +4951,8 @@ static bool cg_class_shared_native_getter_field_accepts_class(XiCgenCtx *ctx, co
     (void) method_prefix;
     if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
         !cg_class_func_uses_native_receiver(ctx, mfunc))
+        return false;
+    if (cg_class_native_receiver_escapes_as_value(ctx, mfunc))
         return false;
     CgClassNativeFunc target_info = cg_class_native_func(ctx, mfunc);
     return cg_class_native_can_pass_instance_as(ctx, source, target_info.class_data);

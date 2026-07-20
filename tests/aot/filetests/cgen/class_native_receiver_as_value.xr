@@ -1,0 +1,29 @@
+// A native class method that uses `this` as a value (return this, capture this
+// in a defer) must materialize a `v0 = p0` receiver alias instead of eliding it,
+// otherwise the generated C references an undeclared `v0`. The constructor's
+// implicit `return this` still lowers to `return p0` with no dead alias.
+
+class Box {
+    n: int
+
+    constructor(n: int) {
+        this.n = n
+    }
+
+    self() -> Box {
+        return this
+    }
+
+    tap() -> int {
+        defer { this.n = this.n + 1 }
+        return this.n
+    }
+}
+
+fn run() -> int {
+    var b = Box(4)
+    var c = b.self()
+    return c.n + b.tap()
+}
+
+print(run())

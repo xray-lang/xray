@@ -1,0 +1,63 @@
+// Native class methods must be able to materialize the receiver `this` as a
+// value: return this, capture this in a defer, pass this as an argument, and
+// method-chain through a `return this` result. Covers both heap-local receivers
+// and module-level shared-native receivers (which must not use the raw static
+// storage once a method leaks `this`).
+
+class Box {
+    n: int
+
+    constructor(n: int) {
+        this.n = n
+    }
+
+    self() -> Box {
+        return this
+    }
+
+    bump() -> int {
+        defer { this.n = this.n + 100 }
+        return this.n
+    }
+}
+
+class Chain {
+    v: int
+
+    constructor(v: int) {
+        this.v = v
+    }
+
+    inc() -> Chain {
+        this.v = this.v + 1
+        return this
+    }
+
+    get() -> int {
+        return this.v
+    }
+}
+
+fn readBox(b: Box) -> int {
+    return b.n
+}
+
+// Module-level receiver exercises the shared-native storage path.
+var moduleBox = Box(1)
+print(moduleBox.self().n)
+print(moduleBox.bump())
+print(moduleBox.bump())
+print(readBox(moduleBox.self()))
+
+fn run() -> int {
+    var b = Box(5)
+    var aliased = b.self()
+    aliased.n = aliased.n + 10
+    var first = b.bump()
+    var viaArg = readBox(b.self())
+    var c = Chain(0)
+    var chained = c.inc().inc().inc().get()
+    return b.n + first + viaArg + chained
+}
+
+print(run())

@@ -1,0 +1,12 @@
+# The generated C must compile: the receiver-as-value bug emitted an undeclared
+# `v0`, which -fsyntax-only rejects.
+c_syntax=pass
+# `return this` and `defer { this... }` materialize the receiver alias v0 = p0.
+c_contains=void * v0 = p0;
+c_contains=return v0;
+# The defer closure captures `this` as a boxed value through the alias.
+c_contains=_c->upvals[0] = xrt_box_obj(v0);
+# The constructor's implicit receiver return stays a direct `return p0`.
+c_contains=return p0;
+# Native dispatch must not fall back to the runtime method helper.
+c_not_contains=xrt_method_
