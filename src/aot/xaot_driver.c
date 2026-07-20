@@ -1011,10 +1011,24 @@ static bool add_stdlib_platform_system_lib_manifest_entries(XaotLinkManifest *ma
     return true;
 }
 
+static bool xaot_target_is_windows(const XaotTarget *target) {
+    if (target && target->os && strcmp(target->os, "windows") == 0)
+        return true;
+#if defined(XR_OS_WINDOWS)
+    return target && target->os && strcmp(target->os, "native") == 0;
+#else
+    return false;
+#endif
+}
+
 static bool add_target_platform_system_lib_manifest_entries(XaotLinkManifest *manifest,
                                                             const XaotTarget *target) {
-    if (target && target->os && strcmp(target->os, "windows") == 0)
-        return xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "ws2_32");
+    if (xaot_target_is_windows(target)) {
+        return xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "ws2_32") &&
+               xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "bcrypt") &&
+               xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB,
+                                             "api-ms-win-core-synch-l1-2-0");
+    }
     return true;
 }
 
@@ -1072,7 +1086,7 @@ static bool add_aot_runtime_archive(XaotLinkManifest *manifest) {
 }
 
 static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
-                                             XaotLinkManifest *manifest) {
+                                             const XaotTarget *target, XaotLinkManifest *manifest) {
     bool needs_aot_runtime = false;
 
     if (features->need_coro || features->need_scope) {
@@ -1173,7 +1187,7 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
     }
     if (needs_aot_runtime && !add_aot_runtime_archive(manifest))
         return false;
-    if (needs_aot_runtime &&
+    if (needs_aot_runtime && !xaot_target_is_windows(target) &&
         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "pthread"))
         return false;
     return true;
@@ -1205,7 +1219,8 @@ static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget
         goto done;
     if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_IMPL"))
         goto done;
-    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "m"))
+    if (!xaot_target_is_windows(target) &&
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "m"))
         goto done;
     fast_test = xaot_fast_test_build_enabled();
     if (fast_test) {
@@ -1246,7 +1261,7 @@ static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_hooks) ||
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_target_hash))
             goto done;
-    } else if (!add_runtime_cap_manifest_entries(features, manifest)) {
+    } else if (!add_runtime_cap_manifest_entries(features, target, manifest)) {
         goto done;
     }
 

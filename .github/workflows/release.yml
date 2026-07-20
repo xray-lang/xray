@@ -79,6 +79,35 @@ jobs:
     - name: Build
       run: cmake --build build --config Release
 
+    - name: Build GNU AOT runtime (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $zig = (Get-Command zig).Source
+        $ccWrapper = Join-Path $env:RUNNER_TEMP 'xray-zig-cc.cmd'
+        $cxxWrapper = Join-Path $env:RUNNER_TEMP 'xray-zig-cxx.cmd'
+        [IO.File]::WriteAllText(
+          $ccWrapper,
+          "@echo off`r`n`"$zig`" cc -target x86_64-windows-gnu %*`r`n",
+          [Text.Encoding]::ASCII
+        )
+        [IO.File]::WriteAllText(
+          $cxxWrapper,
+          "@echo off`r`n`"$zig`" c++ -target x86_64-windows-gnu %*`r`n",
+          [Text.Encoding]::ASCII
+        )
+        cmake -S . -B build-zig-sdk -G Ninja `
+          -DCMAKE_SYSTEM_NAME=Windows `
+          -DCMAKE_BUILD_TYPE=Release `
+          "-DCMAKE_C_COMPILER=$ccWrapper" `
+          "-DCMAKE_CXX_COMPILER=$cxxWrapper" `
+          "-DCMAKE_ASM_COMPILER=$ccWrapper" `
+          -DENABLE_TLS=OFF `
+          -DBUILD_TESTS=OFF `
+          -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE `
+          -DCMAKE_DISABLE_FIND_PACKAGE_OpenSSL=TRUE
+        cmake --build build-zig-sdk --target xray_rt_coro xray_aot_core
+
     - name: Install package tree (Unix)
       if: runner.os != 'Windows'
       run: cmake --install build --prefix dist
@@ -88,6 +117,8 @@ jobs:
       shell: pwsh
       run: |
         cmake --install build --config Release --prefix dist
+        Copy-Item build-zig-sdk\libxray_rt_coro.a dist\lib\ -Force
+        Copy-Item build-zig-sdk\libxray_aot_core.a dist\lib\ -Force
         $buildExe = @('build\Release\xray.exe', 'build\xray.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1
         if (-not $buildExe) {
           throw 'xray.exe was not produced by the release build'
@@ -126,6 +157,7 @@ jobs:
         smoke="$(mktemp -d)"
         trap 'rm -rf "$smoke"' EXIT
         cp tests/aot/filetests/link/runtime_time.xr "$smoke/runtime_time.xr"
+        cp tests/aot/filetests/link/system_time_queries.xr "$smoke/system_time_queries.xr"
         cat > "$smoke/cross.xr" <<'XR_EOF'
         fn answer() -> int {
             return 42
@@ -140,6 +172,8 @@ jobs:
         (cd "$smoke" && "$xray" build --native --dump-link-command runtime_time.xr -o runtime_time) \
           | tee "$smoke/native.log"
         test "$("$smoke/runtime_time")" = "7"
+        (cd "$smoke" && "$xray" build --native system_time_queries.xr -o system_time_queries)
+        test "$("$smoke/system_time_queries" | sort -u)" = "true"
         if grep -Fq "$GITHUB_WORKSPACE/src/aot" "$smoke/native.log"; then
           echo "release AOT command leaked the checkout path" >&2
           exit 1
@@ -155,6 +189,7 @@ jobs:
         $smoke = Join-Path $env:RUNNER_TEMP 'xray-release-smoke'
         New-Item -ItemType Directory -Path $smoke -Force | Out-Null
         Copy-Item tests\aot\filetests\link\runtime_time.xr $smoke\runtime_time.xr
+        Copy-Item tests\aot\filetests\link\system_time_queries.xr $smoke\system_time_queries.xr
         @'
         fn answer() -> int {
             return 42
@@ -177,6 +212,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'installed native AOT build failed' }
           $value = (& .\runtime_time.exe).Trim()
           if ($value -ne '7') { throw "installed native output was '$value'" }
+          & $xray build --native system_time_queries.xr -o system_time_queries.exe
+          if ($LASTEXITCODE -ne 0) { throw 'installed native AOT core build failed' }
+          $timeValues = @(& .\system_time_queries.exe)
+          if ($timeValues.Count -ne 5 -or $timeValues -contains 'false') {
+            throw "installed AOT core output was '$($timeValues -join ',')'"
+          }
           & $xray build --native --target x86_64-linux-musl cross.xr -o cross-linux
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path cross-linux)) {
             throw 'installed cross AOT build failed'

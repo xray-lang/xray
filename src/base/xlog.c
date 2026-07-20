@@ -19,7 +19,9 @@
 #ifdef XR_OS_POSIX
 #include <unistd.h>
 #elif defined(XR_OS_WINDOWS)
-#include <io.h>
+#if !defined(_MSC_VER)
+int __cdecl _isatty(int fd);
+#endif
 #define isatty _isatty
 #define fileno _fileno
 #endif
