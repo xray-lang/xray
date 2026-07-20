@@ -2413,6 +2413,23 @@ if(BUILD_TESTS)
         PROCESSORS 4
         TIMEOUT 600
     )
+
+    # P2: removed-surface-form drift scan. Fails closed on any live occurrence
+    # of a deleted Xray surface form (`let` bindings, mem.free(), unchecked LE
+    # load/store, direct Buffer indexing) across tests/, stdlib/, and knowledge
+    # docs. Negative fixtures and fuzz corpus are excluded by the scanner.
+    add_test(
+        NAME surface_drift_scan
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_surface_drift.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --fail-on-hit
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(surface_drift_scan PROPERTIES
+        LABELS "meta;surface;drift;task-220"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
 endif()
 
 # Fuzzing tests (optional, requires Clang with libFuzzer)
