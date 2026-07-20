@@ -24,6 +24,7 @@ typedef enum XaotValueKind {
     XAOT_VALUE_TAGGED,
     XAOT_VALUE_PTR,
     XAOT_VALUE_AGGREGATE,
+    XAOT_VALUE_VECTOR,
     XAOT_VALUE_VIEW,
 } XaotValueKind;
 
@@ -33,6 +34,9 @@ typedef struct XaotValueRep {
     const XrType *type;
     const char *c_type;
     uint32_t flags;
+    uint8_t vector_native_type;
+    uint8_t vector_lanes;
+    uint8_t vector_width_bytes;
 } XaotValueRep;
 
 enum {

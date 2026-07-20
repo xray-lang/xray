@@ -36,6 +36,7 @@
 #include "../base/xglobal_indices.h"
 #include "../os/os_dir.h"
 #include "../ir/xi.h"
+#include "../ir/xi_evidence.h"
 #include "../ir/xi_pipeline.h"
 #include "../ir/xi_import_resolve.h"
 #include "xi_cgen.h"
@@ -45,7 +46,6 @@
 #include "xaot_link.h"
 #include "xaot_prepare.h"
 #include "xaot_verify.h"
-#include "xi_simd_lower.h"
 #include "../analysis/xglobal_producer.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/analyzer/xanalyzer.h"
@@ -67,6 +67,62 @@ static const uint32_t xaot_evidence_cache_phases[XG_EVIDENCE_CACHE_PHASE_COUNT] 
     XG_EVIDENCE_CACHE_BODY_SUMMARY,
     XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE,
 };
+
+static bool xaot_func_has_explicit_vector_ops(const XiFunc *func) {
+    if (!func)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (value && value->op >= XI_VEC_LOAD && value->op <= XI_VEC_REDUCE_ADD &&
+                xi_vec_shape_is_explicit(value->aux_int))
+                return true;
+        }
+    }
+    for (uint16_t i = 0; i < func->nchildren; i++) {
+        if (xaot_func_has_explicit_vector_ops(func->children[i]))
+            return true;
+    }
+    return false;
+}
+
+static bool xaot_bundle_has_explicit_vector_ops(XiModule **modules, int nmodules) {
+    for (int i = 0; modules && i < nmodules; i++) {
+        if (modules[i] && xaot_func_has_explicit_vector_ops(modules[i]->init))
+            return true;
+    }
+    return false;
+}
+
+static void xaot_dump_func_local_evidence(FILE *out, const XiFunc *func, uint32_t depth) {
+    if (!out || !func)
+        return;
+    fprintf(out, "xi-evidence function=%s depth=%u stage=%s revision=%llu/%llu/%llu/%llu\n",
+            func->name ? func->name : "<anonymous>", depth, xi_stage_name(func->stage),
+            (unsigned long long) func->ir_revision, (unsigned long long) func->cfg_version,
+            (unsigned long long) func->memory_revision, (unsigned long long) func->call_revision);
+    xi_evidence_dump(func, out);
+    for (uint16_t i = 0; i < func->nchildren; i++)
+        xaot_dump_func_local_evidence(out, func->children[i], depth + 1);
+}
+
+static char *xaot_dump_local_evidence(XiFunc **funcs, int nfuncs) {
+    char *buf = NULL;
+    size_t bufsz = 0;
+    FILE *out = xr_open_memstream(&buf, &bufsz);
+    if (!out)
+        return NULL;
+    for (int i = 0; funcs && i < nfuncs; i++)
+        xaot_dump_func_local_evidence(out, funcs[i], 0);
+    bool write_failed = ferror(out) != 0;
+    int close_status = xr_close_memstream(out, &buf, &bufsz);
+    if (write_failed || close_status != 0) {
+        xr_free(buf);
+        return NULL;
+    }
+    return buf;
+}
 
 static bool xaot_str_has_suffix(const char *text, const char *suffix) {
     size_t text_len;
@@ -1011,10 +1067,24 @@ static bool add_stdlib_platform_system_lib_manifest_entries(XaotLinkManifest *ma
     return true;
 }
 
+static bool xaot_target_is_windows(const XaotTarget *target) {
+    if (target && target->os && strcmp(target->os, "windows") == 0)
+        return true;
+#if defined(XR_OS_WINDOWS)
+    return target && target->os && strcmp(target->os, "native") == 0;
+#else
+    return false;
+#endif
+}
+
 static bool add_target_platform_system_lib_manifest_entries(XaotLinkManifest *manifest,
                                                             const XaotTarget *target) {
-    if (target && target->os && strcmp(target->os, "windows") == 0)
-        return xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "ws2_32");
+    if (xaot_target_is_windows(target)) {
+        return xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "ws2_32") &&
+               xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "bcrypt") &&
+               xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB,
+                                             "api-ms-win-core-synch-l1-2-0");
+    }
     return true;
 }
 
@@ -1072,7 +1142,7 @@ static bool add_aot_runtime_archive(XaotLinkManifest *manifest) {
 }
 
 static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
-                                             XaotLinkManifest *manifest) {
+                                             const XaotTarget *target, XaotLinkManifest *manifest) {
     bool needs_aot_runtime = false;
 
     if (features->need_coro || features->need_scope) {
@@ -1173,7 +1243,7 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
     }
     if (needs_aot_runtime && !add_aot_runtime_archive(manifest))
         return false;
-    if (needs_aot_runtime &&
+    if (needs_aot_runtime && !xaot_target_is_windows(target) &&
         !xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "pthread"))
         return false;
     return true;
@@ -1205,7 +1275,8 @@ static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget
         goto done;
     if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_IMPL"))
         goto done;
-    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "m"))
+    if (!xaot_target_is_windows(target) &&
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "m"))
         goto done;
     fast_test = xaot_fast_test_build_enabled();
     if (fast_test) {
@@ -1246,7 +1317,7 @@ static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_hooks) ||
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, provider_target_hash))
             goto done;
-    } else if (!add_runtime_cap_manifest_entries(features, manifest)) {
+    } else if (!add_runtime_cap_manifest_entries(features, target, manifest)) {
         goto done;
     }
 
@@ -1300,6 +1371,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     bool emit_plan_dump;
     bool emit_program_main;
     bool emit_global_evidence_dump;
+    bool emit_local_evidence_dump;
     const char *evidence_cache_dir;
     bool evidence_cache_rebuild;
     bool evidence_cache_verbose;
@@ -1316,6 +1388,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     XiCgenTypeNameProfile type_name_profile;
     int nmodules = 0;
     int entry_index = -1;
+    bool has_explicit_vector_ops = false;
     char **paths = NULL;
     char **mod_names = NULL;
     AstNode **mono_roots = NULL;
@@ -1329,6 +1402,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     emit_plan_dump = options->emit_plan_dump;
     emit_program_main = options->emit_program_main;
     emit_global_evidence_dump = options->emit_global_evidence_dump;
+    emit_local_evidence_dump = options->emit_local_evidence_dump;
     evidence_cache_dir = options->evidence_cache_dir;
     evidence_cache_rebuild = options->evidence_cache_rebuild;
     evidence_cache_verbose = options->evidence_cache_verbose;
@@ -1576,6 +1650,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     XaotPrepareStats prepare_stats;
     char *plan_dump = NULL;
     char *global_evidence_dump = NULL;
+    char *local_evidence_dump = NULL;
     char *evidence_cache_payloads[XG_EVIDENCE_CACHE_PHASE_COUNT];
     XgEvidenceCacheManifest evidence_cache_manifest;
     bool evidence_cache_manifest_valid = false;
@@ -1745,9 +1820,15 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     }
     aot_bundle_initialized = true;
+    aot_bundle.emit_program_main = emit_program_main;
     if (!xaot_bundle_set_target_data_layout(&aot_bundle,
                                             xr_compiler_session_target_data_layout(session))) {
         fprintf(stderr, "Error: failed to set AOT target data layout\n");
+        goto fail_free_ir;
+    }
+    if (!xaot_bundle_set_target_simd_features(
+            &aot_bundle, options->target ? options->target->simd_features : 0)) {
+        fprintf(stderr, "Error: failed to set AOT target SIMD features\n");
         goto fail_free_ir;
     }
     if (options->capability_provider &&
@@ -1770,6 +1851,13 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         char verify_err[512];
         if (!xaot_verify_bundle(&aot_bundle, XAOT_VERIFY_AOT_READY, verify_err,
                                 sizeof(verify_err))) {
+            /* A requested semantic-evidence dump is produced before Xi/AOT
+             * preparation.  Preserve that diagnostic on a later verifier
+             * failure: fail-closed plans are specifically when the evidence
+             * is most useful, and dropping it forces debugging to depend on
+             * unstable Xi names or ad-hoc instrumentation. */
+            if (emit_global_evidence_dump && global_evidence_dump)
+                fputs(global_evidence_dump, stdout);
             fprintf(stderr, "Error: AOT verifier failed: %s\n", verify_err);
             goto fail_free_ir;
         }
@@ -1780,17 +1868,12 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     if (!reject_profile_static_data_plans(&aot_bundle))
         goto fail_free_ir;
-    /* Imported portable SIMD calls acquire their exact aggregate ABI only in
-     * xaot_prepare.  Rewrite them after that plan has been verified, retaining
-     * the prepared value/ABI sidecars for typed Xi C lowering. */
-    uint32_t simd_lowered = 0;
-    {
-        if (!xi_simd_lower_bundle(&aot_bundle, options->target, &simd_lowered)) {
-            fprintf(stderr, "Error: portable SIMD Xi lowering failed\n");
+    if (emit_local_evidence_dump) {
+        local_evidence_dump = xaot_dump_local_evidence(ir_funcs, nmodules);
+        if (!local_evidence_dump) {
+            fprintf(stderr, "Error: failed to dump local Xi evidence\n");
             goto fail_free_ir;
         }
-        if (simd_lowered > 0 && getenv("XRAY_XI_SIMD_DUMP"))
-            fprintf(stderr, "[xi-simd] lowered %u portable vector calls\n", simd_lowered);
     }
     /* The plan dump is O(functions x values) diagnostics; only build it when
      * the caller actually wants it (--dump-xaot-plan). */
@@ -1815,8 +1898,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         fprintf(stderr, "Error: failed to create codegen context\n");
         goto fail_free_ir;
     }
+    has_explicit_vector_ops = xaot_bundle_has_explicit_vector_ops(modules, nmodules);
     xi_cgen_ctx_set_aot_bundle(cg_ctx, &aot_bundle);
-    xi_cgen_ctx_set_target(cg_ctx, options->target, simd_lowered > 0);
+    xi_cgen_ctx_set_target(cg_ctx, options->target, has_explicit_vector_ops);
     xi_cgen_ctx_set_emit_main(cg_ctx, emit_program_main);
     xi_cgen_ctx_set_freestanding_profile(cg_ctx, profile == XAOT_BUILD_PROFILE_FREESTANDING);
     xi_cgen_ctx_set_type_name_profile(cg_ctx, type_name_profile);
@@ -1852,6 +1936,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             /* Multi-module: emit module m as an independently compilable unit
              * (external cross-module symbols; entry unit carries main). */
             xi_cgen_module_tu(cg_ctx, mem, modules, nmodules, m, entry_index);
+        }
+        if (xi_cgen_has_error(cg_ctx)) {
+            fprintf(stderr, "Error: AOT C code generation failed in module '%s'\n",
+                    mod_names[m] ? mod_names[m] : "?");
+            emit_ok = false;
         }
         if (xr_close_memstream(mem, &buf, &bufsz) != 0) {
             fprintf(stderr, "Error: xr_close_memstream failed\n");
@@ -1951,6 +2040,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     plan_dump = NULL;
     result->global_evidence_dump = global_evidence_dump;
     global_evidence_dump = NULL;
+    result->local_evidence_dump = local_evidence_dump;
+    local_evidence_dump = NULL;
     result->evidence_cache_manifest = evidence_cache_manifest;
     result->has_evidence_cache_manifest = evidence_cache_manifest_valid;
     for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++) {
@@ -1966,6 +2057,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     result->total_aot = total_funcs;
     result->nmodules = nmodules;
     result->features = features;
+    result->has_explicit_vector_ops = has_explicit_vector_ops;
     result->prepare_stats = prepare_stats;
     result->cgen_stats = cgen_stats;
     result->coro_frame_stats = coro_frame_stats;
@@ -1984,6 +2076,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
 fail_free_ir:
     xr_free(plan_dump);
     xr_free(global_evidence_dump);
+    xr_free(local_evidence_dump);
     for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++)
         xr_free(evidence_cache_payloads[i]);
     xr_free(c_export_header);
@@ -2051,6 +2144,7 @@ XR_FUNC void xaot_build_result_free(XaotBuildResult *result) {
     }
     xr_free(result->plan_dump);
     xr_free(result->global_evidence_dump);
+    xr_free(result->local_evidence_dump);
     for (uint32_t i = 0; i < XG_EVIDENCE_CACHE_PHASE_COUNT; i++)
         xr_free(result->evidence_cache_payloads[i]);
     xr_free(result->c_export_header);

@@ -17,6 +17,8 @@
 #include "../../../src/frontend/parser/xast_types.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/frontend/analyzer/xa_typed_program.h"
+#include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/toolchain/xcompiler_session.h"
@@ -80,7 +82,13 @@ static XiFunc *lower_source(const char *source) {
     xr_canon_program(program, analyzer, session);
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
-    XiFunc *func = xi_lower_program(program, analyzer, g_iso);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false) : NULL;
+    if (!typed.program) {
+        fprintf(stderr, "  TYPED PROGRAM REJECTED (%s): %s\n",
+                xa_typed_program_reason_name(typed.reason), typed.detail ? typed.detail : "");
+    }
+    xa_typed_program_free(typed.program);
     if (!func) {
         fprintf(stderr, "  LOWER FAILED for: %s\n", source);
         xa_analyzer_free(analyzer);
@@ -149,7 +157,13 @@ static XiFunc *lower_source_with_global_evidence_ex(const char *source, XgGlobal
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
 
-    XiFunc *func = xi_lower_program_ex(program, analyzer, g_iso, false, out_ev, 1);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, out_ev, 1);
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false) : NULL;
+    if (!typed.program) {
+        fprintf(stderr, "  TYPED PROGRAM REJECTED (%s): %s\n",
+                xa_typed_program_reason_name(typed.reason), typed.detail ? typed.detail : "");
+    }
+    xa_typed_program_free(typed.program);
     if (!func) {
         fprintf(stderr, "  LOWER FAILED for: %s\n", source);
         xa_analyzer_free(analyzer);
@@ -178,6 +192,36 @@ static XiFunc *func_tree_find_func_name(XiFunc *f, const char *name) {
             return child;
     }
     return NULL;
+}
+
+static int func_count_trivial_phis(const XiFunc *f) {
+    int count = 0;
+    if (!f)
+        return 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            const XiValue *unique = NULL;
+            bool trivial = true;
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                const XiValue *arg = phi->value.args[a];
+                if (!arg || arg == &phi->value || arg == unique)
+                    continue;
+                if (unique) {
+                    trivial = false;
+                    break;
+                }
+                unique = arg;
+            }
+            if (trivial && unique)
+                count++;
+        }
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        count += func_count_trivial_phis(f->children[i]);
+    return count;
 }
 
 static XiFunc *func_tree_find_xg_body(XiFunc *f, XgFuncId body_func_id) {
@@ -414,6 +458,24 @@ TEST(while_loop) {
     assert(f != NULL);
     /* Should have: entry, cond, body, exit blocks */
     assert(f->nblocks >= 3);
+    xi_func_free(f);
+}
+
+TEST(loop_invariant_rc_trivial_phi_is_rewritten) {
+    XiFunc *f = lower_source("fn invariant(xs: Array<int>) -> int {\n"
+                             "    var i = 0\n"
+                             "    while (i < 2) {\n"
+                             "        print(len(xs))\n"
+                             "        i = i + 1\n"
+                             "    }\n"
+                             "    return len(xs)\n"
+                             "}\n"
+                             "print(invariant([1, 2]))\n");
+    assert(f != NULL);
+    XiFunc *invariant = func_tree_find_func_name(f, "invariant");
+    assert(invariant != NULL);
+    assert(func_count_trivial_phis(invariant) == 0 &&
+           "sealed loop headers must rewrite all users of trivial RC phis");
     xi_func_free(f);
 }
 
@@ -656,18 +718,21 @@ TEST(member_access_field_symbols_are_distinct) {
 }
 
 TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
-    XiFunc *f = lower_source("var src = Array<byte>(8)\n"
-                             "var view: Slice<byte> = src\n"
-                             "var dst = Array<byte>(0)\n"
-                             "var h = view.load<uint16>(0, Endian.LE)\n"
-                             "var a = view.load<uint32>(0, Endian.LE)\n"
-                             "var b = view.load<uint64>(0, Endian.LE)\n"
-                             "view.store<uint16>(6, h, Endian.LE)\n"
-                             "dst.appendFrom(view[0:2])\n"
-                             "dst.repeatFrom(2, 4)\n"
-                             "print(h)\n"
-                             "print(a)\n"
-                             "print(b)\n");
+    XiFunc *f = lower_source("fn exerciseBytes() {\n"
+                             "  var src = Array<byte>(8)\n"
+                             "  var view: Slice<byte> = src[:]\n"
+                             "  var dst = Array<byte>(0)\n"
+                             "  var h = view.load<uint16>(0, Endian.LE)\n"
+                             "  var a = view.load<uint32>(0, Endian.LE)\n"
+                             "  var b = view.load<uint64>(0, Endian.LE)\n"
+                             "  view.store<uint16>(6, h, Endian.LE)\n"
+                             "  dst.appendFrom(view[0:2])\n"
+                             "  dst.repeatFrom(2, 4)\n"
+                             "  print(h)\n"
+                             "  print(a)\n"
+                             "  print(b)\n"
+                             "}\n"
+                             "exerciseBytes()\n");
     assert(f != NULL);
     assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U16) &&
            "load<uint16> should lower to Array<byte> op");
@@ -677,6 +742,16 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
            "load<uint64> should lower to Array<byte> op");
     assert(func_tree_has_op(f, XI_BYTE_SLICE_STORE_U16) &&
            "store<uint16> should lower to Array<byte> op");
+    XiValue *load_u16 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U16);
+    XiValue *load_u32 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U32);
+    XiValue *load_u64 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U64);
+    XiValue *store_u16 = func_tree_find_op(f, XI_BYTE_SLICE_STORE_U16);
+    assert(load_u16 && load_u16->xa_intrinsic_id == XA_INTRINSIC_BYTE_SLICE_LOAD &&
+           "typed load must retain the canonical analyzer intrinsic id");
+    assert(load_u32 && load_u32->xa_intrinsic_id == XA_INTRINSIC_BYTE_SLICE_LOAD);
+    assert(load_u64 && load_u64->xa_intrinsic_id == XA_INTRINSIC_BYTE_SLICE_LOAD);
+    assert(store_u16 && store_u16->xa_intrinsic_id == XA_INTRINSIC_BYTE_SLICE_STORE &&
+           "typed store must retain the canonical analyzer intrinsic id");
     assert(func_tree_has_op(f, XI_BYTE_ARRAY_APPEND_FROM) &&
            "appendFrom should lower to stable Array<byte> append op");
     assert(func_tree_has_op(f, XI_BYTE_ARRAY_REPEAT_FROM) &&
@@ -685,9 +760,56 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
            "appendFrom should not remain an explicit method call");
     assert(!func_tree_find_method(f, "repeatFrom") &&
            "repeatFrom should not remain an explicit method call");
+    assert(!func_tree_find_method(f, "load") && !func_tree_find_method(f, "store") &&
+           "canonical byte slice memory operations must not leak as ordinary calls");
     assert(!func_tree_has_builtin_name(f, "bytes_load_u16_le") &&
            !func_tree_has_builtin_name(f, "bytes_load_u32_le") &&
            "load should not lower through string builtin");
+    xi_func_free(f);
+}
+
+TEST(atomic_methods_lower_to_nothrow_canonical_ops) {
+    XiFunc *f = lower_source("fn update(counter: Atomic<int>) -> int {\n"
+                             "  var before = counter.load(Ordering.Relaxed)\n"
+                             "  counter.store(before + 1, Ordering.Release)\n"
+                             "  var old = counter.fetchAdd(2, Ordering.AcquireRelease)\n"
+                             "  var swapped = counter.swap(old, Ordering.SeqCst)\n"
+                             "  var (seen, ok) = counter.compareExchange(swapped, 9)\n"
+                             "  return seen\n"
+                             "}\n");
+    assert(f != NULL);
+
+    XiValue *load = func_tree_find_op(f, XI_ATOMIC_LOAD);
+    XiValue *store = func_tree_find_op(f, XI_ATOMIC_STORE);
+    XiValue *rmw = func_tree_find_op(f, XI_ATOMIC_RMW);
+    assert(load && load->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_LOAD);
+    assert(store && store->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_STORE);
+    assert(rmw && (rmw->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_FETCH_ADD ||
+                   rmw->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_SWAP ||
+                   rmw->xa_intrinsic_id == XA_INTRINSIC_ATOMIC_COMPARE_EXCHANGE));
+    assert((load->flags & XI_FLAG_MAY_THROW) == 0 && (store->flags & XI_FLAG_MAY_THROW) == 0 &&
+           (rmw->flags & XI_FLAG_MAY_THROW) == 0 &&
+           "typed Atomic operations are intrinsically nothrow");
+    assert(!func_tree_find_op(f, XI_ERR_CHECK) &&
+           "nothrow Atomic operations must not create synthetic error edges");
+    assert(!func_tree_find_method(f, "load") && !func_tree_find_method(f, "store") &&
+           !func_tree_find_method(f, "fetchAdd") &&
+           "canonical Atomic operations must not leak as ordinary method calls");
+    xi_func_free(f);
+}
+
+TEST(user_method_named_fetch_add_remains_ordinary_call) {
+    XiFunc *f = lower_source("class Counter {\n"
+                             "  fetchAdd(delta: int) -> int { return delta }\n"
+                             "}\n"
+                             "fn use(counter: Counter) -> int {\n"
+                             "  return counter.fetchAdd(2)\n"
+                             "}\n");
+    assert(f != NULL);
+    assert(func_tree_find_method(f, "fetchAdd") != NULL &&
+           "a user declaration with the same spelling must remain an ordinary method call");
+    assert(!func_tree_has_op(f, XI_ATOMIC_RMW) &&
+           "Atomic semantics must come from resolved receiver identity, never method spelling");
     xi_func_free(f);
 }
 
@@ -729,6 +851,13 @@ TEST(exact_integer_bit_methods_lower_to_typed_semantic_ops) {
     assert(!func_tree_find_method(f, "rotateLeft") && !func_tree_find_method(f, "byteswap") &&
            !func_tree_find_method(f, "popcount") &&
            "exact-width bit methods should not survive as string-dispatched method calls");
+    assert(rotl->xa_intrinsic_id == XA_INTRINSIC_BITS_ROTATE_LEFT &&
+           rotr->xa_intrinsic_id == XA_INTRINSIC_BITS_ROTATE_RIGHT &&
+           bswap->xa_intrinsic_id == XA_INTRINSIC_BITS_BYTESWAP &&
+           popcount->xa_intrinsic_id == XA_INTRINSIC_BITS_POPCOUNT &&
+           clz->xa_intrinsic_id == XA_INTRINSIC_BITS_LEADING_ZEROS &&
+           ctz->xa_intrinsic_id == XA_INTRINSIC_BITS_TRAILING_ZEROS &&
+           "bit Xi ops must carry analyzer-owned canonical semantic identities");
     xi_func_free(f);
 }
 
@@ -1480,7 +1609,7 @@ static const char *json_codec_same_line_source(void) {
     return "type User = { name: string, age: int }\n"
            "fn codecs() -> string {\n"
            "    var parsed: Json = Json.parse(\"{\\\"name\\\":\\\"A\\\",\\\"age\\\":1}\"); var "
-           "decoded: User = Json.decode<User>(parsed); var encoded: Json = Json.encode(decoded); "
+           "decoded: User = Json.decode<User>(parsed)!; var encoded: Json = Json.encode(decoded); "
            "return Json.stringify(encoded)\n"
            "}\n"
            "print(codecs())\n";
@@ -2085,9 +2214,12 @@ TEST(go_arg_transfer_modes) {
     xi_func_free(copy_ir);
 
     XiFunc *move_ir = lower_source("fn worker(xs: Array<int>) -> int { return len(xs) }\n"
-                                   "shared xs: Array<int> = [1, 2]\n"
-                                   "var task = go worker(move xs)\n"
-                                   "print(await task)\n");
+                                   "fn moveCase() {\n"
+                                   "  owned xs: Array<int> = [1, 2]\n"
+                                   "  var task = go worker(move xs)\n"
+                                   "  print(await task)\n"
+                                   "}\n"
+                                   "moveCase()\n");
     assert(move_ir != NULL);
     XiValue *move_go = func_tree_find_op(move_ir, XI_GO);
     assert(move_go != NULL && "move case should lower a GO op");
@@ -2123,8 +2255,11 @@ TEST(channel_send_transfer_modes) {
     xi_func_free(copy_ir);
 
     XiFunc *move_ir = lower_source("shared ch: Channel<Array<int>> = Channel(1)\n"
-                                   "var xs = [1, 2]\n"
-                                   "ch.send(move xs)\n");
+                                   "fn sendMove() {\n"
+                                   "  owned xs: Array<int> = [1, 2]\n"
+                                   "  ch.send(move xs)\n"
+                                   "}\n"
+                                   "sendMove()\n");
     assert(move_ir != NULL);
     XiValue *move_send = func_tree_find_op(move_ir, XI_CHAN_SEND);
     assert(move_send != NULL && "move case should lower to CHAN_SEND");
@@ -2231,16 +2366,14 @@ TEST(is_expr) {
 }
 
 TEST(slice_expr) {
-    XiFunc *f = lower_source("var arr = [1, 2, 3, 4]\n"
-                             "var sub = arr[1:3]\n"
-                             "print(sub)\n");
+    XiFunc *f = lower_source("fn sliceLocal() {\n"
+                             "  var arr = [1, 2, 3, 4]\n"
+                             "  var sub: Slice<int> = arr[1:3]\n"
+                             "  print(sub)\n"
+                             "}\n"
+                             "sliceLocal()\n");
     assert(f != NULL);
-    int found_slice = 0;
-    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
-        if (f->entry->values[i]->op == XI_SLICE)
-            found_slice = 1;
-    }
-    assert(found_slice && "should have SLICE op");
+    assert(func_tree_has_op(f, XI_SLICE) && "should have SLICE op");
     xi_func_free(f);
 }
 
@@ -2348,7 +2481,7 @@ TEST(struct_field_store_narrows_native_width) {
                              "    octet: byte\n"
                              "}\n"
                              "fn run() -> int {\n"
-                             "    var p = Sample{octet: 300}\n"
+                             "    var p = Sample{octet: 200}\n"
                              "    p.octet = p.octet + 1\n"
                              "    return p.octet\n"
                              "}\n"
@@ -2489,7 +2622,7 @@ TEST(import_export_skip) {
 
 TEST(class_decl_skip) {
     XiFunc *f = lower_source("class Dog {\n"
-                             "    name: string\n"
+                             "    name: string = \"\"\n"
                              "}\n"
                              "print(1)\n");
     assert(f != NULL);
@@ -2528,6 +2661,7 @@ int main(void) {
     run_variable_assignment();
     run_if_else();
     run_while_loop();
+    run_loop_invariant_rc_trivial_phi_is_rewritten();
     run_for_loop();
     run_nested_if();
     run_bool_literals();
@@ -2545,6 +2679,8 @@ int main(void) {
     run_member_access();
     run_member_access_field_symbols_are_distinct();
     run_bytes_new_low_level_methods_lower_to_semantic_ops();
+    run_atomic_methods_lower_to_nothrow_canonical_ops();
+    run_user_method_named_fetch_add_remains_ordinary_call();
     run_exact_integer_bit_methods_lower_to_typed_semantic_ops();
     run_throw_stmt();
     run_for_in_loop();

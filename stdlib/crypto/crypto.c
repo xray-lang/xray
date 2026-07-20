@@ -505,7 +505,7 @@ XR_FUNC void xr_secure_wipe(void *ptr, size_t len) {
     memset_s(ptr, len, 0, len);
 #elif defined(__GLIBC__)
     explicit_bzero(ptr, len);
-#elif defined(XR_OS_WINDOWS)
+#elif defined(XR_OS_WINDOWS) && defined(_MSC_VER)
     SecureZeroMemory(ptr, len);
 #else
     volatile uint8_t *p = (volatile uint8_t *) ptr;

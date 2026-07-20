@@ -13,6 +13,7 @@
  */
 
 #include "xi.h"
+#include "xi_evidence.h"
 #include "xi_loop.h"
 #include "xi_module.h"
 #include "xi_effect.h"
@@ -224,6 +225,7 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
     /* Start cfg_version at 1 so the calloc-zeroed rpo/dom versions
      * deterministically trigger the first xi_ensure_*() recompute. */
     f->cfg_version = 1;
+    xi_evidence_init_func(f);
 
     /* Initialize arena: allocate first chunk eagerly so the common
      * fast path in arena_alloc avoids a NULL check on every call. */
@@ -256,16 +258,6 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
     return f;
 }
 
-XR_FUNC void xi_func_set_stage_recursive(XiFunc *f, XiStage stage) {
-    if (!f)
-        return;
-    f->stage = stage;
-    f->invariant_mask |= xi_stage_invariants(stage);
-    for (uint16_t i = 0; i < f->nchildren; i++) {
-        xi_func_set_stage_recursive(f->children[i], stage);
-    }
-}
-
 void xi_func_free(XiFunc *f) {
     if (!f)
         return;
@@ -289,6 +281,8 @@ void xi_func_free(XiFunc *f) {
         xi_loopinfo_free(f->loop_cache);
         f->loop_cache = NULL;
     }
+
+    xi_evidence_dispose_func(f);
 
     /* Arena owns all XiValues, XiPhis, XiBlocks, and arg arrays.
      * blocks[] (the index array) is heap-allocated separately because
@@ -389,6 +383,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->uses = -1; /* not yet computed */
     v->line = 0;
     v->xg_callsite_id = 0;
+    v->xa_intrinsic_id = 0;
     v->xg_method_id = 0;
     v->xg_interface_dispatch_slot = UINT32_MAX;
     v->xg_json_access_id = 0;

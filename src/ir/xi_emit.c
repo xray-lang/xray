@@ -18,6 +18,7 @@
 #include "xi_analysis.h"
 #include "xi_emit_vm_gen.h"
 #include "xi_opt.h"
+#include "xi_stage.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/value/xffi_sig.h"
@@ -1085,18 +1086,29 @@ cleanup:;
     return result;
 }
 
-static void prepare_ir_for_jit(XiFunc *ir) {
-    if (!ir || ir->stage >= XI_STAGE_REPPED)
-        return;
-    xi_opt_select_rep(ir);
-    xi_opt_box_elim(ir);
-}
-
-XR_FUNC void xi_emit_attach_ir(struct XrProto *proto, XiFunc *ir) {
+XR_FUNC bool xi_emit_attach_ir(struct XrProto *proto, XiFunc *ir) {
     XR_DCHECK(proto != NULL, "xi_emit_attach_ir: NULL proto");
     XR_DCHECK(proto->xi_func == NULL, "xi_emit_attach_ir: proto already has xi_func");
-    prepare_ir_for_jit(ir);
+
+    if (ir && ir->stage == XI_STAGE_OPTIMIZED) {
+        char error[512] = {0};
+        XiOptimizedProgram *optimized = xi_stage_adopt_optimized(ir, error, sizeof(error));
+        if (!optimized)
+            return false;
+        XiRepPolicy policy = xi_rep_policy_tagged_boundary();
+        xi_opt_select_rep_with_policy(ir, &policy);
+        xi_opt_box_elim(ir);
+        XiReppedProgram *repped = xi_program_select_reps(optimized, error, sizeof(error));
+        if (!repped) {
+            xi_optimized_program_release(optimized);
+            return false;
+        }
+        ir = xi_repped_program_release(repped);
+    }
+    if (!ir || ir->stage < XI_STAGE_REPPED)
+        return false;
     proto->xi_func = ir;
+    return true;
 }
 
 XR_FUNC const char *xi_emit_status_str(XiEmitStatus s) {

@@ -748,6 +748,24 @@ TEST(parser_rejects_posthoc_local_export) {
     teardown();
 }
 
+TEST(parser_reexport_preserves_module_identity_kind) {
+    setup();
+    AstNode *program = parse_ok("export { U32x4 } from simd\n"
+                                "export * from \"./local_vectors\"\n");
+    ASSERT_EQ_INT(program->as.program.count, 2);
+
+    AstNode *stdlib_export = program->as.program.statements[0];
+    ASSERT_EQ_INT(stdlib_export->type, AST_EXPORT_STMT);
+    ASSERT_STR_EQ(stdlib_export->as.export_stmt.from_path, "simd");
+    ASSERT_FALSE(stdlib_export->as.export_stmt.from_is_quoted);
+
+    AstNode *local_export = program->as.program.statements[1];
+    ASSERT_EQ_INT(local_export->type, AST_EXPORT_STMT);
+    ASSERT_STR_EQ(local_export->as.export_stmt.from_path, "./local_vectors");
+    ASSERT_TRUE(local_export->as.export_stmt.from_is_quoted);
+    teardown();
+}
+
 TEST(parser_enum_static_method) {
     setup();
     AstNode *stmt = parse_first("enum Color {\n"
@@ -1227,6 +1245,7 @@ int main(void) {
     RUN_TEST(parser_direct_visibility_owns_declaration);
     RUN_TEST(parser_method_no_alloc_attribute);
     RUN_TEST(parser_rejects_posthoc_local_export);
+    RUN_TEST(parser_reexport_preserves_module_identity_kind);
     RUN_TEST(parser_enum_static_method);
 
     // Calls

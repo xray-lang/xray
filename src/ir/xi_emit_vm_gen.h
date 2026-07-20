@@ -14,6 +14,7 @@
     X(PARAM, emit_param) \
     X(TARGET_SIZEOF, xi_emit_target_sizeof) \
     X(TARGET_ALIGNOF, xi_emit_target_alignof) \
+    X(TARGET_SIMD_BYTES, xi_emit_semantic_intrinsic_call) \
     X(COPY, emit_copy) \
     X(MOVE, xi_emit_move) \
     X(ADD, xi_emit_arith) \
@@ -28,13 +29,31 @@
     X(BNOT, xi_emit_bnot) \
     X(BIT_ROTL, xi_emit_exact_bit) \
     X(BIT_ROTR, xi_emit_exact_bit) \
-    X(BIT_MUL_HIGH, xi_emit_exact_bit) \
     X(BIT_BSWAP, xi_emit_exact_bit) \
     X(BIT_POPCOUNT, xi_emit_exact_bit) \
     X(BIT_CLZ, xi_emit_exact_bit) \
     X(BIT_CTZ, xi_emit_exact_bit) \
+    X(BIT_MUL_HIGH, xi_emit_exact_bit) \
     X(NOT, xi_emit_not) \
     X(SELECT, emit_select) \
+    X(VEC_LOAD, xi_emit_semantic_intrinsic_call) \
+    X(VEC_STORE, xi_emit_semantic_intrinsic_call) \
+    X(VEC_SPLAT, xi_emit_semantic_intrinsic_call) \
+    X(VEC_EXTRACT, xi_emit_semantic_intrinsic_call) \
+    X(VEC_REPLACE, xi_emit_semantic_intrinsic_call) \
+    X(VEC_ADD, xi_emit_semantic_intrinsic_call) \
+    X(VEC_SUB, xi_emit_semantic_intrinsic_call) \
+    X(VEC_MUL, xi_emit_semantic_intrinsic_call) \
+    X(VEC_BIT_AND, xi_emit_semantic_intrinsic_call) \
+    X(VEC_BIT_OR, xi_emit_semantic_intrinsic_call) \
+    X(VEC_BIT_XOR, xi_emit_semantic_intrinsic_call) \
+    X(VEC_BIT_NOT, xi_emit_semantic_intrinsic_call) \
+    X(VEC_SHL, xi_emit_semantic_intrinsic_call) \
+    X(VEC_SHR, xi_emit_semantic_intrinsic_call) \
+    X(VEC_REINTERPRET, xi_emit_semantic_intrinsic_call) \
+    X(VEC_SHUFFLE, xi_emit_semantic_intrinsic_call) \
+    X(VEC_WIDEN_MUL, xi_emit_semantic_intrinsic_call) \
+    X(VEC_REDUCE_ADD, xi_emit_semantic_intrinsic_call) \
     X(GET_SHARED, xi_emit_get_shared) \
     X(SET_SHARED, xi_emit_set_shared) \
     X(IMPORT_REF, xi_emit_import_ref) \
@@ -58,6 +77,10 @@
     X(CALL_METHOD_DIRECT, xi_emit_call_method_direct) \
     X(TAIL_CALL, xi_emit_tail_call) \
     X(CALL_BUILTIN, xi_emit_call_builtin) \
+    X(ATOMIC_LOAD, xi_emit_semantic_intrinsic_call) \
+    X(ATOMIC_STORE, xi_emit_semantic_intrinsic_call) \
+    X(ATOMIC_RMW, xi_emit_semantic_intrinsic_call) \
+    X(ATOMIC_TO_STRING, xi_emit_semantic_intrinsic_call) \
     X(THROW, xi_emit_throw) \
     X(TRY, xi_emit_try) \
     X(CATCH, xi_emit_catch) \
@@ -163,6 +186,7 @@
     X(BYTE_SLICE_COMPARE, xi_emit_byte_slice_compare) \
     X(BYTE_SLICE_COMMON_PREFIX, xi_emit_byte_slice_common_prefix) \
     X(BYTE_SLICE_REPEAT, xi_emit_byte_slice_repeat) \
+    X(SPAN_WINDOW, xi_emit_span_window) \
     X(SPAN_AS_BYTES, xi_emit_span_as_bytes) \
     X(SPAN_FILL, xi_emit_span_fill) \
     X(SPAN_COPY, xi_emit_span_copy) \

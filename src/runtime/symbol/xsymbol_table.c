@@ -302,6 +302,7 @@ static const char *xr_builtin_symbol_names[] = {
     "asMutBytes",
     "borrowPtr",
     "mulHigh",
+    "window",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

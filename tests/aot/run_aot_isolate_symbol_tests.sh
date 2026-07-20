@@ -49,7 +49,10 @@ PURE_CRYPTO_AOT_MAX_BYTES=96000
 # metadata. Keep this cap tight against VM/toolchain-shaped drift, while
 # allowing the deliberate runtime surface that a yieldable program currently
 # links.
-RUNTIME_TIME_SLEEP_MAX_BYTES=512000
+# Keep the limit in binary units: 512 KiB. The Darwin linker rounds Mach-O
+# segments to pages, so a decimal 512000 cap incorrectly rejects the stable
+# 505.1 KiB hosted-runtime image while leaving less than two pages of headroom.
+RUNTIME_TIME_SLEEP_MAX_BYTES=524288
 
 cleanup() {
     rm -rf "$WORK"

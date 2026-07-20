@@ -256,6 +256,7 @@ typedef enum {
     ATTR_NAKED,         // @naked — freestanding AOT naked extern symbol declaration
     ATTR_INTERRUPT,     // @interrupt("abi") — freestanding AOT interrupt extern declaration
     ATTR_NO_ALLOC,      // @no_alloc — AOT function must not perform heap/runtime allocation
+    ATTR_INTRINSIC,     // compiler-owned @intrinsic("canonical.id") declaration metadata
     ATTR_DERIVE,        // @derive(...) — opt-in generated capability metadata
 } AttributeKind;
 

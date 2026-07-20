@@ -266,7 +266,8 @@ typedef struct ReexportMember {
 
 // Re-export declaration. Direct declaration visibility lives on AstNode.
 typedef struct ExportStmtNode {
-    char *from_path;  // Source module path (e.g. "./user")
+    char *from_path;      // Source module path (e.g. "./user")
+    bool from_is_quoted;  // false for a bare stdlib module identity
     ReexportMember *reexport_members;
     int reexport_count;
     bool is_reexport_all;  // Whether it's `export * from "..."`

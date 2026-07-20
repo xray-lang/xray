@@ -1,6 +1,6 @@
-contains=root=descriptor scheduler=single
-c_contains=xr_aot_root_descriptor_begin(rt)
-c_contains=xr_aot_root_descriptor_end(rt)
+contains=root=resumable_frame scheduler=single
+c_not_contains=xr_aot_root_descriptor_begin(rt)
+c_not_contains=xr_aot_root_descriptor_end(rt)
 c_contains=xr_aot_spawn(ctx,
 c_contains=xr_aot_run_main(rt,
 c_regex=entry_go_without_root_frame_[0-9a-f]+___main__.*_aot_frame_new

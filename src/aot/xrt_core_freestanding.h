@@ -22,6 +22,7 @@
 #include <limits.h>
 #include <float.h>
 #include <stdatomic.h>
+#include "xrt_callable.h"
 
 #ifdef memcpy
 #undef memcpy
@@ -63,6 +64,15 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XR_AINLINE inline
 #endif
 #endif
+#ifndef XR_NOINLINE
+#if defined(__GNUC__) || defined(__clang__)
+#define XR_NOINLINE __attribute__((noinline))
+#elif defined(_MSC_VER)
+#define XR_NOINLINE __declspec(noinline)
+#else
+#define XR_NOINLINE
+#endif
+#endif
 
 #if defined(__GNUC__) || defined(__clang__)
 #define XR_LIKELY(x) __builtin_expect(!!(x), 1)
@@ -70,6 +80,11 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_COLD __attribute__((cold))
 #define XRT_NORETURN __attribute__((noreturn))
 #define XR_ASSUME_ALIGNED(p, n) __builtin_assume_aligned((p), (n))
+#define XR_ASSUME(x)                                                                               \
+    do {                                                                                           \
+        if (!(x))                                                                                  \
+            __builtin_unreachable();                                                               \
+    } while (0)
 #define XRT_FN_CONST __attribute__((const))
 #define XRT_FN_PURE __attribute__((pure))
 #define XRT_ATTR_SECTION(name) __attribute__((section(name)))
@@ -88,6 +103,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_COLD
 #define XRT_NORETURN __declspec(noreturn)
 #define XR_ASSUME_ALIGNED(p, n) (p)
+#define XR_ASSUME(x) __assume(x)
 #define XRT_FN_CONST
 #define XRT_FN_PURE
 #define XRT_ATTR_SECTION(name)
@@ -102,6 +118,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #define XRT_COLD
 #define XRT_NORETURN
 #define XR_ASSUME_ALIGNED(p, n) (p)
+#define XR_ASSUME(x) ((void) 0)
 #define XRT_FN_CONST
 #define XRT_FN_PURE
 #define XRT_ATTR_SECTION(name)
@@ -398,7 +415,7 @@ xrt_enum_aggregate_make(uint32_t layout_id, int64_t tag, uint32_t payload_count,
 }
 
 typedef struct xrt_closure {
-    void *fn;
+    const XrAotCallableDesc *callable;
     int nupvals;
     XrValue upvals[];
 } xrt_closure_t;

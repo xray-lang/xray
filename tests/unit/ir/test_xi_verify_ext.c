@@ -4,6 +4,7 @@
  */
 
 #include "../../../src/ir/xi_verify.h"
+#include "../../../src/ir/xi_evidence.h"
 #include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_backend.h"
 #include "../../../src/ir/xi_coro_analyze.h"
@@ -527,7 +528,8 @@ TEST(tbaa_memory_op_requires_mem_group) {
     load->args[0] = arr;
     load->args[1] = idx;
     load->mem_group = XI_MEM_NONE;
-    f->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+    xi_evidence_publish(f, XI_EVD_ALIAS, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TEST, 0, NULL);
     xi_block_set_return(entry, load);
 
     ASSERT(verify_fail(f));
@@ -545,7 +547,8 @@ TEST(tbaa_memory_op_with_group_passes) {
     load->args[0] = arr;
     load->args[1] = idx;
     load->mem_group = XI_MEM_ARRAY;
-    f->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+    xi_evidence_publish(f, XI_EVD_ALIAS, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TEST, 0, NULL);
     xi_block_set_return(entry, load);
 
     ASSERT(verify_ok(f));
@@ -565,7 +568,8 @@ TEST(tbaa_store_requires_mem_group) {
     store->args[1] = idx;
     store->args[2] = val;
     store->mem_group = XI_MEM_NONE;
-    f->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+    xi_evidence_publish(f, XI_EVD_ALIAS, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TEST, 0, NULL);
     xi_block_set_return(entry, val);
 
     ASSERT(verify_fail(f));
@@ -583,7 +587,8 @@ TEST(tbaa_non_memory_op_with_group_fails) {
     add->args[0] = a;
     add->args[1] = b;
     add->mem_group = XI_MEM_ARRAY;
-    f->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+    xi_evidence_publish(f, XI_EVD_ALIAS, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TEST, 0, NULL);
     xi_block_set_return(entry, add);
 
     ASSERT(verify_fail(f));
@@ -1555,7 +1560,8 @@ TEST(tbaa_field_load_requires_mem_group) {
     load->args[0] = obj;
     load->aux_int = 0;
     load->mem_group = XI_MEM_NONE;
-    f->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+    xi_evidence_publish(f, XI_EVD_ALIAS, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TEST, 0, NULL);
     xi_block_set_return(entry, load);
 
     ASSERT(verify_fail(f));
@@ -1574,7 +1580,8 @@ TEST(tbaa_field_store_requires_mem_group) {
     store->args[1] = val;
     store->aux_int = 0;
     store->mem_group = XI_MEM_NONE;
-    f->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+    xi_evidence_publish(f, XI_EVD_ALIAS, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TEST, 0, NULL);
     xi_block_set_return(entry, val);
 
     ASSERT(verify_fail(f));
@@ -1589,7 +1596,8 @@ TEST(tbaa_upval_load_requires_mem_group) {
     XiValue *up = xi_value_new(f, entry, XI_LOAD_UPVAL, &stub_int, 0);
     up->aux_int = 0;
     up->mem_group = XI_MEM_NONE;
-    f->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+    xi_evidence_publish(f, XI_EVD_ALIAS, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TEST, 0, NULL);
     xi_block_set_return(entry, up);
 
     ASSERT(verify_fail(f));

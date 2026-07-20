@@ -1,0 +1,10 @@
+import { U64x2 } from simd
+
+fn sumPair(values: Slice<uint64>) -> uint64 {
+    var loaded = U64x2.load(values)
+    var biased = loaded.add(U64x2.splat(7))
+    return biased.reduceAdd()
+}
+
+var values: [uint64; 2] = [11, 13]
+print(sumPair(values[:]))

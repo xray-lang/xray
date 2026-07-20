@@ -13,6 +13,84 @@
 #include "../ir/xi_module.h"
 #include <string.h>
 
+static const XiValue *unwrap_identity_value(const XiValue *v);
+static const XiImportRef *module_import_ref_for_value(const XaotBundle *bundle,
+                                                      const XiFunc *current, const XiValue *value);
+static const XiClassData *resolve_imported_class(const XaotBundle *bundle, const XiImportRef *ref,
+                                                 const XiModule **owner_out);
+
+static const XiFunc *boundary_find_constructor(const XiFunc *parent,
+                                               const XiClassData *class_data) {
+    if (!parent || !class_data || !class_data->methods || !class_data->child_idx)
+        return NULL;
+    for (uint16_t i = 0; i < class_data->nmethod; i++) {
+        const XiClassMethod *method = &class_data->methods[i];
+        if (!method->is_constructor || method->is_static_constructor ||
+            i >= class_data->ninst + class_data->nstat)
+            continue;
+        uint16_t child_index = class_data->child_idx[i];
+        if (child_index < parent->nchildren) {
+            const XiFunc *child = parent->children[child_index];
+            if (child && child->name && strcmp(child->name, "constructor") == 0)
+                return child;
+        }
+    }
+    return NULL;
+}
+
+static const XiFunc *boundary_resolve_shared_constructor(const XaotBundle *bundle,
+                                                         const XiFunc *current, int slot) {
+    if (!bundle || !current || slot < 0)
+        return NULL;
+    for (uint32_t i = 0; i < bundle->nfunc_plans; i++) {
+        const XaotFuncPlan *plan = &bundle->func_plans[i];
+        if (plan->func != current || plan->module_index >= bundle->nmodules)
+            continue;
+        const XiModule *module = bundle->modules[plan->module_index];
+        if (!module || slot >= module->nslots || !module->slot_classes)
+            return NULL;
+        return boundary_find_constructor(module->init, module->slot_classes[slot]);
+    }
+    return NULL;
+}
+
+XR_FUNC const XiFunc *xaot_boundary_resolve_constructor_call_target(const XaotBundle *bundle,
+                                                                    const XiFunc *current,
+                                                                    const XiValue *call,
+                                                                    uint16_t *first_arg_out,
+                                                                    uint16_t *first_param_out) {
+    const XiFunc *target = NULL;
+    if (first_arg_out)
+        *first_arg_out = 0;
+    if (first_param_out)
+        *first_param_out = 0;
+    if (!bundle || !current || !call || call->nargs < 1)
+        return NULL;
+    if (call->op == XI_CALL) {
+        const XiValue *callee = unwrap_identity_value(call->args[0]);
+        if (callee && callee->op == XI_GET_SHARED)
+            target = boundary_resolve_shared_constructor(bundle, current, (int) callee->aux_int);
+    } else if (call->op == XI_CALL_METHOD && call->aux && (call->aux_int & 1) == 0) {
+        const XiImportRef *module_ref = module_import_ref_for_value(bundle, current, call->args[0]);
+        if (module_ref) {
+            XiImportRef class_ref = *module_ref;
+            const XiModule *owner = NULL;
+            class_ref.member_name = (const char *) call->aux;
+            class_ref.resolved_shared_slot = -1;
+            const XiClassData *cls = resolve_imported_class(bundle, &class_ref, &owner);
+            if (cls && owner && owner->init)
+                target = boundary_find_constructor(owner->init, cls);
+        }
+    }
+    if (target) {
+        if (first_arg_out)
+            *first_arg_out = 1;
+        if (first_param_out)
+            *first_param_out = 1;
+    }
+    return target;
+}
+
 XR_FUNC const char *xaot_boundary_reason_name(XaotBoundaryReason reason) {
     switch (reason) {
         case XAOT_BOUNDARY_NONE:
@@ -507,8 +585,9 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle 
     if (callee->op == XI_CONST && callee->type && callee->type->kind == XR_KIND_NULL &&
         current->name)
         return current;
-    if (callee->op == XI_GET_SHARED)
+    if (callee->op == XI_GET_SHARED) {
         return resolve_shared_function(bundle, current, (int) callee->aux_int);
+    }
     if (callee->op == XI_IMPORT_REF && callee->aux)
         return resolve_import_ref(bundle, (const XiImportRef *) callee->aux);
     return NULL;

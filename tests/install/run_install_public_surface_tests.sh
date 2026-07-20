@@ -77,6 +77,8 @@ expect_executable "$PREFIX/bin/xray" "installed xray executable"
 expect_file "$PREFIX/lib/libxray_aot_core.a" "installed xray_aot_core archive"
 expect_file "$PREFIX/lib/libxray_rt_coro.a" "installed xray_rt_coro archive"
 expect_file "$PREFIX/lib/libxray_vm_runtime.a" "installed xray_vm_runtime archive"
+expect_file "$PREFIX/lib/xray/sdk/src/aot/xrt.h" "installed private AOT SDK"
+expect_file "$PREFIX/lib/xray/stdlib/path/path.xr" "installed stdlib source"
 
 if find "$PREFIX/lib" -name 'libxray_core.a' -print -quit | grep -q .; then
     record_fail "does not install libxray_core.a"
@@ -86,13 +88,21 @@ fi
 
 runtime_log="$WORK/runtime_time.log"
 runtime_bin="$WORK/runtime_time"
-if "$PREFIX/bin/xray" build --native --dump-link-command \
-        "$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr" \
-        -o "$runtime_bin" >"$runtime_log" 2>&1; then
+cp "$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr" "$WORK/runtime_time.xr"
+if (cd "$WORK" && unset XRAY_INCLUDE XRAY_LIB XRAY_STDLIB_PATH && \
+        "$PREFIX/bin/xray" build --native --dump-link-command \
+        "$WORK/runtime_time.xr" -o "$runtime_bin") >"$runtime_log" 2>&1; then
     record_pass "installed xray builds runtime_time.xr"
 else
     record_fail "installed xray builds runtime_time.xr"
     print_log_tail "$runtime_log"
+fi
+
+if grep -Fq "$PROJECT_DIR/src/aot" "$runtime_log"; then
+    record_fail "installed AOT command is independent of the source tree"
+    print_log_tail "$runtime_log"
+else
+    record_pass "installed AOT command is independent of the source tree"
 fi
 
 if grep -Fq -- "-lxray_core" "$runtime_log"; then

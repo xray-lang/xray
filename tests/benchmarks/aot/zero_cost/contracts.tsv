@@ -1,0 +1,13 @@
+contract_id	semantic_condition	required_evidence	allowed_reps	forbidden_residue	positive_fixture	negative_fixture	corruption_fixture	shape_gate	performance_gate	owner_task	status
+fixed_array_full_slice	full-range view of fixed array; view does not escape	provenance,range,noescape	view,pointer,elided	xrt_span_from_array_slice,heap,arc	pending	pending	stale_provenance	pending	xxhash_shape	213	baseline-gap
+fixed_width_vector_load	width fits the source view; target supports selected width	range,alignment,target	native_vector,scalar_vector	per_lane_helper,repeated_bounds	pending	pending	stale_range	pending	xxhash_long	211,213	baseline-gap
+pure_vector_chain	all operations have canonical identity, explicit shape, and pure effect	effect,target	native_vector,scalar_vector	_lanes,error_check	pending	pending	stale_effect	pending	xxhash_long	211,213	baseline-gap
+nothrow_call	complete callee target set proves no throw	effect,call_target	scalar,pointer,aggregate	pending_error_check	pending	pending	stale_effect	pending	none	205,213	baseline-gap
+noalloc_function	complete allocation effect proves no heap allocation	noalloc,call_target	scalar,pointer,view	allocator_helper	pending	pending	stale_noalloc	pending	none	213	baseline-gap
+unique_mutable_borrow	borrow is unique for the access lifetime	ownership,provenance,alias	pointer,view	alias_barrier	pending	pending	stale_alias	pending	xxhash_long	213	baseline-gap
+monomorphic_direct_call	closed target set contains exactly one compatible target	call_target,effect	direct_abi	boxed_callable,dynamic_dispatch	pending	pending	stale_call_target	pending	none	212,213	baseline-gap
+nonescaping_closure	closure and captures do not outlive the caller	escape,lifetime	stack_env,scalarized	heap_closure,arc	closure_noescape/direct_symbol_loop.xr	pending	stale_escape	plan_inventory.sh	closure_noescape	178,213	partial
+monomorphic_generic	closed type arguments and body are known	call_target,effect	native_specialization	tagged_generic	generic_instantiation/generic_constraint_direct_loop.xr	pending	stale_call_target	plan_inventory.sh	generic_instantiation	178,213	partial
+fixed_layout_aggregate	layout and ABI boundary are complete	provenance,target	aggregate,scalarized	runtime_field_lookup	pending	pending	wrong_target	pending	none	213	baseline-gap
+owned_move	last use and transfer are proven	ownership,lifetime	native_move	deep_copy,extra_arc	pending	pending	stale_ownership	pending	none	206,213	baseline-gap
+checked_slice_loop	dominating guard proves every induction access in range	range,provenance	view,pointer	per_iteration_bounds	pending	pending	stale_range	pending	xxhash_long	169,213	baseline-gap

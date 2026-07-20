@@ -9,7 +9,6 @@
 
 XR_FUNC XiFunc *xi_func_new(const char *name, struct XrType *return_type);
 XR_FUNC void xi_func_free(XiFunc *f);
-XR_FUNC void xi_func_set_stage_recursive(XiFunc *f, XiStage stage);
 XR_FUNC void *xi_func_arena_alloc(XiFunc *f, uint32_t size);
 XR_FUNC void xi_func_compute_effects(XiFunc *f);
 XR_FUNC bool xi_func_set_param_passing_mode(XiFunc *f, uint16_t index, XrParamMode mode);

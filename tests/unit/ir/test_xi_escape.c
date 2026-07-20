@@ -12,8 +12,10 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_analysis.h"
 #include "../../../src/ir/xi_escape.h"
 #include "../../../src/ir/xi_arc.h"
+#include "../../../src/ir/xi_verify.h"
 #include "../../../src/base/xchecks.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/runtime/value/xtype.h"
@@ -42,6 +44,8 @@ static XrType t_map = {.kind = XR_KIND_MAP, .id = 3, .frozen = true};
 static XrType t_any = {.kind = XR_KIND_UNKNOWN, .id = 4, .frozen = true};
 static XrType t_set = {.kind = XR_KIND_SET, .id = 5, .frozen = true};
 static XrType t_func = {.kind = XR_KIND_FUNCTION, .id = 6, .frozen = true};
+static XrType t_span = {.kind = XR_KIND_SPAN, .id = 7, .frozen = true};
+static XrType t_bool = {.kind = XR_KIND_BOOL, .id = 8, .frozen = true};
 
 /* Helper: create function with sealed entry block */
 static XiFunc *make_func(const char *name, XrType *ret) {
@@ -477,6 +481,127 @@ static void test_arc_many_consume_sites(void) {
     xi_func_free(f);
 }
 
+/* ========== Test: borrowed Span lifetime flows through a phi ========== */
+
+static void test_arc_span_borrow_flows_through_phi(void) {
+    XiFunc *f = make_func("arc_span_phi_borrow", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *body = xi_block_new(f);
+    body->sealed = true;
+
+    XiValue *arr = xi_value_new(f, entry, XI_ARRAY_NEW, &t_array, 0);
+    arr->escape = XI_ESC_ARG;
+    XiValue *start = xi_const_int(f, entry, 0, &t_int);
+    XiValue *end = xi_const_int(f, entry, 1, &t_int);
+    XiValue *span = xi_value_new(f, entry, XI_SLICE, &t_span, 3);
+    span->args[0] = arr;
+    span->args[1] = start;
+    span->args[2] = end;
+    xi_block_set_jump(entry, body);
+
+    XiPhi *span_phi = xi_phi_new(f, body, &t_span, body->npreds);
+    span_phi->value.args[0] = span;
+    XiValue *idx = xi_const_int(f, body, 0, &t_int);
+    XiValue *get = xi_value_new(f, body, XI_INDEX_GET, &t_int, 2);
+    get->args[0] = &span_phi->value;
+    get->args[1] = idx;
+    xi_block_set_return(body, get);
+
+    xi_arc_insert(f);
+
+    XiBlock *release_block = NULL;
+    uint32_t release_index = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; blk && i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (v && v->op == XI_RELEASE && v->nargs == 1 && v->args[0] == arr) {
+                release_block = blk;
+                release_index = i;
+            }
+        }
+    }
+    ASSERT_EQ(release_block == body, true,
+              "Span phi keeps its array owner alive into the consuming block");
+    uint32_t get_index = 0;
+    for (uint32_t i = 0; i < body->nvalues; i++) {
+        if (body->values[i] == get) {
+            get_index = i;
+            break;
+        }
+    }
+    ASSERT_EQ(release_index > get_index, true,
+              "array owner is released after the last borrowed Span read");
+    xi_func_free(f);
+}
+
+/* A branch-local Span can be one incoming owner of a join phi. The phi is an
+ * ownership-transfer boundary: uses after the join cannot extend that one
+ * branch owner's liveness into a block the owner definition does not
+ * dominate. ARC must keep the incoming transfer on the branch edge rather
+ * than emit RELEASE(branch_span) in the join. */
+static void test_arc_branch_local_span_phi_stays_in_dominance_region(void) {
+    XiFunc *f = make_func("arc_branch_span_phi", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *left = xi_block_new(f);
+    XiBlock *right = xi_block_new(f);
+    XiBlock *join = xi_block_new(f);
+    left->sealed = true;
+    right->sealed = true;
+    join->sealed = true;
+
+    XiValue *cond = xi_const_bool(f, entry, true, &t_bool);
+    xi_block_set_if(entry, cond, left, right);
+
+    XiValue *left_arr = xi_value_new(f, left, XI_ARRAY_NEW, &t_array, 0);
+    left_arr->escape = XI_ESC_ARG;
+    XiValue *left_start = xi_const_int(f, left, 0, &t_int);
+    XiValue *left_end = xi_const_int(f, left, 1, &t_int);
+    XiValue *left_span = xi_value_new(f, left, XI_SLICE, &t_span, 3);
+    left_span->args[0] = left_arr;
+    left_span->args[1] = left_start;
+    left_span->args[2] = left_end;
+    xi_block_set_jump(left, join);
+
+    XiValue *right_arr = xi_value_new(f, right, XI_ARRAY_NEW, &t_array, 0);
+    right_arr->escape = XI_ESC_ARG;
+    XiValue *right_start = xi_const_int(f, right, 0, &t_int);
+    XiValue *right_end = xi_const_int(f, right, 1, &t_int);
+    XiValue *right_span = xi_value_new(f, right, XI_SLICE, &t_span, 3);
+    right_span->args[0] = right_arr;
+    right_span->args[1] = right_start;
+    right_span->args[2] = right_end;
+    XiValue *right_move = xi_value_new(f, right, XI_MOVE, &t_span, 1);
+    right_move->args[0] = right_span;
+    xi_block_set_jump(right, join);
+
+    XiPhi *merged = xi_phi_new(f, join, &t_span, join->npreds);
+    for (uint16_t i = 0; i < join->npreds; i++)
+        merged->value.args[i] = join->preds[i] == right ? right_move : left_span;
+    XiValue *idx = xi_const_int(f, join, 0, &t_int);
+    XiValue *get = xi_value_new(f, join, XI_INDEX_GET, &t_int, 2);
+    get->args[0] = &merged->value;
+    get->args[1] = idx;
+    xi_block_set_return(join, get);
+
+    xi_arc_insert(f);
+
+    char err[512] = {0};
+    ASSERT_EQ(xi_verify(f, err, sizeof(err)), true,
+              "ARC releases for branch-local Span phi remain SSA-dominated");
+    xi_ensure_dominators(f);
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; blk && i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (v && v->op == XI_RELEASE && v->nargs == 1 && v->args[0] == right_span)
+                ASSERT_EQ(xi_dominates(right, blk), true,
+                          "branch-local Span is released only in its dominance region");
+        }
+    }
+    xi_func_free(f);
+}
+
 /* ========== Test: stack alloc rewrite — NO_ESCAPE becomes STACK_ALLOC ========== */
 
 static void test_stack_alloc_local_array(void) {
@@ -676,6 +801,8 @@ int main(void) {
     test_arc_heap_gets_retain_release();
     test_arc_elim_keeps_borrowed_single_consumer_retain();
     test_arc_many_consume_sites();
+    test_arc_span_borrow_flows_through_phi();
+    test_arc_branch_local_span_phi_stays_in_dominance_region();
     test_stack_alloc_local_array();
     test_stack_alloc_local_plain_map_set();
     test_stack_alloc_skips_metadata_or_dynamic_capacity();

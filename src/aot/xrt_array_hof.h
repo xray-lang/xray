@@ -76,7 +76,7 @@ static inline XrValue xrt_array_map_typed(XrValue recv, XrValue callback,
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
     XrValue arr = xrt_array_new_typed_uninit(a->length, result_elem_type);
     xrt_array_t *out = (xrt_array_t *) arr.ptr;
-    XrtArrayHofCtx ctx = {a, out, cl, (xrt_array_hof_fn1_t) cl->fn, NULL};
+    XrtArrayHofCtx ctx = {a, out, cl, (xrt_array_hof_fn1_t) cl->callable->sync_entry, NULL};
     int64_t mapped = 0;
     (void) xr_array_core_hof_map(a->length, xrt_array_hof_read, xrt_array_hof_map,
                                  xrt_array_hof_write, &ctx, &mapped);
@@ -91,7 +91,7 @@ static inline XrValue xrt_array_filter_typed(XrValue recv, XrValue callback) {
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
     XrValue arr = xrt_array_new_typed_uninit(a->length, a->elem_type);
     xrt_array_t *out = (xrt_array_t *) arr.ptr;
-    XrtArrayHofCtx ctx = {a, out, cl, (xrt_array_hof_fn1_t) cl->fn, NULL};
+    XrtArrayHofCtx ctx = {a, out, cl, (xrt_array_hof_fn1_t) cl->callable->sync_entry, NULL};
     int64_t kept = 0;
     (void) xr_array_core_hof_filter(a->length, xrt_array_hof_read, xrt_array_hof_filter_predicate,
                                     xrt_array_hof_write, &ctx, &kept);
@@ -104,7 +104,7 @@ static inline XrValue xrt_array_reduce_typed(XrValue recv, XrValue callback, XrV
         return XR_NULL_VAL;
     xrt_array_t *a = (xrt_array_t *) recv.ptr;
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
-    XrtArrayHofCtx ctx = {a, NULL, cl, NULL, (xrt_array_hof_fn2_t) cl->fn};
+    XrtArrayHofCtx ctx = {a, NULL, cl, NULL, (xrt_array_hof_fn2_t) cl->callable->sync_entry};
     return xr_array_core_hof_reduce(a->length, xrt_array_hof_read, xrt_array_hof_reduce, &ctx,
                                     initial);
 }
@@ -114,7 +114,7 @@ static inline XrValue xrt_array_for_each_typed(XrValue recv, XrValue callback) {
         return XR_NULL_VAL;
     xrt_array_t *a = (xrt_array_t *) recv.ptr;
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
-    XrtArrayHofCtx ctx = {a, NULL, cl, (xrt_array_hof_fn1_t) cl->fn, NULL};
+    XrtArrayHofCtx ctx = {a, NULL, cl, (xrt_array_hof_fn1_t) cl->callable->sync_entry, NULL};
     (void) xr_array_core_hof_for_each(a->length, xrt_array_hof_read, xrt_array_hof_each, &ctx,
                                       NULL);
     return XR_NULL_VAL;
@@ -125,7 +125,7 @@ static inline XrValue xrt_array_find_typed(XrValue recv, XrValue callback) {
         return XR_NULL_VAL;
     xrt_array_t *a = (xrt_array_t *) recv.ptr;
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
-    XrtArrayHofCtx ctx = {a, NULL, cl, (xrt_array_hof_fn1_t) cl->fn, NULL};
+    XrtArrayHofCtx ctx = {a, NULL, cl, (xrt_array_hof_fn1_t) cl->callable->sync_entry, NULL};
     XrArrayCoreFindResult result =
         xr_array_core_hof_find(a->length, xrt_array_hof_read, xrt_array_hof_filter_predicate, &ctx);
     return result.found ? result.value : XR_NULL_VAL;
@@ -136,7 +136,7 @@ static inline XrValue xrt_array_find_index_typed(XrValue recv, XrValue callback)
         return XR_FROM_INT(-1);
     xrt_array_t *a = (xrt_array_t *) recv.ptr;
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
-    XrtArrayHofCtx ctx = {a, NULL, cl, (xrt_array_hof_fn1_t) cl->fn, NULL};
+    XrtArrayHofCtx ctx = {a, NULL, cl, (xrt_array_hof_fn1_t) cl->callable->sync_entry, NULL};
     return XR_FROM_INT(xr_array_core_hof_find_index(a->length, xrt_array_hof_read,
                                                     xrt_array_hof_filter_predicate, &ctx));
 }
@@ -146,7 +146,7 @@ static inline XrValue xrt_array_every_typed(XrValue recv, XrValue callback) {
         return XR_TRUE_VAL;
     xrt_array_t *a = (xrt_array_t *) recv.ptr;
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
-    XrtArrayHofCtx ctx = {a, NULL, cl, (xrt_array_hof_fn1_t) cl->fn, NULL};
+    XrtArrayHofCtx ctx = {a, NULL, cl, (xrt_array_hof_fn1_t) cl->callable->sync_entry, NULL};
     return XR_FROM_BOOL(xr_array_core_hof_every(a->length, xrt_array_hof_read,
                                                 xrt_array_hof_filter_predicate, &ctx));
 }
@@ -156,7 +156,7 @@ static inline XrValue xrt_array_some_typed(XrValue recv, XrValue callback) {
         return XR_FALSE_VAL;
     xrt_array_t *a = (xrt_array_t *) recv.ptr;
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
-    XrtArrayHofCtx ctx = {a, NULL, cl, (xrt_array_hof_fn1_t) cl->fn, NULL};
+    XrtArrayHofCtx ctx = {a, NULL, cl, (xrt_array_hof_fn1_t) cl->callable->sync_entry, NULL};
     return XR_FROM_BOOL(xr_array_core_hof_some(a->length, xrt_array_hof_read,
                                                xrt_array_hof_filter_predicate, &ctx));
 }

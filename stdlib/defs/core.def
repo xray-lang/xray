@@ -2180,9 +2180,9 @@ module io {
     layer: "system"
   }
 
-  fn cwd {
-    signature: "(): Path"
-    doc: "Get current working directory"
+  fn __cwd {
+    signature: "(): string"
+    doc: "Get current working directory (raw string; io.xr wraps as Path)"
     vm: "io_cwd"
     aot: "xrt_io_cwd"
     argc: 0
@@ -2190,6 +2190,7 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
   fn exists {
@@ -2276,9 +2277,9 @@ module io {
     layer: "system"
   }
 
-  fn readDir {
-    signature: "(path: Path): Array<Path>"
-    doc: "List directory entries"
+  fn __readDir {
+    signature: "(path: Path): Array<string>"
+    doc: "List directory entries (raw strings; io.xr wraps as Path)"
     vm: "io_readDir"
     aot: "xrt_io_read_dir"
     argc: 1
@@ -2286,11 +2287,12 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
-  fn readDirRecursive {
-    signature: "(path: Path): Array<Path>"
-    doc: "List directory entries recursively"
+  fn __readDirRecursive {
+    signature: "(path: Path): Array<string>"
+    doc: "List directory entries recursively (raw strings; io.xr wraps as Path)"
     vm: "io_readDirRecursive"
     aot: "xrt_io_read_dir_recursive"
     argc: 1
@@ -2298,6 +2300,7 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
   fn readFile {
@@ -2350,9 +2353,9 @@ module io {
     layer: "system"
   }
 
-  fn readlink {
-    signature: "(path: Path): Path?"
-    doc: "Read symlink target"
+  fn __readlink {
+    signature: "(path: Path): string?"
+    doc: "Read symlink target (raw string; io.xr wraps as Path)"
     vm: "io_readlink"
     aot: "xrt_io_readlink"
     argc: 1
@@ -2360,11 +2363,12 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
-  fn realpath {
-    signature: "(path: Path): Path?"
-    doc: "Resolve to absolute path"
+  fn __realpath {
+    signature: "(path: Path): string?"
+    doc: "Resolve to absolute path (raw string; io.xr wraps as Path)"
     vm: "io_realpath"
     aot: "xrt_io_realpath"
     argc: 1
@@ -2372,6 +2376,7 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
   fn remove {
@@ -2434,9 +2439,9 @@ module io {
     layer: "system"
   }
 
-  fn tempDir {
-    signature: "(): Path?"
-    doc: "Create temporary directory"
+  fn __tempDir {
+    signature: "(): string?"
+    doc: "Create temporary directory (raw string; io.xr wraps as Path)"
     vm: "io_tempDir"
     aot: "xrt_io_temp_dir"
     argc: 0
@@ -2444,11 +2449,12 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
-  fn tempFile {
-    signature: "(): Path?"
-    doc: "Create temporary file"
+  fn __tempFile {
+    signature: "(): string?"
+    doc: "Create temporary file (raw string; io.xr wraps as Path)"
     vm: "io_tempFile"
     aot: "xrt_io_temp_file"
     argc: 0
@@ -2456,6 +2462,7 @@ module io {
     aot_direct: true
     link_object: false
     layer: "system"
+    visibility: "internal"
   }
 
   fn touch {

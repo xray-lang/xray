@@ -48,6 +48,8 @@ static XaotArgClass arg_class_for_value_rep(XaotValueRep rep) {
             return XAOT_ARG_PTR;
         case XAOT_VALUE_AGGREGATE:
             return XAOT_ARG_AGG_BY_VALUE;
+        case XAOT_VALUE_VECTOR:
+            return XAOT_ARG_AGG_BY_VALUE;
         case XAOT_VALUE_TAGGED:
         default:
             return XAOT_ARG_TAGGED;
@@ -390,6 +392,13 @@ static XaotAbiSlot native_value_slot_for_type(const XaotBundle *bundle, const Xi
     slot.cls = arg_class_for_value_rep(slot.rep);
     slot.c_type = slot.rep.c_type;
     return slot;
+}
+
+XaotValueRep xaot_abi_native_value_rep(const XaotBundle *bundle, const XiFunc *func,
+                                       const XiValue *value) {
+    if (!value)
+        return xaot_value_rep_for_type(NULL);
+    return native_value_slot_for_type(bundle, func, value->type, value, false).rep;
 }
 
 static XaotAbiSlot borrowed_place_slot(const XrType *type, XaotAbiSlot value_slot) {

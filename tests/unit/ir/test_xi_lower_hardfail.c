@@ -12,6 +12,7 @@
 #include "../../../src/ir/xi_lower_internal.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/frontend/analyzer/xa_typed_program.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_vm.h"
 
@@ -76,7 +77,9 @@ static XiFunc *try_lower(const char *source) {
     freopen("/dev/null", "w", stderr);
 #endif
 
-    XiFunc *func = xi_lower_program(program, analyzer, g_iso);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false) : NULL;
+    xa_typed_program_free(typed.program);
 
 #ifdef _WIN32
     freopen("CON", "w", stderr);

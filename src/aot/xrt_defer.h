@@ -119,7 +119,7 @@ static inline void xrt_defer_invoke_one(XrValue closure) {
 
     xrt_closure_t *c = (xrt_closure_t *) closure.ptr;
     if (c)
-        ((XrValue (*)(xrt_closure_t *)) c->fn)(c);
+        ((XrValue (*)(xrt_closure_t *)) c->callable->sync_entry)(c);
 
     if (had_error) {
         if (xrt_has_pending_error())

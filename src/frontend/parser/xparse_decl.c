@@ -314,6 +314,16 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @interrupt");
     } else if (name_token.length == 8 && memcmp(name_token.start, "no_alloc", 8) == 0) {
         attr->kind = ATTR_NO_ALLOC;
+    } else if (name_token.length == 9 && memcmp(name_token.start, "intrinsic", 9) == 0) {
+        attr->kind = ATTR_INTRINSIC;
+        xr_parser_consume(parser, TK_LPAREN, "expected '(' after @intrinsic");
+        if (xr_parser_check(parser, TK_LITERAL_STRING)) {
+            xr_parser_advance(parser);
+            attr->str_arg = xr_attr_string_arg(parser);
+        } else {
+            xr_parser_error(parser, "@intrinsic requires a canonical identity string");
+        }
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @intrinsic");
     } else if (name_token.length == 6 && memcmp(name_token.start, "derive", 6) == 0) {
         attr->kind = ATTR_DERIVE;
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after @derive");

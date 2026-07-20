@@ -646,6 +646,9 @@ AstNode *xr_ast_call_expr(XrCompilerSession *session, AstNode *callee, AstNode *
     // No generic type arguments
     node->as.call_expr.type_args = NULL;
     node->as.call_expr.type_arg_count = 0;
+    node->as.call_expr.semantic_type_id = 0;
+    node->as.call_expr.semantic_type_args = NULL;
+    node->as.call_expr.semantic_type_arg_count = 0;
 
     return node;
 }
@@ -693,6 +696,9 @@ AstNode *xr_ast_call_expr_generic(XrCompilerSession *session, AstNode *callee, A
     } else {
         node->as.call_expr.type_args = NULL;
     }
+    node->as.call_expr.semantic_type_id = 0;
+    node->as.call_expr.semantic_type_args = NULL;
+    node->as.call_expr.semantic_type_arg_count = 0;
 
     return node;
 }
@@ -2086,9 +2092,11 @@ AstNode *xr_ast_import_stmt_ex(XrCompilerSession *session, const char *module_na
 // export { a, b as c } from "./file"
 // export * from "./file"
 AstNode *xr_ast_export_reexport(XrCompilerSession *session, const char *from_path,
-                                ReexportMember *members, int count, bool is_all, int line) {
+                                bool from_is_quoted, ReexportMember *members, int count,
+                                bool is_all, int line) {
     AstNode *node = alloc_node(session, AST_EXPORT_STMT, line);
     node->as.export_stmt.from_path = from_path ? ast_strdup(session, from_path) : NULL;
+    node->as.export_stmt.from_is_quoted = from_is_quoted;
     node->as.export_stmt.reexport_members = members;
     node->as.export_stmt.reexport_count = count;
     node->as.export_stmt.is_reexport_all = is_all;

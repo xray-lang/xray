@@ -35,6 +35,43 @@ static inline int64_t xr_i64_mul_wrap(int64_t a, int64_t b) {
     return (int64_t) ((uint64_t) a * (uint64_t) b);
 }
 
+/* High half of a full-width unsigned 64 x 64 product.  This is the semantic
+ * truth shared by VM and AOT for uint64.mulHigh().  Native AOT compilers lower
+ * the int128 expression to UMULH/MULX (or the equivalent target instruction);
+ * the four-part fallback keeps the language portable without a public uint128
+ * type or architecture-specific API. */
+static inline uint64_t xr_u64_mul_high(uint64_t a, uint64_t b) {
+#if defined(__SIZEOF_INT128__)
+    return (uint64_t) (((__uint128_t) a * (__uint128_t) b) >> 64);
+#else
+    uint64_t a_lo = (uint32_t) a;
+    uint64_t a_hi = a >> 32;
+    uint64_t b_lo = (uint32_t) b;
+    uint64_t b_hi = b >> 32;
+    uint64_t lo_lo = a_lo * b_lo;
+    uint64_t hi_lo = a_hi * b_lo;
+    uint64_t lo_hi = a_lo * b_hi;
+    uint64_t hi_hi = a_hi * b_hi;
+    uint64_t cross = (lo_lo >> 32) + (uint32_t) hi_lo + lo_hi;
+    return hi_hi + (hi_lo >> 32) + (cross >> 32);
+#endif
+}
+
+static inline uint64_t xr_uint_mul_high_bits(uint64_t a, uint64_t b, unsigned bits) {
+    switch (bits) {
+        case 8:
+            return ((uint16_t) (uint8_t) a * (uint16_t) (uint8_t) b) >> 8;
+        case 16:
+            return ((uint32_t) (uint16_t) a * (uint32_t) (uint16_t) b) >> 16;
+        case 32:
+            return ((uint64_t) (uint32_t) a * (uint64_t) (uint32_t) b) >> 32;
+        case 64:
+            return xr_u64_mul_high(a, b);
+        default:
+            return 0;
+    }
+}
+
 static inline int64_t xr_i64_neg_wrap(int64_t v) {
     return (int64_t) (-(uint64_t) v);
 }

@@ -168,6 +168,8 @@ static bool own_builtin_receiver_registry_matches(const XrType *receiver_type,
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
             return receiver_type && receiver_type->kind == XR_KIND_INT &&
                    !receiver_type->is_nullable;
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+            return xr_type_is_exact_unsigned_integer(receiver_type);
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver_type);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -211,6 +213,9 @@ static bool builtin_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) 
     if (!user || user->op != XI_CALL_BUILTIN || !user->aux)
         return false;
     const char *name = (const char *) user->aux;
+
+    if (strcmp(name, "string_byte_slice") == 0)
+        return arg_idx == 0;
 
     if (strcmp(name, "array_clear") == 0 || strcmp(name, "array_reserve") == 0 ||
         strcmp(name, "array_resize") == 0) {

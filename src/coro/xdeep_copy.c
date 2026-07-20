@@ -35,6 +35,21 @@
 #include <string.h>
 #include "../base/xhash.h"
 
+/* AOT uses extended value tags for its compact string representation.  These
+ * values can appear inside an otherwise header-compatible AOT Map/Array sent
+ * through a runtime channel.  Convert the leaf before VM containers inspect
+ * the tag; tags 0-7 remain layout-identical and need no bridge. */
+#define XR_AOT_VALUE_TAG_STR 14
+#define XR_AOT_VALUE_TAG_STR_ARC 19
+
+typedef struct XrAotStringView {
+    int64_t len;
+    int64_t rune_len;
+    uint32_t hash;
+    uint32_t flags;
+    char *data;
+} XrAotStringView;
+
 const XrObjDeepCopyFn xr_obj_deep_copy_ops[XR_OBJ_TYPE_MAX] = {
     [XR_TSTRING] = xr_deep_copy_string_with_ctx,     [XR_TARRAY] = xr_deep_copy_array_with_ctx,
     [XR_TMAP] = xr_deep_copy_map_with_ctx,           [XR_TSET] = xr_deep_copy_set_with_ctx,
@@ -839,6 +854,13 @@ static inline XrValue deep_copy_dispatch_bounded(XrCopyContext *ctx, XrValue val
 
 XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     XR_DCHECK(ctx != NULL, "deep_copy_with_ctx: NULL context");
+    if (value.tag == XR_AOT_VALUE_TAG_STR || value.tag == XR_AOT_VALUE_TAG_STR_ARC) {
+        const XrAotStringView *src = (const XrAotStringView *) value.ptr;
+        if (!ctx->core || !src || !src->data || src->len < 0)
+            return XR_NULL_VAL;
+        XrString *dst = xr_string_intern_core(ctx->core, src->data, (size_t) src->len, src->hash);
+        return dst ? xr_string_value(dst) : XR_NULL_VAL;
+    }
     if (XR_IS_ARRAY_REF(value))
         return deep_copy_dispatch_bounded(ctx, value, NULL, NULL);
     if (!XR_IS_PTR(value))

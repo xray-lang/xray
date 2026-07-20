@@ -35,6 +35,7 @@
 
 struct AstNode;
 struct XaAnalyzer;
+struct XaTypedProgram;
 struct XgGlobalEvidence;
 struct XrType;
 struct XrVMRuntime;
@@ -102,6 +103,7 @@ typedef struct XiLower {
 
     /* Semantic analysis context (type queries) */
     struct XaAnalyzer *analyzer;
+    const struct XaTypedProgram *typed_program;
     struct XrVMRuntime *isolate;
 
     /* Braun SSA variable tracking.
@@ -231,24 +233,14 @@ typedef struct XiLower {
  * The analyzer provides type information for each AST node.
  * Returns NULL on failure.
  */
-XR_FUNC XiFunc *xi_lower_func(struct AstNode *func_node, struct XaAnalyzer *analyzer,
-                              struct XrVMRuntime *isolate);
+XR_FUNC XiFunc *xi_lower_func(const struct XaTypedProgram *program, struct XrVMRuntime *isolate);
 
 /*
  * Lower a top-level program (sequence of statements) into a
  * synthetic "main" function. Used for script-mode execution.
  * The AST must be canonicalized (xr_canon_program) before lowering.
  */
-XR_FUNC XiFunc *xi_lower_program(struct AstNode *program_node, struct XaAnalyzer *analyzer,
-                                 struct XrVMRuntime *isolate);
-
-/* Same as xi_lower_program but enables REPL incremental compilation.
- * When repl_mode is true, top-level name resolution / store goes
- * through the name-keyed XrGlobalDict instead of the slot-indexed
- * XrSharedArray; cross-input bindings resolve at runtime by name. */
-XR_FUNC XiFunc *xi_lower_program_ex(struct AstNode *program_node, struct XaAnalyzer *analyzer,
-                                    struct XrVMRuntime *isolate, bool repl_mode,
-                                    const struct XgGlobalEvidence *global_evidence,
-                                    uint32_t module_id);
+XR_FUNC XiFunc *xi_lower_program(const struct XaTypedProgram *program, struct XrVMRuntime *isolate,
+                                 bool repl_mode);
 
 #endif  // XI_LOWER_H

@@ -12,6 +12,7 @@
  */
 
 #include "xi_verify.h"
+#include "xi_evidence.h"
 #include "xi_effect.h"
 #include "xi_backend.h"
 #include "xi_coro_analyze.h"
@@ -19,6 +20,7 @@
 #include "xi_verify_gen.h"
 #include "xi_op_name.h"
 #include "xi_analysis.h"
+#include "xi_semantic_intrinsic.h"
 #include "xi_own.h"
 #include "xi_tbaa.h"
 #include "../runtime/value/xtype.h"
@@ -707,6 +709,24 @@ static bool verify_exact_bit_contract(VerifyCtx *ctx, const XiFunc *f, const XiB
                  v->id, xi_op_name(v->op), blk->id);
             return false;
         }
+    }
+    if (mul_high &&
+        (v->aux_int != XR_NATIVE_U8 && v->aux_int != XR_NATIVE_U16 && v->aux_int != XR_NATIVE_U32 &&
+         v->aux_int != XR_NATIVE_U64 && v->aux_int != XR_NATIVE_USIZE)) {
+        verr(ctx, "func '%s': v%u %s in b%u requires an unsigned exact-width receiver", f->name,
+             v->id, xi_op_name(v->op), blk->id);
+        return false;
+    }
+    if (mul_high && !v->args[1]) {
+        /* The source method registry already proves the rhs exact-width type.
+         * Optimizer representation selection may legitimately turn an
+         * imported constant into UNKNOWN-typed GET_SHARED/UNBOX values.  From
+         * semantic Xi onward the stable intrinsic identity plus aux_int width
+         * is the proof consumed by VM/AOT, so only operand presence remains a
+         * stage-local invariant here. */
+        verr(ctx, "func '%s': v%u %s in b%u requires an rhs operand", f->name, v->id,
+             xi_op_name(v->op), blk->id);
+        return false;
     }
     if (receiver_result && !xr_type_equals((XrType *) v->type, (XrType *) v->args[0]->type)) {
         verr(ctx, "func '%s': v%u %s in b%u must preserve the exact receiver type", f->name, v->id,
@@ -1548,6 +1568,60 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
+/* LOWERED: target-independent coroutine/callable and semantic lowering facts
+ * are explicit. Selective lowering is represented per function, not as a
+ * skippable global stage. */
+static void verify_lowered(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed || f->stage < XI_STAGE_LOWERED)
+        return;
+    const XiLoweringFacts *facts = &f->lowering_facts;
+    if (!facts->initialized) {
+        verr(ctx, "func '%s': Lowered stage has no XiLoweringFacts", f->name);
+        return;
+    }
+    if (!facts->semantic_ops_lowered) {
+        verr(ctx, "func '%s': target-independent semantic lowering is incomplete", f->name);
+        return;
+    }
+    if (facts->coroutine_required && !facts->coroutine_lowered) {
+        verr(ctx, "func '%s': required coroutine lowering is incomplete", f->name);
+        return;
+    }
+    if (facts->callable_required && !facts->callable_lowered) {
+        verr(ctx, "func '%s': required callable lowering is incomplete", f->name);
+        return;
+    }
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            if (v->xa_intrinsic_id != XA_INTRINSIC_NONE) {
+                char intrinsic_error[192] = {0};
+                if (!xi_semantic_intrinsic_verify_value(v, f->stage, intrinsic_error,
+                                                        sizeof(intrinsic_error))) {
+                    verr(ctx, "func '%s': v%u in b%u violates semantic intrinsic contract: %s",
+                         f->name, v->id, blk->id, intrinsic_error);
+                    return;
+                }
+            } else if ((xi_op_class(v->op) == XI_GEN_CLASS_VECTOR &&
+                        xi_vec_shape_is_explicit(v->aux_int)) ||
+                       v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR || v->op == XI_BIT_BSWAP ||
+                       v->op == XI_BIT_POPCOUNT || v->op == XI_BIT_CLZ || v->op == XI_BIT_CTZ ||
+                       v->op == XI_BIT_MUL_HIGH) {
+                verr(ctx,
+                     "func '%s': canonical semantic op v%u %s in b%u has no intrinsic identity",
+                     f->name, v->id, xi_op_name(v->op), blk->id);
+                return;
+            }
+        }
+    }
+}
+
 /* ========== Check 17: NARROW Required Before Typed-Array Store ========== */
 
 static bool native_width_needs_narrow(uint8_t native_width) {
@@ -1824,7 +1898,7 @@ static void verify_coro_plan(VerifyCtx *ctx, const XiFunc *f) {
 /* ========== Public API ========== */
 
 static void verify_tbaa_annotations(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed || !(f->invariant_mask & XI_INV_TBAA_ANNOTATED))
+    if (ctx->failed || !xi_evidence_domain_is_proven_current(f, XI_EVD_ALIAS))
         return;
     for (uint32_t bi = 0; bi < f->nblocks && !ctx->failed; bi++) {
         XiBlock *blk = f->blocks[bi];
@@ -1999,6 +2073,8 @@ XR_FUNC bool xi_verify_stage(const XiFunc *f, XiStage stage, char *errbuf, int e
         verify_closed(&ctx, f);
     if (!ctx.failed && stage >= XI_STAGE_OWNED)
         verify_owned(&ctx, f);
+    if (!ctx.failed && stage >= XI_STAGE_LOWERED)
+        verify_lowered(&ctx, f);
     /* REPPED and BACKEND already gated inside verify_repped/verify_backend
      * (called by xi_verify above), so no double-run needed. */
 

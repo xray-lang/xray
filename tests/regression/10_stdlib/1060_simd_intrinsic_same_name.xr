@@ -1,0 +1,14 @@
+// User declarations that share canonical SIMD spellings remain ordinary code.
+struct U32x4 {
+    value: uint32
+
+    bitXor(other: U32x4) -> uint32 {
+        return this.value + other.value
+    }
+}
+
+@test
+fn test_user_simd_names_are_not_intrinsics() {
+    var result = U32x4{value: 2}.bitXor(U32x4{value: 3})
+    assert_eq(result, 5)
+}

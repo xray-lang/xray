@@ -1,0 +1,63 @@
+// io — filesystem module (script layer over the native-primitive C boundary).
+//
+// The C layer (stdlib/io/io.c) implements every filesystem operation directly.
+// Operations that yield a filesystem *path* return a raw string through a private
+// `__*` primitive; this script layer wraps those raw strings into the native
+// `path.Path` class so the public `io` surface is typed in `Path`, matching the
+// VM byte-for-byte.  All non-path operations (chmod, stat, writeFile, exists, …)
+// stay direct C primitives and are not re-declared here.
+
+import { Path } from path
+
+// cwd — the current working directory.
+export fn cwd() -> Path {
+    return Path(__cwd())
+}
+
+// tempDir — create a temporary directory and return its path.
+export fn tempDir() -> Path? {
+    var raw = __tempDir()
+    if (raw == null) { return null }
+    return Path(raw!)
+}
+
+// tempFile — create a temporary file and return its path.
+export fn tempFile() -> Path? {
+    var raw = __tempFile()
+    if (raw == null) { return null }
+    return Path(raw!)
+}
+
+// readlink — the target of a symbolic link.
+export fn readlink(p: Path) -> Path? {
+    var raw = __readlink(p)
+    if (raw == null) { return null }
+    return Path(raw!)
+}
+
+// realpath — the canonical absolute path.
+export fn realpath(p: Path) -> Path? {
+    var raw = __realpath(p)
+    if (raw == null) { return null }
+    return Path(raw!)
+}
+
+// readDir — the immediate entries of a directory.
+export fn readDir(p: Path) -> Array<Path> {
+    var raws = __readDir(p)
+    var out: Array<Path> = []
+    for (var i = 0; i < len(raws); i++) {
+        out.push(Path(raws[i]))
+    }
+    return out
+}
+
+// readDirRecursive — every entry beneath a directory.
+export fn readDirRecursive(p: Path) -> Array<Path> {
+    var raws = __readDirRecursive(p)
+    var out: Array<Path> = []
+    for (var i = 0; i < len(raws); i++) {
+        out.push(Path(raws[i]))
+    }
+    return out
+}

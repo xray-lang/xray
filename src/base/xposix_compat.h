@@ -142,4 +142,28 @@ static inline int poll(struct pollfd *fds, unsigned long nfds, int timeout) {
 }
 
 #endif  // XR_COMPILER_MSVC
+
+/* MinGW/UCRT does not provide GNU memmem. Keep the shim separate from the
+ * wider MSVC compatibility block because MinGW already supplies most of the
+ * other POSIX helpers above. */
+#if defined(XR_OS_WINDOWS) && !defined(XR_COMPILER_MSVC)
+#include <string.h>
+static inline void *xr_windows_memmem(const void *haystack, size_t haystacklen, const void *needle,
+                                      size_t needlelen) {
+    if (needlelen == 0)
+        return (void *) haystack;
+    if (haystacklen < needlelen)
+        return NULL;
+    const unsigned char *h = (const unsigned char *) haystack;
+    const unsigned char *n = (const unsigned char *) needle;
+    size_t limit = haystacklen - needlelen;
+    for (size_t i = 0; i <= limit; i++) {
+        if (h[i] == n[0] && memcmp(h + i, n, needlelen) == 0)
+            return (void *) (h + i);
+    }
+    return NULL;
+}
+#define memmem xr_windows_memmem
+#endif
+
 #endif  // XPOSIX_COMPAT_H

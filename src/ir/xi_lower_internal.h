@@ -116,7 +116,8 @@ XR_FUNC struct XrType *xi_lower_type_or_any(XiLower *l, struct XrType *type, con
                                             int line);
 XR_FUNC uint32_t xi_lower_source_node_id(const XiLower *l, const struct AstNode *node);
 XR_FUNC void xi_lower_bind_module_body_id(XiLower *l);
-XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, uint32_t source_node_id);
+XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, uint32_t source_node_id,
+                                            uint32_t source_span_id);
 XR_FUNC void xi_lower_bind_method_body_id(XiLower *l, uint32_t source_node_id);
 XR_FUNC uint32_t xi_lower_next_key_access_ordinal(XiLower *l, uint32_t source_span_id,
                                                   uint8_t access_op);
@@ -167,7 +168,8 @@ XR_FUNC void xi_lower_apply_sequence_evidence_ids(XiValue *value, const XiSequen
 /* ========== Function Lowering (xi_lower.c) ========== */
 
 XR_FUNC XiFunc *xi_lower_func_impl(struct AstNode *func_node, struct XaAnalyzer *analyzer,
-                                   struct XrVMRuntime *isolate, XiLower *parent_ctx);
+                                   struct XrVMRuntime *isolate, XiLower *parent_ctx,
+                                   const struct XaTypedProgram *typed_program);
 XR_FUNC void xi_lower_func_add_child(XiFunc *parent, XiFunc *child);
 
 /* Rewrite direct calls to generator functions into XI_GEN_CALL across the whole

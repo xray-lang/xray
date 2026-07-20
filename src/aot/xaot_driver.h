@@ -114,15 +114,17 @@ typedef struct {
     int n_sources;              /* number of generated C translation units */
     char *plan_dump;            /* stable AOT prepare plan dump (malloc'd) */
     char *global_evidence_dump; /* global evidence dump (malloc'd) */
+    char *local_evidence_dump;  /* subject-bound Xi evidence dump (malloc'd) */
     XgEvidenceCacheManifest evidence_cache_manifest;
     bool has_evidence_cache_manifest;
     char *evidence_cache_payloads[XG_EVIDENCE_CACHE_PHASE_COUNT]; /* phase payload dumps */
     char *c_export_header; /* public @c_export C declarations (malloc'd) */
     XaotLinkManifest link_manifest;
-    int total_compiled;      /* number of functions successfully transpiled */
-    int total_aot;           /* total AOT-eligible functions found */
-    int nmodules;            /* number of modules in the bundle */
-    XaotFeatureSet features; /* inferred feature set */
+    int total_compiled;           /* number of functions successfully transpiled */
+    int total_aot;                /* total AOT-eligible functions found */
+    int nmodules;                 /* number of modules in the bundle */
+    XaotFeatureSet features;      /* inferred feature set */
+    bool has_explicit_vector_ops; /* bundle contains target-planned explicit SIMD */
     XaotPrepareStats prepare_stats;
     XiCgenStats cgen_stats;
     XiCgenCoroFrameStats coro_frame_stats;
@@ -141,6 +143,7 @@ typedef struct XaotBuildOptions {
     bool emit_plan_dump;
     bool emit_program_main;
     bool emit_global_evidence_dump;
+    bool emit_local_evidence_dump;
     const char *evidence_cache_dir;
     bool evidence_cache_rebuild;
     bool evidence_cache_verbose;

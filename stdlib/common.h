@@ -121,25 +121,6 @@ static inline XrValue xrs_string_value_c(XrVMRuntime *X, const char *s) {
     return xrs_string_value_n(X, s, strlen(s));
 }
 
-static inline XrValue xrs_path_value_n(XrVMRuntime *X, const char *s, size_t len) {
-    if (!X || !s)
-        return xr_null();
-    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    if (!core || !core->pathClass)
-        return xr_null();
-    XrInstance *inst = xr_instance_new(X, core->pathClass);
-    if (!inst)
-        return xr_null();
-    inst->fields[0] = xrs_string_value_n(X, s, len);
-    return xr_value_from_instance(inst);
-}
-
-static inline XrValue xrs_path_value_c(XrVMRuntime *X, const char *s) {
-    if (!s)
-        return xr_null();
-    return xrs_path_value_n(X, s, strlen(s));
-}
-
 /* ========== Module Export Helper ========== */
 
 /*

@@ -1055,8 +1055,8 @@ TEST(emit_closure_new) {
     XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
-    /* Child XiFunc ownership transferred to child_proto during emit */
-    assert(f->children[child_idx] == NULL && "child should be detached from parent");
+    /* Raw direct-emitter tests do not publish unverified IR to the AOT proto. */
+    assert(f->children[child_idx] == child && "raw child should remain owned by parent");
 
     bool found = false;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {

@@ -23,7 +23,8 @@
 
 static int usage(void) {
     fprintf(stderr, "usage: xray_stdlib_bcgen compile <input.xr> --output <output.xrc> "
-                    "--format bytecode [--strip-debug] [--strip-source]\n");
+                    "--format bytecode [--stdlib-module <canonical-name>] "
+                    "[--strip-debug] [--strip-source]\n");
     return 2;
 }
 
@@ -36,6 +37,7 @@ int main(int argc, char **argv) {
 
     const char *input = argv[2];
     const char *output = NULL;
+    const char *stdlib_module = NULL;
     int flags = 0;
 
     for (int i = 3; i < argc; i++) {
@@ -53,6 +55,12 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "xray_stdlib_bcgen: unsupported format '%s'\n", fmt);
                 return 2;
             }
+            continue;
+        }
+        if (strcmp(argv[i], "--stdlib-module") == 0) {
+            if (i + 1 >= argc)
+                return usage();
+            stdlib_module = argv[++i];
             continue;
         }
         if (strcmp(argv[i], "--strip-debug") == 0) {
@@ -77,7 +85,9 @@ int main(int argc, char **argv) {
     }
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
-    bool ok = xr_compile_to_file(session, input, output, flags);
+    bool ok = stdlib_module
+                  ? xr_compile_stdlib_to_file(session, stdlib_module, input, output, flags)
+                  : xr_compile_to_file(session, input, output, flags);
     xray_vm_delete(X);
     return ok ? 0 : 1;
 }

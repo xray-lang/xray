@@ -31,6 +31,7 @@
  */
 
 #include "xi_escape.h"
+#include "xi_evidence.h"
 #include "xi_analysis.h"
 #include "xi_loop.h"
 #include "xi_value_query.h"
@@ -387,6 +388,25 @@ XR_FUNC void xi_escape_analyze(XiFunc *f) {
     }
 
     analyze_func(f);
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (!value || !xi_op_is_heap_alloc(value->op))
+                continue;
+            XiEvidencePayload payload = {
+                .kind = XI_EVIDENCE_PAYLOAD_U64_PAIR,
+                .as.u64_pair = {.first = value->escape, .second = value->op},
+            };
+            xi_evidence_publish(f, XI_EVD_ESCAPE, xi_evidence_subject_value(value), XI_PROOF_PROVEN,
+                                XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_ESCAPE_ANALYSIS,
+                                value->line, &payload);
+        }
+    }
+    xi_evidence_publish(f, XI_EVD_ESCAPE, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_ESCAPE_ANALYSIS, 0, NULL);
 }
 
 /* ========== Cross-Function Escape Summary ========== */

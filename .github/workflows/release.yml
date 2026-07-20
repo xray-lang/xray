@@ -53,46 +53,88 @@ jobs:
       if: runner.os == 'Linux'
       run: sudo apt-get update -qq && sudo apt-get install -y -qq clang
 
+    - name: Install pinned Zig
+      uses: mlugg/setup-zig@v2
+      with:
+        version: 0.16.0
+
     - name: Configure (Unix)
       if: runner.os != 'Windows'
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER=clang \
+          -DXRAY_BUNDLE_ZIG=ON \
+          -DXRAY_BUNDLED_ZIG="$(command -v zig)"
 
     - name: Configure (Windows)
       if: runner.os == 'Windows'
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      shell: pwsh
+      run: |
+        $zig = (Get-Command zig).Source
+        cmake -B build -DCMAKE_BUILD_TYPE=Release `
+          -DXRAY_BUNDLE_ZIG=ON `
+          "-DXRAY_BUNDLED_ZIG=$zig"
 
     - name: Build
       run: cmake --build build --config Release
 
-    # The full 0.9 consolidation gate runs in main CI before release. The
-    # packaging workflow verifies the release binary can start and execute a
-    # stable smoke fixture on every Unix target.
-    - name: Release Smoke (Unix)
-      if: runner.os != 'Windows'
-      run: |
-        ./build/xray --version
-        ./build/xray test -q tests/regression/01_literals/0100_int_basic.xr
-
-    - name: Package (Unix)
-      if: runner.os != 'Windows'
-      run: |
-        mkdir -p dist
-        cp build/xray dist/
-        cp -r stdlib dist/
-        cp README.md LICENSE dist/
-        cd dist && tar -czf ../${{ matrix.artifact }}.tar.gz *
-
-    - name: Package (Windows)
+    - name: Build GNU AOT runtime (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        New-Item -ItemType Directory -Path dist -Force | Out-Null
+        $zig = (Get-Command zig).Source
+        $ccWrapper = Join-Path $env:RUNNER_TEMP 'xray-zig-cc.cmd'
+        $cxxWrapper = Join-Path $env:RUNNER_TEMP 'xray-zig-cxx.cmd'
+        [IO.File]::WriteAllText(
+          $ccWrapper,
+          "@echo off`r`n`"$zig`" cc -target x86_64-windows-gnu %*`r`n",
+          [Text.Encoding]::ASCII
+        )
+        [IO.File]::WriteAllText(
+          $cxxWrapper,
+          "@echo off`r`n`"$zig`" c++ -target x86_64-windows-gnu %*`r`n",
+          [Text.Encoding]::ASCII
+        )
+        cmake -S . -B build-zig-sdk -G Ninja `
+          -DCMAKE_SYSTEM_NAME=Windows `
+          -DCMAKE_BUILD_TYPE=Release `
+          "-DCMAKE_C_COMPILER=$ccWrapper" `
+          "-DCMAKE_CXX_COMPILER=$cxxWrapper" `
+          "-DCMAKE_ASM_COMPILER=$ccWrapper" `
+          -DENABLE_TLS=OFF `
+          -DBUILD_TESTS=OFF `
+          -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE `
+          -DCMAKE_DISABLE_FIND_PACKAGE_OpenSSL=TRUE
+        cmake --build build-zig-sdk --target xray_rt_coro xray_aot_core
+
+    - name: Install package tree (Unix)
+      if: runner.os != 'Windows'
+      run: cmake --install build --prefix dist
+
+    - name: Install package tree (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        cmake --install build --config Release --prefix dist
+        # Keep the MSVC archives available for embedders, but out of the
+        # default -L search directory. Zig prefers the .lib spelling on
+        # Windows, which would otherwise select the MSVC archive instead of
+        # the self-contained GNU ABI archive copied below.
+        New-Item -ItemType Directory -Path dist\lib\msvc -Force | Out-Null
+        foreach ($archive in @('xray_rt_coro.lib', 'xray_aot_core.lib')) {
+          $installed = Join-Path 'dist\lib' $archive
+          if (Test-Path $installed) {
+            Move-Item $installed dist\lib\msvc\ -Force
+          }
+        }
+        Copy-Item build-zig-sdk\libxray_rt_coro.a dist\lib\ -Force
+        Copy-Item build-zig-sdk\libxray_aot_core.a dist\lib\ -Force
         $buildExe = @('build\Release\xray.exe', 'build\xray.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1
         if (-not $buildExe) {
           throw 'xray.exe was not produced by the release build'
         }
-        Copy-Item $buildExe dist\
-        Copy-Item (Join-Path (Split-Path $buildExe) '*.dll') dist\ -ErrorAction SilentlyContinue
+        Copy-Item (Join-Path (Split-Path $buildExe) '*.dll') dist\bin\ -ErrorAction SilentlyContinue
 
         $searchDirs = @()
         if ($env:OPENSSL_ROOT_DIR) {
@@ -110,14 +152,99 @@ jobs:
             ForEach-Object { Get-ChildItem -Path $_ -Filter $pattern -File -ErrorAction SilentlyContinue } |
             Select-Object -First 1
           if ($dll) {
-            Copy-Item $dll.FullName dist\ -Force
+            Copy-Item $dll.FullName dist\bin\ -Force
             Write-Host "Copied $($dll.Name)"
           }
         }
 
-        Copy-Item stdlib dist\stdlib\ -Recurse
-        Copy-Item README.md dist\ -ErrorAction SilentlyContinue
-        Copy-Item LICENSE dist\ -ErrorAction SilentlyContinue
+    # This is deliberately run from outside the checkout with all SDK path
+    # overrides removed. It proves the release tree, not the development tree,
+    # owns native AOT compilation and bundled Zig discovery.
+    - name: Relocatable AOT smoke (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        set -euo pipefail
+        smoke="$(mktemp -d)"
+        trap 'rm -rf "$smoke"' EXIT
+        cp tests/aot/filetests/link/runtime_time.xr "$smoke/runtime_time.xr"
+        cp tests/aot/filetests/link/system_time_queries.xr "$smoke/system_time_queries.xr"
+        cat > "$smoke/cross.xr" <<'XR_EOF'
+        fn answer() -> int {
+            return 42
+        }
+
+        answer()
+        XR_EOF
+        xray="$GITHUB_WORKSPACE/dist/bin/xray"
+        unset XRAY_INCLUDE XRAY_LIB XRAY_STDLIB_PATH XRAY_ZIG
+        "$xray" --version
+        "$xray" toolchain doctor
+        (cd "$smoke" && "$xray" build --native --dump-link-command runtime_time.xr -o runtime_time) \
+          | tee "$smoke/native.log"
+        test "$("$smoke/runtime_time")" = "7"
+        (cd "$smoke" && "$xray" build --native system_time_queries.xr -o system_time_queries)
+        test "$("$smoke/system_time_queries" | sort -u)" = "true"
+        if grep -Fq "$GITHUB_WORKSPACE/src/aot" "$smoke/native.log"; then
+          echo "release AOT command leaked the checkout path" >&2
+          exit 1
+        fi
+        (cd "$smoke" && "$xray" build --native --target x86_64-linux-musl cross.xr -o cross-linux)
+        test -s "$smoke/cross-linux"
+
+    - name: Relocatable AOT smoke (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $smoke = Join-Path $env:RUNNER_TEMP 'xray-release-smoke'
+        New-Item -ItemType Directory -Path $smoke -Force | Out-Null
+        Copy-Item tests\aot\filetests\link\runtime_time.xr $smoke\runtime_time.xr
+        Copy-Item tests\aot\filetests\link\system_time_queries.xr $smoke\system_time_queries.xr
+        @'
+        fn answer() -> int {
+            return 42
+        }
+
+        answer()
+        '@ | Set-Content -Encoding utf8 $smoke\cross.xr
+        $xray = Join-Path $env:GITHUB_WORKSPACE 'dist\bin\xray.exe'
+        Remove-Item Env:XRAY_INCLUDE -ErrorAction SilentlyContinue
+        Remove-Item Env:XRAY_LIB -ErrorAction SilentlyContinue
+        Remove-Item Env:XRAY_STDLIB_PATH -ErrorAction SilentlyContinue
+        Remove-Item Env:XRAY_ZIG -ErrorAction SilentlyContinue
+        & $xray --version
+        if ($LASTEXITCODE -ne 0) { throw 'installed xray --version failed' }
+        & $xray toolchain doctor
+        if ($LASTEXITCODE -ne 0) { throw 'installed toolchain doctor failed' }
+        Push-Location $smoke
+        try {
+          & $xray build --native --dump-link-command runtime_time.xr -o runtime_time.exe
+          if ($LASTEXITCODE -ne 0) { throw 'installed native AOT build failed' }
+          $value = (& .\runtime_time.exe).Trim()
+          if ($value -ne '7') { throw "installed native output was '$value'" }
+          & $xray build --native system_time_queries.xr -o system_time_queries.exe
+          if ($LASTEXITCODE -ne 0) { throw 'installed native AOT core build failed' }
+          $timeValues = @(& .\system_time_queries.exe)
+          if ($timeValues.Count -ne 5 -or $timeValues -contains 'false') {
+            throw "installed AOT core output was '$($timeValues -join ',')'"
+          }
+          & $xray build --native --target x86_64-linux-musl cross.xr -o cross-linux
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path cross-linux)) {
+            throw 'installed cross AOT build failed'
+          }
+        } finally {
+          Pop-Location
+        }
+
+    - name: Package (Unix)
+      if: runner.os != 'Windows'
+      run: tar -czf ${{ matrix.artifact }}.tar.gz -C dist .
+
+    - name: Package (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
         Compress-Archive -Path dist\* -DestinationPath ${{ matrix.artifact }}.zip
 
     - name: Upload artifact
@@ -322,8 +449,8 @@ jobs:
       run: |
         cd artifact
         tar -xzf xray-linux-x64.tar.gz
-        file xray
-        ./xray --version
+        file bin/xray
+        ./bin/xray --version
 
     - name: Upload xray binary to server
       if: steps.gate.outputs.skip != 'true'
@@ -332,9 +459,9 @@ jobs:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "artifact/xray"
+        source: "artifact/bin/xray"
         target: "/tmp"
-        strip_components: 1
+        strip_components: 2
 
     - name: Install + restart xray-server
       if: steps.gate.outputs.skip != 'true'

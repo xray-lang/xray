@@ -1,0 +1,23 @@
+fn sync_worker() -> int {
+    return 40
+}
+
+fn suspend_worker() -> int {
+    Coro.yield()
+    return 41
+}
+
+var worker = sync_worker
+
+fn choose(suspend: bool) {
+    if (suspend) {
+        worker = suspend_worker
+    } else {
+        worker = sync_worker
+    }
+}
+
+choose(false)
+print(worker())
+choose(true)
+print(worker())

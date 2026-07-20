@@ -212,10 +212,6 @@ static struct XrType *xi_get_container_elem_type(struct XrType *container_type) 
     return (struct XrType *) xr_type_contiguous_element_type(container_type);
 }
 
-static bool xi_type_is_bytes(struct XrType *type) {
-    return xr_type_is_u8_contiguous(type);
-}
-
 static int64_t xi_array_cfield_from_type(struct XrType *type) {
     if (!type || !(XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type)) ||
         !type->container.element_type)

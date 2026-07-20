@@ -544,6 +544,7 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
     switch (user->op) {
         case XI_SPAN_AS_BYTES:
         case XI_SPAN_REINTERPRET:
+        case XI_SPAN_WINDOW:
         case XI_SPAN_FILL:
         case XI_SPAN_COPY:
         case XI_BYTE_SLICE_FILL:
@@ -1036,6 +1037,47 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                     is_member_borrow = u->nargs >= 1 && u->args[0] == member;
                 }
                 if (!is_member_borrow)
+                    continue;
+                bool seen = false;
+                for (uint32_t t = 0; t < ntracked; t++) {
+                    if (tracked[t] == u) {
+                        seen = true;
+                        break;
+                    }
+                }
+                if (seen)
+                    continue;
+                if (ntracked == track_cap) {
+                    uint32_t new_cap = track_cap * 2;
+                    XiValue **grown = (XiValue **) xr_realloc(tracked, new_cap * sizeof(XiValue *));
+                    if (!grown) {
+                        xr_free(tracked);
+                        return NULL;
+                    }
+                    tracked = grown;
+                    track_cap = new_cap;
+                }
+                tracked[ntracked++] = u;
+            }
+            /* Phi nodes are stored on blk->phis rather than blk->values[].
+             * They still propagate borrowed raw pointers and Span views. If
+             * they are omitted here, the incoming projection is counted only
+             * as an edge use and its owner can be dropped before the phi's
+             * downstream uses (most visibly at a loop header).
+             *
+             * A non-dominated join is different: the phi merges independent
+             * owners from mutually exclusive paths, so it is an ownership
+             * transfer boundary for this incoming value. Extending one
+             * branch-local owner through that phi would place its death drop
+             * in a block where the owner was never defined. Only propagate
+             * the borrow closure when the original owner dominates the phi;
+             * the incoming edge remains a consuming transfer otherwise. */
+            for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+                XiValue *u = &phi->value;
+                if (target->block && !xi_dominates(target->block, blk))
+                    continue;
+                if (!arc_raw_pointer_borrow_flows_to_user(member, u) &&
+                    !arc_span_view_borrow_flows_to_user(member, u))
                     continue;
                 bool seen = false;
                 for (uint32_t t = 0; t < ntracked; t++) {

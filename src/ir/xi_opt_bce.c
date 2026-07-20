@@ -20,6 +20,7 @@
  */
 
 #include "xi_opt_bce.h"
+#include "xi_evidence.h"
 #include "xi_range.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -111,7 +112,7 @@ XR_FUNC XiPassChange xi_opt_bce(XiFunc *f) {
         return xi_pass_no_change();
 
     /* Range analysis must have run. */
-    if (!(f->invariant_mask & XI_INV_RANGE_ANNOTATED))
+    if (!xi_evidence_domain_is_proven_current(f, XI_EVD_RANGE))
         return xi_pass_no_change();
 
     BceSeen seen;

@@ -188,7 +188,7 @@ XR_FUNC void xr_aot_trace_frame_value(void *visitor, XrValue value);
 XR_FUNC void xr_aot_release_frame_value(struct XrCoroHeap *heap, XrValue value);
 
 /* Objects created by reachable coroutine lowering are provider-owned too. */
-XR_FUNC XrValue xrt_closure_new(void *fn, int nupvals);
+XR_FUNC XrValue xrt_closure_new(const XrAotCallableDesc *callable, int nupvals);
 XR_FUNC void xr_runtime_core_enable_object_destroy_ops(struct XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_enable_task_destroy_ops(struct XrRuntimeCore *core);
 

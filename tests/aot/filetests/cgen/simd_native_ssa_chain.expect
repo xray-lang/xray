@@ -1,0 +1,7 @@
+args=--simd native
+contains=kind=vector
+contains=value-stats scalar=
+regex=value-stats scalar=.* vector=[1-9][0-9]*
+c_regex=(uint64x2_t|__m128i) v[0-9]+ =
+c_regex=_a = v[0-9]+, _b = v[0-9]+;
+c_not_contains=xrt_value_clone_for_coro(v

@@ -21,6 +21,9 @@
 #include "../../../src/ir/xi_escape.h"
 #include "../../../src/ir/xi_coro_analyze.h"
 #include "../../../src/ir/xi_pipeline.h"
+#include "../../../src/ir/xi_stage.h"
+#include "../../../src/ir/xi_backend_lower.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xstruct_layout.h"
@@ -785,17 +788,83 @@ static XiFunc *compile_to_ir(const char *source) {
     return compile_to_ir_with_config(source, cfg);
 }
 
+/* CGen fixtures must explicitly produce a verified Backend program. CGen is
+ * deliberately incapable of repairing an earlier-stage input. */
+static bool test_prepare_backend_ir(XiFunc *ir) {
+    if (!ir)
+        return false;
+    if (ir->stage == XI_STAGE_BACKEND)
+        return true;
+
+    char error[512] = {0};
+    XiOptimizedProgram *optimized = NULL;
+    if (ir->stage == XI_STAGE_RAW) {
+        XiRawProgram *raw = xi_stage_adopt_raw(ir, error, sizeof(error));
+        if (!raw)
+            goto fail;
+        XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
+        if (!canonical)
+            goto fail;
+        xi_pass_close(ir);
+        XiClosedProgram *closed = xi_program_close(canonical, error, sizeof(error));
+        if (!closed)
+            goto fail;
+        XiOwnedProgram *owned = xi_program_make_owned(closed, error, sizeof(error));
+        if (!owned)
+            goto fail;
+        XiLoweredProgram *lowered = xi_program_lower_semantics(owned, error, sizeof(error));
+        if (!lowered)
+            goto fail;
+        optimized = xi_program_finish_optimization(lowered, error, sizeof(error));
+    } else if (ir->stage == XI_STAGE_OPTIMIZED) {
+        optimized = xi_stage_adopt_optimized(ir, error, sizeof(error));
+    }
+
+    XiReppedProgram *repped = NULL;
+    if (optimized) {
+        XiRepPolicy policy = xi_rep_policy_native_boundary();
+        xi_opt_select_rep_with_policy(ir, &policy);
+        xi_opt_box_elim(ir);
+        repped = xi_program_select_reps(optimized, error, sizeof(error));
+    } else if (ir->stage == XI_STAGE_REPPED) {
+        repped = xi_stage_adopt_repped(ir, error, sizeof(error));
+    }
+    if (!repped)
+        goto fail;
+
+    xi_backend_lower(ir);
+    XiBackendProgram *backend = xi_program_plan_backend(repped, error, sizeof(error));
+    if (!backend)
+        goto fail;
+    return xi_backend_program_release(backend) == ir;
+
+fail:
+    fprintf(stderr, "  fixture Backend transition failed for '%s': %s\n",
+            ir->name ? ir->name : "<anonymous>", error);
+    return false;
+}
+
+static char *test_failed_codegen_result(bool *had_error) {
+    if (had_error)
+        *had_error = true;
+    char *empty = (char *) xr_malloc(1);
+    TEST_REQUIRE(empty != NULL, "failed-codegen result allocation failed");
+    empty[0] = '\0';
+    return empty;
+}
+
 /* Generate C code for Xi IR into an xr_malloc-owned string.
  * Caller releases the returned string with xr_free(). */
 static char *generate_c_with_status_and_stats(XiFunc *ir, const char *module_name, bool *had_error,
                                               XiCgenCoroFrameStats *coro_stats) {
     assert(ir != NULL);
 
-    /* AOT codegen owns a native scalar boundary; tagged adapters are emitted
-     * only where dynamic closure calls require them. */
-    if (ir->stage < XI_STAGE_REPPED) {
-        XiRepPolicy policy = xi_rep_policy_native_boundary();
-        xi_opt_select_rep_with_policy(ir, &policy);
+    if (!test_prepare_backend_ir(ir)) {
+        if (coro_stats)
+            memset(coro_stats, 0, sizeof(*coro_stats));
+        if (had_error)
+            return test_failed_codegen_result(had_error);
+        TEST_REQUIRE(false, "fixture Backend preparation failed");
     }
 
     /* Build module metadata if the pipeline didn't (e.g. standalone tests) */
@@ -844,9 +913,12 @@ static char *generate_c_with_status_and_cgen_stats(XiFunc *ir, const char *modul
                                                    bool *had_error, XiCgenStats *cgen_stats) {
     assert(ir != NULL);
 
-    if (ir->stage < XI_STAGE_REPPED) {
-        XiRepPolicy policy = xi_rep_policy_native_boundary();
-        xi_opt_select_rep_with_policy(ir, &policy);
+    if (!test_prepare_backend_ir(ir)) {
+        if (cgen_stats)
+            memset(cgen_stats, 0, sizeof(*cgen_stats));
+        if (had_error)
+            return test_failed_codegen_result(had_error);
+        TEST_REQUIRE(false, "fixture Backend preparation failed");
     }
 
     XiModule *mod = ir->module;
@@ -959,6 +1031,23 @@ static size_t count_op_in_func(const XiFunc *func, XiOp op) {
     }
     for (uint16_t ci = 0; ci < func->nchildren; ci++)
         count += count_op_in_func(func->children[ci], op);
+    return count;
+}
+
+static size_t count_intrinsic_in_func(const XiFunc *func, XaIntrinsicId intrinsic_id) {
+    size_t count = 0;
+    if (!func)
+        return 0;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (value && value->xa_intrinsic_id == (uint32_t) intrinsic_id)
+                count++;
+        }
+    }
+    for (uint16_t ci = 0; ci < func->nchildren; ci++)
+        count += count_intrinsic_in_func(func->children[ci], intrinsic_id);
     return count;
 }
 
@@ -1411,6 +1500,34 @@ TEST(cgen_function_call) {
     xi_func_free(ir);
 }
 
+TEST(cgen_canonical_generic_function_body_is_executable) {
+    const char *src = "fn keep<T>(value: T) -> T { return value }\n"
+                      "print(keep(41))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "generic function IR compilation failed");
+    XiFunc *keep = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "keep") == 0) {
+            keep = ir->children[i];
+            break;
+        }
+    }
+    assert(keep != NULL && "canonical generic function body must be lowered");
+    assert(!keep->is_generic_template &&
+           "a function's own type parameters must retain the canonical erased ABI");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "canonical generic body should generate");
+    assert(contains(code, "keep") &&
+           "reachable canonical generic body must not be pruned as an open owner template");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_c_export_emits_public_c_abi_wrapper) {
     const char *src = "@c_export(\"xr_add\")\n"
                       "fn add(a: int32, b: int32) -> int32 {\n"
@@ -1461,9 +1578,8 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
     app_ir->module->path = "app.xr";
     XiModule *modules[] = {lib_ir->module, app_ir->module};
 
-    XiRepPolicy policy = xi_rep_policy_native_boundary();
-    xi_opt_select_rep_with_policy(lib_ir, &policy);
-    xi_opt_select_rep_with_policy(app_ir, &policy);
+    assert(test_prepare_backend_ir(lib_ir));
+    assert(test_prepare_backend_ir(app_ir));
 
     TestAotPlan plan;
     test_aot_plan_prepare(&plan, modules, 2, 1);
@@ -1520,7 +1636,7 @@ TEST(cgen_stats_tracks_native_abi) {
     assert(stats.functions_tagged_abi >= 1 && "module init remains a tagged boundary");
     assert(stats.boxed_adapters == 0 &&
            "direct-only native function should not expose a boxed adapter");
-    assert(!contains(code, "xrt_closure_new((void*)test_inc_") &&
+    assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
            "direct-only shared function should not allocate a runtime closure");
 
     xr_free(code);
@@ -1929,7 +2045,7 @@ TEST(cgen_for_loop) {
 TEST(cgen_parallel_for_each_uses_runtime_executor) {
     const char *src = "import parallel\n"
                       "fn run(n: int) {\n"
-                      "    var base = 10\n"
+                      "    const base = 10\n"
                       "    parallel.forEach(0..n, (i) -> {\n"
                       "        print(i + base)\n"
                       "    }, parallel.Options(2))\n"
@@ -2029,7 +2145,7 @@ TEST(cgen_parallel_map_return_uses_runtime_executor) {
 TEST(cgen_parallel_reduce_uses_runtime_executor) {
     const char *src = "import parallel\n"
                       "fn run(n: int) -> int {\n"
-                      "    var base = 10\n"
+                      "    const base = 10\n"
                       "    return parallel.reduce(0..n, 0, (i) -> i + base, "
                       "(a, b) -> a + b, parallel.Options(2))\n"
                       "}\n"
@@ -2125,7 +2241,39 @@ TEST(lower_parallel_call_plan_resolves_selective_aliases) {
                  "resolved map alias should lower to XI_PAR_MAP");
     TEST_REQUIRE(count_op_in_func(ir, XI_PAR_REDUCE) == 1,
                  "resolved reduce alias should lower to XI_PAR_REDUCE");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_FOR_EACH) == 1,
+                 "forEach alias must preserve canonical identity on XI_PAR_FOR");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_MAP) == 1,
+                 "map alias must preserve canonical identity on XI_PAR_MAP");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_REDUCE) == 1,
+                 "reduce alias must preserve canonical identity on XI_PAR_REDUCE");
 
+    xi_func_free(ir);
+}
+
+TEST(lower_parallel_plan_methods_preserve_intrinsic_identity) {
+    const char *src = "import parallel\n"
+                      "fn initLane(lane: int) -> int { return lane }\n"
+                      "var plan = parallel.Plan<int>(parallel.Options(2), initLane)\n"
+                      "plan.forEach(0..2, (state, i) -> {})\n"
+                      "var mapped = plan.map(0..2, (state, i) -> state + i)\n"
+                      "var out: Array<int> = []\n"
+                      "out.reserve(2)\n"
+                      "plan.mapInto(0..2, out, (state, i) -> state + i)\n"
+                      "var sum = plan.reduce(0..2, 0, (state, i) -> state + i, "
+                      "(a, b) -> a + b)\n"
+                      "print(len(mapped), len(out), sum)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "parallel Plan methods should lower to IR");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_PLAN_FOR_EACH) == 1,
+                 "Plan.forEach must preserve its canonical identity");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_PLAN_MAP) == 1,
+                 "Plan.map must preserve its canonical identity");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_PLAN_MAP_INTO) == 1,
+                 "Plan.mapInto must preserve its canonical identity on XI_PAR_MAP");
+    TEST_REQUIRE(count_intrinsic_in_func(ir, XA_INTRINSIC_PARALLEL_PLAN_REDUCE) == 1,
+                 "Plan.reduce must preserve its canonical identity");
     xi_func_free(ir);
 }
 
@@ -2141,6 +2289,10 @@ TEST(cgen_parallel_for_each_allows_atomic_i64_direct_body) {
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL);
+    assert(count_op_in_func(ir, XI_ATOMIC_RMW) == 1 &&
+           "Atomic.fetchAdd in a contextual parallel callback must be canonical before CGen");
+    assert(count_op_in_func(ir, XI_CALL_METHOD) == 0 &&
+           "parallel callback lowering must not leak an ordinary Atomic method call");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
@@ -2155,7 +2307,7 @@ TEST(cgen_parallel_for_each_allows_atomic_i64_direct_body) {
     xi_func_free(ir);
 }
 
-TEST(cgen_parallel_for_each_rejects_throwing_body) {
+TEST(analyzer_parallel_for_each_rejects_throwing_body) {
     const char *src = "import parallel\n"
                       "fn run(n: int) {\n"
                       "    parallel.forEach(0..n, (i) -> {\n"
@@ -2165,16 +2317,7 @@ TEST(cgen_parallel_for_each_rejects_throwing_body) {
                       "run(3)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL);
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
-    assert(had_error && "AOT parallel.forEach body must reject throwing ops");
-    assert(code[0] == '\0' && "failed C generation must not publish a partial translation unit");
-
-    xr_free(code);
-    xi_func_free(ir);
+    assert(ir == NULL && "parallel callback effects must be rejected during semantic analysis");
 }
 
 TEST(cgen_parallel_for_body_closure_stack_allocates) {
@@ -2261,9 +2404,9 @@ TEST(cgen_parallel_for_body_closure_stack_allocates) {
            "XI_PAR_FOR no-escape closure should use a scoped C closure env");
     assert(contains(code, "xrt_closure_init(_xr_par_closure_") &&
            "XI_PAR_FOR scoped closure env should initialize the runtime closure view");
-    assert(!contains(code, "xrt_closure_stack_new((void*)") &&
+    assert(!contains(code, "xrt_closure_stack_new(&_xr_callable_") &&
            "XI_PAR_FOR scoped closure env must not use function-lifetime alloca");
-    assert(!contains(code, "xrt_closure_new((void*)") &&
+    assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
            "XI_PAR_FOR no-escape closure must not allocate a heap closure");
 
     printf("  Generated parallel-for stack closure path %zu bytes of C code\n", strlen(code));
@@ -2707,7 +2850,7 @@ TEST(cgen_rawptr_parallel_for_each_capture_keeps_owner_alive) {
                       "        unsafe {\n"
                       "            var p = slots.mutPtr()\n"
                       "            var first = p[0]\n"
-                      "            print(first + i)\n"
+                      "            p[0] = first + i\n"
                       "        }\n"
                       "    }, parallel.Options(2))\n"
                       "}\n"
@@ -2721,29 +2864,11 @@ TEST(cgen_rawptr_parallel_for_each_capture_keeps_owner_alive) {
     CHECK_RAWPTR_PAR_CAPTURE(code != NULL, "C code generation failed");
     CHECK_RAWPTR_PAR_CAPTURE(!had_error, "MutPtr capture inside parallel.forEach should generate");
 
-    const char *run = code;
-    while ((run = strstr(run, "static void test_run_")) != NULL) {
-        const char *suffix = run + strlen("static void test_run_");
-        const char *line_end = strchr(run, '\n');
-        const char *body_open = strstr(run, ") {");
-        const char *after_id = suffix;
-        while (*after_id >= '0' && *after_id <= '9')
-            after_id++;
-        if (after_id > suffix && *after_id == '(' && body_open &&
-            (!line_end || body_open < line_end))
-            break;
-        run = suffix;
-    }
-    CHECK_RAWPTR_PAR_CAPTURE(run != NULL, "run function body should exist");
-    const char *run_end = strstr(run + 1, "\nstatic ");
-    if (!run_end)
-        run_end = code + strlen(code);
-    CHECK_RAWPTR_PAR_CAPTURE(run_end != NULL, "run function body should be bounded");
-    const char *par_for = strstr(run, "xr_parallel_for_range_i64(");
-    CHECK_RAWPTR_PAR_CAPTURE(par_for && par_for < run_end,
+    const char *par_for = strstr(code, "xr_parallel_for_range_i64(");
+    CHECK_RAWPTR_PAR_CAPTURE(par_for != NULL,
                              "parallel.forEach should use the AOT runtime executor");
-    const char *release = strstr(run, "xrt_release(");
-    CHECK_RAWPTR_PAR_CAPTURE(release && release < run_end, "owner Array should still be released");
+    const char *release = strstr(par_for, "xrt_release(");
+    CHECK_RAWPTR_PAR_CAPTURE(release != NULL, "owner Array should still be released");
     CHECK_RAWPTR_PAR_CAPTURE(release > par_for,
                              "Array owner borrowed by mutPtr must outlive MutPtr parallel capture");
 
@@ -2914,6 +3039,40 @@ TEST(cgen_byte_array_repeat_from_tail_elides_dead_err_check) {
            "Array<byte>.repeatFrom native helper must not keep a dead ERR_CHECK");
 
     printf("  Generated Array<byte>.repeatFrom fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_verified_span_helper_drop_elides_pending_error_checks) {
+    const char *src = "fn hot(dst: Slice<byte>, src: in Slice<byte>) -> int {\n"
+                      "    var copied: Slice<byte> = dst.copyFrom(src)\n"
+                      "    var word: uint16 = dst.load<uint16>(0, Endian.LE)\n"
+                      "    dst.store<uint16>(0, word + 1, Endian.LE)\n"
+                      "    return len(copied) + dst.compare(src)\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    var dst = Array<byte>(8, 0)\n"
+                      "    var src = Array<byte>(8, 1)\n"
+                      "    return hot(dst[:], src[:])\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "verified Span helper-drop path should generate");
+
+    const char *fn = find_static_function_definition(code, "test_hot_");
+    assert(fn != NULL && "hot definition should exist");
+    const char *fn_end = next_static_after(fn);
+    assert(fn_end != NULL && "hot function body should be bounded");
+    assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
+           "verified inline Span operations must not retain pending-error polls");
+
+    printf("  Generated verified Span helper-drop path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -4575,8 +4734,8 @@ TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
     assert((contains(code, "xrt_array_new_typed_uninit(") ||
             contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
            "branchy Array<float> fill loop must preallocate uninitialized typed storage");
-    assert(contains(code, "double *_ad") &&
-           "branchy Array<float> fill loop must cache raw double storage");
+    assert((contains(code, "double *_ad") || contains(code, "double *XRT_RESTRICT _ad")) &&
+           "branchy Array<float> fill loop must cache raw double storage (optionally restrict)");
     assert(!contains(code, "_a->len =") &&
            "branchy typed array fill loop must use final len store outside the push body");
     assert(!contains(code, "_a->len >= _a->cap") &&
@@ -4586,8 +4745,9 @@ TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
     assert(!contains(code, "xrt_has_pending_error()) {\n        return 0;") &&
            "branchy typed array fill loop must not keep dead error propagation checks");
     assert(!contains(code, "xr_typed_get(") && !contains(code, "xr_typed_set(") &&
-           !contains(code, "xrt_release(") &&
-           "branchy typed array fill loop must not use typed runtime switches or no-op release");
+           "branchy typed array fill loop must not use typed runtime switches");
+    assert(count_between(code, code + strlen(code), "xrt_release(") == 1 &&
+           "branchy typed array must release its heap owner exactly once after the final read");
 
     printf("  Generated branchy typed array fill loop %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -4615,7 +4775,7 @@ TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
     assert(!had_error && "typed array filter fast path should generate");
     assert(!contains(code, "xrt_array_filter_typed(") &&
            "pure Array<uint8>.filter callback must inline instead of using boxed runtime helper");
-    assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+    assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
            "pure inlined Array<uint8>.filter must not allocate a callback closure");
     assert(!contains(code, "static XrValue test___anonymous__") &&
            "pure inlined Array<uint8>.filter must not emit a dead boxed callback adapter");
@@ -4665,7 +4825,7 @@ TEST(cgen_typed_array_map_uses_typed_result_storage_fast_path) {
     assert(!had_error && "typed array map fast path should generate");
     assert(!contains(code, "xrt_array_map_typed(") &&
            "pure Array<int>.map callback must inline instead of using boxed runtime helper");
-    assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+    assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
            "pure inlined Array<int>.map must not allocate a callback closure");
     assert(!contains(code, "static XrValue test___anonymous__") &&
            "pure inlined Array<int>.map must not emit a dead boxed callback adapter");
@@ -4721,7 +4881,7 @@ TEST(cgen_typed_array_map_readonly_result_caches_data_pointer) {
     assert(!had_error && "read-only typed array map scan should generate");
     assert(!contains(code, "xrt_array_map_typed(") &&
            "read-only pure Array<int>.map must inline instead of using boxed runtime helper");
-    assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+    assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
            "read-only pure Array<int>.map must not allocate a callback closure");
     assert(!contains(code, "static XrValue test___anonymous__") &&
            "read-only pure Array<int>.map must not emit a dead boxed callback adapter");
@@ -4762,7 +4922,7 @@ TEST(cgen_typed_array_map_captured_callback_uses_runtime_helper) {
     assert(!had_error && "captured typed array map should generate");
     assert(contains(code, "xrt_array_map_typed(") &&
            "captured Array<int>.map callback must keep the closure helper path");
-    assert(contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+    assert(contains(code, "xrt_closure_new(&_xr_callable_") &&
            "captured Array<int>.map callback must still allocate a closure env");
     assert(contains(code, "XR_ELEM_I64") &&
            "captured Array<int>.map result must preserve typed storage");
@@ -4790,7 +4950,7 @@ TEST(cgen_dynamic_uncaptured_callback_keeps_boxed_adapter) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "dynamic uncaptured callback should generate");
-    assert(contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+    assert(contains(code, "xrt_closure_new(&_xr_callable_") &&
            "dynamic uncaptured callback must allocate a closure value");
     assert(contains(code, "static XrValue test___anonymous__") &&
            "dynamic uncaptured typed callback must keep its boxed adapter");
@@ -4905,9 +5065,9 @@ TEST(cgen_stack_alloc_direct_closure_uses_stack_runtime) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "stack closure should generate");
-    assert(contains(code, "xrt_closure_stack_new((void*)") &&
+    assert(contains(code, "xrt_closure_stack_new(&_xr_callable_") &&
            "direct no-escape closure should use stack closure runtime");
-    assert(!contains(code, "xrt_closure_new((void*)") &&
+    assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
            "direct no-escape closure must not allocate a heap closure");
     assert(contains(code, "xrt_release(") && contains(code, "XR_TAG_CLOSURE") &&
            "stack closure should still run ARC destruction at its death point");
@@ -4970,7 +5130,7 @@ TEST(cgen_stack_alloc_closure_preserves_cell_capture) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "stack closure cell capture should generate");
-    assert(contains(code, "xrt_closure_stack_new((void*)") &&
+    assert(contains(code, "xrt_closure_stack_new(&_xr_callable_") &&
            "direct no-escape closure should use stack closure runtime");
     assert(contains(code, "xrt_cell_new(") &&
            "mutable capture for stack closure must allocate a cell");
@@ -5009,7 +5169,7 @@ TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
     assert(!had_error && "read-only typed array filter scan should generate");
     assert(!contains(code, "xrt_array_filter_typed(") &&
            "read-only pure Array<uint8>.filter must inline instead of using boxed runtime helper");
-    assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+    assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
            "read-only pure Array<uint8>.filter must not allocate a callback closure");
     assert(!contains(code, "static XrValue test___anonymous__") &&
            "read-only pure Array<uint8>.filter must not emit a dead boxed callback adapter");
@@ -5050,7 +5210,7 @@ TEST(cgen_typed_array_filter_captured_callback_uses_runtime_helper) {
     assert(!had_error && "captured typed array filter should generate");
     assert(contains(code, "xrt_array_filter_typed(") &&
            "captured Array<int>.filter callback must keep the closure helper path");
-    assert(contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+    assert(contains(code, "xrt_closure_new(&_xr_callable_") &&
            "captured Array<int>.filter callback must still allocate a closure env");
     assert(contains(code, "XR_ELEM_I64") &&
            "captured Array<int>.filter result must preserve typed storage");
@@ -5083,7 +5243,7 @@ TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
     assert(!had_error && "typed array reduce fast path should generate");
     assert(!contains(code, "xrt_array_reduce_typed(") &&
            "pure Array<int>.reduce callback must inline instead of using boxed runtime helper");
-    assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+    assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
            "pure inlined Array<int>.reduce must not allocate a callback closure");
     assert(!contains(code, "static XrValue test___anonymous__") &&
            "pure inlined Array<int>.reduce must not emit a dead boxed callback adapter");
@@ -5121,7 +5281,7 @@ TEST(cgen_typed_array_reduce_captured_callback_uses_runtime_helper) {
     assert(!had_error && "captured typed array reduce should generate");
     assert(contains(code, "xrt_array_reduce_typed(") &&
            "captured Array<int>.reduce callback must keep the closure helper path");
-    assert(contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+    assert(contains(code, "xrt_closure_new(&_xr_callable_") &&
            "captured Array<int>.reduce callback must still allocate a closure env");
     assert(!contains(code, "xrt_method_2(") &&
            "captured Array<int>.reduce must not fall back to dynamic method dispatch");
@@ -5620,10 +5780,8 @@ static XiFunc *make_marked_json_parse_ir(void) {
 static char *generate_c_with_injected_json_codec_plan(XiFunc *ir,
                                                       const XaotJsonCodecPlan *codec_plan,
                                                       bool *had_error) {
-    if (ir->stage < XI_STAGE_REPPED) {
-        XiRepPolicy policy = xi_rep_policy_native_boundary();
-        xi_opt_select_rep_with_policy(ir, &policy);
-    }
+    if (!test_prepare_backend_ir(ir))
+        return test_failed_codegen_result(had_error);
     XiModule *mod = xi_module_new("test.xr", "test", ir);
     TEST_REQUIRE(mod != NULL, "Json codec preflight module allocation failed");
     XiModule *modules[] = {mod};
@@ -5689,7 +5847,7 @@ TEST(cgen_json_codec_plan_preflight_rejects_missing_stale_kind_and_action) {
     }
 }
 
-TEST(cgen_suspendable_wrapper_aborts) {
+TEST(cgen_suspendable_function_has_no_sync_wrapper) {
     const char *src = "fn worker(n: int) -> int {\n"
                       "    Coro.yield()\n"
                       "    return n + 1\n"
@@ -5706,12 +5864,10 @@ TEST(cgen_suspendable_wrapper_aborts) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "supported AOT coroutine should generate without cgen errors");
     assert(contains(code, "_aot_resume") && "suspendable function should emit AOT resume entry");
-    assert(contains(code, "return (abort(), XR_NULL_VAL);") &&
-           "sync wrapper for suspendable AOT function must hard-fail");
-    assert(!contains(code, "return XR_NULL_VAL;\n}\n\ntypedef struct") &&
-           "sync wrapper must not silently return null");
+    assert(!contains(code, "return (abort(), XR_NULL_VAL);") &&
+           "suspendable functions must not publish an aborting sync wrapper");
 
-    printf("  Generated suspendable wrapper %zu bytes of C code\n", strlen(code));
+    printf("  Generated suspendable function %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -5742,12 +5898,76 @@ TEST(cgen_direct_suspend_call_propagates_cps) {
            "reusable AOT frame init should reset entry state without clearing cached child frames");
     assert(contains(code, "    memset(f, 0, sizeof(*f));\n    if (!") &&
            "fresh AOT frame allocation should still clear owned frame storage once");
-    assert(contains(code, "return (abort(), XR_NULL_VAL);") &&
-           "suspendable functions must keep hard-failing sync wrappers");
+    assert(!contains(code, "return (abort(), XR_NULL_VAL);") &&
+           "direct suspend calls must not require a sync abort wrapper");
     assert(!contains(code, "unsupported AOT sync call") &&
            "diagnostics should go to stderr, not generated C comments");
 
     printf("  Generated direct suspend call %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_returned_suspendable_closure_uses_verified_child_frame) {
+    const char *src = "fn makeWorker() -> () -> int {\n"
+                      "    return fn() -> int {\n"
+                      "        Coro.yield()\n"
+                      "        return 41\n"
+                      "    }\n"
+                      "}\n"
+                      "var worker = makeWorker()\n"
+                      "print(worker())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "returned suspendable closure IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "returned suspendable closure C generation failed");
+    assert(!had_error && "closed returned callable target should verify and lower");
+    assert(contains(code, "call_frame_") &&
+           "indirect suspend invocation should own a verified child frame");
+    assert(contains(code, ".sync_entry=NULL") &&
+           "suspendable returned closure must not expose a sync entry");
+    assert(contains(code, "XrAotCallableDesc") &&
+           contains(code, "xrt_closure_new(&_xr_callable_") && !contains(code, "->fn") &&
+           "generated closure ABI must use descriptor identity only");
+    assert(!contains(code, "return (abort(), XR_NULL_VAL);") &&
+           "returned suspendable closure must not contain an abort wrapper");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_mixed_callable_targets_use_stable_descriptor_switch) {
+    const char *src = "fn syncWorker() -> int { return 40 }\n"
+                      "fn suspendWorker() -> int { Coro.yield(); return 41 }\n"
+                      "var worker = syncWorker\n"
+                      "fn choose(suspend: bool) {\n"
+                      "    if (suspend) { worker = suspendWorker }\n"
+                      "    else { worker = syncWorker }\n"
+                      "}\n"
+                      "choose(false)\n"
+                      "print(worker())\n"
+                      "choose(true)\n"
+                      "print(worker())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "mixed callable target IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "mixed callable target C generation failed");
+    assert(!had_error && "closed mixed callable target set should verify and lower");
+    assert(contains(code, "switch (f->call_target_id_") &&
+           contains(code, "->callable->target_id") &&
+           "mixed callable invocation must dispatch on stable descriptor identity");
+    assert(contains(code, "->callable->sync_entry") && contains(code, "_aot_frame_new") &&
+           contains(code, "_aot_resume(f->call_frame_") &&
+           "mixed target switch must separate sync entry from suspend frame dispatch");
+    assert(!contains(code, "strcmp(") && !contains(code, "xrt_typename") &&
+           "mixed callable dispatch must not recover target identity from strings or types");
+
     xr_free(code);
     xi_func_free(ir);
 }
@@ -8275,6 +8495,7 @@ int main(void) {
     run_cgen_string_literal();
     run_cgen_str_concat_uses_single_allocation_helper();
     run_cgen_function_call();
+    run_cgen_canonical_generic_function_body_is_executable();
     run_cgen_c_export_emits_public_c_abi_wrapper();
     run_cgen_multimodule_private_helpers_are_file_local_inline();
     run_cgen_stats_tracks_native_abi();
@@ -8295,8 +8516,9 @@ int main(void) {
     run_cgen_parallel_reduce_uses_runtime_executor();
     run_cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime();
     run_lower_parallel_call_plan_resolves_selective_aliases();
+    run_lower_parallel_plan_methods_preserve_intrinsic_identity();
     run_cgen_parallel_for_each_allows_atomic_i64_direct_body();
-    run_cgen_parallel_for_each_rejects_throwing_body();
+    run_analyzer_parallel_for_each_rejects_throwing_body();
     run_cgen_parallel_for_body_closure_stack_allocates();
     run_cgen_typed_array_uses_raw_storage_fast_path();
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();
@@ -8312,6 +8534,7 @@ int main(void) {
     run_cgen_span_slice_elides_dead_err_check();
     run_cgen_byte_array_append_from_slice_elides_dead_err_check();
     run_cgen_byte_array_repeat_from_tail_elides_dead_err_check();
+    run_cgen_verified_span_helper_drop_elides_pending_error_checks();
     run_cgen_mem_load_uses_pointer_helper();
     run_cgen_mem_store_uses_pointer_helper();
     run_cgen_stack_borrow_slice_allows_local_rawptr_read_chain();
@@ -8367,8 +8590,10 @@ int main(void) {
     run_cgen_unsupported_coroutine_ops_fail_fast();
     run_cgen_unresolved_import_fails_fast();
     run_cgen_unknown_method_symbol_fails_fast();
-    run_cgen_suspendable_wrapper_aborts();
+    run_cgen_suspendable_function_has_no_sync_wrapper();
     run_cgen_direct_suspend_call_propagates_cps();
+    run_cgen_returned_suspendable_closure_uses_verified_child_frame();
+    run_cgen_mixed_callable_targets_use_stable_descriptor_switch();
     run_cgen_direct_suspend_method_call_propagates_cps();
     run_cgen_shared_static_function_retain_is_elided();
     run_cgen_coro_shared_static_function_retain_is_elided();

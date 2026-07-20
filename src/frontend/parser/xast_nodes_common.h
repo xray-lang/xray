@@ -83,7 +83,8 @@ typedef struct XrAttribute {
     int timeout;
     // String argument for attributes that carry one: extern ABI/library metadata,
     // @c_export("name") (C symbol),
-    // @section("name") (AOT linker section).
+    // @section("name") (AOT linker section),
+    // @intrinsic("canonical.id") (compiler-owned stdlib semantic identity).
     // Arena-allocated, NUL-terminated; NULL when absent.
     const char *str_arg;
     // Bitmask of XR_DERIVE_* for ATTR_DERIVE; 0 for other attributes.

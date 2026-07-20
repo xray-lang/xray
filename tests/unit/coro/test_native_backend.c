@@ -28,6 +28,7 @@
 #include "runtime/mem/xalloc_unified.h"
 #include "runtime/mem/xobj_destroy_ops.h"
 #include "runtime/object/xarray.h"
+#include "runtime/object/xstring.h"
 #include "runtime/xisolate_internal.h"
 #include "runtime/xshared.h"
 #include <stdatomic.h>
@@ -826,6 +827,43 @@ TEST(aot_runtime_copy_context_uses_core_without_isolate) {
 
     xr_chan_transit_release_core(core, transit);
     xr_coro_destroy(owner);
+    xr_aot_runtime_delete(runtime);
+}
+
+TEST(aot_runtime_copy_context_bridges_aot_string_leaves) {
+    typedef struct TestAotStringView {
+        int64_t len;
+        int64_t rune_len;
+        uint32_t hash;
+        uint32_t flags;
+        char *data;
+    } TestAotStringView;
+
+    XrAotRuntimeConfig cfg;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_OBJECTS;
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+    XrRuntimeCore *core = xr_aot_runtime_core(runtime);
+    ASSERT_NOT_NULL(core);
+
+    char chars[] = "route";
+    TestAotStringView src = {
+        .len = 5,
+        .rune_len = 5,
+        .hash = 0,
+        .flags = 0,
+        .data = chars,
+    };
+    XrValue aot_value = {.tag = 19, .ptr = &src};
+    XrCopyContext copy;
+    xr_copy_context_init_core(&copy, core, NULL);
+    XrValue bridged = xr_deep_copy_with_ctx(&copy, aot_value);
+    xr_copy_context_cleanup(&copy);
+
+    ASSERT_TRUE(XR_IS_STRING(bridged));
+    ASSERT_EQ_INT((int) XR_TO_STRING(bridged)->length, 5);
+    ASSERT_STR_EQ(XR_STRING_CHARS(XR_TO_STRING(bridged)), "route");
     xr_aot_runtime_delete(runtime);
 }
 
@@ -1686,6 +1724,7 @@ RUN_TEST(aot_run_main_uses_runtime_without_isolate);
 RUN_TEST(aot_context_builtin_prefers_runtime_table);
 RUN_TEST(aot_runtime_registers_prelude_enums_without_isolate);
 RUN_TEST(aot_runtime_copy_context_uses_core_without_isolate);
+RUN_TEST(aot_runtime_copy_context_bridges_aot_string_leaves);
 RUN_TEST(aot_result_group_uses_runtime_without_isolate);
 RUN_TEST(aot_work_queue_uses_runtime_owner_without_isolate);
 RUN_TEST(aot_channel_uses_runtime_owner_without_isolate);

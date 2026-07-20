@@ -22,6 +22,10 @@
 #include "xanalyzer_visitor_internal.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xa_parallel_call_plan.h"
+#include "xa_resolved_call.h"
+#include "xa_intrinsic_registry.h"
+#include "xbuiltin_receiver_registry.h"
+#include "xa_selection.h"
 #include "xaddressability.h"
 #include "xtype_ref_resolve.h"
 #include "xanalyzer_mono.h"
@@ -34,8 +38,8 @@
 #include "../../shared/xr_array_core.h"
 #include <inttypes.h>
 
-static bool xa_path_is_parallel_stdlib_module(const char *file);
 static bool xa_class_info_is_parallel_plan(XaInferContext *ctx, XrClassInfo *info);
+static bool xa_intrinsic_is_parallel_plan_method(XaIntrinsicId intrinsic_id);
 static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstNode *arg_node,
                                                        const char *callback_label);
 static XrType *xa_visit_call_arg_for_param_mode(XaInferContext *ctx, AstNode *arg_node,
@@ -55,13 +59,37 @@ static void xa_check_call_arg_access_authorization(XaInferContext *ctx, AstNode 
 static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index);
 static bool xa_class_name_matches_mono_base(const char *class_name, const char *base);
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object, const char *module_name);
+static bool xa_type_is_pod_span_elem(XrType *type);
 
-static bool xa_simd_class_path(const char *path) {
-    static const char suffix[] = "stdlib/simd/simd.xr";
-    if (!path)
-        return false;
-    size_t n = strlen(path);
-    return n >= sizeof(suffix) - 1 && strcmp(path + n - (sizeof(suffix) - 1), suffix) == 0;
+static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, XaSymbol *sym) {
+    if (!ctx || !ctx->analyzer || !sym)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    if (!sym->is_imported || !links || links->intrinsic_id != XA_INTRINSIC_NONE ||
+        !links->module_name || !links->import_member_name)
+        return links;
+
+    const char *module_name = links->module_name;
+    const char *member_name = links->import_member_name;
+    bool is_quoted = module_name[0] == '.' || module_name[0] == '/';
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name, is_quoted);
+    XaSymbol *export_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
+    if (!export_sym && !is_quoted) {
+        char key[192];
+        int key_len = snprintf(key, sizeof(key), "%s.%s", module_name, member_name);
+        const XaIntrinsicDesc *desc =
+            key_len > 0 && (size_t) key_len < sizeof(key) ? xa_intrinsic_by_key(key) : NULL;
+        if (desc)
+            links->intrinsic_id = desc->id;
+        return links;
+    }
+    if (!export_sym || export_sym->links.intrinsic_id == XA_INTRINSIC_NONE)
+        return links;
+
+    xa_symbol_links_copy_export_metadata(links, &export_sym->links);
+    links->module_name = module_name;
+    links->import_member_name = member_name;
+    return links;
 }
 
 static bool xa_simd_shuffle_diag_exists(const XaAnalyzer *analyzer, const XrLocation *loc) {
@@ -79,31 +107,15 @@ static bool xa_simd_shuffle_diag_exists(const XaAnalyzer *analyzer, const XrLoca
     return false;
 }
 
-static void xa_check_simd_shuffle_lanes(XaInferContext *ctx, const AstNode *call_node,
-                                        const CallExprNode *call, const XrType *receiver_type,
-                                        const XaSymbolLinks *method_links,
-                                        const char *method_name) {
-    if (!ctx || !ctx->analyzer || !call_node || !call || !receiver_type || !method_name ||
-        strcmp(method_name, "shuffle") != 0 || !XR_TYPE_IS_INSTANCE(receiver_type))
+static void xa_check_intrinsic_shuffle_lanes(XaInferContext *ctx, const AstNode *call_node,
+                                             const CallExprNode *call,
+                                             const XaIntrinsicDesc *desc) {
+    if (!ctx || !ctx->analyzer || !call_node || !call || !desc ||
+        desc->safety != XA_INTRINSIC_SAFETY_CONST_LANES ||
+        (desc->flags & XA_INTRINSIC_FLAG_EXPLICIT_SHUFFLE) == 0)
         return;
-    const XrClassInfo *info = receiver_type->instance.class_ref;
-    const char *name = info && info->name ? info->name : receiver_type->instance.class_name;
-    int lanes = name && strcmp(name, "U32x4") == 0 ? 4 : name && strcmp(name, "U64x2") == 0 ? 2 : 0;
-    const char *file = info ? info->location.file : NULL;
-    if (!file && method_links)
-        file = method_links->file_path;
-    bool simd_module =
-        method_links && method_links->module_name && strcmp(method_links->module_name, "simd") == 0;
-    if (!simd_module && name) {
-        XaSymbol *class_sym = xa_lookup_visible_symbol(ctx, name);
-        XaSymbolLinks *class_links =
-            class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
-        simd_module = class_sym && class_sym->is_imported && class_links &&
-                      class_links->module_name && strcmp(class_links->module_name, "simd") == 0 &&
-                      class_links->import_member_name &&
-                      strcmp(class_links->import_member_name, name) == 0;
-    }
-    if (lanes == 0 || (!simd_module && !xa_simd_class_path(file)))
+    int lanes = desc->shape_rule.input_lanes;
+    if (lanes <= 0)
         return;
     for (int i = 0; i < call->arg_count; i++) {
         int64_t lane = -1;
@@ -114,8 +126,8 @@ static void xa_check_simd_shuffle_lanes(XaInferContext *ctx, const AstNode *call
                               .line = arg ? arg->line : call_node->line,
                               .column = arg ? arg->column : call_node->column};
             char msg[224];
-            snprintf(msg, sizeof(msg), "simd.%s.shuffle lane %d must be a compile-time integer",
-                     name ? name : "vector", i + 1);
+            snprintf(msg, sizeof(msg), "%s lane %d must be a compile-time integer", desc->key,
+                     i + 1);
             if (!xa_simd_shuffle_diag_exists(ctx->analyzer, &loc))
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);
@@ -125,13 +137,140 @@ static void xa_check_simd_shuffle_lanes(XaInferContext *ctx, const AstNode *call
             XrLocation loc = {.file = ctx->file_path, .line = arg->line, .column = arg->column};
             char msg[224];
             snprintf(msg, sizeof(msg),
-                     "simd.%s.shuffle lane %d is out of range: got %" PRId64 ", expected 0..%d",
-                     name ? name : "vector", i + 1, lane, lanes - 1);
+                     "%s lane %d is out of range: got %" PRId64 ", expected 0..%d", desc->key,
+                     i + 1, lane, lanes - 1);
             if (!xa_simd_shuffle_diag_exists(ctx->analyzer, &loc))
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);
         }
     }
+}
+
+static bool xa_builtin_receiver_intrinsic_matches(XrType *receiver, XaBuiltinReceiverKind kind) {
+    switch (kind) {
+        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+            return receiver && receiver->kind == XR_KIND_INT && !receiver->is_nullable;
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+            return xr_type_is_exact_unsigned_integer(receiver);
+        case XA_BUILTIN_RECEIVER_U8_ARRAY:
+            return xr_type_is_u8_array(receiver);
+        case XA_BUILTIN_RECEIVER_ARRAY:
+            return receiver && XR_TYPE_IS_ARRAY(receiver);
+        case XA_BUILTIN_RECEIVER_U8_SLICE:
+            return xr_type_is_u8_slice(receiver);
+        case XA_BUILTIN_RECEIVER_POD_SLICE:
+            return receiver && XR_TYPE_IS_SPAN(receiver) && receiver->container.element_type &&
+                   xa_type_is_pod_span_elem(receiver->container.element_type);
+    }
+    return false;
+}
+
+static XaIntrinsicId xa_builtin_receiver_method_intrinsic_id(XaBuiltinReceiverMethodId method_id) {
+    switch (method_id) {
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_POPCOUNT:
+            return XA_INTRINSIC_BITS_POPCOUNT;
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_LEADING_ZEROS:
+            return XA_INTRINSIC_BITS_LEADING_ZEROS;
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_TRAILING_ZEROS:
+            return XA_INTRINSIC_BITS_TRAILING_ZEROS;
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_BYTESWAP:
+            return XA_INTRINSIC_BITS_BYTESWAP;
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_LEFT:
+            return XA_INTRINSIC_BITS_ROTATE_LEFT;
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_RIGHT:
+            return XA_INTRINSIC_BITS_ROTATE_RIGHT;
+        case XA_BUILTIN_RECEIVER_METHOD_EXACT_UINT_MUL_HIGH:
+            return XA_INTRINSIC_BITS_MUL_HIGH;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_LOAD:
+            return XA_INTRINSIC_BYTE_SLICE_LOAD;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_STORE:
+            return XA_INTRINSIC_BYTE_SLICE_STORE;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_FILL:
+            return XA_INTRINSIC_BYTE_SLICE_FILL;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COPY_FROM:
+            return XA_INTRINSIC_BYTE_SLICE_COPY;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMPARE:
+            return XA_INTRINSIC_BYTE_SLICE_COMPARE;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMMON_PREFIX:
+            return XA_INTRINSIC_BYTE_SLICE_COMMON_PREFIX;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REPEAT_FROM:
+            return XA_INTRINSIC_BYTE_SLICE_REPEAT;
+        case XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REINTERPRET:
+            return XA_INTRINSIC_BYTE_SLICE_REINTERPRET;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_PTR:
+            return XA_INTRINSIC_POD_SLICE_PTR;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_MUT_PTR:
+            return XA_INTRINSIC_POD_SLICE_MUT_PTR;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_WINDOW:
+            return XA_INTRINSIC_POD_SLICE_WINDOW;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_AS_BYTES:
+            return XA_INTRINSIC_POD_SLICE_AS_BYTES;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_FILL:
+            return XA_INTRINSIC_POD_SLICE_FILL;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COPY_FROM:
+            return XA_INTRINSIC_POD_SLICE_COPY;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COMPARE:
+            return XA_INTRINSIC_POD_SLICE_COMPARE;
+        case XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_GET:
+            return XA_INTRINSIC_POD_SLICE_GET;
+        default:
+            return XA_INTRINSIC_NONE;
+    }
+}
+
+static XaIntrinsicId xa_builtin_receiver_intrinsic_id(XrType *receiver, AstNode *callee) {
+    if (!receiver || !callee || callee->type != AST_MEMBER_ACCESS || !callee->as.member_access.name)
+        return XA_INTRINSIC_NONE;
+
+    const char *name = callee->as.member_access.name;
+    XaIntrinsicId compiler_owned = xa_intrinsic_compiler_receiver_method(receiver, name);
+    if (compiler_owned != XA_INTRINSIC_NONE)
+        return compiler_owned;
+    for (size_t i = 0; i < xa_builtin_receiver_method_count(); i++) {
+        const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[i];
+        if (!xa_builtin_receiver_intrinsic_matches(receiver, spec->receiver) ||
+            strcmp(spec->source_name, name) != 0)
+            continue;
+        return xa_builtin_receiver_method_intrinsic_id(spec->method_id);
+    }
+    return XA_INTRINSIC_NONE;
+}
+
+static const XaResolvedCall *xa_record_resolved_intrinsic_call(XaInferContext *ctx, AstNode *node,
+                                                               AstNode *callee,
+                                                               XrType *receiver_type,
+                                                               XaSymbol *fallback_symbol,
+                                                               XaSymbolLinks *fallback_links) {
+    if (!ctx || !ctx->analyzer || !node || !ctx->analyzer->resolved_call_table)
+        return NULL;
+    const XaSelection *selection = xa_analyzer_get_selection(ctx->analyzer, callee);
+    XaSymbol *target = selection ? selection->target_symbol : fallback_symbol;
+    XaSymbolLinks *links = target ? xa_analyzer_get_links(ctx->analyzer, target) : fallback_links;
+    if (callee && callee->type == AST_MEMBER_ACCESS && callee->as.member_access.object) {
+        XrType *recorded_receiver =
+            xa_analyzer_get_node_type(ctx->analyzer, callee->as.member_access.object);
+        if (recorded_receiver && !XR_TYPE_IS_UNKNOWN(recorded_receiver) &&
+            !XR_TYPE_IS_ERROR(recorded_receiver))
+            receiver_type = recorded_receiver;
+    }
+    XaIntrinsicId intrinsic_id = links ? links->intrinsic_id : XA_INTRINSIC_NONE;
+    if (intrinsic_id == XA_INTRINSIC_NONE)
+        intrinsic_id = xa_intrinsic_compiler_receiver_method(
+            receiver_type,
+            callee && callee->type == AST_MEMBER_ACCESS ? callee->as.member_access.name : NULL);
+    if (intrinsic_id == XA_INTRINSIC_NONE && (!target || target->is_builtin))
+        intrinsic_id = xa_builtin_receiver_intrinsic_id(receiver_type, callee);
+    if (intrinsic_id == XA_INTRINSIC_NONE)
+        return NULL;
+    XaResolvedCall resolved = {
+        .source_node_id = node->node_id,
+        .target_symbol_id = target ? target->id : 0,
+        .intrinsic_id = intrinsic_id,
+        .reason = XA_RESOLVED_CALL_REASON_RESOLVED,
+    };
+    xa_resolved_call_table_set((XaResolvedCallTable *) ctx->analyzer->resolved_call_table, node,
+                               &resolved);
+    return xa_analyzer_get_resolved_call(ctx->analyzer, node);
 }
 
 static bool xa_freestanding_builtin_call_rejected(const char *name) {
@@ -221,11 +360,9 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
     const char **param_names = NULL;
     const char *param_names_buf[8] = {0};
     bool is_parallel_plan_ctor =
-        class_name && strcmp(class_name, "Plan") == 0 &&
-        ((class_links && class_links->module_name &&
-          strcmp(class_links->module_name, "parallel") == 0) ||
-         (class_links && xa_path_is_parallel_stdlib_module(class_links->file_path)) ||
-         xa_class_info_is_parallel_plan(ctx, class_info));
+        xa_class_info_is_parallel_plan(ctx, class_info) ||
+        (class_name && xa_class_name_matches_mono_base(class_name, "Plan") && class_links &&
+         class_links->module_name && strcmp(class_links->module_name, "parallel") == 0);
     if (class_tp_count > 0 && type_args && type_arg_count == class_tp_count) {
         param_names = (class_tp_count <= 8)
                           ? param_names_buf
@@ -277,6 +414,108 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
         xr_free((void *) param_names);
 }
 
+static XaSemanticTypeId xa_class_constructor_semantic_type(CallExprNode *call,
+                                                           const char *class_name,
+                                                           XaSymbolLinks *class_links) {
+    if (!call)
+        return XA_SEMANTIC_TYPE_NONE;
+    XaSemanticTypeId id = (XaSemanticTypeId) call->semantic_type_id;
+    if (id != XA_SEMANTIC_TYPE_NONE)
+        return id;
+    const char *module_name = class_links ? class_links->module_name : NULL;
+    const char *member_name = class_links && class_links->import_member_name
+                                  ? class_links->import_member_name
+                                  : class_name;
+    if (!module_name || !member_name || module_name[0] == '.' || module_name[0] == '/')
+        return XA_SEMANTIC_TYPE_NONE;
+    char key[192];
+    int key_len = snprintf(key, sizeof(key), "%s.%s", module_name, member_name);
+    if (key_len <= 0 || (size_t) key_len >= sizeof(key))
+        return XA_SEMANTIC_TYPE_NONE;
+    id = xa_semantic_type_by_key(key);
+    if (id != XA_SEMANTIC_TYPE_NONE) {
+        call->semantic_type_id = (uint32_t) id;
+        call->semantic_type_args = call->type_args;
+        call->semantic_type_arg_count = call->type_arg_count;
+    }
+    return id;
+}
+
+static XrType *xa_semantic_constructor_instance(XaInferContext *ctx, CallExprNode *call,
+                                                XaSemanticTypeId semantic_type_id,
+                                                XrClassInfo *class_info) {
+    if (!ctx || !ctx->analyzer || !call || semantic_type_id == XA_SEMANTIC_TYPE_NONE)
+        return NULL;
+    int count = call->semantic_type_arg_count;
+    if (count < 0 || (count > 0 && !call->semantic_type_args))
+        return NULL;
+    XrType **args = count > 0 ? xr_malloc(sizeof(XrType *) * (size_t) count) : NULL;
+    if (count > 0 && !args)
+        return NULL;
+    for (int i = 0; i < count; i++)
+        args[i] = xr_tref_resolve_in_analyzer(ctx->analyzer, call->semantic_type_args[i]);
+    const char *source_name = xa_semantic_type_source_name(semantic_type_id);
+    XrType *instance = count > 0
+                           ? xr_type_new_generic_instance(ctx->analyzer->isolate,
+                                                          source_name ? source_name : "<semantic>",
+                                                          class_info, args, count)
+                           : xr_type_new_named_instance(ctx->analyzer->isolate,
+                                                        source_name ? source_name : "<semantic>");
+    if (instance && class_info)
+        instance->instance.class_ref = class_info;
+    xr_free(args);
+    if (instance)
+        instance->semantic_type_id = (uint32_t) semantic_type_id;
+    return instance;
+}
+
+static XrType *xa_imported_semantic_class_instance_type(XaInferContext *ctx, AstNode *node,
+                                                        CallExprNode *call) {
+    if (!ctx || !ctx->analyzer || !call || !call->callee || call->callee->type != AST_VARIABLE ||
+        !call->callee->as.variable.name)
+        return NULL;
+    const char *source_spelling = call->callee->as.variable.name;
+    XaSymbol *symbol = xa_lookup_visible_symbol(ctx, source_spelling);
+    if (!symbol || (!symbol->is_imported && symbol->kind != XA_SYM_IMPORT))
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
+    XaSemanticTypeId semantic_type_id =
+        xa_class_constructor_semantic_type(call, source_spelling, links);
+    if (semantic_type_id == XA_SEMANTIC_TYPE_NONE)
+        return NULL;
+
+    int expected_type_args = semantic_type_id == XA_SEMANTIC_TYPE_PARALLEL_PLAN ? 1 : 0;
+    if (call->semantic_type_arg_count != expected_type_args) {
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = node ? node->line : 0,
+                          .column = node ? node->column : 0};
+        char msg[192];
+        snprintf(msg, sizeof(msg), "Generic class '%s' expects %d type argument(s), but got %d",
+                 xa_semantic_type_source_name(semantic_type_id), expected_type_args,
+                 call->semantic_type_arg_count);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
+    XrType *instance = xa_semantic_constructor_instance(ctx, call, semantic_type_id, NULL);
+    if (!instance)
+        return NULL;
+    if (semantic_type_id == XA_SEMANTIC_TYPE_PARALLEL_PLAN && call->arg_count > 1 &&
+        instance->instance.type_arg_count == 1 && instance->instance.type_args &&
+        instance->instance.type_args[0]) {
+        XrType *lane_params[] = {xr_type_new_int(ctx->analyzer->isolate)};
+        XrType *init_type = xr_type_new_function(ctx->analyzer->isolate, lane_params, 1,
+                                                 instance->instance.type_args[0], false);
+        XrType *saved_expected = ctx->expected_type;
+        ctx->expected_type = init_type;
+        xa_visit_call_arg_with_parallel_context(ctx, call->arguments[1],
+                                                "parallel.Plan init callback");
+        ctx->expected_type = saved_expected;
+    }
+    return instance;
+}
+
 static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *node,
                                                   CallExprNode *call, const char *class_name,
                                                   XaSymbolLinks *class_links,
@@ -297,9 +536,38 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
     }
 
     xa_check_constructor_visibility(ctx, node, class_info);
+    XaSemanticTypeId semantic_type_id =
+        xa_class_constructor_semantic_type(call, class_name, class_links);
 
     bool is_value_type = class_links && class_links->type && class_links->type->is_value_type;
     int type_param_count = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
+    if (call && type_param_count > 0 && call->type_arg_count == 0 &&
+        semantic_type_id != XA_SEMANTIC_TYPE_NONE &&
+        call->semantic_type_arg_count == type_param_count && call->semantic_type_args) {
+        XrType *resolved_buf[8] = {0};
+        XrType **resolved = type_param_count <= 8
+                                ? resolved_buf
+                                : xr_malloc(sizeof(XrType *) * (size_t) type_param_count);
+        if (!resolved)
+            return xr_type_new_error(ctx->analyzer->isolate);
+        for (int i = 0; i < type_param_count; i++)
+            resolved[i] = xr_tref_resolve_in_analyzer(ctx->analyzer, call->semantic_type_args[i]);
+        xa_check_span_generic_class_type_args(ctx, node, class_name, resolved, type_param_count);
+        xa_check_class_constructor_args(ctx, node, call, class_name, class_links, class_info,
+                                        resolved, type_param_count);
+        const char *source_name = xa_semantic_type_source_name(semantic_type_id);
+        XrType *inst = xr_type_new_generic_instance(ctx->analyzer->isolate,
+                                                    source_name ? source_name : class_name,
+                                                    class_info, resolved, type_param_count);
+        if (resolved != resolved_buf)
+            xr_free(resolved);
+        if (inst) {
+            inst->semantic_type_id = (uint32_t) semantic_type_id;
+            if (is_value_type)
+                inst->is_value_type = true;
+        }
+        return inst ? inst : xr_type_new_error(ctx->analyzer->isolate);
+    }
     if (call && type_param_count > 0) {
         if (call->type_arg_count > 0) {
             if (call->type_arg_count != type_param_count) {
@@ -348,6 +616,8 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                                                      resolved, call->type_arg_count);
                     if (inst && is_value_type)
                         inst->is_value_type = true;
+                    if (inst && semantic_type_id != XA_SEMANTIC_TYPE_NONE)
+                        inst->semantic_type_id = (uint32_t) semantic_type_id;
                     if (resolved != resolved_buf)
                         xr_free(resolved);
                     if (inst)
@@ -414,6 +684,8 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                                                          class_info, inferred, type_param_count);
                         if (inst && is_value_type)
                             inst->is_value_type = true;
+                        if (inst && semantic_type_id != XA_SEMANTIC_TYPE_NONE)
+                            inst->semantic_type_id = (uint32_t) semantic_type_id;
                         if (inferred != inferred_buf)
                             xr_free(inferred);
                         if (inst)
@@ -436,9 +708,18 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
     }
 
     xa_check_class_constructor_args(ctx, node, call, class_name, class_links, class_info, NULL, 0);
+    XrType *semantic_instance =
+        xa_semantic_constructor_instance(ctx, call, semantic_type_id, class_info);
+    if (semantic_instance) {
+        if (is_value_type)
+            semantic_instance->is_value_type = true;
+        return semantic_instance;
+    }
     XrType *inst = xr_type_new_instance(ctx->analyzer->isolate, class_info);
     if (inst && is_value_type)
         inst->is_value_type = true;
+    if (inst && semantic_type_id != XA_SEMANTIC_TYPE_NONE)
+        inst->semantic_type_id = (uint32_t) semantic_type_id;
     return inst;
 }
 
@@ -1952,104 +2233,80 @@ static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object,
     return links && links->module_name && strcmp(links->module_name, module_name) == 0;
 }
 
-static bool xa_parallel_intrinsic_member_name(const char *name) {
-    return name && (strcmp(name, "forEach") == 0 || strcmp(name, "map") == 0 ||
-                    strcmp(name, "mapInto") == 0 || strcmp(name, "reduce") == 0);
+static bool xa_intrinsic_is_parallel_plan_method(XaIntrinsicId intrinsic_id) {
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_id(intrinsic_id);
+    return desc && desc->family == XA_INTRINSIC_FAMILY_PARALLEL &&
+           (desc->flags & XA_INTRINSIC_FLAG_PLAN_RECEIVER) != 0;
 }
 
-static bool xa_path_is_parallel_stdlib_module(const char *file) {
-    if (!file)
-        return false;
-    const char *suffixes[] = {"stdlib/parallel/parallel.xr", "stdlib\\parallel\\parallel.xr",
-                              "<embedded stdlib>/parallel/parallel.xr"};
-    for (int i = 0; i < (int) (sizeof(suffixes) / sizeof(suffixes[0])); i++) {
-        size_t flen = strlen(file);
-        size_t slen = strlen(suffixes[i]);
-        if (flen >= slen && strcmp(file + flen - slen, suffixes[i]) == 0)
-            return true;
-    }
-    return false;
+static bool xa_intrinsic_is_parallel_module_function(XaIntrinsicId intrinsic_id) {
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_id(intrinsic_id);
+    return desc && desc->family == XA_INTRINSIC_FAMILY_PARALLEL &&
+           (desc->flags & XA_INTRINSIC_FLAG_PLAN_RECEIVER) == 0;
 }
 
 static bool xa_class_info_is_parallel_plan(XaInferContext *ctx, XrClassInfo *info) {
-    if (!info || !info->name || strcmp(info->name, "Plan") != 0)
-        return false;
-    if (xa_path_is_parallel_stdlib_module(info->location.file))
-        return true;
-    if (!ctx || !ctx->analyzer)
+    if (!info || !ctx || !ctx->analyzer)
         return false;
     for (int i = 0; i < info->method_count; i++) {
         XaSymbol *method = info->methods ? info->methods[i] : NULL;
         XaSymbolLinks *links = method ? xa_analyzer_get_links(ctx->analyzer, method) : NULL;
-        if (links && xa_path_is_parallel_stdlib_module(links->file_path))
+        if (links && xa_intrinsic_is_parallel_plan_method(links->intrinsic_id))
             return true;
     }
     return false;
 }
 
-static bool xa_symbol_is_parallel_plan_class(XaInferContext *ctx, XaSymbol *sym, const char *name) {
-    if (!ctx || !ctx->analyzer || !sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_IMPORT))
-        return false;
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    const char *member_name =
-        links && links->import_member_name ? links->import_member_name : (name ? name : sym->name);
-    if (!member_name || strcmp(member_name, "Plan") != 0)
-        return false;
-    if (links && links->module_name && strcmp(links->module_name, "parallel") == 0)
-        return true;
-    if (links && xa_path_is_parallel_stdlib_module(links->file_path))
-        return true;
-    return links && xa_class_info_is_parallel_plan(ctx, links->class_info);
+static XaIntrinsicId xa_parallel_module_call_intrinsic(XaInferContext *ctx, AstNode *callee,
+                                                       XaSymbolLinks *links) {
+    if (links && xa_intrinsic_is_parallel_module_function(links->intrinsic_id))
+        return links->intrinsic_id;
+    if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
+        return XA_INTRINSIC_NONE;
+
+    MemberAccessNode *ma = &callee->as.member_access;
+    if (!ma->name || !xa_call_object_is_module(ctx, ma->object, "parallel"))
+        return XA_INTRINSIC_NONE;
+    char key[192];
+    int key_len = snprintf(key, sizeof(key), "parallel.%s", ma->name);
+    const XaIntrinsicDesc *desc =
+        key_len > 0 && (size_t) key_len < sizeof(key) ? xa_intrinsic_by_key(key) : NULL;
+    return desc && xa_intrinsic_is_parallel_module_function(desc->id) ? desc->id
+                                                                      : XA_INTRINSIC_NONE;
 }
 
-static bool xa_type_is_parallel_plan(XaInferContext *ctx, XrType *type) {
-    if (!type || !XR_TYPE_IS_INSTANCE(type))
-        return false;
-    const char *class_name = xr_type_get_class_name(type);
-    if (!class_name || strcmp(class_name, "Plan") != 0)
-        return false;
-    if (type->instance.class_ref && xa_class_info_is_parallel_plan(ctx, type->instance.class_ref))
-        return true;
-    XaSymbol *sym = xa_lookup_visible_class_symbol(ctx, class_name);
-    return sym && xa_symbol_is_parallel_plan_class(ctx, sym, class_name);
-}
-
-static const char *xa_parallel_call_member_name(XaInferContext *ctx, CallExprNode *call,
-                                                XaSymbolLinks *links, XaSymbol *fn_sym) {
-    if (!call || !call->callee)
-        return NULL;
-    if (call->callee->type == AST_MEMBER_ACCESS) {
-        MemberAccessNode *ma = &call->callee->as.member_access;
-        if (ma->name && xa_parallel_intrinsic_member_name(ma->name) &&
-            xa_call_object_is_module(ctx, ma->object, "parallel"))
-            return ma->name;
-    }
-    if (links && links->module_name && strcmp(links->module_name, "parallel") == 0) {
-        const char *name =
-            links->import_member_name ? links->import_member_name : (fn_sym ? fn_sym->name : NULL);
-        if (xa_parallel_intrinsic_member_name(name))
-            return name;
-    }
-    return NULL;
-}
-
-static const char *xa_parallel_plan_call_member_name(XaInferContext *ctx, XrType *receiver_type,
+static XaIntrinsicId xa_parallel_plan_call_intrinsic(XaInferContext *ctx, XrType *receiver_type,
                                                      const char *method_name) {
-    if (!method_name || !xa_parallel_intrinsic_member_name(method_name))
-        return NULL;
-    return xa_type_is_parallel_plan(ctx, receiver_type) ? method_name : NULL;
+    if (!ctx || !ctx->analyzer || !receiver_type || !method_name ||
+        !XR_TYPE_IS_INSTANCE(receiver_type))
+        return XA_INTRINSIC_NONE;
+    if (receiver_type->semantic_type_id == XA_SEMANTIC_TYPE_PARALLEL_PLAN) {
+        char key[192];
+        int key_len = snprintf(key, sizeof(key), "parallel.Plan.%s", method_name);
+        const XaIntrinsicDesc *desc =
+            key_len > 0 && (size_t) key_len < sizeof(key) ? xa_intrinsic_by_key(key) : NULL;
+        return desc && xa_intrinsic_is_parallel_plan_method(desc->id) ? desc->id
+                                                                      : XA_INTRINSIC_NONE;
+    }
+    XrClassInfo *info = receiver_type->instance.class_ref;
+    XaSymbol *method = info ? xa_class_info_lookup_instance_member(info, method_name) : NULL;
+    XaSymbolLinks *links = method ? xa_analyzer_get_links(ctx->analyzer, method) : NULL;
+    return links && xa_intrinsic_is_parallel_plan_method(links->intrinsic_id) ? links->intrinsic_id
+                                                                              : XA_INTRINSIC_NONE;
 }
 
-static void xa_record_parallel_call_plan(XaInferContext *ctx, AstNode *node, const char *member,
-                                         bool is_plan_method) {
-    if (!ctx || !ctx->analyzer || !node || !member || !ctx->analyzer->parallel_call_plan_table)
+static void xa_record_parallel_call_plan(XaInferContext *ctx, AstNode *node,
+                                         XaIntrinsicId intrinsic_id) {
+    if (!ctx || !ctx->analyzer || !node || intrinsic_id == XA_INTRINSIC_NONE ||
+        !ctx->analyzer->parallel_call_plan_table)
         return;
-    XaParallelCallKind kind = xa_parallel_call_kind_from_name(member);
+    XaParallelCallKind kind = xa_parallel_call_kind_from_intrinsic(intrinsic_id);
     if (kind == XA_PAR_CALL_NONE)
         return;
     XaParallelCallPlan plan = {
         .kind = kind,
-        .is_plan_method = is_plan_method,
+        .intrinsic_id = intrinsic_id,
+        .is_plan_method = xa_intrinsic_is_parallel_plan_method(intrinsic_id),
     };
     xa_parallel_call_plan_table_set(
         (XaParallelCallPlanTable *) ctx->analyzer->parallel_call_plan_table, node, &plan);
@@ -2170,6 +2427,130 @@ static const char *xa_parallel_callback_label_for_plan(const XaParallelCallPlan 
     const char *member = xa_parallel_call_kind_name(plan->kind);
     return plan->is_plan_method ? xa_parallel_plan_callback_label_for_arg(member, arg_index)
                                 : xa_parallel_callback_label_for_arg(member, arg_index);
+}
+
+static XrType *xa_parallel_callable_type(XaInferContext *ctx, CallExprNode *call,
+                                         XrType *receiver_type, const XaParallelCallPlan *plan) {
+    if (!ctx || !ctx->analyzer || !call || !plan)
+        return NULL;
+    XrType *state_type = NULL;
+    if (plan->is_plan_method) {
+        if (!receiver_type || !XR_TYPE_IS_INSTANCE(receiver_type))
+            return NULL;
+        state_type = receiver_type->instance.type_arg_count > 0 && receiver_type->instance.type_args
+                         ? receiver_type->instance.type_args[0]
+                         : NULL;
+        if (!state_type && receiver_type->instance.class_ref) {
+            XaSymbol *states =
+                xa_class_info_lookup_instance_member(receiver_type->instance.class_ref, "_states");
+            XaSymbolLinks *state_links =
+                states ? xa_analyzer_get_links(ctx->analyzer, states) : NULL;
+            if (state_links && state_links->type && XR_TYPE_IS_ARRAY(state_links->type))
+                state_type = state_links->type->container.element_type;
+        }
+        if (!state_type)
+            state_type = xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+    XrType *range_type = xr_type_new_named_instance(ctx->analyzer->isolate, "Range");
+    XrType *int_type = xr_type_new_int(ctx->analyzer->isolate);
+    XrType *unit_type = xr_type_new_unit(ctx->analyzer->isolate);
+    XrType *unknown_type = xr_type_new_unknown(ctx->analyzer->isolate);
+    XrType *options_type = xr_type_new_named_instance(ctx->analyzer->isolate, "Options");
+    XrType *body_params[] = {state_type, int_type};
+    XrType *combine_params[2] = {unknown_type, unknown_type};
+    XrType *params[5] = {0};
+    XrType *return_type = unit_type;
+    int param_count = 0;
+    int min_params = 0;
+    int body_param_offset = plan->is_plan_method ? 0 : 1;
+    int body_param_count = plan->is_plan_method ? 2 : 1;
+
+    switch (plan->kind) {
+        case XA_PAR_CALL_FOR_EACH:
+            params[0] = range_type;
+            params[1] =
+                xr_type_new_function(ctx->analyzer->isolate, body_params + body_param_offset,
+                                     body_param_count, unit_type, false);
+            if (plan->is_plan_method) {
+                param_count = 2;
+                min_params = 2;
+            } else {
+                params[2] = options_type;
+                param_count = 3;
+                min_params = 2;
+            }
+            break;
+        case XA_PAR_CALL_MAP:
+            params[0] = range_type;
+            params[1] =
+                xr_type_new_function(ctx->analyzer->isolate, body_params + body_param_offset,
+                                     body_param_count, unknown_type, false);
+            return_type = xr_type_new_array(ctx->analyzer->isolate, unknown_type);
+            if (plan->is_plan_method) {
+                param_count = 2;
+                min_params = 2;
+            } else {
+                params[2] = options_type;
+                param_count = 3;
+                min_params = 2;
+            }
+            break;
+        case XA_PAR_CALL_MAP_INTO: {
+            XrType *output_type = call->arg_count > 1
+                                      ? xa_visit_infer_expr(ctx, call->arguments[1])
+                                      : xr_type_new_array(ctx->analyzer->isolate, unknown_type);
+            XrType *element_type = output_type && XR_TYPE_IS_ARRAY(output_type)
+                                       ? output_type->container.element_type
+                                       : unknown_type;
+            params[0] = range_type;
+            params[1] = output_type;
+            params[2] =
+                xr_type_new_function(ctx->analyzer->isolate, body_params + body_param_offset,
+                                     body_param_count, element_type, false);
+            return_type = output_type;
+            if (plan->is_plan_method) {
+                param_count = 3;
+                min_params = 3;
+            } else {
+                params[3] = options_type;
+                param_count = 4;
+                min_params = 3;
+            }
+            break;
+        }
+        case XA_PAR_CALL_REDUCE: {
+            XrType *acc_type =
+                call->arg_count > 1 ? xa_visit_infer_expr(ctx, call->arguments[1]) : unknown_type;
+            body_params[0] = state_type;
+            body_params[1] = int_type;
+            combine_params[0] = acc_type;
+            combine_params[1] = acc_type;
+            params[0] = range_type;
+            params[1] = acc_type;
+            params[2] =
+                xr_type_new_function(ctx->analyzer->isolate, body_params + body_param_offset,
+                                     body_param_count, acc_type, false);
+            params[3] =
+                xr_type_new_function(ctx->analyzer->isolate, combine_params, 2, acc_type, false);
+            return_type = acc_type;
+            if (plan->is_plan_method) {
+                param_count = 4;
+                min_params = 4;
+            } else {
+                params[4] = options_type;
+                param_count = 5;
+                min_params = 4;
+            }
+            break;
+        }
+        case XA_PAR_CALL_NONE:
+            return NULL;
+    }
+    XrType *callable =
+        xr_type_new_function(ctx->analyzer->isolate, params, param_count, return_type, false);
+    if (callable)
+        callable->function.min_params = min_params;
+    return callable;
 }
 
 static XrType *xa_visit_call_arg_with_parallel_context(XaInferContext *ctx, AstNode *arg_node,
@@ -3226,18 +3607,81 @@ static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, CallExp
     const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
                                                                  : ma->object->as.variable.name;
     bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
+    char semantic_key[192];
+    int semantic_key_len =
+        snprintf(semantic_key, sizeof(semantic_key), "%s.%s", mod_name, ma->name);
+    XaSemanticTypeId semantic_type_id = (XaSemanticTypeId) call->semantic_type_id;
+    if (semantic_type_id == XA_SEMANTIC_TYPE_NONE && !is_quoted && semantic_key_len > 0 &&
+        (size_t) semantic_key_len < sizeof(semantic_key)) {
+        semantic_type_id = xa_semantic_type_by_key(semantic_key);
+        if (semantic_type_id != XA_SEMANTIC_TYPE_NONE) {
+            /* Preserve canonical ownership across generic specialization. The
+             * monomorphizer substitutes semantic_type_args while it may rewrite
+             * the source spelling and consume ordinary call type arguments. */
+            call->semantic_type_id = (uint32_t) semantic_type_id;
+            call->semantic_type_args = call->type_args;
+            call->semantic_type_arg_count = call->type_arg_count;
+        }
+    }
+    XrTypeRef **semantic_trefs =
+        call->semantic_type_id != 0 ? call->semantic_type_args : call->type_args;
+    int semantic_tref_count =
+        call->semantic_type_id != 0 ? call->semantic_type_arg_count : call->type_arg_count;
+    const char *semantic_source_name = xa_semantic_type_source_name(semantic_type_id);
     XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
-    if (!exports)
-        return NULL;
+    if (!exports) {
+        if (semantic_type_id == XA_SEMANTIC_TYPE_NONE)
+            return NULL;
+        int type_arg_count = semantic_tref_count;
+        XrType **type_args =
+            type_arg_count > 0 ? xr_malloc(sizeof(XrType *) * (size_t) type_arg_count) : NULL;
+        if (type_arg_count > 0 && !type_args)
+            return NULL;
+        for (int i = 0; i < type_arg_count; i++)
+            type_args[i] = xr_tref_resolve_in_analyzer(ctx->analyzer, semantic_trefs[i]);
+        XrType *instance = xr_type_new_generic_instance(
+            ctx->analyzer->isolate, semantic_source_name ? semantic_source_name : ma->name, NULL,
+            type_args, type_arg_count);
+        if (semantic_type_id == XA_SEMANTIC_TYPE_PARALLEL_PLAN && call->arg_count > 1 &&
+            type_arg_count > 0 && type_args[0]) {
+            XrType *lane_params[] = {xr_type_new_int(ctx->analyzer->isolate)};
+            XrType *init_type =
+                xr_type_new_function(ctx->analyzer->isolate, lane_params, 1, type_args[0], false);
+            XrType *saved_expected = ctx->expected_type;
+            ctx->expected_type = init_type;
+            xa_visit_infer_expr(ctx, call->arguments[1]);
+            ctx->expected_type = saved_expected;
+        }
+        xr_free(type_args);
+        if (instance)
+            instance->semantic_type_id = (uint32_t) semantic_type_id;
+        return instance;
+    }
 
     XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
     if (!member_sym || member_sym->kind != XA_SYM_CLASS)
         return NULL;
 
     XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
-    if (member_links && member_links->class_info)
-        return xa_class_constructor_instance_type(ctx, callee, call, ma->name, member_links,
-                                                  member_links->class_info);
+    if (member_links && member_links->class_info) {
+        XrType *instance = xa_class_constructor_instance_type(
+            ctx, callee, call, ma->name, member_links, member_links->class_info);
+        if (instance && semantic_type_id != XA_SEMANTIC_TYPE_NONE) {
+            if (semantic_tref_count > 0) {
+                XrType **type_args = xr_malloc(sizeof(XrType *) * (size_t) semantic_tref_count);
+                if (!type_args)
+                    return NULL;
+                for (int i = 0; i < semantic_tref_count; i++)
+                    type_args[i] = xr_tref_resolve_in_analyzer(ctx->analyzer, semantic_trefs[i]);
+                instance = xr_type_new_generic_instance(
+                    ctx->analyzer->isolate, semantic_source_name ? semantic_source_name : ma->name,
+                    member_links->class_info, type_args, semantic_tref_count);
+                xr_free(type_args);
+            }
+            instance->semantic_type_id = (uint32_t) semantic_type_id;
+        }
+        return instance;
+    }
     if (!is_quoted && strcmp(mod_name, "sync") == 0)
         return xa_sync_runtime_construct_type(ctx, ma->name, call);
     return NULL;
@@ -3746,7 +4190,7 @@ static bool xa_type_allows_shared_interior_mutation(XrType *type) {
     if (xa_type_is_concurrency_handle(type))
         return true;
     static const char *const audited[] = {"Mutex",   "RwLock",      "Once", "Barrier",
-                                          "Condvar", "ThreadLocal", NULL};
+                                          "Condvar", "ThreadLocal", "Plan", NULL};
     const char *class_name = xr_type_get_class_name(type);
     for (const char *const *p = audited; *p; p++) {
         if (xa_class_name_matches_mono_base(class_name, *p))
@@ -4079,8 +4523,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 "this builtin depends on hosted conversion, cloning, or debug helpers");
         }
         fn_sym = xa_lookup_visible_symbol(ctx, fn_name);
+        if (!fn_sym && call->semantic_type_id != 0 && call->callee->as.variable.symbol_id != 0) {
+            fn_sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope,
+                                           call->callee->as.variable.symbol_id);
+        }
         if (fn_sym) {
-            fn_links = xa_analyzer_get_links(ctx->analyzer, fn_sym);
+            fn_links = xa_refresh_imported_symbol_metadata(ctx, fn_sym);
             if (fn_sym->kind == XA_SYM_CLASS)
                 class_ctor_links = xa_class_constructor_links(ctx, fn_sym);
             if (fn_sym->is_imported && fn_links && fn_links->module_name &&
@@ -4498,11 +4946,20 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    const char *parallel_call_member = xa_parallel_call_member_name(ctx, call, fn_links, fn_sym);
-    const char *parallel_plan_member =
-        xa_parallel_plan_call_member_name(ctx, callee_obj_type, method_name);
-    xa_record_parallel_call_plan(ctx, node, parallel_call_member, false);
-    xa_record_parallel_call_plan(ctx, node, parallel_plan_member, true);
+    XaIntrinsicId parallel_call_intrinsic =
+        xa_parallel_module_call_intrinsic(ctx, call->callee, fn_links);
+    XaIntrinsicId parallel_plan_intrinsic =
+        xa_parallel_plan_call_intrinsic(ctx, callee_obj_type, method_name);
+    xa_record_parallel_call_plan(ctx, node,
+                                 parallel_call_intrinsic != XA_INTRINSIC_NONE
+                                     ? parallel_call_intrinsic
+                                     : parallel_plan_intrinsic);
+    const XaParallelCallPlan *recorded_parallel_plan =
+        xa_analyzer_get_parallel_call_plan(ctx->analyzer, node);
+    const char *parallel_call_member =
+        recorded_parallel_plan && !recorded_parallel_plan->is_plan_method
+            ? xa_parallel_call_kind_name(recorded_parallel_plan->kind)
+            : NULL;
     xa_check_parallel_options_workers_const(ctx, node, call, parallel_call_member);
     const XaParallelCallPlan *parallel_call_plan =
         xa_analyzer_get_parallel_call_plan(ctx->analyzer, node);
@@ -4519,6 +4976,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     ctx->allow_payload_enum_ctor_value = saved_payload_ctor_value;
     if (optional_function_call && callee_type)
         callee_type = xr_type_non_nullable(ctx->analyzer->isolate, callee_type);
+    if (parallel_call_plan && (!callee_type || !XR_TYPE_IS_FUNCTION(callee_type))) {
+        XrType *parallel_callable =
+            xa_parallel_callable_type(ctx, call, callee_obj_type, parallel_call_plan);
+        if (parallel_callable)
+            callee_type = parallel_callable;
+    }
 
     if (class_ctor_links && class_ctor_links->param_defaults) {
         if (call->arg_count < class_ctor_links->param_count) {
@@ -4529,6 +4992,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                               class_ctor_links->param_count);
         }
     }
+
+    const XaResolvedCall *resolved_intrinsic = xa_record_resolved_intrinsic_call(
+        ctx, node, call->callee, callee_obj_type, fn_sym, fn_links);
+    const XaIntrinsicDesc *intrinsic_desc =
+        resolved_intrinsic ? xa_intrinsic_by_id(resolved_intrinsic->intrinsic_id) : NULL;
 
     /* Resolve symbol_ids in non-lambda arguments before any early-return path.
      * Skip AST_FUNCTION_EXPR args: they require expected_type context from
@@ -4553,17 +5021,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (call->arguments[i])
             xa_visit_infer_expr(ctx, call->arguments[i]);
     }
-    xa_check_simd_shuffle_lanes(ctx, node, call, callee_obj_type, fn_links, method_name);
-
-    // A diagnosed callee failure is recovery poison, not an unresolved callable.
-    // Arguments were still visited above so their independent diagnostics survive.
-    if (XR_TYPE_IS_ERROR(callee_type)) {
-        // ref/out authorization is independent of callee type recovery: an
-        // unresolved callee cannot provide the parameter contract required by
-        // either access marker.
-        xa_report_arg_accesses_require_known_contract(ctx, node, call);
-        return callee_type;
-    }
+    xa_check_intrinsic_shuffle_lanes(ctx, node, call, intrinsic_desc);
 
     if (payload_variant) {
         xa_check_payload_enum_variant_call(ctx, node, call, payload_variant, payload_enum_name,
@@ -4588,6 +5046,29 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 return xr_type_new_error(ctx->analyzer->isolate);
             return ns_instance;
         }
+    }
+    XrType *imported_semantic_instance = xa_imported_semantic_class_instance_type(ctx, node, call);
+    if (imported_semantic_instance) {
+        xa_report_arg_accesses_require_known_contract(ctx, node, call);
+        xa_check_threadlocal_initializer(ctx, node, call, imported_semantic_instance);
+        xa_freestanding_report_unavailable(
+            ctx, node, "class construction",
+            "use structs or explicit raw-memory APIs in this profile");
+        if (xa_freestanding_profile_enabled(ctx->analyzer))
+            return xr_type_new_error(ctx->analyzer->isolate);
+        return imported_semantic_instance;
+    }
+
+    // A diagnosed callee failure is recovery poison, not an unresolved callable.
+    // Arguments were still visited above so their independent diagnostics survive. A
+    // canonical namespace class is checked first because source-only analysis can know its
+    // semantic identity even when no module export graph is attached to the session.
+    if (XR_TYPE_IS_ERROR(callee_type)) {
+        // ref/out authorization is independent of callee type recovery: an
+        // unresolved callee cannot provide the parameter contract required by
+        // either access marker.
+        xa_report_arg_accesses_require_known_contract(ctx, node, call);
+        return callee_type;
     }
 
     // Unknown callee type preserves error recovery after imprecise analysis.
@@ -4712,6 +5193,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             XaSymbol *class_sym = xa_lookup_visible_symbol(ctx, class_name);
             if (!class_sym || class_sym->kind != XA_SYM_CLASS)
                 class_sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
+            if ((!class_sym || class_sym->kind != XA_SYM_CLASS) && call->semantic_type_id != 0 &&
+                fn_sym && fn_sym->kind == XA_SYM_CLASS) {
+                class_sym = fn_sym;
+            }
             if (class_sym && class_sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, class_sym);
                 if (links && links->class_info) {
@@ -5286,6 +5771,35 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             return_type = xr_type_new_int(NULL);
         } else if (strcmp(method_name, "every") == 0 || strcmp(method_name, "some") == 0) {
             return_type = xr_type_new_bool(NULL);
+        }
+    }
+
+    if (parallel_call_plan && parallel_call_plan->is_plan_method) {
+        switch (parallel_call_plan->kind) {
+            case XA_PAR_CALL_FOR_EACH:
+                return_type = xr_type_new_unit(ctx->analyzer->isolate);
+                break;
+            case XA_PAR_CALL_MAP: {
+                XrType *callback_type =
+                    call->arg_count > 1
+                        ? xa_analyzer_get_node_type(ctx->analyzer, call->arguments[1])
+                        : NULL;
+                XrType *element_type = callback_type && XR_TYPE_IS_FUNCTION(callback_type)
+                                           ? callback_type->function.return_type
+                                           : xr_type_new_unknown(ctx->analyzer->isolate);
+                return_type = xr_type_new_array(ctx->analyzer->isolate, element_type);
+                break;
+            }
+            case XA_PAR_CALL_MAP_INTO:
+                if (call->arg_count > 1)
+                    return_type = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[1]);
+                break;
+            case XA_PAR_CALL_REDUCE:
+                if (call->arg_count > 1)
+                    return_type = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[1]);
+                break;
+            case XA_PAR_CALL_NONE:
+                break;
         }
     }
 

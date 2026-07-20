@@ -28,6 +28,7 @@
  */
 
 #include "xi_opt_inline.h"
+#include "xi_evidence.h"
 #include "xi_cfg_edit.h"
 #include "xi_tbaa.h"
 #include "xi_ops_gen.h"
@@ -326,7 +327,7 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
         return NULL;
 
     xi_value_copy_metadata(cloned, src);
-    if (caller->invariant_mask & XI_INV_TBAA_ANNOTATED)
+    if (xi_evidence_domain_is_proven_current(caller, XI_EVD_ALIAS))
         xi_tbaa_annotate_value(cloned);
 
     /* Remap args */
@@ -694,6 +695,8 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 continue;
             if (callee->ncaptures > 0)
                 continue; /* LOAD_UPVAL/STORE_UPVAL need closure-env remapping before inlining. */
+            if (callee->is_vararg)
+                continue; /* Rest-Array construction needs a dedicated inline rewrite. */
 
             XiInlineCostModel cm = analyze_callee(callee);
             if (cm.value_count > XI_INLINE_MAX_COST)

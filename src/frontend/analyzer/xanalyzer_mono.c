@@ -504,6 +504,11 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.call_expr.type_args = clone_tref_array(
                 node->as.call_expr.type_args, node->as.call_expr.type_arg_count, map, mc);
             n->as.call_expr.type_arg_count = node->as.call_expr.type_arg_count;
+            n->as.call_expr.semantic_type_id = node->as.call_expr.semantic_type_id;
+            n->as.call_expr.semantic_type_args =
+                clone_tref_array(node->as.call_expr.semantic_type_args,
+                                 node->as.call_expr.semantic_type_arg_count, map, mc);
+            n->as.call_expr.semantic_type_arg_count = node->as.call_expr.semantic_type_arg_count;
             break;
 
         // === Return / Yield ===

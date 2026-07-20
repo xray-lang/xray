@@ -57,6 +57,16 @@ static bool cg_class_field_cache_add(CgClassFieldCache *cache, const char *name,
     if (cache->layout && layout_index < 0)
         return false;
 
+    /* Fields stored as a tagged XrValue in the native struct (strings and other
+     * boxed values) must not be scalar-cached: the cache would declare the local
+     * with the value rep (e.g. void*) while the struct member is an XrValue. Let
+     * them use the direct tagged field access path instead. */
+    if (cache->layout && layout_index >= 0) {
+        const XrAggregateFieldLayout *fl = cg_struct_field(cache->layout, (uint16_t) layout_index);
+        if (fl && (fl->native_type == XR_NATIVE_STRING || fl->native_type == XR_NATIVE_VALUE))
+            return false;
+    }
+
     int existing = cg_class_field_cache_find(cache, name);
     if (existing >= 0) {
         cache->fields[existing].dirty = cache->fields[existing].dirty || dirty;

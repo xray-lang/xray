@@ -1,0 +1,5 @@
+args=--simd native --dump-xaot-plan
+contains=kind=vec_load evidence=recv_agg+pod+range+no_clobber drop=bounds
+contains=kind=vec_store evidence=recv_agg+pod+range+no_clobber drop=bounds
+c_regex=(uint64x2_t|__m128i) v[0-9]+ =
+c_not_contains=_off < 0 || _off > _s.length - 2u

@@ -4,6 +4,9 @@
  */
 
 #include "../../../src/ir/xi_opt_inline.h"
+#include "../../../src/ir/xi_analysis_manager.h"
+#include "../../../src/ir/xi_edit.h"
+#include "../../../src/ir/xi_evidence.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_verify.h"
@@ -309,7 +312,8 @@ TEST(inlines_unannotated_callee_under_tbaa_invariant) {
     XiValue *call = add_known_call(caller, callee);
     ASSERT(call != NULL);
     xi_block_set_return(caller->entry, call);
-    caller->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+    xi_evidence_publish(caller, XI_EVD_ALIAS, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_TEST, 0, NULL);
 
     XiPassChange chg = xi_opt_inline(caller);
     ASSERT(chg.cfg_changed && chg.values_changed);
@@ -367,6 +371,68 @@ TEST(inlines_top_level_shared_function_load) {
     xi_func_free(program);
 }
 
+TEST(inline_clone_reproves_evidence_for_new_subject_and_revision) {
+    XiFunc *callee = make_func("proof_source", &stub_int);
+    XiFunc *caller = make_func("proof_destination", &stub_int);
+    ASSERT(callee != NULL);
+    ASSERT(caller != NULL);
+
+    XiValue *source = xi_const_int(callee, callee->entry, 42, &stub_int);
+    ASSERT(source != NULL);
+    xi_block_set_return(callee->entry, source);
+    XiValue *call = add_known_call(caller, callee);
+    ASSERT(call != NULL);
+    xi_block_set_return(caller->entry, call);
+
+    XiAnalysisManager callee_manager;
+    XiAnalysisManager caller_manager;
+    xi_analysis_manager_init(&callee_manager, callee);
+    xi_analysis_manager_init(&caller_manager, caller);
+    XiEvidenceView source_proof =
+        xi_analysis_require(&callee_manager, XI_EVD_RANGE, xi_evidence_subject_value(source));
+    XiEvidenceView old_call_proof =
+        xi_analysis_require(&caller_manager, XI_EVD_RANGE, xi_evidence_subject_value(call));
+    ASSERT(source_proof.current && source_proof.record != NULL);
+    ASSERT(old_call_proof.current && old_call_proof.record != NULL);
+    uint64_t old_revision = caller->ir_revision;
+
+    XiEditSession edit;
+    XiPassOutcome outcome;
+    char edit_error[256] = {0};
+    ASSERT(xi_edit_begin(&edit, caller));
+    XiPassChange change = xi_opt_inline(caller);
+    ASSERT(change.cfg_changed && change.values_changed);
+    ASSERT(xi_edit_finish(&edit, change, 0, 0, &outcome, edit_error, sizeof(edit_error)));
+    ASSERT(outcome.revision_delta.ir_changed);
+    ASSERT(outcome.revision_delta.cfg_changed);
+    ASSERT(caller->ir_revision > old_revision);
+
+    XiBlock *inlined_entry = caller->entry->succs[0];
+    ASSERT(inlined_entry != NULL && inlined_entry->nvalues == 1);
+    XiValue *clone = inlined_entry->values[0];
+    ASSERT(clone != NULL && clone->op == XI_CONST);
+    ASSERT(clone->id != call->id);
+
+    XiEvidenceView stale_call =
+        xi_evidence_query(caller, XI_EVD_RANGE, xi_evidence_subject_value(call));
+    XiEvidenceView missing_clone =
+        xi_evidence_query(caller, XI_EVD_RANGE, xi_evidence_subject_value(clone));
+    ASSERT(!stale_call.current);
+    ASSERT(!missing_clone.current);
+    ASSERT(missing_clone.reason == XI_EVIDENCE_REASON_SUBJECT_NOT_FOUND);
+    ASSERT(xi_evidence_is_proven_current(callee, XI_EVD_RANGE, xi_evidence_subject_value(source)));
+
+    XiEvidenceView clone_proof =
+        xi_analysis_require(&caller_manager, XI_EVD_RANGE, xi_evidence_subject_value(clone));
+    ASSERT(clone_proof.current && clone_proof.record != NULL);
+    ASSERT(clone_proof.record->subject.id == clone->id);
+    ASSERT(clone_proof.record->stamp.ir_revision == caller->ir_revision);
+    ASSERT(clone_proof.record->producer == XI_EVIDENCE_PRODUCER_RANGE_ANALYSIS);
+
+    xi_func_free(caller);
+    xi_func_free(callee);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -387,6 +453,7 @@ int main(void) {
     run_budget_large_caller();
     run_inlines_unannotated_callee_under_tbaa_invariant();
     run_inlines_top_level_shared_function_load();
+    run_inline_clone_reproves_evidence_for_new_subject_and_revision();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

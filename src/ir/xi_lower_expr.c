@@ -12,6 +12,7 @@
  */
 
 #include "xi_lower_internal.h"
+#include "xi_semantic_intrinsic.h"
 #include "xi.h"
 #include "xi_effect.h"
 #include "xi_lower_expr_helpers.h"
@@ -27,6 +28,8 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xa_parallel_call_plan.h"
+#include "../frontend/analyzer/xa_typed_program.h"
+#include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../frontend/analyzer/xa_selection.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../frontend/analyzer/xconsteval.h"
@@ -60,9 +63,10 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
                                 const char *module_name, const char *cname, AstNode **arguments,
                                 XrCallArgAccess *arg_accesses, int arg_count);
 static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                                     const char *method);
+                                                     XaParallelCallKind kind);
 static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                                   XiValue *plan, const char *method);
+                                                   XiValue *plan, XaParallelCallKind kind,
+                                                   XaIntrinsicId intrinsic_id);
 
 static int pack_go_aux(int link_mode) {
     return link_mode & XI_GO_AUX_LINK_MASK;
@@ -126,7 +130,7 @@ static XiValue *xi_lower_emit_builtin_class(XiLower *l, const char *name, int li
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, cls_type, 0);
     if (v) {
         v->aux_int = index;
-        v->aux = (void *) name;
+        v->aux = (void *) arena_strdup(l->func, name);
         v->line = (uint32_t) line;
     }
     return v;
@@ -1301,142 +1305,10 @@ static const char *lower_call_callee_imported_member(XiLower *l, AstNode *callee
                                      : (sym->name ? sym->name : var->name);
 }
 
-static bool lower_parallel_is_batch_method(const char *method) {
-    return method && (strcmp(method, "forEach") == 0 || strcmp(method, "map") == 0 ||
-                      strcmp(method, "mapInto") == 0 || strcmp(method, "reduce") == 0);
-}
-
 static const XaParallelCallPlan *lower_analyzer_parallel_call_plan(XiLower *l, AstNode *call_node) {
     if (!l || !l->analyzer || !call_node)
         return NULL;
     return xa_analyzer_get_parallel_call_plan(l->analyzer, call_node);
-}
-
-static const char *lower_analyzer_parallel_call_method(const XaParallelCallPlan *plan) {
-    return plan ? xa_parallel_call_kind_name(plan->kind) : NULL;
-}
-
-static bool lower_path_is_parallel_stdlib_module(const char *file) {
-    if (!file)
-        return false;
-    const char *suffixes[] = {"stdlib/parallel/parallel.xr",
-                              "<embedded stdlib>/parallel/parallel.xr"};
-    for (int i = 0; i < (int) (sizeof(suffixes) / sizeof(suffixes[0])); i++) {
-        size_t flen = strlen(file);
-        size_t slen = strlen(suffixes[i]);
-        if (flen >= slen && strcmp(file + flen - slen, suffixes[i]) == 0)
-            return true;
-    }
-    return false;
-}
-
-static XaSymbol *lower_class_info_lookup_instance_member(XrClassInfo *info, const char *name,
-                                                         XaSymbolKind kind) {
-    XaSymbol *member = xa_class_info_lookup_instance_member(info, name);
-    return member && member->kind == kind ? member : NULL;
-}
-
-static XaSymbol *lower_class_info_lookup_instance_storage_member(XrClassInfo *info,
-                                                                 const char *name) {
-    XaSymbol *member = xa_class_info_lookup_instance_member(info, name);
-    if (!member)
-        return NULL;
-    return (member->kind == XA_SYM_FIELD || member->kind == XA_SYM_PROPERTY) ? member : NULL;
-}
-
-static bool lower_class_info_matches_parallel_plan_shape(XiLower *l, XrClassInfo *info) {
-    if (!info || !info->name || strcmp(info->name, "Plan") != 0)
-        return false;
-
-    XaSymbol *states = lower_class_info_lookup_instance_storage_member(info, "_states");
-    XaSymbol *closed = lower_class_info_lookup_instance_storage_member(info, "_closed");
-    XaSymbol *active = lower_class_info_lookup_instance_storage_member(info, "_active");
-    if (!states || !closed || !active || !states->is_private || !closed->is_private ||
-        !active->is_private)
-        return false;
-
-    XaSymbolLinks *state_links = l ? xa_analyzer_get_links(l->analyzer, states) : NULL;
-    XaSymbolLinks *closed_links = l ? xa_analyzer_get_links(l->analyzer, closed) : NULL;
-    XaSymbolLinks *active_links = l ? xa_analyzer_get_links(l->analyzer, active) : NULL;
-    if (!state_links || !XR_TYPE_IS_ARRAY(state_links->type) || !closed_links ||
-        !XR_TYPE_IS_BOOL(closed_links->type) || !active_links ||
-        !XR_TYPE_IS_BOOL(active_links->type))
-        return false;
-
-    const char *required_methods[] = {"_begin", "_end",    "_stateFor", "forEach",
-                                      "map",    "mapInto", "reduce",    "close"};
-    for (int i = 0; i < (int) (sizeof(required_methods) / sizeof(required_methods[0])); i++) {
-        if (!lower_class_info_lookup_instance_member(info, required_methods[i], XA_SYM_METHOD))
-            return false;
-    }
-    return true;
-}
-
-static bool lower_class_info_is_parallel_plan(XiLower *l, XrClassInfo *info) {
-    if (!info || !info->name || strcmp(info->name, "Plan") != 0)
-        return false;
-    if (lower_path_is_parallel_stdlib_module(info->location.file))
-        return true;
-    if (!l || !l->analyzer)
-        return false;
-    for (int i = 0; i < info->method_count; i++) {
-        XaSymbol *method = info->methods ? info->methods[i] : NULL;
-        XaSymbolLinks *links = method ? xa_analyzer_get_links(l->analyzer, method) : NULL;
-        if (links && lower_path_is_parallel_stdlib_module(links->file_path))
-            return true;
-    }
-    return lower_class_info_matches_parallel_plan_shape(l, info);
-}
-
-static bool lower_symbol_is_parallel_plan_class(XiLower *l, XaSymbol *sym, const char *name) {
-    if (!l || !l->analyzer || !sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_IMPORT))
-        return false;
-    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
-    const char *member_name =
-        links && links->import_member_name ? links->import_member_name : (name ? name : sym->name);
-    if (!member_name || strcmp(member_name, "Plan") != 0)
-        return false;
-    if (links && links->module_name && strcmp(links->module_name, "parallel") == 0)
-        return true;
-    if (links && lower_path_is_parallel_stdlib_module(links->file_path))
-        return true;
-    return links && lower_class_info_is_parallel_plan(l, links->class_info);
-}
-
-static bool lower_type_is_parallel_plan(XiLower *l, XrType *type) {
-    if (!type || !XR_TYPE_IS_INSTANCE(type))
-        return false;
-    if (type->instance.class_ref && lower_class_info_is_parallel_plan(l, type->instance.class_ref))
-        return true;
-    const char *class_name = xr_type_get_class_name(type);
-    if (!class_name || strcmp(class_name, "Plan") != 0)
-        return false;
-    if (!l || !l->analyzer)
-        return false;
-    XaSymbol *sym = xa_analyzer_lookup(l->analyzer, class_name);
-    if (!sym)
-        sym = xa_analyzer_lookup_in_scope(l->analyzer, class_name, l->analyzer->global_scope);
-    if (!sym)
-        sym = xa_analyzer_lookup_deep(l->analyzer, class_name);
-    return lower_symbol_is_parallel_plan_class(l, sym, class_name);
-}
-
-static bool lower_selection_is_parallel_plan_method(XiLower *l, AstNode *callee,
-                                                    const char *method) {
-    if (!l || !l->analyzer || !callee || !method)
-        return false;
-    const XaSelection *sel = xa_analyzer_get_selection(l->analyzer, callee);
-    if (!sel || sel->kind != XA_SEL_METHOD)
-        return false;
-    if (sel->receiver_type && lower_type_is_parallel_plan(l, sel->receiver_type))
-        return true;
-    XaSymbol *target = sel->target_symbol;
-    if (!target || !target->name || strcmp(target->name, method) != 0)
-        return false;
-    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, target);
-    if (links && lower_path_is_parallel_stdlib_module(links->file_path))
-        return true;
-    return target->parent && lower_symbol_is_parallel_plan_class(l, target->parent, "Plan");
 }
 
 static XiValue *lower_emit_field_load(XiLower *l, XiValue *obj, const char *name,
@@ -1466,29 +1338,66 @@ static XiValue *lower_emit_len(XiLower *l, XiValue *value, int line) {
     return len;
 }
 
+static XiValue *lower_bind_parallel_intrinsic_result(XiLower *l, uint32_t first_value_id,
+                                                     XaIntrinsicId intrinsic_id, XiValue *result) {
+    if (!l || !l->func || !result || intrinsic_id == XA_INTRINSIC_NONE)
+        return result;
+    XiValue *semantic = NULL;
+    for (uint32_t bi = 0; bi < l->func->nblocks; bi++) {
+        XiBlock *block = l->func->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (!value || value->id < first_value_id ||
+                (value->op != XI_PAR_FOR && value->op != XI_PAR_MAP && value->op != XI_PAR_REDUCE))
+                continue;
+            if (semantic) {
+                l->had_error = true;
+                fprintf(stderr,
+                        "error: canonical parallel call emitted more than one semantic Xi op\n");
+                return NULL;
+            }
+            semantic = value;
+        }
+    }
+    if (!semantic) {
+        l->had_error = true;
+        fprintf(stderr, "error: canonical parallel call emitted no semantic Xi op\n");
+        return NULL;
+    }
+    semantic->xa_intrinsic_id = intrinsic_id;
+    return result;
+}
+
 static XiValue *lower_parallel_module_intrinsic_or_error(XiLower *l, AstNode *node,
-                                                         CallExprNode *call, const char *method) {
-    XiValue *parallel_intrinsic = lower_parallel_module_intrinsic_call(l, node, call, method);
-    if (parallel_intrinsic || (l && l->had_error) || !lower_parallel_is_batch_method(method))
-        return parallel_intrinsic;
+                                                         CallExprNode *call,
+                                                         XaParallelCallKind kind,
+                                                         XaIntrinsicId intrinsic_id) {
+    uint32_t first_value_id = l && l->func ? l->func->next_value_id : 0;
+    XiValue *parallel_intrinsic = lower_parallel_module_intrinsic_call(l, node, call, kind);
+    if (parallel_intrinsic)
+        return lower_bind_parallel_intrinsic_result(l, first_value_id, intrinsic_id,
+                                                    parallel_intrinsic);
+    if ((l && l->had_error) || kind == XA_PAR_CALL_NONE)
+        return NULL;
 
     if (l)
         l->had_error = true;
-    if (strcmp(method, "mapInto") == 0) {
+    if (kind == XA_PAR_CALL_MAP_INTO) {
         fprintf(stderr,
                 "error: parallel.mapInto expected (Range, output, inline (item) lambda[, "
                 "literal parallel.Options(...)]) at line %d\n",
                 node ? node->line : -1);
-    } else if (strcmp(method, "reduce") == 0) {
+    } else if (kind == XA_PAR_CALL_REDUCE) {
         fprintf(stderr,
                 "error: parallel.reduce expected (Range, initial, inline (item) body, inline "
                 "combine lambda[, literal parallel.Options(...)]) at line %d\n",
                 node ? node->line : -1);
     } else {
+        const char *source_name = xa_parallel_call_kind_name(kind);
         fprintf(stderr,
                 "error: parallel.%s expected (Range, inline (item) lambda[, literal "
                 "parallel.Options(...)]) at line %d\n",
-                method, node ? node->line : -1);
+                source_name ? source_name : "<invalid>", node ? node->line : -1);
     }
     return NULL;
 }
@@ -2200,6 +2109,8 @@ static bool xi_lower_builtin_receiver_registry_matches(struct XrType *receiver_t
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
             return receiver_type && receiver_type->kind == XR_KIND_INT &&
                    !receiver_type->is_nullable;
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+            return xr_type_is_exact_unsigned_integer(receiver_type);
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver_type);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -2211,42 +2122,6 @@ static bool xi_lower_builtin_receiver_registry_matches(struct XrType *receiver_t
                    xi_type_is_pod_span_elem(receiver_type->container.element_type);
     }
     return false;
-}
-
-static bool xi_lower_receiver_method_matches(struct XrType *receiver_type, const char *method,
-                                             XaBuiltinReceiverMethodId method_id) {
-    const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
-    return spec && method && strcmp(method, spec->source_name) == 0 &&
-           xi_lower_builtin_receiver_registry_matches(receiver_type, spec->receiver);
-}
-
-static uint16_t xi_lower_exact_integer_bit_op(struct XrType *receiver_type, const char *method,
-                                              int arg_count) {
-    if (arg_count == 0) {
-        if (xi_lower_receiver_method_matches(receiver_type, method,
-                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_POPCOUNT))
-            return XI_BIT_POPCOUNT;
-        if (xi_lower_receiver_method_matches(receiver_type, method,
-                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_LEADING_ZEROS))
-            return XI_BIT_CLZ;
-        if (xi_lower_receiver_method_matches(receiver_type, method,
-                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_TRAILING_ZEROS))
-            return XI_BIT_CTZ;
-        if (xi_lower_receiver_method_matches(receiver_type, method,
-                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_BYTESWAP))
-            return XI_BIT_BSWAP;
-    } else if (arg_count == 1) {
-        if (xi_lower_receiver_method_matches(receiver_type, method,
-                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_LEFT))
-            return XI_BIT_ROTL;
-        if (xi_lower_receiver_method_matches(receiver_type, method,
-                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_ROTATE_RIGHT))
-            return XI_BIT_ROTR;
-        if (xi_lower_receiver_method_matches(receiver_type, method,
-                                             XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_MUL_HIGH))
-            return XI_BIT_MUL_HIGH;
-    }
-    return XI_OP_COUNT;
 }
 
 /* R2-2: wrappingAdd/Sub/Mul are spec-defined as "explicit default two's-
@@ -4843,15 +4718,13 @@ static XiValue *lower_byte_slice_typed_signed_load_narrow(XiLower *l, AstNode *n
 }
 
 static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                            MemberAccessNode *ma, XiValue *recv,
+                                            XaIntrinsicId intrinsic_id, XiValue *recv,
                                             struct XrType *result_type) {
-    if (!ma->name || !call->type_args || !call->type_args[0] || call->type_arg_count != 1)
+    if (!call->type_args || !call->type_args[0] || call->type_arg_count != 1)
         return NULL;
 
-    bool byte_slice_typed_load = xi_lower_receiver_method_matches(
-        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_LOAD);
-    bool byte_slice_typed_store = xi_lower_receiver_method_matches(
-        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_STORE);
+    bool byte_slice_typed_load = intrinsic_id == XA_INTRINSIC_BYTE_SLICE_LOAD;
+    bool byte_slice_typed_store = intrinsic_id == XA_INTRINSIC_BYTE_SLICE_STORE;
     int n = call->arg_count;
     if ((!byte_slice_typed_load || (n != 1 && n != 2)) &&
         (!byte_slice_typed_store || (n != 2 && n != 3)))
@@ -4910,6 +4783,9 @@ static XiValue *lower_byte_slice_typed_call(XiLower *l, AstNode *node, CallExprN
         v->args[2] = endian;
     }
     v->line = (uint32_t) node->line;
+    v->xa_intrinsic_id = (uint32_t) intrinsic_id;
+    v->flags = xi_op_default_effects((XiOp) v->op);
+    xi_lower_insert_err_check(l, node);
     return byte_slice_typed_load ? lower_byte_slice_typed_signed_load_narrow(l, node, v, target)
                                  : v;
 }
@@ -5163,8 +5039,210 @@ static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
     xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, kinds, out_ids);
 }
 
+static void lower_take_memory_intrinsic_evidence(XiLower *l, const AstNode *node,
+                                                 XaIntrinsicId intrinsic_id,
+                                                 XiSequenceEvidenceIds *out_ids) {
+    XiSequenceEvidenceKinds kinds = {0};
+    if (!out_ids)
+        return;
+    memset(out_ids, 0, sizeof(*out_ids));
+    switch (intrinsic_id) {
+        case XA_INTRINSIC_BYTE_SLICE_FILL:
+        case XA_INTRINSIC_POD_SLICE_FILL:
+            kinds.bulk_op_kind = XG_BULK_FILL;
+            break;
+        case XA_INTRINSIC_BYTE_SLICE_COPY:
+        case XA_INTRINSIC_POD_SLICE_COPY:
+            kinds.bulk_op_kind = XG_BULK_COPY;
+            break;
+        case XA_INTRINSIC_BYTE_SLICE_COMPARE:
+        case XA_INTRINSIC_POD_SLICE_COMPARE:
+            kinds.bulk_op_kind = XG_BULK_COMPARE;
+            break;
+        case XA_INTRINSIC_BYTE_SLICE_REPEAT:
+            kinds.bulk_op_kind = XG_BULK_REPEAT;
+            break;
+        default:
+            return;
+    }
+    xi_lower_take_sequence_evidence_ids(l, node ? (uint32_t) node->line : 0, kinds, out_ids);
+}
+
+static bool lower_intrinsic_shuffle_pattern(XiLower *l, AstNode *node, CallExprNode *call,
+                                            const XaIntrinsicDesc *desc, int64_t *extra) {
+    if (!l || !call || !desc || !extra)
+        return false;
+    uint8_t lanes = desc->shape_rule.input_lanes;
+    if ((desc->flags & XA_INTRINSIC_FLAG_EXPLICIT_SHUFFLE) != 0) {
+        for (uint8_t lane = 0; lane < lanes; lane++) {
+            int64_t selected = -1;
+            const char *error = NULL;
+            AstNode *arg = lane < call->arg_count ? call->arguments[lane] : NULL;
+            if (!arg || !xa_consteval_int_expr(l->analyzer, arg, &selected, &error) ||
+                selected < 0 || selected >= lanes) {
+                (void) error;
+                l->had_error = true;
+                return false;
+            }
+            *extra |= selected << (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4);
+        }
+    } else if ((desc->flags & XA_INTRINSIC_FLAG_SWAP_ADJACENT) != 0) {
+        for (uint8_t lane = 0; lane < lanes; lane++)
+            *extra |= (int64_t) (lane ^ 1u) << (XI_VEC_SHAPE_SHUFFLE_SHIFT + lane * 4);
+    } else if ((desc->flags & XA_INTRINSIC_FLAG_SWAP_LANES) != 0) {
+        if (lanes != 2) {
+            l->had_error = true;
+            return false;
+        }
+        *extra |= INT64_C(1) << XI_VEC_SHAPE_SHUFFLE_SHIFT;
+    }
+    (void) node;
+    return true;
+}
+
+static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                              const XaResolvedCall *resolved) {
+    if (!l || !node || !call || !resolved || resolved->reason != XA_RESOLVED_CALL_REASON_RESOLVED)
+        return NULL;
+    const XaIntrinsicDesc *desc = xa_intrinsic_by_id(resolved->intrinsic_id);
+    if (!desc || call->arg_count < desc->min_arity || call->arg_count > desc->max_arity ||
+        !call->callee || call->callee->type != AST_MEMBER_ACCESS) {
+        l->had_error = true;
+        return NULL;
+    }
+    MemberAccessNode *member = &call->callee->as.member_access;
+    XiOp op = xi_semantic_intrinsic_op(desc);
+    bool typed_byte_slice = desc->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_TYPED_LOAD ||
+                            desc->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_TYPED_STORE;
+    if ((!typed_byte_slice && op == XI_OP_COUNT) || !member->object) {
+        l->had_error = true;
+        return NULL;
+    }
+
+    if (call->arg_count > XI_LOWER_MAX_CALL_ARGS) {
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *receiver = xi_lower_expr(l, member->object);
+    if (!receiver)
+        return NULL;
+    if (typed_byte_slice)
+        return lower_byte_slice_typed_call(l, node, call, resolved->intrinsic_id, receiver,
+                                           xi_lower_node_type(l, node));
+
+    XrParamMode stack_modes[64];
+    const XrParamMode *param_modes = NULL;
+    int param_count = 0;
+    XrType *method_type = xr_type_non_nullable(l->isolate, xi_lower_node_type(l, call->callee));
+    if (method_type && method_type->kind == XR_KIND_FUNCTION) {
+        param_modes = lower_function_param_modes(
+            l, method_type, stack_modes, (int) (sizeof(stack_modes) / sizeof(stack_modes[0])),
+            &param_count);
+    }
+
+    XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
+    XiLowerArgList args;
+    xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
+    if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, param_modes,
+                                       param_count, (int) node->line))
+        return NULL;
+
+    uint16_t nargs = (uint16_t) (args.count + 1);
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    XiValue *value = xi_value_new(l->func, l->cur_block, op, result_type, nargs);
+    if (!value)
+        return NULL;
+    value->args[0] = receiver;
+    for (int i = 0; i < args.count; i++)
+        value->args[i + 1] = args.items[i];
+
+    int64_t extra = 0;
+    if ((desc->flags & XA_INTRINSIC_FLAG_ODD_LANES) != 0)
+        extra |= XI_VEC_SHAPE_ODD_LANES;
+    if ((desc->flags & XA_INTRINSIC_FLAG_UNZIP) != 0)
+        extra |= XI_VEC_SHAPE_UNZIP;
+    if ((desc->flags & XA_INTRINSIC_FLAG_CONTIGUOUS_HALF) != 0)
+        extra |= XI_VEC_SHAPE_CONTIGUOUS_HALF;
+    if (desc->lowering == XA_INTRINSIC_LOWERING_VEC_SHUFFLE &&
+        !lower_intrinsic_shuffle_pattern(l, node, call, desc, &extra))
+        return NULL;
+    if (desc->family == XA_INTRINSIC_FAMILY_SIMD) {
+        value->aux_int = xi_vec_shape_encode(desc->shape_rule.result_native_type,
+                                             desc->shape_rule.result_lanes) |
+                         extra;
+    } else if (desc->family == XA_INTRINSIC_FAMILY_BITS) {
+        value->aux_int = receiver->type ? receiver->type->native_width : 0;
+    }
+    value->xa_intrinsic_id = (uint32_t) desc->id;
+    value->flags = xi_op_default_effects(op);
+    value->line = (uint32_t) node->line;
+    if (desc->family == XA_INTRINSIC_FAMILY_MEMORY) {
+        if (desc->lowering == XA_INTRINSIC_LOWERING_SPAN_REINTERPRET) {
+            if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
+                l->had_error = true;
+                return NULL;
+            }
+            XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
+            target = xi_lower_type_or_any(l, target, "span reinterpret type argument",
+                                          node ? node->line : 0);
+            if (!xi_type_is_pod_span_elem(target)) {
+                l->had_error = true;
+                return NULL;
+            }
+            value->aux_int = xi_pack_span_elem_aux(target);
+        } else if (desc->lowering == XA_INTRINSIC_LOWERING_SPAN_GET) {
+            value->aux_int = 1;
+        }
+        XiSequenceEvidenceIds sequence_ids;
+        lower_take_memory_intrinsic_evidence(l, node, resolved->intrinsic_id, &sequence_ids);
+        xi_lower_apply_sequence_evidence_ids(value, &sequence_ids);
+    }
+    if (desc->effect == XA_INTRINSIC_EFFECT_MAY_THROW ||
+        desc->effect == XA_INTRINSIC_EFFECT_READ_MAY_THROW ||
+        desc->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW)
+        xi_lower_insert_err_check(l, node);
+    return value;
+}
+
+static XrType *lower_known_expr_type(XiLower *l, AstNode *node) {
+    XrType *type = l && node ? xi_lower_node_type(l, node) : NULL;
+    if (type && !xi_lower_type_is_unknown(type))
+        return type;
+    if (!l || !node || node->type != AST_VARIABLE)
+        return NULL;
+    for (XiLower *scope = l; scope; scope = scope->parent) {
+        int var_id = xi_lower_var_find(scope, node->as.variable.symbol_id, node->as.variable.name);
+        if (var_id >= 0 && var_id < scope->var_count && scope->vars[var_id].type)
+            return scope->vars[var_id].type;
+    }
+    XiTopBinding top =
+        xi_lower_find_top_binding(l, node->as.variable.symbol_id, node->as.variable.name);
+    return xi_top_binding_valid(top) ? top.type : NULL;
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
+
+    const XaResolvedCall *resolved =
+        l && l->typed_program ? xa_typed_program_resolved_call(l->typed_program, node) : NULL;
+    XaResolvedCall lowering_resolved;
+    if (!resolved && call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *member = &call->callee->as.member_access;
+        XaIntrinsicId intrinsic_id = xa_intrinsic_compiler_receiver_method(
+            lower_known_expr_type(l, member->object), member->name);
+        if (intrinsic_id != XA_INTRINSIC_NONE) {
+            lowering_resolved = (XaResolvedCall) {
+                .source_node_id = node->node_id,
+                .intrinsic_id = intrinsic_id,
+                .reason = XA_RESOLVED_CALL_REASON_RESOLVED,
+            };
+            resolved = &lowering_resolved;
+        }
+    }
+    const XaIntrinsicDesc *resolved_desc =
+        resolved ? xa_intrinsic_by_id(resolved->intrinsic_id) : NULL;
+    if (resolved_desc && resolved_desc->family != XA_INTRINSIC_FAMILY_PARALLEL)
+        return lower_resolved_intrinsic_call(l, node, call, resolved);
 
     /* The source keyword is lowercase, while the runtime's builtin class is
      * named String. Resolve canonical static constructors to that class. */
@@ -5344,20 +5422,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         const XaParallelCallPlan *analyzer_parallel_plan =
             lower_analyzer_parallel_call_plan(l, node);
-        const char *analyzer_parallel_method =
-            lower_analyzer_parallel_call_method(analyzer_parallel_plan);
-
-        if (analyzer_parallel_plan && !analyzer_parallel_plan->is_plan_method &&
-            analyzer_parallel_method) {
-            XiValue *parallel_intrinsic =
-                lower_parallel_module_intrinsic_or_error(l, node, call, analyzer_parallel_method);
-            if (parallel_intrinsic || l->had_error)
-                return parallel_intrinsic;
-        }
-
-        if (ma->name && lower_call_object_is_module(l, ma->object, "parallel")) {
-            XiValue *parallel_intrinsic =
-                lower_parallel_module_intrinsic_or_error(l, node, call, ma->name);
+        if (analyzer_parallel_plan && !analyzer_parallel_plan->is_plan_method) {
+            XiValue *parallel_intrinsic = lower_parallel_module_intrinsic_or_error(
+                l, node, call, analyzer_parallel_plan->kind, analyzer_parallel_plan->intrinsic_id);
             if (parallel_intrinsic || l->had_error)
                 return parallel_intrinsic;
         }
@@ -5381,18 +5448,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (!recv)
             return NULL;
 
-        if (analyzer_parallel_plan && analyzer_parallel_plan->is_plan_method &&
-            analyzer_parallel_method) {
-            XiValue *parallel_plan_intrinsic =
-                lower_parallel_plan_intrinsic_call(l, node, call, recv, analyzer_parallel_method);
-            if (parallel_plan_intrinsic || l->had_error)
-                return parallel_plan_intrinsic;
-        }
-
-        if (ma->name && (lower_type_is_parallel_plan(l, recv->type) ||
-                         lower_selection_is_parallel_plan_method(l, call->callee, ma->name))) {
-            XiValue *parallel_plan_intrinsic =
-                lower_parallel_plan_intrinsic_call(l, node, call, recv, ma->name);
+        if (analyzer_parallel_plan && analyzer_parallel_plan->is_plan_method) {
+            XiValue *parallel_plan_intrinsic = lower_parallel_plan_intrinsic_call(
+                l, node, call, recv, analyzer_parallel_plan->kind,
+                analyzer_parallel_plan->intrinsic_id);
             if (parallel_plan_intrinsic || l->had_error)
                 return parallel_plan_intrinsic;
         }
@@ -5427,11 +5486,6 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         struct XrType *result_type = xi_lower_node_type(l, node);
 
-        XiValue *byte_slice_typed =
-            lower_byte_slice_typed_call(l, node, call, ma, recv, result_type);
-        if (byte_slice_typed)
-            return byte_slice_typed;
-
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
         XiLowerArgList args;
         xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
@@ -5444,20 +5498,6 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (lower_value_is_whole_module_import(l, recv, "math") &&
             lower_math_call_arity_ok(ma->name, n))
             result_type = lower_math_call_result_type(l, ma->name, arg_vals, n);
-
-        uint16_t exact_bit_op = xi_lower_exact_integer_bit_op(recv->type, ma->name, n);
-        if (exact_bit_op != XI_OP_COUNT) {
-            XiValue *v =
-                xi_value_new(l->func, l->cur_block, exact_bit_op, result_type, (uint16_t) (n + 1));
-            if (!v)
-                return NULL;
-            v->args[0] = recv;
-            if (n == 1)
-                v->args[1] = arg_vals[0];
-            v->aux_int = recv->type->native_width;
-            v->line = (uint32_t) node->line;
-            return v;
-        }
 
         uint16_t wrap_arith_op = xi_lower_int_wrapping_method_op(recv->type, ma->name, n);
         if (wrap_arith_op != XI_OP_COUNT && arg_vals[0] && arg_vals[0]->type &&
@@ -5601,22 +5641,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return v;
         }
 
-        if (recv->type && XR_TYPE_IS_SPAN(recv->type) && ma->name && strcmp(ma->name, "get") == 0 &&
-            n == 1) {
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, result_type, 2);
-            if (!v)
-                return NULL;
-            v->args[0] = recv;
-            v->args[1] = arg_vals[0];
-            v->aux_int = 1;
-            v->line = (uint32_t) node->line;
-            return v;
-        }
-
         if (recv->type &&
-            (XR_TYPE_IS_ARRAY(recv->type) || XR_TYPE_IS_SPAN(recv->type) ||
-             recv->type->kind == XR_KIND_FIXED_ARRAY) &&
-            ma->name && n == 0 &&
+            (XR_TYPE_IS_ARRAY(recv->type) || recv->type->kind == XR_KIND_FIXED_ARRAY) && ma->name &&
+            n == 0 &&
             (strcmp(ma->name, "ptr") == 0 ||
              (recv->type->kind != XR_KIND_FIXED_ARRAY && strcmp(ma->name, "mutPtr") == 0))) {
             struct XrType *pointer_type = result_type;
@@ -5691,212 +5718,6 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 v->args[1] = zero;
                 v->line = (uint32_t) node->line;
                 return v;
-            }
-        }
-
-        if (recv->type && n == 0 &&
-            xi_lower_receiver_method_matches(recv->type, ma->name,
-                                             XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_AS_BYTES)) {
-            struct XrType *elem = recv->type->container.element_type;
-            if (xi_type_is_pod_span_elem(elem)) {
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_AS_BYTES, result_type, 1);
-                if (!v)
-                    return NULL;
-                v->args[0] = recv;
-                v->line = (uint32_t) node->line;
-                return v;
-            }
-        }
-
-        if (recv->type && n == 1 && !xi_type_is_bytes(recv->type) &&
-            xi_lower_receiver_method_matches(recv->type, ma->name,
-                                             XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_FILL)) {
-            struct XrType *elem = recv->type->container.element_type;
-            if (xi_type_is_pod_span_elem(elem)) {
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_FILL, recv->type, 2);
-                if (!v)
-                    return NULL;
-                v->args[0] = recv;
-                v->args[1] = arg_vals[0];
-                v->line = (uint32_t) node->line;
-                xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                return v;
-            }
-        }
-
-        if (recv->type && n == 1 && !xi_type_is_bytes(recv->type) &&
-            xi_lower_receiver_method_matches(recv->type, ma->name,
-                                             XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COPY_FROM)) {
-            struct XrType *elem = recv->type->container.element_type;
-            if (xi_type_is_pod_span_elem(elem)) {
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_COPY, recv->type, 2);
-                if (!v)
-                    return NULL;
-                v->args[0] = recv;
-                v->args[1] = arg_vals[0];
-                v->line = (uint32_t) node->line;
-                xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                return v;
-            }
-        }
-
-        if (recv->type && n == 1 && !xi_type_is_bytes(recv->type) &&
-            xi_lower_receiver_method_matches(recv->type, ma->name,
-                                             XA_BUILTIN_RECEIVER_METHOD_POD_SLICE_COMPARE)) {
-            struct XrType *elem = recv->type->container.element_type;
-            if (xi_type_is_pod_span_elem(elem)) {
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_COMPARE, l->type_int, 2);
-                if (!v)
-                    return NULL;
-                v->args[0] = recv;
-                v->args[1] = arg_vals[0];
-                v->line = (uint32_t) node->line;
-                xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                return v;
-            }
-        }
-
-        if (xi_type_is_bytes(recv->type) && ma->name) {
-            uint16_t byte_slice_op = 0;
-            uint16_t expected_args = 0;
-            XrType *target = NULL;
-            bool byte_slice_typed_load = xi_lower_receiver_method_matches(
-                recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_LOAD);
-            bool byte_slice_typed_store = xi_lower_receiver_method_matches(
-                recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_STORE);
-            if (byte_slice_typed_load && (n == 1 || n == 2) && call->type_arg_count == 1 &&
-                call->type_args && call->type_args[0]) {
-                target = xr_tref_resolve(l->isolate, call->type_args[0]);
-                target = xi_lower_type_or_any(l, target, "byte-slice type argument",
-                                              node ? node->line : 0);
-                byte_slice_op = lower_byte_slice_typed_op_for_target(target, true);
-                if (byte_slice_op)
-                    expected_args = 3;
-            } else if (byte_slice_typed_store && (n == 2 || n == 3) && call->type_arg_count == 1 &&
-                       call->type_args && call->type_args[0]) {
-                target = xr_tref_resolve(l->isolate, call->type_args[0]);
-                target = xi_lower_type_or_any(l, target, "byte-slice type argument",
-                                              node ? node->line : 0);
-                byte_slice_op = lower_byte_slice_typed_op_for_target(target, false);
-                if (byte_slice_op)
-                    expected_args = 4;
-            }
-            if (byte_slice_op) {
-                /* Strict dynamic-to-int boundary on byte-array intrinsic offsets/counts:
-                 * a Json/dynamic argument is verified at runtime via OP_CHECKTYPE
-                 * so VM and AOT raise the same TypeError instead of silently
-                 * coercing. */
-                for (int i = 0; i < n; i++) {
-                    bool needs_int_boundary =
-                        byte_slice_typed_load || i != 1 || XR_TYPE_IS_INT(target);
-                    if (arg_vals[i] && arg_vals[i]->type && needs_int_boundary &&
-                        xr_is_json_coercion(l->type_int, arg_vals[i]->type))
-                        arg_vals[i] =
-                            xi_lower_checktype_for_type(l, node, arg_vals[i], l->type_int);
-                }
-                XiValue *default_endian = NULL;
-                if ((byte_slice_typed_load && n == 1) || (byte_slice_typed_store && n == 2))
-                    default_endian =
-                        xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
-                XrType *op_type = byte_slice_typed_store ? l->type_unit : result_type;
-                XiValue *v =
-                    xi_value_new(l->func, l->cur_block, byte_slice_op, op_type, expected_args);
-                if (!v)
-                    return NULL;
-                v->args[0] = recv;
-                for (int i = 0; i < n; i++)
-                    v->args[i + 1] = arg_vals[i];
-                if (default_endian)
-                    v->args[expected_args - 1] = default_endian;
-                v->line = (uint32_t) node->line;
-                return byte_slice_typed_load
-                           ? lower_byte_slice_typed_signed_load_narrow(l, node, v, target)
-                           : v;
-            }
-
-            if (XR_TYPE_IS_SPAN(recv->type)) {
-                if (n == 0 && call->type_arg_count == 1 && call->type_args && call->type_args[0] &&
-                    xi_lower_receiver_method_matches(
-                        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REINTERPRET)) {
-                    XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
-                    target = xi_lower_type_or_any(l, target, "span reinterpret type argument",
-                                                  node ? node->line : 0);
-                    if (xi_type_is_pod_span_elem(target)) {
-                        XiValue *v = xi_value_new(l->func, l->cur_block, XI_SPAN_REINTERPRET,
-                                                  result_type, 1);
-                        if (!v)
-                            return NULL;
-                        v->args[0] = recv;
-                        v->aux_int = xi_pack_span_elem_aux(target);
-                        v->line = (uint32_t) node->line;
-                        return v;
-                    }
-                }
-                if (n == 1 && xi_lower_receiver_method_matches(
-                                  recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_FILL)) {
-                    XiValue *v =
-                        xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_FILL, recv->type, 2);
-                    if (!v)
-                        return NULL;
-                    v->args[0] = recv;
-                    v->args[1] = arg_vals[0];
-                    v->line = (uint32_t) node->line;
-                    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                    return v;
-                }
-                if (n == 1 &&
-                    xi_lower_receiver_method_matches(
-                        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COPY_FROM)) {
-                    XiValue *v =
-                        xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_COPY, recv->type, 2);
-                    if (!v)
-                        return NULL;
-                    v->args[0] = recv;
-                    v->args[1] = arg_vals[0];
-                    v->line = (uint32_t) node->line;
-                    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                    return v;
-                }
-                if (n == 1 &&
-                    xi_lower_receiver_method_matches(recv->type, ma->name,
-                                                     XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMPARE)) {
-                    XiValue *v =
-                        xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_COMPARE, l->type_int, 2);
-                    if (!v)
-                        return NULL;
-                    v->args[0] = recv;
-                    v->args[1] = arg_vals[0];
-                    v->line = (uint32_t) node->line;
-                    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                    return v;
-                }
-                if (n == 1 &&
-                    xi_lower_receiver_method_matches(
-                        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMMON_PREFIX)) {
-                    XiValue *v = xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_COMMON_PREFIX,
-                                              l->type_int, 2);
-                    if (!v)
-                        return NULL;
-                    v->args[0] = recv;
-                    v->args[1] = arg_vals[0];
-                    v->line = (uint32_t) node->line;
-                    return v;
-                }
-                if (n == 3 &&
-                    xi_lower_receiver_method_matches(
-                        recv->type, ma->name, XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_REPEAT_FROM)) {
-                    XiValue *v =
-                        xi_value_new(l->func, l->cur_block, XI_BYTE_SLICE_REPEAT, recv->type, 4);
-                    if (!v)
-                        return NULL;
-                    v->args[0] = recv;
-                    v->args[1] = arg_vals[0];
-                    v->args[2] = arg_vals[1];
-                    v->args[3] = arg_vals[2];
-                    v->line = (uint32_t) node->line;
-                    xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-                    return v;
-                }
             }
         }
 
@@ -6154,20 +5975,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         const char *fname = call->callee->as.variable.name;
         const XaParallelCallPlan *analyzer_parallel_plan =
             lower_analyzer_parallel_call_plan(l, node);
-        const char *analyzer_parallel_method =
-            lower_analyzer_parallel_call_method(analyzer_parallel_plan);
-        if (analyzer_parallel_plan && !analyzer_parallel_plan->is_plan_method &&
-            analyzer_parallel_method) {
-            XiValue *parallel_intrinsic =
-                lower_parallel_module_intrinsic_or_error(l, node, call, analyzer_parallel_method);
-            if (parallel_intrinsic || l->had_error)
-                return parallel_intrinsic;
-        }
-        const char *parallel_member =
-            lower_call_callee_imported_member(l, call->callee, "parallel");
-        if (parallel_member) {
-            XiValue *parallel_intrinsic =
-                lower_parallel_module_intrinsic_or_error(l, node, call, parallel_member);
+        if (analyzer_parallel_plan && !analyzer_parallel_plan->is_plan_method) {
+            XiValue *parallel_intrinsic = lower_parallel_module_intrinsic_or_error(
+                l, node, call, analyzer_parallel_plan->kind, analyzer_parallel_plan->intrinsic_id);
             if (parallel_intrinsic || l->had_error)
                 return parallel_intrinsic;
         }
@@ -6384,7 +6194,7 @@ XR_FUNC void xi_lower_func_add_child(XiFunc *parent, XiFunc *child) {
 XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
     /* Recursively lower the function body into a child XiFunc,
      * passing 'l' as parent so the child can resolve upvalue captures. */
-    XiFunc *child = xi_lower_func_impl(node, l->analyzer, l->isolate, l);
+    XiFunc *child = xi_lower_func_impl(node, l->analyzer, l->isolate, l, l->typed_program);
     if (!child) {
         l->had_error = true;
         return NULL;
@@ -6587,7 +6397,9 @@ static XiFunc *parallel_call_lower_lambda_func(
     child_l.func->native_callback_kind = callback_kind;
     child_l.func->parent_func = parent->func;
     child_l.func->analyzer = parent->analyzer;
-    xi_lower_bind_function_body_id(&child_l, xi_lower_source_node_id(&child_l, lambda_node));
+    child_l.func->is_generic_template = parent->func && parent->func->is_generic_template;
+    xi_lower_bind_function_body_id(&child_l, xi_lower_source_node_id(&child_l, lambda_node),
+                                   lambda_node->line > 0 ? (uint32_t) lambda_node->line : 0);
     child_l.func->nparams = abi_param_count;
     child_l.func->min_params = abi_param_count;
     child_l.func->entry_type = 0;
@@ -6650,8 +6462,6 @@ static XiFunc *parallel_call_lower_lambda_func(
     XiFunc *result = NULL;
     if (!child_l.had_error && xi_lower_capture_source_vars(&child_l)) {
         result = child_l.func;
-        result->stage = XI_STAGE_RAW;
-        result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
     } else {
         xi_func_free(child_l.func);
     }
@@ -6966,11 +6776,11 @@ static XiValue *parallel_call_make_reduce(XiLower *l, AstNode *node, AstNode *ra
 }
 
 static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                                     const char *method) {
-    if (!l || !node || !call || !method)
+                                                     XaParallelCallKind kind) {
+    if (!l || !node || !call || kind == XA_PAR_CALL_NONE)
         return NULL;
 
-    if (strcmp(method, "forEach") == 0) {
+    if (kind == XA_PAR_CALL_FOR_EACH) {
         if (call->arg_count != 2 && call->arg_count != 3)
             return NULL;
         AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
@@ -6983,7 +6793,7 @@ static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, 
         return parallel_call_make_for_each(l, node, range, call->arguments[1], workers);
     }
 
-    if (strcmp(method, "map") == 0) {
+    if (kind == XA_PAR_CALL_MAP) {
         if (call->arg_count != 2 && call->arg_count != 3)
             return NULL;
         AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
@@ -6996,7 +6806,7 @@ static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, 
         return parallel_call_make_map(l, node, range, call->arguments[1], workers, NULL);
     }
 
-    if (strcmp(method, "mapInto") == 0) {
+    if (kind == XA_PAR_CALL_MAP_INTO) {
         if (call->arg_count != 3 && call->arg_count != 4)
             return NULL;
         AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
@@ -7012,7 +6822,7 @@ static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, 
         return parallel_call_make_map(l, node, range, call->arguments[2], workers, into);
     }
 
-    if (strcmp(method, "reduce") == 0) {
+    if (kind == XA_PAR_CALL_REDUCE) {
         if (call->arg_count != 4 && call->arg_count != 5)
             return NULL;
         AstNode *range = parallel_call_unwrap_grouping(call->arguments[0]);
@@ -7075,7 +6885,9 @@ static XiValue *lower_parallel_plan_end_defer_closure(XiLower *l, AstNode *node,
     }
     child_l.func->parent_func = l->func;
     child_l.func->analyzer = l->analyzer;
-    xi_lower_bind_function_body_id(&child_l, node ? xi_lower_source_node_id(&child_l, node) : 0);
+    child_l.func->is_generic_template = l->func && l->func->is_generic_template;
+    xi_lower_bind_function_body_id(&child_l, node ? xi_lower_source_node_id(&child_l, node) : 0,
+                                   node && node->line > 0 ? (uint32_t) node->line : 0);
     child_l.func->nparams = 0;
     child_l.func->min_params = 0;
     child_l.func->entry_type = 0;
@@ -7129,8 +6941,6 @@ static XiValue *lower_parallel_plan_end_defer_closure(XiLower *l, AstNode *node,
     XiFunc *result = NULL;
     if (!child_l.had_error && xi_lower_capture_source_vars(&child_l)) {
         result = child_l.func;
-        result->stage = XI_STAGE_RAW;
-        result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
     } else {
         xi_func_free(child_l.func);
     }
@@ -7522,11 +7332,13 @@ static void parallel_plan_intrinsic_error(XiLower *l, AstNode *node, const char 
 }
 
 static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                                   XiValue *plan, const char *method) {
-    if (!l || !node || !call || !plan || !method)
+                                                   XiValue *plan, XaParallelCallKind kind,
+                                                   XaIntrinsicId intrinsic_id) {
+    if (!l || !node || !call || !plan || kind == XA_PAR_CALL_NONE)
         return NULL;
+    uint32_t first_value_id = l->func ? l->func->next_value_id : 0;
 
-    if (strcmp(method, "forEach") == 0) {
+    if (kind == XA_PAR_CALL_FOR_EACH) {
         if (call->arg_count != 2) {
             parallel_plan_intrinsic_error(
                 l, node, "parallel.Plan.forEach expected (Range, inline (state, item) lambda)");
@@ -7539,10 +7351,12 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
                 l, node, "parallel.Plan.forEach expected a Range and inline (state, item) lambda");
             return NULL;
         }
-        return parallel_plan_call_make_for_each(l, node, plan, range, call->arguments[1]);
+        XiValue *result =
+            parallel_plan_call_make_for_each(l, node, plan, range, call->arguments[1]);
+        return lower_bind_parallel_intrinsic_result(l, first_value_id, intrinsic_id, result);
     }
 
-    if (strcmp(method, "map") == 0) {
+    if (kind == XA_PAR_CALL_MAP) {
         if (call->arg_count != 2) {
             parallel_plan_intrinsic_error(
                 l, node, "parallel.Plan.map expected (Range, inline (state, item) lambda)");
@@ -7555,10 +7369,12 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
                 l, node, "parallel.Plan.map expected a Range and inline (state, item) lambda");
             return NULL;
         }
-        return parallel_plan_call_make_map(l, node, plan, range, call->arguments[1], NULL);
+        XiValue *result =
+            parallel_plan_call_make_map(l, node, plan, range, call->arguments[1], NULL);
+        return lower_bind_parallel_intrinsic_result(l, first_value_id, intrinsic_id, result);
     }
 
-    if (strcmp(method, "mapInto") == 0) {
+    if (kind == XA_PAR_CALL_MAP_INTO) {
         if (call->arg_count != 3) {
             parallel_plan_intrinsic_error(
                 l, node,
@@ -7577,10 +7393,12 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
         XiValue *into = xi_lower_expr(l, call->arguments[1]);
         if (!into)
             return NULL;
-        return parallel_plan_call_make_map(l, node, plan, range, call->arguments[2], into);
+        XiValue *result =
+            parallel_plan_call_make_map(l, node, plan, range, call->arguments[2], into);
+        return lower_bind_parallel_intrinsic_result(l, first_value_id, intrinsic_id, result);
     }
 
-    if (strcmp(method, "reduce") == 0) {
+    if (kind == XA_PAR_CALL_REDUCE) {
         if (call->arg_count != 4) {
             parallel_plan_intrinsic_error(l, node,
                                           "parallel.Plan.reduce expected (Range, initial, inline "
@@ -7596,8 +7414,9 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
                                           "item) body, and inline combine lambda");
             return NULL;
         }
-        return parallel_plan_call_make_reduce(l, node, plan, range, call->arguments[1],
-                                              call->arguments[2], call->arguments[3]);
+        XiValue *result = parallel_plan_call_make_reduce(l, node, plan, range, call->arguments[1],
+                                                         call->arguments[2], call->arguments[3]);
+        return lower_bind_parallel_intrinsic_result(l, first_value_id, intrinsic_id, result);
     }
 
     return NULL;
@@ -8289,7 +8108,7 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
                                             target_type ? target_type : l->type_any, 0);
                     if (type_val) {
                         type_val->aux_int = builtin_index;
-                        type_val->aux = (void *) tref->name;
+                        type_val->aux = (void *) arena_strdup(l->func, tref->name);
                         type_val->line = (uint32_t) line;
                     }
                 }
@@ -8647,7 +8466,7 @@ static XiValue *lower_optional_chain(XiLower *l, AstNode *node) {
         access_val = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
         if (access_val) {
             access_val->args[0] = obj;
-            access_val->aux = (void *) oc->name;
+            access_val->aux = (void *) arena_strdup(l->func, oc->name);
             access_val->aux_int = xi_lower_method_symbol(l, oc->name);
         }
     } else if (oc->index) {
@@ -8882,7 +8701,7 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     call->args[0] = this_val ? this_val : xi_const_null(l->func, l->cur_block, l->type_null);
     for (int i = 0; i < n; i++)
         call->args[i + 1] = arg_vals[i];
-    call->aux = (void *) method_name;
+    call->aux = (void *) arena_strdup(l->func, method_name);
     call->aux_int = ((int64_t) xi_lower_method_symbol(l, method_name) << 1) | 1;
     call->call_plan = call_plan;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;

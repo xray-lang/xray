@@ -72,4 +72,11 @@ XR_FUNC const char *xaot_abi_kind_name(XaotAbiKind kind);
  * this one resolver or the three drift apart. */
 XR_FUNC XaotValueRep xaot_abi_slot_value_rep(const XaotAbiSlot *slot);
 
+/* Derive the native value representation for a concrete Xi value at its
+ * owning function.  Canonical typed operations use this before backend
+ * lowering so representation plans are based on semantic type/layout facts,
+ * not on a later opcode rewrite. */
+XR_FUNC XaotValueRep xaot_abi_native_value_rep(const XaotBundle *bundle, const XiFunc *func,
+                                               const XiValue *value);
+
 #endif  // XAOT_ABI_H

@@ -130,9 +130,10 @@ typedef struct XrObjectType {
 
 // Type structure
 struct XrType {
-    XrTypeKind kind;  // Primary type discriminator
-    uint32_t id;      // Unique type ID for caching
-    bool frozen;      // Singleton protection
+    XrTypeKind kind;            // Primary type discriminator
+    uint32_t id;                // Unique type ID for caching
+    uint32_t semantic_type_id;  // Stable analyzer semantic identity; 0 for ordinary types.
+    bool frozen;                // Singleton protection
 
     union {
         // For Array<T>, Set<T>, Channel<T>
@@ -303,6 +304,21 @@ XR_FUNC bool xr_type_contains_error(const XrType *type);
 
 static inline bool xr_type_is_exact_u8(const XrType *type) {
     return type && type->kind == XR_KIND_INT && type->native_width == XR_NATIVE_U8;
+}
+
+static inline bool xr_type_is_exact_unsigned_integer(const XrType *type) {
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    switch (type->native_width) {
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_USIZE:
+            return true;
+        default:
+            return false;
+    }
 }
 
 static inline const XrType *xr_type_contiguous_element_type(const XrType *type) {

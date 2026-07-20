@@ -65,6 +65,11 @@
  * XRT_ALLOC_ALIGNED after growth, and xrt_arc_alloc keeps object user data
  * 16-byte aligned (see xrt_arc.h). */
 #define XR_ASSUME_ALIGNED(p, n) __builtin_assume_aligned((p), (n))
+#define XR_ASSUME(x)                                                                               \
+    do {                                                                                           \
+        if (!(x))                                                                                  \
+            __builtin_unreachable();                                                               \
+    } while (0)
 /* Function purity attributes, emitted only when the AOT prepare pass proved
  * the function effect-free (XaotFuncAttrPlan): CONST touches no memory,
  * PURE reads memory but never writes / throws / suspends. */
@@ -92,6 +97,11 @@
 #define XRT_NORETURN
 #endif
 #define XR_ASSUME_ALIGNED(p, n) (p)
+#if defined(_MSC_VER)
+#define XR_ASSUME(x) __assume(x)
+#else
+#define XR_ASSUME(x) ((void) 0)
+#endif
 #define XRT_FN_CONST
 #define XRT_FN_PURE
 #define XRT_ATTR_SECTION(name)

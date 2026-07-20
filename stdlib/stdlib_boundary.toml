@@ -179,8 +179,7 @@ aot_helper_forbidden = true
 # Exact runtime representation adapters used by native IO/AOT direct calls.
 # They do not implement path algorithms or public path-module semantics.
 aot_runtime_adapters = [
-  "xrt_path_data", "xrt_path_from_cstr", "xrt_path_from_slice", "xrt_path_len",
-  "xrt_path_raw_value",
+  "xrt_path_data", "xrt_path_len", "xrt_path_raw_value",
 ]
 aot_runtime_adapter_reason = "Bridge the typed Path owner representation at native IO and AOT call boundaries"
 perf_suite = "stdlib/path"
@@ -360,7 +359,7 @@ layer = "L2"
 policy = "native_primitive"
 semantic_source = "stdlib/defs/core.def"
 loader = "stdlib/io/io.c"
-public_native = ["FileStat", "appendFile", "chdir", "chmod", "copyFile", "cwd", "exists", "fileSize", "isDir", "isFile", "isSymlink", "mkdir", "mkdirp", "readDir", "readDirRecursive", "readFile", "readFileBytes", "readLines", "readStdin", "readlink", "realpath", "remove", "removeAll", "rename", "stat", "symlink", "tempDir", "tempFile", "touch", "writeFile", "writeFileBytes"]
+public_native = ["FileStat", "appendFile", "chdir", "chmod", "copyFile", "exists", "fileSize", "isDir", "isFile", "isSymlink", "mkdir", "mkdirp", "readFile", "readFileBytes", "readLines", "readStdin", "remove", "removeAll", "rename", "stat", "symlink", "touch", "writeFile", "writeFileBytes"]
 perf_suite = "stdlib/io"
 
 [[module]]

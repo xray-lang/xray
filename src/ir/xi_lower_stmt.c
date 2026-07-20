@@ -82,7 +82,7 @@ static XiValue *xi_lower_emit_sync_runtime_builtin_class(XiLower *l, const char 
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, type, 0);
     if (v) {
         v->aux_int = index;
-        v->aux = (void *) name;
+        v->aux = (void *) arena_strdup(l->func, name);
         v->line = (uint32_t) line;
     }
     return v;

@@ -123,6 +123,11 @@ static bool cg_value_plan_is_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     return plan && plan->rep.kind == XAOT_VALUE_AGGREGATE;
 }
 
+static bool cg_value_plan_is_vector(XiCgenCtx *ctx, const XiValue *v) {
+    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    return plan && plan->rep.kind == XAOT_VALUE_VECTOR;
+}
+
 static bool cg_value_rep_is_adt_aggregate(XaotValueRep rep) {
     return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_ENUM) != 0;
 }
@@ -204,6 +209,10 @@ static void emit_value_plan_zero_expr(XiCgenCtx *ctx, FILE *out, const XiValue *
     const XaotValuePlan *plan = cg_value_plan(ctx, v);
     if (plan && plan->rep.kind == XAOT_VALUE_AGGREGATE) {
         emit_aggregate_zero_expr(out, plan->rep);
+        return;
+    }
+    if (plan && plan->rep.kind == XAOT_VALUE_VECTOR && plan->rep.c_type) {
+        fprintf(out, "((%s){0})", plan->rep.c_type);
         return;
     }
     fprintf(out, "XR_NULL_VAL");
@@ -436,16 +445,20 @@ static void emit_cfn_stub_fname(XiCgenCtx *ctx, FILE *out, const char *prefix, c
     emit_fname_suffix(ctx, out, prefix, f, "_cfn");
 }
 
-static void cg_prepare_func_tree_for_cgen(XiFunc *f) {
-    if (!f)
-        return;
-    if (f->stage < XI_STAGE_REPPED) {
-        XiRepPolicy policy = xi_rep_policy_native_boundary();
-        xi_opt_select_rep_with_policy(f, &policy);
-        xi_opt_box_elim(f);
+static bool cg_require_backend_tree(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !f)
+        return false;
+    if (f->stage != XI_STAGE_BACKEND) {
+        fprintf(stderr, "[xi_cgen] ERROR: function '%s' is at stage %s; Backend required\n",
+                f->name ? f->name : "<anonymous>", xi_stage_name(f->stage));
+        ctx->error = true;
+        return false;
     }
-    if (f->stage < XI_STAGE_BACKEND)
-        xi_backend_lower(f);
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i] && !cg_require_backend_tree(ctx, f->children[i]))
+            return false;
+    }
+    return true;
 }
 
 static const char *cg_ptr_box_suffix_for_type(const XrType *type) {

@@ -13,6 +13,7 @@
     X(PARAM, "xi.param", xicgen_param) \
     X(TARGET_SIZEOF, "xi.target.sizeof", xicgen_target_sizeof) \
     X(TARGET_ALIGNOF, "xi.target.alignof", xicgen_target_alignof) \
+    X(TARGET_SIMD_BYTES, "xi.target.simd.bytes", xicgen_target_simd_bytes) \
     X(COPY, "xi.copy", xicgen_copy) \
     X(MOVE, "xi.move", xicgen_move) \
     X(ADD, "xi.add", xicgen_add) \
@@ -27,11 +28,11 @@
     X(BNOT, "xi.bnot", xicgen_bnot) \
     X(BIT_ROTL, "xi.bit.rotl", xicgen_exact_bit) \
     X(BIT_ROTR, "xi.bit.rotr", xicgen_exact_bit) \
-    X(BIT_MUL_HIGH, "xi.bit.mul.high", xicgen_exact_bit) \
     X(BIT_BSWAP, "xi.bit.bswap", xicgen_exact_bit) \
     X(BIT_POPCOUNT, "xi.bit.popcount", xicgen_exact_bit) \
     X(BIT_CLZ, "xi.bit.clz", xicgen_exact_bit) \
     X(BIT_CTZ, "xi.bit.ctz", xicgen_exact_bit) \
+    X(BIT_MUL_HIGH, "xi.bit.mul-high", xicgen_exact_bit) \
     X(NOT, "xi.not", xicgen_not) \
     X(SELECT, "xi.select", xicgen_select) \
     X(VEC_LOAD, "xi.vec.load", xicgen_vec) \
@@ -73,6 +74,10 @@
     X(CALL_METHOD, "xi.call.method", xicgen_call_method) \
     X(CALL_METHOD_DIRECT, "xi.call.method.direct", xicgen_call_method) \
     X(CALL_BUILTIN, "xi.call.builtin", xicgen_call_builtin) \
+    X(ATOMIC_LOAD, "xi.atomic.load", xicgen_atomic) \
+    X(ATOMIC_STORE, "xi.atomic.store", xicgen_atomic) \
+    X(ATOMIC_RMW, "xi.atomic.rmw", xicgen_atomic) \
+    X(ATOMIC_TO_STRING, "xi.atomic.to.string", xicgen_atomic) \
     X(THROW, "xi.throw", xicgen_throw) \
     X(RETAIN, "xi.retain", xicgen_retain) \
     X(RELEASE, "xi.release", xicgen_release) \
@@ -149,6 +154,7 @@
     X(BYTE_SLICE_COMPARE, "xi.byte.slice.compare", xicgen_byte_slice_compare) \
     X(BYTE_SLICE_COMMON_PREFIX, "xi.byte.slice.common.prefix", xicgen_byte_slice_common_prefix) \
     X(BYTE_SLICE_REPEAT, "xi.byte.slice.repeat", xicgen_byte_slice_repeat) \
+    X(SPAN_WINDOW, "xi.span.window", xicgen_span_window) \
     X(SPAN_AS_BYTES, "xi.span.as.bytes", xicgen_span_as_bytes) \
     X(SPAN_FILL, "xi.span.fill", xicgen_span_fill) \
     X(SPAN_COPY, "xi.span.copy", xicgen_span_copy) \

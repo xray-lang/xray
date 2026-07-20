@@ -1,5 +1,5 @@
 args=--dump-global-evidence
-contains=xg-cache-key v1 schema=31 phase=2 module=1
+contains=xg-cache-key v1 schema=32 phase=2 module=1
 contains=class-layout 0 id=1 parent=0 ctype=XrC_1 parent_size=0 size=16 align=8 fields=1+2 instance_fields=2 own_instance_fields=2 flags=typed+type_id+payload_only evidence=0xb
 contains=class-layout 1 id=2 parent=1 ctype=XrC_2 parent_size=16 size=24 align=8 fields=3+1 instance_fields=3 own_instance_fields=1 flags=typed+prefix+type_id+payload_only evidence=0xf
 regex=class-field-plan [0-9]+ field=1 owner=1 node=[1-9][0-9]* slot=0 offset=0 .*size=8 align=8 native=0 ref_kind=0 storage=scalar action=native_scalar rep=native_scalar ownership=trivial drop=none reason=none .*evidence=0x7f

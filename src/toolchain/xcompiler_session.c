@@ -45,6 +45,7 @@ struct XrCompilerSession {
     size_t repl_program_capacity;
 
     struct XrModuleGraph *module_graph;
+    XrCompileUnitIdentity compile_unit_identity;
 };
 
 XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
@@ -246,6 +247,17 @@ void xr_compiler_session_set_module_graph(XrCompilerSession *session, struct XrM
 
 struct XrModuleGraph *xr_compiler_session_module_graph(const XrCompilerSession *session) {
     return session ? session->module_graph : NULL;
+}
+
+void xr_compiler_session_set_compile_unit_identity(XrCompilerSession *session,
+                                                   const XrCompileUnitIdentity *identity) {
+    if (!session)
+        return;
+    session->compile_unit_identity = identity ? *identity : (XrCompileUnitIdentity) {0};
+}
+
+XrCompileUnitIdentity xr_compiler_session_compile_unit_identity(const XrCompilerSession *session) {
+    return session ? session->compile_unit_identity : (XrCompileUnitIdentity) {0};
 }
 
 bool xr_compiler_session_push_arena(XrCompilerSession *session, struct XrArena *arena,

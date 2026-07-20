@@ -24,6 +24,7 @@
  */
 
 #include "xi_memssa.h"
+#include "xi_evidence.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 
@@ -186,8 +187,8 @@ static XiBlock **compute_rpo(XiFunc *f, uint32_t *out_count) {
 
 XR_FUNC XiMemSSA *xi_memssa_build(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_memssa_build: NULL func");
-    XR_DCHECK(f->invariant_mask & XI_INV_TBAA_ANNOTATED,
-              "xi_memssa_build: requires XI_INV_TBAA_ANNOTATED");
+    XR_DCHECK(xi_evidence_domain_is_proven_current(f, XI_EVD_ALIAS),
+              "xi_memssa_build: requires current alias evidence");
 
     XiMemSSA *mssa = (XiMemSSA *) xr_calloc(1, sizeof(XiMemSSA));
     if (!mssa)
@@ -286,7 +287,20 @@ XR_FUNC XiMemSSA *xi_memssa_build(XiFunc *f) {
     xr_free(cur_ver);
     xr_free(rpo);
 
-    f->invariant_mask |= XI_INV_MEM_SSA;
+    for (uint32_t id = 0; id < mssa->naccesses; id++) {
+        XiMemAccess *access = mssa->accesses[id];
+        if (!access || !access->value)
+            continue;
+        XiEvidencePayload payload = {
+            .kind = XI_EVIDENCE_PAYLOAD_U64_PAIR,
+            .as.u64_pair = {.first = access->use_ver, .second = access->def_ver},
+        };
+        xi_evidence_publish(f, XI_EVD_MEMSSA, xi_evidence_subject_value(access->value),
+                            XI_PROOF_PROVEN, XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_MEMSSA,
+                            access->value->line, &payload);
+    }
+    xi_evidence_publish(f, XI_EVD_MEMSSA, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_MEMSSA, 0, NULL);
     return mssa;
 }
 

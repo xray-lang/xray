@@ -708,8 +708,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         XrAttribute *attribute = xr_parse_single_attribute(parser);
         if (!attribute)
             return NULL;
-        if (attribute->kind != ATTR_NO_ALLOC) {
-            xr_parser_error(parser, "only @no_alloc can annotate a method");
+        if (attribute->kind != ATTR_NO_ALLOC && attribute->kind != ATTR_INTRINSIC) {
+            xr_parser_error(parser, "only @no_alloc and compiler @intrinsic can annotate a method");
             return NULL;
         }
         XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attribute);
@@ -775,7 +775,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
             xr_parser_advance(parser);  // consume 'constructor'
             AstNode *method = xr_parse_static_constructor(parser, is_private);
             if (attr_count > 0)
-                xr_parser_error(parser, "@no_alloc cannot annotate a static constructor");
+                xr_parser_error(parser, "method attributes cannot annotate a static constructor");
             return method;
         }
     }
@@ -844,7 +844,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         if (method) {
             method->as.method_decl.is_protected = is_protected;
             if (method->as.method_decl.is_constructor && attr_count > 0) {
-                xr_parser_error(parser, "@no_alloc cannot annotate a constructor");
+                xr_parser_error(parser, "method attributes cannot annotate a constructor");
                 return NULL;
             }
             method->as.method_decl.attributes = attributes;
@@ -871,7 +871,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
             // This is a property definition with getter/setter
             *is_method_out = true;
             if (attr_count > 0) {
-                xr_parser_error(parser, "@no_alloc cannot annotate a property accessor block");
+                xr_parser_error(parser,
+                                "method attributes cannot annotate a property accessor block");
                 return NULL;
             }
             return xr_parse_property_accessors(parser, name, field_type, is_private, is_static,

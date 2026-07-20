@@ -484,6 +484,14 @@ static inline XrValue xrt_str_from_cstr(const char *s) {
     return v;
 }
 
+/* Copy a (data, len) slice into a fresh heap string. */
+static inline XrValue xrt_str_from_slice(const char *data, size_t len) {
+    XrValue v = xrt_str_alloc(len);
+    if (len > 0 && data)
+        memcpy(xr_str_buf(v), data, len);
+    return v;
+}
+
 static inline XrValue xrt_str_concat(const char *sa, const char *sb) {
     size_t la = strlen(sa), lb = strlen(sb);
     XrValue v = xrt_str_alloc(la + lb);

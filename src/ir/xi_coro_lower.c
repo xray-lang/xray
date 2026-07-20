@@ -40,6 +40,5 @@ XR_FUNC bool xi_coro_lower(XiFunc *f, const XiCoroResolver *resolver) {
         return false;
     if (!coro_lower_func(f, resolver))
         return false;
-    xi_func_set_stage_recursive(f, XI_STAGE_CORO_LOWERED);
     return true;
 }

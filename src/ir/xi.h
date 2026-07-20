@@ -51,6 +51,7 @@ struct XrCtValue;
 struct AstNode;
 struct XaAnalyzer;
 struct XiCoroPlan;
+struct XiEvidenceSet;
 
 /* ========== IR Stage ========== */
 
@@ -66,25 +67,21 @@ struct XiCoroPlan;
  * active simply pass through (input == output == same stage).
  */
 typedef enum {
-    XI_STAGE_RAW = 0,      /* direct AST lowering output; high-level ops present */
-    XI_STAGE_CANONICAL,    /* evaluation order fixed, syntax sugar expanded */
-    XI_STAGE_CLOSED,       /* closure/module/class metadata materialized */
-    XI_STAGE_OWNED,        /* ownership/effect/lifetime explicit */
-    XI_STAGE_CORO_LOWERED, /* coroutine bodies lowered to explicit stackless state
-                            * machines (entry dispatch + suspend-split blocks +
-                            * explicit frame).  Selective and skippable: only
-                            * suspendable functions are rewritten, and the VM path
-                            * advances straight from OWNED to REPPED, so reaching
-                            * this stage establishes no new universal invariant. */
-    XI_STAGE_REPPED,       /* value representations selected, BOX/UNBOX inserted */
-    XI_STAGE_BACKEND,      /* low-level ops only, ready for code generation */
+    XI_STAGE_RAW = 0,
+    XI_STAGE_CANONICAL,
+    XI_STAGE_CLOSED,
+    XI_STAGE_OWNED,
+    XI_STAGE_LOWERED,
+    XI_STAGE_OPTIMIZED,
+    XI_STAGE_REPPED,
+    XI_STAGE_BACKEND,
     XI_STAGE_COUNT,
 } XiStage;
 
 /* Human-readable stage name (for dumps and diagnostics). */
 static inline const char *xi_stage_name(XiStage s) {
     static const char *names[] = {
-        "Raw", "Canonical", "Closed", "Owned", "CoroLowered", "Repped", "Backend",
+        "Raw", "Canonical", "Closed", "Owned", "Lowered", "Optimized", "Repped", "Backend",
     };
     return (unsigned) s < XI_STAGE_COUNT ? names[s] : "?";
 }
@@ -96,26 +93,15 @@ static inline const char *xi_stage_name(XiStage s) {
  */
 typedef uint32_t XiInvariantMask;
 
-#define XI_INV_SSA_DOM ((XiInvariantMask) (1u << 0)) /* SSA dominance holds */
-#define XI_INV_CFG_CLOSED                                                                          \
-    ((XiInvariantMask) (1u << 1)) /* CFG: no unreachable blocks, succ/pred symmetric */
-#define XI_INV_EVAL_ORDER                                                                          \
-    ((XiInvariantMask) (1u << 2)) /* evaluation order deterministic (no ambiguous side-effects) */
-#define XI_INV_UPVALS_RESOLVED                                                                     \
-    ((XiInvariantMask) (1u << 3)) /* all upvalue refs have valid indices */
-#define XI_INV_ESCAPE_DONE                                                                         \
-    ((XiInvariantMask) (1u << 4)) /* escape analysis has run; every alloc annotated */
-#define XI_INV_REPS_SELECTED                                                                       \
-    ((XiInvariantMask) (1u << 5)) /* representations chosen for all values */
-#define XI_INV_BACKEND_LEGAL ((XiInvariantMask) (1u << 6)) /* all ops in backend-legal set */
-#define XI_INV_ARC_INSERTED ((XiInvariantMask) (1u << 7))  /* RETAIN/RELEASE ops inserted */
-#define XI_INV_EFFECTS_VALID                                                                       \
-    ((XiInvariantMask) (1u << 8)) /* per-value effect flags match opcode table */
-#define XI_INV_TBAA_ANNOTATED                                                                      \
-    ((XiInvariantMask) (1u << 9))                     /* every load/store carries a mem_group */
-#define XI_INV_MEM_SSA ((XiInvariantMask) (1u << 10)) /* memory phi / version chain built */
-#define XI_INV_RANGE_ANNOTATED                                                                     \
-    ((XiInvariantMask) (1u << 11)) /* integer values carry [lo, hi] range */
+#define XI_INV_CFG_WELL_FORMED ((XiInvariantMask) (1u << 0))
+#define XI_INV_SSA_WELL_FORMED ((XiInvariantMask) (1u << 1))
+#define XI_INV_EVAL_ORDER_FIXED ((XiInvariantMask) (1u << 2))
+#define XI_INV_UPVALS_RESOLVED ((XiInvariantMask) (1u << 3))
+#define XI_INV_OWNERSHIP_EXPLICIT ((XiInvariantMask) (1u << 4))
+#define XI_INV_SEMANTIC_OPS_LOWERED ((XiInvariantMask) (1u << 5))
+#define XI_INV_OPTIMIZATION_COMPLETE ((XiInvariantMask) (1u << 6))
+#define XI_INV_REPS_SELECTED ((XiInvariantMask) (1u << 7))
+#define XI_INV_BACKEND_LEGAL ((XiInvariantMask) (1u << 8))
 
 typedef uint16_t XiVarId;
 
@@ -180,27 +166,34 @@ typedef struct XiCallPlan {
     bool verified;
 } XiCallPlan;
 
+typedef struct XiLoweringFacts {
+    bool initialized;
+    bool coroutine_required;
+    bool coroutine_lowered;
+    bool callable_required;
+    bool callable_lowered;
+    bool semantic_ops_lowered;
+} XiLoweringFacts;
+
 /* Invariant mask implied by reaching a given stage. */
 static inline XiInvariantMask xi_stage_invariants(XiStage s) {
     switch (s) {
         case XI_STAGE_RAW:
-            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED;
+            return XI_INV_CFG_WELL_FORMED | XI_INV_SSA_WELL_FORMED;
         case XI_STAGE_CANONICAL:
-            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER;
+            return xi_stage_invariants(XI_STAGE_RAW) | XI_INV_EVAL_ORDER_FIXED;
         case XI_STAGE_CLOSED:
-            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED;
+            return xi_stage_invariants(XI_STAGE_CANONICAL) | XI_INV_UPVALS_RESOLVED;
         case XI_STAGE_OWNED:
-        /* Coroutine lowering rewrites only suspendable bodies and is skippable;
-         * it adds no universal invariant, so it shares OWNED's invariant set. */
-        case XI_STAGE_CORO_LOWERED:
-            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED |
-                   XI_INV_ESCAPE_DONE;
+            return xi_stage_invariants(XI_STAGE_CLOSED) | XI_INV_OWNERSHIP_EXPLICIT;
+        case XI_STAGE_LOWERED:
+            return xi_stage_invariants(XI_STAGE_OWNED) | XI_INV_SEMANTIC_OPS_LOWERED;
+        case XI_STAGE_OPTIMIZED:
+            return xi_stage_invariants(XI_STAGE_LOWERED) | XI_INV_OPTIMIZATION_COMPLETE;
         case XI_STAGE_REPPED:
-            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED |
-                   XI_INV_ESCAPE_DONE | XI_INV_REPS_SELECTED;
+            return xi_stage_invariants(XI_STAGE_OPTIMIZED) | XI_INV_REPS_SELECTED;
         case XI_STAGE_BACKEND:
-            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED |
-                   XI_INV_ESCAPE_DONE | XI_INV_REPS_SELECTED | XI_INV_BACKEND_LEGAL;
+            return xi_stage_invariants(XI_STAGE_REPPED) | XI_INV_BACKEND_LEGAL;
         default:
             return 0;
     }
@@ -218,6 +211,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_PARAM         —                    parameter index
  *  XI_TARGET_SIZEOF —                    XrNativeType whose target C sizeof is needed
  *  XI_TARGET_ALIGNOF —                   XrNativeType whose target C alignment is needed
+ *  XI_TARGET_SIMD_BYTES —                canonical target SIMD width query
  *  XI_BIT_*         —                    receiver XrNativeType (exact width/sign contract)
  *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
  *  XI_STORE_FIELD   field name or NULL   symbol id or field index
@@ -264,6 +258,7 @@ typedef enum {
     XI_PARAM,     /* function parameter (aux_int = param index) */
     XI_TARGET_SIZEOF,
     XI_TARGET_ALIGNOF,
+    XI_TARGET_SIMD_BYTES,
 
     /* Arithmetic (polymorphic: type determines int vs float) */
     XI_ADD,
@@ -282,11 +277,11 @@ typedef enum {
     XI_SHR,  /* >> */
     XI_BIT_ROTL,
     XI_BIT_ROTR,
-    XI_BIT_MUL_HIGH,
     XI_BIT_BSWAP,
     XI_BIT_POPCOUNT,
     XI_BIT_CLZ,
     XI_BIT_CTZ,
+    XI_BIT_MUL_HIGH,
 
     /* Comparison (result is always bool) */
     XI_EQ,
@@ -354,6 +349,7 @@ typedef enum {
     XI_BYTE_SLICE_COMPARE,
     XI_BYTE_SLICE_COMMON_PREFIX,
     XI_BYTE_SLICE_REPEAT,
+    XI_SPAN_WINDOW,      /* args[0]=Span<T>, args[1]=start, args[2]=count; strict borrowed span */
     XI_SPAN_AS_BYTES,    /* args[0]=Span<T>; result Slice<byte>; aux unused */
     XI_SPAN_FILL,        /* args[0]=Span<T> dst, args[1]=T value; result dst */
     XI_SPAN_COPY,        /* args[0]=Span<T> dst, args[1]=Span<T> src; result dst */
@@ -417,13 +413,17 @@ typedef enum {
                      * aux_int bits 8-15: nresults (0 means 1) */
     XI_CALL_METHOD, /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
     XI_CALL_METHOD_DIRECT,
-    XI_TAIL_CALL,    /* general tail call: args[0]=callee, args[1..n]=params
-                      * Terminates the function — semantically a call + return.
-                      * The current frame is cleaned up (ARC release) before
-                      * transferring control.  aux_int mirrors XI_CALL encoding.
-                      * Lowered to OP_TAILCALL (function) or OP_INVOKE_TAIL (method). */
-    XI_CALL_BUILTIN, /* builtin call: aux_int=builtin_id, args[0..n]=params */
-    XI_EXTRACT,      /* obsolete multi-return extraction marker; verifier-only reject */
+    XI_TAIL_CALL,        /* general tail call: args[0]=callee, args[1..n]=params
+                          * Terminates the function — semantically a call + return.
+                          * The current frame is cleaned up (ARC release) before
+                          * transferring control.  aux_int mirrors XI_CALL encoding.
+                          * Lowered to OP_TAILCALL (function) or OP_INVOKE_TAIL (method). */
+    XI_CALL_BUILTIN,     /* builtin call: aux_int=builtin_id, args[0..n]=params */
+    XI_ATOMIC_LOAD,      /* canonical Atomic<T>.load; identity is xa_intrinsic_id */
+    XI_ATOMIC_STORE,     /* canonical Atomic<T>.store */
+    XI_ATOMIC_RMW,       /* canonical RMW; exact operation is xa_intrinsic_id */
+    XI_ATOMIC_TO_STRING, /* canonical allocating Atomic<T>.toString */
+    XI_EXTRACT,          /* obsolete multi-return extraction marker; verifier-only reject */
 
     /* Closure / upvalue */
     XI_CLOSURE_NEW, /* create closure: aux=proto, args=captures */
@@ -620,6 +620,8 @@ typedef enum {
 /* Explicit SIMD shape encoding in XiValue.aux_int. */
 #define XI_VEC_SHAPE_EXPLICIT (INT64_C(1) << 16)
 #define XI_VEC_SHAPE_ODD_LANES (INT64_C(1) << 17)
+#define XI_VEC_SHAPE_UNZIP (INT64_C(1) << 18)
+#define XI_VEC_SHAPE_CONTIGUOUS_HALF (INT64_C(1) << 19)
 #define XI_VEC_SHAPE_LANES_MASK INT64_C(0xff)
 #define XI_VEC_SHAPE_NATIVE_SHIFT 8
 #define XI_VEC_SHAPE_NATIVE_MASK (INT64_C(0xff) << XI_VEC_SHAPE_NATIVE_SHIFT)
@@ -689,6 +691,7 @@ typedef struct XiClassData {
     uint16_t nstat;           /* static method count */
     int clinit_child_idx;     /* children index for static constructor (-1 if none) */
     uint32_t derive_flags;    /* XR_DERIVE_* flags copied from declaration attributes */
+    bool is_generic_skeleton; /* template class; concrete instances are separate classes */
     bool is_monomorphized;    /* true for mono-generated classes */
     bool is_cycle_candidate;  /* type graph forms a reference cycle (enables RC cycle collector) */
     const char **mono_type_arg_names; /* concrete type display names (e.g. ["int","string"]) */
@@ -815,30 +818,31 @@ typedef struct XiClosureMeta {
  * Size: ~72 bytes. Values are arena-allocated within XiFunc.
  */
 typedef struct XiValue {
-    uint32_t id;             /* dense SSA value ID (unique within function) */
-    uint16_t op;             /* XiOp */
-    XiVarId var_id;          /* source variable ID for coalescing (XI_NO_VAR_ID = none) */
-    uint8_t flags;           /* XI_FLAG_* */
-    uint8_t rep;             /* XrRep: machine representation (set by select_rep,
-                              * default XR_REP_TAGGED until STAGE_REPPED) */
-    uint8_t transfer_mode;   /* XrTransferMode for single-value coroutine boundaries.
-                              * Default 0 = SHARE. GO uses its per-arg aux table. */
-    uint8_t aux_kind;        /* XiAuxKind: disambiguates aux/aux_int layouts */
-    uint8_t escape;          /* XiEscapeLevel (2-bit): escape analysis result
-                              * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
-    uint8_t mem_group;       /* XiMemGroup (TBAA): memory group for alias analysis
-                              * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
-    uint8_t lowering_flags;  /* XI_LOWERING_FLAG_* */
-    struct XrType *type;     /* authoritative compile-time type (never NULL) */
-    int64_t aux_int;         /* auxiliary integer: const value, symbol ID, etc. */
-    void *aux;               /* auxiliary pointer: proto, string literal, etc. */
-    XiCallPlan *call_plan;   /* verified ref/out call-bound place contract */
-    struct XiValue **args;   /* operand values (SSA uses) */
-    uint16_t nargs;          /* number of args */
-    int16_t uses;            /* use count (for DCE; -1 = not computed) */
-    uint32_t line;           /* source line number (0 = unknown) */
-    uint32_t xg_callsite_id; /* stable XgCallsiteId for evidence-backed calls (0 = none) */
-    uint32_t xg_method_id;   /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
+    uint32_t id;              /* dense SSA value ID (unique within function) */
+    uint16_t op;              /* XiOp */
+    XiVarId var_id;           /* source variable ID for coalescing (XI_NO_VAR_ID = none) */
+    uint8_t flags;            /* XI_FLAG_* */
+    uint8_t rep;              /* XrRep: machine representation (set by select_rep,
+                               * default XR_REP_TAGGED until STAGE_REPPED) */
+    uint8_t transfer_mode;    /* XrTransferMode for single-value coroutine boundaries.
+                               * Default 0 = SHARE. GO uses its per-arg aux table. */
+    uint8_t aux_kind;         /* XiAuxKind: disambiguates aux/aux_int layouts */
+    uint8_t escape;           /* XiEscapeLevel (2-bit): escape analysis result
+                               * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
+    uint8_t mem_group;        /* XiMemGroup (TBAA): memory group for alias analysis
+                               * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
+    uint8_t lowering_flags;   /* XI_LOWERING_FLAG_* */
+    struct XrType *type;      /* authoritative compile-time type (never NULL) */
+    int64_t aux_int;          /* auxiliary integer: const value, symbol ID, etc. */
+    void *aux;                /* auxiliary pointer: proto, string literal, etc. */
+    XiCallPlan *call_plan;    /* verified ref/out call-bound place contract */
+    struct XiValue **args;    /* operand values (SSA uses) */
+    uint16_t nargs;           /* number of args */
+    int16_t uses;             /* use count (for DCE; -1 = not computed) */
+    uint32_t line;            /* source line number (0 = unknown) */
+    uint32_t xg_callsite_id;  /* stable XgCallsiteId for evidence-backed calls (0 = none) */
+    uint32_t xa_intrinsic_id; /* stable XaIntrinsicId for canonical semantic operations */
+    uint32_t xg_method_id;    /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     uint32_t xg_interface_dispatch_slot; /* interface slot; UINT32_MAX means none */
     uint32_t xg_json_access_id; /* stable XgJsonAccessId for evidence-backed Json slot access */
     uint32_t xg_json_codec_id;  /* stable XgJsonCodecId for evidence-backed Json codec calls */
@@ -871,6 +875,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->aux = src->aux;
     dst->line = src->line;
     dst->xg_callsite_id = src->xg_callsite_id;
+    dst->xa_intrinsic_id = src->xa_intrinsic_id;
     dst->xg_method_id = src->xg_method_id;
     dst->xg_interface_dispatch_slot = src->xg_interface_dispatch_slot;
     dst->xg_json_access_id = src->xg_json_access_id;
@@ -1287,7 +1292,16 @@ typedef struct XiFunc {
     /* Cumulative invariant mask established by passes and stage transitions. */
     XiInvariantMask invariant_mask;
 
-    /* CFG and analysis version tags for lazy recomputation. */
+    /* Target-independent coroutine/callable lowering completion facts. */
+    XiLoweringFacts lowering_facts;
+
+    /* IR revisions are the authoritative freshness keys for local evidence. */
+    uint64_t ir_revision;
+    uint64_t memory_revision;
+    uint64_t call_revision;
+    struct XiEvidenceSet *evidence;
+
+    /* CFG and structural-analysis version tags for lazy recomputation. */
     uint64_t cfg_version;
     uint64_t rpo_version;
     uint64_t dom_version;
@@ -1311,6 +1325,11 @@ typedef struct XiFunc {
      * signature; captures are passed through the hidden closure parameter, so
      * they must not be forced back to the generic tagged closure ABI. */
     XiNativeCallbackKind native_callback_kind;
+
+    /* Body belongs to an open generic owner whose receiver/storage layout is
+     * not executable.  Function-level generics instead keep a canonical
+     * erased ABI and do not set this bit. */
+    bool is_generic_template;
 
     /* FFI: foreign function declared in an extern "C" block. When set, this XiFunc
      * has no real body — the implementation is a C symbol. The AOT backend

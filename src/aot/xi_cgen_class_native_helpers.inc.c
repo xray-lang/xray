@@ -167,6 +167,37 @@ static XgClassId cg_class_native_class_id_for_data(XiCgenCtx *ctx, const XiClass
     return cg_class_native_class_id_for_name(ev, cd->generic_origin_name);
 }
 
+/* True when some verified vtable dispatch in the bundle can receive an instance
+ * of this class. Such instances must use the heap type-id representation
+ * (xrt_obj_alloc + XR_TINSTANCE) because the dispatch reads the runtime type id
+ * from the instance's XrObjHeader; the static-native slot and inline-stack
+ * optimizations produce headerless structs and must be disabled for them so all
+ * access paths agree on one representation. Polymorphic classes whose calls all
+ * devirtualize are not dispatch targets and keep the optimal stack/descriptor-
+ * elided representation. */
+static bool cg_class_native_is_vtable_dispatch_target(XiCgenCtx *ctx, const XiClassData *cd) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    XgClassId class_id = cg_class_native_class_id_for_data(ctx, cd);
+    if (!bundle || class_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < bundle->nmethod_dispatch_plans; i++) {
+        const XaotMethodDispatchPlan *dp = &bundle->method_dispatch_plans[i];
+        if (dp->kind != XAOT_DISPATCH_VTABLE || dp->target_start == 0)
+            continue;
+        for (uint16_t t = 0; t < dp->target_count; t++) {
+            uint32_t idx = dp->target_start - 1 + (uint32_t) t;
+            if (idx < bundle->ndispatch_target_cases &&
+                bundle->dispatch_target_cases[idx].receiver_class_id == class_id)
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_class_native_needs_type_id_instance(XiCgenCtx *ctx, const XiClassData *cd) {
+    return cg_class_native_is_vtable_dispatch_target(ctx, cd);
+}
+
 static const XgDeriveSummary *
 cg_class_native_derive_for_data_kind(XiCgenCtx *ctx, const XiClassData *cd, uint8_t derive_kind) {
     const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
@@ -756,8 +787,29 @@ static void emit_class_native_type_register_expr(XiCgenCtx *ctx, FILE *out, cons
                                                  const char *prefix) {
     const char *name = cd && cd->class_name ? cd->class_name : "?";
     bool native_layout = cg_class_native_type_registers_native_layout(ctx, cd);
+    const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgClassSummary *summary =
+        cg_class_native_evidence_class_by_id(ev, cg_class_native_class_id_for_data(ctx, cd));
+    const XiClassData *parent = NULL;
     (void) name;
-    fprintf(out, "xrt_type_register_hot(0, NULL, 0, ");
+    if (summary && summary->parent_class_id != XG_NO_ID) {
+        parent = cg_class_native_data_for_evidence_class(
+            ctx, bundle, cg_class_native_evidence_class_by_id(ev, summary->parent_class_id));
+    }
+    /* Register the runtime parent type id so xrt_instanceof can walk the
+     * hierarchy for inherited method dispatch. The parent type is registered
+     * earlier in module init, so its shared type-id slot is already populated. */
+    fprintf(out, "xrt_type_register_hot(");
+    if (parent) {
+        fprintf(out, "(uint16_t)(");
+        if (!emit_class_native_type_id_expr(ctx, out, parent))
+            fprintf(out, "0");
+        fprintf(out, ")");
+    } else {
+        fprintf(out, "0");
+    }
+    fprintf(out, ", NULL, 0, ");
     if (native_layout && cg_class_native_layout_has_arc_ref_fields(cd->instance_layout)) {
         emit_class_native_dtor_name(out, prefix, cd);
     } else {
@@ -4051,7 +4103,12 @@ static bool cg_class_native_ctor_can_inline(XiCgenCtx *ctx, const XiFunc *f, con
     if (!ctx || !f || cg_has_exception_handling(f))
         return false;
     const XiValue *origin = cg_class_native_trace_ctor_origin(ctx, f, v, 0);
-    return origin == v && cg_class_native_ctor_uses_safe(ctx, f, v, origin, 0);
+    if (origin != v || !cg_class_native_ctor_uses_safe(ctx, f, v, origin, 0))
+        return false;
+    const XiClassData *cd = cg_class_native_ctor_call_data(ctx, f, v, NULL, NULL);
+    if (cd && cg_class_native_needs_type_id_instance(ctx, cd))
+        return false;
+    return true;
 }
 
 static bool emit_class_native_default_ctor_value_stmt(XiCgenCtx *ctx, FILE *out,
@@ -4634,7 +4691,7 @@ static const XiFunc *cg_class_native_resolve_getter_field_method(XiCgenCtx *ctx,
         if (!mfunc || !mfunc->name || strcmp(mfunc->name, getter_name) != 0)
             return NULL;
     }
-    if (!mfunc || cg_func_needs_aot_coro(mfunc) ||
+    if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
         (!cg_class_func_uses_native_receiver(ctx, mfunc) &&
          !cg_func_param_native_class_data(ctx, mfunc, 0)))
         return NULL;
@@ -4771,7 +4828,8 @@ static bool cg_class_shared_native_method_call_accepts_class(XiCgenCtx *ctx, con
                                                           (int) call->aux_int, &method_prefix)
                               : cg_lookup_method(ctx, method, source->class_name, &method_prefix);
     (void) method_prefix;
-    if (!mfunc || cg_func_needs_aot_coro(mfunc) || !cg_class_func_uses_native_receiver(ctx, mfunc))
+    if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
+        !cg_class_func_uses_native_receiver(ctx, mfunc))
         return false;
     CgClassNativeFunc target_info = cg_class_native_func(ctx, mfunc);
     return cg_class_native_can_pass_instance_as(ctx, source, target_info.class_data);
@@ -4806,7 +4864,8 @@ static bool cg_class_shared_native_getter_field_accepts_class(XiCgenCtx *ctx, co
             return false;
     }
     (void) method_prefix;
-    if (!mfunc || cg_func_needs_aot_coro(mfunc) || !cg_class_func_uses_native_receiver(ctx, mfunc))
+    if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
+        !cg_class_func_uses_native_receiver(ctx, mfunc))
         return false;
     CgClassNativeFunc target_info = cg_class_native_func(ctx, mfunc);
     return cg_class_native_can_pass_instance_as(ctx, source, target_info.class_data);
@@ -5170,6 +5229,8 @@ static bool cg_class_shared_native_slot_can_activate(XiCgenCtx *ctx, int slot,
     if (candidate.invalid || candidate.set_count != 1 || !candidate.ctor_call || !candidate.ctor ||
         !candidate.class_data)
         return false;
+    if (cg_class_native_needs_type_id_instance(ctx, candidate.class_data))
+        return false;
     ctx->shared_native_instances[slot].class_data = candidate.class_data;
     if (!cg_class_shared_native_get_uses_safe_in_func(ctx, ctx->module->init, slot)) {
         memset(&ctx->shared_native_instances[slot], 0, sizeof(ctx->shared_native_instances[slot]));
@@ -5361,7 +5422,8 @@ static bool cg_class_native_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const X
         return true;
     if (call->op == XI_CALL && call->nargs >= 1) {
         CgStaticFunctionCall direct = cg_resolve_static_function_call(ctx, current, call->args[0]);
-        if (direct.func && !direct.is_class_constructor && !cg_func_needs_aot_coro(direct.func) &&
+        if (direct.func && !direct.is_class_constructor &&
+            !cg_func_needs_aot_coro_ctx(ctx, direct.func) &&
             !cg_class_native_func_has_error_flow(ctx, direct.func, (uint8_t) (depth + 1)))
             return true;
 
@@ -5374,7 +5436,7 @@ static bool cg_class_native_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const X
     const char *method_prefix = NULL;
     const XiFunc *mfunc = cg_class_native_resolve_method_call(ctx, current, call, &method_prefix);
     (void) method_prefix;
-    if (!mfunc || cg_func_needs_aot_coro(mfunc) ||
+    if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
         !cg_class_func_uses_native_receiver(ctx, mfunc) ||
         cg_class_native_func_has_error_flow(ctx, mfunc, (uint8_t) (depth + 1)))
         return false;
@@ -5489,7 +5551,14 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
     emit_class_native_type_name(out, prefix, cd->class_name);
     fprintf(out, " { ");
     if (cd->inherited_field_count > 0 && cd->super_name) {
-        emit_class_native_type_name(out, prefix, cd->super_name);
+        /* The base member's struct type must carry the parent's own module
+         * prefix, which differs from `prefix` when the parent lives in another
+         * module (cross-module inheritance). */
+        const XiClassData *super_cd = cg_class_native_data_by_name(ctx, cd->super_name);
+        const char *super_prefix =
+            super_cd ? cg_class_native_prefix_for_data(ctx, super_cd, prefix) : prefix;
+        emit_class_native_type_name(out, super_prefix,
+                                    super_cd ? super_cd->class_name : cd->super_name);
         fprintf(out, " base; ");
     }
     for (uint16_t fi = cd->inherited_field_count; fi < cd->instance_layout->field_count; fi++)
@@ -5625,6 +5694,27 @@ static void cg_collect_native_class(XiCgenCtx *ctx, FILE *out, const XiClassData
     }
 }
 
+/* Recursively collect the cross-module native classes referenced by the
+ * parameter/return types of this unit's own functions (e.g. a Logger method
+ * that takes an imported `Path`).  Own-module classes are skipped inside
+ * cg_collect_native_class, so only imported native types produce a typedef. */
+static void cg_collect_native_classes_from_own_func(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                    const char *own, const XiClassData **seen,
+                                                    int *nseen, int seen_cap) {
+    if (!f)
+        return;
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        cg_collect_native_classes_from_own_func(ctx, out, f->children[i], own, seen, nseen,
+                                                seen_cap);
+    cg_collect_native_class(ctx, out, cg_class_native_data_for_abi_type(ctx, f->return_type), own,
+                            seen, nseen, seen_cap);
+    for (uint16_t p = 0; p < f->nparams; p++) {
+        const XrType *pt = f->params && f->params[p] ? f->params[p]->type : NULL;
+        cg_collect_native_class(ctx, out, cg_class_native_data_for_abi_type(ctx, pt), own, seen,
+                                nseen, seen_cap);
+    }
+}
+
 /* Emit native typedefs for the cross-module classes a unit actually references,
  * derived from the imported functions it calls: the class owning an imported
  * constructor/method, plus any native class in an imported function's parameter
@@ -5635,7 +5725,7 @@ static void emit_imported_class_native_typedefs(XiCgenCtx *ctx, FILE *out) {
     if (!ctx || !out)
         return;
     const char *own = ctx->module && ctx->module->name ? ctx->module->name : NULL;
-    const XiClassData *seen[64];
+    const XiClassData *seen[128];
     int nseen = 0;
     /* A locally-defined class may extend an imported base, whose typedef must
      * precede the derived class's `base` member. */
@@ -5647,6 +5737,10 @@ static void emit_imported_class_native_typedefs(XiCgenCtx *ctx, FILE *out) {
                                         own, seen, &nseen, (int) (sizeof(seen) / sizeof(seen[0])));
         }
     }
+    /* This unit's own functions may take/return an imported native class. */
+    if (ctx->module && ctx->module->init)
+        cg_collect_native_classes_from_own_func(ctx, out, ctx->module->init, own, seen, &nseen,
+                                                (int) (sizeof(seen) / sizeof(seen[0])));
     for (int i = 0; i < ctx->n_xmod_refs; i++) {
         const XiFunc *f = ctx->xmod_ref_funcs[i];
         const char *prefix = ctx->xmod_ref_prefixes[i];

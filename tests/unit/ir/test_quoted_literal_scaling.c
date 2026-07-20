@@ -8,6 +8,7 @@
 
 #include "../test_framework.h"
 
+#include "frontend/analyzer/xa_typed_program.h"
 #include "frontend/analyzer/xanalyzer.h"
 #include "frontend/canonical/xcanon.h"
 #include "frontend/parser/xast_nodes.h"
@@ -123,7 +124,8 @@ static bool run_scaling_case(size_t payload_length, ScalingResult *result) {
     if (pushed)
         xr_compiler_session_pop_arena(&scope);
 
-    XiFunc *func = xi_lower_program(program, analyzer, g_iso);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false) : NULL;
     if (func)
         count_xi_values(func, payload_length, result);
 
@@ -142,6 +144,7 @@ static bool run_scaling_case(size_t payload_length, ScalingResult *result) {
         xr_vm_proto_free(proto);
     if (func)
         xi_func_free(func);
+    xa_typed_program_free(typed.program);
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
     free(source);

@@ -859,11 +859,18 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         }
     }
 
-    /* Transfer Xi IR ownership to child proto for AOT direct lowering */
-    xi_emit_attach_ir(child_proto, child_func);
-    uint16_t cidx = (uint16_t) v->aux_int;
-    if (cidx < ctx->func->nchildren && ctx->func->children[cidx] == child_func) {
-        ctx->func->children[cidx] = NULL;
+    /* Only verified representation-selected IR may cross the AOT attachment
+     * boundary.  Raw xi_emit() calls are bytecode-emitter unit boundaries;
+     * their child IR remains owned by the parent graph. */
+    if (child_func->stage >= XI_STAGE_REPPED || child_func->stage == XI_STAGE_OPTIMIZED) {
+        if (!xi_emit_attach_ir(child_proto, child_func)) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        uint16_t cidx = (uint16_t) v->aux_int;
+        if (cidx < ctx->func->nchildren && ctx->func->children[cidx] == child_func) {
+            ctx->func->children[cidx] = NULL;
+        }
     }
 
     int proto_idx = xr_vm_proto_add_proto(ctx->proto, child_proto);
@@ -1243,8 +1250,11 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
                                 (uint8_t) xi_capture_cross_execution_action(cap), cap->type);
     }
 
-    xi_emit_attach_ir(child_proto, child);
-    ctx->func->children[child_func_idx] = NULL;
+    if (child->stage >= XI_STAGE_REPPED || child->stage == XI_STAGE_OPTIMIZED) {
+        if (!xi_emit_attach_ir(child_proto, child))
+            return -1;
+        ctx->func->children[child_func_idx] = NULL;
+    }
 
     return xr_vm_proto_add_proto(ctx->proto, child_proto);
 }

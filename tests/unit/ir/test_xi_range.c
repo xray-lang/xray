@@ -5,6 +5,7 @@
  */
 
 #include "../../../src/ir/xi_range.h"
+#include "../../../src/ir/xi_evidence.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_opt_sccp.h"
 #include "../../../src/ir/xi_op_name.h"
@@ -269,7 +270,7 @@ TEST(analyze_sets_invariant) {
 
     xi_range_analyze(f);
 
-    ASSERT(f->invariant_mask & XI_INV_RANGE_ANNOTATED);
+    ASSERT(xi_evidence_domain_is_current(f, XI_EVD_RANGE));
 
     xi_func_free(f);
 }
@@ -1572,7 +1573,7 @@ TEST(analyze_reanalyze_stable) {
     xi_range_analyze(f);
     XiRange r1 = xi_range_of(add);
 
-    f->invariant_mask &= ~XI_INV_RANGE_ANNOTATED;
+    xi_evidence_invalidate(f, XI_EVD_RANGE, XI_EVIDENCE_REASON_INVALIDATED_BY_REWRITE);
     xi_range_analyze(f);
     XiRange r2 = xi_range_of(add);
 

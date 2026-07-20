@@ -18,6 +18,7 @@
 #include "../../../src/frontend/parser/xast_nodes.h"
 #include "../../../src/frontend/parser/xast_types.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/frontend/analyzer/xa_typed_program.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_vm.h"
 
@@ -400,7 +401,9 @@ static bool check_bindings(const char *source, const char *label) {
     xr_canon_program(program, analyzer, session);
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
-    XiFunc *func = xi_lower_program(program, analyzer, g_iso);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false) : NULL;
+    xa_typed_program_free(typed.program);
 #ifdef _WIN32
     freopen("CON", "w", stderr);
 #else

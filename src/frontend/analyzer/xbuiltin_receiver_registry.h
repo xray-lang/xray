@@ -16,6 +16,7 @@
 
 typedef enum {
     XA_BUILTIN_RECEIVER_EXACT_INTEGER,
+    XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER,
     XA_BUILTIN_RECEIVER_U8_ARRAY,
     XA_BUILTIN_RECEIVER_ARRAY,
     XA_BUILTIN_RECEIVER_U8_SLICE,
@@ -183,6 +184,7 @@ xa_builtin_receiver_method_documentation_group(const XaBuiltinReceiverMethodSpec
         return XA_BUILTIN_DOC_GROUP_GENERAL;
     switch (spec->receiver) {
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
             return XA_BUILTIN_DOC_GROUP_EXACT_INTEGER;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return XA_BUILTIN_DOC_GROUP_U8_ARRAY;

@@ -17,6 +17,7 @@
 #include <stdbool.h>
 #include "../../src/ir/xi_intrinsic_flags.h"
 #include "../../src/frontend/analyzer/xbuiltin_receiver_registry.h"
+#include "../../src/frontend/analyzer/xa_intrinsic_registry.h"
 
 /* Generate enum from xi_intrinsic.def — mirrors xm_intrinsic.h */
 typedef enum {
@@ -318,6 +319,13 @@ static void test_builtin_receiver_method_placement(void) {
         xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_POPCOUNT);
     ASSERT_TRUE(popcount && popcount->result == XA_BUILTIN_TYPE_INT,
                 "popcount must return language int");
+    const XaBuiltinReceiverMethodSpec *mul_high =
+        xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_EXACT_UINT_MUL_HIGH);
+    ASSERT_TRUE(mul_high && mul_high->receiver == XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER &&
+                    mul_high->result == XA_BUILTIN_TYPE_RECEIVER &&
+                    mul_high->params[0] == XA_BUILTIN_TYPE_RECEIVER &&
+                    mul_high->allocation == XA_BUILTIN_ALLOCATION_NO_HEAP,
+                "mulHigh must be unsigned-only, exact-width, receiver-preserving and no-heap");
 
     const char *u8_array_methods[] = {"appendFrom", "repeatFrom", NULL};
     for (int i = 0; u8_array_methods[i]; i++) {
@@ -367,6 +375,65 @@ static void test_builtin_receiver_method_placement(void) {
     }
 }
 
+static void test_semantic_intrinsic_registry(void) {
+    char error[192];
+    ASSERT_TRUE(xa_intrinsic_registry_validate(error, sizeof(error)),
+                "semantic intrinsic registry must be internally consistent");
+    ASSERT_TRUE(xa_intrinsic_count() >= 51,
+                "semantic intrinsic registry must contain the portable SIMD surface");
+
+    const XaIntrinsicDesc *xor_desc = xa_intrinsic_by_key("simd.U32x4.bitXor");
+    ASSERT_TRUE(xor_desc && xor_desc->id == XA_INTRINSIC_SIMD_U32X4_BIT_XOR,
+                "canonical SIMD identity must resolve by declaration key");
+    ASSERT_TRUE(xor_desc && xor_desc->lowering == XA_INTRINSIC_LOWERING_VEC_BIT_XOR &&
+                    xor_desc->effect == XA_INTRINSIC_EFFECT_PURE &&
+                    xor_desc->shape_rule.input_lanes == 4 &&
+                    xor_desc->shape_rule.result_native_type == XR_NATIVE_U32,
+                "SIMD descriptor must publish lowering/effect/shape before Xi construction");
+    ASSERT_TRUE(xa_intrinsic_by_id(XA_INTRINSIC_SIMD_U32X4_BIT_XOR) == xor_desc,
+                "semantic intrinsic id and key lookup must share one descriptor");
+
+    const XaIntrinsicDesc *cap = xa_intrinsic_by_id(XA_INTRINSIC_SIMD_CAPABILITIES_NATIVE_BYTES);
+    ASSERT_TRUE(cap && cap->family == XA_INTRINSIC_FAMILY_TARGET &&
+                    cap->lowering == XA_INTRINSIC_LOWERING_TARGET_SIMD_BYTES &&
+                    (cap->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0,
+                "target capability must be an explicit semantic identity, not a late name match");
+
+    const XaIntrinsicDesc *rotl = xa_intrinsic_by_id(XA_INTRINSIC_BITS_ROTATE_LEFT);
+    ASSERT_TRUE(rotl && rotl->family == XA_INTRINSIC_FAMILY_BITS &&
+                    rotl->lowering == XA_INTRINSIC_LOWERING_BIT_ROTL &&
+                    rotl->effect == XA_INTRINSIC_EFFECT_PURE && rotl->min_arity == 1 &&
+                    rotl->max_arity == 1,
+                "exact integer bit semantics must be represented in the canonical registry");
+
+    const XaIntrinsicDesc *slice_copy = xa_intrinsic_by_id(XA_INTRINSIC_BYTE_SLICE_COPY);
+    ASSERT_TRUE(slice_copy && slice_copy->family == XA_INTRINSIC_FAMILY_MEMORY &&
+                    slice_copy->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_COPY &&
+                    slice_copy->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW &&
+                    slice_copy->min_arity == 1 && slice_copy->max_arity == 1,
+                "Slice<byte>.copyFrom must have one stable memory identity");
+
+    const XaIntrinsicDesc *pod_ptr = xa_intrinsic_by_id(XA_INTRINSIC_POD_SLICE_PTR);
+    ASSERT_TRUE(pod_ptr && pod_ptr->family == XA_INTRINSIC_FAMILY_MEMORY &&
+                    pod_ptr->lowering == XA_INTRINSIC_LOWERING_SPAN_DATA_PTR &&
+                    pod_ptr->effect == XA_INTRINSIC_EFFECT_PURE,
+                "Slice<POD>.ptr must be canonical before Xi construction");
+
+    const XaIntrinsicDesc *atomic_fetch_add = xa_intrinsic_by_id(XA_INTRINSIC_ATOMIC_FETCH_ADD);
+    ASSERT_TRUE(atomic_fetch_add && atomic_fetch_add->family == XA_INTRINSIC_FAMILY_ATOMIC &&
+                    atomic_fetch_add->lowering == XA_INTRINSIC_LOWERING_ATOMIC_RMW &&
+                    atomic_fetch_add->effect == XA_INTRINSIC_EFFECT_READ_WRITE &&
+                    atomic_fetch_add->allocation == XA_INTRINSIC_ALLOCATION_NO_ALLOC,
+                "Atomic.fetchAdd must publish stable nothrow RMW semantics");
+
+    const XaIntrinsicDesc *par_map_into = xa_intrinsic_by_id(XA_INTRINSIC_PARALLEL_PLAN_MAP_INTO);
+    ASSERT_TRUE(par_map_into && par_map_into->family == XA_INTRINSIC_FAMILY_PARALLEL &&
+                    par_map_into->lowering == XA_INTRINSIC_LOWERING_PAR_MAP_INTO &&
+                    (par_map_into->flags & XA_INTRINSIC_FLAG_PLAN_RECEIVER) != 0 &&
+                    par_map_into->min_arity == 3 && par_map_into->max_arity == 3,
+                "parallel Plan.mapInto must publish receiver, arity, and lowering identity");
+}
+
 int main(void) {
     printf("--- xi_intrinsic.def ---\n");
     test_enum_values();
@@ -386,6 +453,7 @@ int main(void) {
     test_builtin_receiver_registry_method_ids();
     test_builtin_receiver_registry_metadata();
     test_builtin_receiver_method_placement();
+    test_semantic_intrinsic_registry();
 
     printf("\n=== test_xi_intrinsic: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;

@@ -30,6 +30,7 @@
 #define XI_PASS_H
 
 #include "xi.h"
+#include "xi_evidence.h"
 #include "../base/xdefs.h"
 #include <stdbool.h>
 
@@ -42,6 +43,23 @@ typedef struct XiPassChange {
     uint32_t n_removed;  /* values eliminated (for logging) */
     uint32_t n_added;    /* values inserted (for logging) */
 } XiPassChange;
+
+typedef struct XiRevisionDelta {
+    bool ir_changed;
+    bool cfg_changed;
+    bool memory_changed;
+    bool call_changed;
+} XiRevisionDelta;
+
+/* The driver completes this outcome from the pass report plus an audited IR
+ * edit session. Evidence policy is therefore data, not an implicit side effect
+ * hidden inside an optimization. */
+typedef struct XiPassOutcome {
+    XiPassChange change;
+    XiEvidenceDomainMask invalidates;
+    XiEvidenceDomainMask preserves;
+    XiRevisionDelta revision_delta;
+} XiPassOutcome;
 
 /* Sentinel: nothing changed */
 static inline XiPassChange xi_pass_no_change(void) {
@@ -95,17 +113,24 @@ typedef struct XiPassDesc {
     XiOptLevel min_level; /* minimum opt level to run this pass */
     uint32_t flags;       /* XI_PASS_* flags */
 
-    /* Stage contract: the pass requires func->stage >= input_stage.
-     * On completion, func->stage is advanced to output_stage (if greater).
-     * Most optimization passes are stage-preserving (input == output). */
-    XiStage input_stage;  /* minimum stage required (0 = any) */
-    XiStage output_stage; /* stage after this pass (0 = unchanged) */
+    /* Legal stage window. Passes never advance stage; only consuming
+     * transition APIs can do that. */
+    XiStage min_stage;
+    XiStage max_stage;
 
     /* Analysis invariant contract: required bits must already be present
      * before the pass runs; produced bits are marked present after it
      * returns successfully. */
     XiInvariantMask requires_inv_mask;
     XiInvariantMask produces_inv_mask;
+
+    /* Revision-bound analysis contract. Required domains are obtained through
+     * the analysis manager. Any rewrite invalidates every domain not listed in
+     * preserves_evidence, plus the explicitly invalidated domains. */
+    XiEvidenceDomainMask requires_evidence;
+    XiEvidenceDomainMask produces_evidence;
+    XiEvidenceDomainMask invalidates_evidence;
+    XiEvidenceDomainMask preserves_evidence;
 } XiPassDesc;
 
 /* ========== Per-Pass Statistics ========== */

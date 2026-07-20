@@ -1,0 +1,26 @@
+class WorkerBox {
+    worker: () -> int
+
+    constructor(worker: () -> int) {
+        this.worker = worker
+    }
+
+    run() -> int {
+        var current = this.worker
+        return current()
+    }
+}
+
+fn make_worker(base: int) -> () -> int {
+    return fn() -> int {
+        return yield_then_add(base)
+    }
+}
+
+fn yield_then_add(base: int) -> int {
+    Coro.yield()
+    return base + 1
+}
+
+var box = WorkerBox(make_worker(40))
+print(box.run())

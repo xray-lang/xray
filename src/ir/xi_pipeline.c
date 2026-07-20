@@ -11,6 +11,7 @@
  */
 
 #include "xi_pipeline.h"
+#include "../frontend/analyzer/xa_typed_program.h"
 #include "xi_lower.h"
 #include "xi_verify.h"
 #include "xi_opt.h"
@@ -20,10 +21,12 @@
 #include "xi_escape.h"
 #include "xi_own.h"
 #include "xi_arc.h"
+#include "xi_stage.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast.h"
 #include "../runtime/xisolate_api.h"
+#include "../runtime/value/xchunk.h"
 #include "../toolchain/xcompiler_session.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
@@ -225,6 +228,29 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
 
 /* ========== Internal Pipeline ========== */
 
+static XiFunc *xi_pipeline_release_stage_handle(void *program, XiStage stage) {
+    switch (stage) {
+        case XI_STAGE_RAW:
+            return xi_raw_program_release((XiRawProgram *) program);
+        case XI_STAGE_CANONICAL:
+            return xi_canonical_program_release((XiCanonicalProgram *) program);
+        case XI_STAGE_CLOSED:
+            return xi_closed_program_release((XiClosedProgram *) program);
+        case XI_STAGE_OWNED:
+            return xi_owned_program_release((XiOwnedProgram *) program);
+        case XI_STAGE_LOWERED:
+            return xi_lowered_program_release((XiLoweredProgram *) program);
+        case XI_STAGE_OPTIMIZED:
+            return xi_optimized_program_release((XiOptimizedProgram *) program);
+        case XI_STAGE_REPPED:
+            return xi_repped_program_release((XiReppedProgram *) program);
+        case XI_STAGE_BACKEND:
+            return xi_backend_program_release((XiBackendProgram *) program);
+        default:
+            return NULL;
+    }
+}
+
 static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
                                      const XiPipelineConfig *cfg) {
     XiPipelineResult res;
@@ -238,9 +264,38 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         return res;
     }
 
-    /* Closure pass: build XiClosureMeta, assign env layout and cell indices.
-     * Advances stage to XI_STAGE_CLOSED. */
+    char transition_error[512] = {0};
+    void *program = xi_stage_adopt_raw(ir, transition_error, sizeof(transition_error));
+    XiStage current_stage = XI_STAGE_RAW;
+    if (!program) {
+        xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_VERIFY_RAW,
+                              XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
+        return res;
+    }
+
+    void *next = xi_program_canonicalize((XiRawProgram *) program, transition_error,
+                                         sizeof(transition_error));
+    if (!next) {
+        xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_VERIFY_RAW,
+                              XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
+        xi_pipeline_release_stage_handle(program, current_stage);
+        return res;
+    }
+    program = next;
+    current_stage = XI_STAGE_CANONICAL;
+
+    /* Closure pass: build XiClosureMeta and materialize environment layout. */
     xi_pass_close(ir);
+    next = xi_program_close((XiCanonicalProgram *) program, transition_error,
+                            sizeof(transition_error));
+    if (!next) {
+        xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_VERIFY_RAW,
+                              XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
+        xi_pipeline_release_stage_handle(program, current_stage);
+        return res;
+    }
+    program = next;
+    current_stage = XI_STAGE_CLOSED;
 
     /* Optional: dump IR before optimization */
     if (cfg->dump_ir_before) {
@@ -252,39 +307,15 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     /* Verification barriers are part of the executable pipeline contract and
      * cannot be disabled by configuration. */
     if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_VERIFY_RAW))
-        return res;
-
-    /* Optimization passes (pipeline driver handles per-round verify) */
-    if (cfg->run_optimize) {
-        XiOptLevel level = cfg->opt_level;
-        if (level == XI_OPT_NONE)
-            level = XI_OPT_LIGHT;
-
-        XiPipelineStats stats;
-        XiOptResult opt = xi_opt_run_pipeline_ex_with_mask(ir, level, &stats, cfg->budget_ns,
-                                                           cfg->disabled_opt_passes);
-        if (!opt.ok) {
-            xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_OPTIMIZE,
-                                  XI_VERIFY_OPT_INVARIANT, ir, NULL, opt.pass_name, opt.detail);
-            return res;
-        }
-
-        /* Optional dump: XRAY_XI_STATS=1 prints per-function stats */
-        if (xi_env_is_enabled("XRAY_XI_STATS")) {
-            xi_pipeline_stats_dump(&stats, ir->name);
-        }
-    }
-    if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OPTIMIZE))
-        return res;
+        goto fail;
 
     /* Escape analysis: compute escape levels for heap-allocating values.
-     * Run after optimization (dead code eliminated) but before select_rep
-     * so escape info is available when inserting BOX/UNBOX. */
+     * Ownership is made explicit before semantic optimization. */
     if (cfg->run_escape) {
         xi_escape_analyze(ir);
     }
     if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_ESCAPE))
-        return res;
+        goto fail;
 
     /* Backward ownership inference (analysis only — does not mutate IR).
      * Gated behind XRAY_XI_OWN_DUMP=1 for manual verification of dup/drop
@@ -328,10 +359,60 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
                     "\n",
                     ir->name ? ir->name : "<anon>", nret, nrel, nret + nrel);
         }
-        xi_func_set_stage_recursive(ir, XI_STAGE_OWNED);
     }
+
+    next = xi_program_make_owned((XiClosedProgram *) program, transition_error,
+                                 sizeof(transition_error));
+    if (!next) {
+        xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_OWNERSHIP,
+                              XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
+        goto fail;
+    }
+    program = next;
+    current_stage = XI_STAGE_OWNED;
+
+    next = xi_program_lower_semantics((XiOwnedProgram *) program, transition_error,
+                                      sizeof(transition_error));
+    if (!next) {
+        xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_OWNERSHIP,
+                              XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
+        goto fail;
+    }
+    program = next;
+    current_stage = XI_STAGE_LOWERED;
+
     if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OWNERSHIP))
-        return res;
+        goto fail;
+
+    /* Optimization consumes Lowered and produces a verified Optimized program. */
+    if (cfg->run_optimize) {
+        XiOptLevel level = cfg->opt_level;
+        if (level == XI_OPT_NONE)
+            level = XI_OPT_LIGHT;
+
+        XiPipelineStats stats;
+        XiOptResult opt = xi_opt_run_pipeline_ex_with_mask(ir, level, &stats, cfg->budget_ns,
+                                                           cfg->disabled_opt_passes);
+        if (!opt.ok) {
+            xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_OPTIMIZE,
+                                  XI_VERIFY_OPT_INVARIANT, ir, NULL, opt.pass_name, opt.detail);
+            goto fail;
+        }
+        if (xi_env_is_enabled("XRAY_XI_STATS"))
+            xi_pipeline_stats_dump(&stats, ir->name);
+    }
+
+    next = xi_program_finish_optimization((XiLoweredProgram *) program, transition_error,
+                                          sizeof(transition_error));
+    if (!next) {
+        xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_OPTIMIZE,
+                              XI_VERIFY_OPT_INVARIANT, ir, NULL, NULL, transition_error);
+        goto fail;
+    }
+    program = next;
+    current_stage = XI_STAGE_OPTIMIZED;
+    if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OPTIMIZE))
+        goto fail;
 
     /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.
      * Run after general optimization so constants/copies are resolved first. */
@@ -339,16 +420,39 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         xi_opt_select_rep_with_policy(ir, &cfg->rep_policy);
         xi_opt_box_elim(ir);
         xi_rep_cleanup_recursive(ir);
+        next = xi_program_select_reps((XiOptimizedProgram *) program, transition_error,
+                                      sizeof(transition_error));
+        if (!next) {
+            xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_REPRESENTATION,
+                                  XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
+            goto fail;
+        }
+        program = next;
+        current_stage = XI_STAGE_REPPED;
         if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_REPRESENTATION))
-            return res;
+            goto fail;
     }
 
-    /* Backend lowering: rewrite high-level ops to XI_CALL_BUILTIN.
-     * Advances stage to STAGE_BACKEND. */
+    /* Backend lowering is legal only after target representation selection. */
     if (cfg->run_backend_lower) {
+        if (current_stage != XI_STAGE_REPPED) {
+            xi_pipeline_set_error(&res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_BACKEND,
+                                  XI_VERIFY_STRUCTURE, ir, NULL, NULL,
+                                  "backend planning requires a Repped program");
+            goto fail;
+        }
         xi_backend_lower(ir);
+        next = xi_program_plan_backend((XiReppedProgram *) program, transition_error,
+                                       sizeof(transition_error));
+        if (!next) {
+            xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_BACKEND,
+                                  XI_VERIFY_AOT_PLAN, ir, NULL, NULL, transition_error);
+            goto fail;
+        }
+        program = next;
+        current_stage = XI_STAGE_BACKEND;
         if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_BACKEND))
-            return res;
+            goto fail;
     }
 
     /* Optional: dump IR after optimization */
@@ -365,16 +469,58 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         if (emit_st != XI_EMIT_OK) {
             xi_pipeline_set_error(&res, XI_PIPE_ERR_EMIT, XI_PIPE_STAGE_EMIT, XI_VERIFY_EMISSION,
                                   ir, NULL, NULL, xi_emit_status_str(emit_st));
-            return res;
+            goto fail;
         }
         res.proto = proto;
+
+        /* The VM emitter consumes Optimized semantic IR. After bytecode is
+         * fixed, select the VM/JIT tagged representation and close the Repped
+         * transition for the IR retained by the proto. */
+        if (current_stage == XI_STAGE_OPTIMIZED) {
+            XiRepPolicy vm_policy = xi_rep_policy_tagged_boundary();
+            xi_opt_select_rep_with_policy(ir, &vm_policy);
+            xi_opt_box_elim(ir);
+            xi_rep_cleanup_recursive(ir);
+            next = xi_program_select_reps((XiOptimizedProgram *) program, transition_error,
+                                          sizeof(transition_error));
+            if (!next) {
+                xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_REPRESENTATION,
+                                      XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
+                xr_vm_proto_free(proto);
+                res.proto = NULL;
+                goto fail;
+            }
+            program = next;
+            current_stage = XI_STAGE_REPPED;
+        }
+
+        ir = xi_pipeline_release_stage_handle(program, current_stage);
+        program = NULL;
+        res.ir = ir;
         /* Transfer Xi IR ownership to proto for AOT direct lowering.
          * Null res.ir so xi_pipeline_result_free won't double-free. */
-        xi_emit_attach_ir(proto, ir);
+        if (!xi_emit_attach_ir(proto, ir)) {
+            xr_vm_proto_free(proto);
+            res.proto = NULL;
+            res.ir = ir;
+            xi_pipeline_set_error(&res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_EMIT,
+                                  XI_VERIFY_EMISSION, ir, NULL, NULL,
+                                  "VM IR attachment requires a verified Repped program");
+            return res;
+        }
         res.ir = NULL;
+    } else {
+        ir = xi_pipeline_release_stage_handle(program, current_stage);
+        program = NULL;
+        res.ir = ir;
     }
 
     res.status = XI_PIPE_OK;
+    return res;
+
+fail:
+    if (program)
+        xi_pipeline_release_stage_handle(program, current_stage);
     return res;
 }
 
@@ -407,16 +553,22 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
     if (cfg->run_canonicalize)
         xr_canon_func(func_node, analyzer, session);
 
-    XiFunc *ir = xi_lower_func(func_node, analyzer, isolate);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, func_node, NULL, 0);
+    if (!typed.program) {
+        xi_pipeline_set_error(&gate, XI_PIPE_ERR_ANALYZE, XI_PIPE_STAGE_ANALYZE,
+                              XI_VERIFY_EXECUTABLE_TYPE, NULL, NULL,
+                              xa_typed_program_reason_name(typed.reason), typed.detail);
+        gate.error.source_line = typed.source_line;
+        xa_analyzer_pop_file_scope(analyzer, &file_scope);
+        return gate;
+    }
+    XiFunc *ir = xi_lower_func(typed.program, isolate);
+    xa_typed_program_free(typed.program);
 
     xa_analyzer_pop_file_scope(analyzer, &file_scope);
 
-    /* Canonicalization guarantees: advance stage and invariant mask
-     * for the root and all nested child functions. */
-    if (ir) {
+    if (ir)
         xi_set_source_file_recursive(ir, cfg->source_file);
-        xi_func_set_stage_recursive(ir, XI_STAGE_CANONICAL);
-    }
 
     return run_pipeline(ir, isolate, cfg);
 }
@@ -457,17 +609,23 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
 
-    XiFunc *ir = xi_lower_program_ex(program_node, analyzer, isolate, cfg->repl_mode,
-                                     cfg->global_evidence, cfg->global_evidence_module_id);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(
+        analyzer, program_node, cfg->global_evidence, cfg->global_evidence_module_id);
+    if (!typed.program) {
+        xi_pipeline_set_error(&gate, XI_PIPE_ERR_ANALYZE, XI_PIPE_STAGE_ANALYZE,
+                              XI_VERIFY_EXECUTABLE_TYPE, NULL, NULL,
+                              xa_typed_program_reason_name(typed.reason), typed.detail);
+        gate.error.source_line = typed.source_line;
+        xa_analyzer_pop_file_scope(analyzer, &file_scope);
+        return gate;
+    }
+    XiFunc *ir = xi_lower_program(typed.program, isolate, cfg->repl_mode);
+    xa_typed_program_free(typed.program);
 
     xa_analyzer_pop_file_scope(analyzer, &file_scope);
 
-    /* Canonicalization guarantees: advance stage and invariant mask
-     * for the root and all nested child functions. */
-    if (ir) {
+    if (ir)
         xi_set_source_file_recursive(ir, cfg->source_file);
-        xi_func_set_stage_recursive(ir, XI_STAGE_CANONICAL);
-    }
 
     return run_pipeline(ir, isolate, cfg);
 }
@@ -484,7 +642,10 @@ XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrVMRuntime *isol
     }
 
     /* Transfer IR ownership to proto for AOT direct lowering */
-    xi_emit_attach_ir(proto, ir);
+    if (!xi_emit_attach_ir(proto, ir)) {
+        xr_vm_proto_free(proto);
+        return NULL;
+    }
     return proto;
 }
 

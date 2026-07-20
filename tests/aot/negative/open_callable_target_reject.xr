@@ -1,0 +1,6 @@
+@used
+fn invoke(callback: () -> int) -> int {
+    return callback()
+}
+
+print(1)

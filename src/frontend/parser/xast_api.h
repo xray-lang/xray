@@ -307,7 +307,8 @@ XR_FUNC AstNode *xr_ast_import_stmt_ex(XrCompilerSession *session, const char *m
 
 // Create re-export statement node
 XR_FUNC AstNode *xr_ast_export_reexport(XrCompilerSession *session, const char *from_path,
-                                        ReexportMember *members, int count, bool is_all, int line);
+                                        bool from_is_quoted, ReexportMember *members, int count,
+                                        bool is_all, int line);
 
 // Create module-level global assembly declaration node
 XR_FUNC AstNode *xr_ast_global_asm(XrCompilerSession *session, const char *text, int line);

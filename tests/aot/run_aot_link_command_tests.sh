@@ -1313,8 +1313,8 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/fixed-array: generated C uses freestanding prelude"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "xr_span_t" \
             "freestanding-profile/fixed-array: generated C uses freestanding span value"
-        expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "xrt_span_from_array_slice" \
-            "freestanding-profile/fixed-array: generated C slices fixed array into span"
+        expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "xrt_span_from_array_slice" \
+            "freestanding-profile/fixed-array: generated C lowers fixed-array span directly"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xr_array_core_bytes_store_u16" \
             "freestanding-profile/fixed-array: Slice<byte>.store<uint16> uses freestanding bytes helper"
@@ -4071,8 +4071,8 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         "$FREESTANDING_NO_ALLOC_STACK_SRC" >"$FREESTANDING_NO_ALLOC_STACK_LOG" 2>&1; then
     FREESTANDING_NO_ALLOC_STACK_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_NO_ALLOC_STACK_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_NO_ALLOC_STACK_C" ]; then
-        expect_log_contains "$FREESTANDING_NO_ALLOC_STACK_C" "xrt_span_from_array_slice" \
-            "freestanding-profile/no-alloc: fixed-array Span path remains allowed"
+        expect_log_not_contains "$FREESTANDING_NO_ALLOC_STACK_C" "xrt_span_from_array_slice" \
+            "freestanding-profile/no-alloc: fixed-array Span path lowers directly"
         expect_log_not_contains "$FREESTANDING_NO_ALLOC_STACK_C" "xrt_mem_alloc" \
             "freestanding-profile/no-alloc: fixed-array path avoids allocator hook"
         expect_log_not_contains "$FREESTANDING_NO_ALLOC_STACK_C" "xrt_arc_alloc" \

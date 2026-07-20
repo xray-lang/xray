@@ -68,6 +68,9 @@ typedef struct CallExprNode {
     int required_arg_count;
     XrTypeRef **type_args;
     int type_arg_count;
+    uint32_t semantic_type_id;
+    XrTypeRef **semantic_type_args;
+    int semantic_type_arg_count;
 } CallExprNode;
 
 // is expression node (runtime type check)

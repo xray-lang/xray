@@ -14,9 +14,8 @@
 #include "xi.h"
 
 /* Lower all high-level ops in the function tree to backend-legal form
- * and advance stage to XI_STAGE_BACKEND.
- * Requires: f->stage >= XI_STAGE_REPPED.
- * Idempotent: no-op if already at STAGE_BACKEND. */
+ * for the backend verifier. Requires an exact XI_STAGE_REPPED input; the
+ * consuming stage transition publishes XI_STAGE_BACKEND. */
 XR_FUNC void xi_backend_lower(XiFunc *f);
 
 #endif  // XI_BACKEND_LOWER_H

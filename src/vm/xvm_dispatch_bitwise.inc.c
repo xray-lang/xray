@@ -169,6 +169,43 @@ XVM_EXACT_BIT_UNARY_CASE(OP_BIT_CTZ, xr_bits_exact_trailing_zeros)
 
 XVM_EXACT_BIT_ROTATE_CASE(OP_BIT_ROTL, xr_bits_exact_rotate_left)
 XVM_EXACT_BIT_ROTATE_CASE(OP_BIT_ROTR, xr_bits_exact_rotate_right)
-XVM_EXACT_BIT_ROTATE_CASE(OP_BIT_MUL_HIGH, xr_bits_exact_mul_high)
 
 #undef XVM_EXACT_BIT_ROTATE_CASE
+
+vmcase(OP_BIT_MUL_HIGH) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    uint8_t native_type = (uint8_t) GETARG_C(i);
+    XrValue lhs_value = R(b);
+    XrValue rhs_value = R(b + 1);
+    if (!XR_IS_INT(lhs_value) || !XR_IS_INT(rhs_value))
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "unsigned mulHigh requires exact-width integer inputs");
+    uint64_t lhs = (uint64_t) XR_TO_INT(lhs_value);
+    uint64_t rhs = (uint64_t) XR_TO_INT(rhs_value);
+    uint64_t high = 0;
+    switch (native_type) {
+        case XR_NATIVE_U8:
+            high = ((uint16_t) (uint8_t) lhs * (uint16_t) (uint8_t) rhs) >> 8;
+            break;
+        case XR_NATIVE_U16:
+            high = ((uint32_t) (uint16_t) lhs * (uint32_t) (uint16_t) rhs) >> 16;
+            break;
+        case XR_NATIVE_U32:
+            high = ((uint64_t) (uint32_t) lhs * (uint64_t) (uint32_t) rhs) >> 32;
+            break;
+        case XR_NATIVE_USIZE:
+            high = sizeof(uintptr_t) == 8
+                       ? xr_u64_mul_high((uint64_t) (uintptr_t) lhs, (uint64_t) (uintptr_t) rhs)
+                       : (((uint64_t) (uint32_t) lhs * (uint64_t) (uint32_t) rhs) >> 32);
+            break;
+        case XR_NATIVE_U64:
+            high = xr_u64_mul_high(lhs, rhs);
+            break;
+        default:
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                             "mulHigh receiver must be an unsigned exact-width integer");
+    }
+    XR_SET_INT(R(a), (int64_t) high);
+    vmbreak;
+}

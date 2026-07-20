@@ -25,6 +25,16 @@ struct XrModuleGraph;
 
 typedef struct XrCompilerSession XrCompilerSession;
 
+typedef enum XrCompileUnitKind {
+    XR_COMPILE_UNIT_USER = 0,
+    XR_COMPILE_UNIT_STDLIB,
+} XrCompileUnitKind;
+
+typedef struct XrCompileUnitIdentity {
+    XrCompileUnitKind kind;
+    const char *canonical_module;
+} XrCompileUnitIdentity;
+
 typedef struct XrCompilerSessionScope {
     XrCompilerSession *session;
     struct XrArena *saved_arena;
@@ -88,6 +98,14 @@ XR_FUNC bool xr_compiler_session_retain_repl_program(XrCompilerSession *session,
 XR_FUNC void xr_compiler_session_set_module_graph(XrCompilerSession *session,
                                                   struct XrModuleGraph *graph);
 XR_FUNC struct XrModuleGraph *xr_compiler_session_module_graph(const XrCompilerSession *session);
+
+/* Explicit trust identity for graph-less compilation units such as the
+ * build-time stdlib bytecode bootstrap.  Callers must clear it after the
+ * compilation operation; strings are borrowed for the scoped operation. */
+XR_FUNC void xr_compiler_session_set_compile_unit_identity(XrCompilerSession *session,
+                                                           const XrCompileUnitIdentity *identity);
+XR_FUNC XrCompileUnitIdentity
+xr_compiler_session_compile_unit_identity(const XrCompilerSession *session);
 
 XR_FUNC bool xr_compiler_session_push_arena(XrCompilerSession *session, struct XrArena *arena,
                                             const char *source_file, XrCompilerSessionScope *scope);

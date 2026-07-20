@@ -477,10 +477,11 @@ TEST(parallel_selective_alias_call_plan_recorded) {
     struct {
         const char *local_name;
         XaParallelCallKind expected;
+        XaIntrinsicId expected_intrinsic;
     } cases[] = {
-        {"each", XA_PAR_CALL_FOR_EACH},
-        {"parMap", XA_PAR_CALL_MAP},
-        {"fold", XA_PAR_CALL_REDUCE},
+        {"each", XA_PAR_CALL_FOR_EACH, XA_INTRINSIC_PARALLEL_FOR_EACH},
+        {"parMap", XA_PAR_CALL_MAP, XA_INTRINSIC_PARALLEL_MAP},
+        {"fold", XA_PAR_CALL_REDUCE, XA_INTRINSIC_PARALLEL_REDUCE},
     };
 
     bool ok = true;
@@ -500,7 +501,8 @@ TEST(parallel_selective_alias_call_plan_recorded) {
         }
         printf("    alias %s -> kind=%d plan_method=%d\n", cases[i].local_name, plan->kind,
                plan->is_plan_method ? 1 : 0);
-        if (plan->kind != cases[i].expected || plan->is_plan_method) {
+        if (plan->kind != cases[i].expected || plan->intrinsic_id != cases[i].expected_intrinsic ||
+            plan->is_plan_method) {
             fprintf(stderr, "    unexpected call plan for alias '%s'\n", cases[i].local_name);
             ok = false;
         }

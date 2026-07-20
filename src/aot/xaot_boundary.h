@@ -66,5 +66,10 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const struct Xaot
                                                                const XiFunc *current,
                                                                const XiValue *call,
                                                                uint16_t *first_arg_out);
+XR_FUNC const XiFunc *xaot_boundary_resolve_constructor_call_target(const struct XaotBundle *bundle,
+                                                                    const XiFunc *current,
+                                                                    const XiValue *call,
+                                                                    uint16_t *first_arg_out,
+                                                                    uint16_t *first_param_out);
 
 #endif  // XAOT_BOUNDARY_H

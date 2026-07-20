@@ -38,6 +38,17 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.target.simd.bytes
+  :class constant
+  :arity variadic
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.add
   :class arithmetic
   :arity 2
@@ -193,19 +204,6 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-; High half of the full 2W-bit product. aux_int carries the receiver's
-; XrNativeType, same exact-width contract as the rotates.
-(define-xi-op xi.bit.mul.high
-  :class bitwise
-  :arity 2
-  :own-use borrow
-  :speculation safe
-  :vn-kind pure
-  :effects ()
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-c aot-verify))
-
 (define-xi-op xi.bit.bswap
   :class bitwise
   :arity 1
@@ -242,6 +240,17 @@
 (define-xi-op xi.bit.ctz
   :class bitwise
   :arity 1
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.bit.mul-high
+  :class bitwise
+  :arity 2
   :own-use borrow
   :speculation safe
   :vn-kind pure
@@ -737,6 +746,16 @@
   :observable (span-repeat)
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.span.window
+  :class memory-read
+  :arity 3
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (may-throw memory-read)
+  :requires (span bounds)
+  :observable (span-window)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.span.as.bytes
   :class memory-read
   :arity 1
@@ -1193,6 +1212,46 @@
   :effects (side-effect may-throw memory-read memory-write)
   :requires ()
   :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+; Canonical Atomic<T> operations. xa_intrinsic_id distinguishes individual
+; RMW semantics (add/sub/fetch/swap/CAS/toggle) without a method-name payload.
+(define-xi-op xi.atomic.load
+  :class memory-read
+  :arity variadic
+  :own-use borrow
+  :effects (memory-read)
+  :requires (atomic-order)
+  :observable (atomic-load)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.atomic.store
+  :class memory-write
+  :arity variadic
+  :result-kind void
+  :result-ownership none
+  :own-use borrow
+  :effects (side-effect memory-write)
+  :requires (atomic-order)
+  :observable (atomic-store)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.atomic.rmw
+  :class memory-write
+  :arity variadic
+  :own-use borrow
+  :effects (side-effect memory-read memory-write)
+  :requires (atomic-order)
+  :observable (atomic-rmw)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.atomic.to.string
+  :class call
+  :arity 1
+  :own-use borrow
+  :effects (side-effect may-throw memory-read allocates)
+  :requires ()
+  :observable (atomic-load string-format)
   :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.extract
@@ -1995,55 +2054,55 @@
 
 (define-xi-op xi.vec.load
   :class vector
-  :arity 2
+  :arity variadic
   :own-use borrow
   :effects (may-throw memory-read)
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.store
   :class vector
-  :arity 3
+  :arity variadic
   :result-ownership none
   :own-use borrow
   :effects (side-effect may-throw memory-write)
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.splat
   :class vector
-  :arity 1
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.extract
   :class vector
-  :arity 2
+  :arity variadic
   :own-use borrow
   :effects (may-throw)
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.replace
   :class vector
-  :arity 3
+  :arity variadic
   :own-use borrow
   :effects (may-throw)
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.add
   :class vector
-  :arity 2
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
@@ -2051,22 +2110,22 @@
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.sub
   :class vector
-  :arity 2
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.mul
   :class vector
-  :arity 2
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
@@ -2074,11 +2133,11 @@
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.bit.and
   :class vector
-  :arity 2
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
@@ -2086,11 +2145,11 @@
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.bit.or
   :class vector
-  :arity 2
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
@@ -2098,11 +2157,11 @@
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.bit.xor
   :class vector
-  :arity 2
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
@@ -2110,73 +2169,73 @@
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.bit.not
   :class vector
-  :arity 1
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.shl
   :class vector
-  :arity 2
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.shr
   :class vector
-  :arity 2
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.reinterpret
   :class vector
-  :arity 1
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.shuffle
   :class vector
-  :arity 1
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.vec.widen.mul
   :class vector
-  :arity 2
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))
 
 ; Two-input 32-bit deinterleave (NEON uzp1/uzp2). ODD_LANES selects odd lanes.
 (define-xi-op xi.vec.unzip
@@ -2205,11 +2264,11 @@
 
 (define-xi-op xi.vec.reduce.add
   :class vector
-  :arity 1
+  :arity variadic
   :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
-  :targets (aot-c aot-verify))
+  :targets (vm-bytecode aot-c aot-verify))

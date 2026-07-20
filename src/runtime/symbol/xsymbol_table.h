@@ -344,6 +344,7 @@ enum {
     SYMBOL_AS_MUT_BYTES,
     SYMBOL_BORROW_PTR,
     SYMBOL_MUL_HIGH,
+    SYMBOL_WINDOW,
 
     SYMBOL_BUILTIN_COUNT  // sentinel
 };

@@ -133,11 +133,12 @@
     _(SHR_U, FMT_ABC, KOP_ABC_BIN, "R[A] = (uint64)R[B] >> R[C]")                                  \
     _(BIT_ROTL, FMT_ABC, KOP_ABC_OUT_BASE_LIT, "R[A] = exact_rotl(R[B], R[B+1], native_type=C)")   \
     _(BIT_ROTR, FMT_ABC, KOP_ABC_OUT_BASE_LIT, "R[A] = exact_rotr(R[B], R[B+1], native_type=C)")   \
-    _(BIT_MUL_HIGH, FMT_ABC, KOP_ABC_OUT_BASE_LIT, "R[A] = exact_mulhigh(R[B], R[B+1], nt=C)")     \
     _(BIT_BSWAP, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = exact_bswap(R[B], native_type=C)")              \
     _(BIT_POPCOUNT, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = exact_popcount(R[B], native_type=C)")        \
     _(BIT_CLZ, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = exact_clz(R[B], native_type=C)")                  \
     _(BIT_CTZ, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = exact_ctz(R[B], native_type=C)")                  \
+    _(BIT_MUL_HIGH, FMT_ABC, KOP_ABC_OUT_BASE_LIT,                                                 \
+      "R[A] = exact_unsigned_mul_high(R[B], R[B+1], native_type=C)")                               \
     _(EQ, FMT_AB_IMM, KOP_AB_TEST, "if (R[A] == R[B]) != k then PC++")                             \
     _(EQK, FMT_AB_IMM, KOP_AB_TEST_K, "if (R[A] == K[B]) != k then PC++")                          \
     _(EQI, FMT_AsB_C, KOP_AB_TEST_S, "if (R[A] == sB) != k then PC++")                             \
@@ -399,6 +400,8 @@
       "R[A] = VM internal parallel map over R[B..B+5], C=flags")                                   \
     _(PAR_REDUCE, FMT_ABC, KOP_ABC_BIN_LIT,                                                        \
       "R[A] = VM internal parallel reduce over R[B..B+7], C=flags")                                \
+    _(SPAN_WINDOW, FMT_ABC, KOP_ABC_BIN,                                                           \
+      "R[A] = strict Span window R[B], start=R[C], count=R[C+1], slot=R[C+2]")                     \
     _(NOP, FMT_SPECIAL, KOP_SPECIAL, "no-op / spawn metadata")
 
 #endif  // XOPCODE_DEF_H

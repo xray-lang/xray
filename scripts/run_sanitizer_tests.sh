@@ -10,7 +10,7 @@
 #   ./scripts/run_sanitizer_tests.sh tsan         # TSan only
 #   ./scripts/run_sanitizer_tests.sh --skip-build # reuse existing builds
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -28,6 +28,10 @@ elif command -v nproc &>/dev/null; then
     NCPU=$(nproc)
 else
     NCPU=4
+fi
+SANITIZER_JOBS="${XRAY_SANITIZER_JOBS:-$NCPU}"
+if [ "$SANITIZER_JOBS" -gt 8 ]; then
+    SANITIZER_JOBS=8
 fi
 
 SKIP_BUILD=0
@@ -68,7 +72,10 @@ run_sanitizer() {
             2>&1 | tail -5
 
         echo -e "${BLUE}Building...${NC}"
-        if ! cmake --build "${build_dir}" --target xray -j${NCPU} 2>&1 | tail -10; then
+        # Build the registered tests as well as the CLI. Building only `xray`
+        # leaves CTest entries pointing at missing executables and can make a
+        # sanitizer run look green even though most tests never ran.
+        if ! cmake --build "${build_dir}" -j"${SANITIZER_JOBS}" 2>&1 | tail -10; then
             echo -e "${RED}BUILD FAILED: ${name}${NC}"
             TOTAL_FAIL=$((TOTAL_FAIL + 1))
             return 1
@@ -85,10 +92,11 @@ run_sanitizer() {
 
     # Run unit tests (ctest)
     echo -e "${BLUE}Running unit tests...${NC}"
-    if (cd "${build_dir}" && ctest --output-on-failure -j${NCPU} 2>&1 | tail -10); then
+    if (cd "${build_dir}" && ctest --output-on-failure -j"${SANITIZER_JOBS}" 2>&1 | tail -10); then
         echo -e "${GREEN}Unit tests OK${NC}"
     else
-        echo -e "${YELLOW}Some unit tests failed (see above)${NC}"
+        TOTAL_FAIL=$((TOTAL_FAIL + 1))
+        echo -e "${RED}Unit tests FAIL${NC}"
     fi
 
     # Run regression tests

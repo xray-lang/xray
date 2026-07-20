@@ -13,11 +13,13 @@
  * Arithmetic transfer functions model overflow conservatively (widen to
  * TOP on potential overflow).
  *
- * Results are stored in a function-level side-table indexed by value id.
- * The xi_range_of() query reads from this table.
+ * The fixed-point solver uses a transient function-level side-table. Published
+ * results are copied into revision-bound, subject-specific evidence records;
+ * xi_range_of() never reads the solver table directly.
  */
 
 #include "xi_range.h"
+#include "xi_evidence.h"
 #include "xi_analysis.h"
 #include "xi_loop.h"
 #include "../base/xchecks.h"
@@ -244,16 +246,22 @@ XR_FUNC XiRange xi_range_of(const XiValue *v) {
     if (v->op == XI_CONST)
         return xi_range_const(v->aux_int);
 
-    /* Look up in the function's range table. */
+    /* Consume only current proof material for this exact SSA value. */
     if (!v->block || !v->block->func)
         return xi_range_top();
 
     const XiFunc *f = v->block->func;
-    RangeTable *rt = get_range_table(f);
-    if (!rt || v->id >= rt->cap)
+    XiEvidenceView view = xi_evidence_query(f, XI_EVD_RANGE, xi_evidence_subject_value(v));
+    if (!view.current || !view.record || view.record->state != XI_PROOF_PROVEN ||
+        view.record->payload.kind != XI_EVIDENCE_PAYLOAD_RANGE)
         return xi_range_top();
-
-    return rt->ranges[v->id];
+    const XiEvidenceRangePayload *range = &view.record->payload.as.range;
+    return (XiRange) {
+        .lo = range->lo,
+        .hi = range->hi,
+        .is_top = range->is_top,
+        .is_bot = range->is_bot,
+    };
 }
 
 /* ========== Analysis Pass ========== */
@@ -467,6 +475,10 @@ XR_FUNC XiPassChange xi_range_analyze(XiFunc *f) {
         XiBlock *blk = f->blocks[bi];
         if (!blk)
             continue;
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (phi->value.id >= max_id)
+                max_id = phi->value.id + 1;
+        }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
             if (v && v->id >= max_id)
@@ -544,11 +556,47 @@ XR_FUNC XiPassChange xi_range_analyze(XiFunc *f) {
         xr_free(old);
     }
 
-    /* Store in function's analysis slot. */
+    /* Keep the table only as producer scratch/debug data. Consumers query the
+     * revision-bound rows below. */
     f->analysis_data[0] = rt;
-    f->invariant_mask |= XI_INV_RANGE_ANNOTATED;
-
-    XiPassChange chg = xi_pass_no_change();
-    chg.values_changed = true;
-    return chg;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (XiPhi *phi = block->phis; phi; phi = phi->next) {
+            XiValue *value = &phi->value;
+            if (!is_int_value(value) || value->id >= rt->cap)
+                continue;
+            XiRange range = rt->ranges[value->id];
+            XiEvidencePayload payload = {
+                .kind = XI_EVIDENCE_PAYLOAD_RANGE,
+                .as.range = {.lo = range.lo,
+                             .hi = range.hi,
+                             .is_top = range.is_top,
+                             .is_bot = range.is_bot},
+            };
+            xi_evidence_publish(f, XI_EVD_RANGE, xi_evidence_subject_value(value), XI_PROOF_PROVEN,
+                                XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_RANGE_ANALYSIS,
+                                value->line, &payload);
+        }
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (!is_int_value(value) || value->id >= rt->cap)
+                continue;
+            XiRange range = rt->ranges[value->id];
+            XiEvidencePayload payload = {
+                .kind = XI_EVIDENCE_PAYLOAD_RANGE,
+                .as.range = {.lo = range.lo,
+                             .hi = range.hi,
+                             .is_top = range.is_top,
+                             .is_bot = range.is_bot},
+            };
+            xi_evidence_publish(f, XI_EVD_RANGE, xi_evidence_subject_value(value), XI_PROOF_PROVEN,
+                                XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_RANGE_ANALYSIS,
+                                value->line, &payload);
+        }
+    }
+    xi_evidence_publish(f, XI_EVD_RANGE, xi_evidence_subject_function(), XI_PROOF_PROVEN,
+                        XI_EVIDENCE_REASON_NONE, XI_EVIDENCE_PRODUCER_RANGE_ANALYSIS, 0, NULL);
+    return xi_pass_no_change();
 }

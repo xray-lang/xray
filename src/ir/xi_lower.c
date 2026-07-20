@@ -20,6 +20,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xa_typed_program.h"
 #include "../frontend/analyzer/xconsteval.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/lexer/xlex.h"
@@ -279,7 +280,7 @@ XR_FUNC XiValue *xi_lower_emit_top_load(XiLower *l, XiTopBinding binding, struct
     if (l->repl_mode) {
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, type, 0);
         if (v)
-            v->aux = (void *) binding.name;
+            v->aux = (void *) arena_strdup(l->func, binding.name);
         return v;
     }
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, type, 0);
@@ -297,7 +298,7 @@ XR_FUNC XiValue *xi_lower_emit_top_store(XiLower *l, XiTopBinding binding, XiVal
         store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
         if (store) {
             store->args[0] = val;
-            store->aux = (void *) binding.name;
+            store->aux = (void *) arena_strdup(l->func, binding.name);
             store->flags |= XI_FLAG_SIDE_EFFECT;
         }
     } else {
@@ -456,6 +457,56 @@ static XiValue *braun_read_local(XiLower *l, int var_id, XiBlock *blk) {
 static XiValue *braun_read_recursive(XiLower *l, int var_id, XiBlock *blk);
 static XiValue *add_phi_operands(XiLower *l, int var_id, XiPhi *phi);
 
+/* Braun's trivial-phi rule is a real SSA rewrite, not just a hint for future
+ * reads. An incomplete loop-header phi can already have users by the time the
+ * header is sealed, so updating only currentDef leaves those users pointing at
+ * a dead identity merge. Besides violating canonical SSA, that splits one RC
+ * owner into two apparent values before ARC. */
+static void braun_replace_all_uses(XiLower *l, XiValue *old_val, XiValue *new_val) {
+    XiFunc *f = l->func;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] == old_val)
+                    v->args[a] = new_val;
+            }
+        }
+        for (XiPhi *other = blk->phis; other; other = other->next) {
+            if (&other->value == old_val)
+                continue;
+            for (uint16_t a = 0; a < other->value.nargs; a++) {
+                if (other->value.args[a] == old_val)
+                    other->value.args[a] = new_val;
+            }
+        }
+        if (blk->control == old_val)
+            blk->control = new_val;
+    }
+
+    size_t defs_count = (size_t) l->var_cap * (size_t) l->block_cap;
+    for (size_t i = 0; i < defs_count; i++) {
+        if (l->var_defs[i] == old_val)
+            l->var_defs[i] = new_val;
+    }
+}
+
+static void braun_unlink_phi(XiPhi *phi) {
+    XiBlock *blk = phi ? phi->value.block : NULL;
+    if (!blk)
+        return;
+    XiPhi **link = &blk->phis;
+    while (*link && *link != phi)
+        link = &(*link)->next;
+    if (*link == phi)
+        *link = phi->next;
+}
+
 XR_FUNC XiValue *xi_lower_braun_read(XiLower *l, int var_id, XiBlock *blk) {
     XiValue *val = braun_read_local(l, var_id, blk);
     if (val)
@@ -521,8 +572,12 @@ static XiValue *try_remove_trivial_phi(XiLower *l, int var_id, XiPhi *phi) {
     if (same == NULL)
         return pv; /* undefined — keep the phi */
 
-    /* Trivial: update the def map so future reads see the simplified value */
+    /* Trivial: rewrite existing and future uses, then remove the identity
+     * definition from the block. The arena owns the node, so unlinking is
+     * sufficient and keeps any temporary lowering pointer memory-safe. */
+    braun_replace_all_uses(l, pv, same);
     xi_lower_braun_write(l, var_id, phi->value.block, same);
+    braun_unlink_phi(phi);
     return same;
 }
 
@@ -691,6 +746,7 @@ XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent) {
         return;
     child->global_evidence = parent->global_evidence;
     child->xg_module_id = parent->xg_module_id;
+    child->typed_program = parent->typed_program;
 }
 
 static bool xi_lower_evidence_module_matches(const XiLower *l, XgModuleId module_id) {
@@ -717,19 +773,49 @@ XR_FUNC uint32_t xi_lower_source_node_id(const XiLower *l, const AstNode *node) 
     return xg_stable_source_node_id(l->xg_module_id, (uint32_t) node->type, line, column);
 }
 
-static XgFuncId xi_lower_find_unique_body_id(XiLower *l, uint8_t kind, uint32_t source_node_id) {
+static XgFuncId xi_lower_find_unique_body_id(XiLower *l, uint8_t kind, uint32_t source_node_id,
+                                             uint32_t source_span_id) {
     const XgGlobalEvidence *ev;
     XgFuncId match = XG_NO_ID;
+    XgClassId owner_class_id = XG_NO_ID;
+    bool owner_class_known = false;
     if (!l || !l->global_evidence || (kind != XG_BODY_MODULE_INIT && source_node_id == 0))
         return XG_NO_ID;
     ev = l->global_evidence;
+    if (kind == XG_BODY_FUNCTION && l->parent && l->parent->func &&
+        l->parent->func->xg_body_func_id != XG_NO_ID) {
+        for (uint32_t i = 0; i < ev->nbodies; i++) {
+            if (ev->bodies[i].func_id == l->parent->func->xg_body_func_id) {
+                owner_class_id = ev->bodies[i].owner_class_id;
+                owner_class_known = true;
+                break;
+            }
+        }
+    }
     for (uint32_t i = 0; i < ev->nbodies; i++) {
         const XgBodySummary *body = &ev->bodies[i];
         if (body->func_id == XG_NO_ID || body->kind != kind)
             continue;
         if (!xi_lower_evidence_module_matches(l, body->module_id))
             continue;
+        if (owner_class_known && body->owner_class_id != owner_class_id)
+            continue;
         if (kind != XG_BODY_MODULE_INIT && body->source_node_id != source_node_id)
+            continue;
+        if (match != XG_NO_ID)
+            return XG_NO_ID;
+        match = body->func_id;
+    }
+    if (match != XG_NO_ID || kind != XG_BODY_FUNCTION || !owner_class_known || source_span_id == 0)
+        return match;
+    /* Monomorphized AST clones preserve the origin source coordinate while
+     * global evidence assigns the clone a distinct semantic node id.  Select
+     * the child body through its already-bound owner class and source span. */
+    for (uint32_t i = 0; i < ev->nbodies; i++) {
+        const XgBodySummary *body = &ev->bodies[i];
+        if (body->func_id == XG_NO_ID || body->kind != kind ||
+            !xi_lower_evidence_module_matches(l, body->module_id) ||
+            body->owner_class_id != owner_class_id || body->source_span_id != source_span_id)
             continue;
         if (match != XG_NO_ID)
             return XG_NO_ID;
@@ -790,17 +876,19 @@ static void xi_lower_bind_current_func_body_id(XiLower *l, XgFuncId body_func_id
 }
 
 XR_FUNC void xi_lower_bind_module_body_id(XiLower *l) {
-    xi_lower_bind_current_func_body_id(l, xi_lower_find_unique_body_id(l, XG_BODY_MODULE_INIT, 0));
+    xi_lower_bind_current_func_body_id(l,
+                                       xi_lower_find_unique_body_id(l, XG_BODY_MODULE_INIT, 0, 0));
 }
 
-XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, uint32_t source_node_id) {
+XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, uint32_t source_node_id,
+                                            uint32_t source_span_id) {
     xi_lower_bind_current_func_body_id(
-        l, xi_lower_find_unique_body_id(l, XG_BODY_FUNCTION, source_node_id));
+        l, xi_lower_find_unique_body_id(l, XG_BODY_FUNCTION, source_node_id, source_span_id));
 }
 
 XR_FUNC void xi_lower_bind_method_body_id(XiLower *l, uint32_t source_node_id) {
     xi_lower_bind_current_func_body_id(
-        l, xi_lower_find_unique_body_id(l, XG_BODY_METHOD, source_node_id));
+        l, xi_lower_find_unique_body_id(l, XG_BODY_METHOD, source_node_id, 0));
 }
 
 XR_FUNC uint32_t xi_lower_next_key_access_ordinal(XiLower *l, uint32_t source_span_id,
@@ -1425,12 +1513,14 @@ static inline void xi_lower_assert_var_ids(const XiLower *l, const XiFunc *f) {
  * from enclosing scopes via the upvalue capture mechanism.
  */
 XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyzer,
-                                   struct XrVMRuntime *isolate, XiLower *parent_ctx) {
+                                   struct XrVMRuntime *isolate, XiLower *parent_ctx,
+                                   const XaTypedProgram *typed_program) {
     XR_DCHECK(func_node != NULL, "lower_func_impl: func_node is NULL");
     FunctionDeclNode *fdecl = &func_node->as.function_decl;
 
     XiLower l;
     xi_lower_init(&l, analyzer, isolate);
+    l.typed_program = typed_program;
     l.parent = parent_ctx;
     /* Inherit repl_mode from the enclosing program / function so nested
      * closures resolve free top-level names through the globals dict. */
@@ -1472,10 +1562,17 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     }
     l.func->parent_func = parent_ctx ? parent_ctx->func : NULL;
     l.func->analyzer = analyzer;
+    /* Function-level generics have a canonical erased body and therefore a
+     * real callable ABI.  Only bodies nested in an uninstantiated generic
+     * owner are templates: those mention the owner's open type parameters and
+     * must be selected through a concrete generic-body plan. */
+    l.func->is_generic_template =
+        parent_ctx && parent_ctx->func && parent_ctx->func->is_generic_template;
     xi_lower_publish_allocation_effect(l.func, analyzer,
                                        xi_lower_function_symbol(analyzer, func_node));
     xi_lower_bind_function_body_id(&l,
-                                   xi_lower_function_evidence_source_node_id(&l, func_node, fdecl));
+                                   xi_lower_function_evidence_source_node_id(&l, func_node, fdecl),
+                                   func_node->line > 0 ? (uint32_t) func_node->line : 0);
 
     /* FFI: extern "C" functions are bodyless foreign declarations. Record
      * the C symbol + optional dylib; the body below stays empty and a trivial
@@ -1640,8 +1737,6 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     XiFunc *result = NULL;
     if (!l.had_error && xi_lower_capture_source_vars(&l)) {
         result = l.func;
-        result->stage = XI_STAGE_RAW;
-        result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
         xi_lower_assert_var_ids(&l, result);
     }
     xi_lower_cleanup(&l);
@@ -1650,13 +1745,17 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
 
 /* ========== Public API ========== */
 
-XR_FUNC XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
-                              struct XrVMRuntime *isolate) {
-    XR_CHECK(func_node != NULL, "xi_lower_func: func_node is NULL");
-    XR_CHECK(analyzer != NULL, "xi_lower_func: analyzer is NULL");
+XR_FUNC XiFunc *xi_lower_func(const XaTypedProgram *program, struct XrVMRuntime *isolate) {
+    XR_CHECK(program != NULL, "xi_lower_func: typed program is NULL");
+    XR_CHECK(xa_typed_program_is_verified(program), "xi_lower_func: typed program is unverified");
+    XR_CHECK(xa_typed_program_is_current(program), "xi_lower_func: typed program is stale");
+    AstNode *func_node = (AstNode *) xa_typed_program_syntax(program);
+    XaAnalyzer *analyzer = xa_typed_program_semantics(program);
+    XR_CHECK(func_node != NULL, "xi_lower_func: typed syntax is NULL");
+    XR_CHECK(analyzer != NULL, "xi_lower_func: semantic database is NULL");
     XR_CHECK(func_node->type == AST_FUNCTION_DECL || func_node->type == AST_FUNCTION_EXPR,
              "xi_lower_func: not a function node");
-    XiFunc *f = xi_lower_func_impl(func_node, analyzer, isolate, NULL);
+    XiFunc *f = xi_lower_func_impl(func_node, analyzer, isolate, NULL, program);
     if (f) {
         finalize_capture_metadata(f);
         xi_func_compute_effects(f);
@@ -2487,20 +2586,38 @@ static void build_module_metadata(XiLower *l) {
     f->module = mod;
 }
 
-XR_FUNC XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
-                                 struct XrVMRuntime *isolate) {
-    return xi_lower_program_ex(program_node, analyzer, isolate, false, NULL, 0);
+/* REPL values cross independently compiled submissions through runtime-owned
+ * shared slots, so their static type is intentionally erased at this boundary.
+ * Keep the erasure and slot bookkeeping in one canonical helper: declarations
+ * and versioned implicit results differ only in their storage index. */
+static void xi_lower_seed_repl_slot(XiLower *l, XrString *name, int slot,
+                                    uint16_t *next_shared_start) {
+    if (!l || !name || name->length == 0 || slot < 0 || !next_shared_start)
+        return;
+    int vid = xi_lower_var_create(l, 0, name->data, l->type_any);
+    if (vid < 0 || vid >= l->var_cap)
+        return;
+    l->shared_map[vid] = (int16_t) slot;
+    if (slot + 1 > (int) *next_shared_start)
+        *next_shared_start = (uint16_t) (slot + 1);
 }
 
-XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *analyzer,
-                                    struct XrVMRuntime *isolate, bool repl_mode,
-                                    const struct XgGlobalEvidence *global_evidence,
-                                    uint32_t module_id) {
-    XR_CHECK(program_node != NULL, "xi_lower_program: node is NULL");
-    XR_CHECK(analyzer != NULL, "xi_lower_program: analyzer is NULL");
+XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRuntime *isolate,
+                                 bool repl_mode) {
+    XR_CHECK(program != NULL, "xi_lower_program: typed program is NULL");
+    XR_CHECK(xa_typed_program_is_verified(program),
+             "xi_lower_program: typed program is unverified");
+    XR_CHECK(xa_typed_program_is_current(program), "xi_lower_program: typed program is stale");
+    AstNode *program_node = (AstNode *) xa_typed_program_syntax(program);
+    XaAnalyzer *analyzer = xa_typed_program_semantics(program);
+    const struct XgGlobalEvidence *global_evidence = xa_typed_program_global_evidence(program);
+    uint32_t module_id = xa_typed_program_module_id(program);
+    XR_CHECK(program_node != NULL, "xi_lower_program: typed syntax is NULL");
+    XR_CHECK(analyzer != NULL, "xi_lower_program: semantic database is NULL");
 
     XiLower l;
     xi_lower_init(&l, analyzer, isolate);
+    l.typed_program = program;
     l.is_program = true;
     l.repl_mode = repl_mode;
     l.global_evidence = global_evidence;
@@ -2532,26 +2649,12 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
     if (repl_syms) {
         for (int i = 0; i < repl_syms->count; i++) {
             XrReplSymbol *s = &repl_syms->symbols[i];
-            if (!s->name || s->name->length == 0)
-                continue;
-            int vid = xi_lower_var_create(&l, 0, s->name->data, l.type_any);
-            if (vid < 0 || vid >= l.var_cap)
-                continue;
-            l.shared_map[vid] = (int16_t) i;
-            if (i + 1 > (int) next_shared_start)
-                next_shared_start = (uint16_t) (i + 1);
+            xi_lower_seed_repl_slot(&l, s->name, i, &next_shared_start);
         }
         for (int i = 0; i < repl_syms->result_count; i++) {
             XrString *name = repl_syms->result_names[i];
-            if (!name || name->length == 0)
-                continue;
             int slot = repl_syms->count + i;
-            int vid = xi_lower_var_create(&l, 0, name->data, l.type_any);
-            if (vid < 0 || vid >= l.var_cap)
-                continue;
-            l.shared_map[vid] = (int16_t) slot;
-            if (slot + 1 > (int) next_shared_start)
-                next_shared_start = (uint16_t) (slot + 1);
+            xi_lower_seed_repl_slot(&l, name, slot, &next_shared_start);
         }
     }
 
@@ -2623,8 +2726,6 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
     XiFunc *result = NULL;
     if (!l.had_error && xi_lower_capture_source_vars(&l)) {
         result = l.func;
-        result->stage = XI_STAGE_RAW;
-        result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
         xi_lower_assert_var_ids(&l, result);
     }
     xi_lower_cleanup(&l);

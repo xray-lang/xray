@@ -108,6 +108,8 @@ static const XrCliOptionSpec build_options[] = {
     {"dump-xaot-plan", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Dump AOT prepare plan"},
     {"dump-global-evidence", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Dump global evidence facts"},
+    {"dump-xi-evidence", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Dump subject-bound local Xi evidence"},
     {"dump-link-manifest", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Dump AOT link manifest"},
     {"dump-link-command", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Dump resolved AOT link command"},

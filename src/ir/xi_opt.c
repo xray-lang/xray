@@ -38,10 +38,14 @@
 #include "xi_opt_comptime.h"
 #include "xi_range.h"
 #include "xi_value_query.h"
+#include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../os/os_thread.h"
 #include "../shared/xr_int_arith.h"
 #include "../shared/xr_bits_core.h"
 #include "xi_analysis.h"
+#include "xi_analysis_manager.h"
+#include "xi_edit.h"
+#include "xi_evidence.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
 #include "xi_opt_devirt.h"
@@ -233,6 +237,7 @@ static bool rewrite_to_const_literal(XiValue *v, const XiConstLiteral *lit) {
     v->aux_kind = XI_AUX_KIND_NONE;
     v->flags = xi_op_default_effects(XI_CONST);
     v->mem_group = XI_MEM_NONE;
+    v->xa_intrinsic_id = XA_INTRINSIC_NONE;
     switch (lit->kind) {
         case XI_CONST_LITERAL_NULL:
             return true;
@@ -503,6 +508,7 @@ static void rewrite_to_const_int(XiValue *v, int64_t value) {
     v->nargs = 0;
     v->flags = xi_op_default_effects(XI_CONST);
     v->mem_group = XI_MEM_NONE;
+    v->xa_intrinsic_id = XA_INTRINSIC_NONE;
 }
 
 static bool ordering_member_index_opt(const char *name, int64_t *out_index) {
@@ -556,6 +562,7 @@ static void rewrite_to_const_float(XiValue *v, double value) {
     v->nargs = 0;
     v->flags = xi_op_default_effects(XI_CONST);
     v->mem_group = XI_MEM_NONE;
+    v->xa_intrinsic_id = XA_INTRINSIC_NONE;
 }
 
 static void rewrite_to_copy(XiValue *v, XiValue *src) {
@@ -569,6 +576,7 @@ static void rewrite_to_copy(XiValue *v, XiValue *src) {
     v->aux = NULL;
     v->aux_kind = XI_AUX_KIND_NONE;
     v->mem_group = XI_MEM_NONE;
+    v->xa_intrinsic_id = XA_INTRINSIC_NONE;
 }
 
 static bool fold_exact_integer_unary(XiValue *v, int64_t operand) {
@@ -588,6 +596,25 @@ static bool fold_exact_integer_unary(XiValue *v, int64_t operand) {
             break;
         default:
             return false;
+    }
+    rewrite_to_const_int(v, result);
+    return true;
+}
+
+static bool fold_exact_integer_binary(XiValue *v, int64_t lhs, int64_t rhs) {
+    int64_t result;
+    if (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR) {
+        result = v->op == XI_BIT_ROTL ? xr_bits_exact_rotate_left(lhs, rhs, (uint8_t) v->aux_int)
+                                      : xr_bits_exact_rotate_right(lhs, rhs, (uint8_t) v->aux_int);
+    } else if (v->op == XI_BIT_MUL_HIGH) {
+        unsigned bits = v->aux_int == XR_NATIVE_U8      ? 8u
+                        : v->aux_int == XR_NATIVE_U16   ? 16u
+                        : v->aux_int == XR_NATIVE_U32   ? 32u
+                        : v->aux_int == XR_NATIVE_USIZE ? (unsigned) (sizeof(uintptr_t) * 8u)
+                                                        : 64u;
+        result = (int64_t) xr_uint_mul_high_bits((uint64_t) lhs, (uint64_t) rhs, bits);
+    } else {
+        return false;
     }
     rewrite_to_const_int(v, result);
     return true;
@@ -692,13 +719,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             int64_t lhs_i = 0, rhs_i = 0;
             if (const_int_value(lhs, &lhs_i) && const_int_value(rhs, &rhs_i)) {
                 int64_t result;
-                if (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR || v->op == XI_BIT_MUL_HIGH) {
-                    result = v->op == XI_BIT_ROTL
-                                 ? xr_bits_exact_rotate_left(lhs_i, rhs_i, (uint8_t) v->aux_int)
-                             : v->op == XI_BIT_ROTR
-                                 ? xr_bits_exact_rotate_right(lhs_i, rhs_i, (uint8_t) v->aux_int)
-                                 : xr_bits_exact_mul_high(lhs_i, rhs_i, (uint8_t) v->aux_int);
-                    rewrite_to_const_int(v, result);
+                if (fold_exact_integer_binary(v, lhs_i, rhs_i)) {
                     chg.values_changed = true;
                     continue;
                 }
@@ -1154,6 +1175,10 @@ static bool xi_await_all_task_array_allowed_structural_use(XiFunc *f, const XiVa
     return false;
 }
 
+static bool xi_task_array_use_is_ownership_bookkeeping(const XiValue *user, uint16_t arg_idx) {
+    return user && arg_idx == 0 && (user->op == XI_RETAIN || user->op == XI_RELEASE);
+}
+
 static bool xi_task_array_use_is_clear(XiFunc *f, const XiValue *user, uint16_t arg_idx,
                                        XiValue *arr) {
     if (!user || !arr || arg_idx != 0)
@@ -1191,6 +1216,8 @@ static bool xi_await_all_fresh_task_array_can_be_one_shot(XiFunc *f, XiValue *aw
                     continue;
                 }
                 if (xi_task_array_use_is_shared_init(f, v, a, arr))
+                    continue;
+                if (xi_task_array_use_is_ownership_bookkeeping(v, a))
                     continue;
                 if (a == 0 && xi_await_all_task_array_pushes_go(f, v, arr)) {
                     saw_set = true;
@@ -1417,6 +1444,11 @@ static bool xi_task_array_allowed_sequential_await_use(XiFunc *f, XiValue *user,
                                                        XiValue *arr, bool *saw_await) {
     if (!user || !arr || arg_idx != 0)
         return false;
+    /* Ownership is explicit before optimization in the staged pipeline. ARC
+     * bookkeeping does not make the task array semantically observable and
+     * therefore must not defeat the consuming-loop proof. */
+    if (xi_task_array_use_is_ownership_bookkeeping(user, arg_idx))
+        return true;
     if (xi_await_all_task_array_allowed_structural_use(f, user, arg_idx, arr))
         return true;
     if (user->op == XI_LEN && xi_task_array_values_same(f, user->args[0], arr))
@@ -2028,6 +2060,8 @@ static bool sr_builtin_receiver_registry_matches(const XrType *receiver_type,
         case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
             return receiver_type && receiver_type->kind == XR_KIND_INT &&
                    !receiver_type->is_nullable;
+        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
+            return xr_type_is_exact_unsigned_integer(receiver_type);
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
             return xr_type_is_u8_array(receiver_type);
         case XA_BUILTIN_RECEIVER_ARRAY:
@@ -2445,27 +2479,8 @@ static XrRep sr_arith_native_result_rep(const XiValue *v, const XiRepPolicy *pol
     return sr_arith_native_result_rep_depth(v, policy, 0);
 }
 
-static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
-    if (!v || !v->type)
-        return XR_REP_TAGGED;
-    XrRep memory_rep = XR_REP_TAGGED;
-    if (sr_def_rep_memory_op(v, &memory_rep))
-        return memory_rep;
-    switch (v->op) {
-        case XI_PARAM: {
-            if (sr_param_is_call_bound_place(v))
-                return XR_REP_RAWPTR;
-            if (sr_param_uses_default_sentinel(v))
-                return XR_REP_TAGGED;
-            /* Typed boundary params get concrete rep.  The AOT backend can
-             * use this directly instead of re-inferring from type->kind. */
-            return sr_type_native_boundary_rep(v->type);
-        }
-        case XI_CONST: {
-            if (v->type->kind == XR_KIND_NULL || v->type->kind == XR_KIND_STRING)
-                return XR_REP_TAGGED;
-            return sr_type_scalar_rep(v->type);
-        }
+static bool sr_op_has_arith_native_result(uint16_t op) {
+    switch (op) {
         case XI_ADD:
         case XI_SUB:
         case XI_MUL:
@@ -2480,12 +2495,39 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_SHR:
         case XI_BIT_ROTL:
         case XI_BIT_ROTR:
-        case XI_BIT_MUL_HIGH:
         case XI_BIT_BSWAP:
         case XI_BIT_POPCOUNT:
         case XI_BIT_CLZ:
-        case XI_BIT_CTZ: {
-            return sr_arith_native_result_rep(v, policy);
+        case XI_BIT_MUL_HIGH:
+        case XI_BIT_CTZ:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
+    if (!v || !v->type)
+        return XR_REP_TAGGED;
+    XrRep memory_rep = XR_REP_TAGGED;
+    if (sr_def_rep_memory_op(v, &memory_rep))
+        return memory_rep;
+    if (sr_op_has_arith_native_result(v->op))
+        return sr_arith_native_result_rep(v, policy);
+    switch (v->op) {
+        case XI_PARAM: {
+            if (sr_param_is_call_bound_place(v))
+                return XR_REP_RAWPTR;
+            if (sr_param_uses_default_sentinel(v))
+                return XR_REP_TAGGED;
+            /* Typed boundary params get concrete rep.  The AOT backend can
+             * use this directly instead of re-inferring from type->kind. */
+            return sr_type_native_boundary_rep(v->type);
+        }
+        case XI_CONST: {
+            if (v->type->kind == XR_KIND_NULL || v->type->kind == XR_KIND_STRING)
+                return XR_REP_TAGGED;
+            return sr_type_scalar_rep(v->type);
         }
         case XI_EQ:
         case XI_NE:
@@ -2513,6 +2555,13 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
             return XR_REP_TAGGED;
         case XI_CALL:
         case XI_CALL_METHOD_DIRECT:
+            return sr_type_native_boundary_rep(v->type);
+        case XI_ATOMIC_LOAD:
+        case XI_ATOMIC_RMW:
+            /* Canonical Atomic operations are no longer CALL_METHOD nodes, but
+             * they retain the same concrete result contract.  Selecting a
+             * tagged default here would re-box fetch/load results after the
+             * semantic-intrinsic rewrite and defeat the direct C11 lowering. */
             return sr_type_native_boundary_rep(v->type);
         case XI_CALL_BUILTIN: {
             const char *name = (const char *) v->aux;
@@ -2801,10 +2850,10 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_SHR:
         case XI_BIT_ROTL:
         case XI_BIT_ROTR:
-        case XI_BIT_MUL_HIGH:
         case XI_BIT_BSWAP:
         case XI_BIT_POPCOUNT:
         case XI_BIT_CLZ:
+        case XI_BIT_MUL_HIGH:
         case XI_BIT_CTZ: {
             if ((user->op == XI_ADD || user->op == XI_SUB) && user->type &&
                 user->type->kind == XR_KIND_POINTER && arg_idx < user->nargs &&
@@ -3031,8 +3080,6 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
             if (f->children[i])
                 xi_opt_select_rep_with_policy(f->children[i], &local_policy);
         }
-        f->stage = XI_STAGE_REPPED;
-        f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
         return xi_pass_change_all();
     }
 
@@ -3132,8 +3179,6 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
             phi->value.rep = (uint8_t) sr_def_rep(&phi->value, &local_policy);
     }
 
-    f->stage = XI_STAGE_REPPED;
-    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
     return xi_pass_change_all();
 }
 
@@ -3193,62 +3238,84 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
 
 /* ========== Pipeline Driver ========== */
 
+/* Every pass declares an evidence policy. XiEditSession derives the precise
+ * invalidation set from audited CFG/value/type/memory/call fingerprints;
+ * analysis passes preserve IR revisions and publish fresh proof. */
+#define XI_REWRITE_PASS(pass_name, pass_fn, level, pass_flags, required_evidence)                  \
+    {                                                                                              \
+        .name = pass_name,                                                                         \
+        .fn = pass_fn,                                                                             \
+        .min_level = level,                                                                        \
+        .flags = pass_flags,                                                                       \
+        .min_stage = XI_STAGE_RAW,                                                                 \
+        .max_stage = XI_STAGE_LOWERED,                                                             \
+        .requires_inv_mask = 0,                                                                    \
+        .produces_inv_mask = 0,                                                                    \
+        .requires_evidence = required_evidence,                                                    \
+        .produces_evidence = 0,                                                                    \
+        .invalidates_evidence = 0,                                                                 \
+        .preserves_evidence = 0,                                                                   \
+    }
+
+#define XI_ANALYSIS_PASS(pass_name, pass_fn, level, pass_flags, produced_evidence)                 \
+    {                                                                                              \
+        .name = pass_name,                                                                         \
+        .fn = pass_fn,                                                                             \
+        .min_level = level,                                                                        \
+        .flags = pass_flags,                                                                       \
+        .min_stage = XI_STAGE_RAW,                                                                 \
+        .max_stage = XI_STAGE_LOWERED,                                                             \
+        .requires_inv_mask = 0,                                                                    \
+        .produces_inv_mask = 0,                                                                    \
+        .requires_evidence = 0,                                                                    \
+        .produces_evidence = produced_evidence,                                                    \
+        .invalidates_evidence = 0,                                                                 \
+        .preserves_evidence = XI_EVD_ALL,                                                          \
+    }
+
 /* Pass table: ordered by recommended execution sequence.
  * The driver runs all passes whose min_level <= requested level. */
 static const XiPassDesc xi_pass_table[] = {
-    /* name              fn                       min_level      flags               in_stage
-       out_stage       requires              produces */
-    {"tbaa", xi_tbaa_annotate, XI_OPT_LIGHT, XI_PASS_REQUIRED, XI_STAGE_RAW, XI_STAGE_RAW, 0,
-     XI_INV_TBAA_ANNOTATED},
-    {"constfold", xi_opt_const_fold, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"strength_reduce", xi_opt_strength_reduce, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW,
-     XI_STAGE_RAW, 0, 0},
-    {"copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"mark_one_shot_await", xi_opt_mark_one_shot_await, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW,
-     XI_STAGE_RAW, 0, 0},
-    {"phi_simplify", xi_opt_phi_simplify, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
-     0},
-    {"dce", xi_opt_dce, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"sccp", xi_opt_sccp, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"range", xi_range_analyze, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
-     XI_INV_RANGE_ANNOTATED},
-    {"bce", xi_opt_bce, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
-     XI_INV_RANGE_ANNOTATED, 0},
-    {"gvn", xi_opt_gvn_pre, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
-     XI_INV_TBAA_ANNOTATED, 0},
-    {"loop_rotate", xi_opt_loop_rotate, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
-     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
-     XI_INV_TBAA_ANNOTATED, 0},
-    {"ivsr", xi_opt_ivsr, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"loop_peel", xi_opt_loop_peel, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
-     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"loop_unroll", xi_opt_loop_unroll, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
-     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"loop_split", xi_opt_loop_split, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
-     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"loop_inv_branch", xi_opt_loop_inv_branch, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
-     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"devirt", xi_opt_devirt, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
-     0, 0},
-    {"block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
-     0, 0},
-    {"block_layout", xi_opt_block_layout, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW,
-     XI_STAGE_RAW, 0, 0},
-    {"slp", xi_opt_slp, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"loop_vec", xi_opt_loop_vec, XI_OPT_FULL, XI_PASS_NEEDS_LOOP, XI_STAGE_RAW, XI_STAGE_RAW, 0,
-     0},
-    {"reduction", xi_opt_reduction, XI_OPT_FULL, XI_PASS_NEEDS_LOOP, XI_STAGE_RAW, XI_STAGE_RAW, 0,
-     0},
-    {"call_specialize", xi_opt_call_specialize, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW,
-     XI_STAGE_RAW, 0, 0},
-    {"const_fixpoint", xi_opt_const_fixpoint, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
-     0, 0},
+    XI_ANALYSIS_PASS("tbaa", xi_tbaa_annotate, XI_OPT_LIGHT, XI_PASS_REQUIRED, XI_EVD_ALIAS),
+    XI_REWRITE_PASS("constfold", xi_opt_const_fold, XI_OPT_LIGHT, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("strength_reduce", xi_opt_strength_reduce, XI_OPT_LIGHT, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("mark_one_shot_await", xi_opt_mark_one_shot_await, XI_OPT_LIGHT, XI_PASS_NONE,
+                    0),
+    XI_REWRITE_PASS("phi_simplify", xi_opt_phi_simplify, XI_OPT_LIGHT, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("dce", xi_opt_dce, XI_OPT_LIGHT, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("sccp", xi_opt_sccp, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_ANALYSIS_PASS("range", xi_range_analyze, XI_OPT_FULL, XI_PASS_NONE, XI_EVD_RANGE),
+    XI_REWRITE_PASS("bce", xi_opt_bce, XI_OPT_FULL, XI_PASS_NONE, XI_EVD_RANGE),
+    XI_REWRITE_PASS("gvn", xi_opt_gvn_pre, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_EVD_ALIAS),
+    XI_REWRITE_PASS("loop_rotate", xi_opt_loop_rotate, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_EVD_ALIAS),
+    XI_REWRITE_PASS("ivsr", xi_opt_ivsr, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
+    XI_REWRITE_PASS("loop_peel", xi_opt_loop_peel, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("loop_unroll", xi_opt_loop_unroll, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("loop_split", xi_opt_loop_split, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("loop_inv_branch", xi_opt_loop_inv_branch, XI_OPT_FULL,
+                    XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("devirt", xi_opt_devirt, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
+    XI_REWRITE_PASS("jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
+    XI_REWRITE_PASS("block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("block_layout", xi_opt_block_layout, XI_OPT_FULL, XI_PASS_NEEDS_DOM, 0),
+    XI_REWRITE_PASS("slp", xi_opt_slp, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("loop_vec", xi_opt_loop_vec, XI_OPT_FULL, XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("reduction", xi_opt_reduction, XI_OPT_FULL, XI_PASS_NEEDS_LOOP, 0),
+    XI_REWRITE_PASS("call_specialize", xi_opt_call_specialize, XI_OPT_FULL, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("const_fixpoint", xi_opt_const_fixpoint, XI_OPT_FULL, XI_PASS_NONE, 0),
 };
+
+#undef XI_ANALYSIS_PASS
+#undef XI_REWRITE_PASS
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
 
@@ -3259,30 +3326,7 @@ static void validate_pass_table_once(void) {
         (void) d;
         XR_DCHECK(d->name != NULL, "pass table entry has NULL name");
         XR_DCHECK(d->fn != NULL, "pass table entry has NULL fn");
-        /* output_stage must be >= input_stage (stages never go backwards) */
-        XR_DCHECK(d->output_stage >= d->input_stage, "pass has output_stage < input_stage");
-    }
-
-    /* Verify stage monotonicity across the table: no pass should require
-     * a higher input_stage than any earlier pass's output_stage can reach. */
-    XiStage max_output = XI_STAGE_RAW;
-    for (size_t i = 0; i < XI_PASS_TABLE_SIZE; i++) {
-        const XiPassDesc *d = &xi_pass_table[i];
-        if (d->input_stage > max_output) {
-            /* This pass requires a stage that no earlier pass produces.
-             * This is allowed only if an external stage-transition pass
-             * (not in this table) runs between them.  Log a diagnostic
-             * in debug builds but don't abort — the pipeline driver
-             * will soft-skip it via the stage check. */
-#ifndef NDEBUG
-            fprintf(stderr,
-                    "[xi_pass] warning: pass '%s' requires stage %s "
-                    "but max reachable from earlier passes is %s\n",
-                    d->name, xi_stage_name(d->input_stage), xi_stage_name(max_output));
-#endif
-        }
-        if (d->output_stage > max_output)
-            max_output = d->output_stage;
+        XR_DCHECK(d->max_stage >= d->min_stage, "pass has an invalid stage window");
     }
 
     /* Check declarative pass ordering constraints */
@@ -3686,6 +3730,9 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
 
     validate_pass_table();
 
+    XiAnalysisManager analysis_manager;
+    xi_analysis_manager_init(&analysis_manager, f);
+
     if (level == XI_OPT_NONE) {
         result.change = xi_pass_no_change();
         return result;
@@ -3743,11 +3790,16 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                     goto done;
             }
 
-            /* Stage contract: skip pass if function has not reached
-             * the required stage.  This is a soft check — the pass
-             * simply does not fire rather than aborting. */
-            if (desc->input_stage > f->stage)
-                continue;
+            if (f->stage < desc->min_stage || f->stage > desc->max_stage) {
+                result.ok = false;
+                result.pass_name = desc->name;
+                result.round = round;
+                snprintf(result.detail, sizeof(result.detail),
+                         "pass '%s' is illegal at stage %s (legal window %s..%s)", desc->name,
+                         xi_stage_name(f->stage), xi_stage_name(desc->min_stage),
+                         xi_stage_name(desc->max_stage));
+                goto done;
+            }
 
             XiInvariantMask missing_inv = desc->requires_inv_mask & ~f->invariant_mask;
             if (missing_inv) {
@@ -3787,14 +3839,49 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                 }
             }
 
+            /* Debug shuffling changes CFG revision and value order. Acquire
+             * proofs only after that instrumentation so a pass can never see
+             * evidence stamped for the pre-shuffle graph. */
+            if (desc->requires_evidence) {
+                char evidence_error[256];
+                if (!xi_analysis_require_proven_domains(&analysis_manager, desc->requires_evidence,
+                                                        evidence_error, sizeof(evidence_error))) {
+                    result.ok = false;
+                    result.pass_name = desc->name;
+                    result.round = round;
+                    snprintf(result.detail, sizeof(result.detail),
+                             "pass '%s' requires current evidence: %.180s", desc->name,
+                             evidence_error);
+                    goto done;
+                }
+            }
+
             uint64_t t0 = xr_time_monotonic_ns();
+            XiEditSession edit_session;
+            if (!xi_edit_begin(&edit_session, f)) {
+                result.ok = false;
+                result.pass_name = desc->name;
+                result.round = round;
+                snprintf(result.detail, sizeof(result.detail),
+                         "pass '%s' could not open an Xi edit session", desc->name);
+                goto done;
+            }
             XiPassChange pc = desc->fn(f);
 
-            /* Advance stage if the pass declares a higher output stage */
-            if (desc->output_stage > f->stage) {
-                f->stage = desc->output_stage;
-                f->invariant_mask |= xi_stage_invariants(f->stage);
+            XiPassOutcome pass_outcome;
+            char edit_error[256] = {0};
+            if (!xi_edit_finish(&edit_session, pc, desc->invalidates_evidence,
+                                desc->preserves_evidence, &pass_outcome, edit_error,
+                                sizeof(edit_error))) {
+                result.ok = false;
+                result.pass_name = desc->name;
+                result.round = round;
+                snprintf(result.detail, sizeof(result.detail),
+                         "pass '%s' mutation audit failed: %.180s", desc->name, edit_error);
+                goto done;
             }
+            (void) pass_outcome;
+
             uint64_t dt = xr_time_monotonic_ns() - t0;
 
             XiInvariantMask missing_produced = desc->produces_inv_mask & ~f->invariant_mask;
@@ -3843,10 +3930,18 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
 
             round_chg = xi_pass_merge(round_chg, pc);
 
-            /* If the pass changed the CFG, invalidate cached RPO /
-             * dominators so the next xi_ensure_*() recomputes. */
-            if (pc.cfg_changed)
-                xi_cfg_invalidate(f);
+            for (uint32_t bit = 1; bit <= XI_EVD_MEMSSA; bit <<= 1u) {
+                if ((desc->produces_evidence & bit) != 0 &&
+                    !xi_evidence_domain_is_current(f, (XiEvidenceDomain) bit)) {
+                    result.ok = false;
+                    result.pass_name = desc->name;
+                    result.round = round;
+                    snprintf(result.detail, sizeof(result.detail),
+                             "pass '%s' did not publish current '%s' evidence", desc->name,
+                             xi_evidence_domain_name((XiEvidenceDomain) bit));
+                    goto done;
+                }
+            }
 
             /* XRAY_XI_CHECK=1: verify after every single pass.
              * Uses stage-aware verification so stage-specific invariants

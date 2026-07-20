@@ -273,6 +273,9 @@ TEST(pipeline_stats_include_child_ivsr) {
 
     XiPipelineStats stats;
     XiOptResult opt = xi_opt_run_pipeline_ex(parent, XI_OPT_FULL, &stats, 0);
+    if (!opt.ok)
+        printf("  pipeline failed in %s: %s\n", opt.pass_name ? opt.pass_name : "<unknown>",
+               opt.detail);
     ASSERT(opt.ok);
     XiPassChange chg = opt.change;
 

@@ -2679,6 +2679,7 @@ XrType *resolve_class_to_type_param(XrVMRuntime *X, XrType *type, const char **t
         if (changed) {
             XrType *r = xr_type_new_generic_instance(X, type->instance.class_name,
                                                      type->instance.class_ref, na, ac);
+            r->semantic_type_id = type->semantic_type_id;
             return r;
         }
         xr_free(na);
