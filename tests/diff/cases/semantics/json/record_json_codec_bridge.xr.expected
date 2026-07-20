@@ -1,0 +1,10 @@
+Ada
+37
+Hangzhou
+310000
+false
+Ada
+37
+Hangzhou
+310000
+{"name":"Ada","age":37,"address":{"city":"Hangzhou","zip":310000}}
