@@ -120,27 +120,18 @@ bool xi_value_clone_call_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
 }
 
 XR_FUNC bool xi_func_set_param_passing_mode(XiFunc *f, uint16_t index, XrParamMode mode) {
-    if (!f || index >= f->nparams)
+    if (!f || index >= f->nparams || !f->params || !f->params[index])
         return false;
     if (!xr_param_mode_is_valid(mode))
         return false;
-    if (mode == XR_PARAM_VALUE && !f->param_passing_modes)
-        return true;
-    if (!f->param_passing_modes) {
-        f->param_passing_modes =
-            (XrParamMode *) xi_func_arena_alloc(f, (uint32_t) f->nparams * sizeof(XrParamMode));
-        if (!f->param_passing_modes)
-            return false;
-        memset(f->param_passing_modes, XR_PARAM_VALUE, (size_t) f->nparams * sizeof(XrParamMode));
-    }
-    f->param_passing_modes[index] = mode;
+    f->params[index]->param_mode = (uint8_t) mode;
     return true;
 }
 
 XR_FUNC XrParamMode xi_func_param_passing_mode(const XiFunc *f, uint16_t index) {
-    if (!f || index >= f->nparams || !f->param_passing_modes)
+    if (!f || index >= f->nparams || !f->params || !f->params[index])
         return XR_PARAM_VALUE;
-    return f->param_passing_modes[index];
+    return (XrParamMode) f->params[index]->param_mode;
 }
 
 XR_FUNC bool xi_block_ensure_value_capacity(XiBlock *blk, uint32_t min_cap) {
@@ -375,6 +366,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->escape = 0;
     v->mem_group = 0;
     v->lowering_flags = 0;
+    v->param_mode = XR_PARAM_VALUE;
     v->type = type;
     v->aux_int = 0;
     v->aux = NULL;
