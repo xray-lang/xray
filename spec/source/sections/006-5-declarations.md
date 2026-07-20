@@ -358,6 +358,41 @@ print(add(19, 23))        // xray 内部仍是普通函数调用
 - `@c_export` 定义函数 ABI wrapper；`xray build --native --c-header FILE` 可为这些 wrapper 生成 C 原型头文件，`xray build --native --shared --c-header FILE` 可生成 native shared library 和匹配头文件。
 - `--shared` 当前只支持无需 Xray runtime 初始化的 scalar / raw pointer 导出；runtime-backed 特性、managed ownership、aggregate by-value 和初始化/关闭策略仍由后续 FFI 任务定义。
 
+#### 完整可运行示例
+
+闭包捕获与高阶函数：
+
+```xray
+fn apply(f: (int) -> int, x: int) -> int {
+    return f(x)
+}
+
+fn main() {
+    var base = 10
+    var addBase = fn(x: int) -> int { return x + base }   // 闭包捕获 base
+    print(addBase(5))            // => 15
+    print(apply(addBase, 7))     // => 17（函数作为参数传入）
+}
+
+main()
+```
+
+多返回值（元组）：
+
+```xray
+fn divmod(a: int, b: int) -> (int, int) {
+    return (a / b, a % b)
+}
+
+fn main() {
+    var (q, r) = divmod(17, 5)
+    print(q)   // => 3
+    print(r)   // => 2
+}
+
+main()
+```
+
 ### 5.3 `class` 声明
 
 ```ebnf
@@ -723,6 +758,29 @@ class Buffer implements SizedCollection<int> {
     }
     first() -> int { return this.data[0] }
 }
+```
+
+#### 完整可运行示例
+
+接口 + `implements` + 多态：
+
+```xray
+interface Shape {
+    area() -> float
+}
+
+class Circle implements Shape {
+    r: float
+    constructor(r: float) { this.r = r }
+    area() -> float { return 3.14159 * this.r * this.r }
+}
+
+fn main() {
+    var s: Shape = Circle(2.0)
+    print(s.area())   // => 12.56636
+}
+
+main()
 ```
 
 ### 5.6 `enum` 声明
@@ -1339,6 +1397,41 @@ Rules:
 - `@c_export` defines the function ABI wrapper; `xray build --native --c-header FILE` can emit a C prototype header for those wrappers, and `xray build --native --shared --c-header FILE` can emit a native shared library with a matching header.
 - `--shared` currently supports only scalar / raw pointer exports that do not require Xray runtime initialization; runtime-backed features, managed ownership, aggregate by-value, and initialization/shutdown policy remain future FFI work.
 
+#### Worked Examples
+
+Closure capture and higher-order functions:
+
+```xray
+fn apply(f: (int) -> int, x: int) -> int {
+    return f(x)
+}
+
+fn main() {
+    var base = 10
+    var addBase = fn(x: int) -> int { return x + base }   // closure captures base
+    print(addBase(5))            // => 15
+    print(apply(addBase, 7))     // => 17 (function passed as an argument)
+}
+
+main()
+```
+
+Multiple return values (a tuple):
+
+```xray
+fn divmod(a: int, b: int) -> (int, int) {
+    return (a / b, a % b)
+}
+
+fn main() {
+    var (q, r) = divmod(17, 5)
+    print(q)   // => 3
+    print(r)   // => 2
+}
+
+main()
+```
+
 ### 5.3 `class` declaration
 
 ```ebnf
@@ -1704,6 +1797,29 @@ class Buffer implements SizedCollection<int> {
     }
     first() -> int { return this.data[0] }
 }
+```
+
+#### Worked Examples
+
+Interface + `implements` + polymorphism:
+
+```xray
+interface Shape {
+    area() -> float
+}
+
+class Circle implements Shape {
+    r: float
+    constructor(r: float) { this.r = r }
+    area() -> float { return 3.14159 * this.r * this.r }
+}
+
+fn main() {
+    var s: Shape = Circle(2.0)
+    print(s.area())   // => 12.56636
+}
+
+main()
 ```
 
 ### 5.6 `enum` declaration

@@ -464,6 +464,21 @@ var p2 = pair(1, "x")             // (int, string)
 - 字段访问 `t.N` 中 N **必须是字面量整数**；用变量或字符串访问是编译错误 `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` / `_RANGE`。
 - 元组**不可变**：`t.0 = v` 是编译错误。修改必须重新构造。
 
+#### 完整可运行示例
+
+```xray
+fn main() {
+    var pair = (1, "hello")
+    print(pair.0)   // => 1
+    print(pair.1)   // => hello
+    var (a, b) = pair    // 解构
+    print(a)        // => 1
+    print(b)        // => hello
+}
+
+main()
+```
+
 ### 2.8 类型别名
 
 ```xray @id=types-alias
@@ -1081,6 +1096,21 @@ var p2 = pair(1, "x")             // (int, string)
 - A **single-element tuple** must use a trailing comma `(x,)` — `(x)` without a comma is a grouping parenthesis (a plain expression).
 - In field access `t.N`, N **must be an integer literal**; using a variable or string is the compile error `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` / `_RANGE`.
 - Tuples are **immutable**: `t.0 = v` is a compile error. To modify, build a new tuple.
+
+#### Worked Examples
+
+```xray
+fn main() {
+    var pair = (1, "hello")
+    print(pair.0)   // => 1
+    print(pair.1)   // => hello
+    var (a, b) = pair    // destructuring
+    print(a)        // => 1
+    print(b)        // => hello
+}
+
+main()
+```
 
 ### 2.8 Type Aliases
 
