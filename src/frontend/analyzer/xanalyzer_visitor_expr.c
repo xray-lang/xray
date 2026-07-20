@@ -1856,7 +1856,15 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return obj_type;
 
     // Reject `.member` on a possibly-null receiver (strict null checks).
-    xa_check_nullable_access(ctx, node, obj_type, "member access");
+    // Exception: `E.Variant` where E is the enum type name is a namespace /
+    // constructor access, not a nullable value access. The enum type can look
+    // nullable when the module elsewhere mentions E? (e.g. var x: E? = null),
+    // but the namespace reference itself is never a nullable value.
+    bool obj_is_enum_namespace =
+        obj_type && obj_type->kind == XR_KIND_ENUM && obj_type->enum_type.enum_name &&
+        member_object_is_enum_namespace(ctx, ma->object, obj_type->enum_type.enum_name);
+    if (!obj_is_enum_namespace)
+        xa_check_nullable_access(ctx, node, obj_type, "member access");
 
     if (xa_freestanding_reject_string_member(ctx, node, obj_type, ma->name))
         return xr_type_new_error(ctx->analyzer->isolate);
