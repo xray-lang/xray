@@ -56,4 +56,9 @@ XR_FUNC void xlsp_workspace_purge_prefix(XrLspServer *server, const char *path_p
 // adaptive threshold. Safe to call every main-loop tick.
 XR_FUNC void xlsp_workspace_maybe_rebuild_analyzer(XrLspServer *server);
 
+// Evict analyzer files that are neither open nor directly imported by any open
+// document, slowing type-pool growth. Self-healing (needed files are re-pulled
+// on the next parse); safe to call whenever the open-document set changes.
+XR_FUNC void xlsp_workspace_evict_unreferenced_files(XrLspServer *server);
+
 #endif  // XLSP_WORKSPACE_H

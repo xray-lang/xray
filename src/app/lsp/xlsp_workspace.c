@@ -23,6 +23,7 @@
 #include <string.h>
 #include <limits.h>
 #include "../../base/xfileio.h"
+#include "../../base/xhashmap.h"
 #include "../../base/xmalloc.h"
 #include "../../os/os_time.h"
 #include "xlsp_analysis.h"
@@ -538,4 +539,114 @@ void xlsp_workspace_maybe_rebuild_analyzer(XrLspServer *server) {
     // index + drain complete.
     server->analyzer_pool_baseline_bytes = 0;
     lsp_log("[Workspace] Analyzer rebuilt; baseline will re-establish once idle");
+}
+
+// ============================================================================
+// Analyzer working-set eviction
+// ============================================================================
+//
+// Post-Approach-A the workspace analyzer only holds open files + the files they
+// directly import on demand. When a document is closed (or an edit drops an
+// import), the previously-pulled files linger. Evicting them frees their
+// symbols and — more importantly — stops them being re-analyzed, which slows
+// type-pool growth so the rebuild valve fires even less often.
+//
+// This is intentionally cheap and self-healing: the live set is "open docs +
+// their current local imports" (exactly how xlsp_parse_document/
+// index_imports_on_demand populates the analyzer). If we ever evict a file that
+// is still needed, the next parse of its importer re-pulls it — over-eviction
+// costs a re-parse, never correctness. Synthetic (non file://) entries such as
+// prelude/stdlib are never touched.
+void xlsp_workspace_evict_unreferenced_files(XrLspServer *server) {
+    if (!server || !server->workspace_analyzer)
+        return;
+    // Don't race the background indexer's on-demand analysis.
+    if (server->indexing_in_progress)
+        return;
+
+    XaAnalyzer *analyzer = server->workspace_analyzer;
+    if (!analyzer->files)
+        return;
+
+    XrHashMap *live = xr_hashmap_new();
+    if (!live)
+        return;
+
+    // Owned import-URI strings kept alive until eviction finishes (the hash map
+    // borrows keys). Open-doc URIs are owned by their documents and stable here.
+    char **owned = NULL;
+    int owned_count = 0, owned_cap = 0;
+
+    XrLspDocTable *table = server->doc_table;
+    if (table) {
+        for (int i = 0; i < table->bucket_count; i++) {
+            for (XrLspDocBucket *b = table->buckets[i]; b; b = b->next) {
+                XrLspDocument *doc = b->doc;
+                if (!doc || !doc->uri)
+                    continue;
+                xr_hashmap_set(live, doc->uri, (void *) (uintptr_t) 1);
+                if (!doc->content)
+                    continue;
+                XlspImportInfo *imports = xlsp_parse_imports(doc->content, doc->uri);
+                for (XlspImportInfo *imp = imports; imp; imp = imp->next) {
+                    if (imp->type != XLSP_IMPORT_LOCAL || !imp->resolved_path)
+                        continue;
+                    char uri[XLSP_MAX_PATH + 8];
+                    snprintf(uri, sizeof(uri), "file://%s", imp->resolved_path);
+                    char *key = xr_strdup(uri);
+                    if (!key)
+                        continue;
+                    if (owned_count >= owned_cap) {
+                        int nc = owned_cap ? owned_cap * 2 : 16;
+                        char **tmp = xr_realloc(owned, (size_t) nc * sizeof(char *));
+                        if (!tmp) {
+                            xr_free(key);
+                            continue;
+                        }
+                        owned = tmp;
+                        owned_cap = nc;
+                    }
+                    owned[owned_count++] = key;
+                    xr_hashmap_set(live, key, (void *) (uintptr_t) 1);
+                }
+                xlsp_free_imports(imports);
+            }
+        }
+    }
+
+    // Collect analyzer file keys not in the live set (copy the keys: removal
+    // frees the entry that owns them).
+    char **doomed = NULL;
+    int doomed_count = 0;
+    int file_count = analyzer->file_count > 0 ? analyzer->file_count : 0;
+    if (file_count > 0)
+        doomed = xr_malloc((size_t) file_count * sizeof(char *));
+    if (doomed) {
+        for (XaFileEntry *e = analyzer->files; e; e = e->next) {
+            if (!e->path)
+                continue;
+            // Only touch real workspace files; never prelude/stdlib/synthetic.
+            if (strncmp(e->path, "file://", 7) != 0)
+                continue;
+            if (xr_hashmap_has(live, e->path))
+                continue;
+            if (doomed_count < file_count)
+                doomed[doomed_count++] = xr_strdup(e->path);
+        }
+        for (int i = 0; i < doomed_count; i++) {
+            if (!doomed[i])
+                continue;
+            xa_analyzer_remove_file(analyzer, doomed[i]);
+            xr_free(doomed[i]);
+        }
+        xr_free(doomed);
+    }
+
+    if (doomed_count > 0)
+        lsp_log("[Workspace] Evicted %d unreferenced analyzer file(s)", doomed_count);
+
+    for (int i = 0; i < owned_count; i++)
+        xr_free(owned[i]);
+    xr_free(owned);
+    xr_hashmap_free(live);
 }

@@ -14,6 +14,7 @@
 #include "xlsp_server.h"
 #include "../../base/xjson.h"
 #include "xlsp_analysis.h"
+#include "xlsp_workspace.h"
 #include "xlsp_rename.h"
 #include "xlsp_semantic_tokens.h"
 #include "xlsp_inlay_hints.h"
@@ -131,6 +132,9 @@ void xlsp_handle_td_did_close(XrLspServer *server, XrJsonValue *params) {
     const char *uri = xjson_get_string(textDocument, "uri");
     if (uri) {
         xlsp_document_close(server, uri);
+        // Closing a document may leave files it imported referenced by nobody;
+        // reclaim them from the analyzer to slow type-pool growth.
+        xlsp_workspace_evict_unreferenced_files(server);
     }
 }
 
