@@ -165,6 +165,13 @@ XR_FUNC XaEffectDiffKind xa_effect_summary_diff(const XaEffectDatabase *db,
                                                 const XaEffectSummary *after,
                                                 XaEffectDiff *out_diff);
 
+/* Deterministic canonical JSON projection of a summary (task 205 §7.2 / §11.1):
+ * schema-tagged, escaping errors sorted by stable key, fixed-order unknown
+ * reasons, and the stable fingerprint.  `symbol_qualified_name` is optional.
+ * Returns a heap string the caller frees, or NULL on allocation failure. */
+XR_FUNC char *xa_effect_summary_to_json(const XaEffectDatabase *db, const XaEffectSummary *summary,
+                                        const char *symbol_qualified_name);
+
 XR_FUNC XaEffectId xa_effect_db_intern(XaEffectDatabase *db, const XaEffectSummary *summary);
 XR_FUNC const XaEffectSummary *xa_effect_db_get(const XaEffectDatabase *db, XaEffectId id);
 XR_FUNC uint32_t xa_effect_db_summary_count(const XaEffectDatabase *db);

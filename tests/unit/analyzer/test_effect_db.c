@@ -3,6 +3,7 @@
  */
 
 #include "xa_effect_db.h"
+#include "xmalloc.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -545,6 +546,128 @@ TEST(error_type_and_variant_names_round_trip) {
     xa_effect_db_free(db);
 }
 
+TEST(json_empty_complete_summary_is_canonical) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+
+    char *json = xa_effect_summary_to_json(db, &summary, "app::boot");
+    ASSERT(json != NULL);
+    ASSERT(strstr(json, "\"schema\":\"xray.error-effect.v1\"") != NULL);
+    ASSERT(strstr(json, "\"symbol\":\"app::boot\"") != NULL);
+    ASSERT(strstr(json, "\"complete\":true") != NULL);
+    ASSERT(strstr(json, "\"errors\":[]") != NULL);
+    ASSERT(strstr(json, "\"unknownReasons\":[]") != NULL);
+    ASSERT(strstr(json, "\"fingerprint\":\"0x") != NULL);
+
+    xr_free(json);
+    xa_effect_summary_clear(&summary);
+    xa_effect_db_free(db);
+}
+
+TEST(json_named_variants_are_labeled) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x111u, NULL);
+    XaErrorVariantId v0 = xa_effect_db_register_error_variant(db, type, 0xA0u);
+    XaErrorVariantId v1 = xa_effect_db_register_error_variant(db, type, 0xA1u);
+    ASSERT(v0 != XA_ERROR_VARIANT_INVALID);
+    ASSERT(v1 != XA_ERROR_VARIANT_INVALID);
+    xa_effect_db_set_error_type_name(db, type, "std.fs::IoError");
+    xa_effect_db_set_error_variant_name(db, type, v0, "NotFound");
+    xa_effect_db_set_error_variant_name(db, type, v1, "PermissionDenied");
+
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    ASSERT(xa_effect_summary_add_variant(db, &summary, type, v0));
+    ASSERT(xa_effect_summary_add_variant(db, &summary, type, v1));
+
+    char *json = xa_effect_summary_to_json(db, &summary, NULL);
+    ASSERT(json != NULL);
+    ASSERT(strstr(json, "\"symbol\":") == NULL);
+    ASSERT(strstr(json, "\"type\":\"std.fs::IoError\"") != NULL);
+    ASSERT(strstr(json, "\"variant\":\"NotFound\"") != NULL);
+    ASSERT(strstr(json, "\"variant\":\"PermissionDenied\"") != NULL);
+
+    xr_free(json);
+    xa_effect_summary_clear(&summary);
+    xa_effect_db_free(db);
+}
+
+TEST(json_all_variants_marks_all) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x222u, NULL);
+    ASSERT(xa_effect_db_register_error_variant(db, type, 0xB0u) != XA_ERROR_VARIANT_INVALID);
+    xa_effect_db_set_error_type_name(db, type, "app::ParseError");
+
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    ASSERT(xa_effect_summary_add_all_variants(db, &summary, type));
+
+    char *json = xa_effect_summary_to_json(db, &summary, NULL);
+    ASSERT(json != NULL);
+    ASSERT(strstr(json, "\"type\":\"app::ParseError\"") != NULL);
+    ASSERT(strstr(json, "\"allVariants\":true") != NULL);
+    ASSERT(strstr(json, "\"variant\":") == NULL);
+
+    xr_free(json);
+    xa_effect_summary_clear(&summary);
+    xa_effect_db_free(db);
+}
+
+TEST(json_incomplete_lists_reasons_in_fixed_order) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+    xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH);
+
+    char *json = xa_effect_summary_to_json(db, &summary, NULL);
+    ASSERT(json != NULL);
+    ASSERT(strstr(json, "\"complete\":false") != NULL);
+    const char *open = strstr(json, "openVirtualDispatch");
+    const char *dyn = strstr(json, "dynamicCallTarget");
+    ASSERT(open != NULL);
+    ASSERT(dyn != NULL);
+    /* Reasons are emitted in fixed bit order regardless of mark order. */
+    ASSERT(open < dyn);
+
+    xr_free(json);
+    xa_effect_summary_clear(&summary);
+    xa_effect_db_free(db);
+}
+
+TEST(json_sorts_variants_by_stable_key) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaErrorTypeId type = xa_effect_db_register_error_type(db, 0x333u, NULL);
+    /* v0 has the larger stable key, v1 the smaller: output must be key-sorted. */
+    XaErrorVariantId v0 = xa_effect_db_register_error_variant(db, type, 0xB0u);
+    XaErrorVariantId v1 = xa_effect_db_register_error_variant(db, type, 0xA0u);
+    ASSERT(v0 != XA_ERROR_VARIANT_INVALID);
+    ASSERT(v1 != XA_ERROR_VARIANT_INVALID);
+
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    ASSERT(xa_effect_summary_add_variant(db, &summary, type, v0));
+    ASSERT(xa_effect_summary_add_variant(db, &summary, type, v1));
+
+    char *json = xa_effect_summary_to_json(db, &summary, NULL);
+    ASSERT(json != NULL);
+    const char *lo = strstr(json, "0x00000000000000a0");
+    const char *hi = strstr(json, "0x00000000000000b0");
+    ASSERT(lo != NULL);
+    ASSERT(hi != NULL);
+    ASSERT(lo < hi);
+
+    xr_free(json);
+    xa_effect_summary_clear(&summary);
+    xa_effect_db_free(db);
+}
+
 int main(void) {
     printf("Running effect database tests...\n");
     RUN_TEST(empty_complete_is_real_summary);
@@ -565,6 +688,11 @@ int main(void) {
     RUN_TEST(diff_all_variants_widening_and_narrowing);
     RUN_TEST(diff_addition_dominates_removal_as_breaking);
     RUN_TEST(error_type_and_variant_names_round_trip);
+    RUN_TEST(json_empty_complete_summary_is_canonical);
+    RUN_TEST(json_named_variants_are_labeled);
+    RUN_TEST(json_all_variants_marks_all);
+    RUN_TEST(json_incomplete_lists_reasons_in_fixed_order);
+    RUN_TEST(json_sorts_variants_by_stable_key);
 
     printf("\n%d tests passed, %d failed\n", tests_passed, tests_failed);
     return tests_failed ? 1 : 0;
