@@ -753,8 +753,17 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     }
     if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_INCLUDES))
         xi_cgen_header(ctx, unit);
-    if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_TYPES))
+    if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_TYPES)) {
+        /* enum aggregate from_base converters live in the TYPES phase and may
+         * reference the module shared-slot array (class native type ids after
+         * the unified native class representation). Emit a tentative forward
+         * declaration before the type buffer so those file-scope static inline
+         * converters see xrt_shared; the real definition (below) may be a
+         * second tentative definition or an initialized one, both legal in C. */
+        if (main_func->nshared > 0 && typebuf && strstr(typebuf, "xrt_shared["))
+            fprintf(unit, "static XrValue xrt_shared[%u];\n\n", (unsigned) main_func->nshared);
         fwrite(typebuf, 1, typesz, unit);
+    }
     emit_canonical_extern_decls(ctx, unit);
     if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_INTERNAL_DECLS)) {
         emit_extern_closure_adapter_decls(ctx, unit);
@@ -763,7 +772,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_STATIC_DATA))
         xi_cgen_emit_str_literal_defs(ctx, unit);
     if (main_func->nshared > 0 && ((bodybuf && strstr(bodybuf, "xrt_shared[")) ||
-                                   (staticbuf && strstr(staticbuf, "xrt_shared["))))
+                                   (staticbuf && strstr(staticbuf, "xrt_shared[")) ||
+                                   (typebuf && strstr(typebuf, "xrt_shared["))))
         cg_emit_shared_array_definition(ctx, unit, "static ", "xrt_shared", module,
                                         main_func->nshared);
     if (!ctx->error)
@@ -933,6 +943,20 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
         emit_class_shared_native_storage_decls(ctx, unit, prefix);
         emit_imported_class_shared_native_storage_decls(ctx, unit);
         emit_struct_native_typedefs(unit, module->init, prefix);
+        /* enum aggregate from_base converters (emitted next, in the TYPES phase
+         * as file-scope static inline functions) may reference module shared-slot
+         * arrays for class native type ids after the unified native class
+         * representation. Declare this module's shared array (tentative, matching
+         * the definition's external linkage below) and imported modules' shared
+         * arrays (extern) before the enum typedefs so the converters resolve. */
+        if (module->init->nshared > 0)
+            fprintf(unit, "XrValue %s[%u];\n", shared_buf, (unsigned) module->init->nshared);
+        for (int i = 0; i < nmodules; i++) {
+            XiModule *m = modules[i];
+            if (i == mod_index || !m || !m->init || m->init->nshared == 0)
+                continue;
+            fprintf(unit, "extern XrValue xrt_shared_%s[];\n", m->name ? m->name : "mod");
+        }
         emit_imported_enum_native_typedefs(ctx, unit);
         emit_enum_native_typedefs(ctx, unit, module);
         fprintf(unit, "\n");
