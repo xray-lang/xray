@@ -192,8 +192,7 @@ static bool class_collect_native_fields_from_info(XiLower *l, XrClassInfo *info,
             native = XR_NATIVE_SET_REF;
         if (native < 0)
             return false;
-        if (native == XR_NATIVE_STRING && !polymorphic)
-            return false;
+        (void) polymorphic;
         if ((int) *out_idx >= XR_MAX_AGG_FIELDS)
             return false;
         layout->field_names[*out_idx] = arena_strdup(l->func, fs->name);
@@ -315,12 +314,9 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
          * mismatch at the class-field-plan boundary. */
         if (type->is_nullable)
             return NULL;
-        /* String (tagged) fields only enter the native layout for polymorphic
-         * classes, which require the heap type-id representation for vtable
-         * dispatch. Non-polymorphic string classes stay on the boxed/map path,
-         * whose value-boundary ABI (XrValue) is unchanged. */
-        if (native == XR_NATIVE_STRING && !polymorphic)
-            return NULL;
+        /* Task 215: all classes use the native layout; string/tagged fields are
+         * XrValue members with converged tagged field-access rep (see cgen). */
+        (void) polymorphic;
         layout->field_names[out_idx] = arena_strdup(l->func, f->name);
         layout->fields[out_idx].native_type = (uint8_t) native;
         out_idx++;

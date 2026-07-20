@@ -2334,19 +2334,6 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
     xr_swiss_indices_put(m->ctrl, m->indices, m->indices_size, hash, eidx);
 }
 
-static inline XrValue xrt_path_from_slice(const char *data, size_t len) {
-    XrValue raw = xrt_str_alloc(len);
-    if (len > 0 && data)
-        memcpy(xr_str_buf(raw), data, len);
-    XrValue path = xrt_map_set_class_name(xrt_map_new(1), "Path");
-    xrt_map_set((xrt_map_t *) path.ptr, xr_box_str("raw"), raw);
-    return path;
-}
-
-static inline XrValue xrt_path_from_cstr(const char *s) {
-    return s ? xrt_path_from_slice(s, strlen(s)) : XR_NULL_VAL;
-}
-
 static inline XrValue xrt_path_raw_value(XrValue path) {
     if (xrt_map_backed_class_exact(path, "Path"))
         return xrt_map_get((xrt_map_t *) path.ptr, xr_box_str("raw"));

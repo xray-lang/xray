@@ -12,9 +12,13 @@
 #include "../base/xfileio.h"
 #include "../base/xlog.h"
 #include "../base/xmalloc.h"
+#include "../frontend/analyzer/xanalyzer.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/value/xchunk.h"
 #include "../toolchain/xcompiler_session.h"
+#include "xmodule.h"
+#include "xmodule_graph.h"
+#include "xmodule_resolver.h"
 #include "xray_vm.h"
 #include <stdio.h>
 
@@ -82,7 +86,69 @@ bool xr_compile_stdlib_to_file(XrCompilerSession *session, const char *canonical
         .canonical_module = canonical_module,
     };
     xr_compiler_session_set_compile_unit_identity(session, &identity);
+
+    /* Build a dependency module graph so this stdlib module's imports of other
+     * modules' declarations resolve to real symbols — including constructable
+     * classes (class_info + constructor), not just function signatures. Without
+     * it a script layer like io.xr cannot construct an imported `path.Path`
+     * (the import degrades to an unknown type). Best-effort: on any graph
+     * failure we fall back to graph-less compilation, preserving the historical
+     * behavior for modules that need no cross-module class metadata. */
+    XrVMRuntime *X = xr_compiler_session_vm_host(session);
+    XrModuleGraph *graph = NULL;
+    XaAnalyzer *graph_analyzer = NULL;
+    if (X) {
+        xr_module_system_init_with_script(X, source_file);
+        XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
+        XrModuleResolver *resolver = registry ? xr_module_registry_get_resolver(registry) : NULL;
+        char *graph_err = NULL;
+        int build_rc = (resolver && (graph = xr_module_graph_new(session, resolver)) != NULL)
+                           ? xr_module_graph_build(graph, source_file, &graph_err)
+                           : -999;
+        if (resolver && graph && build_rc == 0 && xr_module_graph_topological_sort(graph) == 0 &&
+            !graph->has_cycle) {
+            /* Analyze every dependency (all but the entry) so their exported
+             * symbols are populated before the entry unit is compiled. A
+             * dependency's own diagnostics are irrelevant here (each is validated
+             * when compiled in its own right), so they are cleared. */
+            if (graph->topo_count > 1) {
+                graph_analyzer = xa_analyzer_new(session);
+                if (graph_analyzer) {
+                    xa_analyzer_set_graph(graph_analyzer, graph);
+                    for (int ti = 0; ti < graph->topo_count; ti++) {
+                        int index = graph->topo_order[ti];
+                        if (index == graph->entry_index)
+                            continue;
+                        XrModuleSpec *spec = &graph->specs[index];
+                        if (spec->ast && spec->source_path) {
+                            xa_analyzer_analyze(graph_analyzer, spec->source_path,
+                                                (XrAstNode *) spec->ast);
+                            spec->export_symbols = xa_analyzer_collect_export_symbols(
+                                graph_analyzer, (XrAstNode *) spec->ast);
+                        }
+                        xa_analyzer_clear_diagnostics(graph_analyzer);
+                    }
+                }
+            }
+            xr_compiler_session_set_module_graph(session, graph);
+        } else {
+            xr_free(graph_err);
+            if (graph) {
+                xr_module_graph_free(graph);
+                graph = NULL;
+            }
+        }
+    }
+
     bool ok = xr_compile_to_file(session, source_file, output_file, flags);
+
+    xr_compiler_session_set_module_graph(session, NULL);
+    if (graph_analyzer) {
+        xa_analyzer_set_graph(graph_analyzer, NULL);
+        xa_analyzer_free(graph_analyzer);
+    }
+    if (graph)
+        xr_module_graph_free(graph);
     xr_compiler_session_set_compile_unit_identity(session, NULL);
     return ok;
 }

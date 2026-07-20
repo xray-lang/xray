@@ -3759,7 +3759,7 @@ static void emit_vararg_rest_expr_values(XiCgenCtx *ctx, FILE *out, uint32_t sit
         for (uint16_t a = (uint16_t) (arg_start + fixed); a < nargs; a++, idx++) {
             fprintf(out, "((%s*)_va%u->data)[%" PRId64 "] = (%s)", rest_elem.ctype, site_id, idx,
                     rest_elem.ctype);
-            emit_value_as_rep(out, args[a], rest_elem.rep);
+            emit_value_as_rep_ctx(ctx, out, args[a], rest_elem.rep);
             fprintf(out, "; ");
         }
         const char *rest_suffix = emit_conversion_prefix(out, rest_type, XR_REP_PTR, rest_rep);
@@ -3770,7 +3770,7 @@ static void emit_vararg_rest_expr_values(XiCgenCtx *ctx, FILE *out, uint32_t sit
         fprintf(out, "({ XrValue _va%u = xrt_array_new(0); ", site_id);
         for (uint16_t a = (uint16_t) (arg_start + fixed); a < nargs; a++) {
             fprintf(out, "xrt_array_push(_va%u, ", site_id);
-            emit_value_as_rep(out, args[a], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, args[a], XR_REP_TAGGED);
             fprintf(out, "); ");
         }
         const char *rest_suffix = emit_conversion_prefix(out, rest_type, XR_REP_TAGGED, rest_rep);
@@ -7060,11 +7060,11 @@ static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const Xi
      * builder appends the real value ("null") instead of its unboxed int (0). */
     const XiValue *append_arg = cg_unwrap_identity_value(v->args[1]);
     fprintf(out, literal_plan ? "(xrt_strbuf_append_string_no_grow(" : "(xrt_strbuf_append(");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
-    emit_value_as_rep(out, append_arg, XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, append_arg, XR_REP_TAGGED);
     fprintf(out, "), ");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ")");
     return true;
 }

@@ -1518,7 +1518,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     {
         .name = "cwd",
         .signature = "(): Path",
-        .summary = "Get current working directory",
+        .summary = "",
     },
     {
         .name = "exists",
@@ -1557,13 +1557,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "readDir",
-        .signature = "(path: Path): Array<Path>",
-        .summary = "List directory entries",
+        .signature = "(p: Path): Array<Path>",
+        .summary = "",
     },
     {
         .name = "readDirRecursive",
-        .signature = "(path: Path): Array<Path>",
-        .summary = "List directory entries recursively",
+        .signature = "(p: Path): Array<Path>",
+        .summary = "",
     },
     {
         .name = "readFile",
@@ -1587,13 +1587,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "readlink",
-        .signature = "(path: Path): Path?",
-        .summary = "Read symlink target",
+        .signature = "(p: Path): Path?",
+        .summary = "",
     },
     {
         .name = "realpath",
-        .signature = "(path: Path): Path?",
-        .summary = "Resolve to absolute path",
+        .signature = "(p: Path): Path?",
+        .summary = "",
     },
     {
         .name = "remove",
@@ -1623,12 +1623,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     {
         .name = "tempDir",
         .signature = "(): Path?",
-        .summary = "Create temporary directory",
+        .summary = "",
     },
     {
         .name = "tempFile",
         .signature = "(): Path?",
-        .summary = "Create temporary file",
+        .summary = "",
     },
     {
         .name = "touch",
@@ -6690,7 +6690,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.chdir` | `(path: Path): bool` | Change working directory |\n"
             "| `io.chmod` | `(path: Path, mode: int): bool` | Change file permissions |\n"
             "| `io.copyFile` | `(src: Path, dst: Path): bool` | Copy a file |\n"
-            "| `io.cwd` | `(): Path` | Get current working directory |\n"
+            "| `io.cwd` | `(): Path` |  |\n"
             "| `io.exists` | `(path: Path): bool` | Check if path exists |\n"
             "| `io.fileSize` | `(path: Path): int` | Get file size in bytes |\n"
             "| `io.isDir` | `(path: Path): bool` | Check if path is a directory |\n"
@@ -6698,21 +6698,21 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.isSymlink` | `(path: Path): bool` | Check if path is a symlink |\n"
             "| `io.mkdir` | `(path: Path): bool` | Create directory |\n"
             "| `io.mkdirp` | `(path: Path): bool` | Create directory recursively |\n"
-            "| `io.readDir` | `(path: Path): Array<Path>` | List directory entries |\n"
-            "| `io.readDirRecursive` | `(path: Path): Array<Path>` | List directory entries recursively |\n"
+            "| `io.readDir` | `(p: Path): Array<Path>` |  |\n"
+            "| `io.readDirRecursive` | `(p: Path): Array<Path>` |  |\n"
             "| `io.readFile` | `(path: Path): string?` | Read entire file as string |\n"
             "| `io.readFileBytes` | `(path: Path): Array<byte>?` | Read entire file as byte array |\n"
             "| `io.readLines` | `(path: Path): Array<string>` | Read file as lines |\n"
             "| `io.readStdin` | `(): string?` | Read all data from standard input |\n"
-            "| `io.readlink` | `(path: Path): Path?` | Read symlink target |\n"
-            "| `io.realpath` | `(path: Path): Path?` | Resolve to absolute path |\n"
+            "| `io.readlink` | `(p: Path): Path?` |  |\n"
+            "| `io.realpath` | `(p: Path): Path?` |  |\n"
             "| `io.remove` | `(path: Path): bool` | Remove a file |\n"
             "| `io.removeAll` | `(path: Path): bool` | Remove directory recursively |\n"
             "| `io.rename` | `(old: Path, new: Path): bool` | Rename a file |\n"
             "| `io.stat` | `(path: Path): FileStat?` | Get file stat info |\n"
             "| `io.symlink` | `(target: Path, link: Path): bool` | Create symbolic link |\n"
-            "| `io.tempDir` | `(): Path?` | Create temporary directory |\n"
-            "| `io.tempFile` | `(): Path?` | Create temporary file |\n"
+            "| `io.tempDir` | `(): Path?` |  |\n"
+            "| `io.tempFile` | `(): Path?` |  |\n"
             "| `io.touch` | `(path: Path): bool` | Create or update file timestamp |\n"
             "| `io.writeFile` | `(path: Path, data: string): bool` | Write string to file |\n"
             "| `io.writeFileBytes` | `(path: Path, data: Array<byte>): bool` | Write byte array to file |\n"

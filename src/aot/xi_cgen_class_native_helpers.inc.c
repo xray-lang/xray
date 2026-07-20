@@ -5694,6 +5694,27 @@ static void cg_collect_native_class(XiCgenCtx *ctx, FILE *out, const XiClassData
     }
 }
 
+/* Recursively collect the cross-module native classes referenced by the
+ * parameter/return types of this unit's own functions (e.g. a Logger method
+ * that takes an imported `Path`).  Own-module classes are skipped inside
+ * cg_collect_native_class, so only imported native types produce a typedef. */
+static void cg_collect_native_classes_from_own_func(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                    const char *own, const XiClassData **seen,
+                                                    int *nseen, int seen_cap) {
+    if (!f)
+        return;
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        cg_collect_native_classes_from_own_func(ctx, out, f->children[i], own, seen, nseen,
+                                                seen_cap);
+    cg_collect_native_class(ctx, out, cg_class_native_data_for_abi_type(ctx, f->return_type), own,
+                            seen, nseen, seen_cap);
+    for (uint16_t p = 0; p < f->nparams; p++) {
+        const XrType *pt = f->params && f->params[p] ? f->params[p]->type : NULL;
+        cg_collect_native_class(ctx, out, cg_class_native_data_for_abi_type(ctx, pt), own, seen,
+                                nseen, seen_cap);
+    }
+}
+
 /* Emit native typedefs for the cross-module classes a unit actually references,
  * derived from the imported functions it calls: the class owning an imported
  * constructor/method, plus any native class in an imported function's parameter
@@ -5704,7 +5725,7 @@ static void emit_imported_class_native_typedefs(XiCgenCtx *ctx, FILE *out) {
     if (!ctx || !out)
         return;
     const char *own = ctx->module && ctx->module->name ? ctx->module->name : NULL;
-    const XiClassData *seen[64];
+    const XiClassData *seen[128];
     int nseen = 0;
     /* A locally-defined class may extend an imported base, whose typedef must
      * precede the derived class's `base` member. */
@@ -5716,6 +5737,10 @@ static void emit_imported_class_native_typedefs(XiCgenCtx *ctx, FILE *out) {
                                         own, seen, &nseen, (int) (sizeof(seen) / sizeof(seen[0])));
         }
     }
+    /* This unit's own functions may take/return an imported native class. */
+    if (ctx->module && ctx->module->init)
+        cg_collect_native_classes_from_own_func(ctx, out, ctx->module->init, own, seen, &nseen,
+                                                (int) (sizeof(seen) / sizeof(seen[0])));
     for (int i = 0; i < ctx->n_xmod_refs; i++) {
         const XiFunc *f = ctx->xmod_ref_funcs[i];
         const char *prefix = ctx->xmod_ref_prefixes[i];

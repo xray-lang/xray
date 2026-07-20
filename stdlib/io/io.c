@@ -613,7 +613,7 @@ typedef struct IoReadDirEmitCtx {
 
 static bool io_read_dir_emit(void *ctx, const char *path) {
     IoReadDirEmitCtx *emit = (IoReadDirEmitCtx *) ctx;
-    xr_array_push(emit->arr, xrs_path_value_c(emit->X, path));
+    xr_array_push(emit->arr, xrs_string_value_c(emit->X, path));
     return true;
 }
 
@@ -652,7 +652,7 @@ static XrValue io_cwd(XrVMRuntime *X, XrValue *args, int argc) {
     if (xr_fs_getcwd(buf, sizeof(buf)) == NULL) {
         return xr_null();
     }
-    return xrs_path_value_c(X, buf);
+    return xrs_string_value_c(X, buf);
 }
 
 /* ========== Extended Functions ========== */
@@ -1086,7 +1086,7 @@ static XrValue io_readlink(XrVMRuntime *X, XrValue *args, int argc) {
     XrIoCorePathView view;
     if (!xr_io_core_path_result_view(buf, (size_t) len, &view))
         return xr_null();
-    return xrs_path_value_n(X, view.data, view.len);
+    return xrs_string_value_n(X, view.data, view.len);
 #else
     ssize_t len = readlink(path, buf, sizeof(buf) - 1);
     if (len < 0)
@@ -1094,7 +1094,7 @@ static XrValue io_readlink(XrVMRuntime *X, XrValue *args, int argc) {
     XrIoCorePathView view;
     if (!xr_io_core_path_result_view(buf, (size_t) len, &view))
         return xr_null();
-    return xrs_path_value_n(X, view.data, view.len);
+    return xrs_string_value_n(X, view.data, view.len);
 #endif
 }
 
@@ -1112,7 +1112,7 @@ static XrValue io_realpath(XrVMRuntime *X, XrValue *args, int argc) {
     XrIoCorePathView view;
     if (!xr_io_core_path_result_cstr_view(resolved, &view))
         return xr_null();
-    return xrs_path_value_n(X, view.data, view.len);
+    return xrs_string_value_n(X, view.data, view.len);
 }
 
 // Adapter for xr_os_core_tmpdir(); fallback ordering lives in shared core.
@@ -1144,7 +1144,7 @@ static XrValue io_tempFile(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     close(fd);
 #endif
-    return xrs_path_value_c(X, tpl);
+    return xrs_string_value_c(X, tpl);
 }
 
 // tempDir() - Create temporary directory, return path
@@ -1172,7 +1172,7 @@ static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
     if (mkdtemp(tpl) == NULL)
         return xr_null();
 #endif
-    return xrs_path_value_c(X, tpl);
+    return xrs_string_value_c(X, tpl);
 }
 
 // readDirRecursive helper struct
@@ -1224,6 +1224,9 @@ XR_FUNC XrModule *xr_load_module_io(XrVMRuntime *isolate) {
 
     xr_stdlib_vm_bind_io_generated(isolate, mod);
 
-    // Mark as loaded
+    // The Path-returning public surface (cwd/tempDir/tempFile/readlink/realpath/
+    // readDir/readDirRecursive) lives in stdlib/io/io.xr, which wraps the raw
+    // string primitives above into native `path.Path` instances.
+    mod->requires_script = true;
     return mod;
 }
