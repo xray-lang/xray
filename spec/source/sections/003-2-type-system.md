@@ -565,6 +565,60 @@ Xray 默认只保留最小类型身份层：
 - 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
 运行时类型查询使用 `typeOf(value)`、`typeName(value)` 和 `TypeId`。反射元数据不会暴露为可遍历、可调用的对象图。
+### 2.13 完整可运行示例
+
+以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
+
+数组：
+
+```xray
+fn main() {
+    var nums = [1, 2, 3]
+    nums.push(4)
+    print(nums)          // => [1, 2, 3, 4]
+    print(len(nums))     // => 4
+    var doubled = nums.map(fn(x: int) -> int { return x * 2 })
+    print(doubled)       // => [2, 4, 6, 8]
+    var evens = nums.filter(fn(x: int) -> bool { return x % 2 == 0 })
+    print(evens)         // => [2, 4]
+}
+
+main()
+```
+
+Map 与 Set：
+
+```xray
+fn main() {
+    var scores = #{"alice": 95, "bob": 88}
+    scores.set("carol", 77)
+    print(scores.get("alice") ?? 0)   // => 95
+    print(len(scores))                 // => 3
+
+    var seen = Set<int>()
+    seen.add(1)
+    seen.add(2)
+    seen.add(2)
+    print(len(seen))          // => 2
+    print(seen.contains(1))   // => true
+}
+
+main()
+```
+
+可空类型与 `??`：
+
+```xray
+fn main() {
+    var name: string? = null
+    print(name ?? "anonymous")   // => anonymous
+    var city: string? = "NYC"
+    print(city ?? "unknown")     // => NYC
+}
+
+main()
+```
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1135,4 +1189,58 @@ Xray keeps only the minimal type identity layer by default:
 - Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 
 Runtime type queries use `typeOf(value)`, `typeName(value)`, and `TypeId`. Reflection metadata is not exposed as a traversable or callable object graph.
+### 2.13 Worked Examples
+
+Self-contained programs that run as-is and pass `xray check` (comments show the real output).
+
+Arrays:
+
+```xray
+fn main() {
+    var nums = [1, 2, 3]
+    nums.push(4)
+    print(nums)          // => [1, 2, 3, 4]
+    print(len(nums))     // => 4
+    var doubled = nums.map(fn(x: int) -> int { return x * 2 })
+    print(doubled)       // => [2, 4, 6, 8]
+    var evens = nums.filter(fn(x: int) -> bool { return x % 2 == 0 })
+    print(evens)         // => [2, 4]
+}
+
+main()
+```
+
+Maps and Sets:
+
+```xray
+fn main() {
+    var scores = #{"alice": 95, "bob": 88}
+    scores.set("carol", 77)
+    print(scores.get("alice") ?? 0)   // => 95
+    print(len(scores))                 // => 3
+
+    var seen = Set<int>()
+    seen.add(1)
+    seen.add(2)
+    seen.add(2)
+    print(len(seen))          // => 2
+    print(seen.contains(1))   // => true
+}
+
+main()
+```
+
+Nullable types with `??`:
+
+```xray
+fn main() {
+    var name: string? = null
+    print(name ?? "anonymous")   // => anonymous
+    var city: string? = "NYC"
+    print(city ?? "unknown")     // => NYC
+}
+
+main()
+```
+
 <!-- /xr-spec:en -->
