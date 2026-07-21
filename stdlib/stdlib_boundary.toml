@@ -12,7 +12,7 @@ forbidden_prelude_symbols = ["Result"]
 # These modules still expose fixed-shape dynamic APIs and must be migrated
 # by task 196 after the typed enum error-channel and 191/197 consumer prerequisites land.
 migration_modules = [
-  "Coro", "CoroPool", "cluster", "csv", "http", "log", "net", "toml",
+  "Coro", "CoroPool", "cluster", "csv", "log", "net", "toml",
   "url", "ws", "xml", "yaml",
 ]
 # Exact, reviewed dynamic boundaries live in the structured entries below.
@@ -73,6 +73,14 @@ domain = "json_wire_payload"
 reason = "Cluster publish explicitly transports an arbitrary Json message payload"
 owner = "stdlib/cluster"
 review_task = "task-196"
+
+[[dynamic_allowlist]]
+symbol = "HttpResponse.json"
+direction = "output"
+domain = "json_wire_payload"
+reason = "Explicitly decodes an arbitrary HTTP response body as JSON"
+owner = "stdlib/http"
+review_task = "task-221"
 
 [[dynamic_allowlist]]
 symbol = "log.child"
@@ -403,7 +411,7 @@ layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/http/http.xr"
 loader = "stdlib/http/http.c"
-public_native = ["h2Request"]
+public_native = []
 private_native_sources = ["stdlib/http/*.c"]
 private_native_reason = "HTTP/2, TLS/socket, parser-buffer and client-pool data plane"
 perf_suite = "stdlib/http"

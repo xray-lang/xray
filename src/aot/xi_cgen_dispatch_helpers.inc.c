@@ -8947,9 +8947,13 @@ static bool xicgen_emit_static_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     const char *sprefix = NULL;
     const XiFunc *sfunc =
         recv_class ? cg_lookup_static_method(ctx, recv_class, method, &sprefix) : NULL;
+    uint16_t call_argc = v->nargs > 0 ? (uint16_t) (v->nargs - 1) : 0;
+    if (sfunc && !sfunc->is_vararg && sfunc->nparams != call_argc)
+        sfunc = NULL;
     /* Never guess a static owner from the set of imported classes. An ordinary
-     * instance method can share the same name; explicit import/shared-slot
-     * class receivers are resolved by cg_class_native_class_value_data above. */
+     * instance method can share the same name and arity; explicit import/shared-
+     * slot class receivers are resolved by cg_class_native_class_value_data
+     * above. */
     if (!sfunc)
         return false;
     if (cg_func_needs_aot_coro_ctx(ctx, sfunc)) {

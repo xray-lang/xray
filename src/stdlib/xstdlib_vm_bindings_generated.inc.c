@@ -62,7 +62,8 @@ static void xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *m
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_HTTP
 static void xr_stdlib_vm_bind_http_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT(module, isolate, "h2Request", h2_request);
+    XRS_EXPORT(module, isolate, "__h2Supported", h2_supported);
+    XRS_EXPORT(module, isolate, "__h2Request", h2_request_typed);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_HTTP */
 

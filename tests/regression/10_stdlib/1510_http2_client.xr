@@ -1,58 +1,82 @@
-// Test HTTP/2 client API existence
+// Test the typed HTTP/2 request control plane without performing network I/O.
 
 import http
+import { Headers, HttpError, HttpMethod, HttpRequestOptions, HttpVersion } from http
 
 @test
-fn test_h2_apis_exist() {
-    assert(typeName(http.h2Request) == "function")
+fn test_h2_uses_unified_request_api() {
+    assert(typeName(http.request) == "function")
 }
 
 @test
 fn test_h2_options_object() {
-    var opts = {
+    var headers = Headers()
+    headers.add("Content-Type", "application/json")
+    var body: Array<byte> = [123, 125]
+    var opts: HttpRequestOptions = {
         url: "https://example.com/api",
-        method: "POST",
-        headers: #{"Content-Type": "application/json"},
-        body: "{\"key\": \"value\"}"
+        method: HttpMethod.post(),
+        headers: headers,
+        body: body,
+        version: HttpVersion.Http2,
+        timeoutMs: 2500
     }
-    assert_eq(opts.method, "POST")
-    assert_eq(opts.headers["Content-Type"], "application/json")
+    assert_eq(opts.method!.token, "POST")
+    assert_eq(opts.headers!.get("Content-Type"), "application/json")
+    assert_eq(opts.body![0], 123)
+    assert(opts.version == HttpVersion.Http2)
+    assert_eq(opts.timeoutMs, 2500)
 }
 
-@test
-fn test_h2_request_rejects_http1_connection_headers() {
-    assert(http.h2Request({
-        url: "https://example.com/api",
-        headers: Json.encode(#{"Connection": "keep-alive"})
-    }) == null)
-
-    assert(http.h2Request({
-        url: "https://example.com/api",
-        headers: Json.encode(#{"Host": "other.example"})
-    }) == null)
-
-    assert(http.h2Request({
-        url: "https://example.com/api",
-        headers: Json.encode(#{"TE": "gzip"})
-    }) == null)
+fn h2_rejects_headers(headers: Headers) -> bool {
+    try {
+        http.request({
+            url: "https://example.com/api",
+            headers: headers,
+            version: HttpVersion.Http2
+        })
+    } catch (e: HttpError) {
+        return true
+    }
+    return false
 }
 
 @test
 fn test_h2_request_rejects_invalid_method_and_headers() {
-    assert(http.h2Request({
-        url: "https://example.com/api",
-        method: "BAD METHOD"
-    }) == null)
+    assert(HttpMethod.fromToken("BAD METHOD") == null)
 
-    assert(http.h2Request({
-        url: "https://example.com/api",
-        headers: Json.encode(#{"X-Bad": "a\r\nInjected: y"})
-    }) == null)
+    var invalidValue = false
+    try {
+        var headers = Headers()
+        headers.add("X-Bad", "a\r\nInjected: y")
+    } catch HttpError.InvalidHeaderValue(_) {
+        invalidValue = true
+    }
+    assert(invalidValue)
 
-    assert(http.h2Request({
-        url: "https://example.com/api",
-        headers: Json.encode(#{":path": "/override"})
-    }) == null)
+    var pseudoHeader = false
+    try {
+        var headers = Headers()
+        headers.add(":path", "/override")
+    } catch HttpError.InvalidHeaderName(_) {
+        pseudoHeader = true
+    }
+    assert(pseudoHeader)
+}
+
+@test
+fn test_h2_request_rejects_http1_connection_headers() {
+    var connection = Headers()
+    connection.add("Connection", "keep-alive")
+    assert(h2_rejects_headers(connection))
+
+    var host = Headers()
+    host.add("Host", "other.example")
+    assert(h2_rejects_headers(host))
+
+    var te = Headers()
+    te.add("TE", "gzip")
+    assert(h2_rejects_headers(te))
 }
 
 print("All http2 client tests passed")

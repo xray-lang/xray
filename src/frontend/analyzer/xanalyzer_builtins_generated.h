@@ -213,9 +213,10 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
 
 // http module functions
 static const XaBuiltinMember g_gen_http_functions[] = {
-    {"h2Request", "(options: Json): Json", "Generic HTTP/2 request", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"__h2Supported", "(): bool", "Whether this backend provides the internal HTTP/2 data plane", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"__h2Request", "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?", "Internal typed HTTP/2 data-plane request", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
 };
-#define GEN_HTTP_FUNCTION_COUNT 1
+#define GEN_HTTP_FUNCTION_COUNT 2
 
 // io.FileStat handle fields
 static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {
