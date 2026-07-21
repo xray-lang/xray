@@ -28,7 +28,7 @@ class Array<T> {
     map(fn: (item: T, index: int) -> U) -> Array<U>
     filter(fn: (item: T, index: int) -> bool) -> Array<T>
     reduce(fn: (acc: U, item: T) -> U, initial: U) -> U
-    forEach(fn: (item: T, index: int) -> ())
+    forEach(fn: (item: T, index: int) -> ()) -> ()
     find(fn: (item: T) -> bool) -> T?
     findIndex(fn: (item: T) -> bool) -> int
     every(fn: (item: T) -> bool) -> bool

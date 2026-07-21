@@ -36,12 +36,13 @@ static void resolve_capture_kind(XiCapture *cap) {
     if (cap->is_shared) {
         cap->capture_kind = XI_CAPTURE_SHARED;
         cap->needs_cell = true;
-    } else if (cap->needs_cell || cap->is_mutable || cap->is_reassigned) {
+    } else if (cap->is_mutable || cap->is_reassigned) {
         cap->capture_kind = XI_CAPTURE_BY_MUT_CELL;
         cap->needs_cell = true;
     } else {
         cap->capture_kind = XI_CAPTURE_BY_COPY;
-        cap->needs_cell = false;
+        /* Preserve a representation-only cell introduced for a hoisted
+         * read-only capture.  It remains BY_COPY across execution. */
     }
 }
 

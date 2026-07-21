@@ -737,9 +737,18 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                                                           call->type_arg_count);
                     xa_check_class_constructor_args(ctx, node, call, class_name, class_links,
                                                     class_info, resolved, call->type_arg_count);
-                    XrType *inst =
-                        xr_type_new_generic_instance(ctx->analyzer->isolate, class_name, class_info,
-                                                     resolved, call->type_arg_count);
+                    /* The mono pass rewrites `Box<int>(...)` to `Box$i64(...)` but keeps the
+                     * source type arguments for diagnostics.  The rewritten declaration is no
+                     * longer a generic class, so representing the result as another generic
+                     * instance creates two identities for the same value (`Box<int>` and
+                     * `Box$i64`) and breaks invariant containers such as `Array<Box<int>>`.
+                     * Preserve validation against the original type arguments above, then use
+                     * the concrete clone's nominal instance as the expression type. */
+                    XrType *inst = class_name && strchr(class_name, '$')
+                                       ? xr_type_new_instance(ctx->analyzer->isolate, class_info)
+                                       : xr_type_new_generic_instance(
+                                             ctx->analyzer->isolate, class_name, class_info,
+                                             resolved, call->type_arg_count);
                     if (inst && is_value_type)
                         inst->is_value_type = true;
                     if (inst && semantic_type_id != XA_SEMANTIC_TYPE_NONE)
@@ -3507,6 +3516,63 @@ static bool xa_expr_needs_contextual_view_type(AstNode *expr) {
                     strcmp(name, "asMutBytes") == 0 || strcmp(name, "reinterpret") == 0);
 }
 
+static bool xa_expr_needs_parameter_context(AstNode *expr) {
+    if (!expr)
+        return false;
+    if (expr->type == AST_GROUPING)
+        return xa_expr_needs_parameter_context(expr->as.grouping);
+    if (expr->type == AST_FUNCTION_EXPR || xa_expr_needs_contextual_view_type(expr))
+        return true;
+    if (expr->type == AST_ARRAY_LITERAL) {
+        if (expr->as.array_literal.is_repeat)
+            return xa_expr_needs_parameter_context(expr->as.array_literal.repeat_value) ||
+                   xa_expr_needs_parameter_context(expr->as.array_literal.repeat_count);
+        if (expr->as.array_literal.count == 0)
+            return true;
+        for (int i = 0; i < expr->as.array_literal.count; i++) {
+            if (xa_expr_needs_parameter_context(expr->as.array_literal.elements[i]))
+                return true;
+        }
+        return false;
+    }
+    if (expr->type == AST_MAP_LITERAL) {
+        if (expr->as.map_literal.count == 0)
+            return true;
+        for (int i = 0; i < expr->as.map_literal.count; i++) {
+            if (xa_expr_needs_parameter_context(expr->as.map_literal.keys[i]) ||
+                xa_expr_needs_parameter_context(expr->as.map_literal.values[i]))
+                return true;
+        }
+        return false;
+    }
+    if (expr->type == AST_SET_LITERAL) {
+        if (expr->as.set_literal.count == 0)
+            return true;
+        for (int i = 0; i < expr->as.set_literal.count; i++) {
+            if (xa_expr_needs_parameter_context(expr->as.set_literal.elements[i]))
+                return true;
+        }
+        return false;
+    }
+    if (expr->type == AST_OBJECT_LITERAL) {
+        for (int i = 0; i < expr->as.object_literal.count; i++) {
+            if ((expr->as.object_literal.computed && expr->as.object_literal.computed[i] &&
+                 xa_expr_needs_parameter_context(expr->as.object_literal.keys[i])) ||
+                xa_expr_needs_parameter_context(expr->as.object_literal.values[i]))
+                return true;
+        }
+        return false;
+    }
+    if (expr->type == AST_TUPLE_LITERAL) {
+        for (int i = 0; i < expr->as.tuple_literal.count; i++) {
+            if (xa_expr_needs_parameter_context(expr->as.tuple_literal.elements[i]))
+                return true;
+        }
+        return false;
+    }
+    return false;
+}
+
 static bool xa_type_is_u8_view_or_owner(XrType *type) {
     return xr_type_is_u8_array(type) || xr_type_is_u8_slice(type);
 }
@@ -4685,6 +4751,86 @@ static bool xa_len_type_supported(XrType *type) {
     }
 }
 
+/* Generic higher-order calls are checked left-to-right.  By the time a callback argument is
+ * visited, earlier value arguments may already determine some of the callee's type parameters
+ * (`apply(5, fn(n) { ... })` determines T=int before the lambda).  Substitute that partial
+ * solution into the current parameter so lambda parameters receive concrete contextual types;
+ * unresolved type parameters deliberately remain unchanged. */
+static XrType *xa_contextualize_generic_call_param(XaInferContext *ctx, XaSymbolLinks *links,
+                                                   XrType *callee_type, CallExprNode *call,
+                                                   XrType **effective_arg_types, int current_slot,
+                                                   XrType *param_type) {
+    if (!ctx || !ctx->analyzer || !links || !callee_type || !XR_TYPE_IS_FUNCTION(callee_type) ||
+        !call || !param_type)
+        return param_type;
+    int count = xa_symbol_links_get_type_param_count(links);
+    if (count <= 0)
+        return param_type;
+
+    const char *name_buf[8] = {0};
+    XrType *actual_buf[8] = {0};
+    const char **names = count <= 8 ? name_buf : xr_calloc((size_t) count, sizeof(const char *));
+    XrType **actual = count <= 8 ? actual_buf : xr_calloc((size_t) count, sizeof(XrType *));
+    if (!names || !actual) {
+        if (names != name_buf)
+            xr_free((void *) names);
+        if (actual != actual_buf)
+            xr_free(actual);
+        return param_type;
+    }
+
+    for (int i = 0; i < count; i++)
+        names[i] = xa_symbol_links_get_type_param_name(links, i);
+
+    if (call->type_arg_count == count && call->type_args) {
+        for (int i = 0; i < count; i++)
+            actual[i] = call->type_args[i]
+                            ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[i])
+                            : NULL;
+    } else if (call->type_arg_count == 0 && effective_arg_types) {
+        int param_count = callee_type->function.param_count;
+        int resolved_slots = current_slot < param_count ? current_slot : param_count;
+        for (int i = 0; i < count; i++) {
+            if (!names[i])
+                continue;
+            for (int slot = 0; slot < resolved_slots; slot++) {
+                XrType *arg = effective_arg_types[slot];
+                XrType *declared = xr_type_function_param_type(callee_type, slot);
+                if (!arg || !declared)
+                    continue;
+                actual[i] = xa_infer_type_param_from_arg(declared, arg, names[i], 0);
+                /* `null` satisfies T? but carries no evidence for T.  Keep scanning so a
+                 * later concrete argument (valueOrDefault(null, 42)) determines it. */
+                if (actual[i] && XR_TYPE_IS_NULL(actual[i]))
+                    actual[i] = NULL;
+                if (actual[i])
+                    break;
+            }
+        }
+    }
+
+    /* xr_type_substitute treats a missing replacement as unknown.  Compact the partial
+     * solution before substituting so class parameters already resolved on the receiver (for
+     * example Plan<int>.forEach) are not erased merely because this method call supplies no new
+     * evidence for them. */
+    int resolved_count = 0;
+    for (int i = 0; i < count; i++) {
+        if (!names[i] || !actual[i] || XR_TYPE_IS_UNKNOWN(actual[i]) || XR_TYPE_IS_NULL(actual[i]))
+            continue;
+        names[resolved_count] = names[i];
+        actual[resolved_count] = actual[i];
+        resolved_count++;
+    }
+    XrType *result = resolved_count > 0 ? xr_type_substitute(ctx->analyzer->isolate, param_type,
+                                                             names, actual, resolved_count)
+                                        : param_type;
+    if (names != name_buf)
+        xr_free((void *) names);
+    if (actual != actual_buf)
+        xr_free(actual);
+    return result ? result : param_type;
+}
+
 XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);
@@ -5213,6 +5359,43 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     ctx->allow_payload_enum_ctor_value = saved_payload_ctor_value;
     if (optional_function_call && callee_type)
         callee_type = xr_type_non_nullable(ctx->analyzer->isolate, callee_type);
+    /* Member lookup yields the declaration signature before the receiver's class arguments are
+     * applied. Specialize the whole callable before contextual lambda inference; specializing
+     * only the return below leaves parameters such as Plan<S>.forEach's callback as `(S, int)`
+     * even when the receiver is Plan<int>. */
+    if (callee_type && XR_TYPE_IS_FUNCTION(callee_type) && callee_obj_type &&
+        XR_TYPE_IS_INSTANCE(callee_obj_type) && callee_obj_type->instance.class_name &&
+        callee_obj_type->instance.type_arg_count > 0 && callee_obj_type->instance.type_args) {
+        XaSymbol *class_sym = fn_sym && fn_sym->parent ? fn_sym->parent : NULL;
+        if (!class_sym)
+            class_sym =
+                callee_obj_type->instance.class_ref && callee_obj_type->instance.class_ref->scope
+                    ? callee_obj_type->instance.class_ref->scope->class_symbol
+                    : NULL;
+        if (!class_sym)
+            class_sym =
+                xa_scope_lookup(ctx->analyzer->current_scope, callee_obj_type->instance.class_name);
+        XaSymbolLinks *class_links =
+            class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+        int class_param_count = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
+        if (class_param_count == callee_obj_type->instance.type_arg_count) {
+            const char *name_buf[8] = {0};
+            const char **names = class_param_count <= 8
+                                     ? name_buf
+                                     : xr_malloc(sizeof(const char *) * class_param_count);
+            if (names) {
+                for (int i = 0; i < class_param_count; i++)
+                    names[i] = xa_symbol_links_get_type_param_name(class_links, i);
+                XrType *specialized = xr_type_substitute(ctx->analyzer->isolate, callee_type, names,
+                                                         callee_obj_type->instance.type_args,
+                                                         callee_obj_type->instance.type_arg_count);
+                if (specialized)
+                    callee_type = specialized;
+                if (names != name_buf)
+                    xr_free((void *) names);
+            }
+        }
+    }
     if (parallel_call_plan && (!callee_type || !XR_TYPE_IS_FUNCTION(callee_type))) {
         XrType *parallel_callable =
             xa_parallel_callable_type(ctx, call, callee_obj_type, parallel_call_plan);
@@ -5235,13 +5418,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     const XaIntrinsicDesc *intrinsic_desc =
         resolved_intrinsic ? xa_intrinsic_by_id(resolved_intrinsic->intrinsic_id) : NULL;
 
-    /* Resolve symbol_ids in non-lambda arguments before any early-return path.
-     * Skip AST_FUNCTION_EXPR args: they require expected_type context from
-     * the callee's parameter signature (set in the detailed loop below).
-     * Visiting them eagerly without context triggers spurious E0365. */
+    /* Resolve symbol_ids in arguments before any early-return path.  Values whose type is
+     * supplied by the parameter contract must wait for the detailed loop below; eagerly
+     * visiting an empty container (like a lambda) loses that context and emits a spurious
+     * inference diagnostic even though the call signature is authoritative. */
     for (int i = 0; i < call->arg_count; i++) {
         AstNode *arg = call->arguments[i];
-        if (!arg || arg->type == AST_FUNCTION_EXPR || xa_expr_needs_contextual_view_type(arg))
+        if (!arg || xa_expr_needs_parameter_context(arg))
             continue;
         XrCallArgAccess access = xa_call_arg_access(call, i);
         XrParamMode param_mode = xa_call_param_mode(callee_type, i);
@@ -5723,6 +5906,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
 
         XrType *param_type = xr_type_function_param_type(callee_type, param_slot);
+        param_type = xa_contextualize_generic_call_param(ctx, fn_links, callee_type, call,
+                                                         effective_arg_types, slot, param_type);
         XrType *saved_expected = ctx->expected_type;
         bool saved_copy_view = ctx->allow_view_expr_for_copy;
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {

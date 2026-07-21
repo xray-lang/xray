@@ -24,7 +24,7 @@ fn test_reified_generics() {
     var map = #{"a": 1, "b": 2}
     assert_eq(typeName(map), "Map")
 
-    var set = Set()
+    var set = Set<int>()
     assert_eq(typeName(set), "Set")
 
     // === Test 2: Typed containers keep their checked behavior ===

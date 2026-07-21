@@ -36,7 +36,7 @@ fn test_property_concurrent_intern_safety() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<bool>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go intern_task(i))
     }
@@ -63,7 +63,7 @@ fn test_property_concurrent_global_pool_readonly() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<bool>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go global_access_task(i))
     }
@@ -95,7 +95,7 @@ fn test_property_concurrent_local_pool_isolation() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<bool>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go local_pool_task(i))
     }
@@ -129,7 +129,7 @@ fn test_property_concurrent_long_string_no_intern() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<bool>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go long_string_task(i))
     }
@@ -165,7 +165,7 @@ fn test_property_concurrent_mixed_operations() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<bool>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go mixed_task(i))
     }
@@ -200,7 +200,7 @@ fn test_property_concurrent_string_compare() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<bool>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go compare_task(i))
     }
@@ -230,7 +230,7 @@ fn test_property_concurrent_intern_consistency() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<bool>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go consistency_task(i))
     }
@@ -263,7 +263,7 @@ fn test_property_concurrent_stress_200() {
     }
     
     var n = 100
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<bool>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go stress_task(i))
     }
@@ -275,4 +275,3 @@ fn test_property_concurrent_stress_200() {
         assert_eq(results[i], true)
     }
 }
-

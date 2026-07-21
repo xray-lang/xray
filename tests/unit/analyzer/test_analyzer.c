@@ -1905,6 +1905,44 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
     setup_pool();
 }
 
+TEST(analyzer_error_effect_handles_recursive_function_expr_cycles) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum RecursiveLambdaErr { Boom }\n"
+                         "fn viaRecursiveLambdaNoThrow() {\n"
+                         "  var loop = fn(n: int) -> int {\n"
+                         "    if (n <= 0) { return 0 }\n"
+                         "    return loop(n - 1)\n"
+                         "  }\n"
+                         "  loop(2)\n"
+                         "}\n"
+                         "fn viaRecursiveLambdaThrow() {\n"
+                         "  var loop = fn(n: int) -> int {\n"
+                         "    if (n <= 0) { throw RecursiveLambdaErr.Boom }\n"
+                         "    return loop(n - 1)\n"
+                         "  }\n"
+                         "  loop(2)\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "effect_recursive_function_expr.xr", program);
+
+    const XaEffectSummary *no_throw =
+        analyzer_function_effect_summary(a, "viaRecursiveLambdaNoThrow");
+    const XaEffectSummary *throwing =
+        analyzer_function_effect_summary(a, "viaRecursiveLambdaThrow");
+    ASSERT(no_throw != NULL);
+    ASSERT(throwing != NULL);
+    ASSERT(no_throw->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(no_throw->escaping.count == 0);
+    ASSERT(throwing->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(effect_summary_has_enum_named(a, throwing, "RecursiveLambdaErr"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_error_effect_propagates_direct_method_calls) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -5713,6 +5751,7 @@ int main(void) {
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
     RUN_TEST(analyzer_error_effect_propagates_generic_specialization_target_sets);
     RUN_TEST(analyzer_error_effect_propagates_immediate_function_expr_calls);
+    RUN_TEST(analyzer_error_effect_handles_recursive_function_expr_cycles);
     RUN_TEST(analyzer_error_effect_propagates_direct_method_calls);
     RUN_TEST(analyzer_error_effect_propagates_module_export_calls);
     RUN_TEST(analyzer_error_effect_consumes_xrd_native_contracts);

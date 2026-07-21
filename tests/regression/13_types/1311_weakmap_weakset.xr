@@ -10,8 +10,8 @@
 @test
 fn test_weakmap_weakset() {
     var wm = WeakMap<Json, Json>()
-    var key1 = { name: "alice" }
-    var key2 = { name: "bob" }
+    var key1: Json = { name: "alice" }
+    var key2: Json = { name: "bob" }
     wm.set(key1, "value1")
     wm.set(key2, "value2")
     assert_eq(wm.get(key1), "value1")
@@ -20,7 +20,7 @@ fn test_weakmap_weakset() {
 
     // Test 2: has
     assert_eq(wm.containsKey(key1), true)
-    var key3 = { name: "charlie" }
+    var key3: Json = { name: "charlie" }
     assert_eq(wm.containsKey(key3), false)
     print("PASS: weakmap has")
 
@@ -32,7 +32,7 @@ fn test_weakmap_weakset() {
     print("PASS: weakmap delete")
 
     // Test 4: update value
-    var key4 = { kind: "config" }
+    var key4: Json = { kind: "config" }
     wm.set(key4, "old")
     assert_eq(wm.get(key4), "old")
     wm.set(key4, "new")
@@ -40,8 +40,9 @@ fn test_weakmap_weakset() {
     print("PASS: weakmap update")
 
     // Test 5: array as value
-    var key5 = { kind: "container" }
-    wm.set(key5, [1, 2, 3])
+    var key5: Json = { kind: "container" }
+    var array_value: Json = [1, 2, 3]
+    wm.set(key5, array_value)
     var arr = wm.get(key5)
     assert_eq(arr[0], 1)
     assert_eq(arr[1], 2)
@@ -49,8 +50,9 @@ fn test_weakmap_weakset() {
     print("PASS: weakmap array value")
 
     // Test 6: nested object as value
-    var key6 = { outer: true }
-    wm.set(key6, { inner: { deep: "value" } })
+    var key6: Json = { outer: true }
+    var nested_value: Json = { inner: { deep: "value" } }
+    wm.set(key6, nested_value)
     var val = wm.get(key6)
     assert_eq(val.inner.deep, "value")
     print("PASS: weakmap nested value")
@@ -59,8 +61,8 @@ fn test_weakmap_weakset() {
 
     // Test 7: create and add/has
     var ws = WeakSet<Json>()
-    var obj1 = { id: 1 }
-    var obj2 = { id: 2 }
+    var obj1: Json = { id: 1 }
+    var obj2: Json = { id: 2 }
     assert_eq(ws.contains(obj1), false)
     ws.add(obj1)
     ws.add(obj2)
@@ -76,7 +78,7 @@ fn test_weakmap_weakset() {
 
     // Test 9: no duplicates
     var ws2 = WeakSet<Json>()
-    var obj3 = { unique: true }
+    var obj3: Json = { unique: true }
     ws2.add(obj3)
     ws2.add(obj3)
     ws2.add(obj3)

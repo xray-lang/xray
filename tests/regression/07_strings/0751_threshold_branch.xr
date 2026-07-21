@@ -260,7 +260,7 @@ fn test_concurrent_threshold_boundary() {
         [30, 35]   // 65 (XrStrBuf)
     ]
     
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<int>> = []
     for (var i = 0; i < len(test_cases); i++) {
         var len_a = test_cases[i][0]
         var len_b = test_cases[i][1]

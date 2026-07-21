@@ -266,7 +266,7 @@ fn test_concurrent_short_concat() {
     }
     
     var n = 20
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go short_concat_task(i))
     }
@@ -288,7 +288,7 @@ fn test_concurrent_long_concat() {
     }
     
     var n = 20
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go long_concat_task(i))
     }
@@ -316,7 +316,7 @@ fn test_concurrent_mixed_concat() {
     }
     
     var n = 40
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go mixed_concat_task(i))
     }

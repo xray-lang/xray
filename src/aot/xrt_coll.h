@@ -5135,6 +5135,21 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             return storage_size ? xr_aggregate_ref(dst, storage_size)
                                 : xr_mkptr(dst, XR_TAG_AGG_REF);
         }
+        case XR_TAG_CELL: {
+            xrt_cell_t *src = (xrt_cell_t *) val.ptr;
+            if (!src)
+                return val;
+            XrValue cloned = xrt_value_clone_for_coro(src->value);
+            XrValue result = xrt_cell_new(cloned);
+            /* xrt_cell_new retains its input.  Drop the temporary ownership
+             * only for clone kinds that return a fresh ARC value. */
+            if (cloned.tag == XR_TAG_STR_ARC || cloned.tag == XR_TAG_ARRAY ||
+                cloned.tag == XR_TAG_MAP || cloned.tag == XR_TAG_SET ||
+                cloned.tag == XR_TAG_STRBUF || cloned.tag == XR_TAG_AGG_REF ||
+                cloned.tag == XR_TAG_CELL)
+                xrt_release(cloned);
+            return result;
+        }
         case XR_TAG_REGEX:
         case XR_TAG_NET_CONN:
         case XR_TAG_NET_LISTENER:

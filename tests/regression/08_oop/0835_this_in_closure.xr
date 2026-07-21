@@ -61,7 +61,7 @@ fn test_this_in_closure() {
 
     var n = Nested(10)
     var outer = n.getDoubleWrapper()
-    var inner = outer()
+    var inner = copy(outer())
     print("inner() = ${inner()}")  // expect: 20
 
     /* 测试3：闭包中同时捕获 this 和其他变量 */
@@ -70,4 +70,3 @@ fn test_this_in_closure() {
     var add50 = adder.createAdder(50)
     print("add50(10) = ${add50(10)}")  // expect: 160
 }
-

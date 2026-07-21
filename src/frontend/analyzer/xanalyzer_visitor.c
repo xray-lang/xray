@@ -2965,6 +2965,10 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
                 }
                 if (pt && at) {
                     actual_types[i] = xa_infer_type_param_from_arg(pt, at, tp_name, 0);
+                    /* A null argument constrains only nullable presence; it must not bind the
+                     * underlying generic parameter ahead of a concrete peer argument. */
+                    if (actual_types[i] && XR_TYPE_IS_NULL(actual_types[i]))
+                        actual_types[i] = NULL;
                     if (actual_types[i])
                         break;
                 }

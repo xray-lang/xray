@@ -441,8 +441,17 @@ static bool transfer_block(ArcVerify *av, XiBlock *blk, int16_t *work, bool repo
                  * phi<Span> -> loop read, string dropped before the loop). */
                 if (av->owner[in->id] >= 0 && av->track[av->owner[in->id]] >= 0) {
                     uint32_t o = (uint32_t) av->owner[in->id];
-                    int16_t d = av->delta_out[(size_t) pred->id * T + (uint32_t) av->track[o]];
-                    if (d < 0) {
+                    int16_t owner_delta =
+                        av->delta_out[(size_t) pred->id * T + (uint32_t) av->track[o]];
+                    int16_t view_delta =
+                        av->track[in->id] >= 0
+                            ? av->delta_out[(size_t) pred->id * T + (uint32_t) av->track[in->id]]
+                            : 0;
+                    /* A RETAIN on the borrowed result promotes it to an
+                     * independent owning reference. Releasing the aggregate
+                     * owner is then legal while that compensation remains
+                     * live; a balanced-away retain does not qualify. */
+                    if (owner_delta < 0 && view_delta <= 0) {
                         char detail[160];
                         snprintf(detail, sizeof(detail),
                                  "phi merges borrow view v%u whose owner v%u is over-released "

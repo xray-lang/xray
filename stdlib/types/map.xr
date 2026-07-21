@@ -11,7 +11,7 @@ class Map<K: Hashable, V> {
     keys() -> Array<K> @may_alloc
     values() -> Array<V> @may_alloc
     entries() -> Array<(K, V)> @may_alloc
-    forEach(fn: (key: K, value: V) -> ()) @no_alloc
+    forEach(fn: (key: K, value: V) -> ()) -> () @no_alloc
     // Iteration protocol — iterator() yields each key K (used by
     // single-variable `for (k in m)`); entriesIterator() yields each
     // (key, value) tuple (used by `for (k, v in m)`).

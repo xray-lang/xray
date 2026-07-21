@@ -1875,10 +1875,13 @@ static int elim_block(XiBlock *blk, const XiFunc *f) {
             continue;
 
         int real_uses = count_real_uses(f, target);
-        if (real_uses <= 1 && arc_elim_can_remove_single_consumer_retain(f, target)) {
+        if (real_uses <= 1 && value_has_consuming_use(f, target) &&
+            arc_elim_can_remove_single_consumer_retain(f, target)) {
             /* The value flows to at most one real consumer; the retain is
-             * dead weight because xi_arc already handles single-consumer
-             * ownership transfer via the last-use move rule. */
+             * dead weight only when that use consumes ownership. A sole
+             * borrowing use can intentionally sit between RETAIN and RELEASE
+             * to create an independent owned alias; removing that retain
+             * turns the alias into a dangling reference. */
             arc_remove_value(blk, i);
             eliminated++;
             i--; /* re-examine the slot */

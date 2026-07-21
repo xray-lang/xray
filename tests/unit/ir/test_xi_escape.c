@@ -454,6 +454,35 @@ static void test_arc_elim_keeps_borrowed_single_consumer_retain(void) {
     xi_func_free(f);
 }
 
+/* ========== Test: ARC elim keeps retain that creates an owned alias ====== */
+
+static void test_arc_elim_keeps_retain_before_sole_borrowing_alias(void) {
+    XiFunc *f = make_func("arc_owned_alias_from_borrow", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiValue *source = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 0);
+    source->escape = XI_ESC_ARG;
+
+    XiValue *retain = xi_value_new(f, b0, XI_RETAIN, &t_any, 1);
+    retain->args[0] = source;
+
+    XiValue *alias = xi_value_new(f, b0, XI_AS, &t_array, 1);
+    alias->args[0] = source;
+    alias->aux_int = ((int64_t) (uint32_t) -1 << 1);
+
+    XiValue *len = xi_value_new(f, b0, XI_LEN, &t_int, 1);
+    len->args[0] = alias;
+    xi_block_set_return(b0, len);
+
+    xi_arc_insert(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
+              "owned alias requires an explicit retain before borrowing cast");
+    xi_arc_elim(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
+              "ARC elim must not remove retain whose sole real use borrows");
+    xi_func_free(f);
+}
+
 /* ========== Test: ARC handles more than the old fixed site cap ========== */
 
 static void test_arc_many_consume_sites(void) {
@@ -784,6 +813,7 @@ int main(void) {
     test_arc_return_gets_retain();
     test_arc_heap_gets_retain_release();
     test_arc_elim_keeps_borrowed_single_consumer_retain();
+    test_arc_elim_keeps_retain_before_sole_borrowing_alias();
     test_arc_many_consume_sites();
     test_arc_span_borrow_flows_through_phi();
     test_arc_branch_local_span_phi_stays_in_dominance_region();

@@ -7,7 +7,7 @@ class Set<T: Hashable> {
     delete(value: T) -> bool @no_alloc
     clear() @no_alloc
     values() -> Array<T> @may_alloc
-    forEach(fn: (value: T) -> ()) @no_alloc
+    forEach(fn: (value: T) -> ()) -> () @no_alloc
     union(other: Set<T>) -> Set<T> @may_alloc
     intersection(other: Set<T>) -> Set<T> @may_alloc
     difference(other: Set<T>) -> Set<T> @may_alloc

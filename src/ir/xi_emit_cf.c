@@ -585,8 +585,12 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
         }
 
         case XI_BLOCK_UNREACHABLE:
-            /* Emit a NOP as placeholder */
-            emit_inst(ctx, CREATE_ABC(OP_NOP, 0, 0, 0));
+            /* UNREACHABLE has no CFG successor, so its bytecode must also be a
+             * hard control-flow terminator. A NOP here lets an unexpectedly
+             * reached defensive block fall through into whichever RPO block
+             * happens to follow it, potentially after that block's cleanup
+             * has released values still used by the fallthrough target. */
+            emit_inst(ctx, CREATE_ABC(OP_RETURN0, 0, 0, 0));
             break;
 
         default:

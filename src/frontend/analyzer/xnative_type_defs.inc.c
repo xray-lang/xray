@@ -12,7 +12,7 @@ static const char xr_native_def_array[] =
     "string) -> string\n    reverse() -> Array<T>\n    sort(compareFn?: (a: T, b: T) -> int) -> "
     "Array<T>\n    map(fn: (item: T, index: int) -> U) -> Array<U>\n    filter(fn: (item: T, "
     "index: int) -> bool) -> Array<T>\n    reduce(fn: (acc: U, item: T) -> U, initial: U) -> U\n   "
-    " forEach(fn: (item: T, index: int) -> ())\n    find(fn: (item: T) -> bool) -> T?\n    "
+    " forEach(fn: (item: T, index: int) -> ()) -> ()\n    find(fn: (item: T) -> bool) -> T?\n    "
     "findIndex(fn: (item: T) -> bool) -> int\n    every(fn: (item: T) -> bool) -> bool\n    "
     "some(fn: (item: T) -> bool) -> bool\n    fill(value: T, start?: int, end?: int) -> Array<T>\n "
     "   // All arrays, including Array<byte>, render the \"[a, b]\" container form.\n    // Decode "
@@ -118,8 +118,8 @@ static const char xr_native_def_map[] =
     "@no_alloc\n    containsValue(value: V) -> bool @no_alloc\n    delete(key: K) -> bool "
     "@no_alloc\n    clear() @no_alloc\n    keys() -> Array<K> @may_alloc\n    values() -> Array<V> "
     "@may_alloc\n    entries() -> Array<(K, V)> @may_alloc\n    forEach(fn: (key: K, value: V) -> "
-    "()) @no_alloc\n    // Iteration protocol — iterator() yields each key K (used by\n    // "
-    "single-variable `for (k in m)`); entriesIterator() yields each\n    // (key, value) tuple "
+    "()) -> () @no_alloc\n    // Iteration protocol — iterator() yields each key K (used by\n    "
+    "// single-variable `for (k in m)`); entriesIterator() yields each\n    // (key, value) tuple "
     "(used by `for (k, v in m)`).\n    iterator() -> Iterator<K> @may_alloc\n    entriesIterator() "
     "-> Iterator<(K, V)> @may_alloc\n    toString() -> string @may_alloc\n}\n";
 
@@ -170,7 +170,7 @@ static const char xr_native_def_set[] =
     "src/runtime/object/xset_methods.c\n\n@native\nclass Set<T: Hashable> {\n    add(value: T) "
     "@may_alloc\n    contains(value: T) -> bool @no_alloc\n    delete(value: T) -> bool "
     "@no_alloc\n    clear() @no_alloc\n    values() -> Array<T> @may_alloc\n    forEach(fn: "
-    "(value: T) -> ()) @no_alloc\n    union(other: Set<T>) -> Set<T> @may_alloc\n    "
+    "(value: T) -> ()) -> () @no_alloc\n    union(other: Set<T>) -> Set<T> @may_alloc\n    "
     "intersection(other: Set<T>) -> Set<T> @may_alloc\n    difference(other: Set<T>) -> Set<T> "
     "@may_alloc\n    symmetricDifference(other: Set<T>) -> Set<T> @may_alloc\n    isSubset(other: "
     "Set<T>) -> bool @no_alloc\n    isSuperset(other: Set<T>) -> bool @no_alloc\n    toArray() -> "

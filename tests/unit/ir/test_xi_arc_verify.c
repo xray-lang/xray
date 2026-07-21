@@ -247,6 +247,50 @@ static void test_legal_borrow_view_owner_alive(void) {
     xi_func_free(f);
 }
 
+static void test_legal_retained_borrow_view_outlives_owner(void) {
+    XiFunc *f = make_func("legal_retained_c3", &t_int);
+    XiBlock *b0 = f->entry;
+    XiBlock *b1 = xi_block_new(f);
+
+    XiValue *base = rc_new(f, b0);
+    XiValue *sp = span_view(f, b0, base);
+    retain(f, b0, sp); /* promote the borrowed result to an owning reference */
+    release(f, b0, base);
+    xi_block_set_jump(b0, b1);
+
+    XiPhi *p = xi_phi_new(f, b1, &t_span, b1->npreds);
+    p->value.args[0] = sp;
+    index_get(f, b1, &p->value);
+    release(f, b1, &p->value);
+    XiValue *ret = xi_const_int(f, b1, 0, &t_int);
+    xi_block_set_return(b1, ret);
+
+    ASSERT_OK(f, "legal retained borrow view outlives aggregate owner");
+    xi_func_free(f);
+}
+
+static void test_released_retain_does_not_promote_borrow_view(void) {
+    XiFunc *f = make_func("released_retain_c3", &t_int);
+    XiBlock *b0 = f->entry;
+    XiBlock *b1 = xi_block_new(f);
+
+    XiValue *base = rc_new(f, b0);
+    XiValue *sp = span_view(f, b0, base);
+    retain(f, b0, sp);
+    release(f, b0, sp); /* compensation is gone before the phi edge */
+    release(f, b0, base);
+    xi_block_set_jump(b0, b1);
+
+    XiPhi *p = xi_phi_new(f, b1, &t_span, b1->npreds);
+    p->value.args[0] = sp;
+    index_get(f, b1, &p->value);
+    XiValue *ret = xi_const_int(f, b1, 0, &t_int);
+    xi_block_set_return(b1, ret);
+
+    ASSERT_CONTRACT(f, XI_ARC_C3_BORROW_ESCAPE, "C3: balanced-away retain cannot outlive owner");
+    xi_func_free(f);
+}
+
 /* ========== Legal C4: branch-local release stays in dominance region ======= */
 
 static void test_legal_branch_local_release(void) {
@@ -391,6 +435,8 @@ int main(void) {
     test_legal_move_out();
     test_legal_early_return_release();
     test_legal_borrow_view_owner_alive();
+    test_legal_retained_borrow_view_outlives_owner();
+    test_released_retain_does_not_promote_borrow_view();
     test_legal_branch_local_release();
     test_legal_trivial();
 

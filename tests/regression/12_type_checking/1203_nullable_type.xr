@@ -77,7 +77,7 @@ fn test_optional_chain_method() {
     var count = arr == null ? null : len(arr!)
     assert_eq(count, null)
     arr = [1, 2, 3]
-    count = arr == null ? null : len(arr!)
+    count = len(arr!)
     assert_eq(count, 3)
 }
 

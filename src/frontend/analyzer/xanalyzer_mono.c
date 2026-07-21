@@ -1942,6 +1942,44 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                 rewrite_call_sites(node->as.print_stmt.exprs[i], registry, collector,
                                    import_aliases);
             break;
+        case AST_ARRAY_LITERAL:
+            if (node->as.array_literal.is_repeat) {
+                rewrite_call_sites(node->as.array_literal.repeat_value, registry, collector,
+                                   import_aliases);
+                rewrite_call_sites(node->as.array_literal.repeat_count, registry, collector,
+                                   import_aliases);
+            } else {
+                for (int i = 0; i < node->as.array_literal.count; i++)
+                    rewrite_call_sites(node->as.array_literal.elements[i], registry, collector,
+                                       import_aliases);
+            }
+            break;
+        case AST_INDEX_GET:
+            rewrite_call_sites(node->as.index_get.array, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.index_get.index, registry, collector, import_aliases);
+            break;
+        case AST_INDEX_SET:
+            rewrite_call_sites(node->as.index_set.array, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.index_set.index, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.index_set.value, registry, collector, import_aliases);
+            break;
+        case AST_MEMBER_ACCESS:
+            rewrite_call_sites(node->as.member_access.object, registry, collector, import_aliases);
+            break;
+        case AST_MEMBER_SET:
+            rewrite_call_sites(node->as.member_set.object, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.member_set.value, registry, collector, import_aliases);
+            break;
+        case AST_TERNARY:
+            rewrite_call_sites(node->as.ternary.condition, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.ternary.true_expr, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.ternary.false_expr, registry, collector, import_aliases);
+            break;
+        case AST_TEMPLATE_STRING:
+            for (int i = 0; i < node->as.template_str.part_count; i++)
+                rewrite_call_sites(node->as.template_str.parts[i], registry, collector,
+                                   import_aliases);
+            break;
         case AST_TRY_CATCH:
             rewrite_call_sites(node->as.try_catch.try_body, registry, collector, import_aliases);
             for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
@@ -1965,6 +2003,12 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         case AST_MATCH_ARM:
             rewrite_call_sites(node->as.match_arm.guard, registry, collector, import_aliases);
             rewrite_call_sites(node->as.match_arm.body, registry, collector, import_aliases);
+            break;
+        case AST_IS_EXPR:
+            rewrite_call_sites(node->as.is_expr.expr, registry, collector, import_aliases);
+            break;
+        case AST_AS_EXPR:
+            rewrite_call_sites(node->as.as_expr.expr, registry, collector, import_aliases);
             break;
         case AST_GO_EXPR:
             rewrite_call_sites(node->as.go_expr.expr, registry, collector, import_aliases);

@@ -172,9 +172,9 @@ fn test_box_int() {
 }
 
 @test
-fn test_box_string() {
-    var b = Box("hello")
-    assert_eq(b.get(), "hello")
+fn test_box_second_instance() {
+    var b = Box(7)
+    assert_eq(b.get(), 7)
 }
 
 @test

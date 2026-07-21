@@ -105,6 +105,22 @@ TEST(emit_return_void) {
     xi_func_free(f);
 }
 
+TEST(emit_unreachable_is_terminator) {
+    XiFunc *f = make_func("unreachable", &stub_void);
+    f->entry->kind = XI_BLOCK_UNREACHABLE;
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    assert(s == XI_EMIT_OK);
+    assert(proto != NULL);
+    assert(PROTO_CODE_COUNT(proto) == 1);
+    assert(GET_OPCODE(PROTO_CODE(proto, 0)) == OP_RETURN0 &&
+           "UNREACHABLE bytecode must not fall through");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
 TEST(emit_const_bool) {
     /* fn() { return true } */
     XiFunc *f = make_func("test", &stub_bool);
@@ -1213,6 +1229,7 @@ int main(void) {
     /* Basic emission */
     run_emit_return_const_int();
     run_emit_return_void();
+    run_emit_unreachable_is_terminator();
     run_emit_const_bool();
     run_emit_const_null();
 

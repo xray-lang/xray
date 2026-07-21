@@ -28,7 +28,7 @@ fn test_concurrent_concat_isolation() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go concat_task(i))
     }
@@ -57,7 +57,7 @@ fn test_long_string_isolation() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go long_concat_task(i))
     }
@@ -94,7 +94,7 @@ fn test_interleaved_concat_isolation() {
     }
     
     var n = 30
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<Array<string>>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go interleaved_task(i))
     }
@@ -128,7 +128,7 @@ fn test_buffer_content_no_leak() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     var markers: Array<string> = []
     for (var i = 0; i < n; i++) {
         var marker = "UNIQUE_MARKER_" + string(i) + "_" + string(i * 7 % 100)
@@ -202,7 +202,7 @@ fn test_high_concurrency_isolation() {
     }
     
     var n = 80
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go stress_task(i))
     }
@@ -246,7 +246,7 @@ fn test_mixed_length_isolation() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go mixed_task(i))
     }
@@ -284,7 +284,7 @@ fn test_property_random_isolation() {
     }
     
     var n = 40
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go random_concat(i))
     }

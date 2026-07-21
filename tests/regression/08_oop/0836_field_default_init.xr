@@ -13,7 +13,7 @@ class Simple {
     }
 }
 class Complex {
-    _map = #{}
+    _map: Map<string, int> = #{}
     _arr: Array<int> = []
     _config: Map<string, int> = #{"debug": 0, "port": 8080}
 
@@ -136,4 +136,3 @@ fn test_field_default_init_without_constructor() {
     assert_eq(len(b.nums), 2)
     assert_eq(b.settings["port"], 8080)
 }
-

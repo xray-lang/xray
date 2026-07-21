@@ -18,7 +18,7 @@ fn test_instance_methods() {
 
     var found = re.find("abc123 xyz456")
     assert(found != null)
-    assert_eq(found.text, "abc123")
+    assert_eq(found!.text, "abc123")
 
     assert_eq(re.findText("abc123 xyz456"), "abc123")
     assert_eq(re.findGroup("abc123 xyz456", 1), "abc")
@@ -41,9 +41,9 @@ fn test_find() {
     var re = regex.compile("\\d+")
     var result = regex.find(re, "abc123def")
     assert(result != null)
-    assert_eq(result.start, 3)
-    assert_eq(result.end, 6)
-    assert_eq(result.groups[0], "123")
+    assert_eq(result!.start, 3)
+    assert_eq(result!.end, 6)
+    assert_eq(result!.groups[0], "123")
 }
 
 // @test capture groups
@@ -52,7 +52,7 @@ fn test_capture_groups() {
     var re = regex.compile("(\\w+)@(\\w+)")
     var result = regex.find(re, "contact: user@host.com")
     assert(result != null)
-    var groups = result.groups
+    var groups = result!.groups
     assert_eq(groups[0], "user@host")
     assert_eq(groups[1], "user")
     assert_eq(groups[2], "host")

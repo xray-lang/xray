@@ -8,6 +8,7 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_lower.h"
+#include "../../../src/ir/xi_own.h"
 #include "../../../src/analysis/xglobal_producer.h"
 #include "../../../src/analysis/xglobal_summary.h"
 #include "../../../src/frontend/canonical/xcanon.h"
@@ -2241,6 +2242,26 @@ TEST(go_arg_transfer_modes) {
     xi_func_free(share_ir);
 }
 
+TEST(hoisted_readonly_capture_keeps_copy_semantics) {
+    XiFunc *f = lower_source("fn launch() {\n"
+                             "  shared gate = Atomic(0)\n"
+                             "  fn worker() -> int { return gate.load() }\n"
+                             "  var task = go worker()\n"
+                             "  print(await task)\n"
+                             "}\n"
+                             "launch()\n");
+    assert(f != NULL);
+    XiFunc *worker = func_tree_find_func_name(f, "worker");
+    assert(worker != NULL);
+    assert(worker->ncaptures == 1);
+    assert(worker->captures[0].needs_cell && "hoisting must preserve the forward-initializer cell");
+    assert(!worker->captures[0].is_mutable && !worker->captures[0].is_reassigned &&
+           "initialization ordering is not source-level mutation");
+    assert(worker->captures[0].capture_kind == XI_CAPTURE_BY_COPY);
+    assert(xi_capture_cross_execution_action(&worker->captures[0]) == XR_CAPTURE_DEEP_COPY);
+    xi_func_free(f);
+}
+
 TEST(channel_send_transfer_modes) {
     XiFunc *copy_ir = lower_source("shared ch: Channel<Array<int>> = Channel(1)\n"
                                    "var xs = [1, 2]\n"
@@ -2712,6 +2733,7 @@ int main(void) {
     run_go_await();
     run_direct_await_go_one_shot();
     run_go_arg_transfer_modes();
+    run_hoisted_readonly_capture_keeps_copy_semantics();
     run_channel_send_transfer_modes();
     run_defer_stmt();
     run_defer_args_lower_before_defer();

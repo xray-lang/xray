@@ -53,8 +53,10 @@ invoke_dispatch:;
         }                                                                                          \
     } while (0)
 
-    XrValue receiver = R(a + 1);
-    if (XR_IS_PLACE(receiver)) {
+    XrValue receiver_arg = R(a + 1);
+    bool receiver_is_place = XR_IS_PLACE(receiver_arg);
+    XrValue receiver = receiver_arg;
+    if (receiver_is_place) {
         if (receiver.i < 0 || receiver.i >= vm_ctx->stack_capacity) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid method receiver place");
         }
@@ -392,7 +394,15 @@ invoke_dispatch:;
              * before pushing the frame; without this, when stack and frames
              * share a combined slab allocation the callee's writes can
              * silently overflow into the frames array. */
-            VM_STACK_CHECK(a + 1 + proto->maxstacksize);
+            VM_STACK_CHECK(a + 2 + proto->maxstacksize);
+
+            if (klass->struct_layout != NULL && !receiver_is_place) {
+                int backing = (int) ((base + a + 1) - VM_STACK) + proto->maxstacksize;
+                VM_STACK[backing] = receiver;
+                R(a + 1) = (XrValue) {0};
+                R(a + 1).tag = XR_TAG_PLACE;
+                R(a + 1).i = backing;
+            }
 
             int _fidx = VM_FRAME_COUNT;
             VM_INC_FRAME_COUNT;
@@ -469,8 +479,10 @@ vmcase(OP_INVOKE_DIRECT) {
     int is_tail_direct = (c_raw & 0x80);
     int nargs = c_raw & 0x7F;
 
-    XrValue receiver = R(a + 1);
-    if (XR_IS_PLACE(receiver)) {
+    XrValue receiver_arg = R(a + 1);
+    bool receiver_is_place = XR_IS_PLACE(receiver_arg);
+    XrValue receiver = receiver_arg;
+    if (receiver_is_place) {
         if (receiver.i < 0 || receiver.i >= vm_ctx->stack_capacity) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid direct method receiver place");
         }
@@ -583,7 +595,15 @@ vmcase(OP_INVOKE_DIRECT) {
     /* Stack/frames capacity check before pushing a new frame; without
      * this the callee's register file can overflow into frames[] when
      * the coroutine still uses the combined slab layout. */
-    VM_STACK_CHECK(a + 1 + closure->proto->maxstacksize);
+    VM_STACK_CHECK(a + 2 + closure->proto->maxstacksize);
+
+    if (cls->struct_layout != NULL && !receiver_is_place) {
+        int backing = (int) ((base + a + 1) - VM_STACK) + closure->proto->maxstacksize;
+        VM_STACK[backing] = receiver;
+        R(a + 1) = (XrValue) {0};
+        R(a + 1).tag = XR_TAG_PLACE;
+        R(a + 1).i = backing;
+    }
 
     savepc();
     int _fidx = VM_FRAME_COUNT;

@@ -588,7 +588,22 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
                 /* Place operator frame above caller's maxstacksize to avoid */                    \
                 /* clobbering caller's local registers */                                          \
                 int _safe_base = (int) (base - VM_STACK) + cl->proto->maxstacksize;                \
-                VM_STACK[_safe_base] = (left_val);                                                 \
+                if (_cls->struct_layout != NULL) {                                                 \
+                    /* Value-aggregate methods receive `this` as a call-bound                      \
+                     * place. Dynamic operator dispatch has no lowering-time                       \
+                     * lvalue plan, so keep the aggregate reference in a stable                    \
+                     * scratch slot just beyond the callee register file and pass                  \
+                     * an absolute place descriptor as parameter 0. */                             \
+                    VM_STACK_CHECK(cl->proto->maxstacksize + _proto->maxstacksize + 1);            \
+                    _safe_base = (int) (base - VM_STACK) + cl->proto->maxstacksize;                \
+                    int _backing = _safe_base + _proto->maxstacksize;                              \
+                    VM_STACK[_backing] = (left_val);                                               \
+                    VM_STACK[_safe_base] = (XrValue) {0};                                          \
+                    VM_STACK[_safe_base].tag = XR_TAG_PLACE;                                       \
+                    VM_STACK[_safe_base].i = _backing;                                             \
+                } else {                                                                           \
+                    VM_STACK[_safe_base] = (left_val);                                             \
+                }                                                                                  \
                 VM_STACK[_safe_base + 1] = (right_val);                                            \
                 savepc();                                                                          \
                 int _fidx = VM_FRAME_COUNT;                                                        \

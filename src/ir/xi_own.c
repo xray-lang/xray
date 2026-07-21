@@ -76,9 +76,14 @@ XR_FUNC XrCaptureAction xi_capture_cross_execution_action(const XiCapture *captu
         return XR_CAPTURE_SHARED_REF;
     if (capture->capture_kind == XI_CAPTURE_MODULE_LIVE)
         return capture->is_mutable ? XR_CAPTURE_REJECT : XR_CAPTURE_MODULE_READONLY;
-    if (capture->needs_cell || capture->is_mutable || capture->is_reassigned ||
+    if (capture->is_mutable || capture->is_reassigned ||
         capture->capture_kind == XI_CAPTURE_BY_IMM_REF)
         return XR_CAPTURE_REJECT;
+    /* A cell may be a compiler-only forward-initializer artifact rather than
+     * a source-level mutable binding.  Give the child a private copy of that
+     * cell; shared values inside it retain their shared identity. */
+    if (capture->needs_cell)
+        return XR_CAPTURE_DEEP_COPY;
     return xi_own_type_is_rc(capture->type) ? XR_CAPTURE_DEEP_COPY : XR_CAPTURE_INLINE_VALUE;
 }
 

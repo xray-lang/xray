@@ -114,8 +114,8 @@ fn test_arrow_capture_param() {
 fn test_arrow_return_arrow() {
     var makeAdder = (x: int) -> (y: int) -> x + y
     
-    var add5 = makeAdder(5)
-    var add10 = makeAdder(10)
+    var add5 = copy(makeAdder(5))
+    var add10 = copy(makeAdder(10))
     
     assert_eq(add5(3), 8)
     assert_eq(add10(3), 13)
@@ -157,4 +157,3 @@ fn test_arrow_as_method_arg() {
     var result = apply((x) -> x * 3, 5)
     assert_eq(result, 15)
 }
-

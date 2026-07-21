@@ -2975,6 +2975,53 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
     }
 
+    /* User-defined subscript operators are ordinary instance members at runtime, but indexed
+     * syntax bypasses member-access inference.  Resolve operator[] here so the analyzer agrees
+     * with the VM/AOT dispatch contract and validates the index against the declared signature. */
+    if (XR_TYPE_IS_INSTANCE(container) && container->instance.class_ref) {
+        XrClassInfo *class_info = container->instance.class_ref;
+        struct XrClassInfo *member_owner = NULL;
+        XaSymbol *member =
+            xa_class_info_lookup_instance_member_owner(class_info, "[]", &member_owner);
+        XaSymbolLinks *member_links = member ? xa_analyzer_get_links(ctx->analyzer, member) : NULL;
+        XrType *member_type = member_links ? member_links->type : NULL;
+        if (member && member_type && XR_TYPE_IS_FUNCTION(member_type)) {
+            xa_check_member_visibility(ctx, node, member, member_owner);
+            XaSymbol *class_sym =
+                xa_scope_lookup(ctx->analyzer->current_scope, container->instance.class_name);
+            XaSymbolLinks *class_links =
+                class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+            int type_param_count =
+                class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
+            if (type_param_count > 0 && container->instance.type_arg_count > 0) {
+                const char *name_buf[8] = {0};
+                const char **names = type_param_count <= 8
+                                         ? name_buf
+                                         : xr_malloc(sizeof(const char *) * type_param_count);
+                if (names) {
+                    for (int i = 0; i < type_param_count; i++)
+                        names[i] = xa_symbol_links_get_type_param_name(class_links, i);
+                    member_type = xr_type_substitute(ctx->analyzer->isolate, member_type, names,
+                                                     container->instance.type_args,
+                                                     container->instance.type_arg_count);
+                    if (names != name_buf)
+                        xr_free((void *) names);
+                }
+            }
+            XrType *expected_index = member_type->function.param_count > 0
+                                         ? xr_type_function_param_type(member_type, 0)
+                                         : NULL;
+            if (expected_index && index_type && !XR_TYPE_IS_UNKNOWN(index_type) &&
+                !xa_typecheck_assignable(expected_index, index_type))
+                add_index_type_error(ctx, node, index_type, expected_index);
+            XrType *result = member_type->function.return_type
+                                 ? member_type->function.return_type
+                                 : xr_type_new_unknown(ctx->analyzer->isolate);
+            record_selection(ctx, node, XA_SEL_INDEX, container, member, -1, result, false);
+            return result;
+        }
+    }
+
     if (container && !XR_TYPE_IS_UNKNOWN(container)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[192];
@@ -3108,6 +3155,55 @@ XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
     XrType *result = xr_type_new_tuple(ctx->analyzer->isolate, elem_types, slot);
     xr_free(elem_types);
     return result ? result : xr_type_new_unknown(NULL);
+}
+
+static bool xa_type_contains_unresolved_param(const XrType *type, int depth) {
+    if (!type || depth > 16)
+        return false;
+    if (type->kind == XR_KIND_TYPE_PARAM)
+        return true;
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_SPAN:
+        case XR_KIND_VIEW:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+        case XR_KIND_POINTER:
+            return xa_type_contains_unresolved_param(type->container.element_type, depth + 1);
+        case XR_KIND_MAP:
+            return xa_type_contains_unresolved_param(type->map.key_type, depth + 1) ||
+                   xa_type_contains_unresolved_param(type->map.value_type, depth + 1);
+        case XR_KIND_FUNCTION:
+            for (int i = 0; i < type->function.param_count; i++) {
+                if (xa_type_contains_unresolved_param(xr_type_function_param_type(type, i),
+                                                      depth + 1))
+                    return true;
+            }
+            return xa_type_contains_unresolved_param(type->function.return_type, depth + 1);
+        case XR_KIND_TUPLE:
+            for (int i = 0; i < type->tuple.element_count; i++) {
+                if (xa_type_contains_unresolved_param(type->tuple.element_types[i], depth + 1))
+                    return true;
+            }
+            return false;
+        case XR_KIND_INSTANCE:
+        case XR_KIND_CLASS:
+            for (int i = 0; i < type->instance.type_arg_count; i++) {
+                if (xa_type_contains_unresolved_param(type->instance.type_args[i], depth + 1))
+                    return true;
+            }
+            return false;
+        case XR_KIND_UNION:
+            for (int i = 0; i < type->union_type.member_count; i++) {
+                if (xa_type_contains_unresolved_param(type->union_type.members[i], depth + 1))
+                    return true;
+            }
+            return false;
+        case XR_KIND_FIXED_ARRAY:
+            return xa_type_contains_unresolved_param(type->fixed_array.element_type, depth + 1);
+        default:
+            return false;
+    }
 }
 
 XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
@@ -3326,7 +3422,10 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
                                                  ctx->expected_type->container.element_type);
     }
 
-    bool use_target_elem_type = (target_elem_type != NULL);
+    /* An expected Array<T> guides shape but must not erase evidence from concrete literal
+     * elements: generic call inference needs `[1, 2]` to contribute Array<int>, not Array<T>. */
+    bool use_target_elem_type =
+        target_elem_type != NULL && !xa_type_contains_unresolved_param(target_elem_type, 0);
     XrType *elem_type = NULL;
     bool poisoned = false;
 
@@ -4701,7 +4800,8 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             }
             // Use expected function type (bidirectional inference)
             else if (expected_fn && i < expected_fn->function.param_count &&
-                     xr_type_function_param_type(expected_fn, i)) {
+                     xr_type_function_param_type(expected_fn, i) &&
+                     xr_type_function_param_type(expected_fn, i)->kind != XR_KIND_TYPE_PARAM) {
                 param_types[i] = xr_type_function_param_type(expected_fn, i);
             }
             // Use generic inference from callback context
@@ -4753,7 +4853,12 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     // expected context) — the body visit resolves variable symbol_ids
     // and validates scope constraints.  Without it, captured variables
     // get symbol_id=0 and upvalue resolution fails.
-    bool need_return_infer = XR_TYPE_IS_UNKNOWN(return_type);
+    /* An unannotated callback may inherit an unbound method type parameter
+     * such as U from Array<T>.map.  U supplies parameter context but is not a
+     * concrete return result; infer the callback body and bind map's result to
+     * that concrete type (including nested Array<U> callbacks). */
+    bool need_return_infer = !fn->return_type && (XR_TYPE_IS_UNKNOWN(return_type) ||
+                                                  return_type->kind == XR_KIND_TYPE_PARAM);
     if (fn->body) {
         // Closure bodies execute lazily, so the definite-assignment check
         // produces false positives for variables captured from enclosing

@@ -34,7 +34,7 @@ fn test_weakmap_weakset_contract_error() {
     assert(caught_null, "WeakMap.set(null, ...) must throw")
 
     // Object key still succeeds.
-    var key = { name: "valid" }
+    var key: Json = { name: "valid" }
     wm.set(key, "ok")
     assert_eq(wm.get(key), "ok")
 
@@ -54,7 +54,7 @@ fn test_weakmap_weakset_contract_error() {
     assert(caught_set_null, "WeakSet.add(null) must throw")
 
     // Object element still succeeds.
-    var obj = { id: 1 }
+    var obj: Json = { id: 1 }
     ws.add(obj)
     assert_eq(ws.contains(obj), true)
 }

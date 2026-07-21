@@ -319,8 +319,14 @@ static void test_cross_execution_capture_actions(void) {
 
     capture.needs_cell = true;
     capture.capture_kind = XI_CAPTURE_BY_MUT_CELL;
+    capture.is_mutable = true;
     ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_CAPTURE_REJECT,
               "mutable cell capture is rejected");
+
+    capture.is_mutable = false;
+    capture.capture_kind = XI_CAPTURE_BY_COPY;
+    ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_CAPTURE_DEEP_COPY,
+              "read-only forward cell is privately copied");
 
     capture.needs_cell = false;
     capture.is_shared = true;

@@ -712,9 +712,9 @@ static void propagate_needs_cell(XiLower *l, int upval_idx) {
     if (upval_idx < 0 || upval_idx >= (int) l->func->ncaptures)
         return;
     XiCapture *cap = &l->func->captures[upval_idx];
-    if (cap->needs_cell)
-        return; /* already propagated */
     cap->needs_cell = true;
+    cap->is_mutable = true;
+    cap->is_reassigned = true;
 
     /* Propagate upward through the transitive capture chain */
     if (cap->source == XI_CAPTURE_SRC_UPVAL && l->parent) {
@@ -736,8 +736,10 @@ static void propagate_needs_cell(XiLower *l, int upval_idx) {
             continue;
         for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
             if (child->captures[ci].source == XI_CAPTURE_SRC_UPVAL &&
-                (int) child->captures[ci].index == upval_idx && !child->captures[ci].needs_cell) {
+                (int) child->captures[ci].index == upval_idx) {
                 child->captures[ci].needs_cell = true;
+                child->captures[ci].is_mutable = true;
+                child->captures[ci].is_reassigned = true;
             }
         }
     }
@@ -1096,6 +1098,8 @@ static void lower_assignment_mark_child_capture(XiLower *l, int var_id, const ch
             if (child->captures[ci].source == XI_CAPTURE_SRC_REG && child->captures[ci].name &&
                 name && strcmp(child->captures[ci].name, name) == 0) {
                 child->captures[ci].needs_cell = true;
+                child->captures[ci].is_mutable = true;
+                child->captures[ci].is_reassigned = true;
                 if (var_id < l->var_count)
                     l->vars[var_id].captured_by_child = true;
                 val->flags |= XI_FLAG_SIDE_EFFECT;
@@ -3566,8 +3570,12 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
     if (strcmp(fname, "typeName") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
         if (arg && arg->type &&
-            (arg->type->kind == XR_KIND_FIXED_ARRAY || arg->type->kind == XR_KIND_SPAN ||
-             arg->type->kind == XR_KIND_RUNE || xr_type_is_exact_u8(arg->type))) {
+            (arg->type->kind == XR_KIND_SPAN || arg->type->kind == XR_KIND_VIEW)) {
+            return xi_const_str(l->func, l->cur_block, TYPE_NAME_SPAN, l->type_string);
+        }
+        if (arg && arg->type &&
+            (arg->type->kind == XR_KIND_FIXED_ARRAY || arg->type->kind == XR_KIND_RUNE ||
+             xr_type_is_exact_u8(arg->type))) {
             return xi_const_str(l->func, l->cur_block, xr_type_to_string(arg->type),
                                 l->type_string);
         }

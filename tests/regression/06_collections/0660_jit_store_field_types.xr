@@ -7,7 +7,7 @@
 // ===== Store null to field =====
 @test
 fn test_store_null() {
-    var obj = { "val": 42 }
+    var obj: Json = { "val": 42 }
     obj.val = null
     assert_eq(obj.val, null)
 }
@@ -15,14 +15,14 @@ fn test_store_null() {
 // ===== Store true/false to field =====
 @test
 fn test_store_true() {
-    var obj = { "val": 0 }
+    var obj: Json = { "val": 0 }
     obj.val = true
     assert_eq(obj.val, true)
 }
 
 @test
 fn test_store_false() {
-    var obj = { "val": 1 }
+    var obj: Json = { "val": 1 }
     obj.val = false
     assert_eq(obj.val, false)
 }
@@ -30,14 +30,14 @@ fn test_store_false() {
 // ===== Store int to field =====
 @test
 fn test_store_int() {
-    var obj = { "val": null }
+    var obj: Json = { "val": null }
     obj.val = 42
     assert_eq(obj.val, 42)
 }
 
 @test
 fn test_store_negative_int() {
-    var obj = { "val": 0 }
+    var obj: Json = { "val": 0 }
     obj.val = -123
     assert_eq(obj.val, -123)
 }
@@ -45,14 +45,14 @@ fn test_store_negative_int() {
 // ===== Store float to field =====
 @test
 fn test_store_float() {
-    var obj = { "val": 0 }
+    var obj: Json = { "val": 0 }
     obj.val = 3.14
     assert_eq(obj.val, 3.14)
 }
 
 @test
 fn test_store_negative_float() {
-    var obj = { "val": 0 }
+    var obj: Json = { "val": 0 }
     obj.val = -2.718
     assert_eq(obj.val, -2.718)
 }
@@ -60,14 +60,14 @@ fn test_store_negative_float() {
 // ===== Store string to field =====
 @test
 fn test_store_string() {
-    var obj = { "val": 0 }
+    var obj: Json = { "val": 0 }
     obj.val = "hello"
     assert_eq(obj.val, "hello")
 }
 
 @test
 fn test_store_empty_string() {
-    var obj = { "val": 42 }
+    var obj: Json = { "val": 42 }
     obj.val = ""
     assert_eq(obj.val, "")
 }
@@ -75,7 +75,7 @@ fn test_store_empty_string() {
 // ===== Store object to field =====
 @test
 fn test_store_nested_object() {
-    var obj = { "child": null }
+    var obj: Json = { "child": null }
     obj.child = { "x": 10, "y": 20 }
     assert_eq(obj.child.x, 10)
     assert_eq(obj.child.y, 20)
@@ -84,7 +84,7 @@ fn test_store_nested_object() {
 // ===== Type transition: overwrite with different types =====
 @test
 fn test_type_transition_int_to_null() {
-    var obj = { "val": 42 }
+    var obj: Json = { "val": 42 }
     assert_eq(obj.val, 42)
     obj.val = null
     assert_eq(obj.val, null)
@@ -92,7 +92,7 @@ fn test_type_transition_int_to_null() {
 
 @test
 fn test_type_transition_null_to_string() {
-    var obj = { "val": null }
+    var obj: Json = { "val": null }
     assert_eq(obj.val, null)
     obj.val = "hello"
     assert_eq(obj.val, "hello")
@@ -100,7 +100,7 @@ fn test_type_transition_null_to_string() {
 
 @test
 fn test_type_transition_bool_to_int() {
-    var obj = { "val": true }
+    var obj: Json = { "val": true }
     assert_eq(obj.val, true)
     obj.val = 99
     assert_eq(obj.val, 99)
@@ -108,7 +108,7 @@ fn test_type_transition_bool_to_int() {
 
 @test
 fn test_type_transition_string_to_float() {
-    var obj = { "val": "abc" }
+    var obj: Json = { "val": "abc" }
     assert_eq(obj.val, "abc")
     obj.val = 1.5
     assert_eq(obj.val, 1.5)

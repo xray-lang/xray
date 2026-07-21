@@ -386,6 +386,7 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
         l->func->captures[idx].value = parent_val;
         l->func->captures[idx].cell_index = -1;
         l->func->captures[idx].env_offset = -1;
+        l->func->captures[idx].is_mutable = false;
         l->func->captures[idx].is_reassigned = false;
         l->func->captures[idx].is_shared = false;
         /* Cell indirection is needed when the capture cannot see the final
@@ -424,7 +425,8 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
         l->func->captures[idx].type = capture_type;
         l->func->captures[idx].cell_index = -1;
         l->func->captures[idx].env_offset = -1;
-        l->func->captures[idx].is_reassigned = false;
+        l->func->captures[idx].is_mutable = parent->func->captures[parent_upval].is_mutable;
+        l->func->captures[idx].is_reassigned = parent->func->captures[parent_upval].is_reassigned;
         l->func->captures[idx].is_shared = false;
         /* Inherit needs_cell from the parent capture so CELL_GET is emitted
          * at every level in the transitive capture chain. */
@@ -2471,22 +2473,23 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
 
 /*
  * Recursively decorate capture metadata on the function tree.
- * Sets capture_kind and is_mutable based on the already-computed needs_cell
- * flag from the lowering-time closure analysis.  This finalizes the metadata
- * so downstream passes (emit, AOT) can read XiCapture.capture_kind
- * instead of interpreting needs_cell + source heuristically.
+ * Sets capture_kind from lowering-time closure analysis.  needs_cell is a
+ * representation fact: it can be required solely because a hoisted closure
+ * observes a later initializer.  is_mutable/is_reassigned are semantic facts
+ * and must not be inferred from needs_cell, otherwise a read-only compiler
+ * artifact is rejected at cross-execution boundaries.
  */
 static void finalize_capture_metadata(XiFunc *f) {
     XR_DCHECK(f != NULL, "finalize_capture_metadata: NULL func");
 
     for (uint16_t i = 0; i < f->ncaptures; i++) {
         XiCapture *cap = &f->captures[i];
-        if (cap->needs_cell) {
+        if (cap->is_shared) {
+            cap->capture_kind = (uint8_t) XI_CAPTURE_SHARED;
+        } else if (cap->is_mutable || cap->is_reassigned) {
             cap->capture_kind = (uint8_t) XI_CAPTURE_BY_MUT_CELL;
-            cap->is_mutable = true;
         } else {
             cap->capture_kind = (uint8_t) XI_CAPTURE_BY_COPY;
-            cap->is_mutable = false;
         }
     }
 

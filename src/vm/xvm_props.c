@@ -208,13 +208,18 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
                 int setter_base =
                     (int) (base - vm_ctx->stack) + frame->closure->proto->maxstacksize;
                 /* Stack/frames capacity check: setter occupies
-                 * [setter_base, setter_base + maxstacksize). */
-                int needed = setter_base + proto->maxstacksize;
+                 * [setter_base, setter_base + maxstacksize), followed by one
+                 * stable backing slot for the call-bound receiver place. */
+                int backing = setter_base + proto->maxstacksize;
+                int needed = backing + 1;
                 if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
                     VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
                              "stack overflow: grow failed before struct setter");
                 }
-                vm_ctx->stack[setter_base] = obj;        // this
+                vm_ctx->stack[backing] = obj;
+                vm_ctx->stack[setter_base] = (XrValue) {0};
+                vm_ctx->stack[setter_base].tag = XR_TAG_PLACE;
+                vm_ctx->stack[setter_base].i = backing;
                 vm_ctx->stack[setter_base + 1] = value;  // argument
                 frame->pc = pc;
                 int _fidx = vm_ctx->frame_count;
@@ -285,8 +290,21 @@ XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrVMRuntime *isolate, XrVMCo
     if (!new_frame) {
         VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow before instance setter");
     }
-    vm_ctx->stack[new_frame->base_offset] = obj;        // this (R[0])
-    vm_ctx->stack[new_frame->base_offset + 1] = value;  // argument (R[1])
+    int callee_base = new_frame->base_offset;
+    if (inst->klass && inst->klass->struct_layout) {
+        int backing = callee_base + proto->maxstacksize;
+        if (!vm_ensure_call_stack(vm_ctx, backing + 1, &base, &frame, pc)) {
+            VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
+                     "stack overflow: grow failed before value-struct setter");
+        }
+        vm_ctx->stack[backing] = obj;
+        vm_ctx->stack[callee_base] = (XrValue) {0};
+        vm_ctx->stack[callee_base].tag = XR_TAG_PLACE;
+        vm_ctx->stack[callee_base].i = backing;
+    } else {
+        vm_ctx->stack[callee_base] = obj;
+    }
+    vm_ctx->stack[callee_base + 1] = value;  // argument (R[1])
 
     return XR_DISP_RESTART;
 }
@@ -858,12 +876,17 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
                         VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
                     }
                     /* Stack/frames capacity check before frame push. */
-                    int needed = (int) (base - vm_ctx->stack) + a + 1 + proto->maxstacksize;
+                    int getter_base = (int) (base - vm_ctx->stack) + a + 1;
+                    int backing = getter_base + proto->maxstacksize;
+                    int needed = backing + 1;
                     if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
                         VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
                                  "stack overflow: grow failed before struct getter");
                     }
-                    base[a + 1] = obj;  // this = struct_ref
+                    vm_ctx->stack[backing] = obj;
+                    base[a + 1] = (XrValue) {0};
+                    base[a + 1].tag = XR_TAG_PLACE;
+                    base[a + 1].i = backing;
                     frame->pc = pc;
                     int _fidx = vm_ctx->frame_count;
                     memset(&vm_ctx->frames[_fidx], 0, sizeof(XrBcCallFrame));
@@ -971,13 +994,22 @@ XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrVMRuntime *isolate, XrVMCo
     int safe_base = (int) (base - vm_ctx->stack) + frame->closure->proto->maxstacksize;
 
     /* Stack/frames capacity check before any write to vm_ctx->stack. */
-    int needed = safe_base + proto->maxstacksize;
+    bool value_receiver = inst->klass && inst->klass->struct_layout;
+    int backing = safe_base + proto->maxstacksize;
+    int needed = backing + (value_receiver ? 1 : 0);
     if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
         VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
                  "stack overflow: grow failed before instance getter");
     }
 
-    vm_ctx->stack[safe_base] = obj;  // this
+    if (value_receiver) {
+        vm_ctx->stack[backing] = obj;
+        vm_ctx->stack[safe_base] = (XrValue) {0};
+        vm_ctx->stack[safe_base].tag = XR_TAG_PLACE;
+        vm_ctx->stack[safe_base].i = backing;
+    } else {
+        vm_ctx->stack[safe_base] = obj;
+    }
 
     frame->pc = pc;  // savepc
 

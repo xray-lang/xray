@@ -438,7 +438,7 @@ fn test_ignorecase_inline() {
     var re = regex.compile("(?i)hello")
     var result = regex.find(re, "HELLO")
     assert_eq(result != null, true)
-    assert_eq(result.text, "HELLO")
+    assert_eq(result!.text, "HELLO")
 }
 
 @test
@@ -446,7 +446,7 @@ fn test_ignorecase_flag() {
     var re = regex.compile("hello", "i")
     var result = regex.find(re, "HeLLo")
     assert_eq(result != null, true)
-    assert_eq(result.text, "HeLLo")
+    assert_eq(result!.text, "HeLLo")
 }
 
 @test

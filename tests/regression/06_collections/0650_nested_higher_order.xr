@@ -430,7 +430,7 @@ fn test_count_by_reduce() {
         if (acc[word] == null) {
             acc[word] = 0
         }
-        acc[word] = acc[word] + 1
+        acc[word] = int(acc[word]) + 1
         return acc
     }, seed)
     assert_eq(counts.apple, 3)

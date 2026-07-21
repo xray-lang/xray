@@ -28,7 +28,7 @@ fn test_property_concurrent_concat_short() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go concat_task(i))
     }
@@ -57,7 +57,7 @@ fn test_property_concurrent_concat_long() {
     }
     
     var n = 50
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go concat_task(i))
     }
@@ -90,7 +90,7 @@ fn test_property_concurrent_concat_mixed() {
     }
     
     var n = 40
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go concat_task(i))
     }
@@ -124,7 +124,7 @@ fn test_property_concurrent_concat_isolation() {
     }
     
     var n = 30
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < n; i++) {
         var glyph = chars[i % 10]
         tasks.push(go isolation_task(i, glyph))
@@ -163,7 +163,7 @@ fn test_property_concurrent_concat_threshold_boundary() {
     }
     
     var n = 30
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<Array<int>>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go boundary_task(i))
     }
@@ -197,7 +197,7 @@ fn test_property_concurrent_concat_correctness() {
     }
     
     // 并发执行
-    var tasks: Array<Task> = []
+    var tasks: Array<Task<string>> = []
     for (var i = 0; i < 30; i++) {
         tasks.push(go concat_task(i))
     }

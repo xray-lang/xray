@@ -233,6 +233,8 @@ typedef struct FunctionExprCaptureEntry {
     CatchCaptureState catch_state;
 } FunctionExprCaptureEntry;
 
+#define ERROR_SET_FUNCTION_EXPR_WALK_MAX 128
+
 struct ErrorSetCtx {
     XaAnalyzer *analyzer;
     XaEffectSummary *current_summary; /* Effect summary being built for current function */
@@ -261,6 +263,8 @@ struct ErrorSetCtx {
     FunctionExprCaptureEntry *function_expr_captures;
     int function_expr_capture_count;
     int function_expr_capture_capacity;
+    AstNode *active_function_exprs[ERROR_SET_FUNCTION_EXPR_WALK_MAX];
+    int active_function_expr_count;
     bool collect_no_throw_lints;
     AstNode **redundant_no_throw_tries;
     int redundant_no_throw_try_count;
@@ -1436,6 +1440,22 @@ static bool es_walk_function_expr_body(ErrorSetCtx *ctx, AstNode *function_expr)
     if (!fn->body)
         return true;
 
+    /* Exact function-value targets are expanded into the caller's effect
+     * summary. A recursive (or mutually recursive) lambda therefore reaches
+     * the same expression again while its body is already being visited. The
+     * active body already contributes every direct effect in that recursive
+     * component, so stop at the back-edge instead of recursively re-expanding
+     * it forever. */
+    for (int i = 0; i < ctx->active_function_expr_count; i++) {
+        if (ctx->active_function_exprs[i] == function_expr)
+            return true;
+    }
+    if (ctx->active_function_expr_count >= ERROR_SET_FUNCTION_EXPR_WALK_MAX) {
+        xa_effect_summary_mark_incomplete(ctx->current_summary, XA_UNKNOWN_ANALYSIS_LIMIT);
+        return true;
+    }
+    ctx->active_function_exprs[ctx->active_function_expr_count++] = function_expr;
+
     XaScope *saved_scope = ctx->analyzer->current_scope;
     XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, function_expr);
     if (fn_scope)
@@ -1470,6 +1490,7 @@ static bool es_walk_function_expr_body(ErrorSetCtx *ctx, AstNode *function_expr)
     ctx->current_return_target_unknown = saved_return_unknown;
     ctx->current_func = saved_func;
     ctx->analyzer->current_scope = saved_scope;
+    ctx->active_function_expr_count--;
     return true;
 }
 
