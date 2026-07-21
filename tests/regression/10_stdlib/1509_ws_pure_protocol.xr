@@ -173,4 +173,15 @@ fn test_mask_payload_and_unmasked_frame() {
     assert_eq(ext[3], 126)
 }
 
+@test
+fn test_close_payload_decodes_utf8_reason() {
+    var close = ws.parseClosePayload(Array<byte>([3, 232, 79, 75]))!
+    assert_eq(close.code, 1000)
+    assert_eq(close.reason, "OK")
+
+    var unicode = ws.parseClosePayload(Array<byte>([3, 232, 195, 169]))!
+    assert_eq(unicode.reason, "é")
+    assert(ws.parseClosePayload(Array<byte>([3, 232, 192, 175])) == null)
+}
+
 print("All pure websocket protocol tests passed")
