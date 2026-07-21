@@ -1,0 +1,19 @@
+// Deterministic runtime-module micro-benchmark.
+//
+// Exercises the cycle-collector control surface by toggling it in a tight loop.
+// The observable output is only the loop count (not liveBytes/liveObjects/info,
+// which differ between backends and runs), so it is identical across VM and AOT
+// and stable across runs.
+import runtime
+
+fn run(n: int) -> int {
+    var i = 0
+    while (i < n) {
+        runtime.disableCycleCollection()
+        runtime.enableCycleCollection()
+        i = i + 1
+    }
+    return i
+}
+
+print(run(50000))

@@ -215,6 +215,15 @@ typedef struct XrAotEnumAggregate {
     XrValue payloads[XR_AOT_ENUM_AGG_PAYLOAD_CAP];
 } XrAotEnumAggregate;
 
+/* Small, typed multi-value ABI used by direct stdlib data-plane helpers.
+ * error_index is -1 on success; otherwise it is an ordinal in the generated
+ * error enum attached to the declarative stdlib entry. */
+typedef struct XrtI64PairResult {
+    int64_t first;
+    int64_t second;
+    int32_t error_index;
+} XrtI64PairResult;
+
 static inline int xrt_enum_key_parts(XrValue v, const char **enum_name, const char **member_name,
                                      uint32_t *member_index, uint32_t *layout_id) {
     if (v.tag != XR_TAG_ENUM || !v.ptr)
@@ -666,6 +675,37 @@ xrt_enum_aggregate_make(uint32_t layout_id, int64_t tag, uint32_t payload_count,
         payload_count < XR_AOT_ENUM_AGG_PAYLOAD_CAP ? payload_count : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
     for (uint32_t i = 0; i < limit; i++)
         out.payloads[i] = payloads ? payloads[i] : XR_NULL_VAL;
+    return out;
+}
+
+/* Unpack a boxed enum XrValue (as produced by dynamic reads: getprop, index
+ * load, map/json get) into an XrAotEnumAggregate so a typed enum aggregate can
+ * be reconstructed via <Enum>_from_base(...). Inverse of xrt_enum_aggregate_box.
+ * A non-enum/null value yields a zeroed aggregate (tag 0, no payloads). */
+static inline XrAotEnumAggregate xrt_value_to_enum_aggregate(XrValue v) {
+    XrAotEnumAggregate out = xrt_enum_aggregate_zero();
+    if (v.tag != XR_TAG_ENUM || !v.ptr)
+        return out;
+    const XrObjHeader *hdr = (const XrObjHeader *) v.ptr;
+    if (hdr->type == XR_TENUM_CTOR) {
+        const XrAotRuntimeEnumCtorView *ctor = (const XrAotRuntimeEnumCtorView *) v.ptr;
+        out.enum_name = ctor->enum_name;
+        out.member_name = ctor->member_name;
+        out.tag = (int64_t) ctor->member_index;
+        out.payload_count = 0;
+        out.layout_id = ctor->layout_id;
+        return out;
+    }
+    const XrAotEnumBox *ev = (const XrAotEnumBox *) v.ptr;
+    out.enum_name = ev->enum_name;
+    out.member_name = ev->member_name;
+    out.tag = (int64_t) ev->member_index;
+    out.payload_count = ev->payload_count;
+    out.layout_id = ev->layout_id;
+    uint32_t limit = ev->payload_count < XR_AOT_ENUM_AGG_PAYLOAD_CAP ? ev->payload_count
+                                                                     : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
+    for (uint32_t i = 0; i < limit; i++)
+        out.payloads[i] = ev->payloads[i];
     return out;
 }
 

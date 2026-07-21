@@ -2909,7 +2909,7 @@ XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_type, const
 // then substitutes into return_type. Returns the substituted type.
 XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, XrType *callee_type,
                                    XrType *return_type, CallExprNode *call, int arg_count,
-                                   XrType **effective_arg_types) {
+                                   XrType **effective_arg_types, bool writeback_inferred) {
     XR_DCHECK(ctx != NULL, "substitute_generic_call: NULL ctx");
     XR_DCHECK(links != NULL, "substitute_generic_call: NULL links");
     int type_param_count = xa_symbol_links_get_type_param_count(links);
@@ -2988,6 +2988,25 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
     if (actual_count > 0) {
         return_type = xr_type_substitute(ctx->analyzer->isolate, return_type, param_names,
                                          actual_types, actual_count);
+    }
+
+    // task-221 gap C: for an inferred generic call (no explicit type args), record
+    // the inferred type arguments on the call node so monomorphization and AOT
+    // cgen specialize it exactly like the explicit form. Requires every param to
+    // have been inferred to a concrete type; skip otherwise. Gated by
+    // writeback_inferred: imported generic functions (e.g. parallel.reduce, which
+    // cgen lowers via a native intrinsic rather than ordinary monomorphization)
+    // must keep type_arg_count == 0 so their special-casing still applies.
+    if (writeback_inferred && call->type_arg_count == 0 && actual_count == type_param_count) {
+        bool all_inferred = true;
+        for (int i = 0; i < actual_count; i++) {
+            if (!actual_types[i]) {
+                all_inferred = false;
+                break;
+            }
+        }
+        if (all_inferred)
+            xa_writeback_inferred_type_args(call, actual_types, actual_count);
     }
 
     xr_free(param_names);
@@ -3466,10 +3485,17 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
             const char *local_name = member->alias ? member->alias : member->name;
             XaSymbol *export_sym =
                 graph_exports ? (XaSymbol *) xr_hashmap_get(graph_exports, member->name) : NULL;
+            const XaBuiltinRecord *builtin_record =
+                export_sym ? NULL : xa_builtin_get_record_type(import->module_name, member->name);
+            const XaBuiltinEnum *builtin_enum =
+                export_sym ? NULL : xa_builtin_get_enum_type(import->module_name, member->name);
 
             // Register each imported member as its exported semantic kind.
-            XaSymbol *sym =
-                xa_symbol_new(local_name, export_sym ? export_sym->kind : XA_SYM_IMPORT);
+            XaSymbolKind imported_kind = export_sym       ? export_sym->kind
+                                         : builtin_record ? XA_SYM_TYPE_ALIAS
+                                         : builtin_enum   ? XA_SYM_ENUM
+                                                          : XA_SYM_IMPORT;
+            XaSymbol *sym = xa_symbol_new(local_name, imported_kind);
             if (sym) {
                 sym->is_imported = true;
                 sym->is_const = true;
@@ -3518,7 +3544,17 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                         }
                     }
 
-                    if (!export_sym && !builtin_sig)
+                    if (!member_type && builtin_record) {
+                        member_type =
+                            xa_builtin_record_decl_type(ctx->analyzer->isolate, builtin_record);
+                        sym->alias_type = member_type;
+                    }
+                    if (!member_type && builtin_enum) {
+                        member_type = xa_builtin_enum_decl_type(ctx->analyzer->isolate,
+                                                                builtin_enum, &links->enum_info);
+                    }
+
+                    if (!export_sym && !builtin_sig && !builtin_record && !builtin_enum)
                         xa_report_unknown_stdlib_member(ctx, node, import->module_name,
                                                         member->name);
 

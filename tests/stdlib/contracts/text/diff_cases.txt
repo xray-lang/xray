@@ -1,0 +1,1 @@
+tests/diff/cases/semantics/stdlib/text_contract_direct.xr

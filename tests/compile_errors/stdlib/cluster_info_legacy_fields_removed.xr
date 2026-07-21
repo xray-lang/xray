@@ -1,0 +1,4 @@
+import cluster
+
+var info = cluster.info()!
+print(info.topic_subs)

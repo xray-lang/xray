@@ -975,8 +975,7 @@ static bool emit_static_fixed_tuple_array_get_expr(XiCgenCtx *ctx, FILE *out, co
         return false;
     XrRep elem_rep = cg_struct_native_rep(native_type);
     bool unchecked = cg_fixed_array_index_bounds_proven(receiver.access, receiver.count);
-    const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, elem_rep, cg_value_plan_storage_rep(ctx, v));
+    const char *conv_suffix = emit_load_conversion_prefix(ctx, out, v, elem_rep);
     if (!unchecked) {
         fprintf(out, "({ int64_t _idx = ");
         emit_value_as_rep_ctx(ctx, out, receiver.index, XR_REP_I64);
@@ -2330,7 +2329,7 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         bool outer_unchecked = cg_fixed_array_index_bounds_proven(static_matrix_access,
                                                                   static_matrix_info.outer_count);
         bool guarded = !outer_unchecked || !unchecked;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
+        const char *conv_suffix = emit_load_conversion_prefix(ctx, out, v, info.rep);
         if (guarded)
             fprintf(out, "({ ");
         if (!outer_unchecked) {
@@ -2374,7 +2373,7 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         bool middle_unchecked = cg_fixed_array_index_bounds_proven(static_cube_middle_access,
                                                                    static_cube_info.middle_count);
         bool guarded = !outer_unchecked || !middle_unchecked || !unchecked;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
+        const char *conv_suffix = emit_load_conversion_prefix(ctx, out, v, info.rep);
         if (guarded)
             fprintf(out, "({ ");
         if (!outer_unchecked) {
@@ -2430,7 +2429,7 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         bool outer_unchecked = cg_fixed_array_index_bounds_proven(static_struct_array_access,
                                                                   static_struct_array_info.count);
         bool guarded = !outer_unchecked || !unchecked;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
+        const char *conv_suffix = emit_load_conversion_prefix(ctx, out, v, info.rep);
         if (guarded)
             fprintf(out, "({ ");
         if (!outer_unchecked) {
@@ -2470,7 +2469,7 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         bool outer_unchecked = cg_fixed_array_index_bounds_proven(
             static_struct_array_nested_access, static_struct_array_nested_info.count);
         bool guarded = !outer_unchecked || !unchecked;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
+        const char *conv_suffix = emit_load_conversion_prefix(ctx, out, v, info.rep);
         if (guarded)
             fprintf(out, "({ ");
         if (!outer_unchecked) {
@@ -2507,7 +2506,7 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
+    const char *conv_suffix = emit_load_conversion_prefix(ctx, out, v, info.rep);
     if (!unchecked) {
         fprintf(out, "({ int64_t _idx = ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -4097,9 +4096,12 @@ static bool emit_typed_array_index_get_expr_as_rep(XiCgenCtx *ctx, FILE *out, co
     bool unchecked = cg_array_index_access_bounds_proven(ctx, f, v);
     const XiValue *cached_origin = NULL;
     bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
-    bool borrowed_tagged = target_rep == XR_REP_TAGGED && info.rep == XR_REP_TAGGED &&
+    const XaotValuePlan *_v_plan = cg_value_plan(ctx, v);
+    bool _v_is_adt_agg = _v_plan && cg_value_rep_is_typed_adt_aggregate(_v_plan->rep);
+    bool borrowed_tagged = !_v_is_adt_agg && target_rep == XR_REP_TAGGED &&
+                           info.rep == XR_REP_TAGGED &&
                            cg_tagged_array_index_get_can_borrow(ctx, f, v);
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
+    const char *conv_suffix = emit_load_conversion_prefix(ctx, out, v, info.rep);
     if (unchecked) {
         if (use_cache) {
             emit_aot_hot_region_begin(out, "typed_array_raw_access");
@@ -4219,9 +4221,12 @@ static bool emit_span_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
 
     XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
     bool unchecked = cg_span_index_bounds_proven(ctx, f, v, XAOT_SPAN_ACCESS_INDEX_GET);
-    bool borrowed_tagged = target_rep == XR_REP_TAGGED && info.rep == XR_REP_TAGGED &&
+    const XaotValuePlan *_v_plan = cg_value_plan(ctx, v);
+    bool _v_is_adt_agg = _v_plan && cg_value_rep_is_typed_adt_aggregate(_v_plan->rep);
+    bool borrowed_tagged = !_v_is_adt_agg && target_rep == XR_REP_TAGGED &&
+                           info.rep == XR_REP_TAGGED &&
                            cg_tagged_array_index_get_can_borrow(ctx, f, v);
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, target_rep);
+    const char *conv_suffix = emit_load_conversion_prefix(ctx, out, v, info.rep);
     fprintf(out, "({ xr_span_t _s = ");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _idx = ");

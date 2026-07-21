@@ -1472,10 +1472,11 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                     strcmp(target->object.field_names[i], source->object.field_names[j]) == 0) {
                     if (target_field_type && source->object.field_types) {
                         XrType *source_field_type = source->object.field_types[j];
-                        XrType *check_type = is_optional
-                                                 ? xr_type_non_nullable(NULL, target_field_type)
-                                                 : target_field_type;
-                        if (!xr_type_assignable(check_type, source_field_type)) {
+                        /* A nullable Record field is optional when absent, but an
+                         * explicitly present `null` value must also be checked
+                         * against the nullable target itself. Stripping `?` here
+                         * made a contextually typed literal reject its own shape. */
+                        if (!xr_type_assignable(target_field_type, source_field_type)) {
                             return false;
                         }
                     }

@@ -1,0 +1,1 @@
+tests/diff/cases/semantics/stdlib/sync_module_import.xr

@@ -1,0 +1,23 @@
+import net
+import { NetError } from net
+
+fn acceptOnce(listener: NetListener) {
+    var peer = net.accept(listener)
+    if (peer != null) {
+        net.close(peer!)
+    }
+}
+
+var listener = net.listen(0, 1)!
+go acceptOnce(listener)
+var conn = net.dial("127.0.0.1", listener.port(), 1000)!
+net.close(conn)
+
+try {
+    net.copyBidirectional(conn, conn)
+} catch (error: NetError) {
+    print(error.name)
+    print(error == NetError.Closed)
+}
+
+net.close(listener)

@@ -17,6 +17,8 @@
 #include "../common.h"
 #include "../crypto/crypto.h"  // xr_secure_wipe
 #include "../net/io.h"
+#include "../stdlib_cache.h"
+#include "../../src/runtime/class/xenum.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
@@ -805,9 +807,9 @@ void cluster_subscriber_remove_all_for_node(XrCluster *c, XrClusterNode *node) {
 
 /* ========== xray Function Bindings ========== */
 
-// cluster.start(config) - config is Json with {name, port, secret, tls?}
+// cluster.start(config: ClusterConfig) -> bool
 //
-// The optional `tls` sub-object maps 1:1 onto XrClusterTlsOptions:
+// The optional typed `tls` Record maps 1:1 onto XrClusterTlsOptions:
 //     tls: {
 //         enabled: true,
 //         caFile:   "/etc/xray/ca.pem",
@@ -815,13 +817,13 @@ void cluster_subscriber_remove_all_for_node(XrCluster *c, XrClusterNode *node) {
 //         keyFile:  "/etc/xray/node.key",
 //         insecure: false
 //     }
-// Missing keys fall back to the struct's zero-initialised defaults (off /
-// NULL). The strings stay borrowed from the Json for the duration of this
+// Nullable string fields map to the struct's zero-initialised defaults. The
+// strings stay borrowed from the Record for the duration of this
 // call — cluster_start_ex copies them into OpenSSL contexts before it
 // returns, so no lifetime surprise.
 static XrValue cluster_start(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !xr_value_is_json(args[0]))
-        return xr_null();
+    if (argc < 1 || !xr_value_is_record(args[0]))
+        return xr_bool(false);
 
     XrJson *config = (XrJson *) XR_TO_PTR(args[0]);
     XrValue v_name = xr_json_get_by_key(X, config, "name");
@@ -829,10 +831,13 @@ static XrValue cluster_start(XrVMRuntime *X, XrValue *args, int argc) {
     XrValue v_secret = xr_json_get_by_key(X, config, "secret");
 
     if (!XR_IS_STRING(v_name) || !XR_IS_INT(v_port))
-        return xr_null();
+        return xr_bool(false);
 
     XrString *name = XR_TO_STRING(v_name);
-    uint16_t port = (uint16_t) XR_TO_INT(v_port);
+    int64_t port_value = XR_TO_INT(v_port);
+    if (port_value < 0 || port_value > UINT16_MAX)
+        return xr_bool(false);
+    uint16_t port = (uint16_t) port_value;
     const char *secret = "";
     if (XR_IS_STRING(v_secret)) {
         secret = XR_TO_STRING(v_secret)->data;
@@ -844,18 +849,13 @@ static XrValue cluster_start(XrVMRuntime *X, XrValue *args, int argc) {
     const XrClusterTlsOptions *tls_ptr = NULL;
 
     XrValue v_tls = xr_json_get_by_key(X, config, "tls");
-    if (xr_value_is_json(v_tls)) {
+    if (xr_value_is_record(v_tls)) {
         XrJson *tls_cfg = (XrJson *) XR_TO_PTR(v_tls);
 
         XrValue v_enabled = xr_json_get_by_key(X, tls_cfg, "enabled");
-        if (XR_IS_BOOL(v_enabled)) {
-            tls_opts.enabled = XR_TO_BOOL(v_enabled);
-        } else {
-            // Treat a bare `tls: {...}` with no explicit `enabled` as on;
-            // operators who went to the trouble of populating the block
-            // almost always mean "use it".
-            tls_opts.enabled = true;
-        }
+        if (!XR_IS_BOOL(v_enabled))
+            return xr_bool(false);
+        tls_opts.enabled = XR_TO_BOOL(v_enabled);
 
         XrValue v_ca = xr_json_get_by_key(X, tls_cfg, "caFile");
         XrValue v_cert = xr_json_get_by_key(X, tls_cfg, "certFile");
@@ -1249,6 +1249,19 @@ static XrValue cluster_subscribe_fn(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Cluster Info API ========== */
 
+static XrJson *cluster_record_new(XrVMRuntime *X, const char *name) {
+    XrClass *cls = xr_stdlib_record_class_get(X, "cluster", name);
+    return cls ? xr_json_new_with_class(NULL, cls) : NULL;
+}
+
+static XrValue cluster_node_state_value(XrVMRuntime *X, int state) {
+    XrEnumType *type = xr_stdlib_enum_type_get(X, "cluster", "ClusterNodeState");
+    if (!type || state < XR_NODE_IDLE || state > XR_NODE_CLOSING)
+        return XR_NULL_VAL;
+    XrEnumAggregateValue *value = xr_enum_zero_payload_value(X, type, (uint32_t) state);
+    return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
+}
+
 static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -1256,7 +1269,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (!c)
         return xr_null();
 
-    XrJson *info = xr_json_new(NULL);
+    XrJson *info = cluster_record_new(X, "ClusterInfo");
     if (!info)
         return xr_null();
 
@@ -1272,7 +1285,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
         xr_amutex_lock(&c->nodes_lock);
         XrClusterNode *node = c->nodes;
         while (node) {
-            XrJson *nj = xr_json_new(NULL);
+            XrJson *nj = cluster_record_new(X, "ClusterNodeInfo");
             if (nj) {
                 XrString *nname = xr_string_intern(X, node->name, (uint32_t) strlen(node->name), 0);
                 xr_json_set_by_key(X, nj, "name", xr_string_value(nname));
@@ -1280,7 +1293,12 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
                 XrString *nhost = xr_string_intern(X, node->host, (uint32_t) strlen(node->host), 0);
                 xr_json_set_by_key(X, nj, "host", xr_string_value(nhost));
                 xr_json_set_by_key(X, nj, "port", xr_int(node->port));
-                xr_json_set_by_key(X, nj, "state", xr_int(node->state));
+                XrValue state = cluster_node_state_value(X, node->state);
+                if (XR_IS_NULL(state)) {
+                    xr_amutex_unlock(&c->nodes_lock);
+                    return xr_null();
+                }
+                xr_json_set_by_key(X, nj, "state", state);
 
                 /*
                  * Per-node metrics snapshot. All counters are
@@ -1292,29 +1310,29 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
                  * producing a momentarily-impossible ratio; the
                  * tradeoff is acceptable for a diagnostic JSON.
                  */
-                xr_json_set_by_key(X, nj, "frames_sent",
+                xr_json_set_by_key(X, nj, "framesSent",
                                    xr_int((int64_t) atomic_load(&node->metrics.frames_sent)));
-                xr_json_set_by_key(X, nj, "frames_recv",
+                xr_json_set_by_key(X, nj, "framesReceived",
                                    xr_int((int64_t) atomic_load(&node->metrics.frames_recv)));
-                xr_json_set_by_key(X, nj, "bytes_sent",
+                xr_json_set_by_key(X, nj, "bytesSent",
                                    xr_int((int64_t) atomic_load(&node->metrics.bytes_sent)));
-                xr_json_set_by_key(X, nj, "bytes_recv",
+                xr_json_set_by_key(X, nj, "bytesReceived",
                                    xr_int((int64_t) atomic_load(&node->metrics.bytes_recv)));
                 // send_errors: writev short/fail counter — high values
                 // flag a slow or lossy link; correlate with the slow
                 // flag below.
-                xr_json_set_by_key(X, nj, "send_errors",
+                xr_json_set_by_key(X, nj, "sendErrors",
                                    xr_int((int64_t) atomic_load(&node->metrics.send_errors)));
                 // slow_consumer_events: total times this peer hit the
                 // high watermark (4 MiB by default) since start. Each
                 // event corresponds to one outq_bytes >= high_watermark
                 // transition in cluster_node.
                 xr_json_set_by_key(
-                    X, nj, "slow_consumer_events",
+                    X, nj, "slowConsumerEvents",
                     xr_int((int64_t) atomic_load(&node->metrics.slow_consumer_events)));
-                xr_json_set_by_key(X, nj, "rtt_ms", xr_int(node->metrics.last_rtt_ms));
-                xr_json_set_by_key(X, nj, "outq_bytes", xr_int(node->outq.total_bytes));
-                xr_json_set_by_key(X, nj, "outq_frames", xr_int(node->outq.frame_count));
+                xr_json_set_by_key(X, nj, "rttMs", xr_int(node->metrics.last_rtt_ms));
+                xr_json_set_by_key(X, nj, "outQueueBytes", xr_int(node->outq.total_bytes));
+                xr_json_set_by_key(X, nj, "outQueueFrames", xr_int(node->outq.frame_count));
                 xr_json_set_by_key(X, nj, "slow", xr_bool(cluster_node_is_slow(node)));
 
                 // Phi accrual failure-detector score. Higher = more
@@ -1323,15 +1341,20 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
                 int64_t now = cluster_now_ms();
                 double phi = cluster_phi_value(&node->phi, now);
                 xr_json_set_by_key(X, nj, "phi", xr_float(phi));
-                xr_json_set_by_key(X, nj, "missed_heartbeats",
+                xr_json_set_by_key(X, nj, "missedHeartbeats",
                                    xr_int((int64_t) node->missed_heartbeats));
 
                 xr_array_push(node_arr, xr_json_value(nj));
+            } else {
+                xr_amutex_unlock(&c->nodes_lock);
+                return xr_null();
             }
             node = node->next;
         }
         xr_amutex_unlock(&c->nodes_lock);
         xr_json_set_by_key(X, info, "nodes", xr_value_from_array(node_arr));
+    } else {
+        return xr_null();
     }
 
     // Registries — best-effort counts. Each is guarded by its own
@@ -1339,7 +1362,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     // intentionally lock-free here because info() is a diagnostic
     // endpoint and bounded staleness is preferable to global locking.
     xr_json_set_by_key(X, info, "channels", xr_int(c->channel_count));
-    xr_json_set_by_key(X, info, "topic_subs", xr_int(c->topic_sub_count));
+    xr_json_set_by_key(X, info, "topicSubscriptions", xr_int(c->topic_sub_count));
 
     /*
      * Tombstone snapshot — number of nodes in the recently-dead
@@ -1350,7 +1373,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
      * brain" scenarios.
      */
     xr_amutex_lock(&c->dead_nodes_lock);
-    xr_json_set_by_key(X, info, "dead_nodes", xr_int(c->tombstone_count));
+    xr_json_set_by_key(X, info, "deadNodes", xr_int(c->tombstone_count));
     xr_amutex_unlock(&c->dead_nodes_lock);
 
     /*
@@ -1360,32 +1383,22 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
      * runtime but live at the XrCluster level so a snapshot is
      * trivially consistent.
      */
-    xr_json_set_by_key(X, info, "heartbeat_interval_ms", xr_int(c->heartbeat_interval_ms));
-    xr_json_set_by_key(X, info, "heartbeat_timeout_ms", xr_int(c->heartbeat_timeout_ms));
-    xr_json_set_by_key(X, info, "max_missed_heartbeats", xr_int(c->max_missed_heartbeats));
+    xr_json_set_by_key(X, info, "heartbeatIntervalMs", xr_int(c->heartbeat_interval_ms));
+    xr_json_set_by_key(X, info, "heartbeatTimeoutMs", xr_int(c->heartbeat_timeout_ms));
+    xr_json_set_by_key(X, info, "maxMissedHeartbeats", xr_int(c->max_missed_heartbeats));
 
     /*
-     * TLS posture — one integer encoded as a small bitmap so a
-     * single field tells the observer what security guarantees are
-     * actually in force:
-     *
-     *   bit 0 (1): tls_enabled          — operator set tls.enabled
-     *   bit 1 (2): has client context   — outbound uses TLS
-     *   bit 2 (4): has server context   — inbound accepts TLS
-     *
-     * A mis-configured cluster (tls_enabled=true but no cert) shows
-     * up as value 1: enabled but no contexts — useful because the
-     * accept loop refuses all inbound in that state, and this field
-     * lets the operator notice.
+     * TLS posture is a typed nested Record. A mis-configured cluster
+     * (enabled with neither context ready) remains directly visible to
+     * operators without exposing a bitmap convention in the public API.
      */
-    int tls_posture = 0;
-    if (c->tls_enabled)
-        tls_posture |= 1;
-    if (c->tls_client_ctx)
-        tls_posture |= 2;
-    if (c->tls_server_ctx)
-        tls_posture |= 4;
-    xr_json_set_by_key(X, info, "tls", xr_int(tls_posture));
+    XrJson *tls = cluster_record_new(X, "ClusterTlsStatus");
+    if (!tls)
+        return xr_null();
+    xr_json_set_by_key(X, tls, "enabled", xr_bool(c->tls_enabled));
+    xr_json_set_by_key(X, tls, "clientReady", xr_bool(c->tls_client_ctx != NULL));
+    xr_json_set_by_key(X, tls, "serverReady", xr_bool(c->tls_server_ctx != NULL));
+    xr_json_set_by_key(X, info, "tls", xr_json_value(tls));
 
     return xr_json_value(info);
 }

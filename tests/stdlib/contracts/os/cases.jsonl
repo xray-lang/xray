@@ -1,0 +1,1 @@
+{"case":"os-contract","probe":"tests/diff/cases/semantics/stdlib/os_query_system_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"os public surface behaves identically on VM and AOT for the covered cases"}

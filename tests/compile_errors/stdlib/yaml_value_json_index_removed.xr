@@ -1,0 +1,6 @@
+// Guard: yaml.parse returns a typed `YamlValue` ADT; the legacy `doc["key"]`
+// Json-index consumption form is gone.
+import yaml
+
+var doc = yaml.parse("name: xray")
+print(doc["name"])

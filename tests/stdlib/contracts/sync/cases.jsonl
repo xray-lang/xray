@@ -1,0 +1,1 @@
+{"case":"sync-contract","probe":"tests/diff/cases/semantics/stdlib/sync_module_import.xr","equivalence":["value","error","effect","complexity"],"oracle":"sync public surface behaves identically on VM and AOT for the covered cases"}

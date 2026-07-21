@@ -792,8 +792,8 @@ static const XaBuiltinMember g_rt_coropool_functions[] = {
     ((int) (sizeof(g_rt_coropool_functions) / sizeof(g_rt_coropool_functions[0])))
 
 static const XaBuiltinModule g_rt_builtin_modules[] = {
-    {"Coro", g_rt_coro_functions, RT_CORO_FUNCTION_COUNT, NULL, 0},
-    {"CoroPool", g_rt_coropool_functions, RT_COROPOOL_FUNCTION_COUNT, NULL, 0},
+    {"Coro", g_rt_coro_functions, RT_CORO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"CoroPool", g_rt_coropool_functions, RT_COROPOOL_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
 };
 #define RT_BUILTIN_MODULE_COUNT 2
 
@@ -903,6 +903,127 @@ const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_name,
         }
     }
     return NULL;
+}
+
+const XaBuiltinRecord *xa_builtin_get_record_type(const char *module_name,
+                                                  const char *record_name) {
+    const XaBuiltinModule *mod = xa_builtin_get_module_info(module_name);
+    if (!mod || !record_name)
+        return NULL;
+    for (int i = 0; i < mod->record_count; i++) {
+        if (mod->records[i].name && strcmp(mod->records[i].name, record_name) == 0)
+            return &mod->records[i];
+    }
+    return NULL;
+}
+
+const XaBuiltinRecord *xa_builtin_find_record_by_name(const char *record_name) {
+    if (!record_name)
+        return NULL;
+    for (int i = 0; i < xa_builtin_get_module_count(); i++) {
+        const XaBuiltinModule *mod = xa_builtin_get_module_at(i);
+        if (!mod)
+            continue;
+        for (int j = 0; j < mod->record_count; j++) {
+            if (mod->records[j].name && strcmp(mod->records[j].name, record_name) == 0)
+                return &mod->records[j];
+        }
+    }
+    return NULL;
+}
+
+const XaBuiltinEnum *xa_builtin_get_enum_type(const char *module_name, const char *enum_name) {
+    const XaBuiltinModule *mod = xa_builtin_get_module_info(module_name);
+    if (!mod || !enum_name)
+        return NULL;
+    for (int i = 0; i < mod->enum_count; i++) {
+        if (mod->enums[i].name && strcmp(mod->enums[i].name, enum_name) == 0)
+            return &mod->enums[i];
+    }
+    return NULL;
+}
+
+const XaBuiltinEnum *xa_builtin_find_enum_by_name(const char *enum_name) {
+    if (!enum_name)
+        return NULL;
+    for (int i = 0; i < xa_builtin_get_module_count(); i++) {
+        const XaBuiltinModule *mod = xa_builtin_get_module_at(i);
+        if (!mod)
+            continue;
+        for (int j = 0; j < mod->enum_count; j++) {
+            if (mod->enums[j].name && strcmp(mod->enums[j].name, enum_name) == 0)
+                return &mod->enums[j];
+        }
+    }
+    return NULL;
+}
+
+XrType *xa_builtin_record_decl_type(XrVMRuntime *X, const XaBuiltinRecord *record) {
+    if (!record || record->field_count < 0 || (record->field_count > 0 && !record->fields))
+        return xr_type_new_error(X);
+    int count = record->field_count;
+    const char **names = count > 0 ? xr_malloc(sizeof(*names) * (size_t) count) : NULL;
+    XrType **types = count > 0 ? xr_malloc(sizeof(*types) * (size_t) count) : NULL;
+    if (count > 0 && (!names || !types)) {
+        xr_free(names);
+        xr_free(types);
+        return xr_type_new_error(X);
+    }
+    for (int i = 0; i < count; i++) {
+        names[i] = record->fields[i].name;
+        types[i] = xa_builtin_parse_type_string(X, record->fields[i].type_str);
+    }
+    XrType *type = xr_type_new_record_with_fields(X, names, types, count, record->is_sealed);
+    xr_free(names);
+    xr_free(types);
+    return type ? type : xr_type_new_error(X);
+}
+
+XrType *xa_builtin_enum_decl_type(XrVMRuntime *X, const XaBuiltinEnum *enum_decl,
+                                  XaEnumInfo **out_info) {
+    if (out_info)
+        *out_info = NULL;
+    if (!enum_decl || !enum_decl->name || enum_decl->variant_count <= 0 || !enum_decl->variants)
+        return xr_type_new_error(X);
+
+    XaEnumInfo *info = xa_enum_info_new(enum_decl->name, (uint32_t) enum_decl->variant_count);
+    if (!info)
+        return xr_type_new_error(X);
+    for (int i = 0; i < enum_decl->variant_count; i++) {
+        const XaBuiltinEnumVariant *src = &enum_decl->variants[i];
+        XaEnumVariantInfo *dst = &info->variants[i];
+        dst->name = src->name;
+        dst->payload_count = (uint16_t) src->payload_count;
+        if (src->payload_count > 0) {
+            dst->payload_types = xr_calloc((size_t) src->payload_count, sizeof(XrType *));
+            if (!dst->payload_types) {
+                xa_enum_info_free(info);
+                return xr_type_new_error(X);
+            }
+            for (int p = 0; p < src->payload_count; p++) {
+                dst->payload_types[p] = xa_builtin_parse_type_string(X, src->payload_type_strs[p]);
+            }
+        }
+    }
+    if (!xa_enum_info_finalize_layout(info)) {
+        xa_enum_info_free(info);
+        return xr_type_new_error(X);
+    }
+    if (info->layout && enum_decl->layout_id != 0)
+        info->layout->layout_id = enum_decl->layout_id;
+    XrType *type = xr_type_new_enum(X, enum_decl->name);
+    if (!type) {
+        xa_enum_info_free(info);
+        return xr_type_new_error(X);
+    }
+    if (out_info) {
+        type->enum_type.layout = info->layout;
+        type->enum_type.layout_id = info->layout ? info->layout->layout_id : 0;
+        *out_info = info;
+    } else {
+        xa_enum_info_free(info);
+    }
+    return type;
 }
 
 const XaBuiltinHandle *xa_builtin_find_handle_by_name(const char *handle_name) {
@@ -1423,6 +1544,16 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
                 type = xr_type_new_instance(X, NULL);
                 if (type)
                     type->instance.class_name = handle->name;
+            }
+            if (!type) {
+                const XaBuiltinRecord *record = xa_builtin_find_record_by_name(name_buf);
+                if (record)
+                    type = xa_builtin_record_decl_type(X, record);
+            }
+            if (!type) {
+                const XaBuiltinEnum *enum_decl = xa_builtin_find_enum_by_name(name_buf);
+                if (enum_decl)
+                    type = xa_builtin_enum_decl_type(X, enum_decl, NULL);
             }
         }
         if (!type)

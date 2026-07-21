@@ -1,68 +1,237 @@
-// xml - pure-Xray XML parser and writer.
+// xml - typed pure-Xray XML parser and writer.
 //
 // XML is an L4 format module: the public parse/stringify/node-builder
-// semantics live here. src/base/xxml remains as a low-level C parser for base
+// semantics live here. The node model is a typed `XmlNode` ADT (no Json
+// discriminator tree). src/base/xxml remains as a low-level C parser for base
 // unit tests and non-stdlib tooling boundaries.
 
 import io
 
 const XML_MAX_DEPTH = 256
 
-class XmlConfig {
-    preserveWhitespace: bool
-    preserveComments: bool
-    preserveCData: bool
+// ===== Node model =====
+
+export class XmlName {
+    prefix: string
+    local: string
+
+    constructor(prefix: string, local: string) {
+        this.prefix = prefix
+        this.local = local
+    }
+
+    // Reconstruct the source form `prefix:local` (or just `local` when the
+    // name has no prefix).
+    qualified() -> string {
+        if (len(this.prefix) == 0) { return this.local }
+        return this.prefix + ":" + this.local
+    }
+}
+
+export class XmlAttribute {
+    name: XmlName
+    value: string
+
+    constructor(name: XmlName, value: string) {
+        this.name = name
+        this.value = value
+    }
+}
+
+export enum XmlNode {
+    Document(Array<XmlNode>),
+    Element(XmlName, Array<XmlAttribute>, Array<XmlNode>),
+    Text(string),
+    Comment(string),
+    CData(string),
+    ProcessingInstruction(string, string)
+}
+
+// ===== Access API =====
+//
+// The typed accessors are module-level functions (matching internally) rather
+// than methods on the `XmlNode` enum: enum instance methods are not currently
+// callable across a module boundary (the receiver is misreported as possibly
+// null), so a `node.tag()` form would break for importers. Free functions that
+// `match` internally are unaffected. `match` on `XmlNode` remains available to
+// callers who prefer pattern matching directly.
+
+// Local name of an Element, or null for non-element nodes.
+export fn tag(node: XmlNode) -> string? {
+    return match (node) {
+        XmlNode.Element(name, attrs, kids) -> name.local,
+        _                                  -> null
+    }
+}
+
+// Fully qualified name (prefix + local) of an Element.
+// NOTE: written with block arms rather than a match expression. Returning the
+// class-typed payload binding `name` directly from a match-expression arm in an
+// `XmlName?` context contaminates the enum payload-field type to nullable
+// globally, which then breaks unrelated Element matches.
+export fn qualifiedName(node: XmlNode) -> XmlName? {
+    match (node) {
+        XmlNode.Element(name, attrs, kids) -> { return name }
+        _ -> { return null }
+    }
+    return null
+}
+
+// Ordered attributes of an Element (empty for other node kinds).
+export fn attributes(node: XmlNode) -> Array<XmlAttribute> {
+    return match (node) {
+        XmlNode.Element(name, attrs, kids) -> attrs,
+        _                                  -> _emptyAttrs()
+    }
+}
+
+// First attribute value whose local name matches `key` (ASCII exact match).
+export fn attr(node: XmlNode, key: string) -> string? {
+    var attrs = attributes(node)
+    for (a in attrs) {
+        if (a.name.local == key) { return a.value }
+    }
+    return null
+}
+
+// Namespace URI bound to `prefix` via an `xmlns`/`xmlns:x` attribute on this
+// Element, or null when undeclared here.
+export fn namespace(node: XmlNode, prefix: string) -> string? {
+    var attrs = attributes(node)
+    for (a in attrs) {
+        if (len(prefix) == 0) {
+            if (a.name.prefix == "" && a.name.local == "xmlns") { return a.value }
+        } else {
+            if (a.name.prefix == "xmlns" && a.name.local == prefix) { return a.value }
+        }
+    }
+    return null
+}
+
+// Direct children of a Document or Element (empty otherwise).
+export fn children(node: XmlNode) -> Array<XmlNode> {
+    return match (node) {
+        XmlNode.Document(kids)             -> kids,
+        XmlNode.Element(name, attrs, kids) -> kids,
+        _                                  -> _emptyNodes()
+    }
+}
+
+// Own textual payload of a Text/Comment/CData node.
+export fn nodeText(node: XmlNode) -> string? {
+    return match (node) {
+        XmlNode.Text(s)    -> s,
+        XmlNode.Comment(s) -> s,
+        XmlNode.CData(s)   -> s,
+        _                  -> null
+    }
+}
+
+// Concatenation of the direct Text/CData children (or the node's own text for a
+// Text/CData leaf).
+export fn textContent(node: XmlNode) -> string {
+    return match (node) {
+        XmlNode.Element(name, attrs, kids) -> _directText(kids),
+        XmlNode.Document(kids)             -> _directText(kids),
+        XmlNode.Text(s)                    -> s,
+        XmlNode.CData(s)                   -> s,
+        _                                  -> ""
+    }
+}
+
+// ===== Diagnostics & errors =====
+
+export enum XmlErrorKind {
+    InvalidTag,
+    MismatchedTag,
+    UnclosedTag,
+    InvalidAttr,
+    UnterminatedAttr,
+    UnterminatedComment,
+    UnterminatedCData,
+    UnterminatedPI,
+    UnterminatedDoctype,
+    InvalidEntity,
+    MaxDepthExceeded
+}
+
+export class XmlDiagnostic {
+    kind: XmlErrorKind
+    line: int
+    column: int
+    message: string
+
+    constructor(kind: XmlErrorKind, line: int, column: int, message: string) {
+        this.kind = kind
+        this.line = line
+        this.column = column
+        this.message = message
+    }
+}
+
+export enum XmlError {
+    Parse(XmlDiagnostic),
+    Io(string)
+}
+
+// ===== Options =====
+
+export type XmlOptions = {
+    preserveWhitespace: bool,
+    preserveComments: bool,
+    preserveCData: bool,
     validateEntities: bool
-
-    constructor(optionsValue: Json = null) {
-        var options = Json.encode(optionsValue)
-        if (typeName(options) != "Json") {
-            var emptyOptions: Json = {}
-            options = emptyOptions
-        }
-        this.preserveWhitespace = _jsonBool(options, "preserveWhitespace", false)
-        this.preserveComments = _jsonBool(options, "preserveComments", false)
-        this.preserveCData = _jsonBool(options, "preserveCData", true)
-        this.validateEntities = _jsonBool(options, "validateEntities", true)
-    }
 }
 
-class XmlWriteConfig {
-    indent: int
-    declaration: bool
+export type XmlWriteOptions = {
+    indent: int,
+    declaration: bool,
     encoding: string
+}
 
-    constructor(optionsValue: Json = null) {
-        var options = Json.encode(optionsValue)
-        if (typeName(options) != "Json") {
-            var emptyOptions: Json = {}
-            options = emptyOptions
-        }
-        this.indent = _jsonInt(options, "indent", 0)
-        if (this.indent < 0) { this.indent = 0 }
-        this.declaration = _jsonBool(options, "declaration", true)
-        this.encoding = _jsonString(options, "encoding", "UTF-8")
-        if (len(this.encoding) == 0) { this.encoding = "UTF-8" }
+fn _defaultOptions() -> XmlOptions {
+    var options: XmlOptions = {
+        preserveWhitespace: false,
+        preserveComments: false,
+        preserveCData: true,
+        validateEntities: true
+    }
+    return options
+}
+
+fn _defaultWriteOptions() -> XmlWriteOptions {
+    var options: XmlWriteOptions = {
+        indent: 0,
+        declaration: true,
+        encoding: "UTF-8"
+    }
+    return options
+}
+
+// Option resolution is done inside the module (private default providers cannot
+// be referenced from a caller's scope as a default-argument expression), so the
+// public API takes nullable options and falls back to the defaults here.
+fn _resolveOptions(options: XmlOptions?) -> XmlOptions {
+    if (options == null) { return _defaultOptions() }
+    return options!
+}
+
+fn _resolveWriteOptions(options: XmlWriteOptions?) -> XmlWriteOptions {
+    if (options == null) { return _defaultWriteOptions() }
+    return options!
+}
+
+export class XmlParseReport {
+    doc: XmlNode?
+    diagnostics: Array<XmlDiagnostic>
+
+    constructor(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>) {
+        this.doc = doc
+        this.diagnostics = diagnostics
     }
 }
 
-fn _jsonBool(options: Json, key: string, fallback: bool) -> bool {
-    var v = Json.get(options, key, fallback)
-    if (typeName(v) == "bool") { return v }
-    return fallback
-}
-
-fn _jsonInt(options: Json, key: string, fallback: int) -> int {
-    var v = Json.get(options, key, fallback)
-    if (typeName(v) == "int") { return v }
-    return fallback
-}
-
-fn _jsonString(options: Json, key: string, fallback: string) -> string {
-    var v = Json.get(options, key, fallback)
-    if (typeName(v) == "string") { return v }
-    return fallback
-}
+// ===== Character / entity helpers =====
 
 fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
     if (pos < 0 || pos + len(prefix) > len(s)) { return false }
@@ -270,19 +439,61 @@ fn _escapeAttr(value: string) -> string {
     return out.toString()
 }
 
-fn _stringValue(value: Json, fallback: string = "") -> string {
-    if (typeName(value) == "string") { return value as string }
-    return fallback
+// ===== Node helpers =====
+
+// Split a raw tag/attribute name into `prefix:local`. A leading or trailing
+// colon (or no colon) yields an empty prefix and the whole name as local.
+fn _splitName(raw: string) -> XmlName {
+    var idx = raw.indexOf(":")
+    if (idx <= 0 || idx >= len(raw) - 1) {
+        return XmlName("", raw)
+    }
+    return XmlName(raw.slice(0, idx), raw.slice(idx + 1, len(raw)))
 }
 
-fn _nodeType(node: Json) -> string {
-    return _stringValue(Json.get(node, "type", "element"), "element")
+fn _qualifiedName(name: XmlName) -> string {
+    if (len(name.prefix) == 0) { return name.local }
+    return name.prefix + ":" + name.local
 }
 
-fn _arrayValue(value: Json) -> Array<Json>? {
-    if (typeName(value) == "Array") { return value as Array<Json> }
-    return null
+fn _emptyAttrs() -> Array<XmlAttribute> {
+    var out: Array<XmlAttribute> = []
+    return out
 }
+
+fn _emptyNodes() -> Array<XmlNode> {
+    var out: Array<XmlNode> = []
+    return out
+}
+
+fn _isTextNode(node: XmlNode) -> bool {
+    return match (node) {
+        XmlNode.Text(s) -> true,
+        _               -> false
+    }
+}
+
+fn _textOf(node: XmlNode) -> string {
+    return match (node) {
+        XmlNode.Text(s) -> s,
+        _               -> ""
+    }
+}
+
+fn _directText(kids: Array<XmlNode>) -> string {
+    var out = StringBuilder()
+    for (child in kids) {
+        var piece = match (child) {
+            XmlNode.Text(s)  -> s,
+            XmlNode.CData(s) -> s,
+            _                -> ""
+        }
+        out.append(piece)
+    }
+    return out.toString()
+}
+
+// ===== Parser =====
 
 class XmlParser {
     data: string
@@ -293,22 +504,21 @@ class XmlParser {
     preserveComments: bool
     preserveCData: bool
     validateEntities: bool
-    errors: Json
-    root: Json
+    errors: Array<XmlDiagnostic>
+    root: XmlNode?
     hasRoot: bool
 
-    constructor(data: string, options: Json = null) {
+    constructor(data: string, options: XmlOptions) {
         this.data = data
         this.pos = 0
         this.line = 1
         this.column = 1
-        var config = XmlConfig(options)
-        this.preserveWhitespace = config.preserveWhitespace
-        this.preserveComments = config.preserveComments
-        this.preserveCData = config.preserveCData
-        this.validateEntities = config.validateEntities
+        this.preserveWhitespace = options.preserveWhitespace
+        this.preserveComments = options.preserveComments
+        this.preserveCData = options.preserveCData
+        this.validateEntities = options.validateEntities
         this.errors = []
-        this.root = {}
+        this.root = null
         this.hasRoot = false
     }
 
@@ -348,14 +558,8 @@ class XmlParser {
         return c
     }
 
-    addError(typ: string, message: string) {
-        this.errors.push({
-            type: typ,
-            line: this.line,
-            row: -1,
-            column: this.column,
-            message: message
-        })
+    addError(kind: XmlErrorKind, message: string) {
+        this.errors.push(XmlDiagnostic(kind, this.line, this.column, message))
     }
 
     skipWhitespace() {
@@ -380,7 +584,7 @@ class XmlParser {
         var numeric = _numericEntity(name)
         if (numeric != null) { return numeric! }
         if (this.validateEntities) {
-            this.addError("InvalidEntity", "Unknown entity reference '&" + name + ";'")
+            this.addError(XmlErrorKind.InvalidEntity, "Unknown entity reference '&" + name + ";'")
         }
         return "&" + name + ";"
     }
@@ -420,7 +624,7 @@ class XmlParser {
             }
             this.advance()
         }
-        this.addError("UnterminatedPI", "Unterminated processing instruction")
+        this.addError(XmlErrorKind.UnterminatedPI, "Unterminated processing instruction")
     }
 
     skipDoctype() {
@@ -441,7 +645,7 @@ class XmlParser {
             }
             this.advance()
         }
-        this.addError("UnterminatedDoctype", "Unterminated DOCTYPE")
+        this.addError(XmlErrorKind.UnterminatedDoctype, "Unterminated DOCTYPE")
     }
 
     skipTopLevelComment() {
@@ -456,10 +660,10 @@ class XmlParser {
             }
             this.advance()
         }
-        this.addError("UnterminatedComment", "Unterminated comment")
+        this.addError(XmlErrorKind.UnterminatedComment, "Unterminated comment")
     }
 
-    parseCommentNode() -> Json {
+    parseCommentNode() -> XmlNode? {
         if (!this.startsWith("<!--")) { return null }
         for (var i = 0; i < 4; i++) { this.advance() }
         var start = this.pos
@@ -469,15 +673,15 @@ class XmlParser {
                 this.advance()
                 this.advance()
                 this.advance()
-                return comment(content)
+                return XmlNode.Comment(content)
             }
             this.advance()
         }
-        this.addError("UnterminatedComment", "Unterminated comment")
-        return comment(this.data.slice(start, this.pos))
+        this.addError(XmlErrorKind.UnterminatedComment, "Unterminated comment")
+        return XmlNode.Comment(this.data.slice(start, this.pos))
     }
 
-    parseCDataNode() -> Json {
+    parseCDataNode() -> XmlNode? {
         if (!this.startsWith("<![CDATA[")) { return null }
         for (var i = 0; i < 9; i++) { this.advance() }
         var start = this.pos
@@ -487,18 +691,18 @@ class XmlParser {
                 this.advance()
                 this.advance()
                 this.advance()
-                if (this.preserveCData) { return cdata(content) }
-                return text(content)
+                if (this.preserveCData) { return XmlNode.CData(content) }
+                return XmlNode.Text(content)
             }
             this.advance()
         }
-        this.addError("UnterminatedCData", "Unterminated CDATA")
+        this.addError(XmlErrorKind.UnterminatedCData, "Unterminated CDATA")
         var content = this.data.slice(start, this.pos)
-        if (this.preserveCData) { return cdata(content) }
-        return text(content)
+        if (this.preserveCData) { return XmlNode.CData(content) }
+        return XmlNode.Text(content)
     }
 
-    parseTextNode() -> Json {
+    parseTextNode() -> XmlNode? {
         var start = this.pos
         while (!this.atEnd() && this.peek() != "<") {
             this.advance()
@@ -506,13 +710,13 @@ class XmlParser {
         if (this.pos == start) { return null }
         var value = this.decodeEntities(this.data.slice(start, this.pos))
         if (!this.preserveWhitespace && _allWhitespace(value)) { return null }
-        return text(value)
+        return XmlNode.Text(value)
     }
 
     parseAttributeValue() -> string {
         var quote = this.peek()
         if (quote != "\"" && quote != "'") {
-            this.addError("InvalidAttr", "Expected quote after =")
+            this.addError(XmlErrorKind.InvalidAttr, "Expected quote after =")
             return ""
         }
         this.advance()
@@ -524,48 +728,32 @@ class XmlParser {
         if (this.peek() == quote) {
             this.advance()
         } else {
-            this.addError("UnterminatedAttr", "Unterminated attribute value")
+            this.addError(XmlErrorKind.UnterminatedAttr, "Unterminated attribute value")
         }
         return this.decodeEntities(raw)
     }
 
-    setNamespace(node: Json, name: string, value: string) {
-        if (name != "xmlns" && !name.startsWith("xmlns:")) { return }
-        var nsValue = Json.get(node, "namespaces", null)
-        var ns: Json = {}
-        if (typeName(nsValue) == "Json") {
-            ns = nsValue
-        } else {
-            node["namespaces"] = ns
-        }
-        if (name == "xmlns") {
-            ns[""] = value
-        } else {
-            ns[name.slice(6, len(name))] = value
-        }
-    }
-
-    parseElement(depth: int) -> Json {
+    parseElement(depth: int) -> XmlNode? {
         if (depth > XML_MAX_DEPTH) {
-            this.addError("MaxDepthExceeded", "Maximum nesting depth exceeded")
+            this.addError(XmlErrorKind.MaxDepthExceeded, "Maximum nesting depth exceeded")
             return null
         }
         if (this.peek() != "<") { return null }
         this.advance()
-        var tag = this.parseName()
-        if (len(tag) == 0) {
-            this.addError("InvalidTag", "Invalid tag start")
+        var rawTag = this.parseName()
+        if (len(rawTag) == 0) {
+            this.addError(XmlErrorKind.InvalidTag, "Invalid tag start")
             return null
         }
-        var node = element(tag)
-        var attrs: Json = Json.get(node, "attrs", {})
+        var attrs: Array<XmlAttribute> = []
+        var children: Array<XmlNode> = []
 
         while (!this.atEnd()) {
             this.skipWhitespace()
             if (this.startsWith("/>")) {
                 this.advance()
                 this.advance()
-                return node
+                return XmlNode.Element(_splitName(rawTag), attrs, children)
             }
             if (this.peek() == ">") {
                 this.advance()
@@ -573,7 +761,7 @@ class XmlParser {
             }
             var attrName = this.parseName()
             if (len(attrName) == 0) {
-                this.addError("InvalidAttr", "Invalid attribute")
+                this.addError(XmlErrorKind.InvalidAttr, "Invalid attribute")
                 while (!this.atEnd() && this.peek() != ">" && !this.startsWith("/>")) {
                     this.advance()
                 }
@@ -581,16 +769,14 @@ class XmlParser {
             }
             this.skipWhitespace()
             if (this.peek() != "=") {
-                this.addError("InvalidAttr", "Expected = after attribute name")
-                attrs[attrName] = ""
-                this.setNamespace(node, attrName, "")
+                this.addError(XmlErrorKind.InvalidAttr, "Expected = after attribute name")
+                attrs.push(XmlAttribute(_splitName(attrName), ""))
                 continue
             }
             this.advance()
             this.skipWhitespace()
             var attrValue = this.parseAttributeValue()
-            attrs[attrName] = attrValue
-            this.setNamespace(node, attrName, attrValue)
+            attrs.push(XmlAttribute(_splitName(attrName), attrValue))
         }
 
         while (!this.atEnd()) {
@@ -602,25 +788,25 @@ class XmlParser {
                 if (this.peek() == ">") {
                     this.advance()
                 } else {
-                    this.addError("InvalidTag", "Expected > after closing tag")
+                    this.addError(XmlErrorKind.InvalidTag, "Expected > after closing tag")
                 }
-                if (closeTag != tag) {
-                    this.addError("MismatchedTag", "Mismatched closing tag")
+                if (closeTag != rawTag) {
+                    this.addError(XmlErrorKind.MismatchedTag, "Mismatched closing tag")
                 }
-                return node
+                return XmlNode.Element(_splitName(rawTag), attrs, children)
             }
 
             if (this.startsWith("<!--")) {
                 var commentNode = this.parseCommentNode()
                 if (this.preserveComments && commentNode != null) {
-                    node["children"].push(commentNode!)
+                    children.push(commentNode!)
                 }
                 continue
             }
 
             if (this.startsWith("<![CDATA[")) {
                 var cdataNode = this.parseCDataNode()
-                if (cdataNode != null) { node["children"].push(cdataNode!) }
+                if (cdataNode != null) { children.push(cdataNode!) }
                 continue
             }
 
@@ -636,19 +822,19 @@ class XmlParser {
 
             if (this.peek() == "<") {
                 var child = this.parseElement(depth + 1)
-                if (child != null) { node["children"].push(child!) }
+                if (child != null) { children.push(child!) }
                 continue
             }
 
             var textNode = this.parseTextNode()
-            if (textNode != null) { node["children"].push(textNode!) }
+            if (textNode != null) { children.push(textNode!) }
         }
 
-        this.addError("UnclosedTag", "Unclosed tag")
-        return node
+        this.addError(XmlErrorKind.UnclosedTag, "Unclosed tag")
+        return XmlNode.Element(_splitName(rawTag), attrs, children)
     }
 
-    parseDocument() -> Json {
+    parseDocument() {
         while (!this.atEnd()) {
             this.skipWhitespace()
             if (this.atEnd()) { break }
@@ -668,151 +854,169 @@ class XmlParser {
             if (this.peek() == "<") {
                 var node = this.parseElement(0)
                 if (node != null) {
-                    this.root = node!
+                    this.root = node
                     this.hasRoot = true
-                    return this.root
+                    return
                 }
                 break
             }
             this.advance()
         }
-        return this.root
     }
 }
 
-fn _parseWithDetails(data: string, options: Json = null) -> XmlParser {
+fn _parse(data: string, options: XmlOptions) -> XmlParser {
     var parser = XmlParser(data, options)
     parser.parseDocument()
     return parser
 }
 
-fn _serializeNode(nodeValue: Json, config: XmlWriteConfig, level: int, depth: int) -> string {
-    if (depth > XML_MAX_DEPTH || typeName(nodeValue) != "Json") { return "" }
-    var node = nodeValue as Json
-    var typ = _nodeType(node)
+// ===== Serializer =====
+
+fn _serializeChildren(kids: Array<XmlNode>, config: XmlWriteOptions, level: int, depth: int) -> string {
     var out = StringBuilder()
-    var emptyChildren: Json = []
+    for (var i = 0; i < len(kids); i++) {
+        out.append(_serializeNode(kids[i], config, level, depth + 1))
+    }
+    return out.toString()
+}
 
-    if (typ == "document") {
-        var children = _arrayValue(Json.get(node, "children", emptyChildren))
-        if (children == null) { return "" }
-        for (var i = 0; i < len(children!); i++) {
-            out.append(_serializeNode(children![i], config, level, depth + 1))
-        }
-        return out.toString()
+fn _serializeElement(name: XmlName, attrs: Array<XmlAttribute>, kids: Array<XmlNode>,
+                     config: XmlWriteOptions, level: int, depth: int) -> string {
+    var tag = _qualifiedName(name)
+    if (len(tag) == 0) { return "" }
+    var out = StringBuilder()
+    out.append(_indentText(level, config.indent))
+    out.append("<")
+    out.append(tag)
+
+    for (var i = 0; i < len(attrs); i++) {
+        var a = attrs[i]
+        out.append(" ")
+        out.append(_qualifiedName(a.name))
+        out.append("=\"")
+        out.append(_escapeAttr(a.value))
+        out.append("\"")
     }
 
-    if (typ == "element") {
-        var tag = _stringValue(Json.get(node, "tag", ""), "")
-        if (len(tag) == 0) { return "" }
-        out.append(_indentText(level, config.indent))
-        out.append("<")
-        out.append(tag)
-
-        var attrsValue = Json.get(node, "attrs", null)
-        if (typeName(attrsValue) == "Json") {
-            var attrs = attrsValue as Json
-            for (key in attrs) {
-                var value = Json.get(attrs, key, null)
-                if (typeName(value) == "string") {
-                    out.append(" ")
-                    out.append(key)
-                    out.append("=\"")
-                    out.append(_escapeAttr(value as string))
-                    out.append("\"")
-                }
-            }
-        }
-
-        var children = _arrayValue(Json.get(node, "children", emptyChildren))
-        if (children != null && len(children!) > 0) {
-            out.append(">")
-            var textOnly = false
-            if (len(children!) == 1 && typeName(children![0]) == "Json") {
-                textOnly = _nodeType(children![0] as Json) == "text"
-            }
-            if (textOnly) {
-                var textValue = Json.get(children![0] as Json, "text", "")
-                if (typeName(textValue) == "string") {
-                    out.append(_escapeText(textValue as string))
-                }
-            } else {
-                if (config.indent > 0) { out.append("\n") }
-                for (var i = 0; i < len(children!); i++) {
-                    out.append(_serializeNode(children![i], config, level + 1, depth + 1))
-                }
-                out.append(_indentText(level, config.indent))
-            }
-            out.append("</")
-            out.append(tag)
-            out.append(">")
+    if (len(kids) > 0) {
+        out.append(">")
+        var textOnly = false
+        if (len(kids) == 1) { textOnly = _isTextNode(kids[0]) }
+        if (textOnly) {
+            out.append(_escapeText(_textOf(kids[0])))
         } else {
-            out.append("/>")
+            if (config.indent > 0) { out.append("\n") }
+            for (var i = 0; i < len(kids); i++) {
+                out.append(_serializeNode(kids[i], config, level + 1, depth + 1))
+            }
+            out.append(_indentText(level, config.indent))
         }
-        if (depth > 0 && config.indent > 0) { out.append("\n") }
-        return out.toString()
+        out.append("</")
+        out.append(tag)
+        out.append(">")
+    } else {
+        out.append("/>")
     }
-
-    if (typ == "text") {
-        out.append(_indentText(level, config.indent))
-        out.append(_escapeText(_stringValue(Json.get(node, "text", ""), "")))
-        if (config.indent > 0) { out.append("\n") }
-        return out.toString()
-    }
-
-    if (typ == "comment") {
-        out.append(_indentText(level, config.indent))
-        out.append("<!--")
-        out.append(_stringValue(Json.get(node, "text", ""), ""))
-        out.append("-->")
-        if (config.indent > 0) { out.append("\n") }
-        return out.toString()
-    }
-
-    if (typ == "cdata") {
-        out.append(_indentText(level, config.indent))
-        out.append("<![CDATA[")
-        out.append(_stringValue(Json.get(node, "text", ""), ""))
-        out.append("]]>")
-        if (config.indent > 0) { out.append("\n") }
-        return out.toString()
-    }
-
-    return ""
+    if (depth > 0 && config.indent > 0) { out.append("\n") }
+    return out.toString()
 }
 
-export fn parse(data: string, options: Json = null) -> Json {
-    var parser = _parseWithDetails(data, options)
+fn _serializeText(value: string, config: XmlWriteOptions, level: int) -> string {
+    var out = StringBuilder()
+    out.append(_indentText(level, config.indent))
+    out.append(_escapeText(value))
+    if (config.indent > 0) { out.append("\n") }
+    return out.toString()
+}
+
+fn _serializeComment(value: string, config: XmlWriteOptions, level: int) -> string {
+    var out = StringBuilder()
+    out.append(_indentText(level, config.indent))
+    out.append("<!--")
+    out.append(value)
+    out.append("-->")
+    if (config.indent > 0) { out.append("\n") }
+    return out.toString()
+}
+
+fn _serializeCData(value: string, config: XmlWriteOptions, level: int) -> string {
+    var out = StringBuilder()
+    out.append(_indentText(level, config.indent))
+    out.append("<![CDATA[")
+    out.append(value)
+    out.append("]]>")
+    if (config.indent > 0) { out.append("\n") }
+    return out.toString()
+}
+
+fn _serializePI(target: string, data: string, config: XmlWriteOptions, level: int) -> string {
+    var out = StringBuilder()
+    out.append(_indentText(level, config.indent))
+    out.append("<?")
+    out.append(target)
+    if (len(data) > 0) {
+        out.append(" ")
+        out.append(data)
+    }
+    out.append("?>")
+    if (config.indent > 0) { out.append("\n") }
+    return out.toString()
+}
+
+fn _serializeNode(node: XmlNode, config: XmlWriteOptions, level: int, depth: int) -> string {
+    if (depth > XML_MAX_DEPTH) { return "" }
+    return match (node) {
+        XmlNode.Document(kids)                          -> _serializeChildren(kids, config, level, depth),
+        XmlNode.Element(name, attrs, kids)              -> _serializeElement(name, attrs, kids, config, level, depth),
+        XmlNode.Text(value)                             -> _serializeText(value, config, level),
+        XmlNode.Comment(value)                          -> _serializeComment(value, config, level),
+        XmlNode.CData(value)                            -> _serializeCData(value, config, level),
+        XmlNode.ProcessingInstruction(target, piData)   -> _serializePI(target, piData, config, level)
+    }
+}
+
+// ===== Public API =====
+
+// parse is strict: any recoverable diagnostic or a missing root element enters
+// the typed error channel via `throw XmlError.Parse(...)`.
+export fn parse(data: string, options: XmlOptions? = null) -> XmlNode {
+    var parser = _parse(data, _resolveOptions(options))
+    if (len(parser.errors) > 0) {
+        throw XmlError.Parse(parser.errors[0])
+    }
     if (!parser.hasRoot) {
-        var empty: Json = {}
-        return empty
+        throw XmlError.Parse(XmlDiagnostic(XmlErrorKind.InvalidTag, parser.line, parser.column,
+                                           "No root element"))
     }
-    return parser.root
+    return parser.root!
 }
 
-export fn parseDetailed(data: string, options: Json = null) -> Json {
-    var parser = _parseWithDetails(data, options)
-    return {
-        doc: parser.hasRoot ? parser.root : null,
-        errors: parser.errors
-    }
+// parseReport opts into recovery and returns any partial document together with
+// the typed diagnostics collected during parsing.
+export fn parseReport(data: string, options: XmlOptions? = null) -> XmlParseReport {
+    var parser = _parse(data, _resolveOptions(options))
+    var doc: XmlNode? = null
+    if (parser.hasRoot) { doc = parser.root }
+    return XmlParseReport(doc, parser.errors)
 }
 
-export fn parseFile(path: Path, options: Json = null) -> Json {
+export fn parseFile(path: Path, options: XmlOptions? = null) -> XmlNode {
     var content = io.readFile(path)
     if (content == null) {
-        var empty: Json = {}
-        return empty
+        throw XmlError.Io("Failed to read file")
     }
     return parse(content!, options)
 }
 
-export fn stringify(node: Json, options: Json = null) -> string {
-    var config = XmlWriteConfig(options)
+export fn stringify(node: XmlNode, options: XmlWriteOptions? = null) -> string {
+    var config = _resolveWriteOptions(options)
     var out = StringBuilder()
     if (config.declaration) {
+        var encoding = config.encoding
+        if (len(encoding) == 0) { encoding = "UTF-8" }
         out.append("<?xml version=\"1.0\" encoding=\"")
-        out.append(config.encoding)
+        out.append(encoding)
         out.append("\"?>")
         if (config.indent > 0) { out.append("\n") }
     }
@@ -820,53 +1024,32 @@ export fn stringify(node: Json, options: Json = null) -> string {
     return out.toString()
 }
 
-export fn writeFile(path: Path, node: Json, options: Json = null) -> bool {
+export fn writeFile(path: Path, node: XmlNode, options: XmlWriteOptions? = null) -> bool {
     return io.writeFile(path, stringify(node, options))
 }
 
-export fn document() -> Json {
-    return {
-        type: "document",
-        children: []
-    }
+// ===== Builders =====
+
+export fn document(children: Array<XmlNode>? = null) -> XmlNode {
+    if (children == null) { return XmlNode.Document(_emptyNodes()) }
+    return XmlNode.Document(children!)
 }
 
-export fn element(tag: string, attrsValue: Json = null) -> Json {
-    var attrs: Json = {}
-    var encoded: Json = Json.encode(attrsValue)
-    if (typeName(encoded) == "Json") {
-        for (key in encoded) {
-            var value = Json.get(encoded, key, null)
-            if (typeName(value) == "string") {
-                attrs[key] = value
-            }
-        }
-    }
-    return {
-        type: "element",
-        tag: tag,
-        attrs: attrs,
-        children: []
-    }
+export fn element(tag: string, attrs: Array<XmlAttribute>? = null,
+                  children: Array<XmlNode>? = null) -> XmlNode {
+    var resolvedAttrs = attrs ?? _emptyAttrs()
+    var resolvedChildren = children ?? _emptyNodes()
+    return XmlNode.Element(_splitName(tag), resolvedAttrs, resolvedChildren)
 }
 
-export fn text(content: string) -> Json {
-    return {
-        type: "text",
-        text: content
-    }
+export fn text(content: string) -> XmlNode {
+    return XmlNode.Text(content)
 }
 
-export fn comment(content: string) -> Json {
-    return {
-        type: "comment",
-        text: content
-    }
+export fn comment(content: string) -> XmlNode {
+    return XmlNode.Comment(content)
 }
 
-export fn cdata(content: string) -> Json {
-    return {
-        type: "cdata",
-        text: content
-    }
+export fn cdata(content: string) -> XmlNode {
+    return XmlNode.CData(content)
 }

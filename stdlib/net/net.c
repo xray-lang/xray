@@ -17,12 +17,14 @@
 #include "io.h"
 #include "tls.h"
 #include "xneterror.h"
+#include "../stdlib_cache.h"
 #include "../../src/io/xdns.h"
 #include "../../src/io/xnet_handle.h"
 #include "../../src/runtime/class/xclass.h"
 #include "../../src/runtime/class/xclass_builder.h"
 #include "../../src/runtime/class/xclass_system.h"
 #include "../../src/runtime/class/xinstance.h"
+#include "../../src/runtime/class/xenum.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xarray.h"
@@ -1456,21 +1458,112 @@ typedef struct {
 
 typedef struct NetBidiShared {
     _Atomic int done;
+    _Atomic int refs;
     _Atomic bool ok;
     _Atomic int64_t ab;
     _Atomic int64_t ba;
+    _Atomic uint8_t error;
 } NetBidiShared;
+
+enum {
+    NET_BIDI_ERROR_CANCELLED = 250,
+    NET_BIDI_ERROR_OUT_OF_MEMORY = 251,
+};
+
+typedef enum {
+    NET_ERROR_TIMEOUT,
+    NET_ERROR_CLOSED,
+    NET_ERROR_RESET,
+    NET_ERROR_REFUSED,
+    NET_ERROR_DNS,
+    NET_ERROR_TLS,
+    NET_ERROR_IO,
+    NET_ERROR_INVALID,
+    NET_ERROR_CANCELLED,
+    NET_ERROR_OUT_OF_MEMORY,
+} NetErrorVariant;
+
+static uint32_t net_error_variant_index(uint8_t error) {
+    switch (error) {
+        case XR_NETERR_TIMEOUT:
+            return NET_ERROR_TIMEOUT;
+        case XR_NETERR_CLOSED:
+            return NET_ERROR_CLOSED;
+        case XR_NETERR_RESET:
+            return NET_ERROR_RESET;
+        case XR_NETERR_REFUSED:
+            return NET_ERROR_REFUSED;
+        case XR_NETERR_DNS:
+            return NET_ERROR_DNS;
+        case XR_NETERR_TLS:
+            return NET_ERROR_TLS;
+        case XR_NETERR_INVALID:
+            return NET_ERROR_INVALID;
+        case NET_BIDI_ERROR_CANCELLED:
+            return NET_ERROR_CANCELLED;
+        case NET_BIDI_ERROR_OUT_OF_MEMORY:
+            return NET_ERROR_OUT_OF_MEMORY;
+        case XR_NETERR_IO:
+        case XR_NETERR_NONE:
+        default:
+            return NET_ERROR_IO;
+    }
+}
+
+static XrEnumType *net_error_type(XrVMRuntime *X) {
+    return xr_stdlib_enum_type_get(X, "net", "NetError");
+}
+
+static void net_set_pending_error(XrVMRuntime *X, uint8_t error) {
+    XrEnumType *type = net_error_type(X);
+    if (!type)
+        return;
+    XrEnumAggregateValue *value =
+        xr_enum_zero_payload_value(X, type, net_error_variant_index(error));
+    if (value)
+        xr_vm_set_pending_error(X, XR_FROM_PTR(value));
+}
+
+static void net_bidi_shared_set_error(NetBidiShared *shared, uint8_t error) {
+    if (!shared || error == XR_NETERR_NONE)
+        return;
+    uint8_t expected = XR_NETERR_NONE;
+    (void) atomic_compare_exchange_strong_explicit(&shared->error, &expected, error,
+                                                   memory_order_acq_rel, memory_order_acquire);
+    atomic_store_explicit(&shared->ok, false, memory_order_release);
+}
+
+static void net_bidi_shared_release(NetBidiShared *shared) {
+    if (!shared)
+        return;
+    int previous = atomic_fetch_sub_explicit(&shared->refs, 1, memory_order_acq_rel);
+    if (previous == 1)
+        xr_free(shared);
+}
+
+static void net_bidi_shared_complete(NetBidiShared *shared, int dir, int64_t bytes, uint8_t error) {
+    if (!shared)
+        return;
+    if (dir == 0)
+        atomic_store_explicit(&shared->ab, bytes, memory_order_release);
+    else
+        atomic_store_explicit(&shared->ba, bytes, memory_order_release);
+    if (error != XR_NETERR_NONE)
+        net_bidi_shared_set_error(shared, error);
+    atomic_fetch_add_explicit(&shared->done, 1, memory_order_release);
+    net_bidi_shared_release(shared);
+}
 
 static void net_copy_notify(NetCopyState *state, int64_t bytes, bool ok) {
     if (!state || !state->notify_shared)
         return;
-    if (!ok)
-        atomic_store_explicit(&state->notify_shared->ok, false, memory_order_release);
-    if (state->notify_dir == 0)
-        atomic_store_explicit(&state->notify_shared->ab, bytes, memory_order_release);
-    else
-        atomic_store_explicit(&state->notify_shared->ba, bytes, memory_order_release);
-    atomic_fetch_add_explicit(&state->notify_shared->done, 1, memory_order_acq_rel);
+    uint8_t error = XR_NETERR_NONE;
+    if (!ok) {
+        error = state->waiting_conn ? state->waiting_conn->last_error : XR_NETERR_IO;
+        if (error == XR_NETERR_NONE)
+            error = XR_NETERR_IO;
+    }
+    net_bidi_shared_complete(state->notify_shared, state->notify_dir, bytes, error);
 }
 
 static void net_copy_state_free(NetCopyState *state) {
@@ -1490,6 +1583,11 @@ static XrCFuncResult net_copy_continue(XrVMRuntime *X, int status, XrValue resum
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         net_conn_set_error(state->waiting_conn,
                            status == XR_RESUME_TIMEOUT ? XR_NETERR_TIMEOUT : XR_NETERR_CLOSED, 0);
+        if (state->notify_shared) {
+            net_bidi_shared_set_error(state->notify_shared, status == XR_RESUME_TIMEOUT
+                                                                ? XR_NETERR_TIMEOUT
+                                                                : NET_BIDI_ERROR_CANCELLED);
+        }
         net_copy_notify(state, state->total, false);
         net_copy_state_free(state);
         *result = xr_int(-1);
@@ -1622,13 +1720,19 @@ static XrCFuncResult net_copy_start_ex(XrVMRuntime *X, XrValue src, XrValue dst,
         dst_conn->fd < 0) {
         net_conn_set_error(src_conn, XR_NETERR_CLOSED, 0);
         net_conn_set_error(dst_conn, XR_NETERR_CLOSED, 0);
+        if (notify_shared) {
+            net_bidi_shared_complete(notify_shared, notify_dir, -1, XR_NETERR_CLOSED);
+        }
         *result = xr_int(-1);
         return XR_CFUNC_DONE;
     }
 
     if (buffer_size <= 0) {
+        if (notify_shared) {
+            net_bidi_shared_complete(notify_shared, notify_dir, -1, XR_NETERR_INVALID);
+        }
         *result = xr_int(-1);
-        return XR_CFUNC_ERROR;
+        return notify_shared ? XR_CFUNC_DONE : XR_CFUNC_ERROR;
     }
     if (buffer_size < 1024)
         buffer_size = 1024;
@@ -1643,16 +1747,22 @@ static XrCFuncResult net_copy_start_ex(XrVMRuntime *X, XrValue src, XrValue dst,
         owns_buf = true;
     }
     if (!buf) {
+        if (notify_shared) {
+            net_bidi_shared_complete(notify_shared, notify_dir, -1, NET_BIDI_ERROR_OUT_OF_MEMORY);
+        }
         *result = xr_int(-1);
-        return XR_CFUNC_ERROR;
+        return notify_shared ? XR_CFUNC_DONE : XR_CFUNC_ERROR;
     }
 
     NetCopyState *state = (NetCopyState *) xr_calloc(1, sizeof(NetCopyState));
     if (!state) {
         if (owns_buf)
             xr_free(buf);
+        if (notify_shared) {
+            net_bidi_shared_complete(notify_shared, notify_dir, -1, NET_BIDI_ERROR_OUT_OF_MEMORY);
+        }
         *result = xr_int(-1);
-        return XR_CFUNC_ERROR;
+        return notify_shared ? XR_CFUNC_DONE : XR_CFUNC_ERROR;
     }
     state->src_fd = src_conn->fd;
     state->dst_fd = dst_conn->fd;
@@ -1731,7 +1841,7 @@ static XrCFuncResult net_bidi_wait_continue(XrVMRuntime *X, int status, XrValue 
     (void) resume_value;
     NetBidiWaitState *state = (NetBidiWaitState *) ctx;
     if (status == XR_RESUME_CANCELLED) {
-        xr_free(state->shared);
+        net_bidi_shared_release(state->shared);
         xr_free(state);
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
@@ -1739,25 +1849,34 @@ static XrCFuncResult net_bidi_wait_continue(XrVMRuntime *X, int status, XrValue 
     return net_bidi_wait_step(X, state, result);
 }
 
-static XrValue net_bidi_result_json(XrVMRuntime *X, NetBidiWaitState *state) {
-    XrJson *json = xr_json_new(xr_current_coro(X));
-    if (!json)
+static XrValue net_bidi_result_record(XrVMRuntime *X, NetBidiWaitState *state) {
+    XrClass *cls = xr_stdlib_record_class_get(X, "net", "CopyBidirectionalResult");
+    if (!cls)
         return XR_NULL_VAL;
-    xr_json_set_by_key(
-        X, json, "ab",
+    XrJson *record = xr_json_new_with_class(xr_current_coro(X), cls);
+    if (!record)
+        return XR_NULL_VAL;
+    xr_instance_set_dynamic_field(
+        X, record, 0,
         xr_int((xr_Integer) atomic_load_explicit(&state->shared->ab, memory_order_acquire)));
-    xr_json_set_by_key(
-        X, json, "ba",
+    xr_instance_set_dynamic_field(
+        X, record, 1,
         xr_int((xr_Integer) atomic_load_explicit(&state->shared->ba, memory_order_acquire)));
-    xr_json_set_by_key(X, json, "ok",
-                       xr_bool(atomic_load_explicit(&state->shared->ok, memory_order_acquire)));
-    return xr_json_value(json);
+    return xr_json_value(record);
 }
 
 static XrCFuncResult net_bidi_wait_step(XrVMRuntime *X, NetBidiWaitState *state, XrValue *result) {
     if (atomic_load_explicit(&state->shared->done, memory_order_acquire) >= 2) {
-        *result = net_bidi_result_json(X, state);
-        xr_free(state->shared);
+        if (!atomic_load_explicit(&state->shared->ok, memory_order_acquire)) {
+            uint8_t error = atomic_load_explicit(&state->shared->error, memory_order_acquire);
+            net_set_pending_error(X, error == XR_NETERR_NONE ? XR_NETERR_IO : error);
+            *result = XR_NULL_VAL;
+        } else {
+            *result = net_bidi_result_record(X, state);
+            if (XR_IS_NULL(*result))
+                net_set_pending_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
+        }
+        net_bidi_shared_release(state->shared);
         xr_free(state);
         return XR_CFUNC_DONE;
     }
@@ -1777,32 +1896,42 @@ static XrCFuncResult net_copy_direction_coro(XrVMRuntime *X, XrValue *args, int 
 }
 
 /*
- * net.copyBidirectional(a, b) -> Json
+ * net.copyBidirectional(a, b) -> CopyBidirectionalResult
  * Runs two native stream pumps in opposite directions. Each EOF half-closes
  * the peer write side so request/response style TCP protocols can drain.
  */
 static XrCFuncResult net_copy_bidirectional_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
                                                       XrValue *result) {
     if (nargs < 2) {
+        net_set_pending_error(X, XR_NETERR_INVALID);
         *result = XR_NULL_VAL;
-        return XR_CFUNC_ERROR;
+        return XR_CFUNC_DONE;
     }
     XrNetConn *a = unwrap_conn(args[0]);
     XrNetConn *b = unwrap_conn(args[1]);
     if (!a || a->closed || a->fd < 0 || !b || b->closed || b->fd < 0) {
         net_conn_set_error(a, XR_NETERR_CLOSED, 0);
         net_conn_set_error(b, XR_NETERR_CLOSED, 0);
+        net_set_pending_error(X, XR_NETERR_CLOSED);
+        *result = XR_NULL_VAL;
+        return XR_CFUNC_DONE;
+    }
+    if (a == b || a->fd == b->fd) {
+        net_set_pending_error(X, XR_NETERR_INVALID);
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
     }
 
     NetBidiShared *shared = (NetBidiShared *) xr_calloc(1, sizeof(NetBidiShared));
     if (!shared) {
+        net_set_pending_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
         *result = XR_NULL_VAL;
-        return XR_CFUNC_ERROR;
+        return XR_CFUNC_DONE;
     }
     atomic_init(&shared->done, 0);
+    atomic_init(&shared->refs, 3);
     atomic_init(&shared->ok, true);
+    atomic_init(&shared->error, XR_NETERR_NONE);
     atomic_init(&shared->ab, 0);
     atomic_init(&shared->ba, 0);
 
@@ -1814,20 +1943,26 @@ static XrCFuncResult net_copy_bidirectional_yieldable(XrVMRuntime *X, XrValue *a
     XrCoroutine *ba =
         xr_coro_create_vm_cfunc(X, net_copy_direction_coro, ba_args, 4, "net.copy.ba");
     if (!ab || !ba) {
+        xr_coro_destroy(ab);
+        xr_coro_destroy(ba);
         xr_free(shared);
+        net_set_pending_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
         *result = XR_NULL_VAL;
-        return XR_CFUNC_ERROR;
+        return XR_CFUNC_DONE;
     }
-    xr_coro_spawn(X, ab);
-    xr_coro_spawn(X, ba);
 
     NetBidiWaitState *state = (NetBidiWaitState *) xr_calloc(1, sizeof(NetBidiWaitState));
     if (!state) {
+        xr_coro_destroy(ab);
+        xr_coro_destroy(ba);
         xr_free(shared);
+        net_set_pending_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
         *result = XR_NULL_VAL;
-        return XR_CFUNC_ERROR;
+        return XR_CFUNC_DONE;
     }
     state->shared = shared;
+    xr_coro_spawn(X, ab);
+    xr_coro_spawn(X, ba);
     return net_bidi_wait_step(X, state, result);
 }
 

@@ -113,6 +113,7 @@ typedef enum {
     XI_AUX_KIND_PAR_MAP = 4,
     XI_AUX_KIND_THREAD_SPAWN = 5,
     XI_AUX_KIND_MAP_LITERAL = 6,
+    XI_AUX_KIND_ENUM_NAMESPACE = 7,
 } XiAuxKind;
 
 /* Source-variable IDs are carried on XiValue for backend register/cell

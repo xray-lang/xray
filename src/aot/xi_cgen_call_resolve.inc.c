@@ -145,6 +145,14 @@ static const XiEnumData *cg_resolve_imported_enum_value(XiCgenCtx *ctx, const Xi
     return NULL;
 }
 
+static const XaBuiltinEnum *cg_resolve_imported_builtin_enum_value(XiCgenCtx *ctx, const XiFunc *f,
+                                                                   const XiValue *value) {
+    const XiImportRef *ref = cg_import_ref_for_value(ctx, f, value);
+    if (!ref || !ref->module_path || !ref->member_name)
+        return NULL;
+    return xa_builtin_get_enum_type(ref->module_path, ref->member_name);
+}
+
 static CgStaticFunctionCall cg_resolve_module_member_call(XiCgenCtx *ctx, const XiFunc *f,
                                                           const XiValue *call,
                                                           const char *member_name) {

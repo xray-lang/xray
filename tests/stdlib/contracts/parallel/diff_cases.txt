@@ -1,0 +1,1 @@
+tests/diff/cases/semantics/stdlib/parallel_api_reference.xr

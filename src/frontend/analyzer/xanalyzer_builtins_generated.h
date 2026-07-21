@@ -64,9 +64,90 @@ static const XaBuiltinMember g_gen_osrwlock_members[] = {
 
 // ======== C Module Declarations ========
 
+// cluster.ClusterTlsOptions record fields
+static const XaBuiltinRecordField g_gen_cluster_clustertlsoptions_record_fields[] = {
+    {"enabled", "bool"},
+    {"caFile", "string?"},
+    {"certFile", "string?"},
+    {"keyFile", "string?"},
+    {"insecure", "bool"},
+};
+
+// cluster.ClusterConfig record fields
+static const XaBuiltinRecordField g_gen_cluster_clusterconfig_record_fields[] = {
+    {"name", "string"},
+    {"port", "int"},
+    {"secret", "string?"},
+    {"tls", "ClusterTlsOptions?"},
+};
+
+// cluster.ClusterTlsStatus record fields
+static const XaBuiltinRecordField g_gen_cluster_clustertlsstatus_record_fields[] = {
+    {"enabled", "bool"},
+    {"clientReady", "bool"},
+    {"serverReady", "bool"},
+};
+
+// cluster.ClusterNodeInfo record fields
+static const XaBuiltinRecordField g_gen_cluster_clusternodeinfo_record_fields[] = {
+    {"name", "string"},
+    {"host", "string"},
+    {"port", "int"},
+    {"state", "ClusterNodeState"},
+    {"framesSent", "int"},
+    {"framesReceived", "int"},
+    {"bytesSent", "int"},
+    {"bytesReceived", "int"},
+    {"sendErrors", "int"},
+    {"slowConsumerEvents", "int"},
+    {"rttMs", "int"},
+    {"outQueueBytes", "int"},
+    {"outQueueFrames", "int"},
+    {"slow", "bool"},
+    {"phi", "float"},
+    {"missedHeartbeats", "int"},
+};
+
+// cluster.ClusterInfo record fields
+static const XaBuiltinRecordField g_gen_cluster_clusterinfo_record_fields[] = {
+    {"self", "string"},
+    {"port", "int"},
+    {"running", "bool"},
+    {"nodes", "Array<ClusterNodeInfo>"},
+    {"channels", "int"},
+    {"topicSubscriptions", "int"},
+    {"deadNodes", "int"},
+    {"heartbeatIntervalMs", "int"},
+    {"heartbeatTimeoutMs", "int"},
+    {"maxMissedHeartbeats", "int"},
+    {"tls", "ClusterTlsStatus"},
+};
+
+static const XaBuiltinRecord g_gen_cluster_records[] = {
+    {"ClusterTlsOptions", "Typed TLS configuration for a cluster node", g_gen_cluster_clustertlsoptions_record_fields, 5, true},
+    {"ClusterConfig", "Typed cluster node startup configuration", g_gen_cluster_clusterconfig_record_fields, 4, true},
+    {"ClusterTlsStatus", "Effective TLS posture of a running cluster node", g_gen_cluster_clustertlsstatus_record_fields, 3, true},
+    {"ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", g_gen_cluster_clusternodeinfo_record_fields, 16, true},
+    {"ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", g_gen_cluster_clusterinfo_record_fields, 11, true},
+};
+#define GEN_CLUSTER_RECORD_COUNT 5
+
+static const XaBuiltinEnumVariant g_gen_cluster_clusternodestate_variants[] = {
+    {"Idle", NULL, 0},
+    {"Connecting", NULL, 0},
+    {"Handshaking", NULL, 0},
+    {"Connected", NULL, 0},
+    {"Closing", NULL, 0},
+};
+
+static const XaBuiltinEnum g_gen_cluster_enums[] = {
+    {"ClusterNodeState", "Lifecycle state of a remote cluster node", g_gen_cluster_clusternodestate_variants, 5, UINT32_C(3723918825)},
+};
+#define GEN_CLUSTER_ENUM_COUNT 1
+
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
-    {"start", "(config: Json): ()", "Start cluster node", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"start", "(config: ClusterConfig): bool", "Start cluster node", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"join", "(addr: string): bool", "Join cluster by address", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"self", "(): string", "Get own node name", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"nodes", "(): Array<string>", "List cluster node names", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
@@ -74,7 +155,7 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"discover", "(): ()", "Start LAN auto-discovery", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"stop", "(): ()", "Stop cluster node", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
-    {"info", "(): Json", "Get cluster status info", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"info", "(): ClusterInfo?", "Get cluster status info", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"publish", "(topic: string, value: Json): bool", "Publish to topic", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
 };
@@ -296,6 +377,48 @@ static const XaBuiltinHandle g_gen_net_handles[] = {
 };
 #define GEN_NET_HANDLE_COUNT 1
 
+// net.CopyBidirectionalResult record fields
+static const XaBuiltinRecordField g_gen_net_copybidirectionalresult_record_fields[] = {
+    {"aToB", "int"},
+    {"bToA", "int"},
+};
+
+static const XaBuiltinRecord g_gen_net_records[] = {
+    {"CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", g_gen_net_copybidirectionalresult_record_fields, 2, true},
+};
+#define GEN_NET_RECORD_COUNT 1
+
+static const XaBuiltinEnumVariant g_gen_net_neterror_variants[] = {
+    {"Timeout", NULL, 0},
+    {"Closed", NULL, 0},
+    {"Reset", NULL, 0},
+    {"Refused", NULL, 0},
+    {"Dns", NULL, 0},
+    {"Tls", NULL, 0},
+    {"Io", NULL, 0},
+    {"Invalid", NULL, 0},
+    {"Cancelled", NULL, 0},
+    {"OutOfMemory", NULL, 0},
+};
+
+static const XaBuiltinEnum g_gen_net_enums[] = {
+    {"NetError", "Typed failure from native network operations", g_gen_net_neterror_variants, 10, UINT32_C(2619647518)},
+};
+#define GEN_NET_ENUM_COUNT 1
+
+static const char *g_gen_net_copybidirectional_8_errors[] = {
+    "NetError.Timeout",
+    "NetError.Closed",
+    "NetError.Reset",
+    "NetError.Refused",
+    "NetError.Dns",
+    "NetError.Tls",
+    "NetError.Io",
+    "NetError.Invalid",
+    "NetError.Cancelled",
+    "NetError.OutOfMemory",
+};
+
 // net module functions
 static const XaBuiltinMember g_gen_net_functions[] = {
     {"dial", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TCP connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
@@ -306,7 +429,7 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"write", "(conn: NetConn, data: string): int", "Write data to connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"writeBytes", "(conn: NetConn, data: Array<byte>): int", "Write Array<byte> data to connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"copy", "(src: NetConn, dst: NetConn, bufferSize?: int): int", "Copy a TCP/TLS stream using a reusable native buffer", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
-    {"copyBidirectional", "(a: NetConn, b: NetConn): Json", "Copy two TCP/TLS streams in both directions", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"copyBidirectional", "(a: NetConn, b: NetConn): CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", true, false, false, false, true, {XA_EFFECT_CONTRACT_ERRORS, g_gen_net_copybidirectional_8_errors, 10}, XA_ALLOCATION_CONTRACT_MISSING},
     {"shutdownRead", "(conn: NetConn): bool", "Shut down the read side of a TCP connection", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"shutdownWrite", "(conn: NetConn): bool", "Shut down the write side of a TCP connection", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"shutdown", "(conn: NetConn): bool", "Shut down both sides of a TCP connection", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
@@ -468,9 +591,22 @@ static const XaBuiltinHandle g_gen_ws_handles[] = {
 };
 #define GEN_WS_HANDLE_COUNT 2
 
+// ws.WsConnectOptions record fields
+static const XaBuiltinRecordField g_gen_ws_wsconnectoptions_record_fields[] = {
+    {"timeout", "int?"},
+    {"pingInterval", "int?"},
+    {"pongTimeout", "int?"},
+    {"maxMessageSize", "int?"},
+};
+
+static const XaBuiltinRecord g_gen_ws_records[] = {
+    {"WsConnectOptions", "Typed WebSocket client connection options", g_gen_ws_wsconnectoptions_record_fields, 4, true},
+};
+#define GEN_WS_RECORD_COUNT 1
+
 // ws module functions
 static const XaBuiltinMember g_gen_ws_functions[] = {
-    {"connect", "(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"connect", "(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"send", "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"close", "(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
@@ -482,20 +618,20 @@ static const XaBuiltinMember g_gen_ws_functions[] = {
 
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
-    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0},
-    {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0},
-    {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0},
-    {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, NULL, 0},
-    {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT},
-    {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0},
-    {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0},
-    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT},
-    {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT},
-    {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0},
-    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0},
-    {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0},
-    {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0},
-    {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT},
+    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, g_gen_cluster_records, GEN_CLUSTER_RECORD_COUNT, g_gen_cluster_enums, GEN_CLUSTER_ENUM_COUNT},
+    {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0},
+    {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT, g_gen_net_records, GEN_NET_RECORD_COUNT, g_gen_net_enums, GEN_NET_ENUM_COUNT},
+    {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT, NULL, 0, NULL, 0},
+    {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT, g_gen_ws_records, GEN_WS_RECORD_COUNT, NULL, 0},
 };
 #define GEN_BUILTIN_MODULE_COUNT 14
 

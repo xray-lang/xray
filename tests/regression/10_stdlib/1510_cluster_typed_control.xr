@@ -1,0 +1,27 @@
+import cluster
+import { ClusterConfig, ClusterInfo } from cluster
+
+@test
+fn test_typed_start_and_info() {
+    var config: ClusterConfig = {
+        name: "typed-control-test",
+        port: 0,
+        secret: null,
+        tls: null
+    }
+    assert(cluster.start(config))
+
+    var info: ClusterInfo = cluster.info()!
+    assert_eq(info.self, "typed-control-test")
+    assert_eq(info.port, 0)
+    assert(info.running)
+    assert_eq(len(info.nodes), 0)
+    assert_eq(info.channels, 0)
+    assert_eq(info.topicSubscriptions, 0)
+    assert(!info.tls.enabled)
+    assert(!info.tls.clientReady)
+    assert(!info.tls.serverReady)
+
+    cluster.stop()
+    assert(cluster.info() == null)
+}

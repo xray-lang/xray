@@ -82,9 +82,18 @@ def main() -> int:
 
     root = Path(args.root).resolve()
     stdlibgen = load_stdlibgen(root)
-    entries, _constants, _handles, _type_methods, _native_classes, _classes, class_methods, _fields = (
-        stdlibgen.parse_def_metadata(root)
-    )
+    (
+        entries,
+        _constants,
+        _handles,
+        _records,
+        _enums,
+        _type_methods,
+        _native_classes,
+        _classes,
+        class_methods,
+        _fields,
+    ) = stdlibgen.parse_def_metadata(root)
 
     groups: dict[tuple[str, str], list[str]] = defaultdict(list)
     add_module_entry_groups(groups, entries)

@@ -15,6 +15,7 @@ import argparse
 import ast
 import dataclasses
 import difflib
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -83,6 +84,7 @@ class StdlibEntry:
     argc: str
     arg_spec: str
     ret: str
+    aot_error_enum: str
     aot_direct: bool
     aot_kind: str
     link_object: str
@@ -141,6 +143,46 @@ class StdlibHandleEntry:
     @property
     def symbol(self) -> str:
         return f"{self.module}.{self.name}"
+
+
+@dataclasses.dataclass(frozen=True)
+class StdlibRecordEntry:
+    module: str
+    name: str
+    doc: str
+    fields: tuple[StdlibHandleFieldEntry, ...]
+    sealed: bool
+
+    @property
+    def symbol(self) -> str:
+        return f"{self.module}.{self.name}"
+
+
+@dataclasses.dataclass(frozen=True)
+class StdlibEnumVariantEntry:
+    name: str
+    payload_types: tuple[str, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class StdlibEnumEntry:
+    module: str
+    name: str
+    doc: str
+    variants: tuple[StdlibEnumVariantEntry, ...]
+
+    @property
+    def symbol(self) -> str:
+        return f"{self.module}.{self.name}"
+
+
+def stable_enum_layout_id(module: str, enum: StdlibEnumEntry) -> int:
+    """Return a deterministic, non-zero layout identity for native enums."""
+    shape = [f"{module}.{enum.name}"]
+    for variant in enum.variants:
+        shape.append(f"{variant.name}({','.join(variant.payload_types)})")
+    digest = hashlib.sha256("|".join(shape).encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big") | 0x80000000
 
 
 @dataclasses.dataclass(frozen=True)
@@ -294,12 +336,38 @@ def parse_handle_fields(raw: str, context: str) -> tuple[StdlibHandleFieldEntry,
     return tuple(fields)
 
 
+ENUM_VARIANT_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)(?:\((.*)\))?$")
+
+
+def parse_enum_variants(raw: str, context: str) -> tuple[StdlibEnumVariantEntry, ...]:
+    variants: list[StdlibEnumVariantEntry] = []
+    seen: set[str] = set()
+    for fragment in split_top_level_csv(raw):
+        match = ENUM_VARIANT_RE.fullmatch(fragment.strip())
+        if not match:
+            raise SystemExit(f"{context}: malformed enum variant: {fragment!r}")
+        name = match.group(1)
+        if name in seen:
+            raise SystemExit(f"{context}: duplicate enum variant: {name}")
+        seen.add(name)
+        payload_raw = match.group(2)
+        payload_types = tuple(split_top_level_csv(payload_raw)) if payload_raw is not None else ()
+        if payload_raw is not None and not payload_types:
+            raise SystemExit(f"{context}: enum variant {name!r} requires payload types")
+        variants.append(StdlibEnumVariantEntry(name=name, payload_types=payload_types))
+    if not variants:
+        raise SystemExit(f"{context}: enum requires at least one variant")
+    return tuple(variants)
+
+
 def parse_def_metadata(
     root: Path,
 ) -> tuple[
     list[StdlibEntry],
     list[StdlibConstEntry],
     list[StdlibHandleEntry],
+    list[StdlibRecordEntry],
+    list[StdlibEnumEntry],
     list[StdlibTypeMethodEntry],
     list[StdlibNativeClassEntry],
     list[StdlibClassEntry],
@@ -310,6 +378,8 @@ def parse_def_metadata(
     entries: list[StdlibEntry] = []
     constants: list[StdlibConstEntry] = []
     handles: list[StdlibHandleEntry] = []
+    records: list[StdlibRecordEntry] = []
+    enums: list[StdlibEnumEntry] = []
     type_methods: list[StdlibTypeMethodEntry] = []
     native_classes: list[StdlibNativeClassEntry] = []
     classes: list[StdlibClassEntry] = []
@@ -344,6 +414,8 @@ def parse_def_metadata(
                 raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name} missing {names}")
             aot_direct = bool(props.get("aot_direct", False))
             aot_kind = str(props.get("aot_kind", "method" if aot_direct else ""))
+            ret = str(props.get("ret", "value"))
+            aot_error_enum = str(props.get("aot_error_enum", ""))
             if aot_kind and aot_kind not in {"method", "builtin"}:
                 raise SystemExit(
                     f"{path}:{line_no}: unsupported aot_kind for {current_module}.{current_name}: {aot_kind}"
@@ -351,6 +423,16 @@ def parse_def_metadata(
             if aot_kind and not aot_direct:
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} aot_kind requires aot_direct: true"
+                )
+            if ret == "i64_pair_result" and (not aot_direct or not aot_error_enum):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} i64_pair_result "
+                    "requires aot_direct: true and aot_error_enum"
+                )
+            if aot_error_enum and ret != "i64_pair_result":
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} aot_error_enum "
+                    "requires ret: i64_pair_result"
                 )
             vm_binding = str(props.get("vm_binding", "normal"))
             if vm_binding not in {"normal", "yieldable", "slow"}:
@@ -389,7 +471,8 @@ def parse_def_metadata(
                     aot=str(props.get("aot", "")),
                     argc=str(props["argc"]),
                     arg_spec=str(props.get("arg_spec", "")),
-                    ret=str(props.get("ret", "value")),
+                    ret=ret,
+                    aot_error_enum=aot_error_enum,
                     aot_direct=aot_direct,
                     aot_kind=aot_kind,
                     link_object=link_object,
@@ -457,6 +540,44 @@ def parse_def_metadata(
                     name=current_name,
                     doc=str(props.get("doc", "Native handle type")),
                     fields=fields,
+                )
+            )
+        elif current_kind == "record":
+            missing = [k for k in ("fields",) if k not in props]
+            if missing:
+                names = ", ".join(missing)
+                raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name} missing {names}")
+            fields = parse_handle_fields(
+                str(props["fields"]), f"{path}:{line_no}: {current_module}.{current_name}"
+            )
+            sealed = props.get("sealed", True)
+            if not isinstance(sealed, bool):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} sealed must be boolean"
+                )
+            records.append(
+                StdlibRecordEntry(
+                    module=current_module,
+                    name=current_name,
+                    doc=str(props.get("doc", "Native sealed record type")),
+                    fields=fields,
+                    sealed=sealed,
+                )
+            )
+        elif current_kind == "enum":
+            missing = [k for k in ("variants",) if k not in props]
+            if missing:
+                names = ", ".join(missing)
+                raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name} missing {names}")
+            enums.append(
+                StdlibEnumEntry(
+                    module=current_module,
+                    name=current_name,
+                    doc=str(props.get("doc", "Native enum type")),
+                    variants=parse_enum_variants(
+                        str(props["variants"]),
+                        f"{path}:{line_no}: {current_module}.{current_name}",
+                    ),
                 )
             )
         elif current_kind == "type_method":
@@ -587,6 +708,22 @@ def parse_def_metadata(
                 current_name = m.group(1)
                 props = {}
                 continue
+            m = re.fullmatch(r"record\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
+            if m:
+                if current_module is None or current_kind is not None:
+                    raise SystemExit(f"{path}:{line_no}: record outside module or nested record")
+                current_kind = "record"
+                current_name = m.group(1)
+                props = {}
+                continue
+            m = re.fullmatch(r"enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
+            if m:
+                if current_module is None or current_kind is not None:
+                    raise SystemExit(f"{path}:{line_no}: enum outside module or nested enum")
+                current_kind = "enum"
+                current_name = m.group(1)
+                props = {}
+                continue
             m = re.fullmatch(
                 r"type_method\s+([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*\{",
                 line,
@@ -661,36 +798,57 @@ def parse_def_metadata(
 
     if current_module is not None or current_kind is not None:
         raise SystemExit("unterminated stdlib .def block")
-    return entries, constants, handles, type_methods, native_classes, classes, class_methods, class_fields
+    return (
+        entries,
+        constants,
+        handles,
+        records,
+        enums,
+        type_methods,
+        native_classes,
+        classes,
+        class_methods,
+        class_fields,
+    )
 
 
 def parse_defs(root: Path) -> list[StdlibEntry]:
-    entries, _, _, _, _, _, _, _ = parse_def_metadata(root)
+    entries, _, _, _, _, _, _, _, _, _ = parse_def_metadata(root)
     return entries
 
 
 def parse_constants(root: Path) -> list[StdlibConstEntry]:
-    _, constants, _, _, _, _, _, _ = parse_def_metadata(root)
+    _, constants, _, _, _, _, _, _, _, _ = parse_def_metadata(root)
     return constants
 
 
 def parse_handles(root: Path) -> list[StdlibHandleEntry]:
-    _, _, handles, _, _, _, _, _ = parse_def_metadata(root)
+    _, _, handles, _, _, _, _, _, _, _ = parse_def_metadata(root)
     return handles
 
 
+def parse_records(root: Path) -> list[StdlibRecordEntry]:
+    _, _, _, records, _, _, _, _, _, _ = parse_def_metadata(root)
+    return records
+
+
+def parse_enums(root: Path) -> list[StdlibEnumEntry]:
+    _, _, _, _, enums, _, _, _, _, _ = parse_def_metadata(root)
+    return enums
+
+
 def parse_type_methods(root: Path) -> list[StdlibTypeMethodEntry]:
-    _, _, _, type_methods, _, _, _, _ = parse_def_metadata(root)
+    _, _, _, _, _, type_methods, _, _, _, _ = parse_def_metadata(root)
     return type_methods
 
 
 def parse_native_classes(root: Path) -> list[StdlibNativeClassEntry]:
-    _, _, _, _, native_classes, _, _, _ = parse_def_metadata(root)
+    _, _, _, _, _, _, native_classes, _, _, _ = parse_def_metadata(root)
     return native_classes
 
 
 def parse_class_methods(root: Path) -> list[StdlibClassMethodEntry]:
-    _, _, _, _, _, _, class_methods, _ = parse_def_metadata(root)
+    _, _, _, _, _, _, _, _, class_methods, _ = parse_def_metadata(root)
     return class_methods
 
 
@@ -789,6 +947,8 @@ def ret_expr(entry: StdlibEntry) -> str:
         return "CG_AOT_RET_VALUE"
     if entry.ret == "str_borrowed":
         return "CG_AOT_RET_STR_BORROWED"
+    if entry.ret == "i64_pair_result":
+        return "CG_AOT_RET_I64_PAIR_RESULT"
     raise SystemExit(f"unsupported ret kind for {entry.symbol}: {entry.ret}")
 
 
@@ -802,19 +962,46 @@ def const_kind_expr(entry: StdlibConstEntry) -> str:
     raise SystemExit(f"unsupported aot_const kind for {entry.symbol}: {entry.aot_const_kind}")
 
 
-def emit_aot_methods(entries: list[StdlibEntry], constants: list[StdlibConstEntry]) -> str:
+def emit_aot_methods(
+    entries: list[StdlibEntry],
+    constants: list[StdlibConstEntry],
+    enums: list[StdlibEnumEntry],
+) -> str:
     rows = [e for e in entries if e.aot_direct and e.aot_kind == "method"]
     builtin_rows = [e for e in entries if e.aot_direct and e.aot_kind == "builtin"]
     const_rows = [c for c in constants if c.aot_const_kind]
+    enum_by_symbol = {enum.symbol: enum for enum in enums}
     lines = generated_header("xstdlib_aot_methods_generated.inc.c - AOT stdlib direct-call table")
+    for e in rows:
+        if not e.aot_error_enum:
+            continue
+        enum = enum_by_symbol.get(f"{e.module}.{e.aot_error_enum}")
+        if not enum:
+            raise SystemExit(
+                f"{e.symbol}: unknown aot_error_enum {e.module}.{e.aot_error_enum}"
+            )
+        variants_name = f"g_aot_stdlib_{e.module}_{e.name}_error_variants"
+        lines.append(f"static const char *const {variants_name}[] = {{")
+        for variant in enum.variants:
+            lines.append(f"    {c_string(variant.name)},")
+        lines.append("};")
+        lines.append("")
     lines.append("static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {")
     for e in rows:
         if not e.aot:
             raise SystemExit(f"{e.symbol}: aot_direct requires aot symbol")
+        enum = (
+            enum_by_symbol.get(f"{e.module}.{e.aot_error_enum}") if e.aot_error_enum else None
+        )
+        variants_ref = f"g_aot_stdlib_{e.module}_{e.name}_error_variants" if enum else "NULL"
+        layout_id = stable_enum_layout_id(e.module, enum) if enum else 0
+        enum_name = c_string(enum.name) if enum else "NULL"
+        variant_count = len(enum.variants) if enum else 0
         lines.append(
             "    {"
             f"{c_string(e.module)}, {c_string(e.name)}, {argc_expr(e)}, {c_string(e.aot)}, "
-            f"{c_string(e.arg_spec)}, {ret_expr(e)}, NULL"
+            f"{c_string(e.arg_spec)}, {ret_expr(e)}, NULL, UINT32_C({layout_id}), "
+            f"{enum_name}, {variants_ref}, {variant_count}"
             "},"
         )
     lines.append("};")
@@ -1227,6 +1414,8 @@ def emit_defs_header(
     entries: list[StdlibEntry],
     constants: list[StdlibConstEntry],
     handles: list[StdlibHandleEntry],
+    records: list[StdlibRecordEntry],
+    enums: list[StdlibEnumEntry],
     type_methods: list[StdlibTypeMethodEntry],
     native_classes: list[StdlibNativeClassEntry],
     classes: list[StdlibClassEntry],
@@ -1254,6 +1443,7 @@ def emit_defs_header(
             "    const char *aot;",
             "    const char *arg_spec;",
             "    const char *ret;",
+            "    const char *aot_error_enum;",
             "    const char *link_object;",
             "    const char *define;",
             "    const char *layer;",
@@ -1293,6 +1483,30 @@ def emit_defs_header(
             "    const XrStdlibHandleFieldDefEntry *fields;",
             "    uint16_t field_count;",
             "} XrStdlibHandleDefEntry;",
+            "",
+            "typedef struct XrStdlibRecordDefEntry {",
+            "    const char *module;",
+            "    const char *name;",
+            "    const char *doc;",
+            "    const XrStdlibHandleFieldDefEntry *fields;",
+            "    uint16_t field_count;",
+            "    bool sealed;",
+            "} XrStdlibRecordDefEntry;",
+            "",
+            "typedef struct XrStdlibEnumVariantDefEntry {",
+            "    const char *name;",
+            "    const char *const *payload_types;",
+            "    uint16_t payload_count;",
+            "} XrStdlibEnumVariantDefEntry;",
+            "",
+            "typedef struct XrStdlibEnumDefEntry {",
+            "    const char *module;",
+            "    const char *name;",
+            "    const char *doc;",
+            "    const XrStdlibEnumVariantDefEntry *variants;",
+            "    uint16_t variant_count;",
+            "    uint32_t layout_id;",
+            "} XrStdlibEnumDefEntry;",
             "",
             "typedef struct XrStdlibTypeMethodDefEntry {",
             "    const char *module;",
@@ -1351,6 +1565,7 @@ def emit_defs_header(
             f"{c_string(e.doc)}, {c_string(e.vm)}, {c_string(e.vm_binding)}, "
             f"{c_string(e.vm_ifdef)}, "
             f"{c_string(e.aot)}, {c_string(e.arg_spec)}, {c_string(e.ret)}, "
+            f"{c_string(e.aot_error_enum)}, "
             f"{c_string(e.link_object)}, {c_string(e.define)}, {c_string(e.layer)}, "
             f"{c_string(e.aot_kind)}, {argc}, "
             f"{'true' if e.aot_direct else 'false'}"
@@ -1380,6 +1595,79 @@ def emit_defs_header(
             "#define XR_STDLIB_CONST_DEF_ENTRY_COUNT "
             "((uint32_t) (sizeof(xr_stdlib_const_def_entries) / "
             "sizeof(xr_stdlib_const_def_entries[0])))",
+            "",
+        ]
+    )
+    for record in records:
+        field_array = f"xr_stdlib_record_fields_{record.module}_{record.name}"
+        lines.append(f"static const XrStdlibHandleFieldDefEntry {field_array}[] = {{")
+        for field in record.fields:
+            lines.append(
+                "    {"
+                f"{c_string(record.module)}, {c_string(record.name)}, {c_string(field.name)}, "
+                f"{c_string(field.type)}, {'true' if field.is_const else 'false'}"
+                "},"
+            )
+        lines.append("};")
+        lines.append("")
+    lines.append("static const XrStdlibRecordDefEntry xr_stdlib_record_def_entries[] = {")
+    for record in records:
+        field_array = f"xr_stdlib_record_fields_{record.module}_{record.name}"
+        lines.append(
+            "    {"
+            f"{c_string(record.module)}, {c_string(record.name)}, {c_string(record.doc)}, "
+            f"{field_array}, {len(record.fields)}, {'true' if record.sealed else 'false'}"
+            "},"
+        )
+    lines.extend(
+        [
+            "};",
+            "#define XR_STDLIB_RECORD_DEF_ENTRY_COUNT "
+            "((uint32_t) (sizeof(xr_stdlib_record_def_entries) / "
+            "sizeof(xr_stdlib_record_def_entries[0])))",
+            "",
+        ]
+    )
+    for enum in enums:
+        enum_prefix = f"xr_stdlib_enum_{enum.module}_{enum.name}"
+        for index, variant in enumerate(enum.variants):
+            if not variant.payload_types:
+                continue
+            payload_array = f"{enum_prefix}_variant_{index}_payloads"
+            lines.append(f"static const char *const {payload_array}[] = {{")
+            for payload_type in variant.payload_types:
+                lines.append(f"    {c_string(payload_type)},")
+            lines.append("};")
+            lines.append("")
+        variant_array = f"{enum_prefix}_variants"
+        lines.append(f"static const XrStdlibEnumVariantDefEntry {variant_array}[] = {{")
+        for index, variant in enumerate(enum.variants):
+            payload_ref = (
+                f"{enum_prefix}_variant_{index}_payloads" if variant.payload_types else "NULL"
+            )
+            lines.append(
+                "    {"
+                f"{c_string(variant.name)}, {payload_ref}, {len(variant.payload_types)}"
+                "},"
+            )
+        lines.append("};")
+        lines.append("")
+    lines.append("static const XrStdlibEnumDefEntry xr_stdlib_enum_def_entries[] = {")
+    for enum in enums:
+        variant_array = f"xr_stdlib_enum_{enum.module}_{enum.name}_variants"
+        lines.append(
+            "    {"
+            f"{c_string(enum.module)}, {c_string(enum.name)}, {c_string(enum.doc)}, "
+            f"{variant_array}, {len(enum.variants)}, "
+            f"UINT32_C({stable_enum_layout_id(enum.module, enum)})"
+            "},"
+        )
+    lines.extend(
+        [
+            "};",
+            "#define XR_STDLIB_ENUM_DEF_ENTRY_COUNT "
+            "((uint32_t) (sizeof(xr_stdlib_enum_def_entries) / "
+            "sizeof(xr_stdlib_enum_def_entries[0])))",
             "",
         ]
     )
@@ -1508,12 +1796,21 @@ def emit_defs_header(
 
 
 def output_paths(root: Path) -> dict[Path, str]:
-    entries, constants, handles, type_methods, native_classes, classes, class_methods, class_fields = (
-        parse_def_metadata(root)
-    )
+    (
+        entries,
+        constants,
+        handles,
+        records,
+        enums,
+        type_methods,
+        native_classes,
+        classes,
+        class_methods,
+        class_fields,
+    ) = parse_def_metadata(root)
     return {
         root / "src" / "aot" / "xstdlib_aot_methods_generated.inc.c": emit_aot_methods(
-            entries, constants
+            entries, constants, enums
         ),
         root / "src" / "aot" / "xaot_stdlib_generated.inc.c": emit_driver_metadata(
             entries, constants
@@ -1528,6 +1825,8 @@ def output_paths(root: Path) -> dict[Path, str]:
             entries,
             constants,
             handles,
+            records,
+            enums,
             type_methods,
             native_classes,
             classes,

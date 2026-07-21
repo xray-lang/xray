@@ -22,9 +22,12 @@
 
 /* How a shim returns its result. */
 typedef enum {
-    CG_AOT_RET_VALUE,        /* tagged XrValue, converted to the call's rep */
-    CG_AOT_RET_STR_BORROWED, /* (const char *data, int64_t *out_len) slice into an
-                              * input/static buffer; copied into an AOT string */
+    CG_AOT_RET_VALUE,           /* tagged XrValue, converted to the call's rep */
+    CG_AOT_RET_STR_BORROWED,    /* (const char *data, int64_t *out_len) slice into an
+                                 * input/static buffer; copied into an AOT string */
+    CG_AOT_RET_I64_PAIR_RESULT, /* XrtI64PairResult, materialized as a typed
+                                 * two-int Record; error_index names a generated
+                                 * native enum variant */
 } CgAotRetKind;
 
 #define CG_AOT_STDLIB_VARIADIC UINT16_MAX
@@ -44,6 +47,10 @@ typedef struct CgAotStdlibMethod {
     const char *arg_spec; /* owned: static literal (generated table) */
     CgAotRetKind ret_kind;
     const char *extern_decl; /* owned: static literal; forward decl emitted into generated C */
+    uint32_t error_layout_id;
+    const char *error_enum_name;            /* owned: static literal; generated enum name */
+    const char *const *error_variant_names; /* owned: static generated literal table */
+    uint16_t error_variant_count;
 } CgAotStdlibMethod;
 
 #include "xstdlib_aot_methods_generated.inc.c"
@@ -213,6 +220,90 @@ static bool cg_aot_stdlib_method_is_variadic_strings(const CgAotStdlibMethod *m)
     return m && m->argc == CG_AOT_STDLIB_VARIADIC && m->arg_spec && strcmp(m->arg_spec, "*") == 0;
 }
 
+static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                        const XiValue *v, const CgAotStdlibMethod *m,
+                                        uint16_t call_argc, uint16_t arg_base) {
+    const XrAggregateLayout *layout = cg_value_struct_layout(ctx, f, v);
+    if (!layout)
+        layout = cg_type_struct_layout(v ? v->type : NULL);
+    const XrType *record_type = v ? v->type : NULL;
+    bool layout_ok = layout && layout->field_count == 2 &&
+                     layout->fields[0].native_type == XR_NATIVE_I64 &&
+                     layout->fields[1].native_type == XR_NATIVE_I64;
+    bool record_ok = record_type && XR_TYPE_IS_RECORD(record_type) &&
+                     record_type->object.field_count == 2 && record_type->object.field_names &&
+                     record_type->object.field_types && record_type->object.field_types[0] &&
+                     record_type->object.field_types[1] &&
+                     XR_TYPE_IS_INT(record_type->object.field_types[0]) &&
+                     XR_TYPE_IS_INT(record_type->object.field_types[1]);
+    if (!ctx || !out || !v || !m || (!layout_ok && !record_ok) || !m->error_enum_name ||
+        !m->error_variant_names || m->error_variant_count == 0) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: invalid i64-pair result contract for %s.%s "
+                "(layout=%p fields=%u error-enum=%s variants=%u)\n",
+                m && m->module ? m->module : "?", m && m->method ? m->method : "?",
+                (const void *) layout,
+                layout ? (unsigned) layout->field_count
+                       : (XR_TYPE_HAS_OBJECT_SHAPE(record_type)
+                              ? (unsigned) record_type->object.field_count
+                              : 0),
+                m && m->error_enum_name ? m->error_enum_name : "?",
+                m ? (unsigned) m->error_variant_count : 0);
+        if (ctx)
+            ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+
+    unsigned id = v->id;
+    char field0[128];
+    char field1[128];
+    if (layout) {
+        cg_struct_field_c_name(layout, 0, field0, sizeof(field0));
+        cg_struct_field_c_name(layout, 1, field1, sizeof(field1));
+    }
+
+    fprintf(out, "XrtI64PairResult _arp%u = %s(", id, m->shim);
+    cg_emit_aot_stdlib_args(ctx, out, f, v, m, call_argc, arg_base);
+    fprintf(out,
+            "); if (_arp%u.error_index >= 0) { uint32_t _are%u = "
+            "(uint32_t)_arp%u.error_index; if (_are%u >= UINT32_C(%u)) "
+            "{ fputs(\"invalid direct stdlib error ordinal\\n\", stderr); abort(); } "
+            "xrt_pending_error = "
+            "xrt_enum_box_new(UINT32_C(%u), ",
+            id, id, id, id, (unsigned) m->error_variant_count, (unsigned) m->error_layout_id);
+    emit_c_string_literal(out, m->error_enum_name);
+    fprintf(out, ", ");
+    fprintf(out, "((const char *const[]){");
+    for (uint16_t i = 0; i < m->error_variant_count; i++) {
+        if (i > 0)
+            fprintf(out, ", ");
+        emit_c_string_literal(out, m->error_variant_names[i]);
+    }
+    fprintf(out, "})[_are%u], _are%u); } ", id, id);
+
+    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    if (layout && plan && cg_value_rep_is_struct_aggregate(plan->rep) && plan->rep.c_type) {
+        fprintf(out, "(%s){ .%s = _arp%u.first, .%s = _arp%u.second }; })", plan->rep.c_type,
+                field0, id, field1, id);
+        return true;
+    }
+
+    fprintf(out, "XrValue _arr%u = xrt_record_new_named(2, (const char *const[]){", id);
+    const char *name0 =
+        layout && layout->field_names ? layout->field_names[0] : record_type->object.field_names[0];
+    const char *name1 =
+        layout && layout->field_names ? layout->field_names[1] : record_type->object.field_names[1];
+    emit_c_string_literal(out, name0 ? name0 : "?");
+    fprintf(out, ", ");
+    emit_c_string_literal(out, name1 ? name1 : "?");
+    fprintf(out,
+            "}); xrt_json_set_field(_arr%u, 0, XR_FROM_INT(_arp%u.first)); "
+            "xrt_json_set_field(_arr%u, 1, XR_FROM_INT(_arp%u.second)); _arr%u; })",
+            id, id, id, id, id);
+    return true;
+}
+
 static bool cg_emit_aot_stdlib_direct_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XiValue *v, const CgAotStdlibMethod *m,
                                            uint16_t call_argc, uint16_t arg_base) {
@@ -226,6 +317,9 @@ static bool cg_emit_aot_stdlib_direct_call(XiCgenCtx *ctx, FILE *out, const XiFu
     fprintf(out, "({ ");
     if (m->extern_decl && m->extern_decl[0])
         fprintf(out, "%s ", m->extern_decl);
+
+    if (m->ret_kind == CG_AOT_RET_I64_PAIR_RESULT)
+        return cg_emit_aot_i64_pair_result(ctx, out, f, v, m, call_argc, arg_base);
 
     if (m->ret_kind == CG_AOT_RET_STR_BORROWED) {
         /* The shim returns a borrowed (data, *out_len) slice; copy it into a

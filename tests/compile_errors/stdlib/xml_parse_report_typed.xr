@@ -1,0 +1,6 @@
+// Guard: parseReport returns a typed `XmlParseReport`, not a `Json` bag (this
+// is the typed replacement for the removed `parseDetailed(): Json`).
+import xml
+
+var legacy: Json = xml.parseReport("<ok/>")
+print(legacy)

@@ -1,0 +1,4 @@
+import cluster
+
+var legacy: Json = { name: "node", port: 0, secret: null, tls: null }
+cluster.start(legacy)

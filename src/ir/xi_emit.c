@@ -541,7 +541,9 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         /* fall through */
         default: {
             /* Generic pointer constant (enum type, etc.) */
-            void *ptr = v->aux;
+            void *ptr = v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE && v->aux
+                            ? ((XiEnumData *) v->aux)->runtime_type
+                            : v->aux;
             if (ptr) {
                 XrValue xv = XR_FROM_PTR(ptr);
                 int ki = xr_vm_proto_add_constant(ctx->proto, xv);

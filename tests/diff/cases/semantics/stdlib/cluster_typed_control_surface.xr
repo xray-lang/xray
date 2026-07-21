@@ -1,0 +1,21 @@
+import {
+    ClusterConfig,
+    ClusterInfo,
+    ClusterNodeInfo,
+    ClusterNodeState,
+    ClusterTlsOptions,
+    ClusterTlsStatus
+} from cluster
+
+fn accepts(
+    config: ClusterConfig?,
+    info: ClusterInfo?,
+    node: ClusterNodeInfo?,
+    tlsOptions: ClusterTlsOptions?,
+    tlsStatus: ClusterTlsStatus?
+) -> bool {
+    return true
+}
+
+print(accepts(null, null, null, null, null))
+print(ClusterNodeState.Connected.name)

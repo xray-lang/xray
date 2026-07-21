@@ -1,6 +1,7 @@
 // Pure-Xray WebSocket protocol helpers.
 
 import ws
+import { WsConnectOptions } from ws
 import net
 import time
 
@@ -74,7 +75,13 @@ fn test_upgrade_request_and_protocol_pick() {
 
 @test
 fn test_connect_rejects_invalid_urls_before_network() {
-    var zeroPort = ws.connect("ws://example.com:0/", null)
+    var options: WsConnectOptions = {
+        timeout: 25,
+        pingInterval: 0,
+        pongTimeout: 40,
+        maxMessageSize: 4096
+    }
+    var zeroPort = ws.connect("ws://example.com:0/", options)
     assert(zeroPort != null)
     assert_eq(zeroPort!.error, "URL parse error")
 

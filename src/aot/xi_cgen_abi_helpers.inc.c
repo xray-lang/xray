@@ -583,6 +583,29 @@ static void emit_conversion_suffix(FILE *out, const char *suffix) {
         fprintf(out, "%s", suffix);
 }
 
+/* Convert a source expression (rep from_rep) to value v's storage rep.
+ * When from_rep is TAGGED and v is a typed ADT (enum) aggregate, a dynamically
+ * read XrValue (getprop, index load, map/json get) is a boxed enum that must be
+ * unpacked and rebuilt via <Enum>_from_base(xrt_value_to_enum_aggregate(...));
+ * emit_conversion_prefix only knows XrRep and would leave the boxed XrValue
+ * assigned straight into the enum struct. All other cases fall through to the
+ * plain conversion. */
+static const char *emit_load_conversion_prefix(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                               XrRep from_rep) {
+    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    if (from_rep == XR_REP_TAGGED && plan && cg_value_rep_is_typed_adt_aggregate(plan->rep) &&
+        plan->rep.c_type) {
+        fprintf(out, "%s_from_base(xrt_value_to_enum_aggregate(", plan->rep.c_type);
+        return "))";
+    }
+    return emit_conversion_prefix(out, v->type, from_rep, cg_value_plan_storage_rep(ctx, v));
+}
+
+static const char *emit_tagged_to_value_storage_prefix(XiCgenCtx *ctx, FILE *out,
+                                                       const XiValue *v) {
+    return emit_load_conversion_prefix(ctx, out, v, XR_REP_TAGGED);
+}
+
 static XaotValueRep cg_func_param_abi_value_rep(XiCgenCtx *ctx, const XiFunc *f,
                                                 uint16_t param_idx) {
     const XaotFuncPlan *plan = cg_func_plan(ctx, f);

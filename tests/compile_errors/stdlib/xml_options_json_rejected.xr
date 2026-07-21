@@ -1,0 +1,6 @@
+// Guard: options are typed `XmlOptions`, not an untyped `Json` bag.
+import xml
+
+var opts: Json = { preserveComments: true }
+var doc = xml.parse("<a/>", opts)
+print(doc)

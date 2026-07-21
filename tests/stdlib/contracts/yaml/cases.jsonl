@@ -1,0 +1,1 @@
+{"case":"yaml-typed-module","probe":"tests/diff/cases/semantics/stdlib/yaml_pure_module_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"typed YamlValue parse/access/stringify plus typed errors behave identically on VM and AOT"}

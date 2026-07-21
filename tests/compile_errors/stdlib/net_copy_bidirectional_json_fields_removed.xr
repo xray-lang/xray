@@ -1,0 +1,5 @@
+import { CopyBidirectionalResult } from net
+
+fn stale(result: CopyBidirectionalResult) -> bool {
+    return result.ok
+}

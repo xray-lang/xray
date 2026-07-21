@@ -1,0 +1,14 @@
+import { CopyBidirectionalResult, NetError, copyBidirectional } from net
+
+fn counts(result: CopyBidirectionalResult) -> int {
+    return result.aToB + result.bToA
+}
+
+fn accepts(
+    copier: (NetConn, NetConn) -> CopyBidirectionalResult,
+) -> bool {
+    return true
+}
+
+print(accepts(copyBidirectional))
+print(typeName(NetError.Timeout))

@@ -3064,6 +3064,17 @@ module mem {
 }
 
 module net {
+  record CopyBidirectionalResult {
+    fields: "const aToB: int, const bToA: int"
+    sealed: true
+    doc: "Byte counts copied in each direction by copyBidirectional"
+  }
+
+  enum NetError {
+    variants: "Timeout, Closed, Reset, Refused, Dns, Tls, Io, Invalid, Cancelled, OutOfMemory"
+    doc: "Typed failure from native network operations"
+  }
+
   handle UdpPacket {
     fields: "const data: string, const host: string, const port: int"
   }
@@ -3261,15 +3272,19 @@ module net {
   }
 
   fn copyBidirectional {
-    signature: "(a: NetConn, b: NetConn): Json"
+    signature: "(a: NetConn, b: NetConn): CopyBidirectionalResult"
     doc: "Copy two TCP/TLS streams in both directions"
     vm: "net_copy_bidirectional_yieldable"
     vm_binding: "yieldable"
+    aot: "xrt_net_copy_bidirectional"
     argc: 2
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vv"
+    ret: "i64_pair_result"
+    aot_error_enum: "NetError"
+    aot_direct: true
     link_object: false
     layer: "runtime"
+    effect: "NetError.Timeout, NetError.Closed, NetError.Reset, NetError.Refused, NetError.Dns, NetError.Tls, NetError.Io, NetError.Invalid, NetError.Cancelled, NetError.OutOfMemory"
   }
 
   fn shutdownRead {
@@ -3519,8 +3534,43 @@ module http {
 }
 
 module cluster {
+  enum ClusterNodeState {
+    variants: "Idle, Connecting, Handshaking, Connected, Closing"
+    doc: "Lifecycle state of a remote cluster node"
+  }
+
+  record ClusterTlsOptions {
+    fields: "const enabled: bool, const caFile: string?, const certFile: string?, const keyFile: string?, const insecure: bool"
+    sealed: true
+    doc: "Typed TLS configuration for a cluster node"
+  }
+
+  record ClusterConfig {
+    fields: "const name: string, const port: int, const secret: string?, const tls: ClusterTlsOptions?"
+    sealed: true
+    doc: "Typed cluster node startup configuration"
+  }
+
+  record ClusterTlsStatus {
+    fields: "const enabled: bool, const clientReady: bool, const serverReady: bool"
+    sealed: true
+    doc: "Effective TLS posture of a running cluster node"
+  }
+
+  record ClusterNodeInfo {
+    fields: "const name: string, const host: string, const port: int, const state: ClusterNodeState, const framesSent: int, const framesReceived: int, const bytesSent: int, const bytesReceived: int, const sendErrors: int, const slowConsumerEvents: int, const rttMs: int, const outQueueBytes: int, const outQueueFrames: int, const slow: bool, const phi: float, const missedHeartbeats: int"
+    sealed: true
+    doc: "Typed diagnostic snapshot for one remote cluster node"
+  }
+
+  record ClusterInfo {
+    fields: "const self: string, const port: int, const running: bool, const nodes: Array<ClusterNodeInfo>, const channels: int, const topicSubscriptions: int, const deadNodes: int, const heartbeatIntervalMs: int, const heartbeatTimeoutMs: int, const maxMissedHeartbeats: int, const tls: ClusterTlsStatus"
+    sealed: true
+    doc: "Typed diagnostic snapshot for the local cluster runtime"
+  }
+
   fn start {
-    signature: "(config: Json): ()"
+    signature: "(config: ClusterConfig): bool"
     doc: "Start cluster node"
     vm: "cluster_start"
     argc: 1
@@ -3608,7 +3658,7 @@ module cluster {
   }
 
   fn info {
-    signature: "(): Json"
+    signature: "(): ClusterInfo?"
     doc: "Get cluster status info"
     vm: "cluster_info_fn"
     argc: 0
@@ -3642,6 +3692,12 @@ module cluster {
 }
 
 module ws {
+  record WsConnectOptions {
+    fields: "const timeout: int?, const pingInterval: int?, const pongTimeout: int?, const maxMessageSize: int?"
+    sealed: true
+    doc: "Typed WebSocket client connection options"
+  }
+
   handle WsConn {
     fields: "const wsid: int, url: string, state: string"
   }
@@ -3651,7 +3707,7 @@ module ws {
   }
 
   fn connect {
-    signature: "(url: string, options?: Json): WsConn?"
+    signature: "(url: string, options?: WsConnectOptions?): WsConn?"
     doc: "Connect to a WebSocket server"
     vm: "ws_connect_yieldable"
     vm_binding: "yieldable"

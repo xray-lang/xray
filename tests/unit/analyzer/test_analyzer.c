@@ -207,6 +207,19 @@ TEST(type_assignable) {
     ASSERT(xr_type_assignable(t_int, t_never));
 }
 
+TEST(record_nullable_field_accepts_explicit_null) {
+    const char *names[] = {"secret"};
+    XrType *target_fields[] = {
+        xr_type_make_nullable(g_isolate, xr_type_new_string(g_isolate)),
+    };
+    XrType *source_fields[] = {xr_type_new_null(g_isolate)};
+    XrType *target = xr_type_new_record_with_fields(g_isolate, names, target_fields, 1, true);
+    XrType *source = xr_type_new_record_with_fields(g_isolate, names, source_fields, 1, true);
+
+    ASSERT(xr_type_assignable(target, source));
+    ASSERT(xa_typecheck_assignable(target, source));
+}
+
 TEST(typecheck_assignable_rejects_unknown_source) {
     XrType *t_int = xr_type_new_int(NULL);
     XrType *t_unknown = xr_type_new_unknown(NULL);
@@ -5672,6 +5685,7 @@ int main(void) {
     RUN_TEST(type_union);
     RUN_TEST(type_error_recovery);
     RUN_TEST(type_assignable);
+    RUN_TEST(record_nullable_field_accepts_explicit_null);
     RUN_TEST(typecheck_assignable_rejects_unknown_source);
     RUN_TEST(typecheck_assignable_rejects_unknown_container_member);
     RUN_TEST(analyzer_check_assignment_rejects_unknown_source);

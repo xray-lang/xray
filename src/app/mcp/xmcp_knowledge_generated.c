@@ -175,6 +175,256 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
+        .name = "ClusterConfig",
+        .signature = "{ name: string, port: int, secret: string?, tls: ClusterTlsOptions? }",
+        .summary = "Typed cluster node startup configuration",
+    },
+    {
+        .name = "ClusterConfig.name",
+        .signature = "const string",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterConfig.port",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterConfig.secret",
+        .signature = "const string?",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterConfig.tls",
+        .signature = "const ClusterTlsOptions?",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo",
+        .signature = "{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }",
+        .summary = "Typed diagnostic snapshot for the local cluster runtime",
+    },
+    {
+        .name = "ClusterInfo.channels",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.deadNodes",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.heartbeatIntervalMs",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.heartbeatTimeoutMs",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.maxMissedHeartbeats",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.nodes",
+        .signature = "const Array<ClusterNodeInfo>",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.port",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.running",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.self",
+        .signature = "const string",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.tls",
+        .signature = "const ClusterTlsStatus",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.topicSubscriptions",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo",
+        .signature = "{ name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }",
+        .summary = "Typed diagnostic snapshot for one remote cluster node",
+    },
+    {
+        .name = "ClusterNodeInfo.bytesReceived",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.bytesSent",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.framesReceived",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.framesSent",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.host",
+        .signature = "const string",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.missedHeartbeats",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.name",
+        .signature = "const string",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.outQueueBytes",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.outQueueFrames",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.phi",
+        .signature = "const float",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.port",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.rttMs",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.sendErrors",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.slow",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.slowConsumerEvents",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.state",
+        .signature = "const ClusterNodeState",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeState",
+        .signature = "enum ClusterNodeState",
+        .summary = "Lifecycle state of a remote cluster node",
+    },
+    {
+        .name = "ClusterNodeState.Closing",
+        .signature = "ClusterNodeState.Closing",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterNodeState.Connected",
+        .signature = "ClusterNodeState.Connected",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterNodeState.Connecting",
+        .signature = "ClusterNodeState.Connecting",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterNodeState.Handshaking",
+        .signature = "ClusterNodeState.Handshaking",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterNodeState.Idle",
+        .signature = "ClusterNodeState.Idle",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterTlsOptions",
+        .signature = "{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool }",
+        .summary = "Typed TLS configuration for a cluster node",
+    },
+    {
+        .name = "ClusterTlsOptions.caFile",
+        .signature = "const string?",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsOptions.certFile",
+        .signature = "const string?",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsOptions.enabled",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsOptions.insecure",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsOptions.keyFile",
+        .signature = "const string?",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsStatus",
+        .signature = "{ enabled: bool, clientReady: bool, serverReady: bool }",
+        .summary = "Effective TLS posture of a running cluster node",
+    },
+    {
+        .name = "ClusterTlsStatus.clientReady",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsStatus.enabled",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsStatus.serverReady",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
         .name = "HANDSHAKE_VERSION",
         .signature = ": int",
         .summary = "",
@@ -226,7 +476,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "info",
-        .signature = "(): Json",
+        .signature = "(): ClusterInfo?",
         .summary = "Get cluster status info",
     },
     {
@@ -261,7 +511,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "start",
-        .signature = "(config: Json): ()",
+        .signature = "(config: ClusterConfig): bool",
         .summary = "Start cluster node",
     },
     {
@@ -1289,17 +1539,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "RouteMatch.constructor",
-        .signature = "(value: Json, params: Json): ()",
+        .signature = "(value: T, params: Map<string, string>): ()",
         .summary = "",
     },
     {
         .name = "RouteMatch.params",
-        .signature = ": Json",
+        .signature = ": Map<string, string>",
         .summary = "",
     },
     {
         .name = "RouteMatch.value",
-        .signature = ": Json",
+        .signature = ": T",
         .summary = "",
     },
     {
@@ -1319,7 +1569,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "Router.find",
-        .signature = "(method: string, path: string): RouteMatch?",
+        .signature = "(method: string, path: string): RouteMatch<T>?",
         .summary = "",
     },
     {
@@ -1419,7 +1669,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "router",
-        .signature = "(): Router",
+        .signature = "(): Router<T>",
         .summary = "",
     },
     {
@@ -2291,6 +2541,76 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     {
+        .name = "CopyBidirectionalResult",
+        .signature = "{ aToB: int, bToA: int }",
+        .summary = "Byte counts copied in each direction by copyBidirectional",
+    },
+    {
+        .name = "CopyBidirectionalResult.aToB",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CopyBidirectionalResult.bToA",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "NetError",
+        .signature = "enum NetError",
+        .summary = "Typed failure from native network operations",
+    },
+    {
+        .name = "NetError.Cancelled",
+        .signature = "NetError.Cancelled",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Closed",
+        .signature = "NetError.Closed",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Dns",
+        .signature = "NetError.Dns",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Invalid",
+        .signature = "NetError.Invalid",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Io",
+        .signature = "NetError.Io",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.OutOfMemory",
+        .signature = "NetError.OutOfMemory",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Refused",
+        .signature = "NetError.Refused",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Reset",
+        .signature = "NetError.Reset",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Timeout",
+        .signature = "NetError.Timeout",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Tls",
+        .signature = "NetError.Tls",
+        .summary = "Enum variant",
+    },
+    {
         .name = "UdpPacket",
         .signature = "UdpPacket",
         .summary = "Native handle type",
@@ -2327,7 +2647,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "copyBidirectional",
-        .signature = "(a: NetConn, b: NetConn): Json",
+        .signature = "(a: NetConn, b: NetConn): CopyBidirectionalResult",
         .summary = "Copy two TCP/TLS streams in both directions",
     },
     {
@@ -4563,6 +4883,31 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "Handle field",
     },
     {
+        .name = "WsConnectOptions",
+        .signature = "{ timeout: int?, pingInterval: int?, pongTimeout: int?, maxMessageSize: int? }",
+        .summary = "Typed WebSocket client connection options",
+    },
+    {
+        .name = "WsConnectOptions.maxMessageSize",
+        .signature = "const int?",
+        .summary = "Record field",
+    },
+    {
+        .name = "WsConnectOptions.pingInterval",
+        .signature = "const int?",
+        .summary = "Record field",
+    },
+    {
+        .name = "WsConnectOptions.pongTimeout",
+        .signature = "const int?",
+        .summary = "Record field",
+    },
+    {
+        .name = "WsConnectOptions.timeout",
+        .signature = "const int?",
+        .summary = "Record field",
+    },
+    {
         .name = "WsMessage",
         .signature = "WsMessage",
         .summary = "Native handle type",
@@ -4639,7 +4984,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "connect",
-        .signature = "(url: string, options?: Json): WsConn?",
+        .signature = "(url: string, options?: WsConnectOptions?): WsConn?",
         .summary = "Connect to a WebSocket server",
     },
     {
@@ -4736,86 +5081,491 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     {
+        .name = "XmlAttribute",
+        .signature = "XmlAttribute",
+        .summary = "",
+    },
+    {
+        .name = "XmlAttribute.constructor",
+        .signature = "(name: XmlName, value: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "XmlAttribute.name",
+        .signature = ": XmlName",
+        .summary = "",
+    },
+    {
+        .name = "XmlAttribute.value",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "XmlDiagnostic",
+        .signature = "XmlDiagnostic",
+        .summary = "",
+    },
+    {
+        .name = "XmlDiagnostic.column",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "XmlDiagnostic.constructor",
+        .signature = "(kind: XmlErrorKind, line: int, column: int, message: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "XmlDiagnostic.kind",
+        .signature = ": XmlErrorKind",
+        .summary = "",
+    },
+    {
+        .name = "XmlDiagnostic.line",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "XmlDiagnostic.message",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "XmlName",
+        .signature = "XmlName",
+        .summary = "",
+    },
+    {
+        .name = "XmlName.constructor",
+        .signature = "(prefix: string, local: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "XmlName.local",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "XmlName.prefix",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "XmlName.qualified",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "XmlParseReport",
+        .signature = "XmlParseReport",
+        .summary = "",
+    },
+    {
+        .name = "XmlParseReport.constructor",
+        .signature = "(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()",
+        .summary = "",
+    },
+    {
+        .name = "XmlParseReport.diagnostics",
+        .signature = ": Array<XmlDiagnostic>",
+        .summary = "",
+    },
+    {
+        .name = "XmlParseReport.doc",
+        .signature = ": XmlNode?",
+        .summary = "",
+    },
+    {
+        .name = "attr",
+        .signature = "(node: XmlNode, key: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "attributes",
+        .signature = "(node: XmlNode): Array<XmlAttribute>",
+        .summary = "",
+    },
+    {
         .name = "cdata",
-        .signature = "(content: string): Json",
+        .signature = "(content: string): XmlNode",
+        .summary = "",
+    },
+    {
+        .name = "children",
+        .signature = "(node: XmlNode): Array<XmlNode>",
         .summary = "",
     },
     {
         .name = "comment",
-        .signature = "(content: string): Json",
+        .signature = "(content: string): XmlNode",
         .summary = "",
     },
     {
         .name = "document",
-        .signature = "(): Json",
+        .signature = "(children: Array<XmlNode>? = null): XmlNode",
         .summary = "",
     },
     {
         .name = "element",
-        .signature = "(tag: string, attrsValue: Json = null): Json",
+        .signature = "(tag: string, attrs: Array<XmlAttribute>? = null, children: Array<XmlNode>? = null): XmlNode",
+        .summary = "",
+    },
+    {
+        .name = "namespace",
+        .signature = "(node: XmlNode, prefix: string): string?",
+        .summary = "",
+    },
+    {
+        .name = "nodeText",
+        .signature = "(node: XmlNode): string?",
         .summary = "",
     },
     {
         .name = "parse",
-        .signature = "(data: string, options: Json = null): Json",
-        .summary = "",
-    },
-    {
-        .name = "parseDetailed",
-        .signature = "(data: string, options: Json = null): Json",
+        .signature = "(data: string, options: XmlOptions? = null): XmlNode",
         .summary = "",
     },
     {
         .name = "parseFile",
-        .signature = "(path: Path, options: Json = null): Json",
+        .signature = "(path: Path, options: XmlOptions? = null): XmlNode",
+        .summary = "",
+    },
+    {
+        .name = "parseReport",
+        .signature = "(data: string, options: XmlOptions? = null): XmlParseReport",
+        .summary = "",
+    },
+    {
+        .name = "qualifiedName",
+        .signature = "(node: XmlNode): XmlName?",
         .summary = "",
     },
     {
         .name = "stringify",
-        .signature = "(node: Json, options: Json = null): string",
+        .signature = "(node: XmlNode, options: XmlWriteOptions? = null): string",
+        .summary = "",
+    },
+    {
+        .name = "tag",
+        .signature = "(node: XmlNode): string?",
         .summary = "",
     },
     {
         .name = "text",
-        .signature = "(content: string): Json",
+        .signature = "(content: string): XmlNode",
+        .summary = "",
+    },
+    {
+        .name = "textContent",
+        .signature = "(node: XmlNode): string",
         .summary = "",
     },
     {
         .name = "writeFile",
-        .signature = "(path: Path, node: Json, options: Json = null): bool",
+        .signature = "(path: Path, node: XmlNode, options: XmlWriteOptions? = null): bool",
         .summary = "",
     },
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     {
+        .name = "YamlAnchor",
+        .signature = "YamlAnchor",
+        .summary = "",
+    },
+    {
+        .name = "YamlAnchor.constructor",
+        .signature = "(name: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlAnchor.name",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "YamlDiagnostic",
+        .signature = "YamlDiagnostic",
+        .summary = "",
+    },
+    {
+        .name = "YamlDiagnostic.column",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "YamlDiagnostic.constructor",
+        .signature = "(kind: YamlErrorKind, line: int, column: int, message: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlDiagnostic.kind",
+        .signature = ": YamlErrorKind",
+        .summary = "",
+    },
+    {
+        .name = "YamlDiagnostic.line",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "YamlDiagnostic.message",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping",
+        .signature = "YamlMapping",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.containsKey",
+        .signature = "(key: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.get",
+        .signature = "(key: string): YamlValue?",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.keys",
+        .signature = ": Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.set",
+        .signature = "(key: string, value: YamlValue): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.size",
+        .signature = "(): int",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.values",
+        .signature = ": Array<YamlValue>",
+        .summary = "",
+    },
+    {
+        .name = "YamlParseReport",
+        .signature = "YamlParseReport",
+        .summary = "",
+    },
+    {
+        .name = "YamlParseReport.anchors",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "YamlParseReport.constructor",
+        .signature = "(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: int): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlParseReport.data",
+        .signature = ": YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "YamlParseReport.diagnostics",
+        .signature = ": Array<YamlDiagnostic>",
+        .summary = "",
+    },
+    {
+        .name = "YamlTag",
+        .signature = "YamlTag",
+        .summary = "",
+    },
+    {
+        .name = "YamlTag.constructor",
+        .signature = "(handle: string, suffix: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlTag.handle",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "YamlTag.suffix",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "YamlTagged",
+        .signature = "YamlTagged",
+        .summary = "",
+    },
+    {
+        .name = "YamlTagged.constructor",
+        .signature = "(tag: YamlTag, value: YamlValue): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlTagged.tag",
+        .signature = ": YamlTag",
+        .summary = "",
+    },
+    {
+        .name = "YamlTagged.value",
+        .signature = ": YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "aliasValue",
+        .signature = "(name: string): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "asBool",
+        .signature = "(value: YamlValue): bool?",
+        .summary = "",
+    },
+    {
+        .name = "asFloat",
+        .signature = "(value: YamlValue): float?",
+        .summary = "",
+    },
+    {
+        .name = "asInt",
+        .signature = "(value: YamlValue): int?",
+        .summary = "",
+    },
+    {
+        .name = "asMapping",
+        .signature = "(value: YamlValue): YamlMapping?",
+        .summary = "",
+    },
+    {
+        .name = "asSequence",
+        .signature = "(value: YamlValue): Array<YamlValue>?",
+        .summary = "",
+    },
+    {
+        .name = "asString",
+        .signature = "(value: YamlValue): string?",
+        .summary = "",
+    },
+    {
+        .name = "at",
+        .signature = "(value: YamlValue, index: int): YamlValue?",
+        .summary = "",
+    },
+    {
+        .name = "binaryValue",
+        .signature = "(value: Array<byte>): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "boolValue",
+        .signature = "(value: bool): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "floatValue",
+        .signature = "(value: float): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "get",
+        .signature = "(value: YamlValue, key: string): YamlValue?",
+        .summary = "",
+    },
+    {
+        .name = "intValue",
+        .signature = "(value: int): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "isNull",
+        .signature = "(value: YamlValue): bool",
+        .summary = "",
+    },
+    {
+        .name = "keys",
+        .signature = "(value: YamlValue): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "length",
+        .signature = "(value: YamlValue): int",
+        .summary = "",
+    },
+    {
+        .name = "mappingSet",
+        .signature = "(mapping: YamlMapping, key: string, value: YamlValue): ()",
+        .summary = "",
+    },
+    {
+        .name = "mappingValue",
+        .signature = "(mapping: YamlMapping): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "newMapping",
+        .signature = "(): YamlMapping",
+        .summary = "",
+    },
+    {
+        .name = "nullValue",
+        .signature = "(): YamlValue",
+        .summary = "",
+    },
+    {
         .name = "parse",
-        .signature = "(data: string, options: Json = null): Json",
+        .signature = "(data: string, options: YamlOptions? = null): YamlValue",
         .summary = "",
     },
     {
         .name = "parseAll",
-        .signature = "(data: string): Array<Json>",
+        .signature = "(data: string): Array<YamlValue>",
         .summary = "",
     },
     {
         .name = "parseFile",
-        .signature = "(path: Path): Json",
+        .signature = "(path: Path, options: YamlOptions? = null): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "parseReport",
+        .signature = "(data: string): YamlParseReport",
         .summary = "",
     },
     {
         .name = "parseStrict",
-        .signature = "(data: string): Json",
+        .signature = "(data: string): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "sequenceValue",
+        .signature = "(items: Array<YamlValue>): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "stringValue",
+        .signature = "(value: string): YamlValue",
         .summary = "",
     },
     {
         .name = "stringify",
-        .signature = "(value: Json, options: Json = null): string",
+        .signature = "(value: YamlValue, options: YamlWriteOptions? = null): string",
+        .summary = "",
+    },
+    {
+        .name = "taggedValue",
+        .signature = "(tag: YamlTag, value: YamlValue): YamlValue",
         .summary = "",
     },
     {
         .name = "writeFile",
-        .signature = "(path: Path, value: Json): bool",
+        .signature = "(path: Path, value: YamlValue): bool",
         .summary = "",
     },
 };
@@ -6343,6 +7093,56 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `cluster.CHANNEL_NAME_MAX` | `: int` |  |\n"
+            "| `cluster.ClusterConfig` | `{ name: string, port: int, secret: string?, tls: ClusterTlsOptions? }` | Typed cluster node startup configuration |\n"
+            "| `cluster.ClusterConfig.name` | `const string` | Record field |\n"
+            "| `cluster.ClusterConfig.port` | `const int` | Record field |\n"
+            "| `cluster.ClusterConfig.secret` | `const string?` | Record field |\n"
+            "| `cluster.ClusterConfig.tls` | `const ClusterTlsOptions?` | Record field |\n"
+            "| `cluster.ClusterInfo` | `{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }` | Typed diagnostic snapshot for the local cluster runtime |\n"
+            "| `cluster.ClusterInfo.channels` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.deadNodes` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.heartbeatIntervalMs` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.heartbeatTimeoutMs` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.maxMissedHeartbeats` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.nodes` | `const Array<ClusterNodeInfo>` | Record field |\n"
+            "| `cluster.ClusterInfo.port` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.running` | `const bool` | Record field |\n"
+            "| `cluster.ClusterInfo.self` | `const string` | Record field |\n"
+            "| `cluster.ClusterInfo.tls` | `const ClusterTlsStatus` | Record field |\n"
+            "| `cluster.ClusterInfo.topicSubscriptions` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo` | `{ name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }` | Typed diagnostic snapshot for one remote cluster node |\n"
+            "| `cluster.ClusterNodeInfo.bytesReceived` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.bytesSent` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.framesReceived` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.framesSent` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.host` | `const string` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.missedHeartbeats` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.name` | `const string` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.outQueueBytes` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.outQueueFrames` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.phi` | `const float` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.port` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.rttMs` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.sendErrors` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.slow` | `const bool` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.slowConsumerEvents` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.state` | `const ClusterNodeState` | Record field |\n"
+            "| `cluster.ClusterNodeState` | `enum ClusterNodeState` | Lifecycle state of a remote cluster node |\n"
+            "| `cluster.ClusterNodeState.Closing` | `ClusterNodeState.Closing` | Enum variant |\n"
+            "| `cluster.ClusterNodeState.Connected` | `ClusterNodeState.Connected` | Enum variant |\n"
+            "| `cluster.ClusterNodeState.Connecting` | `ClusterNodeState.Connecting` | Enum variant |\n"
+            "| `cluster.ClusterNodeState.Handshaking` | `ClusterNodeState.Handshaking` | Enum variant |\n"
+            "| `cluster.ClusterNodeState.Idle` | `ClusterNodeState.Idle` | Enum variant |\n"
+            "| `cluster.ClusterTlsOptions` | `{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool }` | Typed TLS configuration for a cluster node |\n"
+            "| `cluster.ClusterTlsOptions.caFile` | `const string?` | Record field |\n"
+            "| `cluster.ClusterTlsOptions.certFile` | `const string?` | Record field |\n"
+            "| `cluster.ClusterTlsOptions.enabled` | `const bool` | Record field |\n"
+            "| `cluster.ClusterTlsOptions.insecure` | `const bool` | Record field |\n"
+            "| `cluster.ClusterTlsOptions.keyFile` | `const string?` | Record field |\n"
+            "| `cluster.ClusterTlsStatus` | `{ enabled: bool, clientReady: bool, serverReady: bool }` | Effective TLS posture of a running cluster node |\n"
+            "| `cluster.ClusterTlsStatus.clientReady` | `const bool` | Record field |\n"
+            "| `cluster.ClusterTlsStatus.enabled` | `const bool` | Record field |\n"
+            "| `cluster.ClusterTlsStatus.serverReady` | `const bool` | Record field |\n"
             "| `cluster.HANDSHAKE_VERSION` | `: int` |  |\n"
             "| `cluster.NODE_NAME_MAX` | `: int` |  |\n"
             "| `NodeAddress` | `NodeAddress` |  |\n"
@@ -6353,14 +7153,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.TOPIC_PATTERN_MAX` | `: int` |  |\n"
             "| `cluster.channel` | `(name: string, size?: int): Channel` | Create or get named distributed channel |\n"
             "| `cluster.discover` | `(): ()` | Start LAN auto-discovery |\n"
-            "| `cluster.info` | `(): Json` | Get cluster status info |\n"
+            "| `cluster.info` | `(): ClusterInfo?` | Get cluster status info |\n"
             "| `cluster.join` | `(addr: string): bool` | Join cluster by address |\n"
             "| `cluster.monitor` | `(name: string, coro_name?: string): Channel` | Monitor node or remote coroutine |\n"
             "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
             "| `cluster.parseAddress` | `(addr: string): NodeAddress` |  |\n"
             "| `cluster.publish` | `(topic: string, value: Json): bool` | Publish to topic |\n"
             "| `cluster.self` | `(): string` | Get own node name |\n"
-            "| `cluster.start` | `(config: Json): ()` | Start cluster node |\n"
+            "| `cluster.start` | `(config: ClusterConfig): bool` | Start cluster node |\n"
             "| `cluster.stop` | `(): ()` | Stop cluster node |\n"
             "| `cluster.subscribe` | `(pattern: string): Channel` | Subscribe to topic pattern |\n"
             "| `cluster.topicMatches` | `(pattern: string, topic: string): bool` |  |\n"
@@ -6670,13 +7470,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ResponseMessage.head` | `: ResponseHead` |  |\n"
             "| `ResponseMessage.trailers` | `: Headers` |  |\n"
             "| `RouteMatch` | `RouteMatch` |  |\n"
-            "| `RouteMatch.constructor` | `(value: Json, params: Json): ()` |  |\n"
-            "| `RouteMatch.params` | `: Json` |  |\n"
-            "| `RouteMatch.value` | `: Json` |  |\n"
+            "| `RouteMatch.constructor` | `(value: T, params: Map<string, string>): ()` |  |\n"
+            "| `RouteMatch.params` | `: Map<string, string>` |  |\n"
+            "| `RouteMatch.value` | `: T` |  |\n"
             "| `Router` | `Router` |  |\n"
             "| `Router.add` | `(method: string, path: string, value: T): bool` |  |\n"
             "| `Router.constructor` | `(): ()` |  |\n"
-            "| `Router.find` | `(method: string, path: string): RouteMatch?` |  |\n"
+            "| `Router.find` | `(method: string, path: string): RouteMatch<T>?` |  |\n"
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
@@ -6696,7 +7496,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
             "| `http.route` | `(method: string, path: string, value: T): ()` |  |\n"
             "| `http.routeHandler` | `(method: string, path: string, handler: (Json): Json)` |  |\n"
-            "| `http.router` | `(): Router` |  |\n"
+            "| `http.router` | `(): Router<T>` |  |\n"
             "| `http.stopServer` | `(): ()` |  |\n"
             "| `http.urlDecode` | `(s: string): string` |  |\n"
             "| `http.urlEncode` | `(s: string): string` |  |\n"
@@ -7017,6 +7817,20 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `net.CopyBidirectionalResult` | `{ aToB: int, bToA: int }` | Byte counts copied in each direction by copyBidirectional |\n"
+            "| `net.CopyBidirectionalResult.aToB` | `const int` | Record field |\n"
+            "| `net.CopyBidirectionalResult.bToA` | `const int` | Record field |\n"
+            "| `net.NetError` | `enum NetError` | Typed failure from native network operations |\n"
+            "| `net.NetError.Cancelled` | `NetError.Cancelled` | Enum variant |\n"
+            "| `net.NetError.Closed` | `NetError.Closed` | Enum variant |\n"
+            "| `net.NetError.Dns` | `NetError.Dns` | Enum variant |\n"
+            "| `net.NetError.Invalid` | `NetError.Invalid` | Enum variant |\n"
+            "| `net.NetError.Io` | `NetError.Io` | Enum variant |\n"
+            "| `net.NetError.OutOfMemory` | `NetError.OutOfMemory` | Enum variant |\n"
+            "| `net.NetError.Refused` | `NetError.Refused` | Enum variant |\n"
+            "| `net.NetError.Reset` | `NetError.Reset` | Enum variant |\n"
+            "| `net.NetError.Timeout` | `NetError.Timeout` | Enum variant |\n"
+            "| `net.NetError.Tls` | `NetError.Tls` | Enum variant |\n"
             "| `net.UdpPacket` | `UdpPacket` | Native handle type |\n"
             "| `net.UdpPacket.data` | `const string` | Handle field |\n"
             "| `net.UdpPacket.host` | `const string` | Handle field |\n"
@@ -7024,7 +7838,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.accept` | `(listener: NetListener): NetConn?` | Accept a new connection |\n"
             "| `net.close` | `(handle: NetConn \\| NetListener): ()` | Close a connection or listener |\n"
             "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize?: int): int` | Copy a TCP/TLS stream using a reusable native buffer |\n"
-            "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): Json` | Copy two TCP/TLS streams in both directions |\n"
+            "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): CopyBidirectionalResult` | Copy two TCP/TLS streams in both directions |\n"
             "| `net.dial` | `(host: string, port: int, timeout?: int): NetConn?` | Dial a TCP connection |\n"
             "| `net.dialTLS` | `(host: string, port: int, timeout?: int): NetConn?` | Dial a TLS connection |\n"
             "| `net.fd` | `(handle: NetConn \\| NetListener): int` | Get fd from handle |\n"
@@ -7775,6 +8589,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.WsConn.state` | `string` | Handle field |\n"
             "| `ws.WsConn.url` | `string` | Handle field |\n"
             "| `ws.WsConn.wsid` | `const int` | Handle field |\n"
+            "| `ws.WsConnectOptions` | `{ timeout: int?, pingInterval: int?, pongTimeout: int?, maxMessageSize: int? }` | Typed WebSocket client connection options |\n"
+            "| `ws.WsConnectOptions.maxMessageSize` | `const int?` | Record field |\n"
+            "| `ws.WsConnectOptions.pingInterval` | `const int?` | Record field |\n"
+            "| `ws.WsConnectOptions.pongTimeout` | `const int?` | Record field |\n"
+            "| `ws.WsConnectOptions.timeout` | `const int?` | Record field |\n"
             "| `ws.WsMessage` | `WsMessage` | Native handle type |\n"
             "| `ws.WsMessage.binary` | `const bool` | Handle field |\n"
             "| `ws.WsMessage.data` | `const string \\| Array<byte> \\| null` | Handle field |\n"
@@ -7790,7 +8609,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.clientHandshakeRequest` | `(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?` |  |\n"
             "| `ws.close` | `(conn: WsConn, code?: int?, reason?: string?): bool` | Close a WebSocket connection |\n"
             "| `ws.closeFrame` | `(code: int = 1000, reason: string = \"\", mask: bool = true): Array<byte>` |  |\n"
-            "| `ws.connect` | `(url: string, options?: Json): WsConn?` | Connect to a WebSocket server |\n"
+            "| `ws.connect` | `(url: string, options?: WsConnectOptions?): WsConn?` | Connect to a WebSocket server |\n"
             "| `ws.frame` | `(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.isValidCloseCode` | `(code: int): bool` |  |\n"
             "| `ws.maskPayload` | `(payload: Array<byte>, key: Array<byte>): Array<byte>` |  |\n"
@@ -7827,16 +8646,43 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `xml.cdata` | `(content: string): Json` |  |\n"
-            "| `xml.comment` | `(content: string): Json` |  |\n"
-            "| `xml.document` | `(): Json` |  |\n"
-            "| `xml.element` | `(tag: string, attrsValue: Json = null): Json` |  |\n"
-            "| `xml.parse` | `(data: string, options: Json = null): Json` |  |\n"
-            "| `xml.parseDetailed` | `(data: string, options: Json = null): Json` |  |\n"
-            "| `xml.parseFile` | `(path: Path, options: Json = null): Json` |  |\n"
-            "| `xml.stringify` | `(node: Json, options: Json = null): string` |  |\n"
-            "| `xml.text` | `(content: string): Json` |  |\n"
-            "| `xml.writeFile` | `(path: Path, node: Json, options: Json = null): bool` |  |\n"
+            "| `XmlAttribute` | `XmlAttribute` |  |\n"
+            "| `XmlAttribute.constructor` | `(name: XmlName, value: string): ()` |  |\n"
+            "| `XmlAttribute.name` | `: XmlName` |  |\n"
+            "| `XmlAttribute.value` | `: string` |  |\n"
+            "| `XmlDiagnostic` | `XmlDiagnostic` |  |\n"
+            "| `XmlDiagnostic.column` | `: int` |  |\n"
+            "| `XmlDiagnostic.constructor` | `(kind: XmlErrorKind, line: int, column: int, message: string): ()` |  |\n"
+            "| `XmlDiagnostic.kind` | `: XmlErrorKind` |  |\n"
+            "| `XmlDiagnostic.line` | `: int` |  |\n"
+            "| `XmlDiagnostic.message` | `: string` |  |\n"
+            "| `XmlName` | `XmlName` |  |\n"
+            "| `XmlName.constructor` | `(prefix: string, local: string): ()` |  |\n"
+            "| `XmlName.local` | `: string` |  |\n"
+            "| `XmlName.prefix` | `: string` |  |\n"
+            "| `XmlName.qualified` | `(): string` |  |\n"
+            "| `XmlParseReport` | `XmlParseReport` |  |\n"
+            "| `XmlParseReport.constructor` | `(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()` |  |\n"
+            "| `XmlParseReport.diagnostics` | `: Array<XmlDiagnostic>` |  |\n"
+            "| `XmlParseReport.doc` | `: XmlNode?` |  |\n"
+            "| `xml.attr` | `(node: XmlNode, key: string): string?` |  |\n"
+            "| `xml.attributes` | `(node: XmlNode): Array<XmlAttribute>` |  |\n"
+            "| `xml.cdata` | `(content: string): XmlNode` |  |\n"
+            "| `xml.children` | `(node: XmlNode): Array<XmlNode>` |  |\n"
+            "| `xml.comment` | `(content: string): XmlNode` |  |\n"
+            "| `xml.document` | `(children: Array<XmlNode>? = null): XmlNode` |  |\n"
+            "| `xml.element` | `(tag: string, attrs: Array<XmlAttribute>? = null, children: Array<XmlNode>? = null): XmlNode` |  |\n"
+            "| `xml.namespace` | `(node: XmlNode, prefix: string): string?` |  |\n"
+            "| `xml.nodeText` | `(node: XmlNode): string?` |  |\n"
+            "| `xml.parse` | `(data: string, options: XmlOptions? = null): XmlNode` |  |\n"
+            "| `xml.parseFile` | `(path: Path, options: XmlOptions? = null): XmlNode` |  |\n"
+            "| `xml.parseReport` | `(data: string, options: XmlOptions? = null): XmlParseReport` |  |\n"
+            "| `xml.qualifiedName` | `(node: XmlNode): XmlName?` |  |\n"
+            "| `xml.stringify` | `(node: XmlNode, options: XmlWriteOptions? = null): string` |  |\n"
+            "| `xml.tag` | `(node: XmlNode): string?` |  |\n"
+            "| `xml.text` | `(content: string): XmlNode` |  |\n"
+            "| `xml.textContent` | `(node: XmlNode): string` |  |\n"
+            "| `xml.writeFile` | `(path: Path, node: XmlNode, options: XmlWriteOptions? = null): bool` |  |\n"
             "",
         .symbols = _symbols_xml,
         .symbol_count = (int)(sizeof(_symbols_xml) / sizeof(_symbols_xml[0])),
@@ -7855,12 +8701,66 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `yaml.parse` | `(data: string, options: Json = null): Json` |  |\n"
-            "| `yaml.parseAll` | `(data: string): Array<Json>` |  |\n"
-            "| `yaml.parseFile` | `(path: Path): Json` |  |\n"
-            "| `yaml.parseStrict` | `(data: string): Json` |  |\n"
-            "| `yaml.stringify` | `(value: Json, options: Json = null): string` |  |\n"
-            "| `yaml.writeFile` | `(path: Path, value: Json): bool` |  |\n"
+            "| `YamlAnchor` | `YamlAnchor` |  |\n"
+            "| `YamlAnchor.constructor` | `(name: string): ()` |  |\n"
+            "| `YamlAnchor.name` | `: string` |  |\n"
+            "| `YamlDiagnostic` | `YamlDiagnostic` |  |\n"
+            "| `YamlDiagnostic.column` | `: int` |  |\n"
+            "| `YamlDiagnostic.constructor` | `(kind: YamlErrorKind, line: int, column: int, message: string): ()` |  |\n"
+            "| `YamlDiagnostic.kind` | `: YamlErrorKind` |  |\n"
+            "| `YamlDiagnostic.line` | `: int` |  |\n"
+            "| `YamlDiagnostic.message` | `: string` |  |\n"
+            "| `YamlMapping` | `YamlMapping` |  |\n"
+            "| `YamlMapping.constructor` | `(): ()` |  |\n"
+            "| `YamlMapping.containsKey` | `(key: string): bool` |  |\n"
+            "| `YamlMapping.get` | `(key: string): YamlValue?` |  |\n"
+            "| `YamlMapping.keys` | `: Array<string>` |  |\n"
+            "| `YamlMapping.set` | `(key: string, value: YamlValue): ()` |  |\n"
+            "| `YamlMapping.size` | `(): int` |  |\n"
+            "| `YamlMapping.values` | `: Array<YamlValue>` |  |\n"
+            "| `YamlParseReport` | `YamlParseReport` |  |\n"
+            "| `YamlParseReport.anchors` | `: int` |  |\n"
+            "| `YamlParseReport.constructor` | `(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: int): ()` |  |\n"
+            "| `YamlParseReport.data` | `: YamlValue` |  |\n"
+            "| `YamlParseReport.diagnostics` | `: Array<YamlDiagnostic>` |  |\n"
+            "| `YamlTag` | `YamlTag` |  |\n"
+            "| `YamlTag.constructor` | `(handle: string, suffix: string): ()` |  |\n"
+            "| `YamlTag.handle` | `: string` |  |\n"
+            "| `YamlTag.suffix` | `: string` |  |\n"
+            "| `YamlTagged` | `YamlTagged` |  |\n"
+            "| `YamlTagged.constructor` | `(tag: YamlTag, value: YamlValue): ()` |  |\n"
+            "| `YamlTagged.tag` | `: YamlTag` |  |\n"
+            "| `YamlTagged.value` | `: YamlValue` |  |\n"
+            "| `yaml.aliasValue` | `(name: string): YamlValue` |  |\n"
+            "| `yaml.asBool` | `(value: YamlValue): bool?` |  |\n"
+            "| `yaml.asFloat` | `(value: YamlValue): float?` |  |\n"
+            "| `yaml.asInt` | `(value: YamlValue): int?` |  |\n"
+            "| `yaml.asMapping` | `(value: YamlValue): YamlMapping?` |  |\n"
+            "| `yaml.asSequence` | `(value: YamlValue): Array<YamlValue>?` |  |\n"
+            "| `yaml.asString` | `(value: YamlValue): string?` |  |\n"
+            "| `yaml.at` | `(value: YamlValue, index: int): YamlValue?` |  |\n"
+            "| `yaml.binaryValue` | `(value: Array<byte>): YamlValue` |  |\n"
+            "| `yaml.boolValue` | `(value: bool): YamlValue` |  |\n"
+            "| `yaml.floatValue` | `(value: float): YamlValue` |  |\n"
+            "| `yaml.get` | `(value: YamlValue, key: string): YamlValue?` |  |\n"
+            "| `yaml.intValue` | `(value: int): YamlValue` |  |\n"
+            "| `yaml.isNull` | `(value: YamlValue): bool` |  |\n"
+            "| `yaml.keys` | `(value: YamlValue): Array<string>` |  |\n"
+            "| `yaml.length` | `(value: YamlValue): int` |  |\n"
+            "| `yaml.mappingSet` | `(mapping: YamlMapping, key: string, value: YamlValue): ()` |  |\n"
+            "| `yaml.mappingValue` | `(mapping: YamlMapping): YamlValue` |  |\n"
+            "| `yaml.newMapping` | `(): YamlMapping` |  |\n"
+            "| `yaml.nullValue` | `(): YamlValue` |  |\n"
+            "| `yaml.parse` | `(data: string, options: YamlOptions? = null): YamlValue` |  |\n"
+            "| `yaml.parseAll` | `(data: string): Array<YamlValue>` |  |\n"
+            "| `yaml.parseFile` | `(path: Path, options: YamlOptions? = null): YamlValue` |  |\n"
+            "| `yaml.parseReport` | `(data: string): YamlParseReport` |  |\n"
+            "| `yaml.parseStrict` | `(data: string): YamlValue` |  |\n"
+            "| `yaml.sequenceValue` | `(items: Array<YamlValue>): YamlValue` |  |\n"
+            "| `yaml.stringValue` | `(value: string): YamlValue` |  |\n"
+            "| `yaml.stringify` | `(value: YamlValue, options: YamlWriteOptions? = null): string` |  |\n"
+            "| `yaml.taggedValue` | `(tag: YamlTag, value: YamlValue): YamlValue` |  |\n"
+            "| `yaml.writeFile` | `(path: Path, value: YamlValue): bool` |  |\n"
             "",
         .symbols = _symbols_yaml,
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),

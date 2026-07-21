@@ -1,0 +1,28 @@
+schema = 1
+module = "_probe"
+contract_revision = 1
+legacy_commit = "971205b8e773e1d3eeaeafb9432355cf8be038e6"
+legacy_oracle = "classification_only"
+legacy_public_surface = [
+  "probe",
+]
+intentional_semantic_changes = [
+  "_probe is the resident pure-Xray capability matrix for stdlib module export shapes",
+  "it exercises module-level fns, named/namespace import, vararg, closures, static methods, and generic/non-generic classes",
+]
+known_legacy_bugs = [
+  "none; the probe is a diagnostic asset, not a migration",
+]
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/_probe/diff_cases.txt"
+benchmark_suite = "stdlib/_probe"
+
+[[legacy_behavior]]
+id = "shape-matrix"
+classification = "required"
+new_behavior = "every probed export shape resolves and runs identically on VM and AOT"
+
+[[legacy_behavior]]
+id = "aot-direct-call"
+classification = "required"
+new_behavior = "module-level function exports are AOT direct-callable with matching return boxing"

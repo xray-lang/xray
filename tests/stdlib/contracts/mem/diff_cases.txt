@@ -1,0 +1,1 @@
+tests/diff/cases/semantics/stdlib/mem_alloc_shared_core.xr
