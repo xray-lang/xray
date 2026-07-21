@@ -8947,16 +8947,9 @@ static bool xicgen_emit_static_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     const char *sprefix = NULL;
     const XiFunc *sfunc =
         recv_class ? cg_lookup_static_method(ctx, recv_class, method, &sprefix) : NULL;
-    /* An imported class receiver loads from a slot the importer does not map to
-     * the class, so when the class name is unresolved, search the imported
-     * classes for the one declaring this static method. */
-    if (!sfunc) {
-        for (int i = 0; i < ctx->nimports && !sfunc; i++) {
-            const XiClassData *cd = ctx->imports[i].target_class;
-            if (cd && cd->class_name)
-                sfunc = cg_lookup_static_method(ctx, cd->class_name, method, &sprefix);
-        }
-    }
+    /* Never guess a static owner from the set of imported classes. An ordinary
+     * instance method can share the same name; explicit import/shared-slot
+     * class receivers are resolved by cg_class_native_class_value_data above. */
     if (!sfunc)
         return false;
     if (cg_func_needs_aot_coro_ctx(ctx, sfunc)) {
