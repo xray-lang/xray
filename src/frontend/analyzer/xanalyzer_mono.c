@@ -1118,8 +1118,8 @@ static void mono_rewrite_type_ref(XrTypeRef *tref, XaMonoCollector *collector) {
     for (int i = 0; i < tref->nchildren; i++)
         mono_rewrite_type_ref(tref->children[i], collector);
     if (tref->kind == XR_TREF_GENERIC && tref->name && tref->nchildren > 0) {
-        const char *mangled =
-            xa_mono_collector_lookup(collector, tref->name, tref->children, tref->nchildren);
+        const char *mangled = xa_mono_collector_lookup(collector, tref->name, tref->children,
+                                                       tref->nchildren, XA_MONO_EFFECT_NONE);
         if (mangled) {
             // The collector's mangled_name is freed when the mono pass ends, but
             // this type ref must survive into post-monomorphization analysis and
