@@ -131,7 +131,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"h2Request", XLSP_SYM_FUNCTION, "fn(options: Json): Json", "Generic HTTP/2 request", NULL, 0},
     {"parseSetCookie", XLSP_SYM_FUNCTION, "fn(header: string, requestDomain?: string, requestPath?: string, nowSeconds?: int): Cookie?", "", NULL, 0},
     {"cookieJar", XLSP_SYM_FUNCTION, "fn(maxCookies?: int): CookieJar", "", NULL, 0},
-    {"router", XLSP_SYM_FUNCTION, "fn(): Router", "", NULL, 0},
+    {"router", XLSP_SYM_FUNCTION, "fn(): Router<T>", "", NULL, 0},
     {"route", XLSP_SYM_FUNCTION, "fn(method: string, path: string, value: T): ()", "", NULL, 0},
     {"routeHandler", XLSP_SYM_FUNCTION, "fn(method: string, path: string, handler: (Json): Json)", "", NULL, 0},
     {"listen", XLSP_SYM_FUNCTION, "fn(port: int): bool", "", NULL, 0},

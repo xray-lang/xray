@@ -1289,17 +1289,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "RouteMatch.constructor",
-        .signature = "(value: Json, params: Json): ()",
+        .signature = "(value: T, params: Map<string, string>): ()",
         .summary = "",
     },
     {
         .name = "RouteMatch.params",
-        .signature = ": Json",
+        .signature = ": Map<string, string>",
         .summary = "",
     },
     {
         .name = "RouteMatch.value",
-        .signature = ": Json",
+        .signature = ": T",
         .summary = "",
     },
     {
@@ -1319,7 +1319,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "Router.find",
-        .signature = "(method: string, path: string): RouteMatch?",
+        .signature = "(method: string, path: string): RouteMatch<T>?",
         .summary = "",
     },
     {
@@ -1419,7 +1419,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "router",
-        .signature = "(): Router",
+        .signature = "(): Router<T>",
         .summary = "",
     },
     {
@@ -4924,33 +4924,303 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     {
+        .name = "YamlAnchor",
+        .signature = "YamlAnchor",
+        .summary = "",
+    },
+    {
+        .name = "YamlAnchor.constructor",
+        .signature = "(name: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlAnchor.name",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "YamlDiagnostic",
+        .signature = "YamlDiagnostic",
+        .summary = "",
+    },
+    {
+        .name = "YamlDiagnostic.column",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "YamlDiagnostic.constructor",
+        .signature = "(kind: YamlErrorKind, line: int, column: int, message: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlDiagnostic.kind",
+        .signature = ": YamlErrorKind",
+        .summary = "",
+    },
+    {
+        .name = "YamlDiagnostic.line",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "YamlDiagnostic.message",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping",
+        .signature = "YamlMapping",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.constructor",
+        .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.containsKey",
+        .signature = "(key: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.get",
+        .signature = "(key: string): YamlValue?",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.keys",
+        .signature = ": Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.set",
+        .signature = "(key: string, value: YamlValue): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.size",
+        .signature = "(): int",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.values",
+        .signature = ": Array<YamlValue>",
+        .summary = "",
+    },
+    {
+        .name = "YamlParseReport",
+        .signature = "YamlParseReport",
+        .summary = "",
+    },
+    {
+        .name = "YamlParseReport.anchors",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "YamlParseReport.constructor",
+        .signature = "(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: int): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlParseReport.data",
+        .signature = ": YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "YamlParseReport.diagnostics",
+        .signature = ": Array<YamlDiagnostic>",
+        .summary = "",
+    },
+    {
+        .name = "YamlTag",
+        .signature = "YamlTag",
+        .summary = "",
+    },
+    {
+        .name = "YamlTag.constructor",
+        .signature = "(handle: string, suffix: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlTag.handle",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "YamlTag.suffix",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "YamlTagged",
+        .signature = "YamlTagged",
+        .summary = "",
+    },
+    {
+        .name = "YamlTagged.constructor",
+        .signature = "(tag: YamlTag, value: YamlValue): ()",
+        .summary = "",
+    },
+    {
+        .name = "YamlTagged.tag",
+        .signature = ": YamlTag",
+        .summary = "",
+    },
+    {
+        .name = "YamlTagged.value",
+        .signature = ": YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "aliasValue",
+        .signature = "(name: string): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "asBool",
+        .signature = "(value: YamlValue): bool?",
+        .summary = "",
+    },
+    {
+        .name = "asFloat",
+        .signature = "(value: YamlValue): float?",
+        .summary = "",
+    },
+    {
+        .name = "asInt",
+        .signature = "(value: YamlValue): int?",
+        .summary = "",
+    },
+    {
+        .name = "asMapping",
+        .signature = "(value: YamlValue): YamlMapping?",
+        .summary = "",
+    },
+    {
+        .name = "asSequence",
+        .signature = "(value: YamlValue): Array<YamlValue>?",
+        .summary = "",
+    },
+    {
+        .name = "asString",
+        .signature = "(value: YamlValue): string?",
+        .summary = "",
+    },
+    {
+        .name = "at",
+        .signature = "(value: YamlValue, index: int): YamlValue?",
+        .summary = "",
+    },
+    {
+        .name = "binaryValue",
+        .signature = "(value: Array<byte>): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "boolValue",
+        .signature = "(value: bool): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "floatValue",
+        .signature = "(value: float): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "get",
+        .signature = "(value: YamlValue, key: string): YamlValue?",
+        .summary = "",
+    },
+    {
+        .name = "intValue",
+        .signature = "(value: int): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "isNull",
+        .signature = "(value: YamlValue): bool",
+        .summary = "",
+    },
+    {
+        .name = "keys",
+        .signature = "(value: YamlValue): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "length",
+        .signature = "(value: YamlValue): int",
+        .summary = "",
+    },
+    {
+        .name = "mappingSet",
+        .signature = "(mapping: YamlMapping, key: string, value: YamlValue): ()",
+        .summary = "",
+    },
+    {
+        .name = "mappingValue",
+        .signature = "(mapping: YamlMapping): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "newMapping",
+        .signature = "(): YamlMapping",
+        .summary = "",
+    },
+    {
+        .name = "nullValue",
+        .signature = "(): YamlValue",
+        .summary = "",
+    },
+    {
         .name = "parse",
-        .signature = "(data: string, options: Json = null): Json",
+        .signature = "(data: string, options: YamlOptions? = null): YamlValue",
         .summary = "",
     },
     {
         .name = "parseAll",
-        .signature = "(data: string): Array<Json>",
+        .signature = "(data: string): Array<YamlValue>",
         .summary = "",
     },
     {
         .name = "parseFile",
-        .signature = "(path: Path): Json",
+        .signature = "(path: Path, options: YamlOptions? = null): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "parseReport",
+        .signature = "(data: string): YamlParseReport",
         .summary = "",
     },
     {
         .name = "parseStrict",
-        .signature = "(data: string): Json",
+        .signature = "(data: string): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "sequenceValue",
+        .signature = "(items: Array<YamlValue>): YamlValue",
+        .summary = "",
+    },
+    {
+        .name = "stringValue",
+        .signature = "(value: string): YamlValue",
         .summary = "",
     },
     {
         .name = "stringify",
-        .signature = "(value: Json, options: Json = null): string",
+        .signature = "(value: YamlValue, options: YamlWriteOptions? = null): string",
+        .summary = "",
+    },
+    {
+        .name = "taggedValue",
+        .signature = "(tag: YamlTag, value: YamlValue): YamlValue",
         .summary = "",
     },
     {
         .name = "writeFile",
-        .signature = "(path: Path, value: Json): bool",
+        .signature = "(path: Path, value: YamlValue): bool",
         .summary = "",
     },
 };
@@ -6782,13 +7052,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ResponseMessage.head` | `: ResponseHead` |  |\n"
             "| `ResponseMessage.trailers` | `: Headers` |  |\n"
             "| `RouteMatch` | `RouteMatch` |  |\n"
-            "| `RouteMatch.constructor` | `(value: Json, params: Json): ()` |  |\n"
-            "| `RouteMatch.params` | `: Json` |  |\n"
-            "| `RouteMatch.value` | `: Json` |  |\n"
+            "| `RouteMatch.constructor` | `(value: T, params: Map<string, string>): ()` |  |\n"
+            "| `RouteMatch.params` | `: Map<string, string>` |  |\n"
+            "| `RouteMatch.value` | `: T` |  |\n"
             "| `Router` | `Router` |  |\n"
             "| `Router.add` | `(method: string, path: string, value: T): bool` |  |\n"
             "| `Router.constructor` | `(): ()` |  |\n"
-            "| `Router.find` | `(method: string, path: string): RouteMatch?` |  |\n"
+            "| `Router.find` | `(method: string, path: string): RouteMatch<T>?` |  |\n"
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
@@ -6808,7 +7078,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
             "| `http.route` | `(method: string, path: string, value: T): ()` |  |\n"
             "| `http.routeHandler` | `(method: string, path: string, handler: (Json): Json)` |  |\n"
-            "| `http.router` | `(): Router` |  |\n"
+            "| `http.router` | `(): Router<T>` |  |\n"
             "| `http.stopServer` | `(): ()` |  |\n"
             "| `http.urlDecode` | `(s: string): string` |  |\n"
             "| `http.urlEncode` | `(s: string): string` |  |\n"
@@ -7994,12 +8264,66 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `yaml.parse` | `(data: string, options: Json = null): Json` |  |\n"
-            "| `yaml.parseAll` | `(data: string): Array<Json>` |  |\n"
-            "| `yaml.parseFile` | `(path: Path): Json` |  |\n"
-            "| `yaml.parseStrict` | `(data: string): Json` |  |\n"
-            "| `yaml.stringify` | `(value: Json, options: Json = null): string` |  |\n"
-            "| `yaml.writeFile` | `(path: Path, value: Json): bool` |  |\n"
+            "| `YamlAnchor` | `YamlAnchor` |  |\n"
+            "| `YamlAnchor.constructor` | `(name: string): ()` |  |\n"
+            "| `YamlAnchor.name` | `: string` |  |\n"
+            "| `YamlDiagnostic` | `YamlDiagnostic` |  |\n"
+            "| `YamlDiagnostic.column` | `: int` |  |\n"
+            "| `YamlDiagnostic.constructor` | `(kind: YamlErrorKind, line: int, column: int, message: string): ()` |  |\n"
+            "| `YamlDiagnostic.kind` | `: YamlErrorKind` |  |\n"
+            "| `YamlDiagnostic.line` | `: int` |  |\n"
+            "| `YamlDiagnostic.message` | `: string` |  |\n"
+            "| `YamlMapping` | `YamlMapping` |  |\n"
+            "| `YamlMapping.constructor` | `(): ()` |  |\n"
+            "| `YamlMapping.containsKey` | `(key: string): bool` |  |\n"
+            "| `YamlMapping.get` | `(key: string): YamlValue?` |  |\n"
+            "| `YamlMapping.keys` | `: Array<string>` |  |\n"
+            "| `YamlMapping.set` | `(key: string, value: YamlValue): ()` |  |\n"
+            "| `YamlMapping.size` | `(): int` |  |\n"
+            "| `YamlMapping.values` | `: Array<YamlValue>` |  |\n"
+            "| `YamlParseReport` | `YamlParseReport` |  |\n"
+            "| `YamlParseReport.anchors` | `: int` |  |\n"
+            "| `YamlParseReport.constructor` | `(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: int): ()` |  |\n"
+            "| `YamlParseReport.data` | `: YamlValue` |  |\n"
+            "| `YamlParseReport.diagnostics` | `: Array<YamlDiagnostic>` |  |\n"
+            "| `YamlTag` | `YamlTag` |  |\n"
+            "| `YamlTag.constructor` | `(handle: string, suffix: string): ()` |  |\n"
+            "| `YamlTag.handle` | `: string` |  |\n"
+            "| `YamlTag.suffix` | `: string` |  |\n"
+            "| `YamlTagged` | `YamlTagged` |  |\n"
+            "| `YamlTagged.constructor` | `(tag: YamlTag, value: YamlValue): ()` |  |\n"
+            "| `YamlTagged.tag` | `: YamlTag` |  |\n"
+            "| `YamlTagged.value` | `: YamlValue` |  |\n"
+            "| `yaml.aliasValue` | `(name: string): YamlValue` |  |\n"
+            "| `yaml.asBool` | `(value: YamlValue): bool?` |  |\n"
+            "| `yaml.asFloat` | `(value: YamlValue): float?` |  |\n"
+            "| `yaml.asInt` | `(value: YamlValue): int?` |  |\n"
+            "| `yaml.asMapping` | `(value: YamlValue): YamlMapping?` |  |\n"
+            "| `yaml.asSequence` | `(value: YamlValue): Array<YamlValue>?` |  |\n"
+            "| `yaml.asString` | `(value: YamlValue): string?` |  |\n"
+            "| `yaml.at` | `(value: YamlValue, index: int): YamlValue?` |  |\n"
+            "| `yaml.binaryValue` | `(value: Array<byte>): YamlValue` |  |\n"
+            "| `yaml.boolValue` | `(value: bool): YamlValue` |  |\n"
+            "| `yaml.floatValue` | `(value: float): YamlValue` |  |\n"
+            "| `yaml.get` | `(value: YamlValue, key: string): YamlValue?` |  |\n"
+            "| `yaml.intValue` | `(value: int): YamlValue` |  |\n"
+            "| `yaml.isNull` | `(value: YamlValue): bool` |  |\n"
+            "| `yaml.keys` | `(value: YamlValue): Array<string>` |  |\n"
+            "| `yaml.length` | `(value: YamlValue): int` |  |\n"
+            "| `yaml.mappingSet` | `(mapping: YamlMapping, key: string, value: YamlValue): ()` |  |\n"
+            "| `yaml.mappingValue` | `(mapping: YamlMapping): YamlValue` |  |\n"
+            "| `yaml.newMapping` | `(): YamlMapping` |  |\n"
+            "| `yaml.nullValue` | `(): YamlValue` |  |\n"
+            "| `yaml.parse` | `(data: string, options: YamlOptions? = null): YamlValue` |  |\n"
+            "| `yaml.parseAll` | `(data: string): Array<YamlValue>` |  |\n"
+            "| `yaml.parseFile` | `(path: Path, options: YamlOptions? = null): YamlValue` |  |\n"
+            "| `yaml.parseReport` | `(data: string): YamlParseReport` |  |\n"
+            "| `yaml.parseStrict` | `(data: string): YamlValue` |  |\n"
+            "| `yaml.sequenceValue` | `(items: Array<YamlValue>): YamlValue` |  |\n"
+            "| `yaml.stringValue` | `(value: string): YamlValue` |  |\n"
+            "| `yaml.stringify` | `(value: YamlValue, options: YamlWriteOptions? = null): string` |  |\n"
+            "| `yaml.taggedValue` | `(tag: YamlTag, value: YamlValue): YamlValue` |  |\n"
+            "| `yaml.writeFile` | `(path: Path, value: YamlValue): bool` |  |\n"
             "",
         .symbols = _symbols_yaml,
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),

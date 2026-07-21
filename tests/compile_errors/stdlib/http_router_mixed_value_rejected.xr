@@ -1,0 +1,7 @@
+// Guard: Router<T> owns one static value domain; add is no longer a generic
+// Json-encoding escape hatch that accepts an unrelated value type per call.
+import { Router } from http
+
+var routes = Router<int>()
+routes.add("GET", "/one", 1)
+routes.add("GET", "/two", "two")

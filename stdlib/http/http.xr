@@ -566,10 +566,10 @@ fn _joinRouteTail(segs: Array<string>, start: int) -> string {
     return out.toString()
 }
 
-fn _matchRoutePath(pattern: string, path: string) -> Json {
+fn _matchRoutePath(pattern: string, path: string) -> Map<string, string>? {
     var pSegs = _routeSegments(pattern)
     var vSegs = _routeSegments(path)
-    var params: Json = {}
+    var params = Map<string, string>()
     var i = 0
     var j = 0
 
@@ -577,7 +577,7 @@ fn _matchRoutePath(pattern: string, path: string) -> Json {
         var p = pSegs[i]
         var wildcard = _routeWildcardName(p)
         if (wildcard != null) {
-            params[wildcard!] = _joinRouteTail(vSegs, j)
+            params.set(wildcard!, _joinRouteTail(vSegs, j))
             return params
         }
 
@@ -586,7 +586,7 @@ fn _matchRoutePath(pattern: string, path: string) -> Json {
         var param = _routeParamName(p)
         if (param != null) {
             if (len(vSegs[j]) == 0) { return null }
-            params[param!] = vSegs[j]
+            params.set(param!, vSegs[j])
         } else if (p != vSegs[j]) {
             return null
         }
@@ -598,62 +598,57 @@ fn _matchRoutePath(pattern: string, path: string) -> Json {
     return params
 }
 
-export class RouteMatch {
-    value: Json
-    params: Json
+export class RouteMatch<T> {
+    value: T
+    params: Map<string, string>
 
-    constructor(value: Json, params: Json) {
+    constructor(value: T, params: Map<string, string>) {
         this.value = value
         this.params = params
     }
 }
 
-class _RouteEntry {
-    method: string
-    path: string
-    value: Json
-
-    constructor(method: string, path: string, value: Json) {
-        this.method = method
-        this.path = path
-        this.value = value
-    }
-}
-
-export class Router {
-    private routes: Array<_RouteEntry>
+export class Router<T> {
+    // These three arrays form one indexed route table and are updated together.
+    // Keeping T directly in `values` avoids a second nested generic instance at
+    // the AOT module boundary while preserving the exact typed value domain.
+    private methods: Array<string>
+    private paths: Array<string>
+    private values: Array<T>
 
     constructor() {
-        this.routes = []
+        this.methods = []
+        this.paths = []
+        this.values = []
     }
 
-    add<T>(method: string, path: string, value: T) -> bool {
-        var encoded = Json.encode(value)
+    add(method: string, path: string, value: T) -> bool {
         var m = _routeMethodKey(method)
         if (len(m) == 0 || !_routePatternValid(path)) { return false }
-        for (var i = 0; i < len(this.routes); i++) {
-            var entry = this.routes[i]
-            if (entry.method == m && entry.path == path) {
-                this.routes[i] = _RouteEntry(m, path, encoded)
+        for (var i = 0; i < len(this.methods); i++) {
+            if (this.methods[i] == m && this.paths[i] == path) {
+                this.values[i] = value
                 return true
             }
         }
-        this.routes.push(_RouteEntry(m, path, encoded))
+        this.methods.push(m)
+        this.paths.push(path)
+        this.values.push(value)
         return true
     }
 
-    find(method: string, path: string) -> RouteMatch? {
+    find(method: string, path: string) -> RouteMatch<T>? {
         var m = _routeMethodKey(method)
         if (len(m) == 0 || !_routeValidPath(path)) { return null }
 
-        var dynamicMatch: RouteMatch? = null
-        for (var i = 0; i < len(this.routes); i++) {
-            var entry = this.routes[i]
-            if (entry.method != m) { continue }
-            var params = _matchRoutePath(entry.path, path)
+        var dynamicMatch: RouteMatch<T>? = null
+        for (var i = 0; i < len(this.methods); i++) {
+            if (this.methods[i] != m) { continue }
+            var pattern = this.paths[i]
+            var params = _matchRoutePath(pattern, path)
             if (params != null) {
-                var found = RouteMatch(entry.value, params)
-                if (_routePatternIsStatic(entry.path)) { return found }
+                var found = RouteMatch(this.values[i], params!)
+                if (_routePatternIsStatic(pattern)) { return found }
                 if (dynamicMatch == null) { dynamicMatch = found }
             }
         }
@@ -661,17 +656,17 @@ export class Router {
     }
 }
 
-export fn router() -> Router {
-    return Router()
+export fn router<T>() -> Router<T> {
+    return Router<T>()
 }
 
 class _ServerRouteMatch {
     value: Json
     handler: (Json) -> Json
     hasHandler: bool
-    params: Json
+    params: Map<string, string>
 
-    constructor(value: Json, params: Json, handler: (Json) -> Json, hasHandler: bool) {
+    constructor(value: Json, params: Map<string, string>, handler: (Json) -> Json, hasHandler: bool) {
         this.value = value
         this.params = params
         this.handler = handler
@@ -745,7 +740,7 @@ class _ServerRouter {
             if (entry.method != m) { continue }
             var params = _matchRoutePath(entry.path, path)
             if (params != null) {
-                var found = _ServerRouteMatch(entry.value, params, entry.handler, entry.hasHandler)
+                var found = _ServerRouteMatch(entry.value, params!, entry.handler, entry.hasHandler)
                 if (_routePatternIsStatic(entry.path)) { return found }
                 if (dynamicMatch == null) { dynamicMatch = found }
             }
@@ -806,7 +801,11 @@ fn _serverQueryJson(target: string) -> Json {
     return out
 }
 
-fn _serverRequestJson(msg: RequestMessage, params: Json) -> Json {
+fn _serverRequestJson(msg: RequestMessage, params: Map<string, string>) -> Json {
+    var dynamicParams: Json = {}
+    for (name, value in params) {
+        dynamicParams[name] = value
+    }
     var req: Json = {}
     req["method"] = msg.head.method
     req["path"] = _serverTargetPath(msg.head.target)
@@ -814,7 +813,7 @@ fn _serverRequestJson(msg: RequestMessage, params: Json) -> Json {
     req["headers"] = _headersJson(msg.head.headers)
     req["body"] = msg.body
     req["contentLength"] = msg.head.contentLength
-    req["params"] = params
+    req["params"] = dynamicParams
     return req
 }
 
