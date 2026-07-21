@@ -486,6 +486,12 @@ XR_FUNC XrCoroutine *xr_coro_create_native(struct XrVMRuntime *X, void (*func)(v
                                            const char *name);
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_destroy(XrCoroutine *coro);
+/* Detach a coroutine's embedded wheel-timer node during single-threaded
+ * teardown, when all workers are stopped/joined (owner wheel + cancel queue
+ * quiescent) and there is no current-worker TLS. Used by xr_aot_run_main before
+ * it frees the main coroutine. Must NOT be called while any worker may still be
+ * running. */
+XR_FUNC void xr_coro_detach_timer_quiescent(struct XrRuntime *runtime, XrCoroutine *coro);
 XR_FUNC void xr_coro_spawn(struct XrVMRuntime *X, XrCoroutine *coro);
 XR_FUNC struct XrScopeContext *xr_coro_parent_scope(const XrCoroutine *coro);
 XR_FUNC bool xr_coro_set_parent_scope(XrCoroutine *coro, struct XrScopeContext *scope);

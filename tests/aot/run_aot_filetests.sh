@@ -446,6 +446,20 @@ run_dump_command() {
     "$XRAY" "${build_args[@]}" >"$out_dump" 2>&1
 }
 
+# Sanitizer builds inject -fsanitize=* and their runtime, which is fundamentally
+# incompatible with the freestanding profile's -nostdlib / -ffreestanding link
+# shape: the sanitizer flags override/drop them, so a filetest that positively
+# asserts those flags (contains=/regex=) can never hold under a
+# sanitizer-instrumented xray. CMake sets XRAY_AOT_FILETEST_SANITIZER=1 for such
+# builds; skip only those flag-asserting cases then. Normal builds always run
+# them, so the freestanding link contract stays fully gated outside sanitizers.
+filetest_skip_for_sanitizer() {
+    local expect="$1"
+    [ "${XRAY_AOT_FILETEST_SANITIZER:-0}" = "1" ] || return 1
+    [ -f "$expect" ] || return 1
+    grep -Eq -- '^(contains|regex)=.*(-nostdlib|-ffreestanding)' "$expect"
+}
+
 run_one() {
     local mode="$1"
     local xr_file="$2"
@@ -462,6 +476,12 @@ run_one() {
     expected_status="$(expect_status "$expect")"
 
     printf '  %-9s %-48s' "$mode" "$test_name"
+
+    if filetest_skip_for_sanitizer "$expect"; then
+        echo "SKIP (freestanding link flags incompatible with sanitizer runtime)"
+        SKIP=$((SKIP + 1))
+        return 0
+    fi
 
     case "$expected_status" in
         pass|fail)

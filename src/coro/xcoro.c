@@ -736,6 +736,58 @@ static void coro_detach_timer_before_free(XrCoroutine *coro) {
         xr_twheel_cancel_timer(owner_tw, timer);
 }
 
+/* Teardown-time detach of the embedded wheel-timer node when there is NO
+ * current-worker context (xr_current_worker()==NULL) but every worker has
+ * already been stopped/joined, so the owner wheel + MPSC cancel queue are
+ * quiescent and this thread is their sole accessor.
+ *
+ * Needed by the standalone AOT entry (xr_aot_run_main): it destroys the main
+ * coroutine right after xr_runtime_main_thread_run joins all workers, i.e.
+ * BEFORE the scheduler-runtime shutdown drain (runtime_drain_timer_cancel_stacks
+ * inside xr_scheduler_runtime_delete). A main coro that armed then cancelled a
+ * recvTimeout leaves its node as a ZOMBIE in the owner cancel queue; freeing
+ * coro->ext without unlinking it strands a dangling node that the later drain
+ * reads (heap-use-after-free). coro_detach_timer_before_free cannot cover this:
+ * it requires xr_current_worker()==owner, which main_thread_run has cleared.
+ *
+ * Safe only under the quiescence precondition above — never call it while any
+ * worker thread might still produce into or consume from the MPSC cancel queue. */
+void xr_coro_detach_timer_quiescent(XrRuntime *runtime, XrCoroutine *coro) {
+    if (!runtime || !coro || !coro->ext)
+        return;
+    XrCoroExt *ext = coro->ext;
+    XrTWheelTimer *timer = &ext->timer;
+
+    bool maybe_linked =
+        atomic_load_explicit(&ext->timer_active, memory_order_relaxed) ||
+        timer->slot != XR_TW_SLOT_INACTIVE ||
+        atomic_load_explicit(&timer->state, memory_order_acquire) == XR_TIMER_STATE_ZOMBIE ||
+        atomic_load_explicit(&timer->cancel_next, memory_order_acquire) != NULL;
+    if (!maybe_linked)
+        return;
+
+    int owner_id = timer->owner_worker_id;
+    if (owner_id < 0 || owner_id >= runtime->worker_count)
+        return;
+    XrTimerWheel *owner_tw = runtime->workers[owner_id].p.timer_wheel;
+    if (!owner_tw)
+        return;
+
+    // Sole remaining thread: act as the owner. Pull any still-armed node from the
+    // wheel, drain the cancel queue (unlinks this ZOMBIE and resets its state),
+    // then clear any residual slot linkage — fully detaching the embedded node
+    // before coro->ext is freed.
+    if (atomic_load_explicit(&ext->timer_active, memory_order_relaxed)) {
+        xr_twheel_cancel_timer(owner_tw, timer);
+        xr_timer_wait_token_cancel(&ext->wait.timer_token);
+        atomic_store_explicit(&ext->timer_active, false, memory_order_relaxed);
+    }
+    if (xr_timer_cancel_pending(owner_tw))
+        (void) xr_timer_process_canceled_queue(owner_tw);
+    if (timer->slot != XR_TW_SLOT_INACTIVE)
+        xr_twheel_cancel_timer(owner_tw, timer);
+}
+
 void xr_coro_free(XrCoroutine *coro) {
     if (!coro)
         return;
