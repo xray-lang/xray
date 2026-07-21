@@ -1,0 +1,11 @@
+import { HttpError, HttpVersion } from http
+
+fn rejectVersion() {
+    throw HttpError.UnsupportedVersion(HttpVersion.Http2)
+}
+
+try {
+    rejectVersion()
+} catch HttpError.UnsupportedVersion(version) {
+    print(version!.name)
+}

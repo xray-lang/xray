@@ -640,6 +640,34 @@ static uint32_t cg_enum_layout_id_for_type(XiCgenCtx *ctx, const XrType *type) {
         ctx && ctx->aot_bundle ? xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, type) : NULL;
     if (plan && plan->layout_id != 0)
         return plan->layout_id;
+    /* Zero-payload enums have no XaotEnumPlan.  Imported analyzer types may
+     * carry a sibling layout from an earlier analysis instance, so prefer the
+     * unique provider definition in the lowered module graph.  If two modules
+     * really declare the same bare enum name, keep the type's own layout and
+     * preserve the ambiguity boundary. */
+    if (ctx && ctx->aot_bundle && type->enum_type.enum_name) {
+        uint32_t provider_layout_id = 0;
+        bool ambiguous = false;
+        for (uint32_t mi = 0; mi < ctx->aot_bundle->nmodules && !ambiguous; mi++) {
+            const XiModule *mod = ctx->aot_bundle->modules ? ctx->aot_bundle->modules[mi] : NULL;
+            if (!mod || !mod->slot_enums)
+                continue;
+            for (uint16_t si = 0; si < mod->nslots; si++) {
+                const XiEnumData *ed = mod->slot_enums[si];
+                if (!ed || !ed->name || strcmp(ed->name, type->enum_type.enum_name) != 0 ||
+                    ed->layout_id == 0)
+                    continue;
+                if (provider_layout_id == 0)
+                    provider_layout_id = ed->layout_id;
+                else if (provider_layout_id != ed->layout_id) {
+                    ambiguous = true;
+                    break;
+                }
+            }
+        }
+        if (!ambiguous && provider_layout_id != 0)
+            return provider_layout_id;
+    }
     if (type->enum_type.layout && type->enum_type.layout->layout_id != 0)
         return type->enum_type.layout->layout_id;
     return type->enum_type.layout_id;

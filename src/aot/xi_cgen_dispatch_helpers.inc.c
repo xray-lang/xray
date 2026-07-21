@@ -9727,7 +9727,7 @@ static bool xicgen_is_enum_evidence(XiCgenCtx *ctx, const XiFunc *f, const XiVal
             ed = cg_resolve_imported_enum_value(ctx, f, v->args[1]);
         if (ed) {
             uint32_t data_layout_id = xicgen_enum_layout_id_for_data(ed);
-            if (layout_id == 0)
+            if (data_layout_id != 0)
                 layout_id = data_layout_id;
             found = true;
         }

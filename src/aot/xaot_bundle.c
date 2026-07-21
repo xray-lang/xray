@@ -5492,25 +5492,37 @@ XR_FUNC const XaotEnumPlan *xaot_bundle_find_enum_plan_for_type(const XaotBundle
     const char *name = type_enum_name(type);
     int argc = type_enum_arg_count(type);
     XrType **args = type_enum_args(type);
+    uint32_t layout_id = 0;
     const XaotEnumPlan *fallback = NULL;
+    const XaotEnumPlan *generic_fallback = NULL;
 
     if (!bundle || !name)
         return NULL;
+    if (type->kind == XR_KIND_ENUM) {
+        layout_id = type->enum_type.layout && type->enum_type.layout->layout_id != 0
+                        ? type->enum_type.layout->layout_id
+                        : type->enum_type.layout_id;
+    }
     for (uint32_t i = 0; i < bundle->nenum_plans; i++) {
         const XaotEnumPlan *plan = &bundle->enum_plans[i];
         const XiEnumData *ed = plan->enum_data;
         if (!ed || !ed->is_adt || !ed->name || strcmp(ed->name, name) != 0)
             continue;
         if (plan->type_arg_count == 0) {
-            fallback = plan;
-            if (argc == 0)
+            if (!fallback)
+                fallback = plan;
+            if (argc == 0 && (layout_id == 0 || plan->layout_id == layout_id))
                 return plan;
             continue;
         }
-        if (argc > 0 && type_args_match(plan->type_args, plan->type_arg_count, args, argc))
-            return plan;
+        if (argc > 0 && type_args_match(plan->type_args, plan->type_arg_count, args, argc)) {
+            if (layout_id == 0 || plan->layout_id == layout_id)
+                return plan;
+            if (!generic_fallback)
+                generic_fallback = plan;
+        }
     }
-    return argc == 0 ? fallback : NULL;
+    return argc == 0 ? fallback : generic_fallback;
 }
 
 static const XiEnumData *find_enum_data_by_name(const XaotBundle *bundle, const char *name,
