@@ -7,3 +7,4 @@ tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr
 tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr
 tests/diff/cases/semantics/stdlib/http_request_message_pure_direct.xr
 tests/diff/cases/semantics/stdlib/http_response_text_pure_direct.xr
+tests/diff/cases/semantics/stdlib/http_typed_request_surface.xr

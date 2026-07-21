@@ -3,13 +3,14 @@
  */
 
 import http
+import { HttpMethod } from http
 
 print("Testing HTTPS...")
 
-var resp = http.request({url: "https://httpbin.org/get", method: "GET"})
-if (resp.error) {
-    print("Error: " + resp.error)
-} else {
+try {
+    var resp = http.request({url: "https://httpbin.org/get", method: HttpMethod.get()})
     print("Success! Status: " + resp.status.toString())
     print("Body length: " + len(resp.body).toString())
+} catch (e) {
+    print("Error: " + string(e))
 }

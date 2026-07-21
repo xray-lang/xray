@@ -1,0 +1,22 @@
+import http
+import { Headers, HttpMethod, HttpRequestOptions, HttpResponse, HttpVersion } from http
+
+fn acceptsOptions(options: HttpRequestOptions) -> bool {
+    return options.url == "http://example.com/"
+}
+
+var options: HttpRequestOptions = { "url": "http://example.com/" }
+print(acceptsOptions(options))
+print(HttpMethod.get().token)
+print(http.parseMethod("propfind")!.token)
+print(http.parseMethod("bad method") == null)
+var response: HttpResponse = http.textResponse("hello")
+print(response.version == HttpVersion.Http1)
+print(response.isSuccess())
+print(response.text())
+var jsonHeaders = Headers()
+var jsonResponse = http.jsonResponse({ "ok": true }, 201, jsonHeaders)
+print(jsonResponse.status)
+print(Json.stringify(jsonResponse.json()))
+print(jsonResponse.headers.get("Content-Type")!)
+print(HttpVersion.Http2.name)

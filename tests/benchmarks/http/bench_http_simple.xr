@@ -1,11 +1,12 @@
 import http
+import { HttpRequest, HttpResponse } from http
 
-http.routeHandler("GET", "/", fn(req: Json) {
-    return "Hello, World!"
+http.routeHandler("GET", "/", fn(req: HttpRequest) -> HttpResponse {
+    return http.textResponse("Hello, World!")
 })
 
-http.routeHandler("GET", "/json", fn(req: Json) {
-    return [200, "application/json", "{\"message\":\"Hello, World!\"}"]
+http.routeHandler("GET", "/json", fn(req: HttpRequest) -> HttpResponse {
+    return http.jsonResponse({message: "Hello, World!"})
 })
 
 http.listen(8080)

@@ -1,4 +1,5 @@
 import http
+import { HttpRequest, HttpResponse } from http
 import net
 import time
 
@@ -7,8 +8,8 @@ const PORT = 9196
 fn serveStaticRoutes(port: int) {
     http.route("GET", "/plain", "hello static")
     http.route("GET", "/empty", "")
-    http.routeHandler("POST", "/dynamic", fn(req: Json) -> string {
-        return Json.containsKey(req, "streaming") ? "handler:true" : "handler:false"
+    http.routeHandler("POST", "/dynamic", fn(req: HttpRequest) -> HttpResponse {
+        return http.textResponse(req.query.get("streaming") != null ? "handler:true" : "handler:false")
     })
     http.listen(port)
 }

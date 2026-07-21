@@ -1,0 +1,7 @@
+import http
+
+fn legacy(req: Json) -> Json {
+    return req
+}
+
+http.routeHandler("GET", "/legacy", legacy)

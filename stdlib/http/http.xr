@@ -6,7 +6,14 @@ import text
 // Public HTTP/1.x request/response formatting, client, routing, and server
 // dispatch live here.
 
-import { encode, decodeForm, parse as parseUrl, resolve as resolveUrl } from url
+import {
+    QueryParams,
+    encode,
+    decodeForm,
+    parse as parseUrl,
+    parseQuery,
+    resolve as resolveUrl
+} from url
 import crypto
 import io
 import net
@@ -662,11 +669,16 @@ export fn router<T>() -> Router<T> {
 
 class _ServerRouteMatch {
     value: Json
-    handler: (Json) -> Json
+    handler: (HttpRequest) -> HttpResponse
     hasHandler: bool
     params: Map<string, string>
 
-    constructor(value: Json, params: Map<string, string>, handler: (Json) -> Json, hasHandler: bool) {
+    constructor(
+        value: Json,
+        params: Map<string, string>,
+        handler: (HttpRequest) -> HttpResponse,
+        hasHandler: bool
+    ) {
         this.value = value
         this.params = params
         this.handler = handler
@@ -678,10 +690,16 @@ class _ServerRouteEntry {
     method: string
     path: string
     value: Json
-    handler: (Json) -> Json
+    handler: (HttpRequest) -> HttpResponse
     hasHandler: bool
 
-    constructor(method: string, path: string, value: Json, handler: (Json) -> Json, hasHandler: bool) {
+    constructor(
+        method: string,
+        path: string,
+        value: Json,
+        handler: (HttpRequest) -> HttpResponse,
+        hasHandler: bool
+    ) {
         this.method = method
         this.path = path
         this.value = value
@@ -690,8 +708,14 @@ class _ServerRouteEntry {
     }
 }
 
-fn _serverDefaultHandler(req: Json) -> Json {
-    return null
+fn _serverDefaultHandler(req: HttpRequest) -> HttpResponse {
+    return HttpResponse(
+        HttpVersion.Http1,
+        500,
+        "Internal Server Error",
+        Headers(),
+        Array<byte>(0)
+    )
 }
 
 class _ServerRouter {
@@ -705,7 +729,7 @@ class _ServerRouter {
         return this.addRouteJson(method, path, Json.encode(value), _serverDefaultHandler, false)
     }
 
-    addHandler(method: string, path: string, handler: (Json) -> Json) -> bool {
+    addHandler(method: string, path: string, handler: (HttpRequest) -> HttpResponse) -> bool {
         var value: Json = {}
         return this.addRouteJson(method, path, value, handler, true)
     }
@@ -714,7 +738,7 @@ class _ServerRouter {
         method: string,
         path: string,
         value: Json,
-        handler: (Json) -> Json,
+        handler: (HttpRequest) -> HttpResponse,
         hasHandler: bool
     ) -> bool {
         var m = _routeMethodKey(method)
@@ -757,7 +781,11 @@ export fn route<T>(method: string, path: string, value: T) {
     _serverRouter.add(method, path, value)
 }
 
-export fn routeHandler(method: string, path: string, handler: (Json) -> Json) {
+export fn routeHandler(
+    method: string,
+    path: string,
+    handler: (HttpRequest) -> HttpResponse
+) {
     _serverRouter.addHandler(method, path, handler)
 }
 
@@ -767,54 +795,26 @@ fn _serverTargetPath(target: string) -> string {
     return target
 }
 
-// The legacy Json server-request envelope cannot represent duplicate query names.
-// Keep the lossy conversion explicit at this dynamic handler boundary; the
-// canonical URL parser's public typed surface remains url.QueryParams.
-fn _serverQueryJson(target: string) -> Json {
-    var out: Json = {}
+fn _serverQuery(target: string) -> QueryParams {
     var q = target.indexOf("?")
-    if (q < 0) { return out }
+    if (q < 0) { return QueryParams() }
 
-    var start = q + 1
     var end = len(target)
-    var hash = _findCharBefore(target, '#', start, end)
+    var hash = _findCharBefore(target, '#', q + 1, end)
     if (hash >= 0) { end = hash }
-
-    while (start < end) {
-        var amp = _findCharBefore(target, '&', start, end)
-        var pairEnd = amp
-        if (pairEnd < 0) { pairEnd = end }
-
-        var eq = _findCharBefore(target, '=', start, pairEnd)
-        var keyEnd = pairEnd
-        if (eq >= 0) { keyEnd = eq }
-        if (pairEnd > start) {
-            var name = decodeForm(target.slice(start, keyEnd))
-            var value = ""
-            if (eq >= 0) { value = decodeForm(target.slice(eq + 1, pairEnd)) }
-            out[name] = value
-        }
-
-        if (amp < 0) { break }
-        start = amp + 1
-    }
-    return out
+    return parseQuery(target.slice(q + 1, end))
 }
 
-fn _serverRequestJson(msg: RequestMessage, params: Map<string, string>) -> Json {
-    var dynamicParams: Json = {}
-    for (name, value in params) {
-        dynamicParams[name] = value
-    }
-    var req: Json = {}
-    req["method"] = msg.head.method
-    req["path"] = _serverTargetPath(msg.head.target)
-    req["query"] = _serverQueryJson(msg.head.target)
-    req["headers"] = _headersJson(msg.head.headers)
-    req["body"] = msg.body
-    req["contentLength"] = msg.head.contentLength
-    req["params"] = dynamicParams
-    return req
+fn _serverRequest(msg: RequestMessage, params: Map<string, string>) -> HttpRequest {
+    return HttpRequest(
+        HttpMethod(msg.head.method),
+        _serverTargetPath(msg.head.target),
+        _serverQuery(msg.head.target),
+        msg.head.headers,
+        msg.body.copyBytes(),
+        msg.head.contentLength,
+        params
+    )
 }
 
 fn _serverStatusResponse(status: int, body: string, keepAlive: bool = false) -> string {
@@ -873,6 +873,46 @@ fn _serverResponseFor(value: Json, keepAlive: bool) -> string {
                         keepAlive)!
 }
 
+fn _serverResponseHead(response: HttpResponse, keepAlive: bool) -> string? {
+    if (response.status < 100 || response.status > 999) { return null }
+    var reason = response.reason
+    if (len(reason) == 0) { reason = _statusReason(response.status) }
+    if (!_headerValueValid(reason)) { return null }
+
+    var out = StringBuilder()
+    out.append("HTTP/1.1 ")
+    out.append(string(response.status))
+    out.append(" ")
+    out.append(reason)
+    out.append("\r\n")
+
+    var hasContentType = false
+    var pairs = response.headers.entries()
+    for (var i = 0; i < len(pairs); i++) {
+        var name = pairs[i].0
+        if (_headerKeyEquals(name, "Content-Length") ||
+            _headerKeyEquals(name, "Connection")) {
+            return null
+        }
+        if (_headerKeyEquals(name, "Content-Type")) { hasContentType = true }
+        _appendHeader(out, name, pairs[i].1)
+    }
+    if (!hasContentType) { _appendHeader(out, "Content-Type", "application/octet-stream") }
+    _appendHeader(out, "Content-Length", string(len(response.body)))
+    _appendHeader(out, "Connection", keepAlive ? "keep-alive" : "close")
+    out.append("\r\n")
+    return out.toString()
+}
+
+fn _serverWriteHttpResponse(conn: NetConn, response: HttpResponse, keepAlive: bool) -> bool {
+    var head = _serverResponseHead(response, keepAlive)
+    if (head == null || !_serverWriteAll(conn, head!)) { return false }
+    if (len(response.body) > 0 && net.writeBytes(conn, response.body) != len(response.body)) {
+        return false
+    }
+    return keepAlive
+}
+
 fn _serverWriteAll(conn: NetConn, data: string) -> bool {
     var pos = 0
     while (pos < len(data.bytes())) {
@@ -893,30 +933,19 @@ fn _serverDispatch(conn: NetConn, msg: RequestMessage) -> bool {
                msg.head.keepAlive
     }
 
-    var result: Json = found!.value
     if (found!.hasHandler) {
-        var req = _serverRequestJson(msg, found!.params)
         try {
+            var req = _serverRequest(msg, found!.params)
             var handler = found!.handler
-            result = handler(req)
+            return _serverWriteHttpResponse(conn, handler(req), msg.head.keepAlive)
         } catch (e) {
             var body = "Internal Server Error: " + string(e)
             _serverWriteAll(conn, _serverStatusResponse(500, body, false))
             return false
         }
-
-        if (typeName(result) == "string") {
-            // Keep dynamic handler strings in this frame; AOT can lose payloads
-            // when that Json value crosses another helper boundary.
-            var body = string(result)
-            return _serverWriteAll(
-                conn,
-                responseText(200, body, "text/plain; charset=utf-8", null, msg.head.keepAlive)!
-            ) && msg.head.keepAlive
-        }
     }
 
-    return _serverWriteAll(conn, _serverResponseFor(result, msg.head.keepAlive)) &&
+    return _serverWriteAll(conn, _serverResponseFor(found!.value, msg.head.keepAlive)) &&
            msg.head.keepAlive
 }
 
@@ -1138,7 +1167,52 @@ fn _headerValueValid(value: string) -> bool {
 
 export enum HttpError {
     InvalidHeaderName(string),
-    InvalidHeaderValue(string)
+    InvalidHeaderValue(string),
+    InvalidMethod(string),
+    InvalidUrl(string),
+    ConnectionFailed(string),
+    ProtocolError(string),
+    WriteFailed,
+    UnsupportedVersion(HttpVersion)
+}
+
+// HttpVersion selects the HTTP wire protocol used by the typed client.
+export enum HttpVersion {
+    Auto,
+    Http1,
+    Http2
+}
+
+// HttpMethod is an open HTTP token value. The standard methods are exposed as
+// constructors instead of a closed enum so extension methods remain valid.
+export class HttpMethod {
+    token: string
+
+    constructor(token: string) {
+        var parsed = _requestMethod(token)
+        if (parsed == null) { throw HttpError.InvalidMethod(token) }
+        this.token = parsed!
+    }
+
+    static fromToken(token: string) -> HttpMethod? {
+        var parsed = _requestMethod(token)
+        if (parsed == null) { return null }
+        return HttpMethod(parsed!)
+    }
+
+    static get() -> HttpMethod { return HttpMethod("GET") }
+    static head() -> HttpMethod { return HttpMethod("HEAD") }
+    static post() -> HttpMethod { return HttpMethod("POST") }
+    static put() -> HttpMethod { return HttpMethod("PUT") }
+    static patch() -> HttpMethod { return HttpMethod("PATCH") }
+    static delete() -> HttpMethod { return HttpMethod("DELETE") }
+    static options() -> HttpMethod { return HttpMethod("OPTIONS") }
+
+    toString() -> string { return this.token }
+}
+
+export fn parseMethod(token: string) -> HttpMethod? {
+    return HttpMethod.fromToken(token)
 }
 
 // Headers is an ordered, duplicate-preserving HTTP field collection. Lookup
@@ -1212,6 +1286,19 @@ export class Headers {
         }
         return out
     }
+}
+
+// HttpRequestOptions is the closed typed configuration surface for request().
+// Optional fields use protocol-safe defaults inside the module.
+export type HttpRequestOptions = {
+    url: string,
+    method?: HttpMethod,
+    headers?: Headers,
+    body?: Array<byte>,
+    followRedirects?: bool,
+    maxRedirects?: int,
+    timeoutMs?: int,
+    version?: HttpVersion
 }
 
 fn _headersJson(headers: Headers) -> Json {
@@ -1463,31 +1550,101 @@ class _HttpRequestUrl {
     }
 }
 
-export class HttpResponse {
-    status: int
-    statusText: string
+// HttpRequest is the typed server handler input. Query parameters preserve
+// duplicates through url.QueryParams; route parameters are available by name.
+export class HttpRequest {
+    method: HttpMethod
+    path: string
+    query: QueryParams
     headers: Headers
-    body: string
-    error: string?
-    ok: bool
+    body: Array<byte>
+    contentLength: int
+    params: Map<string, string>
 
-    constructor(status: int, statusText: string, headers: Headers, body: string, error: string?) {
-        this.status = status
-        this.statusText = statusText
+    constructor(
+        method: HttpMethod,
+        path: string,
+        query: QueryParams,
+        headers: Headers,
+        body: Array<byte>,
+        contentLength: int,
+        params: Map<string, string>
+    ) {
+        this.method = method
+        this.path = path
+        this.query = query
         this.headers = headers
         this.body = body
-        this.error = error
-        this.ok = error == null && status >= 200 && status < 300
+        this.contentLength = contentLength
+        this.params = params
+    }
+
+    text() -> string { return string.fromUtf8(this.body[:]) }
+}
+
+// HttpResponse carries bytes so HTTP bodies are not forced through UTF-8.
+// text() and json() are explicit decoding operations.
+export class HttpResponse {
+    version: HttpVersion
+    status: int
+    reason: string
+    headers: Headers
+    body: Array<byte>
+
+    constructor(
+        version: HttpVersion,
+        status: int,
+        reason: string,
+        headers: Headers,
+        body: Array<byte>
+    ) {
+        this.version = version
+        this.status = status
+        this.reason = reason
+        this.headers = headers
+        this.body = body
+    }
+
+    isSuccess() -> bool { return this.status >= 200 && this.status < 300 }
+
+    text() -> string { return string.fromUtf8(this.body[:]) }
+
+    json() -> Json {
+        var decoded = this.text()
+        return Json.parse(decoded)
     }
 }
 
-fn _httpResponse(status: int, statusText: string, headers: Headers, body: string,
-                 error: string?) -> HttpResponse {
-    return HttpResponse(status, statusText, headers, body, error)
+export fn textResponse(
+    body: string,
+    status: int = 200,
+    headers: Headers? = null
+) -> HttpResponse {
+    return HttpResponse(
+        HttpVersion.Http1,
+        status,
+        _statusReason(status),
+        headers ?? Headers(),
+        body.copyBytes()
+    )
 }
 
-fn _httpError(error: string) -> HttpResponse {
-    return HttpResponse(0, "", Headers(), "", error)
+export fn jsonResponse<T>(
+    value: T,
+    status: int = 200,
+    headers: Headers? = null
+) -> HttpResponse {
+    var responseHeaders = headers ?? Headers()
+    if (!responseHeaders.contains("Content-Type")) {
+        responseHeaders.add("Content-Type", "application/json; charset=utf-8")
+    }
+    return HttpResponse(
+        HttpVersion.Http1,
+        status,
+        _statusReason(status),
+        responseHeaders,
+        Json.stringify(Json.encode(value)).copyBytes()
+    )
 }
 
 fn _firstAuthorityEnd(raw: string, start: int) -> int {
@@ -1604,45 +1761,32 @@ fn _httpRequestUrlText(url: _HttpRequestUrl) -> string {
     return url.scheme + "://" + _httpRequestHostHeader(url) + url.path
 }
 
-fn _requestTimeout(options: Json) -> int {
-    var raw = Json.get(options, "timeout", null)
-    if (raw == null || typeName(raw) != "int") { return HTTP_DEFAULT_TIMEOUT_MS }
-    var t = int(raw)
+fn _requestTimeout(options: HttpRequestOptions) -> int {
+    var raw = options.timeoutMs
+    if (raw == null) { return HTTP_DEFAULT_TIMEOUT_MS }
+    var t = raw!
     if (t <= 0) { return HTTP_DEFAULT_TIMEOUT_MS }
     return t
 }
 
-fn _requestMaxRedirects(options: Json) -> int {
-    var raw = Json.get(options, "maxRedirects", null)
-    if (raw == null || typeName(raw) != "int") { return 5 }
-    var n = int(raw)
+fn _requestMaxRedirects(options: HttpRequestOptions) -> int {
+    var raw = options.maxRedirects
+    if (raw == null) { return 5 }
+    var n = raw!
     if (n < 0) { return 0 }
     return n
 }
 
-fn _requestFollowRedirects(options: Json) -> bool {
-    var raw = Json.get(options, "followRedirects", null)
-    if (raw == null || typeName(raw) != "bool") { return true }
-    return bool(raw)
+fn _requestFollowRedirects(options: HttpRequestOptions) -> bool {
+    return options.followRedirects ?? true
 }
 
-fn _requestBody(options: Json) -> string {
-    var raw = Json.get(options, "body", null)
-    if (raw == null) { return "" }
-    return string(raw)
+fn _requestBody(options: HttpRequestOptions) -> Array<byte> {
+    return options.body ?? Array<byte>(0)
 }
 
-fn _requestHeaders(options: Json) -> Headers {
-    var headers = Headers()
-    var raw = Json.get(options, "headers", null)
-    if (raw == null) { return headers }
-    var object = raw as Json
-    for (key in object) {
-        var name = string(key)
-        var rawValue = Json.get(object, name, null)
-        if (rawValue != null) { headers.add(name, string(rawValue)) }
-    }
-    return headers
+fn _requestHeaders(options: HttpRequestOptions) -> Headers {
+    return options.headers ?? Headers()
 }
 
 fn _requestWireHeaders(headers: Headers) -> Headers {
@@ -1659,7 +1803,71 @@ fn _headersLocation(headers: Headers) -> string? {
     return headers.get("Location")
 }
 
-fn _readHttpResponse(conn: NetConn, method: string) -> ResponseMessage? {
+class _HttpResponseBytes {
+    head: ResponseHead
+    body: Array<byte>
+
+    constructor(head: ResponseHead, body: Array<byte>) {
+        this.head = head
+        this.body = body
+    }
+}
+
+fn _byteRange(raw: string, start: int, end: int) -> Array<byte>? {
+    var bytes = raw.copyBytes()
+    if (start < 0 || end < start || end > len(bytes)) { return null }
+    var out = Array<byte>(end - start)
+    for (var i = start; i < end; i++) {
+        out[i - start] = bytes[i]
+    }
+    return out
+}
+
+fn _copyByteArray(data: Array<byte>) -> Array<byte> {
+    var out = Array<byte>(len(data))
+    for (var i = 0; i < len(data); i++) { out[i] = data[i] }
+    return out
+}
+
+fn _parseChunkedBytes(raw: string, start: int, maxBodyBytes: int) -> Array<byte>? {
+    var bytes = raw.copyBytes()
+    var pos = start
+    var out = Array<byte>()
+
+    while (true) {
+        var lineEnd = _byteCrlfIndex(raw, pos)
+        if (lineEnd < 0) { return null }
+        var line = _byteSlice(raw, pos, lineEnd)
+        if (line == null) { return null }
+        var size = _parseChunkSize(line!)
+        if (size == null) { return null }
+        pos = lineEnd + 2
+
+        if (size! == 0) {
+            while (true) {
+                var trailerEnd = _byteCrlfIndex(raw, pos)
+                if (trailerEnd < 0) { return null }
+                var trailer = _byteSlice(raw, pos, trailerEnd)
+                if (trailer == null) { return null }
+                pos = trailerEnd + 2
+                if (len(trailer!) == 0) { return out }
+                if (_parseHeaderLine(trailer!) == null) { return null }
+            }
+        }
+
+        if (maxBodyBytes > 0 && len(out) + size! > maxBodyBytes) { return null }
+        if (pos + size! + 2 > len(bytes)) { return null }
+        for (var i = 0; i < size!; i++) { out.push(bytes[pos + i]) }
+        pos = pos + size!
+        if (pos + 1 >= len(bytes) || bytes[pos] != 13 || bytes[pos + 1] != 10) {
+            return null
+        }
+        pos = pos + 2
+    }
+    return null
+}
+
+fn _readHttpResponse(conn: NetConn, method: string) -> _HttpResponseBytes? {
     var raw = ""
     var closeDelimited = false
     while (len(raw.bytes()) <= HTTP_MAX_RESPONSE_BYTES) {
@@ -1672,54 +1880,86 @@ fn _readHttpResponse(conn: NetConn, method: string) -> ResponseMessage? {
         var head = parseResponseHead(raw)
         if (head == null) { continue }
         var noBody = !_responseAllowsBody(head!.status) || method == "HEAD"
+        if (noBody) { return _HttpResponseBytes(head!, Array<byte>(0)) }
+
+        if (head!.chunked) {
+            var chunked = _parseChunkedBytes(raw, head!.headerBytes, HTTP_MAX_RESPONSE_BYTES)
+            if (chunked != null) { return _HttpResponseBytes(head!, chunked!) }
+            continue
+        }
+
+        if (head!.contentLength >= 0) {
+            if (head!.contentLength > HTTP_MAX_RESPONSE_BYTES) { return null }
+            var bodyEnd = head!.headerBytes + head!.contentLength
+            var body = _byteRange(raw, head!.headerBytes, bodyEnd)
+            if (body != null) { return _HttpResponseBytes(head!, body!) }
+            continue
+        }
+
         closeDelimited = !noBody && !head!.chunked && head!.contentLength < 0 && !head!.keepAlive
         if (closeDelimited) { continue }
-
-        var parsed = parseResponseText(raw)
-        if (parsed != null) { return parsed! }
     }
     if (closeDelimited) {
-        return parseResponseText(raw)
+        var head = parseResponseHead(raw)
+        if (head == null) { return null }
+        var body = _byteRange(raw, head!.headerBytes, len(raw.bytes()))
+        if (body != null) { return _HttpResponseBytes(head!, body!) }
     }
     return null
 }
 
-fn _singleRequest(url: _HttpRequestUrl, method: string, headers: Headers, body: string,
+fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, body: Array<byte>,
                   timeoutMs: int, stripSensitive: bool) -> HttpResponse {
     var conn = url.isHttps ? net.dialTLS(url.host, url.port, timeoutMs) :
                              net.dial(url.host, url.port, timeoutMs)
-    if (conn == null) { return _httpError("Connection failed") }
+    if (conn == null) { throw HttpError.ConnectionFailed(_httpRequestUrlText(url)) }
 
     var deadline = time.monotonic() + timeoutMs
     net.setDeadline(conn!, deadline)
 
-    var request = requestText(method, url.path, _requestWireHeaders(headers), body, _httpRequestHostHeader(url),
-                              stripSensitive)
-    if (request == null) {
+    var wireHeaders = _requestWireHeaders(headers)
+    wireHeaders.set("Content-Length", string(len(body)))
+    var requestHead = requestText(
+        method.token,
+        url.path,
+        wireHeaders,
+        "",
+        _httpRequestHostHeader(url),
+        stripSensitive
+    )
+    if (requestHead == null) {
         net.close(conn!)
-        return _httpError("Protocol parse error")
+        throw HttpError.ProtocolError("invalid request head")
     }
 
-    if (net.write(conn!, request!) != len(request!.bytes())) {
+    if (net.write(conn!, requestHead!) != len(requestHead!.bytes())) {
         net.close(conn!)
-        return _httpError("Write failed")
+        throw HttpError.WriteFailed
+    }
+    if (len(body) > 0 && net.writeBytes(conn!, body) != len(body)) {
+        net.close(conn!)
+        throw HttpError.WriteFailed
     }
 
-    var msg = _readHttpResponse(conn!, method)
+    var msg = _readHttpResponse(conn!, method.token)
     net.close(conn!)
-    if (msg == null) { return _httpError("Protocol parse error") }
-    return _httpResponse(msg!.head.status, msg!.head.reason, msg!.head.headers as Headers, msg!.body, null)
+    if (msg == null) { throw HttpError.ProtocolError("invalid response") }
+    return HttpResponse(
+        HttpVersion.Http1,
+        msg!.head.status,
+        msg!.head.reason,
+        msg!.head.headers as Headers,
+        _copyByteArray(msg!.body)
+    )
 }
 
-export fn request(options: Json) -> HttpResponse {
-    var rawUrl = Json.get(options, "url", null)
-    if (rawUrl == null) { return _httpError("URL parse error") }
-    var current = _parseHttpRequestUrl(string(rawUrl))
-    if (current == null) { return _httpError("URL parse error") }
+export fn request(options: HttpRequestOptions) -> HttpResponse {
+    var current = _parseHttpRequestUrl(options.url)
+    if (current == null) { throw HttpError.InvalidUrl(options.url) }
 
-    var rawMethod = Json.get(options, "method", "GET")
-    var method = _requestMethod(string(rawMethod))
-    if (method == null) { return _httpError("Protocol parse error") }
+    var method = options.method ?? HttpMethod.get()
+    var version = options.version ?? HttpVersion.Auto
+    if (version == HttpVersion.Http2) { throw HttpError.UnsupportedVersion(version) }
 
     var headers = _requestHeaders(options)
     var body = _requestBody(options)
@@ -1730,7 +1970,7 @@ export fn request(options: Json) -> HttpResponse {
     var stripSensitive = false
 
     while (true) {
-        var response = _singleRequest(current!, method!, headers, body, timeoutMs, stripSensitive)
+        var response = _singleRequest(current!, method, headers, body, timeoutMs, stripSensitive)
         if (!followRedirects || !isRedirectStatus(response.status) || redirects >= maxRedirects) {
             return response
         }
@@ -1738,19 +1978,19 @@ export fn request(options: Json) -> HttpResponse {
         var location = _headersLocation(response.headers)
         if (location == null) { return response }
         var next = redirectDecision(response.status, _httpRequestUrlText(current!), location!,
-                                    method!, stripSensitive)
+                                    method.token, stripSensitive)
         if (next == null) { return response }
 
         var nextUrl = _parseHttpRequestUrl(next!.url)
-        if (nextUrl == null) { return _httpError("URL parse error") }
+        if (nextUrl == null) { throw HttpError.InvalidUrl(next!.url) }
 
         current = nextUrl
-        method = next!.method
+        method = HttpMethod(next!.method)
         stripSensitive = next!.stripSensitiveHeaders
-        if (next!.dropBody) { body = "" }
+        if (next!.dropBody) { body = Array<byte>(0) }
         redirects = redirects + 1
     }
-    return _httpError("URL parse error")
+    throw HttpError.InvalidUrl(options.url)
 }
 
 // ResponseHead - Parsed HTTP/1.x response status line and headers.
@@ -2292,7 +2532,6 @@ export fn requestText(
     out.append(body)
     return out.toString()
 }
-
 fn _statusReason(status: int) -> string {
     if (status == 100) { return "Continue" }
     if (status == 101) { return "Switching Protocols" }
