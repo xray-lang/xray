@@ -108,6 +108,46 @@ TEST(native_module_record_and_enum_metadata) {
     ASSERT_EQ_INT(ws_fn->function.params[1].type->kind, XR_KIND_RECORD);
     ASSERT_TRUE(ws_fn->function.params[1].type->is_nullable);
 
+    const XaBuiltinRecord *cluster_config = xa_builtin_get_record_type("cluster", "ClusterConfig");
+    const XaBuiltinRecord *cluster_info = xa_builtin_get_record_type("cluster", "ClusterInfo");
+    ASSERT_NOT_NULL(cluster_config);
+    ASSERT_NOT_NULL(cluster_info);
+    ASSERT_TRUE(cluster_config->is_sealed);
+    ASSERT_TRUE(cluster_info->is_sealed);
+    ASSERT_EQ_INT(cluster_config->field_count, 4);
+    ASSERT_EQ_INT(cluster_info->field_count, 11);
+    ASSERT_TRUE(strcmp(cluster_config->fields[3].name, "tls") == 0);
+    ASSERT_TRUE(strcmp(cluster_info->fields[6].name, "deadNodes") == 0);
+
+    XrClass *cluster_info_class = xr_stdlib_record_class_get(iso, "cluster", "ClusterInfo");
+    ASSERT_NOT_NULL(cluster_info_class);
+    ASSERT_TRUE(cluster_info_class == xr_stdlib_record_class_get(iso, "cluster", "ClusterInfo"));
+
+    const XaBuiltinEnum *cluster_state = xa_builtin_get_enum_type("cluster", "ClusterNodeState");
+    ASSERT_NOT_NULL(cluster_state);
+    ASSERT_EQ_INT(cluster_state->variant_count, 5);
+    ASSERT_TRUE(cluster_state->layout_id != 0);
+    ASSERT_TRUE(strcmp(cluster_state->variants[3].name, "Connected") == 0);
+    XrEnumType *runtime_cluster_state = xr_stdlib_enum_type_get(iso, "cluster", "ClusterNodeState");
+    ASSERT_NOT_NULL(runtime_cluster_state);
+    ASSERT_EQ_INT(runtime_cluster_state->layout->layout_id, cluster_state->layout_id);
+
+    const char *cluster_start_signature = xa_builtin_get_module_func_signature("cluster", "start");
+    const char *cluster_info_signature = xa_builtin_get_module_func_signature("cluster", "info");
+    ASSERT_NOT_NULL(cluster_start_signature);
+    ASSERT_NOT_NULL(cluster_info_signature);
+    XrType *cluster_start_fn = xa_builtin_parse_full_signature(iso, cluster_start_signature);
+    XrType *cluster_info_fn = xa_builtin_parse_full_signature(iso, cluster_info_signature);
+    ASSERT_NOT_NULL(cluster_start_fn);
+    ASSERT_NOT_NULL(cluster_info_fn);
+    ASSERT_EQ_INT(cluster_start_fn->kind, XR_KIND_FUNCTION);
+    ASSERT_EQ_INT(cluster_start_fn->function.param_count, 1);
+    ASSERT_EQ_INT(cluster_start_fn->function.params[0].type->kind, XR_KIND_RECORD);
+    ASSERT_EQ_INT(cluster_start_fn->function.return_type->kind, XR_KIND_BOOL);
+    ASSERT_EQ_INT(cluster_info_fn->kind, XR_KIND_FUNCTION);
+    ASSERT_EQ_INT(cluster_info_fn->function.return_type->kind, XR_KIND_RECORD);
+    ASSERT_TRUE(cluster_info_fn->function.return_type->is_nullable);
+
     xray_vm_delete(iso);
 }
 
