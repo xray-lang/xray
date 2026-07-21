@@ -61,6 +61,9 @@ ALLOWED_RUNTIME_CASES = {
     # and awaits it after the client exchange. The net calls stay direct, while
     # the fixture's orchestration intentionally requires coro/task support.
     "tests/diff/cases/semantics/stdlib/net_byte_io_direct.xr",
+    # Typed Coro diagnostics lower directly to XI_CORO_OP and therefore need
+    # the coroutine runtime that produces their record and enum values.
+    "tests/diff/cases/semantics/stdlib/coro_typed_diagnostics_direct.xr",
     # `sync.fence` itself lowers to the freestanding mem.fence helper, but the
     # hosted `sync` module is a pure-Xray script module that also exports
     # coroutine-aware Mutex/RwLock/Once/Barrier/Condvar. Current AOT compiles
