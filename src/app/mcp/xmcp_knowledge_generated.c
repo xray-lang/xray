@@ -175,6 +175,256 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
+        .name = "ClusterConfig",
+        .signature = "{ name: string, port: int, secret: string?, tls: ClusterTlsOptions? }",
+        .summary = "Typed cluster node startup configuration",
+    },
+    {
+        .name = "ClusterConfig.name",
+        .signature = "const string",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterConfig.port",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterConfig.secret",
+        .signature = "const string?",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterConfig.tls",
+        .signature = "const ClusterTlsOptions?",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo",
+        .signature = "{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }",
+        .summary = "Typed diagnostic snapshot for the local cluster runtime",
+    },
+    {
+        .name = "ClusterInfo.channels",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.deadNodes",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.heartbeatIntervalMs",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.heartbeatTimeoutMs",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.maxMissedHeartbeats",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.nodes",
+        .signature = "const Array<ClusterNodeInfo>",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.port",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.running",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.self",
+        .signature = "const string",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.tls",
+        .signature = "const ClusterTlsStatus",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterInfo.topicSubscriptions",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo",
+        .signature = "{ name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }",
+        .summary = "Typed diagnostic snapshot for one remote cluster node",
+    },
+    {
+        .name = "ClusterNodeInfo.bytesReceived",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.bytesSent",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.framesReceived",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.framesSent",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.host",
+        .signature = "const string",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.missedHeartbeats",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.name",
+        .signature = "const string",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.outQueueBytes",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.outQueueFrames",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.phi",
+        .signature = "const float",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.port",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.rttMs",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.sendErrors",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.slow",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.slowConsumerEvents",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeInfo.state",
+        .signature = "const ClusterNodeState",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterNodeState",
+        .signature = "enum ClusterNodeState",
+        .summary = "Lifecycle state of a remote cluster node",
+    },
+    {
+        .name = "ClusterNodeState.Closing",
+        .signature = "ClusterNodeState.Closing",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterNodeState.Connected",
+        .signature = "ClusterNodeState.Connected",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterNodeState.Connecting",
+        .signature = "ClusterNodeState.Connecting",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterNodeState.Handshaking",
+        .signature = "ClusterNodeState.Handshaking",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterNodeState.Idle",
+        .signature = "ClusterNodeState.Idle",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterTlsOptions",
+        .signature = "{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool }",
+        .summary = "Typed TLS configuration for a cluster node",
+    },
+    {
+        .name = "ClusterTlsOptions.caFile",
+        .signature = "const string?",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsOptions.certFile",
+        .signature = "const string?",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsOptions.enabled",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsOptions.insecure",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsOptions.keyFile",
+        .signature = "const string?",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsStatus",
+        .signature = "{ enabled: bool, clientReady: bool, serverReady: bool }",
+        .summary = "Effective TLS posture of a running cluster node",
+    },
+    {
+        .name = "ClusterTlsStatus.clientReady",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsStatus.enabled",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "ClusterTlsStatus.serverReady",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
         .name = "HANDSHAKE_VERSION",
         .signature = ": int",
         .summary = "",
@@ -226,7 +476,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "info",
-        .signature = "(): Json",
+        .signature = "(): ClusterInfo?",
         .summary = "Get cluster status info",
     },
     {
@@ -261,7 +511,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "start",
-        .signature = "(config: Json): ()",
+        .signature = "(config: ClusterConfig): bool",
         .summary = "Start cluster node",
     },
     {
@@ -6820,6 +7070,56 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `cluster.CHANNEL_NAME_MAX` | `: int` |  |\n"
+            "| `cluster.ClusterConfig` | `{ name: string, port: int, secret: string?, tls: ClusterTlsOptions? }` | Typed cluster node startup configuration |\n"
+            "| `cluster.ClusterConfig.name` | `const string` | Record field |\n"
+            "| `cluster.ClusterConfig.port` | `const int` | Record field |\n"
+            "| `cluster.ClusterConfig.secret` | `const string?` | Record field |\n"
+            "| `cluster.ClusterConfig.tls` | `const ClusterTlsOptions?` | Record field |\n"
+            "| `cluster.ClusterInfo` | `{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }` | Typed diagnostic snapshot for the local cluster runtime |\n"
+            "| `cluster.ClusterInfo.channels` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.deadNodes` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.heartbeatIntervalMs` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.heartbeatTimeoutMs` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.maxMissedHeartbeats` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.nodes` | `const Array<ClusterNodeInfo>` | Record field |\n"
+            "| `cluster.ClusterInfo.port` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.running` | `const bool` | Record field |\n"
+            "| `cluster.ClusterInfo.self` | `const string` | Record field |\n"
+            "| `cluster.ClusterInfo.tls` | `const ClusterTlsStatus` | Record field |\n"
+            "| `cluster.ClusterInfo.topicSubscriptions` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo` | `{ name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }` | Typed diagnostic snapshot for one remote cluster node |\n"
+            "| `cluster.ClusterNodeInfo.bytesReceived` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.bytesSent` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.framesReceived` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.framesSent` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.host` | `const string` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.missedHeartbeats` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.name` | `const string` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.outQueueBytes` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.outQueueFrames` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.phi` | `const float` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.port` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.rttMs` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.sendErrors` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.slow` | `const bool` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.slowConsumerEvents` | `const int` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.state` | `const ClusterNodeState` | Record field |\n"
+            "| `cluster.ClusterNodeState` | `enum ClusterNodeState` | Lifecycle state of a remote cluster node |\n"
+            "| `cluster.ClusterNodeState.Closing` | `ClusterNodeState.Closing` | Enum variant |\n"
+            "| `cluster.ClusterNodeState.Connected` | `ClusterNodeState.Connected` | Enum variant |\n"
+            "| `cluster.ClusterNodeState.Connecting` | `ClusterNodeState.Connecting` | Enum variant |\n"
+            "| `cluster.ClusterNodeState.Handshaking` | `ClusterNodeState.Handshaking` | Enum variant |\n"
+            "| `cluster.ClusterNodeState.Idle` | `ClusterNodeState.Idle` | Enum variant |\n"
+            "| `cluster.ClusterTlsOptions` | `{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool }` | Typed TLS configuration for a cluster node |\n"
+            "| `cluster.ClusterTlsOptions.caFile` | `const string?` | Record field |\n"
+            "| `cluster.ClusterTlsOptions.certFile` | `const string?` | Record field |\n"
+            "| `cluster.ClusterTlsOptions.enabled` | `const bool` | Record field |\n"
+            "| `cluster.ClusterTlsOptions.insecure` | `const bool` | Record field |\n"
+            "| `cluster.ClusterTlsOptions.keyFile` | `const string?` | Record field |\n"
+            "| `cluster.ClusterTlsStatus` | `{ enabled: bool, clientReady: bool, serverReady: bool }` | Effective TLS posture of a running cluster node |\n"
+            "| `cluster.ClusterTlsStatus.clientReady` | `const bool` | Record field |\n"
+            "| `cluster.ClusterTlsStatus.enabled` | `const bool` | Record field |\n"
+            "| `cluster.ClusterTlsStatus.serverReady` | `const bool` | Record field |\n"
             "| `cluster.HANDSHAKE_VERSION` | `: int` |  |\n"
             "| `cluster.NODE_NAME_MAX` | `: int` |  |\n"
             "| `NodeAddress` | `NodeAddress` |  |\n"
@@ -6830,14 +7130,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.TOPIC_PATTERN_MAX` | `: int` |  |\n"
             "| `cluster.channel` | `(name: string, size?: int): Channel` | Create or get named distributed channel |\n"
             "| `cluster.discover` | `(): ()` | Start LAN auto-discovery |\n"
-            "| `cluster.info` | `(): Json` | Get cluster status info |\n"
+            "| `cluster.info` | `(): ClusterInfo?` | Get cluster status info |\n"
             "| `cluster.join` | `(addr: string): bool` | Join cluster by address |\n"
             "| `cluster.monitor` | `(name: string, coro_name?: string): Channel` | Monitor node or remote coroutine |\n"
             "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
             "| `cluster.parseAddress` | `(addr: string): NodeAddress` |  |\n"
             "| `cluster.publish` | `(topic: string, value: Json): bool` | Publish to topic |\n"
             "| `cluster.self` | `(): string` | Get own node name |\n"
-            "| `cluster.start` | `(config: Json): ()` | Start cluster node |\n"
+            "| `cluster.start` | `(config: ClusterConfig): bool` | Start cluster node |\n"
             "| `cluster.stop` | `(): ()` | Stop cluster node |\n"
             "| `cluster.subscribe` | `(pattern: string): Channel` | Subscribe to topic pattern |\n"
             "| `cluster.topicMatches` | `(pattern: string, topic: string): bool` |  |\n"
