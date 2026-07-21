@@ -57,6 +57,10 @@ ALLOWED_RUNTIME_CASES = {
     # exercise that runtime-backed implementation and therefore pull coro/task.
     "tests/diff/cases/semantics/stdlib/net_copy_bidirectional_error_enum.xr",
     "tests/diff/cases/semantics/stdlib/net_copy_bidirectional_transfer.xr",
+    # The direct byte-I/O loopback case runs its echo endpoint in a `go` task
+    # and awaits it after the client exchange. The net calls stay direct, while
+    # the fixture's orchestration intentionally requires coro/task support.
+    "tests/diff/cases/semantics/stdlib/net_byte_io_direct.xr",
     # `sync.fence` itself lowers to the freestanding mem.fence helper, but the
     # hosted `sync` module is a pure-Xray script module that also exports
     # coroutine-aware Mutex/RwLock/Once/Barrier/Condvar. Current AOT compiles
