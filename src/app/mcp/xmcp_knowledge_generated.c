@@ -11,8 +11,143 @@
 
 static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     {
+        .name = "CoroDeadlock",
+        .signature = "{ members: Array<CoroInfo>, reason: string }",
+        .summary = "Typed description of a detected coroutine wait cycle",
+    },
+    {
+        .name = "CoroDeadlock.members",
+        .signature = "const Array<CoroInfo>",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroDeadlock.reason",
+        .signature = "const string",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroGroupKey",
+        .signature = "enum CoroGroupKey",
+        .summary = "Stable key used to group coroutine diagnostic snapshots",
+    },
+    {
+        .name = "CoroGroupKey.Name",
+        .signature = "CoroGroupKey.Name",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroGroupKey.State",
+        .signature = "CoroGroupKey.State",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroInfo",
+        .signature = "{ id: int, name: string?, state: CoroState, reductions: int, source: string? }",
+        .summary = "Typed diagnostic snapshot for one coroutine",
+    },
+    {
+        .name = "CoroInfo.id",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroInfo.name",
+        .signature = "const string?",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroInfo.reductions",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroInfo.source",
+        .signature = "const string?",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroInfo.state",
+        .signature = "const CoroState",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroMetric",
+        .signature = "enum CoroMetric",
+        .summary = "Metric used to rank coroutine diagnostic snapshots",
+    },
+    {
+        .name = "CoroMetric.Id",
+        .signature = "CoroMetric.Id",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroMetric.Reductions",
+        .signature = "CoroMetric.Reductions",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroState",
+        .signature = "enum CoroState",
+        .summary = "Lifecycle state captured in a coroutine diagnostic snapshot",
+    },
+    {
+        .name = "CoroState.Blocked",
+        .signature = "CoroState.Blocked",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroState.Done",
+        .signature = "CoroState.Done",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroState.Ready",
+        .signature = "CoroState.Ready",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroState.Running",
+        .signature = "CoroState.Running",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroState.Unknown",
+        .signature = "CoroState.Unknown",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroStats",
+        .signature = "{ active: int, blocked: int, ready: int, total: int, created: int }",
+        .summary = "Typed aggregate counters for the coroutine scheduler",
+    },
+    {
+        .name = "CoroStats.active",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroStats.blocked",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroStats.created",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroStats.ready",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroStats.total",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
         .name = "deadlocks",
-        .signature = "(): Array<Json>",
+        .signature = "(): Array<CoroDeadlock>",
         .summary = "Detect deadlocked coroutines",
     },
     {
@@ -32,7 +167,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "groupBy",
-        .signature = "(field: string): Json",
+        .signature = "(field: CoroGroupKey): Map<string, int>",
         .summary = "Group coroutines by field",
     },
     {
@@ -42,7 +177,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "list",
-        .signature = "(limit?: int, state?: string): Array<Json>",
+        .signature = "(limit?: int, state?: CoroState): Array<CoroInfo>",
         .summary = "List coroutines",
     },
     {
@@ -67,17 +202,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "stalled",
-        .signature = "(timeout_ms?: int): Array<Json>",
+        .signature = "(timeout_ms?: int): Array<CoroInfo>",
         .summary = "Detect stalled coroutines",
     },
     {
         .name = "stats",
-        .signature = "(): Json",
+        .signature = "(): CoroStats",
         .summary = "Get coroutine statistics",
     },
     {
         .name = "top",
-        .signature = "(n: int, metric?: string): Array<Json>",
+        .signature = "(n: int, metric?: CoroMetric): Array<CoroInfo>",
         .summary = "Top N coroutines by metric",
     },
     {
@@ -7133,20 +7268,47 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `Coro.deadlocks` | `(): Array<Json>` | Detect deadlocked coroutines |\n"
+            "| `Coro.CoroDeadlock` | `{ members: Array<CoroInfo>, reason: string }` | Typed description of a detected coroutine wait cycle |\n"
+            "| `Coro.CoroDeadlock.members` | `const Array<CoroInfo>` | Record field |\n"
+            "| `Coro.CoroDeadlock.reason` | `const string` | Record field |\n"
+            "| `Coro.CoroGroupKey` | `enum CoroGroupKey` | Stable key used to group coroutine diagnostic snapshots |\n"
+            "| `Coro.CoroGroupKey.Name` | `CoroGroupKey.Name` | Enum variant |\n"
+            "| `Coro.CoroGroupKey.State` | `CoroGroupKey.State` | Enum variant |\n"
+            "| `Coro.CoroInfo` | `{ id: int, name: string?, state: CoroState, reductions: int, source: string? }` | Typed diagnostic snapshot for one coroutine |\n"
+            "| `Coro.CoroInfo.id` | `const int` | Record field |\n"
+            "| `Coro.CoroInfo.name` | `const string?` | Record field |\n"
+            "| `Coro.CoroInfo.reductions` | `const int` | Record field |\n"
+            "| `Coro.CoroInfo.source` | `const string?` | Record field |\n"
+            "| `Coro.CoroInfo.state` | `const CoroState` | Record field |\n"
+            "| `Coro.CoroMetric` | `enum CoroMetric` | Metric used to rank coroutine diagnostic snapshots |\n"
+            "| `Coro.CoroMetric.Id` | `CoroMetric.Id` | Enum variant |\n"
+            "| `Coro.CoroMetric.Reductions` | `CoroMetric.Reductions` | Enum variant |\n"
+            "| `Coro.CoroState` | `enum CoroState` | Lifecycle state captured in a coroutine diagnostic snapshot |\n"
+            "| `Coro.CoroState.Blocked` | `CoroState.Blocked` | Enum variant |\n"
+            "| `Coro.CoroState.Done` | `CoroState.Done` | Enum variant |\n"
+            "| `Coro.CoroState.Ready` | `CoroState.Ready` | Enum variant |\n"
+            "| `Coro.CoroState.Running` | `CoroState.Running` | Enum variant |\n"
+            "| `Coro.CoroState.Unknown` | `CoroState.Unknown` | Enum variant |\n"
+            "| `Coro.CoroStats` | `{ active: int, blocked: int, ready: int, total: int, created: int }` | Typed aggregate counters for the coroutine scheduler |\n"
+            "| `Coro.CoroStats.active` | `const int` | Record field |\n"
+            "| `Coro.CoroStats.blocked` | `const int` | Record field |\n"
+            "| `Coro.CoroStats.created` | `const int` | Record field |\n"
+            "| `Coro.CoroStats.ready` | `const int` | Record field |\n"
+            "| `Coro.CoroStats.total` | `const int` | Record field |\n"
+            "| `Coro.deadlocks` | `(): Array<CoroDeadlock>` | Detect deadlocked coroutines |\n"
             "| `Coro.demonitor` | `(ch: Channel<string>): ()` | Cancel coroutine monitor |\n"
             "| `Coro.dump` | `(limit?: int): ()` | Dump coroutine state |\n"
             "| `Coro.getLocal` | `(key: string): Json` | Get coroutine-local storage |\n"
-            "| `Coro.groupBy` | `(field: string): Json` | Group coroutines by field |\n"
+            "| `Coro.groupBy` | `(field: CoroGroupKey): Map<string, int>` | Group coroutines by field |\n"
             "| `Coro.kill` | `(name: string, reason?: string): bool` | Kill named coroutine |\n"
-            "| `Coro.list` | `(limit?: int, state?: string): Array<Json>` | List coroutines |\n"
+            "| `Coro.list` | `(limit?: int, state?: CoroState): Array<CoroInfo>` | List coroutines |\n"
             "| `Coro.lockThread` | `(): ()` | Lock current thread |\n"
             "| `Coro.monitor` | `(name: string): Channel<string>` | Monitor named coroutine, returns Channel |\n"
             "| `Coro.self` | `(): string?` | Get current coroutine name |\n"
             "| `Coro.setLocal` | `(key: string, value: Json): ()` | Set coroutine-local storage |\n"
-            "| `Coro.stalled` | `(timeout_ms?: int): Array<Json>` | Detect stalled coroutines |\n"
-            "| `Coro.stats` | `(): Json` | Get coroutine statistics |\n"
-            "| `Coro.top` | `(n: int, metric?: string): Array<Json>` | Top N coroutines by metric |\n"
+            "| `Coro.stalled` | `(timeout_ms?: int): Array<CoroInfo>` | Detect stalled coroutines |\n"
+            "| `Coro.stats` | `(): CoroStats` | Get coroutine statistics |\n"
+            "| `Coro.top` | `(n: int, metric?: CoroMetric): Array<CoroInfo>` | Top N coroutines by metric |\n"
             "| `Coro.unlockThread` | `(): ()` | Unlock current thread |\n"
             "| `Coro.whereis` | `(name: string): bool` | Check if named coroutine exists |\n"
             "| `Coro.yield` | `(): ()` | Cooperative CPU yield (Gosched) |\n"
