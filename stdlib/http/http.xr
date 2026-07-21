@@ -1789,14 +1789,32 @@ fn _requestHeaders(options: HttpRequestOptions) -> Headers {
     return options.headers ?? Headers()
 }
 
-fn _requestWireHeaders(headers: Headers) -> Headers {
+fn _requestWireHeaders(headers: Headers, stripSensitive: bool = false) -> Headers {
     var out = Headers()
     var pairs = headers.entries()
     for (var i = 0; i < len(pairs); i++) {
+        if (stripSensitive && _sensitiveHeader(pairs[i].0)) { continue }
         out.add(pairs[i].0, pairs[i].1)
     }
     if (!out.contains("Accept-Encoding")) { out.add("Accept-Encoding", "identity") }
     return out
+}
+
+fn _http2HeadersValid(headers: Headers) -> bool {
+    var pairs = headers.entries()
+    if (len(pairs) > 28) { return false }
+    for (var i = 0; i < len(pairs); i++) {
+        var name = text.lower(pairs[i].0)
+        if (name == "connection" || name == "keep-alive" ||
+            name == "proxy-connection" || name == "transfer-encoding" ||
+            name == "upgrade" || name == "host") {
+            return false
+        }
+        if (name == "te" && text.lower(text.trim(pairs[i].1)) != "trailers") {
+            return false
+        }
+    }
+    return true
 }
 
 fn _headersLocation(headers: Headers) -> string? {
@@ -1959,7 +1977,7 @@ fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, bo
     var deadline = time.monotonic() + timeoutMs
     net.setDeadline(conn!, deadline)
 
-    var wireHeaders = _requestWireHeaders(headers)
+    var wireHeaders = _requestWireHeaders(headers, stripSensitive)
     wireHeaders.set("Content-Length", string(len(body)))
     var requestHead = requestText(
         method.token,
@@ -1995,14 +2013,54 @@ fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, bo
     )
 }
 
+fn _singleHttp2Request(url: _HttpRequestUrl, method: HttpMethod, headers: Headers,
+                       body: Array<byte>, timeoutMs: int,
+                       stripSensitive: bool) -> HttpResponse {
+    if (!__h2Supported()) { throw HttpError.UnsupportedVersion(HttpVersion.Http2) }
+    if (!url.isHttps) {
+        throw HttpError.ProtocolError("HTTP/2 requires HTTPS")
+    }
+
+    var wireHeaders = _requestWireHeaders(headers, stripSensitive)
+    wireHeaders.set("Content-Length", string(len(body)))
+    if (!_http2HeadersValid(wireHeaders)) {
+        throw HttpError.ProtocolError("invalid HTTP/2 headers")
+    }
+
+    var names: Array<string> = []
+    var values: Array<string> = []
+    var pairs = wireHeaders.entries()
+    for (var i = 0; i < len(pairs); i++) {
+        names.push(text.lower(pairs[i].0))
+        values.push(pairs[i].1)
+    }
+
+    var raw = __h2Request(
+        _httpRequestUrlText(url), method.token, names, values, body, timeoutMs
+    )
+    if (raw == null) { throw HttpError.ConnectionFailed(_httpRequestUrlText(url)) }
+    var responseHeaders = Headers()
+    if (len(raw!.1) != len(raw!.2)) {
+        throw HttpError.ProtocolError("invalid HTTP/2 response headers")
+    }
+    for (var i = 0; i < len(raw!.1); i++) {
+        responseHeaders.add(raw!.1[i], raw!.2[i])
+    }
+    return HttpResponse(
+        HttpVersion.Http2,
+        raw!.0,
+        _statusReason(raw!.0),
+        responseHeaders,
+        raw!.3
+    )
+}
+
 export fn request(options: HttpRequestOptions) -> HttpResponse {
     var current = _parseHttpRequestUrl(options.url)
     if (current == null) { throw HttpError.InvalidUrl(options.url) }
 
     var method = options.method ?? HttpMethod.get()
     var version = options.version ?? HttpVersion.Auto
-    if (version == HttpVersion.Http2) { throw HttpError.UnsupportedVersion(version) }
-
     var headers = _requestHeaders(options)
     var body = _requestBody(options)
     var timeoutMs = _requestTimeout(options)
@@ -2012,7 +2070,9 @@ export fn request(options: HttpRequestOptions) -> HttpResponse {
     var stripSensitive = false
 
     while (true) {
-        var response = _singleRequest(current!, method, headers, body, timeoutMs, stripSensitive)
+        var response = version == HttpVersion.Http2 ?
+            _singleHttp2Request(current!, method, headers, body, timeoutMs, stripSensitive) :
+            _singleRequest(current!, method, headers, body, timeoutMs, stripSensitive)
         if (!followRedirects || !isRedirectStatus(response.status) || redirects >= maxRedirects) {
             return response
         }

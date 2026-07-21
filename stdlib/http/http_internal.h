@@ -59,6 +59,8 @@ typedef enum {
 #define XR_H2_DEFAULT_INITIAL_WINDOW_SIZE 65535
 #define XR_H2_DEFAULT_MAX_FRAME_SIZE 16384
 #define XR_H2_DEFAULT_MAX_HEADER_LIST_SIZE UINT32_MAX
+#define XR_H2_MAX_RESPONSE_HEADERS 128
+#define XR_H2_MAX_RESPONSE_HEADER_BYTES 65536
 
 typedef enum {
     XR_H2_NO_ERROR = 0x0,
@@ -119,6 +121,11 @@ typedef struct XrH2Stream {
 
     char *data_buf;
     size_t data_len;
+    XrHttpHeader *response_headers;
+    int response_header_count;
+    int response_header_capacity;
+    size_t response_header_bytes;
+    bool response_header_error;
 
     struct XrH2Stream *next;
 } XrH2Stream;
@@ -187,6 +194,8 @@ typedef struct XrH2Request {
 
 typedef struct XrH2Response {
     int status;
+    XrHttpHeader *headers;
+    int header_count;
     char *body;
     size_t body_len;
 } XrH2Response;
@@ -194,7 +203,7 @@ typedef struct XrH2Response {
 XrH2Pool *http2_client_pool_create(void);
 void http2_client_pool_destroy(XrH2Pool *pool);
 XrH2Response *http2_client_request(XrVMRuntime *X, XrH2Pool *pool, const char *url,
-                                   const XrH2Request *req);
+                                   const XrH2Request *req, int timeout_ms);
 void http2_client_response_free(XrH2Response *resp);
 
 // Per-Isolate HTTP module context, stored in module's native_handle.

@@ -90,7 +90,8 @@ void http2_client_pool_destroy(XrH2Pool *pool) {
 }
 
 // Forward declarations
-static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int port);
+static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int port,
+                                           int timeout_ms);
 static uint64_t get_time_ms(void);
 static unsigned int hash_host(const char *host, int port);
 static void h2_pool_entry_free(XrH2PoolEntry *entry);
@@ -98,7 +99,7 @@ static void h2_pool_discard_entry(XrH2Pool *pool, XrH2PoolEntry *target);
 
 // Acquire connection from per-isolate pool
 static XrH2PoolEntry *http2_client_pool_acquire(XrVMRuntime *X, XrH2Pool *pool, const char *host,
-                                                int port) {
+                                                int port, int timeout_ms) {
     if (!pool || !host)
         return NULL;
 
@@ -114,6 +115,7 @@ static XrH2PoolEntry *http2_client_pool_acquire(XrVMRuntime *X, XrH2Pool *pool, 
             if (entry->conn && (now - entry->last_used) <= XR_H2_CONN_IDLE_TIMEOUT) {
                 entry->in_use = true;
                 entry->last_used = now;
+                xr_io_set_timeout(entry->io, timeout_ms);
                 xr_mutex_unlock(&pool->lock);
                 return entry;
             }
@@ -143,7 +145,7 @@ static XrH2PoolEntry *http2_client_pool_acquire(XrVMRuntime *X, XrH2Pool *pool, 
     xr_mutex_unlock(&pool->lock);
 
     // Create new connection
-    entry = create_h2_connection(X, host, port);
+    entry = create_h2_connection(X, host, port, timeout_ms);
     if (!entry)
         return NULL;
 
@@ -224,7 +226,8 @@ static void h2_pool_discard_entry(XrH2Pool *pool, XrH2PoolEntry *target) {
 }
 
 // Create new HTTPS HTTP/2 connection
-static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int port) {
+static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int port,
+                                           int timeout_ms) {
     XrH2PoolEntry *entry = (XrH2PoolEntry *) xr_calloc(1, sizeof(XrH2PoolEntry));
     if (!entry)
         return NULL;
@@ -244,7 +247,7 @@ static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int
     // Set ALPN
     xr_tls_context_set_alpn(entry->tls_ctx, ALPN_PROTOS, ALPN_PROTOS_LEN);
 
-    entry->io = xr_io_connect_tls_with_ctx(X, entry->tls_ctx, host, port, 30000);
+    entry->io = xr_io_connect_tls_with_ctx(X, entry->tls_ctx, host, port, timeout_ms);
     if (!entry->io) {
         xr_tls_context_free(entry->tls_ctx);
         xr_free(entry->host);
@@ -293,7 +296,7 @@ static XrH2PoolEntry *create_h2_connection(XrVMRuntime *X, const char *host, int
 /* ========== HTTP/2 Request ========== */
 
 XrH2Response *http2_client_request(XrVMRuntime *X, XrH2Pool *pool, const char *url,
-                                   const XrH2Request *req) {
+                                   const XrH2Request *req, int timeout_ms) {
     if (!pool || !url)
         return NULL;
 
@@ -310,7 +313,7 @@ XrH2Response *http2_client_request(XrVMRuntime *X, XrH2Pool *pool, const char *u
     }
 
     // Get connection
-    XrH2PoolEntry *entry = http2_client_pool_acquire(X, pool, parsed.host, parsed.port);
+    XrH2PoolEntry *entry = http2_client_pool_acquire(X, pool, parsed.host, parsed.port, timeout_ms);
     if (!entry) {
         http_url_free(&parsed);
         return NULL;
@@ -400,6 +403,12 @@ XrH2Response *http2_client_request(XrVMRuntime *X, XrH2Pool *pool, const char *u
         return NULL;
     }
     resp->status = stream->status > 0 ? stream->status : 200;
+    resp->headers = stream->response_headers;
+    resp->header_count = stream->response_header_count;
+    stream->response_headers = NULL;
+    stream->response_header_count = 0;
+    stream->response_header_capacity = 0;
+    stream->response_header_bytes = 0;
 
     http2_client_pool_release(pool, entry);
     http_url_free(&parsed);
@@ -411,6 +420,11 @@ void http2_client_response_free(XrH2Response *resp) {
     if (!resp)
         return;
 
+    for (int i = 0; i < resp->header_count; i++) {
+        xr_free((void *) resp->headers[i].name);
+        xr_free((void *) resp->headers[i].value);
+    }
+    xr_free(resp->headers);
     xr_free(resp->body);
     xr_free(resp);
 }

@@ -23,7 +23,8 @@
 
 /* ========== External Declarations ========== */
 
-extern XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc);
+extern XrValue h2_request_typed(XrVMRuntime *X, XrValue *args, int argc);
+extern XrValue h2_supported(XrVMRuntime *X, XrValue *args, int argc);
 
 /* ========== HTTP Context Management ========== */
 

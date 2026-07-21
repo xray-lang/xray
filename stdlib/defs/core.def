@@ -3485,15 +3485,30 @@ module net {
 }
 
 module http {
-  fn h2Request {
-    signature: "(options: Json): Json"
-    doc: "Generic HTTP/2 request"
-    vm: "h2_request"
-    argc: 1
+  fn __h2Supported {
+    signature: "(): bool"
+    doc: "Whether this backend provides the internal HTTP/2 data plane"
+    vm: "h2_supported"
+    argc: 0
     arg_spec: ""
-    aot_direct: false
+    aot: "xrt_http_h2_supported"
+    aot_direct: true
     link_object: false
     layer: "runtime"
+    visibility: "internal"
+  }
+
+  fn __h2Request {
+    signature: "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?"
+    doc: "Internal typed HTTP/2 data-plane request"
+    vm: "h2_request_typed"
+    argc: 6
+    arg_spec: "vvvvvv"
+    aot: "xrt_http_h2_request_unavailable"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    visibility: "internal"
   }
 
 }
