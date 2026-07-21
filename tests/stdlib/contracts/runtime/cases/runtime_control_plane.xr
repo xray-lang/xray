@@ -1,0 +1,19 @@
+// VM-only control-plane contract: standalone AOT has no host heap introspection.
+import runtime
+
+// The embedding host may enter with a nested disable count. Saturating enable
+// calls establish a deterministic baseline before observing the transition.
+var reset = 0
+while (reset < 255) {
+    runtime.enableCycleCollection()
+    reset = reset + 1
+}
+print(runtime.isCycleCollectionEnabled())
+runtime.disableCycleCollection()
+print(runtime.isCycleCollectionEnabled())
+runtime.enableCycleCollection()
+print(runtime.isCycleCollectionEnabled())
+
+print(runtime.liveBytes() >= 0)
+print(runtime.liveObjects() >= 0)
+print(runtime.collectCycles() >= 0)

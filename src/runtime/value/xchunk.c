@@ -277,6 +277,27 @@ static void xr_vm_entry_plan_scan_proto(const XrProto *proto, bool is_root, XrEn
         XrInstruction instruction = DYNARRAY_GET(&proto->code, i, XrInstruction);
         OpCode op = GET_OPCODE(instruction);
         switch (op) {
+            case OP_IMPORT: {
+                uint32_t constant_index = GETARG_Bx(instruction);
+                if (constant_index >= (uint32_t) VALUEARRAY_COUNT(&proto->constants))
+                    break;
+                XrValue path_value = VALUEARRAY_GET(&proto->constants, constant_index);
+                if (!XR_IS_STRING(path_value))
+                    break;
+                const char *module = XR_STRING_CHARS(XR_TO_STRING(path_value));
+                if (strcmp(module, "runtime") == 0) {
+                    plan->required_capability_bits |= XR_CAP_COROUTINE;
+                    plan->reachable_effect_bits |= XR_EFFECT_OBSERVES_TASK_ID;
+                } else if (strcmp(module, "test_yield") == 0) {
+                    /* The internal module contains yieldable native calls.  Its
+                     * bytecode import has no per-member effect metadata, so
+                     * retain a resumable VM root conservatively. */
+                    plan->required_capability_bits |= XR_CAP_COROUTINE;
+                    plan->reachable_effect_bits |=
+                        XR_EFFECT_OBSERVES_TASK_ID | XR_EFFECT_MAY_SUSPEND;
+                }
+                break;
+            }
             case OP_GO:
                 plan->required_capability_bits |= XR_CAP_COROUTINE | XR_CAP_TASK;
                 plan->reachable_effect_bits |= XR_EFFECT_MAY_SPAWN | XR_EFFECT_MAY_ALLOC;

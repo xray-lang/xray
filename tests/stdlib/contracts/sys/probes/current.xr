@@ -1,0 +1,39 @@
+import sys
+
+shared mutex = sys.OsMutex()
+assert(mutex.tryLock())
+mutex.unlock()
+mutex.lock()
+mutex.unlock()
+
+shared rwlock = sys.OsRwLock()
+rwlock.rdlock()
+rwlock.rdunlock()
+rwlock.wrlock()
+rwlock.wrunlock()
+
+shared condvarMutex = sys.OsMutex()
+shared condvar = sys.OsCondvar()
+condvarMutex.lock()
+assert(!condvar.waitFor(condvarMutex, 1000000))
+condvarMutex.unlock()
+condvar.signal()
+condvar.broadcast()
+
+shared barrier = sys.OsBarrier(1)
+assert(barrier.wait())
+assert(barrier.wait())
+
+var counter = 0
+shared once = sys.OsOnce()
+once.call(() -> { counter = counter + 1 })
+once.call(() -> { counter = counter + 10 })
+assert(counter == 1)
+print("{\"case\":\"lock-primitives\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"once-count\":1}}")
+
+assert(typeName(mutex) == "OsMutex")
+assert(typeName(rwlock) == "OsRwLock")
+assert(typeName(condvar) == "OsCondvar")
+assert(typeName(barrier) == "OsBarrier")
+assert(typeName(once) == "OsOnce")
+print("{\"case\":\"os-lock-naming\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")

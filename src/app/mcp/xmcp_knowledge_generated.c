@@ -3496,6 +3496,56 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     {
+        .name = "RuntimeInfo",
+        .signature = "{ liveBytes: int, liveKB: float, liveObjects: int, cycleCollectionEnabled: bool, cycleCollections: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }",
+        .summary = "Typed snapshot of the current coroutine heap and cycle collector",
+    },
+    {
+        .name = "RuntimeInfo.blocks",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "RuntimeInfo.cycleCollectionEnabled",
+        .signature = "const bool",
+        .summary = "Record field",
+    },
+    {
+        .name = "RuntimeInfo.cycleCollections",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "RuntimeInfo.finalizerCount",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "RuntimeInfo.freeBlocks",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "RuntimeInfo.fullBlocks",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "RuntimeInfo.liveBytes",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "RuntimeInfo.liveKB",
+        .signature = "const float",
+        .summary = "Record field",
+    },
+    {
+        .name = "RuntimeInfo.liveObjects",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
         .name = "collectCycles",
         .signature = "(): int",
         .summary = "Run cycle collection + whole-block reclaim, return cycle collection count",
@@ -3512,8 +3562,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     },
     {
         .name = "info",
-        .signature = "(): Map",
-        .summary = "Get memory-model runtime info as Map",
+        .signature = "(): RuntimeInfo",
+        .summary = "Get a typed snapshot of the current coroutine heap and cycle collector",
     },
     {
         .name = "isCycleCollectionEnabled",
@@ -8367,10 +8417,20 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `runtime.RuntimeInfo` | `{ liveBytes: int, liveKB: float, liveObjects: int, cycleCollectionEnabled: bool, cycleCollections: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }` | Typed snapshot of the current coroutine heap and cycle collector |\n"
+            "| `runtime.RuntimeInfo.blocks` | `const int` | Record field |\n"
+            "| `runtime.RuntimeInfo.cycleCollectionEnabled` | `const bool` | Record field |\n"
+            "| `runtime.RuntimeInfo.cycleCollections` | `const int` | Record field |\n"
+            "| `runtime.RuntimeInfo.finalizerCount` | `const int` | Record field |\n"
+            "| `runtime.RuntimeInfo.freeBlocks` | `const int` | Record field |\n"
+            "| `runtime.RuntimeInfo.fullBlocks` | `const int` | Record field |\n"
+            "| `runtime.RuntimeInfo.liveBytes` | `const int` | Record field |\n"
+            "| `runtime.RuntimeInfo.liveKB` | `const float` | Record field |\n"
+            "| `runtime.RuntimeInfo.liveObjects` | `const int` | Record field |\n"
             "| `runtime.collectCycles` | `(): int` | Run cycle collection + whole-block reclaim, return cycle collection count |\n"
             "| `runtime.disableCycleCollection` | `(): ()` | Pause the automatic cycle collector |\n"
             "| `runtime.enableCycleCollection` | `(): ()` | Resume the automatic cycle collector |\n"
-            "| `runtime.info` | `(): Map` | Get memory-model runtime info as Map |\n"
+            "| `runtime.info` | `(): RuntimeInfo` | Get a typed snapshot of the current coroutine heap and cycle collector |\n"
             "| `runtime.isCycleCollectionEnabled` | `(): bool` | Check if automatic cycle collection is enabled |\n"
             "| `runtime.liveBytes` | `(): int` | Get live memory usage in bytes |\n"
             "| `runtime.liveObjects` | `(): int` | Get live object count |\n"

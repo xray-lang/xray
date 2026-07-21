@@ -1,0 +1,15 @@
+import os
+
+assert(len(os.platform) > 0)
+assert(len(os.arch) > 0)
+assert(os.cpuCount() >= 1)
+assert(len(os.hostname()) > 0)
+assert(os.getenv("XRAY_STDLIB_LEGACY_ORACLE_MISSING_221") == null)
+print("{\"case\":\"query-parity\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
+
+var result = os.exec("printf xray-stdlib-oracle")
+assert(result != null)
+assert(result!.stdout == "xray-stdlib-oracle")
+assert(result!.stderr == "")
+assert(result!.exitCode == 0)
+print("{\"case\":\"exec-result\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"process\":\"exit-0\"}}")

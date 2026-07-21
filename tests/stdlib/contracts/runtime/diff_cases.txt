@@ -1,0 +1,1 @@
+tests/stdlib/contracts/runtime/cases/runtime_control_plane.xr

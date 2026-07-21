@@ -510,6 +510,10 @@ static bool producer_stdlib_module_known(const char *name) {
     return xr_stdlib_metadata_link_dependency_module_known(name);
 }
 
+static bool producer_vm_control_module_known(const char *name) {
+    return name && (strcmp(name, "runtime") == 0 || strcmp(name, "test_yield") == 0);
+}
+
 static bool producer_stdlib_member_is_constant(const char *module, const char *member) {
     if (!module || !member)
         return false;
@@ -8776,12 +8780,50 @@ static bool body_builtin_method_call_may_suspend(XgBodyCollect *bc, const AstNod
 static bool body_stdlib_call_may_suspend(XgBodyCollect *bc, const AstNode *call) {
     const AstNode *callee;
     const char *module;
+    const char *name;
     if (!bc || !call || call->type != AST_CALL_EXPR || !(callee = call->as.call_expr.callee) ||
-        callee->type != AST_MEMBER_ACCESS || !callee->as.member_access.name)
+        (callee->type != AST_MEMBER_ACCESS && callee->type != AST_VARIABLE))
         return false;
-    module = body_stdlib_module_for_expr(bc, callee->as.member_access.object);
-    return module && strcmp(module, "time") == 0 &&
-           strcmp(callee->as.member_access.name, "sleep") == 0;
+    if (callee->type == AST_MEMBER_ACCESS) {
+        name = callee->as.member_access.name;
+        module = body_stdlib_module_for_expr(bc, callee->as.member_access.object);
+    } else {
+        const XgStdlibImportRow *row =
+            producer_lookup_stdlib_import(bc->producer, bc->module_id, callee->as.variable.name);
+        name = row ? row->member_name : NULL;
+        module = row ? row->module_name : NULL;
+    }
+    if (!name)
+        return false;
+    if (!module)
+        return false;
+    if (strcmp(module, "time") == 0)
+        return strcmp(name, "sleep") == 0;
+    if (strcmp(module, "test_yield") != 0)
+        return false;
+    return strcmp(name, "simple") == 0 || strcmp(name, "add") == 0 ||
+           strcmp(name, "multi_yield") == 0 || strcmp(name, "chain") == 0 ||
+           strcmp(name, "error_test") == 0 || strcmp(name, "cancel_test") == 0 ||
+           strcmp(name, "counter_inc") == 0 || strcmp(name, "nested") == 0 ||
+           strcmp(name, "long_task") == 0;
+}
+
+static bool body_stdlib_call_observes_coro_heap(XgBodyCollect *bc, const AstNode *call) {
+    const AstNode *callee;
+    const char *module;
+    if (!bc || !call || call->type != AST_CALL_EXPR || !(callee = call->as.call_expr.callee) ||
+        (callee->type != AST_MEMBER_ACCESS && callee->type != AST_VARIABLE))
+        return false;
+    if (callee->type == AST_MEMBER_ACCESS) {
+        if (!callee->as.member_access.name)
+            return false;
+        module = body_stdlib_module_for_expr(bc, callee->as.member_access.object);
+    } else {
+        const XgStdlibImportRow *row =
+            producer_lookup_stdlib_import(bc->producer, bc->module_id, callee->as.variable.name);
+        module = row && row->member_name ? row->module_name : NULL;
+    }
+    return module && (strcmp(module, "runtime") == 0 || strcmp(module, "test_yield") == 0);
 }
 
 static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
@@ -8822,6 +8864,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 bc->effect_bits |= XG_BODY_MAY_SPAWN | XG_BODY_MAY_ALLOC;
                 bc->escape_bits |= XG_BODY_ESCAPE_CORO;
                 bc->capability_bits |= XG_CAP_COROUTINE | XG_CAP_TASK | XG_CAP_OBJECTS;
+            }
+            if (body_stdlib_call_observes_coro_heap(bc, node)) {
+                bc->effect_bits |= XG_BODY_OBSERVES_TASK_ID;
+                bc->capability_bits |= XG_CAP_COROUTINE;
             }
             if (body_builtin_method_call_may_suspend(bc, node) ||
                 body_stdlib_call_may_suspend(bc, node)) {
@@ -10101,22 +10147,25 @@ static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *no
 
 static bool add_import_link_dependencies(XgProducer *p, XgModuleId module_id, const AstNode *node) {
     const ImportStmtNode *import;
+    bool link_known;
     if (!p || !node || node->type != AST_IMPORT_STMT)
         return true;
     import = &node->as.import_stmt;
-    if (!producer_stdlib_module_known(import->module_name))
+    link_known = producer_stdlib_module_known(import->module_name);
+    if (!link_known && !producer_vm_control_module_known(import->module_name))
         return true;
-    if (!producer_add_link_dependency(p, module_id, XG_NO_ID, (uint32_t) node->line,
-                                      XG_LINK_DEP_STDLIB_MODULE, import->module_name))
+    if (link_known && !producer_add_link_dependency(p, module_id, XG_NO_ID, (uint32_t) node->line,
+                                                    XG_LINK_DEP_STDLIB_MODULE, import->module_name))
         return false;
     if (import->member_count == 0) {
-        return producer_register_stdlib_import(p, module_id, import->alias, import->module_name,
-                                               NULL);
+        const char *local_name = import->alias ? import->alias : import->module_name;
+        return producer_register_stdlib_import(p, module_id, local_name, import->module_name, NULL);
     }
     for (int i = 0; i < import->member_count; i++) {
         const ImportMember *member = &import->members[i];
         const char *local_name = member->alias ? member->alias : member->name;
-        if (!producer_add_stdlib_symbol_dependency(p, module_id, (uint32_t) node->line,
+        if (link_known &&
+            !producer_add_stdlib_symbol_dependency(p, module_id, (uint32_t) node->line,
                                                    import->module_name, member->name))
             return false;
         if (!producer_register_stdlib_import(p, module_id, local_name, import->module_name,

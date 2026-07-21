@@ -2542,6 +2542,12 @@ module io {
 }
 
 module runtime {
+  record RuntimeInfo {
+    fields: "const liveBytes: int, const liveKB: float, const liveObjects: int, const cycleCollectionEnabled: bool, const cycleCollections: int, const finalizerCount: int, const blocks: int, const freeBlocks: int, const fullBlocks: int"
+    sealed: true
+    doc: "Typed snapshot of the current coroutine heap and cycle collector"
+  }
+
   fn collectCycles {
     signature: "(): int"
     doc: "Run cycle collection + whole-block reclaim, return cycle collection count"
@@ -2609,8 +2615,8 @@ module runtime {
   }
 
   fn info {
-    signature: "(): Map"
-    doc: "Get memory-model runtime info as Map"
+    signature: "(): RuntimeInfo"
+    doc: "Get a typed snapshot of the current coroutine heap and cycle collector"
     vm: "runtime_info"
     argc: 0
     arg_spec: ""

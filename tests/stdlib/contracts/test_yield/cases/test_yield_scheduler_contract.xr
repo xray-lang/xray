@@ -1,0 +1,12 @@
+// VM-only internal scheduler contract. Requires XR_BUILD_TEST_MODULES=ON.
+import test_yield
+
+print(test_yield.sync())
+print(test_yield.simple())
+print(test_yield.add(19, 23))
+
+test_yield.counter_reset()
+print(test_yield.counter_get())
+print(test_yield.counter_inc())
+print(test_yield.counter_inc())
+print(test_yield.counter_get())

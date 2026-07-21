@@ -89,6 +89,6 @@ log.info("server started", "port", 8080, "host", "localhost")
 // Memory module
 import runtime
 runtime.collectCycles()
-let stats = runtime.info()
+let stats: runtime.RuntimeInfo = runtime.info()
 print(stats.liveBytes)
 print(stats.liveObjects)

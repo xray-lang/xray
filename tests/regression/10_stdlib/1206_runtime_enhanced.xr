@@ -55,14 +55,14 @@ fn test_mem_disable_enable() {
 @test
 fn test_mem_disable_prevents_gc() {
     runtime.disableCycleCollection()
-    var before_count = runtime.info()["cycleCollections"]
+    var before_count = runtime.info().cycleCollections
     // Allocate a bunch of objects
     var arr: Array<Json> = []
     for (var i = 0; i < 500; i++) {
         arr.push({"idx": i, "data": "item_" + string(i)})
     }
     // Automatic cycle collection must not have run while disabled
-    var after_count = runtime.info()["cycleCollections"]
+    var after_count = runtime.info().cycleCollections
     assert_eq(before_count, after_count)
     assert(len(arr) == 500)
     runtime.enableCycleCollection()
@@ -73,17 +73,17 @@ fn test_mem_disable_prevents_gc() {
 fn test_mem_info_keys() {
     var info = runtime.info()
     // Live memory + object stats
-    assert(info["liveBytes"] >= 0)
-    assert(info["liveKB"] >= 0.0)
-    assert(info["liveObjects"] >= 0)
+    assert(info.liveBytes >= 0)
+    assert(info.liveKB >= 0.0)
+    assert(info.liveObjects >= 0)
     // Automatic cycle collector state
-    assert(info["cycleCollections"] >= 0)
-    assert_eq(typeName(info["cycleCollectionEnabled"]), "bool")
-    assert(info["finalizerCount"] >= 0)
+    assert(info.cycleCollections >= 0)
+    assert_eq(typeName(info.cycleCollectionEnabled), "bool")
+    assert(info.finalizerCount >= 0)
     // Region block stats
-    assert(info["blocks"] >= 0)
-    assert(info["freeBlocks"] >= 0)
-    assert(info["fullBlocks"] >= 0)
+    assert(info.blocks >= 0)
+    assert(info.freeBlocks >= 0)
+    assert(info.fullBlocks >= 0)
 }
 
 // @test runtime.collectCycles returns a monotonic cycle count

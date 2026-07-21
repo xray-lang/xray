@@ -18,7 +18,7 @@
  *   - runtime.isCycleCollectionEnabled() - automatic collector state
  *   - runtime.liveBytes()                - live memory bytes
  *   - runtime.liveObjects()              - live object count
- *   - runtime.info()                     - introspection Map
+ *   - runtime.info()                     - typed RuntimeInfo snapshot
  *
  *   All functions are VM-only introspection (aot_direct: false, no aot
  *   helper) — same as before the move: the AOT cgen rejects them with an
@@ -29,9 +29,11 @@
 
 #include "runtime.h"
 #include "../common.h"
+#include "../stdlib_cache.h"
 #include "../../src/runtime/xisolate_internal.h"
+#include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/runtime/mem/xcoro_heap.h"
-#include "../../src/runtime/object/xmap.h"
+#include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/xexec_frame.h"
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/runtime/xisolate_api.h"
@@ -128,43 +130,39 @@ static XrValue runtime_live_objects(XrVMRuntime *isolate, XrValue *args, int arg
 
 /* ========== runtime.info() ========== */
 
-// Map keys in runtime.info() use camelCase for every field.
-#define MAP_SET(map, key_str, val) xr_map_set((map), xrs_string_value_c(isolate, (key_str)), (val))
-
-// Return memory-model-native info as a Map
+// Return a sealed, typed snapshot. The record class is generated from
+// stdlib/defs/core.def, so the runtime and analyzer share one field schema.
 static XrValue runtime_info(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
 
     XrCoroHeap *heap = get_heap(isolate);
-    XrMap *map = xr_map_new(xr_current_coro(isolate));
+    XrClass *cls = xr_stdlib_record_class_get(isolate, "runtime", "RuntimeInfo");
+    XR_CHECK(cls != NULL, "runtime.info: RuntimeInfo class unavailable");
+    XrJson *record = xr_json_new_with_class(xr_current_coro(isolate), cls);
+    XR_CHECK(record != NULL, "runtime.info: RuntimeInfo allocation failed");
 
-    if (!heap) {
-        MAP_SET(map, "error", xrs_string_value_c(isolate, "no memory heap"));
-        return xr_value_from_map(map);
-    }
+    XrRegionStats stats = {0};
+    if (heap)
+        xr_region_get_stats(&heap->region, &stats);
 
-    // Live memory + object stats
-    MAP_SET(map, "liveBytes", xr_int(heap->totalbytes));
-    MAP_SET(map, "liveKB", xr_float((double) heap->totalbytes / 1024.0));
-    MAP_SET(map, "liveObjects", xr_int((int64_t) heap->object_count));
+    xr_json_set_by_key(isolate, record, "liveBytes", xr_int(heap ? heap->totalbytes : 0));
+    xr_json_set_by_key(isolate, record, "liveKB",
+                       xr_float(heap ? (double) heap->totalbytes / 1024.0 : 0.0));
+    xr_json_set_by_key(isolate, record, "liveObjects",
+                       xr_int(heap ? (int64_t) heap->object_count : 0));
+    xr_json_set_by_key(isolate, record, "cycleCollectionEnabled",
+                       xr_bool(heap && heap->cycle_collection_disabled == 0));
+    xr_json_set_by_key(isolate, record, "cycleCollections",
+                       xr_int(heap ? heap->cycle_collect_count : 0));
+    xr_json_set_by_key(isolate, record, "finalizerCount",
+                       xr_int(heap ? (int64_t) heap->finalizer_count : 0));
+    xr_json_set_by_key(isolate, record, "blocks", xr_int((int64_t) stats.total_blocks));
+    xr_json_set_by_key(isolate, record, "freeBlocks", xr_int((int64_t) stats.free_blocks));
+    xr_json_set_by_key(isolate, record, "fullBlocks", xr_int((int64_t) stats.full_blocks));
 
-    // Automatic cycle collector state
-    MAP_SET(map, "cycleCollectionEnabled", xr_bool(heap->cycle_collection_disabled == 0));
-    MAP_SET(map, "cycleCollections", xr_int(heap->cycle_collect_count));
-    MAP_SET(map, "finalizerCount", xr_int((int64_t) heap->finalizer_count));
-
-    // Region block stats
-    XrRegionStats istats;
-    xr_region_get_stats(&heap->region, &istats);
-    MAP_SET(map, "blocks", xr_int((int64_t) istats.total_blocks));
-    MAP_SET(map, "freeBlocks", xr_int((int64_t) istats.free_blocks));
-    MAP_SET(map, "fullBlocks", xr_int((int64_t) istats.full_blocks));
-
-    return xr_value_from_map(map);
+    return xr_json_value(record);
 }
-
-#undef MAP_SET
 
 #define XR_STDLIB_VM_BIND_MODULE_RUNTIME 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
