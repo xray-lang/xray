@@ -72,10 +72,56 @@ def validate_contract(root: Path, module: str) -> tuple[list[str], dict[str, Any
         )
     if legacy_oracle == "executable":
         legacy_manifest = contract.get("legacy_cases_manifest")
-        if not legacy_manifest or not (root / str(legacy_manifest)).is_file():
+        legacy_manifest_path = root / str(legacy_manifest or "")
+        if not legacy_manifest or not legacy_manifest_path.is_file():
             errors.append(
                 f"{path}: executable legacy oracle requires legacy_cases_manifest"
             )
+        else:
+            legacy_rows, legacy_errors = read_jsonl(legacy_manifest_path)
+            errors.extend(legacy_errors)
+            behavior_classes = {
+                str(row.get("id", "")): str(row.get("classification", ""))
+                for row in contract.get("legacy_behavior", ())
+            }
+            legacy_cases: set[str] = set()
+            for index, row in enumerate(legacy_rows, 1):
+                case = str(row.get("case", ""))
+                if case in legacy_cases:
+                    errors.append(f"{legacy_manifest_path}: duplicate legacy case {case!r}")
+                legacy_cases.add(case)
+                if case not in behavior_classes:
+                    errors.append(f"{legacy_manifest_path}: unknown legacy behavior {case!r}")
+                if row.get("classification") != behavior_classes.get(case):
+                    errors.append(
+                        f"{legacy_manifest_path}: row {index} classification does not match contract"
+                    )
+                if row.get("legacy_commit") != legacy:
+                    errors.append(
+                        f"{legacy_manifest_path}: row {index} legacy_commit does not match contract"
+                    )
+                missing = [
+                    field
+                    for field in ("case", "outcome", "value", "error", "effects")
+                    if field not in row
+                ]
+                if missing or row.get("outcome") not in {"value", "error"} or not isinstance(
+                    row.get("effects"), dict
+                ):
+                    errors.append(f"{legacy_manifest_path}: row {index} is not canonical observation")
+            required = {
+                case for case, classification in behavior_classes.items() if classification == "required"
+            }
+            missing_required = sorted(required - legacy_cases)
+            if missing_required:
+                errors.append(
+                    f"{legacy_manifest_path}: missing required legacy behaviors: "
+                    f"{', '.join(missing_required)}"
+                )
+        for probe_name in ("legacy.xr", "current.xr"):
+            probe = path.parent / "probes" / probe_name
+            if not probe.is_file():
+                errors.append(f"{path}: executable legacy oracle requires {probe}")
     equivalence = set(contract.get("equivalence", ()))
     if equivalence != REQUIRED_EQUIVALENCE:
         errors.append(
@@ -207,6 +253,22 @@ def run_vm_cases(root: Path, contract: dict[str, Any], xray: Path) -> int:
     return 0
 
 
+def run_legacy_oracle(root: Path, module: str, xray: Path) -> int:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(root / "scripts/stdlib_legacy_oracle.py"),
+            "verify",
+            module,
+            "--root",
+            str(root),
+            "--xray",
+            str(xray),
+        ],
+        cwd=root,
+    ).returncode
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("check", "verify"))
@@ -244,6 +306,8 @@ def main() -> int:
         for module in modules:
             mode = contracts[module]["legacy_oracle"]
             print(f"== stdlib backend convergence: {module} (legacy_oracle={mode}) ==")
+            if mode == "executable" and run_legacy_oracle(root, module, xray):
+                return 1
             if run_diff(root, contracts[module], xray):
                 return 1
     executable = sum(1 for contract in contracts.values() if contract["legacy_oracle"] == "executable")
