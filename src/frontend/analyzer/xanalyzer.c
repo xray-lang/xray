@@ -497,6 +497,12 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
     xr_free(analyzer);
 }
 
+size_t xa_analyzer_type_pool_bytes(const XaAnalyzer *analyzer) {
+    if (!analyzer || !analyzer->type_pool)
+        return 0;
+    return xr_arena_get_allocated_size(&analyzer->type_pool->arena);
+}
+
 // Configuration
 void xa_analyzer_set_strict_null(XaAnalyzer *analyzer, bool enable) {
     if (analyzer)

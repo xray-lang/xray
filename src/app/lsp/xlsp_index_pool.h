@@ -68,7 +68,10 @@ typedef struct XrLspIndexResult {
 // Index Worker Pool
 // ============================================================================
 
-#define XLSP_INDEX_POOL_SIZE 4  // Number of worker threads
+// Upper bound on indexing worker threads. The live worker_count is chosen at
+// pool creation from the host CPU count (see xlsp_index_pool_new), so large
+// machines parallelise the parse pass while the array size stays fixed.
+#define XLSP_INDEX_POOL_MAX_WORKERS 16
 
 // Work item for the pool
 typedef struct XrLspIndexWork {
@@ -88,7 +91,7 @@ typedef struct XrLspIndexWorker {
 // Index pool state
 typedef struct XrLspIndexPool {
     // Workers
-    XrLspIndexWorker workers[XLSP_INDEX_POOL_SIZE];
+    XrLspIndexWorker workers[XLSP_INDEX_POOL_MAX_WORKERS];
     int worker_count;
 
     // Work queue (MPMC with mutex for simplicity)
@@ -160,5 +163,14 @@ XR_FUNC void xlsp_index_result_free_list(XrLspIndexResult *list);
 
 // Free a single symbol
 XR_FUNC void xlsp_index_symbol_free(XrLspIndexSymbol *sym);
+
+// Free a whole XrLspIndexSymbol linked list.
+XR_FUNC void xlsp_index_symbol_free_list(XrLspIndexSymbol *list);
+
+// Extract shallow symbols from an AST into a fresh linked list. Shared by the
+// worker parse path and the LSP live-index refresh for open documents. The
+// caller owns the returned list (free with xlsp_index_symbol_free_list).
+struct AstNode;
+XR_FUNC XrLspIndexSymbol *xlsp_index_symbols_from_ast(struct AstNode *ast);
 
 #endif  // XLSP_INDEX_POOL_H

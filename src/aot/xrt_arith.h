@@ -86,6 +86,20 @@ static inline int64_t xrt_int_mod(int64_t a, int64_t b) {
     return xr_i64_mod_wrap(a, b);
 }
 
+/* Unsigned division / modulo for statically-unsigned operands (mirrors VM
+ * OP_DIV_U / OP_MOD_U and xr_i64_div_u_wrap). uint64_t covers every unsigned
+ * width: narrower payloads are zero-extended in the i64 value model. */
+static inline int64_t xrt_uint_div(int64_t a, int64_t b) {
+    if (XR_UNLIKELY(b == 0))
+        xrt_throw_exc(xr_box_str("E0420: division by zero"));
+    return xr_i64_div_u_wrap(a, b);
+}
+static inline int64_t xrt_uint_mod(int64_t a, int64_t b) {
+    if (XR_UNLIKELY(b == 0))
+        xrt_throw_exc(xr_box_str("E0421: modulo by zero"));
+    return xr_i64_mod_u_wrap(a, b);
+}
+
 /* Shifts: the language defines the count as taken mod 64 (spec: "shift count
  * is taken modulo 64 — unlike C, xray shifts are always defined"). Matches
  * xi_opt constant folding and AOT hardware behavior (x64 SHL/SAR with CL,

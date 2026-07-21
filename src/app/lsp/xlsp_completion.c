@@ -15,14 +15,17 @@
 #include "../../base/xjson.h"
 #include "xlsp_utils.h"
 #include "../../base/xmalloc.h"
+#include "../../base/xhashmap.h"
 #include "xlsp_stdlib.h"
 #include "xlsp_imports.h"
 #include "xlsp_builtins.h"
 #include "xlsp_workspace.h"
+#include "xlsp_symbol_index.h"
 #include "../../frontend/analyzer/xanalyzer.h"
 #include "../../frontend/analyzer/xanalyzer_builtins.h"
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../frontend/parser/xast_types.h"
+#include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -323,8 +326,67 @@ XlspBuiltinType xlsp_infer_variable_type(XrLspServer *server, XrLspDocument *doc
     return infer_type_from_source(doc->content, var_name);
 }
 
+// Map a shallow-index symbol kind to an LSP CompletionItemKind.
+static int shallow_symbol_completion_kind(XrLspSymbolKind kind) {
+    switch (kind) {
+        case XR_SYMBOL_FUNCTION:
+            return XR_COMPLETION_FUNCTION;
+        case XR_SYMBOL_METHOD:
+            return XR_COMPLETION_METHOD;
+        case XR_SYMBOL_CLASS:
+            return XR_COMPLETION_CLASS;
+        case XR_SYMBOL_INTERFACE:
+            return XR_COMPLETION_INTERFACE;
+        case XR_SYMBOL_ENUM:
+            return XR_COMPLETION_ENUM;
+        case XR_SYMBOL_ENUM_MEMBER:
+            return XR_COMPLETION_ENUM_MEMBER;
+        case XR_SYMBOL_CONSTANT:
+            return XR_COMPLETION_CONSTANT;
+        case XR_SYMBOL_TYPE_PARAMETER:
+            return XR_COMPLETION_TYPE_PARAMETER;
+        default:
+            return XR_COMPLETION_VARIABLE;
+    }
+}
+
+// Cap on closed-file symbols added to a single completion response.
+#define XLSP_COMPLETION_SHALLOW_LIMIT 500
+
+typedef struct {
+    XrJsonValue *items;
+    XrHashMap *seen;      // names already emitted (dedup)
+    const char *doc_uri;  // current document; its symbols come from the analyzer
+    int added;
+} ShallowCompletionCtx;
+
+static void shallow_completion_collect(const XlspIndexEntry *entry, void *ctx_) {
+    ShallowCompletionCtx *ctx = (ShallowCompletionCtx *) ctx_;
+    if (ctx->added >= XLSP_COMPLETION_SHALLOW_LIMIT)
+        return;
+    if (!entry->name || !entry->is_exported)
+        return;
+    // Same-file symbols already came from the analyzer scope above.
+    if (ctx->doc_uri && entry->uri && strcmp(entry->uri, ctx->doc_uri) == 0)
+        return;
+    if (ctx->seen && xr_hashmap_has(ctx->seen, entry->name))
+        return;
+    if (ctx->seen)
+        xr_hashmap_set(ctx->seen, entry->name, (void *) (uintptr_t) 1);
+
+    XrJsonValue *item =
+        make_completion_item(entry->name, shallow_symbol_completion_kind(entry->kind), NULL);
+    xjson_object_set(item, "sortText", xjson_new_string("4"));
+    xjson_array_push(ctx->items, item);
+    ctx->added++;
+}
+
 static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
     XrJsonValue *items = xjson_new_array();
+
+    // Tracks names already emitted from the analyzer scope so the shallow
+    // workspace-index augmentation below does not duplicate them.
+    XrHashMap *seen = xr_hashmap_new();
 
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
     if (doc && analyzer) {
@@ -412,6 +474,8 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             XrJsonValue *item = make_completion_item(sym->name, kind, detail);
             xjson_object_set(item, "sortText", xjson_new_string("0"));
             xjson_array_push(items, item);
+            if (seen)
+                xr_hashmap_set(seen, sym->name, (void *) (uintptr_t) 1);
         }
         xr_free(symbols);
     }
@@ -457,6 +521,16 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             }
         }
     }
+
+    // Augment with exported top-level symbols from other workspace files
+    // (Approach A: closed files are shallow-indexed, not fully analyzed).
+    if (doc && server && server->symbol_index) {
+        ShallowCompletionCtx sctx = {.items = items, .seen = seen, .doc_uri = doc->uri, .added = 0};
+        xlsp_symbol_index_foreach(server->symbol_index, shallow_completion_collect, &sctx);
+    }
+
+    if (seen)
+        xr_hashmap_free(seen);
 
     return items;
 }

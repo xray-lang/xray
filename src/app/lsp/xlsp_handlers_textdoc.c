@@ -14,6 +14,7 @@
 #include "xlsp_server.h"
 #include "../../base/xjson.h"
 #include "xlsp_analysis.h"
+#include "xlsp_workspace.h"
 #include "xlsp_rename.h"
 #include "xlsp_semantic_tokens.h"
 #include "xlsp_inlay_hints.h"
@@ -95,18 +96,20 @@ void xlsp_handle_td_did_change(XrLspServer *server, XrJsonValue *params) {
     lsp_log("didChange: parsing %s", uri);
     xlsp_parse_document(doc, server);
 
-    // If document recovered from error, trigger re-analysis of dependent documents
+    // If document recovered from error, re-analyze the documents that actually
+    // depend on it. The xlsp_parse_document() call above already propagated
+    // dirty flags to importers via the analyzer's dependency graph, so we only
+    // touch documents flagged dirty — recovery on a widely-imported file no
+    // longer stalls the main loop with a full-workspace reparse.
     if (had_error_before && !doc->parse_error) {
-        lsp_log("didChange: document recovered from error, triggering dependent re-analysis");
-        // Re-parse all open documents that might import this file
+        lsp_log("didChange: recovered from error, re-analyzing dependent documents");
         if (server->doc_table) {
             XrLspDocTable *table = server->doc_table;
             for (int i = 0; i < table->bucket_count; i++) {
                 XrLspDocBucket *bucket = table->buckets[i];
                 while (bucket) {
                     XrLspDocument *other = bucket->doc;
-                    if (other != doc && other->content) {
-                        other->dirty = true;
+                    if (other && other != doc && other->dirty && other->content) {
                         xlsp_parse_document(other, server);
                         xlsp_schedule_diagnostics(server, other);
                     }
@@ -129,6 +132,9 @@ void xlsp_handle_td_did_close(XrLspServer *server, XrJsonValue *params) {
     const char *uri = xjson_get_string(textDocument, "uri");
     if (uri) {
         xlsp_document_close(server, uri);
+        // Closing a document may leave files it imported referenced by nobody;
+        // reclaim them from the analyzer to slow type-pool growth.
+        xlsp_workspace_evict_unreferenced_files(server);
     }
 }
 

@@ -166,6 +166,22 @@ import time
 var t = time.now()
 time.sleep(100)
 ```
+### 11.8 完整可运行示例
+
+从标准库按需导入与命名空间导入：
+
+```xray
+import { sha256 } from crypto
+import math
+
+fn main() {
+    print(math.sqrt(144.0))   // => 12.0
+    print(sha256("xray"))     // => 1a46e6a6...（SHA-256 摘要）
+}
+
+main()
+```
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -333,4 +349,20 @@ import time
 var t = time.now()
 time.sleep(100)
 ```
+### 11.8 Worked Examples
+
+Selective import and namespace import from the standard library:
+
+```xray
+import { sha256 } from crypto
+import math
+
+fn main() {
+    print(math.sqrt(144.0))   // => 12.0
+    print(sha256("xray"))     // => 1a46e6a6... (SHA-256 digest)
+}
+
+main()
+```
+
 <!-- /xr-spec:en -->

@@ -1473,6 +1473,21 @@ static inline int64_t xrt_int_mod(int64_t a, int64_t b) {
     return a % b;
 }
 
+/* Unsigned division / modulo for statically-unsigned operands (mirrors VM
+ * OP_DIV_U / OP_MOD_U). uint64_t covers every unsigned width: narrower payloads
+ * are zero-extended in the i64 value model. */
+static inline int64_t xrt_uint_div(int64_t a, int64_t b) {
+    if (XR_UNLIKELY(b == 0))
+        xrt_freestanding_trap("division by zero");
+    return (int64_t) ((uint64_t) a / (uint64_t) b);
+}
+
+static inline int64_t xrt_uint_mod(int64_t a, int64_t b) {
+    if (XR_UNLIKELY(b == 0))
+        xrt_freestanding_trap("modulo by zero");
+    return (int64_t) ((uint64_t) a % (uint64_t) b);
+}
+
 static inline int64_t xrt_i64_shl(int64_t a, int64_t b) {
     return (int64_t) ((uint64_t) a << ((uint64_t) b & 63));
 }

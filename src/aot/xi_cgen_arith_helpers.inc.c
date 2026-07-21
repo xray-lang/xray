@@ -75,6 +75,40 @@ static bool emit_native_positive_divisor_div_mod_expr(FILE *out, const XiFunc *f
     return true;
 }
 
+/* XI_DIV / XI_MOD on statically-unsigned integer operands are unsigned. The i64
+ * value slot has no signedness tag, so the signed division below would divide
+ * u64/usize top-bit-set values as negative. Mirrors the VM emitter's
+ * xi_emit_divmod_uses_unsigned (operand-based: both int-like, either unsigned)
+ * so VM and AOT select the same signedness. */
+static bool cg_divmod_uses_unsigned(const XiValue *v) {
+    if (!v || (v->op != XI_DIV && v->op != XI_MOD) || v->nargs < 2)
+        return false;
+    const XrType *left = v->args[0] ? v->args[0]->type : NULL;
+    const XrType *right = v->args[1] ? v->args[1]->type : NULL;
+    bool left_int = left && left->kind == XR_KIND_INT;
+    bool right_int = right && right->kind == XR_KIND_INT;
+    return left_int && right_int &&
+           (cg_type_is_unsigned_int(left) || cg_type_is_unsigned_int(right));
+}
+
+/* Emit unsigned div/mod via xrt_uint_div / xrt_uint_mod (same divide-by-zero
+ * throw as the signed path; clang folds the check and constant divisors after
+ * inlining). Must be tried before the signed const / positive-divisor fast
+ * paths, which emit signed C '/' and '%'. */
+static bool emit_native_unsigned_div_mod_expr(FILE *out, const XiValue *v) {
+    if (!v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64 ||
+        cg_rep(v->args[1]) != XR_REP_I64)
+        return false;
+    if (!cg_divmod_uses_unsigned(v))
+        return false;
+    fprintf(out, "%s(", v->op == XI_DIV ? "xrt_uint_div" : "xrt_uint_mod");
+    emit_vref(out, v->args[0]);
+    fprintf(out, ", ");
+    emit_vref(out, v->args[1]);
+    fprintf(out, ")");
+    return true;
+}
+
 static bool cg_div_mod_is_trusted_nothrow(const XiFunc *f, const XiValue *v) {
     if (!v || (v->op != XI_DIV && v->op != XI_MOD) || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
         cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
@@ -171,11 +205,20 @@ static bool emit_native_rawptr_arith_expr(XiCgenCtx *ctx, FILE *out, const XiVal
     const XiValue *ptr = NULL;
     const XiValue *offset = NULL;
     bool subtract = v->op == XI_SUB;
-    if (cg_rep(v->args[0]) == XR_REP_RAWPTR && cg_rep(v->args[1]) == XR_REP_I64) {
+    /* Exactly one operand is the raw pointer base; the other is an integer
+     * offset. The offset may still be tagged (an imported const folds to a
+     * tagged XrValue, or an `as int` cast produced a tagged int); unboxing it to
+     * i64 below keeps this native address arithmetic instead of falling back to
+     * the generic xrt_add, which cannot take a raw pointer as an XrValue
+     * argument (that fallback emits illegal C). The offset rep is restricted to
+     * i64/tagged so a managed pointer never masquerades as an offset. */
+    XrRep r0 = cg_rep(v->args[0]);
+    XrRep r1 = cg_rep(v->args[1]);
+    if (r0 == XR_REP_RAWPTR && (r1 == XR_REP_I64 || r1 == XR_REP_TAGGED)) {
         ptr = v->args[0];
         offset = v->args[1];
-    } else if (v->op == XI_ADD && cg_rep(v->args[0]) == XR_REP_I64 &&
-               cg_rep(v->args[1]) == XR_REP_RAWPTR) {
+    } else if (v->op == XI_ADD && r1 == XR_REP_RAWPTR &&
+               (r0 == XR_REP_I64 || r0 == XR_REP_TAGGED)) {
         ptr = v->args[1];
         offset = v->args[0];
     } else {

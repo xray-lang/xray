@@ -223,13 +223,18 @@ static bool rewrite_to_const_literal(XiValue *v, const XiConstLiteral *lit) {
             return false;
     }
     v->op = XI_CONST;
-    /* Preserve the read's declared type. A folded shared const must not lose the
-     * width/signedness of the binding: e.g. a `uint64` const folded to a signed
-     * `int` would make a later PTR_STORE into a uint64 slot fail verify
+    /* Preserve the read's declared concrete type. A folded shared const must not
+     * lose the width/signedness of the binding: e.g. a `uint64` const folded to
+     * a signed `int` would make a later PTR_STORE into a uint64 slot fail verify
      * (value maps to I64 while the store aux is U64). rewrite_to_const_int
      * already preserves the value's type; do the same here. Fall back to the
-     * literal's recorded type only when the read carried no type. */
-    if (!v->type)
+     * literal's recorded (concrete) type when the read carried no type, or when
+     * it only carried an unresolved `any`/unknown type: an imported const loads
+     * via GET_SHARED typed unknown, and keeping unknown would give the folded
+     * const a tagged representation, so later native uses (pointer `.offset`,
+     * `as int`) mis-lower (a raw pointer add would be emitted as
+     * xrt_add(void*, XrValue)). The literal carries the binding's real width. */
+    if (!v->type || XR_TYPE_IS_UNKNOWN(v->type))
         v->type = lit->type;
     v->nargs = 0;
     v->aux = NULL;
@@ -350,7 +355,8 @@ static void block_remove_value(XiBlock *blk, uint32_t idx) {
  * INT64_MIN / -1 and INT64_MIN %% -1 are special-cased to match the
  * runtime VM and AOT, which also produce INT64_MIN / 0 respectively.
  */
-static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, bool shr_unsigned, int64_t *result) {
+static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, bool shr_unsigned,
+                            bool divmod_unsigned, int64_t *result) {
     switch (op) {
         case XI_ADD:
             *result = xr_i64_add_wrap(a, b);
@@ -364,12 +370,12 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, bool shr_unsigned
         case XI_DIV:
             if (b == 0)
                 return false;
-            *result = xr_i64_div_wrap(a, b);
+            *result = divmod_unsigned ? xr_i64_div_u_wrap(a, b) : xr_i64_div_wrap(a, b);
             return true;
         case XI_MOD:
             if (b == 0)
                 return false;
-            *result = xr_i64_mod_wrap(a, b);
+            *result = divmod_unsigned ? xr_i64_mod_u_wrap(a, b) : xr_i64_mod_wrap(a, b);
             return true;
         case XI_BAND:
             *result = a & b;
@@ -725,7 +731,18 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
                 }
                 bool shr_unsigned = v->op == XI_SHR && opt_type_is_int_like(lhs->type) &&
                                     opt_type_is_unsigned_int(lhs->type);
-                if (fold_int_binary(v->op, lhs_i, rhs_i, shr_unsigned, &result)) {
+                /* Result-type check recovers the unsigned intent when inlining
+                 * has substituted integer literals for typed uint params (the
+                 * operand types lose their signedness, but the div node's own
+                 * type stays uint). Result-unsigned implies operand-unsigned in
+                 * well-typed code, so this cannot over-trigger vs the VM. */
+                bool divmod_unsigned =
+                    (v->op == XI_DIV || v->op == XI_MOD) &&
+                    (opt_type_is_unsigned_int(v->type) ||
+                     (opt_type_is_int_like(lhs->type) && opt_type_is_int_like(rhs->type) &&
+                      (opt_type_is_unsigned_int(lhs->type) ||
+                       opt_type_is_unsigned_int(rhs->type))));
+                if (fold_int_binary(v->op, lhs_i, rhs_i, shr_unsigned, divmod_unsigned, &result)) {
                     rewrite_to_const_int(v, result);
                     chg.values_changed = true;
                     continue;

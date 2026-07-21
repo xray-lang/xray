@@ -13,6 +13,7 @@
 #include "xlsp_ast_utils.h"
 #include "xlsp_workspace.h"
 #include "xlsp_index_pool.h"
+#include "xlsp_symbol_index.h"
 #include "../../base/xjson.h"
 #include "xlsp_cache.h"
 #include "../../frontend/analyzer/xanalyzer.h"
@@ -175,6 +176,23 @@ static XrLspDocTable *doc_table_new(void) {
     return table;
 }
 
+// Release every heap resource owned by a document, then the document itself.
+// This is the single destruction point shared by doc_table_free,
+// doc_table_remove and xlsp_document_free_temp so no owned field is ever
+// forgotten as the document struct grows new caches.
+static void xlsp_document_destroy(XrLspDocument *doc) {
+    if (!doc)
+        return;
+    xlsp_invalidate_import_cache(doc);
+    xlsp_free_document_cache(doc);
+    xr_arena_destroy(&doc->arena);
+    xr_free(doc->uri);
+    xr_free(doc->content);
+    xr_free(doc->line_offsets);
+    xr_free(doc->prev_sem_tokens);
+    xr_free(doc);
+}
+
 static void doc_table_free(XrLspDocTable *table) {
     if (!table)
         return;
@@ -182,16 +200,7 @@ static void doc_table_free(XrLspDocTable *table) {
         XrLspDocBucket *bucket = table->buckets[i];
         while (bucket) {
             XrLspDocBucket *next = bucket->next;
-            XrLspDocument *doc = bucket->doc;
-            if (doc) {
-                xlsp_invalidate_import_cache(doc);
-                xlsp_free_document_cache(doc);
-                xr_arena_destroy(&doc->arena);
-                xr_free(doc->uri);
-                xr_free(doc->content);
-                xr_free(doc->line_offsets);
-                xr_free(doc);
-            }
+            xlsp_document_destroy(bucket->doc);
             xr_free(bucket);
             bucket = next;
         }
@@ -293,20 +302,7 @@ static void doc_table_remove(XrLspDocTable *table, const char *uri) {
         if ((*pp)->doc && strcmp((*pp)->doc->uri, uri) == 0) {
             XrLspDocBucket *to_free = *pp;
             *pp = to_free->next;
-            XrLspDocument *doc = to_free->doc;
-            if (doc) {
-                // Free import cache
-                xlsp_invalidate_import_cache(doc);
-                // Free diagnostics cache
-                xlsp_free_document_cache(doc);
-                // Destroy arena first (frees AST, diagnostics, etc.)
-                xr_arena_destroy(&doc->arena);
-                // Free separately managed resources
-                xr_free(doc->uri);
-                xr_free(doc->content);
-                xr_free(doc->line_offsets);
-                xr_free(doc);
-            }
+            xlsp_document_destroy(to_free->doc);
             xr_free(to_free);
             table->doc_count--;
             return;
@@ -358,6 +354,12 @@ XrLspServer *xlsp_server_new(void) {
     server->workspace_analyzer = xa_analyzer_new(session);
     if (!server->workspace_analyzer) {
         lsp_log("Warning: Failed to create workspace analyzer");
+    }
+
+    // Shallow workspace-wide symbol index (parallel-populated, no type memory).
+    server->symbol_index = xlsp_symbol_index_new();
+    if (!server->symbol_index) {
+        lsp_log("Warning: Failed to create workspace symbol index");
     }
 
     // Create background task system.
@@ -461,8 +463,11 @@ void xlsp_server_free(XrLspServer *server) {
     // Free pending diagnostics queue
     xr_free(server->pending_diag);
 
-    // Free pending analysis queue
-    xlsp_free_pending_analysis(server);
+    // Free the shallow workspace symbol index
+    if (server->symbol_index) {
+        xlsp_symbol_index_free(server->symbol_index);
+        server->symbol_index = NULL;
+    }
 
     // Release any still-live string ids in the pending-request ring
     // buffer. After a clean shutdown the ring is usually empty, but
@@ -683,17 +688,9 @@ XrLspDocument *xlsp_document_get_or_load(XrLspServer *server, const char *uri) {
     return doc;
 }
 
-// Free a temporarily loaded document
+// Free a temporarily loaded document (on-demand loads never entered doc_table)
 void xlsp_document_free_temp(XrLspDocument *doc) {
-    if (!doc)
-        return;
-    xlsp_invalidate_import_cache(doc);
-    xlsp_free_document_cache(doc);
-    xr_free(doc->uri);
-    xr_free(doc->content);
-    xr_free(doc->line_offsets);
-    xr_arena_destroy(&doc->arena);
-    xr_free(doc);
+    xlsp_document_destroy(doc);
 }
 
 uint32_t xlsp_position_to_offset(XrLspDocument *doc, XrLspPosition pos) {
@@ -1586,11 +1583,13 @@ int xlsp_server_run(XrLspServer *server) {
             xlsp_workspace_poll_index_results(server);
         }
 
-        // Drain pending background analysis (budgeted: ≤5ms per tick)
-        xlsp_drain_pending_analysis(server);
-
         // Check debounced diagnostic deadlines (every loop iteration)
         flush_pending_diagnostics(server);
+
+        // Bound long-session memory: rebuild the analyzer if its type pool has
+        // accumulated too much reclaimable garbage (no-op unless idle + over
+        // threshold).
+        xlsp_workspace_maybe_rebuild_analyzer(server);
     }
 
     xr_poll_destroy(&poll);

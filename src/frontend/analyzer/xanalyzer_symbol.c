@@ -1197,6 +1197,12 @@ XaSymbol **xa_scope_get_all_symbols(XaScope *scope, int *count) {
     return result;
 }
 
+int xa_scope_count_symbols(XaScope *scope) {
+    if (!scope || !scope->symbols)
+        return 0;
+    return (int) xr_hashmap_count((XrHashMap *) scope->symbols);
+}
+
 // Lookup symbol by ID — O(1) via registry, fallback to O(n) scan
 XaSymbol *xa_scope_lookup_by_id(XaScope *scope, uint32_t id) {
     if (id == 0)

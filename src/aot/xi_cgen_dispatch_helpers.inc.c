@@ -684,7 +684,11 @@ static void xicgen_arith(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
             emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
             fprintf(out, "))");
         }
-    } else if (result_rep == XR_REP_TAGGED || any_tagged) {
+    } else if (result_rep != XR_REP_RAWPTR && (result_rep == XR_REP_TAGGED || any_tagged)) {
+        /* A raw-pointer result is always native address arithmetic (ptr ± int)
+         * and must fall through to the RAWPTR branch even when the integer
+         * offset is still tagged; xrt_add cannot take a raw pointer as an
+         * XrValue operand. The RAWPTR emitter unboxes a tagged offset to i64. */
         const char *fn = xi_to_c_template_arith_runtime_fn(v->op);
         if (result_rep == XR_REP_F64) {
             fprintf(out, "%s(", fn);
@@ -769,6 +773,36 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     XrRep result_rep = cg_rep(v);
     XrRep a_rep = cg_rep(v->args[0]);
     XrRep b_rep = cg_rep(v->args[1]);
+
+    /* Statically-unsigned integer div/mod must be UNSIGNED (matches VM
+     * OP_DIV_U/OP_MOD_U and both constant folders). The signed xrt_int_div /
+     * xrt_int_mod fallback below would treat u64/usize top-bit-set payloads as
+     * negative. uint64_t covers every unsigned width — narrower payloads are
+     * zero-extended in the i64 value model. When the divisor is provably
+     * nonzero, inline the native division; otherwise use the throwing helper.
+     * emit_value_as_rep_ctx normalizes raw-i64 and boxed operands alike. */
+    if (result_rep == XR_REP_I64 && cg_type_is_unsigned_int(v->type)) {
+        bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
+        if (boxed)
+            fprintf(out, "XR_FROM_INT(");
+        if (cg_div_mod_is_trusted_nothrow(f, v)) {
+            fprintf(out, "(int64_t)((uint64_t)(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+            fprintf(out, ") %s (uint64_t)(", v->op == XI_DIV ? "/" : "%");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, "))");
+        } else {
+            fprintf(out, "%s(", v->op == XI_DIV ? "xrt_uint_div" : "xrt_uint_mod");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+            fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out, ")");
+        }
+        if (boxed)
+            fprintf(out, ")");
+        return;
+    }
+
     bool any_tagged = (a_rep == XR_REP_TAGGED || b_rep == XR_REP_TAGGED);
     if (result_rep == XR_REP_TAGGED || any_tagged) {
         const char *fn = xi_to_c_template_div_mod_runtime_fn(v->op);
@@ -816,7 +850,7 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
         }
     } else if (result_rep == XR_REP_I64) {
-        if (!emit_native_const_div_mod_expr(out, v) &&
+        if (!emit_native_unsigned_div_mod_expr(out, v) && !emit_native_const_div_mod_expr(out, v) &&
             !emit_native_positive_divisor_div_mod_expr(out, f, v)) {
             const char *fn = xi_to_c_template_div_mod_int_fn(v->op);
             fprintf(out, "%s(", fn);

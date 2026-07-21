@@ -423,6 +423,14 @@ static inline xr_Integer xr_int_div_wrap(xr_Integer a, xr_Integer b) {
 static inline xr_Integer xr_int_mod_wrap(xr_Integer a, xr_Integer b) {
     return xr_i64_mod_wrap(a, b);
 }
+/* Unsigned division / modulo for statically-unsigned operands (OP_DIV_U /
+ * OP_MOD_U). Caller must have rejected divisor == 0 before calling these. */
+static inline xr_Integer xr_int_div_u_wrap(xr_Integer a, xr_Integer b) {
+    return xr_i64_div_u_wrap(a, b);
+}
+static inline xr_Integer xr_int_mod_u_wrap(xr_Integer a, xr_Integer b) {
+    return xr_i64_mod_u_wrap(a, b);
+}
 
 /* Shift helpers: the language defines the shift count as taken mod 64
  * (spec "Expressions": unlike C, xray shifts are always defined). This is

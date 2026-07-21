@@ -460,6 +460,48 @@ vmcase(OP_MODK) {
     vmbreak;
 }
 
+/* Unsigned (logical) division / modulo. The emitter selects these when the
+ * operands are statically-unsigned ints so u64/usize values with the top bit
+ * set divide/mod correctly (the i64 value slot carries no signedness tag, so
+ * the signed OP_DIV/OP_MOD would treat them as negative). Mirrors OP_SHR_U and
+ * the uint64_t-typed division the AOT backend emits. Unsigned ints are always
+ * fixed-width (never BigInt), so only the int/int fast path is needed. */
+vmcase(OP_DIV_U) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    XrValue vb = R(b);
+    XrValue vc = R(c);
+
+    if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
+        xr_Integer nc = XR_TO_INT(vc);
+        if (nc == 0) {
+            VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
+        }
+        R(a) = xr_int(xr_int_div_u_wrap(XR_TO_INT(vb), nc));
+        vmbreak;
+    }
+    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "division requires numeric types");
+}
+
+vmcase(OP_MOD_U) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    XrValue vb = R(b);
+    XrValue vc = R(c);
+
+    if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
+        xr_Integer divisor = XR_TO_INT(vc);
+        if (divisor == 0) {
+            VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");
+        }
+        R(a) = xr_int(xr_int_mod_u_wrap(XR_TO_INT(vb), divisor));
+        vmbreak;
+    }
+    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "modulo requires integer types");
+}
+
 #define XVM_TRY_UNARY_OP_OVERLOAD(value, dest, op_name)                                            \
     do {                                                                                           \
         if (xr_value_is_instance(value)) {                                                         \

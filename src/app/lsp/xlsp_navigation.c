@@ -15,6 +15,7 @@
 #include "xlsp_analysis.h"
 #include "xlsp_imports.h"
 #include "xlsp_utils.h"
+#include "xlsp_symbol_index.h"
 #include "../../frontend/analyzer/xanalyzer.h"
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../frontend/parser/xast_api.h"
@@ -112,6 +113,21 @@ XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc, Xr
     // Check if word is an imported module name (for "import xxx" goto definition)
     if (!result) {
         result = xlsp_get_module_file_location(doc, word);
+    }
+
+    // Shallow workspace-index fallback: resolves declarations in files that are
+    // indexed but not loaded into the analyzer (Approach A keeps closed,
+    // non-imported files shallow-only). The analyzer, local, and import paths
+    // above always take precedence.
+    if (!result && server && server->symbol_index) {
+        const XlspIndexEntry *entry = xlsp_symbol_index_find(server->symbol_index, word);
+        if (entry && entry->uri) {
+            result = xjson_new_object();
+            xjson_object_set(result, "uri", xjson_new_string(entry->uri));
+            xjson_object_set(result, "range",
+                             xjson_make_range(entry->line, entry->column, entry->line,
+                                              entry->column + (int) strlen(word)));
+        }
     }
 
     xr_free(word);

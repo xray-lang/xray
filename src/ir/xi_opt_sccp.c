@@ -284,6 +284,23 @@ static bool sccp_shr_uses_unsigned(const XiValue *v) {
     return sccp_type_is_int_like(left) && sccp_type_is_unsigned_int(left);
 }
 
+/* XI_DIV / XI_MOD on statically-unsigned operands are unsigned (OP_DIV_U /
+ * OP_MOD_U); fold with the logical division to match the runtime. */
+static bool sccp_divmod_uses_unsigned(const XiValue *v) {
+    if (!v || (v->op != XI_DIV && v->op != XI_MOD) || v->nargs < 2)
+        return false;
+    /* Result-type check recovers unsigned intent after inlining substitutes
+     * integer literals for typed uint params (operand types lose signedness,
+     * the div node's own type stays uint). Result-unsigned implies
+     * operand-unsigned in well-typed code, so it cannot over-trigger. */
+    if (sccp_type_is_unsigned_int(v->type))
+        return true;
+    const XrType *left = v->args[0] ? v->args[0]->type : NULL;
+    const XrType *right = v->args[1] ? v->args[1]->type : NULL;
+    return sccp_type_is_int_like(left) && sccp_type_is_int_like(right) &&
+           (sccp_type_is_unsigned_int(left) || sccp_type_is_unsigned_int(right));
+}
+
 /* True if the cell carries integer range info (const or range). */
 static bool has_int_bounds(SccpCell c) {
     return c.kind == SCCP_CONST_INT || c.kind == SCCP_RANGE_INT;
@@ -369,7 +386,7 @@ static SccpCell eval_exact_bit(const XiValue *v, SccpCell a, SccpCell b) {
 }
 
 /* Integer / float arithmetic on two operand cells. */
-static SccpCell eval_arith(uint16_t op, SccpCell a, SccpCell b) {
+static SccpCell eval_arith(uint16_t op, SccpCell a, SccpCell b, bool divmod_unsigned) {
     switch (op) {
         case XI_ADD:
             if (both_int(a, b))
@@ -391,14 +408,16 @@ static SccpCell eval_arith(uint16_t op, SccpCell a, SccpCell b) {
             return sccp_bot();
         case XI_DIV:
             if (both_int(a, b) && b.ival != 0) {
-                return sccp_int(xr_i64_div_wrap(a.ival, b.ival));
+                return sccp_int(divmod_unsigned ? xr_i64_div_u_wrap(a.ival, b.ival)
+                                                : xr_i64_div_wrap(a.ival, b.ival));
             }
             if (both_float(a, b) && b.fval != 0.0)
                 return sccp_float(a.fval / b.fval);
             return sccp_bot();
         case XI_MOD:
             if (both_int(a, b) && b.ival != 0) {
-                return sccp_int(xr_i64_mod_wrap(a.ival, b.ival));
+                return sccp_int(divmod_unsigned ? xr_i64_mod_u_wrap(a.ival, b.ival)
+                                                : xr_i64_mod_wrap(a.ival, b.ival));
             }
             return sccp_bot();
         default:
@@ -603,7 +622,7 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
                 return fb == 0.0f ? sccp_bot()
                                   : sccp_float((double) (float) ((double) fa / (double) fb));
         }
-        return eval_arith(v->op, a, b);
+        return eval_arith(v->op, a, b, sccp_divmod_uses_unsigned(v));
     }
 
     /* Unmodeled ops default to BOT */

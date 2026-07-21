@@ -358,6 +358,41 @@ print(add(19, 23))        // xray 内部仍是普通函数调用
 - `@c_export` 定义函数 ABI wrapper；`xray build --native --c-header FILE` 可为这些 wrapper 生成 C 原型头文件，`xray build --native --shared --c-header FILE` 可生成 native shared library 和匹配头文件。
 - `--shared` 当前只支持无需 Xray runtime 初始化的 scalar / raw pointer 导出；runtime-backed 特性、managed ownership、aggregate by-value 和初始化/关闭策略仍由后续 FFI 任务定义。
 
+#### 完整可运行示例
+
+闭包捕获与高阶函数：
+
+```xray
+fn apply(f: (int) -> int, x: int) -> int {
+    return f(x)
+}
+
+fn main() {
+    var base = 10
+    var addBase = fn(x: int) -> int { return x + base }   // 闭包捕获 base
+    print(addBase(5))            // => 15
+    print(apply(addBase, 7))     // => 17（函数作为参数传入）
+}
+
+main()
+```
+
+多返回值（元组）：
+
+```xray
+fn divmod(a: int, b: int) -> (int, int) {
+    return (a / b, a % b)
+}
+
+fn main() {
+    var (q, r) = divmod(17, 5)
+    print(q)   // => 3
+    print(r)   // => 2
+}
+
+main()
+```
+
 ### 5.3 `class` 声明
 
 ```ebnf
@@ -527,6 +562,56 @@ class Counter {
 
 实现 `iterator()` 返回带 `hasNext() -> bool` 和 `next() -> T?` 的对象即可启用 `for-in`。详见 §14.15。
 
+#### 5.3.7 完整可运行示例
+
+以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
+
+继承与自动覆写：
+
+```xray
+class Animal {
+    name: string
+    constructor(name: string) { this.name = name }
+    speak() -> string { return "..." }
+}
+
+class Dog extends Animal {
+    constructor(name: string) { super(name) }
+    speak() -> string { return "woof" }   // 同名同签：自动覆写
+}
+
+fn main() {
+    var d = Dog("Rex")
+    print(d.name)      // => Rex
+    print(d.speak())   // => woof
+}
+
+main()
+```
+
+运算符重载（用具名变量调用）：
+
+```xray
+class Vec2 {
+    x: int
+    y: int
+    constructor(x: int, y: int) { this.x = x; this.y = y }
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+}
+
+fn main() {
+    var a = Vec2(1, 2)
+    var b = Vec2(3, 4)
+    var sum = a + b
+    print(sum.x)   // => 4
+    print(sum.y)   // => 6
+}
+
+main()
+```
+
 ### 5.4 `struct` 声明
 
 ```ebnf
@@ -577,6 +662,27 @@ b.x = 99.0
 - 数学类型（Vec2/Vec3/Quat/Color）
 - 短生命周期值（迭代器状态、临时元组替代）
 - 性能敏感、希望避免堆分配的数据
+
+#### 5.4.1 值语义示例
+
+`struct` 是值类型，赋值与传参都会拷贝：
+
+```xray
+struct Point {
+    x: int
+    y: int
+}
+
+fn main() {
+    var p = Point{x: 3, y: 4}
+    var q = p            // struct 赋值是拷贝
+    q.x = 99
+    print(p.x)           // => 3（不受影响）
+    print(q.x)           // => 99
+}
+
+main()
+```
 
 ### 5.5 `interface` 与 `implements`
 
@@ -652,6 +758,29 @@ class Buffer implements SizedCollection<int> {
     }
     first() -> int { return this.data[0] }
 }
+```
+
+#### 完整可运行示例
+
+接口 + `implements` + 多态：
+
+```xray
+interface Shape {
+    area() -> float
+}
+
+class Circle implements Shape {
+    r: float
+    constructor(r: float) { this.r = r }
+    area() -> float { return 3.14159 * this.r * this.r }
+}
+
+fn main() {
+    var s: Shape = Circle(2.0)
+    print(s.area())   // => 12.56636
+}
+
+main()
 ```
 
 ### 5.6 `enum` 声明
@@ -1268,6 +1397,41 @@ Rules:
 - `@c_export` defines the function ABI wrapper; `xray build --native --c-header FILE` can emit a C prototype header for those wrappers, and `xray build --native --shared --c-header FILE` can emit a native shared library with a matching header.
 - `--shared` currently supports only scalar / raw pointer exports that do not require Xray runtime initialization; runtime-backed features, managed ownership, aggregate by-value, and initialization/shutdown policy remain future FFI work.
 
+#### Worked Examples
+
+Closure capture and higher-order functions:
+
+```xray
+fn apply(f: (int) -> int, x: int) -> int {
+    return f(x)
+}
+
+fn main() {
+    var base = 10
+    var addBase = fn(x: int) -> int { return x + base }   // closure captures base
+    print(addBase(5))            // => 15
+    print(apply(addBase, 7))     // => 17 (function passed as an argument)
+}
+
+main()
+```
+
+Multiple return values (a tuple):
+
+```xray
+fn divmod(a: int, b: int) -> (int, int) {
+    return (a / b, a % b)
+}
+
+fn main() {
+    var (q, r) = divmod(17, 5)
+    print(q)   // => 3
+    print(r)   // => 2
+}
+
+main()
+```
+
 ### 5.3 `class` declaration
 
 ```ebnf
@@ -1437,6 +1601,56 @@ class Counter {
 
 Implement `iterator()` returning an object with `hasNext() -> bool` and `next() -> T?` to enable `for-in`. See §14.15.
 
+#### 5.3.7 Worked Examples
+
+Self-contained programs that run as-is and pass `xray check` (comments show the real output).
+
+Inheritance with automatic override:
+
+```xray
+class Animal {
+    name: string
+    constructor(name: string) { this.name = name }
+    speak() -> string { return "..." }
+}
+
+class Dog extends Animal {
+    constructor(name: string) { super(name) }
+    speak() -> string { return "woof" }   // same name/signature: auto-override
+}
+
+fn main() {
+    var d = Dog("Rex")
+    print(d.name)      // => Rex
+    print(d.speak())   // => woof
+}
+
+main()
+```
+
+Operator overloading (call with named values):
+
+```xray
+class Vec2 {
+    x: int
+    y: int
+    constructor(x: int, y: int) { this.x = x; this.y = y }
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+}
+
+fn main() {
+    var a = Vec2(1, 2)
+    var b = Vec2(3, 4)
+    var sum = a + b
+    print(sum.x)   // => 4
+    print(sum.y)   // => 6
+}
+
+main()
+```
+
 ### 5.4 `struct` declaration
 
 ```ebnf
@@ -1487,6 +1701,27 @@ b.x = 99.0
 - Math types (Vec2/Vec3/Quat/Color)
 - Short-lived values (iterator state, ad-hoc tuples)
 - Performance-sensitive data where heap allocation should be avoided
+
+#### 5.4.1 Value-semantics example
+
+A `struct` is a value type: assignment and argument passing copy it.
+
+```xray
+struct Point {
+    x: int
+    y: int
+}
+
+fn main() {
+    var p = Point{x: 3, y: 4}
+    var q = p            // struct assignment copies
+    q.x = 99
+    print(p.x)           // => 3 (unchanged)
+    print(q.x)           // => 99
+}
+
+main()
+```
 
 ### 5.5 `interface` and `implements`
 
@@ -1562,6 +1797,29 @@ class Buffer implements SizedCollection<int> {
     }
     first() -> int { return this.data[0] }
 }
+```
+
+#### Worked Examples
+
+Interface + `implements` + polymorphism:
+
+```xray
+interface Shape {
+    area() -> float
+}
+
+class Circle implements Shape {
+    r: float
+    constructor(r: float) { this.r = r }
+    area() -> float { return 3.14159 * this.r * this.r }
+}
+
+fn main() {
+    var s: Shape = Circle(2.0)
+    print(s.area())   // => 12.56636
+}
+
+main()
 ```
 
 ### 5.6 `enum` declaration

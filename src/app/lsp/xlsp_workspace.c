@@ -23,8 +23,11 @@
 #include <string.h>
 #include <limits.h>
 #include "../../base/xfileio.h"
+#include "../../base/xhashmap.h"
 #include "../../base/xmalloc.h"
 #include "../../os/os_time.h"
+#include "xlsp_analysis.h"
+#include "xlsp_symbol_index.h"
 
 // lsp_log declared in xlsp_server.h (included via xlsp_workspace.h)
 // ============================================================================
@@ -89,179 +92,6 @@ static void find_xr_files_with_config(const char *dir_path, char ***files, int *
     xr_dir_close(it);
 }
 
-// Simplified wrapper without custom ignore rules
-static void find_xr_files(const char *dir_path, char ***files, int *count, int *capacity) {
-    // Use empty config - only hidden files will be ignored
-    XlspConfig empty_config = {0};
-    find_xr_files_with_config(dir_path, files, count, capacity, &empty_config);
-}
-
-// Background task: scan and index files
-void xlsp_workspace_index_task_execute(void *data) {
-    XrLspIndexTaskData *task_data = (XrLspIndexTaskData *) data;
-
-    // Find all .xr files using server's ignore configuration
-    int capacity = 64;
-    task_data->files = xr_malloc(capacity * sizeof(char *));
-    if (!task_data->files)
-        return;
-    task_data->file_count = 0;
-
-    if (task_data->server) {
-        find_xr_files_with_config(task_data->root_path, &task_data->files, &task_data->file_count,
-                                  &capacity, &task_data->server->config);
-    } else {
-        find_xr_files(task_data->root_path, &task_data->files, &task_data->file_count, &capacity);
-    }
-}
-
-// Completion: update server state (runs in main thread)
-// Index all files in the scanned directory (typically current file's directory)
-// On-demand import indexing handles cross-directory dependencies
-
-// Index a single file (helper function)
-static void index_single_file(XrLspServer *server, const char *path) {
-    char *content = xr_file_read_all(path, "r", NULL);
-    if (!content)
-        return;
-
-    char uri[1100];
-    snprintf(uri, sizeof(uri), "file://%s", path);
-
-    if (server->workspace_analyzer && server->isolate) {
-        XrTypePool *apool = workspace_compiler_analyzer_pool(server->isolate);
-        if (apool) {
-            xr_type_set_current_pool(apool, &apool->next_type_id);
-        }
-        XrArena arena;
-        xr_arena_init(&arena, 64 * 1024);
-        XrCompilerSessionScope parse_scope;
-        if (!xr_compiler_session_push_arena(
-                xr_compiler_session_current_for_isolate(server->isolate), &arena, uri,
-                &parse_scope)) {
-            xr_arena_destroy(&arena);
-            xr_free(content);
-            return;
-        }
-        Parser parser;
-        xr_parser_init(&parser, xr_compiler_session_current_for_isolate(server->isolate), content,
-                       uri, &arena);
-        AstNode *ast = xr_parse_recoverable(&parser);
-        xr_compiler_session_pop_arena(&parse_scope);
-
-        if (ast && !parser.had_error) {
-            xa_analyzer_analyze(server->workspace_analyzer, uri, (XrAstNode *) ast);
-        }
-        xr_arena_destroy(&arena);
-    }
-
-    xr_free(content);
-}
-
-// Task for incremental batch indexing
-static void index_batch_execute(void *data) {
-    // Nothing to do in worker thread - just a placeholder
-    (void) data;
-}
-
-static void index_batch_complete(void *data, void *result) {
-    (void) result;
-    XrLspIndexTaskData *task_data = (XrLspIndexTaskData *) data;
-    XrLspServer *server = task_data->server;
-
-    // Check if indexing was cancelled
-    if (server->index_cancelled) {
-        lsp_log("Background indexing cancelled at %d/%d files", task_data->current_file,
-                task_data->file_count);
-
-        // Cleanup remaining files
-        for (int i = task_data->current_file; i < task_data->file_count; i++) {
-            xr_free(task_data->files[i]);
-        }
-        xr_free(task_data->files);
-        xr_free(task_data->root_path);
-        server->indexing_in_progress = false;
-        server->index_task_data = NULL;
-        server->index_cancelled = false;  // Reset for next indexing
-        xr_free(task_data);
-        return;
-    }
-
-// Process a small batch of files (max 3 per cycle to keep UI responsive)
-#define BATCH_SIZE 3
-    int processed = 0;
-
-    while (task_data->current_file < task_data->file_count && processed < BATCH_SIZE) {
-        // Check cancellation between files
-        if (server->index_cancelled)
-            break;
-
-        char *path = task_data->files[task_data->current_file];
-        index_single_file(server, path);
-        xr_free(path);
-        task_data->current_file++;
-        server->files_indexed++;
-        processed++;
-    }
-
-    // Check if done or cancelled
-    if (task_data->current_file >= task_data->file_count || server->index_cancelled) {
-        if (server->index_cancelled) {
-            // Cleanup remaining files
-            for (int i = task_data->current_file; i < task_data->file_count; i++) {
-                xr_free(task_data->files[i]);
-            }
-            lsp_log("Background indexing cancelled at %d/%d files", server->files_indexed,
-                    server->files_total);
-            server->index_cancelled = false;
-        } else {
-            int symbol_count = 0;
-            if (server->workspace_analyzer && server->workspace_analyzer->global_scope) {
-                XaSymbol **syms = xa_scope_get_all_symbols(server->workspace_analyzer->global_scope,
-                                                           &symbol_count);
-                xr_free(syms);
-            }
-
-            lsp_log("Background indexing complete: %d/%d files, %d symbols", server->files_indexed,
-                    server->files_total, symbol_count);
-        }
-
-        // All files indexed or cancelled
-        xr_free(task_data->files);
-        xr_free(task_data->root_path);
-        server->indexing_in_progress = false;
-        server->index_task_data = NULL;
-        xr_free(task_data);
-    } else {
-        // Schedule next batch - this allows main thread to process other requests
-        XrLspTask *task =
-            xlsp_task_new_ex(index_batch_execute, index_batch_complete, task_data,
-                             XLSP_TASK_LOW,  // Low priority so user requests take precedence
-                             XLSP_TASK_TYPE_INDEX,
-                             0  // No associated request ID
-            );
-        xlsp_async_submit(server->async, task);
-    }
-}
-
-void xlsp_workspace_index_task_complete(void *data, void *result) {
-    (void) result;
-    XrLspIndexTaskData *task_data = (XrLspIndexTaskData *) data;
-    XrLspServer *server = task_data->server;
-
-    server->files_total = task_data->file_count;
-    server->files_indexed = 0;
-    task_data->current_file = 0;
-
-    // Store task data for incremental processing
-    server->index_task_data = task_data;
-
-    lsp_log("Starting incremental indexing: %d files", task_data->file_count);
-
-    // Start incremental indexing - process first batch
-    index_batch_complete(task_data, NULL);
-}
-
 // Index a single file by path (for file watcher updates)
 void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char *path) {
     if (!server || !server->workspace_analyzer || !server->isolate || !path)
@@ -303,6 +133,14 @@ void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char 
         // 3. Propagate dirty flags to dependent files
         xa_analyzer_refresh_file(server->workspace_analyzer, uri, (XrAstNode *) ast, content_hash);
         lsp_log("Indexed file: %s (hash: %llx)", path, (unsigned long long) content_hash);
+    }
+
+    // Keep the shallow workspace symbol index current for this file (covers
+    // watched-file create/change of unopened files).
+    if (ast && server->symbol_index) {
+        XrLspIndexSymbol *shallow = xlsp_index_symbols_from_ast(ast);
+        xlsp_symbol_index_replace_file(server->symbol_index, uri, shallow);
+        xlsp_index_symbol_free_list(shallow);
     }
 
     xr_arena_destroy(&arena);
@@ -353,13 +191,14 @@ void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexResult *r
         }
 
         // ================================================================
-        // Enqueue for budgeted main-thread analysis instead of
-        // blocking the merge loop with synchronous per-file I/O.
+        // Merge the worker's shallow symbols straight into the global index.
+        // No main-thread re-parse/analyze: closed files are shallow-only
+        // (full type analysis happens on demand when a file is opened).
         // ================================================================
-        if (result->path && result->uri) {
-            xlsp_enqueue_analysis(server, result->uri, result->path);
-
-            // Count symbols from worker-side shallow extraction
+        if (result->uri) {
+            if (server->symbol_index) {
+                xlsp_symbol_index_replace_file(server->symbol_index, result->uri, result->symbols);
+            }
             for (XrLspIndexSymbol *sym = result->symbols; sym; sym = sym->next) {
                 symbols_added++;
             }
@@ -391,15 +230,11 @@ void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexResult *r
         if (submitted > 0 && submitted == completed) {
             server->indexing_in_progress = false;
 
-            // Log final symbol count
-            int total_symbols = 0;
-            if (server->workspace_analyzer && server->workspace_analyzer->global_scope) {
-                XaSymbol **syms = xa_scope_get_all_symbols(server->workspace_analyzer->global_scope,
-                                                           &total_symbols);
-                xr_free(syms);
-            }
+            // Report the shallow index size: under Approach A closed files live
+            // in the workspace symbol index, not the (open-files-only) analyzer.
+            int total_symbols = (int) xlsp_symbol_index_entry_count(server->symbol_index);
 
-            lsp_log("[IndexPool] Background indexing complete: %d files, %d global symbols",
+            lsp_log("[IndexPool] Background indexing complete: %d files, %d indexed symbols",
                     completed, total_symbols);
 
             // End progress with success message
@@ -439,8 +274,8 @@ void xlsp_workspace_start_background_index(XrLspServer *server, const char *root
     if (!server || !root_path)
         return;
 
-    // If indexing is already running, scan files and enqueue them into the
-    // pending analysis queue so they get processed after the current batch.
+    // If indexing is already running, scan this root and hand its files to the
+    // parallel pool so they get shallow-indexed alongside the current batch.
     if (server->indexing_in_progress) {
         int capacity = 64;
         char **files = xr_malloc(capacity * sizeof(char *));
@@ -450,18 +285,16 @@ void xlsp_workspace_start_background_index(XrLspServer *server, const char *root
 
         find_xr_files_with_config(root_path, &files, &file_count, &capacity, &server->config);
 
-        for (int i = 0; i < file_count; i++) {
-            char uri[XLSP_MAX_PATH + 8];
-            snprintf(uri, sizeof(uri), "file://%s", files[i]);
-            xlsp_enqueue_analysis(server, uri, files[i]);
-            xr_free(files[i]);
-        }
-        xr_free(files);
-
-        if (file_count > 0) {
-            lsp_log("[IndexPool] Queued %d files from %s (indexing in progress)", file_count,
+        if (file_count > 0 && server->index_pool) {
+            xlsp_index_pool_submit_batch(server->index_pool, files, file_count);
+            server->files_total += file_count;
+            lsp_log("[IndexPool] Queued %d more files from %s (indexing in progress)", file_count,
                     root_path);
         }
+
+        for (int i = 0; i < file_count; i++)
+            xr_free(files[i]);
+        xr_free(files);
         return;
     }
 
@@ -574,88 +407,6 @@ void xlsp_workspace_start_background_index_roots(XrLspServer *server, const char
     xr_free(files);
 }
 
-// ============================================================================
-// Pending Analysis Queue — budgeted main-thread drain
-// ============================================================================
-
-void xlsp_enqueue_analysis(XrLspServer *server, const char *uri, const char *path) {
-    if (!server || !uri || !path)
-        return;
-
-    // O(n) dedup — queue is typically small (<100 entries per batch)
-    for (int i = 0; i < server->pending_analysis_count; i++) {
-        if (strcmp(server->pending_analysis[i].path, path) == 0) {
-            return;  // Already queued
-        }
-    }
-
-    // Grow if needed
-    if (server->pending_analysis_count >= server->pending_analysis_capacity) {
-        int new_cap =
-            server->pending_analysis_capacity == 0 ? 32 : server->pending_analysis_capacity * 2;
-        XlspPendingAnalysis *tmp =
-            xr_realloc(server->pending_analysis, (size_t) new_cap * sizeof(XlspPendingAnalysis));
-        if (!tmp)
-            return;
-        server->pending_analysis = tmp;
-        server->pending_analysis_capacity = new_cap;
-    }
-
-    int idx = server->pending_analysis_count++;
-    server->pending_analysis[idx].uri = xr_strdup(uri);
-    server->pending_analysis[idx].path = xr_strdup(path);
-}
-
-int xlsp_drain_pending_analysis(XrLspServer *server) {
-    if (!server || server->pending_analysis_count == 0)
-        return 0;
-
-    uint64_t now_ms = xr_time_monotonic_ms();
-    uint64_t deadline = now_ms + ANALYSIS_DRAIN_BUDGET_MS;
-    int processed = 0;
-
-    while (server->pending_analysis_count > 0) {
-        // Pop from front
-        XlspPendingAnalysis entry = server->pending_analysis[0];
-
-        // Shift remaining entries (could be optimised with ring buffer later)
-        server->pending_analysis_count--;
-        for (int i = 0; i < server->pending_analysis_count; i++) {
-            server->pending_analysis[i] = server->pending_analysis[i + 1];
-        }
-
-        // Analyse on main thread
-        xlsp_workspace_index_file(server, entry.uri, entry.path);
-        xr_free(entry.uri);
-        xr_free(entry.path);
-        processed++;
-
-        // Respect time budget
-        now_ms = xr_time_monotonic_ms();
-        if (now_ms >= deadline)
-            break;
-    }
-
-    if (processed > 0) {
-        lsp_log("[Drain] Analysed %d files, %d remaining", processed,
-                server->pending_analysis_count);
-    }
-    return processed;
-}
-
-void xlsp_free_pending_analysis(XrLspServer *server) {
-    if (!server)
-        return;
-    for (int i = 0; i < server->pending_analysis_count; i++) {
-        xr_free(server->pending_analysis[i].uri);
-        xr_free(server->pending_analysis[i].path);
-    }
-    xr_free(server->pending_analysis);
-    server->pending_analysis = NULL;
-    server->pending_analysis_count = 0;
-    server->pending_analysis_capacity = 0;
-}
-
 // Purge all analyzer/cache state for files under a path prefix
 void xlsp_workspace_purge_prefix(XrLspServer *server, const char *path_prefix) {
     if (!server || !path_prefix)
@@ -680,5 +431,222 @@ void xlsp_workspace_purge_prefix(XrLspServer *server, const char *path_prefix) {
     // Invalidate exports cache for files under this prefix
     xlsp_exports_cache_remove_prefix(server, path_prefix);
 
+    // Drop shallow workspace-symbol entries for files under this folder.
+    if (server->symbol_index) {
+        xlsp_symbol_index_remove_prefix(server->symbol_index, path_prefix);
+    }
+
     lsp_log("[Workspace] Purged state for prefix: %s (len=%zu)", path_prefix, prefix_len);
+}
+
+// ============================================================================
+// Long-session analyzer memory bound
+// ============================================================================
+//
+// xa_analyzer_refresh_file() frees the old XaSymbol structs on every edit, but
+// the XrType objects they allocated came from the analyzer's type-pool arena,
+// which can only be freed wholesale. Over a long editing session the pool grows
+// monotonically (see xa_analyzer_type_pool_bytes). Rather than add a per-type
+// refcount/ownership scheme to the whole type system, the LSP treats a full
+// analyzer rebuild as a rare "garbage collection": drop the old analyzer, then
+// re-analyze open documents immediately and repopulate closed files with a
+// fresh background index. This reclaims all leaked types at once.
+//
+// The trigger is adaptive: rebuild when the live pool exceeds 2x the size it
+// settled to after the last clean (re)build, floored so tiny projects never
+// churn. Because the baseline is re-established only after the system settles
+// post-rebuild, projects that legitimately need a large pool simply raise their
+// own threshold instead of rebuilding in a loop.
+#define XLSP_ANALYZER_POOL_FLOOR_BYTES (64u * 1024u * 1024u)  // 64 MiB
+
+void xlsp_workspace_maybe_rebuild_analyzer(XrLspServer *server) {
+    if (!server || !server->workspace_analyzer)
+        return;
+
+    // Only act when fully idle: a rebuild mid-index would race repopulation
+    // and discard in-flight work.
+    if (server->indexing_in_progress)
+        return;
+    if (server->index_pool && !xlsp_index_pool_is_idle(server->index_pool))
+        return;
+
+    size_t bytes = xa_analyzer_type_pool_bytes(server->workspace_analyzer);
+
+    // Ignore everything below the floor: memory is cheap and rebuilds are not.
+    if (bytes < XLSP_ANALYZER_POOL_FLOOR_BYTES)
+        return;
+
+    // First settled measurement over the floor establishes the clean baseline.
+    if (server->analyzer_pool_baseline_bytes == 0) {
+        server->analyzer_pool_baseline_bytes = bytes;
+        return;
+    }
+
+    size_t trigger = server->analyzer_pool_baseline_bytes * 2;
+    if (trigger < XLSP_ANALYZER_POOL_FLOOR_BYTES)
+        trigger = XLSP_ANALYZER_POOL_FLOOR_BYTES;
+    if (bytes <= trigger)
+        return;
+
+    lsp_log("[Workspace] Analyzer type pool %zu bytes > trigger %zu (baseline %zu) — rebuilding",
+            bytes, trigger, server->analyzer_pool_baseline_bytes);
+
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(server->isolate);
+    XaAnalyzer *fresh = xa_analyzer_new(session);
+    if (!fresh) {
+        // Can't allocate a replacement; bump the baseline so we don't spin
+        // retrying on every tick, and keep the (larger) current analyzer.
+        lsp_log("[Workspace] Rebuild aborted: analyzer allocation failed");
+        server->analyzer_pool_baseline_bytes = bytes;
+        return;
+    }
+
+    xa_analyzer_free(server->workspace_analyzer);
+    server->workspace_analyzer = fresh;
+
+    // Re-analyze open documents right away so active editing keeps working
+    // against a populated analyzer. The shallow symbol index survives the
+    // rebuild untouched (it holds no type-pool memory), so workspace-wide
+    // features keep working; the fresh background index below refreshes it.
+    if (server->doc_table) {
+        XrLspDocTable *table = server->doc_table;
+        for (int i = 0; i < table->bucket_count; i++) {
+            for (XrLspDocBucket *bucket = table->buckets[i]; bucket; bucket = bucket->next) {
+                XrLspDocument *doc = bucket->doc;
+                if (doc && doc->content) {
+                    doc->dirty = true;
+                    xlsp_parse_document(doc, server);
+                }
+            }
+        }
+    }
+
+    // Repopulate closed workspace files in the background (mirrors startup).
+    if (server->workspace_folder_count > 0) {
+        const char *roots[MAX_WORKSPACE_FOLDERS];
+        int root_count = 0;
+        for (int i = 0; i < server->workspace_folder_count && root_count < MAX_WORKSPACE_FOLDERS;
+             i++) {
+            if (server->workspace_folders[i].path)
+                roots[root_count++] = server->workspace_folders[i].path;
+        }
+        if (root_count > 0)
+            xlsp_workspace_start_background_index_roots(server, roots, root_count);
+    }
+
+    // Re-establish the baseline only after the system settles again: leave it
+    // 0 so the idle guards above defer the next measurement until the fresh
+    // index + drain complete.
+    server->analyzer_pool_baseline_bytes = 0;
+    lsp_log("[Workspace] Analyzer rebuilt; baseline will re-establish once idle");
+}
+
+// ============================================================================
+// Analyzer working-set eviction
+// ============================================================================
+//
+// Post-Approach-A the workspace analyzer only holds open files + the files they
+// directly import on demand. When a document is closed (or an edit drops an
+// import), the previously-pulled files linger. Evicting them frees their
+// symbols and — more importantly — stops them being re-analyzed, which slows
+// type-pool growth so the rebuild valve fires even less often.
+//
+// This is intentionally cheap and self-healing: the live set is "open docs +
+// their current local imports" (exactly how xlsp_parse_document/
+// index_imports_on_demand populates the analyzer). If we ever evict a file that
+// is still needed, the next parse of its importer re-pulls it — over-eviction
+// costs a re-parse, never correctness. Synthetic (non file://) entries such as
+// prelude/stdlib are never touched.
+void xlsp_workspace_evict_unreferenced_files(XrLspServer *server) {
+    if (!server || !server->workspace_analyzer)
+        return;
+    // Don't race the background indexer's on-demand analysis.
+    if (server->indexing_in_progress)
+        return;
+
+    XaAnalyzer *analyzer = server->workspace_analyzer;
+    if (!analyzer->files)
+        return;
+
+    XrHashMap *live = xr_hashmap_new();
+    if (!live)
+        return;
+
+    // Owned import-URI strings kept alive until eviction finishes (the hash map
+    // borrows keys). Open-doc URIs are owned by their documents and stable here.
+    char **owned = NULL;
+    int owned_count = 0, owned_cap = 0;
+
+    XrLspDocTable *table = server->doc_table;
+    if (table) {
+        for (int i = 0; i < table->bucket_count; i++) {
+            for (XrLspDocBucket *b = table->buckets[i]; b; b = b->next) {
+                XrLspDocument *doc = b->doc;
+                if (!doc || !doc->uri)
+                    continue;
+                xr_hashmap_set(live, doc->uri, (void *) (uintptr_t) 1);
+                if (!doc->content)
+                    continue;
+                XlspImportInfo *imports = xlsp_parse_imports(doc->content, doc->uri);
+                for (XlspImportInfo *imp = imports; imp; imp = imp->next) {
+                    if (imp->type != XLSP_IMPORT_LOCAL || !imp->resolved_path)
+                        continue;
+                    char uri[XLSP_MAX_PATH + 8];
+                    snprintf(uri, sizeof(uri), "file://%s", imp->resolved_path);
+                    char *key = xr_strdup(uri);
+                    if (!key)
+                        continue;
+                    if (owned_count >= owned_cap) {
+                        int nc = owned_cap ? owned_cap * 2 : 16;
+                        char **tmp = xr_realloc(owned, (size_t) nc * sizeof(char *));
+                        if (!tmp) {
+                            xr_free(key);
+                            continue;
+                        }
+                        owned = tmp;
+                        owned_cap = nc;
+                    }
+                    owned[owned_count++] = key;
+                    xr_hashmap_set(live, key, (void *) (uintptr_t) 1);
+                }
+                xlsp_free_imports(imports);
+            }
+        }
+    }
+
+    // Collect analyzer file keys not in the live set (copy the keys: removal
+    // frees the entry that owns them).
+    char **doomed = NULL;
+    int doomed_count = 0;
+    int file_count = analyzer->file_count > 0 ? analyzer->file_count : 0;
+    if (file_count > 0)
+        doomed = xr_malloc((size_t) file_count * sizeof(char *));
+    if (doomed) {
+        for (XaFileEntry *e = analyzer->files; e; e = e->next) {
+            if (!e->path)
+                continue;
+            // Only touch real workspace files; never prelude/stdlib/synthetic.
+            if (strncmp(e->path, "file://", 7) != 0)
+                continue;
+            if (xr_hashmap_has(live, e->path))
+                continue;
+            if (doomed_count < file_count)
+                doomed[doomed_count++] = xr_strdup(e->path);
+        }
+        for (int i = 0; i < doomed_count; i++) {
+            if (!doomed[i])
+                continue;
+            xa_analyzer_remove_file(analyzer, doomed[i]);
+            xr_free(doomed[i]);
+        }
+        xr_free(doomed);
+    }
+
+    if (doomed_count > 0)
+        lsp_log("[Workspace] Evicted %d unreferenced analyzer file(s)", doomed_count);
+
+    for (int i = 0; i < owned_count; i++)
+        xr_free(owned[i]);
+    xr_free(owned);
+    xr_hashmap_free(live);
 }

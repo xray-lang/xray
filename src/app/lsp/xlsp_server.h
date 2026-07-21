@@ -108,15 +108,6 @@ typedef struct XrLspIndexPool XrLspIndexPool;
 // Maximum workspace folders
 #define MAX_WORKSPACE_FOLDERS 16
 
-// Per-tick time budget (ms) for draining pending background analysis
-#define ANALYSIS_DRAIN_BUDGET_MS 5
-
-// Pending analysis entry (file waiting for main-thread re-analysis)
-typedef struct XlspPendingAnalysis {
-    char *uri;
-    char *path;
-} XlspPendingAnalysis;
-
 // Maximum pending requests to track (for cancellation support)
 #define MAX_PENDING_REQUESTS 64
 
@@ -262,7 +253,6 @@ struct XrLspServer {
     bool indexing_in_progress;
     int files_indexed;
     int files_total;
-    void *index_task_data;  // For incremental indexing
 
     // Method dispatch table (per-server instead of global)
     MethodHashEntry *method_hash_table[METHOD_HASH_SIZE];
@@ -280,10 +270,12 @@ struct XrLspServer {
     int pending_diag_count;
     int pending_diag_capacity;
 
-    // Pending background analysis queue (budgeted drain per tick)
-    XlspPendingAnalysis *pending_analysis;
-    int pending_analysis_count;
-    int pending_analysis_capacity;
+    // Shallow, workspace-wide symbol index (names/kinds/locations only).
+    // Populated in parallel by the index-pool workers for closed files and by
+    // the live parse path for open documents. Powers workspace/symbol, the
+    // go-to-definition fallback for closed files, and completion augmentation
+    // without forcing full main-thread analysis of every workspace file.
+    struct XlspSymbolIndex *symbol_index;
 
     // Request cancellation support ($/cancelRequest)
     XlspPendingRequests pending_requests;
@@ -299,6 +291,13 @@ struct XrLspServer {
     // Kept here (not as a file-scope mutable global) so multiple servers —
     // including test harnesses — don't collide on "xlsp-progress-N".
     int progress_token_counter;
+
+    // Long-session memory bound for the workspace analyzer's type pool.
+    // Holds the pool size (bytes) measured right after the last clean
+    // (re)build/index once the server settled to idle. 0 means "not yet
+    // established". xlsp_workspace_maybe_rebuild_analyzer() rebuilds the
+    // analyzer when the live pool grows past an adaptive multiple of this.
+    size_t analyzer_pool_baseline_bytes;
 };
 
 // Create and destroy server

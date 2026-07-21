@@ -1,0 +1,24 @@
+// Regression: `ptr.offset(<imported const> as int)` must lower to native pointer
+// arithmetic on both backends. The imported const folds to a value that was
+// tagged; the raw-pointer XI_ADD used to fall back to xrt_add(void*, XrValue),
+// which is illegal C (AOT build failed while the VM ran fine). VM and AOT must
+// now agree. The base comes from malloc so it is an unowned raw pointer.
+import mem
+import { PAGE } from "./_ptr_offset_const_lib"
+
+extern "C" {
+    fn malloc(n: uintsize) -> MutPtr<uint8>
+}
+
+fn step(base: MutPtr<uint8>) -> int {
+    var q = base.offset(PAGE as int)
+    // Address-only: never dereferenced, so the out-of-range offset is fine.
+    return (mem.addr(q) as int) - (mem.addr(base) as int)
+}
+
+fn main() {
+    var raw = unsafe { malloc(8192 as uintsize) }
+    print(step(raw))   // 4096 on VM and AOT
+}
+
+main()

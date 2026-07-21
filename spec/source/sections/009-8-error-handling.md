@@ -247,6 +247,22 @@ class PanicInfo {
 
 用户代码一般不直接构造 `PanicInfo`——业务错误用 `throw <enum>`。
 
+**在 `catch panic` 中读取 panic 信息**：`catch panic (p)` 会把 `PanicInfo` 对象绑定到 `p`，可读取 `message`、`code`、`stack` 等字段：
+
+```xray
+fn main() {
+    var arr: Array<int> = [1, 2, 3]
+    try {
+        print(arr[10])                       // 越界 → panic
+    } catch panic (p) {
+        print("message:", p.message)         // array index out of range: 10 (length 3)
+        print("code:", p.code)               // 430
+    }
+}
+
+main()
+```
+
 ### 8.3 `defer` — 资源清理
 
 `defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
@@ -322,26 +338,28 @@ fn fetch(url: string) -> string {
 #### 模式 1：enum 错误 + defer 资源清理
 
 ```xray
-enum ConnErr { Refused, Timeout, Reset }
+enum ConnErr { Refused, Timeout }
 
-fn fetchData(host: string) -> string {
-    var conn = connect(host)
-    defer conn.close()
+// 用一个极简的 "连接" 替身让示例自成一体。
+class Conn {
+    alive: bool
+    constructor(alive: bool) { this.alive = alive }
+    isAlive() -> bool { return this.alive }
+    close() { print("closed") }
+}
 
+fn fetchData(alive: bool) -> string {
+    var conn = Conn(alive)
+    defer conn.close()                 // 无论成功或抛错都会执行
     if (!conn.isAlive()) { throw ConnErr.Timeout }
-    return conn.read()
+    return "payload"
 }
 
 fn main() {
     try {
-        var data = fetchData("api.example.com")
-        print(data)
+        print(fetchData(true))         // => closed 然后 payload
     } catch (e: ConnErr) {
-        match (e) {
-            ConnErr.Refused -> print("connection refused"),
-            ConnErr.Timeout -> print("timeout"),
-            ConnErr.Reset -> print("connection reset"),
-        }
+        print("connection error")
     }
 }
 
@@ -351,23 +369,20 @@ main()
 #### 模式 2：throw + catch 用于库 API
 
 ```xray
-enum ConfigErr { BadJson(string), BadField(string) }
+enum ConfigErr { Missing(string) }
 
-fn parseConfig(text: string) -> Config {
-    var json = parseJson(text)
-    var port = json["port"].toInt()
-    if (port == null) { throw ConfigErr.BadField("port") }
-    return Config(port: port!)
+fn requirePort(cfg: Json) {
+    if (!Json.containsKey(cfg, "port")) { throw ConfigErr.Missing("port") }
+    print("port:", Json.get(cfg, "port"))
 }
 
 fn main() {
     try {
-        var cfg = parseConfig(configText)
-        startServer(cfg)
+        requirePort(Json.parse("{\"port\": 8080}"))   // => port: 8080
+        requirePort(Json.parse("{}"))                  // 抛出 ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
-            ConfigErr.BadJson(msg) -> print("invalid JSON:", msg),
-            ConfigErr.BadField(f) -> print("bad field:", f),
+            ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port
         }
     }
 }
@@ -392,6 +407,79 @@ fn safeDivide(a: int, b: int) -> string {
         return "error: division by zero"
     }
 }
+```
+
+### 8.7 完整可运行示例
+
+以下均为自包含、可直接运行并通过 `xray check` 验证的完整程序（注释标注了真实输出）。
+
+#### 示例 1：`throw` / `catch` / `match`
+
+```xray
+enum ParseErr { Empty, BadChar(string) }
+
+fn parseDigit(s: string) -> int {
+    if (len(s) == 0) { throw ParseErr.Empty }
+    if (s == "x") { throw ParseErr.BadChar(s) }
+    return 42
+}
+
+fn main() {
+    try {
+        print(parseDigit(""))
+    } catch (e: ParseErr) {
+        match (e) {
+            ParseErr.Empty -> print("empty input"),        // => empty input
+            ParseErr.BadChar(c) -> print("bad char:", c),
+        }
+    }
+}
+
+main()
+```
+
+#### 示例 2：`defer` 的 LIFO 顺序与异常路径
+
+```xray
+enum E { Boom }
+
+fn work() {
+    defer print("defer 1")
+    defer print("defer 2")
+    print("body")
+    throw E.Boom                             // 抛错时 defer 仍会执行
+}
+
+fn main() {
+    try { work() } catch (e) { print("caught") }
+}
+
+main()
+```
+
+输出（`defer` 按 LIFO 逆序执行）：
+
+```
+body
+defer 2
+defer 1
+caught
+```
+
+#### 示例 3：`catch panic` 兜底并读取故障信息
+
+```xray
+fn main() {
+    var arr: Array<int> = [1, 2, 3]
+    try {
+        print(arr[10])
+    } catch panic (p) {
+        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // => code: 430
+    }
+}
+
+main()
 ```
 <!-- /xr-spec:cn -->
 
@@ -639,6 +727,22 @@ class PanicInfo {
 
 User code generally does not construct `PanicInfo` directly — use `throw <enum>` for business errors.
 
+**Reading panic details in `catch panic`**: `catch panic (p)` binds the `PanicInfo` object to `p`, so you can read `message`, `code`, `stack`, and the other fields:
+
+```xray
+fn main() {
+    var arr: Array<int> = [1, 2, 3]
+    try {
+        print(arr[10])                       // out of bounds → panic
+    } catch panic (p) {
+        print("message:", p.message)         // array index out of range: 10 (length 3)
+        print("code:", p.code)               // 430
+    }
+}
+
+main()
+```
+
 ### 8.3 `defer` — resource cleanup
 
 `defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
@@ -714,26 +818,28 @@ Reference table:
 #### Pattern 1: enum errors + defer for resource cleanup
 
 ```xray
-enum ConnErr { Refused, Timeout, Reset }
+enum ConnErr { Refused, Timeout }
 
-fn fetchData(host: string) -> string {
-    var conn = connect(host)
-    defer conn.close()
+// A tiny stand-in "connection" so the example runs on its own.
+class Conn {
+    alive: bool
+    constructor(alive: bool) { this.alive = alive }
+    isAlive() -> bool { return this.alive }
+    close() { print("closed") }
+}
 
+fn fetchData(alive: bool) -> string {
+    var conn = Conn(alive)
+    defer conn.close()                 // runs whether we succeed or throw
     if (!conn.isAlive()) { throw ConnErr.Timeout }
-    return conn.read()
+    return "payload"
 }
 
 fn main() {
     try {
-        var data = fetchData("api.example.com")
-        print(data)
+        print(fetchData(true))         // => closed, then payload
     } catch (e: ConnErr) {
-        match (e) {
-            ConnErr.Refused -> print("connection refused"),
-            ConnErr.Timeout -> print("timeout"),
-            ConnErr.Reset -> print("connection reset"),
-        }
+        print("connection error")
     }
 }
 
@@ -743,23 +849,20 @@ main()
 #### Pattern 2: throw + catch for library APIs
 
 ```xray
-enum ConfigErr { BadJson(string), BadField(string) }
+enum ConfigErr { Missing(string) }
 
-fn parseConfig(text: string) -> Config {
-    var json = parseJson(text)
-    var port = json["port"].toInt()
-    if (port == null) { throw ConfigErr.BadField("port") }
-    return Config(port: port!)
+fn requirePort(cfg: Json) {
+    if (!Json.containsKey(cfg, "port")) { throw ConfigErr.Missing("port") }
+    print("port:", Json.get(cfg, "port"))
 }
 
 fn main() {
     try {
-        var cfg = parseConfig(configText)
-        startServer(cfg)
+        requirePort(Json.parse("{\"port\": 8080}"))   // => port: 8080
+        requirePort(Json.parse("{}"))                  // throws ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
-            ConfigErr.BadJson(msg) -> print("invalid JSON:", msg),
-            ConfigErr.BadField(f) -> print("bad field:", f),
+            ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port
         }
     }
 }
@@ -784,5 +887,78 @@ fn safeDivide(a: int, b: int) -> string {
         return "error: division by zero"
     }
 }
+```
+
+### 8.7 Worked Examples
+
+These are self-contained programs that run as-is and pass `xray check` (comments show the real output).
+
+#### Example 1: `throw` / `catch` / `match`
+
+```xray
+enum ParseErr { Empty, BadChar(string) }
+
+fn parseDigit(s: string) -> int {
+    if (len(s) == 0) { throw ParseErr.Empty }
+    if (s == "x") { throw ParseErr.BadChar(s) }
+    return 42
+}
+
+fn main() {
+    try {
+        print(parseDigit(""))
+    } catch (e: ParseErr) {
+        match (e) {
+            ParseErr.Empty -> print("empty input"),        // => empty input
+            ParseErr.BadChar(c) -> print("bad char:", c),
+        }
+    }
+}
+
+main()
+```
+
+#### Example 2: `defer` order (LIFO) on the error path
+
+```xray
+enum E { Boom }
+
+fn work() {
+    defer print("defer 1")
+    defer print("defer 2")
+    print("body")
+    throw E.Boom                             // defers still run when throwing
+}
+
+fn main() {
+    try { work() } catch (e) { print("caught") }
+}
+
+main()
+```
+
+Output (`defer` runs in LIFO order):
+
+```
+body
+defer 2
+defer 1
+caught
+```
+
+#### Example 3: `catch panic` with fault details
+
+```xray
+fn main() {
+    var arr: Array<int> = [1, 2, 3]
+    try {
+        print(arr[10])
+    } catch panic (p) {
+        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // => code: 430
+    }
+}
+
+main()
 ```
 <!-- /xr-spec:en -->

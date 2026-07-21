@@ -205,6 +205,16 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
     }
 }
 
+XrLspIndexSymbol *xlsp_index_symbols_from_ast(struct AstNode *ast) {
+    if (!ast)
+        return NULL;
+    // extract_symbols() prepends into result->symbols; borrow a stack result so
+    // callers get an owning list without a full XrLspIndexResult.
+    XrLspIndexResult tmp = {0};
+    extract_symbols(&tmp, (AstNode *) ast, false);
+    return tmp.symbols;
+}
+
 // ============================================================================
 // File Parsing (in worker thread)
 // ============================================================================
@@ -384,8 +394,18 @@ XrLspIndexPool *xlsp_index_pool_new(XrLspServer *server) {
 
     atomic_store(&pool->running, true);
 
+    // Size the pool to the host CPU count so large machines parallelise the
+    // parse pass, but leave one core for the main LSP loop and cap at the
+    // fixed array bound. Always keep at least 2 workers for small machines.
+    unsigned int cpus = xr_os_cpu_count();
+    int desired = cpus > 1 ? (int) cpus - 1 : 1;
+    if (desired < 2)
+        desired = 2;
+    if (desired > XLSP_INDEX_POOL_MAX_WORKERS)
+        desired = XLSP_INDEX_POOL_MAX_WORKERS;
+
     // Start worker threads
-    pool->worker_count = XLSP_INDEX_POOL_SIZE;
+    pool->worker_count = desired;
     for (int i = 0; i < pool->worker_count; i++) {
         pool->workers[i].worker_id = i;
         pool->workers[i].pool = pool;
@@ -568,6 +588,14 @@ void xlsp_index_symbol_free(XrLspIndexSymbol *sym) {
     xr_free(sym->name);
     xr_free(sym->type_str);
     xr_free(sym);
+}
+
+void xlsp_index_symbol_free_list(XrLspIndexSymbol *list) {
+    while (list) {
+        XrLspIndexSymbol *next = list->next;
+        xlsp_index_symbol_free(list);
+        list = next;
+    }
 }
 
 void xlsp_index_result_free(XrLspIndexResult *result) {

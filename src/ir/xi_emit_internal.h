@@ -96,6 +96,19 @@ static inline bool xi_emit_shr_uses_unsigned(const XiValue *v) {
     return xi_emit_type_is_unsigned_int(v->args[0] ? v->args[0]->type : NULL);
 }
 
+/* XI_DIV / XI_MOD on statically-unsigned integer operands are unsigned
+ * (OP_DIV_U / OP_MOD_U). The i64 value slot has no signedness tag, so the
+ * signed OP_DIV/OP_MOD would divide u64/usize top-bit-set values as negative.
+ * Mirrors the uint64_t-typed division the AOT backend emits. */
+static inline bool xi_emit_divmod_uses_unsigned(const XiValue *v) {
+    if (!v || (v->op != XI_DIV && v->op != XI_MOD) || v->nargs < 2)
+        return false;
+    const XrType *left = v->args[0] ? v->args[0]->type : NULL;
+    const XrType *right = v->args[1] ? v->args[1]->type : NULL;
+    return xi_emit_type_is_int_like(left) && xi_emit_type_is_int_like(right) &&
+           (xi_emit_type_is_unsigned_int(left) || xi_emit_type_is_unsigned_int(right));
+}
+
 /* ========== Emit Context ========== */
 
 typedef struct {

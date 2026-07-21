@@ -313,6 +313,38 @@ dump(some_obj)                 // 调试输出，含类型信息与结构布局
 - 多参时以单空格分隔。
 - `print` 默认会追加换行（与 C/Python 不同，与回归测试一致）。
 - `dump` 用于调试，输出格式包含类型标注与对象内部结构。
+### 4.11 完整可运行示例
+
+综合 `if` / `match` / `for-in` 的控制流：
+
+```xray
+fn classify(n: int) -> string {
+    if (n < 0) { return "negative" }
+    return match (n) {
+        0 -> "zero"
+        1..=9 -> "small"
+        _ -> "large"
+    }
+}
+
+fn main() {
+    for (i in [-1, 0, 5, 100]) {
+        print(classify(i))
+    }
+}
+
+main()
+```
+
+输出：
+
+```
+negative
+zero
+small
+large
+```
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -627,4 +659,36 @@ dump(some_obj)                 // debug output, with type info and structure
 - Multiple arguments are separated by single spaces.
 - `print` appends a newline by default (different from C/Python; consistent with regression tests).
 - `dump` is for debugging; output includes type tags and internal structure.
+### 4.11 Worked Examples
+
+Combining `if` / `match` / `for-in` control flow:
+
+```xray
+fn classify(n: int) -> string {
+    if (n < 0) { return "negative" }
+    return match (n) {
+        0 -> "zero"
+        1..=9 -> "small"
+        _ -> "large"
+    }
+}
+
+fn main() {
+    for (i in [-1, 0, 5, 100]) {
+        print(classify(i))
+    }
+}
+
+main()
+```
+
+Output:
+
+```
+negative
+zero
+small
+large
+```
+
 <!-- /xr-spec:en -->

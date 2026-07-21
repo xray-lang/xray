@@ -28,6 +28,8 @@
 #include "xlsp_stdlib.h"
 #include "xlsp_imports.h"
 #include "xlsp_builtins.h"
+#include "xlsp_index_pool.h"
+#include "xlsp_symbol_index.h"
 
 // Static analyzer
 #include "../../frontend/analyzer/xanalyzer.h"
@@ -456,6 +458,15 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
             }
             xr_free(dirty_files);
         }
+    }
+
+    // Keep the workspace-wide shallow symbol index in sync with this open
+    // document's live (possibly unsaved) content, so workspace/symbol,
+    // definition fallback and completion see edits before they hit disk.
+    if (ast && server->symbol_index && doc->uri) {
+        XrLspIndexSymbol *shallow = xlsp_index_symbols_from_ast(ast);
+        xlsp_symbol_index_replace_file(server->symbol_index, doc->uri, shallow);
+        xlsp_index_symbol_free_list(shallow);
     }
 
     lsp_log("parse_document: done");

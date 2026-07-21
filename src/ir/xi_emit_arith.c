@@ -84,7 +84,7 @@ XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
                              (rhs->type->kind == XR_KIND_INT || rhs->type->kind == XR_KIND_FLOAT));
     bool lhs_is_const_num = (lhs->op == XI_CONST && lhs->type &&
                              (lhs->type->kind == XR_KIND_INT || lhs->type->kind == XR_KIND_FLOAT));
-    if (rhs_is_const_num && !rhs_is_small_int &&
+    if (rhs_is_const_num && !rhs_is_small_int && !xi_emit_divmod_uses_unsigned(v) &&
         (v->op == XI_ADD || v->op == XI_SUB || v->op == XI_MUL || v->op == XI_DIV ||
          v->op == XI_MOD)) {
         XiEmitReg b = reg_of(ctx, lhs);
@@ -149,6 +149,8 @@ XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
     if (xi_emit_shr_uses_unsigned(v))
         op = OP_SHR_U;
+    if (xi_emit_divmod_uses_unsigned(v))
+        op = (v->op == XI_DIV) ? OP_DIV_U : OP_MOD_U;
     if (op == OP_NOP) {
         emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
         return;
