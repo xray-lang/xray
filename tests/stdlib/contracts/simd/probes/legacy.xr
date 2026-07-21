@@ -1,0 +1,20 @@
+import { Capabilities, U8x16, U32x4 } from simd
+
+fn run() {
+    var lanes: [uint32; 4] = [1, 2, 3, 4]
+    var vector = U32x4.fromLanes(lanes)
+    var result = vector.add(U32x4.splat(5)).mul(U32x4.splat(2))
+    assert(result.extract(0) == 12)
+    assert(result.extract(3) == 18)
+    assert(vector.swapAdjacent().extract(0) == 2)
+    assert(Capabilities.nativeBytes() >= 16)
+    print("{\"case\":\"portable-lane-ops\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
+
+    var bytes = U8x16.splat(7)
+    var roundtrip = bytes.reinterpretU32().reinterpretU8()
+    assert(roundtrip.extract(0) == 7)
+    assert(roundtrip.extract(15) == 7)
+    print("{\"case\":\"intrinsic-identity\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
+}
+
+run()

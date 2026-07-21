@@ -1,0 +1,11 @@
+import strconv
+
+assert(strconv.parseInt("42") == 42)
+assert(strconv.parseInt("-7") == -7)
+assert(strconv.parseFloat("3.5") == 3.5)
+print("{\"case\":\"optional-parse\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
+
+assert(strconv.parseInt("not-a-number") == null)
+assert(strconv.parseInt("") == null)
+assert(strconv.parseFloat("bad") == null)
+print("{\"case\":\"reject-malformed\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")

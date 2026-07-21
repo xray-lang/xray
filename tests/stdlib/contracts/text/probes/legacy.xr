@@ -1,0 +1,11 @@
+import text
+
+assert(text.lower("HELLO") == "hello")
+assert(text.upper("world") == "WORLD")
+assert(text.trim("  hi  ") == "hi")
+assert(text.padStart("7", 3, "0") == "007")
+assert(text.padEnd("7", 3, "0") == "700")
+print("{\"case\":\"case-trim-pad\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
+
+assert(text.reverseRunes("A世🙂") == "🙂世A")
+print("{\"case\":\"rune-aware\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")

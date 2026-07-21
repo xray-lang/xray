@@ -1,0 +1,17 @@
+import datetime
+
+var leap = datetime.createUTC(2024, 2, 29, 23, 45, 6)
+var next = leap.add(1, "days")
+assert(next.year == 2024)
+assert(next.month == 3)
+assert(next.day == 1)
+assert(leap.diff(next, "hours") == -24)
+assert(leap.format("YYYY/MM/DD HH:mm:ss") == "2024/02/29 23:45:06")
+print("{\"case\":\"calendar-algebra\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
+
+var encoded = leap.toISOString()
+var decoded = datetime.parse(encoded)
+assert(decoded != null)
+assert(decoded!.timestamp == leap.timestamp)
+assert(decoded!.millisecond == leap.millisecond)
+print("{\"case\":\"iso-roundtrip\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
