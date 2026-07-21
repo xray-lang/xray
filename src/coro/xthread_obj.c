@@ -10,6 +10,7 @@
 
 #include "xthread_obj.h"
 
+#include "xcoro_tuning.h"
 #include "xcoroutine.h"
 #include "xdeep_copy.h"
 #include "xmachine.h"
@@ -314,6 +315,16 @@ XrThread *xr_thread_obj_spawn_vm(struct XrVMRuntime *isolate, struct XrCoroutine
     atomic_store_explicit(&thread->state, XR_THREAD_CREATED, memory_order_relaxed);
     atomic_store_explicit(&thread->finished, false, memory_order_relaxed);
     atomic_store_explicit(&thread->failed, false, memory_order_relaxed);
+
+    /* The OS thread drives the full VM interpreter to completion. run()'s
+     * native C-stack frame is very large — enormously so under ASan, which
+     * inflates per-frame usage — and overflows on the very first run() entry
+     * when the thread runs on the platform-default secondary-thread stack
+     * (512 KB on macOS) or an undersized user-requested stack. Floor the stack
+     * at the worker stack size, which exists for exactly this reason (see
+     * XR_WORKER_STACK_BYTES). Larger explicit requests are still honored. */
+    if (stack_size < XR_WORKER_STACK_BYTES)
+        stack_size = XR_WORKER_STACK_BYTES;
 
     xr_shared_retain(&thread->hdr); /* OS entry owns the handle until exit. */
     thread_runtime_enter(isolate);

@@ -1012,6 +1012,21 @@ var p2 = pair(1, "x")             // (int, string)
 - In field access `t.N`, N **must be an integer literal**; using a variable or string is the compile error `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` / `_RANGE`.
 - Tuples are **immutable**: `t.0 = v` is a compile error. To modify, build a new tuple.
 
+#### Worked Examples
+
+```xray
+fn main() {
+    var pair = (1, "hello")
+    print(pair.0)   // => 1
+    print(pair.1)   // => hello
+    var (a, b) = pair    // destructuring
+    print(a)        // => 1
+    print(b)        // => hello
+}
+
+main()
+```
+
 ### 2.8 Type Aliases
 
 ```xray
@@ -1119,6 +1134,59 @@ Xray keeps only the minimal type identity layer by default:
 - Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
 
 Runtime type queries use `typeOf(value)`, `typeName(value)`, and `TypeId`. Reflection metadata is not exposed as a traversable or callable object graph.
+### 2.13 Worked Examples
+
+Self-contained programs that run as-is and pass `xray check` (comments show the real output).
+
+Arrays:
+
+```xray
+fn main() {
+    var nums = [1, 2, 3]
+    nums.push(4)
+    print(nums)          // => [1, 2, 3, 4]
+    print(len(nums))     // => 4
+    var doubled = nums.map(fn(x: int) -> int { return x * 2 })
+    print(doubled)       // => [2, 4, 6, 8]
+    var evens = nums.filter(fn(x: int) -> bool { return x % 2 == 0 })
+    print(evens)         // => [2, 4]
+}
+
+main()
+```
+
+Maps and Sets:
+
+```xray
+fn main() {
+    var scores = #{"alice": 95, "bob": 88}
+    scores.set("carol", 77)
+    print(scores.get("alice") ?? 0)   // => 95
+    print(len(scores))                 // => 3
+
+    var seen = Set<int>()
+    seen.add(1)
+    seen.add(2)
+    seen.add(2)
+    print(len(seen))          // => 2
+    print(seen.contains(1))   // => true
+}
+
+main()
+```
+
+Nullable types with `??`:
+
+```xray
+fn main() {
+    var name: string? = null
+    print(name ?? "anonymous")   // => anonymous
+    var city: string? = "NYC"
+    print(city ?? "unknown")     // => NYC
+}
+
+main()
+```
 
 ---
 
@@ -2012,6 +2080,37 @@ dump(some_obj)                 // debug output, with type info and structure
 - Multiple arguments are separated by single spaces.
 - `print` appends a newline by default (different from C/Python; consistent with regression tests).
 - `dump` is for debugging; output includes type tags and internal structure.
+### 4.11 Worked Examples
+
+Combining `if` / `match` / `for-in` control flow:
+
+```xray
+fn classify(n: int) -> string {
+    if (n < 0) { return "negative" }
+    return match (n) {
+        0 -> "zero"
+        1..=9 -> "small"
+        _ -> "large"
+    }
+}
+
+fn main() {
+    for (i in [-1, 0, 5, 100]) {
+        print(classify(i))
+    }
+}
+
+main()
+```
+
+Output:
+
+```
+negative
+zero
+small
+large
+```
 
 ---
 
@@ -2367,6 +2466,41 @@ Rules:
 - `@c_export` defines the function ABI wrapper; `xray build --native --c-header FILE` can emit a C prototype header for those wrappers, and `xray build --native --shared --c-header FILE` can emit a native shared library with a matching header.
 - `--shared` currently supports only scalar / raw pointer exports that do not require Xray runtime initialization; runtime-backed features, managed ownership, aggregate by-value, and initialization/shutdown policy remain future FFI work.
 
+#### Worked Examples
+
+Closure capture and higher-order functions:
+
+```xray
+fn apply(f: (int) -> int, x: int) -> int {
+    return f(x)
+}
+
+fn main() {
+    var base = 10
+    var addBase = fn(x: int) -> int { return x + base }   // closure captures base
+    print(addBase(5))            // => 15
+    print(apply(addBase, 7))     // => 17 (function passed as an argument)
+}
+
+main()
+```
+
+Multiple return values (a tuple):
+
+```xray
+fn divmod(a: int, b: int) -> (int, int) {
+    return (a / b, a % b)
+}
+
+fn main() {
+    var (q, r) = divmod(17, 5)
+    print(q)   // => 3
+    print(r)   // => 2
+}
+
+main()
+```
+
 ### 5.3 `class` declaration
 
 ```ebnf
@@ -2536,6 +2670,56 @@ class Counter {
 
 Implement `iterator()` returning an object with `hasNext() -> bool` and `next() -> T?` to enable `for-in`. See §14.15.
 
+#### 5.3.7 Worked Examples
+
+Self-contained programs that run as-is and pass `xray check` (comments show the real output).
+
+Inheritance with automatic override:
+
+```xray
+class Animal {
+    name: string
+    constructor(name: string) { this.name = name }
+    speak() -> string { return "..." }
+}
+
+class Dog extends Animal {
+    constructor(name: string) { super(name) }
+    speak() -> string { return "woof" }   // same name/signature: auto-override
+}
+
+fn main() {
+    var d = Dog("Rex")
+    print(d.name)      // => Rex
+    print(d.speak())   // => woof
+}
+
+main()
+```
+
+Operator overloading (call with named values):
+
+```xray
+class Vec2 {
+    x: int
+    y: int
+    constructor(x: int, y: int) { this.x = x; this.y = y }
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+}
+
+fn main() {
+    var a = Vec2(1, 2)
+    var b = Vec2(3, 4)
+    var sum = a + b
+    print(sum.x)   // => 4
+    print(sum.y)   // => 6
+}
+
+main()
+```
+
 ### 5.4 `struct` declaration
 
 ```ebnf
@@ -2586,6 +2770,27 @@ b.x = 99.0
 - Math types (Vec2/Vec3/Quat/Color)
 - Short-lived values (iterator state, ad-hoc tuples)
 - Performance-sensitive data where heap allocation should be avoided
+
+#### 5.4.1 Value-semantics example
+
+A `struct` is a value type: assignment and argument passing copy it.
+
+```xray
+struct Point {
+    x: int
+    y: int
+}
+
+fn main() {
+    var p = Point{x: 3, y: 4}
+    var q = p            // struct assignment copies
+    q.x = 99
+    print(p.x)           // => 3 (unchanged)
+    print(q.x)           // => 99
+}
+
+main()
+```
 
 ### 5.5 `interface` and `implements`
 
@@ -2661,6 +2866,29 @@ class Buffer implements SizedCollection<int> {
     }
     first() -> int { return this.data[0] }
 }
+```
+
+#### Worked Examples
+
+Interface + `implements` + polymorphism:
+
+```xray
+interface Shape {
+    area() -> float
+}
+
+class Circle implements Shape {
+    r: float
+    constructor(r: float) { this.r = r }
+    area() -> float { return 3.14159 * this.r * this.r }
+}
+
+fn main() {
+    var s: Shape = Circle(2.0)
+    print(s.area())   // => 12.56636
+}
+
+main()
 ```
 
 ### 5.6 `enum` declaration
@@ -3631,26 +3859,28 @@ Reference table:
 #### Pattern 1: enum errors + defer for resource cleanup
 
 ```xray
-enum ConnErr { Refused, Timeout, Reset }
+enum ConnErr { Refused, Timeout }
 
-fn fetchData(host: string) -> string {
-    var conn = connect(host)
-    defer conn.close()
+// A tiny stand-in "connection" so the example runs on its own.
+class Conn {
+    alive: bool
+    constructor(alive: bool) { this.alive = alive }
+    isAlive() -> bool { return this.alive }
+    close() { print("closed") }
+}
 
+fn fetchData(alive: bool) -> string {
+    var conn = Conn(alive)
+    defer conn.close()                 // runs whether we succeed or throw
     if (!conn.isAlive()) { throw ConnErr.Timeout }
-    return conn.read()
+    return "payload"
 }
 
 fn main() {
     try {
-        var data = fetchData("api.example.com")
-        print(data)
+        print(fetchData(true))         // => closed, then payload
     } catch (e: ConnErr) {
-        match (e) {
-            ConnErr.Refused -> print("connection refused"),
-            ConnErr.Timeout -> print("timeout"),
-            ConnErr.Reset -> print("connection reset"),
-        }
+        print("connection error")
     }
 }
 
@@ -3660,23 +3890,20 @@ main()
 #### Pattern 2: throw + catch for library APIs
 
 ```xray
-enum ConfigErr { BadJson(string), BadField(string) }
+enum ConfigErr { Missing(string) }
 
-fn parseConfig(text: string) -> Config {
-    var json = parseJson(text)
-    var port = json["port"].toInt()
-    if (port == null) { throw ConfigErr.BadField("port") }
-    return Config(port: port!)
+fn requirePort(cfg: Json) {
+    if (!Json.containsKey(cfg, "port")) { throw ConfigErr.Missing("port") }
+    print("port:", Json.get(cfg, "port"))
 }
 
 fn main() {
     try {
-        var cfg = parseConfig(configText)
-        startServer(cfg)
+        requirePort(Json.parse("{\"port\": 8080}"))   // => port: 8080
+        requirePort(Json.parse("{}"))                  // throws ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
-            ConfigErr.BadJson(msg) -> print("invalid JSON:", msg),
-            ConfigErr.BadField(f) -> print("bad field:", f),
+            ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port
         }
     }
 }
@@ -4584,6 +4811,21 @@ Usage from Xray code is identical:
 import time
 var t = time.now()
 time.sleep(100)
+```
+### 11.8 Worked Examples
+
+Selective import and namespace import from the standard library:
+
+```xray
+import { sha256 } from crypto
+import math
+
+fn main() {
+    print(math.sqrt(144.0))   // => 12.0
+    print(sha256("xray"))     // => 1a46e6a6... (SHA-256 digest)
+}
+
+main()
 ```
 
 ---

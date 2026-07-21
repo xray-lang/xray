@@ -105,10 +105,16 @@ static bool countdown_latch_claim_waiter(XrCountdownLatch *latch, XrCoroutine *c
 static void countdown_latch_wake_all(XrCountdownLatch *latch, bool success) {
     if (!latch)
         return;
-    XrRuntime *runtime = countdown_latch_runtime(latch);
-    if (!countdown_latch_runtime_can_wake(runtime))
-        return;
 
+    /* Detach the waiter list first, touching only the latch's own state. A
+     * blocked waiter always holds a live reference to the latch (the receiver
+     * local of `latch.wait()`), so a latch closed as part of RC-destroy during
+     * runtime teardown has no waiters at this point. Draining before touching
+     * latch->scheduler is what makes teardown safe: the scheduler runtime is
+     * freed before shared latches are destroyed, so dereferencing the stale
+     * scheduler pointer (countdown_latch_runtime_can_wake) once it is gone is a
+     * heap-use-after-free. With no waiters there is nothing to route, so we
+     * return before reading the scheduler. */
     XrCoroutine *list = NULL;
     XrCoroutine *last = NULL;
 
@@ -126,6 +132,13 @@ static void countdown_latch_wake_all(XrCountdownLatch *latch, bool success) {
         last = coro;
     }
     xr_amutex_unlock(&latch->lock);
+
+    if (!list)
+        return;
+
+    XrRuntime *runtime = countdown_latch_runtime(latch);
+    if (!countdown_latch_runtime_can_wake(runtime))
+        return;
 
     XrWorker *current = xr_current_worker();
     bool current_matches = current && current->p.runtime == runtime;

@@ -2069,7 +2069,13 @@ static inline XrValue xrt_map_index_get_small_owned(xrt_map_t *m, XrValue key) {
 }
 
 static inline void xrt_map_require_mutable(const xrt_map_t *m, const char *operation) {
-    if (XR_UNLIKELY(m && (m->flags & XR_MAP_FLAG_STATIC_READONLY))) {
+    /* A boolmap (xrt_boolmap_t) is a smaller heap object that stops well before
+     * the tagged-map ABI `flags` byte, so probing m->flags on one reads past the
+     * allocation. Only generic tagged maps ever carry XR_MAP_FLAG_STATIC_READONLY
+     * and boolmaps are always runtime-mutable, so skip the flags read for them.
+     * hdr.type (offset 0, checked by xrt_map_is_boolmap) is in bounds for every
+     * map variant. */
+    if (XR_UNLIKELY(m && !xrt_map_is_boolmap(m) && (m->flags & XR_MAP_FLAG_STATIC_READONLY))) {
         fprintf(stderr, "%s: readonly static Map cannot be mutated\n",
                 operation ? operation : "Map mutation");
         abort();

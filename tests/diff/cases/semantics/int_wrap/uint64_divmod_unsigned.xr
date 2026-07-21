@@ -1,0 +1,63 @@
+// anchor: uint64-divmod-unsigned
+// uint64 / usize (statically unsigned) division and modulo must be UNSIGNED in
+// every backend and folder: the VM lowers to OP_DIV_U / OP_MOD_U, the AOT
+// backend emits uint64_t-typed division, and both constant folders (xi_opt
+// fold_int_binary + SCCP eval_arith) fold with xr_i64_div_u_wrap /
+// xr_i64_mod_u_wrap. Regression guard for the xray-ports LMDB port divergence
+// (the VM did signed division on top-bit-set uint64 payloads — mdb_pack85 %/ 85,
+// 2026-07-20).
+
+// 高位置位的 uint64（拼接构造，避免 > INT64_MAX 字面量饱和）
+var hi: uint64 = 0x8000_0000
+var x: uint64 = hi << 32              // 0x8000000000000000 = 9223372036854775808
+
+// 常量除数（DIVK/MODK 对无符号被禁用，落到 OP_DIV_U / OP_MOD_U）
+print(x / 85)                         // 108510259257115009
+print(x % 85)                         // 43
+print(x / 2)                          // 4611686018427387904
+print(x % 2)                          // 0
+
+// 全 1 位型 0xFFFFFFFFFFFFFFFF
+var ones: uint64 = 0xFFFF_FFFF
+var all: uint64 = (ones << 32) | ones
+print(all / 85)                       // 217020518514230019
+print(all % 85)                       // 0
+print(all / 3)                        // 6148914691236517205
+print(all % 7)                        // 3
+
+// 变量除数（reg-reg OP_DIV_U / OP_MOD_U）
+var d85: uint64 = 85
+var d7: uint64 = 7
+print(all / d85)                      // 217020518514230019
+print(all % d85)                      // 0
+print(x / d7)                         // 1317624576693539401
+print(x % d7)                         // 1
+
+// uintsize（本平台 64 位，语义同 uint64）
+var us: uintsize = all as uintsize
+print(us / 1000)                      // 18446744073709551
+print(us % 1000)                      // 615
+
+// 编译期常量折叠（两操作数均常量：hi<<32 折叠为 uint64 常量）
+var cfold_div: uint64 = (hi << 32) / 85
+var cfold_mod: uint64 = (hi << 32) % 85
+print(cfold_div)                      // 108510259257115009
+print(cfold_mod)                      // 43
+
+// 有符号 int 除模保持算术语义（不受影响）
+var s: int = -85
+print(s / 2)                          // -42
+print(s % 2)                          // -1
+var sd: int = 2
+print(s / sd)                         // -42
+print(s % sd)                         // -1
+print(-8 / 3)                         // -2（有符号常量折叠）
+print(-8 % 3)                         // -2
+
+// uint32 / byte 除模（零扩展 payload，语义回归）
+var u32top: uint32 = 0x8000_0000
+print(u32top / 7)                     // 306783378
+print(u32top % 7)                     // 2
+var u8v: byte = 200
+print(u8v / 7)                        // 28
+print(u8v % 7)                        // 4

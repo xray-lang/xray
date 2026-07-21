@@ -1,0 +1,5 @@
+// Helper module for xmod_ptr_offset_imported_const: an exported scalar const.
+// Imported into another module it loads via GET_SHARED typed unknown; folding it
+// must keep a concrete (native) integer type so `as int` + pointer `.offset`
+// lower to native address arithmetic instead of xrt_add(void*, XrValue).
+export const PAGE: uint64 = 4096

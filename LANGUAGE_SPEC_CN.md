@@ -1013,6 +1013,21 @@ var p2 = pair(1, "x")             // (int, string)
 - 字段访问 `t.N` 中 N **必须是字面量整数**；用变量或字符串访问是编译错误 `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` / `_RANGE`。
 - 元组**不可变**：`t.0 = v` 是编译错误。修改必须重新构造。
 
+#### 完整可运行示例
+
+```xray
+fn main() {
+    var pair = (1, "hello")
+    print(pair.0)   // => 1
+    print(pair.1)   // => hello
+    var (a, b) = pair    // 解构
+    print(a)        // => 1
+    print(b)        // => hello
+}
+
+main()
+```
+
 ### 2.8 类型别名
 
 ```xray
@@ -1114,6 +1129,59 @@ Xray 默认只保留最小类型身份层：
 - 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
 
 运行时类型查询使用 `typeOf(value)`、`typeName(value)` 和 `TypeId`。反射元数据不会暴露为可遍历、可调用的对象图。
+### 2.13 完整可运行示例
+
+以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
+
+数组：
+
+```xray
+fn main() {
+    var nums = [1, 2, 3]
+    nums.push(4)
+    print(nums)          // => [1, 2, 3, 4]
+    print(len(nums))     // => 4
+    var doubled = nums.map(fn(x: int) -> int { return x * 2 })
+    print(doubled)       // => [2, 4, 6, 8]
+    var evens = nums.filter(fn(x: int) -> bool { return x % 2 == 0 })
+    print(evens)         // => [2, 4]
+}
+
+main()
+```
+
+Map 与 Set：
+
+```xray
+fn main() {
+    var scores = #{"alice": 95, "bob": 88}
+    scores.set("carol", 77)
+    print(scores.get("alice") ?? 0)   // => 95
+    print(len(scores))                 // => 3
+
+    var seen = Set<int>()
+    seen.add(1)
+    seen.add(2)
+    seen.add(2)
+    print(len(seen))          // => 2
+    print(seen.contains(1))   // => true
+}
+
+main()
+```
+
+可空类型与 `??`：
+
+```xray
+fn main() {
+    var name: string? = null
+    print(name ?? "anonymous")   // => anonymous
+    var city: string? = "NYC"
+    print(city ?? "unknown")     // => NYC
+}
+
+main()
+```
 
 ---
 
@@ -2005,6 +2073,37 @@ dump(some_obj)                 // 调试输出，含类型信息与结构布局
 - 多参时以单空格分隔。
 - `print` 默认会追加换行（与 C/Python 不同，与回归测试一致）。
 - `dump` 用于调试，输出格式包含类型标注与对象内部结构。
+### 4.11 完整可运行示例
+
+综合 `if` / `match` / `for-in` 的控制流：
+
+```xray
+fn classify(n: int) -> string {
+    if (n < 0) { return "negative" }
+    return match (n) {
+        0 -> "zero"
+        1..=9 -> "small"
+        _ -> "large"
+    }
+}
+
+fn main() {
+    for (i in [-1, 0, 5, 100]) {
+        print(classify(i))
+    }
+}
+
+main()
+```
+
+输出：
+
+```
+negative
+zero
+small
+large
+```
 
 ---
 
@@ -2360,6 +2459,41 @@ print(add(19, 23))        // xray 内部仍是普通函数调用
 - `@c_export` 定义函数 ABI wrapper；`xray build --native --c-header FILE` 可为这些 wrapper 生成 C 原型头文件，`xray build --native --shared --c-header FILE` 可生成 native shared library 和匹配头文件。
 - `--shared` 当前只支持无需 Xray runtime 初始化的 scalar / raw pointer 导出；runtime-backed 特性、managed ownership、aggregate by-value 和初始化/关闭策略仍由后续 FFI 任务定义。
 
+#### 完整可运行示例
+
+闭包捕获与高阶函数：
+
+```xray
+fn apply(f: (int) -> int, x: int) -> int {
+    return f(x)
+}
+
+fn main() {
+    var base = 10
+    var addBase = fn(x: int) -> int { return x + base }   // 闭包捕获 base
+    print(addBase(5))            // => 15
+    print(apply(addBase, 7))     // => 17（函数作为参数传入）
+}
+
+main()
+```
+
+多返回值（元组）：
+
+```xray
+fn divmod(a: int, b: int) -> (int, int) {
+    return (a / b, a % b)
+}
+
+fn main() {
+    var (q, r) = divmod(17, 5)
+    print(q)   // => 3
+    print(r)   // => 2
+}
+
+main()
+```
+
 ### 5.3 `class` 声明
 
 ```ebnf
@@ -2529,6 +2663,56 @@ class Counter {
 
 实现 `iterator()` 返回带 `hasNext() -> bool` 和 `next() -> T?` 的对象即可启用 `for-in`。详见 §14.15。
 
+#### 5.3.7 完整可运行示例
+
+以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
+
+继承与自动覆写：
+
+```xray
+class Animal {
+    name: string
+    constructor(name: string) { this.name = name }
+    speak() -> string { return "..." }
+}
+
+class Dog extends Animal {
+    constructor(name: string) { super(name) }
+    speak() -> string { return "woof" }   // 同名同签：自动覆写
+}
+
+fn main() {
+    var d = Dog("Rex")
+    print(d.name)      // => Rex
+    print(d.speak())   // => woof
+}
+
+main()
+```
+
+运算符重载（用具名变量调用）：
+
+```xray
+class Vec2 {
+    x: int
+    y: int
+    constructor(x: int, y: int) { this.x = x; this.y = y }
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+}
+
+fn main() {
+    var a = Vec2(1, 2)
+    var b = Vec2(3, 4)
+    var sum = a + b
+    print(sum.x)   // => 4
+    print(sum.y)   // => 6
+}
+
+main()
+```
+
 ### 5.4 `struct` 声明
 
 ```ebnf
@@ -2579,6 +2763,27 @@ b.x = 99.0
 - 数学类型（Vec2/Vec3/Quat/Color）
 - 短生命周期值（迭代器状态、临时元组替代）
 - 性能敏感、希望避免堆分配的数据
+
+#### 5.4.1 值语义示例
+
+`struct` 是值类型，赋值与传参都会拷贝：
+
+```xray
+struct Point {
+    x: int
+    y: int
+}
+
+fn main() {
+    var p = Point{x: 3, y: 4}
+    var q = p            // struct 赋值是拷贝
+    q.x = 99
+    print(p.x)           // => 3（不受影响）
+    print(q.x)           // => 99
+}
+
+main()
+```
 
 ### 5.5 `interface` 与 `implements`
 
@@ -2654,6 +2859,29 @@ class Buffer implements SizedCollection<int> {
     }
     first() -> int { return this.data[0] }
 }
+```
+
+#### 完整可运行示例
+
+接口 + `implements` + 多态：
+
+```xray
+interface Shape {
+    area() -> float
+}
+
+class Circle implements Shape {
+    r: float
+    constructor(r: float) { this.r = r }
+    area() -> float { return 3.14159 * this.r * this.r }
+}
+
+fn main() {
+    var s: Shape = Circle(2.0)
+    print(s.area())   // => 12.56636
+}
+
+main()
 ```
 
 ### 5.6 `enum` 声明
@@ -3624,26 +3852,28 @@ fn fetch(url: string) -> string {
 #### 模式 1：enum 错误 + defer 资源清理
 
 ```xray
-enum ConnErr { Refused, Timeout, Reset }
+enum ConnErr { Refused, Timeout }
 
-fn fetchData(host: string) -> string {
-    var conn = connect(host)
-    defer conn.close()
+// 用一个极简的 "连接" 替身让示例自成一体。
+class Conn {
+    alive: bool
+    constructor(alive: bool) { this.alive = alive }
+    isAlive() -> bool { return this.alive }
+    close() { print("closed") }
+}
 
+fn fetchData(alive: bool) -> string {
+    var conn = Conn(alive)
+    defer conn.close()                 // 无论成功或抛错都会执行
     if (!conn.isAlive()) { throw ConnErr.Timeout }
-    return conn.read()
+    return "payload"
 }
 
 fn main() {
     try {
-        var data = fetchData("api.example.com")
-        print(data)
+        print(fetchData(true))         // => closed 然后 payload
     } catch (e: ConnErr) {
-        match (e) {
-            ConnErr.Refused -> print("connection refused"),
-            ConnErr.Timeout -> print("timeout"),
-            ConnErr.Reset -> print("connection reset"),
-        }
+        print("connection error")
     }
 }
 
@@ -3653,23 +3883,20 @@ main()
 #### 模式 2：throw + catch 用于库 API
 
 ```xray
-enum ConfigErr { BadJson(string), BadField(string) }
+enum ConfigErr { Missing(string) }
 
-fn parseConfig(text: string) -> Config {
-    var json = parseJson(text)
-    var port = json["port"].toInt()
-    if (port == null) { throw ConfigErr.BadField("port") }
-    return Config(port: port!)
+fn requirePort(cfg: Json) {
+    if (!Json.containsKey(cfg, "port")) { throw ConfigErr.Missing("port") }
+    print("port:", Json.get(cfg, "port"))
 }
 
 fn main() {
     try {
-        var cfg = parseConfig(configText)
-        startServer(cfg)
+        requirePort(Json.parse("{\"port\": 8080}"))   // => port: 8080
+        requirePort(Json.parse("{}"))                  // 抛出 ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
-            ConfigErr.BadJson(msg) -> print("invalid JSON:", msg),
-            ConfigErr.BadField(f) -> print("bad field:", f),
+            ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port
         }
     }
 }
@@ -4571,6 +4798,21 @@ xray 端用法相同：
 import time
 var t = time.now()
 time.sleep(100)
+```
+### 11.8 完整可运行示例
+
+从标准库按需导入与命名空间导入：
+
+```xray
+import { sha256 } from crypto
+import math
+
+fn main() {
+    print(math.sqrt(144.0))   // => 12.0
+    print(sha256("xray"))     // => 1a46e6a6...（SHA-256 摘要）
+}
+
+main()
 ```
 
 ---

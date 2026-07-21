@@ -402,6 +402,8 @@
       "R[A] = VM internal parallel reduce over R[B..B+7], C=flags")                                \
     _(SPAN_WINDOW, FMT_ABC, KOP_ABC_BIN,                                                           \
       "R[A] = strict Span window R[B], start=R[C], count=R[C+1], slot=R[C+2]")                     \
+    _(DIV_U, FMT_ABC, KOP_ABC_BIN, "R[A] = (uint64)R[B] / R[C]  (statically-unsigned divide)")     \
+    _(MOD_U, FMT_ABC, KOP_ABC_BIN, "R[A] = (uint64)R[B] % R[C]  (statically-unsigned modulo)")     \
     _(NOP, FMT_SPECIAL, KOP_SPECIAL, "no-op / spawn metadata")
 
 #endif  // XOPCODE_DEF_H

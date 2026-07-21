@@ -32,6 +32,8 @@
 #include "xi_cfg_edit.h"
 #include "xi_tbaa.h"
 #include "xi_ops_gen.h"
+#include "../runtime/value/xtype.h"
+#include "../runtime/value/xffi_sig.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <string.h>
@@ -395,6 +397,10 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     if (!value_map)
         return false;
 
+    /* Index of the call within call_blk; grows as retyped-constant args are
+     * inserted before the call (see the param-binding loop). Used for the split. */
+    uint32_t eff_call_idx = call_idx;
+
     /* Map callee params → call arguments (args[1..n] of XI_CALL) */
     uint16_t nparams = callee->nparams;
     for (uint16_t p = 0; p < nparams; p++) {
@@ -403,8 +409,40 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
             continue;
         /* call_val->args[0] = callee, args[1..] = actual arguments */
         uint16_t arg_idx = p + 1;
-        if (arg_idx < call_val->nargs && param->id < callee_max_id)
-            value_map[param->id] = call_val->args[arg_idx];
+        if (arg_idx >= call_val->nargs || param->id >= callee_max_id)
+            continue;
+        XiValue *arg = call_val->args[arg_idx];
+        /* An integer constant argument keeps its own signed int64 type at the
+         * call boundary, but the parameter may be a different width/signedness
+         * integer (for example an int literal 0 passed to a uint64 parameter).
+         * Once the constant replaces the parameter inside the inlined body, a
+         * typed use that trusted the parameter's width (a PTR_STORE into a uint64
+         * slot) fails verification: the value maps to the I64 ABI scalar while
+         * the store expects U64. Bind a retyped constant clone with the
+         * parameter's type. Restricted to non-nullable integer→integer so null,
+         * nullable, bool, float, and other constants keep their exact semantics.
+         * The clone is inserted just before the call so it dominates and, in
+         * codegen order, precedes the inlined body; appending after the call
+         * would move it into the post-call continuation during the split. */
+        if (arg && arg->op == XI_CONST && param->type && arg->type &&
+            param->type->kind == XR_KIND_INT && !param->type->is_nullable &&
+            arg->type->kind == XR_KIND_INT && !arg->type->is_nullable &&
+            xr_ffi_type_from_xrtype(arg->type, false) !=
+                xr_ffi_type_from_xrtype(param->type, false)) {
+            XiValue *retyped = xi_value_new(caller, call_blk, XI_CONST, param->type, 0);
+            if (retyped) {
+                xi_value_copy_metadata(retyped, arg);
+                retyped->type = param->type;
+                /* xi_value_new appended at the block end; shift it in front of
+                 * the call so pre-call ordering and dominance hold. */
+                for (uint32_t i = call_blk->nvalues - 1; i > eff_call_idx; i--)
+                    call_blk->values[i] = call_blk->values[i - 1];
+                call_blk->values[eff_call_idx] = retyped;
+                eff_call_idx++;
+                arg = retyped;
+            }
+        }
+        value_map[param->id] = arg;
     }
 
     /* Create continuation block (values after the call). */
@@ -428,7 +466,7 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     }
 
     /* Move post-call values to continuation block. */
-    uint32_t post_start = call_idx + 1;
+    uint32_t post_start = eff_call_idx + 1;
     uint32_t post_count = call_blk->nvalues - post_start;
     if (post_count > 0) {
         if (post_count > cont_blk->values_cap) {
@@ -450,7 +488,7 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     }
 
     /* Truncate call_blk: remove the call and everything after it. */
-    call_blk->nvalues = call_idx;
+    call_blk->nvalues = eff_call_idx;
 
     /* Clone callee blocks into caller. */
     uint32_t callee_nblk = callee->nblocks;

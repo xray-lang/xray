@@ -96,6 +96,21 @@ static inline int64_t xr_i64_mod_wrap(int64_t a, int64_t b) {
     return a % b;
 }
 
+/* Unsigned division / modulo for statically-unsigned operands (mirrors
+ * OP_DIV_U / OP_MOD_U in the VM and the uint64_t-typed division the AOT
+ * backend emits). No signed-overflow edge cases: unsigned division only
+ * traps on divide-by-zero, which the caller must reject first. Keyed on the
+ * static type because the i64 value model carries no signedness tag — the
+ * only widths where this differs from the signed path are u64/usize (the
+ * narrower unsigned payloads are zero-extended, so both agree). */
+static inline int64_t xr_i64_div_u_wrap(int64_t a, int64_t b) {
+    return (int64_t) ((uint64_t) a / (uint64_t) b);
+}
+
+static inline int64_t xr_i64_mod_u_wrap(int64_t a, int64_t b) {
+    return (int64_t) ((uint64_t) a % (uint64_t) b);
+}
+
 static inline int64_t xr_i64_shl_wrap(int64_t a, int64_t b) {
     return (int64_t) ((uint64_t) a << ((uint64_t) b & 63));
 }
