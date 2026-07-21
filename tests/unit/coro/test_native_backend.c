@@ -686,6 +686,22 @@ TEST(aot_runtime_control_plane_uses_root_descriptor_heap) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(aot_test_yield_provider_preserves_scalar_and_atomic_contracts) {
+    ASSERT_EQ_INT(xr_aot_test_yield_sync(), 100);
+    ASSERT_EQ_INT(xr_aot_test_yield_simple(), 42);
+    ASSERT_EQ_INT(xr_aot_test_yield_add(19, 23), 42);
+    ASSERT_EQ_INT(xr_aot_test_yield_blocking_sleep(0), 0);
+
+    (void) xr_aot_test_yield_counter_reset();
+    ASSERT_EQ_INT(xr_aot_test_yield_counter_get(), 0);
+    xr_aot_test_yield_counter_inc();
+    ASSERT_EQ_INT(xr_aot_test_yield_counter_get(), 1);
+    xr_aot_test_yield_counter_inc();
+    ASSERT_EQ_INT(xr_aot_test_yield_counter_get(), 2);
+    ASSERT_EQ_INT(xr_aot_test_yield_counter_reset(), 2);
+    ASSERT_EQ_INT(xr_aot_test_yield_counter_get(), 0);
+}
+
 TEST(aot_parallel_cap_creates_scheduler_runtime) {
     XrAotRuntimeConfig cfg;
     aot_test_runtime_config_init(&cfg);
@@ -1750,6 +1766,7 @@ RUN_TEST(aot_frame_alloc_reuses_small_frames_locally);
 RUN_TEST(aot_runtime_owns_core_without_isolate);
 RUN_TEST(aot_runtime_creates_scheduler_for_runtime_caps);
 RUN_TEST(aot_runtime_control_plane_uses_root_descriptor_heap);
+RUN_TEST(aot_test_yield_provider_preserves_scalar_and_atomic_contracts);
 RUN_TEST(aot_parallel_cap_creates_scheduler_runtime);
 RUN_TEST(aot_runtime_creates_isolate_free_aot_coroutine);
 RUN_TEST(aot_run_main_uses_runtime_without_isolate);

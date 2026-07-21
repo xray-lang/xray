@@ -278,6 +278,13 @@ XR_FUNC bool xr_aot_runtime_is_cycle_collection_enabled(const XrAotContext *ctx)
 XR_FUNC int64_t xr_aot_runtime_live_bytes(const XrAotContext *ctx);
 XR_FUNC int64_t xr_aot_runtime_live_objects(const XrAotContext *ctx);
 XR_FUNC XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx);
+XR_FUNC int64_t xr_aot_test_yield_simple(void);
+XR_FUNC int64_t xr_aot_test_yield_add(int64_t a, int64_t b);
+XR_FUNC int64_t xr_aot_test_yield_sync(void);
+XR_FUNC int64_t xr_aot_test_yield_blocking_sleep(int64_t milliseconds);
+XR_FUNC void xr_aot_test_yield_counter_inc(void);
+XR_FUNC int64_t xr_aot_test_yield_counter_get(void);
+XR_FUNC int64_t xr_aot_test_yield_counter_reset(void);
 /* Process-wide "current" standalone AOT runtime (the last one created,
  * cleared on delete). Standalone binaries create exactly one; the *_sync
  * bridge helpers use it to reach the builtin table (Recv/SendResult ADT

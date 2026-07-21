@@ -1,0 +1,11 @@
+import { add, counter_get, counter_inc, counter_reset, simple, sync } from "test_yield"
+
+print(sync())
+print(simple())
+print(add(19, 23))
+
+counter_reset()
+print(counter_get())
+print(counter_inc())
+print(counter_inc())
+print(counter_get())

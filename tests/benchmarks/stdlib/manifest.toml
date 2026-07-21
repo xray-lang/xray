@@ -154,9 +154,9 @@ vm_budget_ratio = 60.0
 # load; per 221 §4 a widened budget is allowed with a recorded reason, and true
 # perf tightening is deferred to the 196 §7 P1-P5 analysis.
 #
-# test_yield requires building xray with -DXR_BUILD_TEST_MODULES=ON. Runtime
-# control-plane benchmarks execute on both backends through the provider-owned
-# current coroutine heap.
+# test_yield requires building xray with -DXR_BUILD_TEST_MODULES=ON; its AOT
+# benchmark executes through the internal provider. Runtime control-plane
+# benchmarks execute on both backends through the provider-owned current heap.
 
 [[benchmark]]
 id = "probe.shapes.contract"

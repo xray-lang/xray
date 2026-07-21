@@ -73,7 +73,7 @@ static int cg_aot_stdlib_method_count(void) {
 static bool cg_module_has_aot_direct_calls(const char *module) {
     if (!module)
         return false;
-    if (strcmp(module, "runtime") == 0)
+    if (strcmp(module, "runtime") == 0 || strcmp(module, "test_yield") == 0)
         return true;
     for (int i = 0; i < cg_aot_stdlib_method_count(); i++) {
         const CgAotStdlibMethod *m = cg_aot_stdlib_method_at(i);
@@ -91,6 +91,12 @@ static bool cg_aot_stdlib_has_direct_member(const char *module, const char *memb
          strcmp(member, "enableCycleCollection") == 0 ||
          strcmp(member, "isCycleCollectionEnabled") == 0 || strcmp(member, "liveBytes") == 0 ||
          strcmp(member, "liveObjects") == 0 || strcmp(member, "info") == 0))
+        return true;
+    if (strcmp(module, "test_yield") == 0 &&
+        (strcmp(member, "simple") == 0 || strcmp(member, "add") == 0 ||
+         strcmp(member, "sync") == 0 || strcmp(member, "blocking_sleep") == 0 ||
+         strcmp(member, "counter_inc") == 0 || strcmp(member, "counter_get") == 0 ||
+         strcmp(member, "counter_reset") == 0))
         return true;
     for (int i = 0; i < cg_aot_stdlib_method_count(); i++) {
         const CgAotStdlibMethod *m = cg_aot_stdlib_method_at(i);
@@ -271,6 +277,62 @@ static bool xicgen_emit_runtime_control_method(XiCgenCtx *ctx, FILE *out, const 
 
     return cg_emit_runtime_control_call(ctx, out, f, v, (const char *) v->aux,
                                         (uint16_t) (v->nargs - 1));
+}
+
+static bool cg_emit_test_yield_sync_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                         const XiValue *v, const char *method, uint16_t argc,
+                                         uint16_t arg_base) {
+    (void) f;
+    if (!method)
+        return false;
+
+    const char *helper = NULL;
+    uint16_t expected_argc = 0;
+    if (strcmp(method, "sync") == 0)
+        helper = "xr_aot_test_yield_sync";
+    else if (strcmp(method, "blocking_sleep") == 0) {
+        helper = "xr_aot_test_yield_blocking_sleep";
+        expected_argc = 1;
+    } else if (strcmp(method, "counter_get") == 0)
+        helper = "xr_aot_test_yield_counter_get";
+    else if (strcmp(method, "counter_reset") == 0)
+        helper = "xr_aot_test_yield_counter_reset";
+    else if (strcmp(method, "simple") == 0 || strcmp(method, "add") == 0 ||
+             strcmp(method, "counter_inc") == 0) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: yieldable AOT test_yield call '%s' escaped coroutine lowering\n",
+                method);
+        emit_codegen_abort_expr(out);
+        return true;
+    } else {
+        return false;
+    }
+
+    if (argc != expected_argc) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT test_yield call '%s' with %u args\n",
+                method, (unsigned) argc);
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    const char *suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "%s(", helper);
+    if (expected_argc == 1)
+        emit_value_as_rep_ctx(ctx, out, v->args[arg_base], XR_REP_I64);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, suffix);
+    return true;
+}
+
+static bool xicgen_emit_test_yield_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                          const XiValue *v) {
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1 ||
+        !cg_value_is_module_import_ctx(ctx, f, v->args[0], "test_yield"))
+        return false;
+    return cg_emit_test_yield_sync_call(ctx, out, f, v, (const char *) v->aux,
+                                        (uint16_t) (v->nargs - 1), 1);
 }
 
 static const CgAotStdlibMethod *cg_find_aot_stdlib_method(const char *module, const char *method,
@@ -537,6 +599,8 @@ static bool xicgen_emit_stdlib_import_call(XiCgenCtx *ctx, FILE *out, const XiFu
     uint16_t call_argc = (uint16_t) (v->nargs - 1);
     if (strcmp(ref->module_path, "runtime") == 0)
         return cg_emit_runtime_control_call(ctx, out, f, v, ref->member_name, call_argc);
+    if (strcmp(ref->module_path, "test_yield") == 0)
+        return cg_emit_test_yield_sync_call(ctx, out, f, v, ref->member_name, call_argc, 1);
 
     const CgAotStdlibMethod *m =
         cg_find_aot_stdlib_method(ref->module_path, ref->member_name, call_argc);
