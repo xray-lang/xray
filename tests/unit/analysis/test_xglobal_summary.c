@@ -17319,6 +17319,91 @@ TEST(global_evidence_producer_marks_typed_coro_local_and_pool_submit) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_keeps_runtime_control_plane_on_coro_root) {
+    setup_parser_session();
+    const char *source = "import runtime\n"
+                         "print(runtime.liveBytes())\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_COROUTINE), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_effect(&ev, XG_BODY_OBSERVES_TASK_ID), 1);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    for (uint32_t i = 0; i < ev.nbodies; i++) {
+        if (ev.bodies[i].kind == XG_BODY_MODULE_INIT) {
+            init_func.xg_body_func_id = ev.bodies[i].func_id;
+            break;
+        }
+    }
+    ASSERT_TRUE(init_func.xg_body_func_id != XG_NO_ID);
+    memset(&module, 0, sizeof(module));
+    module.path = "runtime_control_plane.xr";
+    module.name = "runtime_control_plane";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    XaotBundle bundle;
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_EQ_UINT(bundle.entry_plan.root_representation, XR_ROOT_DESCRIPTOR);
+    ASSERT_EQ_UINT(bundle.entry_plan.scheduler_mode, XR_SCHED_SINGLE);
+    ASSERT_TRUE((bundle.entry_plan.runtime_component_bits & XG_CAP_COROUTINE) != 0);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_marks_internal_yield_module_suspendable) {
+    setup_parser_session();
+    const char *source = "import test_yield\n"
+                         "print(test_yield.simple())\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_COROUTINE), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_effect(&ev, XG_BODY_OBSERVES_TASK_ID), 1);
+    ASSERT_EQ_UINT(evidence_body_count_with_effect(&ev, XG_BODY_MAY_SUSPEND), 1);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_sys_thread_spawn_capability) {
     setup_parser_session();
     const char *source = "import sys\n"
@@ -18299,6 +18384,8 @@ RUN_TEST(global_evidence_producer_marks_static_data_runtime_init);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
 RUN_TEST(global_evidence_producer_marks_coro_module_runtime_capability);
 RUN_TEST(global_evidence_producer_marks_typed_coro_local_and_pool_submit);
+RUN_TEST(global_evidence_producer_keeps_runtime_control_plane_on_coro_root);
+RUN_TEST(global_evidence_producer_marks_internal_yield_module_suspendable);
 RUN_TEST(global_evidence_producer_marks_sys_thread_spawn_capability);
 RUN_TEST(global_evidence_producer_marks_extern_dylib_link_dependency);
 RUN_TEST(global_evidence_producer_marks_stdlib_link_dependencies);
