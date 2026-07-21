@@ -2746,6 +2746,13 @@ static bool body_call_is_sys_thread_spawn(const CallExprNode *call) {
     return module_name && strcmp(module_name, "sys") == 0;
 }
 
+static bool body_call_uses_coro_runtime(XgBodyCollect *bc, const CallExprNode *call) {
+    if (!bc || !call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    const MemberAccessNode *member = &call->callee->as.member_access;
+    return body_member_receiver_is_module(member, "Coro") && !body_has_name_local(bc, "Coro");
+}
+
 static uint32_t body_capabilities_for_builtin_member_constructor(const MemberAccessNode *member) {
     if (!body_member_receiver_is_module(member, "sync"))
         return 0;
@@ -8761,6 +8768,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_CALL_EXPR: {
             bool intrinsic_sequence_len = body_add_sequence_len_call(bc, node);
+            if (body_call_uses_coro_runtime(bc, &node->as.call_expr))
+                bc->capability_bits |= XG_CAP_COROUTINE;
             if (body_builtin_method_call_may_suspend(bc, node) ||
                 body_stdlib_call_may_suspend(bc, node)) {
                 bc->effect_bits |= XG_BODY_MAY_SUSPEND;

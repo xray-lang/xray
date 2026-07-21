@@ -89,6 +89,59 @@ static void register_builtin_var(XaAnalyzer *analyzer, const char *name, XrType 
     }
 }
 
+static void register_builtin_module_types_in_prelude(XaAnalyzer *analyzer,
+                                                     const char *module_name) {
+    const XaBuiltinModule *module = xa_builtin_get_module_info(module_name);
+    if (!analyzer || !module)
+        return;
+
+    for (int i = 0; i < module->record_count; i++) {
+        const XaBuiltinRecord *record = &module->records[i];
+        if (!record->name || xa_scope_lookup_local(analyzer->global_scope, record->name))
+            continue;
+        XaSymbol *sym = xa_symbol_new(record->name, XA_SYM_TYPE_ALIAS);
+        if (!sym)
+            continue;
+        sym->location.line = 0;
+        sym->is_builtin = true;
+        sym->is_const = true;
+        sym->is_exported = true;
+        sym->alias_type = xa_builtin_record_decl_type(analyzer->isolate, record);
+        xa_scope_add_symbol(analyzer->global_scope, sym);
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+        if (links) {
+            links->type = sym->alias_type;
+            links->declared_type = links->type;
+            links->is_definitely_assigned = true;
+            links->module_name = module_name;
+            links->import_member_name = record->name;
+        }
+    }
+
+    for (int i = 0; i < module->enum_count; i++) {
+        const XaBuiltinEnum *enum_decl = &module->enums[i];
+        if (!enum_decl->name || xa_scope_lookup_local(analyzer->global_scope, enum_decl->name))
+            continue;
+        XaSymbol *sym = xa_symbol_new(enum_decl->name, XA_SYM_ENUM);
+        if (!sym)
+            continue;
+        sym->location.line = 0;
+        sym->is_builtin = true;
+        sym->is_const = true;
+        sym->is_exported = true;
+        xa_scope_add_symbol(analyzer->global_scope, sym);
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+        if (links) {
+            links->type =
+                xa_builtin_enum_decl_type(analyzer->isolate, enum_decl, &links->enum_info);
+            links->declared_type = links->type;
+            links->is_definitely_assigned = true;
+            links->module_name = module_name;
+            links->import_member_name = enum_decl->name;
+        }
+    }
+}
+
 // Register all Codegen builtin functions/constructors that are available at runtime
 static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     // Reusable param types
@@ -179,6 +232,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     // Modules/namespaces (XA_SYM_MODULE enables member signature lookup)
     register_builtin_module(analyzer, "Json");
     register_builtin_module(analyzer, "Coro");
+    register_builtin_module_types_in_prelude(analyzer, "Coro");
     register_builtin_module(analyzer, "CoroPool");
     register_builtin_module(analyzer, "Channel");
 

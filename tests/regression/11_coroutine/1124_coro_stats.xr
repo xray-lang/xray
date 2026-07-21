@@ -14,8 +14,8 @@
 fn test_coro_stats() {
     print("test1: Coro.stats()")
     var stats = Coro.stats()
-    print("  active:", stats["active"])
-    print("  total:", stats["total"])
+    print("  active:", stats.active)
+    print("  total:", stats.total)
 
     // 测试 2：创建协程后统计变化
     print("test2: stats after creating coroutines")
@@ -34,15 +34,15 @@ fn test_coro_stats() {
 
     // 给协程时间进入阻塞状态
     var stats2 = Coro.stats()
-    print("  active:", stats2["active"])
-    print("  blocked:", stats2["blocked"])
+    print("  active:", stats2.active)
+    print("  blocked:", stats2.blocked)
 
     // 测试 3：Coro.list() 
     print("test3: Coro.list()")
     var list = Coro.list()
     print("  count:", len(list))
     for (item in list) {
-        print("    id:", item["id"], "name:", item["name"], "state:", item["state"])
+        print("    id:", item.id, "name:", item.name, "state:", item.state)
     }
 
     // 解除阻塞
@@ -54,5 +54,5 @@ fn test_coro_stats() {
     // 测试 4：协程完成后统计
     print("test4: stats after completion")
     var stats3 = Coro.stats()
-    print("  total created:", stats3["total"])
+    print("  total created:", stats3.created)
 }

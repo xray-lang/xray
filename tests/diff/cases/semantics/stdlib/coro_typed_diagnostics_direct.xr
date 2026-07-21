@@ -1,0 +1,13 @@
+fn accepts(stats: CoroStats, infos: Array<CoroInfo>) -> bool {
+    return stats.total >= 0 && stats.created >= 0 && len(infos) >= 0
+}
+
+var stats = Coro.stats()
+var infos = Coro.list(8, CoroState.Running)
+var top = Coro.top(2, CoroMetric.Reductions)
+var grouped = Coro.groupBy(CoroGroupKey.State)
+
+print(accepts(stats, infos))
+print(len(top) >= 0)
+print(len(grouped) >= 0)
+print(CoroState.Blocked.name)

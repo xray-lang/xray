@@ -30,6 +30,7 @@
 #include "../runtime/xray_debug_hooks.h"
 #include "../runtime/xstrbuf.h"
 #include "../runtime/object/xstringbuilder.h"
+#include "../../stdlib/stdlib_cache.h"
 
 #include "../runtime/object/xjson.h"
 #include "../runtime/object/xiterator.h"
@@ -62,6 +63,62 @@ static XrValue vm_coro_name_value(XrVMRuntime *isolate, const XrCoroutine *coro)
         return xr_null();
     XrString *s = xr_string_intern(isolate, name, strlen(name), 0);
     return s ? xr_string_value(s) : xr_null();
+}
+
+static int vm_coro_state_ordinal(const char *state) {
+    if (!state)
+        return 0;
+    if (strcmp(state, "ready") == 0)
+        return 1;
+    if (strcmp(state, "blocked") == 0)
+        return 2;
+    if (strcmp(state, "running") == 0)
+        return 3;
+    if (strcmp(state, "done") == 0)
+        return 4;
+    return 0;
+}
+
+static int vm_coro_enum_ordinal(XrValue value, int fallback) {
+    XrEnumAggregateValue *aggregate = xr_value_to_enum_aggregate(value);
+    return aggregate ? (int) aggregate->member_index : fallback;
+}
+
+static XrValue vm_coro_state_value(XrVMRuntime *isolate, const char *state) {
+    XrEnumType *type = xr_stdlib_enum_type_get(isolate, "Coro", "CoroState");
+    if (!type)
+        return XR_NULL_VAL;
+    XrEnumAggregateValue *value =
+        xr_enum_zero_payload_value(isolate, type, (uint32_t) vm_coro_state_ordinal(state));
+    return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
+}
+
+static XrJson *vm_coro_record_new(XrVMRuntime *isolate, XrCoroutine *owner, const char *name) {
+    XrClass *cls = xr_stdlib_record_class_get(isolate, "Coro", name);
+    return cls ? xr_json_new_with_class(owner, cls) : NULL;
+}
+
+static XrValue vm_coro_info_record(XrVMRuntime *isolate, XrCoroutine *owner,
+                                   const XrCoroutine *coro, const char *state) {
+    XrJson *info = vm_coro_record_new(isolate, owner, "CoroInfo");
+    if (!info)
+        return XR_NULL_VAL;
+    xr_json_set_by_key(isolate, info, "id", xr_int(coro->id));
+    xr_json_set_by_key(isolate, info, "name", vm_coro_name_value(isolate, coro));
+    xr_json_set_by_key(isolate, info, "state", vm_coro_state_value(isolate, state));
+    xr_json_set_by_key(isolate, info, "reductions", xr_int(xr_coro_reds(coro)));
+
+    XrValue source_value = XR_NULL_VAL;
+    const char *source_file = xr_coro_source_file(coro);
+    if (source_file) {
+        char source_buf[XR_MAX_PROPERTY_NAME_LEN];
+        snprintf(source_buf, sizeof(source_buf), "%s:%d", source_file, xr_coro_source_line(coro));
+        XrString *source = xr_string_intern(isolate, source_buf, strlen(source_buf), 0);
+        if (source)
+            source_value = xr_string_value(source);
+    }
+    xr_json_set_by_key(isolate, info, "source", source_value);
+    return xr_json_value(info);
 }
 
 static void vm_coro_set_source_field(XrVMRuntime *isolate, XrMap *info, const XrCoroutine *coro) {
@@ -98,18 +155,16 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
     switch (coro_sub) {
         case CORO_CTRL_STATS: {
             XrRuntime *runtime = (XrRuntime *) isolate->vm.scheduler;
-            if (!runtime) {
-                base[a] = xr_null();
-                return XR_DISP_NEXT;
-            }
 
             int blocked_count = 0, ready_count = 0, active_count = 0;
             uint64_t total_created = 0;
-            for (int _si = 0; _si < runtime->worker_count; _si++)
-                total_created += runtime->workers[_si].p.stats.spawned_count;
+            if (runtime) {
+                for (int _si = 0; _si < runtime->worker_count; _si++)
+                    total_created += runtime->workers[_si].p.stats.spawned_count;
+            }
 
             VmCoroEntry *entries = xr_malloc(sizeof(VmCoroEntry) * VM_CORO_COLLECT_MAX);
-            if (entries) {
+            if (entries && runtime) {
                 int total = vm_collect_all_coros(isolate, entries, VM_CORO_COLLECT_MAX);
                 for (int i = 0; i < total; i++) {
                     if (strcmp(entries[i].state, "ready") == 0)
@@ -120,29 +175,35 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                         active_count++;
                 }
                 xr_free(entries);
-            } else {
+            } else if (runtime) {
                 active_count = xr_runtime_active_coros(runtime);
                 for (int wi = 0; wi < runtime->worker_count; wi++) {
                     XrWorker *w = &runtime->workers[wi];
                     blocked_count += w->p.blocked_count;
                     ready_count += xr_runq_len(&w->p.runq);
                 }
+            } else {
+                xr_free(entries);
             }
 
             int total_alive = ready_count + blocked_count + active_count;
-            XrMap *result = xr_map_new(vm_get_coro(vm_ctx));
-            xr_map_set(result, VM_INTERN_KEY("active"), xr_int(active_count));
-            xr_map_set(result, VM_INTERN_KEY("blocked"), xr_int(blocked_count));
-            xr_map_set(result, VM_INTERN_KEY("ready"), xr_int(ready_count));
-            xr_map_set(result, VM_INTERN_KEY("total"), xr_int(total_alive));
-            xr_map_set(result, VM_INTERN_KEY("created"), xr_int((int) total_created));
-            base[a] = xr_value_from_map(result);
+            XrJson *result = vm_coro_record_new(isolate, vm_get_coro(vm_ctx), "CoroStats");
+            if (!result) {
+                base[a] = XR_NULL_VAL;
+                return XR_DISP_NEXT;
+            }
+            xr_json_set_by_key(isolate, result, "active", xr_int(active_count));
+            xr_json_set_by_key(isolate, result, "blocked", xr_int(blocked_count));
+            xr_json_set_by_key(isolate, result, "ready", xr_int(ready_count));
+            xr_json_set_by_key(isolate, result, "total", xr_int(total_alive));
+            xr_json_set_by_key(isolate, result, "created", xr_int((int) total_created));
+            base[a] = xr_json_value(result);
             return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_LIST: {
             int limit = 0;
-            int state_filter = 0;  // 0=all, 1=ready, 2=blocked
+            int state_filter = -1;
 
             XrValue limit_val = base[b];
             if (XR_IS_INT(limit_val))
@@ -151,15 +212,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                 limit = 100000;
 
             XrValue state_val = base[a + 1];
-            if (XR_IS_INT(state_val)) {
-                state_filter = (int) XR_TO_INT(state_val);
-            } else if (XR_IS_STRING(state_val)) {
-                XrString *s = (XrString *) XR_TO_PTR(state_val);
-                if (strcmp(s->data, "ready") == 0)
-                    state_filter = 1;
-                else if (strcmp(s->data, "blocked") == 0)
-                    state_filter = 2;
-            }
+            state_filter = vm_coro_enum_ordinal(state_val, -1);
 
             VmCoroEntry *entries = xr_malloc(sizeof(VmCoroEntry) * VM_CORO_COLLECT_MAX);
             if (!entries) {
@@ -174,21 +227,13 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
             for (int i = 0; i < total && count < limit; i++) {
                 XrCoroutine *coro = entries[i].coro;
                 const char *st = entries[i].state;
-                bool is_ready = (strcmp(st, "ready") == 0);
-                bool is_blocked = (strcmp(st, "blocked") == 0);
-
-                if (state_filter == 1 && !is_ready)
-                    continue;
-                if (state_filter == 2 && !is_blocked)
+                if (state_filter >= 0 && state_filter != vm_coro_state_ordinal(st))
                     continue;
 
-                XrMap *info = xr_map_new(vm_get_coro(vm_ctx));
-                xr_map_set(info, VM_INTERN_KEY("id"), xr_int(coro->id));
-                xr_map_set(info, VM_INTERN_KEY("name"), vm_coro_name_value(isolate, coro));
-                xr_map_set(info, VM_INTERN_KEY("state"),
-                           xr_string_value(xr_string_intern(isolate, st, strlen(st), 0)));
-                vm_coro_set_source_field(isolate, info, coro);
-                xr_array_push(result, xr_value_from_map(info));
+                XrValue info = vm_coro_info_record(isolate, vm_get_coro(vm_ctx), coro, st);
+                if (XR_IS_NULL(info))
+                    continue;
+                xr_array_push(result, info);
                 count++;
             }
 
@@ -348,7 +393,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
 
         case CORO_CTRL_TOP: {
             int top_n = 10;
-            int metric = 0;  // 0=id, 2=reductions
+            int metric = 0;  // CoroMetric.Id
 
             XrValue n_val = base[b];
             if (XR_IS_INT(n_val)) {
@@ -360,13 +405,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
             }
 
             XrValue metric_val = base[a + 1];
-            if (XR_IS_STRING(metric_val)) {
-                XrString *s = (XrString *) XR_TO_PTR(metric_val);
-                if (strcmp(s->data, "reductions") == 0)
-                    metric = 2;
-                else if (strcmp(s->data, "id") == 0)
-                    metric = 0;
-            }
+            metric = vm_coro_enum_ordinal(metric_val, 0);
 
             typedef struct {
                 XrCoroutine *coro;
@@ -390,7 +429,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
             for (int i = 0; i < count; i++) {
                 entries[i].coro = raw[i].coro;
                 entries[i].state = raw[i].state;
-                entries[i].value = (metric == 2) ? xr_coro_reds(raw[i].coro) : raw[i].coro->id;
+                entries[i].value = metric == 1 ? xr_coro_reds(raw[i].coro) : raw[i].coro->id;
             }
             xr_free(raw);
 
@@ -412,15 +451,10 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
             int result_count = (top_n < count) ? top_n : count;
             for (int j = 0; j < result_count; j++) {
                 XrCoroutine *coro = entries[j].coro;
-                XrMap *info = xr_map_new(vm_get_coro(vm_ctx));
-                xr_map_set(info, VM_INTERN_KEY("id"), xr_int(coro->id));
-                xr_map_set(info, VM_INTERN_KEY("name"), vm_coro_name_value(isolate, coro));
-                xr_map_set(info, VM_INTERN_KEY("state"),
-                           xr_string_value(xr_string_intern(isolate, entries[j].state,
-                                                            strlen(entries[j].state), 0)));
-                xr_map_set(info, VM_INTERN_KEY("reductions"), xr_int(xr_coro_reds(coro)));
-                vm_coro_set_source_field(isolate, info, coro);
-                xr_array_push(result, xr_value_from_map(info));
+                XrValue info =
+                    vm_coro_info_record(isolate, vm_get_coro(vm_ctx), coro, entries[j].state);
+                if (!XR_IS_NULL(info))
+                    xr_array_push(result, info);
             }
 
             xr_free(entries);
@@ -429,14 +463,10 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
         }
 
         case CORO_CTRL_GROUP_BY: {
-            int group_by = 0;  // 0=name, 1=state
+            int group_by = 0;  // CoroGroupKey.Name
 
             XrValue field_val = base[b];
-            if (XR_IS_STRING(field_val)) {
-                XrString *s = (XrString *) XR_TO_PTR(field_val);
-                if (strcmp(s->data, "state") == 0)
-                    group_by = 1;
-            }
+            group_by = vm_coro_enum_ordinal(field_val, 0);
 
             VmCoroEntry *entries = xr_malloc(sizeof(VmCoroEntry) * VM_CORO_COLLECT_MAX);
             if (!entries) {

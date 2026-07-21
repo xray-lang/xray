@@ -3026,6 +3026,41 @@ module mem {
 
 }
 
+module Coro {
+  enum CoroState {
+    variants: "Unknown, Ready, Blocked, Running, Done"
+    doc: "Lifecycle state captured in a coroutine diagnostic snapshot"
+  }
+
+  enum CoroGroupKey {
+    variants: "Name, State"
+    doc: "Stable key used to group coroutine diagnostic snapshots"
+  }
+
+  enum CoroMetric {
+    variants: "Id, Reductions"
+    doc: "Metric used to rank coroutine diagnostic snapshots"
+  }
+
+  record CoroStats {
+    fields: "const active: int, const blocked: int, const ready: int, const total: int, const created: int"
+    sealed: true
+    doc: "Typed aggregate counters for the coroutine scheduler"
+  }
+
+  record CoroInfo {
+    fields: "const id: int, const name: string?, const state: CoroState, const reductions: int, const source: string?"
+    sealed: true
+    doc: "Typed diagnostic snapshot for one coroutine"
+  }
+
+  record CoroDeadlock {
+    fields: "const members: Array<CoroInfo>, const reason: string"
+    sealed: true
+    doc: "Typed description of a detected coroutine wait cycle"
+  }
+}
+
 module net {
   record CopyBidirectionalResult {
     fields: "const aToB: int, const bToA: int"

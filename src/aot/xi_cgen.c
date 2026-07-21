@@ -4624,6 +4624,26 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         return;
     }
 
+    if (v->op == XI_CORO_OP) {
+        XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, rep);
+        fprintf(out, "xr_aot_coro_op(%s, %d, ", xicgen_aot_context_expr(ctx, f), (int) v->aux_int);
+        if (v->nargs == 0) {
+            fprintf(out, "NULL");
+        } else {
+            fprintf(out, "(XrValue[]){");
+            for (uint16_t i = 0; i < v->nargs; i++) {
+                if (i > 0)
+                    fprintf(out, ", ");
+                emit_boxed_value_ref(out, v->args[i]);
+            }
+            fprintf(out, "}");
+        }
+        fprintf(out, ", %u)", (unsigned) v->nargs);
+        emit_conversion_suffix(out, suffix);
+        return;
+    }
+
     if (xi_op_is_coroutine(v->op)) {
         const char *op_name = xi_op_name(v->op);
         fprintf(stderr, "[xi_cgen] ERROR: unsupported coroutine Xi op %s\n", op_name);

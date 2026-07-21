@@ -8,6 +8,17 @@
 
 /* clang-format off */
 
+// Coro module symbols
+static const XlspSymbolInfo g_xlsp_stdlib_coro_symbols[] = {
+    {"CoroStats", XLSP_SYM_CLASS, "type CoroStats = { active: int, blocked: int, ready: int, total: int, created: int }", "Typed aggregate counters for the coroutine scheduler", NULL, 0},
+    {"CoroInfo", XLSP_SYM_CLASS, "type CoroInfo = { id: int, name: string?, state: CoroState, reductions: int, source: string? }", "Typed diagnostic snapshot for one coroutine", NULL, 0},
+    {"CoroDeadlock", XLSP_SYM_CLASS, "type CoroDeadlock = { members: Array<CoroInfo>, reason: string }", "Typed description of a detected coroutine wait cycle", NULL, 0},
+    {"CoroState", XLSP_SYM_CLASS, "enum CoroState", "Lifecycle state captured in a coroutine diagnostic snapshot", NULL, 0},
+    {"CoroGroupKey", XLSP_SYM_CLASS, "enum CoroGroupKey", "Stable key used to group coroutine diagnostic snapshots", NULL, 0},
+    {"CoroMetric", XLSP_SYM_CLASS, "enum CoroMetric", "Metric used to rank coroutine diagnostic snapshots", NULL, 0},
+};
+#define GEN_XLSP_STDLIB_CORO_SYMBOL_COUNT 6
+
 // base64 module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
     {"encode", XLSP_SYM_FUNCTION, "fn(data: Slice<byte>, options?: Base64EncodeOptions?): string", "", NULL, 0},
@@ -707,6 +718,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_yaml_symbols[] = {
 #define GEN_XLSP_STDLIB_YAML_SYMBOL_COUNT 39
 
 static const XlspModuleInfo g_xlsp_stdlib_modules[] = {
+    {"Coro", "Coro standard library module", g_xlsp_stdlib_coro_symbols, GEN_XLSP_STDLIB_CORO_SYMBOL_COUNT},
     {"base64", "base64 standard library module", g_xlsp_stdlib_base64_symbols, GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT},
     {"cluster", "cluster standard library module", g_xlsp_stdlib_cluster_symbols, GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT},
     {"compress", "compress standard library module", g_xlsp_stdlib_compress_symbols, GEN_XLSP_STDLIB_COMPRESS_SYMBOL_COUNT},
