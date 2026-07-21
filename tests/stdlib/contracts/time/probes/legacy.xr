@@ -1,0 +1,18 @@
+import time
+
+var beforeMillis = time.monotonic()
+var beforeNanos = time.nanos()
+var afterNanos = time.nanos()
+var afterMillis = time.monotonic()
+assert(beforeMillis >= 0)
+assert(afterMillis >= beforeMillis)
+assert(afterNanos >= beforeNanos)
+print("{\"case\":\"monotonic-ordering\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
+
+var offset = time.localOffset()
+var epochOffset = time.localOffsetAt(0)
+assert(offset >= -1440)
+assert(offset <= 1440)
+assert(epochOffset >= -1440)
+assert(epochOffset <= 1440)
+print("{\"case\":\"local-offset-range\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")

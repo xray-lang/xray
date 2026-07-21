@@ -1,0 +1,36 @@
+import mem
+
+fn run() {
+    var source = mem.allocZeroed(8)
+    var target = mem.allocZeroed(8)
+    var sourcePtr = unsafe { source.borrowPtr() }
+    var targetPtr = unsafe { target.borrowPtr() }
+    mem.set(sourcePtr, 90, 8)
+    mem.copy(targetPtr, sourcePtr, 8)
+    assert(mem.compare(sourcePtr, targetPtr, 8) == 0)
+    mem.set(sourcePtr, 17, 8)
+    mem.move(targetPtr, sourcePtr, 8)
+    assert(mem.compare(sourcePtr, targetPtr, 8) == 0)
+    unsafe {
+        assert(targetPtr[0] == 17)
+        assert(targetPtr[7] == 17)
+    }
+    print("{\"case\":\"alloc-bulk-semantics\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"bytes\":\"copied-and-moved\"}}")
+
+    var owner = mem.allocZeroed(4)
+    {
+        var view: Slice<uint8> = owner.asMutBytes()
+        view[0] = 42
+        view[3] = 99
+    }
+    assert(owner.resize(12))
+    assert(len(owner) == 12)
+    {
+        var view: Slice<uint8> = owner.asBytes()
+        assert(view[0] == 42)
+        assert(view[3] == 99)
+    }
+    print("{\"case\":\"buffer-raii\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"ownership\":\"scoped\"}}")
+}
+
+run()

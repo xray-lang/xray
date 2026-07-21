@@ -1,0 +1,18 @@
+import math
+
+var absolute = math.abs(-42)
+var minimum = math.min(9, 4, 6)
+var maximum = math.max(9, 4, 6)
+assert(typeName(absolute) == "int")
+assert(absolute == 42)
+assert(typeName(minimum) == "int")
+assert(minimum == 4)
+assert(typeName(maximum) == "int")
+assert(maximum == 9)
+print("{\"case\":\"numeric-type-preservation\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
+
+assert(math.sin(0.0) == 0.0)
+assert(math.cos(0.0) == 1.0)
+assert(math.sqrt(81.0) == 9.0)
+assert(math.hypot(3.0, 4.0) == 5.0)
+print("{\"case\":\"transcendental-parity\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
