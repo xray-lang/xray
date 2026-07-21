@@ -329,7 +329,7 @@ static XiValue *xi_lower_enum_namespace_value(XiLower *l, XaSymbol *enum_sym, co
         XiEnumData *data = (XiEnumData *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(*data));
         XiEnumMemberData *members = (XiEnumMemberData *) xi_func_arena_alloc(
             l->func, (uint32_t) (sizeof(*members) * info->variant_count));
-        if (!runtime_type || !data || !members)
+        if (!runtime_type || !links->type || !data || !members)
             return NULL;
         memset(data, 0, sizeof(*data));
         memset(members, 0, sizeof(*members) * info->variant_count);
@@ -348,7 +348,7 @@ static XiValue *xi_lower_enum_namespace_value(XiLower *l, XaSymbol *enum_sym, co
             if (members[i].payload_count > data->max_payload)
                 data->max_payload = members[i].payload_count;
         }
-        XiValue *value = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_any, 0);
+        XiValue *value = xi_value_new(l->func, l->cur_block, XI_CONST, links->type, 0);
         if (!value)
             return NULL;
         value->aux = data;

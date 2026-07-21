@@ -191,10 +191,14 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         cg_emit_str_value(ctx, out, (const char *) v->aux);
     } else if (xr_type_is_named_class(v->type, "BigInt") && v->aux) {
         xicgen_emit_bigint_literal_value(ctx, out, v, false);
+    } else if (v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE && v->aux) {
+        const XiEnumData *ed = (const XiEnumData *) v->aux;
+        if (ctx && ctx->freestanding_profile && ed)
+            fprintf(out, "XR_NULL_VAL");
+        else
+            emit_enum_type_expr(ctx, out, ed);
     } else if (v->type->kind == XR_KIND_UNKNOWN && v->aux) {
-        const XiEnumData *ed = v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE
-                                   ? (const XiEnumData *) v->aux
-                                   : cg_enum_for_runtime_type(ctx, v->aux);
+        const XiEnumData *ed = cg_enum_for_runtime_type(ctx, v->aux);
         if (ctx && ctx->freestanding_profile && ed)
             fprintf(out, "XR_NULL_VAL");
         else
