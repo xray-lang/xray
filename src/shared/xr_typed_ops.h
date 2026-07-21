@@ -57,6 +57,8 @@ static inline XrValue xr_typed_get(void *data, int32_t index, uint8_t elem_type)
             return ((uint8_t *) data)[index] ? XR_TRUE_VAL : XR_FALSE_VAL;
         case XR_ELEM_RUNE:
             return XR_FROM_RUNE(((uint32_t *) data)[index]);
+        case XR_ELEM_RAWPTR:
+            return XR_FROM_INT((int64_t) (intptr_t) ((void **) data)[index]);
         default:
             return XR_NULL_VAL;
     }
@@ -84,6 +86,7 @@ static inline bool xr_typed_value_is_storable(XrValue value, uint8_t elem_type) 
         case XR_ELEM_U64:
         case XR_ELEM_F32:
         case XR_ELEM_F64:
+        case XR_ELEM_RAWPTR:
             return xr_typed_value_is_numeric_like(value);
         default:
             return false;
@@ -139,6 +142,9 @@ static inline bool xr_typed_set(void *data, int32_t index, XrValue value, uint8_
             if (!XR_IS_RUNE(value))
                 return false;
             ((uint32_t *) data)[index] = XR_TO_RUNE(value);
+            return false;
+        case XR_ELEM_RAWPTR:
+            ((void **) data)[index] = (void *) (intptr_t) xr_value_to_int64_coerce(value);
             return false;
         default:
             return false;
@@ -235,6 +241,13 @@ static inline bool xr_typed_fill(void *data, int64_t length, XrValue value, uint
                 return false;
             uint32_t fill = XR_TO_RUNE(value);
             uint32_t *dst = (uint32_t *) data;
+            for (int64_t i = 0; i < length; i++)
+                dst[i] = fill;
+            return true;
+        }
+        case XR_ELEM_RAWPTR: {
+            void *fill = (void *) (intptr_t) xr_value_to_int64_coerce(value);
+            void **dst = (void **) data;
             for (int64_t i = 0; i < length; i++)
                 dst[i] = fill;
             return true;

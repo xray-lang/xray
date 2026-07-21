@@ -1696,7 +1696,15 @@ bool xr_type_assignable(XrType *target, XrType *source) {
             return false;
         }
         if (target->function.is_c_abi != source->function.is_c_abi) {
-            return false;
+            // One-way coercion: an ordinary xray function value may be used where a
+            // CFn<...> (first-class C-ABI function item) is expected. The
+            // "module-level, non-capturing, exact-signature" requirement is enforced
+            // at the value-formation site (analyzer) and at stub emission (AOT),
+            // which keeps VM and AOT fail-closed in lock-step. A CFn value is NOT
+            // assignable back to an ordinary closure type.
+            if (!(target->function.is_c_abi && !source->function.is_c_abi)) {
+                return false;
+            }
         }
         if (source->function.param_count > target->function.param_count) {
             return false;

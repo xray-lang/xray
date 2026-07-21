@@ -1,0 +1,31 @@
+// First-class CFn op table lowers to a zero-alloc typed function-pointer table:
+// module-level noncapturing functions stored as bare `_cfn` stub addresses in a
+// raw-pointer array (XR_ELEM_RAWPTR), loaded as raw pointers, and indirect-called
+// as a typed native C function pointer — no closure allocation, no XrValue boxing.
+// This is the wasm3-style zero-cost dispatch primitive.
+extern "C" { fn malloc(n: uintsize) -> MutPtr<int32> }
+
+type Op = CFn<(int, MutPtr<int32>, int) -> int>
+
+fn opConst(pc: int, stack: MutPtr<int32>, sp: int) -> int {
+    unsafe { stack[sp] = 42 }
+    return sp + 1
+}
+
+fn opAdd(pc: int, stack: MutPtr<int32>, sp: int) -> int {
+    var b = unsafe { stack[sp - 1] }
+    var a = unsafe { stack[sp - 2] }
+    unsafe { stack[sp - 2] = a + b }
+    return sp - 1
+}
+
+@c_export("run_optable")
+fn run_optable() -> int32 {
+    var ops: Array<Op> = [opConst, opConst, opAdd]
+    var stack = unsafe { malloc(64) }
+    var sp = 0
+    for (var pc = 0; pc < 3; pc++) {
+        sp = ops[pc](pc, stack, sp)
+    }
+    return unsafe { stack[sp - 1] }
+}

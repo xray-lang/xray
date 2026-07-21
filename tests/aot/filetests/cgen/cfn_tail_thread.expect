@@ -1,0 +1,3 @@
+c_contains=__attribute__((musttail)) return
+c_regex=__attribute__\(\(musttail\)\) return \(\(int64_t \(\*\)\(xrt_closure_t \*, int64_t, void \*, int64_t\)\)
+c_not_contains=unsupported AOT indirect call

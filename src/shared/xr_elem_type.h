@@ -34,6 +34,7 @@ typedef enum {
     XR_ELEM_F64,     /* double[]  (Array<float>) */
     XR_ELEM_BOOL,    /* uint8_t[] (1 byte per element) */
     XR_ELEM_RUNE,    /* uint32_t[] (Unicode scalar, Array<char>) */
+    XR_ELEM_RAWPTR,  /* void*[] raw C pointer / CFn function pointer (8 bytes, GC-invisible; AOT) */
     XR_ELEM_COUNT
 } XrArrayElemType;
 
@@ -48,7 +49,8 @@ static const uint8_t XR_ELEM_SIZES[XR_ELEM_COUNT] = {
     4,     /* F32 */
     8,     /* F64 */
     1,     /* BOOL */
-    4      /* CHAR */
+    4,     /* CHAR */
+    8      /* RAWPTR (void* address) */
 };
 
 /* Map semantic XrTypeId to storage layout.

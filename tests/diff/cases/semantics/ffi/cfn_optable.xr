@@ -1,0 +1,40 @@
+// First-class CFn values: a module-level function stored in an Array<CFn<...>>
+// op table and indirect-called (driver loop), plus a single CFn variable.
+// VM (closure-backed) and AOT (zero-alloc typed function-pointer table) must agree.
+extern "C" { fn malloc(n: uintsize) -> MutPtr<int32> }
+
+type Op = CFn<(int, MutPtr<int32>, int) -> int>
+
+var IMM: Array<int32> = [10, 20, 0, 0]
+
+fn opConst(pc: int, stack: MutPtr<int32>, sp: int) -> int {
+    unsafe { stack[sp] = IMM[pc] }
+    return sp + 1
+}
+
+fn opAdd(pc: int, stack: MutPtr<int32>, sp: int) -> int {
+    var b = unsafe { stack[sp - 1] }
+    var a = unsafe { stack[sp - 2] }
+    unsafe { stack[sp - 2] = a + b }
+    return sp - 1
+}
+
+fn interp(ops: Array<Op>, n: int, stack: MutPtr<int32>) -> int32 {
+    var sp = 0
+    for (var pc = 0; pc < n; pc++) {
+        sp = ops[pc](pc, stack, sp)
+    }
+    return unsafe { stack[sp - 1] }
+}
+
+fn main() {
+    var ops: Array<Op> = [opConst, opConst, opAdd]
+    var stack = unsafe { malloc(64) }
+    print("sum=${interp(ops, 3, stack)}")
+
+    var f: Op = opConst
+    var st2 = unsafe { malloc(64) }
+    print("f=${f(0, st2, 0)} v=${unsafe { st2[0] }}")
+}
+
+main()

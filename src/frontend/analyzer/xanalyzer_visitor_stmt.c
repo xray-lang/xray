@@ -5665,6 +5665,11 @@ static bool xa_function_assignment_mismatch(XrType *target_type, XrType *value_t
         return !target_type->is_nullable;
     if (!XR_TYPE_IS_FUNCTION(value_type))
         return true;
+    // First-class CFn: an ordinary xray function value coerces one-way to CFn<...>.
+    // Use assignability (not strict equality) so `var f: CFn<sig> = moduleFn` binds;
+    // the module-level/non-capturing requirement is enforced at value formation.
+    if (XR_TYPE_IS_C_FUNCTION(target_type) && !value_type->function.is_c_abi)
+        return !xa_typecheck_assignable(target_type, value_type);
     if (target_type->is_nullable || value_type->is_nullable)
         return !xa_typecheck_assignable(target_type, value_type);
     return !xr_type_function_signature_assignable(target_type, value_type);

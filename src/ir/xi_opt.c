@@ -1799,6 +1799,10 @@ static XrRep sr_type_scalar_rep(const struct XrType *type) {
         return XR_REP_TAGGED;
     if (type->kind == XR_KIND_POINTER)
         return XR_REP_RAWPTR;
+    /* CFn<...> is a first-class bare C function pointer (no closure header),
+     * represented like a raw pointer address. */
+    if (XR_TYPE_IS_C_FUNCTION(type))
+        return XR_REP_RAWPTR;
     XrRep r = xr_type_rep(type);
     return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
 }

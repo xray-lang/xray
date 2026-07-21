@@ -6773,6 +6773,45 @@ static bool cg_value_terminates_c_path(const XiValue *v) {
     return v && (v->op == XI_ERR_RETURN || v->op == XI_THROW);
 }
 
+/* A CFn indirect call in tail position (`return f(...)`) is emitted as a musttail
+ * return: a constant-stack tail jump with native ABI — the wasm3 threaded-operation
+ * topology. Only the err_check on the tail call's OWN result is elided (the callee
+ * propagates its error via the pending-error global, checked at the chain head);
+ * err_checks for this op's own operations (array indexing, etc.) are kept, so trap
+ * semantics are preserved. Requires no defer / exception / cell-var cleanup, since
+ * nothing may run between the call and the return under musttail, and the caller's
+ * scalar return rep must match the call so the call is returned without conversion. */
+static bool cg_func_has_cell_releases(const XiCgenCtx *ctx) {
+    if (!ctx || !ctx->cell_release_vars)
+        return false;
+    for (uint32_t i = 0; i < ctx->cell_var_count; i++) {
+        if (ctx->cell_release_vars[i])
+            return true;
+    }
+    return false;
+}
+
+static const XiValue *cg_block_musttail_call(XiCgenCtx *ctx, const XiFunc *f, const XiBlock *blk) {
+    if (!ctx || !f || !blk || blk->kind != XI_BLOCK_RETURN || !blk->control)
+        return NULL;
+    const XiValue *call = blk->control;
+    if ((call->op != XI_CALL && call->op != XI_TAIL_CALL) || call->nargs < 1 || !call->args[0])
+        return NULL;
+    const XiValue *callee = cg_unwrap_identity_value(call->args[0]);
+    if (!callee || !callee->type || !XR_TYPE_IS_C_FUNCTION(callee->type))
+        return NULL;
+    /* Nothing may run between the tail call and the return under musttail. */
+    if (cg_has_exception_handling(f) || cg_func_has_defer_stmt(f) || cg_func_has_cell_releases(ctx))
+        return NULL;
+    XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
+    if (ret_rep == XR_REP_VOID || cg_func_return_abi_is_aggregate(ctx, f))
+        return NULL;
+    /* The call must be returned directly (no rep conversion around it). */
+    if (cg_value_plan_storage_rep(ctx, call) != ret_rep)
+        return NULL;
+    return call;
+}
+
 static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock *blk,
                        const char *prefix) {
     XR_DCHECK(blk != NULL, "emit_block: NULL block");
@@ -6782,10 +6821,17 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
         fprintf(out, "L%u:;\n", blk->id);
     emit_typed_array_final_len_stores(ctx, out, f, blk);
 
+    /* A tail-position CFn call is fused into a musttail return below; skip its
+     * value statement and the err_check on its result. */
+    const XiValue *mt_call = cg_block_musttail_call(ctx, f, blk);
+
     /* Instructions */
     for (uint32_t i = 0; i < blk->nvalues; i++) {
         XiValue *v = blk->values[i];
         if (!v)
+            continue;
+        if (mt_call && (v == mt_call || (v->op == XI_ERR_CHECK && v->nargs >= 1 &&
+                                         cg_unwrap_identity_value(v->args[0]) == mt_call)))
             continue;
         xicgen_emit_stringbuilder_literal_append_reserve(ctx, out, blk, i);
         emit_value_stmt(ctx, out, f, v, prefix);
@@ -6798,6 +6844,17 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
         case XI_BLOCK_RETURN: {
             if (blk->control && blk->control->op == XI_ERR_RETURN)
                 break;
+            if (mt_call) {
+                /* Tail-threaded CFn call: constant-stack tail jump (musttail). No
+                 * cleanup runs between (guarded in cg_block_musttail_call), and the
+                 * call is returned directly so reps match without conversion. */
+                emit_block_terminator_source_line(ctx, out, blk);
+                fprintf(out, "    __attribute__((musttail)) return ");
+                emit_value_rhs(ctx, out, f, mt_call, prefix);
+                fprintf(out, ";\n");
+                emit_block_terminator_generated_line_reset(ctx, out, blk);
+                break;
+            }
             emit_block_terminator_source_line(ctx, out, blk);
             emit_class_field_cache_flush(ctx, out);
             emit_deferred_calls(ctx, out, f, prefix);
