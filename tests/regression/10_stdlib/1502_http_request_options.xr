@@ -59,7 +59,7 @@ fn serve_raw_response(lst: NetListener, response: string) {
     net.close(lst)
 }
 
-fn serve_binary_response(lst: NetListener) {
+fn serve_binary_response(lst: NetListener, framing: string) {
     var conn = net.accept(lst)
     if (conn == null) {
         net.close(lst)
@@ -67,13 +67,43 @@ fn serve_binary_response(lst: NetListener) {
     }
 
     net.read(conn!, 4096)
-    net.write(
-        conn!,
-        "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\n"
-    )
-    net.writeBytes(conn!, Array<byte>([0x78, 0x00, 0x7f]))
+    if (framing == "chunked") {
+        net.write(
+            conn!,
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n3\r\n"
+        )
+        net.writeBytes(conn!, Array<byte>([0xff, 0x00, 0x7f]))
+        net.write(conn!, "\r\n0\r\n\r\n")
+    } else if (framing == "close") {
+        net.write(conn!, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
+        net.writeBytes(conn!, Array<byte>([0xff, 0x00, 0x7f]))
+    } else {
+        net.write(
+            conn!,
+            "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\n"
+        )
+        net.writeBytes(conn!, Array<byte>([0xff, 0x00, 0x7f]))
+    }
     net.close(conn!)
     net.close(lst)
+}
+
+fn assert_binary_response(framing: string) {
+    var maybeLst = net.listen(0, 1)
+    if (maybeLst == null) { return }
+    var lst = maybeLst!
+    go serve_binary_response(lst, framing)
+
+    var resp = http.request({
+        url: "http://127.0.0.1:" + string(lst.port()) + "/binary",
+        timeoutMs: 1000
+    })
+
+    assert(resp.isSuccess())
+    assert_eq(len(resp.body), 3)
+    assert_eq(resp.body[0], 0xff)
+    assert_eq(resp.body[1], 0x00)
+    assert_eq(resp.body[2], 0x7f)
 }
 
 @test
@@ -182,21 +212,17 @@ fn test_request_ignores_no_body_status_payload() {
 
 @test
 fn test_request_preserves_non_utf8_response_body() {
-    var maybeLst = net.listen(0, 1)
-    if (maybeLst == null) { return }
-    var lst = maybeLst!
-    go serve_binary_response(lst)
+    assert_binary_response("content-length")
+}
 
-    var resp = http.request({
-        url: "http://127.0.0.1:" + string(lst.port()) + "/binary",
-        timeoutMs: 1000
-    })
+@test
+fn test_request_preserves_non_utf8_chunked_body() {
+    assert_binary_response("chunked")
+}
 
-    assert(resp.isSuccess())
-    assert_eq(len(resp.body), 3)
-    assert_eq(resp.body[0], 0x78)
-    assert_eq(resp.body[1], 0x00)
-    assert_eq(resp.body[2], 0x7f)
+@test
+fn test_request_preserves_non_utf8_close_delimited_body() {
+    assert_binary_response("close")
 }
 
 @test
