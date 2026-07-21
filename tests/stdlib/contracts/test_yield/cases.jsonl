@@ -1,0 +1,3 @@
+{"case":"sync-baseline","equivalence":["value","complexity"],"oracle":"sync returns the fixed native baseline value 100"}
+{"case":"yield-resume","equivalence":["value","error","effect"],"oracle":"yieldable simple and add resume with 42 and the captured integer sum"}
+{"case":"atomic-counter","equivalence":["value","effect"],"oracle":"reset and two scheduled increments produce the observable sequence 0,1,2,2"}

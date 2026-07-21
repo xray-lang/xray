@@ -1,0 +1,1 @@
+tests/diff/cases/semantics/stdlib/test_yield_scheduler_contract.xr

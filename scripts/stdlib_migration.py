@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,7 @@ from stdlib_manifest import load_manifest, load_toml
 REQUIRED_EQUIVALENCE = {"value", "error", "effect", "complexity"}
 LEGACY_CLASSIFICATIONS = {"required", "bug", "accidental", "removed"}
 LEGACY_ORACLE_MODES = {"classification_only", "executable"}
+DIFF_BACKENDS = {"vm", "aot"}
 CONTRACT_ROOT = Path("tests/stdlib/contracts")
 
 
@@ -79,6 +81,14 @@ def validate_contract(root: Path, module: str) -> tuple[list[str], dict[str, Any
         errors.append(
             f"{path}: equivalence must be exactly {', '.join(sorted(REQUIRED_EQUIVALENCE))}"
         )
+    backends = contract.get("backends", ["vm", "aot"])
+    if (
+        not isinstance(backends, list)
+        or not backends
+        or len(set(backends)) != len(backends)
+        or not set(backends) <= DIFF_BACKENDS
+    ):
+        errors.append(f"{path}: backends must be a non-empty unique subset of vm,aot")
     manifest_rel = contract.get("diff_cases_manifest")
     manifest_path = root / str(manifest_rel or "")
     if not manifest_rel or not manifest_path.is_file():
@@ -142,13 +152,59 @@ def find_xray(root: Path, value: str | None) -> Path:
 
 
 def run_diff(root: Path, contract: dict[str, Any], xray: Path) -> int:
+    backends = contract.get("backends", ["vm", "aot"])
+    if backends == ["vm"]:
+        return run_vm_cases(root, contract, xray)
     env = os.environ.copy()
     env["XRAY_DIFF_CASES_FILE"] = str(root / str(contract["diff_cases_manifest"]))
     env["XRAY_DIFF_EXTRA_CASES_FILE"] = ""
-    env["XRAY_DIFF_BACKENDS"] = "vm,aot"
+    env["XRAY_DIFF_BACKENDS"] = ",".join(contract.get("backends", ["vm", "aot"]))
     return subprocess.run(
         [str(root / "tests/diff/run_backend_diff.sh"), str(xray)], cwd=root, env=env
     ).returncode
+
+
+def run_vm_cases(root: Path, contract: dict[str, Any], xray: Path) -> int:
+    """Execute an explicitly VM-only contract without silently skipping it."""
+    manifest = root / str(contract["diff_cases_manifest"])
+    for lineno, raw in enumerate(manifest.read_text(encoding="utf-8").splitlines(), 1):
+        case = raw.strip()
+        if not case or case.startswith("#"):
+            continue
+        case_path = root / case
+        expected_path = Path(f"{case_path}.expected")
+        if not expected_path.is_file():
+            print(
+                f"{manifest}:{lineno}: VM-only contract case requires {expected_path.name}",
+                file=sys.stderr,
+            )
+            return 1
+        args_path = Path(f"{case_path}.args")
+        extra_args: list[str] = []
+        if args_path.is_file():
+            lines = args_path.read_text(encoding="utf-8").splitlines()
+            extra_args = shlex.split(lines[0]) if lines else []
+        stdin_path = Path(f"{case_path}.stdin")
+        stdin = stdin_path.read_bytes() if stdin_path.is_file() else None
+        result = subprocess.run(
+            [str(xray), "run", str(case_path), *extra_args],
+            cwd=root,
+            input=stdin,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        expected = expected_path.read_bytes()
+        if result.returncode != 0 or result.stdout != expected:
+            print(f"FAIL vm {case}", file=sys.stderr)
+            print(f"  exit: {result.returncode}", file=sys.stderr)
+            if result.stdout != expected:
+                print(f"  expected stdout: {expected!r}", file=sys.stderr)
+                print(f"  actual stdout:   {result.stdout!r}", file=sys.stderr)
+            if result.stderr:
+                print(result.stderr.decode("utf-8", errors="replace"), file=sys.stderr)
+            return 1
+        print(f"PASS vm {case}")
+    return 0
 
 
 def main() -> int:
