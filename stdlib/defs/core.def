@@ -3620,6 +3620,12 @@ module cluster {
 }
 
 module ws {
+  record WsConnectOptions {
+    fields: "const timeout: int?, const pingInterval: int?, const pongTimeout: int?, const maxMessageSize: int?"
+    sealed: true
+    doc: "Typed WebSocket client connection options"
+  }
+
   handle WsConn {
     fields: "const wsid: int, url: string, state: string"
   }
@@ -3629,7 +3635,7 @@ module ws {
   }
 
   fn connect {
-    signature: "(url: string, options?: Json): WsConn?"
+    signature: "(url: string, options?: WsConnectOptions?): WsConn?"
     doc: "Connect to a WebSocket server"
     vm: "ws_connect_yieldable"
     vm_binding: "yieldable"

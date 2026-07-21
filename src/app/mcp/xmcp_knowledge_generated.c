@@ -2291,6 +2291,76 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     {
+        .name = "CopyBidirectionalResult",
+        .signature = "{ aToB: int, bToA: int }",
+        .summary = "Byte counts copied in each direction by copyBidirectional",
+    },
+    {
+        .name = "CopyBidirectionalResult.aToB",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CopyBidirectionalResult.bToA",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "NetError",
+        .signature = "enum NetError",
+        .summary = "Typed failure from native network operations",
+    },
+    {
+        .name = "NetError.Cancelled",
+        .signature = "NetError.Cancelled",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Closed",
+        .signature = "NetError.Closed",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Dns",
+        .signature = "NetError.Dns",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Invalid",
+        .signature = "NetError.Invalid",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Io",
+        .signature = "NetError.Io",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.OutOfMemory",
+        .signature = "NetError.OutOfMemory",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Refused",
+        .signature = "NetError.Refused",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Reset",
+        .signature = "NetError.Reset",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Timeout",
+        .signature = "NetError.Timeout",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "NetError.Tls",
+        .signature = "NetError.Tls",
+        .summary = "Enum variant",
+    },
+    {
         .name = "UdpPacket",
         .signature = "UdpPacket",
         .summary = "Native handle type",
@@ -2327,7 +2397,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "copyBidirectional",
-        .signature = "(a: NetConn, b: NetConn): Json",
+        .signature = "(a: NetConn, b: NetConn): CopyBidirectionalResult",
         .summary = "Copy two TCP/TLS streams in both directions",
     },
     {
@@ -4563,6 +4633,31 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "Handle field",
     },
     {
+        .name = "WsConnectOptions",
+        .signature = "{ timeout: int?, pingInterval: int?, pongTimeout: int?, maxMessageSize: int? }",
+        .summary = "Typed WebSocket client connection options",
+    },
+    {
+        .name = "WsConnectOptions.maxMessageSize",
+        .signature = "const int?",
+        .summary = "Record field",
+    },
+    {
+        .name = "WsConnectOptions.pingInterval",
+        .signature = "const int?",
+        .summary = "Record field",
+    },
+    {
+        .name = "WsConnectOptions.pongTimeout",
+        .signature = "const int?",
+        .summary = "Record field",
+    },
+    {
+        .name = "WsConnectOptions.timeout",
+        .signature = "const int?",
+        .summary = "Record field",
+    },
+    {
         .name = "WsMessage",
         .signature = "WsMessage",
         .summary = "Native handle type",
@@ -4639,7 +4734,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "connect",
-        .signature = "(url: string, options?: Json): WsConn?",
+        .signature = "(url: string, options?: WsConnectOptions?): WsConn?",
         .summary = "Connect to a WebSocket server",
     },
     {
@@ -7399,6 +7494,20 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `net.CopyBidirectionalResult` | `{ aToB: int, bToA: int }` | Byte counts copied in each direction by copyBidirectional |\n"
+            "| `net.CopyBidirectionalResult.aToB` | `const int` | Record field |\n"
+            "| `net.CopyBidirectionalResult.bToA` | `const int` | Record field |\n"
+            "| `net.NetError` | `enum NetError` | Typed failure from native network operations |\n"
+            "| `net.NetError.Cancelled` | `NetError.Cancelled` | Enum variant |\n"
+            "| `net.NetError.Closed` | `NetError.Closed` | Enum variant |\n"
+            "| `net.NetError.Dns` | `NetError.Dns` | Enum variant |\n"
+            "| `net.NetError.Invalid` | `NetError.Invalid` | Enum variant |\n"
+            "| `net.NetError.Io` | `NetError.Io` | Enum variant |\n"
+            "| `net.NetError.OutOfMemory` | `NetError.OutOfMemory` | Enum variant |\n"
+            "| `net.NetError.Refused` | `NetError.Refused` | Enum variant |\n"
+            "| `net.NetError.Reset` | `NetError.Reset` | Enum variant |\n"
+            "| `net.NetError.Timeout` | `NetError.Timeout` | Enum variant |\n"
+            "| `net.NetError.Tls` | `NetError.Tls` | Enum variant |\n"
             "| `net.UdpPacket` | `UdpPacket` | Native handle type |\n"
             "| `net.UdpPacket.data` | `const string` | Handle field |\n"
             "| `net.UdpPacket.host` | `const string` | Handle field |\n"
@@ -7406,7 +7515,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.accept` | `(listener: NetListener): NetConn?` | Accept a new connection |\n"
             "| `net.close` | `(handle: NetConn \\| NetListener): ()` | Close a connection or listener |\n"
             "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize?: int): int` | Copy a TCP/TLS stream using a reusable native buffer |\n"
-            "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): Json` | Copy two TCP/TLS streams in both directions |\n"
+            "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): CopyBidirectionalResult` | Copy two TCP/TLS streams in both directions |\n"
             "| `net.dial` | `(host: string, port: int, timeout?: int): NetConn?` | Dial a TCP connection |\n"
             "| `net.dialTLS` | `(host: string, port: int, timeout?: int): NetConn?` | Dial a TLS connection |\n"
             "| `net.fd` | `(handle: NetConn \\| NetListener): int` | Get fd from handle |\n"
@@ -8157,6 +8266,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.WsConn.state` | `string` | Handle field |\n"
             "| `ws.WsConn.url` | `string` | Handle field |\n"
             "| `ws.WsConn.wsid` | `const int` | Handle field |\n"
+            "| `ws.WsConnectOptions` | `{ timeout: int?, pingInterval: int?, pongTimeout: int?, maxMessageSize: int? }` | Typed WebSocket client connection options |\n"
+            "| `ws.WsConnectOptions.maxMessageSize` | `const int?` | Record field |\n"
+            "| `ws.WsConnectOptions.pingInterval` | `const int?` | Record field |\n"
+            "| `ws.WsConnectOptions.pongTimeout` | `const int?` | Record field |\n"
+            "| `ws.WsConnectOptions.timeout` | `const int?` | Record field |\n"
             "| `ws.WsMessage` | `WsMessage` | Native handle type |\n"
             "| `ws.WsMessage.binary` | `const bool` | Handle field |\n"
             "| `ws.WsMessage.data` | `const string \\| Array<byte> \\| null` | Handle field |\n"
@@ -8172,7 +8286,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.clientHandshakeRequest` | `(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?` |  |\n"
             "| `ws.close` | `(conn: WsConn, code?: int?, reason?: string?): bool` | Close a WebSocket connection |\n"
             "| `ws.closeFrame` | `(code: int = 1000, reason: string = \"\", mask: bool = true): Array<byte>` |  |\n"
-            "| `ws.connect` | `(url: string, options?: Json): WsConn?` | Connect to a WebSocket server |\n"
+            "| `ws.connect` | `(url: string, options?: WsConnectOptions?): WsConn?` | Connect to a WebSocket server |\n"
             "| `ws.frame` | `(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.isValidCloseCode` | `(code: int): bool` |  |\n"
             "| `ws.maskPayload` | `(payload: Array<byte>, key: Array<byte>): Array<byte>` |  |\n"

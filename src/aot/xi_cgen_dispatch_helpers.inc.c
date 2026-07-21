@@ -2707,6 +2707,12 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         } else if (xicgen_import_ref_is_core_math_member(ref)) {
             fprintf(out, "XR_NULL_VAL /* builtin math.%s */", ref->member_name);
         } else if (ref && ref->module_path && ref->member_name &&
+                   xa_builtin_get_record_type(ref->module_path, ref->member_name)) {
+            /* Native Record declarations are type-only imports. They have no
+             * runtime namespace value to resolve after type erasure. */
+            fprintf(out, "XR_NULL_VAL /* builtin record type: %s.%s */", ref->module_path,
+                    ref->member_name);
+        } else if (ref && ref->module_path && ref->member_name &&
                    cg_aot_stdlib_has_direct_member(ref->module_path, ref->member_name)) {
             fprintf(out, "XR_NULL_VAL /* builtin function: %s.%s */", ref->module_path,
                     ref->member_name);

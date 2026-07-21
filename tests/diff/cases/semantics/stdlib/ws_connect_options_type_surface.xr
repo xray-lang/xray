@@ -1,0 +1,7 @@
+import { WsConnectOptions } from ws
+
+fn acceptsOptions(options: WsConnectOptions?) -> bool {
+    return true
+}
+
+print(acceptsOptions(null))

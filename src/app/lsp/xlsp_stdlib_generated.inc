@@ -587,7 +587,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_url_symbols[] = {
 
 // ws module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
-    {"connect", XLSP_SYM_FUNCTION, "fn(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", NULL, 0},
+    {"connect", XLSP_SYM_FUNCTION, "fn(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", NULL, 0},
     {"send", XLSP_SYM_FUNCTION, "fn(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", NULL, 0},
     {"recv", XLSP_SYM_FUNCTION, "fn(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", NULL, 0},
     {"close", XLSP_SYM_FUNCTION, "fn(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", NULL, 0},
@@ -618,8 +618,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"ClosePayload", XLSP_SYM_CLASS, "type ClosePayload", "Class type", NULL, 0},
     {"ParsedUpgradeResponse", XLSP_SYM_CLASS, "type ParsedUpgradeResponse", "Class type", NULL, 0},
     {"ParsedUpgradeRequest", XLSP_SYM_CLASS, "type ParsedUpgradeRequest", "Class type", NULL, 0},
+    {"WsConnectOptions", XLSP_SYM_CLASS, "type WsConnectOptions = { timeout: int?, pingInterval: int?, pongTimeout: int?, maxMessageSize: int? }", "Typed WebSocket client connection options", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 31
+#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 32
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {

@@ -275,7 +275,7 @@ static void remove_ws(XrWsContext *ctx, int id) {
 /* ========== WebSocket API Implementation ========== */
 
 /*
- * ws.connect(url: string, options?: Json) -> Json
+ * ws.connect(url: string, options?: WsConnectOptions?) -> WsConn?
  *
  * Connect to WebSocket server.
  * Returns: { _wsId: int, url: string, state: string, error?: string }

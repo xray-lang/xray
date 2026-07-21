@@ -91,6 +91,23 @@ TEST(native_module_record_and_enum_metadata) {
     ASSERT_EQ_INT(effect->kind, XA_EFFECT_CONTRACT_ERRORS);
     ASSERT_EQ_INT(effect->error_count, 10);
 
+    const XaBuiltinRecord *ws_options = xa_builtin_get_record_type("ws", "WsConnectOptions");
+    ASSERT_NOT_NULL(ws_options);
+    ASSERT_TRUE(ws_options->is_sealed);
+    ASSERT_EQ_INT(ws_options->field_count, 4);
+    ASSERT_TRUE(strcmp(ws_options->fields[0].name, "timeout") == 0);
+    ASSERT_TRUE(strcmp(ws_options->fields[3].name, "maxMessageSize") == 0);
+
+    const char *ws_signature = xa_builtin_get_module_func_signature("ws", "connect");
+    ASSERT_NOT_NULL(ws_signature);
+    XrType *ws_fn = xa_builtin_parse_full_signature(iso, ws_signature);
+    ASSERT_NOT_NULL(ws_fn);
+    ASSERT_EQ_INT(ws_fn->kind, XR_KIND_FUNCTION);
+    ASSERT_EQ_INT(ws_fn->function.param_count, 2);
+    ASSERT_NOT_NULL(ws_fn->function.params[1].type);
+    ASSERT_EQ_INT(ws_fn->function.params[1].type->kind, XR_KIND_RECORD);
+    ASSERT_TRUE(ws_fn->function.params[1].type->is_nullable);
+
     xray_vm_delete(iso);
 }
 

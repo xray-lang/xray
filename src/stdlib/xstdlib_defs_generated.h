@@ -378,7 +378,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "info", "(): Json", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "publish", "(topic: string, value: Json): bool", "Publish to topic", "cluster_publish_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"cluster", "subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", "cluster_subscribe_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
-    {"ws", "connect", "(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", "ws_connect_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
+    {"ws", "connect", "(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", "ws_connect_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"ws", "send", "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 3, false},
     {"ws", "recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", "ws_recv_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"ws", "close", "(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", "ws_close", "normal", "", "", "", "value", "", "", "", "runtime", "", 3, false},
@@ -419,8 +419,16 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_net_CopyBidirec
     {"net", "CopyBidirectionalResult", "bToA", "int", true},
 };
 
+static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_ws_WsConnectOptions[] = {
+    {"ws", "WsConnectOptions", "timeout", "int?", true},
+    {"ws", "WsConnectOptions", "pingInterval", "int?", true},
+    {"ws", "WsConnectOptions", "pongTimeout", "int?", true},
+    {"ws", "WsConnectOptions", "maxMessageSize", "int?", true},
+};
+
 static const XrStdlibRecordDefEntry xr_stdlib_record_def_entries[] = {
     {"net", "CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", xr_stdlib_record_fields_net_CopyBidirectionalResult, 2, true},
+    {"ws", "WsConnectOptions", "Typed WebSocket client connection options", xr_stdlib_record_fields_ws_WsConnectOptions, 4, true},
 };
 #define XR_STDLIB_RECORD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_record_def_entries) / sizeof(xr_stdlib_record_def_entries[0])))
 

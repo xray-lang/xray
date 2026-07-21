@@ -58,6 +58,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
+#include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xa_alloc_effect.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../frontend/analyzer/xconsteval.h"

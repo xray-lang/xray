@@ -510,9 +510,22 @@ static const XaBuiltinHandle g_gen_ws_handles[] = {
 };
 #define GEN_WS_HANDLE_COUNT 2
 
+// ws.WsConnectOptions record fields
+static const XaBuiltinRecordField g_gen_ws_wsconnectoptions_record_fields[] = {
+    {"timeout", "int?"},
+    {"pingInterval", "int?"},
+    {"pongTimeout", "int?"},
+    {"maxMessageSize", "int?"},
+};
+
+static const XaBuiltinRecord g_gen_ws_records[] = {
+    {"WsConnectOptions", "Typed WebSocket client connection options", g_gen_ws_wsconnectoptions_record_fields, 4, true},
+};
+#define GEN_WS_RECORD_COUNT 1
+
 // ws module functions
 static const XaBuiltinMember g_gen_ws_functions[] = {
-    {"connect", "(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"connect", "(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"send", "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"close", "(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
@@ -537,7 +550,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT, NULL, 0, NULL, 0},
+    {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT, g_gen_ws_records, GEN_WS_RECORD_COUNT, NULL, 0},
 };
 #define GEN_BUILTIN_MODULE_COUNT 14
 
