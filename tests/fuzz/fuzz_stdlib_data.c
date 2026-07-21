@@ -10,8 +10,8 @@
  * The first input byte selects the stdlib parser:
  *   0: csv.parseReport
  *   1: toml.parseReport
- *   2: xml.parseDetailed
- *   3: yaml.parseAll
+ *   2: xml.parseReport
+ *   3: yaml.parseReport
  */
 
 #include <stdbool.h>
@@ -139,10 +139,9 @@ static const char *target_suffix(uint8_t selector) {
         case 1:
             return "\nvar result = toml.parseReport(data)\n";
         case 2:
-            return "\nvar result = xml.parseDetailed(data, { preserveComments: true, "
-                   "preserveCData: true, validateEntities: true })\n";
+            return "\nvar result = xml.parseReport(data)\n";
         default:
-            return "\nvar result = yaml.parseAll(data)\n";
+            return "\nvar result = yaml.parseReport(data)\n";
     }
 }
 
