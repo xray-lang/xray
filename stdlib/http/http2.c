@@ -1199,6 +1199,11 @@ static void http2_stream_hash_free(XrH2StreamHash *hash) {
             XrH2Stream *stream = hash->buckets[i];
             while (stream) {
                 XrH2Stream *next = stream->next;
+                for (int hi = 0; hi < stream->response_header_count; hi++) {
+                    xr_free((void *) stream->response_headers[hi].name);
+                    xr_free((void *) stream->response_headers[hi].value);
+                }
+                xr_free(stream->response_headers);
                 xr_free(stream->data_buf);
                 xr_free(stream);
                 stream = next;
@@ -1269,17 +1274,61 @@ static int h2_recv(XrH2Conn *conn, void *buf, size_t len) {
     return (int) total;
 }
 
-// HPACK header decode callback: extract :status pseudo-header
+// HPACK header decode callback: extract :status and retain regular response
+// headers for the typed http.xr control plane.
 static void h2_header_callback(const char *name, size_t name_len, const char *value,
                                size_t value_len, void *user_data) {
     XrH2Stream *stream = (XrH2Stream *) user_data;
+    if (!stream || stream->response_header_error)
+        return;
     if (name_len == 7 && memcmp(name, ":status", 7) == 0 && value_len > 0) {
         int status = 0;
         for (size_t i = 0; i < value_len && value[i] >= '0' && value[i] <= '9'; i++) {
             status = status * 10 + (value[i] - '0');
         }
         stream->status = status;
+        return;
     }
+    if (!name || (value_len > 0 && !value) || name_len == 0 || name[0] == ':')
+        return;
+    if (stream->response_header_count >= XR_H2_MAX_RESPONSE_HEADERS ||
+        name_len + value_len > XR_H2_MAX_RESPONSE_HEADER_BYTES - stream->response_header_bytes) {
+        stream->response_header_error = true;
+        return;
+    }
+    if (stream->response_header_count == stream->response_header_capacity) {
+        int next_capacity =
+            stream->response_header_capacity == 0 ? 8 : stream->response_header_capacity * 2;
+        if (next_capacity > XR_H2_MAX_RESPONSE_HEADERS)
+            next_capacity = XR_H2_MAX_RESPONSE_HEADERS;
+        XrHttpHeader *next = (XrHttpHeader *) xr_realloc(
+            stream->response_headers, sizeof(XrHttpHeader) * (size_t) next_capacity);
+        if (!next) {
+            stream->response_header_error = true;
+            return;
+        }
+        stream->response_headers = next;
+        stream->response_header_capacity = next_capacity;
+    }
+    char *name_copy = (char *) xr_malloc(name_len + 1);
+    char *value_copy = (char *) xr_malloc(value_len + 1);
+    if (!name_copy || !value_copy) {
+        xr_free(name_copy);
+        xr_free(value_copy);
+        stream->response_header_error = true;
+        return;
+    }
+    memcpy(name_copy, name, name_len);
+    name_copy[name_len] = '\0';
+    if (value_len > 0)
+        memcpy(value_copy, value, value_len);
+    value_copy[value_len] = '\0';
+    XrHttpHeader *header = &stream->response_headers[stream->response_header_count++];
+    header->name = name_copy;
+    header->name_len = name_len;
+    header->value = value_copy;
+    header->value_len = value_len;
+    stream->response_header_bytes += name_len + value_len;
 }
 
 // Receive and process frame
@@ -1373,8 +1422,12 @@ static int http2_recv(XrH2Conn *conn) {
             }
             // Decode HPACK headers to extract :status pseudo-header
             if (stream && hdr_ptr && hdr_len > 0) {
-                http2_hpack_decode(&conn->decoder_table, hdr_ptr, hdr_len, h2_header_callback,
-                                   stream);
+                if (http2_hpack_decode(&conn->decoder_table, hdr_ptr, hdr_len, h2_header_callback,
+                                       stream) < 0 ||
+                    stream->response_header_error) {
+                    result = -1;
+                    break;
+                }
             }
             if (stream && header.flags & XR_H2_FLAG_END_STREAM) {
                 stream->state = XR_H2_STREAM_HALF_CLOSED_REMOTE;
