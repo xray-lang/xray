@@ -1,0 +1,12 @@
+import base64
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+let encoded = base64.encode("hello")
+emit("rfc4648-roundtrip", encoded == "aGVsbG8=" && base64.decode(encoded)! == "hello")
+emit("typed-error-invalid-input", base64.decode("!!!!") == null)
+emit("canonical-trailing-bits", base64.decode("AB==") == null)
+let urlEncoded = base64.encodeUrl("subjects?_d")
+emit("explicit-alphabet-padding-policy", urlEncoded == "c3ViamVjdHM_X2Q" && base64.decodeUrl(urlEncoded)! == "subjects?_d")

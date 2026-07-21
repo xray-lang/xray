@@ -8,7 +8,7 @@
  * xi_cgen_coro_resolver.inc.c - AOT seam wiring shared xi_coro analysis to the
  * codegen bundle.
  *
- * The shared IR coroutine analysis (xi_coro_analyze.h) routes its two
+ * The shared IR coroutine analysis (xi_coro_analyze.h) routes its
  * context-dependent queries through an XiCoroResolver so it never depends on
  * AOT bundle types.  These builders supply the AOT implementations:
  *   - the intra resolver answers only direct module imports and performs no
@@ -60,6 +60,25 @@ static bool cg_coro_module_import_ctx_cb(void *ud, const XiFunc *f, const XiValu
     return cg_value_is_module_import_ctx((XiCgenCtx *) ud, f, v, module);
 }
 
+static bool cg_coro_module_member_call_ctx_cb(void *ud, const XiFunc *f, const XiValue *v,
+                                              const char *module, const char *member) {
+    XiCgenCtx *ctx = (XiCgenCtx *) ud;
+    if (!ctx || !f || !v || !module || !member || v->nargs < 1)
+        return false;
+    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->aux &&
+        strcmp((const char *) v->aux, member) == 0)
+        return cg_value_is_module_import_ctx(ctx, f, v->args[0], module);
+    if (v->op != XI_CALL)
+        return false;
+
+    const XiValue *callee = cg_unwrap_identity_value(v->args[0]);
+    const XiImportRef *ref = (callee && callee->op == XI_IMPORT_REF && callee->aux)
+                                 ? (const XiImportRef *) callee->aux
+                                 : cg_import_ref_for_value(ctx, f, callee);
+    return ref && ref->module_path && ref->member_name && strcmp(ref->module_path, module) == 0 &&
+           strcmp(ref->member_name, member) == 0;
+}
+
 static int cg_coro_func_suspendability_cb(void *ud, const XiFunc *func) {
     XiCgenCtx *ctx = (XiCgenCtx *) ud;
     const XaotFuncPlan *plan = xaot_bundle_find_func_plan(cg_ctx_aot_bundle(ctx), func);
@@ -72,6 +91,7 @@ static XiCoroResolver cg_coro_resolver_ctx(XiCgenCtx *ctx) {
     resolver.resolve_method = cg_coro_resolve_method_cb;
     resolver.func_suspendability = cg_coro_func_suspendability_cb;
     resolver.value_is_module_import = cg_coro_module_import_ctx_cb;
+    resolver.call_is_module_member = cg_coro_module_member_call_ctx_cb;
     resolver.ud = ctx;
     return resolver;
 }

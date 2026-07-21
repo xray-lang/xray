@@ -1,0 +1,3 @@
+{"case":"header-order-and-duplicates","classification":"required","effects":{},"error":null,"legacy_commit":"95172da726477612a09e76258cc05a585886e124","outcome":"value","value":true}
+{"case":"request-body-framing","classification":"required","effects":{},"error":null,"legacy_commit":"95172da726477612a09e76258cc05a585886e124","outcome":"value","value":true}
+{"case":"response-body-framing","classification":"required","effects":{},"error":null,"legacy_commit":"95172da726477612a09e76258cc05a585886e124","outcome":"value","value":true}

@@ -7509,6 +7509,37 @@ TEST(cgen_coro_sleep_publishes_state_before_block) {
     xi_func_free(ir);
 }
 
+TEST(cgen_test_yield_calls_publish_resume_states) {
+    const char *src = "import test_yield\n"
+                      "import { add } from \"test_yield\"\n"
+                      "Coro.yield()\n"
+                      "print(test_yield.simple())\n"
+                      "print(add(19, 23))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation succeeded");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation produced output");
+    TEST_REQUIRE(!had_error, "contracted AOT test_yield calls generated successfully");
+    TEST_REQUIRE(contains(code, "switch (f->state)") && contains(code, "case 1: goto S1;") &&
+                     contains(code, "case 2: goto S2;") && contains(code, "case 3: goto S3;"),
+                 "test_yield calls participate in the shared coroutine plan");
+    TEST_REQUIRE(contains(code, "xr_aot_test_yield_simple()") &&
+                     contains(code, "xr_aot_test_yield_add(INT64_C(19), INT64_C(23))"),
+                 "module and selected-import calls use the AOT test provider");
+    TEST_REQUIRE(contains(code, "int64_t test_yield_value_"),
+                 "add arguments and result are captured before yielding");
+    TEST_REQUIRE(contains(code, "f->state = 2;\n    return xr_aot_yielded();") &&
+                     contains(code, "f->state = 3;\n    return xr_aot_yielded();"),
+                 "each contracted yieldable call publishes one cooperative resume state");
+
+    printf("  Generated test_yield provider states %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_runtime_needed_main_uses_aot_runtime) {
     const char *src = "import time\n"
                       "time.sleep(5)\n";
@@ -8639,6 +8670,7 @@ int main(void) {
     run_cgen_descriptor_scalar_channel_try_recv_returns_recv_enum();
     run_cgen_descriptor_select_try_recv_uses_ready_bit();
     run_cgen_coro_sleep_publishes_state_before_block();
+    run_cgen_test_yield_calls_publish_resume_states();
     run_cgen_runtime_needed_main_uses_aot_runtime();
     run_cgen_coro_select_publishes_state_before_block();
     run_cgen_coro_channel_timeout_publishes_state_before_block();

@@ -742,6 +742,13 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
     // Use PREC_TERNARY to avoid parsing assignment
     AstNode *first_expr = xr_parse_precedence(parser, PREC_TERNARY);
 
+    // Recoverable parsing may reject the prefix expression while leaving an
+    // assignment-like token (for example the removed `=>` match arm syntax)
+    // as the current token. Do not dispatch an infix rule with a NULL left
+    // operand; the outer recoverable loop will synchronize at the error.
+    if (!first_expr)
+        return NULL;
+
     // Bare comma at statement position is the obsolete multi-value
     // form. Point users at the tuple destructure equivalent instead
     // of letting it fall through with a generic error.
@@ -886,7 +893,9 @@ AstNode *xr_parse_statement(Parser *parser) {
                 }
             }
             if (parser->current.type != TK_ASSIGN) {
-                *parser = checkpoint;
+                // The name and ':' are already known to form an invalid loop
+                // label. Keep them consumed so recoverable parsing cannot
+                // revisit the same token pair indefinitely.
                 xr_parser_error_at_current(parser, "loop labels can only annotate loops");
                 return NULL;
             }
@@ -1364,6 +1373,7 @@ AstNode *xr_parse_recoverable(Parser *parser) {
         }
 
         int stmt_line = parser->current.line;
+        const char *stmt_start = parser->current.start;
 
         AstNode *decl = xr_parse_declaration(parser);
         if (decl != NULL) {
@@ -1382,6 +1392,14 @@ AstNode *xr_parse_recoverable(Parser *parser) {
                 }
                 // Don't break - continue parsing for more errors
             }
+        }
+
+        // Last-resort progress guarantee for the recoverable/LSP entrypoint.
+        // Local recovery normally consumes or synchronizes tokens, but a
+        // malformed construct must never be allowed to pin this loop.
+        if (parser->current.start == stmt_start && decl == NULL && !parser->panic_mode &&
+            !xr_parser_check(parser, TK_EOF) && !xr_parser_check(parser, TK_RBRACE)) {
+            xr_parser_advance(parser);
         }
 
         // Don't break on error - continue to find more errors

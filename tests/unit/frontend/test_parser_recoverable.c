@@ -463,6 +463,73 @@ TEST(deep_expression_reports_error_instead_of_crashing) {
     teardown();
 }
 
+TEST(removed_match_arrow_recovers_without_null_assignment_lhs) {
+    // The parser corpus still contains the removed `=>` match-arm spelling.
+    // Error recovery reaches the `=` token after rejecting the arm pattern;
+    // it must not call the assignment infix parser with a NULL left operand.
+    setup();
+    Parser parser;
+    DiagSink sink;
+    XrArena *arena = NULL;
+    AstNode *ast = parse_recoverable("fn f(x) {\n"
+                                     "    return match (x) {\n"
+                                     "        _ => null\n"
+                                     "    }\n"
+                                     "}\n"
+                                     "var after = 1\n",
+                                     &parser, &sink, 0, &arena);
+
+    ASSERT_NOT_NULL(ast);
+    ASSERT_TRUE(parser.had_error != 0);
+    ASSERT_TRUE(sink.count >= 1);
+
+    release_arena(arena);
+    teardown();
+}
+
+TEST(malformed_type_list_recovers_without_unbounded_growth) {
+    // A missing comma followed by a malformed struct type used to leave the
+    // current token unchanged while both field/type arrays doubled forever.
+    setup();
+    Parser parser;
+    DiagSink sink;
+    XrArena *arena = NULL;
+    AstNode *ast = parse_recoverable("fn f() -> (string, str{ni ) {\n"
+                                     "    return ()\n"
+                                     "}\n"
+                                     "var after = 1\n",
+                                     &parser, &sink, 0, &arena);
+
+    ASSERT_NOT_NULL(ast);
+    ASSERT_TRUE(parser.had_error != 0);
+    ASSERT_TRUE(sink.count >= 1);
+
+    release_arena(arena);
+    teardown();
+}
+
+TEST(invalid_loop_label_recovers_without_revisiting_tokens) {
+    // A name/colon pair immediately after a malformed declaration used to be
+    // restored to its checkpoint after reporting the invalid label, so the
+    // recoverable loop emitted the same diagnostic forever.
+    setup();
+    Parser parser;
+    DiagSink sink;
+    XrArena *arena = NULL;
+    AstNode *ast = parse_recoverable("fn value()up: (string) {\n"
+                                     "    return \"ok\"\n"
+                                     "}\n"
+                                     "var after = 1\n",
+                                     &parser, &sink, 0, &arena);
+
+    ASSERT_NOT_NULL(ast);
+    ASSERT_TRUE(parser.had_error != 0);
+    ASSERT_TRUE(sink.count >= 1);
+
+    release_arena(arena);
+    teardown();
+}
+
 TEST(removed_oop_member_modifier_drops_invalid_member) {
     setup();
     Parser parser;
@@ -545,6 +612,9 @@ RUN_TEST(broken_function_body_does_not_eat_following_decls);
 RUN_TEST(empty_and_whitespace_source_no_error);
 RUN_TEST(error_coordinates_in_source_bounds);
 RUN_TEST(deep_expression_reports_error_instead_of_crashing);
+RUN_TEST(removed_match_arrow_recovers_without_null_assignment_lhs);
+RUN_TEST(malformed_type_list_recovers_without_unbounded_growth);
+RUN_TEST(invalid_loop_label_recovers_without_revisiting_tokens);
 RUN_TEST(removed_oop_member_modifier_drops_invalid_member);
 RUN_TEST(removed_top_level_oop_modifier_drops_invalid_class);
 RUN_TEST(null_parser_returns_null_safely);

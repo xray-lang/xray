@@ -1,4 +1,4 @@
-// VM-only control-plane contract: standalone AOT has no host heap introspection.
+// VM/AOT control-plane contract: each backend observes its current coroutine heap.
 import runtime
 
 // The embedding host may enter with a nested disable count. Saturating enable
@@ -17,3 +17,7 @@ print(runtime.isCycleCollectionEnabled())
 print(runtime.liveBytes() >= 0)
 print(runtime.liveObjects() >= 0)
 print(runtime.collectCycles() >= 0)
+var info = runtime.info()
+print(info.liveBytes >= 0)
+print(info.liveObjects >= 0)
+print(info.cycleCollections >= 0)

@@ -721,6 +721,7 @@ static const XiFunc *cg_coro_direct_suspend_call_target(XiCgenCtx *ctx, const Xi
 static const XaotCallableInvokePlan *cg_coro_callable_target_switch_plan(XiCgenCtx *ctx,
                                                                          const XiValue *v);
 static bool cg_coro_call_needs_child_frame(XiCgenCtx *ctx, const XiFunc *current, const XiValue *v);
+static bool cg_coro_test_yield_add_call(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 
 /* The shared coroutine plan for 'f', wired to the ctx-level resolver.  Cached
  * on f->coro_plan by xi_coro_analyze, so repeated lookups are cheap. */
@@ -937,6 +938,8 @@ static size_t estimate_coro_frame_size(XiCgenCtx *ctx, const XiFunc *f) {
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
+            if (cg_coro_test_yield_add_call(ctx, f, v))
+                cg_coro_layout_add(&size, &max_align, sizeof(int64_t), _Alignof(int64_t));
             if (cg_coro_call_needs_child_frame(ctx, f, v)) {
                 cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
                 if (cg_coro_callable_target_switch_plan(ctx, v))
@@ -1840,6 +1843,8 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
+            if (cg_coro_test_yield_add_call(ctx, f, v))
+                fprintf(out, "    int64_t test_yield_value_%u;\n", v->id);
             if (cg_coro_call_needs_child_frame(ctx, f, v)) {
                 fprintf(out, "    void *call_frame_%u;\n", v->id);
                 if (cg_coro_callable_target_switch_plan(ctx, v))
@@ -2395,6 +2400,91 @@ static bool emit_coro_callable_target_switch(XiCgenCtx *ctx, FILE *out, const Xi
     return true;
 }
 
+static const char *cg_coro_test_yield_call_name(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
+                                                uint16_t *arg_base_out) {
+    if (!ctx || !f || !v || v->nargs < 1)
+        return NULL;
+    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) &&
+        cg_value_is_module_import_ctx(ctx, f, v->args[0], "test_yield")) {
+        if (arg_base_out)
+            *arg_base_out = 1;
+        return (const char *) v->aux;
+    }
+    if (v->op != XI_CALL)
+        return NULL;
+
+    const XiValue *callee = cg_unwrap_identity_value(v->args[0]);
+    const XiImportRef *ref = (callee && callee->op == XI_IMPORT_REF && callee->aux)
+                                 ? (const XiImportRef *) callee->aux
+                                 : cg_import_ref_for_value(ctx, f, callee);
+    if (!ref || !ref->module_path || strcmp(ref->module_path, "test_yield") != 0)
+        return NULL;
+    if (arg_base_out)
+        *arg_base_out = 1;
+    return ref->member_name;
+}
+
+static bool cg_coro_test_yield_add_call(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    const char *method = v ? cg_coro_test_yield_call_name(ctx, f, v, NULL) : NULL;
+    return method && strcmp(method, "add") == 0;
+}
+
+static bool emit_coro_test_yield_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *v, int *state_id) {
+    uint16_t arg_base = 0;
+    const char *method = cg_coro_test_yield_call_name(ctx, f, v, &arg_base);
+    if (!method || (strcmp(method, "simple") != 0 && strcmp(method, "add") != 0 &&
+                    strcmp(method, "counter_inc") != 0))
+        return false;
+
+    uint16_t argc = v->nargs >= arg_base ? (uint16_t) (v->nargs - arg_base) : 0;
+    uint16_t expected_argc = strcmp(method, "add") == 0 ? 2 : 0;
+    if (argc != expected_argc) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: unsupported yieldable AOT test_yield call '%s' with "
+                "%u args\n",
+                method, (unsigned) argc);
+        emit_codegen_abort_aot_result(out);
+        return true;
+    }
+
+    int sid = ++(*state_id);
+    emit_value_source_line(ctx, out, v);
+    if (strcmp(method, "add") == 0) {
+        fprintf(out, "    f->test_yield_value_%u = xr_aot_test_yield_add(", v->id);
+        emit_value_as_rep_ctx(ctx, out, v->args[arg_base], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[arg_base + 1], XR_REP_I64);
+        fprintf(out, ");\n");
+    } else if (strcmp(method, "counter_inc") == 0) {
+        fprintf(out, "    xr_aot_test_yield_counter_inc();\n");
+    }
+    fprintf(out, "    f->state = %d;\n", sid);
+    fprintf(out, "    return xr_aot_yielded();\n");
+    emit_value_generated_line_reset(ctx, out, v);
+    fprintf(out, "S%d:;\n", sid);
+    fprintf(out, "    f->state = 0;\n");
+    if (cg_coro_value_has_storage(f, v) && strcmp(method, "add") == 0) {
+        char temp[48];
+        snprintf(temp, sizeof(temp), "f->test_yield_value_%u", v->id);
+        emit_assign_from_i64_temp(out, v, temp);
+    } else if (cg_coro_value_has_storage(f, v) && strcmp(method, "simple") == 0) {
+        fprintf(out, "    int64_t _test_yield_value_%u = xr_aot_test_yield_simple();\n", v->id);
+        char temp[48];
+        snprintf(temp, sizeof(temp), "_test_yield_value_%u", v->id);
+        emit_assign_from_i64_temp(out, v, temp);
+    } else if (cg_coro_value_has_storage(f, v) && strcmp(method, "counter_inc") == 0) {
+        fprintf(out, "    int64_t _test_yield_value_%u = xr_aot_test_yield_counter_get();\n",
+                v->id);
+        char temp[48];
+        snprintf(temp, sizeof(temp), "_test_yield_value_%u", v->id);
+        emit_assign_from_i64_temp(out, v, temp);
+    }
+    emit_coro_debug_result_source_var_sync(ctx, out, f, v);
+    return true;
+}
+
 static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                  const char *prefix, int *state_id) {
     XR_DCHECK(v != NULL, "emit_coro_value_stmt: NULL value");
@@ -2879,6 +2969,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
+
+    if (emit_coro_test_yield_call_stmt(ctx, out, f, v, state_id))
+        return;
 
     if (emit_coro_callable_target_switch(ctx, out, f, v, state_id))
         return;

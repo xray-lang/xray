@@ -22,6 +22,7 @@ struct XrAotRuntime {
     struct XrRuntimeCore *core;
     struct XrRuntime *scheduler;
     struct XrScopeContext *root_scope;
+    struct XrCoroutine *root_coro;
     const XrAotValueOps *value_ops;
     XrValue coro_locals;
     atomic_flag coro_locals_lock;

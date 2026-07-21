@@ -2654,6 +2654,10 @@ static bool xicgen_import_ref_is_core_math_member(const XiImportRef *ref) {
 
 /* Both defined in xi_cgen_stdlib_helpers.inc.c (included later in this TU). */
 static bool xicgen_emit_stdlib_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v);
+static bool xicgen_emit_runtime_control_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                               const XiValue *v);
+static bool xicgen_emit_test_yield_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                          const XiValue *v);
 static bool xicgen_emit_stdlib_import_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                            const XiValue *v);
 static bool cg_module_has_aot_direct_calls(const char *module);
@@ -9065,6 +9069,10 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (!is_super && xicgen_emit_import_module_member_call(ctx, out, f, v, prefix, method))
         return;
     if (xicgen_emit_time_method(ctx, out, f, v))
+        return;
+    if (xicgen_emit_runtime_control_method(ctx, out, f, v))
+        return;
+    if (xicgen_emit_test_yield_method(ctx, out, f, v))
         return;
     if (xicgen_emit_stdlib_method(ctx, out, f, v))
         return;

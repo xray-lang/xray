@@ -1725,19 +1725,18 @@ TEST(knowledge_search_stdlib) {
     ASSERT_NOT_NULL(kb);
     xmcp_knowledge_load(kb);
 
+    XmcpStdlibSearchResult matches;
+    xmcp_knowledge_search_stdlib_matches(kb, "http", NULL, &matches);
+    ASSERT(matches.match_count > 0);
+    ASSERT_STR_EQ(matches.matches[0].module->name, "http");
+    ASSERT(matches.matches[0].symbol == NULL);
+
     int match_count = 0;
     char *result = xmcp_knowledge_search_stdlib(kb, "http", NULL, &match_count);
     ASSERT_NOT_NULL(result);
     ASSERT(match_count > 0);
     ASSERT(strstr(result, "Module: http") != NULL);
     xr_free(result);
-
-    XmcpStdlibSearchResult matches;
-    xmcp_knowledge_search_stdlib_matches(kb, "http", NULL, &matches);
-    ASSERT(matches.match_count > 0);
-    ASSERT_NOT_NULL(matches.matches[0].module);
-    ASSERT_STR_EQ(matches.matches[0].module->name, "http");
-    ASSERT(matches.matches[0].symbol == NULL);
 
     xmcp_knowledge_free(kb);
 }

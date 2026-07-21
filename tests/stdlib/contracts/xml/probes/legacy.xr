@@ -1,0 +1,13 @@
+import xml
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+var source = "<root id=\"7\"><item>A&amp;B</item><![CDATA[<raw>]]></root>"
+var doc = xml.parse(source)
+emit("xmlnode-adt", string(doc["tag"]) == "root" && string(doc["attrs"]["id"]) == "7" && len(doc["children"]) == 2 && string(doc["children"][0]["children"][0]["text"]) == "A&B")
+var report = xml.parseDetailed("<root>")
+emit("typed-parse-diagnostics", len(report["errors"]) > 0)
+var round = xml.parse(xml.stringify(doc, { indent: 0, declaration: false }))
+emit("stringify-roundtrip", string(round["tag"]) == "root" && string(round["attrs"]["id"]) == "7" && string(round["children"][0]["children"][0]["text"]) == "A&B")

@@ -1,0 +1,14 @@
+import yaml
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+var doc = yaml.parse("name: xray\nversion: 2\nactive: true\nitems: [one, two]")
+var valuesOk = string(doc["name"]) == "xray" && int(doc["version"]) == 2 && bool(doc["active"]) && string(doc["items"][1]) == "two"
+emit("yaml-value-domain", valuesOk)
+var strict = yaml.parseStrict("not-a-mapping")
+emit("typed-parse-errors", len(strict["errors"]) > 0)
+var original: Json = { name: "xray", version: 2 }
+var round = yaml.parse(yaml.stringify(original))
+emit("stringify-roundtrip", string(round["name"]) == "xray" && int(round["version"]) == 2)

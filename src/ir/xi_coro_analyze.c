@@ -212,6 +212,18 @@ static bool xi_coro_is_time_sleep_call(const XiFunc *f, const XiValue *v,
            resolver->value_is_module_import(resolver->ud, f, v->args[0], "time");
 }
 
+static bool xi_coro_is_test_yield_call(const XiFunc *f, const XiValue *v,
+                                       const XiCoroResolver *resolver) {
+    if (!resolver || !resolver->call_is_module_member)
+        return false;
+    static const char *const members[] = {"simple", "add", "counter_inc"};
+    for (size_t i = 0; i < sizeof(members) / sizeof(members[0]); i++) {
+        if (resolver->call_is_module_member(resolver->ud, f, v, "test_yield", members[i]))
+            return true;
+    }
+    return false;
+}
+
 /* ========== Suspendability (function-level, optionally interprocedural) ========== */
 
 static bool xi_coro_func_intrinsic_suspends(const XiFunc *f, const XiCoroResolver *resolver) {
@@ -247,6 +259,8 @@ static bool xi_coro_func_intrinsic_suspends(const XiFunc *f, const XiCoroResolve
                 xi_value_is_blocking_event_count_method_call(v))
                 return true;
             if (xi_coro_is_time_sleep_call(f, v, resolver))
+                return true;
+            if (xi_coro_is_test_yield_call(f, v, resolver))
                 return true;
         }
     }
@@ -353,6 +367,8 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
         xi_value_is_blocking_event_count_method_call(v))
         return true;
     if (xi_coro_is_time_sleep_call(f, v, resolver))
+        return true;
+    if (xi_coro_is_test_yield_call(f, v, resolver))
         return true;
     return xi_coro_call_suspends(f, v, resolver) || xi_coro_method_call_suspends(f, v, resolver);
 }

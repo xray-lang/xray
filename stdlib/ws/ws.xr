@@ -276,7 +276,10 @@ fn _bytesToString(data: Array<byte>, start: int, end: int) -> string {
     for (var i = start; i < end; i++) {
         out[i - start] = data[i]
     }
-    return out.toString()
+    // parseClosePayload validates the byte range before decoding it, so the
+    // UTF-8 conversion is total here. Array.toString() renders numeric lanes
+    // (for example "[79, 75]") and is not a WebSocket close reason.
+    return string.fromUtf8(out[:])!
 }
 
 fn _randomBytes(n: int) -> Array<byte> {

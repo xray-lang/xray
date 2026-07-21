@@ -1,0 +1,3 @@
+{"case":"checksum-known-values","classification":"required","effects":{},"error":null,"legacy_commit":"d5cfcb587219468fde5bf8cda6cb76df875cf25b","outcome":"value","value":true}
+{"case":"roundtrip-formats","classification":"required","effects":{},"error":null,"legacy_commit":"d5cfcb587219468fde5bf8cda6cb76df875cf25b","outcome":"value","value":true}
+{"case":"truncated-input-classification","classification":"required","effects":{},"error":null,"legacy_commit":"d5cfcb587219468fde5bf8cda6cb76df875cf25b","outcome":"value","value":true}

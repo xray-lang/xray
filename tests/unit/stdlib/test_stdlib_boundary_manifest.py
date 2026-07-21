@@ -59,20 +59,12 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
             )
         self.assertEqual(0, report["migration_debt_count"])
 
-    def test_consistency_is_not_reported_as_completion(self) -> None:
+    def test_completion_is_reported_after_all_blockers_clear(self) -> None:
         errors, report = build_report(ROOT)
         self.assertEqual([], errors)
         self.assertTrue(report["status"]["consistent"])
-        self.assertFalse(report["status"]["complete"])
-        kinds = {item["kind"] for item in report["status"]["completion_blockers"]}
-        # Source consistency must never be reported as completion while blockers
-        # remain. Task 221 cleared the benchmark, dynamic-migration, and
-        # correctness-coverage blockers; legacy-oracle execution still gates
-        # completion.
-        self.assertTrue(kinds, "consistency must not imply completion while blockers remain")
-        self.assertNotIn("dynamic_migration_debt", kinds)
-        self.assertNotIn("missing_correctness_contracts", kinds)
-        self.assertIn("non_executable_legacy_oracles", kinds)
+        self.assertTrue(report["status"]["complete"])
+        self.assertEqual([], report["status"]["completion_blockers"])
 
 
 if __name__ == "__main__":

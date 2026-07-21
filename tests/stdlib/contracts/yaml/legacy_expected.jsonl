@@ -1,0 +1,3 @@
+{"case":"yaml-value-domain","classification":"required","effects":{},"error":null,"legacy_commit":"971205b8e773e1d3eeaeafb9432355cf8be038e6","outcome":"value","value":true}
+{"case":"typed-parse-errors","classification":"required","effects":{},"error":null,"legacy_commit":"971205b8e773e1d3eeaeafb9432355cf8be038e6","outcome":"value","value":true}
+{"case":"stringify-roundtrip","classification":"required","effects":{},"error":null,"legacy_commit":"971205b8e773e1d3eeaeafb9432355cf8be038e6","outcome":"value","value":true}

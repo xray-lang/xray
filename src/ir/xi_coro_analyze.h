@@ -17,9 +17,9 @@
  *
  *   The logical frame (which values are members) is identical across
  *   backends; each backend chooses its own physical slot representation and
- *   layout, which is unobservable.  The two genuinely context-dependent
- *   queries -- interprocedural callee resolution and stdlib module-import
- *   recognition -- are routed through XiCoroResolver so the analysis never
+ *   layout, which is unobservable.  The genuinely context-dependent queries
+ *   -- interprocedural callee resolution and stdlib module/member recognition
+ *   -- are routed through XiCoroResolver so the analysis never
  *   depends on AOT or VM bundle types (keeps the src/ir DAG intact).
  */
 
@@ -97,13 +97,15 @@ typedef struct XiCoroPlan {
 } XiCoroPlan;
 
 /* Backend seam: keeps the analysis free of AOT/VM bundle types by routing
- * the two context-dependent queries through callbacks.
+ * context-dependent queries through callbacks.
  *   - resolve_callee maps a call's callee value to its target XiFunc.
  *   - resolve_method maps a method-call value to its statically known target.
  *   - func_suspendability returns the prepared whole-program execution shape
  *     for a function (1 = suspendable, 0 = synchronous, -1 = unknown).
  *   - value_is_module_import decides whether 'v' (as used in 'f') refers to
  *     an import of the named stdlib module (e.g. "time" for time.sleep).
+ *   - call_is_module_member recognizes both module-method and selected-import
+ *     calls for internal/native stdlib suspension contracts.
  * Either callback may be NULL; the analysis then answers only from the
  * intraprocedural / direct-import information available in the IR. */
 typedef struct XiCoroResolver {
@@ -111,6 +113,8 @@ typedef struct XiCoroResolver {
     const XiFunc *(*resolve_method)(void *ud, const XiFunc *current, const XiValue *call);
     int (*func_suspendability)(void *ud, const XiFunc *func);
     bool (*value_is_module_import)(void *ud, const XiFunc *f, const XiValue *v, const char *module);
+    bool (*call_is_module_member)(void *ud, const XiFunc *f, const XiValue *v, const char *module,
+                                  const char *member);
     void *ud;
 } XiCoroResolver;
 

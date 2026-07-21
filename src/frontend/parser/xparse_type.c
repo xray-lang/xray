@@ -760,11 +760,19 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 capacity = new_cap;
             }
             bool is_const = xr_parser_match(parser, TK_CONST);
-            xr_parser_consume(parser, TK_NAME, "expected field name");
+            if (!xr_parser_check(parser, TK_NAME)) {
+                xr_parser_error(parser, "expected field name");
+                break;
+            }
+            xr_parser_advance(parser);
             fnames[field_count] = strndup(parser->previous.start, parser->previous.length);
 
             bool is_optional = xr_parser_match(parser, TK_QUESTION);
-            xr_parser_consume(parser, TK_COLON, "expected ':'");
+            if (!xr_parser_match(parser, TK_COLON)) {
+                xr_parser_error(parser, "expected ':'");
+                xr_free((void *) fnames[field_count]);
+                break;
+            }
             XrTypeRef *ftype = xr_parse_type_annotation(parser);
             if (is_optional)
                 ftype = xr_tref_optional(parser->compiler_session, ftype);
@@ -830,9 +838,15 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         int count = 0;
         bool saw_param_mode = false;
         while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
-            if (count > 0 && xr_parser_match(parser, TK_COMMA) &&
-                xr_parser_check(parser, TK_RPAREN))
-                break;
+            if (count > 0) {
+                if (!xr_parser_match(parser, TK_COMMA)) {
+                    xr_parser_error(parser,
+                                    "expected ',' between tuple or function parameter types");
+                    break;
+                }
+                if (xr_parser_check(parser, TK_RPAREN))
+                    break;
+            }
             if (count == cap) {
                 int new_cap = cap * 2;
                 XrTypeRef **resized =

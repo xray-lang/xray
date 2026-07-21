@@ -1,0 +1,25 @@
+import compress
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+fn rejects(body: () -> ()) -> bool {
+    try {
+        body()
+        return false
+    } catch (e: CompressionError) {
+        return true
+    }
+}
+
+emit("checksum-known-values", compress.crc32("123456789") == 3421780262 && compress.adler32("Wikipedia") == 300286872)
+var data = "stdlib legacy oracle compression payload"
+var gz = compress.gzip(data)!
+var df = compress.deflate(data)!
+var zl = compress.zlibCompress(data)!
+emit("roundtrip-formats", compress.gunzip(gz) == data && compress.inflate(df) == data && compress.zlibDecompress(zl) == data)
+emit("truncated-input-classification",
+    rejects(fn() { compress.gunzip(gz.slice(0, 1)) }) &&
+    rejects(fn() { compress.inflate(df.slice(0, 1)) }) &&
+    rejects(fn() { compress.zlibDecompress(zl.slice(0, 1)) }))

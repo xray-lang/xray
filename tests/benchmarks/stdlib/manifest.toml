@@ -154,12 +154,9 @@ vm_budget_ratio = 60.0
 # load; per 221 §4 a widened budget is allowed with a recorded reason, and true
 # perf tightening is deferred to the 196 §7 P1-P5 analysis.
 #
-# NOTE: runtime and test_yield are VM-only modules with no AOT lowering, so
-# run.py (which always builds AOT via compare = ["vm", "aot"]) cannot execute
-# their benchmarks. Their entries exist to satisfy the governance gate (an active
-# benchmark per governed suite); actually running them needs either compiler AOT
-# support for these modules or a VM-only benchmark lane in run.py. test_yield
-# additionally requires building xray with -DXR_BUILD_TEST_MODULES=ON.
+# test_yield requires building xray with -DXR_BUILD_TEST_MODULES=ON; its AOT
+# benchmark executes through the internal provider. Runtime control-plane
+# benchmarks execute on both backends through the provider-owned current heap.
 
 [[benchmark]]
 id = "probe.shapes.contract"
