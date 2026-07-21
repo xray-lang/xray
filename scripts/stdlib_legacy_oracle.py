@@ -92,6 +92,15 @@ def contract_modules(root: Path) -> list[str]:
     return sorted(path.parent.name for path in (root / CONTRACT_ROOT).glob("*/contract.toml"))
 
 
+def executable_contract_modules(root: Path) -> list[str]:
+    modules: list[str] = []
+    for module in contract_modules(root):
+        _, contract = load_contract(root, module)
+        if contract.get("legacy_oracle") == "executable":
+            modules.append(module)
+    return modules
+
+
 def behavior_classifications(contract: dict[str, Any]) -> dict[str, str]:
     return {
         str(row.get("id", "")): str(row.get("classification", ""))
@@ -218,7 +227,7 @@ def main() -> int:
     parser.add_argument("--jobs", type=int, default=max(1, min(os.cpu_count() or 1, 8)))
     args = parser.parse_args()
     root = Path(args.root).resolve()
-    modules = [args.module] if args.module else contract_modules(root)
+    modules = [args.module] if args.module else executable_contract_modules(root)
     try:
         if args.command == "verify":
             if not args.xray:

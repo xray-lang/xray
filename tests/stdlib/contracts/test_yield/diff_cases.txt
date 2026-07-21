@@ -1,1 +1,1 @@
-tests/diff/cases/semantics/stdlib/test_yield_scheduler_contract.xr
+tests/stdlib/contracts/test_yield/cases/test_yield_scheduler_contract.xr

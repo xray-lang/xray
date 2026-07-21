@@ -1,1 +1,1 @@
-tests/diff/cases/semantics/stdlib/runtime_control_plane.xr
+tests/stdlib/contracts/runtime/cases/runtime_control_plane.xr

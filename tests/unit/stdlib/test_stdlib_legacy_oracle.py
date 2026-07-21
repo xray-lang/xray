@@ -3,6 +3,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -16,6 +17,16 @@ SPEC.loader.exec_module(ORACLE)
 
 
 class LegacyOracleObservationTests(unittest.TestCase):
+    def test_default_module_selection_skips_classification_only_contracts(self):
+        contracts = {
+            "classified": {"legacy_oracle": "classification_only"},
+            "executable": {"legacy_oracle": "executable"},
+        }
+        with mock.patch.object(ORACLE, "contract_modules", return_value=list(contracts)), mock.patch.object(
+            ORACLE, "load_contract", side_effect=lambda _root, module: (Path(module), contracts[module])
+        ):
+            self.assertEqual(["executable"], ORACLE.executable_contract_modules(ROOT))
+
     def test_canonical_observation_rejects_lossy_or_incomplete_rows(self):
         with self.assertRaisesRegex(ValueError, "missing fields"):
             ORACLE.canonical_observation({"case": "x", "outcome": "value"})
