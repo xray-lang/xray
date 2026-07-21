@@ -251,8 +251,9 @@ XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
              * which is the same RC object. For dup/drop placement this behaves
              * exactly like a consume of the operand (the operand is no longer an
              * independent owner afterwards). The independent xi_arc_verify pass
-             * additionally reads XI_GEN_OWN_USE_PASS to union the operand and
-             * result into one lifetime equivalence class (C5). */
+             * consumes the same explicit ownership metadata for C5 checks, but
+             * deliberately tracks net deltas per owning reference instead of
+             * unioning object lifetimes (multiple owning aliases are legal). */
             return true;
         case XI_GEN_OWN_USE_STORED_VALUE:
             /* arg 0 = container/receiver; arg 1+ = stored value. */
