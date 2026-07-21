@@ -1,0 +1,32 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
+
+shared semaphore = Semaphore(1)
+assert(semaphore.tryAcquire())
+assert(semaphore.release())
+
+shared latch = CountdownLatch(1)
+latch.done()
+assert(latch.wait())
+
+shared event = EventCount(0)
+assert(event.advance())
+assert(event.epoch == 1)
+
+shared queue: WorkQueue<int> = WorkQueue<int>(2, 2)
+assert(queue.push(7))
+var (popped, poppedOk) = queue.tryPop()
+assert(poppedOk)
+assert(popped == 7)
+
+shared results: ResultGroup = ResultGroup(2)
+assert(results.add(4))
+assert(results.add(5))
+assert(results.recv() == 9)
+print("{\"case\":\"primitive-classes\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
+
+assert(typeName(semaphore) == "Semaphore")
+assert(typeName(latch) == "CountdownLatch")
+assert(typeName(event) == "EventCount")
+assert(typeName(queue) == "WorkQueue")
+assert(typeName(results) == "ResultGroup")
+print("{\"case\":\"explicit-import\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")

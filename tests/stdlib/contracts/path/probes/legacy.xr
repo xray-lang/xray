@@ -1,0 +1,12 @@
+import path
+
+let joined = path.join("foo", "bar", "baz")
+let normalized = path.normalize("/usr/local/../bin/./xray")
+let parsed = path.parse("/home/user/file.txt")
+assert(path.sep == "/")
+assert(joined == "foo/bar/baz")
+assert(normalized == "/usr/bin/xray")
+assert(parsed.root == "/")
+assert(parsed.dir == "/home/user")
+assert(path.format(parsed) == "/home/user/file.txt")
+print("{\"case\":\"platform-separator\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")

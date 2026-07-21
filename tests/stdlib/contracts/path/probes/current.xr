@@ -1,0 +1,12 @@
+import path
+
+var joined = path.join(path.from("foo"), path.from("bar"), path.from("baz"))
+var normalized = path.normalize(path.from("/usr/local/../bin/./xray"))
+var parsed = path.parse(path.from("/home/user/file.txt"))
+assert(path.sep == "/")
+assert(joined.toString() == "foo/bar/baz")
+assert(normalized.toString() == "/usr/bin/xray")
+assert(parsed.root == "/")
+assert(parsed.dir.toString() == "/home/user")
+assert(path.format(parsed).toString() == "/home/user/file.txt")
+print("{\"case\":\"platform-separator\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")

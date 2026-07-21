@@ -75,8 +75,13 @@ def run_probe(xray: Path, root: Path, probe: Path) -> list[dict[str, Any]]:
         stderr=subprocess.PIPE,
     )
     if result.returncode != 0:
-        detail = result.stderr.decode("utf-8", errors="replace")
-        raise RuntimeError(f"probe failed ({probe}, exit {result.returncode}):\n{detail}")
+        stdout = result.stdout.decode("utf-8", errors="replace")
+        stderr = result.stderr.decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"probe failed ({probe}, exit {result.returncode}):\n"
+            f"stdout:\n{stdout}\n"
+            f"stderr:\n{stderr}"
+        )
     return parse_observations(result.stdout, str(probe))
 
 
@@ -184,6 +189,13 @@ def capture_group(
             check=True,
         )
         added = True
+        # Historical commits intentionally capture their checked-in generated
+        # compiler tables. Some old revisions have a newer ops.def but no
+        # matching enum update, so regenerating xi_ops_gen.h makes that exact
+        # revision unbuildable and no longer represents the committed binary.
+        xi_ops_generated = checkout / "src/ir/xi_ops_gen.h"
+        if xi_ops_generated.is_file():
+            os.utime(xi_ops_generated, None)
         xray = configure_and_build(checkout, jobs)
         for module in modules:
             directory, contract = load_contract(root, module)

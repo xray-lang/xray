@@ -1,15 +1,35 @@
 import test_yield
 
-let syncValue = test_yield.sync()
-print("{\"case\":\"sync-baseline\",\"outcome\":\"value\",\"value\":" + string(syncValue) + ",\"error\":null,\"effects\":{}}")
+fn simpleTask() -> int {
+    return test_yield.simple()
+}
 
-let simpleValue = test_yield.simple()
-let addValue = test_yield.add(19, 23)
-print("{\"case\":\"yield-resume\",\"outcome\":\"value\",\"value\":[" + string(simpleValue) + "," + string(addValue) + "],\"error\":null,\"effects\":{\"resumes\":2}}")
+fn addTask() -> int {
+    return test_yield.add(19, 23)
+}
 
-test_yield.counter_reset()
-let counter0 = test_yield.counter_get()
-let counter1 = test_yield.counter_inc()
-let counter2 = test_yield.counter_inc()
-let counterFinal = test_yield.counter_get()
-print("{\"case\":\"atomic-counter\",\"outcome\":\"value\",\"value\":[" + string(counter0) + "," + string(counter1) + "," + string(counter2) + "," + string(counterFinal) + "],\"error\":null,\"effects\":{}}")
+fn incrementTask() -> int {
+    return test_yield.counter_inc()
+}
+
+fn run() {
+    var syncValue = test_yield.sync()
+    print("{\"case\":\"sync-baseline\",\"outcome\":\"value\",\"value\":" + string(syncValue) + ",\"error\":null,\"effects\":{}}")
+
+    var simple = go simpleTask()
+    var add = go addTask()
+    var simpleValue = await simple
+    var addValue = await add
+    print("{\"case\":\"yield-resume\",\"outcome\":\"value\",\"value\":[" + string(simpleValue) + "," + string(addValue) + "],\"error\":null,\"effects\":{\"resumes\":2}}")
+
+    test_yield.counter_reset()
+    var counter0 = test_yield.counter_get()
+    var increment1 = go incrementTask()
+    var counter1 = await increment1
+    var increment2 = go incrementTask()
+    var counter2 = await increment2
+    var counterFinal = test_yield.counter_get()
+    print("{\"case\":\"atomic-counter\",\"outcome\":\"value\",\"value\":[" + string(counter0) + "," + string(counter1) + "," + string(counter2) + "," + string(counterFinal) + "],\"error\":null,\"effects\":{}}")
+}
+
+run()

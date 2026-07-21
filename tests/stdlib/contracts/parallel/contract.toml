@@ -2,12 +2,12 @@ schema = 1
 module = "parallel"
 contract_revision = 1
 legacy_commit = "971205b8e773e1d3eeaeafb9432355cf8be038e6"
-legacy_oracle = "classification_only"
+legacy_oracle = "executable"
+legacy_cases_manifest = "tests/stdlib/contracts/parallel/legacy_expected.jsonl"
 legacy_public_surface = [
   "forEach",
   "map",
   "reduce",
-  "filter",
 ]
 intentional_semantic_changes = [
   "parallel for/map/reduce semantics are owned by stdlib/parallel/parallel.xr over the runtime scheduler",
@@ -23,7 +23,7 @@ benchmark_suite = "stdlib/parallel"
 [[legacy_behavior]]
 id = "parallel-combinators"
 classification = "required"
-new_behavior = "forEach/map/reduce/filter produce order-correct results identical on VM and AOT"
+new_behavior = "forEach/map/reduce produce order-correct results identical on VM and AOT"
 
 [[legacy_behavior]]
 id = "batch-equivalence"

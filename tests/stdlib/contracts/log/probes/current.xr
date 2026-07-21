@@ -1,0 +1,16 @@
+import log
+import { LogFormat, LogLevel } from log
+
+log.setLevel(LogLevel.Warn)
+log.setFormat(LogFormat.Text)
+assert(typeName(LogLevel.Warn) == "LogLevel")
+assert(typeName(LogFormat.Text) == "LogFormat")
+assert(log.isEnabled(LogLevel.Warn))
+print("{\"case\":\"typed-level-format\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
+
+assert(!log.isEnabled(LogLevel.Debug))
+assert(!log.isEnabled(LogLevel.Info))
+assert(log.isEnabled(LogLevel.Warn))
+assert(log.isEnabled(LogLevel.Error))
+assert(log.isEnabled(LogLevel.Fatal))
+print("{\"case\":\"level-ordering\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
