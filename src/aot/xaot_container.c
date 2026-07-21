@@ -91,6 +91,10 @@ static bool container_elem_plan_for_type(const XrType *type, XaotContainerElemPl
         return elem_plan_make(type, XAOT_REP_BOOL, "XR_ELEM_BOOL", out);
     if (allow_char && type->kind == XR_KIND_RUNE)
         return elem_plan_make(type, XAOT_REP_RUNE, "XR_ELEM_RUNE", out);
+    /* CFn<...> is a bare C function pointer: store the raw address (8 bytes,
+     * GC-invisible) instead of a tagged closure. */
+    if (XR_TYPE_IS_C_FUNCTION(type))
+        return elem_plan_make(type, XAOT_REP_RAWPTR, "XR_ELEM_RAWPTR", out);
     return false;
 }
 

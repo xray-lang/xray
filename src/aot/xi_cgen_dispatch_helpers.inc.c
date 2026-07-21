@@ -4305,6 +4305,40 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         }
     }
 
+    /* First-class CFn callee: invoke the function pointer with native, unboxed ABI
+     * (no closure object, no XrValue boxing). The callee value is a raw pointer to the
+     * target's NATIVE entry, whose Xray ABI takes a hidden `xrt_closure_t *_cl` first
+     * param; a noncapturing function ignores it, so we pass NULL. Casting to the native
+     * signature (rather than the C-ABI `_cfn` stub signature) keeps a tail-position
+     * `return f(...)` musttail-compatible with the caller's own native entry. */
+    {
+        const XiValue *cfn_val = cg_unwrap_identity_value(callee);
+        if (cfn_val && cfn_val->type && XR_TYPE_IS_C_FUNCTION(cfn_val->type)) {
+            const XrType *fn_type = cfn_val->type;
+            XrRep ret_rep = cg_cfn_value_storage_rep(fn_type->function.return_type, true);
+            const char *conv_suffix =
+                emit_conversion_prefix(out, v->type, ret_rep, cg_value_plan_storage_rep(ctx, v));
+            fprintf(out, "((%s (*)(xrt_closure_t *",
+                    cg_cfn_value_c_type(fn_type->function.return_type, true));
+            for (int p = 0; p < fn_type->function.param_count; p++)
+                fprintf(out, ", %s",
+                        cg_cfn_value_c_type(xr_type_function_param_type(fn_type, p), false));
+            fprintf(out, ")) ");
+            emit_value_as_rep(out, callee, XR_REP_RAWPTR);
+            fprintf(out, ")(NULL");
+            for (uint16_t a = 1; a < v->nargs; a++) {
+                fprintf(out, ", ");
+                const XrType *pt = (int) (a - 1) < fn_type->function.param_count
+                                       ? xr_type_function_param_type(fn_type, (int) (a - 1))
+                                       : NULL;
+                emit_value_as_rep(out, v->args[a], cg_cfn_value_storage_rep(pt, false));
+            }
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+            return;
+        }
+    }
+
     /* Indirect call through a closure value.  A function value carries a
      * canonical descriptor whose sync_entry is the boxed entry point
      * `XrValue (xrt_closure_t *, XrValue...)` (see emit_closure_new_expr), so

@@ -3853,6 +3853,12 @@ static void emit_typed_array_store_value(XiCgenCtx *ctx, FILE *out, const CgArra
         emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
         return;
     }
+    /* First-class CFn element: store the bare `_cfn` stub address (raw pointer),
+     * resolved from a static top-level function (module-level resolve via ctx->module). */
+    if (info->rep == XR_REP_RAWPTR && info->type && XR_TYPE_IS_C_FUNCTION(info->type)) {
+        emit_cfn_value_rawptr(ctx, out, NULL, info->type, value);
+        return;
+    }
     fprintf(out, "(%s)", info->ctype);
     emit_value_as_rep_ctx(ctx, out, value, info->rep);
 }
@@ -3863,6 +3869,8 @@ static void emit_typed_array_load_value(FILE *out, const CgArrayElemInfo *info, 
             fprintf(out, "xrt_value_to_owned(");
     } else if (info->rep == XR_REP_F64) {
         fprintf(out, "(double)");
+    } else if (info->rep == XR_REP_RAWPTR) {
+        fprintf(out, "(void *)");
     } else {
         fprintf(out, "(int64_t)");
     }
@@ -4151,6 +4159,19 @@ static bool emit_typed_array_index_get_expr_as_rep(XiCgenCtx *ctx, FILE *out, co
         }
         emit_typed_array_load_value_end(out, &info, borrowed_tagged);
         fprintf(out, " : (xrt_index_oob(_idx, _a->length), XR_NULL_VAL); })");
+    } else if (info.rep == XR_REP_RAWPTR) {
+        fprintf(out, "({ xrt_array_t *_a = ");
+        emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
+        fprintf(out, "; int64_t _idx = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, "; XR_LIKELY(_idx >= 0 && _idx < _a->length) ? (void *)");
+        if (use_cache) {
+            emit_typed_array_data_cache_ref(out, cached_origin);
+            fprintf(out, "[_idx]");
+        } else {
+            fprintf(out, "((%s*)_a->data)[_idx]", info.ctype);
+        }
+        fprintf(out, " : (xrt_index_oob(_idx, _a->length), (void *)0); })");
     } else {
         fprintf(out, "({ xrt_array_t *_a = ");
         emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);

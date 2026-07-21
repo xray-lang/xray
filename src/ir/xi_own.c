@@ -48,6 +48,9 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
      * values whose static type was erased or unknown. */
     if (xr_type_is_runtime_managed(type))
         return false;
+    /* CFn<...> is a bare C function pointer (no closure header), not RC-managed. */
+    if (XR_TYPE_IS_C_FUNCTION(type))
+        return false;
     switch (type->kind) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:

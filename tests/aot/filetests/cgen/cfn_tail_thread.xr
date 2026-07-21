@@ -1,0 +1,25 @@
+// A tail-position CFn indirect call (`return OPS[pc+1](...)`) — the wasm3 threaded
+// operation topology — lowers to a musttail tail jump: constant-stack, native ABI.
+// The op table is a const Array<CFn<...>> of module-level ops.
+extern "C" { fn malloc(n: uintsize) -> MutPtr<int32> }
+
+type Op = CFn<(int, MutPtr<int32>, int) -> int>
+
+var IMM: Array<int32> = [10, 20, 0, 0]
+
+fn opConst(pc: int, stack: MutPtr<int32>, sp: int) -> int {
+    unsafe { stack[sp] = IMM[pc] }
+    return OPS[pc + 1](pc + 1, stack, sp + 1)
+}
+
+fn opReturn(pc: int, stack: MutPtr<int32>, sp: int) -> int {
+    return unsafe { stack[sp - 1] }
+}
+
+const OPS: Array<Op> = [opConst, opReturn]
+
+@c_export("run_thread")
+fn run_thread() -> int32 {
+    var stack = unsafe { malloc(64) }
+    return OPS[0](0, stack, 0)
+}

@@ -1056,3 +1056,31 @@ static bool emit_cfn_callback_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
     emit_cfn_stub_fname(ctx, out, cb_prefix, cb.func);
     return true;
 }
+
+/* Emit a first-class CFn value as a bare function-pointer address, for storing into
+ * a raw-pointer array element / struct field / any RAWPTR slot. Internal CFn values
+ * use the function's NATIVE entry (Xray ABI: hidden `xrt_closure_t *_cl` first param,
+ * passed NULL for a noncapturing function). Using the native entry — rather than the
+ * C-ABI `_cfn` stub — lets a tail-position indirect call `return f(...)` be a musttail
+ * tail jump, because the caller's own native entry shares that exact signature (the
+ * threaded-interpreter topology). The `_cfn` stub remains for the FFI boundary only.
+ * The target must be a top-level noncapturing function with an exact CFn signature;
+ * otherwise fail closed. */
+static bool emit_cfn_value_rawptr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
+                                  const XrType *expected_type, const XiValue *value) {
+    CgStaticFunctionCall cb = cg_resolve_static_function_call(ctx, current, value);
+    if (!cb.func || cb.is_class_constructor || cb.func->is_extern ||
+        !cg_func_can_have_cfn_stub(ctx, cb.func) ||
+        (expected_type && !cg_cfn_xray_func_matches_expected(cb.func, expected_type))) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: unsupported first-class CFn value at v%u; expected a top-level "
+                "noncapturing function with an exact CFn signature\n",
+                value ? value->id : 0);
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return false;
+    }
+    fprintf(out, "(void *)");
+    emit_fname(ctx, out, cb.prefix, cb.func);
+    return true;
+}

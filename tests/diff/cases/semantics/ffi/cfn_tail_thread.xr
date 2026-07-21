@@ -1,0 +1,30 @@
+// Tail-threaded CFn op chain: opLoop indirect-tail-calls itself many times via a
+// const op table. AOT lowers the tail call to musttail and the VM uses OP_TAILCALL,
+// so both run in constant stack (no overflow) and must agree on the result.
+extern "C" { fn malloc(n: uintsize) -> MutPtr<int32> }
+
+type Op = CFn<(int, MutPtr<int32>, int) -> int>
+
+fn opLoop(pc: int, stack: MutPtr<int32>, sp: int) -> int {
+    var n = unsafe { stack[0] }
+    if (n <= 0) {
+        return OPS[1](pc, stack, sp)
+    }
+    unsafe { stack[0] = n - 1 }
+    return OPS[0](pc, stack, sp)
+}
+
+fn opReturn(pc: int, stack: MutPtr<int32>, sp: int) -> int {
+    return unsafe { stack[1] }
+}
+
+const OPS: Array<Op> = [opLoop, opReturn]
+
+fn main() {
+    var stack = unsafe { malloc(64) }
+    unsafe { stack[0] = 200000 }
+    unsafe { stack[1] = 42 }
+    print("result=${OPS[0](0, stack, 0)}")
+}
+
+main()
