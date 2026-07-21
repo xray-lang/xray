@@ -1253,23 +1253,118 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "HttpMethod",
+        .signature = "HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.constructor",
+        .signature = "(token: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.delete",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.fromToken",
+        .signature = "(token: string): HttpMethod?",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.get",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.head",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.options",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.patch",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.post",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.put",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.toString",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.token",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest",
+        .signature = "HttpRequest",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.body",
+        .signature = ": Array<byte>",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.contentLength",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.headers",
+        .signature = ": Headers",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.method",
+        .signature = ": HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.params",
+        .signature = ": Map<string, string>",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.path",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.query",
+        .signature = ": QueryParams",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.text",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
         .name = "HttpResponse",
         .signature = "HttpResponse",
         .summary = "",
     },
     {
         .name = "HttpResponse.body",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.constructor",
-        .signature = "(status: int, statusText: string, headers: Headers, body: string, error: string?): ()",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.error",
-        .signature = ": string?",
+        .signature = ": Array<byte>",
         .summary = "",
     },
     {
@@ -1278,8 +1373,18 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "HttpResponse.ok",
-        .signature = ": bool",
+        .name = "HttpResponse.isSuccess",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.json",
+        .signature = "(): Json",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.reason",
+        .signature = ": string",
         .summary = "",
     },
     {
@@ -1288,8 +1393,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "HttpResponse.statusText",
-        .signature = ": string",
+        .name = "HttpResponse.text",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.version",
+        .signature = ": HttpVersion",
         .summary = "",
     },
     {
@@ -1598,6 +1708,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "jsonResponse",
+        .signature = "(value: T, status: int = 200, headers: Headers? = null): HttpResponse",
+        .summary = "",
+    },
+    {
         .name = "listen",
         .signature = "(port: int): bool",
         .summary = "",
@@ -1605,6 +1720,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "parseChunkedBody",
         .signature = "(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?",
+        .summary = "",
+    },
+    {
+        .name = "parseMethod",
+        .signature = "(token: string): HttpMethod?",
         .summary = "",
     },
     {
@@ -1644,7 +1764,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "request",
-        .signature = "(options: Json): HttpResponse",
+        .signature = "(options: HttpRequestOptions): HttpResponse",
         .summary = "",
     },
     {
@@ -1664,7 +1784,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "routeHandler",
-        .signature = "(method: string, path: string, handler: (Json): Json)",
+        .signature = "(method: string, path: string, handler: (HttpRequest): HttpResponse",
         .summary = "",
     },
     {
@@ -1675,6 +1795,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "stopServer",
         .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "textResponse",
+        .signature = "(body: string, status: int = 200, headers: Headers? = null): HttpResponse",
         .summary = "",
     },
     {
@@ -7418,14 +7543,36 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Headers.get` | `(name: string): string?` |  |\n"
             "| `Headers.getAll` | `(name: string): Array<string>` |  |\n"
             "| `Headers.set` | `(name: string, value: string): ()` |  |\n"
+            "| `HttpMethod` | `HttpMethod` |  |\n"
+            "| `HttpMethod.constructor` | `(token: string): ()` |  |\n"
+            "| `HttpMethod.delete` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.fromToken` | `(token: string): HttpMethod?` |  |\n"
+            "| `HttpMethod.get` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.head` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.options` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.patch` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.post` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.put` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.toString` | `(): string` |  |\n"
+            "| `HttpMethod.token` | `: string` |  |\n"
+            "| `HttpRequest` | `HttpRequest` |  |\n"
+            "| `HttpRequest.body` | `: Array<byte>` |  |\n"
+            "| `HttpRequest.contentLength` | `: int` |  |\n"
+            "| `HttpRequest.headers` | `: Headers` |  |\n"
+            "| `HttpRequest.method` | `: HttpMethod` |  |\n"
+            "| `HttpRequest.params` | `: Map<string, string>` |  |\n"
+            "| `HttpRequest.path` | `: string` |  |\n"
+            "| `HttpRequest.query` | `: QueryParams` |  |\n"
+            "| `HttpRequest.text` | `(): string` |  |\n"
             "| `HttpResponse` | `HttpResponse` |  |\n"
-            "| `HttpResponse.body` | `: string` |  |\n"
-            "| `HttpResponse.constructor` | `(status: int, statusText: string, headers: Headers, body: string, error: string?): ()` |  |\n"
-            "| `HttpResponse.error` | `: string?` |  |\n"
+            "| `HttpResponse.body` | `: Array<byte>` |  |\n"
             "| `HttpResponse.headers` | `: Headers` |  |\n"
-            "| `HttpResponse.ok` | `: bool` |  |\n"
+            "| `HttpResponse.isSuccess` | `(): bool` |  |\n"
+            "| `HttpResponse.json` | `(): Json` |  |\n"
+            "| `HttpResponse.reason` | `: string` |  |\n"
             "| `HttpResponse.status` | `: int` |  |\n"
-            "| `HttpResponse.statusText` | `: string` |  |\n"
+            "| `HttpResponse.text` | `(): string` |  |\n"
+            "| `HttpResponse.version` | `: HttpVersion` |  |\n"
             "| `MultipartBody` | `MultipartBody` |  |\n"
             "| `MultipartBody.body` | `: string` |  |\n"
             "| `MultipartBody.constructor` | `(body: string, contentType: string): ()` |  |\n"
@@ -7487,8 +7634,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
             "| `http.h2Request` | `(options: Json): Json` | Generic HTTP/2 request |\n"
             "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
+            "| `http.jsonResponse` | `(value: T, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
             "| `http.listen` | `(port: int): bool` |  |\n"
             "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
+            "| `http.parseMethod` | `(token: string): HttpMethod?` |  |\n"
             "| `http.parseRequestHead` | `(raw: string, maxHeaders: int = 100): RequestHead?` |  |\n"
             "| `http.parseRequestText` | `(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): RequestMessage?` |  |\n"
             "| `http.parseResponseHead` | `(raw: string, maxHeaders: int = 100): ResponseHead?` |  |\n"
@@ -7496,13 +7645,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?` |  |\n"
             "| `http.redirectDecision` | `(status: int, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?` |  |\n"
             "| `http.redirectTarget` | `(currentUrl: string, location: string): string?` |  |\n"
-            "| `http.request` | `(options: Json): HttpResponse` |  |\n"
+            "| `http.request` | `(options: HttpRequestOptions): HttpResponse` |  |\n"
             "| `http.requestText` | `(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
             "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
             "| `http.route` | `(method: string, path: string, value: T): ()` |  |\n"
-            "| `http.routeHandler` | `(method: string, path: string, handler: (Json): Json)` |  |\n"
+            "| `http.routeHandler` | `(method: string, path: string, handler: (HttpRequest): HttpResponse` |  |\n"
             "| `http.router` | `(): Router<T>` |  |\n"
             "| `http.stopServer` | `(): ()` |  |\n"
+            "| `http.textResponse` | `(body: string, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
             "| `http.urlDecode` | `(s: string): string` |  |\n"
             "| `http.urlEncode` | `(s: string): string` |  |\n"
             "",
