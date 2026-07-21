@@ -22,5 +22,5 @@ that cite the affected category.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h e048903cca587a4dae6de3df312a86f16cdec3572bb492490fe92d9f71dc3991
-anchor-sha256: src/aot/xi_cgen.c 9dabd17f95b48a3c81d0a078044dcc9c656c1d09e67c5955982b2ac10b606c57
-anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c f3e49f77dfcf8517fa11652da16e2ce71ec895d069e40c469787d8763589b1b4
+anchor-sha256: src/aot/xi_cgen.c b451c3119a23a98057058dda09ab5815804432051585e60c97e9e8dccb1c99d5
+anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c b5eebe0cef9514385b06e264084bf0557b0b552b528243878ae6f34415bbe237

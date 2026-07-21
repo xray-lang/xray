@@ -3317,14 +3317,14 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         "$FREESTANDING_ENUM_NAME_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_ENUM_NAME_C" ]; then
         expect_log_contains "$FREESTANDING_ENUM_NAME_C" \
-            "static const xrt_str_t _xenum_name_FsState_" \
+            "static const xrt_str_t *const _xenum_names_FsState_" \
             "freestanding-profile/enum-name: materializes enum names as static strings"
         expect_log_contains "$FREESTANDING_ENUM_NAME_C" \
-            "static const xrt_str_t _xenum_name_Endian_" \
+            "static const xrt_str_t *const _xenum_names_Endian_" \
             "freestanding-profile/enum-name: materializes prelude enum names as static strings"
-        expect_log_contains "$FREESTANDING_ENUM_NAME_C" "xr_str_lit(&_xenum_name_FsState_" \
+        expect_log_contains "$FREESTANDING_ENUM_NAME_C" "xr_str_lit(_xenum_name_FsState_" \
             "freestanding-profile/enum-name: returns borrowed static string literal"
-        expect_log_contains "$FREESTANDING_ENUM_NAME_C" "xr_str_lit(&_xenum_name_Endian_" \
+        expect_log_contains "$FREESTANDING_ENUM_NAME_C" "xr_str_lit(_xenum_name_Endian_" \
             "freestanding-profile/enum-name: returns borrowed prelude static string literal"
         expect_log_contains "$FREESTANDING_ENUM_NAME_C" "xrt_println" \
             "freestanding-profile/enum-name: print path stays on freestanding print helper"
@@ -3371,16 +3371,16 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         "$FREESTANDING_ENUM_TOSTRING_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_ENUM_TOSTRING_C" ]; then
         expect_log_contains "$FREESTANDING_ENUM_TOSTRING_C" \
-            "static const xrt_str_t _xenum_name_FsStatus_" \
+            "static const xrt_str_t *const _xenum_names_FsStatus_" \
             "freestanding-profile/enum-tostring: materializes enum strings statically"
         expect_log_contains "$FREESTANDING_ENUM_TOSTRING_C" \
-            "static const xrt_str_t _xenum_name_Endian_" \
+            "static const xrt_str_t *const _xenum_names_Endian_" \
             "freestanding-profile/enum-tostring: materializes prelude enum strings statically"
         expect_log_contains "$FREESTANDING_ENUM_TOSTRING_C" \
-            "(void *) &_xenum_name_FsStatus_" \
+            "(void *)_xenum_name_FsStatus_" \
             "freestanding-profile/enum-tostring: returns borrowed static string pointer"
         expect_log_contains "$FREESTANDING_ENUM_TOSTRING_C" \
-            "(void *) &_xenum_name_Endian_" \
+            "(void *)_xenum_name_Endian_" \
             "freestanding-profile/enum-tostring: returns borrowed prelude static string pointer"
         expect_log_contains "$FREESTANDING_ENUM_TOSTRING_C" "xr_str_value_from_ptr" \
             "freestanding-profile/enum-tostring: boxes borrowed string pointer only at print boundary"

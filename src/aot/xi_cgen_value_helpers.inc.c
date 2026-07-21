@@ -515,25 +515,16 @@ static bool emit_static_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const 
     if (source_rep == XR_REP_I64) {
         fprintf(out, "INT64_C(%u)", (unsigned) member_index);
     } else {
-        const XrType *owner =
-            v && v->enum_metadata_owner ? v->enum_metadata_owner : (v ? v->type : NULL);
-        const XaotEnumPlan *enum_plan =
-            ctx && ctx->aot_bundle && owner
-                ? xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, owner)
-                : NULL;
-        bool keep_names =
-            enum_plan && (enum_plan->descriptor_use_bits & XAOT_ENUM_USE_VARIANT_NAME) != 0;
         fprintf(out, "({ static const XrAotEnumBox _xenum_%u_%u = {{0, 0}, NULL, ",
                 (unsigned) ed->layout_id, (unsigned) member_index);
-        if (keep_names)
-            emit_c_string_literal(out, ed->name ? ed->name : "");
-        else
-            fprintf(out, "NULL");
+        /* Reaching a tagged static box is itself an erased representation
+         * boundary. Generic formatting, typeName(), or a later `.name` load
+         * may observe the nominal identity outside this local use site, so the
+         * box must carry its names even when descriptor metadata is otherwise
+         * unreachable. Fully typed scalar enum values still emit no box. */
+        emit_c_string_literal(out, ed->name ? ed->name : "");
         fprintf(out, ", ");
-        if (keep_names)
-            emit_c_string_literal(out, member->name ? member->name : "");
-        else
-            fprintf(out, "NULL");
+        emit_c_string_literal(out, member->name ? member->name : "");
         fprintf(out,
                 ", %u, 0, %u}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
                 "_v.ptr = (void *)&_xenum_%u_%u; _v; })",

@@ -689,6 +689,18 @@ static bool fold_enum_metadata_value(XiValue *value) {
     return false;
 }
 
+static bool fold_tuple_projection_value(XiValue *value) {
+    if (!value || value->op != XI_TUPLE_GET || value->nargs != 1 || !value->args[0] ||
+        value->args[0]->op != XI_TUPLE_NEW)
+        return false;
+    XiValue *tuple = value->args[0];
+    int64_t index = value->aux_int;
+    if (index < 0 || (uint16_t) index >= tuple->nargs || !tuple->args[(uint16_t) index])
+        return false;
+    rewrite_to_copy(value, tuple->args[(uint16_t) index]);
+    return true;
+}
+
 XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_const_fold: NULL func");
     XiPassChange chg = xi_pass_no_change();
@@ -773,16 +785,9 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
              * arity, so reaching this peephole with idx >= nargs would be a
              * compiler bug — leave the GET intact and let later stages fail
              * loudly. */
-            if (v->op == XI_TUPLE_GET && v->nargs == 1 && v->args[0] &&
-                v->args[0]->op == XI_TUPLE_NEW) {
-                XiValue *tup = v->args[0];
-                int64_t idx = v->aux_int;
-                if (idx >= 0 && (uint16_t) idx < tup->nargs && tup->args[(uint16_t) idx]) {
-                    rewrite_to_copy(v, tup->args[(uint16_t) idx]);
-                    /* nargs already 1; type stays as the projected element's type */
-                    chg.values_changed = true;
-                    continue;
-                }
+            if (fold_tuple_projection_value(v)) {
+                chg.values_changed = true;
+                continue;
             }
 
             /* Binary: need exactly 2 args */

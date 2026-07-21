@@ -579,7 +579,7 @@ static const char *emit_conversion_prefix(FILE *out, const XrType *type, XrRep f
 }
 
 static const XaotEnumPlan *cg_unit_enum_scalar_plan(XiCgenCtx *ctx, const XrType *type) {
-    if (!ctx || ctx->freestanding_profile || !ctx->aot_bundle || !type || type->is_nullable)
+    if (!ctx || ctx->freestanding_profile || !ctx->aot_bundle || !type)
         return NULL;
     const XaotEnumPlan *plan = xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, type);
     return plan && plan->enum_data && plan->members && plan->member_count > 0 &&

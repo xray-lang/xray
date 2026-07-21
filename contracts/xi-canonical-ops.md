@@ -16,5 +16,5 @@ Status: frozen by task 220.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 6b08cce19b5a208cfc30e0695c7f476f558cfece087fec10fa3425f114af4d06
-anchor-sha256: xisa/xi/lowering.def 62a555d8accc8d1b30813c9ece540e774dc2a6f54b12efe055af1343d5f71fd6
+anchor-sha256: xisa/xi/ops.def 6f2bd51b3f0d05df0daffce0ac2ab20959b2dadc17c4f16da0493a585a70e07e
+anchor-sha256: xisa/xi/lowering.def 3af6584f78bcd752cb1af5681b016461b1d774b102303b037604513d74de3ede

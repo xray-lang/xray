@@ -563,7 +563,7 @@ static void xicgen_identity(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     }
     XrRep from_rep = xicgen_value_c_storage_rep(ctx, f, v->args[0]);
     XrRep to_rep = xicgen_value_c_storage_rep(ctx, f, v);
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, from_rep, to_rep);
+    const char *conv_suffix = emit_conversion_prefix_ctx(ctx, out, v->type, from_rep, to_rep);
     emit_vref(out, v->args[0]);
     emit_conversion_suffix(out, conv_suffix);
 }
@@ -615,7 +615,7 @@ static void xicgen_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     }
 
     XrRep to_rep = cg_value_decl_storage_rep(ctx, f, v);
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, to_rep);
+    const char *conv_suffix = emit_conversion_prefix_ctx(ctx, out, v->type, XR_REP_TAGGED, to_rep);
     fprintf(out, "xrt_value_clone_for_coro(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ")");
