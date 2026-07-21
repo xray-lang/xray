@@ -210,6 +210,16 @@ check_binary_max_size() {
     local max="$2"
     local name="$3"
 
+    # Sanitizer instrumentation inflates AOT binary size several-fold (observed
+    # multi-MB images vs. sub-MB caps), so the hard size gate is meaningless under
+    # sanitizers. Skip only the size assertion when CMake marks a sanitizer build;
+    # the symbol-isolation checks (the real contract) still run. Normal builds
+    # keep the strict size cap as a bloat guard.
+    if [ "${XRAY_ISOLATE_TEST_SANITIZER:-0}" = "1" ]; then
+        echo "  SKIP: $name: size gate disabled under sanitizer build (actual ${actual} bytes)"
+        return
+    fi
+
     if [ "$actual" -le "$max" ]; then
         record_pass "$name: size ${actual} <= ${max} bytes"
     else

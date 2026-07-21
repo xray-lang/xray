@@ -1451,17 +1451,26 @@ if(BUILD_TESTS)
         TIMEOUT ${STDLIB_EMBED_TIMEOUT}
     )
 
+    # Under sanitizers the runner tolerates benign [sysmon] "worker stuck"
+    # diagnostics on stderr (see run_parallel_plan_scaling_gate.sh); the strict
+    # empty-stderr contract still holds for normal builds.
+    if(ENABLE_SANITIZERS OR ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR ENABLE_MSAN)
+        set(PARALLEL_PLAN_ENV ${CMAKE_COMMAND} -E env XRAY_SANITIZER_BUILD=1)
+    else()
+        set(PARALLEL_PLAN_ENV)
+    endif()
     add_test(
         NAME parallel_plan_vm_scaling_gate
-        COMMAND bash
+        COMMAND ${PARALLEL_PLAN_ENV} bash
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_parallel_plan_scaling_gate.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    math(EXPR PARALLEL_PLAN_TIMEOUT "60 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(parallel_plan_vm_scaling_gate PROPERTIES
         LABELS "vm;parallel;plan;scaling;task-193"
         PROCESSORS 1
-        TIMEOUT 60
+        TIMEOUT ${PARALLEL_PLAN_TIMEOUT}
     )
 
     add_test(
@@ -1943,18 +1952,27 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    # Sanitizer builds cannot produce the freestanding -nostdlib/-ffreestanding
+    # link shape (the sanitizer runtime is injected instead), so the runner skips
+    # only the freestanding flag-asserting filetests when this env marks the
+    # build as sanitized. All other filetests still run.
+    set(AOT_FILETEST_ENV XRAY_AOT_FILETEST_JOBS=${XRAY_CTEST_AOT_FILETEST_JOBS})
+    if(ENABLE_SANITIZERS OR ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR ENABLE_MSAN)
+        list(APPEND AOT_FILETEST_ENV XRAY_AOT_FILETEST_SANITIZER=1)
+    endif()
     add_test(
         NAME aot_filetests
         COMMAND ${CMAKE_COMMAND} -E env
-                XRAY_AOT_FILETEST_JOBS=${XRAY_CTEST_AOT_FILETEST_JOBS}
+                ${AOT_FILETEST_ENV}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_filetests.sh
                 --xray $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    math(EXPR AOT_FILETESTS_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(aot_filetests PROPERTIES
         LABELS "aot;filetests"
         PROCESSORS ${XRAY_CTEST_AOT_FILETEST_JOBS}
-        TIMEOUT 120
+        TIMEOUT ${AOT_FILETESTS_TIMEOUT}
     )
 
     # Sanitizer instrumentation deliberately inserts calls and conditional
@@ -2061,20 +2079,32 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    # The benchmark always enforces build/run/output-parity correctness; --gate
+    # additionally fails on the perf ratio and strict codegen-shape audit.
+    # Sanitizer instrumentation makes the AOT binary 5-9x slower (observed ratio
+    # ~0.04 vs the 0.90 target) and deliberately alters codegen shape, so the
+    # ratio/audit gate is meaningless there. Drop --gate under sanitizers to keep
+    # the correctness checks without the (impossible) perf gate; normal builds
+    # keep the full gate as a real perf guard.
+    set(BYTE_ARRAY_C90_ARGS --samples 3)
+    if(NOT (ENABLE_SANITIZERS OR ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR ENABLE_MSAN))
+        list(APPEND BYTE_ARRAY_C90_ARGS --gate)
+    endif()
+    list(APPEND BYTE_ARRAY_C90_ARGS
+         --bench byte_array_u8_index_fill_sum,byte_array_slice_bulk_hotpath)
     add_test(
         NAME byte_array_aot_c90_hotpath
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_BIN=$<TARGET_FILE:xray>
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_aot_c90_benchmarks.sh
-                --samples 3
-                --gate
-                --bench byte_array_u8_index_fill_sum,byte_array_slice_bulk_hotpath
+                ${BYTE_ARRAY_C90_ARGS}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    math(EXPR BYTE_ARRAY_C90_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(byte_array_aot_c90_hotpath PROPERTIES
         LABELS "aot;benchmark;types"
         PROCESSORS 2
-        TIMEOUT 120
+        TIMEOUT ${BYTE_ARRAY_C90_TIMEOUT}
     )
 
     # Zero-cost feature inventory: every tracked family must either have a
@@ -2101,31 +2131,50 @@ if(BUILD_TESTS)
 
     # Link manifest contract: freestanding direct calls and runtime-backed
     # stdlib modules must not drag in the full xray_core library.
+    # Under sanitizers the freestanding -nostdlib probes inevitably carry
+    # __asan_*/__ubsan_* undefined symbols (the sanitizer runtime is injected),
+    # so the runner filters only those sanitizer symbols from the undefined-symbol
+    # audit; all non-freestanding link-contract checks still run strictly.
+    if(ENABLE_SANITIZERS OR ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR ENABLE_MSAN)
+        set(AOT_LINK_MANIFEST_CMD ${CMAKE_COMMAND} -E env XRAY_LINK_TEST_SANITIZER=1)
+    else()
+        set(AOT_LINK_MANIFEST_CMD)
+    endif()
     add_test(
         NAME aot_link_command_manifest
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_link_command_tests.sh
+        COMMAND ${AOT_LINK_MANIFEST_CMD}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_link_command_tests.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    math(EXPR AOT_LINK_MANIFEST_TIMEOUT "120 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(aot_link_command_manifest PROPERTIES
         LABELS "aot;link;stdlib;smoke"
         PROCESSORS 2
-        TIMEOUT 120
+        TIMEOUT ${AOT_LINK_MANIFEST_TIMEOUT}
     )
 
     # Freestanding stdlib allowlist: every committed module contract must have
     # a no-libc object probe, so the allowlist cannot silently drift.
-    add_test(
-        NAME aot_freestanding_allowlist
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_allowlist_tests.sh
-                $<TARGET_FILE:xray>
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(aot_freestanding_allowlist PROPERTIES
-        LABELS "aot;freestanding;stdlib;smoke"
-        PROCESSORS 1
-        TIMEOUT 60
-    )
+    # Sanitizer builds link the sanitizer runtime into every object and cannot
+    # honor the freestanding -nostdlib contract, so the probe's undefined-symbol
+    # surface is polluted with __asan_*/__ubsan_* symbols. This is an inherent
+    # freestanding-vs-sanitizer conflict, not a product defect, so skip the gate
+    # under sanitizers (same rationale as raw_scalar_assembly_shape above).
+    if(NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
+       NOT ENABLE_MSAN AND NOT ENABLE_SANITIZERS)
+        add_test(
+            NAME aot_freestanding_allowlist
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_allowlist_tests.sh
+                    $<TARGET_FILE:xray>
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(aot_freestanding_allowlist PROPERTIES
+            LABELS "aot;freestanding;stdlib;smoke"
+            PROCESSORS 1
+            TIMEOUT 60
+        )
+    endif()
 
     add_test(
         NAME aot_freestanding_provider_abi
@@ -2196,18 +2245,26 @@ if(BUILD_TESTS)
 
     # Isolate/runtime split guard (132/M0 + 133/I0/I4): AOT binaries must stay
     # free of xray_core and public isolate/VM/compiler/module-loader symbols.
+    # Sanitizer instrumentation inflates binary size several-fold, so the hard
+    # size caps are meaningless under sanitizers; the runner then skips only the
+    # size assertions while keeping the symbol-isolation checks (the real guard).
+    set(AOT_ISOLATE_ENV XRAY_AOT_ISOLATE_JOBS=${XRAY_CTEST_AOT_ISOLATE_JOBS})
+    if(ENABLE_SANITIZERS OR ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR ENABLE_MSAN)
+        list(APPEND AOT_ISOLATE_ENV XRAY_ISOLATE_TEST_SANITIZER=1)
+    endif()
     add_test(
         NAME aot_isolate_symbol_gate
         COMMAND ${CMAKE_COMMAND} -E env
-                XRAY_AOT_ISOLATE_JOBS=${XRAY_CTEST_AOT_ISOLATE_JOBS}
+                ${AOT_ISOLATE_ENV}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_isolate_symbol_tests.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
+    math(EXPR AOT_ISOLATE_TIMEOUT "180 * ${XR_TEST_TIMEOUT_SCALE}")
     set_tests_properties(aot_isolate_symbol_gate PROPERTIES
         LABELS "aot;link;isolate;smoke"
         PROCESSORS ${XRAY_CTEST_AOT_ISOLATE_JOBS}
-        TIMEOUT 180
+        TIMEOUT ${AOT_ISOLATE_TIMEOUT}
     )
 
     # Public install surface: xray_core is an internal development aggregate,

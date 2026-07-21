@@ -803,6 +803,14 @@ XrValue xr_aot_run_main(XrAotRuntime *runtime, const XrAotCoroDesc *desc, void *
     (void) xr_coro_set_source(main_coro, runtime->core ? runtime->core->script_info.file : NULL, 0);
     xr_runtime_main_thread_run(xr_aot_runtime_scheduler(runtime), main_coro);
     XrValue result = main_coro->result;
+    /* main_thread_run has joined every worker before returning, so the owner
+     * timer wheel + cancel queue are quiescent. Detach the main coro's embedded
+     * timer node now: destroying it here (before xr_aot_runtime_delete runs the
+     * scheduler shutdown cancel-queue drain) would otherwise strand a dangling
+     * ZOMBIE node in the owner cancel queue — a heap-use-after-free the drain
+     * reads. xr_current_worker() is NULL at this point, so the owner-thread
+     * detach in xr_coro_free cannot cover it. */
+    xr_coro_detach_timer_quiescent(xr_aot_runtime_scheduler(runtime), main_coro);
     xr_coro_destroy(main_coro);
     return result;
 }

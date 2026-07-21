@@ -57,10 +57,25 @@ record_skip() {
     echo "  SKIP: $1"
 }
 
+# Sanitizer builds inject their runtime into every object — including the
+# freestanding -nostdlib probes — leaving __asan_*/__ubsan_*/... as undefined
+# symbols that the freestanding link contract can never satisfy. When CMake marks
+# a sanitizer build (XRAY_LINK_TEST_SANITIZER=1), drop those sanitizer-runtime
+# symbols before the undefined-symbol audit so only genuine freestanding leaks
+# fail. Normal builds keep the full strict audit as the real contract guard.
+strip_sanitizer_undefined() {
+    if [ "${XRAY_LINK_TEST_SANITIZER:-0}" = "1" ]; then
+        grep -Ev '_(asan|ubsan|tsan|msan|sanitizer)' || true
+    else
+        cat
+    fi
+}
+
 nm_undefined_normalized() {
     nm -u "$1" 2>&1 |
         sed '/^[[:space:]]*$/d' |
-        sed 's/.*[[:space:]]//; s/^_//'
+        sed 's/.*[[:space:]]//; s/^_//' |
+        strip_sanitizer_undefined
 }
 
 object_has_weak_symbol() {
@@ -748,7 +763,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
         record_fail "freestanding-profile: kept C source missing"
         sed 's/^/      /' "$FREESTANDING_EXPORT_REAL_LOG" | sed -n '1,120p'
     fi
-    FREESTANDING_UNDEFINED="$(nm -u "$FREESTANDING_EXPORT_OBJ" 2>&1 | sed '/^[[:space:]]*$/d')"
+    FREESTANDING_UNDEFINED="$(nm -u "$FREESTANDING_EXPORT_OBJ" 2>&1 | sed '/^[[:space:]]*$/d' | strip_sanitizer_undefined)"
     if [ -z "$FREESTANDING_UNDEFINED" ]; then
         record_pass "freestanding-profile: no undefined symbols in relocatable object"
     else

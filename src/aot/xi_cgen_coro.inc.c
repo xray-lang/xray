@@ -531,16 +531,41 @@ static void emit_assign_coro_param_from_xrvalue(XiCgenCtx *ctx, FILE *out, const
     fprintf(out, ";\n");
 }
 
+static bool cg_coro_value_needs_frame(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
+
 static void emit_coro_slot_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix,
                                const XiValue *v) {
-    (void) ctx;
     (void) prefix;
     const XiValue *slot_value = xi_coro_typed_recv_unbox_user(f, v);
     if (!slot_value)
         slot_value = v;
-    fprintf(out, "xr_slot_aot_frame_offset(f, (uint32_t)((uint8_t *)&");
-    emit_vref(out, slot_value);
-    fprintf(out, " - (uint8_t *)f), %u)", (unsigned) cg_rep(slot_value));
+    /* Frame members live inside the heap-allocated coroutine frame 'f', so their
+     * address is a small frame-relative offset that stays valid across
+     * suspend/resume. Non-frame values are plain C locals: their address is only
+     * valid within the current resume execution and MUST NOT be encoded as a
+     * frame offset. (uint8_t *)&local - (uint8_t *)f is a full 64-bit distance
+     * truncated to uint32_t; it round-trips only when the heap frame and the C
+     * stack share their top 32 bits (true in a normal build, but NOT under ASan,
+     * where the heap sits far from the stack, so f + offset dereferences an
+     * unmapped high address -> BUS/WRITE). Every slot store to a non-frame value
+     * is synchronous within the same resume (the await/recv helpers only touch
+     * the slot on the READY path), so a raw pointer to the C local is valid. */
+    if (cg_coro_value_needs_frame(ctx, f, slot_value)) {
+        fprintf(out, "xr_slot_aot_frame_offset(f, (uint32_t)((uint8_t *)&");
+        emit_vref(out, slot_value);
+        fprintf(out, " - (uint8_t *)f), %u)", (unsigned) cg_rep(slot_value));
+        return;
+    }
+    XrRep rep = cg_rep(slot_value);
+    if (rep == XR_REP_TAGGED) {
+        fprintf(out, "xr_slot_xvalue_ptr(&");
+        emit_vref(out, slot_value);
+        fprintf(out, ")");
+    } else {
+        fprintf(out, "xr_slot_native_ptr(&");
+        emit_vref(out, slot_value);
+        fprintf(out, ", %u)", (unsigned) rep);
+    }
 }
 
 static void emit_coro_optional_slot_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
