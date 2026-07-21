@@ -3327,8 +3327,7 @@ static const XiValue *cg_class_native_receiver_value(const XiCgenCtx *ctx, const
  * elided. Every other use (return this / pass this as an argument / capture this
  * into a closure / compare this / store this) reads `v0`, which forces the alias
  * to be materialized. */
-static bool cg_class_native_receiver_use_is_structural(const XiCgenCtx *ctx, const XiFunc *f,
-                                                       const XiValue *u, uint16_t arg_idx) {
+static bool cg_class_native_receiver_use_is_structural(const XiValue *u, uint16_t arg_idx) {
     if (!u)
         return false;
     switch ((XiOp) u->op) {
@@ -3379,7 +3378,7 @@ static bool cg_class_native_receiver_escapes_as_value(const XiCgenCtx *ctx, cons
             for (uint16_t i = 0; i < u->nargs; i++) {
                 const XiValue *arg = u->args ? u->args[i] : NULL;
                 if (arg && cg_class_native_receiver_value(ctx, f, arg) &&
-                    !cg_class_native_receiver_use_is_structural(ctx, f, u, i))
+                    !cg_class_native_receiver_use_is_structural(u, i))
                     return true;
             }
         }
@@ -3390,7 +3389,7 @@ static bool cg_class_native_receiver_escapes_as_value(const XiCgenCtx *ctx, cons
     return false;
 }
 
-static bool cg_class_native_value_stmt_is_elided(const XiCgenCtx *ctx, const XiFunc *f,
+static bool cg_class_native_value_stmt_is_elided(XiCgenCtx *ctx, const XiFunc *f,
                                                  const XiValue *v) {
     if (!v || !cg_class_func_uses_native_receiver(ctx, f))
         return false;
