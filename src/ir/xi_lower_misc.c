@@ -481,11 +481,23 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
             return NULL;
     }
 
-    /* Count static (non-computed) keys for Shape construction */
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    bool canonical_record_shape = result_type && result_type->kind == XR_KIND_RECORD &&
+                                  XR_TYPE_HAS_OBJECT_SHAPE(result_type) &&
+                                  result_type->object.field_count > 0 &&
+                                  result_type->object.field_names;
+
+    /* A contextual Record must retain its declared shape even when optional
+     * fields are omitted. Otherwise a later supplied field is compacted into
+     * an earlier optional slot and direct field reads observe the wrong value. */
     int static_count = 0;
-    for (int i = 0; i < n; i++) {
-        if (!key_vals[i])
-            static_count++;
+    if (canonical_record_shape) {
+        static_count = result_type->object.field_count;
+    } else {
+        for (int i = 0; i < n; i++) {
+            if (!key_vals[i])
+                static_count++;
+        }
     }
 
     /* Collect static key names (arena-allocated) */
@@ -493,26 +505,46 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
         l->func, (uint32_t) (sizeof(const char *) * (static_count > 0 ? static_count : 1)));
     if (!key_names)
         return NULL;
-    int si = 0;
-    for (int i = 0; i < n; i++) {
-        if (!key_vals[i]) {
-            if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING) {
-                const char *name = obj->keys[i]->as.literal.raw_value.string_val;
-                key_names[si] = arena_strdup(l->func, name ? name : "?");
-            } else {
-                key_names[si] = arena_strdup(l->func, "?");
-            }
-            if (!key_names[si])
+    if (canonical_record_shape) {
+        for (int i = 0; i < static_count; i++) {
+            const char *name = result_type->object.field_names[i];
+            key_names[i] = arena_strdup(l->func, name ? name : "?");
+            if (!key_names[i])
                 return NULL;
-            static_idx_map[i] = si;
-            si++;
-        } else {
+        }
+        for (int i = 0; i < n; i++) {
             static_idx_map[i] = -1;
+            if (key_vals[i] || !obj->keys[i] || obj->keys[i]->type != AST_LITERAL_STRING)
+                continue;
+            const char *literal_name = obj->keys[i]->as.literal.raw_value.string_val;
+            for (int k = 0; literal_name && k < static_count; k++) {
+                if (key_names[k] && strcmp(key_names[k], literal_name) == 0) {
+                    static_idx_map[i] = k;
+                    break;
+                }
+            }
+        }
+    } else {
+        int si = 0;
+        for (int i = 0; i < n; i++) {
+            if (!key_vals[i]) {
+                if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING) {
+                    const char *name = obj->keys[i]->as.literal.raw_value.string_val;
+                    key_names[si] = arena_strdup(l->func, name ? name : "?");
+                } else {
+                    key_names[si] = arena_strdup(l->func, "?");
+                }
+                if (!key_names[si])
+                    return NULL;
+                static_idx_map[i] = si;
+                si++;
+            } else {
+                static_idx_map[i] = -1;
+            }
         }
     }
 
     /* Create Json object with Shape built from static keys only */
-    struct XrType *result_type = xi_lower_node_type(l, node);
     XiValue *obj_val = xi_value_new(l->func, l->cur_block, XI_JSON_NEW, result_type, 0);
     if (!obj_val)
         return NULL;
@@ -522,7 +554,7 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
 
     /* Init static fields by index, computed fields by dynamic key */
     for (int i = 0; i < n; i++) {
-        if (!key_vals[i]) {
+        if (!key_vals[i] && static_idx_map[i] >= 0) {
             /* Static key → indexed init */
             XiValue *init = xi_value_new(l->func, l->cur_block, XI_JSON_INIT_F, l->type_unit, 2);
             if (!init)
@@ -533,11 +565,19 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
             init->flags |= XI_FLAG_SIDE_EFFECT;
         } else {
             /* Computed key → dynamic index-set: obj[key] = val */
+            XiValue *dynamic_key = key_vals[i];
+            if (!dynamic_key && obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING) {
+                const char *name = obj->keys[i]->as.literal.raw_value.string_val;
+                dynamic_key =
+                    xi_const_str(l->func, l->cur_block, name ? name : "?", l->type_string);
+            }
+            if (!dynamic_key)
+                break;
             XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
             if (!set)
                 break;
             set->args[0] = obj_val;
-            set->args[1] = key_vals[i];
+            set->args[1] = dynamic_key;
             set->args[2] = val_vals[i];
             set->flags |= XI_FLAG_SIDE_EFFECT;
         }
