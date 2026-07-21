@@ -23,7 +23,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
 
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
-    {"start", XLSP_SYM_FUNCTION, "fn(config: Json): ()", "Start cluster node", NULL, 0},
+    {"start", XLSP_SYM_FUNCTION, "fn(config: ClusterConfig): bool", "Start cluster node", NULL, 0},
     {"join", XLSP_SYM_FUNCTION, "fn(addr: string): bool", "Join cluster by address", NULL, 0},
     {"self", XLSP_SYM_FUNCTION, "fn(): string", "Get own node name", NULL, 0},
     {"nodes", XLSP_SYM_FUNCTION, "fn(): Array<string>", "List cluster node names", NULL, 0},
@@ -31,7 +31,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"monitor", XLSP_SYM_FUNCTION, "fn(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", NULL, 0},
     {"discover", XLSP_SYM_FUNCTION, "fn(): ()", "Start LAN auto-discovery", NULL, 0},
     {"stop", XLSP_SYM_FUNCTION, "fn(): ()", "Stop cluster node", NULL, 0},
-    {"info", XLSP_SYM_FUNCTION, "fn(): Json", "Get cluster status info", NULL, 0},
+    {"info", XLSP_SYM_FUNCTION, "fn(): ClusterInfo?", "Get cluster status info", NULL, 0},
     {"publish", XLSP_SYM_FUNCTION, "fn(topic: string, value: Json): bool", "Publish to topic", NULL, 0},
     {"subscribe", XLSP_SYM_FUNCTION, "fn(pattern: string): Channel", "Subscribe to topic pattern", NULL, 0},
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
@@ -47,8 +47,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"TOPIC_PATTERN_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
     {"NodeAddress", XLSP_SYM_CLASS, "type NodeAddress", "Class type", NULL, 0},
+    {"ClusterTlsOptions", XLSP_SYM_CLASS, "type ClusterTlsOptions = { enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool }", "Typed TLS configuration for a cluster node", NULL, 0},
+    {"ClusterConfig", XLSP_SYM_CLASS, "type ClusterConfig = { name: string, port: int, secret: string?, tls: ClusterTlsOptions? }", "Typed cluster node startup configuration", NULL, 0},
+    {"ClusterTlsStatus", XLSP_SYM_CLASS, "type ClusterTlsStatus = { enabled: bool, clientReady: bool, serverReady: bool }", "Effective TLS posture of a running cluster node", NULL, 0},
+    {"ClusterNodeInfo", XLSP_SYM_CLASS, "type ClusterNodeInfo = { name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }", "Typed diagnostic snapshot for one remote cluster node", NULL, 0},
+    {"ClusterInfo", XLSP_SYM_CLASS, "type ClusterInfo = { self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }", "Typed diagnostic snapshot for the local cluster runtime", NULL, 0},
+    {"ClusterNodeState", XLSP_SYM_CLASS, "enum ClusterNodeState", "Lifecycle state of a remote cluster node", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 24
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 30
 
 // compress module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_compress_symbols[] = {

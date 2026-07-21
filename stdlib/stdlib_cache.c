@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "../src/base/xmalloc.h"
+#include "../src/runtime/class/xinstance.h"
 #include "../src/runtime/class/xenum.h"
 #include "../src/runtime/xisolate_internal.h"
 #include "../src/stdlib/xstdlib_defs_generated.h"
@@ -26,6 +27,38 @@ typedef struct XrStdlibNativeEnumCacheEntry {
     const XrStdlibEnumDefEntry *decl;
     XrEnumType *type;
 } XrStdlibNativeEnumCacheEntry;
+
+typedef struct XrStdlibNativeRecordCacheEntry {
+    const XrStdlibRecordDefEntry *decl;
+    XrClass *cls;
+} XrStdlibNativeRecordCacheEntry;
+
+static const XrStdlibRecordDefEntry *stdlib_record_decl_find(const char *module, const char *name) {
+    if (!module || !name)
+        return NULL;
+    for (uint32_t i = 0; i < XR_STDLIB_RECORD_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibRecordDefEntry *decl = &xr_stdlib_record_def_entries[i];
+        if (strcmp(decl->module, module) == 0 && strcmp(decl->name, name) == 0)
+            return decl;
+    }
+    return NULL;
+}
+
+static XrClass *stdlib_record_class_build(XrVMRuntime *isolate,
+                                          const XrStdlibRecordDefEntry *decl) {
+    uint32_t count = decl ? decl->field_count : 0;
+    if (!isolate || !decl || count == 0 || !decl->fields)
+        return NULL;
+    const char **names = (const char **) xr_calloc(count, sizeof(*names));
+    if (!names)
+        return NULL;
+    for (uint32_t i = 0; i < count; i++)
+        names[i] = decl->fields[i].name;
+    XrClass *cls =
+        xr_class_build_record_chain(isolate, names, NULL, (int) count, NULL, decl->sealed);
+    xr_free(names);
+    return cls;
+}
 
 static const XrStdlibEnumDefEntry *stdlib_enum_decl_find(const char *module, const char *name) {
     if (!module || !name)
@@ -118,6 +151,38 @@ XR_FUNC XrEnumType *xr_stdlib_enum_type_get(XrVMRuntime *isolate, const char *mo
     return type;
 }
 
+XR_FUNC XrClass *xr_stdlib_record_class_get(XrVMRuntime *isolate, const char *module,
+                                            const char *name) {
+    const XrStdlibRecordDefEntry *decl = stdlib_record_decl_find(module, name);
+    XrStdlibCache *cache = isolate ? xr_stdlib_cache_get(isolate) : NULL;
+    if (!decl || !cache)
+        return NULL;
+    XrStdlibNativeRecordCacheEntry *entries =
+        (XrStdlibNativeRecordCacheEntry *) cache->native_record_cache;
+    for (size_t i = 0; i < cache->native_record_count; i++) {
+        if (entries[i].decl == decl)
+            return entries[i].cls;
+    }
+
+    XrClass *cls = stdlib_record_class_build(isolate, decl);
+    if (!cls)
+        return NULL;
+    if (cache->native_record_count == cache->native_record_capacity) {
+        size_t next_capacity =
+            cache->native_record_capacity ? cache->native_record_capacity * 2 : 4;
+        XrStdlibNativeRecordCacheEntry *next =
+            (XrStdlibNativeRecordCacheEntry *) xr_realloc(entries, next_capacity * sizeof(*next));
+        if (!next)
+            return NULL;
+        entries = next;
+        cache->native_record_cache = entries;
+        cache->native_record_capacity = next_capacity;
+    }
+    entries[cache->native_record_count++] =
+        (XrStdlibNativeRecordCacheEntry) {.decl = decl, .cls = cls};
+    return cls;
+}
+
 XR_FUNC void xr_stdlib_cache_free(XrVMRuntime *isolate) {
     if (!isolate || !isolate->stdlib_cache)
         return;
@@ -128,6 +193,7 @@ XR_FUNC void xr_stdlib_cache_free(XrVMRuntime *isolate) {
         c->log_state_cleanup(c->log_state);
     }
 
+    xr_free(c->native_record_cache);
     xr_free(c->native_enum_cache);
 
     /* Shapes and interned strings are GC-managed; freeing the

@@ -1849,20 +1849,8 @@ static XrCFuncResult net_bidi_wait_continue(XrVMRuntime *X, int status, XrValue 
     return net_bidi_wait_step(X, state, result);
 }
 
-static XrClass *net_bidi_result_class(XrVMRuntime *X) {
-    XrStdlibCache *cache = xr_stdlib_cache_get(X);
-    if (!cache)
-        return NULL;
-    if (cache->net_copy_bidirectional_result_class)
-        return cache->net_copy_bidirectional_result_class;
-    static const char *const names[] = {"aToB", "bToA"};
-    cache->net_copy_bidirectional_result_class =
-        xr_class_build_record_chain(X, names, NULL, 2, NULL, true);
-    return cache->net_copy_bidirectional_result_class;
-}
-
 static XrValue net_bidi_result_record(XrVMRuntime *X, NetBidiWaitState *state) {
-    XrClass *cls = net_bidi_result_class(X);
+    XrClass *cls = xr_stdlib_record_class_get(X, "net", "CopyBidirectionalResult");
     if (!cls)
         return XR_NULL_VAL;
     XrJson *record = xr_json_new_with_class(xr_current_coro(X), cls);

@@ -2713,6 +2713,12 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             fprintf(out, "XR_NULL_VAL /* builtin record type: %s.%s */", ref->module_path,
                     ref->member_name);
         } else if (ref && ref->module_path && ref->member_name &&
+                   xa_builtin_get_enum_type(ref->module_path, ref->member_name)) {
+            /* Native enum declarations are namespace-only imports. Variant
+             * access is lowered statically from generated enum metadata. */
+            fprintf(out, "XR_NULL_VAL /* builtin enum type: %s.%s */", ref->module_path,
+                    ref->member_name);
+        } else if (ref && ref->module_path && ref->member_name &&
                    cg_aot_stdlib_has_direct_member(ref->module_path, ref->member_name)) {
             fprintf(out, "XR_NULL_VAL /* builtin function: %s.%s */", ref->module_path,
                     ref->member_name);
@@ -9913,6 +9919,13 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         int midx = cg_enum_member_index(recv_enum, field);
         if (recv_enum && midx >= 0 &&
             emit_static_enum_member_value_expr(ctx, out, v, recv_enum, (uint32_t) midx))
+            return;
+        const XaBuiltinEnum *builtin_enum =
+            cg_resolve_imported_builtin_enum_value(ctx, f, v->args[0]);
+        int builtin_midx = cg_builtin_enum_member_index(builtin_enum, field);
+        if (builtin_enum && builtin_midx >= 0 &&
+            emit_static_builtin_enum_member_value_expr(ctx, out, v, builtin_enum,
+                                                       (uint32_t) builtin_midx))
             return;
     }
     if (emit_static_fixed_tuple_array_get_expr(ctx, out, v))

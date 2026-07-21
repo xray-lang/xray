@@ -534,6 +534,48 @@ static bool emit_static_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const 
     return true;
 }
 
+static int cg_builtin_enum_member_index(const XaBuiltinEnum *decl, const char *member_name) {
+    if (!decl || !member_name)
+        return -1;
+    for (int i = 0; i < decl->variant_count; i++) {
+        if (decl->variants[i].name && strcmp(decl->variants[i].name, member_name) == 0)
+            return i;
+    }
+    return -1;
+}
+
+static bool emit_static_builtin_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                       const XaBuiltinEnum *decl,
+                                                       uint32_t member_index) {
+    if (!out || !decl || !decl->variants || member_index >= (uint32_t) decl->variant_count)
+        return false;
+    const XaBuiltinEnumVariant *member = &decl->variants[member_index];
+    if (member->payload_count != 0)
+        return false;
+    XrRep source_rep =
+        (ctx && ctx->freestanding_profile && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
+            ? XR_REP_I64
+            : XR_REP_TAGGED;
+    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, source_rep,
+                                                     cg_value_plan_storage_rep(ctx, v));
+    if (source_rep == XR_REP_I64) {
+        fprintf(out, "INT64_C(%u)", (unsigned) member_index);
+    } else {
+        fprintf(out, "({ static const XrAotEnumBox _xbuiltin_enum_%u_%u = {{0, 0}, NULL, ",
+                (unsigned) decl->layout_id, (unsigned) member_index);
+        emit_c_string_literal(out, decl->name ? decl->name : "");
+        fprintf(out, ", ");
+        emit_c_string_literal(out, member->name ? member->name : "");
+        fprintf(out,
+                ", %u, 0, %u}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
+                "_v.ptr = (void *)&_xbuiltin_enum_%u_%u; _v; })",
+                (unsigned) member_index, (unsigned) decl->layout_id, (unsigned) member_index,
+                (unsigned) decl->layout_id, (unsigned) member_index);
+    }
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
 static void emit_enum_variant_c_field_name(FILE *out, const XiEnumMemberData *member,
                                            uint32_t index) {
     fprintf(out, "v%u_", (unsigned) index);

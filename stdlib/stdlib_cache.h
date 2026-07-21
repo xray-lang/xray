@@ -93,8 +93,10 @@ typedef struct XrStdlibCache {
     // are only valid for the owning isolate.
     struct XrClass *io_stat_class;
 
-    // net module: typed copyBidirectional result shape.
-    struct XrClass *net_copy_bidirectional_result_class;
+    // Generated native Record declarations materialized once per isolate.
+    void *native_record_cache;
+    size_t native_record_count;
+    size_t native_record_capacity;
 
     // Generated native enum declarations materialized once per isolate.
     void *native_enum_cache;
@@ -124,6 +126,11 @@ XR_FUNC XrStdlibCache *xr_stdlib_cache_get(struct XrVMRuntime *isolate);
 // The returned type is canonical for (isolate, module, name), so native
 // producers and VM namespace constants share the same enum identity.
 XR_FUNC struct XrEnumType *xr_stdlib_enum_type_get(struct XrVMRuntime *isolate, const char *module,
+                                                   const char *name);
+
+// Materialize the runtime shape for a module-scoped native sealed Record.
+// The returned class is canonical for (isolate, module, name).
+XR_FUNC struct XrClass *xr_stdlib_record_class_get(struct XrVMRuntime *isolate, const char *module,
                                                    const char *name);
 
 // Release the cache and every lazily-populated object it owns. Safe to

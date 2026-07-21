@@ -64,9 +64,90 @@ static const XaBuiltinMember g_gen_osrwlock_members[] = {
 
 // ======== C Module Declarations ========
 
+// cluster.ClusterTlsOptions record fields
+static const XaBuiltinRecordField g_gen_cluster_clustertlsoptions_record_fields[] = {
+    {"enabled", "bool"},
+    {"caFile", "string?"},
+    {"certFile", "string?"},
+    {"keyFile", "string?"},
+    {"insecure", "bool"},
+};
+
+// cluster.ClusterConfig record fields
+static const XaBuiltinRecordField g_gen_cluster_clusterconfig_record_fields[] = {
+    {"name", "string"},
+    {"port", "int"},
+    {"secret", "string?"},
+    {"tls", "ClusterTlsOptions?"},
+};
+
+// cluster.ClusterTlsStatus record fields
+static const XaBuiltinRecordField g_gen_cluster_clustertlsstatus_record_fields[] = {
+    {"enabled", "bool"},
+    {"clientReady", "bool"},
+    {"serverReady", "bool"},
+};
+
+// cluster.ClusterNodeInfo record fields
+static const XaBuiltinRecordField g_gen_cluster_clusternodeinfo_record_fields[] = {
+    {"name", "string"},
+    {"host", "string"},
+    {"port", "int"},
+    {"state", "ClusterNodeState"},
+    {"framesSent", "int"},
+    {"framesReceived", "int"},
+    {"bytesSent", "int"},
+    {"bytesReceived", "int"},
+    {"sendErrors", "int"},
+    {"slowConsumerEvents", "int"},
+    {"rttMs", "int"},
+    {"outQueueBytes", "int"},
+    {"outQueueFrames", "int"},
+    {"slow", "bool"},
+    {"phi", "float"},
+    {"missedHeartbeats", "int"},
+};
+
+// cluster.ClusterInfo record fields
+static const XaBuiltinRecordField g_gen_cluster_clusterinfo_record_fields[] = {
+    {"self", "string"},
+    {"port", "int"},
+    {"running", "bool"},
+    {"nodes", "Array<ClusterNodeInfo>"},
+    {"channels", "int"},
+    {"topicSubscriptions", "int"},
+    {"deadNodes", "int"},
+    {"heartbeatIntervalMs", "int"},
+    {"heartbeatTimeoutMs", "int"},
+    {"maxMissedHeartbeats", "int"},
+    {"tls", "ClusterTlsStatus"},
+};
+
+static const XaBuiltinRecord g_gen_cluster_records[] = {
+    {"ClusterTlsOptions", "Typed TLS configuration for a cluster node", g_gen_cluster_clustertlsoptions_record_fields, 5, true},
+    {"ClusterConfig", "Typed cluster node startup configuration", g_gen_cluster_clusterconfig_record_fields, 4, true},
+    {"ClusterTlsStatus", "Effective TLS posture of a running cluster node", g_gen_cluster_clustertlsstatus_record_fields, 3, true},
+    {"ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", g_gen_cluster_clusternodeinfo_record_fields, 16, true},
+    {"ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", g_gen_cluster_clusterinfo_record_fields, 11, true},
+};
+#define GEN_CLUSTER_RECORD_COUNT 5
+
+static const XaBuiltinEnumVariant g_gen_cluster_clusternodestate_variants[] = {
+    {"Idle", NULL, 0},
+    {"Connecting", NULL, 0},
+    {"Handshaking", NULL, 0},
+    {"Connected", NULL, 0},
+    {"Closing", NULL, 0},
+};
+
+static const XaBuiltinEnum g_gen_cluster_enums[] = {
+    {"ClusterNodeState", "Lifecycle state of a remote cluster node", g_gen_cluster_clusternodestate_variants, 5, UINT32_C(3723918825)},
+};
+#define GEN_CLUSTER_ENUM_COUNT 1
+
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
-    {"start", "(config: Json): ()", "Start cluster node", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"start", "(config: ClusterConfig): bool", "Start cluster node", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"join", "(addr: string): bool", "Join cluster by address", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"self", "(): string", "Get own node name", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"nodes", "(): Array<string>", "List cluster node names", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
@@ -74,7 +155,7 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"discover", "(): ()", "Start LAN auto-discovery", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"stop", "(): ()", "Stop cluster node", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
-    {"info", "(): Json", "Get cluster status info", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"info", "(): ClusterInfo?", "Get cluster status info", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"publish", "(topic: string, value: Json): bool", "Publish to topic", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
 };
@@ -537,7 +618,7 @@ static const XaBuiltinMember g_gen_ws_functions[] = {
 
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
-    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, g_gen_cluster_records, GEN_CLUSTER_RECORD_COUNT, g_gen_cluster_enums, GEN_CLUSTER_ENUM_COUNT},
     {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},

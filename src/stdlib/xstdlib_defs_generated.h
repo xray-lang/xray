@@ -367,7 +367,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"net", "sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", "net_send_to_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 4, false},
     {"net", "recvFrom", "(handle: NetConn, maxlen?: int): UdpPacket?", "Receive UDP datagram (returns flat handle: data, host, port)", "net_recv_from_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"http", "h2Request", "(options: Json): Json", "Generic HTTP/2 request", "h2_request", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
-    {"cluster", "start", "(config: Json): ()", "Start cluster node", "cluster_start", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
+    {"cluster", "start", "(config: ClusterConfig): bool", "Start cluster node", "cluster_start", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
     {"cluster", "join", "(addr: string): bool", "Join cluster by address", "cluster_join", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
     {"cluster", "self", "(): string", "Get own node name", "cluster_self", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "nodes", "(): Array<string>", "List cluster node names", "cluster_nodes", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
@@ -375,7 +375,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", "cluster_monitor_coro_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"cluster", "discover", "(): ()", "Start LAN auto-discovery", "cluster_discover_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
-    {"cluster", "info", "(): Json", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
+    {"cluster", "info", "(): ClusterInfo?", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "publish", "(topic: string, value: Json): bool", "Publish to topic", "cluster_publish_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"cluster", "subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", "cluster_subscribe_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
     {"ws", "connect", "(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", "ws_connect_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
@@ -419,6 +419,60 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_net_CopyBidirec
     {"net", "CopyBidirectionalResult", "bToA", "int", true},
 };
 
+static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_ClusterTlsOptions[] = {
+    {"cluster", "ClusterTlsOptions", "enabled", "bool", true},
+    {"cluster", "ClusterTlsOptions", "caFile", "string?", true},
+    {"cluster", "ClusterTlsOptions", "certFile", "string?", true},
+    {"cluster", "ClusterTlsOptions", "keyFile", "string?", true},
+    {"cluster", "ClusterTlsOptions", "insecure", "bool", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_ClusterConfig[] = {
+    {"cluster", "ClusterConfig", "name", "string", true},
+    {"cluster", "ClusterConfig", "port", "int", true},
+    {"cluster", "ClusterConfig", "secret", "string?", true},
+    {"cluster", "ClusterConfig", "tls", "ClusterTlsOptions?", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_ClusterTlsStatus[] = {
+    {"cluster", "ClusterTlsStatus", "enabled", "bool", true},
+    {"cluster", "ClusterTlsStatus", "clientReady", "bool", true},
+    {"cluster", "ClusterTlsStatus", "serverReady", "bool", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_ClusterNodeInfo[] = {
+    {"cluster", "ClusterNodeInfo", "name", "string", true},
+    {"cluster", "ClusterNodeInfo", "host", "string", true},
+    {"cluster", "ClusterNodeInfo", "port", "int", true},
+    {"cluster", "ClusterNodeInfo", "state", "ClusterNodeState", true},
+    {"cluster", "ClusterNodeInfo", "framesSent", "int", true},
+    {"cluster", "ClusterNodeInfo", "framesReceived", "int", true},
+    {"cluster", "ClusterNodeInfo", "bytesSent", "int", true},
+    {"cluster", "ClusterNodeInfo", "bytesReceived", "int", true},
+    {"cluster", "ClusterNodeInfo", "sendErrors", "int", true},
+    {"cluster", "ClusterNodeInfo", "slowConsumerEvents", "int", true},
+    {"cluster", "ClusterNodeInfo", "rttMs", "int", true},
+    {"cluster", "ClusterNodeInfo", "outQueueBytes", "int", true},
+    {"cluster", "ClusterNodeInfo", "outQueueFrames", "int", true},
+    {"cluster", "ClusterNodeInfo", "slow", "bool", true},
+    {"cluster", "ClusterNodeInfo", "phi", "float", true},
+    {"cluster", "ClusterNodeInfo", "missedHeartbeats", "int", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_ClusterInfo[] = {
+    {"cluster", "ClusterInfo", "self", "string", true},
+    {"cluster", "ClusterInfo", "port", "int", true},
+    {"cluster", "ClusterInfo", "running", "bool", true},
+    {"cluster", "ClusterInfo", "nodes", "Array<ClusterNodeInfo>", true},
+    {"cluster", "ClusterInfo", "channels", "int", true},
+    {"cluster", "ClusterInfo", "topicSubscriptions", "int", true},
+    {"cluster", "ClusterInfo", "deadNodes", "int", true},
+    {"cluster", "ClusterInfo", "heartbeatIntervalMs", "int", true},
+    {"cluster", "ClusterInfo", "heartbeatTimeoutMs", "int", true},
+    {"cluster", "ClusterInfo", "maxMissedHeartbeats", "int", true},
+    {"cluster", "ClusterInfo", "tls", "ClusterTlsStatus", true},
+};
+
 static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_ws_WsConnectOptions[] = {
     {"ws", "WsConnectOptions", "timeout", "int?", true},
     {"ws", "WsConnectOptions", "pingInterval", "int?", true},
@@ -428,6 +482,11 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_ws_WsConnectOpt
 
 static const XrStdlibRecordDefEntry xr_stdlib_record_def_entries[] = {
     {"net", "CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", xr_stdlib_record_fields_net_CopyBidirectionalResult, 2, true},
+    {"cluster", "ClusterTlsOptions", "Typed TLS configuration for a cluster node", xr_stdlib_record_fields_cluster_ClusterTlsOptions, 5, true},
+    {"cluster", "ClusterConfig", "Typed cluster node startup configuration", xr_stdlib_record_fields_cluster_ClusterConfig, 4, true},
+    {"cluster", "ClusterTlsStatus", "Effective TLS posture of a running cluster node", xr_stdlib_record_fields_cluster_ClusterTlsStatus, 3, true},
+    {"cluster", "ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", xr_stdlib_record_fields_cluster_ClusterNodeInfo, 16, true},
+    {"cluster", "ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", xr_stdlib_record_fields_cluster_ClusterInfo, 11, true},
     {"ws", "WsConnectOptions", "Typed WebSocket client connection options", xr_stdlib_record_fields_ws_WsConnectOptions, 4, true},
 };
 #define XR_STDLIB_RECORD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_record_def_entries) / sizeof(xr_stdlib_record_def_entries[0])))
@@ -445,8 +504,17 @@ static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_net_NetError_variants[] 
     {"OutOfMemory", NULL, 0},
 };
 
+static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_cluster_ClusterNodeState_variants[] = {
+    {"Idle", NULL, 0},
+    {"Connecting", NULL, 0},
+    {"Handshaking", NULL, 0},
+    {"Connected", NULL, 0},
+    {"Closing", NULL, 0},
+};
+
 static const XrStdlibEnumDefEntry xr_stdlib_enum_def_entries[] = {
     {"net", "NetError", "Typed failure from native network operations", xr_stdlib_enum_net_NetError_variants, 10, UINT32_C(2619647518)},
+    {"cluster", "ClusterNodeState", "Lifecycle state of a remote cluster node", xr_stdlib_enum_cluster_ClusterNodeState_variants, 5, UINT32_C(3723918825)},
 };
 #define XR_STDLIB_ENUM_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_enum_def_entries) / sizeof(xr_stdlib_enum_def_entries[0])))
 
