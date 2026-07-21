@@ -1,0 +1,3 @@
+contains=xaot-plan v0
+contains=name=get
+c_not_contains=xrt_call_dynamic(

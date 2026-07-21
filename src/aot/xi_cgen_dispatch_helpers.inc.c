@@ -9059,6 +9059,11 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     const XaotMethodDispatchPlan *dispatch_plan =
         is_super ? NULL
                  : xaot_bundle_find_method_dispatch_plan_for_xi_call(cg_ctx_aot_bundle(ctx), v);
+    const XgMethodSummary *dispatch_method =
+        dispatch_plan
+            ? xicgen_evidence_method(xicgen_global_evidence(ctx), dispatch_plan->method_id)
+            : NULL;
+    bool dispatch_is_static = dispatch_method && (dispatch_method->flags & XG_METHOD_STATIC) != 0;
 
     if (!is_super && xicgen_emit_import_module_member_call(ctx, out, f, v, prefix, method))
         return;
@@ -9087,6 +9092,12 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (xicgen_emit_task_method(ctx, out, f, v, method, nargs))
         return;
     if (xicgen_emit_parallel_plan_lifecycle_method(ctx, out, f, v, prefix, method, nargs))
+        return;
+    /* Static methods carry a class namespace in args[0], but their Xi function
+     * ABI has no receiver. Global dispatch evidence may still produce a direct
+     * plan for the callsite; route that plan through the static emitter so the
+     * namespace operand is dropped before ABI argument conversion. */
+    if (!is_super && dispatch_is_static && xicgen_emit_static_method(ctx, out, f, v, prefix))
         return;
     if (xicgen_emit_planned_direct_method(ctx, out, f, v, prefix, dispatch_plan))
         return;

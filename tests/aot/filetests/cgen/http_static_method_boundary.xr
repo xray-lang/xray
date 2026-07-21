@@ -1,0 +1,4 @@
+import { HttpMethod } from http
+
+var method = HttpMethod.get()
+print(method.token)
