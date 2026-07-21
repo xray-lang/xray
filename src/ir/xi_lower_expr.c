@@ -43,6 +43,7 @@
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../shared/xr_array_core.h"
+#include "../../stdlib/stdlib_cache.h"
 #include "../shared/xr_elem_type.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xconstants.h"
@@ -318,6 +319,44 @@ static XiValue *xi_lower_enum_namespace_value(XiLower *l, XaSymbol *enum_sym, co
     if (builtin_idx >= 0)
         return xi_lower_emit_builtin_class(l, enum_name, line);
 
+    const char *module_path = xi_lower_export_module_for_symbol(l, enum_sym, enum_name);
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, enum_sym);
+    const XaBuiltinEnum *native_decl =
+        module_path ? xa_builtin_get_enum_type(module_path, enum_name) : NULL;
+    XaEnumInfo *info = links ? links->enum_info : NULL;
+    if (native_decl && info && info->variant_count > 0) {
+        XrEnumType *runtime_type = xr_stdlib_enum_type_get(l->isolate, module_path, enum_name);
+        XiEnumData *data = (XiEnumData *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(*data));
+        XiEnumMemberData *members = (XiEnumMemberData *) xi_func_arena_alloc(
+            l->func, (uint32_t) (sizeof(*members) * info->variant_count));
+        if (!runtime_type || !data || !members)
+            return NULL;
+        memset(data, 0, sizeof(*data));
+        memset(members, 0, sizeof(*members) * info->variant_count);
+        data->name = arena_strdup(l->func, enum_name);
+        data->member_count = info->variant_count;
+        data->is_adt = info->is_payload_enum;
+        data->layout_id = native_decl->layout_id;
+        data->runtime_type = runtime_type;
+        data->members = members;
+        for (uint32_t i = 0; i < info->variant_count; i++) {
+            const XaEnumVariantInfo *variant = &info->variants[i];
+            members[i].name = arena_strdup(l->func, variant->name);
+            members[i].ordinal = variant->tag;
+            members[i].payload_count = (int) variant->payload_count;
+            members[i].payload_types = variant->payload_types;
+            if (members[i].payload_count > data->max_payload)
+                data->max_payload = members[i].payload_count;
+        }
+        XiValue *value = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_any, 0);
+        if (!value)
+            return NULL;
+        value->aux = data;
+        value->aux_kind = XI_AUX_KIND_ENUM_NAMESPACE;
+        value->line = (uint32_t) line;
+        return value;
+    }
+
     int var_id = xi_lower_var_find(l, enum_sym->id, enum_name);
     if (var_id >= 0)
         return xi_lower_braun_read(l, var_id, l->cur_block);
@@ -326,11 +365,8 @@ static XiValue *xi_lower_enum_namespace_value(XiLower *l, XaSymbol *enum_sym, co
     if (xi_top_binding_valid(top))
         return xi_lower_emit_top_load(l, top, NULL);
 
-    const char *module_path = xi_lower_export_module_for_symbol(l, enum_sym, enum_name);
     if (!module_path)
         return NULL;
-
-    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, enum_sym);
     return xi_lower_emit_import_ref(l, module_path, enum_name, links ? links->type : l->type_any,
                                     line);
 }
@@ -8083,9 +8119,18 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
             if (type_val)
                 type_val->aux_int = tid;
         } else if (tref->kind == XR_TREF_NAMED && tref->name) {
+            XaSymbol *named_symbol = xa_analyzer_lookup(l->analyzer, tref->name);
+            if (!named_symbol)
+                named_symbol =
+                    xa_analyzer_lookup_in_scope(l->analyzer, tref->name, l->analyzer->global_scope);
+            if (!named_symbol)
+                named_symbol = xa_analyzer_lookup_deep(l->analyzer, tref->name);
+            if (named_symbol && named_symbol->kind == XA_SYM_ENUM)
+                type_val = xi_lower_enum_namespace_value(l, named_symbol, tref->name, line);
+
             /* Resolve class from scope chain */
-            int var = xi_lower_var_find(l, 0, tref->name);
-            if (var >= 0) {
+            int var = type_val ? -1 : xi_lower_var_find(l, 0, tref->name);
+            if (!type_val && var >= 0) {
                 if (l->is_program && var < l->var_count && l->shared_map[var] >= 0) {
                     XiTopBinding b;
                     b.slot = l->shared_map[var];

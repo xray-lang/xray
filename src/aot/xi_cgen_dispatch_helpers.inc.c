@@ -192,7 +192,9 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     } else if (xr_type_is_named_class(v->type, "BigInt") && v->aux) {
         xicgen_emit_bigint_literal_value(ctx, out, v, false);
     } else if (v->type->kind == XR_KIND_UNKNOWN && v->aux) {
-        const XiEnumData *ed = cg_enum_for_runtime_type(ctx, v->aux);
+        const XiEnumData *ed = v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE
+                                   ? (const XiEnumData *) v->aux
+                                   : cg_enum_for_runtime_type(ctx, v->aux);
         if (ctx && ctx->freestanding_profile && ed)
             fprintf(out, "XR_NULL_VAL");
         else
@@ -5947,7 +5949,9 @@ static bool xicgen_emit_net_handle_method(XiCgenCtx *ctx, FILE *out, const XiFun
 
 static bool xicgen_emit_enum_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                     const char *method) {
-    const XiEnumData *recv_enum = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);
+    const XiEnumData *recv_enum = cg_enum_for_namespace_value(v->args[0]);
+    if (!recv_enum)
+        recv_enum = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);
     if (!recv_enum)
         recv_enum = cg_resolve_imported_enum_value(ctx, f, v->args[0]);
     if (!recv_enum)
@@ -5986,7 +5990,9 @@ static bool xicgen_enum_method_call_is_aggregate_adt_construct(XiCgenCtx *ctx, c
     if (!ctx || !v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || !v->aux ||
         v->nargs < 1)
         return false;
-    const XiEnumData *recv_enum = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);
+    const XiEnumData *recv_enum = cg_enum_for_namespace_value(v->args[0]);
+    if (!recv_enum)
+        recv_enum = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);
     if (!recv_enum)
         recv_enum = cg_resolve_imported_enum_value(ctx, f, v->args[0]);
     if (!recv_enum)
@@ -9893,7 +9899,9 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             return;
     }
     if (field) {
-        const XiEnumData *recv_enum = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);
+        const XiEnumData *recv_enum = cg_enum_for_namespace_value(v->args[0]);
+        if (!recv_enum)
+            recv_enum = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);
         if (!recv_enum)
             recv_enum = cg_resolve_imported_enum_value(ctx, f, v->args[0]);
         int midx = cg_enum_member_index(recv_enum, field);

@@ -545,6 +545,8 @@ def build_def_location_index(root: Path) -> dict[tuple[str, str, str], tuple[str
         ("fn", re.compile(r"fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
         ("const", re.compile(r"const\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
         ("handle", re.compile(r"handle\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
+        ("record", re.compile(r"record\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
+        ("enum", re.compile(r"enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
     )
     for path in sorted(defs_dir.glob("*.def")):
         for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -578,6 +580,8 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
         entries,
         constants,
         handles,
+        records,
+        enums,
         _type_methods,
         _native_classes,
         _classes,
@@ -655,6 +659,75 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
                     line=line,
                     doc_surface="stdlib",
                     doc_module=handle.module,
+                )
+            )
+    for record in records:
+        source, line = source_for("record", record.module, record.name)
+        out.append(
+            item(
+                category="stdlib-module",
+                namespace=record.module,
+                name=record.name,
+                kind="type",
+                signature="{ "
+                + ", ".join(f"{field.name}: {field.type}" for field in record.fields)
+                + " }",
+                summary=record.doc,
+                source=source,
+                line=line,
+                doc_surface="stdlib",
+                doc_module=record.module,
+            )
+        )
+        for field in record.fields:
+            out.append(
+                item(
+                    category="stdlib-module",
+                    namespace=record.module,
+                    name=f"{record.name}.{field.name}",
+                    kind="field",
+                    signature=f"{'const ' if field.is_const else ''}{field.type}",
+                    summary="Record field",
+                    source=source,
+                    line=line,
+                    doc_surface="stdlib",
+                    doc_module=record.module,
+                )
+            )
+    for enum in enums:
+        source, line = source_for("enum", enum.module, enum.name)
+        out.append(
+            item(
+                category="stdlib-module",
+                namespace=enum.module,
+                name=enum.name,
+                kind="enum",
+                signature="enum " + enum.name,
+                summary=enum.doc,
+                source=source,
+                line=line,
+                doc_surface="stdlib",
+                doc_module=enum.module,
+            )
+        )
+        for variant in enum.variants:
+            payload = (
+                "(" + ", ".join(variant.payload_types) + ")"
+                if variant.payload_types
+                else ""
+            )
+            out.append(
+                item(
+                    category="stdlib-module",
+                    namespace=enum.module,
+                    name=f"{enum.name}.{variant.name}",
+                    kind="enum-variant",
+                    signature=f"{enum.name}.{variant.name}{payload}",
+                    summary="Enum variant",
+                    source=source,
+                    line=line,
+                    doc_surface="stdlib",
+                    doc_module=enum.module,
                 )
             )
     return out

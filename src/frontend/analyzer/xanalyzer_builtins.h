@@ -57,6 +57,35 @@ typedef struct XaBuiltinHandle {
     int method_count;
 } XaBuiltinHandle;
 
+// Named sealed record declared by a native stdlib module.
+typedef struct XaBuiltinRecordField {
+    const char *name;
+    const char *type_str;
+} XaBuiltinRecordField;
+
+typedef struct XaBuiltinRecord {
+    const char *name;
+    const char *doc;
+    const XaBuiltinRecordField *fields;
+    int field_count;
+    bool is_sealed;
+} XaBuiltinRecord;
+
+// Module-scoped enum declared by a native stdlib module.
+typedef struct XaBuiltinEnumVariant {
+    const char *name;
+    const char *const *payload_type_strs;
+    int payload_count;
+} XaBuiltinEnumVariant;
+
+typedef struct XaBuiltinEnum {
+    const char *name;
+    const char *doc;
+    const XaBuiltinEnumVariant *variants;
+    int variant_count;
+    uint32_t layout_id;
+} XaBuiltinEnum;
+
 // Built-in C module info (for net, ws, http, etc.)
 typedef struct XaBuiltinModule {
     const char *name;  // Module name (e.g., "net")
@@ -64,6 +93,10 @@ typedef struct XaBuiltinModule {
     int function_count;
     const XaBuiltinHandle *handles;
     int handle_count;
+    const XaBuiltinRecord *records;
+    int record_count;
+    const XaBuiltinEnum *enums;
+    int enum_count;
 } XaBuiltinModule;
 
 // Convert XrType to unified XrTypeId (O(1) enum mapping)
@@ -158,6 +191,19 @@ XR_FUNC bool xa_builtin_module_func_is_yieldable(const char *module_name, const 
 // Get module handle type info
 XR_FUNC const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_name,
                                                           const char *handle_name);
+
+// Get native module named record/enum declarations.
+XR_FUNC const XaBuiltinRecord *xa_builtin_get_record_type(const char *module_name,
+                                                          const char *record_name);
+XR_FUNC const XaBuiltinRecord *xa_builtin_find_record_by_name(const char *record_name);
+XR_FUNC const XaBuiltinEnum *xa_builtin_get_enum_type(const char *module_name,
+                                                      const char *enum_name);
+XR_FUNC const XaBuiltinEnum *xa_builtin_find_enum_by_name(const char *enum_name);
+
+// Materialize analyzer types and enum metadata from native declarations.
+XR_FUNC XrType *xa_builtin_record_decl_type(XrVMRuntime *X, const XaBuiltinRecord *record);
+XR_FUNC XrType *xa_builtin_enum_decl_type(XrVMRuntime *X, const XaBuiltinEnum *enum_decl,
+                                          XaEnumInfo **out_info);
 
 // Find a handle type by name across all loaded modules (builtin + .xrd)
 XR_FUNC const XaBuiltinHandle *xa_builtin_find_handle_by_name(const char *handle_name);

@@ -31,6 +31,7 @@ This ensures type declarations stay in sync with runtime implementations.
 import argparse
 import copy
 import difflib
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -376,6 +377,8 @@ def merge_pure_xray_modules(module_results, pure_modules):
     for mod_name, pure_data in sorted(pure_modules.items()):
         mod_data = module_results.setdefault(mod_name, {
             'handles': [],
+            'records': [],
+            'enums': [],
             'methods': [],
             'handle_methods': {},
             'constants': [],
@@ -575,6 +578,63 @@ def load_def_module_handles():
     return modules
 
 
+def load_def_module_records():
+    """Load named native record declarations from stdlib/defs/*.def."""
+    sys.path.insert(0, str(STDLIBGEN_TOOL_DIR))
+    try:
+        from stdlibgen import parse_records
+    except Exception as e:
+        raise SystemExit(f"Error: cannot import stdlibgen parser: {e}") from e
+    finally:
+        try:
+            sys.path.remove(str(STDLIBGEN_TOOL_DIR))
+        except ValueError:
+            pass
+
+    modules = {}
+    for entry in parse_records(PROJECT_ROOT):
+        modules.setdefault(entry.module, []).append({
+            'name': entry.name,
+            'doc': entry.doc,
+            'sealed': entry.sealed,
+            'fields': [
+                {
+                    'name': field.name,
+                    'type': field.type,
+                    'is_const': field.is_const,
+                }
+                for field in entry.fields
+            ],
+        })
+    return modules
+
+
+def load_def_module_enums():
+    """Load native module enum declarations from stdlib/defs/*.def."""
+    sys.path.insert(0, str(STDLIBGEN_TOOL_DIR))
+    try:
+        from stdlibgen import parse_enums
+    except Exception as e:
+        raise SystemExit(f"Error: cannot import stdlibgen parser: {e}") from e
+    finally:
+        try:
+            sys.path.remove(str(STDLIBGEN_TOOL_DIR))
+        except ValueError:
+            pass
+
+    modules = {}
+    for entry in parse_enums(PROJECT_ROOT):
+        modules.setdefault(entry.module, []).append({
+            'name': entry.name,
+            'doc': entry.doc,
+            'variants': [
+                {'name': variant.name, 'payload_types': list(variant.payload_types)}
+                for variant in entry.variants
+            ],
+        })
+    return modules
+
+
 def load_def_type_methods():
     """Load migrated builtin type methods from stdlib/defs/*.def."""
     sys.path.insert(0, str(STDLIBGEN_TOOL_DIR))
@@ -606,6 +666,8 @@ def merge_def_module_methods(module_results, def_methods):
     for mod_name, methods in sorted(def_methods.items()):
         mod_data = module_results.setdefault(mod_name, {
             'handles': [],
+            'records': [],
+            'enums': [],
             'methods': [],
             'handle_methods': {},
             'constants': [],
@@ -632,6 +694,8 @@ def merge_def_module_constants(module_results, def_constants):
     for mod_name, constants in sorted(def_constants.items()):
         mod_data = module_results.setdefault(mod_name, {
             'handles': [],
+            'records': [],
+            'enums': [],
             'methods': [],
             'handle_methods': {},
             'constants': [],
@@ -658,6 +722,8 @@ def merge_def_module_handles(module_results, def_handles):
     for mod_name, handles in sorted(def_handles.items()):
         mod_data = module_results.setdefault(mod_name, {
             'handles': [],
+            'records': [],
+            'enums': [],
             'methods': [],
             'handle_methods': {},
             'constants': [],
@@ -675,6 +741,50 @@ def merge_def_module_handles(module_results, def_handles):
                 mod_data['handles'][idx] = handle
                 replaced += 1
     return replaced, added
+
+
+def merge_def_module_records(module_results, def_records):
+    """Overlay .def record declarations onto module metadata."""
+    added = 0
+    for mod_name, records in sorted(def_records.items()):
+        mod_data = module_results.setdefault(mod_name, {
+            'handles': [],
+            'records': [],
+            'enums': [],
+            'methods': [],
+            'handle_methods': {},
+            'constants': [],
+        })
+        existing = {record['name'] for record in mod_data.get('records', [])}
+        for record in records:
+            if record['name'] in existing:
+                raise SystemExit(f"duplicate native record declaration: {mod_name}.{record['name']}")
+            mod_data.setdefault('records', []).append(record)
+            existing.add(record['name'])
+            added += 1
+    return added
+
+
+def merge_def_module_enums(module_results, def_enums):
+    """Overlay .def enum declarations onto module metadata."""
+    added = 0
+    for mod_name, enums in sorted(def_enums.items()):
+        mod_data = module_results.setdefault(mod_name, {
+            'handles': [],
+            'records': [],
+            'enums': [],
+            'methods': [],
+            'handle_methods': {},
+            'constants': [],
+        })
+        existing = {enum['name'] for enum in mod_data.get('enums', [])}
+        for enum in enums:
+            if enum['name'] in existing:
+                raise SystemExit(f"duplicate native enum declaration: {mod_name}.{enum['name']}")
+            mod_data.setdefault('enums', []).append(enum)
+            existing.add(enum['name'])
+            added += 1
+    return added
 
 
 def merge_def_type_methods(type_results, def_type_methods):
@@ -708,6 +818,16 @@ def c_string(value):
             .replace('\n', '\\n')
             .replace('\r', '\\r')
             .replace('\t', '\\t'))
+
+
+def stable_enum_layout_id(module_name, enum):
+    """Return the stdlibgen-compatible stable identity for a native enum."""
+    shape = [f"{module_name}.{enum['name']}"]
+    for variant in enum['variants']:
+        payloads = ','.join(variant.get('payload_types', []))
+        shape.append(f"{variant['name']}({payloads})")
+    digest = hashlib.sha256('|'.join(shape).encode('utf-8')).digest()
+    return int.from_bytes(digest[:4], 'big') | 0x80000000
 
 
 def c_ident(value):
@@ -838,6 +958,68 @@ def generate_header(type_results, module_results):
                 lines.append(f"#define GEN_{mod_name.upper()}_HANDLE_COUNT {len(mod_data['handles'])}")
                 lines.append("")
 
+            # Named sealed records returned by native module functions.
+            for record in mod_data.get('records', []):
+                field_var = f"g_gen_{mod_name}_{record['name'].lower()}_record_fields"
+                lines.append(f"// {mod_name}.{record['name']} record fields")
+                lines.append(f"static const XaBuiltinRecordField {field_var}[] = {{")
+                for field in record['fields']:
+                    lines.append(
+                        f'    {{"{c_string(field["name"])}", "{c_string(field["type"])}"}},'
+                    )
+                lines.append("};")
+                lines.append("")
+            if mod_data.get('records'):
+                lines.append(f"static const XaBuiltinRecord g_gen_{mod_name}_records[] = {{")
+                for record in mod_data['records']:
+                    field_var = f"g_gen_{mod_name}_{record['name'].lower()}_record_fields"
+                    lines.append(
+                        f'    {{"{c_string(record["name"])}", "{c_string(record["doc"])}", '
+                        f'{field_var}, {len(record["fields"])}, '
+                        f'{"true" if record.get("sealed", True) else "false"}}},'
+                    )
+                lines.append("};")
+                lines.append(f"#define GEN_{mod_name.upper()}_RECORD_COUNT {len(mod_data['records'])}")
+                lines.append("")
+
+            # Module-scoped enum declarations. Payload types are kept as
+            # declaration strings and parsed by the analyzer on import.
+            for enum in mod_data.get('enums', []):
+                prefix = f"g_gen_{mod_name}_{enum['name'].lower()}"
+                for index, variant in enumerate(enum['variants']):
+                    payload_types = variant.get('payload_types', [])
+                    if not payload_types:
+                        continue
+                    payload_var = f"{prefix}_variant_{index}_payloads"
+                    lines.append(f"static const char *const {payload_var}[] = {{")
+                    for payload_type in payload_types:
+                        lines.append(f'    "{c_string(payload_type)}",')
+                    lines.append("};")
+                    lines.append("")
+                variants_var = f"{prefix}_variants"
+                lines.append(f"static const XaBuiltinEnumVariant {variants_var}[] = {{")
+                for index, variant in enumerate(enum['variants']):
+                    payload_types = variant.get('payload_types', [])
+                    payload_ref = f"{prefix}_variant_{index}_payloads" if payload_types else "NULL"
+                    lines.append(
+                        f'    {{"{c_string(variant["name"])}", {payload_ref}, '
+                        f'{len(payload_types)}}},'
+                    )
+                lines.append("};")
+                lines.append("")
+            if mod_data.get('enums'):
+                lines.append(f"static const XaBuiltinEnum g_gen_{mod_name}_enums[] = {{")
+                for enum in mod_data['enums']:
+                    variants_var = f"g_gen_{mod_name}_{enum['name'].lower()}_variants"
+                    lines.append(
+                        f'    {{"{c_string(enum["name"])}", "{c_string(enum["doc"])}", '
+                        f'{variants_var}, {len(enum["variants"])}, '
+                        f'UINT32_C({stable_enum_layout_id(mod_name, enum)})}},'
+                    )
+                lines.append("};")
+                lines.append(f"#define GEN_{mod_name.upper()}_ENUM_COUNT {len(mod_data['enums'])}")
+                lines.append("")
+
             # Function declarations.
             #
             # Methods (functions with signatures) come first, followed by
@@ -900,9 +1082,14 @@ def generate_header(type_results, module_results):
             func_count = f"GEN_{mod_name.upper()}_FUNCTION_COUNT" if has_function_slot else "0"
             handle_ref = f"g_gen_{mod_name}_handles" if mod_data.get('handles') else "NULL"
             handle_count = f"GEN_{mod_name.upper()}_HANDLE_COUNT" if mod_data.get('handles') else "0"
+            record_ref = f"g_gen_{mod_name}_records" if mod_data.get('records') else "NULL"
+            record_count = f"GEN_{mod_name.upper()}_RECORD_COUNT" if mod_data.get('records') else "0"
+            enum_ref = f"g_gen_{mod_name}_enums" if mod_data.get('enums') else "NULL"
+            enum_count = f"GEN_{mod_name.upper()}_ENUM_COUNT" if mod_data.get('enums') else "0"
             lines.append(
                 f'    {{"{c_string(mod_name)}", {func_ref}, {func_count}, '
-                f'{handle_ref}, {handle_count}}},')
+                f'{handle_ref}, {handle_count}, {record_ref}, {record_count}, '
+                f'{enum_ref}, {enum_count}}},')
         lines.append("};")
         lines.append(f"#define GEN_BUILTIN_MODULE_COUNT {len(module_results)}")
         lines.append("")
@@ -948,6 +1135,23 @@ def generate_lsp_include(module_results):
                 'name': handle['name'],
                 'signature': f"type {handle['name']}",
                 'doc': handle.get('doc') or "Native handle type",
+                'lsp_kind': "XLSP_SYM_CLASS",
+            })
+        for record in mod_data.get('records', []):
+            fields = ", ".join(
+                f"{field['name']}: {field['type']}" for field in record.get('fields', [])
+            )
+            symbols.append({
+                'name': record['name'],
+                'signature': f"type {record['name']} = {{ {fields} }}",
+                'doc': record.get('doc') or "Native sealed record type",
+                'lsp_kind': "XLSP_SYM_CLASS",
+            })
+        for enum in mod_data.get('enums', []):
+            symbols.append({
+                'name': enum['name'],
+                'signature': f"enum {enum['name']}",
+                'doc': enum.get('doc') or "Native enum type",
                 'lsp_kind': "XLSP_SYM_CLASS",
             })
 
@@ -1100,6 +1304,8 @@ def main():
     const_replaced, const_added = merge_def_module_constants(module_results, def_constants)
     def_handles = load_def_module_handles()
     handle_replaced, handle_added = merge_def_module_handles(module_results, def_handles)
+    record_added = merge_def_module_records(module_results, load_def_module_records())
+    enum_added = merge_def_module_enums(module_results, load_def_module_enums())
     def_type_methods = load_def_type_methods()
     type_method_replaced, type_method_added = merge_def_type_methods(
         type_results, def_type_methods
@@ -1124,6 +1330,8 @@ def main():
           f"({const_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)
     print(f"Def handles: {handle_added} handles loaded "
           f"({handle_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)
+    print(f"Def records: {record_added} records loaded from stdlib/defs/*.def", file=sys.stderr)
+    print(f"Def enums: {enum_added} enums loaded from stdlib/defs/*.def", file=sys.stderr)
     print(f"Def type methods: {type_method_added} methods loaded "
           f"({type_method_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)
     print(f"Pure-Xray modules: {pure_added} exported symbols loaded "

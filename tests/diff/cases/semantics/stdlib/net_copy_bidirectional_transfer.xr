@@ -1,0 +1,32 @@
+import net
+import { CopyBidirectionalResult } from net
+
+fn bridgeOnce(listener: NetListener) -> CopyBidirectionalResult {
+    var a = net.accept(listener)!
+    var b = net.accept(listener)!
+    var result = net.copyBidirectional(a, b)
+    net.close(a)
+    net.close(b)
+    return result
+}
+
+var listener = net.listen(0, 2)!
+var bridge = go bridgeOnce(listener)
+var left = net.dial("127.0.0.1", listener.port(), 1000)!
+var right = net.dial("127.0.0.1", listener.port(), 1000)!
+
+net.write(left, "left")
+net.write(right, "right")
+net.shutdownWrite(left)
+net.shutdownWrite(right)
+
+print(net.read(left)!)
+print(net.read(right)!)
+
+var result = await bridge
+print(result.aToB)
+print(result.bToA)
+
+net.close(left)
+net.close(right)
+net.close(listener)

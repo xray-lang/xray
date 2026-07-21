@@ -296,6 +296,48 @@ static const XaBuiltinHandle g_gen_net_handles[] = {
 };
 #define GEN_NET_HANDLE_COUNT 1
 
+// net.CopyBidirectionalResult record fields
+static const XaBuiltinRecordField g_gen_net_copybidirectionalresult_record_fields[] = {
+    {"aToB", "int"},
+    {"bToA", "int"},
+};
+
+static const XaBuiltinRecord g_gen_net_records[] = {
+    {"CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", g_gen_net_copybidirectionalresult_record_fields, 2, true},
+};
+#define GEN_NET_RECORD_COUNT 1
+
+static const XaBuiltinEnumVariant g_gen_net_neterror_variants[] = {
+    {"Timeout", NULL, 0},
+    {"Closed", NULL, 0},
+    {"Reset", NULL, 0},
+    {"Refused", NULL, 0},
+    {"Dns", NULL, 0},
+    {"Tls", NULL, 0},
+    {"Io", NULL, 0},
+    {"Invalid", NULL, 0},
+    {"Cancelled", NULL, 0},
+    {"OutOfMemory", NULL, 0},
+};
+
+static const XaBuiltinEnum g_gen_net_enums[] = {
+    {"NetError", "Typed failure from native network operations", g_gen_net_neterror_variants, 10, UINT32_C(2619647518)},
+};
+#define GEN_NET_ENUM_COUNT 1
+
+static const char *g_gen_net_copybidirectional_8_errors[] = {
+    "NetError.Timeout",
+    "NetError.Closed",
+    "NetError.Reset",
+    "NetError.Refused",
+    "NetError.Dns",
+    "NetError.Tls",
+    "NetError.Io",
+    "NetError.Invalid",
+    "NetError.Cancelled",
+    "NetError.OutOfMemory",
+};
+
 // net module functions
 static const XaBuiltinMember g_gen_net_functions[] = {
     {"dial", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TCP connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
@@ -306,7 +348,7 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"write", "(conn: NetConn, data: string): int", "Write data to connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"writeBytes", "(conn: NetConn, data: Array<byte>): int", "Write Array<byte> data to connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"copy", "(src: NetConn, dst: NetConn, bufferSize?: int): int", "Copy a TCP/TLS stream using a reusable native buffer", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
-    {"copyBidirectional", "(a: NetConn, b: NetConn): Json", "Copy two TCP/TLS streams in both directions", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"copyBidirectional", "(a: NetConn, b: NetConn): CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", true, false, false, false, true, {XA_EFFECT_CONTRACT_ERRORS, g_gen_net_copybidirectional_8_errors, 10}, XA_ALLOCATION_CONTRACT_MISSING},
     {"shutdownRead", "(conn: NetConn): bool", "Shut down the read side of a TCP connection", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"shutdownWrite", "(conn: NetConn): bool", "Shut down the write side of a TCP connection", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"shutdown", "(conn: NetConn): bool", "Shut down both sides of a TCP connection", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
@@ -482,20 +524,20 @@ static const XaBuiltinMember g_gen_ws_functions[] = {
 
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
-    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0},
-    {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0},
-    {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0},
-    {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, NULL, 0},
-    {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT},
-    {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0},
-    {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0},
-    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT},
-    {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT},
-    {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0},
-    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0},
-    {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0},
-    {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0},
-    {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT},
+    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0},
+    {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT, g_gen_net_records, GEN_NET_RECORD_COUNT, g_gen_net_enums, GEN_NET_ENUM_COUNT},
+    {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT, NULL, 0, NULL, 0},
+    {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT, NULL, 0, NULL, 0},
 };
 #define GEN_BUILTIN_MODULE_COUNT 14
 

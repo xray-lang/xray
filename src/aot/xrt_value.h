@@ -215,6 +215,15 @@ typedef struct XrAotEnumAggregate {
     XrValue payloads[XR_AOT_ENUM_AGG_PAYLOAD_CAP];
 } XrAotEnumAggregate;
 
+/* Small, typed multi-value ABI used by direct stdlib data-plane helpers.
+ * error_index is -1 on success; otherwise it is an ordinal in the generated
+ * error enum attached to the declarative stdlib entry. */
+typedef struct XrtI64PairResult {
+    int64_t first;
+    int64_t second;
+    int32_t error_index;
+} XrtI64PairResult;
+
 static inline int xrt_enum_key_parts(XrValue v, const char **enum_name, const char **member_name,
                                      uint32_t *member_index, uint32_t *layout_id) {
     if (v.tag != XR_TAG_ENUM || !v.ptr)

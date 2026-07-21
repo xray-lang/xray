@@ -1535,7 +1535,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
      * struct layouts and produces garbage values for every downstream
      * type lookup (AOT codegen RET tag, TFA, etc.). */
     struct XrType *ret_type =
-        fdecl->return_type ? xr_tref_resolve(isolate, fdecl->return_type) : NULL;
+        fdecl->return_type ? xr_tref_resolve_in_analyzer(analyzer, fdecl->return_type) : NULL;
     if (!ret_type) {
         /* Un-annotated closure/lambda: named functions must annotate their
          * return type, but anonymous functions may leave it to inference. The

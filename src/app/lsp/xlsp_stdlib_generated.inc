@@ -328,7 +328,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"write", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: string): int", "Write data to connection", NULL, 0},
     {"writeBytes", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: Array<byte>): int", "Write Array<byte> data to connection", NULL, 0},
     {"copy", XLSP_SYM_FUNCTION, "fn(src: NetConn, dst: NetConn, bufferSize?: int): int", "Copy a TCP/TLS stream using a reusable native buffer", NULL, 0},
-    {"copyBidirectional", XLSP_SYM_FUNCTION, "fn(a: NetConn, b: NetConn): Json", "Copy two TCP/TLS streams in both directions", NULL, 0},
+    {"copyBidirectional", XLSP_SYM_FUNCTION, "fn(a: NetConn, b: NetConn): CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", NULL, 0},
     {"shutdownRead", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "Shut down the read side of a TCP connection", NULL, 0},
     {"shutdownWrite", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "Shut down the write side of a TCP connection", NULL, 0},
     {"shutdown", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "Shut down both sides of a TCP connection", NULL, 0},
@@ -348,8 +348,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"sendTo", XLSP_SYM_FUNCTION, "fn(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", NULL, 0},
     {"recvFrom", XLSP_SYM_FUNCTION, "fn(handle: NetConn, maxlen?: int): UdpPacket?", "Receive UDP datagram (returns flat handle: data, host, port)", NULL, 0},
     {"UdpPacket", XLSP_SYM_CLASS, "type UdpPacket", "Native handle type", NULL, 0},
+    {"CopyBidirectionalResult", XLSP_SYM_CLASS, "type CopyBidirectionalResult = { aToB: int, bToA: int }", "Byte counts copied in each direction by copyBidirectional", NULL, 0},
+    {"NetError", XLSP_SYM_CLASS, "enum NetError", "Typed failure from native network operations", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 28
+#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 30
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {

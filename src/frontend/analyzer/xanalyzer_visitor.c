@@ -3466,10 +3466,17 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
             const char *local_name = member->alias ? member->alias : member->name;
             XaSymbol *export_sym =
                 graph_exports ? (XaSymbol *) xr_hashmap_get(graph_exports, member->name) : NULL;
+            const XaBuiltinRecord *builtin_record =
+                export_sym ? NULL : xa_builtin_get_record_type(import->module_name, member->name);
+            const XaBuiltinEnum *builtin_enum =
+                export_sym ? NULL : xa_builtin_get_enum_type(import->module_name, member->name);
 
             // Register each imported member as its exported semantic kind.
-            XaSymbol *sym =
-                xa_symbol_new(local_name, export_sym ? export_sym->kind : XA_SYM_IMPORT);
+            XaSymbolKind imported_kind = export_sym       ? export_sym->kind
+                                         : builtin_record ? XA_SYM_TYPE_ALIAS
+                                         : builtin_enum   ? XA_SYM_ENUM
+                                                          : XA_SYM_IMPORT;
+            XaSymbol *sym = xa_symbol_new(local_name, imported_kind);
             if (sym) {
                 sym->is_imported = true;
                 sym->is_const = true;
@@ -3518,7 +3525,17 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                         }
                     }
 
-                    if (!export_sym && !builtin_sig)
+                    if (!member_type && builtin_record) {
+                        member_type =
+                            xa_builtin_record_decl_type(ctx->analyzer->isolate, builtin_record);
+                        sym->alias_type = member_type;
+                    }
+                    if (!member_type && builtin_enum) {
+                        member_type = xa_builtin_enum_decl_type(ctx->analyzer->isolate,
+                                                                builtin_enum, &links->enum_info);
+                    }
+
+                    if (!export_sym && !builtin_sig && !builtin_record && !builtin_enum)
                         xa_report_unknown_stdlib_member(ctx, node, import->module_name,
                                                         member->name);
 

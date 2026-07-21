@@ -42,6 +42,7 @@
 #include "../src/runtime/value/xvalue.h"
 
 struct XrClass;
+struct XrEnumType;
 struct XrString;
 
 // XML node-shape keys interned once per isolate and reused on every
@@ -92,6 +93,14 @@ typedef struct XrStdlibCache {
     // are only valid for the owning isolate.
     struct XrClass *io_stat_class;
 
+    // net module: typed copyBidirectional result shape.
+    struct XrClass *net_copy_bidirectional_result_class;
+
+    // Generated native enum declarations materialized once per isolate.
+    void *native_enum_cache;
+    size_t native_enum_count;
+    size_t native_enum_capacity;
+
     // xml module: per-isolate interned key / type-name cache.
     XrStdlibXmlKeys xml_keys;
 
@@ -110,6 +119,12 @@ typedef struct XrStdlibCache {
 // Never returns NULL in practice; on allocator OOM it returns NULL,
 // matching the xmalloc OOM policy used elsewhere by stdlib.
 XR_FUNC XrStdlibCache *xr_stdlib_cache_get(struct XrVMRuntime *isolate);
+
+// Materialize a module-scoped native enum from generated stdlib metadata.
+// The returned type is canonical for (isolate, module, name), so native
+// producers and VM namespace constants share the same enum identity.
+XR_FUNC struct XrEnumType *xr_stdlib_enum_type_get(struct XrVMRuntime *isolate, const char *module,
+                                                   const char *name);
 
 // Release the cache and every lazily-populated object it owns. Safe to
 // call with a NULL isolate or with the cache already freed.

@@ -79,11 +79,13 @@ PRE_SWITCH_NATIVE_PUBLIC_SURFACE = {
         "writeFileBytes",
     ),
     "net": (
+        "CopyBidirectionalResult",
         "NetConn",
         "NetConn.close",
         "NetConn.fd",
         "NetConn.isClosed",
         "NetConn.isTLS",
+        "NetError",
         "NetListener",
         "NetListener.close",
         "NetListener.fd",

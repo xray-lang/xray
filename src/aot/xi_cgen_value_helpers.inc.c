@@ -912,6 +912,13 @@ static const XiEnumData *cg_enum_for_shared_value_in_func(const XiCgenCtx *ctx, 
     return cg_enum_for_shared_slot_in_func(ctx, f, (int) v->aux_int);
 }
 
+static const XiEnumData *cg_enum_for_namespace_value(const XiValue *v) {
+    v = cg_unwrap_identity_value(v);
+    return v && v->op == XI_CONST && v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE
+               ? (const XiEnumData *) v->aux
+               : NULL;
+}
+
 static const XiEnumData *cg_enum_for_runtime_type(const XiCgenCtx *ctx, const void *runtime_type) {
     if (!ctx || !runtime_type)
         return NULL;

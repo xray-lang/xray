@@ -35,10 +35,8 @@ fn serveProxyOnce(lst: NetListener, upstreamPort: int) {
     var client = net.accept(lst)!
     var upstream = net.dial("127.0.0.1", upstreamPort)!
     var stats = net.copyBidirectional(client, upstream)
-    assert_true(stats != null)
-    assert_true(stats.ab >= 4)
-    assert_true(stats.ba >= 4)
-    assert_true(stats.ok)
+    assert_true(stats.aToB >= 4)
+    assert_true(stats.bToA >= 4)
     net.close(client)
     net.close(upstream)
 }

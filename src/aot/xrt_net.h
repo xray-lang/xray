@@ -571,6 +571,200 @@ static inline XrValue xrt_net_write(XrValue conn_value, const char *data, int64_
     return XR_FROM_INT(written > 0 ? written : -1);
 }
 
+#define XRT_NET_BIDI_BUFFER_BYTES 16384
+
+static inline XrtI64PairResult xrt_net_bidi_result(int64_t first, int64_t second,
+                                                   int32_t error_index) {
+    XrtI64PairResult result;
+    result.first = first;
+    result.second = second;
+    result.error_index = error_index;
+    return result;
+}
+
+static inline int32_t xrt_net_error_variant_index(uint8_t kind) {
+    if (kind >= XRT_NETERR_TIMEOUT && kind <= XRT_NETERR_INVALID)
+        return (int32_t) kind - 1;
+    return 6; /* NetError.Io */
+}
+
+static inline int64_t xrt_net_min_active_deadline(int64_t current, int64_t candidate) {
+    if (candidate <= 0)
+        return current;
+    return current <= 0 || candidate < current ? candidate : current;
+}
+
+/* Hosted AOT data plane for net.copyBidirectional. The helper returns a
+ * native pair plus an enum ordinal; codegen materializes the declared sealed
+ * Record and publishes the generated stable NetError value when needed. */
+static inline XrtI64PairResult xrt_net_copy_bidirectional(XrValue a_value, XrValue b_value) {
+    xrt_net_conn_object_t *a = xrt_net_conn_ptr(a_value);
+    xrt_net_conn_object_t *b = xrt_net_conn_ptr(b_value);
+    if (!a || !b)
+        return xrt_net_bidi_result(0, 0, xrt_net_error_variant_index(XRT_NETERR_INVALID));
+    if (a->base.closed || b->base.closed || a->base.fd == XR_INVALID_SOCKET ||
+        b->base.fd == XR_INVALID_SOCKET)
+        return xrt_net_bidi_result(0, 0, xrt_net_error_variant_index(XRT_NETERR_CLOSED));
+    if (a == b || a->base.fd == b->base.fd)
+        return xrt_net_bidi_result(0, 0, xrt_net_error_variant_index(XRT_NETERR_INVALID));
+    if (a->conn_kind == XRT_NETCONN_TLS || b->conn_kind == XRT_NETCONN_TLS)
+        return xrt_net_bidi_result(0, 0, xrt_net_error_variant_index(XRT_NETERR_TLS));
+
+    char a_to_b_buf[XRT_NET_BIDI_BUFFER_BYTES];
+    char b_to_a_buf[XRT_NET_BIDI_BUFFER_BYTES];
+    size_t a_to_b_off = 0;
+    size_t a_to_b_len = 0;
+    size_t b_to_a_off = 0;
+    size_t b_to_a_len = 0;
+    int64_t a_to_b_total = 0;
+    int64_t b_to_a_total = 0;
+    bool a_eof = false;
+    bool b_eof = false;
+
+    for (;;) {
+        if (a_eof && b_eof && a_to_b_len == 0 && b_to_a_len == 0) {
+            xrt_net_clear_error_base(&a->base);
+            xrt_net_clear_error_base(&b->base);
+            return xrt_net_bidi_result(a_to_b_total, b_to_a_total, -1);
+        }
+
+        fd_set read_fds;
+        fd_set write_fds;
+        FD_ZERO(&read_fds);
+        FD_ZERO(&write_fds);
+        bool read_a = !a_eof && a_to_b_len == 0;
+        bool read_b = !b_eof && b_to_a_len == 0;
+        bool write_a = b_to_a_len > 0;
+        bool write_b = a_to_b_len > 0;
+        if (read_a)
+            FD_SET(a->base.fd, &read_fds);
+        if (read_b)
+            FD_SET(b->base.fd, &read_fds);
+        if (write_a)
+            FD_SET(a->base.fd, &write_fds);
+        if (write_b)
+            FD_SET(b->base.fd, &write_fds);
+
+        int64_t deadline = 0;
+        if (read_a)
+            deadline = xrt_net_min_active_deadline(deadline, a->read_deadline_ms);
+        if (read_b)
+            deadline = xrt_net_min_active_deadline(deadline, b->read_deadline_ms);
+        if (write_a)
+            deadline = xrt_net_min_active_deadline(deadline, a->write_deadline_ms);
+        if (write_b)
+            deadline = xrt_net_min_active_deadline(deadline, b->write_deadline_ms);
+
+        struct timeval tv;
+        struct timeval *tvp = NULL;
+        if (xrt_net_deadline_timeout_ms(deadline, &tv) >= 0)
+            tvp = &tv;
+        xr_socket_t max_fd = a->base.fd > b->base.fd ? a->base.fd : b->base.fd;
+        int ready = select((int) max_fd + 1, &read_fds, &write_fds, NULL, tvp);
+        if (ready == 0) {
+            xr_set_socket_error(XR_ETIMEDOUT);
+            xrt_net_set_error_base(&a->base, XRT_NETERR_TIMEOUT, XR_ETIMEDOUT);
+            xrt_net_set_error_base(&b->base, XRT_NETERR_TIMEOUT, XR_ETIMEDOUT);
+            return xrt_net_bidi_result(a_to_b_total, b_to_a_total,
+                                       xrt_net_error_variant_index(XRT_NETERR_TIMEOUT));
+        }
+        if (ready < 0) {
+            int err = xr_get_socket_error();
+            if (err == XR_EINTR)
+                continue;
+            uint8_t kind = xrt_net_error_from_errno(err);
+            xrt_net_set_error_base(&a->base, kind, err);
+            xrt_net_set_error_base(&b->base, kind, err);
+            return xrt_net_bidi_result(a_to_b_total, b_to_a_total,
+                                       xrt_net_error_variant_index(kind));
+        }
+
+        if (write_a && FD_ISSET(a->base.fd, &write_fds)) {
+            ssize_t n = xr_socket_send(a->base.fd, b_to_a_buf + b_to_a_off, b_to_a_len);
+            if (n > 0) {
+                b_to_a_off += (size_t) n;
+                b_to_a_len -= (size_t) n;
+                b_to_a_total += (int64_t) n;
+                if (b_to_a_len == 0)
+                    b_to_a_off = 0;
+            } else if (n == 0) {
+                xrt_net_set_error_base(&a->base, XRT_NETERR_CLOSED, 0);
+                return xrt_net_bidi_result(a_to_b_total, b_to_a_total,
+                                           xrt_net_error_variant_index(XRT_NETERR_CLOSED));
+            } else {
+                int err = xr_get_socket_error();
+                if (!xr_socket_err_is_again(err) && err != XR_EINTR) {
+                    uint8_t kind = xrt_net_error_from_errno(err);
+                    xrt_net_set_error_base(&a->base, kind, err);
+                    return xrt_net_bidi_result(a_to_b_total, b_to_a_total,
+                                               xrt_net_error_variant_index(kind));
+                }
+            }
+        }
+
+        if (write_b && FD_ISSET(b->base.fd, &write_fds)) {
+            ssize_t n = xr_socket_send(b->base.fd, a_to_b_buf + a_to_b_off, a_to_b_len);
+            if (n > 0) {
+                a_to_b_off += (size_t) n;
+                a_to_b_len -= (size_t) n;
+                a_to_b_total += (int64_t) n;
+                if (a_to_b_len == 0)
+                    a_to_b_off = 0;
+            } else if (n == 0) {
+                xrt_net_set_error_base(&b->base, XRT_NETERR_CLOSED, 0);
+                return xrt_net_bidi_result(a_to_b_total, b_to_a_total,
+                                           xrt_net_error_variant_index(XRT_NETERR_CLOSED));
+            } else {
+                int err = xr_get_socket_error();
+                if (!xr_socket_err_is_again(err) && err != XR_EINTR) {
+                    uint8_t kind = xrt_net_error_from_errno(err);
+                    xrt_net_set_error_base(&b->base, kind, err);
+                    return xrt_net_bidi_result(a_to_b_total, b_to_a_total,
+                                               xrt_net_error_variant_index(kind));
+                }
+            }
+        }
+
+        if (read_a && FD_ISSET(a->base.fd, &read_fds)) {
+            ssize_t n = xr_socket_recv(a->base.fd, a_to_b_buf, sizeof(a_to_b_buf));
+            if (n > 0) {
+                a_to_b_off = 0;
+                a_to_b_len = (size_t) n;
+            } else if (n == 0) {
+                a_eof = true;
+                (void) shutdown(b->base.fd, XR_SHUT_WR);
+            } else {
+                int err = xr_get_socket_error();
+                if (!xr_socket_err_is_again(err) && err != XR_EINTR) {
+                    uint8_t kind = xrt_net_error_from_errno(err);
+                    xrt_net_set_error_base(&a->base, kind, err);
+                    return xrt_net_bidi_result(a_to_b_total, b_to_a_total,
+                                               xrt_net_error_variant_index(kind));
+                }
+            }
+        }
+
+        if (read_b && FD_ISSET(b->base.fd, &read_fds)) {
+            ssize_t n = xr_socket_recv(b->base.fd, b_to_a_buf, sizeof(b_to_a_buf));
+            if (n > 0) {
+                b_to_a_off = 0;
+                b_to_a_len = (size_t) n;
+            } else if (n == 0) {
+                b_eof = true;
+                (void) shutdown(a->base.fd, XR_SHUT_WR);
+            } else {
+                int err = xr_get_socket_error();
+                if (!xr_socket_err_is_again(err) && err != XR_EINTR) {
+                    uint8_t kind = xrt_net_error_from_errno(err);
+                    xrt_net_set_error_base(&b->base, kind, err);
+                    return xrt_net_bidi_result(a_to_b_total, b_to_a_total,
+                                               xrt_net_error_variant_index(kind));
+                }
+            }
+        }
+    }
+}
+
 static inline XrValue xrt_net_close(XrValue handle_value) {
     xrt_net_close_base(xrt_net_handle_base_ptr(handle_value));
     return XR_NULL_VAL;

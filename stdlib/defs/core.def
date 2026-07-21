@@ -3027,6 +3027,17 @@ module mem {
 }
 
 module net {
+  record CopyBidirectionalResult {
+    fields: "const aToB: int, const bToA: int"
+    sealed: true
+    doc: "Byte counts copied in each direction by copyBidirectional"
+  }
+
+  enum NetError {
+    variants: "Timeout, Closed, Reset, Refused, Dns, Tls, Io, Invalid, Cancelled, OutOfMemory"
+    doc: "Typed failure from native network operations"
+  }
+
   handle UdpPacket {
     fields: "const data: string, const host: string, const port: int"
   }
@@ -3224,15 +3235,19 @@ module net {
   }
 
   fn copyBidirectional {
-    signature: "(a: NetConn, b: NetConn): Json"
+    signature: "(a: NetConn, b: NetConn): CopyBidirectionalResult"
     doc: "Copy two TCP/TLS streams in both directions"
     vm: "net_copy_bidirectional_yieldable"
     vm_binding: "yieldable"
+    aot: "xrt_net_copy_bidirectional"
     argc: 2
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vv"
+    ret: "i64_pair_result"
+    aot_error_enum: "NetError"
+    aot_direct: true
     link_object: false
     layer: "runtime"
+    effect: "NetError.Timeout, NetError.Closed, NetError.Reset, NetError.Refused, NetError.Dns, NetError.Tls, NetError.Io, NetError.Invalid, NetError.Cancelled, NetError.OutOfMemory"
   }
 
   fn shutdownRead {
