@@ -1,0 +1,13 @@
+import encoding
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+var hex = encoding.hexEncode("Hello")
+emit("hex-byte-roundtrip", hex == "48656c6c6f" && encoding.hexDecodeString("48656C6C6F")! == "Hello")
+emit("strict-utf8-validation", encoding.utf8Valid("你好"))
+var le = encoding.utf16Encode("A😀", encoding.LE)
+var be = encoding.utf16Encode("A😀", encoding.BE)
+emit("utf16-endian-bom-roundtrip", encoding.utf16Decode(le, encoding.LE)! == "A😀" && encoding.utf16Decode(be, encoding.BE)! == "A😀")
+emit("utf16-typed-errors", encoding.utf16Decode(Array<byte>(1)) == null)

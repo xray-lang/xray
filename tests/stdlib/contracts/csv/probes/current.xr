@@ -1,0 +1,5 @@
+import csv
+
+var doc = csv.parse("name,age\nAlice,30")
+var ok = len(doc.rows) == 2 && doc.rows[0][0] == "name" && doc.rows[1][0] == "Alice"
+print("{\"case\":\"dynamic-typing\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")

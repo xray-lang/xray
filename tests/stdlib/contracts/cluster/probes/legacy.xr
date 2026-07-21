@@ -1,0 +1,13 @@
+import cluster
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+var ipv4 = cluster.parseAddress("127.0.0.1:9000")
+var host = cluster.parseAddress("example.com:443")
+var ipv6 = cluster.parseAddress("[::1]:9001")
+emit("host-port-address",
+    string(ipv4["host"]) == "127.0.0.1" && int(ipv4["port"]) == 9000 &&
+    string(host["host"]) == "example.com" && int(host["port"]) == 443 &&
+    string(ipv6["host"]) == "::1" && int(ipv6["port"]) == 9001)

@@ -1,0 +1,16 @@
+import toml
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+var doc = toml.parse("name = \"xray\"\nversion = 2\nactive = true")
+var valuesOk = toml.asString(toml.get(doc, "name")!)! == "xray" && toml.asInt(toml.get(doc, "version")!)! == 2 && toml.asBool(toml.get(doc, "active")!)!
+emit("toml-value-domain", valuesOk)
+var report = toml.parseReport("name = \"one\"\nname = \"two\"")
+emit("typed-parse-diagnostics", len(report.errors) > 0 && report.errors[0].line > 0 && len(report.errors[0].message) > 0)
+var table = toml.newTable()
+toml.tableSet(table, "name", toml.stringValue("xray"))
+toml.tableSet(table, "version", toml.intValue(2))
+var round = toml.parse(toml.stringify(toml.tableValue(table)))
+emit("stringify-roundtrip", toml.asString(toml.get(round, "name")!)! == "xray" && toml.asInt(toml.get(round, "version")!)! == 2)

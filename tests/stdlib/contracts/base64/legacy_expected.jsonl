@@ -1,0 +1,4 @@
+{"case":"rfc4648-roundtrip","classification":"required","effects":{},"error":null,"legacy_commit":"e50953853746185e1f2e8e2d6371898166c6a42a","outcome":"value","value":true}
+{"case":"typed-error-invalid-input","classification":"required","effects":{},"error":null,"legacy_commit":"e50953853746185e1f2e8e2d6371898166c6a42a","outcome":"value","value":true}
+{"case":"canonical-trailing-bits","classification":"bug","effects":{},"error":null,"legacy_commit":"e50953853746185e1f2e8e2d6371898166c6a42a","outcome":"value","value":false}
+{"case":"explicit-alphabet-padding-policy","classification":"required","effects":{},"error":null,"legacy_commit":"e50953853746185e1f2e8e2d6371898166c6a42a","outcome":"value","value":true}

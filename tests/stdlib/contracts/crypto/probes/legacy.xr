@@ -1,0 +1,16 @@
+import crypto
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+emit("hash-and-hmac-kat",
+    crypto.md5("abc") == "900150983cd24fb0d6963f7d28e17f72" &&
+    crypto.sha1("abc") == "a9993e364706816aba3e25717850c26c9cd0d89d" &&
+    crypto.sha256("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" &&
+    crypto.hmac("sha256", "key", "data") == "5031fe3d989c6d1537a013fa6e739da23463fdaec3b70137d828e36ace221bd0")
+emit("timing-safe-equal", crypto.timingSafeEqual("abc", "abc") && !crypto.timingSafeEqual("abc", "abd") && !crypto.timingSafeEqual("abc", "ab"))
+var random = crypto.randomBytes(8)
+var uuid = crypto.uuid()
+var variant = uuid.runes().nth(19)
+emit("random-shape", len(random) == 16 && len(uuid) == 36 && uuid.runes().nth(14) == '4' && (variant == '8' || variant == '9' || variant == 'a' || variant == 'b'))

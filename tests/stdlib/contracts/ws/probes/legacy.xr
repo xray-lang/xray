@@ -1,0 +1,33 @@
+import ws
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+var key = "dGhlIHNhbXBsZSBub25jZQ=="
+emit("rfc6455-accept-key", ws.acceptKey(key) == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+var request = "GET /chat HTTP/1.1\r\nHost: example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + key + "\r\nSec-WebSocket-Version: 13\r\n\r\n"
+var parsed = ws.parseUpgradeRequest(request, null, false, null)
+emit("upgrade-handshake", parsed != null && parsed!.target == "/chat" && ws.upgradeResponse(key).indexOf("101 Switching Protocols") >= 0)
+var closeBytes = Array<uint8>(4)
+closeBytes[0] = 3
+closeBytes[1] = 232
+closeBytes[2] = 79
+closeBytes[3] = 75
+var invalidClose = Array<uint8>(4)
+invalidClose[0] = 3
+invalidClose[1] = 232
+invalidClose[2] = 192
+invalidClose[3] = 175
+var close = ws.parseClosePayload(closeBytes)
+emit("close-payload-utf8", close != null && close!.code == 1000 && ws.parseClosePayload(invalidClose) == null)
+emit("close-reason-array-render", close != null && close!.reason == "[79, 75]")
+var payload = Array<uint8>(5)
+payload[0] = 0
+payload[1] = 1
+payload[2] = 127
+payload[3] = 128
+payload[4] = 255
+var framed = ws.frame(payload, 2, false)
+var frame = ws.parseFrame(framed, false)!
+emit("frame-byte-roundtrip", frame.opcode == 2 && frame.payload.length == 5 && frame.payload[0] == 0 && frame.payload[3] == 128 && frame.payload[4] == 255 && frame.consumedBytes == framed.length)

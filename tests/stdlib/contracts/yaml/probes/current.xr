@@ -1,0 +1,18 @@
+import yaml
+import { YamlError } from yaml
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+var doc = yaml.parse("name: xray\nversion: 2\nactive: true\nitems: [one, two]")
+var valuesOk = yaml.asString(yaml.get(doc, "name")!)! == "xray" && yaml.asInt(yaml.get(doc, "version")!)! == 2 && yaml.asBool(yaml.get(doc, "active")!)! && yaml.asString(yaml.at(yaml.get(doc, "items")!, 1)!)! == "two"
+emit("yaml-value-domain", valuesOk)
+var rejected = false
+try { yaml.parseStrict("not-a-mapping") } catch (e: YamlError) { rejected = true }
+emit("typed-parse-errors", rejected)
+var mapping = yaml.newMapping()
+yaml.mappingSet(mapping, "name", yaml.stringValue("xray"))
+yaml.mappingSet(mapping, "version", yaml.intValue(2))
+var round = yaml.parse(yaml.stringify(yaml.mappingValue(mapping)))
+emit("stringify-roundtrip", yaml.asString(yaml.get(round, "name")!)! == "xray" && yaml.asInt(yaml.get(round, "version")!)! == 2)

@@ -85,6 +85,30 @@ def run_probe(xray: Path, root: Path, probe: Path) -> list[dict[str, Any]]:
     return parse_observations(result.stdout, str(probe))
 
 
+CHECKED_IN_GENERATED = (
+    Path("src/ir/xi_ops_gen.h"),
+    Path("src/aot/xi_to_c_dispatch_gen.h"),
+    Path("src/aot/xaot_rep_gen.h"),
+)
+
+
+def snapshot_checked_in_generated(checkout: Path) -> dict[Path, bytes]:
+    """Snapshot generated tables that are part of the historical revision."""
+    return {
+        relative: (checkout / relative).read_bytes()
+        for relative in CHECKED_IN_GENERATED
+        if (checkout / relative).is_file()
+    }
+
+
+def restore_checked_in_generated(checkout: Path, snapshot: dict[Path, bytes]) -> None:
+    """Undo configure-time regeneration and make committed tables newest."""
+    for relative, contents in snapshot.items():
+        generated = checkout / relative
+        generated.write_bytes(contents)
+        os.utime(generated, None)
+
+
 def load_contract(root: Path, module: str) -> tuple[Path, dict[str, Any]]:
     directory = root / CONTRACT_ROOT / module
     path = directory / "contract.toml"
@@ -148,6 +172,7 @@ def verify_module(root: Path, module: str, xray: Path) -> None:
 
 def configure_and_build(checkout: Path, jobs: int) -> Path:
     build = checkout / "build-stdlib-legacy-oracle"
+    generated_snapshot = snapshot_checked_in_generated(checkout)
     configure = [
         "cmake",
         "-S",
@@ -161,6 +186,10 @@ def configure_and_build(checkout: Path, jobs: int) -> Path:
         "-DXR_BUILD_TEST_MODULES=ON",
     ]
     subprocess.run(configure, cwd=checkout, check=True)
+    # Configure can eagerly rewrite these tables before the build graph runs.
+    # Restore the exact committed bytes, then make them newer than dependency
+    # stamps so the historical binary is not a mixed-version reconstruction.
+    restore_checked_in_generated(checkout, generated_snapshot)
     subprocess.run(
         ["cmake", "--build", str(build), "--target", "xray", f"-j{jobs}"],
         cwd=checkout,
@@ -193,9 +222,6 @@ def capture_group(
         # compiler tables. Some old revisions have a newer ops.def but no
         # matching enum update, so regenerating xi_ops_gen.h makes that exact
         # revision unbuildable and no longer represents the committed binary.
-        xi_ops_generated = checkout / "src/ir/xi_ops_gen.h"
-        if xi_ops_generated.is_file():
-            os.utime(xi_ops_generated, None)
         xray = configure_and_build(checkout, jobs)
         for module in modules:
             directory, contract = load_contract(root, module)

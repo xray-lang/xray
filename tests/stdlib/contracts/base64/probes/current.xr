@@ -1,0 +1,33 @@
+import base64
+import { Base64Alphabet, Base64DecodeOptions, Base64EncodeOptions, Base64Error, Base64PaddingPolicy } from base64
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+fn decodeFails(data: string, options: Base64DecodeOptions? = null) -> bool {
+    try {
+        base64.decode(data, options)
+        return false
+    } catch (e: Base64Error) {
+        return true
+    }
+}
+
+var raw = "hello".copyBytes()
+var encoded = base64.encode(raw[:])
+var decoded = base64.decode(encoded)
+emit("rfc4648-roundtrip", encoded == "aGVsbG8=" && string.fromUtf8(decoded[:])! == "hello")
+emit("typed-error-invalid-input", decodeFails("!!!!"))
+emit("canonical-trailing-bits", decodeFails("AB=="))
+
+var enc = Base64EncodeOptions()
+enc.alphabet = Base64Alphabet.UrlSafe
+enc.padding = false
+var dec = Base64DecodeOptions()
+dec.alphabet = Base64Alphabet.UrlSafe
+dec.padding = Base64PaddingPolicy.Forbidden
+var urlRaw = "subjects?_d".copyBytes()
+var urlEncoded = base64.encode(urlRaw[:], enc)
+var urlDecoded = base64.decode(urlEncoded, dec)
+emit("explicit-alphabet-padding-policy", urlEncoded == "c3ViamVjdHM_X2Q" && string.fromUtf8(urlDecoded[:])! == "subjects?_d")

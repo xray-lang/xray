@@ -1,0 +1,14 @@
+import http
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+var head = http.parseRequestHead("GET / HTTP/1.1\r\nX-Trace: one\r\nX-Trace: two\r\n\r\n")!
+emit("header-order-and-duplicates", head.getHeaders("x-trace").join("|") == "one|two")
+var fixed = http.parseRequestText("POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhelloextra")!
+var chunked = http.parseRequestText("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n0\r\nX-End: yes\r\n\r\n")!
+emit("request-body-framing", fixed.body == "hello" && fixed.consumedBytes > 0 && chunked.body == "Wiki" && chunked.getTrailer("x-end")! == "yes")
+var response = http.parseResponseText("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhelloextra")!
+var noBody = http.parseResponseText("HTTP/1.1 204 No Content\r\n\r\nleft")!
+emit("response-body-framing", response.body == "hello" && noBody.body == "" && noBody.consumedBytes < "HTTP/1.1 204 No Content\r\n\r\nleft".length)

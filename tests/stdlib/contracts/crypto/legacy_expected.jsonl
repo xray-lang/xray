@@ -1,0 +1,3 @@
+{"case":"hash-and-hmac-kat","classification":"required","effects":{},"error":null,"legacy_commit":"d5cfcb587219468fde5bf8cda6cb76df875cf25b","outcome":"value","value":true}
+{"case":"timing-safe-equal","classification":"required","effects":{},"error":null,"legacy_commit":"d5cfcb587219468fde5bf8cda6cb76df875cf25b","outcome":"value","value":true}
+{"case":"random-shape","classification":"required","effects":{},"error":null,"legacy_commit":"d5cfcb587219468fde5bf8cda6cb76df875cf25b","outcome":"value","value":true}

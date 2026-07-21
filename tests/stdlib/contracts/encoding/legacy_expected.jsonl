@@ -1,0 +1,4 @@
+{"case":"hex-byte-roundtrip","classification":"required","effects":{},"error":null,"legacy_commit":"e571b17d0ac7bf8a47f741a271686cd46b2bff68","outcome":"value","value":true}
+{"case":"strict-utf8-validation","classification":"required","effects":{},"error":null,"legacy_commit":"e571b17d0ac7bf8a47f741a271686cd46b2bff68","outcome":"value","value":true}
+{"case":"utf16-endian-bom-roundtrip","classification":"required","effects":{},"error":null,"legacy_commit":"e571b17d0ac7bf8a47f741a271686cd46b2bff68","outcome":"value","value":true}
+{"case":"utf16-typed-errors","classification":"required","effects":{},"error":null,"legacy_commit":"e571b17d0ac7bf8a47f741a271686cd46b2bff68","outcome":"value","value":true}

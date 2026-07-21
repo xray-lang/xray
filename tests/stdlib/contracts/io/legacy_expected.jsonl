@@ -1,0 +1,4 @@
+{"case":"text-binary-file-split","classification":"required","effects":{"filesystem":"temp"},"error":null,"legacy_commit":"0a9f6fdb5bd77e5c1a5d729bd68a1064b1c5e6e7","outcome":"value","value":true}
+{"case":"byte-file-roundtrip","classification":"required","effects":{"filesystem":"temp"},"error":null,"legacy_commit":"0a9f6fdb5bd77e5c1a5d729bd68a1064b1c5e6e7","outcome":"value","value":true}
+{"case":"all-byte-file-roundtrip","classification":"required","effects":{"filesystem":"temp"},"error":null,"legacy_commit":"0a9f6fdb5bd77e5c1a5d729bd68a1064b1c5e6e7","outcome":"value","value":true}
+{"case":"path-owner-boundary","classification":"required","effects":{"filesystem":"temp"},"error":null,"legacy_commit":"0a9f6fdb5bd77e5c1a5d729bd68a1064b1c5e6e7","outcome":"value","value":true}

@@ -1,0 +1,33 @@
+import encoding
+import { HexError, Utf16DecodeOptions, Utf16EncodeOptions, Utf16Error } from encoding
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
+}
+
+fn encOpts(order: Endian) -> Utf16EncodeOptions {
+    var out = Utf16EncodeOptions()
+    out.order = order
+    return out
+}
+
+fn decOpts(order: Endian) -> Utf16DecodeOptions {
+    var out = Utf16DecodeOptions()
+    out.order = order
+    return out
+}
+
+var raw = Array<byte>([0, 1, 127, 128, 255])
+var hex = encoding.hexEncode(raw[:])
+var back = encoding.hexDecode(hex)
+emit("hex-byte-roundtrip", hex == "00017f80ff" && len(back) == 5 && back[0] == 0 && back[4] == 255 && encoding.hexDecode("00017F80FF")[3] == 128)
+var invalid = Array<byte>([0xC0, 0xAF])
+var unicode = "你好"
+emit("strict-utf8-validation", encoding.utf8Valid(unicode.bytes()) && !encoding.utf8Valid(invalid[:]))
+var le = encoding.utf16Encode("A😀", encOpts(Endian.LE))
+var be = encoding.utf16Encode("A😀", encOpts(Endian.BE))
+emit("utf16-endian-bom-roundtrip", encoding.utf16Decode(le[:], decOpts(Endian.LE)) == "A😀" && encoding.utf16Decode(be[:], decOpts(Endian.BE)) == "A😀")
+var odd = Array<byte>(1)
+var rejected = false
+try { encoding.utf16Decode(odd[:]) } catch (e: Utf16Error) { rejected = true }
+emit("utf16-typed-errors", rejected)

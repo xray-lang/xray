@@ -1,0 +1,57 @@
+import net
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{\"transport\":\"loopback\"}}")
+}
+
+fn highServer(listener: NetListener) -> bool {
+    var conn = net.accept(listener)!
+    var data = net.read(conn)!
+    var written = net.write(conn, data)
+    net.close(conn)
+    return written == len(data.bytes())
+}
+
+fn highClient(port: int) -> bool {
+    var conn = net.dial("127.0.0.1", port)!
+    net.write(conn, "é€")
+    var data = net.read(conn)!
+    net.close(conn)
+    return len(data.bytes()) == 5 && data.bytes()[0] == 195 && data.bytes()[4] == 172
+}
+
+fn copyServer(listener: NetListener) -> bool {
+    var conn = net.accept(listener)!
+    var copied = net.copy(conn, conn)
+    net.close(conn)
+    return copied == 6
+}
+
+fn copyClient(port: int) -> bool {
+    var conn = net.dial("127.0.0.1", port)!
+    net.write(conn, "native")
+    net.shutdownWrite(conn)
+    var data = net.read(conn)!
+    net.close(conn)
+    return data == "native"
+}
+
+fn run() {
+    var highListener = net.listen(0, 8)!
+    var highServerTask = go highServer(highListener)
+    var highClientTask = go highClient(highListener.port())
+    var highOk = await highClientTask
+    highOk = (await highServerTask) && highOk
+    net.close(highListener)
+    emit("high-byte-loopback", highOk)
+
+    var copyListener = net.listen(0, 8)!
+    var copyServerTask = go copyServer(copyListener)
+    var copyClientTask = go copyClient(copyListener.port())
+    var copyOk = await copyClientTask
+    copyOk = (await copyServerTask) && copyOk
+    net.close(copyListener)
+    emit("native-copy-byte-boundary", copyOk)
+}
+
+run()

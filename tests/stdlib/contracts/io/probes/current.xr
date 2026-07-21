@@ -1,0 +1,31 @@
+import io
+import path
+
+fn emit(name: string, ok: bool) {
+    print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{\"filesystem\":\"temp\"}}")
+}
+
+var root = io.tempDir()!
+var textPath = path.join(root, path.from("oracle.txt"))
+var bytePath = path.join(root, path.from("oracle.bin"))
+var allPath = path.join(root, path.from("all.bin"))
+var textOk = io.writeFile(textPath, "hello\nworld") && io.readFile(textPath)! == "hello\nworld"
+var bytes = Array<byte>([0, 127, 128, 255])
+var byteOk = io.writeFileBytes(bytePath, bytes)
+var byteRead = Array<byte>(0)
+if (byteOk) { byteRead = io.readFileBytes(bytePath)! }
+byteOk = len(byteRead) == 4 && byteRead[0] == 0 && byteRead[1] == 127 && byteRead[2] == 128 && byteRead[3] == 255
+var all = Array<byte>(256)
+for (var i = 0; i < 256; i++) { all[i] = i }
+var allRead = Array<byte>(0)
+var allOk = io.writeFileBytes(allPath, all)
+if (allOk) { allRead = io.readFileBytes(allPath)! }
+if (len(allRead) != 256) { allOk = false }
+for (var i = 0; i < len(allRead); i++) {
+    if (allRead[i] != i) { allOk = false }
+}
+emit("text-binary-file-split", textOk && byteOk)
+emit("byte-file-roundtrip", byteOk)
+emit("all-byte-file-roundtrip", allOk)
+emit("path-owner-boundary", path.basename(textPath) == "oracle.txt")
+io.removeAll(root)

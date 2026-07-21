@@ -1,0 +1,5 @@
+import url
+
+var query = url.parseQuery("msg=hello+world&symbol=a%2Bb")
+var ok = string(query["msg"]) == "hello world" && string(query["symbol"]) == "a+b" && url.encodeForm("a b+c") == "a+b%2Bc" && url.decodeForm("a+b%2Bc") == "a b+c"
+print("{\"case\":\"form-percent-encoding\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
