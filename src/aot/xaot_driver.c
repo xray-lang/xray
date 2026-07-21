@@ -1625,7 +1625,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         int idx = graph->topo_order[ti];
         XrModuleSpec *spec = &graph->specs[idx];
         if (spec->ast)
-            xa_mono_pass_with_external_structs((AstNode *) spec->ast, mono_roots, nmodules, X);
+            xa_mono_pass_with_external_structs_and_analyzer((AstNode *) spec->ast, mono_roots,
+                                                            nmodules, X, shared_analyzer);
     }
 
     for (int ti = 0; ti < nmodules; ti++) {

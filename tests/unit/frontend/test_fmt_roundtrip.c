@@ -454,6 +454,31 @@ TEST(parameter_modes_roundtrip) {
     teardown();
 }
 
+TEST(no_throw_function_type_roundtrip) {
+    setup();
+    const char *src = "type Pure = @no_throw (int) -> int\n"
+                      "type PureSync = @no_throw @no_suspend (int) -> int\n"
+                      "fn apply(cb: @no_throw (int) -> int, value: int) -> int {\n"
+                      "    return cb(value)\n"
+                      "}\n"
+                      "interface PureMapper {\n"
+                      "    @no_throw\n"
+                      "    map(value: int) -> int\n"
+                      "}\n";
+    char *fmt1 = parse_and_format(src, "no-throw-type.xr");
+    ASSERT_NOT_NULL(fmt1);
+    ASSERT_TRUE(contains(fmt1, "type Pure = @no_throw (int) -> int"));
+    ASSERT_TRUE(contains(fmt1, "type PureSync = @no_throw @no_suspend (int) -> int"));
+    ASSERT_TRUE(contains(fmt1, "cb: @no_throw (int) -> int"));
+    ASSERT_TRUE(contains(fmt1, "@no_throw\n    map(value: int) -> int"));
+    char *fmt2 = parse_and_format(fmt1, "no-throw-type-formatted.xr");
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
+    teardown();
+}
+
 TEST(extern_block_roundtrip) {
     setup();
     const char *src = "extern \"C\" link(\"m\") {\n"
@@ -915,6 +940,7 @@ RUN_TEST(method_no_alloc_attribute_roundtrip);
 RUN_TEST(zero_cost_allow_categories_roundtrip);
 RUN_TEST(object_destructure_rename_roundtrip);
 RUN_TEST(parameter_modes_roundtrip);
+RUN_TEST(no_throw_function_type_roundtrip);
 RUN_TEST(extern_block_roundtrip);
 RUN_TEST(extern_layout_roundtrip);
 RUN_TEST(parameter_modes_comments_roundtrip);

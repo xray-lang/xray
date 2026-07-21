@@ -792,6 +792,9 @@ XR_FUNC XrType *xr_type_new_fixed_array(XrVMRuntime *X, XrType *element_type, in
 XR_FUNC XrType *xr_type_copy(XrVMRuntime *X, XrType *type);
 XR_FUNC bool xr_type_assignable(XrType *target, XrType *source);
 XR_FUNC bool xr_type_equals(XrType *a, XrType *b);
+/* Exact function signature compatibility with covariant throw effect:
+ * NO_THROW implements/overrides MAY_THROW, never the reverse. */
+XR_FUNC bool xr_type_function_signature_assignable(XrType *target, XrType *source);
 
 // API: Nullable operations (safe for singletons - copies if frozen)
 XR_FUNC XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type);

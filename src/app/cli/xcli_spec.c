@@ -73,6 +73,11 @@ static const XrCliOptionSpec fmt_options[] = {
      "Omit trailing `,` when wrapping to multi-line (default: keep)"},
     XR_CLI_OPT_END};
 
+static const XrCliOptionSpec fix_options[] = {
+    {"annotate-no-throw", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Add @no_throw to named functions proven non-throwing"},
+    XR_CLI_OPT_END};
+
 static const XrCliOptionSpec compile_options[] = {
     {"output", 'o', XR_CLI_VALUE_STRING, false, false, "FILE", "Output file path"},
     {"format", 'f', XR_CLI_VALUE_STRING, false, false, "FMT", "Output format: bytecode, c, header"},
@@ -207,6 +212,8 @@ static XrCliCommandSpec cli_commands[] = {
     {"test", "Run tests", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},
+    {"fix", "Apply optional source annotations", NULL, fix_options, 1, -1, false, false, NULL, NULL,
+     0},
 
     /* Artifact commands */
     {"compile", "Compile to bytecode or C", NULL, compile_options, 1, 1, false, false, NULL, NULL,

@@ -1857,6 +1857,7 @@ if(BUILD_TESTS)
         NAME error_effect_convergence_inventory
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_error_effect_convergence.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --max-category THROW_BIT_RECOMPUTE=0
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(error_effect_convergence_inventory PROPERTIES
@@ -2338,6 +2339,30 @@ if(BUILD_TESTS)
     set_tests_properties(compile_error_tests PROPERTIES
         LABELS "frontend;negative;regression"
         PROCESSORS 2
+        TIMEOUT 60
+    )
+
+    add_test(
+        NAME cli_fix_no_throw
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_fix_no_throw_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(cli_fix_no_throw PROPERTIES
+        LABELS "cli;frontend;regression"
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME aot_no_throw_contract
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_no_throw_contract_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_no_throw_contract PROPERTIES
+        LABELS "aot;effects;frontend;regression"
         TIMEOUT 60
     )
 

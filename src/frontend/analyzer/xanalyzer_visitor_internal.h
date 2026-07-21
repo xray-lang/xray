@@ -14,6 +14,7 @@
 #include "xanalyzer_visitor.h"
 #include "xanalyzer_builtins.h"
 #include "xanalyzer_incremental.h"
+#include "../parser/xa_assertion_attr.h"
 #include "../../base/xstorage.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/symbol/xsymbol_table.h"
@@ -54,6 +55,7 @@ XR_FUNC XaSymbol *xa_visit_bind_parameter_symbol(XaInferContext *ctx, XrParamNod
                                                  int fallback_line);
 XR_FUNC bool xa_propagate_receiver_mutations_for_ast(XaAnalyzer *analyzer, AstNode *node);
 XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, AstNode *node);
+XR_FUNC void xa_validate_interface_throw_effects(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_apply_param_storage_requirements_to_scope(XaInferContext *ctx,
                                                           XaSymbolLinks *links);
 XR_FUNC XrType *resolve_class_to_type_param(XrVMRuntime *X, XrType *type, const char **tp_names,

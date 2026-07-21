@@ -96,6 +96,8 @@ typedef struct InterfaceMethodNode {
     XrParamNode **params;
     int param_count;
     XrTypeRef *return_type;
+    XrAttribute **attributes;
+    int attr_count;
 } InterfaceMethodNode;
 
 // Property signature inside an interface body, e.g. `length: int` or

@@ -4445,7 +4445,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             param_modes[i] = mode;
             // Check for explicit type annotation first
             if (p && p->type) {
-                param_types[i] = xr_tref_resolve_in_analyzer(ctx->analyzer, p->type);
+                param_types[i] = xr_tref_resolve_parameter_in_analyzer(ctx->analyzer, p->type);
                 if (type_param_names) {
                     param_types[i] =
                         resolve_class_to_type_param(ctx->analyzer->isolate, param_types[i],
@@ -4694,6 +4694,9 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     XrType *result = xr_type_new_function(ctx->analyzer->isolate, param_types, fn->param_count,
                                           return_type, has_rest);
     if (result) {
+        xr_type_function_set_throw_effect(result, xa_decl_has_attribute(node, ATTR_NO_THROW)
+                                                      ? XR_FN_EFFECT_NO_THROW
+                                                      : XR_FN_EFFECT_POLY);
         result->function.min_params = fn->required_count;
         for (int i = 0; i < fn->param_count; i++) {
             if (fn->params[i])

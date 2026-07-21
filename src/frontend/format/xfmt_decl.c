@@ -693,6 +693,7 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
 
         if (method->leading_comments)
             xfmt_write_leading_comments(ctx, method->leading_comments);
+        xfmt_emit_attributes(ctx, m->attributes, m->attr_count);
         xfmt_write_indent(ctx);
         xfmt_write_str(ctx, m->name);
         xfmt_write_char(ctx, '(');

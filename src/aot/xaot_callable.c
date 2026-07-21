@@ -156,28 +156,35 @@ static int callable_func_index(const CallableAnalysis *a, const XiFunc *func) {
 
 XR_FUNC bool xaot_callable_func_has_executable_body_plan(const XaotBundle *bundle,
                                                          const XiFunc *func) {
-    if (!func || !func->is_generic_template)
-        return func != NULL;
-    if (!bundle || func->xg_body_func_id == XG_NO_ID)
+    if (!func)
         return false;
+    if (!bundle || func->xg_body_func_id == XG_NO_ID)
+        return !func->is_generic_template;
+    bool mentioned = false;
+    bool selected = false;
     for (uint32_t i = 0; i < bundle->ngeneric_body_plans; i++) {
         const XaotGenericBodyPlan *plan = &bundle->generic_body_plans[i];
-        XgFuncId selected = XG_NO_ID;
         switch ((XaotGenericBodyAction) plan->action) {
             case XAOT_GENERIC_BODY_CLONE:
-                selected = plan->specialized_body_func_id;
+                if (plan->specialized_body_func_id == func->xg_body_func_id)
+                    selected = true;
                 break;
             case XAOT_GENERIC_BODY_SHARE_CANONICAL_BODY:
             case XAOT_GENERIC_BODY_DIRECT_CONSTRAINT_CALL:
-                selected = plan->origin_body_func_id;
+                if (plan->origin_body_func_id == func->xg_body_func_id)
+                    selected = true;
                 break;
             case XAOT_GENERIC_BODY_REJECT:
                 break;
         }
-        if (selected == func->xg_body_func_id)
-            return true;
+        if (plan->origin_body_func_id == func->xg_body_func_id ||
+            plan->specialized_body_func_id == func->xg_body_func_id)
+            mentioned = true;
     }
-    return false;
+    /* Function-level generic origins intentionally retain an erased callable
+     * ABI and therefore are not tagged `is_generic_template`. A clone plan
+     * still makes that origin non-executable. */
+    return mentioned ? selected : !func->is_generic_template;
 }
 
 static CallableFuncFacts *callable_func_facts(CallableAnalysis *a, const XiFunc *func) {
@@ -767,9 +774,11 @@ static bool callable_mark_reachable_func(CallableAnalysis *a, const XiFunc *func
         }
         break;
     }
-    if (!xg_body_reachability_mark_closed_world_calls(ev, func->xg_body_func_id,
-                                                      a->reachable_bodies, ev->nbodies))
-        return false;
+    /* Do not replay pre-optimization evidence call edges here. Inlining may
+     * have removed the only call to a specialized HOF body; treating that
+     * stale edge as executable makes its now-dead open callback parameter
+     * reject the build. The fixed point below walks the final Xi graph and is
+     * the authoritative source of executable direct/closure edges. */
     return callable_refresh_reachable_funcs(a, changed);
 }
 
@@ -787,6 +796,17 @@ static bool callable_mark_exported_class_methods(CallableAnalysis *a, const XiMo
             return false;
     }
     return true;
+}
+
+static bool callable_func_is_generated_generic_specialization(const XaotBundle *bundle,
+                                                              const XiFunc *func) {
+    if (!bundle || !func || func->xg_body_func_id == XG_NO_ID)
+        return false;
+    for (uint32_t i = 0; i < bundle->ngeneric_body_plans; i++) {
+        if (bundle->generic_body_plans[i].specialized_body_func_id == func->xg_body_func_id)
+            return true;
+    }
+    return false;
 }
 
 static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
@@ -821,7 +841,10 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
                 continue;
             for (uint16_t ei = 0; ei < mod->nexports; ei++) {
                 const XiModuleExport *exp = &mod->exports[ei];
-                if (exp->function && !callable_mark_reachable_func(a, exp->function, &changed))
+                if (exp->function &&
+                    !callable_func_is_generated_generic_specialization(bundle, exp->function) &&
+                    xaot_callable_func_has_executable_body_plan(bundle, exp->function) &&
+                    !callable_mark_reachable_func(a, exp->function, &changed))
                     return false;
                 if (exp->class_data &&
                     !callable_mark_exported_class_methods(a, mod, exp->class_data, &changed))
@@ -844,11 +867,9 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
                     continue;
                 for (uint32_t vi = 0; vi < block->nvalues; vi++) {
                     const XiValue *call = block->values[vi];
-                    if ((call->op == XI_CLOSURE_NEW ||
-                         (call->op == XI_STACK_ALLOC && call->aux_int == XI_CLOSURE_NEW)) &&
-                        call->aux &&
-                        !callable_mark_reachable_func(a, (const XiFunc *) call->aux, &changed))
-                        return false;
+                    /* Creating a top-level closure in module init does not by
+                     * itself execute its body. Direct calls and closed
+                     * function-value target sets below add the real edge. */
                     const XiFunc *direct = callable_resolve_direct_target(a->bundle, func, call);
                     if (direct && !callable_mark_reachable_func(a, direct, &changed))
                         return false;

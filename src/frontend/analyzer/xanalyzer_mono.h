@@ -29,6 +29,18 @@
 
 #define XR_MONO_MAX_DEPTH 8
 
+typedef struct XaAnalyzer XaAnalyzer;
+
+/* A generic higher-order function has one additional finite specialization
+ * dimension.  MAY_THROW deliberately keeps the historical mangled name;
+ * NO_THROW adds a suffix, so a concrete type tuple can produce at most two
+ * executable bodies. */
+typedef enum XaMonoThrowEffect {
+    XA_MONO_EFFECT_NONE = 0,
+    XA_MONO_EFFECT_MAY_THROW,
+    XA_MONO_EFFECT_NO_THROW,
+} XaMonoThrowEffect;
+
 /* ========== Name Mangling ========== */
 
 // Generate mangled name for a monomorphized function/class.
@@ -74,12 +86,14 @@ typedef struct {
     const char *mangled_name;  // Mangled name (heap-allocated)
     uint32_t rep_signature;    // Combined slot-type signature for ABI planning
     bool is_class_generic;     // true for class/struct generics
+    XaMonoThrowEffect throw_effect;
 } XaMonoInstance;
 
 typedef struct {
     XaMonoInstance *instances;
     int count;
     int capacity;
+    XaAnalyzer *analyzer;  // borrowed; enables call-site HOF effect specialization
 } XaMonoCollector;
 
 XR_FUNC void xa_mono_collector_init(XaMonoCollector *c);
@@ -99,6 +113,10 @@ XR_FUNC const char *xa_mono_collector_add(XaMonoCollector *c, const char *generi
 // Safe to call on programs with no generics (no-op).
 XR_FUNC void xa_mono_pass(AstNode *root, XrVMRuntime *isolate);
 
+// Analyzer-backed variant used by production compilation after the first
+// semantic pass. It splits generic HOFs into MAY_THROW / NO_THROW bodies.
+XR_FUNC void xa_mono_pass_with_analyzer(AstNode *root, XrVMRuntime *isolate, XaAnalyzer *analyzer);
+
 // AOT/module-graph variant: the current module may instantiate generic value
 // structs imported from dependency modules, and may rewrite imported generic
 // class/function namespace calls to specializations injected by their defining
@@ -106,5 +124,10 @@ XR_FUNC void xa_mono_pass(AstNode *root, XrVMRuntime *isolate);
 // a concrete local layout.
 XR_FUNC void xa_mono_pass_with_external_structs(AstNode *root, AstNode **external_roots,
                                                 int external_root_count, XrVMRuntime *isolate);
+XR_FUNC void xa_mono_pass_with_external_structs_and_analyzer(AstNode *root,
+                                                             AstNode **external_roots,
+                                                             int external_root_count,
+                                                             XrVMRuntime *isolate,
+                                                             XaAnalyzer *analyzer);
 
 #endif  // XANALYZER_MONO_H

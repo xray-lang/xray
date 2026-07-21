@@ -23,7 +23,7 @@
 | `scripts/run_byte_receiver_effect_audit.sh` | 204：`Array<byte>` / `Slice<byte>` receiver effect 与 203 local/owned/const/shared provenance 对齐 audit | env: `XRAY_BIN` | 任一正例或负例漂移=1；CTest `byte_receiver_effect_audit` 固定可复跑组合证据 | < 120s |
 | `scripts/check_source_unknown_convergence.py` | 202：source `unknown` 删除与 typed erasure 边界收敛前的 source/runtime/analyzer/IR/AOT/Task residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 | `scripts/check_source_unknown_aot_baseline.py` | 202：Task、ThreadLocal、Json encode 与 HTTP handler 的 AOT baseline fixture/expect 覆盖检查 | `--root <repo>`；可选 `--json` | baseline fixture 或关键断言缺失=1 | < 1s |
-| `scripts/check_error_effect_convergence.py` | 205：unchecked error-effect graph 收敛前的旧 error-set API、`MAY_THROW`、pending-error、LSP 与 `.xrd` 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
+| `scripts/check_error_effect_convergence.py` | 205/216：unchecked error-effect graph、typed throw bit 与 backend 重推导分类 inventory | `--root <repo>`；可选 `--json`、`--max-category NAME=N` | 默认输出 inventory；CTest 固定 `THROW_BIT_RECOMPUTE=0`，阻止 backend/CGen 重推导 typed bit | < 2s |
 | `scripts/check_param_mode_convergence.py` | 206：`value/in/ref/out` 参数契约、调用授权、`move/copy` 来源动作与旧 `XR_PARAM_*`/并行数组 residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 | `scripts/check_meta_ownership.py` | 218：编译器元级跨生命周期借用审计，分类 A `AST_PTR_INTO_IR`、B `PTR_ACROSS_GROWTH`、C `CGEN_BORROWED_NAME`（R-OWN-1..3） | `--root <repo>`；可选 `--json`、`--counts-json`、`--baseline <json>`、`--max-category NAME=N`、`--write-baseline <json>` | CTest `meta_ownership_inventory` 对三类均固定 `--max-category NAME=0`，发现回流即失败；standalone inventory 仍可用于审计 | < 2s |
 | `scripts/run_asan_focused.sh` | 218 防线 2：ASan+UBSan 聚焦门禁——C 单测 + 快速 backend-diff 子集（task190）+ xxhash 端口与已提交 bili-analysis-server fixture 的全量 AOT C 发射。`detect_leaks=0`（泄漏归 lsan_strict） | env: `XR_ASAN_JOBS`、`XR_ASAN_CTEST_REGEX`、`XR_ASAN_CTEST_EXCLUDE`、`XR_ASAN_DIFF_REGEX`、`XR_ASAN_XXHASH_MAIN`、`XR_ASAN_BILI_MAIN`、`XR_ASAN_SKIP_BUILD` | 必需 bili fixture 或任一已发现 workload/测试失败=非0；xxhash sibling 缺失时明确跳过；普通非 sanitizer 构建的 CTest 常驻 `asan_focused` | 增量测试面 <10min（全量 ASan 自举另计） |
@@ -173,8 +173,11 @@ contract；ThreadLocal 与 HTTP handler 当前仍作为后续替换目标被固�
 `AOT_MAY_THROW_CONSUMER`、`IR_ERROR_CHANNEL_CONSUMER`、
 `VM_RUNTIME_PENDING_ERROR_CHANNEL`、`LSP_ERROR_TOOLING_ENTRY`、
 `XRD_METADATA_GENERATOR_OR_LOADER`、`NATIVE_ERROR_CONTRACT_SURFACE` 和
-`TASK_TYPED_ERROR_RESIDUE`。默认模式只打印 inventory 并返回 0，便于 P0 固定旧 error-set、
-旧 MAY_THROW 和 tooling metadata 入口；后续 205 P1/P2/P8/P10 可按类别逐步增加 fail gate。
+`TASK_TYPED_ERROR_RESIDUE`。216 新增 `THROW_BIT_RECOMPUTE`：只跟踪 lowering 之后直接消费
+`XrFnThrowEffect`/`XR_FN_EFFECT_*` 并重建 source-level throw bit 的位置；CGen 对已经生成的
+`ERR_CHECK` 做低级操作折叠属于允许保留的 defense-in-depth，不计入该类别。默认模式仍输出
+完整 inventory；CTest 以 `--max-category THROW_BIT_RECOMPUTE=0` 固定零基线，阻止 backend/CGen
+重新形成 typed-bit 第二真源。
 
 ### `check_meta_ownership.py`
 

@@ -1639,6 +1639,14 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     // declare *more* parameters than target, since those would never get
     // a value.
     if (XR_TYPE_IS_FUNCTION(target) && XR_TYPE_IS_FUNCTION(source)) {
+        /* Effect covariance. POLY is an inference variable at this stage: a
+         * target POLY accepts either concrete effect, while a source POLY is
+         * provisionally accepted and resolved/rechecked after effect fixpoint. */
+        if (target->function.throw_effect == XR_FN_EFFECT_NO_THROW &&
+            source->function.throw_effect != XR_FN_EFFECT_NO_THROW &&
+            source->function.throw_effect != XR_FN_EFFECT_POLY) {
+            return false;
+        }
         if (target->function.is_c_abi != source->function.is_c_abi) {
             return false;
         }
@@ -1762,6 +1770,30 @@ static bool function_type_params_equal(XrType *a, XrType *b) {
     return true;
 }
 
+bool xr_type_function_signature_assignable(XrType *target, XrType *source) {
+    if (!target || !source || target->kind != XR_KIND_FUNCTION || source->kind != XR_KIND_FUNCTION)
+        return false;
+    if (target->function.param_count != source->function.param_count ||
+        target->function.min_params != source->function.min_params ||
+        target->function.is_variadic != source->function.is_variadic ||
+        target->function.is_c_abi != source->function.is_c_abi ||
+        !function_type_params_equal(target, source))
+        return false;
+    if (target->function.throw_effect == XR_FN_EFFECT_NO_THROW &&
+        source->function.throw_effect != XR_FN_EFFECT_NO_THROW &&
+        source->function.throw_effect != XR_FN_EFFECT_POLY)
+        return false;
+    if (!xr_type_equals(target->function.return_type, source->function.return_type))
+        return false;
+    for (int i = 0; i < target->function.param_count; i++) {
+        if (xr_type_function_param_mode(target, i) != xr_type_function_param_mode(source, i) ||
+            !xr_type_equals(xr_type_function_param_type(target, i),
+                            xr_type_function_param_type(source, i)))
+            return false;
+    }
+    return true;
+}
+
 // Check if two types are equal
 bool xr_type_equals(XrType *a, XrType *b) {
     if (a == b)
@@ -1830,6 +1862,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
         if (a->function.is_variadic != b->function.is_variadic)
             return false;
         if (a->function.is_c_abi != b->function.is_c_abi)
+            return false;
+        if (a->function.throw_effect != b->function.throw_effect)
             return false;
         if (!function_type_params_equal(a, b))
             return false;

@@ -5667,7 +5667,7 @@ static bool xa_function_assignment_mismatch(XrType *target_type, XrType *value_t
         return true;
     if (target_type->is_nullable || value_type->is_nullable)
         return !xa_typecheck_assignable(target_type, value_type);
-    return !xr_type_equals(target_type, value_type);
+    return !xr_type_function_signature_assignable(target_type, value_type);
 }
 
 XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *target_type,

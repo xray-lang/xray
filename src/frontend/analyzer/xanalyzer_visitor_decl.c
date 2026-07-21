@@ -2245,7 +2245,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         for (int i = 0; i < fn->param_count; i++) {
             XrParamNode *param = fn->params[i];
             param_types[i] = (param && param->type)
-                                 ? xr_tref_resolve_in_analyzer(ctx->analyzer, param->type)
+                                 ? xr_tref_resolve_parameter_in_analyzer(ctx->analyzer, param->type)
                                  : xr_type_new_unknown(NULL);
             param_names[i] = param ? param->name : NULL;
             if (param && param->is_rest)
@@ -2309,6 +2309,12 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
 
     XrType *fn_type = xr_type_new_function(ctx->analyzer->isolate, param_types, fn->param_count,
                                            return_type, has_rest);
+    if (fn_type) {
+        if (xa_decl_has_attribute(node, ATTR_NO_THROW))
+            xr_type_function_set_throw_effect(fn_type, XR_FN_EFFECT_NO_THROW);
+        else if (fn->body)
+            xr_type_function_set_throw_effect(fn_type, XR_FN_EFFECT_POLY);
+    }
     xa_set_function_type_params_from_ast(ctx, fn_type, fn->type_params, fn->type_param_count);
 
     // Set min_params for default parameter support
@@ -3037,9 +3043,10 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
                 continue;
             for (int j = 0; j < im->param_count; j++) {
                 XrParamNode *param = im->params ? im->params[j] : NULL;
-                param_types[j] = (param && param->type)
-                                     ? xr_tref_resolve_in_analyzer(ctx->analyzer, param->type)
-                                     : xr_type_new_unknown(NULL);
+                param_types[j] =
+                    (param && param->type)
+                        ? xr_tref_resolve_parameter_in_analyzer(ctx->analyzer, param->type)
+                        : xr_type_new_unknown(NULL);
             }
         }
         XrType *ret_type = im->return_type
@@ -3047,6 +3054,14 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
                                : xr_type_new_unit(NULL);
         mlinks->type = xr_type_new_function(ctx->analyzer->isolate, param_types, im->param_count,
                                             ret_type, false);
+        if (mlinks->type) {
+            for (int j = 0; j < im->attr_count; j++) {
+                if (im->attributes[j] && im->attributes[j]->kind == ATTR_NO_THROW) {
+                    xr_type_function_set_throw_effect(mlinks->type, XR_FN_EFFECT_NO_THROW);
+                    break;
+                }
+            }
+        }
         if (mlinks->type && im->params) {
             for (int j = 0; j < im->param_count; j++) {
                 XrParamNode *param = im->params[j];
@@ -3208,7 +3223,7 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
             XrType *found_sig = found_links ? found_links->type : NULL;
             if (!xa_interface_signature_has_recovery_type(required_sig) &&
                 !xa_interface_signature_has_recovery_type(found_sig) &&
-                !xr_type_equals(required_sig, found_sig)) {
+                !xr_type_function_signature_assignable(required_sig, found_sig)) {
                 char msg[512];
                 snprintf(msg, sizeof(msg),
                          "Class '%s' method '%s' does not match signature required by interface "
@@ -3246,6 +3261,77 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
             }
         }
     }
+}
+
+/* The initial structural conformance check runs before error-effect fixpoint,
+ * while implementation method types are deliberately POLY. Recheck only the
+ * covariant throw-effect dimension after Pass 3 has published final bits. */
+static void xa_validate_class_interface_throw_effects(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !node ||
+        (node->type != AST_CLASS_DECL && node->type != AST_STRUCT_DECL &&
+         node->type != AST_UNION_DECL))
+        return;
+    ClassDeclNode *cls = node->type == AST_CLASS_DECL    ? &node->as.class_decl
+                         : node->type == AST_STRUCT_DECL ? &node->as.struct_decl
+                                                         : &node->as.union_decl;
+    XaSymbol *class_symbol =
+        cls->symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, cls->symbol_id) : NULL;
+    XrClassInfo *class_info = class_symbol ? class_symbol->links.class_info : NULL;
+    if (!class_info || !class_info->interface_types)
+        return;
+
+    for (int i = 0; i < class_info->interface_count; i++) {
+        XrType *interface_type = class_info->interface_types[i];
+        const char *interface_name = interface_type ? interface_type->instance.class_name : NULL;
+        if (!interface_name || xa_is_builtin_interface_name(interface_name))
+            continue;
+        XaSymbol *interface_symbol = xa_scope_lookup(ctx->analyzer->current_scope, interface_name);
+        if (!interface_symbol)
+            interface_symbol = xa_analyzer_lookup_deep(ctx->analyzer, interface_name);
+        XaSymbolLinks *interface_links =
+            interface_symbol ? xa_analyzer_get_links(ctx->analyzer, interface_symbol) : NULL;
+        XrClassInfo *interface_info = interface_links ? interface_links->class_info : NULL;
+        if (!interface_info ||
+            (interface_links->type && interface_links->type->kind != XR_KIND_INTERFACE))
+            continue;
+        for (int j = 0; j < interface_info->method_count; j++) {
+            XaSymbol *required = interface_info->methods[j];
+            XaSymbol *found = required && required->name
+                                  ? xa_class_info_lookup_member(class_info, required->name)
+                                  : NULL;
+            if (!required || !found || found->kind != XA_SYM_METHOD)
+                continue;
+            XrType *required_signature = xa_interface_required_signature(
+                ctx, interface_links, interface_type, required->links.type);
+            XrType *found_signature = found->links.type;
+            if (!required_signature || !found_signature ||
+                required_signature->kind != XR_KIND_FUNCTION ||
+                found_signature->kind != XR_KIND_FUNCTION ||
+                required_signature->function.throw_effect != XR_FN_EFFECT_NO_THROW ||
+                found_signature->function.throw_effect == XR_FN_EFFECT_NO_THROW)
+                continue;
+            char message[512];
+            snprintf(message, sizeof(message),
+                     "Class '%s' method '%s' may throw but interface '%s' requires signature '%s'",
+                     class_info->name ? class_info->name : "?", required->name, interface_name,
+                     xr_type_to_string(required_signature));
+            XrLocation location = {.file = ctx->file_path, .line = found->location.line};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, message,
+                                       &location);
+        }
+    }
+}
+
+void xa_validate_interface_throw_effects(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !node)
+        return;
+    if (node->type == AST_PROGRAM) {
+        for (int i = 0; i < node->as.program.count; i++)
+            xa_validate_interface_throw_effects(ctx, node->as.program.statements[i]);
+        return;
+    }
+    xa_validate_class_interface_throw_effects(ctx, node);
 }
 
 void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
@@ -3880,9 +3966,10 @@ skip_layout:
                 }
                 for (int j = 0; param_types && j < md->param_count; j++) {
                     XrParamNode *param = md->params ? md->params[j] : NULL;
-                    param_types[j] = (param && param->type)
-                                         ? xr_tref_resolve_in_analyzer(ctx->analyzer, param->type)
-                                         : xr_type_new_unknown(NULL);
+                    param_types[j] =
+                        (param && param->type)
+                            ? xr_tref_resolve_parameter_in_analyzer(ctx->analyzer, param->type)
+                            : xr_type_new_unknown(NULL);
                     param_names[j] = param ? param->name : NULL;
 
                     // Warn: method parameter missing type annotation (skip constructor)
@@ -3955,8 +4042,14 @@ skip_layout:
 
             XrType *method_type = xr_type_new_function(ctx->analyzer->isolate, param_types,
                                                        md->param_count, ret_type, md->is_variadic);
-            if (method_type)
+            if (method_type) {
                 method_type->function.min_params = md->required_count;
+                xr_type_function_set_throw_effect(method_type,
+                                                  xa_decl_has_attribute(method, ATTR_NO_THROW)
+                                                      ? XR_FN_EFFECT_NO_THROW
+                                                  : md->body ? XR_FN_EFFECT_POLY
+                                                             : XR_FN_EFFECT_MAY_THROW);
+            }
 
             if (method_type && md->params) {
                 for (int j = 0; j < md->param_count; j++) {
@@ -4243,7 +4336,7 @@ static bool method_types_equal_for_override(XaSymbol *method, XaSymbol *parent_m
         return false;
     if (method_type->kind != XR_KIND_FUNCTION || parent_type->kind != XR_KIND_FUNCTION)
         return false;
-    return xr_type_equals(method_type, parent_type);
+    return xr_type_function_signature_assignable(parent_type, method_type);
 }
 
 static XaSymbol *find_parent_override_target(XrClassInfo *info, XaSymbol *method,

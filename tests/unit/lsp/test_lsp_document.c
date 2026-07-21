@@ -864,6 +864,26 @@ TEST(param_mode_inlay_hints_describe_modes) {
     xlsp_server_free(server);
 }
 
+TEST(throw_effect_inlay_hints_show_inferred_result) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    const char *content = "enum HintError { Boom }\n"
+                          "fn pure(value: int) -> int { return value + 1 }\n"
+                          "fn fallible() { throw HintError.Boom }\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///throw_effect_inlay.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspRange range = {{0, 0}, {10, 0}};
+    XrJsonValue *hints = xlsp_analyze_inlay_hints(server, doc, range);
+    ASSERT(hints != NULL);
+    ASSERT(json_array_find_label_tooltip(hints, " · no_throw ✓", "inferred error effect") != NULL);
+    ASSERT(json_array_find_label_tooltip(hints, " · may throw {HintError}",
+                                         "inferred error effect") != NULL);
+    xjson_free(hints);
+    xlsp_server_free(server);
+}
+
 // ============================================================================
 // Code Action Quick-Fix Tests (concurrency diagnostics)
 // ============================================================================
@@ -1014,6 +1034,7 @@ int main(int argc, char **argv) {
     RUN_TEST(block_quoted_literals_preserve_lsp_positions_and_semantic_boundaries);
     RUN_TEST(block_import_path_uses_shared_quoted_literal_decoder);
     RUN_TEST(param_mode_inlay_hints_describe_modes);
+    RUN_TEST(throw_effect_inlay_hints_show_inferred_result);
 
     printf("\nCode action concurrency quick-fix tests:\n");
     RUN_TEST(code_action_go_capture_to_shared);

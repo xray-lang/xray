@@ -121,6 +121,20 @@ static void test_class_implements_all_methods_no_error(void) {
     ASSERT(n == 0);
 }
 
+static void test_no_throw_interface_accepts_pure_implementation(void) {
+    const char *src = "interface PureActionOk {\n"
+                      "    @no_throw\n"
+                      "    run(value: int) -> int\n"
+                      "}\n"
+                      "class PureActionImpl implements PureActionOk {\n"
+                      "    run(value: int) -> int { return value + 1 }\n"
+                      "}\n";
+    int total = 0;
+    int n = count_diagnostics(src, XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, &total);
+    ASSERT(n == 0);
+    ASSERT(total == 0);
+}
+
 static void test_class_missing_method_reports_error(void) {
     const char *src = "interface Greeter {\n"
                       "    greet() -> string\n"
@@ -305,6 +319,7 @@ int main(void) {
 
     printf("User-defined interface conformance:\n");
     RUN_TEST(class_implements_all_methods_no_error);
+    RUN_TEST(no_throw_interface_accepts_pure_implementation);
     RUN_TEST(class_missing_method_reports_error);
     RUN_TEST(class_missing_property_reports_error);
     RUN_TEST(class_property_as_getter_accepted);

@@ -649,6 +649,24 @@ TEST(type_function_complex) {
     ASSERT(XR_TYPE_IS_ARRAY(fn->function.return_type));
 }
 
+TEST(type_function_throw_effect_covariance) {
+    XrType *params[] = {xr_type_new_int(NULL)};
+    XrType *may = xr_type_new_function(g_isolate, params, 1, xr_type_new_int(NULL), false);
+    XrType *no = xr_type_copy(g_isolate, may);
+    XrType *poly = xr_type_copy(g_isolate, may);
+    ASSERT(may != NULL && no != NULL && poly != NULL);
+    ASSERT(xr_type_function_set_throw_effect(no, XR_FN_EFFECT_NO_THROW));
+    ASSERT(xr_type_function_set_throw_effect(poly, XR_FN_EFFECT_POLY));
+
+    ASSERT(!xr_type_equals(may, no));
+    ASSERT(!xr_type_equals(no, poly));
+    ASSERT(xr_type_assignable(may, no));
+    ASSERT(!xr_type_assignable(no, may));
+    ASSERT(xr_type_assignable(no, poly));
+    ASSERT(xr_type_assignable(may, poly));
+    ASSERT(strstr(xr_type_to_string(no), "@no_throw") != NULL);
+}
+
 TEST(type_void_never) {
     XrType *t_void = xr_type_new_unit(NULL);
     XrType *t_never = xr_type_new_never(NULL);
@@ -1102,6 +1120,91 @@ TEST(analyzer_throw_effect_bit_matches_effect_summary) {
     check_throw_effect_consistency(a, "guarded", -1);
     /* Dynamic (function-value) call is incomplete → fail-closed MAY_THROW. */
     check_throw_effect_consistency(a, "viaDynamic", XR_FN_EFFECT_MAY_THROW);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_no_throw_constraints_accept_proven_callbacks) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "@no_throw\n"
+                         "fn increment(value: int) -> int { return value + 1 }\n"
+                         "fn applyPure(callback: @no_throw (int) -> int, value: int) -> int {\n"
+                         "  return callback(value)\n"
+                         "}\n"
+                         "fn main() -> int {\n"
+                         "  const local: @no_throw (int) -> int = fn(value: int) -> int {\n"
+                         "    return value * 2\n"
+                         "  }\n"
+                         "  return applyPure(increment, local(2))\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "no_throw_constraints.xr", program);
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(a, &diagnostic_count);
+    ASSERT(diagnostic_count == 1);
+    ASSERT(analyzer_diag_contains(a, "has not rejected any may-throw value"));
+    check_throw_effect_consistency(a, "increment", XR_FN_EFFECT_NO_THROW);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_no_throw_lints_redundant_try_catch) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "@no_throw\n"
+                         "fn guarded(value: int) -> int {\n"
+                         "  try {\n"
+                         "    return value + 1\n"
+                         "  } catch (e) {\n"
+                         "    return value\n"
+                         "  }\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "no_throw_redundant_try.xr", program);
+    ASSERT(analyzer_diag_contains(a, "redundant try/catch in @no_throw function"));
+    check_throw_effect_consistency(a, "guarded", XR_FN_EFFECT_NO_THROW);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source =
+        "enum HofEffectErr { Boom }\n"
+        "fn apply<T>(callback: (T) -> T, value: T) -> T { return callback(value) }\n"
+        "fn plusOne(value: int) -> int { return value + 1 }\n"
+        "fn plusTwo(value: int) -> int { return value + 2 }\n"
+        "fn checked(value: int) -> int {\n"
+        "  if (value < 0) { throw HofEffectErr.Boom }\n"
+        "  return value\n"
+        "}\n"
+        "fn viaPureOne(value: int) -> int { return apply<int>(plusOne, value) }\n"
+        "fn viaPureTwo(value: int) -> int { return apply<int>(plusTwo, value) }\n"
+        "fn viaChecked(value: int) -> int { return apply<int>(checked, value) }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+
+    xa_analyzer_analyze(a, "hof_effect_specialization.xr", program);
+    xa_mono_pass_with_analyzer(program, g_isolate, a);
+    xa_analyzer_analyze(a, "hof_effect_specialization.xr", program);
+
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(a, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
+    check_throw_effect_consistency(a, "apply$i64$nothrow", XR_FN_EFFECT_NO_THROW);
+    check_throw_effect_consistency(a, "apply$i64", XR_FN_EFFECT_MAY_THROW);
+    check_throw_effect_consistency(a, "viaPureOne", XR_FN_EFFECT_NO_THROW);
+    check_throw_effect_consistency(a, "viaPureTwo", XR_FN_EFFECT_NO_THROW);
+    check_throw_effect_consistency(a, "viaChecked", XR_FN_EFFECT_MAY_THROW);
+
+    const XaEffectSummary *checked = analyzer_function_effect_summary(a, "apply$i64");
+    ASSERT(checked != NULL);
+    ASSERT(effect_summary_has_enum_named(a, checked, "HofEffectErr"));
 
     xa_analyzer_free(a);
     setup_pool();
@@ -5512,6 +5615,9 @@ int main(void) {
     RUN_TEST(analyzer_scope_management);
     RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);
     RUN_TEST(analyzer_throw_effect_bit_matches_effect_summary);
+    RUN_TEST(analyzer_no_throw_constraints_accept_proven_callbacks);
+    RUN_TEST(analyzer_no_throw_lints_redundant_try_catch);
+    RUN_TEST(analyzer_generic_hof_splits_throw_effect_dimension);
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_error_effect_propagates_const_function_value_aliases);
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
@@ -5542,6 +5648,7 @@ int main(void) {
     printf("\nAdditional type tests:\n");
     RUN_TEST(type_class_instance);
     RUN_TEST(type_function_complex);
+    RUN_TEST(type_function_throw_effect_covariance);
     RUN_TEST(type_void_never);
     RUN_TEST(type_rejects_invalid_counts);
     RUN_TEST(type_function_copy_preserves_metadata);

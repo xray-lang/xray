@@ -68,6 +68,7 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv);
 XR_FUNC int cmd_test(const XrCliInvocation *inv);
 XR_FUNC int cmd_check(const XrCliInvocation *inv);
 XR_FUNC int cmd_fmt(const XrCliInvocation *inv);
+XR_FUNC int cmd_fix(const XrCliInvocation *inv);
 XR_FUNC int cmd_compile(const XrCliInvocation *inv);
 XR_FUNC int cmd_build(const XrCliInvocation *inv);
 XR_FUNC int cmd_deps(const XrCliInvocation *inv);
@@ -96,6 +97,7 @@ void xr_cli_register_all_handlers(void) {
     xr_cli_register_handler("test", cmd_test);
     xr_cli_register_handler("check", cmd_check);
     xr_cli_register_handler("fmt", cmd_fmt);
+    xr_cli_register_handler("fix", cmd_fix);
     xr_cli_register_handler("compile", cmd_compile);
     xr_cli_register_handler("build", cmd_build);
     xr_cli_register_handler("deps", cmd_deps);
