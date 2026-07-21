@@ -8,7 +8,11 @@
     "arrow",
     "closure",
     "lambda",
-    "params"
+    "params",
+    "no_throw",
+    "no_suspend",
+    "zero_cost",
+    "no_alloc"
   ],
   "sections": [
     {
@@ -49,8 +53,15 @@
       ]
     },
     {
+      "heading": "Checked system assertions",
+      "markdown": "- `@no_alloc`, `@no_throw`, and `@no_suspend` are analyzer-proven, fail-closed contracts\n- `@zero_cost` is an AOT generated-shape contract; its optional allow list names explicit residue exemptions\n- `@no_throw` and `@no_suspend` may prefix function types to constrain callbacks",
+      "fences": [
+        "decl-system-assertions"
+      ]
+    },
+    {
       "heading": "Higher-order functions",
-      "markdown": "- Function types use `fn(T1, T2) -> R` in type position\n- Function values can be passed to callbacks such as `map`, `filter`, and `reduce`\n- Closure capture rules are described in the scoping and concurrency sections"
+      "markdown": "- Function types use `(T1, T2) -> R` in type position, optionally prefixed by `@no_throw` and/or `@no_suspend`\n- Function values can be passed to callbacks such as `map`, `filter`, and `reduce`\n- Unconstrained callback parameters are effect-polymorphic; explicit effect prefixes are fixed constraints\n- Closure capture rules are described in the scoping and concurrency sections"
     }
   ]
 }

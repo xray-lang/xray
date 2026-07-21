@@ -3559,7 +3559,8 @@ skip_interfaces:
                                         : xr_type_new_unknown(NULL);
             } else if (fd->initializer) {
                 // Infer type from initializer
-                field_links->type = xa_visit_infer(ctx, fd->initializer);
+                field_links->type =
+                    xa_function_value_storage_type(ctx, xa_visit_infer(ctx, fd->initializer));
             } else {
                 field_links->type = xr_type_new_unknown(NULL);
                 // Warn: class field missing type annotation and initializer

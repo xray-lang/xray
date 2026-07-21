@@ -1171,6 +1171,36 @@ TEST(analyzer_no_throw_lints_redundant_try_catch) {
     setup_pool();
 }
 
+TEST(analyzer_stored_function_value_defaults_may_throw) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "enum StoredEffectErr { Boom }\n"
+                         "fn pure(value: int) -> int { return value + 1 }\n"
+                         "fn checked(value: int) -> int {\n"
+                         "  if (value < 0) { throw StoredEffectErr.Boom }\n"
+                         "  return value\n"
+                         "}\n"
+                         "var callback = pure\n"
+                         "callback = checked\n"
+                         "print(callback(1))\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "stored_function_effect.xr", program);
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(a, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
+
+    XaSymbol *callback = analyzer_function_symbol(a, "callback");
+    ASSERT(callback != NULL);
+    ASSERT(callback->links.type != NULL);
+    ASSERT(callback->links.type->kind == XR_KIND_FUNCTION);
+    ASSERT(callback->links.type->function.throw_effect == XR_FN_EFFECT_MAY_THROW);
+    check_throw_effect_consistency(a, "pure", XR_FN_EFFECT_NO_THROW);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -5617,6 +5647,7 @@ int main(void) {
     RUN_TEST(analyzer_throw_effect_bit_matches_effect_summary);
     RUN_TEST(analyzer_no_throw_constraints_accept_proven_callbacks);
     RUN_TEST(analyzer_no_throw_lints_redundant_try_catch);
+    RUN_TEST(analyzer_stored_function_value_defaults_may_throw);
     RUN_TEST(analyzer_generic_hof_splits_throw_effect_dimension);
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_error_effect_propagates_const_function_value_aliases);

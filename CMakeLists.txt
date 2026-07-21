@@ -2482,6 +2482,7 @@ if(BUILD_TESTS)
         NAME aot_standalone_suite
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_AOT_TOMBSTONE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/TOMBSTONES.tsv
+                XRAY_AOT_TOMBSTONE_MAX=10
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_tests.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2507,6 +2508,33 @@ if(BUILD_TESTS)
         LABELS "meta;surface;drift;task-220"
         PROCESSORS 1
         TIMEOUT 60
+    )
+
+    # P0: semantic contract anchor digests and CONTRACT-CHANGE trailers. The
+    # self-test injects both an anchor drift and a missing trailer to prove the
+    # gate fails closed independently of the live repository state.
+    add_test(
+        NAME contract_freeze
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_contract_freeze.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(contract_freeze PROPERTIES
+        LABELS "meta;contracts;freeze;task-220"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME contract_freeze_injection
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_contract_freeze.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(contract_freeze_injection PROPERTIES
+        LABELS "meta;contracts;freeze;task-220"
+        PROCESSORS 1
+        TIMEOUT 30
     )
 endif()
 

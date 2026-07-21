@@ -1,7 +1,8 @@
-// 126-P3: error_set is advisory metadata, not part of the function type
-// identity. Two functions with the same signature but different inferred error
-// sets share the same function type, so they unify in a typed function array
-// and are interchangeable as `fn(int) -> int` values.
+// 126-P3 / 216: the concrete error_set is analyzer metadata, not part of
+// function type identity. Task 216 adds only a typed throw-effect bit and the
+// opt-in @no_throw constraint; it does not put enum/variant sets back into the
+// type. Functions with the same signature but different inferred error sets
+// therefore still unify in a may-throw `(int) -> int` array.
 
 enum E { A, B }
 

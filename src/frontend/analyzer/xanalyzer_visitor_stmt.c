@@ -8385,7 +8385,10 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
             }
             var_type = links->declared_type;
         } else {
-            var_type = init_type;
+            /* Unannotated stored function values are a merge boundary. Keep
+             * the initializer node's precise bit for direct evidence, but give
+             * the binding an independent fail-closed MAY_THROW function type. */
+            var_type = xa_function_value_storage_type(ctx, init_type);
             // Empty array literal without type annotation: require explicit type
             if (var->initializer && var->initializer->type == AST_ARRAY_LITERAL &&
                 var->initializer->as.array_literal.count == 0 && XR_TYPE_IS_ARRAY(init_type) &&

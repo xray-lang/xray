@@ -11,6 +11,8 @@
 #
 # Governance rule: tombstones only DECREASE (只减不增). A case that starts passing
 # must be pruned from this list (the gate reports such cases as "resolved").
+# CTest pins XRAY_AOT_TOMBSTONE_MAX=10, the adoption baseline, so adding an
+# eleventh entry fails even when that new failure is listed here.
 # Stale-API cases already cleared in this phase (rewritten to the current surface,
 # no longer failing, therefore NOT tombstoned): basic/builtin_methods,
 # basic/collection_methods, basic/span_static_surface, basic/struct_native_fields,

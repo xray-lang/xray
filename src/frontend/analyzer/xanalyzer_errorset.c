@@ -1419,7 +1419,14 @@ static bool is_dynamic_function_call_target(XaAnalyzer *analyzer, AstNode *calle
         (resolved_sym->kind == XA_SYM_FUNCTION || resolved_sym->kind == XA_SYM_METHOD))
         return false;
     XrType *callee_type = xa_analyzer_get_node_type(analyzer, callee);
-    return callee_type && XR_TYPE_IS_FUNCTION(callee_type);
+    if (callee_type && XR_TYPE_IS_FUNCTION(callee_type))
+        return true;
+    /* The expression side table can be absent on a control-flow merge even
+     * though the resolved variable/parameter retains its function type. Do not
+     * turn that cache miss into a false NO_THROW result: a non-declaration
+     * function symbol without an exact target is dynamic and therefore
+     * incomplete (fail-closed). */
+    return resolved_sym && symbol_has_function_type(resolved_sym);
 }
 
 static bool es_walk_function_expr_body(ErrorSetCtx *ctx, AstNode *function_expr) {

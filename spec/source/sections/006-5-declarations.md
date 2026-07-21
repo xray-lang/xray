@@ -358,6 +358,38 @@ print(add(19, 23))        // xray 内部仍是普通函数调用
 - `@c_export` 定义函数 ABI wrapper；`xray build --native --c-header FILE` 可为这些 wrapper 生成 C 原型头文件，`xray build --native --shared --c-header FILE` 可生成 native shared library 和匹配头文件。
 - `--shared` 当前只支持无需 Xray runtime 初始化的 scalar / raw pointer 导出；runtime-backed 特性、managed ownership、aggregate by-value 和初始化/关闭策略仍由后续 FFI 任务定义。
 
+#### 5.2.11 系统断言注解
+
+系统断言注解是**受检契约**，不是优化提示。编译器必须从对应证明源证明断言成立；证明失败或目标不确定时均 fail-closed，直接报编译错误。
+
+```xray @id=decl-system-assertions
+@no_throw
+@no_suspend
+fn addOne(x: int) -> int {
+    return x + 1
+}
+
+fn applySync(f: @no_throw @no_suspend (int) -> int, x: int) -> int {
+    return f(x)
+}
+
+@zero_cost
+fn hotAdd(x: int, y: int) -> int {
+    return x + y
+}
+```
+
+| 注解 | 证明阶段 | 契约 |
+|--|--|--|
+| `@no_alloc` | analyzer | 函数及其传递调用不分配；不可证明即拒绝 |
+| `@no_throw` | analyzer error-effect | 函数不会通过值返回错误通道抛出；不引入 `throws` 声明。它也可前缀函数类型，约束回调值必须已证明 no-throw |
+| `@no_suspend` | analyzer suspend-effect | 函数不会挂起；它也可前缀函数类型。`@interrupt` 与同步 `@c_export` 边界隐含该约束 |
+| `@zero_cost` | AOT CGen | 生成形状不得残留 runtime helper、分配、error-check、bounds panic、boxing 或 lanes aggregate 往返 |
+
+裸 `@zero_cost` 禁止全部六类残留。确有契约化边界时，可显式豁免一部分：`@zero_cost(allow: bounds, box)`；可用类别仅为 `runtime`、`alloc`、`error`、`bounds`、`box`、`lanes`。该注解只约束 AOT 生成形状，不改变 VM 语义，也不保证耗时阈值。
+
+`@no_throw` 断言本身不制造优化机会：对已经推断为 no-throw 的直接调用，加或不加断言必须生成相同 C。性能来自分析得到的类型化 throw-effect bit，使 lowering 构造性地不生成无用的 error-check。未标注的函数值存入变量或字段时采用 may-throw 上界；只有显式 `@no_throw (...) -> R` 槽位才保留并强制 no-throw 约束。
+
 ### 5.3 `class` 声明
 
 ```ebnf
@@ -1267,6 +1299,38 @@ Rules:
 - Managed xray values such as `string`, class instances, Array/Map/Set, ordinary closures, and by-value aggregates are not exported directly today. To share struct memory with C, pass an address through `Ptr<T>` / `MutPtr<T>`.
 - `@c_export` defines the function ABI wrapper; `xray build --native --c-header FILE` can emit a C prototype header for those wrappers, and `xray build --native --shared --c-header FILE` can emit a native shared library with a matching header.
 - `--shared` currently supports only scalar / raw pointer exports that do not require Xray runtime initialization; runtime-backed features, managed ownership, aggregate by-value, and initialization/shutdown policy remain future FFI work.
+
+#### 5.2.11 System Assertion Attributes
+
+System assertion attributes are **checked contracts**, not optimization hints. The compiler must prove each assertion from its designated evidence source; a failed or indeterminate proof is a compile error.
+
+```xray @id=decl-system-assertions
+@no_throw
+@no_suspend
+fn addOne(x: int) -> int {
+    return x + 1
+}
+
+fn applySync(f: @no_throw @no_suspend (int) -> int, x: int) -> int {
+    return f(x)
+}
+
+@zero_cost
+fn hotAdd(x: int, y: int) -> int {
+    return x + y
+}
+```
+
+| Attribute | Proof stage | Contract |
+|--|--|--|
+| `@no_alloc` | analyzer | The function and its transitive callees do not allocate; an unprovable case is rejected |
+| `@no_throw` | analyzer error effect | The function does not raise through the value-return error channel; this does not add a `throws` declaration. It may also prefix a function type, requiring a callback value proven no-throw |
+| `@no_suspend` | analyzer suspend effect | The function does not suspend; it may also prefix a function type. `@interrupt` and synchronous `@c_export` boundaries imply this constraint |
+| `@zero_cost` | AOT CGen | The generated shape contains no runtime-helper, allocation, error-check, bounds-panic, boxing, or lanes aggregate residue |
+
+A bare `@zero_cost` forbids all six residue categories. A contract boundary may explicitly exempt some categories, for example `@zero_cost(allow: bounds, box)`; the only category names are `runtime`, `alloc`, `error`, `bounds`, `box`, and `lanes`. The attribute constrains AOT output shape only: it does not change VM semantics and does not promise a timing threshold.
+
+`@no_throw` itself creates no optimization opportunity: for a direct call already inferred no-throw, adding or removing the assertion must produce identical C. The optimization comes from the analyzer-owned typed throw-effect bit, which lets lowering constructively omit unnecessary error checks. An unannotated function value stored in a variable or field is widened to a may-throw upper bound; only an explicit `@no_throw (...) -> R` slot preserves and enforces the no-throw constraint.
 
 ### 5.3 `class` declaration
 

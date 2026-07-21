@@ -2360,6 +2360,38 @@ print(add(19, 23))        // xray 内部仍是普通函数调用
 - `@c_export` 定义函数 ABI wrapper；`xray build --native --c-header FILE` 可为这些 wrapper 生成 C 原型头文件，`xray build --native --shared --c-header FILE` 可生成 native shared library 和匹配头文件。
 - `--shared` 当前只支持无需 Xray runtime 初始化的 scalar / raw pointer 导出；runtime-backed 特性、managed ownership、aggregate by-value 和初始化/关闭策略仍由后续 FFI 任务定义。
 
+#### 5.2.11 系统断言注解
+
+系统断言注解是**受检契约**，不是优化提示。编译器必须从对应证明源证明断言成立；证明失败或目标不确定时均 fail-closed，直接报编译错误。
+
+```xray
+@no_throw
+@no_suspend
+fn addOne(x: int) -> int {
+    return x + 1
+}
+
+fn applySync(f: @no_throw @no_suspend (int) -> int, x: int) -> int {
+    return f(x)
+}
+
+@zero_cost
+fn hotAdd(x: int, y: int) -> int {
+    return x + y
+}
+```
+
+| 注解 | 证明阶段 | 契约 |
+|--|--|--|
+| `@no_alloc` | analyzer | 函数及其传递调用不分配；不可证明即拒绝 |
+| `@no_throw` | analyzer error-effect | 函数不会通过值返回错误通道抛出；不引入 `throws` 声明。它也可前缀函数类型，约束回调值必须已证明 no-throw |
+| `@no_suspend` | analyzer suspend-effect | 函数不会挂起；它也可前缀函数类型。`@interrupt` 与同步 `@c_export` 边界隐含该约束 |
+| `@zero_cost` | AOT CGen | 生成形状不得残留 runtime helper、分配、error-check、bounds panic、boxing 或 lanes aggregate 往返 |
+
+裸 `@zero_cost` 禁止全部六类残留。确有契约化边界时，可显式豁免一部分：`@zero_cost(allow: bounds, box)`；可用类别仅为 `runtime`、`alloc`、`error`、`bounds`、`box`、`lanes`。该注解只约束 AOT 生成形状，不改变 VM 语义，也不保证耗时阈值。
+
+`@no_throw` 断言本身不制造优化机会：对已经推断为 no-throw 的直接调用，加或不加断言必须生成相同 C。性能来自分析得到的类型化 throw-effect bit，使 lowering 构造性地不生成无用的 error-check。未标注的函数值存入变量或字段时采用 may-throw 上界；只有显式 `@no_throw (...) -> R` 槽位才保留并强制 no-throw 约束。
+
 ### 5.3 `class` 声明
 
 ```ebnf
@@ -3310,6 +3342,8 @@ Xray 的错误处理分为两个严格分离的通道：
 - **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 PanicInfo 对象。
 - **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
 - **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
+- **错误集合不进入函数类型**：具体错误 enum/variant 集合仍由 analyzer effect database 维护；函数类型只携带内部三态 throw-effect bit（`UNKNOWN` / `MAY_THROW` / `NO_THROW`），供安全约束和构造性代码生成消费。
+- **`@no_throw` 是可选断言**：用户无需为普通函数声明错误效应；只有希望冻结 no-throw 契约或约束回调时才标注。未知或不完整证明按 may-throw 处理。
 - **`defer` 替代 `finally`**：xray 没有 `finally` 关键字，资源清理统一用函数作用域的 `defer`（Go 模型）。
 
 ### 8.1 值返回错误通道
@@ -3814,6 +3848,8 @@ var result = identity<float>(0)            // 0 默认 int，强制 float
 - class / struct 泛型不做 rep-sharing 会增加代码和元数据体积（大致按“类型组合数 × 类体积”增长），但换来精确布局、调试类型名保真和按类型特化；未来体积敏感场景可考虑对纯 PTR class 泛型增加显式 opt-in rep-sharing。
 - 内置特化容器（`Array<int>`、`Array<byte>`）进一步避免装箱开销。
 - 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
+
+**高阶函数的错误效应特化**：未带 `@no_throw` 的回调参数默认是 effect-polymorphic。单态化会按实参回调的 throw-effect bit 选择 `NO_THROW` 或 `MAY_THROW` 版本，使已证明 no-throw 的回调路径不生成无用 error-check；未知动态目标保守进入 may-throw 版本。显式 `@no_throw (T) -> R` 参数是固定约束，而不是新的特化维度：传入 may-throw 或无法证明的函数值会在调用点被拒绝。
 
 **当前缓项**：
 - 声明点方差标注（`out T` / `in T`）、默认类型参数和 `where` 子句本轮不提供；容器默认保持不变性，这是 AOT 友好且安全的基线。
@@ -5474,7 +5510,8 @@ PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | Tupl
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= '(' TypeList? ')' '->' Type
+FunctionType ::= FunctionEffect* '(' TypeList? ')' '->' Type
+FunctionEffect ::= '@no_throw' | '@no_suspend'
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?
@@ -5730,7 +5767,9 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // 例如 @c_export("sym")、@section(".text")
+AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+AttrArgList ::= ArgList | 'allow' ':' Identifier (',' Identifier)*
+              // 例如 @c_export("sym")、@zero_cost(allow: bounds, box)
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

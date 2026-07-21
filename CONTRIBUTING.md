@@ -21,3 +21,26 @@ ctest --test-dir build --output-on-failure -R asan_focused
 ```
 
 Generated C is checked by the always-on W1-W4 well-formedness verifier before it is written or passed to a toolchain. A verifier failure is an internal compiler error and must be fixed at its source; there is no bypass switch.
+
+## Semantic contract changes
+
+Language syntax and API shape may be replaced directly, but the semantic layer
+in `contracts/` is versioned by git and guarded by anchor digests. A commit that
+changes a contract or one of its listed anchors must:
+
+1. update the affected contract text and `anchor-sha256` records;
+2. include one trailer per contract:
+
+   ```text
+   CONTRACT-CHANGE: contracts/<file>.md <one-line reason>
+   ```
+
+3. state which differential cases, KATs, generated-shape gates, and ports were
+   rerun, regenerated, or intentionally retired; and
+4. run `ctest --test-dir build --output-on-failure -R contract_freeze` after
+   committing, plus the affected semantic gates.
+
+Implementation-only edits outside registered anchors do not need a trailer.
+The gate deliberately defers trailer validation in a dirty working tree because
+the final commit message does not exist yet; clean post-commit and CI runs are
+fail-closed.

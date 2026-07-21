@@ -100,6 +100,21 @@ XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *no
 XR_FUNC void xa_report_unknown_stdlib_member(XaInferContext *ctx, AstNode *node,
                                              const char *module_name, const char *member_name);
 
+/* Task 216: a function item can carry a precise inferred effect, but storing it
+ * in an unannotated variable/field creates a merge point whose type defaults to
+ * MAY_THROW. Copy before widening so the declaration symbol's precise function
+ * type remains unchanged. An explicit @no_throw function type bypasses this
+ * helper by using its declared type. */
+static inline XrType *xa_function_value_storage_type(XaInferContext *ctx, XrType *inferred) {
+    if (!ctx || !ctx->analyzer || !inferred || inferred->kind != XR_KIND_FUNCTION)
+        return inferred;
+    XrType *stored = xr_type_copy(ctx->analyzer->isolate, inferred);
+    if (!stored)
+        return xr_type_new_error(ctx->analyzer->isolate);
+    xr_type_function_set_throw_effect(stored, XR_FN_EFFECT_MAY_THROW);
+    return stored;
+}
+
 static inline bool xa_freestanding_type_requires_tagged_value(const XrType *type) {
     if (!type)
         return false;
