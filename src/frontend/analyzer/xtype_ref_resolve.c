@@ -1033,7 +1033,9 @@ static int known_type_head_arity(XrVMRuntime *X, const char *name) {
     if (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SPAN) == 0 ||
         strcmp(name, "Set") == 0 || strcmp(name, "WeakSet") == 0 || strcmp(name, "Channel") == 0 ||
         strcmp(name, "Task") == 0 || strcmp(name, "CoroLocal") == 0 || strcmp(name, "Ptr") == 0 ||
-        strcmp(name, "MutPtr") == 0 || strcmp(name, "CFn") == 0)
+        strcmp(name, "MutPtr") == 0 || strcmp(name, "CFn") == 0 ||
+        strcmp(name, XR_ENUM_VARIANT_TYPE_NAME) == 0 ||
+        strcmp(name, XR_ENUM_PAYLOAD_FIELD_TYPE_NAME) == 0)
         return 1;
     if (strcmp(name, "Map") == 0 || strcmp(name, "WeakMap") == 0)
         return 2;
@@ -1169,6 +1171,11 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
         } else {
             result = xr_type_new_error(NULL);
         }
+    } else if ((strcmp(name, XR_ENUM_VARIANT_TYPE_NAME) == 0 ||
+                strcmp(name, XR_ENUM_PAYLOAD_FIELD_TYPE_NAME) == 0) &&
+               nargs == 1 && args[0] && args[0]->kind == XR_KIND_ENUM &&
+               args[0]->enum_type.layout) {
+        result = xr_type_new_enum_metadata(X, name, args[0]);
     } else if (xa_is_builtin_interface_name(name)) {
         /* Built-in interface with type args: e.g. Iterable<int>. Create a fresh
          * generic interface type via the current isolate. */
@@ -1644,6 +1651,11 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
             result = report_generic_type_argument_error(analyzer, name,
                                                         "requires a function type argument");
         }
+    } else if ((strcmp(name, XR_ENUM_VARIANT_TYPE_NAME) == 0 ||
+                strcmp(name, XR_ENUM_PAYLOAD_FIELD_TYPE_NAME) == 0) &&
+               nargs == 1 && args[0] && args[0]->kind == XR_KIND_ENUM &&
+               args[0]->enum_type.layout) {
+        result = xr_type_new_enum_metadata(X, name, args[0]);
     } else if (xa_is_builtin_interface_name(name)) {
         result = xr_type_new_generic_interface(X, name, args, nargs);
     } else {

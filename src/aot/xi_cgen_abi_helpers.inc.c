@@ -578,6 +578,97 @@ static const char *emit_conversion_prefix(FILE *out, const XrType *type, XrRep f
     return NULL;
 }
 
+static const XaotEnumPlan *cg_unit_enum_scalar_plan(XiCgenCtx *ctx, const XrType *type) {
+    if (!ctx || ctx->freestanding_profile || !ctx->aot_bundle || !type || type->is_nullable)
+        return NULL;
+    const XaotEnumPlan *plan = xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, type);
+    return plan && plan->enum_data && plan->members && plan->member_count > 0 &&
+                   plan->max_payload == 0
+               ? plan
+               : NULL;
+}
+
+static bool cg_mark_enum_scalar_sidecar(XiCgenCtx *ctx, const XaotEnumPlan *plan,
+                                        uint32_t *out_index) {
+    if (!ctx || !ctx->aot_bundle || !plan || !ctx->aot_bundle->enum_plans ||
+        plan < ctx->aot_bundle->enum_plans ||
+        plan >= ctx->aot_bundle->enum_plans + ctx->aot_bundle->nenum_plans) {
+        if (ctx)
+            ctx->error = true;
+        return false;
+    }
+    uint32_t index = (uint32_t) (plan - ctx->aot_bundle->enum_plans);
+    if (index >= ctx->enum_scalar_sidecar_cap || !ctx->enum_scalar_sidecar_used) {
+        ctx->error = true;
+        return false;
+    }
+    ctx->enum_scalar_sidecar_used[index] = 1;
+    if (out_index)
+        *out_index = index;
+    return true;
+}
+
+static void cg_reset_enum_scalar_sidecars(XiCgenCtx *ctx) {
+    if (ctx && ctx->enum_scalar_sidecar_used && ctx->enum_scalar_sidecar_cap > 0)
+        memset(ctx->enum_scalar_sidecar_used, 0, ctx->enum_scalar_sidecar_cap);
+}
+
+static void emit_enum_scalar_sidecar_defs(XiCgenCtx *ctx, FILE *out) {
+    if (!ctx || !out || !ctx->aot_bundle || !ctx->enum_scalar_sidecar_used)
+        return;
+    for (uint32_t index = 0; index < ctx->aot_bundle->nenum_plans; index++) {
+        if (index >= ctx->enum_scalar_sidecar_cap || !ctx->enum_scalar_sidecar_used[index])
+            continue;
+        const XaotEnumPlan *plan = &ctx->aot_bundle->enum_plans[index];
+        if (!plan->enum_data || !plan->members || plan->member_count == 0 || plan->max_payload != 0)
+            continue;
+        /* A scalar sidecar exists only when a concrete enum crosses a tagged
+         * boundary.  That erased value may subsequently flow to generic
+         * formatting, `.name`, or `toString()` outside the typed call site, so
+         * its nominal name table is part of the boundary representation even
+         * when the local descriptor-use bitmap did not request `.name`.
+         * Enums that remain fully typed still emit no sidecar or name table. */
+        fprintf(out, "static const char *const _xenum_scalar_names_%u[%u] = {", (unsigned) index,
+                (unsigned) plan->member_count);
+        for (uint32_t i = 0; i < plan->member_count; i++) {
+            if (i > 0)
+                fprintf(out, ",");
+            emit_c_string_literal(out, plan->members[i].name ? plan->members[i].name : "");
+        }
+        fprintf(out, "};\n");
+        fprintf(out,
+                "static const XrAotEnumScalarLayout _xenum_scalar_layout_%u = "
+                "{{XR_TENUM_SCALAR_LAYOUT, XR_OBJ_STORAGE_BUMP, XR_RC_STICKY, 0, 0}, ",
+                (unsigned) index);
+        emit_c_string_literal(out, plan->enum_data->name ? plan->enum_data->name : "");
+        fprintf(out, ", _xenum_scalar_names_%u", (unsigned) index);
+        fprintf(out, ", %u, %u};\n\n", (unsigned) plan->member_count, (unsigned) plan->layout_id);
+    }
+}
+
+/* Context-aware scalar unit-enum conversion.  Hot typed code carries only an
+ * ordinal.  If that value crosses a genuinely tagged boundary, point it at one
+ * immutable layout sidecar and keep the ordinal in XrValue.ext; this preserves
+ * enum identity/names without a per-case table of boxes or a heap allocation. */
+static const char *emit_conversion_prefix_ctx(XiCgenCtx *ctx, FILE *out, const XrType *type,
+                                              XrRep from_rep, XrRep to_rep) {
+    const XaotEnumPlan *plan = cg_unit_enum_scalar_plan(ctx, type);
+    if (!plan)
+        return emit_conversion_prefix(out, type, from_rep, to_rep);
+    if (from_rep == XR_REP_TAGGED && to_rep == XR_REP_I64) {
+        fprintf(out, "XR_TO_INT(xrt_enum_box_ordinal(");
+        return "))";
+    }
+    if (from_rep == XR_REP_I64 && to_rep == XR_REP_TAGGED) {
+        uint32_t index = 0;
+        if (!cg_mark_enum_scalar_sidecar(ctx, plan, &index))
+            return emit_conversion_prefix(out, type, from_rep, to_rep);
+        fprintf(out, "xrt_enum_scalar_box(&_xenum_scalar_layout_%u, (", (unsigned) index);
+        return "))";
+    }
+    return emit_conversion_prefix(out, type, from_rep, to_rep);
+}
+
 static void emit_conversion_suffix(FILE *out, const char *suffix) {
     if (suffix)
         fprintf(out, "%s", suffix);
@@ -598,7 +689,8 @@ static const char *emit_load_conversion_prefix(XiCgenCtx *ctx, FILE *out, const 
         fprintf(out, "%s_from_base(xrt_value_to_enum_aggregate(", plan->rep.c_type);
         return "))";
     }
-    return emit_conversion_prefix(out, v->type, from_rep, cg_value_plan_storage_rep(ctx, v));
+    return emit_conversion_prefix_ctx(ctx, out, v->type, from_rep,
+                                      cg_value_plan_storage_rep(ctx, v));
 }
 
 static const char *emit_tagged_to_value_storage_prefix(XiCgenCtx *ctx, FILE *out,
@@ -644,7 +736,8 @@ static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const 
     }
 
     XrRep param_rep = cg_func_param_abi_rep(ctx, f, param_idx);
-    const char *param_suffix = emit_conversion_prefix(out, param_type, XR_REP_TAGGED, param_rep);
+    const char *param_suffix =
+        emit_conversion_prefix_ctx(ctx, out, param_type, XR_REP_TAGGED, param_rep);
     fprintf(out, "%s", boxed_expr ? boxed_expr : "XR_NULL_VAL");
     emit_conversion_suffix(out, param_suffix);
 }
@@ -675,7 +768,7 @@ static bool emit_const_value_as_rep_expr(XiCgenCtx *ctx, FILE *out, const XiValu
                                          XrRep from_rep, XrRep target_rep) {
     if (!v || v->op != XI_CONST)
         return false;
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, from_rep, target_rep);
+    const char *conv_suffix = emit_conversion_prefix_ctx(ctx, out, v->type, from_rep, target_rep);
     const XiFunc *vf = v->block ? v->block->func : NULL;
     const char *prefix = (ctx && ctx->module && ctx->module->name) ? ctx->module->name : NULL;
     emit_value_rhs(ctx, out, vf, v, prefix);
@@ -737,7 +830,8 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
         const XiValue *inner = v->args[0];
         if (emit_const_value_as_rep_expr(ctx, out, inner, inner_rep, target_rep))
             return;
-        const char *conv_suffix = emit_conversion_prefix(out, inner->type, inner_rep, target_rep);
+        const char *conv_suffix =
+            emit_conversion_prefix_ctx(ctx, out, inner->type, inner_rep, target_rep);
         emit_vref(out, inner);
         emit_conversion_suffix(out, conv_suffix);
         return;
@@ -787,7 +881,8 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
             return;
         }
     }
-    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, from_rep, target_rep);
+    const char *conv_suffix =
+        emit_conversion_prefix_ctx(ctx, out, v ? v->type : NULL, from_rep, target_rep);
     emit_vref(out, v);
     emit_conversion_suffix(out, conv_suffix);
 }
@@ -876,7 +971,7 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
     }
     const XrType *ret_type =
         (target && target->return_type) ? target->return_type : (call ? call->type : NULL);
-    return emit_conversion_prefix(out, ret_type, actual_rep, result_rep);
+    return emit_conversion_prefix_ctx(ctx, out, ret_type, actual_rep, result_rep);
 }
 
 static bool emit_checked_tagged_direct_call_scalar_arg(XiCgenCtx *ctx, FILE *out,
@@ -1008,7 +1103,7 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     if (to_rep != XR_REP_TAGGED && !cg_func_needs_aot_coro_ctx(ctx, f) &&
         cg_value_box_inner_native_rep(ctx, arg, &inner_rep)) {
         const XiValue *inner = arg->args[0];
-        conv_suffix = emit_conversion_prefix(out, inner->type, inner_rep, to_rep);
+        conv_suffix = emit_conversion_prefix_ctx(ctx, out, inner->type, inner_rep, to_rep);
         emit_vref(out, inner);
         emit_conversion_suffix(out, conv_suffix);
         return;
@@ -1016,7 +1111,7 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     if (emit_checked_tagged_direct_call_scalar_arg(ctx, out, target, call, arg_index, arg, from_rep,
                                                    to_rep))
         return;
-    conv_suffix = emit_conversion_prefix(out, arg ? arg->type : NULL, from_rep, to_rep);
+    conv_suffix = emit_conversion_prefix_ctx(ctx, out, arg ? arg->type : NULL, from_rep, to_rep);
     emit_vref(out, arg);
     emit_conversion_suffix(out, conv_suffix);
 }

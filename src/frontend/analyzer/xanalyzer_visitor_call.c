@@ -5790,10 +5790,23 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 xa_check_null_safety(ctx->analyzer, param_type, arg_type, "Argument", &loc);
             if (!null_err && !xa_typecheck_assignable(param_type, arg_type) &&
                 !xr_is_json_coercion(param_type, arg_type)) {
-                char msg[256];
-                snprintf(msg, sizeof(msg),
-                         "Argument %d: type '%s' is not assignable to parameter type '%s'",
-                         slot + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type));
+                char msg[512];
+                if (xr_type_is_enum_metadata_named(arg_type, XR_ENUM_VARIANT_TYPE_NAME) &&
+                    param_type->kind == XR_KIND_ENUM) {
+                    XrType *owner = xr_type_enum_metadata_owner(arg_type);
+                    snprintf(
+                        msg, sizeof(msg),
+                        "Argument %d: type '%s' is not assignable to parameter type '%s'; "
+                        "'%s.variants' yields variant descriptors, so iterate '%s' directly "
+                        "when actual enum values are required",
+                        slot + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type),
+                        owner && owner->enum_type.enum_name ? owner->enum_type.enum_name : "Enum",
+                        param_type->enum_type.enum_name ? param_type->enum_type.enum_name : "Enum");
+                } else {
+                    snprintf(msg, sizeof(msg),
+                             "Argument %d: type '%s' is not assignable to parameter type '%s'",
+                             slot + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type));
+                }
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);
             }

@@ -723,6 +723,33 @@ TEST(enum_payload_members_roundtrip) {
     teardown();
 }
 
+TEST(enum_static_iteration_roundtrip) {
+    setup();
+    const char *src = "enum Color { Red, Green }\n"
+                      "enum Event { Ready, Data(value: int) }\n"
+                      "export enum Result<T> { Empty, Ok(T) }\n"
+                      "for(color in Color){print(color.name)}\n"
+                      "for(variant in Event.variants){\n"
+                      "for(field in variant.payloads){print(field.name)}\n"
+                      "}\n"
+                      "for(variant in Result<int>.variants){print(variant.name)}\n";
+    char *out = parse_and_format(src, "enum_static_iteration.xr");
+    ASSERT_NOT_NULL(out);
+    ASSERT_TRUE(contains(out, "for (color in Color) {"));
+    ASSERT_TRUE(contains(out, "for (variant in Event.variants) {"));
+    ASSERT_TRUE(contains(out, "for (field in variant.payloads) {"));
+    ASSERT_TRUE(contains(out, "export enum Result<T> {"));
+    ASSERT_TRUE(contains(out, "for (variant in Result<int>.variants) {"));
+    ASSERT_FALSE(contains(out, "Result<int>().variants"));
+
+    char *again = parse_and_format(out, "enum_static_iteration_formatted.xr");
+    ASSERT_NOT_NULL(again);
+    ASSERT_STR_EQ(out, again);
+    free(again);
+    free(out);
+    teardown();
+}
+
 /* ====================================================================== */
 /* Class field alignment (opt-in)                                          */
 /* ====================================================================== */
@@ -953,6 +980,7 @@ RUN_TEST(match_single_arm_no_padding);
 
 RUN_TEST(enum_members_ignore_removed_value_alignment);
 RUN_TEST(enum_payload_members_roundtrip);
+RUN_TEST(enum_static_iteration_roundtrip);
 
 RUN_TEST(class_fields_aligned_when_enabled);
 RUN_TEST(class_fields_default_single_space);

@@ -1,0 +1,49 @@
+enum BoundaryHue {
+    Red,
+    Blue
+}
+
+enum BoundaryState {
+    Idle,
+    Busy(int)
+}
+
+type BoundaryVariant = EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>
+
+class BoundaryBox<T> {
+    value: T
+
+    constructor(value: T) {
+        this.value = value
+    }
+}
+
+fn isHueBoundary(value: EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>) -> bool {
+    return value is EnumVariant<BoundaryHue>
+}
+
+fn hueOrdinalBoundary(value: EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>) -> int {
+    if (value is EnumVariant<BoundaryHue>) {
+        return value.ordinal
+    }
+    return -1
+}
+
+var localBoundary: EnumVariant<BoundaryHue> | EnumVariant<BoundaryState> = BoundaryHue.variants[1]
+print(localBoundary is EnumVariant<BoundaryHue>)
+print(isHueBoundary(BoundaryHue.variants[0]))
+print(isHueBoundary(BoundaryState.variants[0]))
+print(hueOrdinalBoundary(BoundaryHue.variants[1]))
+print(hueOrdinalBoundary(BoundaryState.variants[0]))
+var literalBoundaries: Array<EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>> = [BoundaryHue.variants[0], BoundaryState.variants[1]]
+print(literalBoundaries[0] is EnumVariant<BoundaryHue>)
+print(literalBoundaries[1] is EnumVariant<BoundaryState>)
+var pushedBoundaries: Array<EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>> = []
+pushedBoundaries.push(BoundaryState.variants[0])
+print(pushedBoundaries[0] is EnumVariant<BoundaryState>)
+var fieldBoundary = BoundaryBox<EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>>(BoundaryState.variants[0])
+fieldBoundary.value = BoundaryHue.variants[1]
+print(fieldBoundary.value is EnumVariant<BoundaryHue>)
+var mappedBoundaries: Map<string, EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>> = Map<string, EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>>()
+mappedBoundaries["hue"] = BoundaryHue.variants[0]
+print(mappedBoundaries["hue"] is EnumVariant<BoundaryHue>)

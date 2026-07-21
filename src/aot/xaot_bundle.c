@@ -445,7 +445,7 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
             continue;
         for (uint16_t si = 0; si < mod->nslots; si++) {
             const XiEnumData *ed = mod->slot_enums[si];
-            if (ed && ed->is_adt && !xaot_bundle_add_enum_plan(bundle, ed, mi)) {
+            if (ed && !xaot_bundle_add_enum_plan(bundle, ed, mi)) {
                 xaot_bundle_free(bundle);
                 return false;
             }
@@ -5399,7 +5399,7 @@ XR_FUNC XaotEnumPlan *xaot_bundle_add_enum_plan(XaotBundle *bundle, const XiEnum
     XaotEnumPlan *plan;
     char ctype[192];
 
-    if (!bundle || !enum_data || !enum_data->is_adt)
+    if (!bundle || !enum_data)
         return NULL;
     plan = (XaotEnumPlan *) xaot_bundle_find_enum_plan(bundle, enum_data);
     if (plan)
@@ -5461,13 +5461,21 @@ static const char *type_enum_name(const XrType *type) {
 }
 
 static int type_enum_arg_count(const XrType *type) {
-    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE))
+    if (!type)
+        return 0;
+    if (type->kind == XR_KIND_ENUM)
+        return type->enum_type.type_arg_count > 0 ? type->enum_type.type_arg_count : 0;
+    if (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE)
         return 0;
     return type->instance.type_arg_count > 0 ? type->instance.type_arg_count : 0;
 }
 
 static XrType **type_enum_args(const XrType *type) {
-    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
+    if (!type)
+        return NULL;
+    if (type->kind == XR_KIND_ENUM)
+        return type->enum_type.type_arg_count > 0 ? type->enum_type.type_args : NULL;
+    if ((type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
         type->instance.type_arg_count <= 0)
         return NULL;
     return type->instance.type_args;
@@ -5506,7 +5514,7 @@ XR_FUNC const XaotEnumPlan *xaot_bundle_find_enum_plan_for_type(const XaotBundle
     for (uint32_t i = 0; i < bundle->nenum_plans; i++) {
         const XaotEnumPlan *plan = &bundle->enum_plans[i];
         const XiEnumData *ed = plan->enum_data;
-        if (!ed || !ed->is_adt || !ed->name || strcmp(ed->name, name) != 0)
+        if (!ed || !ed->name || strcmp(ed->name, name) != 0)
             continue;
         if (plan->type_arg_count == 0) {
             if (!fallback)
@@ -5532,8 +5540,7 @@ static const XiEnumData *find_enum_data_by_name(const XaotBundle *bundle, const 
     for (uint32_t i = 0; i < bundle->nenum_plans; i++) {
         const XaotEnumPlan *plan = &bundle->enum_plans[i];
         const XiEnumData *ed = plan->enum_data;
-        if (plan->type_arg_count == 0 && ed && ed->is_adt && ed->name &&
-            strcmp(ed->name, name) == 0) {
+        if (plan->type_arg_count == 0 && ed && ed->name && strcmp(ed->name, name) == 0) {
             if (module_index_out)
                 *module_index_out = plan->module_index;
             return ed;
@@ -5545,7 +5552,7 @@ static const XiEnumData *find_enum_data_by_name(const XaotBundle *bundle, const 
             continue;
         for (uint16_t si = 0; si < mod->nslots; si++) {
             const XiEnumData *ed = mod->slot_enums[si];
-            if (ed && ed->is_adt && ed->name && strcmp(ed->name, name) == 0) {
+            if (ed && ed->name && strcmp(ed->name, name) == 0) {
                 if (module_index_out)
                     *module_index_out = mi;
                 return ed;
@@ -5563,7 +5570,7 @@ static XaotEnumPlan *xaot_bundle_add_concrete_enum_plan(XaotBundle *bundle,
     int argc = type_enum_arg_count(type);
     XrType **args = type_enum_args(type);
 
-    if (!bundle || !enum_data || !enum_data->is_adt || !type || argc <= 0 || !args)
+    if (!bundle || !enum_data || !type || argc <= 0 || !args)
         return NULL;
     plan = (XaotEnumPlan *) xaot_bundle_find_enum_plan_for_type(bundle, type);
     if (plan)
@@ -7666,6 +7673,40 @@ static const char *enum_scalar_action_name(uint8_t action) {
     }
 }
 
+static const char *enum_descriptor_escape_name(uint8_t escape) {
+    switch ((XaotEnumDescriptorEscapeKind) escape) {
+        case XAOT_ENUM_DESCRIPTOR_SCALAR:
+            return "scalar";
+        case XAOT_ENUM_DESCRIPTOR_TYPED_VALUE:
+            return "typed_value";
+        case XAOT_ENUM_DESCRIPTOR_ERASED_BOX:
+            return "erased_box";
+        default:
+            return "unknown";
+    }
+}
+
+static void print_enum_descriptor_use_bits(FILE *out, uint32_t bits) {
+    bool first = true;
+#define PRINT_BIT(mask, name)                                                                      \
+    do {                                                                                           \
+        if ((bits & (mask)) != 0) {                                                                \
+            fprintf(out, "%s%s", first ? "" : "+", (name));                                        \
+            first = false;                                                                         \
+        }                                                                                          \
+    } while (0)
+    PRINT_BIT(XAOT_ENUM_USE_COUNT, "count");
+    PRINT_BIT(XAOT_ENUM_USE_ORDINAL, "ordinal");
+    PRINT_BIT(XAOT_ENUM_USE_VARIANT_NAME, "variant_name");
+    PRINT_BIT(XAOT_ENUM_USE_PAYLOAD_COUNT, "payload_count");
+    PRINT_BIT(XAOT_ENUM_USE_PAYLOAD_INDEX, "payload_index");
+    PRINT_BIT(XAOT_ENUM_USE_PAYLOAD_NAME, "payload_name");
+    PRINT_BIT(XAOT_ENUM_USE_PAYLOAD_TYPE, "payload_type");
+    if (first)
+        fprintf(out, "none");
+#undef PRINT_BIT
+}
+
 static void print_transfer_evidence_bits(FILE *out, uint32_t bits) {
     bool first = true;
 #define PRINT_BIT(mask, name)                                                                      \
@@ -8249,10 +8290,19 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
             const XaotValuePlan *vp = &bundle->value_plans[vi];
             if (vp->func != func || !vp->value)
                 continue;
-            fprintf(out, "  value %s%u op=%s kind=%s rep=%s c_type=%s\n",
+            fprintf(out, "  value %s%u op=%s kind=%s rep=%s c_type=%s",
                     vp->value->op == XI_PHI ? "phi" : "v", vp->value->id, xi_op_name(vp->value->op),
                     xaot_value_kind_name(vp->rep.kind), rep_name(vp->rep.rep),
                     safe_str(vp->rep.c_type));
+            if (vp->value->enum_metadata_owner || vp->value->enum_metadata_kind != 0)
+                fprintf(out, " enum_owner=%s enum_kind=%u enum_field=%u",
+                        vp->value->enum_metadata_owner &&
+                                vp->value->enum_metadata_owner->kind == XR_KIND_ENUM
+                            ? safe_str(vp->value->enum_metadata_owner->enum_type.enum_name)
+                            : "?",
+                        (unsigned) vp->value->enum_metadata_kind,
+                        (unsigned) vp->value->enum_metadata_field);
+            fprintf(out, "\n");
         }
     }
 
@@ -8302,6 +8352,13 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 "c_type=%s\n",
                 ei, ei, enum_scalar_action_name(ep->scalar_action), ep->scalar_evidence,
                 (unsigned) ep->scalar_payload_cap, safe_str(ep->c_type));
+        fprintf(out,
+                "enum-domain-plan %u enum=%u value_iteration=%s variant_iteration=%s "
+                "descriptor=",
+                ei, ei, ep->value_iteration_reachable ? "yes" : "no",
+                ep->variant_iteration_reachable ? "yes" : "no");
+        print_enum_descriptor_use_bits(out, ep->descriptor_use_bits);
+        fprintf(out, " escape=%s\n", enum_descriptor_escape_name(ep->descriptor_escape_kind));
     }
 
     for (uint32_t ai = 0; ai < bundle->narray_storage_plans; ai++) {

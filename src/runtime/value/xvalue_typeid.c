@@ -21,7 +21,7 @@ static const XrTypeId tag_to_typeid[8] = {
     [XR_TAG_AGG_REF] = XR_TID_NULL, [XR_TAG_NOTFOUND] = XR_TID_NULL,
 };
 
-static const XrTypeId gctype_to_typeid[XR_TENUM_CTOR + 1] = {
+static const XrTypeId gctype_to_typeid[XR_TENUM_SCALAR_LAYOUT + 1] = {
     [XR_TNULL] = XR_TID_NULL,
     [XR_TBOOL] = XR_TID_BOOL,
     [XR_TINT] = XR_TID_INT,
@@ -51,6 +51,8 @@ static const XrTypeId gctype_to_typeid[XR_TENUM_CTOR + 1] = {
     [XR_TTHREAD] = XR_TID_THREAD,
     [XR_TENUM_TYPE] = XR_TID_ENUM_TYPE,
     [XR_TENUM_CTOR] = XR_TID_FUNCTION,
+    [XR_TENUM_DESCRIPTOR] = XR_TID_INSTANCE,
+    [XR_TENUM_SCALAR_LAYOUT] = XR_TID_ENUM_VALUE,
 };
 
 XrTypeId xr_value_typeid(XrValue v) {

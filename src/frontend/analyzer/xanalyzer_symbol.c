@@ -76,6 +76,27 @@ bool xa_enum_info_finalize_layout(XaEnumInfo *info) {
 
     if (!layout)
         return false;
+    for (uint32_t i = 0; i < info->variant_count; i++) {
+        XaEnumVariantInfo *variant = &info->variants[i];
+        if (variant->payload_count == 0)
+            continue;
+        uint8_t *type_ids =
+            (uint8_t *) xr_calloc((size_t) variant->payload_count, sizeof(*type_ids));
+        if (!type_ids) {
+            xr_enum_layout_free(layout);
+            return false;
+        }
+        for (uint16_t p = 0; p < variant->payload_count; p++)
+            type_ids[p] = xr_type_to_tid(variant->payload_types ? variant->payload_types[p] : NULL);
+        bool metadata_ok = xr_enum_layout_set_variant_payload_metadata(
+            layout, i, (const char *const *) variant->payload_names, type_ids,
+            variant->payload_count);
+        xr_free(type_ids);
+        if (!metadata_ok) {
+            xr_enum_layout_free(layout);
+            return false;
+        }
+    }
     if (info->layout)
         xr_enum_layout_free(info->layout);
     info->layout = layout;

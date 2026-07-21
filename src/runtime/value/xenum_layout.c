@@ -111,6 +111,44 @@ bool xr_enum_layout_set_payload_counts(XrEnumLayout *layout, const int *payload_
     return true;
 }
 
+bool xr_enum_layout_set_variant_payload_metadata(XrEnumLayout *layout, uint32_t tag,
+                                                 const char *const *payload_names,
+                                                 const uint8_t *payload_type_ids,
+                                                 uint16_t payload_count) {
+    if (!layout || tag >= layout->variant_count)
+        return false;
+    XrEnumVariantLayout *variant = &layout->variants[tag];
+    if (variant->payload_count != payload_count)
+        return false;
+    if (variant->payload_names) {
+        for (uint16_t i = 0; i < variant->payload_count; i++)
+            xr_free((void *) variant->payload_names[i]);
+        xr_free(variant->payload_names);
+        variant->payload_names = NULL;
+    }
+    if (variant->payload_type_ids) {
+        xr_free(variant->payload_type_ids);
+        variant->payload_type_ids = NULL;
+    }
+    if (payload_count == 0)
+        return true;
+
+    variant->payload_names =
+        (const char **) xr_calloc((size_t) payload_count, sizeof(*variant->payload_names));
+    variant->payload_type_ids =
+        (uint8_t *) xr_calloc((size_t) payload_count, sizeof(*variant->payload_type_ids));
+    if (!variant->payload_names || !variant->payload_type_ids)
+        return false;
+    for (uint16_t i = 0; i < payload_count; i++) {
+        const char *name = payload_names && payload_names[i] ? payload_names[i] : "";
+        variant->payload_names[i] = xr_strdup(name);
+        variant->payload_type_ids[i] = payload_type_ids ? payload_type_ids[i] : 0;
+        if (!variant->payload_names[i])
+            return false;
+    }
+    return true;
+}
+
 void xr_enum_layout_set_variant_symbol(XrEnumLayout *layout, uint32_t tag, int symbol) {
     if (!layout || tag >= layout->variant_count)
         return;
@@ -142,7 +180,18 @@ uint16_t xr_enum_layout_max_payload(const XrEnumLayout *layout) {
 void xr_enum_layout_free(XrEnumLayout *layout) {
     if (!layout)
         return;
-    if (layout->variants)
+    if (layout->variants) {
+        for (uint32_t i = 0; i < layout->variant_count; i++) {
+            XrEnumVariantLayout *variant = &layout->variants[i];
+            if (variant->payload_names) {
+                for (uint16_t p = 0; p < variant->payload_count; p++)
+                    xr_free((void *) variant->payload_names[p]);
+                xr_free(variant->payload_names);
+            }
+            if (variant->payload_type_ids)
+                xr_free(variant->payload_type_ids);
+        }
         xr_free(layout->variants);
+    }
     xr_free(layout);
 }

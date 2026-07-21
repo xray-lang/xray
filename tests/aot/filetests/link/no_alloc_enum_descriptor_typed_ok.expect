@@ -1,0 +1,4 @@
+status=pass
+contains=xray_no_alloc_enum_descriptor_typed_ok
+not_contains=erased enum descriptor
+not_contains=@no_alloc contract is not satisfied

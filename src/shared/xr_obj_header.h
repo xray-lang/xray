@@ -99,21 +99,23 @@ typedef enum {
     XR_TCOROUTINE,
     XR_TCHANNEL,
     XR_TCOROPOOL,
-    XR_TBLOB,           /* Raw byte buffer on Region heap (no traverse/destroy) */
-    XR_TCELL,           /* Single-slot mutable capture cell (32B) */
-    XR_TTASK,           /* Lightweight GC-managed coroutine handle */
-    XR_TATOMIC,         /* Atomic<T> shared primitive wrapper (system heap) */
-    XR_TWORKQUEUE,      /* WorkQueue<T> shared sharded queue (system heap) */
-    XR_TRESULTGROUP,    /* ResultGroup shared scalar reducer (system heap) */
-    XR_TBOOLMAP,        /* AOT-only Map<bool,scalar> 2-slot direct store; boxes as
-                         * XR_TAG_MAP (value heap_type stays XR_TMAP) and is
-                         * discriminated from a generic map by this hdr.type */
-    XR_TCOUNTDOWNLATCH, /* CountdownLatch shared completion barrier (system heap) */
-    XR_TSEMAPHORE,      /* Semaphore shared counting permit primitive (system heap) */
-    XR_TEVENTCOUNT,     /* EventCount shared epoch/broadcast primitive (system heap) */
-    XR_TTHREAD,         /* sys.Thread shared OS-thread handle (system heap) */
-    XR_TENUM_TYPE,      /* Internal enum namespace/type metadata; not a user wrapper class */
-    XR_TENUM_CTOR,      /* Internal payload variant constructor metadata */
+    XR_TBLOB,               /* Raw byte buffer on Region heap (no traverse/destroy) */
+    XR_TCELL,               /* Single-slot mutable capture cell (32B) */
+    XR_TTASK,               /* Lightweight GC-managed coroutine handle */
+    XR_TATOMIC,             /* Atomic<T> shared primitive wrapper (system heap) */
+    XR_TWORKQUEUE,          /* WorkQueue<T> shared sharded queue (system heap) */
+    XR_TRESULTGROUP,        /* ResultGroup shared scalar reducer (system heap) */
+    XR_TBOOLMAP,            /* AOT-only Map<bool,scalar> 2-slot direct store; boxes as
+                             * XR_TAG_MAP (value heap_type stays XR_TMAP) and is
+                             * discriminated from a generic map by this hdr.type */
+    XR_TCOUNTDOWNLATCH,     /* CountdownLatch shared completion barrier (system heap) */
+    XR_TSEMAPHORE,          /* Semaphore shared counting permit primitive (system heap) */
+    XR_TEVENTCOUNT,         /* EventCount shared epoch/broadcast primitive (system heap) */
+    XR_TTHREAD,             /* sys.Thread shared OS-thread handle (system heap) */
+    XR_TENUM_TYPE,          /* Internal enum namespace/type metadata; not a user wrapper class */
+    XR_TENUM_CTOR,          /* Internal payload variant constructor metadata */
+    XR_TENUM_DESCRIPTOR,    /* Erased enum-domain descriptor {layout, kind, scalar}. */
+    XR_TENUM_SCALAR_LAYOUT, /* Static unit-enum layout used by compact AOT scalar boxes. */
 } XrObjType;
 
 #endif  // XR_OBJ_HEADER_H

@@ -16,6 +16,7 @@
 #include "../base/xhash.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../frontend/analyzer/xa_alloc_effect.h"
+#include "../frontend/analyzer/xa_selection.h"
 #include "../ir/xi_effect.h"
 #include "../ir/xi_escape.h"
 #include "../runtime/value/xstruct_layout.h"
@@ -353,6 +354,139 @@ static uint32_t verify_enum_scalar_evidence_for(const XaotEnumPlan *plan) {
     return evidence;
 }
 
+typedef struct VerifyEnumDomainFacts {
+    uint32_t descriptor_use_bits;
+    uint8_t descriptor_escape_kind;
+    bool value_iteration_reachable;
+    bool variant_iteration_reachable;
+} VerifyEnumDomainFacts;
+
+static uint32_t verify_enum_metadata_use_bit(uint8_t field) {
+    switch ((XaEnumMetaField) field) {
+        case XA_ENUM_META_VARIANTS:
+        case XA_ENUM_META_LENGTH:
+            return XAOT_ENUM_USE_COUNT;
+        case XA_ENUM_META_ORDINAL:
+            return XAOT_ENUM_USE_ORDINAL;
+        case XA_ENUM_META_NAME:
+            return XAOT_ENUM_USE_VARIANT_NAME;
+        case XA_ENUM_META_PAYLOAD_COUNT:
+        case XA_ENUM_META_IS_UNIT:
+        case XA_ENUM_META_PAYLOADS:
+            return XAOT_ENUM_USE_PAYLOAD_COUNT;
+        case XA_ENUM_META_PAYLOAD_INDEX:
+            return XAOT_ENUM_USE_PAYLOAD_INDEX;
+        case XA_ENUM_META_PAYLOAD_NAME:
+            return XAOT_ENUM_USE_PAYLOAD_NAME;
+        case XA_ENUM_META_PAYLOAD_TYPE:
+            return XAOT_ENUM_USE_PAYLOAD_TYPE;
+        default:
+            return 0;
+    }
+}
+
+static bool verify_enum_domain_value(const XaotBundle *bundle, const XaotEnumPlan *plan,
+                                     const XiValue *value, VerifyEnumDomainFacts *facts,
+                                     char *errbuf, size_t errbuf_len) {
+    const XrType *owner;
+    const XaotEnumPlan *owner_plan;
+
+    if (!value)
+        return true;
+    owner = value->enum_metadata_owner;
+    if (!owner && xr_type_is_enum_metadata(value->type))
+        owner = xr_type_enum_metadata_owner(value->type);
+    if (!owner)
+        return true;
+    if (owner->kind != XR_KIND_ENUM || !owner->enum_type.layout)
+        return set_error(errbuf, errbuf_len, "enum-domain Xi value has no concrete enum owner");
+    owner_plan = xaot_bundle_find_enum_plan_for_type(bundle, owner);
+    if (!owner_plan && value->enum_metadata_kind == XR_ENUM_METADATA_NONE)
+        return true;
+    if (!owner_plan)
+        return set_error(errbuf, errbuf_len, "enum-domain Xi value has no enum plan");
+    if (owner_plan != plan)
+        return true;
+
+    if (value->aux_kind == XI_AUX_KIND_ENUM_CASE) {
+        if (value->op != XI_INDEX_GET || !value->type || value->type->kind != XR_KIND_ENUM ||
+            !value->type->enum_type.layout || !value->type->enum_type.layout->is_zero_payload)
+            return set_error(errbuf, errbuf_len,
+                             "enum value iteration is not a unit-only typed index access");
+        facts->value_iteration_reachable = true;
+        facts->descriptor_use_bits |= XAOT_ENUM_USE_COUNT;
+    }
+    if (value->op == XI_ENUM_VARIANT_AT) {
+        if (!xr_type_is_enum_metadata_named(value->type, XR_ENUM_VARIANT_TYPE_NAME))
+            return set_error(errbuf, errbuf_len,
+                             "enum variant iteration result is not EnumVariant<E>");
+        facts->variant_iteration_reachable = true;
+        facts->descriptor_use_bits |= XAOT_ENUM_USE_COUNT;
+    }
+    if ((value->op == XI_ENUM_VARIANT_AT || value->op == XI_ENUM_PAYLOAD_AT) && value->nargs != 2)
+        return set_error(errbuf, errbuf_len, "enum descriptor access has stale arity");
+
+    facts->descriptor_use_bits |= verify_enum_metadata_use_bit(value->enum_metadata_field);
+    if (xr_type_is_enum_metadata(value->type) && value->escape != XI_ESC_NONE &&
+        facts->descriptor_escape_kind < XAOT_ENUM_DESCRIPTOR_TYPED_VALUE)
+        facts->descriptor_escape_kind = XAOT_ENUM_DESCRIPTOR_TYPED_VALUE;
+    if (value->op == XI_ENUM_DESCRIPTOR_BOX) {
+        if (value->nargs != 1 || !value->enum_metadata_owner ||
+            value->enum_metadata_kind == XR_ENUM_METADATA_NONE)
+            return set_error(errbuf, errbuf_len,
+                             "erased enum descriptor box lacks typed owner/value");
+        facts->descriptor_escape_kind = XAOT_ENUM_DESCRIPTOR_ERASED_BOX;
+    }
+    if (value->op == XI_ENUM_DESCRIPTOR_UNBOX && value->nargs != 1)
+        return set_error(errbuf, errbuf_len, "erased enum descriptor unbox has stale arity");
+    return true;
+}
+
+static bool verify_enum_domain_func(const XaotBundle *bundle, const XaotEnumPlan *plan,
+                                    const XiFunc *func, VerifyEnumDomainFacts *facts, char *errbuf,
+                                    size_t errbuf_len) {
+    if (!func)
+        return true;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks ? func->blocks[bi] : NULL;
+        if (!block)
+            continue;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            if (!verify_enum_domain_value(bundle, plan, &phi->value, facts, errbuf, errbuf_len))
+                return false;
+        }
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            if (!verify_enum_domain_value(bundle, plan, block->values ? block->values[vi] : NULL,
+                                          facts, errbuf, errbuf_len))
+                return false;
+        }
+    }
+    for (uint16_t ci = 0; ci < func->nchildren; ci++) {
+        if (!verify_enum_domain_func(bundle, plan, func->children[ci], facts, errbuf, errbuf_len))
+            return false;
+    }
+    return true;
+}
+
+static uint32_t verify_enum_xg_metadata_bits(uint32_t descriptor_bits) {
+    uint32_t bits = 0;
+    if (descriptor_bits & XAOT_ENUM_USE_COUNT)
+        bits |= XG_METADATA_ENUM_COUNT;
+    if (descriptor_bits & XAOT_ENUM_USE_ORDINAL)
+        bits |= XG_METADATA_ENUM_ORDINAL;
+    if (descriptor_bits & XAOT_ENUM_USE_VARIANT_NAME)
+        bits |= XG_METADATA_ENUM_VARIANT_NAME;
+    if (descriptor_bits & XAOT_ENUM_USE_PAYLOAD_COUNT)
+        bits |= XG_METADATA_ENUM_PAYLOAD_COUNT;
+    if (descriptor_bits & XAOT_ENUM_USE_PAYLOAD_INDEX)
+        bits |= XG_METADATA_ENUM_PAYLOAD_INDEX;
+    if (descriptor_bits & XAOT_ENUM_USE_PAYLOAD_NAME)
+        bits |= XG_METADATA_ENUM_PAYLOAD_NAME;
+    if (descriptor_bits & XAOT_ENUM_USE_PAYLOAD_TYPE)
+        bits |= XG_METADATA_ENUM_PAYLOAD_TYPE;
+    return bits;
+}
+
 static bool verify_enum_plan(const XaotBundle *bundle, const XaotEnumPlan *plan, char *errbuf,
                              size_t errbuf_len) {
     const XiEnumData *ed;
@@ -361,8 +495,8 @@ static bool verify_enum_plan(const XaotBundle *bundle, const XaotEnumPlan *plan,
     if (!bundle || !plan)
         return set_error(errbuf, errbuf_len, "AOT enum scalar plan is NULL");
     ed = plan->enum_data;
-    if (!ed || !ed->is_adt)
-        return set_error(errbuf, errbuf_len, "AOT enum scalar plan has no ADT enum");
+    if (!ed)
+        return set_error(errbuf, errbuf_len, "AOT enum plan has no enum schema");
     if (plan->module_index >= bundle->nmodules)
         return set_error(errbuf, errbuf_len, "AOT enum scalar plan module is out of range");
     if (!plan->c_type || plan->c_type[0] == '\0')
@@ -380,6 +514,21 @@ static bool verify_enum_plan(const XaotBundle *bundle, const XaotEnumPlan *plan,
         return set_error(errbuf, errbuf_len, "AOT enum scalar action does not re-derive");
     if (plan->scalar_evidence != verify_enum_scalar_evidence_for(plan))
         return set_error(errbuf, errbuf_len, "AOT enum scalar evidence is stale");
+    VerifyEnumDomainFacts facts;
+    memset(&facts, 0, sizeof(facts));
+    for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+        const XiModule *mod = bundle->modules ? bundle->modules[mi] : NULL;
+        if (mod && !verify_enum_domain_func(bundle, plan, mod->init, &facts, errbuf, errbuf_len))
+            return false;
+    }
+    if (plan->descriptor_use_bits != facts.descriptor_use_bits)
+        return set_error(errbuf, errbuf_len, "AOT enum descriptor use bitmap is stale");
+    if (plan->descriptor_escape_kind != facts.descriptor_escape_kind)
+        return set_error(errbuf, errbuf_len, "AOT enum descriptor escape plan is stale");
+    if (plan->value_iteration_reachable != facts.value_iteration_reachable)
+        return set_error(errbuf, errbuf_len, "AOT enum value-iteration reachability is stale");
+    if (plan->variant_iteration_reachable != facts.variant_iteration_reachable)
+        return set_error(errbuf, errbuf_len, "AOT enum variant-iteration reachability is stale");
     return true;
 }
 
@@ -6892,6 +7041,33 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     }
     if (bundle->nmetadata_plans != expected_metadata_plans)
         return set_error(errbuf, errbuf_len, "AOT metadata plan count mismatches evidence");
+    {
+        const uint32_t enum_mask = XG_METADATA_ENUM_COUNT | XG_METADATA_ENUM_ORDINAL |
+                                   XG_METADATA_ENUM_VARIANT_NAME | XG_METADATA_ENUM_PAYLOAD_COUNT |
+                                   XG_METADATA_ENUM_PAYLOAD_INDEX | XG_METADATA_ENUM_PAYLOAD_NAME |
+                                   XG_METADATA_ENUM_PAYLOAD_TYPE;
+        uint32_t evidence_bits = 0;
+        uint32_t plan_bits = 0;
+        for (uint32_t bi = 0; bi < ev->nbodies; bi++)
+            evidence_bits |= ev->bodies[bi].metadata_use_bits & enum_mask;
+        for (uint32_t ei = 0; ei < bundle->nenum_plans; ei++)
+            plan_bits |= verify_enum_xg_metadata_bits(bundle->enum_plans[ei].descriptor_use_bits);
+        /* Global evidence is collected before Xi optimization, while enum
+         * plans describe the surviving optimized program.  Constant folding
+         * and DCE may therefore remove a metadata projection (for example,
+         * direct unit-enum `.ordinal` becomes the loop induction variable).
+         * The plan may be a strict subset, but it must never invent a use that
+         * was absent from the source-backed evidence. */
+        uint32_t unproven_bits = plan_bits & ~evidence_bits;
+        if (unproven_bits != 0) {
+            if (errbuf && errbuf_len > 0)
+                snprintf(errbuf, errbuf_len,
+                         "AOT enum metadata plan exceeds global evidence "
+                         "(evidence=0x%x plan=0x%x unproven=0x%x)",
+                         evidence_bits, plan_bits, unproven_bits);
+            return false;
+        }
+    }
 
     for (uint32_t ci = 0; ci < capability_count; ci++) {
         uint32_t cap = capabilities[ci];

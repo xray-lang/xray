@@ -727,6 +727,7 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_str(ctx, "export ");
     xfmt_write_str(ctx, "enum ");
     xfmt_write_str(ctx, en->name);
+    xfmt_emit_generic_params(ctx, en->type_params, en->type_param_count);
     xfmt_write_str(ctx, " {");
     xfmt_write_newline(ctx);
     ctx->indent_level++;

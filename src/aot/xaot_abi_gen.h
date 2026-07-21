@@ -112,6 +112,8 @@ static inline XaotRep xaot_abi_rep_for_type(const XrType *type) {
     XaotRep rep;
     if (!type)
         return XAOT_REP_TAGGED;
+    if (!type->is_nullable && xr_type_is_enum_metadata(type))
+        return XAOT_REP_I64;
     abi = xaot_abi_for_type_kind(type->kind);
     if (!abi || (type->is_nullable && !abi->allows_nullable))
         return XAOT_REP_TAGGED;
@@ -131,6 +133,8 @@ static inline bool xaot_abi_type_can_use_typed_boundary(const XrType *type) {
     XrRep storage;
     if (!type)
         return false;
+    if (!type->is_nullable && xr_type_is_enum_metadata(type))
+        return true;
     abi = xaot_abi_for_type_kind(type->kind);
     if (!abi || !abi->typed_boundary || (type->is_nullable && !abi->allows_nullable))
         return false;

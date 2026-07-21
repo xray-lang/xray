@@ -280,6 +280,15 @@
     _(CHR, FMT_AB, KOP_AB_UNARY, "R[A] = chr(R[B])")                                               \
     _(ENUM_ACCESS, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].variant[R[C]]")                              \
     _(ENUM_NAME, FMT_AB, KOP_AB_UNARY, "R[A] = enum_name(R[B])")                                   \
+    _(ENUM_VARIANT_AT, FMT_ABC, KOP_ABC_BIN, "R[A] = checked EnumVariants(count=R[B])[R[C]]")      \
+    _(ENUM_PAYLOAD_AT, FMT_ABC, KOP_ABC_BIN, "R[A] = checked EnumPayloads(view=R[B])[R[C]]")       \
+    _(ENUM_VARIANT_NAME, FMT_ABC, KOP_ABC_BIN, "R[A] = enum variant name R[B][R[C]]")              \
+    _(ENUM_VARIANT_PAYLOAD_COUNT, FMT_ABC, KOP_ABC_BIN,                                            \
+      "R[A] = enum variant payload count R[B][R[C]]")                                              \
+    _(ENUM_PAYLOAD_FIELD_NAME, FMT_ABC, KOP_ABC_BIN,                                               \
+      "R[A] = enum payload field name R[B][packed R[C]]")                                          \
+    _(ENUM_PAYLOAD_FIELD_TYPE, FMT_ABC, KOP_ABC_BIN,                                               \
+      "R[A] = enum payload field Type id R[B][packed R[C]]")                                       \
     _(TRY, FMT_SPECIAL, KOP_SPECIAL, "try block start")                                            \
     _(CATCH, FMT_A, KOP_A_LOAD, "catch block")                                                     \
     _(END_TRY, FMT_NONE, KOP_NONE, "try block end")                                                \
@@ -293,6 +302,9 @@
     _(BOX_F64, FMT_AB, KOP_AB_UNARY, "R[A] = box(R[B] as f64)")                                    \
     _(UNBOX_I64, FMT_AB, KOP_AB_UNARY, "R[A] = unbox(R[B]) as i64")                                \
     _(UNBOX_F64, FMT_AB, KOP_AB_UNARY, "R[A] = unbox(R[B]) as f64")                                \
+    _(ENUM_DESCRIPTOR_BOX, FMT_ABC, KOP_ABC_BIN, "R[A] = enum_descriptor_box(R[B], token=R[C])")   \
+    _(ENUM_DESCRIPTOR_UNBOX, FMT_AB, KOP_AB_UNARY, "R[A] = enum_descriptor_unbox(R[B])")           \
+    _(IS_ENUM_DESCRIPTOR, FMT_ABC, KOP_ABC_BIN, "R[A] = enum_descriptor_is(R[B], token=R[C])")     \
     _(NARROW_I8, FMT_AB, KOP_AB_UNARY, "R[A] = (int8_t)R[B]")                                      \
     _(NARROW_U8, FMT_AB, KOP_AB_UNARY, "R[A] = (uint8_t)R[B]")                                     \
     _(NARROW_I16, FMT_AB, KOP_AB_UNARY, "R[A] = (int16_t)R[B]")                                    \

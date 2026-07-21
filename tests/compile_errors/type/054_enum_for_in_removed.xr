@@ -1,8 +1,8 @@
-enum Color {
-    Red,
-    Green
+enum Result {
+    Ok(value: int),
+    Error(message: string)
 }
 
-for (c in Color) {
-    print(c.name)
+for (value in Result) {
+    print(value)
 }

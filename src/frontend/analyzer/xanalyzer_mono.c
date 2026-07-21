@@ -457,6 +457,9 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.for_in_stmt.item_name = clone_str(node->as.for_in_stmt.item_name);
             n->as.for_in_stmt.value_name = clone_str(node->as.for_in_stmt.value_name);
             n->as.for_in_stmt.is_keyvalue = node->as.for_in_stmt.is_keyvalue;
+            n->as.for_in_stmt.domain_kind = node->as.for_in_stmt.domain_kind;
+            n->as.for_in_stmt.enum_symbol_id = node->as.for_in_stmt.enum_symbol_id;
+            n->as.for_in_stmt.enum_variant_count = node->as.for_in_stmt.enum_variant_count;
             n->as.for_in_stmt.item_type = sub_tref(node->as.for_in_stmt.item_type, map, mc);
             n->as.for_in_stmt.collection =
                 xr_ast_clone_ctx(node->as.for_in_stmt.collection, map, mc, clone_ctx);
@@ -685,6 +688,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.new_expr.type_args = clone_tref_array(node->as.new_expr.type_args,
                                                         node->as.new_expr.type_arg_count, map, mc);
             n->as.new_expr.type_arg_count = node->as.new_expr.type_arg_count;
+            n->as.new_expr.is_type_namespace = node->as.new_expr.is_type_namespace;
             break;
         case AST_THIS_EXPR:
             break;

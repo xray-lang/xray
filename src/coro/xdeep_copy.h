@@ -167,11 +167,14 @@ XR_FUNC XrValue xr_deep_copy_set_with_ctx(struct XrCopyContext *ctx, struct XrOb
 XR_FUNC XrValue xr_deep_copy_instance_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_deep_copy_closure_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_deep_copy_cell_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_deep_copy_enum_descriptor_with_ctx(struct XrCopyContext *ctx,
+                                                      struct XrObjHeader *obj);
 
 XR_FUNC XrValue xr_to_shared_array(struct XrVMRuntime *X, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_to_shared_map(struct XrVMRuntime *X, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_to_shared_set(struct XrVMRuntime *X, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_to_shared_instance(struct XrVMRuntime *X, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_to_shared_closure(struct XrVMRuntime *X, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_to_shared_enum_descriptor(struct XrVMRuntime *X, struct XrObjHeader *obj);
 
 #endif  // XDEEP_COPY_H

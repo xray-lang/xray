@@ -128,6 +128,85 @@ static void push_decl_rewrite_action(XrJsonValue *actions, const char *uri, cons
     xjson_array_push(actions, action);
 }
 
+static bool extract_enum_variants_target(const char *message, char *buf, size_t buf_size) {
+    if (!message || !buf || buf_size < 2)
+        return false;
+    const char *start = strstr(message, "use `");
+    if (!start)
+        return false;
+    start += strlen("use `");
+    const char *suffix = strstr(start, ".variants`");
+    if (!suffix || suffix == start)
+        return false;
+    size_t len = (size_t) (suffix - start);
+    if (len >= buf_size)
+        return false;
+    for (size_t i = 0; i < len; i++) {
+        char ch = start[i];
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') ||
+              ch == '_'))
+            return false;
+    }
+    memcpy(buf, start, len);
+    buf[len] = '\0';
+    return true;
+}
+
+static void push_enum_variants_action(XrJsonValue *actions, const char *uri, const char *content,
+                                      int diagnostic_line, const char *enum_name) {
+    if (!actions || !uri || !content || diagnostic_line < 0 || !enum_name || !*enum_name)
+        return;
+    const char *line_start = content;
+    for (int line = 0; line < diagnostic_line && *line_start; line++) {
+        const char *newline = strchr(line_start, '\n');
+        if (!newline)
+            return;
+        line_start = newline + 1;
+    }
+    const char *line_end = strchr(line_start, '\n');
+    if (!line_end)
+        line_end = line_start + strlen(line_start);
+
+    size_t enum_len = strlen(enum_name);
+    const char *match = line_start;
+    while ((match = strstr(match, enum_name)) != NULL && match < line_end) {
+        const char *before = match;
+        while (before > line_start && (before[-1] == ' ' || before[-1] == '\t'))
+            before--;
+        bool after_in = before >= line_start + 2 && before[-2] == 'i' && before[-1] == 'n' &&
+                        (before == line_start + 2 || before[-3] == ' ' || before[-3] == '\t' ||
+                         before[-3] == '(');
+        char after = match + enum_len < line_end ? match[enum_len] : '\0';
+        bool target_end = !((after >= 'a' && after <= 'z') || (after >= 'A' && after <= 'Z') ||
+                            (after >= '0' && after <= '9') || after == '_' || after == '.');
+        if (after_in && target_end)
+            break;
+        match += enum_len;
+    }
+    if (!match || match >= line_end)
+        return;
+
+    int column = (int) (match + enum_len - line_start);
+    char title[256];
+    snprintf(title, sizeof(title), "Iterate '%s.variants' descriptors", enum_name);
+    XrJsonValue *action = xjson_new_object();
+    xjson_object_set(action, "title", xjson_new_string(title));
+    xjson_object_set(action, "kind", xjson_new_string("quickfix"));
+
+    XrJsonValue *edit = xjson_new_object();
+    XrJsonValue *changes = xjson_new_object();
+    XrJsonValue *edits = xjson_new_array();
+    XrJsonValue *text_edit = xjson_new_object();
+    xjson_object_set(text_edit, "newText", xjson_new_string(".variants"));
+    xjson_object_set(text_edit, "range",
+                     xjson_make_range(diagnostic_line, column, diagnostic_line, column));
+    xjson_array_push(edits, text_edit);
+    xjson_object_set(changes, uri, edits);
+    xjson_object_set(edit, "changes", changes);
+    xjson_object_set(action, "edit", edit);
+    xjson_array_push(actions, action);
+}
+
 XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
     XrJsonValue *context = xjson_get_object(params, "context");
@@ -236,6 +315,16 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                     snprintf(title, sizeof(title),
                              "Declare '%s' as 'shared' (allow concurrent access)", var_name);
                     push_decl_rewrite_action(actions, uri, doc->content, var_name, "shared", title);
+                }
+            }
+
+            if (msg && strstr(msg, "is not directly iterable") && strstr(msg, ".variants`")) {
+                char enum_name[128];
+                XrJsonValue *diag_range = xjson_get_object(diag, "range");
+                XrJsonValue *diag_start = diag_range ? xjson_get_object(diag_range, "start") : NULL;
+                if (diag_start && extract_enum_variants_target(msg, enum_name, sizeof(enum_name))) {
+                    push_enum_variants_action(actions, uri, doc->content,
+                                              xjson_get_int(diag_start, "line"), enum_name);
                 }
             }
         }

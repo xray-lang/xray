@@ -1,0 +1,7 @@
+enum Option {
+    Some(value: int),
+    None,
+}
+
+var descriptor = Option.variants[0]
+var value = descriptor.construct(42)

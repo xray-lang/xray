@@ -91,6 +91,8 @@ XR_FUNC XiTopBinding xi_lower_find_top_binding(XiLower *l, uint32_t symbol_id, c
  * back to binding.type and finally to l->type_any.
  * Caller must pass a valid binding (xi_top_binding_valid). */
 XR_FUNC XiValue *xi_lower_emit_top_load(XiLower *l, XiTopBinding binding, struct XrType *type);
+XR_FUNC XiValue *xi_lower_enum_namespace_value(XiLower *l, struct XaSymbol *enum_sym,
+                                               const char *enum_name, int line);
 
 /* Emit a store of `val` to the given top binding.  Mirrors
  * xi_lower_emit_top_load on the opcode choice and sets

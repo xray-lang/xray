@@ -74,12 +74,26 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     for (size_t i = 0; i < ctx->nfunc_residues; i++)
         xr_free(ctx->func_residues[i].entries);
     xr_free(ctx->func_residues);
+    xr_free(ctx->enum_scalar_sidecar_used);
     xr_free(ctx);
 }
 
 XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle) {
-    if (ctx)
-        ctx->aot_bundle = bundle;
+    if (!ctx)
+        return;
+    ctx->aot_bundle = bundle;
+    uint32_t need = bundle ? bundle->nenum_plans : 0;
+    if (need > ctx->enum_scalar_sidecar_cap) {
+        uint8_t *used = (uint8_t *) xr_realloc(ctx->enum_scalar_sidecar_used, need);
+        if (!used) {
+            ctx->error = true;
+            return;
+        }
+        ctx->enum_scalar_sidecar_used = used;
+        ctx->enum_scalar_sidecar_cap = need;
+    }
+    if (ctx->enum_scalar_sidecar_used && ctx->enum_scalar_sidecar_cap > 0)
+        memset(ctx->enum_scalar_sidecar_used, 0, ctx->enum_scalar_sidecar_cap);
 }
 
 XR_FUNC void xi_cgen_ctx_set_target(XiCgenCtx *ctx, const XaotTarget *target, bool simd_active) {

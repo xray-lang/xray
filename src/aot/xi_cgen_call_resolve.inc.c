@@ -126,8 +126,25 @@ static const XiImportRef *cg_module_import_ref_for_value(XiCgenCtx *ctx, const X
 
 static const XiEnumData *cg_resolve_imported_enum_value(XiCgenCtx *ctx, const XiFunc *f,
                                                         const XiValue *value) {
-    const XiImportRef *ref = cg_import_ref_for_value(ctx, f, value);
-    if (!ctx || !ref || !ref->member_name)
+    if (!ctx)
+        return NULL;
+
+    const XiValue *origin = cg_unwrap_identity_value(value);
+    if (origin && origin->op == XI_LOAD_FIELD && origin->nargs >= 1 && origin->aux) {
+        const XiImportRef *module_ref = cg_module_import_ref_for_value(ctx, f, origin->args[0]);
+        const char *member_name = (const char *) origin->aux;
+        if (module_ref) {
+            for (int ii = 0; ii < ctx->nimports; ii++) {
+                CgImportEntry *imp = &ctx->imports[ii];
+                if (imp->target_enum &&
+                    cg_import_entry_matches_ref(ctx, imp, module_ref, member_name))
+                    return imp->target_enum;
+            }
+        }
+    }
+
+    const XiImportRef *ref = cg_import_ref_for_value(ctx, f, origin);
+    if (!ref || !ref->member_name)
         return NULL;
 
     if (ref->resolved_mod_index >= 0 && ref->resolved_mod_index < ctx->all_nmodules &&

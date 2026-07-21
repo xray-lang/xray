@@ -822,6 +822,10 @@ TEST(bytecode_roundtrips_enum_type_constants) {
     ASSERT_NOT_NULL(enum_type);
     int payload_counts[] = {0, 1};
     ASSERT_TRUE(xr_enum_type_set_adt_payloads(enum_type, payload_counts, 2));
+    const char *payload_names[] = {"reason"};
+    uint8_t payload_type_ids[] = {XR_TID_STRING};
+    ASSERT_TRUE(xr_enum_layout_set_variant_payload_metadata(enum_type->layout, 1, payload_names,
+                                                            payload_type_ids, 1));
     enum_type->derive_flags = XR_DERIVE_INSPECT | XR_DERIVE_EQ;
 
     int kidx = xr_valuearray_add(&proto->constants, XR_FROM_PTR(enum_type));
@@ -852,6 +856,12 @@ TEST(bytecode_roundtrips_enum_type_constants) {
     ASSERT_STR_EQ(xr_enum_type_member_name(roundtrip_enum, 1), "Err");
     ASSERT_EQ_INT(xr_enum_type_payload_count(roundtrip_enum, 0), 0);
     ASSERT_EQ_INT(xr_enum_type_payload_count(roundtrip_enum, 1), 1);
+    const XrEnumVariantLayout *err_variant = xr_enum_layout_variant(roundtrip_enum->layout, 1);
+    ASSERT_NOT_NULL(err_variant);
+    ASSERT_NOT_NULL(err_variant->payload_names);
+    ASSERT_NOT_NULL(err_variant->payload_type_ids);
+    ASSERT_STR_EQ(err_variant->payload_names[0], "reason");
+    ASSERT_EQ_UINT(err_variant->payload_type_ids[0], XR_TID_STRING);
     ASSERT_EQ_UINT(roundtrip_enum->derive_flags, XR_DERIVE_INSPECT | XR_DERIVE_EQ);
 
     XrSymbolTable *reader_symbols = (XrSymbolTable *) xr_isolate_get_symbol_table(reader);

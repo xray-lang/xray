@@ -1,0 +1,10 @@
+enum Color {
+    Red,
+    Green
+}
+
+fn paint(color: Color) {}
+
+for (variant in Color.variants) {
+    paint(variant)
+}

@@ -620,6 +620,10 @@ static XrJsonValue *complete_enum_decl(XrLspDocument *doc, const char *prefix) {
         return NULL;
     XrJsonValue *items = xjson_new_array();
     char detail_buf[256];
+    snprintf(detail_buf, sizeof(detail_buf), "%s.variants: EnumVariants<%s>", prefix, prefix);
+    XrJsonValue *variants = make_completion_item("variants", XR_COMPLETION_PROPERTY, detail_buf);
+    xjson_object_set(variants, "sortText", xjson_new_string("1"));
+    xjson_array_push(items, variants);
     for (int i = 0; i < enum_node->as.enum_decl.member_count; i++) {
         AstNode *member = enum_node->as.enum_decl.members[i];
         if (member && member->type == AST_ENUM_MEMBER && member->as.enum_member.name) {

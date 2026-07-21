@@ -16,6 +16,7 @@
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
+#include "../frontend/analyzer/xa_selection.h"
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_coro_analyze.h"
 #include "../ir/xi_escape.h"
@@ -44,11 +45,20 @@ static bool prepare_bundle_is_freestanding(const XaotBundle *bundle) {
     return bundle && bundle->global_evidence_plan.profile == XG_BUILD_FREESTANDING;
 }
 
-static bool prepare_type_is_freestanding_ordinal_enum(const XaotBundle *bundle,
-                                                      const XrType *type) {
-    return prepare_bundle_is_freestanding(bundle) && type && !type->is_nullable &&
-           type->kind == XR_KIND_ENUM && type->enum_type.layout &&
-           type->enum_type.layout->is_zero_payload;
+static bool prepare_type_is_unit_enum_ordinal(const XaotBundle *bundle, const XrType *type) {
+    if (!bundle || !type || type->is_nullable || type->kind != XR_KIND_ENUM ||
+        !type->enum_type.layout || !type->enum_type.layout->is_zero_payload)
+        return false;
+
+    /* Freestanding static enums have always used their declaration ordinal.
+     * Hosted code may use that compact representation only when the bundle
+     * owns a concrete enum plan.  Prelude/runtime enums such as SendResult
+     * cross runtime boundaries as tagged values and must not be reinterpreted
+     * as an i64 merely because their source type happens to be unit-only. */
+    if (prepare_bundle_is_freestanding(bundle))
+        return true;
+    const XaotEnumPlan *plan = xaot_bundle_find_enum_plan_for_type(bundle, type);
+    return plan && plan->enum_data && plan->member_count > 0 && plan->max_payload == 0;
 }
 
 static XaotValueRep prepare_enum_ordinal_value_rep(const XrType *type) {
@@ -62,19 +72,18 @@ static XaotValueRep prepare_enum_ordinal_value_rep(const XrType *type) {
     return rep;
 }
 
-static bool prepare_value_is_freestanding_ordinal_enum_member(const XaotBundle *bundle,
+static bool prepare_value_is_unit_enum_ordinal_member(const XaotBundle *bundle, const XiFunc *func,
+                                                      const XiValue *value);
+static bool prepare_value_is_unit_enum_ordinal_compare_member(const XaotBundle *bundle,
                                                               const XiFunc *func,
                                                               const XiValue *value);
-static bool prepare_value_is_freestanding_ordinal_enum_compare_member(const XaotBundle *bundle,
-                                                                      const XiFunc *func,
-                                                                      const XiValue *value);
 
-static void apply_freestanding_enum_ordinal_value_plan(XaotBundle *bundle, XaotValuePlan *vp) {
+static void apply_unit_enum_ordinal_value_plan(XaotBundle *bundle, XaotValuePlan *vp) {
     if (!vp)
         return;
-    if (!prepare_type_is_freestanding_ordinal_enum(bundle, vp->value ? vp->value->type : NULL) &&
-        !prepare_value_is_freestanding_ordinal_enum_member(bundle, vp->func, vp->value) &&
-        !prepare_value_is_freestanding_ordinal_enum_compare_member(bundle, vp->func, vp->value))
+    if (!prepare_type_is_unit_enum_ordinal(bundle, vp->value ? vp->value->type : NULL) &&
+        !prepare_value_is_unit_enum_ordinal_member(bundle, vp->func, vp->value) &&
+        !prepare_value_is_unit_enum_ordinal_compare_member(bundle, vp->func, vp->value))
         return;
     vp->rep = prepare_enum_ordinal_value_rep(vp->value->type);
 }
@@ -341,11 +350,8 @@ static bool prepare_value_plan_is_i64_enum(const XaotBundle *bundle, const XiVal
     return plan && xaot_value_storage_rep(plan->rep) == XR_REP_I64;
 }
 
-static bool prepare_value_is_freestanding_ordinal_enum_member(const XaotBundle *bundle,
-                                                              const XiFunc *func,
-                                                              const XiValue *value) {
-    if (!prepare_bundle_is_freestanding(bundle))
-        return false;
+static bool prepare_value_is_unit_enum_ordinal_member(const XaotBundle *bundle, const XiFunc *func,
+                                                      const XiValue *value) {
     const XiValue *origin = unwrap_identity_value(value);
     if (!origin || origin->op != XI_LOAD_FIELD || origin->nargs < 1 || !origin->aux)
         return false;
@@ -356,11 +362,10 @@ static bool prepare_value_is_freestanding_ordinal_enum_member(const XaotBundle *
     return !ed->members || ed->members[member_index].payload_count == 0;
 }
 
-static bool prepare_value_is_freestanding_ordinal_enum_compare_member(const XaotBundle *bundle,
-                                                                      const XiFunc *func,
-                                                                      const XiValue *value) {
-    if (!prepare_bundle_is_freestanding(bundle) || !func ||
-        !prepare_value_is_namespace_field_load(value))
+static bool prepare_value_is_unit_enum_ordinal_compare_member(const XaotBundle *bundle,
+                                                              const XiFunc *func,
+                                                              const XiValue *value) {
+    if (!func || !prepare_value_is_namespace_field_load(value))
         return false;
     const XiValue *target = unwrap_identity_value(value);
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
@@ -374,11 +379,11 @@ static bool prepare_value_is_freestanding_ordinal_enum_compare_member(const Xaot
             const XiValue *lhs = unwrap_identity_value(user->args[0]);
             const XiValue *rhs = unwrap_identity_value(user->args[1]);
             if (lhs == target &&
-                (prepare_type_is_freestanding_ordinal_enum(bundle, rhs ? rhs->type : NULL) ||
+                (prepare_type_is_unit_enum_ordinal(bundle, rhs ? rhs->type : NULL) ||
                  prepare_value_plan_is_i64_enum(bundle, rhs)))
                 return true;
             if (rhs == target &&
-                (prepare_type_is_freestanding_ordinal_enum(bundle, lhs ? lhs->type : NULL) ||
+                (prepare_type_is_unit_enum_ordinal(bundle, lhs ? lhs->type : NULL) ||
                  prepare_value_plan_is_i64_enum(bundle, lhs)))
                 return true;
         }
@@ -429,6 +434,14 @@ static bool prepare_type_plans_for_type(XaotBundle *bundle, const XrType *type, 
             for (int i = 0; i < type->instance.type_arg_count; i++) {
                 if (!prepare_type_plans_for_type(
                         bundle, type->instance.type_args ? type->instance.type_args[i] : NULL,
+                        depth + 1))
+                    return false;
+            }
+            return true;
+        case XR_KIND_ENUM:
+            for (int i = 0; i < type->enum_type.type_arg_count; i++) {
+                if (!prepare_type_plans_for_type(
+                        bundle, type->enum_type.type_args ? type->enum_type.type_args[i] : NULL,
                         depth + 1))
                     return false;
             }
@@ -3324,6 +3337,97 @@ static bool prepare_func_type_plans(XaotBundle *bundle, XiFunc *func) {
     return true;
 }
 
+static uint32_t prepare_enum_metadata_use_bit(uint8_t field) {
+    switch ((XaEnumMetaField) field) {
+        case XA_ENUM_META_VARIANTS:
+        case XA_ENUM_META_LENGTH:
+            return XAOT_ENUM_USE_COUNT;
+        case XA_ENUM_META_ORDINAL:
+            return XAOT_ENUM_USE_ORDINAL;
+        case XA_ENUM_META_NAME:
+            return XAOT_ENUM_USE_VARIANT_NAME;
+        case XA_ENUM_META_PAYLOAD_COUNT:
+        case XA_ENUM_META_IS_UNIT:
+        case XA_ENUM_META_PAYLOADS:
+            return XAOT_ENUM_USE_PAYLOAD_COUNT;
+        case XA_ENUM_META_PAYLOAD_INDEX:
+            return XAOT_ENUM_USE_PAYLOAD_INDEX;
+        case XA_ENUM_META_PAYLOAD_NAME:
+            return XAOT_ENUM_USE_PAYLOAD_NAME;
+        case XA_ENUM_META_PAYLOAD_TYPE:
+            return XAOT_ENUM_USE_PAYLOAD_TYPE;
+        default:
+            return 0;
+    }
+}
+
+static bool prepare_enum_domain_value(XaotBundle *bundle, const XiValue *value) {
+    const XrType *owner;
+    XaotEnumPlan *plan;
+
+    if (!bundle)
+        return false;
+    if (!value)
+        return true;
+    owner = value->enum_metadata_owner;
+    if (!owner && xr_type_is_enum_metadata(value->type))
+        owner = xr_type_enum_metadata_owner(value->type);
+    if (!owner)
+        return true;
+    if (owner->kind != XR_KIND_ENUM || !owner->enum_type.layout) {
+        bundle->error_msg = "enum-domain Xi value has no concrete enum owner";
+        return false;
+    }
+    if (!xaot_bundle_prepare_enum_plan_for_type(bundle, owner))
+        return false;
+    plan = (XaotEnumPlan *) xaot_bundle_find_enum_plan_for_type(bundle, owner);
+    if (!plan && value->enum_metadata_kind == XR_ENUM_METADATA_NONE) {
+        /* Prelude enums such as Endian use the existing static-enum lowering
+         * and are not module slot enum domains.  Their ordinary value
+         * `.name`/`.ordinal` loads may carry best-effort metadata provenance,
+         * but they must not be mistaken for a task-210 descriptor domain. */
+        return true;
+    }
+    if (!plan) {
+        bundle->error_msg = "enum-domain Xi value has no AOT enum plan";
+        return false;
+    }
+    if (value->aux_kind == XI_AUX_KIND_ENUM_CASE) {
+        plan->value_iteration_reachable = true;
+        plan->descriptor_use_bits |= XAOT_ENUM_USE_COUNT;
+    }
+    if (value->op == XI_ENUM_VARIANT_AT) {
+        plan->variant_iteration_reachable = true;
+        plan->descriptor_use_bits |= XAOT_ENUM_USE_COUNT;
+    }
+    plan->descriptor_use_bits |= prepare_enum_metadata_use_bit(value->enum_metadata_field);
+    if (xr_type_is_enum_metadata(value->type) && value->escape != XI_ESC_NONE &&
+        plan->descriptor_escape_kind < XAOT_ENUM_DESCRIPTOR_TYPED_VALUE)
+        plan->descriptor_escape_kind = XAOT_ENUM_DESCRIPTOR_TYPED_VALUE;
+    if (value->op == XI_ENUM_DESCRIPTOR_BOX)
+        plan->descriptor_escape_kind = XAOT_ENUM_DESCRIPTOR_ERASED_BOX;
+    return true;
+}
+
+static bool prepare_func_enum_domain_plan(XaotBundle *bundle, const XiFunc *func) {
+    if (!bundle || !func)
+        return false;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks ? func->blocks[bi] : NULL;
+        if (!block)
+            continue;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            if (!prepare_enum_domain_value(bundle, &phi->value))
+                return false;
+        }
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            if (!prepare_enum_domain_value(bundle, block->values ? block->values[vi] : NULL))
+                return false;
+        }
+    }
+    return true;
+}
+
 static bool prepare_apply_param_abi_value_plan(XaotBundle *bundle, const XiFunc *func,
                                                XaotValuePlan *vp) {
     const XaotFuncPlan *func_plan;
@@ -3360,7 +3464,7 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                 return false;
             }
             apply_native_class_ptr_value_plan(bundle, vp);
-            apply_freestanding_enum_ordinal_value_plan(bundle, vp);
+            apply_unit_enum_ordinal_value_plan(bundle, vp);
             record_value_stats(&bundle->stats, vp->rep.kind);
             if (!prepare_type_plans_for_type(bundle, phi->value.type, 0))
                 return false;
@@ -3381,7 +3485,7 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                     vp->rep = intrinsic_rep;
             }
             apply_native_class_ptr_value_plan(bundle, vp);
-            apply_freestanding_enum_ordinal_value_plan(bundle, vp);
+            apply_unit_enum_ordinal_value_plan(bundle, vp);
             record_value_stats(&bundle->stats, vp->rep.kind);
             if (!prepare_type_plans_for_type(bundle, blk->values[vi]->type, 0))
                 return false;
@@ -3870,7 +3974,7 @@ static bool prepare_apply_freestanding_typed_catch_rep(XaotBundle *bundle, XiVal
 
     XaotValueRep rep;
     if (!prepare_compact_adt_value_rep_for_type(bundle, value->type, &rep)) {
-        if (!prepare_type_is_freestanding_ordinal_enum(bundle, value->type))
+        if (!prepare_type_is_unit_enum_ordinal(bundle, value->type))
             return false;
         rep = prepare_enum_ordinal_value_rep(value->type);
     }
@@ -4409,6 +4513,8 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     if (!prepare_func_values(bundle, func))
         return false;
     if (!prepare_func_fixed_bytes_plans(bundle, func))
+        return false;
+    if (!prepare_func_enum_domain_plan(bundle, func))
         return false;
     if (!prepare_apply_return_abi_value_plans(bundle, plan))
         return false;

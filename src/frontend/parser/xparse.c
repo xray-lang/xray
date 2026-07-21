@@ -1417,10 +1417,6 @@ AstNode *xr_parse_recoverable(Parser *parser) {
 // Try parsing generic type args <T1, T2, ...>
 // Uses lookahead to detect identifier<...>( pattern, avoiding confusion with comparison
 // Uses space sensitivity: foo<T>() is generic, foo < T is comparison
-static bool is_raw_pointer_type_name(const char *name) {
-    return name && (strcmp(name, "Ptr") == 0 || strcmp(name, "MutPtr") == 0);
-}
-
 // Returns: number of type args parsed, 0 means not a generic call/type namespace.
 static int try_parse_generic_type_args(Parser *parser, XrTypeRef **type_args, int capacity,
                                        bool allow_dot_follow) {
@@ -1564,8 +1560,7 @@ AstNode *xr_parse_variable(Parser *parser) {
     // Try parsing generic type args <T1, T2, ...>
     XrTypeRef *type_args[16];  // Max 16 type args
     int before_generic_error_count = parser->error_count;
-    int type_arg_count =
-        try_parse_generic_type_args(parser, type_args, 16, is_raw_pointer_type_name(name));
+    int type_arg_count = try_parse_generic_type_args(parser, type_args, 16, true);
     if (parser->error_count > before_generic_error_count) {
         AstNode *node = xr_ast_variable(parser->compiler_session, name, line);
         node->column = column;
@@ -1573,9 +1568,12 @@ AstNode *xr_parse_variable(Parser *parser) {
     }
 
     if (type_arg_count > 0) {
-        if (xr_parser_check(parser, TK_DOT) && is_raw_pointer_type_name(name)) {
-            return xr_ast_new_expr(parser->compiler_session, NULL, name, NULL, NULL, 0, type_args,
-                                   type_arg_count, line);
+        if (xr_parser_check(parser, TK_DOT)) {
+            AstNode *type_namespace = xr_ast_new_expr(parser->compiler_session, NULL, name, NULL,
+                                                      NULL, 0, type_args, type_arg_count, line);
+            if (type_namespace)
+                type_namespace->as.new_expr.is_type_namespace = true;
+            return type_namespace;
         }
 
         // Check if this is a generic struct literal: Name<T1, T2>{field: value}

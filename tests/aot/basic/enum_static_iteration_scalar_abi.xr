@@ -1,0 +1,38 @@
+enum ScalarColor {
+    Red,
+    Green,
+    Blue
+}
+
+type ScalarBoundary = ScalarColor | int
+
+fn identityColor(value: ScalarColor) -> ScalarColor {
+    return value
+}
+
+fn eraseColor(value: ScalarColor) -> ScalarColor | int {
+    return value
+}
+
+fn restoreColor(value: ScalarColor | int) -> ScalarColor {
+    if (value is ScalarColor) {
+        return value as ScalarColor
+    }
+    return ScalarColor.Red
+}
+
+var score = 0
+for (color in ScalarColor) {
+    score += identityColor(color).ordinal
+}
+print(score)
+var erased = eraseColor(ScalarColor.Blue)
+print(erased is ScalarColor)
+var restored = restoreColor(erased)
+print(restored.name)
+print(restored.ordinal)
+print(restored == ScalarColor.Blue)
+var boundaries: Array<ScalarColor | int> = [eraseColor(ScalarColor.Green), 41, eraseColor(ScalarColor.Red)]
+print(restoreColor(boundaries[0]).name)
+print(restoreColor(boundaries[1]).name)
+print(restoreColor(boundaries[2]).ordinal)

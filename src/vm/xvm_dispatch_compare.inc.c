@@ -288,6 +288,17 @@ vmcase(OP_IS) {
     vmbreak;
 }
 
+vmcase(OP_IS_ENUM_DESCRIPTOR) {
+    int dest = GETARG_A(i);
+    int src = GETARG_B(i);
+    int type_reg = GETARG_C(i);
+    int64_t token = XR_TO_INT(R(type_reg));
+    uint32_t layout_id = (uint32_t) ((uint64_t) token >> 8);
+    uint8_t metadata_kind = (uint8_t) (token & 0xff);
+    R(dest) = xr_bool(xr_enum_descriptor_matches(R(src), layout_id, metadata_kind));
+    vmbreak;
+}
+
 vmcase(OP_CHECKTYPE) {
     /* OP_CHECKTYPE A B: assert R[A] matches type bitmask K(B).
      * K(B) is a bitmask where bit[tid] = 1 for each allowed type.

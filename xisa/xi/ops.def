@@ -385,6 +385,27 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.enum.descriptor.box
+  :class allocation
+  :arity 1
+  :escape-alloc heap
+  :own-use borrow
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.enum.descriptor.unbox
+  :class conversion
+  :arity 1
+  :result-ownership none
+  :own-use borrow
+  :speculation safe
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.narrow.i8
   :class conversion
   :arity 1
@@ -595,6 +616,36 @@
   :own-use stored-value
   :effects (side-effect memory-write)
   :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.enum.variant.at
+  :class pure
+  :arity 2
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (may-throw)
+  :requires (concrete-enum-metadata)
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.enum.payload.at
+  :class pure
+  :arity 2
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (may-throw)
+  :requires (concrete-enum-metadata)
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.enum.meta.get
+  :class memory-read
+  :arity 2
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (may-throw memory-read)
+  :requires (concrete-enum-metadata)
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 

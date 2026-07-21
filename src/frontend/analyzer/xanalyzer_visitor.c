@@ -3790,6 +3790,17 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                             continue;
                         if (!enum_meta || enum_index >= enum_meta->variant_count)
                             continue;
+                        if (strcmp(mem->as.enum_member.name, "variants") == 0) {
+                            XrLocation loc = {
+                                .file = ctx->file_path, .line = mem->line, .column = mem->column};
+                            char msg[256];
+                            snprintf(msg, sizeof(msg),
+                                     "enum '%s' cannot declare a variant named 'variants'; "
+                                     "'.variants' is the reserved static variant metadata view",
+                                     edecl->name ? edecl->name : "<enum>");
+                            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                        }
                         XaEnumVariantInfo *variant = &enum_meta->variants[enum_index];
                         variant->name = mem->as.enum_member.name;
                         int pc = mem->as.enum_member.payload_count;
@@ -5947,6 +5958,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             XrType *value_type = xa_visit_infer_expr(ctx, ms->value);
             ctx->expected_type = saved_expected;
+            if (!member_type && XR_TYPE_HAS_OBJECT_SHAPE(obj_type) && ms->member) {
+                int field_idx = object_shape_field_index_local(obj_type, ms->member);
+                if (field_idx >= 0 && obj_type->object.field_types)
+                    member_type = obj_type->object.field_types[field_idx];
+            }
+            /* Preserve the declared write-boundary type for lowering and
+             * allocation-effect analysis.  The value expression keeps its
+             * precise type; the member-set node records the storage type. */
+            xa_analyzer_set_node_type(ctx->analyzer, node, member_type ? member_type : value_type);
             xa_assign_check_type(ctx, node, member_type, value_type, ms->member, "member");
             xa_check_span_value_escape(ctx, node, value_type, "store Slice view into a member");
             xa_check_pointer_borrow_escape(ctx, node, ms->value, value_type,
@@ -6486,6 +6506,12 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType *coll_type = NULL;
             bool is_enum_iter = false;
             const char *enum_name = NULL;
+            XaEnumInfo *enum_info = NULL;
+            XrType *enum_type = NULL;
+
+            fi->domain_kind = XR_FOR_IN_DOMAIN_DEFAULT;
+            fi->enum_symbol_id = 0;
+            fi->enum_variant_count = 0;
 
             if (fi->collection) {
                 if (fi->collection->type == AST_RANGE) {
@@ -6496,19 +6522,40 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         xa_visit_infer_expr(ctx, fi->collection->as.range.end);
                     coll_type = xr_type_new_int(NULL);
                 } else if (fi->collection->type == AST_VARIABLE) {
-                    // Check if variable is an enum
+                    // Check whether this identifier denotes an enum type-domain.
+                    // Ordinary enum-typed variables are values and deliberately
+                    // do not enter this path; aliases/imports are compile-time
+                    // type-domain bindings and resolve to the canonical schema.
                     XaSymbol *coll_sym = xa_scope_lookup(ctx->analyzer->current_scope,
                                                          fi->collection->as.variable.name);
-                    if (coll_sym && coll_sym->kind == XA_SYM_ENUM) {
+                    XaSymbolLinks *coll_links =
+                        coll_sym ? xa_analyzer_get_links(ctx->analyzer, coll_sym) : NULL;
+                    bool enum_domain_binding = coll_sym && (coll_sym->kind == XA_SYM_ENUM ||
+                                                            coll_sym->kind == XA_SYM_TYPE_ALIAS ||
+                                                            coll_sym->kind == XA_SYM_IMPORT);
+                    XrType *resolved_domain_type =
+                        enum_domain_binding ? xa_visit_infer_expr(ctx, fi->collection) : NULL;
+                    if (enum_domain_binding && resolved_domain_type &&
+                        resolved_domain_type->kind == XR_KIND_ENUM) {
                         is_enum_iter = true;
-                        // Visit the collection variable so its symbol_id is resolved
-                        xa_visit_infer_expr(ctx, fi->collection);
-                        XaSymbolLinks *coll_links = xa_analyzer_get_links(ctx->analyzer, coll_sym);
-                        if (coll_links && coll_links->type) {
-                            enum_name = coll_links->type->enum_type.enum_name;
+                        enum_name = resolved_domain_type->enum_type.enum_name;
+                        enum_type = resolved_domain_type;
+                        enum_info = coll_links ? coll_links->enum_info : NULL;
+                        XaSymbol *runtime_enum_sym = coll_sym;
+                        if ((!enum_info || coll_sym->kind == XA_SYM_TYPE_ALIAS) && enum_name) {
+                            XaSymbol *canonical = xa_analyzer_lookup_deep(ctx->analyzer, enum_name);
+                            if (canonical && canonical->kind == XA_SYM_ENUM) {
+                                XaSymbolLinks *canonical_links =
+                                    xa_analyzer_get_links(ctx->analyzer, canonical);
+                                enum_info =
+                                    canonical_links ? canonical_links->enum_info : enum_info;
+                                runtime_enum_sym = canonical;
+                            }
                         }
+                        fi->enum_symbol_id = runtime_enum_sym ? runtime_enum_sym->id : coll_sym->id;
                     } else {
-                        coll_type = xa_visit_infer_expr(ctx, fi->collection);
+                        coll_type = resolved_domain_type ? resolved_domain_type
+                                                         : xa_visit_infer_expr(ctx, fi->collection);
                     }
                 } else {
                     coll_type = xa_visit_infer_expr(ctx, fi->collection);
@@ -6532,18 +6579,66 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             if (is_enum_iter) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
-                char msg[192];
-                snprintf(msg, sizeof(msg),
-                         "enum '%s' is not iterable; enum case iteration requires explicit "
-                         "generated metadata",
-                         enum_name ? enum_name : "<unknown>");
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                if (fi->is_keyvalue) {
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                             "enum iteration yields values only; use `for (value in %s)`",
+                             enum_name ? enum_name : "Enum");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                } else if (!enum_info || !enum_info->layout) {
+                    char msg[192];
+                    snprintf(msg, sizeof(msg),
+                             "enum '%s' iteration requires a concrete enum layout",
+                             enum_name ? enum_name : "<unknown>");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                } else if (enum_info->is_payload_enum) {
+                    char msg[384];
+                    snprintf(msg, sizeof(msg),
+                             "payload enum '%s' is not directly iterable because its value set "
+                             "is not finite; use `%s.variants` to iterate variant descriptors, "
+                             "or construct concrete payload values explicitly",
+                             enum_name ? enum_name : "<unknown>", enum_name ? enum_name : "Enum");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                } else {
+                    fi->domain_kind = XR_FOR_IN_DOMAIN_UNIT_ENUM_VALUES;
+                    fi->enum_variant_count = enum_info->variant_count;
+                    item_type = enum_type ? enum_type : xr_type_new_unknown(NULL);
+                }
             } else if (fi->collection && fi->collection->type == AST_RANGE) {
                 item_type = xr_type_new_int(NULL);
             } else if (coll_type) {
-                if (XR_TYPE_IS_ARRAY(coll_type) || XR_TYPE_IS_VIEW(coll_type) ||
-                    XR_TYPE_IS_SPAN(coll_type)) {
+                if (xr_type_is_enum_metadata_named(coll_type, XR_ENUM_VARIANTS_TYPE_NAME)) {
+                    XrType *owner = xr_type_enum_metadata_owner(coll_type);
+                    if (fi->is_keyvalue) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        xa_analyzer_add_diagnostic(
+                            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                            "enum variant metadata iteration yields descriptors only", &loc);
+                    }
+                    fi->domain_kind = XR_FOR_IN_DOMAIN_ENUM_VARIANTS;
+                    fi->enum_variant_count = owner && owner->enum_type.layout
+                                                 ? owner->enum_type.layout->variant_count
+                                                 : 0;
+                    item_type = xr_type_new_enum_metadata(ctx->analyzer->isolate,
+                                                          XR_ENUM_VARIANT_TYPE_NAME, owner);
+                } else if (xr_type_is_enum_metadata_named(coll_type, XR_ENUM_PAYLOADS_TYPE_NAME)) {
+                    XrType *owner = xr_type_enum_metadata_owner(coll_type);
+                    if (fi->is_keyvalue) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        xa_analyzer_add_diagnostic(
+                            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                            "enum payload metadata iteration yields descriptors only", &loc);
+                    }
+                    fi->domain_kind = XR_FOR_IN_DOMAIN_ENUM_PAYLOADS;
+                    item_type = xr_type_new_enum_metadata(ctx->analyzer->isolate,
+                                                          XR_ENUM_PAYLOAD_FIELD_TYPE_NAME, owner);
+                } else if (XR_TYPE_IS_ARRAY(coll_type) || XR_TYPE_IS_VIEW(coll_type) ||
+                           XR_TYPE_IS_SPAN(coll_type)) {
                     if (coll_type->container.element_type) {
                         item_type = coll_type->container.element_type;
                     }

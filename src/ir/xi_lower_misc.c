@@ -183,6 +183,47 @@ static uint32_t xi_lower_decl_derive_flags(XrAttribute **attrs, int count) {
     return flags;
 }
 
+static int xi_lower_configure_adt_layout(XiLower *l, XrEnumType *enum_type,
+                                         const EnumDeclNode *decl,
+                                         const XiEnumMemberData *members) {
+    int variant_count = decl->member_count;
+    int max_payload = 0;
+    int *payload_counts = (int *) xr_calloc((size_t) variant_count, sizeof(int));
+    if (payload_counts) {
+        for (int i = 0; i < variant_count; i++) {
+            int count = decl->members[i]->as.enum_member.payload_count;
+            payload_counts[i] = count;
+            if (count > max_payload)
+                max_payload = count;
+        }
+        (void) xr_enum_type_set_adt_payloads(enum_type, payload_counts, variant_count);
+        xr_free(payload_counts);
+    }
+    if (!enum_type->layout)
+        return max_payload;
+
+    for (int i = 0; i < variant_count; i++) {
+        EnumMemberNode *member = &decl->members[i]->as.enum_member;
+        if (member->payload_count <= 0)
+            continue;
+        uint8_t *type_ids =
+            (uint8_t *) xr_calloc((size_t) member->payload_count, sizeof(*type_ids));
+        if (!type_ids)
+            continue;
+        for (int p = 0; p < member->payload_count; p++) {
+            XrType *payload_type =
+                members && members[i].payload_types ? members[i].payload_types[p] : NULL;
+            type_ids[p] = xr_type_to_tid(payload_type);
+        }
+        (void) xr_enum_layout_set_variant_payload_metadata(
+            enum_type->layout, (uint32_t) i, (const char *const *) member->payload_names, type_ids,
+            (uint16_t) member->payload_count);
+        xr_free(type_ids);
+    }
+    (void) l;
+    return max_payload;
+}
+
 /* Lower AST_ENUM_DECL: create XrEnumType at compile time, store as
  * shared variable so enum member access can find it.
  * Handles both zero-payload enums and payload enums. The temporary runtime
@@ -244,6 +285,16 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
             enum_members[i].name = arena_strdup(l->func, m->name);
             enum_members[i].ordinal = (uint32_t) i;
             enum_members[i].payload_count = m->payload_count;
+            if (m->payload_count > 0 && m->payload_names) {
+                const char **payload_names = (const char **) xi_func_arena_alloc(
+                    l->func, (uint32_t) ((size_t) m->payload_count * sizeof(const char *)));
+                if (payload_names) {
+                    for (int p = 0; p < m->payload_count; p++)
+                        payload_names[p] =
+                            arena_strdup(l->func, m->payload_names[p] ? m->payload_names[p] : "");
+                    enum_members[i].payload_names = payload_names;
+                }
+            }
             if (m->payload_count > 0 && m->payload_types) {
                 XrType **payload_types = (XrType **) xi_func_arena_alloc(
                     l->func, (uint32_t) ((size_t) m->payload_count * sizeof(XrType *)));
@@ -269,22 +320,10 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     xr_free(names);
 
     /* Set tagged aggregate layout metadata on the created enum type. */
-    if (et && is_adt) {
-        int *payload_counts = (int *) xr_calloc((size_t) n, sizeof(int));
-        int max_pc = 0;
-        if (payload_counts) {
-            for (int i = 0; i < n; i++) {
-                int pc = ed->members[i]->as.enum_member.payload_count;
-                payload_counts[i] = pc;
-                if (pc > max_pc)
-                    max_pc = pc;
-            }
-            (void) xr_enum_type_set_adt_payloads(et, payload_counts, n);
-            xr_free(payload_counts);
-        }
-        if (enum_data)
-            enum_data->max_payload = max_pc;
-    }
+    if (et && is_adt && enum_data)
+        enum_data->max_payload = xi_lower_configure_adt_layout(l, et, ed, enum_members);
+    else if (et && is_adt)
+        (void) xi_lower_configure_adt_layout(l, et, ed, enum_members);
     if (enum_data) {
         enum_data->layout_id = et && et->layout ? et->layout->layout_id : 0;
         enum_data->runtime_type = et;

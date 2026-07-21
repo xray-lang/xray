@@ -42,6 +42,7 @@ typedef struct XiEnumMemberData {
     const char *name;
     uint32_t ordinal;
     int payload_count;
+    const char **payload_names;
     struct XrType **payload_types;
 } XiEnumMemberData;
 

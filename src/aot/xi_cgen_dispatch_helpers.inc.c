@@ -145,7 +145,7 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     // A scalar const whose storage rep is TAGGED (e.g. an int/float/bool value
     // typed as a nullable primitive) must be boxed to match its XrValue C slot.
     bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
-    if (v->type->kind == XR_KIND_INT) {
+    if (v->type->kind == XR_KIND_INT || xr_type_is_enum_metadata(v->type)) {
         if (boxed)
             fprintf(out, "XR_FROM_INT(");
         if (v->aux_int == INT64_MIN)
@@ -425,27 +425,15 @@ static uint32_t xicgen_enum_name_expr_id(const XiValue *recv) {
     return recv && recv->id ? recv->id : 1u;
 }
 
-static void xicgen_emit_enum_name_static_ref(FILE *out, const char *enum_buf, uint32_t expr_id,
-                                             uint32_t member_index, XrRep result_rep) {
-    if (result_rep == XR_REP_PTR) {
-        fprintf(out, "(void *) &_xenum_name_%s_%u_%u", enum_buf, (unsigned) expr_id,
-                (unsigned) member_index);
-        return;
-    }
-    fprintf(out, "xr_str_lit(&_xenum_name_%s_%u_%u)", enum_buf, (unsigned) expr_id,
-            (unsigned) member_index);
-}
-
 static bool xicgen_emit_freestanding_enum_layout_name_expr(XiCgenCtx *ctx, FILE *out,
                                                            const XiValue *recv,
                                                            const XrEnumLayout *layout,
                                                            XrRep result_rep) {
-    if (!ctx || !ctx->freestanding_profile || !out || !recv || !layout || !layout->variants ||
-        layout->variant_count == 0 || !layout->is_zero_payload ||
-        cg_value_plan_storage_rep(ctx, recv) != XR_REP_I64)
+    if (!ctx || !out || !recv || !layout || !layout->variants || layout->variant_count == 0 ||
+        !layout->is_zero_payload || cg_value_plan_storage_rep(ctx, recv) != XR_REP_I64)
         return false;
     for (uint32_t i = 0; i < layout->variant_count; i++) {
-        if (layout->variants[i].payload_count != 0)
+        if (layout->variants[i].payload_count != 0 || layout->variants[i].tag != i)
             return false;
     }
 
@@ -454,27 +442,28 @@ static bool xicgen_emit_freestanding_enum_layout_name_expr(XiCgenCtx *ctx, FILE 
     sanitize_c_ident_part(enum_buf, sizeof(enum_buf), layout->name ? layout->name : "Enum");
     result_rep = result_rep == XR_REP_PTR ? XR_REP_PTR : XR_REP_TAGGED;
     fprintf(out, "({ ");
-    for (uint32_t i = 0; i < layout->variant_count; i++) {
-        fprintf(out, "static const xrt_str_t _xenum_name_%s_%u_%u = ", enum_buf, (unsigned) expr_id,
-                (unsigned) i);
-        cg_emit_static_string_header_initializer(
-            out, layout->variants[i].name ? layout->variants[i].name : "");
-        fprintf(out, "; ");
-    }
-    fprintf(out, "int64_t _xenum_tag_%s_%u = ", enum_buf, (unsigned) expr_id);
-    emit_value_as_rep_ctx(ctx, out, recv, XR_REP_I64);
-    fprintf(out, "; ");
+    fprintf(out, "static const xrt_str_t *const _xenum_names_%s_%u[%u] = {", enum_buf,
+            (unsigned) expr_id, (unsigned) layout->variant_count);
     for (uint32_t i = 0; i < layout->variant_count; i++) {
         if (i > 0)
-            fprintf(out, " : ");
-        fprintf(out, "(_xenum_tag_%s_%u == INT64_C(%u) ? ", enum_buf, (unsigned) expr_id,
-                (unsigned) layout->variants[i].tag);
-        xicgen_emit_enum_name_static_ref(out, enum_buf, expr_id, i, result_rep);
+            fprintf(out, ",");
+        fprintf(out, "&_xstr_%d",
+                cg_intern_str_lit(ctx, layout->variants[i].name ? layout->variants[i].name : ""));
     }
-    fprintf(out, " : ");
-    xicgen_emit_enum_name_static_ref(out, enum_buf, expr_id, 0, result_rep);
-    for (uint32_t i = 0; i < layout->variant_count; i++)
-        fprintf(out, ")");
+    fprintf(out, "}; ");
+    fprintf(out, "int64_t _xenum_tag_%s_%u = ", enum_buf, (unsigned) expr_id);
+    emit_value_as_rep_ctx(ctx, out, recv, XR_REP_I64);
+    fprintf(out,
+            "; const xrt_str_t *_xenum_name_%s_%u = "
+            "(_xenum_tag_%s_%u >= 0 && (uint64_t)_xenum_tag_%s_%u < %u) ? "
+            "_xenum_names_%s_%u[_xenum_tag_%s_%u] : _xenum_names_%s_%u[0]; ",
+            enum_buf, (unsigned) expr_id, enum_buf, (unsigned) expr_id, enum_buf,
+            (unsigned) expr_id, (unsigned) layout->variant_count, enum_buf, (unsigned) expr_id,
+            enum_buf, (unsigned) expr_id, enum_buf, (unsigned) expr_id);
+    if (result_rep == XR_REP_PTR)
+        fprintf(out, "(void *)_xenum_name_%s_%u", enum_buf, (unsigned) expr_id);
+    else
+        fprintf(out, "xr_str_lit(_xenum_name_%s_%u)", enum_buf, (unsigned) expr_id);
     fprintf(out, "; })");
     return true;
 }
@@ -547,7 +536,7 @@ static void xicgen_param(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     uint16_t param_idx = (uint16_t) v->aux_int;
     XrRep from_rep = cg_func_param_abi_rep(ctx, f, param_idx);
     XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
-    const char *conv_suffix = emit_conversion_prefix(out, v->type, from_rep, to_rep);
+    const char *conv_suffix = emit_conversion_prefix_ctx(ctx, out, v->type, from_rep, to_rep);
     fprintf(out, "p%u", (unsigned) v->aux_int);
     emit_conversion_suffix(out, conv_suffix);
 }
@@ -2534,7 +2523,11 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_codegen_abort_expr(out);
         return;
     }
+    XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
+    const char *suffix =
+        emit_conversion_prefix_ctx(ctx, out, v ? v->type : NULL, XR_REP_TAGGED, target_rep);
     fprintf(out, "%s[%d]", ctx->shared_name, (int) v->aux_int);
+    emit_conversion_suffix(out, suffix);
 }
 
 static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -9826,6 +9819,59 @@ static void xicgen_unbox(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     emit_conversion_suffix(out, conv_suffix);
 }
 
+static bool xicgen_enum_descriptor_token(XiCgenCtx *ctx, const XiValue *v, uint32_t *out_layout_id,
+                                         uint8_t *out_kind) {
+    const XrType *type = v ? v->type : NULL;
+    const XrType *owner =
+        v && v->enum_metadata_owner ? v->enum_metadata_owner : xr_type_enum_metadata_owner(type);
+    if (!ctx || !ctx->aot_bundle || !v || !owner)
+        return false;
+    const XaotEnumPlan *plan = xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, owner);
+    XrEnumMetadataKind kind = v->enum_metadata_kind != 0
+                                  ? (XrEnumMetadataKind) v->enum_metadata_kind
+                                  : xr_type_enum_metadata_kind(type);
+    if (!plan || plan->layout_id == 0 || kind == XR_ENUM_METADATA_NONE)
+        return false;
+    if (out_layout_id)
+        *out_layout_id = plan->layout_id;
+    if (out_kind)
+        *out_kind = (uint8_t) kind;
+    return true;
+}
+
+static void xicgen_enum_descriptor_box(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                       const char *prefix) {
+    (void) f;
+    (void) prefix;
+    uint32_t layout_id = 0;
+    uint8_t kind = 0;
+    if (!v || v->nargs != 1 || !v->args[0] ||
+        !xicgen_enum_descriptor_token(ctx, v, &layout_id, &kind)) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: invalid erased enum descriptor box\n");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, "xrt_enum_descriptor_box_new(%u, %u, ", layout_id, (unsigned) kind);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, ")");
+}
+
+static void xicgen_enum_descriptor_unbox(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                         const XiValue *v, const char *prefix) {
+    (void) f;
+    (void) prefix;
+    if (!v || v->nargs != 1 || !v->args[0]) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: invalid erased enum descriptor unbox\n");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, "xrt_enum_descriptor_unbox(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ")");
+}
+
 static uint32_t xicgen_enum_layout_id_for_data(const XiEnumData *ed) {
     if (!ed)
         return 0;
@@ -9882,6 +9928,31 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_is: missing arg");
     struct XrType *target = (struct XrType *) v->aux;
+    if (xr_type_is_enum_metadata(target)) {
+        const XrType *owner = xr_type_enum_metadata_owner(target);
+        const XaotEnumPlan *plan = ctx && ctx->aot_bundle && owner
+                                       ? xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, owner)
+                                       : NULL;
+        XrEnumMetadataKind kind = xr_type_enum_metadata_kind(target);
+        if (!plan || plan->layout_id == 0 || kind == XR_ENUM_METADATA_NONE) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: enum descriptor is-check lacks verified plan\n");
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        uint32_t source_layout_id = 0;
+        uint8_t source_kind = 0;
+        if (v->args[0] &&
+            xicgen_enum_descriptor_token(ctx, v->args[0], &source_layout_id, &source_kind)) {
+            fprintf(out, "%d",
+                    source_layout_id == plan->layout_id && source_kind == (uint8_t) kind);
+            return;
+        }
+        fprintf(out, "xrt_enum_descriptor_matches(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", %u, %u)", plan->layout_id, (unsigned) kind);
+        return;
+    }
     uint32_t enum_layout_id = 0;
     if (xicgen_is_enum_evidence(ctx, f, v, target, &enum_layout_id)) {
         const XaotValuePlan *input_plan = cg_value_plan(ctx, v->args[0]);
@@ -9995,8 +10066,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                 return;
             helper = "xrt_enum_box_name";
         } else if (strcmp(field, "ordinal") == 0) {
-            if (ctx && ctx->freestanding_profile &&
-                cg_value_plan_storage_rep(ctx, v->args[0]) == XR_REP_I64) {
+            if (ctx && cg_value_plan_storage_rep(ctx, v->args[0]) == XR_REP_I64) {
                 const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64,
                                                                  cg_value_plan_storage_rep(ctx, v));
                 emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
@@ -10042,6 +10112,17 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             recv_enum = cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);
         if (!recv_enum)
             recv_enum = cg_resolve_imported_enum_value(ctx, f, v->args[0]);
+        /* Optimisation may replace the enum namespace receiver with an
+         * identity/constant value before C emission.  The result still has a
+         * concrete enum type, so recover the declaration from the prepared
+         * enum-domain plan instead of falling back to a runtime namespace
+         * map. */
+        if (!recv_enum && ctx && ctx->aot_bundle && v->type && v->type->kind == XR_KIND_ENUM) {
+            const XaotEnumPlan *enum_plan =
+                xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, v->type);
+            if (enum_plan)
+                recv_enum = enum_plan->enum_data;
+        }
         int midx = cg_enum_member_index(recv_enum, field);
         if (recv_enum && midx >= 0 &&
             emit_static_enum_member_value_expr(ctx, out, v, recv_enum, (uint32_t) midx))
@@ -10605,9 +10686,252 @@ static bool xicgen_emit_map_index_set_user_hash_eq(XiCgenCtx *ctx, FILE *out, co
     return true;
 }
 
+static void xicgen_enum_variant_at(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                   const char *prefix) {
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v && v->nargs >= 2, "xicgen_enum_variant_at: missing operands");
+    const char *suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "({ int64_t _n = ");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, "; int64_t _i = ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+    fprintf(out, "; if (_i < 0 || _i >= _n) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                 "\"enum variant index out of bounds\"); _i; })");
+    emit_conversion_suffix(out, suffix);
+}
+
+static void xicgen_enum_payload_at(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                   const char *prefix) {
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v && v->nargs >= 2, "xicgen_enum_payload_at: missing operands");
+    const char *suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "({ uint64_t _p = (uint64_t)(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, "); int64_t _i = ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+    fprintf(out, "; uint32_t _n = (uint32_t)(_p >> 32); if (_i < 0 || (uint64_t)_i >= _n) "
+                 "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                 "\"enum payload field index out of bounds\"); "
+                 "(int64_t)(((uint64_t)(uint32_t)_p << 32) | (uint32_t)_i); })");
+    emit_conversion_suffix(out, suffix);
+}
+
+static uint32_t xicgen_enum_meta_use_bit(int64_t field) {
+    switch ((XaEnumMetaField) field) {
+        case XA_ENUM_META_NAME:
+            return XAOT_ENUM_USE_VARIANT_NAME;
+        case XA_ENUM_META_PAYLOAD_COUNT:
+            return XAOT_ENUM_USE_PAYLOAD_COUNT;
+        case XA_ENUM_META_PAYLOAD_NAME:
+            return XAOT_ENUM_USE_PAYLOAD_NAME;
+        case XA_ENUM_META_PAYLOAD_TYPE:
+            return XAOT_ENUM_USE_PAYLOAD_TYPE;
+        default:
+            return 0;
+    }
+}
+
+static const XaotEnumPlan *xicgen_enum_meta_plan(XiCgenCtx *ctx, const XiFunc *f,
+                                                 const XiValue *v) {
+    if (!v || v->nargs < 2)
+        return NULL;
+    if (ctx && ctx->aot_bundle && v->enum_metadata_owner) {
+        const XaotEnumPlan *plan =
+            xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, v->enum_metadata_owner);
+        if (plan)
+            return plan;
+    }
+    const XiValue *enum_value = cg_unwrap_identity_value(v->args[0]);
+    const XiEnumData *ed = cg_enum_for_shared_value_in_func(ctx, f, enum_value);
+    if (!ed)
+        ed = cg_resolve_imported_enum_value(ctx, f, enum_value);
+    /* A module initializer may still hold the canonical enum namespace as
+     * its compile-time runtime-type constant before the SET_SHARED.  Resolve
+     * that identity directly instead of forcing a temporary runtime Map. */
+    if (!ed && enum_value && enum_value->op == XI_CONST && enum_value->aux)
+        ed = cg_enum_for_runtime_type(ctx, enum_value->aux);
+    return ctx && ctx->aot_bundle && ed ? xaot_bundle_find_enum_plan(ctx->aot_bundle, ed) : NULL;
+}
+
+static uint32_t xicgen_enum_payload_field_count(const XaotEnumPlan *plan) {
+    uint64_t total = 0;
+    if (!plan || !plan->members)
+        return 0;
+    for (uint32_t i = 0; i < plan->member_count; i++) {
+        int count = plan->members[i].payload_count;
+        if (count > 0)
+            total += (uint32_t) count;
+    }
+    return total <= UINT32_MAX ? (uint32_t) total : UINT32_MAX;
+}
+
+static void xicgen_emit_enum_payload_offsets(FILE *out, const XaotEnumPlan *plan) {
+    uint32_t offset = 0;
+    fprintf(out, "static const uint32_t _xenum_offsets[%u] = {0",
+            (unsigned) plan->member_count + 1u);
+    for (uint32_t i = 0; i < plan->member_count; i++) {
+        int count = plan->members[i].payload_count;
+        if (count > 0)
+            offset += (uint32_t) count;
+        fprintf(out, ",%u", (unsigned) offset);
+    }
+    fprintf(out, "}; ");
+}
+
+static void xicgen_emit_enum_payload_values(XiCgenCtx *ctx, FILE *out, const XaotEnumPlan *plan,
+                                            bool strings) {
+    uint32_t total = xicgen_enum_payload_field_count(plan);
+    fprintf(out, "static const %s _xenum_values[%u] = {", strings ? "XrValue" : "uint16_t",
+            (unsigned) (total > 0 ? total : 1u));
+    if (total == 0) {
+        fprintf(out, strings ? "{0}" : "0");
+    } else {
+        bool first = true;
+        for (uint32_t i = 0; i < plan->member_count; i++) {
+            const XiEnumMemberData *member = &plan->members[i];
+            for (int p = 0; p < member->payload_count; p++) {
+                if (!first)
+                    fprintf(out, ",");
+                first = false;
+                if (strings) {
+                    const char *name = member->payload_names && member->payload_names[p]
+                                           ? member->payload_names[p]
+                                           : "";
+                    cg_emit_static_str_value_initializer(ctx, out, name);
+                } else {
+                    fprintf(out, "%u",
+                            (unsigned) xr_type_to_tid(
+                                member->payload_types ? member->payload_types[p] : NULL));
+                }
+            }
+        }
+    }
+    fprintf(out, "}; ");
+}
+
+static void xicgen_enum_meta_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                 const char *prefix) {
+    (void) prefix;
+    const XaotEnumPlan *plan = xicgen_enum_meta_plan(ctx, f, v);
+    const XiEnumData *ed = plan ? plan->enum_data : NULL;
+    uint32_t required_bit = xicgen_enum_meta_use_bit(v ? v->aux_int : 0);
+    if (!plan || !ed || !plan->members || required_bit == 0 ||
+        (plan->descriptor_use_bits & required_bit) == 0) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: enum metadata access lacks verified field reachability\n");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+
+    bool string_result = v->aux_int == XA_ENUM_META_NAME || v->aux_int == XA_ENUM_META_PAYLOAD_NAME;
+    XrRep source_rep = string_result ? XR_REP_TAGGED : XR_REP_I64;
+    const char *suffix =
+        emit_conversion_prefix(out, v->type, source_rep, cg_value_plan_storage_rep(ctx, v));
+    if (v->aux_int == XA_ENUM_META_NAME) {
+        fprintf(out, "({ int64_t _i = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, "; static const XrValue _xenum_names[%u] = {",
+                (unsigned) (ed->member_count > 0 ? ed->member_count : 1u));
+        for (uint32_t i = 0; i < ed->member_count; i++) {
+            if (i > 0)
+                fprintf(out, ",");
+            cg_emit_static_str_value_initializer(
+                ctx, out, plan->members[i].name ? plan->members[i].name : "");
+        }
+        if (ed->member_count == 0)
+            fprintf(out, "{0}");
+        fprintf(out,
+                "}; if (_i < 0 || (uint64_t)_i >= UINT64_C(%u)) "
+                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                "\"enum variant ordinal out of bounds\"); _xenum_names[_i]; })",
+                (unsigned) ed->member_count);
+    } else if (v->aux_int == XA_ENUM_META_PAYLOAD_COUNT) {
+        fprintf(out, "({ int64_t _i = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, "; static const uint16_t _xenum_counts[%u] = {",
+                (unsigned) (ed->member_count > 0 ? ed->member_count : 1u));
+        for (uint32_t i = 0; i < ed->member_count; i++) {
+            if (i > 0)
+                fprintf(out, ",");
+            fprintf(out, "%u", (unsigned) plan->members[i].payload_count);
+        }
+        if (ed->member_count == 0)
+            fprintf(out, "0");
+        fprintf(out,
+                "}; if (_i < 0 || (uint64_t)_i >= UINT64_C(%u)) "
+                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                "\"enum variant ordinal out of bounds\"); (int64_t)_xenum_counts[_i]; })",
+                (unsigned) ed->member_count);
+    } else {
+        fprintf(out, "({ uint64_t _p = (uint64_t)(");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, "); uint32_t _v = (uint32_t)(_p >> 32), _f = (uint32_t)_p; ");
+        xicgen_emit_enum_payload_offsets(out, plan);
+        xicgen_emit_enum_payload_values(ctx, out, plan, string_result);
+        fprintf(out,
+                "if (_v >= UINT32_C(%u)) "
+                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                "\"enum variant ordinal out of bounds\"); "
+                "uint32_t _begin = _xenum_offsets[_v], _end = _xenum_offsets[_v + 1u]; "
+                "if (_f >= _end - _begin) "
+                "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                "\"enum payload field index out of bounds\"); "
+                "%s_xenum_values[_begin + _f]; })",
+                (unsigned) ed->member_count, string_result ? "" : "(int64_t)");
+    }
+    emit_conversion_suffix(out, suffix);
+}
+
 static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_index_get: need obj and key");
+    if (v->aux_kind == XI_AUX_KIND_ENUM_CASE) {
+        const XaotEnumPlan *enum_plan =
+            ctx && ctx->aot_bundle && v->enum_metadata_owner
+                ? xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, v->enum_metadata_owner)
+                : NULL;
+        const XiEnumData *ed =
+            enum_plan ? enum_plan->enum_data : cg_enum_for_shared_value_in_func(ctx, f, v->args[0]);
+        if (!ed)
+            ed = cg_resolve_imported_enum_value(ctx, f, v->args[0]);
+        if (!enum_plan || !enum_plan->value_iteration_reachable || !ed || ed->is_adt ||
+            ed->member_count == 0) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: enum case iteration lacks verified unit-only reachability\n");
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        if (cg_value_plan_storage_rep(ctx, v) == XR_REP_I64) {
+            fprintf(out, "({ int64_t _xenum_i = ");
+            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+            fprintf(out,
+                    "; if (_xenum_i < 0 || (uint64_t)_xenum_i >= UINT64_C(%u)) "
+                    "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                    "\"enum case ordinal out of bounds\"); _xenum_i; })",
+                    (unsigned) ed->member_count);
+            return;
+        }
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+        fprintf(out, "({ int64_t _xenum_i = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, "; XrValue _xenum_v = XR_NULL_VAL; switch (_xenum_i) {");
+        for (uint32_t i = 0; i < ed->member_count; i++) {
+            fprintf(out, " case %u: _xenum_v = ", (unsigned) i);
+            emit_static_enum_member_value_expr(ctx, out, v, ed, i);
+            fprintf(out, "; break;");
+        }
+        fprintf(out, " default: xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
+                     "\"enum case ordinal out of bounds\"); } _xenum_v; })");
+        emit_conversion_suffix(out, conv_suffix);
+        return;
+    }
     const XaotKeyAccessPlan *key_plan =
         xicgen_checked_key_access_plan(ctx, v, XG_KEY_ACCESS_INDEX_GET);
     if (ctx && ctx->error) {

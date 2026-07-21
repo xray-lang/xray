@@ -27,6 +27,69 @@ static int type_member_to_tid(AstNode *node) {
     return xr_type_from_name(ma->name);
 }
 
+static bool flow_type_matches_tref(const XrType *type, const XrTypeRef *tref) {
+    if (!type || !tref)
+        return false;
+    if (tref->kind == XR_TREF_NAMED || tref->kind == XR_TREF_GENERIC) {
+        const char *name = tref->name;
+        if (!name)
+            return false;
+        if (type->kind == XR_KIND_ENUM) {
+            if (!type->enum_type.enum_name || strcmp(type->enum_type.enum_name, name) != 0)
+                return false;
+            if (tref->kind != XR_TREF_GENERIC)
+                return type->enum_type.type_arg_count == 0;
+            if (type->enum_type.type_arg_count != tref->nchildren)
+                return false;
+            for (uint8_t i = 0; i < tref->nchildren; i++) {
+                if (!flow_type_matches_tref(type->enum_type.type_args[i], tref->children[i]))
+                    return false;
+            }
+            return true;
+        }
+        if (type->kind == XR_KIND_INSTANCE) {
+            if (!type->instance.class_name || strcmp(type->instance.class_name, name) != 0)
+                return false;
+            if (tref->kind != XR_TREF_GENERIC)
+                return type->instance.type_arg_count == 0;
+            if (type->instance.type_arg_count != tref->nchildren)
+                return false;
+            for (uint8_t i = 0; i < tref->nchildren; i++) {
+                if (!flow_type_matches_tref(type->instance.type_args[i], tref->children[i]))
+                    return false;
+            }
+            return true;
+        }
+        if (strcmp(name, "int") == 0)
+            return type->kind == XR_KIND_INT;
+        if (strcmp(name, "float") == 0)
+            return type->kind == XR_KIND_FLOAT;
+        if (strcmp(name, "bool") == 0)
+            return type->kind == XR_KIND_BOOL;
+        if (strcmp(name, "string") == 0)
+            return type->kind == XR_KIND_STRING;
+    }
+    return false;
+}
+
+static XrType *flow_narrow_by_tref(XrType *base_type, const XrTypeRef *tref, bool assume_true) {
+    if (!base_type || !tref || !XR_TYPE_IS_UNION(base_type))
+        return NULL;
+    XrType *members[XR_UNION_MAX_MEMBERS];
+    int count = 0;
+    for (int i = 0; i < xr_type_union_count(base_type) && count < XR_UNION_MAX_MEMBERS; i++) {
+        XrType *member = xr_type_union_member(base_type, i);
+        bool matches = flow_type_matches_tref(member, tref);
+        if (matches == assume_true)
+            members[count++] = member;
+    }
+    if (count == 0)
+        return xr_type_new_never(NULL);
+    if (count == 1)
+        return members[0];
+    return xr_type_new_union(NULL, members, count);
+}
+
 // Apply type narrowing based on condition expression
 // Analyzes common patterns: x != null, x == null, typeOf(x) == Type.xxx, truthiness
 static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, XrType *base_type,
@@ -144,6 +207,9 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
             XrTypeRef *tref = is_expr->type;
             // Extract class name from NAMED / GENERIC type refs
             if ((tref->kind == XR_TREF_NAMED || tref->kind == XR_TREF_GENERIC) && tref->name) {
+                XrType *precise = flow_narrow_by_tref(base_type, tref, assume_true);
+                if (precise)
+                    return precise;
                 return xa_narrow_by_instanceof(base_type, tref->name, assume_true);
             }
             // For primitive type checks (x is int, x is string, etc.)

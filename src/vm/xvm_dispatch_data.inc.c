@@ -67,6 +67,30 @@ vmcase(OP_UNBOX_F64) {
     vmbreak;
 }
 
+vmcase(OP_ENUM_DESCRIPTOR_BOX) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    int64_t token = XR_TO_INT(R(c));
+    uint32_t layout_id = (uint32_t) ((uint64_t) token >> 8);
+    uint8_t metadata_kind = (uint8_t) (token & 0xff);
+    R(a) = xr_enum_descriptor_box_new((XrCoroutine *) VM_CURRENT_CORO, layout_id, metadata_kind,
+                                      R(b).i);
+    if (XR_IS_NULL(R(a)))
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "cannot allocate erased enum descriptor");
+    vmbreak;
+}
+
+vmcase(OP_ENUM_DESCRIPTOR_UNBOX) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int64_t scalar = 0;
+    if (!xr_enum_descriptor_scalar(R(b), &scalar))
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "value is not an erased enum descriptor");
+    XR_SET_INT(R(a), scalar);
+    vmbreak;
+}
+
 /* Narrow/widen tagged width handlers are generated from xisa/xi/lowering.def. */
 #include "xvm_template_width_gen.inc.c"
 

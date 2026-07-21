@@ -131,6 +131,13 @@ static uint64_t type_hash_depth(const XrType *type, int depth) {
             h = struct_hash_string(h, type->enum_type.enum_name);
             h ^= type->enum_type.layout_id;
             h *= UINT64_C(1099511628211);
+            h ^= (uint64_t) type->enum_type.type_arg_count;
+            h *= UINT64_C(1099511628211);
+            for (int i = 0; i < type->enum_type.type_arg_count; i++) {
+                h ^= type_hash_depth(
+                    type->enum_type.type_args ? type->enum_type.type_args[i] : NULL, depth + 1);
+                h *= UINT64_C(1099511628211);
+            }
             break;
         case XR_KIND_CLASS:
         case XR_KIND_INSTANCE:

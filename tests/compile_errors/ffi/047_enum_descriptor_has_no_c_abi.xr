@@ -1,0 +1,9 @@
+enum Color {
+    Red,
+    Green,
+}
+
+extern "C" {
+    fn consume_variant(value: EnumVariant<Color>) -> int32
+    fn produce_variant() -> EnumVariant<Color>
+}

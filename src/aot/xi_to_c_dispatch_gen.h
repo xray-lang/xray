@@ -109,10 +109,15 @@
     X(CONVERT, "xi.convert", xicgen_convert) \
     X(BOX, "xi.box", xicgen_box) \
     X(UNBOX, "xi.unbox", xicgen_unbox) \
+    X(ENUM_DESCRIPTOR_BOX, "xi.enum.descriptor.box", xicgen_enum_descriptor_box) \
+    X(ENUM_DESCRIPTOR_UNBOX, "xi.enum.descriptor.unbox", xicgen_enum_descriptor_unbox) \
     X(LOAD_FIELD, "xi.load.field", xicgen_load_field) \
     X(STORE_FIELD, "xi.store.field", xicgen_store_field) \
     X(INDEX_GET, "xi.index.get", xicgen_index_get) \
     X(INDEX_SET, "xi.index.set", xicgen_index_set) \
+    X(ENUM_VARIANT_AT, "xi.enum.variant.at", xicgen_enum_variant_at) \
+    X(ENUM_PAYLOAD_AT, "xi.enum.payload.at", xicgen_enum_payload_at) \
+    X(ENUM_META_GET, "xi.enum.meta.get", xicgen_enum_meta_get) \
     X(ARRAY_NEW, "xi.array.new", xicgen_array_new) \
     X(ARRAY_PUSH, "xi.array.push", xicgen_array_push) \
     X(ARRAY_EXTEND, "xi.array.extend", xicgen_array_extend) \

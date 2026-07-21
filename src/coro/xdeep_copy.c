@@ -12,6 +12,7 @@
 #include "../base/xchecks.h"
 #include "../runtime/xshared.h"
 #include "../runtime/value/xvalue.h"
+#include "../runtime/value/xenum_descriptor.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/mem/xheap.h"
 #include "../runtime/mem/xfixed_heap.h"
@@ -51,16 +52,21 @@ typedef struct XrAotStringView {
 } XrAotStringView;
 
 const XrObjDeepCopyFn xr_obj_deep_copy_ops[XR_OBJ_TYPE_MAX] = {
-    [XR_TSTRING] = xr_deep_copy_string_with_ctx,     [XR_TARRAY] = xr_deep_copy_array_with_ctx,
-    [XR_TMAP] = xr_deep_copy_map_with_ctx,           [XR_TSET] = xr_deep_copy_set_with_ctx,
-    [XR_TINSTANCE] = xr_deep_copy_instance_with_ctx, [XR_TFUNCTION] = xr_deep_copy_closure_with_ctx,
-    [XR_TCELL] = xr_deep_copy_cell_with_ctx,         [XR_TBOOLMAP] = xr_deep_copy_map_with_ctx,
+    [XR_TSTRING] = xr_deep_copy_string_with_ctx,
+    [XR_TARRAY] = xr_deep_copy_array_with_ctx,
+    [XR_TMAP] = xr_deep_copy_map_with_ctx,
+    [XR_TSET] = xr_deep_copy_set_with_ctx,
+    [XR_TINSTANCE] = xr_deep_copy_instance_with_ctx,
+    [XR_TFUNCTION] = xr_deep_copy_closure_with_ctx,
+    [XR_TCELL] = xr_deep_copy_cell_with_ctx,
+    [XR_TBOOLMAP] = xr_deep_copy_map_with_ctx,
+    [XR_TENUM_DESCRIPTOR] = xr_deep_copy_enum_descriptor_with_ctx,
 };
 
 const XrObjToSharedFn xr_obj_to_shared_ops[XR_OBJ_TYPE_MAX] = {
     [XR_TARRAY] = xr_to_shared_array,      [XR_TMAP] = xr_to_shared_map,
     [XR_TSET] = xr_to_shared_set,          [XR_TINSTANCE] = xr_to_shared_instance,
-    [XR_TFUNCTION] = xr_to_shared_closure,
+    [XR_TFUNCTION] = xr_to_shared_closure, [XR_TENUM_DESCRIPTOR] = xr_to_shared_enum_descriptor,
 };
 
 // Initial bucket count. Seen hash dynamically grows when the
@@ -672,6 +678,30 @@ XrValue xr_deep_copy_cell_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     ctx->objects_copied++;
 
     new_cell->value = xr_deep_copy_with_ctx(ctx, cell->value);
+    return result;
+}
+
+XrValue xr_deep_copy_enum_descriptor_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
+    XrEnumDescriptorBox *source = (XrEnumDescriptorBox *) obj;
+    if (!ctx || !source)
+        return XR_NULL_VAL;
+    XrValue cached = xr_copy_context_lookup(ctx, source);
+    if (!XR_IS_NULL(cached))
+        return cached;
+
+    XrEnumDescriptorBox *copy =
+        (XrEnumDescriptorBox *) copy_ctx_alloc(ctx, sizeof(*copy), XR_TENUM_DESCRIPTOR);
+    if (!copy)
+        return XR_NULL_VAL;
+    xr_obj_header_init_type(&copy->hdr, XR_TENUM_DESCRIPTOR);
+    copy->layout_id = source->layout_id;
+    copy->metadata_kind = source->metadata_kind;
+    copy->_reserved[0] = copy->_reserved[1] = copy->_reserved[2] = 0;
+    copy->scalar = source->scalar;
+
+    XrValue result = XR_FROM_PTR(copy);
+    xr_copy_context_record(ctx, source, result);
+    ctx->objects_copied++;
     return result;
 }
 
@@ -1372,6 +1402,23 @@ XrValue xr_to_shared_closure(struct XrVMRuntime *X, XrObjHeader *obj) {
     XR_OBJ_SET_STORAGE(&new_cl->hdr, XR_OBJ_STORAGE_SHARED);
     xr_shared_set_refc(&new_cl->hdr, 1);
     return XR_FROM_PTR(new_cl);
+}
+
+XrValue xr_to_shared_enum_descriptor(struct XrVMRuntime *X, XrObjHeader *obj) {
+    XrEnumDescriptorBox *source = (XrEnumDescriptorBox *) obj;
+    if (!X || !source || !xr_isolate_get_sys_heap(X))
+        return XR_NULL_VAL;
+    XrEnumDescriptorBox *copy = (XrEnumDescriptorBox *) xr_sysheap_alloc_shared(
+        xr_isolate_get_sys_heap(X), sizeof(*copy), XR_TENUM_DESCRIPTOR);
+    if (!copy)
+        return XR_NULL_VAL;
+    copy->layout_id = source->layout_id;
+    copy->metadata_kind = source->metadata_kind;
+    copy->_reserved[0] = copy->_reserved[1] = copy->_reserved[2] = 0;
+    copy->scalar = source->scalar;
+    XR_OBJ_SET_STORAGE(&copy->hdr, XR_OBJ_STORAGE_SHARED);
+    xr_shared_set_refc(&copy->hdr, 1);
+    return XR_FROM_PTR(copy);
 }
 
 XrValue xr_to_shared(struct XrVMRuntime *X, XrValue value) {

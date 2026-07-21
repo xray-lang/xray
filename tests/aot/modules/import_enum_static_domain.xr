@@ -1,0 +1,20 @@
+import "./enum_static_domain_lib" as enum_lib
+import { ExportColor, ExportEvent } from "./enum_static_domain_lib"
+var names = ""
+for (color in ExportColor) {
+    names += color.name
+}
+print(names)
+var schema = ""
+for (variant in ExportEvent.variants) {
+    schema += variant.name + ":" + string(variant.payloadCount) + ";"
+}
+print(schema)
+try {
+    enum_lib.failWithBlue()
+} catch (error) {
+    match (error) {
+        enum_lib.ExportColor.Blue -> print("blue")
+        _                         -> print("other")
+    }
+}

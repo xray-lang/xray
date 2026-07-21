@@ -206,6 +206,9 @@ static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_str(ctx, new_expr->class_name);
     xfmt_emit_generic_args(ctx, new_expr->type_args, new_expr->type_arg_count);
 
+    if (new_expr->is_type_namespace)
+        return;
+
     bool wrap = ctx->config && ctx->config->wrap_long_lines && new_expr->arg_count > 0;
     XfmtSnapshot snap;
     if (wrap)

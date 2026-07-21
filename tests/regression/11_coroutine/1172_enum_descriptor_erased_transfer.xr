@@ -1,0 +1,32 @@
+enum TransferHue {
+    Red,
+    Blue
+}
+
+enum TransferState {
+    Idle,
+    Busy(int)
+}
+
+type TransferVariant = EnumVariant<TransferHue> | EnumVariant<TransferState>
+
+fn recv_variant(ch: Channel<EnumVariant<TransferHue> | EnumVariant<TransferState>>) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> {
+            if (value is EnumVariant<TransferHue>) {
+                return value.ordinal
+            }
+            return -1
+        }
+        _                 -> -2
+    }
+}
+
+shared descriptorChannel: Channel<EnumVariant<TransferHue> | EnumVariant<TransferState>> = Channel(2)
+var hueTask = go recv_variant(descriptorChannel)
+descriptorChannel.send(TransferHue.variants[1])
+print(await hueTask)
+var stateTask = go recv_variant(descriptorChannel)
+descriptorChannel.send(TransferState.variants[0])
+print(await stateTask)
+descriptorChannel.close()

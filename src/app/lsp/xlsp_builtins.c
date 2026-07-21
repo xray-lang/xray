@@ -19,6 +19,84 @@
 #include <string.h>
 #include <stdio.h>
 
+typedef struct XlspEnumMetadataPropertySpec {
+    XrEnumMetadataKind owner_kind;
+    const char *name;
+    const char *result_type;
+    const char *summary;
+    const char *profile;
+    const char *effect;
+    const char *allocation;
+} XlspEnumMetadataPropertySpec;
+
+#define XR_ENUM_METADATA_TYPE(kind, source_name, summary, profile, effect, allocation)
+#define XR_ENUM_STATIC_PROPERTY(source_name, result_type, summary, profile, effect, allocation)
+#define XR_ENUM_METADATA_PROPERTY(kind, source_name, result_type, summary, profile, effect,        \
+                                  allocation)                                                      \
+    {XR_ENUM_METADATA_##kind, #source_name, result_type, summary, profile, effect, allocation},
+static const XlspEnumMetadataPropertySpec xlsp_enum_metadata_properties[] = {
+#include "../../runtime/value/xenum_metadata_api.def"
+};
+#undef XR_ENUM_METADATA_PROPERTY
+#undef XR_ENUM_STATIC_PROPERTY
+#undef XR_ENUM_METADATA_TYPE
+
+static const XlspEnumMetadataPropertySpec *xlsp_enum_metadata_property(XrType *type,
+                                                                       const char *name) {
+    if (!xr_type_is_enum_metadata(type) || !name)
+        return NULL;
+    XrEnumMetadataKind kind = xr_type_enum_metadata_kind(type);
+    size_t count = sizeof(xlsp_enum_metadata_properties) / sizeof(xlsp_enum_metadata_properties[0]);
+    for (size_t i = 0; i < count; i++) {
+        const XlspEnumMetadataPropertySpec *spec = &xlsp_enum_metadata_properties[i];
+        if (spec->owner_kind == kind && strcmp(spec->name, name) == 0)
+            return spec;
+    }
+    return NULL;
+}
+
+static void xlsp_enum_metadata_result_label(XrType *type, const XlspEnumMetadataPropertySpec *spec,
+                                            char *buf, size_t buf_size) {
+    if (!type || !spec || !buf || buf_size == 0)
+        return;
+    if (strcmp(spec->result_type, "EnumPayloads<E>") != 0) {
+        snprintf(buf, buf_size, "%s", spec->result_type);
+        return;
+    }
+    XrType *owner = xr_type_enum_metadata_owner(type);
+    snprintf(buf, buf_size, "EnumPayloads<%s>", owner ? xr_type_to_string(owner) : "E");
+}
+
+static int xlsp_append_enum_metadata_completions(XrJsonValue *items, XrType *type) {
+    if (!items || !xr_type_is_enum_metadata(type))
+        return 0;
+    int added = 0;
+    char receiver[192];
+    snprintf(receiver, sizeof(receiver), "%s", xr_type_to_string(type));
+    size_t count = sizeof(xlsp_enum_metadata_properties) / sizeof(xlsp_enum_metadata_properties[0]);
+    for (size_t i = 0; i < count; i++) {
+        const XlspEnumMetadataPropertySpec *spec = &xlsp_enum_metadata_properties[i];
+        if (spec->owner_kind != xr_type_enum_metadata_kind(type))
+            continue;
+        char result[192];
+        char detail[512];
+        char documentation[768];
+        xlsp_enum_metadata_result_label(type, spec, result, sizeof(result));
+        snprintf(detail, sizeof(detail), "%s.%s: %s", receiver, spec->name, result);
+        snprintf(documentation, sizeof(documentation),
+                 "%s\n\nProfile: %s\nEffect: %s\nAllocation: %s", spec->summary, spec->profile,
+                 spec->effect, spec->allocation);
+        XrJsonValue *item = xjson_new_object();
+        xjson_object_set(item, "label", xjson_new_string(spec->name));
+        xjson_object_set(item, "kind", xjson_new_number(XLSP_KIND_PROPERTY));
+        xjson_object_set(item, "detail", xjson_new_string(detail));
+        xjson_object_set(item, "documentation", xjson_new_string(documentation));
+        xjson_array_push(items, item);
+        added++;
+    }
+    return added;
+}
+
 // ============================================================================
 // XrType creation helpers (for type conversion)
 // ============================================================================
@@ -445,6 +523,7 @@ XrJsonValue *xlsp_builtin_get_completions_for_type(XrType *type) {
     if (!type)
         return items;
 
+    xlsp_append_enum_metadata_completions(items, type);
     xlsp_append_receiver_registry_completions(items, type);
     xlsp_append_native_completions(items, type);
     return items;
@@ -481,6 +560,31 @@ const char *xlsp_builtin_get_hover_for_type(XrType *type, const char *method_nam
                                             size_t buf_size) {
     if (!type || !method_name || !buf || buf_size == 0)
         return NULL;
+
+    if (XR_TYPE_IS_ENUM(type) && strcmp(method_name, "variants") == 0) {
+        const char *owner = type->enum_type.enum_name ? type->enum_type.enum_name : "E";
+        snprintf(
+            buf, buf_size,
+            "```xray\n%s.variants: EnumVariants<%s>\n```\n\n"
+            "Read-only declaration-order variant descriptor view. Iteration yields "
+            "`EnumVariant<%s>`, not enum values.\n\nProfile: all\nEffect: pure\nAllocation: none",
+            owner, owner, owner);
+        return buf;
+    }
+
+    const XlspEnumMetadataPropertySpec *enum_property =
+        xlsp_enum_metadata_property(type, method_name);
+    if (enum_property) {
+        char receiver[192];
+        char result[192];
+        snprintf(receiver, sizeof(receiver), "%s", xr_type_to_string(type));
+        xlsp_enum_metadata_result_label(type, enum_property, result, sizeof(result));
+        snprintf(buf, buf_size,
+                 "```xray\n%s.%s: %s\n```\n\n%s\n\nProfile: %s\nEffect: %s\nAllocation: %s",
+                 receiver, enum_property->name, result, enum_property->summary,
+                 enum_property->profile, enum_property->effect, enum_property->allocation);
+        return buf;
+    }
 
     char signature[512];
     const XlspReceiverMethodSpec *spec = xlsp_find_receiver_method(type, method_name);

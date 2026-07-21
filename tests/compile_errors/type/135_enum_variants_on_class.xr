@@ -1,0 +1,3 @@
+class User {}
+
+print(User.variants.length)

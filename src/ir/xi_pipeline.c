@@ -310,6 +310,21 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_VERIFY_RAW))
         goto fail;
 
+    if (cfg->run_backend_lower) {
+        XiPassChange enum_type_lookup = xi_opt_compact_enum_payload_type_lookup(ir);
+        if (enum_type_lookup.values_changed) {
+            xi_opt_dce(ir);
+            if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OPTIMIZE))
+                return res;
+        }
+    }
+
+    /* A concrete EnumVariant<E>/EnumPayloadField<E> is a scalar while E is
+     * statically known.  Crossing an erased identity boundary is a semantic
+     * allocation, so materialize it before escape and ARC analysis for both
+     * VM and AOT instead of hiding it in AOT representation selection. */
+    xi_opt_materialize_enum_descriptor_erasure(ir);
+
     /* Escape analysis: compute escape levels for heap-allocating values.
      * Ownership is made explicit before semantic optimization. */
     if (cfg->run_escape) {

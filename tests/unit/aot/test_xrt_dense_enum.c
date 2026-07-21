@@ -166,10 +166,9 @@ static void test_dense_enum_set_hit_and_mutation_fallback(void) {
 }
 
 static void test_generic_enum_key_hash_eq_consistency(void) {
-    /* Every enum-member access in generated code allocates a fresh box, so enum
-     * keys must hash by ordinal (xrt_hash_value) to match value equality
-     * (xrt_eq/xrt_enum_key_eq). Otherwise generic Map/Set keys and derived
-     * Hashable fields with an enum member would fail to dedup and look up. */
+    /* Enum keys use nominal layout identity plus ordinal, not box pointer
+     * identity. Independently materialized boxes for the same member must keep
+     * the hash/equality contract used by generic Map/Set and derived Hashable. */
     TestEnumBox green_a = {{0, 0}, NULL, "Color", "Green", 1, 0, 17};
     TestEnumBox green_b = {{0, 0}, NULL, "Color", "Green", 1, 0, 17};
     TestEnumBox green_c = {{0, 0}, NULL, "Color", "Green", 1, 0, 17};
@@ -209,10 +208,41 @@ static void test_generic_enum_key_hash_eq_consistency(void) {
     xrt_set_destroy(set);
 }
 
+static void test_scalar_enum_sidecar_identity_and_hash(void) {
+    static const char *const names[3] = {"Red", "Green", "Blue"};
+    static const XrAotEnumScalarLayout layout_a = {
+        {XR_TENUM_SCALAR_LAYOUT, XR_OBJ_STORAGE_BUMP, XR_RC_STICKY, 0, 0}, "Color", names, 3, 17,
+    };
+    static const XrAotEnumScalarLayout layout_b = {
+        {XR_TENUM_SCALAR_LAYOUT, XR_OBJ_STORAGE_BUMP, XR_RC_STICKY, 0, 0}, "Color", names, 3, 17,
+    };
+    XrValue green_a = xrt_enum_scalar_box(&layout_a, 1);
+    XrValue green_b = xrt_enum_scalar_box(&layout_b, 1);
+    XrValue blue = xrt_enum_scalar_box(&layout_a, 2);
+
+    ASSERT_TRUE(xrt_eq(green_a, green_b),
+                "different translation-unit sidecars preserve enum identity");
+    ASSERT_TRUE(!xrt_eq(green_a, blue), "different ordinals remain unequal");
+    ASSERT_EQ_INT(xrt_enum_box_ordinal(green_a).i, 1,
+                  "scalar sidecar exposes the declaration ordinal");
+    ASSERT_TRUE(strcmp(xr_to_cstr(xrt_enum_box_name(green_a), (char[32]) {0}, 32), "Green") == 0,
+                "scalar sidecar exposes the retained member name");
+    ASSERT_TRUE(xrt_hash_value(green_a) == xrt_hash_value(green_b),
+                "semantic enum equality has a matching hash across sidecars");
+
+    XrValue map_value = xrt_map_new(1);
+    xrt_map_t *map = (xrt_map_t *) map_value.ptr;
+    xrt_map_set(map, green_a, XR_FROM_INT(73));
+    ASSERT_EQ_INT(xrt_map_get(map, green_b).i, 73,
+                  "map lookup crosses scalar sidecar identities by layout and ordinal");
+    xrt_map_destroy(map);
+}
+
 int main(void) {
     test_dense_enum_map_hit_and_mutation_fallback();
     test_dense_enum_set_hit_and_mutation_fallback();
     test_generic_enum_key_hash_eq_consistency();
+    test_scalar_enum_sidecar_identity_and_hash();
 
     printf("test_xrt_dense_enum: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;

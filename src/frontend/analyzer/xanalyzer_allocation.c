@@ -257,6 +257,22 @@ static void alloc_mark_direct(XaAllocFunctionRow *row, AstNode *site, XaAllocRea
     row->direct.cause_detail = detail;
 }
 
+static bool alloc_enum_descriptor_erases_to(const XrType *source, const XrType *target) {
+    if (!source || !target || !xr_type_is_enum_metadata(source))
+        return false;
+    if (xr_type_is_enum_metadata(target))
+        return !xr_type_equals((XrType *) (uintptr_t) source, (XrType *) (uintptr_t) target);
+    return target->kind == XR_KIND_UNION || target->kind == XR_KIND_INTERFACE ||
+           target->kind == XR_KIND_JSON || target->kind == XR_KIND_UNKNOWN;
+}
+
+static void alloc_mark_enum_descriptor_erasure(XaAllocScan *scan, AstNode *site,
+                                               const XrType *source, const XrType *target) {
+    if (scan && alloc_enum_descriptor_erases_to(source, target))
+        alloc_mark_direct(scan->row, site, XA_ALLOC_REASON_HEAP_CONSTRUCT, "conversion",
+                          "erased enum descriptor");
+}
+
 static bool alloc_pod_span_element(const XrType *type) {
     if (!type || type->is_nullable)
         return false;
@@ -508,6 +524,17 @@ static void alloc_scan_call(XaAllocScan *scan, AstNode *node) {
     AstNode *callee = alloc_identity_expr(call->callee);
     if (!callee)
         return;
+    XrType *callee_type = xa_analyzer_get_node_type(scan->pass->analyzer, call->callee);
+    if (callee_type && callee_type->kind == XR_KIND_FUNCTION) {
+        int count = call->arg_count < callee_type->function.param_count
+                        ? call->arg_count
+                        : callee_type->function.param_count;
+        for (int i = 0; i < count; i++) {
+            XrType *source = xa_analyzer_get_node_type(scan->pass->analyzer, call->arguments[i]);
+            alloc_mark_enum_descriptor_erasure(scan, call->arguments[i], source,
+                                               callee_type->function.params[i].type);
+        }
+    }
     if (callee->type == AST_FUNCTION_EXPR) {
         XaAllocFunctionRow *callee_row = alloc_row_for_node(scan->pass, callee);
         alloc_add_symbol_edge(scan,
@@ -712,6 +739,51 @@ static void alloc_scan_node_pre(AstNode *node, void *userdata) {
             if (node_type && node_type->kind == XR_KIND_STRING &&
                 (!source_type || source_type->kind != XR_KIND_STRING))
                 alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_STRING, "conversion", "string");
+            break;
+        }
+        case AST_RETURN_STMT: {
+            XrType *target =
+                scan->row && scan->row->symbol ? scan->row->symbol->links.return_type : NULL;
+            for (int i = 0; i < node->as.return_stmt.value_count; i++) {
+                AstNode *value = node->as.return_stmt.values[i];
+                XrType *source = xa_analyzer_get_node_type(scan->pass->analyzer, value);
+                alloc_mark_enum_descriptor_erasure(scan, value, source, target);
+            }
+            break;
+        }
+        case AST_VAR_DECL:
+        case AST_CONST_DECL: {
+            AstNode *value = node->as.var_decl.initializer;
+            XrType *source = xa_analyzer_get_node_type(scan->pass->analyzer, value);
+            XaSymbol *symbol =
+                alloc_symbol_by_id(scan->pass->analyzer, node->as.var_decl.symbol_id);
+            XrType *target = symbol ? symbol->links.type : node_type;
+            alloc_mark_enum_descriptor_erasure(scan, value, source, target);
+            break;
+        }
+        case AST_INDEX_SET: {
+            XrType *container =
+                xa_analyzer_get_node_type(scan->pass->analyzer, node->as.index_set.array);
+            XrType *target = NULL;
+            if (container) {
+                if (container->kind == XR_KIND_FIXED_ARRAY)
+                    target = container->fixed_array.element_type;
+                else if (container->kind == XR_KIND_ARRAY || container->kind == XR_KIND_VIEW ||
+                         container->kind == XR_KIND_SPAN)
+                    target = container->container.element_type;
+                else if (container->kind == XR_KIND_MAP)
+                    target = container->map.value_type;
+            }
+            AstNode *value = node->as.index_set.value;
+            XrType *source = xa_analyzer_get_node_type(scan->pass->analyzer, value);
+            alloc_mark_enum_descriptor_erasure(scan, value, source, target);
+            break;
+        }
+        case AST_MEMBER_SET: {
+            AstNode *value = node->as.member_set.value;
+            XrType *source = xa_analyzer_get_node_type(scan->pass->analyzer, value);
+            XrType *target = xa_analyzer_get_node_type(scan->pass->analyzer, node);
+            alloc_mark_enum_descriptor_erasure(scan, value, source, target);
             break;
         }
         case AST_SLICE_EXPR:

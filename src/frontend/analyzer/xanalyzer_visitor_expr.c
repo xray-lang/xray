@@ -417,19 +417,53 @@ static void xa_report_view_member_error(XaInferContext *ctx, AstNode *node, XrTy
 
 static bool member_object_is_enum_namespace(XaInferContext *ctx, AstNode *object,
                                             const char *enum_name) {
-    if (!ctx || !object || object->type != AST_VARIABLE || !enum_name)
+    if (!ctx || !object || !enum_name)
+        return false;
+    if (object->type == AST_NEW_EXPR) {
+        NewExprNode *ne = &object->as.new_expr;
+        return ne->is_type_namespace && !ne->module_name && ne->class_name &&
+               strcmp(ne->class_name, enum_name) == 0;
+    }
+    if (object->type != AST_VARIABLE)
         return false;
     XaSymbol *sym =
         object->as.variable.symbol_id
             ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, object->as.variable.symbol_id)
             : NULL;
-    if (sym && sym->kind == XA_SYM_ENUM && sym->name && strcmp(sym->name, enum_name) == 0)
-        return true;
+    if (sym) {
+        if (sym->kind == XA_SYM_ENUM && sym->name && strcmp(sym->name, enum_name) == 0)
+            return true;
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+        if ((sym->kind == XA_SYM_TYPE_ALIAS || sym->kind == XA_SYM_IMPORT) && links &&
+            links->type && links->type->kind == XR_KIND_ENUM && links->type->enum_type.enum_name &&
+            strcmp(links->type->enum_type.enum_name, enum_name) == 0)
+            return true;
+    }
     const char *name = object->as.variable.name;
     if (!name || strcmp(name, enum_name) != 0)
         return false;
     sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
-    return sym && sym->kind == XA_SYM_ENUM;
+    if (!sym)
+        return false;
+    if (sym->kind == XA_SYM_ENUM)
+        return true;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    return (sym->kind == XA_SYM_TYPE_ALIAS || sym->kind == XA_SYM_IMPORT) && links && links->type &&
+           links->type->kind == XR_KIND_ENUM && links->type->enum_type.enum_name &&
+           strcmp(links->type->enum_type.enum_name, enum_name) == 0;
+}
+
+static bool xa_symbol_has_enum_schema(XaInferContext *ctx, XaSymbol *sym, const char *enum_name) {
+    if (!ctx || !sym)
+        return false;
+    if (sym->kind == XA_SYM_ENUM)
+        return !enum_name || (sym->name && strcmp(sym->name, enum_name) == 0);
+    if (sym->kind != XA_SYM_IMPORT)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    return links && links->type && links->type->kind == XR_KIND_ENUM && links->enum_info &&
+           (!enum_name || (links->type->enum_type.enum_name &&
+                           strcmp(links->type->enum_type.enum_name, enum_name) == 0));
 }
 
 static XaSymbol *xa_expected_enum_symbol(XaInferContext *ctx, AstNode *object) {
@@ -1799,11 +1833,49 @@ static XrType *xa_c_view_member_type(XaInferContext *ctx, AstNode *node, XrType 
     return result;
 }
 
+static bool xa_member_receiver_is_generic_type_param(XaInferContext *ctx, const AstNode *object) {
+    if (!ctx || !ctx->analyzer || !object || object->type != AST_VARIABLE ||
+        !object->as.variable.name || xa_lookup_visible_symbol(ctx, object->as.variable.name))
+        return false;
+    /* Mirror type-reference resolution: nested function/class scopes carry
+     * their generic owner even in analysis phases where current_function is
+     * intentionally unset. */
+    for (XaScope *scope = ctx->analyzer->current_scope; scope; scope = scope->parent) {
+        XaSymbol *owners[2] = {scope->function_symbol, scope->class_symbol};
+        for (int oi = 0; oi < 2; oi++) {
+            XaSymbolLinks *links =
+                owners[oi] ? xa_analyzer_get_links(ctx->analyzer, owners[oi]) : NULL;
+            int count = links ? xa_symbol_links_get_type_param_count(links) : 0;
+            for (int i = 0; i < count; i++) {
+                const char *name = xa_symbol_links_get_type_param_name(links, i);
+                if (name && strcmp(name, object->as.variable.name) == 0)
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
 XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_error(NULL);
 
     MemberAccessNode *ma = &node->as.member_access;
+
+    /* A type parameter is not a runtime namespace and does not describe a
+     * finite enum domain.  Diagnose `E.variants` at the selection itself so it
+     * cannot degrade into the misleading receiver error "Undeclared E". */
+    if (ma->name && strcmp(ma->name, "variants") == 0 &&
+        xa_member_receiver_is_generic_type_param(ctx, ma->object)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "generic type parameter '%s' has no member 'variants'; use a concrete enum type",
+                 ma->object->as.variable.name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
 
     if (ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
         strcmp(ma->object->as.variable.name, "Type") == 0) {
@@ -1991,19 +2063,29 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             ma->object->as.variable.symbol_id != 0) {
             XaSymbol *by_id = xa_scope_lookup_by_id(ctx->analyzer->global_scope,
                                                     ma->object->as.variable.symbol_id);
-            if (by_id && by_id->kind == XA_SYM_ENUM && by_id->name &&
-                strcmp(by_id->name, obj_type->enum_type.enum_name) == 0)
+            if (xa_symbol_has_enum_schema(ctx, by_id, obj_type->enum_type.enum_name))
                 enum_sym = by_id;
         }
         if (!enum_sym)
             enum_sym = xa_scope_lookup(ctx->analyzer->current_scope, obj_type->enum_type.enum_name);
-        if (enum_sym && enum_sym->kind == XA_SYM_ENUM) {
+        if (xa_symbol_has_enum_schema(ctx, enum_sym, obj_type->enum_type.enum_name)) {
             XaSymbolLinks *el = xa_analyzer_get_links(ctx->analyzer, enum_sym);
             if (el) {
                 bool is_namespace =
                     member_object_is_enum_namespace(ctx, ma->object, obj_type->enum_type.enum_name);
                 if (is_namespace) {
                     XaEnumInfo *enum_info = el->enum_info;
+                    if (ma->name && strcmp(ma->name, "variants") == 0 && enum_info &&
+                        enum_info->layout) {
+                        XrType *enum_type = xr_type_copy(ctx->analyzer->isolate, obj_type);
+                        enum_type->enum_type.layout = enum_info->layout;
+                        enum_type->enum_type.layout_id = enum_info->layout->layout_id;
+                        XrType *view_type = xr_type_new_enum_metadata(
+                            ctx->analyzer->isolate, XR_ENUM_VARIANTS_TYPE_NAME, enum_type);
+                        record_selection(ctx, node, XA_SEL_ENUM_VARIANTS, obj_type, enum_sym,
+                                         XA_ENUM_META_VARIANTS, view_type, false);
+                        return view_type;
+                    }
                     for (uint32_t i = 0; enum_info && i < enum_info->variant_count; i++) {
                         if (enum_info->variants[i].name &&
                             strcmp(enum_info->variants[i].name, ma->name) == 0) {
@@ -2067,6 +2149,18 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     }
                 }
                 if (!is_namespace) {
+                    if (strcmp(ma->name, "variants") == 0) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                                 "'.variants' is only available on the enum type '%s'; this "
+                                 "receiver is an enum value",
+                                 obj_type->enum_type.enum_name);
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+                        return xr_type_new_error(ctx->analyzer->isolate);
+                    }
                     if (strcmp(ma->name, "name") == 0) {
                         if (xa_freestanding_profile_enabled(ctx->analyzer) &&
                             (!el->enum_info || el->enum_info->is_payload_enum)) {
@@ -2107,6 +2201,70 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
     }
 
+    if (xr_type_is_enum_metadata(obj_type)) {
+        XrType *owner = xr_type_enum_metadata_owner(obj_type);
+        XaSymbol *enum_sym =
+            owner && owner->kind == XR_KIND_ENUM && owner->enum_type.enum_name
+                ? xa_scope_lookup(ctx->analyzer->current_scope, owner->enum_type.enum_name)
+                : NULL;
+        XrType *result = NULL;
+        int field = 0;
+        if (xr_type_is_enum_metadata_named(obj_type, XR_ENUM_VARIANTS_TYPE_NAME) ||
+            xr_type_is_enum_metadata_named(obj_type, XR_ENUM_PAYLOADS_TYPE_NAME)) {
+            if (strcmp(ma->name, "length") == 0) {
+                result = xr_type_new_int(NULL);
+                field = XA_ENUM_META_LENGTH;
+            }
+        } else if (xr_type_is_enum_metadata_named(obj_type, XR_ENUM_VARIANT_TYPE_NAME)) {
+            if (strcmp(ma->name, "ordinal") == 0) {
+                result = xr_type_new_int(NULL);
+                field = XA_ENUM_META_ORDINAL;
+            } else if (strcmp(ma->name, "name") == 0) {
+                result = xr_type_new_string(NULL);
+                field = XA_ENUM_META_NAME;
+            } else if (strcmp(ma->name, "payloadCount") == 0) {
+                result = xr_type_new_int(NULL);
+                field = XA_ENUM_META_PAYLOAD_COUNT;
+            } else if (strcmp(ma->name, "isUnit") == 0) {
+                result = xr_type_new_bool(NULL);
+                field = XA_ENUM_META_IS_UNIT;
+            } else if (strcmp(ma->name, "payloads") == 0) {
+                result = xr_type_new_enum_metadata(ctx->analyzer->isolate,
+                                                   XR_ENUM_PAYLOADS_TYPE_NAME, owner);
+                field = XA_ENUM_META_PAYLOADS;
+            }
+        } else if (xr_type_is_enum_metadata_named(obj_type, XR_ENUM_PAYLOAD_FIELD_TYPE_NAME)) {
+            if (strcmp(ma->name, "index") == 0) {
+                result = xr_type_new_int(NULL);
+                field = XA_ENUM_META_PAYLOAD_INDEX;
+            } else if (strcmp(ma->name, "name") == 0) {
+                result = xr_type_new_string(NULL);
+                field = XA_ENUM_META_PAYLOAD_NAME;
+            } else if (strcmp(ma->name, "type") == 0) {
+                result = xr_type_new_int(NULL);
+                field = XA_ENUM_META_PAYLOAD_TYPE;
+            }
+        }
+        if (result) {
+            record_selection(ctx, node, XA_SEL_ENUM_META, obj_type, enum_sym, field, result, false);
+            return result;
+        }
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[192];
+        if (ma->name && strcmp(ma->name, "construct") == 0) {
+            snprintf(msg, sizeof(msg),
+                     "enum metadata type '%s' has no member 'construct'; construct enum values "
+                     "with an explicit static variant constructor",
+                     xr_type_to_string(obj_type));
+        } else {
+            snprintf(msg, sizeof(msg), "enum metadata type '%s' has no member '%s'",
+                     xr_type_to_string(obj_type), ma->name ? ma->name : "");
+        }
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
     // Class static member access: ClassName.staticMethod
     if (obj_type->kind == XR_KIND_CLASS && obj_type->instance.class_name) {
         XrClassInfo *class_info = obj_type->instance.class_ref;
@@ -2128,6 +2286,16 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     return ml->type;
                 }
             }
+        }
+        if (ma->name && strcmp(ma->name, "variants") == 0) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "static member '.variants' is only available on enum types; '%s' is a class",
+                     obj_type->instance.class_name);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+            return xr_type_new_error(ctx->analyzer->isolate);
         }
     }
 
@@ -2697,6 +2865,19 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
             add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
         XrType *pointee = container->container.element_type;
         return pointee ? pointee : xr_type_new_unknown(NULL);
+    }
+
+    if (xr_type_is_enum_metadata_named(container, XR_ENUM_VARIANTS_TYPE_NAME) ||
+        xr_type_is_enum_metadata_named(container, XR_ENUM_PAYLOADS_TYPE_NAME)) {
+        if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
+            add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+        XrType *owner = xr_type_enum_metadata_owner(container);
+        return xr_type_new_enum_metadata(
+            ctx->analyzer->isolate,
+            xr_type_is_enum_metadata_named(container, XR_ENUM_VARIANTS_TYPE_NAME)
+                ? XR_ENUM_VARIANT_TYPE_NAME
+                : XR_ENUM_PAYLOAD_FIELD_TYPE_NAME,
+            owner);
     }
 
     if ((XR_TYPE_IS_ARRAY(container) || XR_TYPE_IS_VIEW(container) || XR_TYPE_IS_SPAN(container)) &&
@@ -3487,6 +3668,55 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                                        "use structs or explicit raw-memory APIs in this profile");
 
     NewExprNode *ne = &node->as.new_expr;
+
+    /* A generic type namespace is not a construction. Resolve a concrete enum
+     * owner here so `Result<int>.variants` carries both its declaration layout
+     * and specialization arguments into typed metadata lowering. */
+    if (ne->is_type_namespace && !ne->module_name && ne->class_name) {
+        XaSymbol *enum_sym = xa_scope_lookup(ctx->analyzer->current_scope, ne->class_name);
+        if (!enum_sym)
+            enum_sym = xa_scope_lookup(ctx->analyzer->global_scope, ne->class_name);
+        if (xa_symbol_has_enum_schema(ctx, enum_sym, NULL)) {
+            XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, enum_sym);
+            int expected = links ? xa_symbol_links_get_type_param_count(links) : 0;
+            if (expected != ne->type_arg_count) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[224];
+                snprintf(msg, sizeof(msg), "generic enum '%s' expects %d type argument%s, got %d",
+                         ne->class_name, expected, expected == 1 ? "" : "s", ne->type_arg_count);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
+                return xr_type_new_error(ctx->analyzer->isolate);
+            }
+            XrType *stack_args[8];
+            XrType **args =
+                ne->type_arg_count <= 8
+                    ? stack_args
+                    : (XrType **) xr_malloc(sizeof(XrType *) * (size_t) ne->type_arg_count);
+            if (!args && ne->type_arg_count > 0)
+                return xr_type_new_error(ctx->analyzer->isolate);
+            bool poisoned = false;
+            for (int i = 0; i < ne->type_arg_count; i++) {
+                args[i] = ne->type_args && ne->type_args[i]
+                              ? xr_tref_resolve_in_analyzer(ctx->analyzer, ne->type_args[i])
+                              : xr_type_new_error(ctx->analyzer->isolate);
+                if (xa_reject_error_type_success_type(ctx->analyzer, args[i],
+                                                      "generic enum type argument", ne->class_name,
+                                                      node->line, node->column))
+                    poisoned = true;
+            }
+            XrType *result = poisoned
+                                 ? xr_type_new_error(ctx->analyzer->isolate)
+                                 : xr_type_new_generic_enum(
+                                       ctx->analyzer->isolate, ne->class_name,
+                                       links && links->enum_info ? links->enum_info->layout : NULL,
+                                       args, ne->type_arg_count);
+            if (args != stack_args)
+                xr_free(args);
+            return result ? result : xr_type_new_error(ctx->analyzer->isolate);
+        }
+    }
 
     bool poisoned_argument = false;
     /* Visit argument expressions so their types are resolved. */

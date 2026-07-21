@@ -381,6 +381,104 @@ TEST(completion_shared_channel_member) {
     xlsp_server_free(server);
 }
 
+TEST(completion_enum_static_variants_descriptor) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "enum Color { Red, Green }\n"
+                          "Color.\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///enum_static.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 6};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "Red"));
+    ASSERT(json_array_contains_label(items, "Green"));
+    XrJsonValue *variants = json_array_find_label(items, "variants");
+    ASSERT(variants != NULL);
+    const char *detail = xjson_get_string(variants, "detail");
+    ASSERT(detail != NULL);
+    ASSERT(strstr(detail, "EnumVariants<Color>") != NULL);
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(completion_enum_descriptor_properties) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "enum Event { Data(value: int) }\n"
+                          "for (variant in Event.variants) {\n"
+                          "    for (field in variant.payloads) {\n"
+                          "        field.\n"
+                          "    }\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///enum_payload_loop.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {3, 14};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "index"));
+    ASSERT(json_array_contains_label(items, "name"));
+    ASSERT(json_array_contains_label(items, "type"));
+    ASSERT(!json_array_contains_label(items, "Data"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(hover_enum_descriptor_keeps_precise_type) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "enum Color { Red, Green }\n"
+                          "for (variant in Color.variants) {\n"
+                          "    print(variant.ordinal)\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///enum_hover.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {2, 20};
+    XrJsonValue *hover = xlsp_analyze_hover(server, doc, pos);
+    ASSERT(hover != NULL);
+    const char *value = hover_markdown_value(hover);
+    ASSERT(value != NULL);
+    ASSERT(strstr(value, "EnumVariant<Color>.ordinal: int") != NULL);
+    ASSERT(strstr(value, "Allocation: none") != NULL);
+
+    xjson_free(hover);
+    xlsp_server_free(server);
+}
+
+TEST(completion_enum_iteration_variable_is_descriptor) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "enum Color { Red, Green }\n"
+                          "for (variant in Color.variants) {\n"
+                          "    variant.\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, "file:///enum_loop.xr", content, 1);
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {2, 12};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "ordinal"));
+    ASSERT(json_array_contains_label(items, "payloads"));
+    ASSERT(!json_array_contains_label(items, "Red"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
 TEST(completion_u8_array_registry_methods) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
@@ -931,6 +1029,58 @@ static bool actions_contain_title_with(XrJsonValue *actions, const char *s1, con
     return false;
 }
 
+static XrJsonValue *find_action_with_title(XrJsonValue *actions, const char *needle) {
+    if (!actions || !needle)
+        return NULL;
+    int n = xjson_array_len(actions);
+    for (int i = 0; i < n; i++) {
+        XrJsonValue *action = xjson_array_get(actions, i);
+        const char *title = xjson_get_string(action, "title");
+        if (title && strstr(title, needle))
+            return action;
+    }
+    return NULL;
+}
+
+TEST(code_action_payload_enum_iteration_to_variants) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *uri = "file:///enum_quickfix.xr";
+    const char *content = "enum Result { Ok(value: int), Error(message: string) }\n"
+                          "for (value in Result) {\n"
+                          "    print(value)\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
+    ASSERT(doc != NULL);
+
+    XrJsonValue *params = make_code_action_params(
+        uri, 1, 0, 21,
+        "payload enum 'Result' is not directly iterable because its value set is not finite; "
+        "use `Result.variants` to iterate variant descriptors, or construct concrete payload "
+        "values explicitly");
+    XrJsonValue *actions = xlsp_handle_code_action(server, params);
+    ASSERT(actions != NULL);
+    XrJsonValue *action = find_action_with_title(actions, "Result.variants");
+    ASSERT(action != NULL);
+    XrJsonValue *edit = xjson_get_object(action, "edit");
+    XrJsonValue *changes = edit ? xjson_get_object(edit, "changes") : NULL;
+    XrJsonValue *edits = changes ? xjson_get_array(changes, uri) : NULL;
+    ASSERT(edits != NULL);
+    ASSERT_EQ(xjson_array_len(edits), 1);
+    XrJsonValue *text_edit = xjson_array_get(edits, 0);
+    ASSERT_STR_EQ(xjson_get_string(text_edit, "newText"), ".variants");
+    XrJsonValue *range = xjson_get_object(text_edit, "range");
+    XrJsonValue *start = range ? xjson_get_object(range, "start") : NULL;
+    ASSERT(start != NULL);
+    ASSERT_EQ(xjson_get_int(start, "line"), 1);
+    ASSERT_EQ(xjson_get_int(start, "character"), 20);
+
+    xjson_free(actions);
+    xjson_free(params);
+    xlsp_server_free(server);
+}
+
 TEST(code_action_go_capture_to_shared) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
@@ -1019,6 +1169,10 @@ int main(int argc, char **argv) {
 
     printf("\nCompletion tests:\n");
     RUN_TEST(completion_shared_channel_member);
+    RUN_TEST(completion_enum_static_variants_descriptor);
+    RUN_TEST(completion_enum_descriptor_properties);
+    RUN_TEST(completion_enum_iteration_variable_is_descriptor);
+    RUN_TEST(hover_enum_descriptor_keeps_precise_type);
     RUN_TEST(completion_u8_array_registry_methods);
     RUN_TEST(completion_uint8_array_uses_canonical_byte_docs);
     RUN_TEST(completion_int_array_excludes_u8_registry_methods);
@@ -1037,6 +1191,7 @@ int main(int argc, char **argv) {
     RUN_TEST(throw_effect_inlay_hints_show_inferred_result);
 
     printf("\nCode action concurrency quick-fix tests:\n");
+    RUN_TEST(code_action_payload_enum_iteration_to_variants);
     RUN_TEST(code_action_go_capture_to_shared);
     RUN_TEST(code_action_quickfix_skips_when_decl_missing);
 

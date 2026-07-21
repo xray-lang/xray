@@ -120,9 +120,12 @@ def item(
     line: int = 1,
     doc_surface: str = "",
     doc_module: str = "",
+    profile: str = "",
+    effect: str = "",
+    allocation: str = "",
 ) -> dict[str, Any]:
     qualified = f"{namespace}.{name}" if namespace and name and name != namespace else name
-    return {
+    entry = {
         "category": category,
         "namespace": namespace,
         "name": name,
@@ -135,6 +138,13 @@ def item(
         "doc_surface": doc_surface,
         "doc_module": doc_module,
     }
+    if profile:
+        entry["profile"] = profile
+    if effect:
+        entry["effect"] = effect
+    if allocation:
+        entry["allocation"] = allocation
+    return entry
 
 
 def stdlib_doc_surface_for_name(doc_surface: str, doc_module: str, name: str) -> tuple[str, str]:
@@ -1081,6 +1091,103 @@ def collect_intrinsics(root: Path) -> list[dict[str, Any]]:
     return out
 
 
+def collect_enum_metadata_api(root: Path) -> list[dict[str, Any]]:
+    """Collect the compiler-owned, non-reflective enum descriptor surface."""
+    path = root / "src/runtime/value/xenum_metadata_api.def"
+    text = path.read_text(encoding="utf-8")
+    quoted = r'"(?:\\.|[^"\\])*"'
+    common = (
+        rf"\s*,\s*({quoted})\s*,\s*({quoted})\s*,\s*({quoted})\s*,\s*({quoted})"
+    )
+    out: list[dict[str, Any]] = []
+
+    type_pattern = re.compile(
+        rf"XR_ENUM_METADATA_TYPE\(\s*([A-Z_]+)\s*,\s*([A-Za-z_][A-Za-z0-9_]*)"
+        rf"{common}\s*\)",
+        re.S,
+    )
+    for match in type_pattern.finditer(text):
+        source_name = match.group(2)
+        summary, profile, effect, allocation = (
+            ast.literal_eval(match.group(i)) for i in range(3, 7)
+        )
+        out.append(
+            item(
+                category="language-intrinsic",
+                namespace=source_name,
+                name=source_name,
+                kind="type",
+                signature=f"{source_name}<E>",
+                summary=summary,
+                source=rel(root, path),
+                line=line_for_offset(text, match.start()),
+                profile=profile,
+                effect=effect,
+                allocation=allocation,
+            )
+        )
+
+    property_pattern = re.compile(
+        rf"XR_ENUM_METADATA_PROPERTY\(\s*([A-Z_]+)\s*,\s*"
+        rf"([A-Za-z_][A-Za-z0-9_]*)\s*,\s*({quoted}){common}\s*\)",
+        re.S,
+    )
+    owner_names = {
+        "VARIANTS": "EnumVariants",
+        "VARIANT": "EnumVariant",
+        "PAYLOADS": "EnumPayloads",
+        "PAYLOAD_FIELD": "EnumPayloadField",
+    }
+    for match in property_pattern.finditer(text):
+        owner = owner_names[match.group(1)]
+        source_name = match.group(2)
+        result_type, summary, profile, effect, allocation = (
+            ast.literal_eval(match.group(i)) for i in range(3, 8)
+        )
+        out.append(
+            item(
+                category="language-intrinsic",
+                namespace=owner,
+                name=source_name,
+                kind="property",
+                signature=f": {result_type}",
+                summary=summary,
+                source=rel(root, path),
+                line=line_for_offset(text, match.start()),
+                profile=profile,
+                effect=effect,
+                allocation=allocation,
+            )
+        )
+
+    static_pattern = re.compile(
+        rf"XR_ENUM_STATIC_PROPERTY\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*"
+        rf"({quoted}){common}\s*\)",
+        re.S,
+    )
+    for match in static_pattern.finditer(text):
+        source_name = match.group(1)
+        result_type, summary, profile, effect, allocation = (
+            ast.literal_eval(match.group(i)) for i in range(2, 7)
+        )
+        out.append(
+            item(
+                category="language-intrinsic",
+                namespace="enum",
+                name=source_name,
+                kind="static-property",
+                signature=f": {result_type}",
+                summary=summary,
+                source=rel(root, path),
+                line=line_for_offset(text, match.start()),
+                profile=profile,
+                effect=effect,
+                allocation=allocation,
+            )
+        )
+    return out
+
+
 def dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
     for entry in items:
@@ -1271,6 +1378,7 @@ def build_inventory(root: Path, xray: Path | None, builtin_dump: Path | None) ->
     items.extend(collect_interfaces(root))
     items.extend(collect_keywords(root))
     items.extend(collect_intrinsics(root))
+    items.extend(collect_enum_metadata_api(root))
     items = dedupe(items)
     return {
         "schema": 1,

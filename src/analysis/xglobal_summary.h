@@ -59,10 +59,10 @@ typedef uint32_t XgHashEqId;
 
 enum {
     XG_NO_ID = 0,
-    /* 32: merge of R2-3 sequence-element class tracking (main, was 31) and the
-     * native class representation evidence (task/213, was 30); bumped to a fresh
-     * version so caches for either lineage are invalidated. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 32,
+    /* 33: combines the sequence/native-class evidence carried by schema 32
+     * with enum static-domain and descriptor metadata evidence from task 210.
+     * Use a fresh version so caches from either parent lineage are invalidated. */
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 33,
 };
 
 typedef enum XgBuildProfile {
@@ -375,6 +375,13 @@ enum {
     XG_METADATA_DERIVE = 1u << 1,
     XG_METADATA_DEBUG = 1u << 2,
     XG_METADATA_TOOLING = 1u << 3,
+    XG_METADATA_ENUM_COUNT = 1u << 4,
+    XG_METADATA_ENUM_ORDINAL = 1u << 5,
+    XG_METADATA_ENUM_VARIANT_NAME = 1u << 6,
+    XG_METADATA_ENUM_PAYLOAD_COUNT = 1u << 7,
+    XG_METADATA_ENUM_PAYLOAD_INDEX = 1u << 8,
+    XG_METADATA_ENUM_PAYLOAD_NAME = 1u << 9,
+    XG_METADATA_ENUM_PAYLOAD_TYPE = 1u << 10,
 };
 
 enum {

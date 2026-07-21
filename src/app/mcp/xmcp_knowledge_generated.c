@@ -6223,7 +6223,10 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "for (ch in \"hello\") { print(ch) }             // string characters (by Unicode scalar)\n"
             "for (key in someMap) { print(key) }           // single variable over Map \xe2\x86\x92 key\n"
             "for (key in someJson) { print(key) }          // single variable over Json \xe2\x86\x92 key\n"
-            "// for (day in Color) { ... }                 // compile error: an enum type is not iterable\n"
+            "for (color in Color) { print(color.name) }    // unit-only enum; yields Color values\n"
+            "for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>\n"
+            "    print(variant.name)\n"
+            "}\n"
             "for (_ in 0..n) { count++ }                   // discard with placeholder\n"
             "```\n"
             "```xray\n"
@@ -6485,7 +6488,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "enum",
         .title = "Enum",
-        .aliases_csv = "enums,enumeration,adt,payload,variant,Option,Some,None",
+        .aliases_csv = "enums,enumeration,adt,payload,variant,variants,EnumVariants,EnumVariant,EnumPayloads,EnumPayloadField,iteration,declaration order,TypeId,Option,Some,None",
         .body =
             "[Language reference](#56-enum-\xe5\xa3\xb0\xe6\x98\x8e)\n"
             "\n"
@@ -6524,7 +6527,18 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Iteration\n"
             "```xray\n"
-            "for (c in Color) { print(c.name) }        // compile error\n"
+            "for (color in Color) {\n"
+            "    print(color.name)                     // color: Color; Red, Green, Blue\n"
+            "}\n"
+            "\n"
+            "for (variant in NetEvent.variants) {\n"
+            "    print(variant.ordinal)                // variant: EnumVariant<NetEvent>\n"
+            "    print(variant.name)\n"
+            "    for (field in variant.payloads) {\n"
+            "        print(field.name)                 // field: EnumPayloadField<NetEvent>\n"
+            "        print(field.type)                 // int: canonical TypeId for the concrete field type\n"
+            "    }\n"
+            "}\n"
             "```\n"
             "\n"
             "### Pattern matching\n"
@@ -9204,7 +9218,10 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "for (ch in \"hello\") { print(ch) }             // string characters (by Unicode scalar)\n"
     "for (key in someMap) { print(key) }           // single variable over Map \xe2\x86\x92 key\n"
     "for (key in someJson) { print(key) }          // single variable over Json \xe2\x86\x92 key\n"
-    "// for (day in Color) { ... }                 // compile error: an enum type is not iterable\n"
+    "for (color in Color) { print(color.name) }    // unit-only enum; yields Color values\n"
+    "for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>\n"
+    "    print(variant.name)\n"
+    "}\n"
     "for (_ in 0..n) { count++ }                   // discard with placeholder\n"
     "```\n"
     "```xray\n"

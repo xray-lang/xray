@@ -640,6 +640,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     cg_writer_reset(ctx);
     if (ctx->error)
         return;
+    cg_reset_enum_scalar_sidecars(ctx);
 
     /* Build every section off-output.  The final unit is assembled in fixed
      * phase order and copied to the caller only after every buffer closes and
@@ -754,6 +755,9 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     } else {
         xi_cgen_shared_lib_ctor(ctx, body, single_module, 1, 0);
     }
+
+    cg_mark_extern_adapter_enum_scalar_sidecars(ctx);
+    emit_enum_scalar_sidecar_defs(ctx, statics);
 
     bool close_failed = xr_close_memstream(types, &typebuf, &typesz) != 0;
     close_failed = (xr_close_memstream(forwards, &forwardbuf, &forwardsz) != 0) || close_failed;
@@ -890,6 +894,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
         ctx->extern_linkage = false;
         return;
     }
+    cg_reset_enum_scalar_sidecars(ctx);
 
     char *staticbuf = NULL;
     size_t staticsz = 0;
@@ -931,6 +936,9 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
             xi_cgen_shared_lib_ctor(ctx, body, modules, nmodules, entry_index);
     }
     ctx->collect_xmod_refs = false;
+
+    cg_mark_extern_adapter_enum_scalar_sidecars(ctx);
+    emit_enum_scalar_sidecar_defs(ctx, statics);
 
     bool close_failed = xr_close_memstream(statics, &staticbuf, &staticsz) != 0;
     close_failed = (xr_close_memstream(body, &bodybuf, &bodysz) != 0) || close_failed;

@@ -1,0 +1,11 @@
+enum SignalLevel {
+    Low,
+    High
+}
+
+extern "C" {
+    fn xray_signal_level() -> SignalLevel
+}
+
+const readSignalLevel = xray_signal_level
+print(readSignalLevel)

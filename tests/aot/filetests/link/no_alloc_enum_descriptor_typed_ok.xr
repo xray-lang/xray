@@ -1,0 +1,12 @@
+enum NoAllocTypedColor {
+    Red,
+    Green,
+    Blue,
+}
+
+@no_alloc
+fn xray_no_alloc_enum_descriptor_typed_ok(value: EnumVariant<NoAllocTypedColor>) -> int {
+    return value.ordinal
+}
+
+print(xray_no_alloc_enum_descriptor_typed_ok(NoAllocTypedColor.variants[2]))

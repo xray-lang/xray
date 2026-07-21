@@ -112,6 +112,22 @@ static inline bool xr_kind_is_object_like(XrTypeKind k) {
 typedef struct XrType XrType;
 typedef struct XrClassInfo XrClassInfo;
 
+#define XR_ENUM_VARIANTS_TYPE_NAME "EnumVariants"
+#define XR_ENUM_VARIANT_TYPE_NAME "EnumVariant"
+#define XR_ENUM_PAYLOADS_TYPE_NAME "EnumPayloads"
+#define XR_ENUM_PAYLOAD_FIELD_TYPE_NAME "EnumPayloadField"
+
+/* Stable runtime kind carried by an erased enum-domain descriptor box.  Keep
+ * this independent from frontend selection ids: it is part of the VM/AOT
+ * representation contract, not a source-level reflection API. */
+typedef enum XrEnumMetadataKind {
+    XR_ENUM_METADATA_NONE = 0,
+    XR_ENUM_METADATA_VARIANTS = 1,
+    XR_ENUM_METADATA_VARIANT = 2,
+    XR_ENUM_METADATA_PAYLOADS = 3,
+    XR_ENUM_METADATA_PAYLOAD_FIELD = 4,
+} XrEnumMetadataKind;
+
 typedef struct XrFunctionParam {
     XrType *type;
     XrParamMode mode;
@@ -226,6 +242,8 @@ struct XrType {
             const char *enum_name;
             uint32_t layout_id;
             const XrEnumLayout *layout;
+            XrType **type_args;  // Concrete arguments retained by a generic enum type domain.
+            int type_arg_count;
         } enum_type;
 
         // For union type (int | string) - compile-time only
@@ -258,6 +276,55 @@ struct XrType {
     // Type alias name (NULL unless resolved through a type alias)
     const char *alias_name;
 };
+
+static inline bool xr_type_is_enum_metadata(const XrType *t) {
+    if (!t || t->kind != XR_KIND_INSTANCE || !t->instance.class_name)
+        return false;
+    const char *name = t->instance.class_name;
+    return strcmp(name, XR_ENUM_VARIANTS_TYPE_NAME) == 0 ||
+           strcmp(name, XR_ENUM_VARIANT_TYPE_NAME) == 0 ||
+           strcmp(name, XR_ENUM_PAYLOADS_TYPE_NAME) == 0 ||
+           strcmp(name, XR_ENUM_PAYLOAD_FIELD_TYPE_NAME) == 0;
+}
+
+static inline bool xr_type_is_enum_metadata_named(const XrType *t, const char *name) {
+    return xr_type_is_enum_metadata(t) && name && strcmp(t->instance.class_name, name) == 0;
+}
+
+static inline XrType *xr_type_enum_metadata_owner(const XrType *t) {
+    return xr_type_is_enum_metadata(t) && t->instance.type_arg_count == 1 && t->instance.type_args
+               ? t->instance.type_args[0]
+               : NULL;
+}
+
+static inline XrEnumMetadataKind xr_type_enum_metadata_kind(const XrType *t) {
+    if (!xr_type_is_enum_metadata(t))
+        return XR_ENUM_METADATA_NONE;
+    const char *name = t->instance.class_name;
+    if (strcmp(name, XR_ENUM_VARIANTS_TYPE_NAME) == 0)
+        return XR_ENUM_METADATA_VARIANTS;
+    if (strcmp(name, XR_ENUM_VARIANT_TYPE_NAME) == 0)
+        return XR_ENUM_METADATA_VARIANT;
+    if (strcmp(name, XR_ENUM_PAYLOADS_TYPE_NAME) == 0)
+        return XR_ENUM_METADATA_PAYLOADS;
+    if (strcmp(name, XR_ENUM_PAYLOAD_FIELD_TYPE_NAME) == 0)
+        return XR_ENUM_METADATA_PAYLOAD_FIELD;
+    return XR_ENUM_METADATA_NONE;
+}
+
+static inline uint32_t xr_type_enum_metadata_layout_id(const XrType *t) {
+    XrType *owner = xr_type_enum_metadata_owner(t);
+    if (!owner || owner->kind != XR_KIND_ENUM)
+        return 0;
+    if (owner->enum_type.layout && owner->enum_type.layout->layout_id != 0)
+        return owner->enum_type.layout->layout_id;
+    return owner->enum_type.layout_id;
+}
+
+static inline int64_t xr_type_enum_metadata_token(const XrType *t) {
+    return ((int64_t) xr_type_enum_metadata_layout_id(t) << 8) |
+           (int64_t) xr_type_enum_metadata_kind(t);
+}
 
 // Named instance class check: used to identify BIGINT/REGEX/etc after INSTANCE merge
 static inline bool xr_type_is_named_class(const XrType *t, const char *name) {
@@ -387,6 +454,8 @@ static inline bool xr_type_is_u8_contiguous(const XrType *type) {
 static inline XrRep xr_type_base_rep(const XrType *t) {
     if (!t)
         return XR_REP_TAGGED;
+    if (xr_type_is_enum_metadata(t))
+        return XR_REP_I64;
     switch (t->kind) {
         case XR_KIND_INT:
         case XR_KIND_BOOL:
@@ -433,7 +502,15 @@ static inline XrRep xr_type_rep(const XrType *t) {
         return (base == XR_REP_PTR) ? XR_REP_PTR : XR_REP_TAGGED;
     }
     if (t->kind == XR_KIND_UNION) {
-        // If all members share the same rep, use it; otherwise TAGGED
+        /* Enum metadata descriptors are scalar ordinals only while their
+         * concrete owner E remains statically known.  A union is an erased
+         * identity boundary: even if all members happen to use I64, the
+         * runtime value must retain owner/kind identity. */
+        for (int i = 0; i < t->union_type.member_count; i++) {
+            if (xr_type_is_enum_metadata(t->union_type.members[i]))
+                return XR_REP_TAGGED;
+        }
+        // If all remaining members share the same rep, use it; otherwise TAGGED
         if (t->union_type.member_count == 0)
             return XR_REP_TAGGED;
         XrRep common = xr_type_rep(t->union_type.members[0]);
@@ -485,6 +562,8 @@ XR_FUNC XrType *xr_type_new_pointer(XrVMRuntime *X, XrType *element_type, bool i
 static inline uint8_t xr_type_to_slot_type(XrType *type) {
     if (!type)
         return XR_SLOT_ANY;
+    if (xr_type_is_enum_metadata(type))
+        return XR_SLOT_I64;
     if (type->native_width != 0 && !type->is_nullable) {
         uint8_t nw = type->native_width;
         if (nw == XR_NATIVE_F32 || nw == XR_NATIVE_F64)
@@ -540,6 +619,8 @@ static inline uint8_t xr_type_to_slot_type(XrType *type) {
 static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
     if (!t)
         return 0xFF;
+    if (xr_type_is_enum_metadata(t))
+        return XR_TAG_I64;
     if (t->is_nullable) {
         // PTR-based T?: safe to tag as PTR.
         // jit_value_from_tag(0, PTR) returns {tag=NULL} for null values.
@@ -653,6 +734,8 @@ XR_FUNC XrType *xr_type_new_instance(XrVMRuntime *X, XrClassInfo *class_info);
 XR_FUNC XrType *xr_type_new_generic_instance(XrVMRuntime *X, const char *class_name,
                                              XrClassInfo *class_info, XrType **type_args,
                                              int type_arg_count);
+XR_FUNC XrType *xr_type_new_enum_metadata(XrVMRuntime *X, const char *metadata_name,
+                                          XrType *enum_type);
 XR_FUNC XrType *xr_type_new_bigint(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_u8_array(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_regex(XrVMRuntime *X);
@@ -661,6 +744,9 @@ XR_FUNC XrType *
 xr_type_new_named_instance(XrVMRuntime *X,
                            const char *name);  // generic named class (Exception/Range/etc)
 XR_FUNC XrType *xr_type_new_enum(XrVMRuntime *X, const char *enum_name);
+XR_FUNC XrType *xr_type_new_generic_enum(XrVMRuntime *X, const char *enum_name,
+                                         const XrEnumLayout *layout, XrType **type_args,
+                                         int type_arg_count);
 
 // API: Optional type (T?)
 XR_FUNC XrType *xr_type_new_optional(XrVMRuntime *X, XrType *base_type);

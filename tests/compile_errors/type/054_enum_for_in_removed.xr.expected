@@ -1,2 +1,2 @@
-is not iterable
-generated metadata
+payload enum 'Result' is not directly iterable because its value set is not finite
+use `Result.variants` to iterate variant descriptors

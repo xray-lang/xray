@@ -172,6 +172,9 @@ typedef struct NewExprNode {
     int arg_count;
     XrTypeRef **type_args;
     int type_arg_count;
+    /* Parser-confirmed generic type namespace (`Result<int>.variants`).
+     * This stays distinct from zero-argument construction (`Result<int>()`). */
+    bool is_type_namespace;
 } NewExprNode;
 
 typedef struct ThisExprNode {

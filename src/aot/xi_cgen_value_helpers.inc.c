@@ -490,9 +490,7 @@ static bool emit_static_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out
     if (ed->members[member_index].has_payload || cg_prelude_enum_has_payload_member(ed))
         return false;
     XrRep source_rep =
-        (ctx && ctx->freestanding_profile && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
-            ? XR_REP_I64
-            : XR_REP_TAGGED;
+        ctx && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ? XR_REP_I64 : XR_REP_TAGGED;
     const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, source_rep,
                                                      cg_value_plan_storage_rep(ctx, v));
     if (source_rep == XR_REP_I64)
@@ -511,19 +509,31 @@ static bool emit_static_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const 
     if (member->payload_count != 0)
         return false;
     XrRep source_rep =
-        (ctx && ctx->freestanding_profile && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
-            ? XR_REP_I64
-            : XR_REP_TAGGED;
+        ctx && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ? XR_REP_I64 : XR_REP_TAGGED;
     const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, source_rep,
                                                      cg_value_plan_storage_rep(ctx, v));
     if (source_rep == XR_REP_I64) {
         fprintf(out, "INT64_C(%u)", (unsigned) member_index);
     } else {
+        const XrType *owner =
+            v && v->enum_metadata_owner ? v->enum_metadata_owner : (v ? v->type : NULL);
+        const XaotEnumPlan *enum_plan =
+            ctx && ctx->aot_bundle && owner
+                ? xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, owner)
+                : NULL;
+        bool keep_names =
+            enum_plan && (enum_plan->descriptor_use_bits & XAOT_ENUM_USE_VARIANT_NAME) != 0;
         fprintf(out, "({ static const XrAotEnumBox _xenum_%u_%u = {{0, 0}, NULL, ",
                 (unsigned) ed->layout_id, (unsigned) member_index);
-        emit_c_string_literal(out, ed->name ? ed->name : "");
+        if (keep_names)
+            emit_c_string_literal(out, ed->name ? ed->name : "");
+        else
+            fprintf(out, "NULL");
         fprintf(out, ", ");
-        emit_c_string_literal(out, member->name ? member->name : "");
+        if (keep_names)
+            emit_c_string_literal(out, member->name ? member->name : "");
+        else
+            fprintf(out, "NULL");
         fprintf(out,
                 ", %u, 0, %u}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
                 "_v.ptr = (void *)&_xenum_%u_%u; _v; })",
@@ -856,13 +866,46 @@ static void emit_one_enum_native_typedef(XiCgenCtx *ctx, FILE *out, const XaotEn
             "default: out.member_name = NULL; out.payload_count = 0; break; } return out; }\n");
 }
 
+static bool cg_enum_plan_rep_matches(XaotValueRep rep, const XaotEnumPlan *plan) {
+    return plan && plan->c_type && cg_value_rep_is_typed_adt_aggregate(rep) && rep.c_type &&
+           strcmp(rep.c_type, plan->c_type) == 0;
+}
+
+static bool cg_enum_native_typedef_is_reachable(XiCgenCtx *ctx, const XaotEnumPlan *plan,
+                                                uint32_t module_index) {
+    if (!ctx || !ctx->aot_bundle || !plan ||
+        plan->scalar_action != XAOT_ENUM_SCALAR_COMPACT_AGGREGATE)
+        return false;
+    for (uint32_t i = 0; i < ctx->aot_bundle->nfunc_plans; i++) {
+        const XaotFuncPlan *func = &ctx->aot_bundle->func_plans[i];
+        if (func->module_index != module_index)
+            continue;
+        if (cg_enum_plan_rep_matches(xaot_abi_slot_value_rep(&func->abi.ret), plan))
+            return true;
+        for (uint16_t p = 0; p < func->abi.nparams; p++) {
+            if (cg_enum_plan_rep_matches(xaot_abi_slot_value_rep(&func->abi.params[p]), plan))
+                return true;
+        }
+    }
+    for (uint32_t i = 0; i < ctx->aot_bundle->nvalue_plans; i++) {
+        const XaotValuePlan *value = &ctx->aot_bundle->value_plans[i];
+        const XaotFuncPlan *func =
+            value->func ? xaot_bundle_find_func_plan(ctx->aot_bundle, value->func) : NULL;
+        if (func && func->module_index == module_index &&
+            cg_enum_plan_rep_matches(value->rep, plan))
+            return true;
+    }
+    return false;
+}
+
 static void emit_enum_native_typedefs(XiCgenCtx *ctx, FILE *out, const XiModule *module) {
     if (!ctx || !ctx->aot_bundle || !out || !module)
         return;
     for (uint32_t i = 0; i < ctx->aot_bundle->nenum_plans; i++) {
         const XaotEnumPlan *plan = &ctx->aot_bundle->enum_plans[i];
         const XiModule *owner = cg_enum_plan_owner_module(ctx, plan);
-        if (owner != module || !plan->c_type)
+        if (owner != module || !plan->c_type ||
+            !cg_enum_native_typedef_is_reachable(ctx, plan, plan->module_index))
             continue;
         emit_one_enum_native_typedef(ctx, out, plan);
     }
