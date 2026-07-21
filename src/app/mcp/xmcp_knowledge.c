@@ -165,9 +165,9 @@ static void insert_match(XmcpStdlibSearchResult *out, const XmcpModule *module,
  * by score_text_terms().  The relative ordering reflects how strong a hit on
  * that field is for ranking purposes:
  *
- *   - symbol_name dominates: an exact match on a function name is the
- *     strongest possible signal, so it scores higher than every module-level
- *     hit.
+ *   - symbol_name dominates ordinary full-text ranking. A query that exactly
+ *     names a module receives a separate boost so the module overview cannot
+ *     be displaced by its own symbol matches.
  *   - signature and summary fields share a tier (70/45/25) so renaming a
  *     symbol in docs vs. signature does not perturb ranking.
  *   - body text is weakest (35/20/10): full-text hits inside long markdown
@@ -187,6 +187,7 @@ static const XmcpScoreTier XMCP_SCORE_SYMBOL_SUMMARY = {50, 30, 18};
 static const XmcpScoreTier XMCP_SCORE_MODULE_NAME = {120, 90, 55};
 static const XmcpScoreTier XMCP_SCORE_MODULE_SUMMARY = {70, 45, 25};
 static const XmcpScoreTier XMCP_SCORE_MODULE_BODY = {35, 20, 10};
+static const int XMCP_EXACT_MODULE_QUERY_BOOST = 100;
 
 static int score_text_with_tier(const char *text, const char *query,
                                 char tokens[XMCP_QUERY_MAX_TOKENS][XMCP_QUERY_TOKEN_MAX],
@@ -418,6 +419,8 @@ void xmcp_knowledge_search_stdlib_matches(XmcpKnowledge *kb, const char *query,
 
         int module_score =
             direct_module_known ? 0 : score_module(module, effective_query, tokens, token_count);
+        if (!direct_module_known && strcasecmp(module->name, effective_query) == 0)
+            module_score += XMCP_EXACT_MODULE_QUERY_BOOST;
         insert_match(out, module, NULL, module_score);
         int module_context = score_module(module, query, tokens, token_count);
         for (int j = 0; j < module->symbol_count; j++) {
