@@ -415,6 +415,27 @@ static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
 
+static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_Coro_CoroStats[] = {
+    {"Coro", "CoroStats", "active", "int", true},
+    {"Coro", "CoroStats", "blocked", "int", true},
+    {"Coro", "CoroStats", "ready", "int", true},
+    {"Coro", "CoroStats", "total", "int", true},
+    {"Coro", "CoroStats", "created", "int", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_Coro_CoroInfo[] = {
+    {"Coro", "CoroInfo", "id", "int", true},
+    {"Coro", "CoroInfo", "name", "string?", true},
+    {"Coro", "CoroInfo", "state", "CoroState", true},
+    {"Coro", "CoroInfo", "reductions", "int", true},
+    {"Coro", "CoroInfo", "source", "string?", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_Coro_CoroDeadlock[] = {
+    {"Coro", "CoroDeadlock", "members", "Array<CoroInfo>", true},
+    {"Coro", "CoroDeadlock", "reason", "string", true},
+};
+
 static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_net_CopyBidirectionalResult[] = {
     {"net", "CopyBidirectionalResult", "aToB", "int", true},
     {"net", "CopyBidirectionalResult", "bToA", "int", true},
@@ -482,6 +503,9 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_ws_WsConnectOpt
 };
 
 static const XrStdlibRecordDefEntry xr_stdlib_record_def_entries[] = {
+    {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_record_fields_Coro_CoroStats, 5, true},
+    {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_record_fields_Coro_CoroInfo, 5, true},
+    {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_record_fields_Coro_CoroDeadlock, 2, true},
     {"net", "CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", xr_stdlib_record_fields_net_CopyBidirectionalResult, 2, true},
     {"cluster", "ClusterTlsOptions", "Typed TLS configuration for a cluster node", xr_stdlib_record_fields_cluster_ClusterTlsOptions, 5, true},
     {"cluster", "ClusterConfig", "Typed cluster node startup configuration", xr_stdlib_record_fields_cluster_ClusterConfig, 4, true},
@@ -491,6 +515,24 @@ static const XrStdlibRecordDefEntry xr_stdlib_record_def_entries[] = {
     {"ws", "WsConnectOptions", "Typed WebSocket client connection options", xr_stdlib_record_fields_ws_WsConnectOptions, 4, true},
 };
 #define XR_STDLIB_RECORD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_record_def_entries) / sizeof(xr_stdlib_record_def_entries[0])))
+
+static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_Coro_CoroState_variants[] = {
+    {"Unknown", NULL, 0},
+    {"Ready", NULL, 0},
+    {"Blocked", NULL, 0},
+    {"Running", NULL, 0},
+    {"Done", NULL, 0},
+};
+
+static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_Coro_CoroGroupKey_variants[] = {
+    {"Name", NULL, 0},
+    {"State", NULL, 0},
+};
+
+static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_Coro_CoroMetric_variants[] = {
+    {"Id", NULL, 0},
+    {"Reductions", NULL, 0},
+};
 
 static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_net_NetError_variants[] = {
     {"Timeout", NULL, 0},
@@ -514,6 +556,9 @@ static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_cluster_ClusterNodeState
 };
 
 static const XrStdlibEnumDefEntry xr_stdlib_enum_def_entries[] = {
+    {"Coro", "CoroState", "Lifecycle state captured in a coroutine diagnostic snapshot", xr_stdlib_enum_Coro_CoroState_variants, 5, UINT32_C(2619776588)},
+    {"Coro", "CoroGroupKey", "Stable key used to group coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroGroupKey_variants, 2, UINT32_C(2968543505)},
+    {"Coro", "CoroMetric", "Metric used to rank coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroMetric_variants, 2, UINT32_C(3802670327)},
     {"net", "NetError", "Typed failure from native network operations", xr_stdlib_enum_net_NetError_variants, 10, UINT32_C(2619647518)},
     {"cluster", "ClusterNodeState", "Lifecycle state of a remote cluster node", xr_stdlib_enum_cluster_ClusterNodeState_variants, 5, UINT32_C(3723918825)},
 };

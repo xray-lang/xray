@@ -17202,6 +17202,58 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_marks_coro_module_runtime_capability) {
+    setup_parser_session();
+    const char *source = "var stats = Coro.stats()\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_EQ_UINT(evidence_body_count_with_capability(&ev, XG_CAP_COROUTINE), 1);
+
+    XiFunc init_func;
+    XiModule module;
+    XiModule *modules[1];
+    memset(&init_func, 0, sizeof(init_func));
+    init_func.name = "init";
+    for (uint32_t i = 0; i < ev.nbodies; i++) {
+        if (ev.bodies[i].kind == XG_BODY_MODULE_INIT) {
+            init_func.xg_body_func_id = ev.bodies[i].func_id;
+            break;
+        }
+    }
+    ASSERT_TRUE(init_func.xg_body_func_id != XG_NO_ID);
+    memset(&module, 0, sizeof(module));
+    module.path = "coro_runtime_capability.xr";
+    module.name = "coro_runtime_capability";
+    module.init = &init_func;
+    modules[0] = &module;
+
+    XaotBundle bundle;
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    ASSERT_NOT_NULL(xaot_bundle_find_capability_plan(&bundle, XG_CAP_COROUTINE));
+    ASSERT_TRUE((bundle.entry_plan.runtime_component_bits & XG_CAP_COROUTINE) != 0);
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_marks_sys_thread_spawn_capability) {
     setup_parser_session();
     const char *source = "import sys\n"
@@ -18180,6 +18232,7 @@ RUN_TEST(global_evidence_producer_marks_static_data_reachability);
 RUN_TEST(global_evidence_publishes_allocation_contracts);
 RUN_TEST(global_evidence_producer_marks_static_data_runtime_init);
 RUN_TEST(global_evidence_producer_marks_runtime_capabilities);
+RUN_TEST(global_evidence_producer_marks_coro_module_runtime_capability);
 RUN_TEST(global_evidence_producer_marks_sys_thread_spawn_capability);
 RUN_TEST(global_evidence_producer_marks_extern_dylib_link_dependency);
 RUN_TEST(global_evidence_producer_marks_stdlib_link_dependencies);

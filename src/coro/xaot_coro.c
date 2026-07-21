@@ -1503,6 +1503,91 @@ static XrValue aot_coro_new_array(XrAotVmHost vm_host, XrCoroutine *coro) {
                                                              : XR_NULL_VAL;
 }
 
+static XrValue aot_coro_name_value(XrAotVmHost vm_host, const XrCoroutine *coro);
+
+static XrValue aot_coro_new_record(XrAotVmHost vm_host, XrCoroutine *coro, const char *name,
+                                   const char *const *field_names, int64_t field_count) {
+    if (!coro)
+        coro = aot_context_coro(NULL, vm_host, NULL);
+    if (aot_vm_host_available(vm_host) && vm_host.ops->new_record)
+        return vm_host.ops->new_record(vm_host.host, "Coro", name, coro);
+    return vm_host.value_ops && vm_host.value_ops->record_new
+               ? vm_host.value_ops->record_new(field_count, field_names)
+               : XR_NULL_VAL;
+}
+
+static void aot_value_record_set(XrAotVmHost vm_host, XrValue record, int64_t field_index,
+                                 XrValue value) {
+    if (aot_vm_host_available(vm_host)) {
+        if (vm_host.ops->record_set)
+            vm_host.ops->record_set(vm_host.host, record, field_index, value);
+        return;
+    }
+    if (vm_host.value_ops && vm_host.value_ops->record_set)
+        vm_host.value_ops->record_set(record, field_index, value);
+}
+
+static int64_t aot_coro_enum_ordinal(XrAotVmHost vm_host, XrValue value, int64_t fallback) {
+    if (aot_vm_host_available(vm_host)) {
+        if (vm_host.ops->enum_ordinal)
+            return vm_host.ops->enum_ordinal(vm_host.host, value, fallback);
+        XrEnumAggregateValue *aggregate = xr_value_to_enum_aggregate(value);
+        return aggregate ? (int64_t) aggregate->member_index : fallback;
+    }
+    return vm_host.value_ops && vm_host.value_ops->enum_ordinal
+               ? vm_host.value_ops->enum_ordinal(value, fallback)
+               : fallback;
+}
+
+static int aot_coro_state_ordinal(const char *state) {
+    if (!state)
+        return 0;
+    if (strcmp(state, "ready") == 0)
+        return 1;
+    if (strcmp(state, "blocked") == 0)
+        return 2;
+    if (strcmp(state, "running") == 0)
+        return 3;
+    if (strcmp(state, "done") == 0)
+        return 4;
+    return 0;
+}
+
+static XrValue aot_coro_state_value(XrAotVmHost vm_host, const char *state) {
+    static const char *const members[] = {"Unknown", "Ready", "Blocked", "Running", "Done"};
+    int ordinal = aot_coro_state_ordinal(state);
+    if (aot_vm_host_available(vm_host) && vm_host.ops->enum_new)
+        return vm_host.ops->enum_new(vm_host.host, "Coro", "CoroState", members[ordinal], ordinal);
+    return vm_host.value_ops && vm_host.value_ops->enum_new
+               ? vm_host.value_ops->enum_new("CoroState", members[ordinal], ordinal)
+               : XR_NULL_VAL;
+}
+
+static const char *const aot_coro_stats_fields[] = {"active", "blocked", "ready", "total",
+                                                    "created"};
+static const char *const aot_coro_info_fields[] = {"id", "name", "state", "reductions", "source"};
+
+static XrValue aot_coro_info_record(XrAotVmHost vm_host, XrCoroutine *owner,
+                                    const XrCoroutine *coro, const char *state) {
+    XrValue info = aot_coro_new_record(vm_host, owner, "CoroInfo", aot_coro_info_fields, 5);
+    if (XR_IS_NULL(info))
+        return XR_NULL_VAL;
+    aot_value_record_set(vm_host, info, 0, xr_int(coro->id));
+    aot_value_record_set(vm_host, info, 1, aot_coro_name_value(vm_host, coro));
+    aot_value_record_set(vm_host, info, 2, aot_coro_state_value(vm_host, state));
+    aot_value_record_set(vm_host, info, 3, xr_int(xr_coro_reds(coro)));
+
+    XrValue source = XR_NULL_VAL;
+    const char *source_file = xr_coro_source_file(coro);
+    if (source_file) {
+        char source_buf[256];
+        snprintf(source_buf, sizeof(source_buf), "%s:%d", source_file, xr_coro_source_line(coro));
+        source = aot_vm_host_string_value(vm_host, source_buf, strlen(source_buf));
+    }
+    aot_value_record_set(vm_host, info, 4, source);
+    return info;
+}
+
 static void aot_value_map_set(XrAotVmHost vm_host, XrValue map, XrValue key, XrValue value) {
     if (aot_vm_host_available(vm_host)) {
         if (XR_IS_MAP(map) && map.ptr)
@@ -1578,19 +1663,19 @@ static int aot_coro_collect_all(XrAotVmHost vm_host, XrCoroSnapshotEntry *out, i
 
 static XrValue aot_coro_stats(XrAotVmHost vm_host, XrCoroutine *owner) {
     XrRuntime *runtime = aot_vm_host_scheduler(vm_host);
-    if (!runtime)
-        return XR_NULL_VAL;
 
     int blocked_count = 0;
     int ready_count = 0;
     int active_count = 0;
     uint64_t total_created = 0;
-    for (int si = 0; si < runtime->worker_count; si++)
-        total_created += runtime->workers[si].p.stats.spawned_count;
+    if (runtime) {
+        for (int si = 0; si < runtime->worker_count; si++)
+            total_created += runtime->workers[si].p.stats.spawned_count;
+    }
 
     XrCoroSnapshotEntry *entries =
         (XrCoroSnapshotEntry *) xr_malloc(sizeof(XrCoroSnapshotEntry) * XR_AOT_CORO_COLLECT_MAX);
-    if (entries) {
+    if (entries && runtime) {
         int total = aot_coro_collect_all(vm_host, entries, XR_AOT_CORO_COLLECT_MAX);
         for (int i = 0; i < total; i++) {
             if (strcmp(entries[i].state, "ready") == 0)
@@ -1601,52 +1686,41 @@ static XrValue aot_coro_stats(XrAotVmHost vm_host, XrCoroutine *owner) {
                 active_count++;
         }
         xr_free(entries);
-    } else {
+    } else if (runtime) {
         active_count = xr_runtime_active_coros(runtime);
         for (int wi = 0; wi < runtime->worker_count; wi++) {
             XrWorker *w = &runtime->workers[wi];
             blocked_count += w->p.blocked_count;
             ready_count += xr_runq_len(&w->p.runq);
         }
+    } else {
+        xr_free(entries);
     }
 
-    XrValue result = aot_coro_new_map(vm_host, owner);
+    XrValue result = aot_coro_new_record(vm_host, owner, "CoroStats", aot_coro_stats_fields, 5);
     if (XR_IS_NULL(result))
         return XR_NULL_VAL;
     int total_alive = ready_count + blocked_count + active_count;
-    aot_value_map_set(vm_host, result, aot_coro_intern_key(vm_host, "active"),
-                      xr_int(active_count));
-    aot_value_map_set(vm_host, result, aot_coro_intern_key(vm_host, "blocked"),
-                      xr_int(blocked_count));
-    aot_value_map_set(vm_host, result, aot_coro_intern_key(vm_host, "ready"), xr_int(ready_count));
-    aot_value_map_set(vm_host, result, aot_coro_intern_key(vm_host, "total"), xr_int(total_alive));
-    aot_value_map_set(vm_host, result, aot_coro_intern_key(vm_host, "created"),
-                      xr_int((int) total_created));
+    aot_value_record_set(vm_host, result, 0, xr_int(active_count));
+    aot_value_record_set(vm_host, result, 1, xr_int(blocked_count));
+    aot_value_record_set(vm_host, result, 2, xr_int(ready_count));
+    aot_value_record_set(vm_host, result, 3, xr_int(total_alive));
+    aot_value_record_set(vm_host, result, 4, xr_int((int) total_created));
     return result;
 }
 
 static XrValue aot_coro_list(XrAotVmHost vm_host, XrCoroutine *owner, const XrValue *args,
                              int argc) {
     int limit = 100000;
-    int state_filter = 0;
+    int state_filter = -1;
 
     if (argc > 0 && XR_IS_INT(args[0])) {
         limit = (int) XR_TO_INT(args[0]);
         if (limit <= 0)
             limit = 100000;
     }
-    if (argc > 1) {
-        XrValue state_val = args[1];
-        if (XR_IS_INT(state_val)) {
-            state_filter = (int) XR_TO_INT(state_val);
-        } else if (XR_IS_STRING(state_val)) {
-            const char *state = aot_value_string_data(vm_host, state_val);
-            if (state && strcmp(state, "ready") == 0)
-                state_filter = 1;
-            else if (state && strcmp(state, "blocked") == 0)
-                state_filter = 2;
-        }
-    }
+    if (argc > 1)
+        state_filter = (int) aot_coro_enum_ordinal(vm_host, args[1], -1);
 
     XrValue result = aot_coro_new_array(vm_host, owner);
     if (XR_IS_NULL(result))
@@ -1662,23 +1736,12 @@ static XrValue aot_coro_list(XrAotVmHost vm_host, XrCoroutine *owner, const XrVa
     for (int i = 0; i < total && count < limit; i++) {
         XrCoroutine *coro = entries[i].coro;
         const char *st = entries[i].state;
-        bool is_ready = strcmp(st, "ready") == 0;
-        bool is_blocked = strcmp(st, "blocked") == 0;
-
-        if (state_filter == 1 && !is_ready)
-            continue;
-        if (state_filter == 2 && !is_blocked)
+        if (state_filter >= 0 && state_filter != aot_coro_state_ordinal(st))
             continue;
 
-        XrValue info = aot_coro_new_map(vm_host, owner);
+        XrValue info = aot_coro_info_record(vm_host, owner, coro, st);
         if (XR_IS_NULL(info))
             continue;
-        aot_value_map_set(vm_host, info, aot_coro_intern_key(vm_host, "id"), xr_int(coro->id));
-        aot_value_map_set(vm_host, info, aot_coro_intern_key(vm_host, "name"),
-                          aot_coro_name_value(vm_host, coro));
-        aot_value_map_set(vm_host, info, aot_coro_intern_key(vm_host, "state"),
-                          aot_vm_host_string_value(vm_host, st, strlen(st)));
-        aot_coro_set_source_field(vm_host, info, coro);
         aot_value_array_push(vm_host, result, info);
         count++;
     }
@@ -1821,10 +1884,8 @@ static XrValue aot_coro_top(XrAotVmHost vm_host, XrCoroutine *owner, const XrVal
         if (top_n > 1000)
             top_n = 1000;
     }
-    if (argc > 1 && XR_IS_STRING(args[1])) {
-        const char *metric_name = aot_value_string_data(vm_host, args[1]);
-        metric = metric_name && strcmp(metric_name, "reductions") == 0 ? 2 : 0;
-    }
+    if (argc > 1)
+        metric = (int) aot_coro_enum_ordinal(vm_host, args[1], 0);
 
     XrValue result = aot_coro_new_array(vm_host, owner);
     if (XR_IS_NULL(result))
@@ -1839,8 +1900,8 @@ static XrValue aot_coro_top(XrAotVmHost vm_host, XrCoroutine *owner, const XrVal
         int max_idx = j;
         for (int k = j + 1; k < count; k++) {
             int64_t lhs =
-                metric == 2 ? xr_coro_reds(entries[k].coro) : (int64_t) entries[k].coro->id;
-            int64_t rhs = metric == 2 ? xr_coro_reds(entries[max_idx].coro)
+                metric == 1 ? xr_coro_reds(entries[k].coro) : (int64_t) entries[k].coro->id;
+            int64_t rhs = metric == 1 ? xr_coro_reds(entries[max_idx].coro)
                                       : (int64_t) entries[max_idx].coro->id;
             if (lhs > rhs)
                 max_idx = k;
@@ -1855,18 +1916,9 @@ static XrValue aot_coro_top(XrAotVmHost vm_host, XrCoroutine *owner, const XrVal
     int result_count = top_n < count ? top_n : count;
     for (int j = 0; j < result_count; j++) {
         XrCoroutine *coro = entries[j].coro;
-        XrValue info = aot_coro_new_map(vm_host, owner);
+        XrValue info = aot_coro_info_record(vm_host, owner, coro, entries[j].state);
         if (XR_IS_NULL(info))
             continue;
-        aot_value_map_set(vm_host, info, aot_coro_intern_key(vm_host, "id"), xr_int(coro->id));
-        aot_value_map_set(vm_host, info, aot_coro_intern_key(vm_host, "name"),
-                          aot_coro_name_value(vm_host, coro));
-        aot_value_map_set(
-            vm_host, info, aot_coro_intern_key(vm_host, "state"),
-            aot_vm_host_string_value(vm_host, entries[j].state, strlen(entries[j].state)));
-        aot_value_map_set(vm_host, info, aot_coro_intern_key(vm_host, "reductions"),
-                          xr_int(xr_coro_reds(coro)));
-        aot_coro_set_source_field(vm_host, info, coro);
         aot_value_array_push(vm_host, result, info);
     }
 
@@ -1877,11 +1929,8 @@ static XrValue aot_coro_top(XrAotVmHost vm_host, XrCoroutine *owner, const XrVal
 static XrValue aot_coro_group_by(XrAotVmHost vm_host, XrCoroutine *owner, const XrValue *args,
                                  int argc) {
     int group_by = 0;
-    if (argc > 0 && XR_IS_STRING(args[0])) {
-        const char *group_name = aot_value_string_data(vm_host, args[0]);
-        if (group_name && strcmp(group_name, "state") == 0)
-            group_by = 1;
-    }
+    if (argc > 0)
+        group_by = (int) aot_coro_enum_ordinal(vm_host, args[0], 0);
 
     XrValue result = aot_coro_new_map(vm_host, owner);
     if (XR_IS_NULL(result))

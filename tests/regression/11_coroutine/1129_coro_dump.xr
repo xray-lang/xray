@@ -10,7 +10,7 @@ fn worker(c: Channel<int>) -> string {
 fn test_coro_dump() {
     print("test1: Coro.stats()")
     var stats = Coro.stats()
-    print("stats keys:", len(stats.keys()))
+    print("stats total:", stats.total)
 
     print("test2: Coro.dump()")
     Coro.dump()

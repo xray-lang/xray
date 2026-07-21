@@ -64,6 +64,62 @@ static const XaBuiltinMember g_gen_osrwlock_members[] = {
 
 // ======== C Module Declarations ========
 
+// Coro.CoroStats record fields
+static const XaBuiltinRecordField g_gen_Coro_corostats_record_fields[] = {
+    {"active", "int"},
+    {"blocked", "int"},
+    {"ready", "int"},
+    {"total", "int"},
+    {"created", "int"},
+};
+
+// Coro.CoroInfo record fields
+static const XaBuiltinRecordField g_gen_Coro_coroinfo_record_fields[] = {
+    {"id", "int"},
+    {"name", "string?"},
+    {"state", "CoroState"},
+    {"reductions", "int"},
+    {"source", "string?"},
+};
+
+// Coro.CoroDeadlock record fields
+static const XaBuiltinRecordField g_gen_Coro_corodeadlock_record_fields[] = {
+    {"members", "Array<CoroInfo>"},
+    {"reason", "string"},
+};
+
+static const XaBuiltinRecord g_gen_Coro_records[] = {
+    {"CoroStats", "Typed aggregate counters for the coroutine scheduler", g_gen_Coro_corostats_record_fields, 5, true},
+    {"CoroInfo", "Typed diagnostic snapshot for one coroutine", g_gen_Coro_coroinfo_record_fields, 5, true},
+    {"CoroDeadlock", "Typed description of a detected coroutine wait cycle", g_gen_Coro_corodeadlock_record_fields, 2, true},
+};
+#define GEN_CORO_RECORD_COUNT 3
+
+static const XaBuiltinEnumVariant g_gen_Coro_corostate_variants[] = {
+    {"Unknown", NULL, 0},
+    {"Ready", NULL, 0},
+    {"Blocked", NULL, 0},
+    {"Running", NULL, 0},
+    {"Done", NULL, 0},
+};
+
+static const XaBuiltinEnumVariant g_gen_Coro_corogroupkey_variants[] = {
+    {"Name", NULL, 0},
+    {"State", NULL, 0},
+};
+
+static const XaBuiltinEnumVariant g_gen_Coro_corometric_variants[] = {
+    {"Id", NULL, 0},
+    {"Reductions", NULL, 0},
+};
+
+static const XaBuiltinEnum g_gen_Coro_enums[] = {
+    {"CoroState", "Lifecycle state captured in a coroutine diagnostic snapshot", g_gen_Coro_corostate_variants, 5, UINT32_C(2619776588)},
+    {"CoroGroupKey", "Stable key used to group coroutine diagnostic snapshots", g_gen_Coro_corogroupkey_variants, 2, UINT32_C(2968543505)},
+    {"CoroMetric", "Metric used to rank coroutine diagnostic snapshots", g_gen_Coro_corometric_variants, 2, UINT32_C(3802670327)},
+};
+#define GEN_CORO_ENUM_COUNT 3
+
 // cluster.ClusterTlsOptions record fields
 static const XaBuiltinRecordField g_gen_cluster_clustertlsoptions_record_fields[] = {
     {"enabled", "bool"},
@@ -619,6 +675,7 @@ static const XaBuiltinMember g_gen_ws_functions[] = {
 
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
+    {"Coro", NULL, 0, NULL, 0, g_gen_Coro_records, GEN_CORO_RECORD_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT},
     {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, g_gen_cluster_records, GEN_CLUSTER_RECORD_COUNT, g_gen_cluster_enums, GEN_CLUSTER_ENUM_COUNT},
     {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
@@ -634,7 +691,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT, g_gen_ws_records, GEN_WS_RECORD_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 14
+#define GEN_BUILTIN_MODULE_COUNT 15
 
 /* clang-format on */
 

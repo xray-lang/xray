@@ -753,15 +753,15 @@ static const int builtin_module_count = GEN_BUILTIN_MODULE_COUNT;
 
 static const XaBuiltinMember g_rt_coro_functions[] = {
     {"yield", "(): ()", "Cooperative CPU yield (Gosched)", true, true, false, false, true},
-    {"stats", "(): Json", "Get coroutine statistics", true, true, false, false, false},
-    {"list", "(limit?: int, state?: string): Array<Json>", "List coroutines", true, true, false,
-     false, false},
-    {"deadlocks", "(): Array<Json>", "Detect deadlocked coroutines", true, true, false, false,
-     false},
-    {"top", "(n: int, metric?: string): Array<Json>", "Top N coroutines by metric", true, true,
+    {"stats", "(): CoroStats", "Get coroutine statistics", true, true, false, false, false},
+    {"list", "(limit?: int, state?: CoroState): Array<CoroInfo>", "List coroutines", true, true,
      false, false, false},
-    {"groupBy", "(field: string): Json", "Group coroutines by field", true, true, false, false,
-     false},
+    {"deadlocks", "(): Array<CoroDeadlock>", "Detect deadlocked coroutines", true, true, false,
+     false, false},
+    {"top", "(n: int, metric?: CoroMetric): Array<CoroInfo>", "Top N coroutines by metric", true,
+     true, false, false, false},
+    {"groupBy", "(field: CoroGroupKey): Map<string, int>", "Group coroutines by field", true, true,
+     false, false, false},
     {"setLocal", "(key: string, value: Json): ()", "Set coroutine-local storage", true, true, false,
      false, false},
     {"getLocal", "(key: string): Json", "Get coroutine-local storage", true, true, false, false,
@@ -769,8 +769,8 @@ static const XaBuiltinMember g_rt_coro_functions[] = {
     {"lockThread", "(): ()", "Lock current thread", true, true, false, false, false},
     {"unlockThread", "(): ()", "Unlock current thread", true, true, false, false, false},
     {"dump", "(limit?: int): ()", "Dump coroutine state", true, true, false, false, false},
-    {"stalled", "(timeout_ms?: int): Array<Json>", "Detect stalled coroutines", true, true, false,
-     false, false},
+    {"stalled", "(timeout_ms?: int): Array<CoroInfo>", "Detect stalled coroutines", true, true,
+     false, false, false},
     {"whereis", "(name: string): bool", "Check if named coroutine exists", true, true, false, false,
      false},
     {"monitor", "(name: string): Channel<string>", "Monitor named coroutine, returns Channel", true,
@@ -792,7 +792,8 @@ static const XaBuiltinMember g_rt_coropool_functions[] = {
     ((int) (sizeof(g_rt_coropool_functions) / sizeof(g_rt_coropool_functions[0])))
 
 static const XaBuiltinModule g_rt_builtin_modules[] = {
-    {"Coro", g_rt_coro_functions, RT_CORO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"Coro", g_rt_coro_functions, RT_CORO_FUNCTION_COUNT, NULL, 0, g_gen_Coro_records,
+     GEN_CORO_RECORD_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT},
     {"CoroPool", g_rt_coropool_functions, RT_COROPOOL_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
 };
 #define RT_BUILTIN_MODULE_COUNT 2
