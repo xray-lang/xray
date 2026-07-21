@@ -1,0 +1,7 @@
+[package]
+name = "bili-analysis-server-fixture"
+version = "0.0.0"
+
+[[bin]]
+name = "bili-analysis-server-fixture"
+path = "src/main.xr"

@@ -7,6 +7,7 @@
 
 macro(add_xray_unit_test name source)
     add_executable(${name} ${source})
+    target_compile_definitions(${name} PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
     target_include_directories(${name} PRIVATE
         ${XRAY_COMMON_INCLUDES}
         ${CMAKE_CURRENT_SOURCE_DIR}

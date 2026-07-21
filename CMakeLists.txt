@@ -276,12 +276,6 @@ option(XR_USE_MIMALLOC "Use mimalloc high-performance allocator" OFF)
 option(XR_STDLIB_FROM_FILE "Load stdlib from file instead of embedded bytecode (for debugging)" OFF)
 option(XRAY_STDLIB_VM_FASTPATHS "Enable verified VM-only stdlib fastpaths" ON)
 
-# Task 218: register the focused sanitizer CTest lanes (asan_focused / lsan_strict).
-# Each lane drives a nested sanitizer build + focused test surface, so it is
-# opt-in (off by default) to keep the ordinary `ctest` run fast; enable with
-# -DXR_ENABLE_SANITIZER_LANES=ON and run e.g. `ctest -R asan_focused`.
-option(XR_ENABLE_SANITIZER_LANES "Register the task-218 asan_focused / lsan_strict CTest lanes" OFF)
-
 # Modular build options
 option(XR_BUILD_LSP "Build LSP language server" ON)
 option(XR_BUILD_DAP "Build DAP debug adapter" ON)
@@ -1892,9 +1886,12 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    # Task 218 defense line 2: focused ASan+UBSan lane. Opt-in (see
-    # XR_ENABLE_SANITIZER_LANES) because it drives a nested sanitizer build.
-    if(XR_ENABLE_SANITIZER_LANES AND NOT WIN32)
+    # Task 218 defenses 2/4 are part of the ordinary, non-sanitized CTest
+    # surface.  Do not register nested sanitizer drivers inside an already
+    # sanitized build: CI runs those configurations directly and recursive
+    # sanitizer builds would only duplicate the same work.
+    if(NOT WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
+       NOT ENABLE_MSAN)
         add_test(
             NAME asan_focused
             COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused.sh

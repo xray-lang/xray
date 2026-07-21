@@ -13,6 +13,17 @@
 
 #include "../base/xdefs.h"
 
+typedef void (*XrProcessShutdownCallback)(void);
+
+/*
+ * Register an idempotent teardown callback owned by a higher compiler layer.
+ * Duplicate registrations are coalesced.  The fixed-capacity registry avoids
+ * introducing heap ownership into the shutdown mechanism itself.
+ *
+ * Returns false only when the process-wide registry is full.
+ */
+XR_FUNC bool xr_process_shutdown_register(XrProcessShutdownCallback callback);
+
 /*
  * Release process-wide, non-isolate-owned registries so a leak checker
  * (LeakSanitizer) observes a clean exit.

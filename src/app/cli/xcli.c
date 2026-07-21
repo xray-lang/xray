@@ -14,8 +14,10 @@
  */
 
 #include "xcli_dispatch.h"
+#include "../../runtime/xr_process_shutdown.h"
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #ifdef XR_OS_WINDOWS
 #include <io.h>
@@ -58,6 +60,7 @@ static void crash_handler(int sig) {
 #endif
 
 int main(int argc, char **argv) {
+    atexit(xr_process_shutdown);
     /* MSVC's CRT (and most libc implementations) fully buffer stdout when
      * it is connected to a pipe — exactly the configuration the regression
      * runner uses. If a coroutine traps or aborts before the

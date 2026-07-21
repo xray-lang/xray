@@ -9,8 +9,10 @@
  */
 
 #include "xlsp_server.h"
+#include "../../runtime/xr_process_shutdown.h"
 #include "xray_version.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static void print_usage(const char *prog) {
@@ -29,6 +31,7 @@ static void print_version(void) {
 }
 
 int main(int argc, char *argv[]) {
+    atexit(xr_process_shutdown);
     // Parse command line arguments
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {

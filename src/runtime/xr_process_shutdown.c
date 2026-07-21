@@ -12,6 +12,24 @@
 
 #include "value/xtype.h"
 
+#define XR_PROCESS_SHUTDOWN_CALLBACK_CAP 16
+
+static XrProcessShutdownCallback g_shutdown_callbacks[XR_PROCESS_SHUTDOWN_CALLBACK_CAP];
+static size_t g_shutdown_callback_count = 0;
+
+bool xr_process_shutdown_register(XrProcessShutdownCallback callback) {
+    if (!callback)
+        return false;
+    for (size_t i = 0; i < g_shutdown_callback_count; i++) {
+        if (g_shutdown_callbacks[i] == callback)
+            return true;
+    }
+    if (g_shutdown_callback_count == XR_PROCESS_SHUTDOWN_CALLBACK_CAP)
+        return false;
+    g_shutdown_callbacks[g_shutdown_callback_count++] = callback;
+    return true;
+}
+
 void xr_process_shutdown(void) {
     /*
      * Release process-wide (non-isolate) runtime registries. Keep this the
@@ -21,13 +39,7 @@ void xr_process_shutdown(void) {
      * Type system: clears the borrowed per-thread current type pool pointer
      * so no stale cross-lifetime borrow survives shutdown.
      */
+    for (size_t i = g_shutdown_callback_count; i > 0; i--)
+        g_shutdown_callbacks[i - 1]();
     xr_type_global_shutdown();
-
-    /*
-     * NOTE (task 218 P1 / follow-up): additional process-exit leaks reported
-     * by the lsan_strict lane originate outside the runtime's editable surface
-     * (the frontend XRD module cache and the analyzer's thread-local symbol
-     * registry). As those layers adopt this hook, add their releases here so
-     * the LSan suppression list only ever shrinks.
-     */
 }

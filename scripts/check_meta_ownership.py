@@ -33,10 +33,9 @@ Categories emitted:
                           AST pointer, or a raw ``const char *`` field in
                           the ctx struct).
 
-This is a P0 inventory gate. By default it runs in RECORD mode: it prints
-the classified counts, optionally diffs against a committed baseline, and
-ALWAYS exits 0. P1 (borrow clean-up, owned by another agent) drives each
-category to zero and then flips the gate fail-closed via ``--max-category``.
+The scanner can still run as an inventory, but the committed CTest gate is
+fail-closed: all three categories have a maximum of zero.  A baseline remains
+available for historical comparison and for deliberate standalone audits.
 
 A borrow that is provably safe may be exempted inline with an
 ``owned:`` annotation, e.g. ``/* owned: cg arena */`` on (or immediately

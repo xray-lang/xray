@@ -57,6 +57,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <time.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
@@ -1975,7 +1976,16 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
          * structurally well-formed before it can be written to disk / handed
          * to the C toolchain. Fail-closed — a malformed TU raises an ICE with
          * a full on-disk dump and never reaches clang. No bypass. */
+        const char *verify_timing = getenv("XRAY_CGEN_VERIFY_TIMING");
+        clock_t verify_started = verify_timing ? clock() : (clock_t) 0;
         xi_cgen_verify_output_or_ice(buf, bufsz, mod_names[m] ? mod_names[m] : "module");
+        if (verify_timing) {
+            clock_t verify_ticks = clock() - verify_started;
+            unsigned long long verify_us =
+                (unsigned long long) verify_ticks * 1000000ULL / CLOCKS_PER_SEC;
+            fprintf(stderr, "[cgen-verify] cpu_us=%llu bytes=%zu tu=%s\n", verify_us, bufsz,
+                    mod_names[m] ? mod_names[m] : "module");
+        }
         sources[m].name = xr_strdup(mod_names[m] ? mod_names[m] : "module");
         sources[m].c_source = buf;
         n_sources++;

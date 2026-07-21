@@ -17,6 +17,7 @@
 #include "xanalyzer_xrd.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
+#include "../../runtime/xr_process_shutdown.h"
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -686,6 +687,13 @@ const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path) {
     g_xrd_error[0] = '\0';
     if (!xrd_path)
         return NULL;
+
+    /* The runtime owns only a callback registry; the analyzer keeps ownership
+     * of its cache and supplies the layer-specific teardown operation. */
+    if (!xr_process_shutdown_register(xa_xrd_cleanup)) {
+        xrd_set_error("process shutdown callback registry is full");
+        return NULL;
+    }
 
     char *content = read_file_content(xrd_path);
     if (!content)

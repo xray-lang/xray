@@ -17,6 +17,19 @@
 /* Defined with external linkage in xtype.c; not part of the public header. */
 XrTypePool *xr_type_get_current_pool(void);
 
+static int shutdown_callback_calls = 0;
+
+static void test_shutdown_callback(void) {
+    shutdown_callback_calls++;
+}
+
+TEST(process_shutdown_callback_registry) {
+    ASSERT(xr_process_shutdown_register(test_shutdown_callback));
+    ASSERT(xr_process_shutdown_register(test_shutdown_callback));
+    xr_process_shutdown();
+    ASSERT_EQ_INT(shutdown_callback_calls, 1);
+}
+
 TEST(process_shutdown_clears_current_type_pool) {
     xr_type_global_init();
     /* Borrow a sentinel current type pool, as the analyzer would. */
@@ -35,6 +48,7 @@ TEST(process_shutdown_is_idempotent) {
 
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("process shutdown (task 218 line 4)");
+RUN_TEST(process_shutdown_callback_registry);
 RUN_TEST(process_shutdown_clears_current_type_pool);
 RUN_TEST(process_shutdown_is_idempotent);
 TEST_MAIN_END()

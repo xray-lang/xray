@@ -8,9 +8,8 @@
 #
 #   1. all C unit tests
 #   2. a fast backend-diff subset (VM vs native, task-190 cases)
-#   3. a real workload: full AOT compilation (emit C only, do not run) of the
-#      xxhash port src/main.xr -- exercises the whole frontend -> IR -> CGen ->
-#      well-formedness-verifier -> plan/evidence chain under ASan/UBSan.
+#   3. two real workloads compiled end-to-end to C: the xxhash port and the
+#      committed bili-analysis-server fixture.
 #
 # Leaks are intentionally OFF here (detect_leaks=0); process-exit leaks are the
 # job of the separate lsan_strict lane (task 218 P4). ASan/UBSan stay fully on.
@@ -26,6 +25,7 @@
 #   XR_ASAN_CTEST_REGEX   unit test name regex (default: ^test_)
 #   XR_ASAN_DIFF_REGEX    backend-diff subset regex (default: task190_.*_backend_diff)
 #   XR_ASAN_XXHASH_MAIN   path to the xxhash port entry (default: repo-relative sibling)
+#   XR_ASAN_BILI_MAIN     path to the committed bili-analysis-server fixture
 #   XR_ASAN_SKIP_BUILD    if set to 1, reuse an existing ASan build
 
 set -euo pipefail
@@ -53,6 +53,7 @@ CTEST_EXCLUDE="${XR_ASAN_CTEST_EXCLUDE:-native_error_abi|param_mode_diagnostics|
 # and the whole task-190 diff surface runs under ASan.
 DIFF_REGEX="${XR_ASAN_DIFF_REGEX:-task190_.*_backend_diff}"
 XXHASH_MAIN="${XR_ASAN_XXHASH_MAIN:-${ROOT}/../../xray-ports/ports/xxhash/src/main.xr}"
+BILI_MAIN="${XR_ASAN_BILI_MAIN:-${ROOT}/tests/meta/fixtures/bili-analysis-server/src/main.xr}"
 
 # Sanitizer runtime config. Leaks are handled by the lsan_strict lane; keep
 # ASan/UBSan themselves aborting on the first real error.
@@ -116,6 +117,18 @@ if [[ -f "${XXHASH_MAIN}" ]]; then
     rm -f "${OUT_C}"
 else
     echo "== [asan_focused] xxhash port not found at ${XXHASH_MAIN}; skipping real-workload compile"
+fi
+
+if [[ -f "${BILI_MAIN}" ]]; then
+    BILI_PROJECT="$(cd "$(dirname "${BILI_MAIN}")/.." && pwd)"
+    OUT_C="$(mktemp -t asan_bili_XXXXXX).c"
+    echo "== [asan_focused] AOT-compiling (emit C only) bili fixture: ${BILI_MAIN}"
+    ( cd "${BILI_PROJECT}" && "${XRAY_BIN}" build "${BILI_MAIN}" --native --c-only -o "${OUT_C}" )
+    echo "== [asan_focused] bili AOT emit OK: $(wc -c <"${OUT_C}") bytes -> ${OUT_C}"
+    rm -f "${OUT_C}"
+else
+    echo "!! [asan_focused] required bili fixture missing at ${BILI_MAIN}" >&2
+    exit 1
 fi
 
 echo "== [asan_focused] PASS"
