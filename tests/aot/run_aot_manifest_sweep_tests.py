@@ -52,6 +52,22 @@ ALLOWED_RUNTIME_CASES = {
     "tests/diff/cases/semantics/stdlib/parallel_plan_map_cleanup_after_panic.xr",
     "tests/diff/cases/semantics/stdlib/parallel_plan_nested_dispatch_cleanup.xr",
     "tests/diff/cases/semantics/stdlib/parallel_reduce_vm_batch.xr",
+    # net.copyBidirectional launches two transfer tasks so both half-duplex
+    # directions can make progress concurrently; these cases intentionally
+    # exercise that runtime-backed implementation and therefore pull coro/task.
+    "tests/diff/cases/semantics/stdlib/net_copy_bidirectional_error_enum.xr",
+    "tests/diff/cases/semantics/stdlib/net_copy_bidirectional_transfer.xr",
+    # The direct byte-I/O loopback case runs its echo endpoint in a `go` task
+    # and awaits it after the client exchange. The net calls stay direct, while
+    # the fixture's orchestration intentionally requires coro/task support.
+    "tests/diff/cases/semantics/stdlib/net_byte_io_direct.xr",
+    # Typed Coro diagnostics lower directly to XI_CORO_OP and therefore need
+    # the coroutine runtime that produces their record and enum values.
+    "tests/diff/cases/semantics/stdlib/coro_typed_diagnostics_direct.xr",
+    # Typed coroutine-local slots and CoroPool.submit are explicit wrappers
+    # around coroutine runtime storage and task scheduling.
+    "tests/diff/cases/semantics/stdlib/coro_typed_local_pool.xr",
+    "tests/diff/cases/semantics/stdlib/coro_typed_local_sync.xr",
     # `sync.fence` itself lowers to the freestanding mem.fence helper, but the
     # hosted `sync` module is a pure-Xray script module that also exports
     # coroutine-aware Mutex/RwLock/Once/Barrier/Condvar. Current AOT compiles

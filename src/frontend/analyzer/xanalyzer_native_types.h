@@ -30,6 +30,10 @@ XR_FUNC bool xa_native_types_ready(void);
 /* Get the populated builtin type table (indexed by XrTypeId). */
 XR_FUNC const XaBuiltinType *xa_native_get_builtin_types(void);
 
+/* Compiler-only nominal generic types have member tables but no runtime
+ * XrTypeId slot. */
+XR_FUNC const XaBuiltinType *xa_native_get_compiler_builtin_type(const char *name);
+
 /* Verify that C-registered native methods match .xr declarations.
  * Logs warnings for any mismatches.  Returns number of mismatches (0 = OK). */
 XR_FUNC int xa_native_verify_protocol(struct XrVMRuntime *X);

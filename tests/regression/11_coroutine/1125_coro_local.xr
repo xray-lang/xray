@@ -1,62 +1,40 @@
 /*
-** 测试协程本地存储
-** 作者：xingleixu@gmail.com
-** 
-** 测试内容：
-** 1. Coro.setLocal(key, value) - 设置本地数据
-** 2. Coro.getLocal(key) - 获取本地数据
-** 3. 协程之间数据隔离
+** Typed coroutine-local storage.
+**
+** Covers distinct typed slots, per-coroutine isolation, preservation of the
+** caller's values, and the nullable result of an unset slot.
 */
-
-// 测试 1：主线程本地存储
 
 @test
 fn test_coro_local() {
-    print("test1: main thread local storage")
-    Coro.setLocal("name", "main")
-    Coro.setLocal("count", 42)
-    print("  name:", Coro.getLocal("name"))   // expect: main
-    print("  count:", Coro.getLocal("count")) // expect: 42
+    var nameLocal = Coro.Local<string>()
+    var countLocal = Coro.Local<int>()
+    nameLocal.set("main")
+    countLocal.set(42)
+    assert_eq(nameLocal.get(), "main")
+    assert_eq(countLocal.get(), 42)
 
-    // 测试 2：协程内本地存储
-    print("test2: coroutine local storage")
-    var task1 = go(name: "worker-1") fn() -> int {
-        Coro.setLocal("id", 1)
-        Coro.setLocal("name", "worker-one")
-        return Coro.getLocal("id")
-    }()
+    var idLocal = Coro.Local<int>()
+    var idTask = go fn(slot: CoroLocal<int>) -> int {
+        slot.set(1)
+        return slot.get() ?? -1
+    }(copy(idLocal))
+    assert_eq(await idTask, 1)
+    assert_eq(idLocal.get(), null)
 
-    var result1 = await task1
-    print("  worker-1 id:", result1)  // expect: 1
+    var valueLocal = Coro.Local<string>()
+    var taskA = go fn(slot: CoroLocal<string>) -> string {
+        slot.set("A")
+        return slot.get() ?? "missing"
+    }(copy(valueLocal))
+    var taskB = go fn(slot: CoroLocal<string>) -> string {
+        slot.set("B")
+        return slot.get() ?? "missing"
+    }(copy(valueLocal))
+    assert_eq(await taskA, "A")
+    assert_eq(await taskB, "B")
 
-    // 测试 3：协程之间数据隔离
-    print("test3: isolation between coroutines")
-
-    var task2 = go(name: "worker-A") fn() -> string {
-        Coro.setLocal("value", "A")
-        return Coro.getLocal("value")
-    }()
-
-    var task3 = go(name: "worker-B") fn() -> string {
-        Coro.setLocal("value", "B")
-        return Coro.getLocal("value")
-    }()
-
-    var resultA = await task2
-    var resultB = await task3
-    print("  worker-A value:", resultA)  // expect: A
-    print("  worker-B value:", resultB)  // expect: B
-
-    // 测试 4：主线程数据不受协程影响
-    print("test4: main thread unaffected")
-    print("  main name:", Coro.getLocal("name"))   // expect: main
-    print("  main count:", Coro.getLocal("count")) // expect: 42
-
-    // 测试 5：获取不存在的 key
-    print("test5: get non-existent key")
-    var missing = Coro.getLocal("non_existent")
-    if (missing == null) {
-        print("  missing key returns null")  // expect: null
-    }
+    assert_eq(nameLocal.get(), "main")
+    assert_eq(countLocal.get(), 42)
+    assert_eq(Coro.Local<int>().get(), null)
 }
-

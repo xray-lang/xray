@@ -628,6 +628,8 @@ static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
     {"mem", "Buffer", "asMutBytes", "(): Slice<byte>", "Borrow this buffer as a mutable Slice<byte> view"},
     {"mem", "Buffer", "borrowPtr", "(): MutPtr<byte>", "Borrow the underlying mutable pointer; requires unsafe at the call site"},
     {"mem", "Buffer", "resize", "(n: int): bool", "Resize this buffer; returns false on allocation failure"},
+    {"Coro", "CoroLocal", "set", "(value: T): ()", "Set this typed coroutine-local slot for the current coroutine"},
+    {"Coro", "CoroLocal", "get", "(): T?", "Get this typed coroutine-local slot for the current coroutine"},
 };
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
 

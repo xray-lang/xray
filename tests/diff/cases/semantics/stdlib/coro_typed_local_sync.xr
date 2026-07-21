@@ -1,0 +1,8 @@
+var local = Coro.Local<string>()
+print(local.get() == null)
+local.set("main")
+print(local.get() ?? "missing")
+
+var count = Coro.Local<int>()
+count.set(7)
+print(count.get() ?? -1)

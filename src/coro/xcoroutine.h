@@ -500,6 +500,10 @@ XR_FUNC bool xr_coro_add_deferred_spawn(XrCoroutine *coro, XrCoroutine *child);
 XR_FUNC void xr_coro_submit_deferred_spawns(XrCoroutine *coro);
 XR_FUNC void xr_coro_discard_deferred_spawns(XrCoroutine *coro);
 
+/* Allocate a process-unique identity shared by VM and AOT Coro.Local<T>
+ * constructors, including mixed VM-hosted AOT execution. */
+XR_FUNC int64_t xr_coro_local_token_new(void);
+
 // Isolate-level coroutine bookkeeping
 XR_FUNC void xr_coro_state_init(XrCoroState *state);
 XR_FUNC void xr_coro_state_destroy(XrCoroState *state);

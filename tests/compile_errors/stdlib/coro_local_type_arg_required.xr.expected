@@ -1,0 +1,1 @@
+Coro.Local<T>() expects exactly one type argument

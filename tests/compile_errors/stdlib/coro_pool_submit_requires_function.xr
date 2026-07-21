@@ -1,0 +1,2 @@
+var task = CoroPool.submit(42)
+print(task)

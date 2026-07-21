@@ -3027,6 +3027,20 @@ module mem {
 }
 
 module Coro {
+  type_method CoroLocal.set {
+    signature: "(value: T): ()"
+    receiver: "CoroLocal"
+    doc: "Set this typed coroutine-local slot for the current coroutine"
+    allocation: "may_heap"
+  }
+
+  type_method CoroLocal.get {
+    signature: "(): T?"
+    receiver: "CoroLocal"
+    doc: "Get this typed coroutine-local slot for the current coroutine"
+    allocation: "no_heap"
+  }
+
   enum CoroState {
     variants: "Unknown, Ready, Blocked, Running, Done"
     doc: "Lifecycle state captured in a coroutine diagnostic snapshot"

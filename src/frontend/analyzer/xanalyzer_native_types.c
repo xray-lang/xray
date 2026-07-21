@@ -420,6 +420,8 @@ static void load_one_source(const char *source) {
 #pragma GCC diagnostic pop
 #endif
 
+static XaBuiltinType compiler_builtin_corolocal;
+
 static void xa_native_types_init_once(void) {
     memset(native_builtin_types, 0, sizeof(native_builtin_types));
 
@@ -433,6 +435,11 @@ static void xa_native_types_init_once(void) {
     native_builtin_types[XR_TID_BUFFER].name = TYPE_NAME_BUFFER;
     native_builtin_types[XR_TID_BUFFER].members = g_gen_buffer_members;
     native_builtin_types[XR_TID_BUFFER].member_count = GEN_BUFFER_MEMBER_COUNT;
+#endif
+#ifdef GEN_COROLOCAL_MEMBER_COUNT
+    compiler_builtin_corolocal.name = "CoroLocal";
+    compiler_builtin_corolocal.members = g_gen_corolocal_members;
+    compiler_builtin_corolocal.member_count = GEN_COROLOCAL_MEMBER_COUNT;
 #endif
 
     atomic_store_explicit(&native_types_initialized, true, memory_order_release);
@@ -453,6 +460,14 @@ XR_FUNC const XaBuiltinType *xa_native_get_builtin_types(void) {
     XR_DCHECK(atomic_load_explicit(&native_types_initialized, memory_order_acquire),
               "xa_native_get_builtin_types: not initialized");
     return native_builtin_types;
+}
+
+XR_FUNC const XaBuiltinType *xa_native_get_compiler_builtin_type(const char *name) {
+    if (!atomic_load_explicit(&native_types_initialized, memory_order_acquire))
+        xa_native_types_init();
+    if (name && strcmp(name, "CoroLocal") == 0 && compiler_builtin_corolocal.members)
+        return &compiler_builtin_corolocal;
+    return NULL;
 }
 
 /* ========== Protocol Verification ==========

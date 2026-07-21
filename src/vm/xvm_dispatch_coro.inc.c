@@ -207,7 +207,7 @@ vmcase(OP_UNLOCK_THREAD) {
 }
 
 vmcase(OP_SET_LOCAL) {
-    // Coro.setLocal(R[A], R[B])
+    // Coro.Local<T>.set(R[B]) with the local token in R[A]
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     XrValue key = R(a);
@@ -231,7 +231,7 @@ vmcase(OP_SET_LOCAL) {
 }
 
 vmcase(OP_GET_LOCAL) {
-    // R[A] = Coro.getLocal(R[B])
+    // R[A] = Coro.Local<T>.get() with the local token in R[B]
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     XrValue key = R(b);

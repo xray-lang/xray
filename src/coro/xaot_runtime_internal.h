@@ -13,6 +13,8 @@
 
 #include "xaot_coro.h"
 
+#include <stdatomic.h>
+
 #include "../base/xglobal_indices.h"
 
 struct XrAotRuntime {
@@ -21,6 +23,8 @@ struct XrAotRuntime {
     struct XrRuntime *scheduler;
     struct XrScopeContext *root_scope;
     const XrAotValueOps *value_ops;
+    XrValue coro_locals;
+    atomic_flag coro_locals_lock;
     XrValue builtins[XR_USER_GLOBALS_START];
 };
 

@@ -1446,8 +1446,8 @@ XR_FUNC void xi_emit_coro_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
     switch (sub) {
         case XI_CORO_SUB_SET_LOCAL: {
-            /* Coro.setLocal(key, val) → OP_SET_LOCAL A=key B=val */
-            XR_DCHECK(v->nargs >= 2, "emit coro_op: setLocal needs 2 args");
+            /* Coro.Local<T>.set(value) → OP_SET_LOCAL A=token B=value */
+            XR_DCHECK(v->nargs >= 2, "emit coro_op: local set needs token and value");
             XiEmitReg key = reg_of(ctx, v->args[0]);
             XiEmitReg val = reg_of(ctx, v->args[1]);
             if (ctx->status != XI_EMIT_OK)
@@ -1456,8 +1456,8 @@ XR_FUNC void xi_emit_coro_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             return;
         }
         case XI_CORO_SUB_GET_LOCAL: {
-            /* Coro.getLocal(key) → OP_GET_LOCAL A=dst B=key */
-            XR_DCHECK(v->nargs >= 1, "emit coro_op: getLocal needs 1 arg");
+            /* Coro.Local<T>.get() → OP_GET_LOCAL A=dst B=token */
+            XR_DCHECK(v->nargs >= 1, "emit coro_op: local get needs token");
             XiEmitReg key = reg_of(ctx, v->args[0]);
             if (ctx->status != XI_EMIT_OK)
                 return;

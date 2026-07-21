@@ -3432,11 +3432,9 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
  * Returns -1 for unknown methods. */
 static int coro_method_sub_type(const char *method) {
     XR_DCHECK(method != NULL, "coro_method_sub_type: NULL method");
+    if (strcmp(method, "Local") == 0)
+        return XI_CORO_SUB_LOCAL_NEW;
     /* Dedicated opcodes */
-    if (strcmp(method, "setLocal") == 0)
-        return XI_CORO_SUB_SET_LOCAL;
-    if (strcmp(method, "getLocal") == 0)
-        return XI_CORO_SUB_GET_LOCAL;
     if (strcmp(method, "lockThread") == 0)
         return XI_CORO_SUB_LOCK_THREAD;
     if (strcmp(method, "unlockThread") == 0)
@@ -3881,6 +3879,22 @@ static XiValue *lower_coro_method(XiLower *l, AstNode *node, const char *method,
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
     return v;
+}
+
+static XiValue *lower_coro_pool_submit(XiLower *l, AstNode *node, CallExprNode *call) {
+    if (!l || !node || !call || call->arg_count != 1 || !call->arguments || !call->arguments[0])
+        return NULL;
+    XiValue *callee = xi_lower_expr(l, call->arguments[0]);
+    if (!callee)
+        return NULL;
+    XiValue *task = xi_value_new(l->func, l->cur_block, XI_GO, xi_lower_node_type(l, node), 1);
+    if (!task)
+        return NULL;
+    task->args[0] = callee;
+    task->aux_int = (int64_t) pack_go_aux(0);
+    task->flags |= XI_FLAG_SIDE_EFFECT;
+    task->line = (uint32_t) node->line;
+    return task;
 }
 
 /* Lower the argument list of a call, expanding any AST_SPREAD_EXPR
@@ -5438,6 +5452,14 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
              * will report "unresolved variable" for Coro. */
         }
 
+        if (ma->object && ma->object->type == AST_VARIABLE && ma->name &&
+            strcmp(ma->object->as.variable.name, "CoroPool") == 0 &&
+            strcmp(ma->name, "submit") == 0) {
+            XiValue *task = lower_coro_pool_submit(l, node, call);
+            if (task)
+                return task;
+        }
+
         if (ma->name && lower_call_object_is_module(l, ma->object, "mem")) {
             XiValue *layout_const = lower_mem_layout_call(l, node, call, ma->name);
             if (layout_const)
@@ -5530,6 +5552,27 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return NULL;
         XiValue **arg_vals = args.items;
         int n = args.count;
+
+        if (recv->type && xr_type_is_named_class(recv->type, "CoroLocal") && ma->name) {
+            int sub = -1;
+            if (strcmp(ma->name, "set") == 0 && n == 1)
+                sub = XI_CORO_SUB_SET_LOCAL;
+            else if (strcmp(ma->name, "get") == 0 && n == 0)
+                sub = XI_CORO_SUB_GET_LOCAL;
+            if (sub >= 0) {
+                XiValue *local = xi_value_new(l->func, l->cur_block, XI_CORO_OP, result_type,
+                                              (uint16_t) (n + 1));
+                if (!local)
+                    return NULL;
+                local->args[0] = recv;
+                for (int i = 0; i < n; i++)
+                    local->args[i + 1] = arg_vals[i];
+                local->aux_int = sub;
+                local->flags |= XI_FLAG_SIDE_EFFECT;
+                local->line = (uint32_t) node->line;
+                return local;
+            }
+        }
 
         if (lower_value_is_whole_module_import(l, recv, "math") &&
             lower_math_call_arity_ok(ma->name, n))

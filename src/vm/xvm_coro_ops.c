@@ -121,17 +121,6 @@ static XrValue vm_coro_info_record(XrVMRuntime *isolate, XrCoroutine *owner,
     return xr_json_value(info);
 }
 
-static void vm_coro_set_source_field(XrVMRuntime *isolate, XrMap *info, const XrCoroutine *coro) {
-    const char *source_file = xr_coro_source_file(coro);
-    if (!source_file)
-        return;
-    char source_buf[XR_MAX_PROPERTY_NAME_LEN];
-    snprintf(source_buf, sizeof(source_buf), "%s:%d", source_file, xr_coro_source_line(coro));
-    XrString *source = xr_string_intern(isolate, source_buf, strlen(source_buf), 0);
-    if (source)
-        xr_map_set(info, VM_INTERN_KEY("source"), xr_string_value(source));
-}
-
 // Collect coroutines from runtime queues into a flat array for diagnostic sub-ops.
 // Returns the number of entries written. Best-effort snapshot (not atomic).
 int vm_collect_all_coros(XrVMRuntime *isolate, VmCoroEntry *out, int max_out) {
@@ -242,62 +231,8 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
             return XR_DISP_NEXT;
         }
 
-        case CORO_CTRL_INFO: {
-            XrValue coro_val = base[b];
-            if (!xr_value_is_coro(coro_val)) {
-                base[a] = xr_null();
-                return XR_DISP_NEXT;
-            }
-
-            XrCoroutine *coro = xr_value_to_coro(coro_val);
-            XrMap *info = xr_map_new(vm_get_coro(vm_ctx));
-            uint32_t flags = xr_coro_flags_load(coro);
-
-            xr_map_set(info, VM_INTERN_KEY("id"), xr_int(coro->id));
-            xr_map_set(info, VM_INTERN_KEY("name"), vm_coro_name_value(isolate, coro));
-
-            const char *state_str = "unknown";
-            if (flags & XR_CORO_FLG_DONE)
-                state_str = "done";
-            else if (flags & XR_CORO_FLG_BLOCKED)
-                state_str = "blocked";
-            else if (flags & XR_CORO_FLG_RUNNING)
-                state_str = "running";
-            else if (flags & XR_CORO_FLG_READY)
-                state_str = "ready";
-            xr_map_set(info, VM_INTERN_KEY("state"),
-                       xr_string_value(xr_string_intern(isolate, state_str, strlen(state_str), 0)));
-
-            xr_map_set(info, VM_INTERN_KEY("reductions"), xr_int(xr_coro_reds(coro)));
-
-            vm_coro_set_source_field(isolate, info, coro);
-
-            struct XrMap *coro_locals = (coro->ext) ? coro->ext->locals : NULL;
-            if (coro_locals) {
-                xr_map_set(info, VM_INTERN_KEY("locals"), xr_value_from_map(coro_locals));
-            } else {
-                xr_map_set(info, VM_INTERN_KEY("locals"),
-                           xr_value_from_map(xr_map_new(vm_get_coro(vm_ctx))));
-            }
-
-            const XrCoroWaitState *wait = xr_coro_wait_state_const(coro);
-            int wait_count = wait ? atomic_load(&wait->wait_count) : 0;
-            xr_map_set(info, VM_INTERN_KEY("waitCount"), xr_int(wait_count));
-            xr_map_set(info, VM_INTERN_KEY("cancelled"), xr_bool(flags & XR_CORO_FLG_CANCELLED));
-
-            if (flags & XR_CORO_FLG_DONE) {
-                xr_map_set(info, VM_INTERN_KEY("result"), coro->result);
-            }
-            if (flags & XR_CORO_FLG_BLOCKED) {
-                void *wait_channel =
-                    coro->ext ? atomic_load_explicit(&coro->ext->wait_channel, memory_order_acquire)
-                              : NULL;
-                const char *reason = wait_channel ? "channel" : "await";
-                xr_map_set(info, VM_INTERN_KEY("blockedOn"),
-                           xr_string_value(xr_string_intern(isolate, reason, strlen(reason), 0)));
-            }
-
-            base[a] = xr_value_from_map(info);
+        case CORO_CTRL_LOCAL_NEW: {
+            base[a] = xr_int(xr_coro_local_token_new());
             return XR_DISP_NEXT;
         }
 

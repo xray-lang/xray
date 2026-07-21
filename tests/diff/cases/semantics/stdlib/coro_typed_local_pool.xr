@@ -1,0 +1,14 @@
+var local = Coro.Local<string>()
+
+var first = CoroPool.submit(fn() -> string {
+    local.set("first")
+    return local.get() ?? "missing"
+})
+var second = CoroPool.submit(fn() -> string {
+    local.set("second")
+    return local.get() ?? "missing"
+})
+
+print(await first)
+print(await second)
+print(local.get() == null)

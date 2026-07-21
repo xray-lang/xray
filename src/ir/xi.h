@@ -617,6 +617,7 @@ typedef enum {
  * sub-opcode = (aux_int - XI_CORO_SUB_CTRL_BASE), which corresponds
  * to the CORO_CTRL_* constants in xchunk.h. */
 #define XI_CORO_SUB_CTRL_BASE 100
+#define XI_CORO_SUB_LOCAL_NEW (XI_CORO_SUB_CTRL_BASE + 2)
 
 /* Explicit SIMD shape encoding in XiValue.aux_int. */
 #define XI_VEC_SHAPE_EXPLICIT (INT64_C(1) << 16)

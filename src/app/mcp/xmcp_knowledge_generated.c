@@ -11,8 +11,148 @@
 
 static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     {
+        .name = "CoroDeadlock",
+        .signature = "{ members: Array<CoroInfo>, reason: string }",
+        .summary = "Typed description of a detected coroutine wait cycle",
+    },
+    {
+        .name = "CoroDeadlock.members",
+        .signature = "const Array<CoroInfo>",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroDeadlock.reason",
+        .signature = "const string",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroGroupKey",
+        .signature = "enum CoroGroupKey",
+        .summary = "Stable key used to group coroutine diagnostic snapshots",
+    },
+    {
+        .name = "CoroGroupKey.Name",
+        .signature = "CoroGroupKey.Name",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroGroupKey.State",
+        .signature = "CoroGroupKey.State",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroInfo",
+        .signature = "{ id: int, name: string?, state: CoroState, reductions: int, source: string? }",
+        .summary = "Typed diagnostic snapshot for one coroutine",
+    },
+    {
+        .name = "CoroInfo.id",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroInfo.name",
+        .signature = "const string?",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroInfo.reductions",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroInfo.source",
+        .signature = "const string?",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroInfo.state",
+        .signature = "const CoroState",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroMetric",
+        .signature = "enum CoroMetric",
+        .summary = "Metric used to rank coroutine diagnostic snapshots",
+    },
+    {
+        .name = "CoroMetric.Id",
+        .signature = "CoroMetric.Id",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroMetric.Reductions",
+        .signature = "CoroMetric.Reductions",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroState",
+        .signature = "enum CoroState",
+        .summary = "Lifecycle state captured in a coroutine diagnostic snapshot",
+    },
+    {
+        .name = "CoroState.Blocked",
+        .signature = "CoroState.Blocked",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroState.Done",
+        .signature = "CoroState.Done",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroState.Ready",
+        .signature = "CoroState.Ready",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroState.Running",
+        .signature = "CoroState.Running",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroState.Unknown",
+        .signature = "CoroState.Unknown",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "CoroStats",
+        .signature = "{ active: int, blocked: int, ready: int, total: int, created: int }",
+        .summary = "Typed aggregate counters for the coroutine scheduler",
+    },
+    {
+        .name = "CoroStats.active",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroStats.blocked",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroStats.created",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroStats.ready",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "CoroStats.total",
+        .signature = "const int",
+        .summary = "Record field",
+    },
+    {
+        .name = "Local",
+        .signature = "<T>(): CoroLocal<T>",
+        .summary = "Create a typed coroutine-local slot",
+    },
+    {
         .name = "deadlocks",
-        .signature = "(): Array<Json>",
+        .signature = "(): Array<CoroDeadlock>",
         .summary = "Detect deadlocked coroutines",
     },
     {
@@ -26,13 +166,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
         .summary = "Dump coroutine state",
     },
     {
-        .name = "getLocal",
-        .signature = "(key: string): Json",
-        .summary = "Get coroutine-local storage",
-    },
-    {
         .name = "groupBy",
-        .signature = "(field: string): Json",
+        .signature = "(field: CoroGroupKey): Map<string, int>",
         .summary = "Group coroutines by field",
     },
     {
@@ -42,7 +177,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "list",
-        .signature = "(limit?: int, state?: string): Array<Json>",
+        .signature = "(limit?: int, state?: CoroState): Array<CoroInfo>",
         .summary = "List coroutines",
     },
     {
@@ -61,23 +196,18 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
         .summary = "Get current coroutine name",
     },
     {
-        .name = "setLocal",
-        .signature = "(key: string, value: Json): ()",
-        .summary = "Set coroutine-local storage",
-    },
-    {
         .name = "stalled",
-        .signature = "(timeout_ms?: int): Array<Json>",
+        .signature = "(timeout_ms?: int): Array<CoroInfo>",
         .summary = "Detect stalled coroutines",
     },
     {
         .name = "stats",
-        .signature = "(): Json",
+        .signature = "(): CoroStats",
         .summary = "Get coroutine statistics",
     },
     {
         .name = "top",
-        .signature = "(n: int, metric?: string): Array<Json>",
+        .signature = "(n: int, metric?: CoroMetric): Array<CoroInfo>",
         .summary = "Top N coroutines by metric",
     },
     {
@@ -99,14 +229,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_CoroPool[] = {
     {
-        .name = "close",
-        .signature = "(): ()",
-        .summary = "Close the pool",
-    },
-    {
         .name = "submit",
-        .signature = "(fn: function): Json",
-        .summary = "Submit task to pool",
+        .signature = "(fn: fn(): T): Task<T>",
+        .summary = "Submit a typed task",
     },
 };
 
@@ -1253,23 +1378,118 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "HttpMethod",
+        .signature = "HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.constructor",
+        .signature = "(token: string): ()",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.delete",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.fromToken",
+        .signature = "(token: string): HttpMethod?",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.get",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.head",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.options",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.patch",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.post",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.put",
+        .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.toString",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.token",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest",
+        .signature = "HttpRequest",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.body",
+        .signature = ": Array<byte>",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.contentLength",
+        .signature = ": int",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.headers",
+        .signature = ": Headers",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.method",
+        .signature = ": HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.params",
+        .signature = ": Map<string, string>",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.path",
+        .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.query",
+        .signature = ": QueryParams",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.text",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
         .name = "HttpResponse",
         .signature = "HttpResponse",
         .summary = "",
     },
     {
         .name = "HttpResponse.body",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.constructor",
-        .signature = "(status: int, statusText: string, headers: Headers, body: string, error: string?): ()",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.error",
-        .signature = ": string?",
+        .signature = ": Array<byte>",
         .summary = "",
     },
     {
@@ -1278,8 +1498,18 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "HttpResponse.ok",
-        .signature = ": bool",
+        .name = "HttpResponse.isSuccess",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.json",
+        .signature = "(): Json",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.reason",
+        .signature = ": string",
         .summary = "",
     },
     {
@@ -1288,8 +1518,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "HttpResponse.statusText",
-        .signature = ": string",
+        .name = "HttpResponse.text",
+        .signature = "(): string",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.version",
+        .signature = ": HttpVersion",
         .summary = "",
     },
     {
@@ -1588,13 +1823,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "h2Request",
-        .signature = "(options: Json): Json",
-        .summary = "Generic HTTP/2 request",
-    },
-    {
         .name = "isRedirectStatus",
         .signature = "(status: int): bool",
+        .summary = "",
+    },
+    {
+        .name = "jsonResponse",
+        .signature = "(value: T, status: int = 200, headers: Headers? = null): HttpResponse",
         .summary = "",
     },
     {
@@ -1605,6 +1840,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "parseChunkedBody",
         .signature = "(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?",
+        .summary = "",
+    },
+    {
+        .name = "parseMethod",
+        .signature = "(token: string): HttpMethod?",
         .summary = "",
     },
     {
@@ -1644,7 +1884,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "request",
-        .signature = "(options: Json): HttpResponse",
+        .signature = "(options: HttpRequestOptions): HttpResponse",
         .summary = "",
     },
     {
@@ -1664,7 +1904,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "routeHandler",
-        .signature = "(method: string, path: string, handler: (Json): Json)",
+        .signature = "(method: string, path: string, handler: (HttpRequest): HttpResponse",
         .summary = "",
     },
     {
@@ -1675,6 +1915,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "stopServer",
         .signature = "(): ()",
+        .summary = "",
+    },
+    {
+        .name = "textResponse",
+        .signature = "(body: string, status: int = 200, headers: Headers? = null): HttpResponse",
         .summary = "",
     },
     {
@@ -6985,20 +7230,46 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `Coro.deadlocks` | `(): Array<Json>` | Detect deadlocked coroutines |\n"
+            "| `Coro.CoroDeadlock` | `{ members: Array<CoroInfo>, reason: string }` | Typed description of a detected coroutine wait cycle |\n"
+            "| `Coro.CoroDeadlock.members` | `const Array<CoroInfo>` | Record field |\n"
+            "| `Coro.CoroDeadlock.reason` | `const string` | Record field |\n"
+            "| `Coro.CoroGroupKey` | `enum CoroGroupKey` | Stable key used to group coroutine diagnostic snapshots |\n"
+            "| `Coro.CoroGroupKey.Name` | `CoroGroupKey.Name` | Enum variant |\n"
+            "| `Coro.CoroGroupKey.State` | `CoroGroupKey.State` | Enum variant |\n"
+            "| `Coro.CoroInfo` | `{ id: int, name: string?, state: CoroState, reductions: int, source: string? }` | Typed diagnostic snapshot for one coroutine |\n"
+            "| `Coro.CoroInfo.id` | `const int` | Record field |\n"
+            "| `Coro.CoroInfo.name` | `const string?` | Record field |\n"
+            "| `Coro.CoroInfo.reductions` | `const int` | Record field |\n"
+            "| `Coro.CoroInfo.source` | `const string?` | Record field |\n"
+            "| `Coro.CoroInfo.state` | `const CoroState` | Record field |\n"
+            "| `Coro.CoroMetric` | `enum CoroMetric` | Metric used to rank coroutine diagnostic snapshots |\n"
+            "| `Coro.CoroMetric.Id` | `CoroMetric.Id` | Enum variant |\n"
+            "| `Coro.CoroMetric.Reductions` | `CoroMetric.Reductions` | Enum variant |\n"
+            "| `Coro.CoroState` | `enum CoroState` | Lifecycle state captured in a coroutine diagnostic snapshot |\n"
+            "| `Coro.CoroState.Blocked` | `CoroState.Blocked` | Enum variant |\n"
+            "| `Coro.CoroState.Done` | `CoroState.Done` | Enum variant |\n"
+            "| `Coro.CoroState.Ready` | `CoroState.Ready` | Enum variant |\n"
+            "| `Coro.CoroState.Running` | `CoroState.Running` | Enum variant |\n"
+            "| `Coro.CoroState.Unknown` | `CoroState.Unknown` | Enum variant |\n"
+            "| `Coro.CoroStats` | `{ active: int, blocked: int, ready: int, total: int, created: int }` | Typed aggregate counters for the coroutine scheduler |\n"
+            "| `Coro.CoroStats.active` | `const int` | Record field |\n"
+            "| `Coro.CoroStats.blocked` | `const int` | Record field |\n"
+            "| `Coro.CoroStats.created` | `const int` | Record field |\n"
+            "| `Coro.CoroStats.ready` | `const int` | Record field |\n"
+            "| `Coro.CoroStats.total` | `const int` | Record field |\n"
+            "| `Coro.Local` | `<T>(): CoroLocal<T>` | Create a typed coroutine-local slot |\n"
+            "| `Coro.deadlocks` | `(): Array<CoroDeadlock>` | Detect deadlocked coroutines |\n"
             "| `Coro.demonitor` | `(ch: Channel<string>): ()` | Cancel coroutine monitor |\n"
             "| `Coro.dump` | `(limit?: int): ()` | Dump coroutine state |\n"
-            "| `Coro.getLocal` | `(key: string): Json` | Get coroutine-local storage |\n"
-            "| `Coro.groupBy` | `(field: string): Json` | Group coroutines by field |\n"
+            "| `Coro.groupBy` | `(field: CoroGroupKey): Map<string, int>` | Group coroutines by field |\n"
             "| `Coro.kill` | `(name: string, reason?: string): bool` | Kill named coroutine |\n"
-            "| `Coro.list` | `(limit?: int, state?: string): Array<Json>` | List coroutines |\n"
+            "| `Coro.list` | `(limit?: int, state?: CoroState): Array<CoroInfo>` | List coroutines |\n"
             "| `Coro.lockThread` | `(): ()` | Lock current thread |\n"
             "| `Coro.monitor` | `(name: string): Channel<string>` | Monitor named coroutine, returns Channel |\n"
             "| `Coro.self` | `(): string?` | Get current coroutine name |\n"
-            "| `Coro.setLocal` | `(key: string, value: Json): ()` | Set coroutine-local storage |\n"
-            "| `Coro.stalled` | `(timeout_ms?: int): Array<Json>` | Detect stalled coroutines |\n"
-            "| `Coro.stats` | `(): Json` | Get coroutine statistics |\n"
-            "| `Coro.top` | `(n: int, metric?: string): Array<Json>` | Top N coroutines by metric |\n"
+            "| `Coro.stalled` | `(timeout_ms?: int): Array<CoroInfo>` | Detect stalled coroutines |\n"
+            "| `Coro.stats` | `(): CoroStats` | Get coroutine statistics |\n"
+            "| `Coro.top` | `(n: int, metric?: CoroMetric): Array<CoroInfo>` | Top N coroutines by metric |\n"
             "| `Coro.unlockThread` | `(): ()` | Unlock current thread |\n"
             "| `Coro.whereis` | `(name: string): bool` | Check if named coroutine exists |\n"
             "| `Coro.yield` | `(): ()` | Cooperative CPU yield (Gosched) |\n"
@@ -7020,8 +7291,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `CoroPool.close` | `(): ()` | Close the pool |\n"
-            "| `CoroPool.submit` | `(fn: function): Json` | Submit task to pool |\n"
+            "| `CoroPool.submit` | `(fn: fn(): T): Task<T>` | Submit a typed task |\n"
             "",
         .symbols = _symbols_CoroPool,
         .symbol_count = (int)(sizeof(_symbols_CoroPool) / sizeof(_symbols_CoroPool[0])),
@@ -7390,14 +7660,36 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Headers.get` | `(name: string): string?` |  |\n"
             "| `Headers.getAll` | `(name: string): Array<string>` |  |\n"
             "| `Headers.set` | `(name: string, value: string): ()` |  |\n"
+            "| `HttpMethod` | `HttpMethod` |  |\n"
+            "| `HttpMethod.constructor` | `(token: string): ()` |  |\n"
+            "| `HttpMethod.delete` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.fromToken` | `(token: string): HttpMethod?` |  |\n"
+            "| `HttpMethod.get` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.head` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.options` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.patch` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.post` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.put` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.toString` | `(): string` |  |\n"
+            "| `HttpMethod.token` | `: string` |  |\n"
+            "| `HttpRequest` | `HttpRequest` |  |\n"
+            "| `HttpRequest.body` | `: Array<byte>` |  |\n"
+            "| `HttpRequest.contentLength` | `: int` |  |\n"
+            "| `HttpRequest.headers` | `: Headers` |  |\n"
+            "| `HttpRequest.method` | `: HttpMethod` |  |\n"
+            "| `HttpRequest.params` | `: Map<string, string>` |  |\n"
+            "| `HttpRequest.path` | `: string` |  |\n"
+            "| `HttpRequest.query` | `: QueryParams` |  |\n"
+            "| `HttpRequest.text` | `(): string` |  |\n"
             "| `HttpResponse` | `HttpResponse` |  |\n"
-            "| `HttpResponse.body` | `: string` |  |\n"
-            "| `HttpResponse.constructor` | `(status: int, statusText: string, headers: Headers, body: string, error: string?): ()` |  |\n"
-            "| `HttpResponse.error` | `: string?` |  |\n"
+            "| `HttpResponse.body` | `: Array<byte>` |  |\n"
             "| `HttpResponse.headers` | `: Headers` |  |\n"
-            "| `HttpResponse.ok` | `: bool` |  |\n"
+            "| `HttpResponse.isSuccess` | `(): bool` |  |\n"
+            "| `HttpResponse.json` | `(): Json` |  |\n"
+            "| `HttpResponse.reason` | `: string` |  |\n"
             "| `HttpResponse.status` | `: int` |  |\n"
-            "| `HttpResponse.statusText` | `: string` |  |\n"
+            "| `HttpResponse.text` | `(): string` |  |\n"
+            "| `HttpResponse.version` | `: HttpVersion` |  |\n"
             "| `MultipartBody` | `MultipartBody` |  |\n"
             "| `MultipartBody.body` | `: string` |  |\n"
             "| `MultipartBody.constructor` | `(body: string, contentType: string): ()` |  |\n"
@@ -7457,10 +7749,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
-            "| `http.h2Request` | `(options: Json): Json` | Generic HTTP/2 request |\n"
             "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
+            "| `http.jsonResponse` | `(value: T, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
             "| `http.listen` | `(port: int): bool` |  |\n"
             "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
+            "| `http.parseMethod` | `(token: string): HttpMethod?` |  |\n"
             "| `http.parseRequestHead` | `(raw: string, maxHeaders: int = 100): RequestHead?` |  |\n"
             "| `http.parseRequestText` | `(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): RequestMessage?` |  |\n"
             "| `http.parseResponseHead` | `(raw: string, maxHeaders: int = 100): ResponseHead?` |  |\n"
@@ -7468,13 +7761,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?` |  |\n"
             "| `http.redirectDecision` | `(status: int, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?` |  |\n"
             "| `http.redirectTarget` | `(currentUrl: string, location: string): string?` |  |\n"
-            "| `http.request` | `(options: Json): HttpResponse` |  |\n"
+            "| `http.request` | `(options: HttpRequestOptions): HttpResponse` |  |\n"
             "| `http.requestText` | `(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
             "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
             "| `http.route` | `(method: string, path: string, value: T): ()` |  |\n"
-            "| `http.routeHandler` | `(method: string, path: string, handler: (Json): Json)` |  |\n"
+            "| `http.routeHandler` | `(method: string, path: string, handler: (HttpRequest): HttpResponse` |  |\n"
             "| `http.router` | `(): Router<T>` |  |\n"
             "| `http.stopServer` | `(): ()` |  |\n"
+            "| `http.textResponse` | `(body: string, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
             "| `http.urlDecode` | `(s: string): string` |  |\n"
             "| `http.urlEncode` | `(s: string): string` |  |\n"
             "",

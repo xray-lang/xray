@@ -1,0 +1,1 @@
+print(Coro.getLocal("key"))
