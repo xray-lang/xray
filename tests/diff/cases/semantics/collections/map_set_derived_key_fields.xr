@@ -1,0 +1,44 @@
+// Derived Eq/Hash keys with scalar, string, and enum fields must dedup and look
+// up identically on VM and AOT. Enum fields are boxed freshly on every access,
+// so this guards the enum ordinal hash/eq contract for Hashable map/set keys.
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+@derive(Eq, Hash)
+class Key {
+    color: Color
+    n: int
+    label: string
+
+    constructor(color: Color, n: int, label: string) {
+        this.color = color
+        this.n = n
+        this.label = label
+    }
+}
+
+var m: Map<Key, int> = #{}
+m.set(Key(Color.Red, 1, "a"), 10)
+m.set(Key(Color.Green, 2, "b"), 20)
+m.set(Key(Color.Red, 1, "a"), 11)
+print(len(m))
+print(m[Key(Color.Red, 1, "a")])
+print(m.containsKey(Key(Color.Green, 2, "b")))
+print(m.containsKey(Key(Color.Blue, 2, "b")))
+print(m.containsKey(Key(Color.Red, 1, "z")))
+print(m.get(Key(Color.Blue, 9, "q")))
+
+m.delete(Key(Color.Green, 2, "b"))
+print(m.containsKey(Key(Color.Green, 2, "b")))
+print(len(m))
+
+var s: Set<Key> = #[]
+s.add(Key(Color.Blue, 7, "x"))
+s.add(Key(Color.Blue, 7, "x"))
+s.add(Key(Color.Blue, 8, "x"))
+print(len(s))
+print(s.contains(Key(Color.Blue, 7, "x")))
+print(s.contains(Key(Color.Blue, 9, "x")))

@@ -1,0 +1,7 @@
+// Casting between two unrelated enums has no value-domain overlap and must be
+// rejected. Enum identity is nominal (by name), so `Color as Suit` is disjoint.
+enum Color { Red, Green, Blue }
+enum Suit { Hearts, Spades }
+
+var value = Color.Red as Suit
+print(value)

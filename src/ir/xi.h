@@ -832,6 +832,9 @@ typedef struct XiValue {
     uint8_t mem_group;        /* XiMemGroup (TBAA): memory group for alias analysis
                                * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
     uint8_t lowering_flags;   /* XI_LOWERING_FLAG_* */
+    uint8_t param_mode;       /* XrParamMode for XI_PARAM values (the single param
+                               * contract source; default XR_PARAM_VALUE). Occupies
+                               * struct padding, so it costs no extra memory. */
     struct XrType *type;      /* authoritative compile-time type (never NULL) */
     int64_t aux_int;          /* auxiliary integer: const value, symbol ID, etc. */
     void *aux;                /* auxiliary pointer: proto, string literal, etc. */
@@ -871,6 +874,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->escape = src->escape;
     dst->mem_group = src->mem_group;
     dst->lowering_flags = src->lowering_flags;
+    dst->param_mode = src->param_mode;
     dst->aux_int = src->aux_int;
     dst->aux = src->aux;
     dst->line = src->line;
@@ -1195,9 +1199,10 @@ typedef struct XiFunc {
     struct XrType *return_type; /* return type (from analyzer) */
     uint32_t xg_body_func_id;   /* stable global-evidence XgFuncId for this body (0 = none) */
 
-    /* Function parameters as SSA values (in entry block) */
+    /* Function parameters as SSA values (in entry block).  Each param XiValue
+     * carries its own XrParamMode in XiValue::param_mode, so the parameter
+     * contract lives in one place per parameter with no parallel mode array. */
     XiValue **params;
-    XrParamMode *param_passing_modes; /* NULL means every parameter uses XR_PARAM_VALUE */
     uint16_t nparams;
 
     /* Source variable metadata captured during lowering.  XiValue::var_id

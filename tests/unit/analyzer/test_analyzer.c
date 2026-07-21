@@ -4972,6 +4972,51 @@ TEST(analyzer_cast_error_recovery_and_union_overlap) {
     setup_pool();
 }
 
+TEST(analyzer_enum_identity_is_nominal) {
+    // Two distinct enums are separate nominal types. Neither an `as` cast nor an
+    // assignment may bridge unrelated enums; only same-name enums are equal.
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    AstNode *program = xr_parse(g_session, "enum Color { Red, Green, Blue }\n"
+                                           "enum Suit { Hearts, Spades }\n"
+                                           "var value = Color.Red as Suit\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "enum_disjoint_cast.xr", program);
+    ASSERT(analyzer_diag_contains(a, "Cannot cast type 'Color' to unrelated type 'Suit'"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+
+    a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    program = xr_parse(g_session, "enum Color { Red, Green, Blue }\n"
+                                  "enum Suit { Hearts, Spades }\n"
+                                  "var value: Suit = Color.Red\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "enum_disjoint_assign.xr", program);
+    ASSERT(analyzer_diag_contains(a, "is not assignable to type 'Suit'"));
+
+    xa_analyzer_free(a);
+    setup_pool();
+
+    // Same enum stays assignable, and enum -> int conversion remains valid.
+    a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    program = xr_parse(g_session, "enum Color { Red, Green, Blue }\n"
+                                  "var c: Color = Color.Red\n"
+                                  "var same: Color = c\n"
+                                  "var n = c as int\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "enum_same_ok.xr", program);
+    int count = 0;
+    xa_analyzer_get_diagnostics(a, &count);
+    ASSERT(count == 0);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_assignment_error_recovery_suppresses_cascade) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -5489,6 +5534,7 @@ int main(void) {
     RUN_TEST(analyzer_rejects_error_type_container_success_types);
     RUN_TEST(analyzer_type_ref_failures_use_error_recovery);
     RUN_TEST(analyzer_cast_error_recovery_and_union_overlap);
+    RUN_TEST(analyzer_enum_identity_is_nominal);
     RUN_TEST(analyzer_assignment_error_recovery_suppresses_cascade);
     RUN_TEST(analyzer_member_error_recovery_suppresses_call_cascade);
     RUN_TEST(analyzer_operator_and_index_failures_use_error_recovery);

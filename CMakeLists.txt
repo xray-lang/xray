@@ -1905,6 +1905,24 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    # Task 202: categories that have fully converged to zero are locked here so
+    # any regression (a formatter/LSP unknown surface or a public-spec unknown
+    # type re-appearing) fails CI. These are permanent residue gates, not the
+    # still-shrinking inventory floors tracked by the readiness gate above.
+    add_test(
+        NAME source_unknown_converged_zero_categories
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_source_unknown_convergence.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --max-category FORMATTER_LSP_UNKNOWN_SURFACE=0
+                --max-category PUBLIC_SPEC_UNKNOWN_RESIDUE=0
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(source_unknown_converged_zero_categories PROPERTIES
+        LABELS "frontend;types;metadata"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
     add_test(
         NAME source_unknown_inventory_classification
         COMMAND ${XRAY_PYTHON}

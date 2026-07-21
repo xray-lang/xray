@@ -19,12 +19,14 @@
 
 typedef struct XaErrorVariantInfo {
     uint64_t stable_key;
+    char *name;
 } XaErrorVariantInfo;
 
 typedef struct XaErrorTypeInfo {
     XaErrorTypeId id;
     uint64_t stable_key;
     XrType *type_handle;
+    char *qualified_name;
     XaErrorVariantInfo *variants;
     uint32_t variant_count;
     uint32_t variant_capacity;
@@ -172,8 +174,15 @@ void xa_effect_db_clear(XaEffectDatabase *db) {
     if (!db)
         return;
     for (uint32_t i = 0; i < db->error_type_count; i++) {
-        if (db->error_types[i].variants)
-            xr_free(db->error_types[i].variants);
+        XaErrorTypeInfo *info = &db->error_types[i];
+        for (uint32_t v = 0; v < info->variant_count; v++) {
+            if (info->variants[v].name)
+                xr_free(info->variants[v].name);
+        }
+        if (info->variants)
+            xr_free(info->variants);
+        if (info->qualified_name)
+            xr_free(info->qualified_name);
     }
     xr_free(db->error_types);
     db->error_types = NULL;
@@ -212,6 +221,17 @@ static uint64_t stable_key_text3(const char *prefix, const char *type_name,
     return key ? key : 1u;
 }
 
+static char *dup_cstr(const char *s) {
+    if (!s)
+        return NULL;
+    size_t len = strlen(s);
+    char *copy = (char *) xr_malloc(len + 1u);
+    if (!copy)
+        return NULL;
+    memcpy(copy, s, len + 1u);
+    return copy;
+}
+
 XaErrorTypeId xa_effect_db_register_error_type(XaEffectDatabase *db, uint64_t stable_type_key,
                                                XrType *type_handle) {
     if (!db || stable_type_key == 0)
@@ -241,12 +261,14 @@ XaErrorTypeId xa_effect_db_register_error_enum(XaEffectDatabase *db, XrType *enu
     const char *name = enum_type->enum_type.enum_name;
     XaErrorTypeId type_id =
         xa_effect_db_register_error_type(db, stable_key_text2("enum", name), enum_type);
+    xa_effect_db_set_error_type_name(db, type_id, name);
     const XrEnumLayout *layout = enum_type->enum_type.layout;
     if (type_id != XA_ERROR_TYPE_NONE && layout) {
         for (uint32_t i = 0; i < layout->variant_count; i++) {
             const char *variant_name = layout->variants[i].name;
-            xa_effect_db_register_error_variant(db, type_id,
-                                                stable_key_text3("variant", name, variant_name));
+            XaErrorVariantId variant_id = xa_effect_db_register_error_variant(
+                db, type_id, stable_key_text3("variant", name, variant_name));
+            xa_effect_db_set_error_variant_name(db, type_id, variant_id, variant_name);
         }
     }
     return type_id;
@@ -265,8 +287,39 @@ XaErrorVariantId xa_effect_db_register_error_variant(XaEffectDatabase *db, XaErr
                     info->variant_count + 1u))
         return XA_ERROR_VARIANT_INVALID;
     XaErrorVariantId id = info->variant_count;
-    info->variants[info->variant_count++].stable_key = stable_variant_key;
+    info->variants[id].stable_key = stable_variant_key;
+    info->variants[id].name = NULL;
+    info->variant_count++;
     return id;
+}
+
+void xa_effect_db_set_error_type_name(XaEffectDatabase *db, XaErrorTypeId type_id,
+                                      const char *name) {
+    XaErrorTypeInfo *info = db_type_info_mut(db, type_id);
+    if (!info || !name || info->qualified_name)
+        return;
+    info->qualified_name = dup_cstr(name);
+}
+
+void xa_effect_db_set_error_variant_name(XaEffectDatabase *db, XaErrorTypeId type_id,
+                                         XaErrorVariantId variant_id, const char *name) {
+    XaErrorTypeInfo *info = db_type_info_mut(db, type_id);
+    if (!info || variant_id >= info->variant_count || !name || info->variants[variant_id].name)
+        return;
+    info->variants[variant_id].name = dup_cstr(name);
+}
+
+const char *xa_effect_db_error_type_name(const XaEffectDatabase *db, XaErrorTypeId type_id) {
+    const XaErrorTypeInfo *info = db_type_info(db, type_id);
+    return info ? info->qualified_name : NULL;
+}
+
+const char *xa_effect_db_error_variant_name(const XaEffectDatabase *db, XaErrorTypeId type_id,
+                                            XaErrorVariantId variant_id) {
+    const XaErrorTypeInfo *info = db_type_info(db, type_id);
+    if (!info || variant_id >= info->variant_count)
+        return NULL;
+    return info->variants[variant_id].name;
 }
 
 uint64_t xa_effect_db_error_type_key(const XaEffectDatabase *db, XaErrorTypeId type_id) {
@@ -665,6 +718,357 @@ uint64_t xa_effect_summary_fingerprint(const XaEffectDatabase *db, const XaEffec
     }
     h = xr_hash_core_mix_u64(h);
     return h ? h : 1u;
+}
+
+/* Collects the sorted, de-duplicated stable variant keys escaping for one type
+ * set.  `all_variants` sets expand to the currently registered variant universe
+ * of the error type; specific sets expand to the escaping bits only. */
+static uint64_t *collect_variant_keys(const XaEffectDatabase *db, const XaErrorTypeSet *set,
+                                      uint32_t *out_count) {
+    if (out_count)
+        *out_count = 0;
+    if (!set)
+        return NULL;
+    const XaErrorTypeInfo *info = db_type_info(db, set->type_id);
+    uint32_t count = 0;
+    if (set->all_variants) {
+        count = info ? info->variant_count : 0;
+    } else {
+        for (uint32_t word = 0; word < set->variants.word_count; word++) {
+            uint64_t bits = set->variants.words[word];
+            while (bits) {
+                count++;
+                bits &= bits - 1u;
+            }
+        }
+    }
+    if (count == 0)
+        return NULL;
+    uint64_t *keys = (uint64_t *) xr_malloc((size_t) count * sizeof(uint64_t));
+    if (!keys)
+        return NULL;
+    uint32_t out = 0;
+    if (set->all_variants) {
+        for (uint32_t i = 0; i < count; i++)
+            keys[out++] = info->variants[i].stable_key;
+    } else {
+        for (uint32_t word = 0; word < set->variants.word_count; word++) {
+            uint64_t bits = set->variants.words[word];
+            for (uint32_t bit = 0; bit < 64u; bit++) {
+                if ((bits & (UINT64_C(1) << bit)) == 0)
+                    continue;
+                uint32_t variant_id = word * 64u + bit;
+                uint64_t key = xa_effect_db_error_variant_key(db, set->type_id, variant_id);
+                keys[out++] = key ? key : fallback_variant_key(set->stable_type_key, variant_id);
+            }
+        }
+    }
+    if (out > 1)
+        qsort(keys, out, sizeof(uint64_t), cmp_u64);
+    if (out_count)
+        *out_count = out;
+    return keys;
+}
+
+static void diff_specific_variant_sets(const XaEffectDatabase *db, const XaErrorTypeSet *before,
+                                       const XaErrorTypeSet *after, XaEffectDiff *diff) {
+    uint32_t bc = 0;
+    uint32_t ac = 0;
+    uint64_t *bk = collect_variant_keys(db, before, &bc);
+    uint64_t *ak = collect_variant_keys(db, after, &ac);
+    uint32_t x = 0;
+    uint32_t y = 0;
+    while (x < bc || y < ac) {
+        if (x < bc && (y >= ac || bk[x] < ak[y])) {
+            diff->removed_escaping = true;
+            x++;
+        } else if (y < ac && (x >= bc || ak[y] < bk[x])) {
+            diff->added_escaping = true;
+            y++;
+        } else {
+            x++;
+            y++;
+        }
+    }
+    xr_free(bk);
+    xr_free(ak);
+}
+
+XaEffectDiffKind xa_effect_summary_diff(const XaEffectDatabase *db, const XaEffectSummary *before,
+                                        const XaEffectSummary *after, XaEffectDiff *out_diff) {
+    XaEffectDiff diff;
+    memset(&diff, 0, sizeof(diff));
+
+    XaEffectSummary empty;
+    xa_effect_summary_init(&empty);
+    if (!before)
+        before = &empty;
+    if (!after)
+        after = &empty;
+
+    /* Both escaping sets are kept sorted by stable_type_key, so a merge join
+     * detects newly escaping / no-longer escaping typed errors by stable key. */
+    uint32_t bi = 0;
+    uint32_t ai = 0;
+    while (bi < before->escaping.count || ai < after->escaping.count) {
+        const XaErrorTypeSet *bs = bi < before->escaping.count ? &before->escaping.types[bi] : NULL;
+        const XaErrorTypeSet *as = ai < after->escaping.count ? &after->escaping.types[ai] : NULL;
+        if (bs && (!as || bs->stable_type_key < as->stable_type_key)) {
+            diff.removed_escaping = true;
+            bi++;
+            continue;
+        }
+        if (as && (!bs || as->stable_type_key < bs->stable_type_key)) {
+            diff.added_escaping = true;
+            ai++;
+            continue;
+        }
+        if (bs->all_variants && as->all_variants) {
+            /* identical full coverage */
+        } else if (!bs->all_variants && as->all_variants) {
+            diff.added_escaping = true;
+        } else if (bs->all_variants && !as->all_variants) {
+            diff.removed_escaping = true;
+        } else {
+            diff_specific_variant_sets(db, bs, as, &diff);
+        }
+        bi++;
+        ai++;
+    }
+
+    if (before->completeness == XA_EFFECT_COMPLETE && after->completeness == XA_EFFECT_INCOMPLETE)
+        diff.became_incomplete = true;
+    if (before->completeness == XA_EFFECT_INCOMPLETE && after->completeness == XA_EFFECT_COMPLETE)
+        diff.became_complete = true;
+    if ((after->unknown_reasons & ~before->unknown_reasons) != 0)
+        diff.widened_unknown = true;
+    if ((before->unknown_reasons & ~after->unknown_reasons) != 0)
+        diff.narrowed_unknown = true;
+
+    if (diff.added_escaping || diff.became_incomplete || diff.widened_unknown)
+        diff.kind = XA_EFFECT_DIFF_BREAKING;
+    else if (diff.removed_escaping || diff.became_complete || diff.narrowed_unknown)
+        diff.kind = XA_EFFECT_DIFF_IMPROVEMENT;
+    else
+        diff.kind = XA_EFFECT_DIFF_COMPATIBLE;
+
+    xa_effect_summary_clear(&empty);
+    if (out_diff)
+        *out_diff = diff;
+    return diff.kind;
+}
+
+typedef struct XaJsonBuf {
+    char *data;
+    size_t len;
+    size_t cap;
+    bool ok;
+} XaJsonBuf;
+
+static void xa_json_reserve(XaJsonBuf *b, size_t extra) {
+    if (!b->ok)
+        return;
+    size_t need = b->len + extra + 1u;
+    if (need <= b->cap)
+        return;
+    size_t cap = b->cap ? b->cap : 128u;
+    while (cap < need)
+        cap *= 2u;
+    char *next = (char *) xr_realloc(b->data, cap);
+    if (!next) {
+        b->ok = false;
+        return;
+    }
+    b->data = next;
+    b->cap = cap;
+}
+
+static void xa_json_raw(XaJsonBuf *b, const char *s) {
+    if (!b->ok || !s)
+        return;
+    size_t n = strlen(s);
+    xa_json_reserve(b, n);
+    if (!b->ok)
+        return;
+    memcpy(b->data + b->len, s, n);
+    b->len += n;
+    b->data[b->len] = '\0';
+}
+
+static void xa_json_string(XaJsonBuf *b, const char *s) {
+    xa_json_raw(b, "\"");
+    for (const char *p = s; b->ok && p && *p; p++) {
+        unsigned char c = (unsigned char) *p;
+        if (c == '"' || c == '\\') {
+            char esc[3] = {'\\', (char) c, '\0'};
+            xa_json_raw(b, esc);
+        } else if (c < 0x20u) {
+            char buf[8];
+            snprintf(buf, sizeof(buf), "\\u%04x", (unsigned) c);
+            xa_json_raw(b, buf);
+        } else {
+            char one[2] = {(char) c, '\0'};
+            xa_json_raw(b, one);
+        }
+    }
+    xa_json_raw(b, "\"");
+}
+
+static void xa_json_hex_u64(XaJsonBuf *b, uint64_t value) {
+    char buf[24];
+    snprintf(buf, sizeof(buf), "\"0x%016llx\"", (unsigned long long) value);
+    xa_json_raw(b, buf);
+}
+
+typedef struct XaVariantKeyId {
+    uint64_t key;
+    XaErrorVariantId variant_id;
+} XaVariantKeyId;
+
+static int cmp_variant_key_id(const void *a, const void *b) {
+    const XaVariantKeyId *x = (const XaVariantKeyId *) a;
+    const XaVariantKeyId *y = (const XaVariantKeyId *) b;
+    if (x->key != y->key)
+        return (x->key > y->key) - (x->key < y->key);
+    return (x->variant_id > y->variant_id) - (x->variant_id < y->variant_id);
+}
+
+static void xa_json_specific_variants(XaJsonBuf *b, const XaEffectDatabase *db,
+                                      const XaErrorTypeSet *set) {
+    uint32_t count = 0;
+    for (uint32_t word = 0; word < set->variants.word_count; word++) {
+        uint64_t bits = set->variants.words[word];
+        while (bits) {
+            count++;
+            bits &= bits - 1u;
+        }
+    }
+    if (count == 0)
+        return;
+    XaVariantKeyId *entries = (XaVariantKeyId *) xr_malloc((size_t) count * sizeof(XaVariantKeyId));
+    if (!entries) {
+        b->ok = false;
+        return;
+    }
+    uint32_t out = 0;
+    for (uint32_t word = 0; word < set->variants.word_count; word++) {
+        uint64_t bits = set->variants.words[word];
+        for (uint32_t bit = 0; bit < 64u; bit++) {
+            if ((bits & (UINT64_C(1) << bit)) == 0)
+                continue;
+            XaErrorVariantId variant_id = word * 64u + bit;
+            uint64_t key = xa_effect_db_error_variant_key(db, set->type_id, variant_id);
+            entries[out].key = key ? key : fallback_variant_key(set->stable_type_key, variant_id);
+            entries[out].variant_id = variant_id;
+            out++;
+        }
+    }
+    if (out > 1)
+        qsort(entries, out, sizeof(XaVariantKeyId), cmp_variant_key_id);
+    const char *type_name = xa_effect_db_error_type_name(db, set->type_id);
+    for (uint32_t i = 0; i < out; i++) {
+        if (i > 0)
+            xa_json_raw(b, ",");
+        xa_json_raw(b, "{");
+        if (type_name) {
+            xa_json_raw(b, "\"type\":");
+            xa_json_string(b, type_name);
+            xa_json_raw(b, ",");
+        }
+        xa_json_raw(b, "\"typeKey\":");
+        xa_json_hex_u64(b, set->stable_type_key);
+        const char *variant_name =
+            xa_effect_db_error_variant_name(db, set->type_id, entries[i].variant_id);
+        if (variant_name) {
+            xa_json_raw(b, ",\"variant\":");
+            xa_json_string(b, variant_name);
+        }
+        xa_json_raw(b, ",\"variantKey\":");
+        xa_json_hex_u64(b, entries[i].key);
+        xa_json_raw(b, "}");
+    }
+    xr_free(entries);
+}
+
+char *xa_effect_summary_to_json(const XaEffectDatabase *db, const XaEffectSummary *summary,
+                                const char *symbol_qualified_name) {
+    if (!summary)
+        return NULL;
+    static const struct {
+        XaUnknownReason bit;
+        const char *name;
+    } unknown_reason_names[] = {
+        {XA_UNKNOWN_UNRESOLVED_CALLEE, "unresolvedCallee"},
+        {XA_UNKNOWN_MISSING_IMPORTED_EFFECT, "missingImportedEffect"},
+        {XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH, "openVirtualDispatch"},
+        {XA_UNKNOWN_DYNAMIC_CALL_TARGET, "dynamicCallTarget"},
+        {XA_UNKNOWN_NATIVE_CONTRACT_MISSING, "nativeContractMissing"},
+        {XA_UNKNOWN_ANALYSIS_LIMIT, "analysisLimit"},
+        {XA_UNKNOWN_INVALID_PROGRAM, "invalidProgram"},
+    };
+
+    XaJsonBuf b;
+    b.data = NULL;
+    b.len = 0;
+    b.cap = 0;
+    b.ok = true;
+
+    xa_json_raw(&b, "{\"schema\":\"xray.error-effect.v1\"");
+    if (symbol_qualified_name) {
+        xa_json_raw(&b, ",\"symbol\":");
+        xa_json_string(&b, symbol_qualified_name);
+    }
+    xa_json_raw(&b, ",\"complete\":");
+    xa_json_raw(&b, summary->completeness == XA_EFFECT_COMPLETE ? "true" : "false");
+
+    xa_json_raw(&b, ",\"errors\":[");
+    bool first_error = true;
+    for (uint32_t i = 0; i < summary->escaping.count; i++) {
+        const XaErrorTypeSet *set = &summary->escaping.types[i];
+        const char *type_name = xa_effect_db_error_type_name(db, set->type_id);
+        if (set->all_variants) {
+            if (!first_error)
+                xa_json_raw(&b, ",");
+            first_error = false;
+            xa_json_raw(&b, "{");
+            if (type_name) {
+                xa_json_raw(&b, "\"type\":");
+                xa_json_string(&b, type_name);
+                xa_json_raw(&b, ",");
+            }
+            xa_json_raw(&b, "\"typeKey\":");
+            xa_json_hex_u64(&b, set->stable_type_key);
+            xa_json_raw(&b, ",\"allVariants\":true}");
+        } else {
+            if (!first_error)
+                xa_json_raw(&b, ",");
+            first_error = false;
+            xa_json_specific_variants(&b, db, set);
+        }
+    }
+    xa_json_raw(&b, "]");
+
+    xa_json_raw(&b, ",\"unknownReasons\":[");
+    bool first_reason = true;
+    for (size_t i = 0; i < sizeof(unknown_reason_names) / sizeof(unknown_reason_names[0]); i++) {
+        if ((summary->unknown_reasons & (XaUnknownReasonSet) unknown_reason_names[i].bit) == 0)
+            continue;
+        if (!first_reason)
+            xa_json_raw(&b, ",");
+        first_reason = false;
+        xa_json_string(&b, unknown_reason_names[i].name);
+    }
+    xa_json_raw(&b, "]");
+
+    xa_json_raw(&b, ",\"fingerprint\":");
+    xa_json_hex_u64(&b, xa_effect_summary_fingerprint(db, summary));
+    xa_json_raw(&b, "}");
+
+    if (!b.ok) {
+        xr_free(b.data);
+        return NULL;
+    }
+    return b.data;
 }
 
 static bool summary_copy(XaEffectSummary *dst, const XaEffectSummary *src) {

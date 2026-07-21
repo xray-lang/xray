@@ -103,6 +103,17 @@ XR_FUNC uint64_t xa_effect_db_error_type_key(const XaEffectDatabase *db, XaError
 XR_FUNC XrType *xa_effect_db_error_type_handle(const XaEffectDatabase *db, XaErrorTypeId type_id);
 XR_FUNC uint64_t xa_effect_db_error_variant_key(const XaEffectDatabase *db, XaErrorTypeId type_id,
                                                 XaErrorVariantId variant_id);
+/* Canonical human-readable names for deterministic query/manifest output
+ * (task 205 §7.2 / §11.1).  Names are display metadata; the stable key remains
+ * the cross-process identity.  First assignment wins and the DB owns the copy. */
+XR_FUNC void xa_effect_db_set_error_type_name(XaEffectDatabase *db, XaErrorTypeId type_id,
+                                              const char *name);
+XR_FUNC void xa_effect_db_set_error_variant_name(XaEffectDatabase *db, XaErrorTypeId type_id,
+                                                 XaErrorVariantId variant_id, const char *name);
+XR_FUNC const char *xa_effect_db_error_type_name(const XaEffectDatabase *db, XaErrorTypeId type_id);
+XR_FUNC const char *xa_effect_db_error_variant_name(const XaEffectDatabase *db,
+                                                    XaErrorTypeId type_id,
+                                                    XaErrorVariantId variant_id);
 
 XR_FUNC void xa_effect_summary_init(XaEffectSummary *summary);
 XR_FUNC void xa_effect_summary_clear(XaEffectSummary *summary);
@@ -129,6 +140,37 @@ XR_FUNC void xa_effect_summary_mark_incomplete(XaEffectSummary *summary, XaUnkno
 XR_FUNC bool xa_effect_summary_is_nothrow(const XaEffectSummary *summary);
 XR_FUNC uint64_t xa_effect_summary_fingerprint(const XaEffectDatabase *db,
                                                const XaEffectSummary *summary);
+
+/* Public effect API-diff (task 205 §11.2).  Compares two summaries of the same
+ * exported entity by stable error keys and completeness.  BREAKING dominates
+ * IMPROVEMENT dominates COMPATIBLE so release gates can reject regressions. */
+typedef enum XaEffectDiffKind {
+    XA_EFFECT_DIFF_COMPATIBLE = 0,
+    XA_EFFECT_DIFF_IMPROVEMENT = 1,
+    XA_EFFECT_DIFF_BREAKING = 2,
+} XaEffectDiffKind;
+
+typedef struct XaEffectDiff {
+    XaEffectDiffKind kind;
+    bool added_escaping;   /* after escapes an error the before summary did not */
+    bool removed_escaping; /* before escaped an error the after summary does not */
+    bool became_incomplete;
+    bool became_complete;
+    bool widened_unknown;  /* after has unknown reasons absent from before */
+    bool narrowed_unknown; /* before has unknown reasons absent from after */
+} XaEffectDiff;
+
+XR_FUNC XaEffectDiffKind xa_effect_summary_diff(const XaEffectDatabase *db,
+                                                const XaEffectSummary *before,
+                                                const XaEffectSummary *after,
+                                                XaEffectDiff *out_diff);
+
+/* Deterministic canonical JSON projection of a summary (task 205 §7.2 / §11.1):
+ * schema-tagged, escaping errors sorted by stable key, fixed-order unknown
+ * reasons, and the stable fingerprint.  `symbol_qualified_name` is optional.
+ * Returns a heap string the caller frees, or NULL on allocation failure. */
+XR_FUNC char *xa_effect_summary_to_json(const XaEffectDatabase *db, const XaEffectSummary *summary,
+                                        const char *symbol_qualified_name);
 
 XR_FUNC XaEffectId xa_effect_db_intern(XaEffectDatabase *db, const XaEffectSummary *summary);
 XR_FUNC const XaEffectSummary *xa_effect_db_get(const XaEffectDatabase *db, XaEffectId id);

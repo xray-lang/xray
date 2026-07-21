@@ -1,0 +1,30 @@
+// anchor: spread-array-eval-order
+// 181: pin strict left-to-right evaluation order of array spread operands
+// interleaved with explicit elements that carry observable side effects, and
+// confirm the source arrays are not consumed by the spread.
+
+var order = 0
+
+fn mark(step: int) -> int {
+    order = order * 10 + step
+    return step
+}
+
+fn seq(step: int, a: int, b: int) -> Array<int> {
+    mark(step)
+    return [a, b]
+}
+
+var out = [...seq(1, 10, 11), mark(2), ...seq(3, 30, 31), mark(4)]
+print(order)      // 1234: strict left-to-right operand evaluation
+print(out)        // [10, 11, 2, 30, 31, 4]
+print(len(out))   // 6
+
+// Source arrays survive the spread and keep their values.
+var base = [7, 8]
+order = 0
+var copy = [...base, mark(5), ...base]
+print(order)      // 5
+print(copy)       // [7, 8, 5, 7, 8]
+print(base)       // [7, 8]
+print(len(base))  // 2
