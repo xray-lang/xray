@@ -123,6 +123,8 @@ HTTP 的 `Router<T>`、请求/响应结构，Coro 的诊断、本地存储与池
 
 全仓 sanitizer CTest 仍为红色，包含 coroutine heap UAF/stack overflow、FFI 越界、latch 生命周期、AOT map/runtime、UBSAN shift/alignment 及超时等跨路线历史问题。因此本报告只声明“标准库自举完成门禁”和“相关 native 边界聚焦验证”通过，不声明全仓 sanitizer clean；这些问题应作为后续 runtime/AOT/FFI 安全路线继续治理。
 
+此外，核心协程类型 `TaskResult<T>.Failed(unknown)` 仍存在于 `stdlib/types/coroutine.xr`。它不属于 196/221 的 32 个模块动态 API 债扫描，而由任务 202 P3 的 `Task<T,E>` / `TaskResult<T,E>` 原子切换独立治理；当前 `check_source_unknown_aot_baseline.py` 资产通过，但本报告不声明“全仓 source unknown 已清零”。
+
 ## 7. 重复表面与残留清理
 
 以下 16 个模块已禁止重新引入旧 `.def` 语义入口：`_probe`、`base64`、`csv`、`datetime`、`encoding`、`log`、`parallel`、`path`、`simd`、`strconv`、`sync`、`text`、`toml`、`url`、`xml`、`yaml`。
