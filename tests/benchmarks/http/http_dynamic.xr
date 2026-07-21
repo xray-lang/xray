@@ -6,7 +6,7 @@
  *
  * Endpoints:
  *   GET /plaintext    - fn returns plain string
- *   GET /json         - fn returns Json object (auto-serialized)
+ *   GET /json         - fn returns a typed JSON HttpResponse
  *   GET /users/:id    - fn with path params + string concat
  *
  * Usage:
@@ -14,6 +14,7 @@
  */
 
 import http
+import { HttpRequest, HttpResponse } from http
 
 var port = 8080
 if (len(process.args) > 0) {
@@ -21,18 +22,18 @@ if (len(process.args) > 0) {
 }
 
 // Dynamic plaintext (fn callback, NOT prebuilt)
-http.routeHandler("GET", "/plaintext", fn(req: Json) {
-    return "Hello, World!"
+http.routeHandler("GET", "/plaintext", fn(req: HttpRequest) -> HttpResponse {
+    return http.textResponse("Hello, World!")
 })
 
-// Dynamic JSON (fn callback builds Json each time)
-http.routeHandler("GET", "/json", fn(req: Json) {
-    return { message: "Hello, World!" }
+// Dynamic JSON response
+http.routeHandler("GET", "/json", fn(req: HttpRequest) -> HttpResponse {
+    return http.jsonResponse({ message: "Hello, World!" })
 })
 
 // Path params + string concatenation
-http.routeHandler("GET", "/users/:id", fn(req: Json) {
-    return "User: " + req.params.id
+http.routeHandler("GET", "/users/:id", fn(req: HttpRequest) -> HttpResponse {
+    return http.textResponse("User: " + (req.params.get("id") ?? ""))
 })
 
 print("xray Dynamic Handler Benchmark on port " + string(port))

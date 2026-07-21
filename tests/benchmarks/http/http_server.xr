@@ -13,6 +13,7 @@
  */
 
 import http
+import { Headers, HttpRequest, HttpResponse, HttpVersion } from http
 
 var port = 8080
 if (len(process.args) > 0) {
@@ -22,11 +23,11 @@ if (len(process.args) > 0) {
 // Static plaintext route (pre-built response, zero overhead)
 http.route("GET", "/plaintext", "Hello, World!")
 
-// JSON route (pass Json object directly, C layer auto-serializes to prebuilt response)
+// Static JSON route (the generic static route serializer owns this value).
 http.route("GET", "/json", { message: "Hello, World!" })
 
-http.routeHandler("POST", "/echo", fn(req: Json) -> string {
-    return req.body ?? ""
+http.routeHandler("POST", "/echo", fn(req: HttpRequest) -> HttpResponse {
+    return HttpResponse(HttpVersion.Http1, 200, "OK", Headers(), req.body)
 })
 
 print("xray HTTP Server on port " + string(port))

@@ -1,0 +1,23 @@
+type SparseOptions = {
+    required: string,
+    method?: string,
+    headers?: int,
+    timeoutMs?: int
+}
+
+var lateOnly: SparseOptions = {
+    required: "late",
+    timeoutMs: 25
+}
+print(lateOnly.required)
+print(lateOnly.method == null)
+print(lateOnly.headers == null)
+print(lateOnly.timeoutMs!)
+
+var middleOnly: SparseOptions = {
+    required: "middle",
+    headers: 7
+}
+print(middleOnly.method == null)
+print(middleOnly.headers!)
+print(middleOnly.timeoutMs == null)

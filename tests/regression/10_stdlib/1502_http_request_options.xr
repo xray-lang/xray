@@ -1,6 +1,7 @@
 // Test http request options object construction
 
 import http
+import { Headers, HttpError, HttpMethod, HttpRequestOptions } from http
 import net
 
 fn recv_line(ch: Channel<string>) -> string {
@@ -58,21 +59,40 @@ fn serve_raw_response(lst: NetListener, response: string) {
     net.close(lst)
 }
 
+fn serve_binary_response(lst: NetListener) {
+    var conn = net.accept(lst)
+    if (conn == null) {
+        net.close(lst)
+        return
+    }
+
+    net.read(conn!, 4096)
+    net.write(
+        conn!,
+        "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\n"
+    )
+    net.writeBytes(conn!, Array<byte>([0x78, 0x00, 0x7f]))
+    net.close(conn!)
+    net.close(lst)
+}
+
 @test
 fn test_request_options_object() {
-    var options = {
+    var headers = Headers()
+    headers.add("Content-Type", "application/json")
+    headers.add("X-Custom-Header", "test-value")
+    var options: HttpRequestOptions = {
         url: "http://127.0.0.1:19998/test",
-        method: "POST",
-        headers: #{"Content-Type": "application/json",
-            "X-Custom-Header": "test-value"},
-        body: "{\"key\": \"value\"}",
-        timeout: 5000
+        method: HttpMethod.post(),
+        headers: headers,
+        body: "{\"key\": \"value\"}".copyBytes(),
+        timeoutMs: 5000
     }
     assert_eq(options.url, "http://127.0.0.1:19998/test")
-    assert_eq(options.method, "POST")
-    assert_eq(options.headers["Content-Type"], "application/json")
-    assert_eq(options.body, "{\"key\": \"value\"}")
-    assert_eq(options.timeout, 5000)
+    assert_eq(options.method!.token, "POST")
+    assert_eq(options.headers!.get("Content-Type")!, "application/json")
+    assert_eq(string.fromUtf8(options.body![:])!, "{\"key\": \"value\"}")
+    assert_eq(options.timeoutMs!, 5000)
 }
 
 @test
@@ -80,29 +100,29 @@ fn test_request_api_exists() {
     assert(typeName(http.request) == "function")
 }
 
+fn rejects_url(url: string) -> bool {
+    try {
+        http.request({url: url})
+    } catch (e: HttpError) {
+        return true
+    }
+    return false
+}
+
 @test
 fn test_request_rejects_unsupported_scheme() {
-    var r = http.request({url: "ftp://example.com/path"})
-    assert(!r.ok)
-    assert_eq(r.error, "URL parse error")
+    assert(rejects_url("ftp://example.com/path"))
 }
 
 @test
 fn test_request_rejects_invalid_explicit_port() {
-    var zero = http.request({url: "http://example.com:0/path"})
-    assert(!zero.ok)
-    assert_eq(zero.error, "URL parse error")
-
-    var tooLarge = http.request({url: "http://example.com:99999/path"})
-    assert(!tooLarge.ok)
-    assert_eq(tooLarge.error, "URL parse error")
+    assert(rejects_url("http://example.com:0/path"))
+    assert(rejects_url("http://example.com:99999/path"))
 }
 
 @test
 fn test_request_rejects_url_userinfo() {
-    var r = http.request({url: "http://user:pass@example.com/path"})
-    assert(!r.ok)
-    assert_eq(r.error, "URL parse error")
+    assert(rejects_url("http://user:pass@example.com/path"))
 }
 
 @test
@@ -115,11 +135,11 @@ fn test_request_preserves_custom_method_token() {
 
     var resp = http.request({
         url: "http://127.0.0.1:" + string(lst.port()) + "/custom",
-        method: "propfind"
+        method: HttpMethod("propfind")
     })
 
     var line = recv_line(lines)
-    assert(resp.ok)
+    assert(resp.isSuccess())
     assert_eq(line, "PROPFIND /custom HTTP/1.1")
 }
 
@@ -136,7 +156,7 @@ fn test_request_defaults_identity_accept_encoding() {
     })
 
     var raw = recv_line(requests)
-    assert(resp.ok)
+    assert(resp.isSuccess())
     assert(raw.contains("\r\nAccept-Encoding: identity\r\n"))
     assert(!raw.contains("Accept-Encoding: gzip, deflate"))
 }
@@ -155,29 +175,53 @@ fn test_request_ignores_no_body_status_payload() {
         url: "http://127.0.0.1:" + string(lst.port()) + "/empty"
     })
 
-    assert(resp.ok)
+    assert(resp.isSuccess())
     assert_eq(resp.status, 204)
-    assert_eq(resp.body, "")
+    assert_eq(len(resp.body), 0)
 }
 
 @test
-fn test_request_stream_option_does_not_expose_native_stream_facade() {
+fn test_request_preserves_non_utf8_response_body() {
     var maybeLst = net.listen(0, 1)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    go serve_raw_response(
-        lst,
-        "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello"
-    )
+    go serve_binary_response(lst)
 
     var resp = http.request({
-        url: "http://127.0.0.1:" + string(lst.port()) + "/stream",
-        stream: true
+        url: "http://127.0.0.1:" + string(lst.port()) + "/binary",
+        timeoutMs: 1000
     })
 
-    assert(resp.ok)
-    assert_eq(typeName(resp), "HttpResponse")
-    assert_eq(resp.body, "hello")
+    assert(resp.isSuccess())
+    assert_eq(len(resp.body), 3)
+    assert_eq(resp.body[0], 0x78)
+    assert_eq(resp.body[1], 0x00)
+    assert_eq(resp.body[2], 0x7f)
+}
+
+@test
+fn test_request_body_is_written_as_bytes() {
+    var maybeLst = net.listen(0, 1)
+    if (maybeLst == null) { return }
+    var lst = maybeLst!
+    shared requests: Channel<string> = Channel(1)
+    go capture_request_raw(lst, requests)
+
+    var headers = Headers()
+    headers.add("Content-Type", "application/octet-stream")
+
+    var resp = http.request({
+        url: "http://127.0.0.1:" + string(lst.port()) + "/bytes",
+        method: HttpMethod.post(),
+        headers: headers,
+        body: Array<byte>([0x78, 0x72]),
+        timeoutMs: 1000
+    })
+
+    var raw = recv_line(requests)
+    assert(resp.isSuccess())
+    assert(raw.contains("POST /bytes HTTP/1.1\r\n"))
+    assert(raw.contains("\r\nContent-Length: 2\r\n"))
 }
 
 print("All http request options tests passed")

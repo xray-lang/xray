@@ -13,6 +13,8 @@
 
 #include "xrt_arc.h"
 #include "xrt_value.h"
+#include "../shared/xr_array_abi.h"
+#include "../shared/xr_elem_type.h"
 #include "../os/os_net.h"
 
 #include <stdbool.h>
@@ -70,6 +72,13 @@ typedef struct xrt_net_listener_object {
     int port;
     int64_t accept_deadline_ms;
 } xrt_net_listener_object_t;
+
+/* xrt_net.h is included before xrt_coll.h, so use the shared array ABI
+ * directly instead of depending on xrt_array_t. */
+typedef struct xrt_net_array_view {
+    XrObjHeader hdr;
+    XR_ARRAY_ABI_FIELDS;
+} xrt_net_array_view_t;
 
 static inline void xrt_net_init_once(void) {
 #if defined(XR_OS_WINDOWS)
@@ -526,6 +535,55 @@ static inline XrValue xrt_net_read_default(XrValue conn_value) {
     return xrt_net_read(conn_value, XR_FROM_INT(XRT_NET_DEFAULT_READ_BYTES));
 }
 
+static inline XrValue xrt_net_read_into(XrValue conn_value, XrValue buffer_value,
+                                        XrValue maxlen_value) {
+    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
+    if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET) {
+        if (conn)
+            xrt_net_set_error_base(&conn->base, XRT_NETERR_CLOSED, 0);
+        return XR_FROM_INT(-1);
+    }
+    if (conn->conn_kind == XRT_NETCONN_TLS) {
+        xrt_net_set_error_base(&conn->base, XRT_NETERR_TLS, 0);
+        return XR_FROM_INT(-1);
+    }
+    if (!XR_IS_ARRAY(buffer_value) || !buffer_value.ptr) {
+        xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
+        return XR_FROM_INT(-1);
+    }
+
+    xrt_net_array_view_t *buffer = (xrt_net_array_view_t *) buffer_value.ptr;
+    if (buffer->elem_type != XR_ELEM_U8 || buffer->elem_size != 1 || buffer->capacity <= 0 ||
+        !buffer->data) {
+        xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
+        return XR_FROM_INT(-1);
+    }
+
+    int64_t requested = xrt_net_int_arg(maxlen_value);
+    if (requested <= 0 || requested > buffer->capacity)
+        requested = buffer->capacity;
+
+    for (;;) {
+        ssize_t n = xr_socket_recv(conn->base.fd, (char *) buffer->data, (size_t) requested);
+        if (n >= 0) {
+            buffer->length = (int64_t) n;
+            xrt_net_clear_error_base(&conn->base);
+            return XR_FROM_INT((int64_t) n);
+        }
+        int err = xr_get_socket_error();
+        if (err == XR_EINTR)
+            continue;
+        if (xr_socket_err_is_again(err)) {
+            int ready = xrt_net_wait_fd(conn->base.fd, true, conn->read_deadline_ms);
+            if (ready > 0)
+                continue;
+            err = xr_get_socket_error();
+        }
+        xrt_net_set_error_base(&conn->base, xrt_net_error_from_errno(err), err);
+        return XR_FROM_INT(-1);
+    }
+}
+
 static inline XrValue xrt_net_write(XrValue conn_value, const char *data, int64_t len) {
     xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
     if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET) {
@@ -569,6 +627,24 @@ static inline XrValue xrt_net_write(XrValue conn_value, const char *data, int64_
     if (written == len)
         xrt_net_clear_error_base(&conn->base);
     return XR_FROM_INT(written > 0 ? written : -1);
+}
+
+static inline XrValue xrt_net_write_bytes(XrValue conn_value, XrValue data_value) {
+    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
+    if (!XR_IS_ARRAY(data_value) || !data_value.ptr) {
+        if (conn)
+            xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
+        return XR_FROM_INT(-1);
+    }
+
+    xrt_net_array_view_t *data = (xrt_net_array_view_t *) data_value.ptr;
+    if (data->elem_type != XR_ELEM_U8 || data->elem_size != 1 || data->length < 0 ||
+        (data->length > 0 && !data->data)) {
+        if (conn)
+            xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
+        return XR_FROM_INT(-1);
+    }
+    return xrt_net_write(conn_value, (const char *) data->data, data->length);
 }
 
 #define XRT_NET_BIDI_BUFFER_BYTES 16384

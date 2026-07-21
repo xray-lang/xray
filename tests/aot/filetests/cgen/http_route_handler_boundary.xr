@@ -1,7 +1,8 @@
 import http
+import { HttpRequest, HttpResponse } from http
 
-fn handle(req: Json) -> Json {
-    return { ok: true, path: req.path }
+fn handle(req: HttpRequest) -> HttpResponse {
+    return http.textResponse(req.path)
 }
 
 http.routeHandler("GET", "/hello", handle)

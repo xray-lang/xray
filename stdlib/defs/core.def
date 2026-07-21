@@ -3228,8 +3228,9 @@ module net {
     vm: "net_read_into_yieldable"
     vm_binding: "yieldable"
     argc: 3
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vvv"
+    aot: "xrt_net_read_into"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }
@@ -3253,8 +3254,9 @@ module net {
     vm: "net_write_bytes_yieldable"
     vm_binding: "yieldable"
     argc: 2
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vv"
+    aot: "xrt_net_write_bytes"
+    aot_direct: true
     link_object: false
     layer: "runtime"
   }

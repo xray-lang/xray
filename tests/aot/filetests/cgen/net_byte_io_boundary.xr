@@ -1,0 +1,12 @@
+import net
+
+fn exchange(conn: NetConn) -> int {
+    var buffer = Array<byte>(32)
+    var read = net.readInto(conn, buffer, 16)
+    if (read <= 0) {
+        return read
+    }
+    return net.writeBytes(conn, buffer)
+}
+
+print(typeName(exchange))

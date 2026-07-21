@@ -1,6 +1,6 @@
 schema = 1
 module = "http"
-contract_revision = 4
+contract_revision = 5
 legacy_commit = "c4ead56205b25b7bde418cf2b8c782e592916a61"
 legacy_oracle = "classification_only"
 legacy_public_surface = [
@@ -17,6 +17,8 @@ intentional_semantic_changes = [
   "requestText and responseText accept only Headers rather than Json objects",
   "complete request/response parsers keep body framing explicit and byte-counted",
   "HTTP text helpers may expose string bodies only after framing and UTF-8 boundaries are validated",
+  "request uses HttpRequestOptions and returns byte-owned HttpResponse values",
+  "routeHandler accepts HttpRequest callbacks that return HttpResponse",
 ]
 known_legacy_bugs = ["legacy helper behavior is not authoritative for conflicting framing headers"]
 equivalence = ["value", "error", "effect", "complexity"]
@@ -56,4 +58,4 @@ new_behavior = "parseResponseText consumes fixed, chunked, close-delimited, and 
 [[legacy_behavior]]
 id = "binary-body-string-shortcut"
 classification = "removed"
-new_behavior = "future HTTP binary body convergence must carry non-text bodies through owned bytes and use text bridges only for validated text"
+new_behavior = "typed HTTP responses carry non-text bodies through owned bytes and use text or JSON only through explicit decoding methods"

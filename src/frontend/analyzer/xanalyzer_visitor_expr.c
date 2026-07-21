@@ -3467,6 +3467,14 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
     xr_free(field_names);
     xr_free(field_types);
 
+    /* Once a contextual Record literal has been structurally validated, keep
+     * the declared shape on the expression. Lowering then allocates omitted
+     * optional fields as null slots instead of compacting later fields into
+     * the wrong ordinal. Invalid literals retain their inferred shape so the
+     * caller still reports the normal assignment mismatch. */
+    if (record_context && xa_typecheck_assignable(expected, type))
+        return expected;
+
     return type;
 }
 
