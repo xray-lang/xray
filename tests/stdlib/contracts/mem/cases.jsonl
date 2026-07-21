@@ -1,0 +1,1 @@
+{"case":"mem-contract","probe":"tests/diff/cases/semantics/stdlib/mem_alloc_shared_core.xr","equivalence":["value","error","effect","complexity"],"oracle":"mem public surface behaves identically on VM and AOT for the covered cases"}

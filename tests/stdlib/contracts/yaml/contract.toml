@@ -1,0 +1,45 @@
+schema = 1
+module = "yaml"
+contract_revision = 1
+legacy_commit = "971205b8e773e1d3eeaeafb9432355cf8be038e6"
+legacy_oracle = "classification_only"
+legacy_public_surface = [
+  "parse",
+  "parseStrict",
+  "parseAll",
+  "stringify",
+  "parseFile",
+  "writeFile",
+]
+intentional_semantic_changes = [
+  "YAML parse/stringify semantics are owned by stdlib/yaml/yaml.xr as the sole source",
+  "the value domain is the typed YamlValue enum (null/bool/int/float/string/binary/sequence/mapping/tagged/alias), wider than JSON",
+  "parse failures raise typed YamlError; unsupported features are typed errors, never silently coerced to string/Json",
+  "JSON interop is an explicit, fallible conversion rather than an implicit lossy projection",
+]
+known_legacy_bugs = [
+  "the pre-migration Json value domain could not represent YAML tags, binary, or anchor/alias identity",
+]
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/yaml/diff_cases.txt"
+benchmark_suite = "stdlib/yaml"
+
+[[legacy_behavior]]
+id = "yaml-value-domain"
+classification = "required"
+new_behavior = "parse returns the typed YamlValue enum covering the YAML value domain wider than JSON"
+
+[[legacy_behavior]]
+id = "typed-parse-errors"
+classification = "required"
+new_behavior = "parse/parseStrict raise typed YamlError on malformed input instead of returning Json/null sentinels"
+
+[[legacy_behavior]]
+id = "stringify-roundtrip"
+classification = "required"
+new_behavior = "stringify emits YAML that parses back to an equal YamlValue for the covered value domain"
+
+[[legacy_behavior]]
+id = "json-value-domain-removed"
+classification = "removed"
+new_behavior = "the pre-migration Json value domain is replaced by YamlValue; JSON is reachable only via an explicit yaml.toJson conversion"

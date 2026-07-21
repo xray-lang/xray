@@ -1,0 +1,1 @@
+{"case":"math-contract","probe":"tests/diff/cases/semantics/stdlib/math_core_direct_type_preserve.xr","equivalence":["value","error","effect","complexity"],"oracle":"math public surface behaves identically on VM and AOT for the covered cases"}

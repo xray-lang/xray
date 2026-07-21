@@ -1,0 +1,2 @@
+{"case":"log-typed-level-enum","probe":"tests/diff/cases/semantics/stdlib/log_level_enum_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"typed LogLevel/LogFormat enums, ordering, and isEnabled behave identically on VM and AOT"}
+{"case":"log-typed-module","probe":"tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"typed logging output, child context, and format switching behave identically on VM and AOT"}

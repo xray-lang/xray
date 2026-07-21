@@ -1,0 +1,34 @@
+schema = 1
+module = "time"
+contract_revision = 1
+legacy_commit = "971205b8e773e1d3eeaeafb9432355cf8be038e6"
+legacy_oracle = "classification_only"
+legacy_public_surface = [
+  "now",
+  "monotonic",
+  "nanos",
+  "micros",
+  "sleep",
+  "clock",
+  "localOffset",
+]
+intentional_semantic_changes = [
+  "time is a permanent L1 native primitive for clock queries; the .def signatures are the typed contract",
+  "this contract is a behavior baseline lock, not a migration",
+]
+known_legacy_bugs = [
+  "none recorded for the native baseline",
+]
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/time/diff_cases.txt"
+benchmark_suite = "stdlib/time"
+
+[[legacy_behavior]]
+id = "monotonic-ordering"
+classification = "required"
+new_behavior = "monotonic/nanos are non-decreasing and consistent on VM and AOT"
+
+[[legacy_behavior]]
+id = "local-offset-range"
+classification = "required"
+new_behavior = "localOffset returns an in-range timezone offset identically on VM and AOT"

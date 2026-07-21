@@ -1,0 +1,1 @@
+{"case":"parallel-contract","probe":"tests/diff/cases/semantics/stdlib/parallel_api_reference.xr","equivalence":["value","error","effect","complexity"],"oracle":"parallel public surface behaves identically on VM and AOT for the covered cases"}

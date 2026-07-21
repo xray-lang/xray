@@ -1,0 +1,1 @@
+tests/diff/cases/semantics/stdlib/regex_escape_direct.xr

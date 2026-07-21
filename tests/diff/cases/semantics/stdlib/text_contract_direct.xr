@@ -1,0 +1,11 @@
+// task-221 阶段B: text contract backend-diff coverage.
+import text
+
+print(text.lower("HELLO"))
+print(text.upper("world"))
+print(text.trim("  hi  "))
+print(text.trimStart("  left"))
+print(text.trimEnd("right  "))
+print(text.padStart("7", 3, "0"))
+print(text.padEnd("7", 3, "0"))
+print(text.reverseRunes("abc"))
