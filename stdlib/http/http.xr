@@ -1813,14 +1813,45 @@ class _HttpResponseBytes {
     }
 }
 
-fn _byteRange(raw: string, start: int, end: int) -> Array<byte>? {
-    var bytes = raw.copyBytes()
-    if (start < 0 || end < start || end > len(bytes)) { return null }
+fn _byteArrayRange(raw: Array<byte>, start: int, end: int) -> Array<byte>? {
+    if (start < 0 || end < start || end > len(raw)) { return null }
     var out = Array<byte>(end - start)
     for (var i = start; i < end; i++) {
-        out[i - start] = bytes[i]
+        out[i - start] = raw[i]
     }
     return out
+}
+
+fn _byteArrayText(raw: Array<byte>, start: int, end: int) -> string? {
+    var bytes = _byteArrayRange(raw, start, end)
+    if (bytes == null) { return null }
+    try {
+        return string.fromUtf8(bytes![:])
+    } catch (e: Utf8Error) {
+        return null
+    }
+}
+
+fn _byteArrayCrlfIndex(raw: Array<byte>, start: int) -> int {
+    var pos = start
+    while (pos + 1 < len(raw)) {
+        if (raw[pos] == 13 && raw[pos + 1] == 10) { return pos }
+        pos = pos + 1
+    }
+    return -1
+}
+
+fn _byteArrayHeadEnd(raw: Array<byte>) -> int {
+    var pos = 0
+    while (pos + 1 < len(raw)) {
+        if (pos + 3 < len(raw) && raw[pos] == 13 && raw[pos + 1] == 10 &&
+            raw[pos + 2] == 13 && raw[pos + 3] == 10) {
+            return pos + 4
+        }
+        if (raw[pos] == 10 && raw[pos + 1] == 10) { return pos + 2 }
+        pos = pos + 1
+    }
+    return -1
 }
 
 fn _copyByteArray(data: Array<byte>) -> Array<byte> {
@@ -1829,15 +1860,14 @@ fn _copyByteArray(data: Array<byte>) -> Array<byte> {
     return out
 }
 
-fn _parseChunkedBytes(raw: string, start: int, maxBodyBytes: int) -> Array<byte>? {
-    var bytes = raw.copyBytes()
+fn _parseChunkedBytes(raw: Array<byte>, start: int, maxBodyBytes: int) -> Array<byte>? {
     var pos = start
     var out = Array<byte>()
 
     while (true) {
-        var lineEnd = _byteCrlfIndex(raw, pos)
+        var lineEnd = _byteArrayCrlfIndex(raw, pos)
         if (lineEnd < 0) { return null }
-        var line = _byteSlice(raw, pos, lineEnd)
+        var line = _byteArrayText(raw, pos, lineEnd)
         if (line == null) { return null }
         var size = _parseChunkSize(line!)
         if (size == null) { return null }
@@ -1845,9 +1875,9 @@ fn _parseChunkedBytes(raw: string, start: int, maxBodyBytes: int) -> Array<byte>
 
         if (size! == 0) {
             while (true) {
-                var trailerEnd = _byteCrlfIndex(raw, pos)
+                var trailerEnd = _byteArrayCrlfIndex(raw, pos)
                 if (trailerEnd < 0) { return null }
-                var trailer = _byteSlice(raw, pos, trailerEnd)
+                var trailer = _byteArrayText(raw, pos, trailerEnd)
                 if (trailer == null) { return null }
                 pos = trailerEnd + 2
                 if (len(trailer!) == 0) { return out }
@@ -1856,10 +1886,10 @@ fn _parseChunkedBytes(raw: string, start: int, maxBodyBytes: int) -> Array<byte>
         }
 
         if (maxBodyBytes > 0 && len(out) + size! > maxBodyBytes) { return null }
-        if (pos + size! + 2 > len(bytes)) { return null }
-        for (var i = 0; i < size!; i++) { out.push(bytes[pos + i]) }
+        if (pos + size! + 2 > len(raw)) { return null }
+        for (var i = 0; i < size!; i++) { out.push(raw[pos + i]) }
         pos = pos + size!
-        if (pos + 1 >= len(bytes) || bytes[pos] != 13 || bytes[pos + 1] != 10) {
+        if (pos + 1 >= len(raw) || raw[pos] != 13 || raw[pos + 1] != 10) {
             return null
         }
         pos = pos + 2
@@ -1868,30 +1898,37 @@ fn _parseChunkedBytes(raw: string, start: int, maxBodyBytes: int) -> Array<byte>
 }
 
 fn _readHttpResponse(conn: NetConn, method: string) -> _HttpResponseBytes? {
-    var raw = ""
+    var raw = Array<byte>()
     var closeDelimited = false
-    while (len(raw.bytes()) <= HTTP_MAX_RESPONSE_BYTES) {
-        var chunk = net.read(conn, 8192)
-        if (chunk == null) {
-            break
-        }
-        raw = raw + chunk!
+    while (len(raw) <= HTTP_MAX_RESPONSE_BYTES) {
+        var chunk = Array<byte>(8192)
+        var read = net.readInto(conn, chunk, 8192)
+        if (read < 0) { return null }
+        if (read == 0) { break }
+        for (var i = 0; i < read; i++) { raw.push(chunk[i]) }
+        if (len(raw) > HTTP_MAX_RESPONSE_BYTES) { return null }
 
-        var head = parseResponseHead(raw)
-        if (head == null) { continue }
+        var headEnd = _byteArrayHeadEnd(raw)
+        if (headEnd < 0) { continue }
+        var headText = _byteArrayText(raw, 0, headEnd)
+        if (headText == null) { return null }
+        var head = parseResponseHead(headText!)
+        if (head == null) { return null }
+        head!.headerBytes = headEnd
+
         var noBody = !_responseAllowsBody(head!.status) || method == "HEAD"
         if (noBody) { return _HttpResponseBytes(head!, Array<byte>(0)) }
 
         if (head!.chunked) {
-            var chunked = _parseChunkedBytes(raw, head!.headerBytes, HTTP_MAX_RESPONSE_BYTES)
+            var chunked = _parseChunkedBytes(raw, headEnd, HTTP_MAX_RESPONSE_BYTES)
             if (chunked != null) { return _HttpResponseBytes(head!, chunked!) }
             continue
         }
 
         if (head!.contentLength >= 0) {
             if (head!.contentLength > HTTP_MAX_RESPONSE_BYTES) { return null }
-            var bodyEnd = head!.headerBytes + head!.contentLength
-            var body = _byteRange(raw, head!.headerBytes, bodyEnd)
+            var bodyEnd = headEnd + head!.contentLength
+            var body = _byteArrayRange(raw, headEnd, bodyEnd)
             if (body != null) { return _HttpResponseBytes(head!, body!) }
             continue
         }
@@ -1900,9 +1937,14 @@ fn _readHttpResponse(conn: NetConn, method: string) -> _HttpResponseBytes? {
         if (closeDelimited) { continue }
     }
     if (closeDelimited) {
-        var head = parseResponseHead(raw)
+        var headEnd = _byteArrayHeadEnd(raw)
+        if (headEnd < 0) { return null }
+        var headText = _byteArrayText(raw, 0, headEnd)
+        if (headText == null) { return null }
+        var head = parseResponseHead(headText!)
         if (head == null) { return null }
-        var body = _byteRange(raw, head!.headerBytes, len(raw.bytes()))
+        head!.headerBytes = headEnd
+        var body = _byteArrayRange(raw, headEnd, len(raw))
         if (body != null) { return _HttpResponseBytes(head!, body!) }
     }
     return null
