@@ -1,1 +1,2 @@
 tests/stdlib/contracts/runtime/cases/runtime_control_plane.xr
+tests/stdlib/contracts/runtime/cases/runtime_selective_import.xr

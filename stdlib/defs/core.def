@@ -2515,6 +2515,7 @@ module runtime {
     signature: "(): int"
     doc: "Run cycle collection + whole-block reclaim, return cycle collection count"
     vm: "runtime_collect_cycles"
+    aot: "xr_aot_runtime_collect_cycles"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2526,6 +2527,7 @@ module runtime {
     signature: "(): ()"
     doc: "Pause the automatic cycle collector"
     vm: "runtime_disable_cycle_collection"
+    aot: "xr_aot_runtime_disable_cycle_collection"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2537,6 +2539,7 @@ module runtime {
     signature: "(): ()"
     doc: "Resume the automatic cycle collector"
     vm: "runtime_enable_cycle_collection"
+    aot: "xr_aot_runtime_enable_cycle_collection"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2548,6 +2551,7 @@ module runtime {
     signature: "(): bool"
     doc: "Check if automatic cycle collection is enabled"
     vm: "runtime_is_cycle_collection_enabled"
+    aot: "xr_aot_runtime_is_cycle_collection_enabled"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2559,6 +2563,7 @@ module runtime {
     signature: "(): int"
     doc: "Get live memory usage in bytes"
     vm: "runtime_live_bytes"
+    aot: "xr_aot_runtime_live_bytes"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2570,6 +2575,7 @@ module runtime {
     signature: "(): int"
     doc: "Get live object count"
     vm: "runtime_live_objects"
+    aot: "xr_aot_runtime_live_objects"
     argc: 0
     arg_spec: ""
     aot_direct: false
@@ -2581,6 +2587,7 @@ module runtime {
     signature: "(): RuntimeInfo"
     doc: "Get a typed snapshot of the current coroutine heap and cycle collector"
     vm: "runtime_info"
+    aot: "xr_aot_runtime_info"
     argc: 0
     arg_spec: ""
     aot_direct: false

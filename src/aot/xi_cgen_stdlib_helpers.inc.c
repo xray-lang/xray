@@ -73,6 +73,8 @@ static int cg_aot_stdlib_method_count(void) {
 static bool cg_module_has_aot_direct_calls(const char *module) {
     if (!module)
         return false;
+    if (strcmp(module, "runtime") == 0)
+        return true;
     for (int i = 0; i < cg_aot_stdlib_method_count(); i++) {
         const CgAotStdlibMethod *m = cg_aot_stdlib_method_at(i);
         if (m && strcmp(module, m->module) == 0)
@@ -84,6 +86,12 @@ static bool cg_module_has_aot_direct_calls(const char *module) {
 static bool cg_aot_stdlib_has_direct_member(const char *module, const char *member) {
     if (!module || !member)
         return false;
+    if (strcmp(module, "runtime") == 0 &&
+        (strcmp(member, "collectCycles") == 0 || strcmp(member, "disableCycleCollection") == 0 ||
+         strcmp(member, "enableCycleCollection") == 0 ||
+         strcmp(member, "isCycleCollectionEnabled") == 0 || strcmp(member, "liveBytes") == 0 ||
+         strcmp(member, "liveObjects") == 0 || strcmp(member, "info") == 0))
+        return true;
     for (int i = 0; i < cg_aot_stdlib_method_count(); i++) {
         const CgAotStdlibMethod *m = cg_aot_stdlib_method_at(i);
         if (m && m->module && m->method && strcmp(module, m->module) == 0 &&
@@ -153,6 +161,116 @@ static bool cg_emit_aot_stdlib_generated_constant_field(XiCgenCtx *ctx, FILE *ou
         return cg_emit_aot_stdlib_generated_constant_value(ctx, out, v, c);
     }
     return false;
+}
+
+static void cg_emit_runtime_info_value(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                       const char *aot_ctx) {
+    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XrAggregateLayout *layout = cg_value_struct_layout(ctx, f, v);
+    if (layout && layout->field_count == 9 && plan && cg_value_rep_is_struct_aggregate(plan->rep) &&
+        plan->rep.c_type) {
+        char fields[9][128];
+        for (uint16_t i = 0; i < 9; i++)
+            cg_struct_field_c_name(layout, i, fields[i], sizeof(fields[i]));
+        fprintf(out,
+                "({ XrAotRuntimeInfo _ri = xr_aot_runtime_info(%s); "
+                "(%s){ .%s = _ri.live_bytes, .%s = _ri.live_kb, "
+                ".%s = _ri.live_objects, .%s = _ri.cycle_collection_enabled, "
+                ".%s = _ri.cycle_collections, .%s = _ri.finalizer_count, "
+                ".%s = _ri.blocks, .%s = _ri.free_blocks, .%s = _ri.full_blocks }; })",
+                aot_ctx, plan->rep.c_type, fields[0], fields[1], fields[2], fields[3], fields[4],
+                fields[5], fields[6], fields[7], fields[8]);
+        return;
+    }
+
+    if (cg_value_plan_storage_rep(ctx, v) != XR_REP_TAGGED) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: runtime.info has no verified AOT record layout\n");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out,
+            "({ static const char *const _rif[] = {\"liveBytes\", \"liveKB\", "
+            "\"liveObjects\", \"cycleCollectionEnabled\", \"cycleCollections\", "
+            "\"finalizerCount\", \"blocks\", \"freeBlocks\", \"fullBlocks\"}; "
+            "XrAotRuntimeInfo _ri = xr_aot_runtime_info(%s); "
+            "XrValue _riv = xrt_record_new_named(9, _rif); "
+            "xrt_json_set_field(_riv, 0, XR_FROM_INT(_ri.live_bytes)); "
+            "xrt_json_set_field(_riv, 1, XR_FROM_FLOAT(_ri.live_kb)); "
+            "xrt_json_set_field(_riv, 2, XR_FROM_INT(_ri.live_objects)); "
+            "xrt_json_set_field(_riv, 3, XR_FROM_BOOL(_ri.cycle_collection_enabled)); "
+            "xrt_json_set_field(_riv, 4, XR_FROM_INT(_ri.cycle_collections)); "
+            "xrt_json_set_field(_riv, 5, XR_FROM_INT(_ri.finalizer_count)); "
+            "xrt_json_set_field(_riv, 6, XR_FROM_INT(_ri.blocks)); "
+            "xrt_json_set_field(_riv, 7, XR_FROM_INT(_ri.free_blocks)); "
+            "xrt_json_set_field(_riv, 8, XR_FROM_INT(_ri.full_blocks)); "
+            "_riv; })",
+            aot_ctx);
+}
+
+static bool cg_emit_runtime_control_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                         const XiValue *v, const char *method, uint16_t argc) {
+    const char *aot_ctx = xicgen_aot_context_expr(ctx, f);
+    if (!method || argc != 0) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT runtime control call '%s'\n",
+                method ? method : "?");
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+
+    if (strcmp(method, "info") == 0) {
+        cg_emit_runtime_info_value(ctx, out, f, v, aot_ctx);
+        return true;
+    }
+    if (strcmp(method, "disableCycleCollection") == 0 ||
+        strcmp(method, "enableCycleCollection") == 0) {
+        const char *helper = strcmp(method, "disableCycleCollection") == 0
+                                 ? "xr_aot_runtime_disable_cycle_collection"
+                                 : "xr_aot_runtime_enable_cycle_collection";
+        const char *suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+        fprintf(out, "({ %s(%s); XR_NULL_VAL; })", helper, aot_ctx);
+        emit_conversion_suffix(out, suffix);
+        return true;
+    }
+
+    const char *helper = NULL;
+    if (strcmp(method, "collectCycles") == 0)
+        helper = "xr_aot_runtime_collect_cycles";
+    else if (strcmp(method, "liveBytes") == 0)
+        helper = "xr_aot_runtime_live_bytes";
+    else if (strcmp(method, "liveObjects") == 0)
+        helper = "xr_aot_runtime_live_objects";
+    if (helper) {
+        const char *suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+        fprintf(out, "%s(%s)", helper, aot_ctx);
+        emit_conversion_suffix(out, suffix);
+        return true;
+    }
+    if (strcmp(method, "isCycleCollectionEnabled") == 0) {
+        const char *suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+        fprintf(out, "(int64_t)xr_aot_runtime_is_cycle_collection_enabled(%s)", aot_ctx);
+        emit_conversion_suffix(out, suffix);
+        return true;
+    }
+
+    ctx->error = true;
+    fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT runtime control call 'runtime.%s'\n", method);
+    emit_codegen_abort_expr(out);
+    return true;
+}
+
+static bool xicgen_emit_runtime_control_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                               const XiValue *v) {
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1 ||
+        !cg_value_is_module_import_ctx(ctx, f, v->args[0], "runtime"))
+        return false;
+
+    return cg_emit_runtime_control_call(ctx, out, f, v, (const char *) v->aux,
+                                        (uint16_t) (v->nargs - 1));
 }
 
 static const CgAotStdlibMethod *cg_find_aot_stdlib_method(const char *module, const char *method,
@@ -417,6 +535,9 @@ static bool xicgen_emit_stdlib_import_call(XiCgenCtx *ctx, FILE *out, const XiFu
         return false;
 
     uint16_t call_argc = (uint16_t) (v->nargs - 1);
+    if (strcmp(ref->module_path, "runtime") == 0)
+        return cg_emit_runtime_control_call(ctx, out, f, v, ref->member_name, call_argc);
+
     const CgAotStdlibMethod *m =
         cg_find_aot_stdlib_method(ref->module_path, ref->member_name, call_argc);
     if (!m) {

@@ -37,6 +37,68 @@ typedef struct XrAotCoroState {
     XrAotRuntime *runtime;
 } XrAotCoroState;
 
+static XrCoroHeap *aot_runtime_control_heap(const XrAotContext *ctx) {
+    if (ctx && ctx->coro)
+        return xr_coro_ensure_heap(ctx->coro);
+    if (ctx && ctx->runtime && ctx->runtime->root_coro)
+        return xr_coro_ensure_heap(ctx->runtime->root_coro);
+    return NULL;
+}
+
+int64_t xr_aot_runtime_collect_cycles(const XrAotContext *ctx) {
+    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
+    if (!heap)
+        return 0;
+    xr_coro_heap_collect_cycles(heap);
+    return (int64_t) heap->cycle_collect_count;
+}
+
+void xr_aot_runtime_disable_cycle_collection(const XrAotContext *ctx) {
+    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
+    if (heap && heap->cycle_collection_disabled < UINT8_MAX)
+        heap->cycle_collection_disabled++;
+}
+
+void xr_aot_runtime_enable_cycle_collection(const XrAotContext *ctx) {
+    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
+    if (heap && heap->cycle_collection_disabled > 0)
+        heap->cycle_collection_disabled--;
+}
+
+bool xr_aot_runtime_is_cycle_collection_enabled(const XrAotContext *ctx) {
+    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
+    return heap && heap->cycle_collection_disabled == 0;
+}
+
+int64_t xr_aot_runtime_live_bytes(const XrAotContext *ctx) {
+    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
+    return heap ? heap->totalbytes : 0;
+}
+
+int64_t xr_aot_runtime_live_objects(const XrAotContext *ctx) {
+    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
+    return heap ? (int64_t) heap->object_count : 0;
+}
+
+XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx) {
+    XrAotRuntimeInfo info = {0};
+    XrCoroHeap *heap = aot_runtime_control_heap(ctx);
+    if (!heap)
+        return info;
+    XrRegionStats stats = {0};
+    xr_region_get_stats(&heap->region, &stats);
+    info.live_bytes = heap->totalbytes;
+    info.live_kb = (double) heap->totalbytes / 1024.0;
+    info.live_objects = (int64_t) heap->object_count;
+    info.cycle_collection_enabled = heap->cycle_collection_disabled == 0;
+    info.cycle_collections = (int64_t) heap->cycle_collect_count;
+    info.finalizer_count = (int64_t) heap->finalizer_count;
+    info.blocks = (int64_t) stats.total_blocks;
+    info.free_blocks = (int64_t) stats.free_blocks;
+    info.full_blocks = (int64_t) stats.full_blocks;
+    return info;
+}
+
 static XrAotCoroState *aot_state_from_coro(XrCoroutine *coro) {
     if (!coro || !coro->backend_state)
         return NULL;
@@ -715,6 +777,10 @@ void xr_aot_runtime_delete(XrAotRuntime *runtime) {
         return;
     XrAotRuntime *expected = runtime;
     atomic_compare_exchange_strong(&g_aot_runtime_current, &expected, NULL);
+    if (runtime->root_coro) {
+        xr_coro_destroy(runtime->root_coro);
+        runtime->root_coro = NULL;
+    }
     if (runtime->scheduler) {
         xr_scheduler_runtime_delete(runtime->scheduler);
         runtime->scheduler = NULL;
@@ -857,7 +923,8 @@ static const XrAotCoroDesc AOT_ROOT_DESCRIPTOR = {
 
 bool xr_aot_root_descriptor_begin(XrAotRuntime *runtime) {
     XrScopeContext *scope;
-    if (!runtime || !runtime->scheduler || runtime->root_scope)
+    XrCoroutine *root;
+    if (!runtime || !runtime->scheduler || runtime->root_scope || runtime->root_coro)
         return false;
     scope = (XrScopeContext *) xr_calloc(1, sizeof(XrScopeContext));
     if (!scope)
@@ -869,7 +936,15 @@ bool xr_aot_root_descriptor_begin(XrAotRuntime *runtime) {
      * `go` error isolation. Explicit linked/supervisor scopes carry policy. */
     scope->mode = XR_SCOPE_WAIT;
     scope->first_error = XR_NULL_VAL;
+    root = xr_coro_create_aot(runtime, &AOT_ROOT_DESCRIPTOR, scope, "root-descriptor");
+    if (!root) {
+        xr_free(scope);
+        return false;
+    }
+    scope->owner = root;
+    atomic_store_explicit(&root->current_scope, scope, memory_order_release);
     runtime->root_scope = scope;
+    runtime->root_coro = root;
     runtime->scheduler->current_scope = scope;
     return true;
 }
@@ -878,22 +953,15 @@ bool xr_aot_root_descriptor_end(XrAotRuntime *runtime) {
     XrScopeContext *scope;
     XrCoroutine *root;
     bool ok;
-    if (!runtime || !runtime->scheduler || !(scope = runtime->root_scope))
+    if (!runtime || !runtime->scheduler || !(scope = runtime->root_scope) ||
+        !(root = runtime->root_coro))
         return false;
-    root = xr_coro_create_aot(runtime, &AOT_ROOT_DESCRIPTOR, scope, "root-descriptor");
-    if (!root) {
-        runtime->scheduler->current_scope = NULL;
-        runtime->root_scope = NULL;
-        xr_free(scope);
-        return false;
-    }
-    scope->owner = root;
-    atomic_store_explicit(&root->current_scope, scope, memory_order_release);
     ok =
         xr_runtime_main_thread_run(runtime->scheduler, root) == 0 && XR_IS_NULL(scope->first_error);
     runtime->scheduler->current_scope = NULL;
     atomic_store_explicit(&root->current_scope, NULL, memory_order_release);
     runtime->root_scope = NULL;
+    runtime->root_coro = NULL;
     xr_coro_destroy(root);
     xr_free(scope);
     return ok;

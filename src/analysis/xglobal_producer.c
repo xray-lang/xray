@@ -8398,7 +8398,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         uint32_t method_name_id = hash_name32(callee->as.member_access.name);
         generic_name = callee->as.member_access.name;
         generic_kind = XG_GENERIC_INST_METHOD;
-        if (stdlib_module)
+        if (stdlib_module && producer_stdlib_module_known(stdlib_module))
             (void) producer_add_stdlib_symbol_dependency(bc->producer, bc->module_id,
                                                          (uint32_t) call->line, stdlib_module,
                                                          callee->as.member_access.name);

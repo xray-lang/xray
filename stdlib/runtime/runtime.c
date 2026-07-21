@@ -20,11 +20,9 @@
  *   - runtime.liveObjects()              - live object count
  *   - runtime.info()                     - typed RuntimeInfo snapshot
  *
- *   All functions are VM-only introspection (aot_direct: false, no aot
- *   helper) — same as before the move: the AOT cgen rejects them with an
- *   explicit "unsupported" error rather than silently misbehaving. Giving
- *   standalone AOT binaries a real introspection surface is a separate,
- *   additive task.
+ *   Standalone AOT routes the same surface through the provider-owned current
+ *   coroutine heap. The compiler materializes RuntimeInfo with the same typed
+ *   field layout, so neither backend reports unrelated host-process state.
  */
 
 #include "runtime.h"

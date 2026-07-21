@@ -160,6 +160,18 @@ typedef struct XrAotContext {
     void *worker;
 } XrAotContext;
 
+typedef struct XrAotRuntimeInfo {
+    int64_t live_bytes;
+    double live_kb;
+    int64_t live_objects;
+    bool cycle_collection_enabled;
+    int64_t cycle_collections;
+    int64_t finalizer_count;
+    int64_t blocks;
+    int64_t free_blocks;
+    int64_t full_blocks;
+} XrAotRuntimeInfo;
+
 typedef XrAotResult (*XrAotResumeFn)(void *frame, const XrAotContext *ctx);
 typedef void (*XrAotFrameTraceFn)(void *frame, void *visitor);
 /* Optional hook; when present, it releases owned fields and frees the frame. */
@@ -259,6 +271,13 @@ XR_FUNC void xr_aot_frame_free(void *frame);
 XR_FUNC void xr_aot_runtime_config_init(XrAotRuntimeConfig *cfg);
 XR_FUNC XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg);
 XR_FUNC void xr_aot_runtime_delete(XrAotRuntime *runtime);
+XR_FUNC int64_t xr_aot_runtime_collect_cycles(const XrAotContext *ctx);
+XR_FUNC void xr_aot_runtime_disable_cycle_collection(const XrAotContext *ctx);
+XR_FUNC void xr_aot_runtime_enable_cycle_collection(const XrAotContext *ctx);
+XR_FUNC bool xr_aot_runtime_is_cycle_collection_enabled(const XrAotContext *ctx);
+XR_FUNC int64_t xr_aot_runtime_live_bytes(const XrAotContext *ctx);
+XR_FUNC int64_t xr_aot_runtime_live_objects(const XrAotContext *ctx);
+XR_FUNC XrAotRuntimeInfo xr_aot_runtime_info(const XrAotContext *ctx);
 /* Process-wide "current" standalone AOT runtime (the last one created,
  * cleared on delete). Standalone binaries create exactly one; the *_sync
  * bridge helpers use it to reach the builtin table (Recv/SendResult ADT

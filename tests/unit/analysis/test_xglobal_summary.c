@@ -17534,6 +17534,35 @@ TEST(global_evidence_producer_marks_stdlib_link_dependencies) {
     teardown_parser_session();
 }
 
+TEST(global_evidence_producer_keeps_vm_control_calls_out_of_stdlib_links) {
+    setup_parser_session();
+    const char *source = "import runtime\n"
+                         "runtime.disableCycleCollection()\n"
+                         "runtime.enableCycleCollection()\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    ASSERT_EQ_UINT(ev.nlink_deps, 0);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
 TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities) {
     setup_parser_session();
     const char *source = "class Fake {\n"
@@ -18389,6 +18418,7 @@ RUN_TEST(global_evidence_producer_marks_internal_yield_module_suspendable);
 RUN_TEST(global_evidence_producer_marks_sys_thread_spawn_capability);
 RUN_TEST(global_evidence_producer_marks_extern_dylib_link_dependency);
 RUN_TEST(global_evidence_producer_marks_stdlib_link_dependencies);
+RUN_TEST(global_evidence_producer_keeps_vm_control_calls_out_of_stdlib_links);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);
 RUN_TEST(global_evidence_composes_field_receiver_runtime_wait_effects);
 RUN_TEST(global_evidence_records_generic_body_storage_code_size_plans);

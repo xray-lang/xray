@@ -655,6 +655,37 @@ TEST(aot_runtime_creates_scheduler_for_runtime_caps) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(aot_runtime_control_plane_uses_root_descriptor_heap) {
+    XrAotRuntime *runtime = aot_test_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    XrAotContext ctx = aot_test_context_for_runtime(runtime);
+
+    ASSERT_FALSE(xr_aot_runtime_is_cycle_collection_enabled(&ctx));
+    ASSERT_TRUE(xr_aot_root_descriptor_begin(runtime));
+    ASSERT_TRUE(xr_aot_runtime_is_cycle_collection_enabled(&ctx));
+
+    xr_aot_runtime_disable_cycle_collection(&ctx);
+    ASSERT_FALSE(xr_aot_runtime_is_cycle_collection_enabled(&ctx));
+    XrAotRuntimeInfo disabled = xr_aot_runtime_info(&ctx);
+    ASSERT_FALSE(disabled.cycle_collection_enabled);
+    ASSERT_GE(disabled.live_bytes, 0);
+    ASSERT_GE(disabled.live_objects, 0);
+
+    xr_aot_runtime_enable_cycle_collection(&ctx);
+    ASSERT_TRUE(xr_aot_runtime_is_cycle_collection_enabled(&ctx));
+    ASSERT_GE(xr_aot_runtime_collect_cycles(&ctx), disabled.cycle_collections);
+    ASSERT_TRUE(xr_aot_root_descriptor_end(runtime));
+    ASSERT_FALSE(xr_aot_runtime_is_cycle_collection_enabled(&ctx));
+
+    XrAotContext detached;
+    memset(&detached, 0, sizeof(detached));
+    ASSERT_EQ_INT(xr_aot_runtime_live_bytes(&detached), 0);
+    ASSERT_EQ_INT(xr_aot_runtime_live_objects(&detached), 0);
+    ASSERT_FALSE(xr_aot_runtime_is_cycle_collection_enabled(&detached));
+
+    xr_aot_runtime_delete(runtime);
+}
+
 TEST(aot_parallel_cap_creates_scheduler_runtime) {
     XrAotRuntimeConfig cfg;
     aot_test_runtime_config_init(&cfg);
@@ -1718,6 +1749,7 @@ RUN_TEST(aot_frame_alloc_accepts_zero_state_frames);
 RUN_TEST(aot_frame_alloc_reuses_small_frames_locally);
 RUN_TEST(aot_runtime_owns_core_without_isolate);
 RUN_TEST(aot_runtime_creates_scheduler_for_runtime_caps);
+RUN_TEST(aot_runtime_control_plane_uses_root_descriptor_heap);
 RUN_TEST(aot_parallel_cap_creates_scheduler_runtime);
 RUN_TEST(aot_runtime_creates_isolate_free_aot_coroutine);
 RUN_TEST(aot_run_main_uses_runtime_without_isolate);
