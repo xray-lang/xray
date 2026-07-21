@@ -1864,6 +1864,8 @@ for (var j = 100; j > 90; j--) {
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```
 
+`for-in` 迭代变量是每次迭代新建的不可变绑定；闭包捕获的是创建闭包时该轮绑定的值。
+
 ```xray
 for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
