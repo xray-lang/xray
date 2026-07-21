@@ -1,0 +1,3 @@
+{"case":"sync-baseline","classification":"required","effects":{},"error":null,"legacy_commit":"55066fb5773fa407530de239d135013d240e7e8d","outcome":"value","value":100}
+{"case":"yield-resume","classification":"required","effects":{"resumes":2},"error":null,"legacy_commit":"55066fb5773fa407530de239d135013d240e7e8d","outcome":"value","value":[42,42]}
+{"case":"atomic-counter","classification":"required","effects":{},"error":null,"legacy_commit":"55066fb5773fa407530de239d135013d240e7e8d","outcome":"value","value":[0,1,2,2]}
