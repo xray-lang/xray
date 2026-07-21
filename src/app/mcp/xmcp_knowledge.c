@@ -441,6 +441,12 @@ void xmcp_knowledge_search_stdlib_matches(XmcpKnowledge *kb, const char *query,
 
         int module_score =
             direct_module_known ? 0 : score_module(module, effective_query, tokens, token_count);
+        /* A bare, exact module query is a navigation request as well as a
+         * full-text search.  Keep the module entry ahead of symbols whose
+         * names or summaries repeat the module name; otherwise a large module
+         * can fill the bounded result set and hide its own documentation. */
+        if (!direct_module_known && strcasecmp(module->name, effective_query) == 0)
+            module_score = 300;
         insert_match(out, module, NULL, module_score);
         int module_context = score_module(module, query, tokens, token_count);
         for (int j = 0; j < module->symbol_count; j++) {

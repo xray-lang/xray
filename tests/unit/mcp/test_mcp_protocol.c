@@ -66,13 +66,13 @@ static int tests_failed = 0;
     } while (0)
 
 #define ASSERT_EQ(a, b) ASSERT((a) == (b))
-#define ASSERT_STR_EQ(a, b)                                                                         \
+#define ASSERT_STR_EQ(a, b)                                                                        \
     do {                                                                                           \
-        const char *_assert_str_a = (a);                                                            \
-        const char *_assert_str_b = (b);                                                            \
-        ASSERT(_assert_str_a != NULL);                                                              \
-        ASSERT(_assert_str_b != NULL);                                                              \
-        ASSERT(strcmp(_assert_str_a, _assert_str_b) == 0);                                          \
+        const char *_assert_str_a = (a);                                                           \
+        const char *_assert_str_b = (b);                                                           \
+        ASSERT(_assert_str_a != NULL);                                                             \
+        ASSERT(_assert_str_b != NULL);                                                             \
+        ASSERT(strcmp(_assert_str_a, _assert_str_b) == 0);                                         \
     } while (0)
 #define ASSERT_NOT_NULL(p) ASSERT((p) != NULL)
 
@@ -1729,8 +1729,15 @@ TEST(knowledge_search_stdlib) {
     char *result = xmcp_knowledge_search_stdlib(kb, "http", NULL, &match_count);
     ASSERT_NOT_NULL(result);
     ASSERT(match_count > 0);
-    ASSERT(strstr(result, "http") != NULL);
+    ASSERT(strstr(result, "Module: http") != NULL);
     xr_free(result);
+
+    XmcpStdlibSearchResult matches;
+    xmcp_knowledge_search_stdlib_matches(kb, "http", NULL, &matches);
+    ASSERT(matches.match_count > 0);
+    ASSERT_NOT_NULL(matches.matches[0].module);
+    ASSERT_STR_EQ(matches.matches[0].module->name, "http");
+    ASSERT(matches.matches[0].symbol == NULL);
 
     xmcp_knowledge_free(kb);
 }
