@@ -1,0 +1,5 @@
+status=fail
+contains=error[E0655]: @zero_cost violated in 'zeroCostWindowReject'
+contains=R4 bounds-panic branch
+contains=window proof missing
+not_contains=CRASH

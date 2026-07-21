@@ -1,0 +1,8 @@
+@zero_cost
+fn zeroCostWindowReject(data: Slice<int>, start: int) -> int {
+    var window = data.window(start, 2)
+    return len(window)
+}
+
+var values: [int; 4] = [1, 2, 3, 4]
+print(zeroCostWindowReject(values[:], 1))

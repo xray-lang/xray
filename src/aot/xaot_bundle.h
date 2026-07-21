@@ -285,6 +285,7 @@ typedef enum XaotSpanAccessKind {
     XAOT_SPAN_ACCESS_REINTERPRET,
     XAOT_SPAN_ACCESS_VEC_LOAD,
     XAOT_SPAN_ACCESS_VEC_STORE,
+    XAOT_SPAN_ACCESS_WINDOW,
 } XaotSpanAccessKind;
 
 enum {
@@ -299,6 +300,7 @@ enum {
     XAOT_SPAN_EV_DATA_VALID = 1u << 8,
     XAOT_SPAN_EV_ENDIAN_CONST = 1u << 9,
     XAOT_SPAN_EV_NO_CLOBBER = 1u << 10,
+    XAOT_SPAN_EV_ASSERT_GUARD = 1u << 11,
 };
 
 enum {
