@@ -15,6 +15,7 @@
 #include "../../../src/ir/xi_analysis.h"
 #include "../../../src/ir/xi_escape.h"
 #include "../../../src/ir/xi_arc.h"
+#include "../../../src/ir/xi_arc_verify.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/base/xchecks.h"
 #include "../../../src/base/xmalloc.h"
@@ -509,29 +510,14 @@ static void test_arc_span_borrow_flows_through_phi(void) {
 
     xi_arc_insert(f);
 
-    XiBlock *release_block = NULL;
-    uint32_t release_index = 0;
-    for (uint32_t b = 0; b < f->nblocks; b++) {
-        XiBlock *blk = f->blocks[b];
-        for (uint32_t i = 0; blk && i < blk->nvalues; i++) {
-            XiValue *v = blk->values[i];
-            if (v && v->op == XI_RELEASE && v->nargs == 1 && v->args[0] == arr) {
-                release_block = blk;
-                release_index = i;
-            }
-        }
-    }
-    ASSERT_EQ(release_block == body, true,
-              "Span phi keeps its array owner alive into the consuming block");
-    uint32_t get_index = 0;
-    for (uint32_t i = 0; i < body->nvalues; i++) {
-        if (body->values[i] == get) {
-            get_index = i;
-            break;
-        }
-    }
-    ASSERT_EQ(release_index > get_index, true,
-              "array owner is released after the last borrowed Span read");
+    /* The general RC verifier (task 219, C3 borrow-closure) now enforces that a
+     * borrow view's owner stays live through every use, including across a phi.
+     * Assert the ARC output is accepted rather than re-deriving the exact drop
+     * placement by hand (that manual regression is subsumed by the verifier). */
+    (void) get;
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "Span phi keeps its array owner alive into the consuming block (C3)");
     xi_func_free(f);
 }
 
@@ -589,16 +575,14 @@ static void test_arc_branch_local_span_phi_stays_in_dominance_region(void) {
     char err[512] = {0};
     ASSERT_EQ(xi_verify(f, err, sizeof(err)), true,
               "ARC releases for branch-local Span phi remain SSA-dominated");
-    xi_ensure_dominators(f);
-    for (uint32_t b = 0; b < f->nblocks; b++) {
-        XiBlock *blk = f->blocks[b];
-        for (uint32_t i = 0; blk && i < blk->nvalues; i++) {
-            XiValue *v = blk->values[i];
-            if (v && v->op == XI_RELEASE && v->nargs == 1 && v->args[0] == right_span)
-                ASSERT_EQ(xi_dominates(right, blk), true,
-                          "branch-local Span is released only in its dominance region");
-        }
-    }
+    /* C4 (dominance boundary) generalizes the hand-checked invariant that a
+     * branch-local Span owner is released only within its dominance region; the
+     * per-release dominance scan below is subsumed by the general verifier. */
+    (void) right;
+    (void) right_span;
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "branch-local Span phi releases stay in the owner's dominance region (C4)");
     xi_func_free(f);
 }
 

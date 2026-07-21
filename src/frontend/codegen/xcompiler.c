@@ -98,7 +98,7 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
         ctx->post_analyze_hook(ctx, ast, ctx->post_analyze_user_data);
 
     /* Monomorphization: clone generic functions/structs for each concrete type */
-    xa_mono_pass(ast, ctx->X);
+    xa_mono_pass_with_analyzer(ast, ctx->X, ctx->analyzer);
 
     /* Post-mono: re-analyze monomorphized declarations for struct layouts */
     if (ctx->analyzer) {

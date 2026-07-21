@@ -14,6 +14,7 @@
 #include "xanalyzer_visitor.h"
 #include "xanalyzer_builtins.h"
 #include "xanalyzer_incremental.h"
+#include "../parser/xa_assertion_attr.h"
 #include "../../base/xstorage.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/symbol/xsymbol_table.h"
@@ -62,6 +63,7 @@ XR_FUNC XaSymbol *xa_visit_bind_parameter_symbol(XaInferContext *ctx, XrParamNod
                                                  int fallback_line);
 XR_FUNC bool xa_propagate_receiver_mutations_for_ast(XaAnalyzer *analyzer, AstNode *node);
 XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, AstNode *node);
+XR_FUNC void xa_validate_interface_throw_effects(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_apply_param_storage_requirements_to_scope(XaInferContext *ctx,
                                                           XaSymbolLinks *links);
 XR_FUNC XrType *resolve_class_to_type_param(XrVMRuntime *X, XrType *type, const char **tp_names,
@@ -105,6 +107,21 @@ XR_FUNC void xa_freestanding_report_unavailable(XaInferContext *ctx, AstNode *no
                                                 const char *feature, const char *suggestion);
 XR_FUNC void xa_report_unknown_stdlib_member(XaInferContext *ctx, AstNode *node,
                                              const char *module_name, const char *member_name);
+
+/* Task 216: a function item can carry a precise inferred effect, but storing it
+ * in an unannotated variable/field creates a merge point whose type defaults to
+ * MAY_THROW. Copy before widening so the declaration symbol's precise function
+ * type remains unchanged. An explicit @no_throw function type bypasses this
+ * helper by using its declared type. */
+static inline XrType *xa_function_value_storage_type(XaInferContext *ctx, XrType *inferred) {
+    if (!ctx || !ctx->analyzer || !inferred || inferred->kind != XR_KIND_FUNCTION)
+        return inferred;
+    XrType *stored = xr_type_copy(ctx->analyzer->isolate, inferred);
+    if (!stored)
+        return xr_type_new_error(ctx->analyzer->isolate);
+    xr_type_function_set_throw_effect(stored, XR_FN_EFFECT_MAY_THROW);
+    return stored;
+}
 
 static inline bool xa_freestanding_type_requires_tagged_value(const XrType *type) {
     if (!type)

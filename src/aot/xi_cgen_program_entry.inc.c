@@ -298,7 +298,7 @@ static void emit_xrt_builtin_init(FILE *out, const CgBuiltinInitPlan *plan, cons
 static void emit_xrt_runtime_caps_expr(FILE *out, uint32_t caps) {
     struct CapName {
         uint32_t bit;
-        const char *name;
+        const char *name; /* owned: static string literal (cap_names table below) */
     };
     static const struct CapName cap_names[] = {
         {XR_AOT_CAP_CORO, "XR_AOT_CAP_CORO"},

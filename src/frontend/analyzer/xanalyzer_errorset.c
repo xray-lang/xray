@@ -23,7 +23,10 @@
 
 #include "xanalyzer_errorset.h"
 #include "xanalyzer_builtins.h"
+#include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_visitor.h"
+#include "../parser/xa_assertion_attr.h"
+#include "../parser/xtype_ref.h"
 #include "xa_effect_db.h"
 #include "xa_selection.h"
 #include "xtype_ref_resolve.h"
@@ -258,6 +261,10 @@ struct ErrorSetCtx {
     FunctionExprCaptureEntry *function_expr_captures;
     int function_expr_capture_count;
     int function_expr_capture_capacity;
+    bool collect_no_throw_lints;
+    AstNode **redundant_no_throw_tries;
+    int redundant_no_throw_try_count;
+    int redundant_no_throw_try_capacity;
     int callsite_inline_depth;
     FunctionValueTarget current_return_target;
     bool current_return_target_seen;
@@ -298,6 +305,8 @@ static bool es_summary_add_enum_selection(ErrorSetCtx *ctx, const XaSelection *s
 static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node);
 static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node);
 static void es_walk_block(ErrorSetCtx *ctx, AstNode *node);
+static bool es_function_has_no_throw_attr(AstNode *node);
+static void record_redundant_no_throw_try(ErrorSetCtx *ctx, AstNode *node);
 static FunctionValueTarget resolve_call_target_depth(ErrorSetCtx *ctx, AstNode *callee, int depth);
 static bool function_value_target_add(FunctionValueTarget *target, XaSymbol *sym,
                                       AstNode *function_expr);
@@ -363,6 +372,8 @@ static AstNode *function_like_body(AstNode *node) {
         return node->as.function_decl.body;
     if (node->type == AST_METHOD_DECL)
         return node->as.method_decl.body;
+    if (node->type == AST_FUNCTION_EXPR)
+        return node->as.function_expr.body;
     return NULL;
 }
 
@@ -1408,7 +1419,14 @@ static bool is_dynamic_function_call_target(XaAnalyzer *analyzer, AstNode *calle
         (resolved_sym->kind == XA_SYM_FUNCTION || resolved_sym->kind == XA_SYM_METHOD))
         return false;
     XrType *callee_type = xa_analyzer_get_node_type(analyzer, callee);
-    return callee_type && XR_TYPE_IS_FUNCTION(callee_type);
+    if (callee_type && XR_TYPE_IS_FUNCTION(callee_type))
+        return true;
+    /* The expression side table can be absent on a control-flow merge even
+     * though the resolved variable/parameter retains its function type. Do not
+     * turn that cache miss into a false NO_THROW result: a non-declaration
+     * function symbol without an exact target is dynamic and therefore
+     * incomplete (fail-closed). */
+    return resolved_sym && symbol_has_function_type(resolved_sym);
 }
 
 static bool es_walk_function_expr_body(ErrorSetCtx *ctx, AstNode *function_expr) {
@@ -1469,6 +1487,8 @@ static int function_like_param_count(AstNode *node) {
         return node->as.function_decl.param_count;
     if (node->type == AST_METHOD_DECL)
         return node->as.method_decl.param_count;
+    if (node->type == AST_FUNCTION_EXPR)
+        return node->as.function_expr.param_count;
     return 0;
 }
 
@@ -1476,7 +1496,7 @@ static XaSymbol *function_like_param_symbol(ErrorSetCtx *ctx, AstNode *node, XaS
                                             int index) {
     if (!ctx || !node || index < 0)
         return NULL;
-    if (node->type == AST_FUNCTION_DECL) {
+    if (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR) {
         FunctionDeclNode *fn = &node->as.function_decl;
         if (!fn->params || index >= fn->param_count || !fn->params[index] ||
             fn->params[index]->symbol_id == 0)
@@ -3790,6 +3810,19 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                     capture_catch_alias_state(ctx, &catch_alias_try_state);
                 ctx->function_value_control_depth--;
             }
+            if (ctx->collect_no_throw_lints && ctx->current_func &&
+                es_function_has_no_throw_attr(ctx->current_func->links.function_decl_node) &&
+                tc->catch_count > 0 && xa_effect_summary_is_nothrow(&try_summary)) {
+                bool has_panic_catch = false;
+                for (int i = 0; i < tc->catch_count; i++) {
+                    if (tc->catch_clauses[i] && tc->catch_clauses[i]->is_panic) {
+                        has_panic_catch = true;
+                        break;
+                    }
+                }
+                if (!has_panic_catch)
+                    record_redundant_no_throw_try(ctx, node);
+            }
             ctx->current_summary = outer_summary;
 
             if (tc->catch_count > 0) {
@@ -4250,6 +4283,90 @@ typedef struct FuncEntry {
     XaSymbol *sym;
 } FuncEntry;
 
+static void es_report_no_throw_violation(XaAnalyzer *analyzer, AstNode *node, XaSymbol *sym,
+                                         const XaEffectSummary *summary);
+
+typedef struct FunctionExprList {
+    AstNode **items;
+    int count;
+    int capacity;
+} FunctionExprList;
+
+static void collect_function_expr_pre(AstNode *node, void *userdata) {
+    FunctionExprList *list = (FunctionExprList *) userdata;
+    if (!list || !node || node->type != AST_FUNCTION_EXPR)
+        return;
+    if (list->count >= list->capacity) {
+        int next_capacity = list->capacity ? list->capacity * 2 : 16;
+        XR_REALLOC_OR_ABORT(list->items, (size_t) next_capacity * sizeof(AstNode *),
+                            "function expression list grow");
+        list->capacity = next_capacity;
+    }
+    list->items[list->count++] = node;
+}
+
+/* Function expressions do not own a declaration symbol/effect-id, but their
+ * function value still carries the task-216 bit. Infer the same complete/empty
+ * conclusion after named-function fixpoint and publish it on the expression's
+ * analyzed type. Stored and passed lambdas can then satisfy @no_throw without
+ * relying on a syntactic special case. */
+static void infer_function_expr_throw_effect(ErrorSetCtx *ctx, AstNode *node) {
+    if (!ctx || !node || node->type != AST_FUNCTION_EXPR)
+        return;
+    AstNode *body = function_like_body(node);
+    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, node);
+    if (!body || !type || type->kind != XR_KIND_FUNCTION)
+        return;
+
+    XaScope *saved_scope = ctx->analyzer->current_scope;
+    XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, node);
+    if (fn_scope)
+        ctx->analyzer->current_scope = fn_scope;
+    XaEffectSummary *saved_summary = ctx->current_summary;
+    XaSymbol *saved_func = ctx->current_func;
+    FunctionValueTarget saved_return_target = ctx->current_return_target;
+    bool saved_return_seen = ctx->current_return_target_seen;
+    bool saved_return_unknown = ctx->current_return_target_unknown;
+    FunctionValueAliasState saved_alias_state;
+    capture_function_value_alias_state(ctx, &saved_alias_state);
+    CatchAliasState saved_catch_alias_state;
+    capture_catch_alias_state(ctx, &saved_catch_alias_state);
+    const char *saved_catch_var = ctx->current_catch_var;
+    uint32_t saved_catch_symbol_id = ctx->current_catch_symbol_id;
+    XaEffectSummary *saved_caught = ctx->current_caught;
+    int saved_catch_alias_control_depth = ctx->current_catch_alias_control_depth;
+
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    ctx->current_summary = &summary;
+    ctx->current_func = NULL;
+    ctx->current_return_target = function_value_target_none();
+    ctx->current_return_target_seen = false;
+    ctx->current_return_target_unknown = false;
+    apply_function_expr_capture(ctx, node);
+    apply_function_expr_catch_capture(ctx, node);
+    es_walk_block(ctx, body);
+    XrFnThrowEffect effect =
+        xa_effect_summary_is_nothrow(&summary) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW;
+    xr_type_function_set_throw_effect(type, effect);
+    if (es_function_has_no_throw_attr(node) && effect != XR_FN_EFFECT_NO_THROW)
+        es_report_no_throw_violation(ctx->analyzer, node, NULL, &summary);
+    xa_effect_summary_clear(&summary);
+
+    ctx->current_summary = saved_summary;
+    ctx->current_func = saved_func;
+    ctx->current_return_target = saved_return_target;
+    ctx->current_return_target_seen = saved_return_seen;
+    ctx->current_return_target_unknown = saved_return_unknown;
+    restore_function_value_alias_state(ctx, &saved_alias_state);
+    ctx->current_catch_var = saved_catch_var;
+    ctx->current_catch_symbol_id = saved_catch_symbol_id;
+    restore_catch_alias_state(ctx, &saved_catch_alias_state);
+    ctx->current_caught = saved_caught;
+    ctx->current_catch_alias_control_depth = saved_catch_alias_control_depth;
+    ctx->analyzer->current_scope = saved_scope;
+}
+
 static void collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **out, int *count,
                               int *cap) {
     if (!node)
@@ -4284,6 +4401,398 @@ static void collect_functions(XaAnalyzer *analyzer, AstNode *node, FuncEntry **o
     }
 }
 
+/* ========== @no_throw Assertion (task 216) ========== */
+
+static bool es_function_has_no_throw_attr(AstNode *node) {
+    return xa_decl_has_attribute(node, ATTR_NO_THROW);
+}
+
+static void record_redundant_no_throw_try(ErrorSetCtx *ctx, AstNode *node) {
+    if (!ctx || !node)
+        return;
+    for (int i = 0; i < ctx->redundant_no_throw_try_count; i++) {
+        if (ctx->redundant_no_throw_tries[i] == node)
+            return;
+    }
+    if (ctx->redundant_no_throw_try_count >= ctx->redundant_no_throw_try_capacity) {
+        int new_capacity =
+            ctx->redundant_no_throw_try_capacity ? ctx->redundant_no_throw_try_capacity * 2 : 8;
+        XR_REALLOC_OR_ABORT(ctx->redundant_no_throw_tries,
+                            (size_t) new_capacity * sizeof(AstNode *),
+                            "redundant no-throw try lint grow");
+        ctx->redundant_no_throw_try_capacity = new_capacity;
+    }
+    ctx->redundant_no_throw_tries[ctx->redundant_no_throw_try_count++] = node;
+}
+
+static void emit_redundant_no_throw_try_lints(ErrorSetCtx *ctx) {
+    if (!ctx)
+        return;
+    for (int i = 0; i < ctx->redundant_no_throw_try_count; i++) {
+        AstNode *node = ctx->redundant_no_throw_tries[i];
+        XrLocation location = {.file = ctx->analyzer->current_file,
+                               .line = node ? (uint32_t) node->line : 0,
+                               .column = node ? (uint32_t) node->column : 0};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_HINT, XR_ERR_ANALYZE,
+            "redundant try/catch in @no_throw function: the try body is already proven not to "
+            "throw",
+            &location);
+    }
+}
+
+static const char *es_function_decl_name(AstNode *node, XaSymbol *sym) {
+    if (node) {
+        if ((node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR) &&
+            node->as.function_decl.name)
+            return node->as.function_decl.name;
+        if (node->type == AST_METHOD_DECL && node->as.method_decl.name)
+            return node->as.method_decl.name;
+    }
+    return (sym && sym->name) ? sym->name : "?";
+}
+
+static const char *es_unknown_reason_text(XaUnknownReasonSet reasons) {
+    if (reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH)
+        return "an open virtual dispatch target is not closed";
+    if (reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET)
+        return "an indirect call target is unknown";
+    if (reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING)
+        return "a native callee has no declared throw effect";
+    if (reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT)
+        return "an imported callee effect is missing";
+    if (reasons & XA_UNKNOWN_UNRESOLVED_CALLEE)
+        return "a callee effect is unresolved";
+    if (reasons & XA_UNKNOWN_ANALYSIS_LIMIT)
+        return "the effect analysis limit was reached";
+    if (reasons & XA_UNKNOWN_INVALID_PROGRAM)
+        return "the function contains prior semantic errors";
+    return "its escaping effect could not be proven empty";
+}
+
+/* Emit the definition-site @no_throw diagnostic (fail-closed): the summary must
+ * be complete with an empty escaping set. Lists the escaping error enums and any
+ * incompleteness reason so the author sees why the assertion failed. */
+static void es_report_no_throw_violation(XaAnalyzer *analyzer, AstNode *node, XaSymbol *sym,
+                                         const XaEffectSummary *summary) {
+    const char *name = es_function_decl_name(node, sym);
+    char errset[512];
+    size_t off = 0;
+    errset[0] = '\0';
+    if (summary) {
+        for (uint32_t i = 0; i < summary->escaping.count && off + 1 < sizeof(errset); i++) {
+            XrType *t = xa_effect_db_error_type_handle(analyzer->effect_db,
+                                                       summary->escaping.types[i].type_id);
+            const char *en = (t && XR_TYPE_IS_ENUM(t)) ? t->enum_type.enum_name : NULL;
+            if (!en)
+                continue;
+            int n = snprintf(errset + off, sizeof(errset) - off, "%s%s", off ? ", " : "", en);
+            if (n > 0)
+                off += (size_t) n;
+        }
+    }
+    bool incomplete = !summary || summary->completeness != XA_EFFECT_COMPLETE ||
+                      summary->unknown_reasons != XA_UNKNOWN_NONE;
+    char message[768];
+    if (off > 0 && incomplete) {
+        snprintf(message, sizeof(message),
+                 "@no_throw contract is not satisfied for '%s': may throw {%s}, and %s", name,
+                 errset, es_unknown_reason_text(summary ? summary->unknown_reasons : 0));
+    } else if (off > 0) {
+        snprintf(message, sizeof(message),
+                 "@no_throw contract is not satisfied for '%s': may throw {%s}", name, errset);
+    } else {
+        snprintf(message, sizeof(message), "@no_throw contract cannot be proven for '%s': %s", name,
+                 es_unknown_reason_text(summary ? summary->unknown_reasons : 0));
+    }
+    XrLocation location = {.file = sym ? sym->links.file_path : NULL,
+                           .line = node ? (uint32_t) node->line : 0,
+                           .column = 0};
+    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, message, &location);
+}
+
+static XrFnThrowEffect function_value_target_throw_effect(ErrorSetCtx *ctx,
+                                                          FunctionValueTarget target) {
+    if (!ctx || !function_value_target_is_exact(target))
+        return XR_FN_EFFECT_MAY_THROW;
+    for (int i = 0; i < target.target_count; i++) {
+        XaSymbol *symbol = target.target_symbols[i];
+        AstNode *function_expr = target.target_function_exprs[i];
+        if (symbol) {
+            if (symbol->links.throw_effect != XR_FN_EFFECT_NO_THROW)
+                return XR_FN_EFFECT_MAY_THROW;
+            continue;
+        }
+        XrType *type =
+            function_expr ? xa_analyzer_get_node_type(ctx->analyzer, function_expr) : NULL;
+        if (!type || type->kind != XR_KIND_FUNCTION ||
+            type->function.throw_effect != XR_FN_EFFECT_NO_THROW)
+            return XR_FN_EFFECT_MAY_THROW;
+    }
+    return XR_FN_EFFECT_NO_THROW;
+}
+
+/* Materialize the effect argument of a monomorphized HOF parameter after all
+ * concrete callees have their final bit. A merged/unknown target is MAY_THROW;
+ * the lowering therefore skips ERR_CHECK only for a closed all-NO target set. */
+static void publish_specialized_param_throw_effects(ErrorSetCtx *ctx) {
+    if (!ctx)
+        return;
+    for (int i = 0; i < ctx->specialized_param_target_count; i++) {
+        SpecializedParamTargetEntry *entry = &ctx->specialized_param_targets[i];
+        XaSymbol *func_sym = lookup_symbol_by_id(ctx, entry->function_id);
+        XaSymbol *param_sym = lookup_symbol_by_id(ctx, entry->param_id);
+        if (!func_sym || !param_sym || !symbol_has_function_type(param_sym))
+            continue;
+        XrFnThrowEffect effect = entry->unknown
+                                     ? XR_FN_EFFECT_MAY_THROW
+                                     : function_value_target_throw_effect(ctx, entry->target);
+        xr_type_function_set_throw_effect(param_sym->links.type, effect);
+
+        AstNode *fn_node = func_sym->links.function_decl_node;
+        XrType *fn_type = func_sym->links.type;
+        if (!fn_node || !fn_type || fn_type->kind != XR_KIND_FUNCTION)
+            continue;
+        int param_count = function_like_param_count(fn_node);
+        XaScope *fn_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, fn_node);
+        int limit = param_count < fn_type->function.param_count ? param_count
+                                                                : fn_type->function.param_count;
+        for (int p = 0; p < limit; p++) {
+            XaSymbol *candidate = function_like_param_symbol(ctx, fn_node, fn_scope, p);
+            if (!candidate || candidate->id != param_sym->id)
+                continue;
+            XrType *slot_type = xr_type_function_param_type(fn_type, p);
+            xr_type_function_set_throw_effect(slot_type, effect);
+            break;
+        }
+    }
+}
+
+static AstNode *no_throw_call_target_decl(ErrorSetCtx *ctx, AstNode *callee) {
+    callee = identity_source(callee);
+    if (!ctx || !callee)
+        return NULL;
+    if (callee->type == AST_FUNCTION_EXPR)
+        return callee;
+    XaSymbol *symbol = NULL;
+    if (callee->type == AST_VARIABLE) {
+        symbol = lookup_variable_symbol(ctx->analyzer, callee);
+    } else if (callee->type == AST_MEMBER_ACCESS) {
+        const XaSelection *selection = xa_analyzer_get_selection(ctx->analyzer, callee);
+        symbol = selection ? selection->target_symbol : NULL;
+    }
+    return symbol ? symbol->links.function_decl_node : NULL;
+}
+
+static XrParamNode **no_throw_decl_params(AstNode *node, int *out_count) {
+    if (out_count)
+        *out_count = 0;
+    if (!node)
+        return NULL;
+    if (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR) {
+        if (out_count)
+            *out_count = node->as.function_decl.param_count;
+        return node->as.function_decl.params;
+    }
+    if (node->type == AST_METHOD_DECL) {
+        if (out_count)
+            *out_count = node->as.method_decl.param_count;
+        return node->as.method_decl.params;
+    }
+    return NULL;
+}
+
+static const char *no_throw_argument_name(ErrorSetCtx *ctx, AstNode *expr) {
+    expr = identity_source(expr);
+    if (!expr)
+        return "callback";
+    if (expr->type == AST_FUNCTION_EXPR)
+        return expr->as.function_expr.name ? expr->as.function_expr.name : "<anonymous>";
+    if (expr->type == AST_VARIABLE) {
+        XaSymbol *symbol = lookup_variable_symbol(ctx->analyzer, expr);
+        return symbol && symbol->name
+                   ? symbol->name
+                   : (expr->as.variable.name ? expr->as.variable.name : "callback");
+    }
+    if (expr->type == AST_MEMBER_ACCESS && expr->as.member_access.name)
+        return expr->as.member_access.name;
+    return "callback";
+}
+
+static bool no_throw_expr_is_proven(ErrorSetCtx *ctx, AstNode *expr) {
+    if (!ctx || !expr)
+        return false;
+    FunctionValueTarget target = resolve_function_value_expr_target(ctx, expr, 0);
+    if (function_value_target_is_exact(target))
+        return function_value_target_throw_effect(ctx, target) == XR_FN_EFFECT_NO_THROW;
+    XrType *type = xa_analyzer_get_node_type(ctx->analyzer, identity_source(expr));
+    return type && type->kind == XR_KIND_FUNCTION &&
+           type->function.throw_effect == XR_FN_EFFECT_NO_THROW;
+}
+
+static bool no_throw_tref_requires_constraint(const XrTypeRef *tref) {
+    return tref && tref->kind == XR_TREF_FUNCTION && tref->no_throw;
+}
+
+static void report_no_throw_value_constraint(ErrorSetCtx *ctx, AstNode *site, const char *slot_name,
+                                             AstNode *value) {
+    if (!ctx || !site || !value || no_throw_expr_is_proven(ctx, value))
+        return;
+    const char *argument_name = no_throw_argument_name(ctx, value);
+    char message[512];
+    snprintf(message, sizeof(message),
+             "@no_throw function constraint '%s' rejects value '%s': it may throw or cannot be "
+             "proven non-throwing",
+             slot_name ? slot_name : "callback", argument_name);
+    XrLocation location = {.file = ctx->analyzer->current_file,
+                           .line = (uint32_t) value->line,
+                           .column = (uint32_t) value->column};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                               message, &location);
+}
+
+static void no_throw_constraint_scan_pre(AstNode *node, void *userdata) {
+    ErrorSetCtx *ctx = (ErrorSetCtx *) userdata;
+    if (!ctx || !node)
+        return;
+    if (node->type == AST_CALL_EXPR) {
+        AstNode *decl = no_throw_call_target_decl(ctx, node->as.call_expr.callee);
+        int param_count = 0;
+        XrParamNode **params = no_throw_decl_params(decl, &param_count);
+        int limit =
+            node->as.call_expr.arg_count < param_count ? node->as.call_expr.arg_count : param_count;
+        for (int i = 0; params && i < limit; i++) {
+            XrParamNode *param = params[i];
+            if (!param || !no_throw_tref_requires_constraint(param->type))
+                continue;
+            report_no_throw_value_constraint(ctx, node, param->name,
+                                             node->as.call_expr.arguments[i]);
+        }
+        return;
+    }
+    if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL ||
+        node->type == AST_OWNED_DECL || node->type == AST_SHARED_DECL) {
+        VarDeclNode *decl = &node->as.var_decl;
+        if (decl->initializer && no_throw_tref_requires_constraint(decl->type_annotation))
+            report_no_throw_value_constraint(ctx, node, decl->name, decl->initializer);
+        return;
+    }
+    if (node->type == AST_ASSIGNMENT) {
+        AssignmentNode *assignment = &node->as.assignment;
+        XaSymbol *target = lookup_symbol_by_id(ctx, assignment->symbol_id);
+        XrType *target_type = target ? target->links.type : NULL;
+        if (assignment->value && target_type && target_type->kind == XR_KIND_FUNCTION &&
+            target_type->function.throw_effect == XR_FN_EFFECT_NO_THROW)
+            report_no_throw_value_constraint(ctx, node, target->name, assignment->value);
+    }
+}
+
+static void validate_no_throw_value_constraints(ErrorSetCtx *ctx, AstNode *ast) {
+    if (ctx && ast)
+        xa_ast_walk(ast, no_throw_constraint_scan_pre, NULL, ctx);
+}
+
+typedef struct NoThrowConstraintLint {
+    AstNode *declaration;
+    XrParamNode *parameter;
+    int parameter_index;
+    int observed_calls;
+    bool rejected_may_throw;
+} NoThrowConstraintLint;
+
+typedef struct NoThrowConstraintLintList {
+    ErrorSetCtx *ctx;
+    NoThrowConstraintLint *items;
+    int count;
+    int capacity;
+} NoThrowConstraintLintList;
+
+static const char *no_throw_constraint_decl_name(AstNode *node) {
+    if (!node)
+        return "<anonymous>";
+    if (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR)
+        return node->as.function_decl.name ? node->as.function_decl.name : "<anonymous>";
+    if (node->type == AST_METHOD_DECL)
+        return node->as.method_decl.name ? node->as.method_decl.name : "<method>";
+    return "<function>";
+}
+
+static void collect_no_throw_constraint_lint_pre(AstNode *node, void *userdata) {
+    NoThrowConstraintLintList *list = (NoThrowConstraintLintList *) userdata;
+    if (!list || !node ||
+        (node->type != AST_FUNCTION_DECL && node->type != AST_FUNCTION_EXPR &&
+         node->type != AST_METHOD_DECL))
+        return;
+    const char *name = no_throw_constraint_decl_name(node);
+    if (name && strchr(name, '$'))
+        return; /* inferred monomorphized callback qualification, not source syntax */
+    int param_count = 0;
+    XrParamNode **params = no_throw_decl_params(node, &param_count);
+    for (int i = 0; params && i < param_count; i++) {
+        XrParamNode *param = params[i];
+        if (!param || !no_throw_tref_requires_constraint(param->type))
+            continue;
+        if (list->count >= list->capacity) {
+            int new_capacity = list->capacity ? list->capacity * 2 : 8;
+            XR_REALLOC_OR_ABORT(list->items, (size_t) new_capacity * sizeof(NoThrowConstraintLint),
+                                "no-throw constraint lint grow");
+            list->capacity = new_capacity;
+        }
+        NoThrowConstraintLint *entry = &list->items[list->count++];
+        memset(entry, 0, sizeof(*entry));
+        entry->declaration = node;
+        entry->parameter = param;
+        entry->parameter_index = i;
+    }
+}
+
+static void observe_no_throw_constraint_calls_pre(AstNode *node, void *userdata) {
+    NoThrowConstraintLintList *list = (NoThrowConstraintLintList *) userdata;
+    if (!list || !list->ctx || !node || node->type != AST_CALL_EXPR)
+        return;
+    AstNode *declaration = no_throw_call_target_decl(list->ctx, node->as.call_expr.callee);
+    if (!declaration)
+        return;
+    for (int i = 0; i < list->count; i++) {
+        NoThrowConstraintLint *entry = &list->items[i];
+        if (entry->declaration != declaration ||
+            entry->parameter_index >= node->as.call_expr.arg_count)
+            continue;
+        entry->observed_calls++;
+        AstNode *argument = node->as.call_expr.arguments[entry->parameter_index];
+        if (!no_throw_expr_is_proven(list->ctx, argument))
+            entry->rejected_may_throw = true;
+    }
+}
+
+static void emit_no_throw_constraint_lints(ErrorSetCtx *ctx, AstNode *ast) {
+    if (!ctx || !ast)
+        return;
+    NoThrowConstraintLintList list = {.ctx = ctx};
+    xa_ast_walk(ast, collect_no_throw_constraint_lint_pre, NULL, &list);
+    xa_ast_walk(ast, observe_no_throw_constraint_calls_pre, NULL, &list);
+    for (int i = 0; i < list.count; i++) {
+        NoThrowConstraintLint *entry = &list.items[i];
+        if (entry->rejected_may_throw)
+            continue;
+        char message[512];
+        snprintf(message, sizeof(message),
+                 "@no_throw constraint '%s' on '%s' has not rejected any may-throw value in %d "
+                 "observed call%s",
+                 entry->parameter && entry->parameter->name ? entry->parameter->name : "callback",
+                 no_throw_constraint_decl_name(entry->declaration), entry->observed_calls,
+                 entry->observed_calls == 1 ? "" : "s");
+        XrLocation location = {
+            .file = ctx->analyzer->current_file,
+            .line = entry->parameter ? (uint32_t) entry->parameter->line : 0,
+            .column = entry->parameter ? (uint32_t) entry->parameter->column : 0,
+        };
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_HINT, XR_ERR_ANALYZE, message,
+                                   &location);
+    }
+    xr_free(list.items);
+}
+
 /* ========== Public Entry Point ========== */
 
 void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
@@ -4299,7 +4808,10 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
     int func_count = 0, func_cap = 0;
     collect_functions(analyzer, ast, &funcs, &func_count, &func_cap);
 
-    if (func_count == 0)
+    FunctionExprList function_exprs = {0};
+    xa_ast_walk(ast, collect_function_expr_pre, NULL, &function_exprs);
+
+    if (func_count == 0 && function_exprs.count == 0)
         goto cleanup;
 
     /* Phase 2: Iterate the finite monotone effect/target domains to a real fixed point.
@@ -4316,9 +4828,59 @@ void xa_infer_error_sets(XaAnalyzer *analyzer, AstNode *ast) {
             break;
     }
 
+    /* Revisit asserted functions once with the stable fixpoint solely to
+     * collect redundant try/catch hints. This does not publish a second
+     * semantic truth; it reads the same finalized callee summaries. */
+    ctx.collect_no_throw_lints = true;
+    for (int i = 0; i < func_count; i++) {
+        if (es_function_has_no_throw_attr(funcs[i].node))
+            infer_function_error_set(&ctx, funcs[i].node, funcs[i].sym);
+    }
+    ctx.collect_no_throw_lints = false;
+
+    /* Phase 3: publish the typed throw-effect bit (task 216). After the fixpoint
+     * each function symbol's interned summary is authoritative. Derive the bit
+     * fail-closed — NO_THROW only when the summary is complete AND its escaping
+     * error set is empty — and mirror it onto both the symbol and its function
+     * type so IR lowering can decide error-check emission constructively by
+     * callee effect. The error *set* stays in the effect DB and never enters the
+     * type. */
+    for (int i = 0; i < func_count; i++) {
+        XaSymbol *sym = funcs[i].sym;
+        if (!sym)
+            continue;
+        const XaEffectSummary *summary =
+            xa_effect_db_get(analyzer->effect_db, sym->links.effect_id);
+        XrFnThrowEffect effect =
+            xa_effect_summary_is_nothrow(summary) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW;
+        sym->links.throw_effect = effect;
+        if (sym->links.type && sym->links.type->kind == XR_KIND_FUNCTION)
+            xr_type_function_set_throw_effect(sym->links.type, effect);
+        /* @no_throw assertion: verify the definition is provably nothrow
+         * (fail-closed — incomplete or non-empty escaping set is an error). */
+        if (es_function_has_no_throw_attr(funcs[i].node)) {
+            sym->links.has_no_throw_contract = true;
+            if (effect != XR_FN_EFFECT_NO_THROW)
+                es_report_no_throw_violation(analyzer, funcs[i].node, sym, summary);
+        }
+    }
+
+    /* Anonymous function values carry the same bit even though they do not
+     * have an effect-id-bearing declaration symbol. Named callees are already
+     * stable, so one expression pass is sufficient. */
+    for (int i = 0; i < function_exprs.count; i++)
+        infer_function_expr_throw_effect(&ctx, function_exprs.items[i]);
+
+    publish_specialized_param_throw_effects(&ctx);
+    validate_no_throw_value_constraints(&ctx, ast);
+    emit_no_throw_constraint_lints(&ctx, ast);
+    emit_redundant_no_throw_try_lints(&ctx);
+
 cleanup:
+    xr_free(function_exprs.items);
     xr_free(funcs);
     xr_free(ctx.function_return_targets);
     xr_free(ctx.specialized_param_targets);
+    xr_free(ctx.redundant_no_throw_tries);
     clear_function_expr_captures(&ctx);
 }

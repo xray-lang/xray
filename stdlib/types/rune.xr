@@ -2,10 +2,10 @@
 
 @native
 class rune {
-    toUInt32() -> uint32 @no_alloc
-    toString() -> string @may_alloc
-    isLetter() -> bool @no_alloc
-    isNumber() -> bool @no_alloc
-    isAlphanumeric() -> bool @no_alloc
-    isWhitespace() -> bool @no_alloc
+    toUInt32() -> uint32 @nothrow @no_alloc
+    toString() -> string @nothrow @may_alloc
+    isLetter() -> bool @nothrow @no_alloc
+    isNumber() -> bool @nothrow @no_alloc
+    isAlphanumeric() -> bool @nothrow @no_alloc
+    isWhitespace() -> bool @nothrow @no_alloc
 }

@@ -73,6 +73,11 @@ static const XrCliOptionSpec fmt_options[] = {
      "Omit trailing `,` when wrapping to multi-line (default: keep)"},
     XR_CLI_OPT_END};
 
+static const XrCliOptionSpec fix_options[] = {
+    {"annotate-no-throw", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Add @no_throw to named functions proven non-throwing"},
+    XR_CLI_OPT_END};
+
 static const XrCliOptionSpec compile_options[] = {
     {"output", 'o', XR_CLI_VALUE_STRING, false, false, "FILE", "Output file path"},
     {"format", 'f', XR_CLI_VALUE_STRING, false, false, "FMT", "Output format: bytecode, c, header"},
@@ -111,6 +116,8 @@ static const XrCliOptionSpec build_options[] = {
     {"dump-xi-evidence", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Dump subject-bound local Xi evidence"},
     {"dump-link-manifest", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Dump AOT link manifest"},
+    {"dump-residue", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Dump per-function abstraction-cost residue (task 217)"},
     {"dump-link-command", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Dump resolved AOT link command"},
     {"dry-run-link", 0, XR_CLI_VALUE_NONE, false, false, NULL,
@@ -126,6 +133,10 @@ static const XrCliOptionSpec build_options[] = {
      "Force recompile all AOT modules, ignoring cached objects"},
     {"lto", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Whole-program link-time optimization (cross-module inlining)"},
+    {"rc-guard", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Debug RC guard codegen: poison objects on release, abort on use-after-release (task 219)"},
+    {"verify-arc", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Force the RC/ownership verifier on after every lifetime/CFG-invalidating pass (task 219)"},
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     XR_CLI_OPT_END};
 
@@ -201,6 +212,8 @@ static XrCliCommandSpec cli_commands[] = {
     {"test", "Run tests", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},
+    {"fix", "Apply optional source annotations", NULL, fix_options, 1, -1, false, false, NULL, NULL,
+     0},
 
     /* Artifact commands */
     {"compile", "Compile to bytecode or C", NULL, compile_options, 1, 1, false, false, NULL, NULL,

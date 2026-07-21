@@ -7,6 +7,7 @@
 
 macro(add_xray_unit_test name source)
     add_executable(${name} ${source})
+    target_compile_definitions(${name} PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
     target_include_directories(${name} PRIVATE
         ${XRAY_COMMON_INCLUDES}
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -164,6 +165,7 @@ add_xray_unit_test(test_xi_intrinsic ir/test_xi_intrinsic.c)
 add_xray_unit_test(test_xi_effect ir/test_xi_effect.c)
 add_xray_unit_test(test_xi_escape ir/test_xi_escape.c)
 add_xray_unit_test(test_xi_own ir/test_xi_own.c)
+add_xray_unit_test(test_xi_arc_verify ir/test_xi_arc_verify.c)
 add_xray_unit_test(test_xi_tbaa ir/test_xi_tbaa.c)
 add_xray_unit_test(test_xi_range ir/test_xi_range.c)
 add_xray_unit_test(test_xi_bce ir/test_xi_bce.c)
@@ -187,6 +189,8 @@ add_xray_unit_test(test_xi_call_specialize ir/test_xi_call_specialize.c)
 add_xray_unit_test(test_xi_comptime ir/test_xi_comptime.c)
 add_xray_unit_test(test_xi_lto aot/test_xi_lto.c)
 add_xray_unit_test(test_xaot_driver aot/test_xaot_driver.c)
+add_xray_unit_test(test_cgen_verify_output aot/test_cgen_verify_output.c)
+set_tests_properties(test_cgen_verify_output PROPERTIES LABELS "aot;cgen;task-218")
 add_xray_unit_test(test_xi_backend_plan_contract aot/test_xi_backend_plan_contract.c)
 add_xray_unit_test(test_xrt_array aot/test_xrt_array.c)
 add_xray_unit_test(test_xrt_boolmap aot/test_xrt_boolmap.c)
@@ -229,6 +233,8 @@ add_xray_unit_test(test_mutex base/test_mutex.c)
 add_xray_unit_test(test_intmap base/test_intmap.c)
 add_xray_unit_test(test_mem_profiler base/test_mem_profiler.c)
 add_xray_unit_test(test_xmalloc base/test_xmalloc.c)
+add_xray_unit_test(test_process_shutdown base/test_process_shutdown.c)
+set_tests_properties(test_process_shutdown PROPERTIES LABELS "runtime;memory;task-218")
 
 # ============================================================================
 # coro/ — MPSC queue, work-stealing queue

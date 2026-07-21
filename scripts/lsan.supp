@@ -1,0 +1,17 @@
+# Task 218 defense line 4 — LeakSanitizer suppressions.
+#
+# RULES:
+#   * Every suppression MUST carry a one-line justification.
+#   * The suppression count is inventory: it only ever shrinks. A leak that can
+#     be released belongs in xr_process_shutdown(), not here.
+#   * LeakSanitizer only runs under ASan on Linux. Apple/Homebrew clang on
+#     macOS ships ASan WITHOUT a leak detector, so this file is consumed by the
+#     lsan_strict lane on Linux CI only (see scripts/run_lsan_strict.sh).
+#
+# Format: `leak:<substring of a frame's function/file>` (see LSan docs).
+
+# --- Genuinely unreleasable: OS / libc one-time allocations reclaimed at exit.
+leak:__cxa_thread_atexit_impl
+# ^ glibc thread-local dtor registry; owned by libc, freed by the OS on exit.
+leak:dyld
+# ^ dynamic loader bookkeeping; not owned by the process.

@@ -369,6 +369,7 @@ VALID_XI_OWN_USES = {
     'borrow',
     'consume',
     'method-args',
+    'pass',
     'stored-value',
 }
 
@@ -620,7 +621,15 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         if escape_alloc not in VALID_XI_ESCAPE_ALLOCS:
             die(f"{path}: Xi op '{name}' uses unknown escape-alloc "
                 f"'{escape_alloc}'")
-        own_use = _xi_get_kw_str(form, ':own-use', 'consume')
+        # Task 219 C5 (fail-closed operand ownership): every Xi op MUST declare
+        # its operand-ownership column explicitly. There is no default guess —
+        # an undeclared op is a compile error. This structurally eliminates the
+        # incident-5 class (a receiver silently defaulting to `consume`).
+        if _xi_get_kw(form, ':own-use') is None:
+            die(f"{path}: Xi op '{name}' is missing required :own-use "
+                f"(one of {sorted(VALID_XI_OWN_USES)}); ownership must be "
+                f"declared explicitly (task 219 C5, no default)")
+        own_use = _xi_get_kw_str(form, ':own-use')
         if own_use not in VALID_XI_OWN_USES:
             die(f"{path}: Xi op '{name}' uses unknown own-use "
                 f"'{own_use}'")
@@ -833,6 +842,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    XI_GEN_OWN_USE_BORROW = 1,')
     lines.append('    XI_GEN_OWN_USE_STORED_VALUE = 2,')
     lines.append('    XI_GEN_OWN_USE_METHOD_ARGS = 3,')
+    lines.append('    XI_GEN_OWN_USE_PASS = 4,')
     lines.append('    XI_GEN_OWN_USE__COUNT')
     lines.append('} XiGeneratedOwnUse;')
     lines.append('')
@@ -3271,6 +3281,7 @@ def _test_xi_ops_parser():
       :operands ((address $addr :type pointer))
       :results ((value $result))
       :result-ownership borrowed
+      :own-use borrow
       :effects (memory-read may-throw)
       :tbaa-group array
       :requires (valid-address)
@@ -3282,6 +3293,7 @@ def _test_xi_ops_parser():
       :arity 1
       :result-kind value
       :result-native-type i8
+      :own-use borrow
       :effects ()
       :requires ()
       :observable ()
@@ -3302,6 +3314,7 @@ def _test_xi_ops_parser():
     (define-xi-op xi.iter.new
       :class iterator
       :arity 1
+      :own-use consume
       :effects (side-effect memory-read memory-write)
       :requires ()
       :observable ()
@@ -3335,6 +3348,7 @@ def _test_xi_ops_parser():
       :class allocation
       :arity variadic
       :escape-alloc heap
+      :own-use consume
       :effects (side-effect memory-write allocates)
       :requires ()
       :observable ()
@@ -3415,6 +3429,41 @@ def _test_xi_ops_parser():
     assert 'xi_generated_op_default_flags' in header
     assert 'xi_generated_op_effects' in header
     assert 'case XI_MEM_LOAD: return XI_EFFECT_MEMORY_READ | XI_EFFECT_MAY_THROW;' in header
+
+    # Task 219 C5 (fail-closed operand ownership): an op that omits :own-use
+    # must be a hard compile error, not a silent `consume` default. This is the
+    # structural regression for incident 5 (nativeBytes receiver mis-consumed
+    # via a default guess). `pass` (identity-alias) must also round-trip.
+    missing_own_use = '''
+    (define-xi-op xi.needs.decl
+      :class pure
+      :arity 1
+      :effects ()
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode aot-c aot-verify))
+    '''
+    raised = False
+    try:
+        parse_xi_ops_def(missing_own_use)
+    except SystemExit:
+        raised = True
+    assert raised, "missing :own-use must fail closed (task 219 C5)"
+
+    pass_alias = '''
+    (define-xi-op xi.move
+      :class pure
+      :arity 1
+      :own-use pass
+      :effects ()
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode aot-c aot-verify))
+    '''
+    pass_ops = parse_xi_ops_def(pass_alias)
+    assert pass_ops[0].own_use == 'pass'
+    pass_header = generate_xi_ops_header(pass_ops)
+    assert 'case XI_MOVE: return XI_GEN_OWN_USE_PASS;' in pass_header
     print(" PASS", file=sys.stderr)
 
 def _test_xi_lowering_parser():
@@ -3423,6 +3472,7 @@ def _test_xi_lowering_parser():
     (define-xi-op xi.add
       :class arithmetic
       :arity 2
+      :own-use borrow
       :effects ()
       :requires ()
       :observable ()
@@ -3430,6 +3480,7 @@ def _test_xi_lowering_parser():
     (define-xi-op xi.copy
       :class pure
       :arity 1
+      :own-use borrow
       :effects ()
       :requires ()
       :observable ()
@@ -3437,6 +3488,7 @@ def _test_xi_lowering_parser():
     (define-xi-op xi.phi
       :class pure
       :arity variadic
+      :own-use pass
       :effects ()
       :requires ()
       :observable ()
@@ -3445,6 +3497,7 @@ def _test_xi_lowering_parser():
     (define-xi-op xi.extract
       :class call
       :arity 1
+      :own-use borrow
       :effects ()
       :requires ()
       :observable ()
@@ -3453,6 +3506,7 @@ def _test_xi_lowering_parser():
     (define-xi-op xi.vec.add
       :class vector
       :arity 2
+      :own-use borrow
       :effects ()
       :requires ()
       :observable ()
@@ -3687,6 +3741,7 @@ def _test_xi_lowering_parser():
     (define-xi-op xi.add
       :class arithmetic
       :arity 2
+      :own-use borrow
       :effects ()
       :requires ()
       :observable ()
@@ -3711,6 +3766,7 @@ def _test_xi_verifier_parser():
     (define-xi-op xi.eq
       :class comparison
       :arity 2
+      :own-use borrow
       :effects ()
       :requires ()
       :observable ()
@@ -3718,6 +3774,7 @@ def _test_xi_verifier_parser():
     (define-xi-op xi.select
       :class pure
       :arity 3
+      :own-use consume
       :effects ()
       :requires ()
       :observable ()
@@ -3725,6 +3782,7 @@ def _test_xi_verifier_parser():
     (define-xi-op xi.extract
       :class call
       :arity 1
+      :own-use borrow
       :effects ()
       :requires ()
       :observable ()

@@ -152,6 +152,12 @@ struct XaSymbolLinks {
     bool is_c_export;  // @c_export AOT C ABI wrapper
     const char *c_export_symbol;
     XaEffectId effect_id;  // Canonical analyzer-owned effect summary id (0 = not inferred yet)
+    // Error-effect "may-throw" bit (task 216), derived from the effect summary
+    // after the effect-DB fixpoint: NO_THROW iff the summary is complete AND its
+    // escaping error set is empty; MAY_THROW otherwise (fail-closed default).
+    // Mirrored onto the function type (links.type->function.throw_effect) and
+    // consumed by IR lowering to emit error checks constructively.
+    XrFnThrowEffect throw_effect;
     XaAllocEffectId alloc_effect_id;  // Canonical allocation summary (0 = not inferred yet)
     XaIntrinsicId intrinsic_id;       // canonical source-semantic identity, never name-derived
     /* Stable publication snapshot.  alloc_effect_id is local to one analyzer
@@ -162,6 +168,10 @@ struct XaSymbolLinks {
     uint64_t alloc_fingerprint;
     bool alloc_effect_complete;
     bool has_no_alloc_contract;
+    // @no_throw assertion (task 216): the definition asserts it raises no error;
+    // the analyzer verifies the effect summary is complete with an empty escaping
+    // set after the effect-DB fixpoint, else it is a compile error.
+    bool has_no_throw_contract;
 
     // Call-site inferred parameter types (for unannotated params)
     // Populated by xa_visit_call when callee has unannotated parameters.

@@ -16,6 +16,7 @@
 #include "xparse_internal.h"
 #include "xtype_ref.h"
 #include "xtype_scope.h"
+#include "xa_assertion_attr.h"
 #include "../../runtime/xerror_codes.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
@@ -356,7 +357,43 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
         xr_parser_error(parser, "type nesting too deep (max 1000 levels)");
         return xr_tref_error(parser->compiler_session);
     }
+    /* Optional assertion-attribute prefix on a function type, e.g.
+     * `@no_throw @no_suspend (int) -> int`. Only registry attributes
+     * marked usable-in-function-type are accepted here. */
+    bool require_no_suspend = false;
+    bool require_no_throw = false;
+    while (xr_parser_check(parser, TK_AT)) {
+        xr_parser_advance(parser);
+        if (!xr_parser_check(parser, TK_NAME)) {
+            xr_parser_error(parser, "expected attribute name after '@' in a type");
+            parser->recursion_depth--;
+            return xr_tref_error(parser->compiler_session);
+        }
+        Token name = parser->current;
+        const XaAssertionAttrInfo *info = xa_assertion_attr_by_name(name.start, name.length);
+        if (!info || !info->usable_in_function_type) {
+            xr_parser_error(parser,
+                            "only @no_throw and @no_suspend may constrain a function type in "
+                            "this position");
+            parser->recursion_depth--;
+            return xr_tref_error(parser->compiler_session);
+        }
+        xr_parser_advance(parser);
+        if (info->kind == ATTR_NO_SUSPEND)
+            require_no_suspend = true;
+        else if (info->kind == ATTR_NO_THROW)
+            require_no_throw = true;
+    }
     XrTypeRef *result = parse_type_annotation_inner(parser);
+    if (require_no_suspend || require_no_throw) {
+        if (result && result->kind == XR_TREF_FUNCTION) {
+            result->no_suspend = require_no_suspend;
+            result->no_throw = require_no_throw;
+        } else {
+            xr_parser_error(parser,
+                            "@no_throw/@no_suspend may only prefix a function type '(...) -> R'");
+        }
+    }
     parser->recursion_depth--;
     return result;
 }

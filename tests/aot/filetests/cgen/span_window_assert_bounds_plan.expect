@@ -1,0 +1,5 @@
+args=--dump-xaot-plan
+contains=kind=window evidence=recv_agg+pod+range+no_clobber+assert_guard drop=bounds
+c_contains=XR_ASSUME(_start >= 0 && _start <= _src.length - INT64_C(2))
+c_not_contains=xrt_index_oob(_start, _src.length)
+c_not_contains=error[E0655]

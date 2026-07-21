@@ -87,7 +87,8 @@ typedef struct XrAttribute {
     // @intrinsic("canonical.id") (compiler-owned stdlib semantic identity).
     // Arena-allocated, NUL-terminated; NULL when absent.
     const char *str_arg;
-    // Bitmask of XR_DERIVE_* for ATTR_DERIVE; 0 for other attributes.
+    // Bitmask of XR_DERIVE_* for ATTR_DERIVE, or XA_ZERO_COST_ALLOW_* for
+    // ATTR_ZERO_COST (@zero_cost(allow: ...) exempted categories); 0 otherwise.
     uint32_t derive_flags;
 } XrAttribute;
 

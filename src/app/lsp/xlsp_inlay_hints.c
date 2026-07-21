@@ -12,6 +12,8 @@
 #include "xlsp_utils.h"
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../frontend/analyzer/xanalyzer.h"
+#include "../../frontend/analyzer/xa_effect_db.h"
+#include "../../frontend/analyzer/xanalyzer_symbol.h"
 #include <stdlib.h>
 #include <string.h>
 #include "../../base/xmalloc.h"
@@ -52,6 +54,55 @@ static const char *param_mode_tooltip(XrParamMode mode, char *buf, size_t cap) {
         return NULL;
     snprintf(buf, cap, "parameter mode: %s", xr_param_mode_label(mode));
     return buf;
+}
+
+static XaSymbol *function_decl_symbol(XaAnalyzer *analyzer, AstNode *node) {
+    if (!analyzer || !node || node->type != AST_FUNCTION_DECL)
+        return NULL;
+    uint32_t id = node->as.function_decl.symbol_id;
+    XaSymbol *symbol = id ? xa_scope_lookup_by_id(analyzer->global_scope, id) : NULL;
+    if (!symbol && node->as.function_decl.name)
+        symbol = xa_analyzer_lookup_deep(analyzer, node->as.function_decl.name);
+    return symbol;
+}
+
+static void format_throw_effect_hint(XaAnalyzer *analyzer, XaSymbol *symbol, char *label,
+                                     size_t capacity) {
+    if (!label || capacity == 0)
+        return;
+    label[0] = '\0';
+    if (!analyzer || !symbol)
+        return;
+    if (symbol->links.throw_effect == XR_FN_EFFECT_NO_THROW) {
+        snprintf(label, capacity, " · no_throw ✓");
+        return;
+    }
+    size_t offset = (size_t) snprintf(label, capacity, " · may throw");
+    const XaEffectSummary *summary = xa_effect_db_get(analyzer->effect_db, symbol->links.effect_id);
+    if (!summary || summary->escaping.count == 0 || offset + 3 >= capacity)
+        return;
+    label[offset++] = ' ';
+    label[offset++] = '{';
+    bool wrote_name = false;
+    for (uint32_t i = 0; i < summary->escaping.count && offset + 2 < capacity; i++) {
+        XrType *type =
+            xa_effect_db_error_type_handle(analyzer->effect_db, summary->escaping.types[i].type_id);
+        const char *name = type && XR_TYPE_IS_ENUM(type) ? type->enum_type.enum_name : NULL;
+        if (!name)
+            continue;
+        int written =
+            snprintf(label + offset, capacity - offset, "%s%s", wrote_name ? ", " : "", name);
+        if (written < 0 || (size_t) written >= capacity - offset) {
+            label[capacity - 1] = '\0';
+            return;
+        }
+        offset += (size_t) written;
+        wrote_name = true;
+    }
+    if (offset + 1 < capacity) {
+        label[offset++] = '}';
+        label[offset] = '\0';
+    }
 }
 
 // Check if line is in range
@@ -221,10 +272,23 @@ static void collect_hints(XrJsonValue *hints, AstNode *node, AstNode *root, XrLs
             }
             break;
         }
-        case AST_FUNCTION_DECL:
+        case AST_FUNCTION_DECL: {
+            if (show_types && analyzer && in_range(line, range)) {
+                XaSymbol *symbol = function_decl_symbol(analyzer, node);
+                char label[256];
+                format_throw_effect_hint(analyzer, symbol, label, sizeof(label));
+                if (label[0]) {
+                    const char *name = node->as.function_decl.name;
+                    int char_pos = (node->column > 0 ? node->column - 1 : 0) +
+                                   (name ? (int) strlen(name) + 3 : 0);
+                    xjson_array_push(hints, make_hint(line, char_pos, label, XLSP_HINT_TYPE,
+                                                      "inferred error effect"));
+                }
+            }
             collect_hints(hints, node->as.function_decl.body, root, range, analyzer, show_types,
                           show_params);
             break;
+        }
         case AST_IF_STMT:
             collect_hints(hints, node->as.if_stmt.condition, root, range, analyzer, show_types,
                           show_params);

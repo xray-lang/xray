@@ -10,8 +10,8 @@
 
 typedef struct CgArrayElemInfo {
     const XrType *type;
-    const char *elem_name;
-    const char *ctype;
+    const char *elem_name; /* owned: static element-kind token (e.g. "XR_ELEM_F32") */
+    const char *ctype;     /* owned: static ctype literal from cg_struct_native_c_type */
     XrRep rep;
 } CgArrayElemInfo;
 
@@ -35,7 +35,7 @@ static void emit_array_i64_arg(FILE *out, const XiValue *value);
 
 typedef struct CgFixedArrayLaneInfo {
     const XiValue *stack_origin;
-    const char *ctype;
+    const char *ctype; /* owned: static ctype literal from cg_struct_native_c_type */
     XrRep rep;
     uint8_t native_type;
     uint32_t count;
@@ -5124,7 +5124,7 @@ typedef struct CgArrayInlineMap {
     CgArrayElemInfo src_info;
     CgArrayElemInfo dst_info;
     const XiFunc *target;
-    const char *target_prefix;
+    const char *target_prefix; /* owned: XiModule C-name prefix (Xi arena)/NULL; local emit info */
     XrRep param_rep;
     XrRep return_rep;
 } CgArrayInlineMap;
@@ -5312,7 +5312,7 @@ static bool emit_typed_array_filter_inline_stmt(XiCgenCtx *ctx, FILE *out, const
 typedef struct CgArrayInlineReduce {
     CgArrayElemInfo src_info;
     const XiFunc *target;
-    const char *target_prefix;
+    const char *target_prefix; /* owned: XiModule C-name prefix (Xi arena)/NULL; local emit info */
     XrRep acc_rep;
     XrRep elem_param_rep;
 } CgArrayInlineReduce;

@@ -1,0 +1,15 @@
+// @no_throw on a function that directly raises must be rejected at the
+// definition (task 216, fail-closed assertion).
+enum IoErr { Boom }
+
+@no_throw
+fn throwsBoom() {
+    throw IoErr.Boom
+}
+
+fn main() {
+    try {
+        throwsBoom()
+    } catch (e: IoErr) {
+    }
+}

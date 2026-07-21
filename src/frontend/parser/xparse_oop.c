@@ -12,6 +12,7 @@
  */
 
 #include "xparse_internal.h"
+#include "xa_assertion_attr.h"
 #include "../../base/xchecks.h"
 #include "xast.h"
 #include "xtype_ref.h"
@@ -708,12 +709,12 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         XrAttribute *attribute = xr_parse_single_attribute(parser);
         if (!attribute)
             return NULL;
-        if (attribute->kind != ATTR_NO_ALLOC && attribute->kind != ATTR_INTRINSIC) {
-            xr_parser_error(parser, "only @no_alloc and compiler @intrinsic can annotate a method");
+        if (!xr_parser_validate_member_attr(parser, attribute))
             return NULL;
-        }
         XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attribute);
     }
+    if (!xr_parser_reject_duplicate_assertion_attrs(parser, attributes, attr_count))
+        return NULL;
 
     // Parse access modifiers (optional)
     bool is_private = false;
@@ -890,7 +891,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         AstNode *field = xr_ast_field_decl(parser->compiler_session, name, field_type, is_private,
                                            is_static, initializer, name_line);
         if (attr_count > 0) {
-            xr_parser_error(parser, "@no_alloc can only annotate a function or method");
+            xr_parser_error(parser,
+                            "attributes can only annotate a function or method, not a field");
             return NULL;
         }
         if (field) {
@@ -1841,6 +1843,22 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
 // object-type fields tolerate `const` in xparse_type.c.  All forms allow an
 // optional trailing semicolon.
 AstNode *xr_parse_interface_member(Parser *parser) {
+    XrAttribute **attributes = NULL;
+    int attr_count = 0;
+    int attr_capacity = 0;
+    while (xr_parser_check(parser, TK_AT)) {
+        XrAttribute *attribute = xr_parse_single_attribute(parser);
+        if (!attribute)
+            return NULL;
+        if (!xa_assertion_attr_allows_position(attribute->kind, XA_ASSERT_POS_METHOD)) {
+            xr_parser_error(parser, "only assertion attributes may annotate an interface method");
+            return NULL;
+        }
+        XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attribute);
+    }
+    if (!xr_parser_reject_duplicate_assertion_attrs(parser, attributes, attr_count))
+        return NULL;
+
     if (xr_parser_match(parser, TK_OPERATOR)) {
         int member_line = parser->previous.line;
         xr_parser_consume(parser, TK_NAME, "expected named operator after 'operator'");
@@ -1853,9 +1871,12 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         xr_parser_consume(parser, TK_ARROW, "expected '->' after 'operator len()'");
         XrTypeRef *return_type = xr_parse_type_annotation(parser);
         xr_parser_match(parser, TK_SEMICOLON);
-        return xr_ast_interface_method(parser->compiler_session,
-                                       ast_strdup(parser->compiler_session, "__operator_len"), NULL,
-                                       0, return_type, member_line);
+        AstNode *method = xr_ast_interface_method(
+            parser->compiler_session, ast_strdup(parser->compiler_session, "__operator_len"), NULL,
+            0, return_type, member_line);
+        method->as.interface_method.attributes = attributes;
+        method->as.interface_method.attr_count = attr_count;
+        return method;
     }
 
     // Optional `const` modifier — only valid for property signatures.
@@ -1868,6 +1889,10 @@ AstNode *xr_parse_interface_member(Parser *parser) {
 
     // Property signature: `name: type`
     if (xr_parser_check(parser, TK_COLON)) {
+        if (attr_count > 0) {
+            xr_parser_error(parser, "assertion attributes cannot annotate an interface property");
+            return NULL;
+        }
         xr_parser_advance(parser);  // consume ':'
         XrTypeRef *prop_type = xr_parse_type_annotation(parser);
         xr_parser_match(parser, TK_SEMICOLON);  // optional terminator
@@ -1925,8 +1950,11 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     // Interface method signature ends with semicolon (optional)
     xr_parser_match(parser, TK_SEMICOLON);
 
-    return xr_ast_interface_method(parser->compiler_session, member_name, params, param_count,
-                                   return_type, member_line);
+    AstNode *method = xr_ast_interface_method(parser->compiler_session, member_name, params,
+                                              param_count, return_type, member_line);
+    method->as.interface_method.attributes = attributes;
+    method->as.interface_method.attr_count = attr_count;
+    return method;
 }
 
 /* ========== Enum Declaration Parsing ========== */
@@ -2212,12 +2240,12 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
             XrAttribute *attribute = xr_parse_single_attribute(parser);
             if (!attribute)
                 break;
-            if (attribute->kind != ATTR_NO_ALLOC) {
-                xr_parser_error(parser, "only @no_alloc can annotate an enum method");
+            if (!xr_parser_validate_enum_method_attr(parser, attribute))
                 break;
-            }
             XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attribute);
         }
+        if (!xr_parser_reject_duplicate_assertion_attrs(parser, attributes, attr_count))
+            break;
 
         bool is_static = false;
         if (xr_parser_match(parser, TK_STATIC)) {

@@ -12,7 +12,11 @@ extern "C" dylib("m") {
     fn fmax(x: float64, y: float64) -> float64
 }
 
-const left = b"ABC"
+// `left` is passed to C strlen, which reads until a NUL terminator. Byte
+// literals are exactly-N-byte arrays (no implicit terminator), so the input
+// must carry its own NUL to make the FFI call well-formed; otherwise strlen
+// runs off the end of the 3-byte array (an out-of-bounds read by construction).
+const left = b"ABC\0"
 const right = b"ABD"
 
 print(unsafe { strlen(left.ptr()) })

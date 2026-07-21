@@ -1,0 +1,27 @@
+/*
+ * Canonical system-layer assertion-attribute registry (task 217 §3.1).
+ *
+ * XA_ASSERTION_ATTR(name, attr_enum, proof_source, verify_stage, positions,
+ *                   usable_in_function_type)
+ *
+ *   name         source spelling without the leading '@' (bare token)
+ *   attr_enum    AttributeKind carried on the parsed AST attribute
+ *   proof_source effect analysis that proves the assertion (fail-closed)
+ *   verify_stage compiler stage that enforces the contract
+ *   positions    bitmask of XaAssertionPosition the attribute may modify
+ *   usable_in_function_type  may appear as a `@name fn(...) -> T` type prefix
+ *
+ * Every column is metadata only: the shared parser/formatter/analyzer paths
+ * read this table instead of hard-coding one branch per attribute.  Adding a
+ * member is one line here plus its proof-source wiring — there is no scattered
+ * per-attribute plumbing to keep in sync.
+ */
+
+XA_ASSERTION_ATTR(no_alloc, ATTR_NO_ALLOC, XA_ASSERT_PROOF_ALLOC, XA_ASSERT_STAGE_ANALYZER,
+                  XA_ASSERT_POS_FN | XA_ASSERT_POS_METHOD, false)
+XA_ASSERTION_ATTR(no_throw, ATTR_NO_THROW, XA_ASSERT_PROOF_THROW, XA_ASSERT_STAGE_ANALYZER,
+                  XA_ASSERT_POS_FN | XA_ASSERT_POS_METHOD | XA_ASSERT_POS_FN_TYPE, true)
+XA_ASSERTION_ATTR(no_suspend, ATTR_NO_SUSPEND, XA_ASSERT_PROOF_SUSPEND, XA_ASSERT_STAGE_ANALYZER,
+                  XA_ASSERT_POS_FN | XA_ASSERT_POS_METHOD | XA_ASSERT_POS_FN_TYPE, true)
+XA_ASSERTION_ATTR(zero_cost, ATTR_ZERO_COST, XA_ASSERT_PROOF_CGEN_SHAPE, XA_ASSERT_STAGE_AOT_BACKEND,
+                  XA_ASSERT_POS_FN | XA_ASSERT_POS_METHOD, false)

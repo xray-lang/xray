@@ -16,9 +16,11 @@
 
 #include "../../api/xisolate_profile.h"
 #include "../../module/xbytecode_io.h"
+#include "../../runtime/xr_process_shutdown.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "xray_vm.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int usage(void) {
@@ -29,6 +31,7 @@ static int usage(void) {
 }
 
 int main(int argc, char **argv) {
+    atexit(xr_process_shutdown);
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 

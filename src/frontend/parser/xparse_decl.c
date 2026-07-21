@@ -15,6 +15,7 @@
 
 #include "xparse_internal.h"
 #include "xtype_ref.h"
+#include "xa_assertion_attr.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include "../../base/xutf8.h"
@@ -178,6 +179,36 @@ static bool xr_derive_target_bit(Token token, uint32_t *bit_out) {
     return false;
 }
 
+/* Map a @zero_cost(allow: ...) category spelling to its allow-mask bit
+ * (task 217 §3.3).  Names are the user-facing category labels. */
+static bool xr_zero_cost_category_bit(Token token, uint32_t *bit_out) {
+    if (token.length == 7 && memcmp(token.start, "runtime", 7) == 0) {
+        *bit_out = XA_ZERO_COST_ALLOW_RUNTIME;
+        return true;
+    }
+    if (token.length == 5 && memcmp(token.start, "alloc", 5) == 0) {
+        *bit_out = XA_ZERO_COST_ALLOW_ALLOC;
+        return true;
+    }
+    if (token.length == 5 && memcmp(token.start, "error", 5) == 0) {
+        *bit_out = XA_ZERO_COST_ALLOW_ERROR;
+        return true;
+    }
+    if (token.length == 6 && memcmp(token.start, "bounds", 6) == 0) {
+        *bit_out = XA_ZERO_COST_ALLOW_BOUNDS;
+        return true;
+    }
+    if (token.length == 3 && memcmp(token.start, "box", 3) == 0) {
+        *bit_out = XA_ZERO_COST_ALLOW_BOX;
+        return true;
+    }
+    if (token.length == 5 && memcmp(token.start, "lanes", 5) == 0) {
+        *bit_out = XA_ZERO_COST_ALLOW_LANES;
+        return true;
+    }
+    return false;
+}
+
 // Parse single attribute: @test, @test(skip), @test(timeout: 30), etc.
 XrAttribute *xr_parse_single_attribute(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_single_attribute: NULL parser");
@@ -312,8 +343,52 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
             xr_parser_error(parser, "@interrupt requires an ABI string, e.g. @interrupt(\"irq\")");
         }
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @interrupt");
-    } else if (name_token.length == 8 && memcmp(name_token.start, "no_alloc", 8) == 0) {
-        attr->kind = ATTR_NO_ALLOC;
+    } else if (name_token.length == 9 && memcmp(name_token.start, "zero_cost", 9) == 0) {
+        /* @zero_cost / @zero_cost(allow: bounds, box, ...) — AOT shape contract
+         * (task 217 §3.3).  The optional allow list exempts residue categories;
+         * the bitmask lives in derive_flags and is consumed by the AOT verifier.
+         * A bare @zero_cost forbids every category. */
+        attr->kind = ATTR_ZERO_COST;
+        if (xr_parser_match(parser, TK_LPAREN)) {
+            xr_parser_consume(parser, TK_NAME, "expected 'allow' in @zero_cost(...)");
+            Token kw = parser->previous;
+            if (!(kw.length == 5 && memcmp(kw.start, "allow", 5) == 0))
+                xr_parser_error(parser, "@zero_cost only accepts 'allow: <categories>'");
+            xr_parser_consume(parser, TK_COLON, "expected ':' after 'allow'");
+            uint32_t seen_cats = 0;
+            do {
+                xr_parser_consume(
+                    parser, TK_NAME,
+                    "expected a residue category: runtime, alloc, error, bounds, box, or lanes");
+                Token cat = parser->previous;
+                uint32_t bit = 0;
+                char name_buf[32];
+                int n = cat.length < (int) sizeof(name_buf) - 1 ? cat.length
+                                                                : (int) sizeof(name_buf) - 1;
+                memcpy(name_buf, cat.start, (size_t) n);
+                name_buf[n] = '\0';
+                if (!xr_zero_cost_category_bit(cat, &bit)) {
+                    char msg[176];
+                    snprintf(msg, sizeof(msg),
+                             "unknown @zero_cost category '%s'; expected runtime, alloc, error, "
+                             "bounds, box, or lanes",
+                             name_buf);
+                    xr_parser_error(parser, msg);
+                } else if ((seen_cats & bit) != 0) {
+                    char msg[128];
+                    snprintf(msg, sizeof(msg), "duplicate @zero_cost category '%s'", name_buf);
+                    xr_parser_error(parser, msg);
+                } else {
+                    seen_cats |= bit;
+                    attr->derive_flags |= bit;
+                }
+            } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
+            xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @zero_cost");
+        }
+    } else if (xa_assertion_attr_by_name(name_token.start, name_token.length) != NULL) {
+        /* @no_alloc / @no_throw / ... — every assertion attribute is spelled and
+         * kind-mapped from the shared registry (task 217 §3.1). */
+        attr->kind = xa_assertion_attr_by_name(name_token.start, name_token.length)->kind;
     } else if (name_token.length == 9 && memcmp(name_token.start, "intrinsic", 9) == 0) {
         attr->kind = ATTR_INTRINSIC;
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after @intrinsic");
@@ -430,6 +505,72 @@ static AstNode *mark_direct_visibility(AstNode *declaration, bool is_exported) {
     return declaration;
 }
 
+/* Reject a repeated assertion attribute (e.g. `@no_alloc @no_alloc fn`).  The
+ * registry decides which kinds are assertions, so no per-attribute branch is
+ * needed here. */
+bool xr_parser_reject_duplicate_assertion_attrs(Parser *parser, XrAttribute **attrs, int count) {
+    for (int i = 0; i < count; i++) {
+        if (!attrs[i])
+            continue;
+        const XaAssertionAttrInfo *info = xa_assertion_attr_by_kind(attrs[i]->kind);
+        if (!info)
+            continue;
+        for (int j = 0; j < i; j++) {
+            if (attrs[j] && attrs[j]->kind == attrs[i]->kind) {
+                char msg[96];
+                snprintf(msg, sizeof(msg), "duplicate @%s assertion attribute", info->name);
+                xr_parser_error(parser, msg);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/* Declaration-site validation for assertion attributes: they may only modify a
+ * function item (methods flow through the OOP parser), and may not repeat. */
+bool xr_parser_reject_invalid_assertion_attrs(Parser *parser, XrAttribute **attrs, int count,
+                                              bool target_is_fn) {
+    for (int i = 0; i < count; i++) {
+        if (!attrs[i])
+            continue;
+        const XaAssertionAttrInfo *info = xa_assertion_attr_by_kind(attrs[i]->kind);
+        if (!info)
+            continue;
+        bool allows_fn = (info->positions & XA_ASSERT_POS_FN) != 0;
+        if (!target_is_fn || !allows_fn) {
+            char msg[96];
+            snprintf(msg, sizeof(msg), "@%s can only annotate a function", info->name);
+            xr_parser_error(parser, msg);
+            return false;
+        }
+    }
+    return xr_parser_reject_duplicate_assertion_attrs(parser, attrs, count);
+}
+
+/* Member-position validation shared by class/struct methods and fields: an
+ * attribute must be an assertion attribute usable on a method, or the
+ * compiler-owned @intrinsic identity. */
+bool xr_parser_validate_member_attr(Parser *parser, XrAttribute *attr) {
+    if (!attr)
+        return true;
+    if (attr->kind == ATTR_INTRINSIC ||
+        xa_assertion_attr_allows_position(attr->kind, XA_ASSERT_POS_METHOD))
+        return true;
+    xr_parser_error(
+        parser, "only assertion attributes and the compiler @intrinsic attribute can annotate a "
+                "method");
+    return false;
+}
+
+/* Enum-method position validation: assertion attributes only (no @intrinsic). */
+bool xr_parser_validate_enum_method_attr(Parser *parser, XrAttribute *attr) {
+    if (attr && xa_assertion_attr_allows_position(attr->kind, XA_ASSERT_POS_METHOD))
+        return true;
+    xr_parser_error(parser, "only assertion attributes can annotate an enum method");
+    return false;
+}
+
 // Parse attributed declaration: @test fn ..., @native class ..., etc.
 static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     XrAttribute **attributes = NULL;
@@ -453,7 +594,6 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     bool is_c_export = attrs_has(attributes, attr_count, ATTR_C_EXPORT);
     bool is_naked = attrs_has(attributes, attr_count, ATTR_NAKED);
     bool is_interrupt = attrs_has(attributes, attr_count, ATTR_INTERRUPT);
-    bool is_no_alloc = attrs_has(attributes, attr_count, ATTR_NO_ALLOC);
     bool has_symbol_layout_attr = attrs_has_symbol_layout_attr(attributes, attr_count);
     uint32_t derive_flags = attrs_derive_flags(attributes, attr_count);
     if (is_c_export && parser->scope_depth > 0) {
@@ -466,10 +606,12 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
                         "data declaration");
         return NULL;
     }
-    if (is_no_alloc && !xr_parser_check(parser, TK_FN)) {
-        xr_parser_error(parser, "@no_alloc can only annotate a function");
+    /* Assertion attributes (@no_alloc/@no_throw/...) at a declaration site only
+     * modify a function item; methods flow through the OOP parser.  Positions
+     * and duplicate diagnostics both come from the shared registry. */
+    if (!xr_parser_reject_invalid_assertion_attrs(parser, attributes, attr_count,
+                                                  xr_parser_check(parser, TK_FN)))
         return NULL;
-    }
     if (is_naked && !xr_parser_check(parser, TK_FN)) {
         xr_parser_error(parser, "@naked can only annotate a function");
         return NULL;

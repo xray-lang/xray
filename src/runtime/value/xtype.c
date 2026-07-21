@@ -146,6 +146,15 @@ void xr_type_global_init(void) {
     xr_once_call(&g_types_once, xr_type_global_init_once);
 }
 
+// Release process-level type-system state (task 218 defense line 4).
+// The basic-type singletons are static storage (nothing to free), but the
+// per-thread "current type pool" is a *borrowed* pointer into analyzer/isolate
+// memory. Clearing it on shutdown guarantees no stale cross-lifetime borrow
+// (R-OWN-1) outlives the pool it points at. Idempotent.
+void xr_type_global_shutdown(void) {
+    g_current_type_pool = NULL;
+}
+
 // Set the analyzer/current type pool for no-isolate type helpers.
 void xr_type_set_current_pool(XrTypePool *pool, uint32_t *id_counter) {
     (void) id_counter;  // ID counter now managed by pool itself
@@ -730,6 +739,9 @@ XrType *xr_type_new_function(XrVMRuntime *X, XrType **param_types, int param_cou
     type->function.min_params = param_count;  // Default: all params required
     type->function.return_type = return_type;
     type->function.is_variadic = is_variadic;
+    // Fail-closed default (task 216): a function type is assumed to possibly
+    // throw until the analyzer proves otherwise after the effect-DB fixpoint.
+    type->function.throw_effect = XR_FN_EFFECT_MAY_THROW;
     return type;
 }
 
@@ -1157,6 +1169,7 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
             copy->function.return_type = type->function.return_type;
             copy->function.is_variadic = type->function.is_variadic;
             copy->function.is_c_abi = type->function.is_c_abi;
+            copy->function.throw_effect = type->function.throw_effect;  // task 216
             if (type->function.type_param_count > 0 && type->function.type_param_names) {
                 xr_type_set_function_type_params(
                     X, copy, type->function.type_param_names, type->function.type_param_constraints,
@@ -1626,6 +1639,14 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     // declare *more* parameters than target, since those would never get
     // a value.
     if (XR_TYPE_IS_FUNCTION(target) && XR_TYPE_IS_FUNCTION(source)) {
+        /* Effect covariance. POLY is an inference variable at this stage: a
+         * target POLY accepts either concrete effect, while a source POLY is
+         * provisionally accepted and resolved/rechecked after effect fixpoint. */
+        if (target->function.throw_effect == XR_FN_EFFECT_NO_THROW &&
+            source->function.throw_effect != XR_FN_EFFECT_NO_THROW &&
+            source->function.throw_effect != XR_FN_EFFECT_POLY) {
+            return false;
+        }
         if (target->function.is_c_abi != source->function.is_c_abi) {
             return false;
         }
@@ -1749,6 +1770,30 @@ static bool function_type_params_equal(XrType *a, XrType *b) {
     return true;
 }
 
+bool xr_type_function_signature_assignable(XrType *target, XrType *source) {
+    if (!target || !source || target->kind != XR_KIND_FUNCTION || source->kind != XR_KIND_FUNCTION)
+        return false;
+    if (target->function.param_count != source->function.param_count ||
+        target->function.min_params != source->function.min_params ||
+        target->function.is_variadic != source->function.is_variadic ||
+        target->function.is_c_abi != source->function.is_c_abi ||
+        !function_type_params_equal(target, source))
+        return false;
+    if (target->function.throw_effect == XR_FN_EFFECT_NO_THROW &&
+        source->function.throw_effect != XR_FN_EFFECT_NO_THROW &&
+        source->function.throw_effect != XR_FN_EFFECT_POLY)
+        return false;
+    if (!xr_type_equals(target->function.return_type, source->function.return_type))
+        return false;
+    for (int i = 0; i < target->function.param_count; i++) {
+        if (xr_type_function_param_mode(target, i) != xr_type_function_param_mode(source, i) ||
+            !xr_type_equals(xr_type_function_param_type(target, i),
+                            xr_type_function_param_type(source, i)))
+            return false;
+    }
+    return true;
+}
+
 // Check if two types are equal
 bool xr_type_equals(XrType *a, XrType *b) {
     if (a == b)
@@ -1827,6 +1872,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
         if (a->function.is_variadic != b->function.is_variadic)
             return false;
         if (a->function.is_c_abi != b->function.is_c_abi)
+            return false;
+        if (a->function.throw_effect != b->function.throw_effect)
             return false;
         if (!function_type_params_equal(a, b))
             return false;

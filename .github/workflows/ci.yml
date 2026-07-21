@@ -274,6 +274,19 @@ jobs:
         UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
 
+    # The ordinary sanitizer CTest surface above covers the C tests.  This
+    # additional ASan-only step exercises a committed multi-module compiler
+    # workload through the native AOT C-emission path.  The optional sibling
+    # xxhash checkout is exercised by the same script in local/release gates.
+    - name: Run Task 218 focused compiler workload
+      if: matrix.sanitizer.short == 'asan'
+      run: bash scripts/run_asan_focused.sh
+      env:
+        XR_ASAN_BUILD_DIR: build
+        XR_ASAN_SKIP_BUILD: "1"
+        XR_ASAN_CTEST_REGEX: "^$"
+        XR_ASAN_DIFF_REGEX: "^$"
+
   # ===========================================================================
   # Freestanding QEMU Smoke
   # Keep the 0.9 mainline gate focused on the x86_64 multiboot smoke. The

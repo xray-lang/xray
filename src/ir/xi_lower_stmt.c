@@ -938,7 +938,7 @@ XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, AstNode *node) {
      * same way a fallible call does.  Panic-channel child failures unwind
      * inside OP_SCOPE_EXIT and never reach here. */
     if (sb->scope_mode == 1 /* XR_SCOPE_LINKED */)
-        xi_lower_insert_err_check(l, node);
+        xi_lower_insert_err_check(l, node, true);
 
     return exit_v;
 }
@@ -2161,7 +2161,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     iter->aux_int = (int64_t) xi_lower_method_symbol(l, "iterator") << 1;
     iter->flags |= XI_FLAG_SIDE_EFFECT;
     iter->line = line;
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     if (!l->cur_block)
         return;
 
@@ -2191,7 +2191,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     has_next->aux_int = (int64_t) xi_lower_method_symbol(l, "hasNext") << 1;
     has_next->flags |= XI_FLAG_SIDE_EFFECT;
     has_next->line = line;
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     if (!l->cur_block)
         return;
     xi_block_set_if(l->cur_block, has_next, body_blk, exit_blk);
@@ -2212,7 +2212,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     next_val->aux_int = (int64_t) xi_lower_method_symbol(l, "next") << 1;
     next_val->flags |= XI_FLAG_SIDE_EFFECT;
     next_val->line = line;
-    xi_lower_insert_err_check(l, node);
+    xi_lower_insert_err_check(l, node, true);
     if (!l->cur_block)
         return;
 

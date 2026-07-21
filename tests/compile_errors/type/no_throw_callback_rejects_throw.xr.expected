@@ -1,0 +1,1 @@
+@no_throw function constraint 'callback' rejects value 'throwingCallback'

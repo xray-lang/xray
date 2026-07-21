@@ -1137,6 +1137,7 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     dst->is_c_export = src->is_c_export;
     dst->c_export_symbol = src->c_export_symbol ? xr_strdup(src->c_export_symbol) : NULL;
     dst->effect_id = src->effect_id;
+    dst->throw_effect = src->throw_effect;
     dst->alloc_effect_id = src->alloc_effect_id;
     dst->intrinsic_id = src->intrinsic_id;
     dst->alloc_state = src->alloc_state;
@@ -1144,6 +1145,7 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     dst->alloc_fingerprint = src->alloc_fingerprint;
     dst->alloc_effect_complete = src->alloc_effect_complete;
     dst->has_no_alloc_contract = src->has_no_alloc_contract;
+    dst->has_no_throw_contract = src->has_no_throw_contract;
 
     if (src->type_param_count > 0) {
         xa_symbol_links_set_type_params(dst, src->type_param_names, src->type_param_constraints,

@@ -1,0 +1,14 @@
+// Task 217 P3 negative: a @zero_cost function whose index carries no range
+// evidence (an unconstrained parameter) keeps a bounds-panic branch (R4) in the
+// generated C.  Recursion forces a standalone emission so the contract is
+// verified on the function body itself.
+@zero_cost
+fn zeroCostBoundsReject(data: Slice<int>, i: int) -> int {
+    if (i <= 0) {
+        return 0
+    }
+    return data[i] + zeroCostBoundsReject(data, i - 1)
+}
+
+var d = [1, 2, 3, 4]
+print(zeroCostBoundsReject(d[:], 3))

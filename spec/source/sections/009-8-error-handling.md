@@ -24,6 +24,8 @@ Xray 的错误处理分为两个严格分离的通道：
 - **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 PanicInfo 对象。
 - **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
 - **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
+- **错误集合不进入函数类型**：具体错误 enum/variant 集合仍由 analyzer effect database 维护；函数类型只携带内部三态 throw-effect bit（`UNKNOWN` / `MAY_THROW` / `NO_THROW`），供安全约束和构造性代码生成消费。
+- **`@no_throw` 是可选断言**：用户无需为普通函数声明错误效应；只有希望冻结 no-throw 契约或约束回调时才标注。未知或不完整证明按 may-throw 处理。
 - **`defer` 替代 `finally`**：xray 没有 `finally` 关键字，资源清理统一用函数作用域的 `defer`（Go 模型）。
 
 ### 8.1 值返回错误通道
@@ -504,6 +506,8 @@ Design principles:
 - **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no PanicInfo allocation.
 - **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
 - **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
+- **Error sets are not part of function types**: concrete error enum/variant sets remain in the analyzer effect database. A function type carries only the internal three-state throw-effect bit (`UNKNOWN` / `MAY_THROW` / `NO_THROW`) used by safety constraints and constructive code generation.
+- **`@no_throw` is an optional assertion**: ordinary functions do not declare an error effect. Annotate only when freezing a no-throw contract or constraining a callback; unknown or incomplete evidence is treated as may-throw.
 - **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses function-scoped `defer` (Go model).
 
 ### 8.1 Value-return error channel

@@ -1,0 +1,12 @@
+export struct VideoSummary {
+    aid: int
+    title: string
+    views: int
+}
+
+export fn engagementScore(video: VideoSummary) -> float {
+    if (video.views <= 0) {
+        return 0.0
+    }
+    return float(len(video.title)) / float(video.views)
+}

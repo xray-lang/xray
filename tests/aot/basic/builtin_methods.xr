@@ -21,7 +21,7 @@ print(text.padEnd("hi", 5, "!"))           // hi!!!
 
 print(strconv.parseInt("123"))         // 123
 print(strconv.parseFloat("3.14"))      // 3.14
-print("A".toUInt32())             // 65
+print("A".bytes()[0])             // 65
 print(text.reverseRunes("hello"))     // olleh
 
 // --- Array new methods ---

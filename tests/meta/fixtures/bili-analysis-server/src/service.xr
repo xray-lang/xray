@@ -1,0 +1,11 @@
+import { VideoSummary, engagementScore } from "./model"
+
+export fn summarize(rows: Slice<VideoSummary>) -> float {
+    var score = 0.0
+    var i = 0
+    while (i < len(rows)) {
+        score += engagementScore(rows[i])
+        i += 1
+    }
+    return score
+}

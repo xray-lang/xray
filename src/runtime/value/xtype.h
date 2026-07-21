@@ -117,6 +117,27 @@ typedef struct XrFunctionParam {
     XrParamMode mode;
 } XrFunctionParam;
 
+// Error-effect "may-throw" bit carried by the internal function type (task 216).
+//
+// This is a TYPED dimension of a function type — the 1-bit "is this function
+// allowed to raise into the error channel?" — kept strictly separate from the
+// error *set* (which enum variants), which stays inferred in XaEffectDatabase
+// and never enters the type system. The bit participates in code generation
+// (constructive ERR_CHECK emission), the @no_throw assertion, and HOF effect
+// polymorphism.
+//
+// Storage default is fail-closed MAY_THROW: any function type produced without
+// an authoritative effect conclusion is treated as possibly throwing. The
+// analyzer downgrades a definition to NO_THROW only after the effect-DB
+// fixpoint proves its summary is complete AND its escaping set is empty.
+typedef enum XrFnThrowEffect {
+    XR_FN_EFFECT_NO_THROW = 0,   // proven not to throw (complete ∧ empty escaping)
+    XR_FN_EFFECT_MAY_THROW = 1,  // may throw, or incomplete/unknown (fail-closed)
+    XR_FN_EFFECT_POLY = 2,       // effect variable: parameter-position function types
+                                 // (rethrows — instantiated per call site by the
+                                 // effect of the actual argument)
+} XrFnThrowEffect;
+
 // ObjectShape metadata shared by Record and Json object values.
 // is_sealed=true means fixed fields (no runtime extension).
 typedef struct XrObjectType {
@@ -167,6 +188,10 @@ struct XrType {
             XrType *return_type;
             bool is_variadic;
             bool is_c_abi;  // C function pointer ABI (`CFn<...>`), no Xray closure header
+            // Error-effect "may-throw" bit (task 216). Default is fail-closed
+            // MAY_THROW; the analyzer proves NO_THROW after the effect-DB
+            // fixpoint. POLY marks parameter-position (rethrows) function types.
+            XrFnThrowEffect throw_effect;
             const char **type_param_names;
             XrType ***type_param_constraints;
             int *type_param_constraint_counts;
@@ -767,6 +792,9 @@ XR_FUNC XrType *xr_type_new_fixed_array(XrVMRuntime *X, XrType *element_type, in
 XR_FUNC XrType *xr_type_copy(XrVMRuntime *X, XrType *type);
 XR_FUNC bool xr_type_assignable(XrType *target, XrType *source);
 XR_FUNC bool xr_type_equals(XrType *a, XrType *b);
+/* Exact function signature compatibility with covariant throw effect:
+ * NO_THROW implements/overrides MAY_THROW, never the reverse. */
+XR_FUNC bool xr_type_function_signature_assignable(XrType *target, XrType *source);
 
 // API: Nullable operations (safe for singletons - copies if frozen)
 XR_FUNC XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type);
@@ -811,6 +839,10 @@ XR_FUNC XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **pa
 // API: Initialize process-level type singletons (call once at startup)
 XR_FUNC void xr_type_global_init(void);
 
+// Release process-level type-system state (borrowed current type pool).
+// Called via xr_process_shutdown() in test/tool builds. Idempotent.
+XR_FUNC void xr_type_global_shutdown(void);
+
 // API: Set current type pool (called by XaAnalyzer before analysis)
 // This eliminates global state - each analyzer has its own pool
 XR_FUNC void xr_type_set_current_pool(XrTypePool *pool, uint32_t *id_counter);
@@ -839,6 +871,26 @@ static inline XrType *xr_type_get_value(XrType *t) {
 
 static inline XrType *xr_type_get_return(XrType *t) {
     return t ? t->function.return_type : NULL;
+}
+
+// Error-effect bit accessor (task 216). Non-function types report MAY_THROW
+// (fail-closed): callers only ever skip an error check when a value is proven
+// NO_THROW, so an unexpected kind must never masquerade as non-throwing.
+static inline XrFnThrowEffect xr_type_function_throw_effect(const XrType *t) {
+    if (!t || t->kind != XR_KIND_FUNCTION)
+        return XR_FN_EFFECT_MAY_THROW;
+    return t->function.throw_effect;
+}
+
+static inline bool xr_type_function_is_no_throw(const XrType *t) {
+    return t && t->kind == XR_KIND_FUNCTION && t->function.throw_effect == XR_FN_EFFECT_NO_THROW;
+}
+
+static inline bool xr_type_function_set_throw_effect(XrType *t, XrFnThrowEffect effect) {
+    if (!t || t->kind != XR_KIND_FUNCTION || t->frozen)
+        return false;
+    t->function.throw_effect = effect;
+    return true;
 }
 
 static inline int xr_type_get_param_count(XrType *t) {

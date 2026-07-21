@@ -21,6 +21,12 @@
 #include <math.h>
 #include <stdint.h>
 #include "test_win_compat.h"
+#ifdef XR_TEST_HAS_PROCESS_SHUTDOWN
+#include "runtime/xr_process_shutdown.h"
+#define XR_TEST_PROCESS_SHUTDOWN() xr_process_shutdown()
+#else
+#define XR_TEST_PROCESS_SHUTDOWN() ((void) 0)
+#endif
 
 /* ========== Test Counters ========== */
 
@@ -281,7 +287,11 @@ static int xr_tests_failed = 0;
 
 #define TEST_MAIN_END()                                                                            \
     TEST_REPORT();                                                                                 \
-    return TEST_EXIT();                                                                            \
+    int _xr_test_exit = TEST_EXIT();                                                               \
+    /* Make every xray_core-linked unit executable a strict leak-check target. */                  \
+    /* The standalone architecture walker does not define this capability. */                      \
+    XR_TEST_PROCESS_SHUTDOWN();                                                                    \
+    return _xr_test_exit;                                                                          \
     }
 
 #endif  // XR_TEST_FRAMEWORK_H

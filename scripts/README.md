@@ -23,9 +23,13 @@
 | `scripts/run_byte_receiver_effect_audit.sh` | 204：`Array<byte>` / `Slice<byte>` receiver effect 与 203 local/owned/const/shared provenance 对齐 audit | env: `XRAY_BIN` | 任一正例或负例漂移=1；CTest `byte_receiver_effect_audit` 固定可复跑组合证据 | < 120s |
 | `scripts/check_source_unknown_convergence.py` | 202：source `unknown` 删除与 typed erasure 边界收敛前的 source/runtime/analyzer/IR/AOT/Task residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 | `scripts/check_source_unknown_aot_baseline.py` | 202：Task、ThreadLocal、Json encode 与 HTTP handler 的 AOT baseline fixture/expect 覆盖检查 | `--root <repo>`；可选 `--json` | baseline fixture 或关键断言缺失=1 | < 1s |
-| `scripts/check_error_effect_convergence.py` | 205：unchecked error-effect graph 收敛前的旧 error-set API、`MAY_THROW`、pending-error、LSP 与 `.xrd` 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
+| `scripts/check_error_effect_convergence.py` | 205/216：unchecked error-effect graph、typed throw bit 与 backend 重推导分类 inventory | `--root <repo>`；可选 `--json`、`--max-category NAME=N` | 默认输出 inventory；CTest 固定 `THROW_BIT_RECOMPUTE=0`，阻止 backend/CGen 重推导 typed bit | < 2s |
 | `scripts/check_param_mode_convergence.py` | 206：`value/in/ref/out` 参数契约、调用授权、`move/copy` 来源动作与旧 `XR_PARAM_*`/并行数组 residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
-
+| `scripts/check_meta_ownership.py` | 218：编译器元级跨生命周期借用审计，分类 A `AST_PTR_INTO_IR`、B `PTR_ACROSS_GROWTH`、C `CGEN_BORROWED_NAME`（R-OWN-1..3） | `--root <repo>`；可选 `--json`、`--counts-json`、`--baseline <json>`、`--max-category NAME=N`、`--write-baseline <json>` | CTest `meta_ownership_inventory` 对三类均固定 `--max-category NAME=0`，发现回流即失败；standalone inventory 仍可用于审计 | < 2s |
+| `scripts/check_contract_freeze.py` | 220：八份语义契约的 anchor digest 与 `CONTRACT-CHANGE` trailer 门禁 | `--root <repo>`；注入验证用 `--self-test` | digest 漂移、契约锚点缺失或干净提交缺 trailer=1；dirty tree 只检查 digest，trailer 延迟到 post-commit/CI | < 2s |
+| `scripts/run_asan_focused.sh` | 218 防线 2：ASan+UBSan 聚焦门禁——C 单测 + 快速 backend-diff 子集（task190）+ xxhash 端口与已提交 bili-analysis-server fixture 的全量 AOT C 发射。`detect_leaks=0`（泄漏归 lsan_strict） | env: `XR_ASAN_JOBS`、`XR_ASAN_CTEST_REGEX`、`XR_ASAN_CTEST_EXCLUDE`、`XR_ASAN_DIFF_REGEX`、`XR_ASAN_XXHASH_MAIN`、`XR_ASAN_BILI_MAIN`、`XR_ASAN_SKIP_BUILD` | 必需 bili fixture 或任一已发现 workload/测试失败=非0；xxhash sibling 缺失时明确跳过；普通非 sanitizer 构建的 CTest 常驻 `asan_focused` | 增量测试面 <10min（全量 ASan 自举另计） |
+| `scripts/run_lsan_strict.sh` | 218 防线 4：严格 LeakSanitizer lane——ASan+LSan（`detect_leaks=1`）跑单测面，配 `scripts/lsan.supp`。LSan 仅 Linux 支持，macOS 上明确跳过 | env: `XR_LSAN_JOBS`、`XR_LSAN_BUILD_DIR`、`XR_LSAN_CTEST_REGEX` | 非 Linux=0（跳过）；Linux 有泄漏=非0；普通非 sanitizer 构建的 CTest 常驻 `lsan_strict` | Linux CI 数分钟 |
+| `scripts/bench_cgen_verifier.py` | 218 防线 3：在真实 xxhash AOT C 发射中统计常开 W1–W4 verifier 的 CPU 时间占端到端编译 wall time 比例 | `--xray`、`--main`、`--samples`、`--max-percent` | 中位开销 `<1%` 为 0；达到或超过预算为 1；计时环境变量只观测、不能关闭 verifier | 默认 5 次，约 1min |
 ## 详细说明
 
 ### `run_mem_stress.sh`
@@ -170,8 +174,23 @@ contract；ThreadLocal 与 HTTP handler 当前仍作为后续替换目标被固�
 `AOT_MAY_THROW_CONSUMER`、`IR_ERROR_CHANNEL_CONSUMER`、
 `VM_RUNTIME_PENDING_ERROR_CHANNEL`、`LSP_ERROR_TOOLING_ENTRY`、
 `XRD_METADATA_GENERATOR_OR_LOADER`、`NATIVE_ERROR_CONTRACT_SURFACE` 和
-`TASK_TYPED_ERROR_RESIDUE`。默认模式只打印 inventory 并返回 0，便于 P0 固定旧 error-set、
-旧 MAY_THROW 和 tooling metadata 入口；后续 205 P1/P2/P8/P10 可按类别逐步增加 fail gate。
+`TASK_TYPED_ERROR_RESIDUE`。216 新增 `THROW_BIT_RECOMPUTE`：只跟踪 lowering 之后直接消费
+`XrFnThrowEffect`/`XR_FN_EFFECT_*` 并重建 source-level throw bit 的位置；CGen 对已经生成的
+`ERR_CHECK` 做低级操作折叠属于允许保留的 defense-in-depth，不计入该类别。默认模式仍输出
+完整 inventory；CTest 以 `--max-category THROW_BIT_RECOMPUTE=0` 固定零基线，阻止 backend/CGen
+重新形成 typed-bit 第二真源。
+
+### `check_meta_ownership.py`
+
+扫描 `src/ir/`、`src/aot/`、`src/analysis/`，把 218 防线 1（编译器元级内存安全）关注的
+"跨生命周期借用"分成三类：`AST_PTR_INTO_IR`（`Xi*`/`Xaot*` 结构字段右值直接借用
+`node->name` 式 AST 名称指针，且无 `arena_strdup`/`intern` 包裹）、`PTR_ACROSS_GROWTH`
+（同一函数体内取 `&arr[i]`/`arr + i` 后又对同一数组 `push`/`append`/`grow`/`realloc`）、
+`CGEN_BORROWED_NAME`（CGen ctx 族结构里的裸 `const char *` 借用面）。规约见 R-OWN-1..3
+（脚本 docstring）。三类借用已经归零，CTest `meta_ownership_inventory` 对每类传入
+`--max-category NAME=0`，因此任何回流都会 fail-closed。standalone 默认模式仍打印 inventory，
+也可对照 `scripts/meta_ownership_baseline.json` 做历史审计。证明安全的借用用行内 `owned:` 注释
+（如 `/* owned: cg arena */`）豁免，永不计数。
 
 ### `check_param_mode_convergence.py`
 

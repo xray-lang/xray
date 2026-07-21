@@ -53,6 +53,9 @@ SKIP_DIR_NAMES = {
 }
 SKIP_SCAN_FILES = {
     Path("scripts/check_c_interop_surface.py"),
+    # Sibling residue scanner (task 220): matching removed surface forms is its
+    # job, so its pattern literals must not count as active reappearances here.
+    Path("scripts/check_surface_drift.py"),
     Path("scripts/README.md"),
 }
 

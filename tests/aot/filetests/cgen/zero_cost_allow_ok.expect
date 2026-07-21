@@ -1,0 +1,2 @@
+c_contains=int64_t zc_allow_sum(int64_t p0)
+c_not_contains=error[E0655]

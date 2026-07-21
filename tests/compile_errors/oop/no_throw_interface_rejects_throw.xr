@@ -1,0 +1,17 @@
+enum NoThrowInterfaceError { Boom }
+
+interface PureAction {
+    @no_throw
+    run() -> int
+}
+
+class ThrowingAction implements PureAction {
+    run() -> int {
+        throw NoThrowInterfaceError.Boom
+        return 0
+    }
+}
+
+fn main() -> int {
+    return ThrowingAction().run()
+}

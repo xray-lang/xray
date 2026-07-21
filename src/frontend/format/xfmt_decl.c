@@ -16,6 +16,7 @@
 
 #include "xfmt_internal.h"
 #include "xfmt_literal.h"
+#include "../parser/xa_assertion_attr.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../shared/xr_derive_flags.h"
 #include <string.h>
@@ -23,6 +24,35 @@
 static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
     if (!ctx || !attr)
         return;
+    /* Assertion attributes (@no_alloc/@no_throw/...) spell themselves from the
+     * shared registry so the formatter needs no per-attribute branch. */
+    const XaAssertionAttrInfo *assertion = xa_assertion_attr_by_kind(attr->kind);
+    if (assertion) {
+        xfmt_write_char(ctx, '@');
+        xfmt_write_str(ctx, assertion->name);
+        if (attr->kind == ATTR_ZERO_COST && attr->derive_flags != 0) {
+            static const struct {
+                uint32_t bit;
+                const char *name;
+            } categories[] = {
+                {XA_ZERO_COST_ALLOW_RUNTIME, "runtime"}, {XA_ZERO_COST_ALLOW_ALLOC, "alloc"},
+                {XA_ZERO_COST_ALLOW_ERROR, "error"},     {XA_ZERO_COST_ALLOW_BOUNDS, "bounds"},
+                {XA_ZERO_COST_ALLOW_BOX, "box"},         {XA_ZERO_COST_ALLOW_LANES, "lanes"},
+            };
+            bool first = true;
+            xfmt_write_str(ctx, "(allow: ");
+            for (size_t i = 0; i < sizeof(categories) / sizeof(categories[0]); i++) {
+                if ((attr->derive_flags & categories[i].bit) == 0)
+                    continue;
+                if (!first)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_write_str(ctx, categories[i].name);
+                first = false;
+            }
+            xfmt_write_char(ctx, ')');
+        }
+        return;
+    }
     switch (attr->kind) {
         case ATTR_TEST:
             xfmt_write_str(ctx, "@test");
@@ -47,9 +77,6 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
             break;
         case ATTR_NATIVE:
             xfmt_write_str(ctx, "@native");
-            break;
-        case ATTR_NO_ALLOC:
-            xfmt_write_str(ctx, "@no_alloc");
             break;
         case ATTR_INTRINSIC:
             xfmt_write_str(ctx, "@intrinsic(");
@@ -666,6 +693,7 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
 
         if (method->leading_comments)
             xfmt_write_leading_comments(ctx, method->leading_comments);
+        xfmt_emit_attributes(ctx, m->attributes, m->attr_count);
         xfmt_write_indent(ctx);
         xfmt_write_str(ctx, m->name);
         xfmt_write_char(ctx, '(');

@@ -649,6 +649,24 @@ TEST(type_function_complex) {
     ASSERT(XR_TYPE_IS_ARRAY(fn->function.return_type));
 }
 
+TEST(type_function_throw_effect_covariance) {
+    XrType *params[] = {xr_type_new_int(NULL)};
+    XrType *may = xr_type_new_function(g_isolate, params, 1, xr_type_new_int(NULL), false);
+    XrType *no = xr_type_copy(g_isolate, may);
+    XrType *poly = xr_type_copy(g_isolate, may);
+    ASSERT(may != NULL && no != NULL && poly != NULL);
+    ASSERT(xr_type_function_set_throw_effect(no, XR_FN_EFFECT_NO_THROW));
+    ASSERT(xr_type_function_set_throw_effect(poly, XR_FN_EFFECT_POLY));
+
+    ASSERT(!xr_type_equals(may, no));
+    ASSERT(!xr_type_equals(no, poly));
+    ASSERT(xr_type_assignable(may, no));
+    ASSERT(!xr_type_assignable(no, may));
+    ASSERT(xr_type_assignable(no, poly));
+    ASSERT(xr_type_assignable(may, poly));
+    ASSERT(strstr(xr_type_to_string(no), "@no_throw") != NULL);
+}
+
 TEST(type_void_never) {
     XrType *t_void = xr_type_new_unit(NULL);
     XrType *t_never = xr_type_new_never(NULL);
@@ -1029,6 +1047,197 @@ static bool write_text_file(const char *path, const char *content) {
     if (content)
         fputs(content, f);
     return fclose(f) == 0;
+}
+
+static XaSymbol *analyzer_function_symbol(XaAnalyzer *analyzer, const char *name) {
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, name);
+    if (!sym)
+        sym = xa_analyzer_lookup_in_scope(analyzer, name, analyzer->global_scope);
+    if (!sym)
+        sym = xa_analyzer_lookup_deep(analyzer, name);
+    return sym;
+}
+
+/* Task 216 P0 invariant: the typed throw-effect bit published on each function
+ * symbol (and mirrored onto its function type) must agree with the analyzer's
+ * effect summary — NO_THROW iff the summary is complete with an empty escaping
+ * set, MAY_THROW otherwise (fail-closed). Pass expected = -1 to check only the
+ * bit<->summary and symbol<->type consistency without pinning an expectation.
+ * This guards the publication path against drift between the effect DB (the set
+ * truth source) and the type-system bit. */
+static void check_throw_effect_consistency(XaAnalyzer *a, const char *name, int expected) {
+    XaSymbol *sym = analyzer_function_symbol(a, name);
+    if (!sym) {
+        printf("FAILED: throw-effect symbol '%s' not found\n", name);
+        tests_failed++;
+        return;
+    }
+    const XaEffectSummary *summary = analyzer_function_effect_summary(a, name);
+    XrFnThrowEffect from_summary =
+        xa_effect_summary_is_nothrow(summary) ? XR_FN_EFFECT_NO_THROW : XR_FN_EFFECT_MAY_THROW;
+    if (sym->links.throw_effect != from_summary) {
+        printf("FAILED: '%s' symbol throw bit %d != summary-derived %d\n", name,
+               (int) sym->links.throw_effect, (int) from_summary);
+        tests_failed++;
+        return;
+    }
+    if (sym->links.type && sym->links.type->kind == XR_KIND_FUNCTION &&
+        sym->links.type->function.throw_effect != sym->links.throw_effect) {
+        printf("FAILED: '%s' function-type throw bit %d != symbol bit %d\n", name,
+               (int) sym->links.type->function.throw_effect, (int) sym->links.throw_effect);
+        tests_failed++;
+        return;
+    }
+    if (expected >= 0 && sym->links.throw_effect != (XrFnThrowEffect) expected) {
+        printf("FAILED: '%s' throw effect %d != expected %d\n", name, (int) sym->links.throw_effect,
+               expected);
+        tests_failed++;
+        return;
+    }
+}
+
+TEST(analyzer_throw_effect_bit_matches_effect_summary) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+
+    const char *source = "enum IoErr { Boom }\n"
+                         "fn pureAdd(x: int, y: int) -> int { return x + y }\n"
+                         "fn throwsDirect() { throw IoErr.Boom }\n"
+                         "fn propagates() { throwsDirect() }\n"
+                         "fn guarded() { try { throwsDirect() } catch (e: IoErr) {} }\n"
+                         "fn viaDynamic(f: () -> ()) { f() }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "throw_effect_bit.xr", program);
+
+    /* Pure arithmetic: proven NO_THROW. */
+    check_throw_effect_consistency(a, "pureAdd", XR_FN_EFFECT_NO_THROW);
+    /* Direct throw and its transitive propagation: MAY_THROW. */
+    check_throw_effect_consistency(a, "throwsDirect", XR_FN_EFFECT_MAY_THROW);
+    check_throw_effect_consistency(a, "propagates", XR_FN_EFFECT_MAY_THROW);
+    /* Catch subtraction that fully consumes the escaping set: check the
+     * invariant without pinning (behaviour owned by the error-set pass). */
+    check_throw_effect_consistency(a, "guarded", -1);
+    /* Dynamic (function-value) call is incomplete → fail-closed MAY_THROW. */
+    check_throw_effect_consistency(a, "viaDynamic", XR_FN_EFFECT_MAY_THROW);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_no_throw_constraints_accept_proven_callbacks) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "@no_throw\n"
+                         "fn increment(value: int) -> int { return value + 1 }\n"
+                         "fn applyPure(callback: @no_throw (int) -> int, value: int) -> int {\n"
+                         "  return callback(value)\n"
+                         "}\n"
+                         "fn main() -> int {\n"
+                         "  const local: @no_throw (int) -> int = fn(value: int) -> int {\n"
+                         "    return value * 2\n"
+                         "  }\n"
+                         "  return applyPure(increment, local(2))\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "no_throw_constraints.xr", program);
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(a, &diagnostic_count);
+    ASSERT(diagnostic_count == 1);
+    ASSERT(analyzer_diag_contains(a, "has not rejected any may-throw value"));
+    check_throw_effect_consistency(a, "increment", XR_FN_EFFECT_NO_THROW);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_no_throw_lints_redundant_try_catch) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "@no_throw\n"
+                         "fn guarded(value: int) -> int {\n"
+                         "  try {\n"
+                         "    return value + 1\n"
+                         "  } catch (e) {\n"
+                         "    return value\n"
+                         "  }\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "no_throw_redundant_try.xr", program);
+    ASSERT(analyzer_diag_contains(a, "redundant try/catch in @no_throw function"));
+    check_throw_effect_consistency(a, "guarded", XR_FN_EFFECT_NO_THROW);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_stored_function_value_defaults_may_throw) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "enum StoredEffectErr { Boom }\n"
+                         "fn pure(value: int) -> int { return value + 1 }\n"
+                         "fn checked(value: int) -> int {\n"
+                         "  if (value < 0) { throw StoredEffectErr.Boom }\n"
+                         "  return value\n"
+                         "}\n"
+                         "var callback = pure\n"
+                         "callback = checked\n"
+                         "print(callback(1))\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "stored_function_effect.xr", program);
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(a, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
+
+    XaSymbol *callback = analyzer_function_symbol(a, "callback");
+    ASSERT(callback != NULL);
+    ASSERT(callback->links.type != NULL);
+    ASSERT(callback->links.type->kind == XR_KIND_FUNCTION);
+    ASSERT(callback->links.type->function.throw_effect == XR_FN_EFFECT_MAY_THROW);
+    check_throw_effect_consistency(a, "pure", XR_FN_EFFECT_NO_THROW);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source =
+        "enum HofEffectErr { Boom }\n"
+        "fn apply<T>(callback: (T) -> T, value: T) -> T { return callback(value) }\n"
+        "fn plusOne(value: int) -> int { return value + 1 }\n"
+        "fn plusTwo(value: int) -> int { return value + 2 }\n"
+        "fn checked(value: int) -> int {\n"
+        "  if (value < 0) { throw HofEffectErr.Boom }\n"
+        "  return value\n"
+        "}\n"
+        "fn viaPureOne(value: int) -> int { return apply<int>(plusOne, value) }\n"
+        "fn viaPureTwo(value: int) -> int { return apply<int>(plusTwo, value) }\n"
+        "fn viaChecked(value: int) -> int { return apply<int>(checked, value) }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+
+    xa_analyzer_analyze(a, "hof_effect_specialization.xr", program);
+    xa_mono_pass_with_analyzer(program, g_isolate, a);
+    xa_analyzer_analyze(a, "hof_effect_specialization.xr", program);
+
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(a, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
+    check_throw_effect_consistency(a, "apply$i64$nothrow", XR_FN_EFFECT_NO_THROW);
+    check_throw_effect_consistency(a, "apply$i64", XR_FN_EFFECT_MAY_THROW);
+    check_throw_effect_consistency(a, "viaPureOne", XR_FN_EFFECT_NO_THROW);
+    check_throw_effect_consistency(a, "viaPureTwo", XR_FN_EFFECT_NO_THROW);
+    check_throw_effect_consistency(a, "viaChecked", XR_FN_EFFECT_MAY_THROW);
+
+    const XaEffectSummary *checked = analyzer_function_effect_summary(a, "apply$i64");
+    ASSERT(checked != NULL);
+    ASSERT(effect_summary_has_enum_named(a, checked, "HofEffectErr"));
+
+    xa_analyzer_free(a);
+    setup_pool();
 }
 
 TEST(analyzer_error_effect_records_direct_throw_variant) {
@@ -5480,6 +5689,11 @@ int main(void) {
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
     RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);
+    RUN_TEST(analyzer_throw_effect_bit_matches_effect_summary);
+    RUN_TEST(analyzer_no_throw_constraints_accept_proven_callbacks);
+    RUN_TEST(analyzer_no_throw_lints_redundant_try_catch);
+    RUN_TEST(analyzer_stored_function_value_defaults_may_throw);
+    RUN_TEST(analyzer_generic_hof_splits_throw_effect_dimension);
     RUN_TEST(analyzer_error_effect_records_direct_throw_variant);
     RUN_TEST(analyzer_error_effect_propagates_const_function_value_aliases);
     RUN_TEST(analyzer_error_effect_propagates_stable_var_function_values);
@@ -5510,6 +5724,7 @@ int main(void) {
     printf("\nAdditional type tests:\n");
     RUN_TEST(type_class_instance);
     RUN_TEST(type_function_complex);
+    RUN_TEST(type_function_throw_effect_covariance);
     RUN_TEST(type_void_never);
     RUN_TEST(type_rejects_invalid_counts);
     RUN_TEST(type_function_copy_preserves_metadata);

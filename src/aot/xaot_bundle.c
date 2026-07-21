@@ -7447,6 +7447,8 @@ static const char *span_access_kind_name(uint8_t kind) {
             return "vec_load";
         case XAOT_SPAN_ACCESS_VEC_STORE:
             return "vec_store";
+        case XAOT_SPAN_ACCESS_WINDOW:
+            return "window";
         default:
             return "unknown";
     }
@@ -7473,6 +7475,7 @@ static void print_span_access_bits(FILE *out, uint32_t bits, bool evidence) {
         PRINT_BIT(XAOT_SPAN_EV_DATA_VALID, "data_valid");
         PRINT_BIT(XAOT_SPAN_EV_ENDIAN_CONST, "endian_const");
         PRINT_BIT(XAOT_SPAN_EV_NO_CLOBBER, "no_clobber");
+        PRINT_BIT(XAOT_SPAN_EV_ASSERT_GUARD, "assert_guard");
     } else {
         PRINT_BIT(XAOT_SPAN_DROP_BOUNDS, "bounds");
         PRINT_BIT(XAOT_SPAN_DROP_READONLY, "readonly");

@@ -27,6 +27,7 @@
 #include "../../module/xbundle.h"
 #include "../../module/xproject.h"
 #include "../../aot/xaot_driver.h"
+#include "../../ir/xi_arc_verify.h"
 #include "../../base/xfileio.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
@@ -1299,9 +1300,10 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
                             const char *sysroot, const char *linker_script, bool verbose,
                             bool dump_xaot_plan, bool dump_global_evidence, bool dump_xi_evidence,
-                            bool dump_link_manifest, bool dump_link_command, bool dry_run_link,
-                            const char *c_header, bool keep_c, const char *cache_dir_arg,
-                            bool rebuild, bool lto, const XrCliBuildTarget *target,
+                            bool dump_link_manifest, bool dump_residue, bool dump_link_command,
+                            bool dry_run_link, const char *c_header, bool keep_c,
+                            const char *cache_dir_arg, bool rebuild, bool lto, bool rc_guard,
+                            const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan,
                             const XrTargetConfig *target_config, const char *objcopy_output);
 
@@ -1328,6 +1330,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     bool dump_global_evidence = xr_cli_opt_bool(&inv->options, "dump-global-evidence");
     bool dump_xi_evidence = xr_cli_opt_bool(&inv->options, "dump-xi-evidence");
     bool dump_link_manifest = xr_cli_opt_bool(&inv->options, "dump-link-manifest");
+    bool dump_residue = xr_cli_opt_bool(&inv->options, "dump-residue");
     bool dump_link_command = xr_cli_opt_bool(&inv->options, "dump-link-command");
     bool dry_run_link = xr_cli_opt_bool(&inv->options, "dry-run-link");
     const char *c_header = xr_cli_opt_string(&inv->options, "c-header", NULL);
@@ -1335,6 +1338,12 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     const char *cache_dir_arg = xr_cli_opt_string(&inv->options, "cache-dir", NULL);
     bool rebuild = xr_cli_opt_bool(&inv->options, "rebuild");
     bool lto = xr_cli_opt_bool(&inv->options, "lto");
+    bool rc_guard = xr_cli_opt_bool(&inv->options, "rc-guard");
+    /* Task 219: --verify-arc forces the RC/ownership verifier on after every
+     * lifetime/CFG-invalidating optimization pass (post-ARC single run stays
+     * always-on regardless). Accepted both here and as a global flag. */
+    if (xr_cli_opt_bool(&inv->options, "verify-arc"))
+        xi_arc_verify_set_per_pass(true);
     bool verbose = xr_cli_opt_bool(&inv->options, "verbose") || (inv->ctx && inv->ctx->verbose);
     bool opt_fast = build_opt_level_is_fast(opt_level);
     XrProject *project = NULL;
@@ -1439,6 +1448,10 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     }
     if (dump_link_manifest && !native_mode) {
         fprintf(stderr, "Error: --dump-link-manifest requires --native\n");
+        CMD_BUILD_RETURN(2);
+    }
+    if (dump_residue && !native_mode) {
+        fprintf(stderr, "Error: --dump-residue requires --native\n");
         CMD_BUILD_RETURN(2);
     }
     if (dump_link_command && !native_mode) {
@@ -1575,8 +1588,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
             input_file, output_file, cc, opt_flag, effective_cpu, simd_mode, c_only, strip_symbols,
             debug_symbols, shared_library, profile, type_name_profile, sysroot, linker_script,
             verbose, dump_xaot_plan, dump_global_evidence, dump_xi_evidence, dump_link_manifest,
-            dump_link_command, dry_run_link, c_header, keep_c, cache_dir_arg, rebuild,
-            effective_lto, &target, &toolchain_plan, target_config, objcopy_output);
+            dump_residue, dump_link_command, dry_run_link, c_header, keep_c, cache_dir_arg, rebuild,
+            effective_lto, rc_guard, &target, &toolchain_plan, target_config, objcopy_output);
         CMD_BUILD_RETURN(rc);
     }
     rc = cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
@@ -2507,9 +2520,10 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             XrCliBuildProfile profile, XiCgenTypeNameProfile type_name_profile,
                             const char *sysroot, const char *linker_script, bool verbose,
                             bool dump_xaot_plan, bool dump_global_evidence, bool dump_xi_evidence,
-                            bool dump_link_manifest, bool dump_link_command, bool dry_run_link,
-                            const char *c_header, bool keep_c, const char *cache_dir_arg,
-                            bool rebuild, bool lto, const XrCliBuildTarget *target,
+                            bool dump_link_manifest, bool dump_residue, bool dump_link_command,
+                            bool dry_run_link, const char *c_header, bool keep_c,
+                            const char *cache_dir_arg, bool rebuild, bool lto, bool rc_guard,
+                            const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan,
                             const XrTargetConfig *target_config, const char *objcopy_output) {
     XaotBuildResult aot_result;
@@ -2562,6 +2576,7 @@ static int cmd_build_native(const char *input, const char *output, const char *c
     build_options.emit_program_main = !shared_library;
     build_options.emit_global_evidence_dump = dump_global_evidence;
     build_options.emit_local_evidence_dump = dump_xi_evidence;
+    build_options.emit_residue_dump = dump_residue;
     build_options.evidence_cache_dir = cache_dir_ready ? cache_dir : NULL;
     build_options.evidence_cache_rebuild = rebuild;
     build_options.evidence_cache_verbose = verbose;
@@ -2580,6 +2595,14 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         if (!xaot_cli_add_build_sanitizer_flags(&aot_result.link_manifest, target, normalize_err,
                                                 sizeof(normalize_err))) {
             fprintf(stderr, "Error: %s\n", normalize_err);
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
+        /* Task 219 --rc-guard: compile the generated C with the RC guard macro
+         * so xrt_arc.h poisons released objects and aborts on use-after-release. */
+        if (rc_guard && !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
+                                                       "-DXR_RC_GUARD")) {
+            fprintf(stderr, "Error: failed to add --rc-guard compile flag\n");
             xaot_build_result_free(&aot_result);
             return 1;
         }
@@ -2691,6 +2714,12 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         printf("%s", aot_result.local_evidence_dump);
         if (aot_result.local_evidence_dump[0] &&
             aot_result.local_evidence_dump[strlen(aot_result.local_evidence_dump) - 1] != '\n')
+            printf("\n");
+    }
+    if (dump_residue && aot_result.residue_dump) {
+        printf("%s", aot_result.residue_dump);
+        if (aot_result.residue_dump[0] &&
+            aot_result.residue_dump[strlen(aot_result.residue_dump) - 1] != '\n')
             printf("\n");
     }
     if (dump_link_manifest) {

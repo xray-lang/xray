@@ -2466,6 +2466,38 @@ Rules:
 - `@c_export` defines the function ABI wrapper; `xray build --native --c-header FILE` can emit a C prototype header for those wrappers, and `xray build --native --shared --c-header FILE` can emit a native shared library with a matching header.
 - `--shared` currently supports only scalar / raw pointer exports that do not require Xray runtime initialization; runtime-backed features, managed ownership, aggregate by-value, and initialization/shutdown policy remain future FFI work.
 
+#### 5.2.11 System Assertion Attributes
+
+System assertion attributes are **checked contracts**, not optimization hints. The compiler must prove each assertion from its designated evidence source; a failed or indeterminate proof is a compile error.
+
+```xray
+@no_throw
+@no_suspend
+fn addOne(x: int) -> int {
+    return x + 1
+}
+
+fn applySync(f: @no_throw @no_suspend (int) -> int, x: int) -> int {
+    return f(x)
+}
+
+@zero_cost
+fn hotAdd(x: int, y: int) -> int {
+    return x + y
+}
+```
+
+| Attribute | Proof stage | Contract |
+|--|--|--|
+| `@no_alloc` | analyzer | The function and its transitive callees do not allocate; an unprovable case is rejected |
+| `@no_throw` | analyzer error effect | The function does not raise through the value-return error channel; this does not add a `throws` declaration. It may also prefix a function type, requiring a callback value proven no-throw |
+| `@no_suspend` | analyzer suspend effect | The function does not suspend; it may also prefix a function type. `@interrupt` and synchronous `@c_export` boundaries imply this constraint |
+| `@zero_cost` | AOT CGen | The generated shape contains no runtime-helper, allocation, error-check, bounds-panic, boxing, or lanes aggregate residue |
+
+A bare `@zero_cost` forbids all six residue categories. A contract boundary may explicitly exempt some categories, for example `@zero_cost(allow: bounds, box)`; the only category names are `runtime`, `alloc`, `error`, `bounds`, `box`, and `lanes`. The attribute constrains AOT output shape only: it does not change VM semantics and does not promise a timing threshold.
+
+`@no_throw` itself creates no optimization opportunity: for a direct call already inferred no-throw, adding or removing the assertion must produce identical C. The optimization comes from the analyzer-owned typed throw-effect bit, which lets lowering constructively omit unnecessary error checks. An unannotated function value stored in a variable or field is widened to a may-throw upper bound; only an explicit `@no_throw (...) -> R` slot preserves and enforces the no-throw constraint.
+
 #### Worked Examples
 
 Closure capture and higher-order functions:
@@ -3545,6 +3577,8 @@ Design principles:
 - **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no PanicInfo allocation.
 - **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
 - **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
+- **Error sets are not part of function types**: concrete error enum/variant sets remain in the analyzer effect database. A function type carries only the internal three-state throw-effect bit (`UNKNOWN` / `MAY_THROW` / `NO_THROW`) used by safety constraints and constructive code generation.
+- **`@no_throw` is an optional assertion**: ordinary functions do not declare an error effect. Annotate only when freezing a no-throw contract or constraining a callback; unknown or incomplete evidence is treated as may-throw.
 - **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses function-scoped `defer` (Go model).
 
 ### 8.1 Value-return error channel
@@ -4141,6 +4175,8 @@ var result = identity<float>(0)            // 0 defaults to int; force float
 - Generic classes / structs do not use rep-sharing, so code and metadata size grow roughly with "type combinations x class body size"; this buys exact layout, faithful debug type names, and per-type specialization. A future size-sensitive mode may add explicit opt-in rep-sharing for pure-PTR class generics.
 - Built-in specialized containers (`Array<int>`, `Array<byte>`) further avoid boxing overhead.
 - Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
+
+**Error-effect specialization for higher-order functions**: a callback parameter without `@no_throw` is effect-polymorphic by default. Monomorphization selects a `NO_THROW` or `MAY_THROW` version from the argument callback's throw-effect bit, so a callback proven no-throw does not generate unnecessary error checks; an unknown dynamic target conservatively selects the may-throw version. An explicit `@no_throw (T) -> R` parameter is a fixed constraint rather than another specialization dimension: a may-throw or unprovable function value is rejected at the call site.
 
 **Deferred features**:
 - Declaration-site variance annotations (`out T` / `in T`), default type parameters, and `where` clauses are not provided in this round; invariant containers remain the safe, AOT-friendly baseline.
@@ -5818,7 +5854,8 @@ PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | Tupl
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= '(' TypeList? ')' '->' Type
+FunctionType ::= FunctionEffect* '(' TypeList? ')' '->' Type
+FunctionEffect ::= '@no_throw' | '@no_suspend'
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?
@@ -6074,7 +6111,9 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // e.g. @c_export("sym"), @section(".text")
+AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+AttrArgList ::= ArgList | 'allow' ':' Identifier (',' Identifier)*
+              // e.g. @c_export("sym"), @zero_cost(allow: bounds, box)
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

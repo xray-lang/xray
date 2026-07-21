@@ -1,0 +1,9 @@
+import { VideoSummary } from "./model"
+import { summarize } from "./service"
+
+var rows: [VideoSummary; 2] = [
+    VideoSummary{aid: 1, title: "compiler roadmap", views: 1200},
+    VideoSummary{aid: 2, title: "backend evidence", views: 900},
+]
+
+print(summarize(rows[:]))

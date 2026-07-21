@@ -1,0 +1,14 @@
+enum NoThrowCallbackError { Boom }
+
+fn throwingCallback(value: int) -> int {
+    throw NoThrowCallbackError.Boom
+    return value
+}
+
+fn applyPure(callback: @no_throw (int) -> int, value: int) -> int {
+    return callback(value)
+}
+
+fn main() -> int {
+    return applyPure(throwingCallback, 1)
+}

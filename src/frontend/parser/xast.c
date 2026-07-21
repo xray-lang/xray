@@ -1097,6 +1097,8 @@ AstNode *xr_ast_interface_method(XrCompilerSession *session, const char *name, X
     node->as.interface_method.params = params;
     node->as.interface_method.param_count = param_count;
     node->as.interface_method.return_type = return_type;
+    node->as.interface_method.attributes = NULL;
+    node->as.interface_method.attr_count = 0;
     return node;
 }
 

@@ -21,6 +21,7 @@
 #include "xi_escape.h"
 #include "xi_own.h"
 #include "xi_arc.h"
+#include "xi_arc_verify.h"
 #include "xi_stage.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/analyzer/xanalyzer.h"
@@ -359,6 +360,12 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
                     "\n",
                     ir->name ? ir->name : "<anon>", nret, nrel, nret + nrel);
         }
+        /* Task 219: independent RC-contract verifier. Runs FORCED once here,
+         * right after ARC insertion, in every build mode. A violation means the
+         * compiler mis-inferred ownership (use-after-release / double-free in
+         * otherwise-safe user code) — a hard ICE with a counterexample path is
+         * the correct response, not a silent miscompile. */
+        xi_arc_verify_or_ice(ir, "xi_arc_insert");
     }
 
     next = xi_program_make_owned((XiClosedProgram *) program, transition_error,

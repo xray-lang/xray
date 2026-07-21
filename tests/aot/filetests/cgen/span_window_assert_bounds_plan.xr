@@ -1,0 +1,10 @@
+@zero_cost
+fn provenWindowLength(values: Slice<uint64>, start: int) -> int {
+    assert(start >= 0)
+    assert(start <= len(values) - 2)
+    var window = values.window(start, 2)
+    return len(window)
+}
+
+var values: [uint64; 4] = [11, 13, 17, 19]
+print(provenWindowLength(values[:], 1))

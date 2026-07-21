@@ -64,7 +64,8 @@ PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | Tupl
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= '(' TypeList? ')' '->' Type
+FunctionType ::= FunctionEffect* '(' TypeList? ')' '->' Type
+FunctionEffect ::= '@no_throw' | '@no_suspend'
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?
@@ -320,7 +321,9 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // 例如 @c_export("sym")、@section(".text")
+AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+AttrArgList ::= ArgList | 'allow' ':' Identifier (',' Identifier)*
+              // 例如 @c_export("sym")、@zero_cost(allow: bounds, box)
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'
@@ -393,7 +396,8 @@ PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | Tupl
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= '(' TypeList? ')' '->' Type
+FunctionType ::= FunctionEffect* '(' TypeList? ')' '->' Type
+FunctionEffect ::= '@no_throw' | '@no_suspend'
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?
@@ -649,7 +653,9 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // e.g. @c_export("sym"), @section(".text")
+AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+AttrArgList ::= ArgList | 'allow' ':' Identifier (',' Identifier)*
+              // e.g. @c_export("sym"), @zero_cost(allow: bounds, box)
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

@@ -1,0 +1,30 @@
+# Task 220 P1 — Independent AOT suite tombstones (tests/aot/run_aot_tests.sh)
+# The standalone suite is adopted into CTest as `aot_standalone_suite`, which runs
+# every case and treats EXACTLY the cases below as expected failures. Any other
+# failure fails the gate (fail-closed).
+#
+# Columns are TAB-separated; the gate keys on the first whitespace-delimited field.
+#   case          suite-relative name without .xr (as printed by the runner)
+#   failure_class one of: stale-api | vtable-diff | float-diff | coro-diff | other
+#   disposition   one of: fix | rewrite | delete
+#   owner_task    task number responsible for carrying out the disposition
+#
+# Governance rule: tombstones only DECREASE (只减不增). A case that starts passing
+# must be pruned from this list (the gate reports such cases as "resolved").
+# CTest pins XRAY_AOT_TOMBSTONE_MAX=10, the adoption baseline, so adding an
+# eleventh entry fails even when that new failure is listed here.
+# Stale-API cases already cleared in this phase (rewritten to the current surface,
+# no longer failing, therefore NOT tombstoned): basic/builtin_methods,
+# basic/collection_methods, basic/span_static_surface, basic/struct_native_fields,
+# basic/struct_shared_fields.
+case	failure_class	disposition	owner_task
+modules/import_shared_class_instance	stale-api	rewrite	203
+coro/channel_array_isolation	stale-api	rewrite	220
+coro/dynamic_channel_send	stale-api	rewrite	220
+coro/send_timeout_storm	stale-api	rewrite	220
+coro/shared_const_byte_array_parallel_slice_stress	stale-api	rewrite	220
+coro/work_queue_many_workers_close_stress	stale-api	rewrite	220
+basic/byte_array_tuple_stringbuilder	other	fix	213
+basic/typed_array_float_branch_fill	float-diff	fix	213
+coro/sleep	coro-diff	fix	195
+coro/try_recv_close	coro-diff	fix	212

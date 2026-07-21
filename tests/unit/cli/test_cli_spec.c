@@ -68,6 +68,15 @@ TEST(spec_find_command_toolchain) {
     ASSERT_STR_EQ(spec->subcommands[1].name, "doctor");
 }
 
+TEST(spec_find_command_fix) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("fix");
+    ASSERT_NOT_NULL(spec);
+    ASSERT_EQ_INT(spec->positional_min, 1);
+    ASSERT_EQ_INT(spec->positional_max, -1);
+    ASSERT_EQ_INT(xr_cli_option_count(spec->options), 1);
+    ASSERT_STR_EQ(spec->options[0].long_name, "annotate-no-throw");
+}
+
 TEST(spec_find_command_unknown) {
     const XrCliCommandSpec *spec = xr_cli_find_command("nonexistent");
     ASSERT_NULL(spec);
@@ -719,6 +728,7 @@ RUN_TEST(spec_find_command_eval);
 RUN_TEST(spec_find_command_repl);
 RUN_TEST(spec_find_command_pkg);
 RUN_TEST(spec_find_command_toolchain);
+RUN_TEST(spec_find_command_fix);
 RUN_TEST(spec_find_command_unknown);
 RUN_TEST(spec_aliases_removed);
 RUN_TEST(spec_option_count);

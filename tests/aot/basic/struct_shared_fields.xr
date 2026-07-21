@@ -2,15 +2,15 @@ struct Sample {
     x: int
     y: float
     ok: bool
-    byte: byte
+    b: byte
 }
 
-var p = Sample{x: 41, y: 2.5, ok: true, byte: 30}
+var p = Sample{x: 41, y: 2.5, ok: true, b: 30}
 p.x = p.x + 1
-p.byte = p.byte + 1
+p.b = p.b + 1
 
 if (p.ok) {
-    print(p.x + p.byte)
+    print(p.x + p.b)
 } else {
     print(0)
 }

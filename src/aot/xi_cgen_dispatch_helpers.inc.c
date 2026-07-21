@@ -5588,8 +5588,8 @@ static bool xicgen_emit_math_raw_expr(FILE *out, const XiValue *v, const char *n
     }
 
     struct {
-        const char *name;
-        const char *c_name;
+        const char *name;   /* owned: static string literal (table below) */
+        const char *c_name; /* owned: static string literal (libm symbol) */
         uint16_t nargs;
         bool returns_int;
     } table[] = {
@@ -11629,9 +11629,9 @@ static void xicgen_byte_slice_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
 
 static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
-    (void) f;
     (void) prefix;
     XR_DCHECK(v && v->nargs == 3, "xicgen_span_window: need source, start, and count");
+    bool bounds_proven = cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_WINDOW, XAOT_SPAN_DROP_BOUNDS);
     int64_t fixed_count = 0;
     bool has_fixed_count = (cg_const_int_value(v->args[2], &fixed_count) ||
                             xicgen_imported_int_const_value(ctx, f, v->args[2], &fixed_count)) &&
@@ -11643,14 +11643,17 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     fprintf(out, "; int64_t _start = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     if (has_fixed_count) {
+        fprintf(out, "; XR_ASSUME(_src.length >= 0); ");
+        if (!bounds_proven)
+            fprintf(out,
+                    "if (XR_UNLIKELY(_start < 0 || "
+                    "_start > _src.length - INT64_C(%" PRId64 "))) "
+                    "xrt_index_oob(_start, _src.length); ",
+                    fixed_count);
         fprintf(out,
-                "; XR_ASSUME(_src.length >= 0); "
-                "if (XR_UNLIKELY(_start < 0 || "
-                "_start > _src.length - INT64_C(%" PRId64 "))) "
-                "xrt_index_oob(_start, _src.length); "
                 "XR_ASSUME(_start >= 0 && "
                 "_start <= _src.length - INT64_C(%" PRId64 ")); xr_span_t _out = _src; ",
-                fixed_count, fixed_count);
+                fixed_count);
         if (fixed_count > 0) {
             fprintf(out,
                     "XR_ASSUME(_src.data != NULL); _out.data = (void *)((uint8_t *)_src.data + "
@@ -11666,11 +11669,13 @@ static void xicgen_span_window(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     }
     fprintf(out, "; int64_t _count = ");
     emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-    fprintf(out, "; if (XR_UNLIKELY(_src.length < 0 || _start < 0 || _count < 0 || "
-                 "_start > _src.length || _count > _src.length - _start)) "
-                 "xrt_index_oob((_start < 0 || _start > _src.length) ? _start : _count, "
-                 "_src.length); "
-                 "XR_ASSUME(_src.length >= 0 && _start >= 0 && _count >= 0 && "
+    fprintf(out, "; ");
+    if (!bounds_proven)
+        fprintf(out, "if (XR_UNLIKELY(_src.length < 0 || _start < 0 || _count < 0 || "
+                     "_start > _src.length || _count > _src.length - _start)) "
+                     "xrt_index_oob((_start < 0 || _start > _src.length) ? _start : _count, "
+                     "_src.length); ");
+    fprintf(out, "XR_ASSUME(_src.length >= 0 && _start >= 0 && _count >= 0 && "
                  "_start <= _src.length && _count <= _src.length - _start); "
                  "xr_span_t _out = _src; _out.data = (_src.data && _count > 0) ? "
                  "(void *)((uint8_t *)_src.data + (size_t)_start * ");

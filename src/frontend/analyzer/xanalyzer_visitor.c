@@ -18,6 +18,7 @@
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_errorset.h"
 #include "xanalyzer_allocation.h"
+#include "xanalyzer_suspend.h"
 #include "xanalyzer_xrd.h"
 #include "xconsteval.h"
 #include "xtype_ref_resolve.h"
@@ -3565,7 +3566,7 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
         for (int i = 0; param_types && i < md->param_count; i++) {
             XrParamNode *param = md->params ? md->params[i] : NULL;
             param_types[i] = (param && param->type)
-                                 ? xr_tref_resolve_in_analyzer(ctx->analyzer, param->type)
+                                 ? xr_tref_resolve_parameter_in_analyzer(ctx->analyzer, param->type)
                                  : xr_type_new_unknown(NULL);
             param_names[i] = param ? param->name : NULL;
         }
@@ -3578,8 +3579,13 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
 
     XrType *method_type = xr_type_new_function(ctx->analyzer->isolate, param_types, md->param_count,
                                                ret_type, md->is_variadic);
-    if (method_type)
+    if (method_type) {
         method_type->function.min_params = md->required_count;
+        xr_type_function_set_throw_effect(method_type, xa_decl_has_attribute(method, ATTR_NO_THROW)
+                                                           ? XR_FN_EFFECT_NO_THROW
+                                                       : md->body ? XR_FN_EFFECT_POLY
+                                                                  : XR_FN_EFFECT_MAY_THROW);
+    }
     if (method_type && md->params) {
         for (int i = 0; i < md->param_count; i++) {
             XrParamNode *param = md->params[i];
@@ -7641,6 +7647,7 @@ static void xa_validate_freestanding_payload_error_catches(XaAnalyzer *analyzer,
  *   Pass 2   -> Type inference and checking
  *   Pass 3   -> Error set inference (value-return error system)
  *   Pass 4   -> Allocation effect inference and @no_alloc validation
+ *   Pass 5   -> Suspend effect validation (@no_suspend / @interrupt / @c_export)
  * ========================================================================== */
 
 void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
@@ -7676,9 +7683,17 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     // Pass 3: Infer error sets for functions (value-return error system)
     xa_infer_error_sets(analyzer, ast);
 
+    // Pass 3b: function definitions were provisionally POLY during structural
+    // interface checking. Enforce @no_throw covariance with the final bits.
+    xa_validate_interface_throw_effects(ctx, ast);
+
     // Pass 4: Infer allocation effects from the typed, symbol-resolved AST.
     // This runs for check, VM and AOT; backends only consume the result.
     xa_infer_allocation_effects(analyzer, ast);
+
+    // Pass 5: Validate @no_suspend assertions (and the implicit @interrupt /
+    // @c_export boundaries) against the task-212 suspend effect. Fail-closed.
+    xa_verify_no_suspend(analyzer, ast);
 
     xa_validate_freestanding_payload_error_catches(analyzer, ast);
 

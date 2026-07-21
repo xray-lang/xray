@@ -547,8 +547,14 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
 
 /* ========== Error Propagation ========== */
 
-XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node) {
+XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool producer_may_throw) {
     if (!l->cur_block)
+        return;
+
+    /* Constructive generation (task 216): a producer proven NO_THROW can never
+     * leave a pending error, so the check is not emitted at all. This replaces
+     * the historical "insert unconditionally, delete later by evidence" path. */
+    if (!producer_may_throw)
         return;
 
     if (l->try_depth > 0) {

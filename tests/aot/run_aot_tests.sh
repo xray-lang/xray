@@ -24,6 +24,11 @@
 #                       set to 1 to force executing cached native binaries and
 #                       VM runs even when a previous identical run passed
 #   XRAY_AOT_KEEP_WORK  keep temporary outputs on exit for debugging
+#   XRAY_AOT_TOMBSTONE_MAX
+#                       maximum accepted tombstone inventory when
+#                       XRAY_AOT_TOMBSTONE_FILE is set; the Task 220 CTest gate
+#                       pins this to the adoption baseline so the list can only
+#                       shrink
 
 set -u
 
@@ -31,6 +36,83 @@ XRAY="${1:-./build/xray}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 . "$PROJECT_DIR/tests/test_common.sh"
+
+# ---------------------------------------------------------------------------
+# Task 220 P1: tombstone-aware CTest gate.
+# When XRAY_AOT_TOMBSTONE_FILE is set (used by the `aot_standalone_suite` CTest)
+# the full suite is run, then EXACTLY the cases listed in that file are treated
+# as expected failures. Any other failure fails the gate (fail-closed); a
+# tombstoned case that has started passing is reported as "resolved" so the
+# tombstone inventory can only shrink. Default behaviour (env unset) is
+# unchanged: the fast runner is exec'd directly below.
+# ---------------------------------------------------------------------------
+if [ -n "${XRAY_AOT_TOMBSTONE_FILE:-}" ]; then
+    TOMB_FILE="$XRAY_AOT_TOMBSTONE_FILE"
+    if [ ! -f "$TOMB_FILE" ]; then
+        echo "error: tombstone file not found: $TOMB_FILE" >&2
+        exit 2
+    fi
+    PYTHON_BIN="${PYTHON:-python3}"
+    if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+        echo "error: python3 is required for the AOT tombstone gate" >&2
+        exit 2
+    fi
+
+    gate_tmp="$(mktemp -d "${TMPDIR:-/tmp}/aot_gate.XXXXXX")" || {
+        echo "error: cannot create gate temp dir" >&2
+        exit 2
+    }
+    trap 'rm -rf "$gate_tmp"' EXIT
+
+    # Tombstoned case names: first field, skipping comments and the header row.
+    grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$TOMB_FILE" \
+        | awk '$1!="case"{print $1}' | sort -u > "$gate_tmp/tombstoned"
+
+    tombstone_count="$(wc -l < "$gate_tmp/tombstoned" | tr -d ' ')"
+    if [ -n "${XRAY_AOT_TOMBSTONE_MAX:-}" ]; then
+        case "$XRAY_AOT_TOMBSTONE_MAX" in
+            ''|*[!0-9]*)
+                echo "error: XRAY_AOT_TOMBSTONE_MAX must be a non-negative integer" >&2
+                exit 2
+                ;;
+        esac
+        if [ "$tombstone_count" -gt "$XRAY_AOT_TOMBSTONE_MAX" ]; then
+            echo "error: tombstone inventory grew: $tombstone_count > $XRAY_AOT_TOMBSTONE_MAX" >&2
+            echo "Task 220 tombstones may only decrease; fix or rewrite the new failure." >&2
+            exit 1
+        fi
+    fi
+
+    suite_out="$("$PYTHON_BIN" "$SCRIPT_DIR/run_aot_tests_fast.py" "$@" 2>&1)"
+    printf '%s\n' "$suite_out"
+
+    # Failing case names. Case names carry no whitespace, so the leading token
+    # is the case even when a >42-char name abuts the FAIL status token.
+    printf '%s\n' "$suite_out" \
+        | grep 'FAIL' \
+        | sed -E 's/^[[:space:]]+//; s/(PASS|FAIL|SKIP).*$//; s/[[:space:]]+$//' \
+        | grep -v '^$' | sort -u > "$gate_tmp/failing"
+
+    comm -23 "$gate_tmp/failing" "$gate_tmp/tombstoned" > "$gate_tmp/unexpected"
+    comm -13 "$gate_tmp/failing" "$gate_tmp/tombstoned" > "$gate_tmp/resolved"
+
+    echo ""
+    echo "=== Task 220 AOT tombstone gate ==="
+    echo "Tombstoned cases:   $tombstone_count"
+    echo "Failing cases:      $(wc -l < "$gate_tmp/failing" | tr -d ' ')"
+    if [ -s "$gate_tmp/resolved" ]; then
+        echo "Resolved tombstones (now passing — prune from TOMBSTONES.tsv):"
+        sed 's/^/  - /' "$gate_tmp/resolved"
+    fi
+    if [ -s "$gate_tmp/unexpected" ]; then
+        echo "Unexpected (non-tombstoned) failures:"
+        sed 's/^/  - /' "$gate_tmp/unexpected"
+        echo "=== GATE: FAIL ==="
+        exit 1
+    fi
+    echo "=== GATE: PASS (only tombstoned cases failed) ==="
+    exit 0
+fi
 
 if [ "${XRAY_AOT_RUNNER:-python}" != "bash" ]; then
     PYTHON_BIN="${PYTHON:-python3}"

@@ -1877,6 +1877,7 @@ if(BUILD_TESTS)
         NAME error_effect_convergence_inventory
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_error_effect_convergence.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --max-category THROW_BIT_RECOMPUTE=0
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(error_effect_convergence_inventory PROPERTIES
@@ -1884,6 +1885,59 @@ if(BUILD_TESTS)
         PROCESSORS 1
         TIMEOUT 30
     )
+
+    # Task 218 defense line 1: cross-lifetime borrow inventory. P1 drove every
+    # category to zero (CGEN_BORROWED_NAME fields are now either arena/pool/
+    # static-literal owned or carry an explicit `owned:` justification), so the
+    # gate is now FAIL-CLOSED: any new unannotated cross-lifetime borrow makes
+    # this test fail. The baseline diff stays on for a readable regression report.
+    add_test(
+        NAME meta_ownership_inventory
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_meta_ownership.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --baseline ${CMAKE_CURRENT_SOURCE_DIR}/scripts/meta_ownership_baseline.json
+                --max-category AST_PTR_INTO_IR=0
+                --max-category PTR_ACROSS_GROWTH=0
+                --max-category CGEN_BORROWED_NAME=0
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(meta_ownership_inventory PROPERTIES
+        LABELS "aot;ir;metadata;memory;task-218"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    # Task 218 defenses 2/4 are part of the ordinary, non-sanitized CTest
+    # surface.  Do not register nested sanitizer drivers inside an already
+    # sanitized build: CI runs those configurations directly and recursive
+    # sanitizer builds would only duplicate the same work.
+    if(NOT WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
+       NOT ENABLE_MSAN)
+        add_test(
+            NAME asan_focused
+            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused.sh
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(asan_focused PROPERTIES
+            LABELS "sanitizer;asan;ubsan;task-218"
+            RUN_SERIAL TRUE
+            TIMEOUT 2400
+        )
+
+        # Task 218 defense line 4: strict LeakSanitizer lane. LSan runs only on
+        # Linux; the script skips cleanly elsewhere. Uses scripts/lsan.supp and
+        # xr_process_shutdown() for process-global registry release.
+        add_test(
+            NAME lsan_strict
+            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_lsan_strict.sh
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(lsan_strict PROPERTIES
+            LABELS "sanitizer;lsan;leak;task-218"
+            RUN_SERIAL TRUE
+            TIMEOUT 2400
+        )
+    endif()
 
     add_test(
         NAME source_unknown_convergence_inventory
@@ -2376,6 +2430,30 @@ if(BUILD_TESTS)
         TIMEOUT ${COMPILE_ERROR_TESTS_TIMEOUT}
     )
 
+    add_test(
+        NAME cli_fix_no_throw
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_fix_no_throw_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(cli_fix_no_throw PROPERTIES
+        LABELS "cli;frontend;regression"
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME aot_no_throw_contract
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_no_throw_contract_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_no_throw_contract PROPERTIES
+        LABELS "aot;effects;frontend;regression"
+        TIMEOUT 60
+    )
+
     # Borrow/ownership instrumentation: keep a machine-parseable Xi
     # retain/release budget available for RC-overhead regression work.
     add_test(
@@ -2473,6 +2551,77 @@ if(BUILD_TESTS)
     )
     set_tests_properties(regression_rc_closure_self_capture PROPERTIES
         LABELS "regression;rc;vm"
+        TIMEOUT 30
+    )
+
+    # ========================================================================
+    # Task 220 — Verification asset governance gates (appended registrations)
+    # Design: xray-docs/tasks/220-semantic-contract-freeze-and-verification-
+    # asset-governance-cn.md. This section only registers tests; it adds no
+    # build targets.
+    # ========================================================================
+
+    # P1: independent AOT VM-vs-native suite adopted into CTest with a tombstone
+    # gate. Runs every tests/aot/{basic,modules,coro,negative} case and treats
+    # EXACTLY the cases in tests/aot/TOMBSTONES.tsv as expected failures; any
+    # other failure fails the gate (fail-closed). Allowed to be slower than the
+    # main gate.
+    add_test(
+        NAME aot_standalone_suite
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_AOT_TOMBSTONE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/TOMBSTONES.tsv
+                XRAY_AOT_TOMBSTONE_MAX=10
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_standalone_suite PROPERTIES
+        LABELS "aot;standalone;tombstone;task-220"
+        PROCESSORS 4
+        TIMEOUT 600
+    )
+
+    # P2: removed-surface-form drift scan. Fails closed on any live occurrence
+    # of a deleted Xray surface form (`let` bindings, mem.free(), unchecked LE
+    # load/store, direct Buffer indexing) across tests/, stdlib/, and knowledge
+    # docs. Negative fixtures and fuzz corpus are excluded by the scanner.
+    add_test(
+        NAME surface_drift_scan
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_surface_drift.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --fail-on-hit
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(surface_drift_scan PROPERTIES
+        LABELS "meta;surface;drift;task-220"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
+
+    # P0: semantic contract anchor digests and CONTRACT-CHANGE trailers. The
+    # self-test injects both an anchor drift and a missing trailer to prove the
+    # gate fails closed independently of the live repository state.
+    add_test(
+        NAME contract_freeze
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_contract_freeze.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(contract_freeze PROPERTIES
+        LABELS "meta;contracts;freeze;task-220"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME contract_freeze_injection
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_contract_freeze.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(contract_freeze_injection PROPERTIES
+        LABELS "meta;contracts;freeze;task-220"
+        PROCESSORS 1
         TIMEOUT 30
     )
 endif()

@@ -1,0 +1,10 @@
+enum NoThrowDefinitionError { Boom }
+
+@no_throw
+fn promisedPure() {
+    throw NoThrowDefinitionError.Boom
+}
+
+fn main() {
+    promisedPure()
+}

@@ -48,6 +48,7 @@
 #include "xi_evidence.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
+#include "xi_arc_verify.h"
 #include "xi_opt_devirt.h"
 #include "../base/xdefs.h"
 #include "../base/xglobal_indices.h"
@@ -3974,6 +3975,19 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                              round, f->name ? f->name : "?", check_errbuf);
                     goto done;
                 }
+            }
+
+            /* Task 219 P3: re-verify the RC contracts after any pass that
+             * mutates lifetime/ownership evidence or the CFG. A lifetime-
+             * invalidating optimization that reintroduces a use-after-release
+             * or double-free then ICEs at the offending pass instead of
+             * silently miscompiling. On by default in debug/CI, off in release
+             * (see xi_arc_verify_per_pass_enabled); the post-ARC single run is
+             * always on regardless. */
+            if (xi_arc_verify_per_pass_enabled() &&
+                ((desc->invalidates_evidence & (XI_EVD_LIFETIME | XI_EVD_OWNERSHIP)) != 0 ||
+                 pc.cfg_changed)) {
+                xi_arc_verify_or_ice(f, desc->name);
             }
         }
 

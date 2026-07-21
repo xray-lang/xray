@@ -241,6 +241,7 @@ module math {
   fn abs {
     signature: "(x: float): float"
     doc: "Absolute value (preserves int)"
+    effect: "nothrow"
     vm: "math_abs"
     aot: "builtin"
     argc: 1
@@ -253,6 +254,7 @@ module math {
   fn floor {
     signature: "(x: float): int"
     doc: "Floor to integer"
+    effect: "nothrow"
     vm: "math_floor"
     aot: "builtin"
     argc: 1
@@ -265,6 +267,7 @@ module math {
   fn ceil {
     signature: "(x: float): int"
     doc: "Ceiling to integer"
+    effect: "nothrow"
     vm: "math_ceil"
     aot: "builtin"
     argc: 1
@@ -277,6 +280,7 @@ module math {
   fn round {
     signature: "(x: float): int"
     doc: "Round to nearest integer"
+    effect: "nothrow"
     vm: "math_round"
     aot: "builtin"
     argc: 1
@@ -289,6 +293,7 @@ module math {
   fn sqrt {
     signature: "(x: float): float"
     doc: "Square root"
+    effect: "nothrow"
     vm: "math_sqrt"
     aot: "builtin"
     argc: 1
@@ -301,6 +306,7 @@ module math {
   fn pow {
     signature: "(base: float, exp: float): float"
     doc: "Power"
+    effect: "nothrow"
     vm: "math_pow"
     aot: "builtin"
     argc: 2
@@ -313,6 +319,7 @@ module math {
   fn sin {
     signature: "(x: float): float"
     doc: "Sine"
+    effect: "nothrow"
     vm: "math_sin"
     aot: "builtin"
     argc: 1
@@ -325,6 +332,7 @@ module math {
   fn cos {
     signature: "(x: float): float"
     doc: "Cosine"
+    effect: "nothrow"
     vm: "math_cos"
     aot: "builtin"
     argc: 1
@@ -337,6 +345,7 @@ module math {
   fn tan {
     signature: "(x: float): float"
     doc: "Tangent"
+    effect: "nothrow"
     vm: "math_tan"
     aot: "builtin"
     argc: 1
@@ -349,6 +358,7 @@ module math {
   fn asin {
     signature: "(x: float): float"
     doc: "Arc sine"
+    effect: "nothrow"
     vm: "math_asin"
     aot: "builtin"
     argc: 1
@@ -361,6 +371,7 @@ module math {
   fn acos {
     signature: "(x: float): float"
     doc: "Arc cosine"
+    effect: "nothrow"
     vm: "math_acos"
     aot: "builtin"
     argc: 1
@@ -373,6 +384,7 @@ module math {
   fn atan {
     signature: "(x: float): float"
     doc: "Arc tangent"
+    effect: "nothrow"
     vm: "math_atan"
     aot: "builtin"
     argc: 1
@@ -385,6 +397,7 @@ module math {
   fn atan2 {
     signature: "(y: float, x: float): float"
     doc: "Arc tangent of y/x"
+    effect: "nothrow"
     vm: "math_atan2"
     aot: "builtin"
     argc: 2
@@ -397,6 +410,7 @@ module math {
   fn log {
     signature: "(x: float): float"
     doc: "Natural logarithm"
+    effect: "nothrow"
     vm: "math_log"
     aot: "builtin"
     argc: 1
@@ -409,6 +423,7 @@ module math {
   fn log10 {
     signature: "(x: float): float"
     doc: "Base-10 logarithm"
+    effect: "nothrow"
     vm: "math_log10"
     aot: "builtin"
     argc: 1
@@ -421,6 +436,7 @@ module math {
   fn log2 {
     signature: "(x: float): float"
     doc: "Base-2 logarithm"
+    effect: "nothrow"
     vm: "math_log2"
     aot: "builtin"
     argc: 1
@@ -433,6 +449,7 @@ module math {
   fn exp {
     signature: "(x: float): float"
     doc: "Exponential e^x"
+    effect: "nothrow"
     vm: "math_exp"
     aot: "builtin"
     argc: 1
@@ -445,6 +462,7 @@ module math {
   fn min {
     signature: "(...args: float): float"
     doc: "Minimum (preserves int)"
+    effect: "nothrow"
     vm: "math_min"
     aot: "builtin"
     argc: variadic
@@ -457,6 +475,7 @@ module math {
   fn max {
     signature: "(...args: float): float"
     doc: "Maximum (preserves int)"
+    effect: "nothrow"
     vm: "math_max"
     aot: "builtin"
     argc: variadic
@@ -469,6 +488,7 @@ module math {
   fn clamp {
     signature: "(x: float, min: float, max: float): float"
     doc: "Clamp (preserves int)"
+    effect: "nothrow"
     vm: "math_clamp"
     aot: "builtin"
     argc: 3
@@ -481,6 +501,7 @@ module math {
   fn random {
     signature: "(): float"
     doc: "Random float in [0, 1)"
+    effect: "nothrow"
     vm: "math_random"
     aot: "xrt_math_random"
     argc: 0
@@ -493,6 +514,7 @@ module math {
   fn randomInt {
     signature: "(min: int, max: int): int"
     doc: "Random integer in [min, max]"
+    effect: "nothrow"
     vm: "math_randomInt"
     aot: "xrt_math_random_int"
     argc: 2
@@ -505,6 +527,7 @@ module math {
   fn sign {
     signature: "(x: float): int"
     doc: "Sign of value (-1, 0, 1)"
+    effect: "nothrow"
     vm: "math_sign"
     aot: "builtin"
     argc: 1
@@ -517,6 +540,7 @@ module math {
   fn sinh {
     signature: "(x: float): float"
     doc: "Hyperbolic sine"
+    effect: "nothrow"
     vm: "math_sinh"
     aot: "builtin"
     argc: 1
@@ -529,6 +553,7 @@ module math {
   fn cosh {
     signature: "(x: float): float"
     doc: "Hyperbolic cosine"
+    effect: "nothrow"
     vm: "math_cosh"
     aot: "builtin"
     argc: 1
@@ -541,6 +566,7 @@ module math {
   fn tanh {
     signature: "(x: float): float"
     doc: "Hyperbolic tangent"
+    effect: "nothrow"
     vm: "math_tanh"
     aot: "builtin"
     argc: 1
@@ -553,6 +579,7 @@ module math {
   fn hypot {
     signature: "(x: float, y: float): float"
     doc: "Hypotenuse sqrt(x*x+y*y)"
+    effect: "nothrow"
     vm: "math_hypot"
     aot: "builtin"
     argc: 2
@@ -565,6 +592,7 @@ module math {
   fn cbrt {
     signature: "(x: float): float"
     doc: "Cube root"
+    effect: "nothrow"
     vm: "math_cbrt"
     aot: "builtin"
     argc: 1
@@ -577,6 +605,7 @@ module math {
   fn trunc {
     signature: "(x: float): int"
     doc: "Truncate toward zero"
+    effect: "nothrow"
     vm: "math_trunc"
     aot: "builtin"
     argc: 1
@@ -589,6 +618,7 @@ module math {
   fn fmod {
     signature: "(x: float, y: float): float"
     doc: "Floating-point remainder"
+    effect: "nothrow"
     vm: "math_fmod"
     aot: "builtin"
     argc: 2
@@ -601,6 +631,7 @@ module math {
   fn log1p {
     signature: "(x: float): float"
     doc: "log(1+x) accurate for small x"
+    effect: "nothrow"
     vm: "math_log1p"
     aot: "builtin"
     argc: 1
@@ -613,6 +644,7 @@ module math {
   fn expm1 {
     signature: "(x: float): float"
     doc: "exp(x)-1 accurate for small x"
+    effect: "nothrow"
     vm: "math_expm1"
     aot: "builtin"
     argc: 1
@@ -625,6 +657,7 @@ module math {
   fn lerp {
     signature: "(a: float, b: float, t: float): float"
     doc: "Linear interpolation"
+    effect: "nothrow"
     vm: "math_lerp"
     aot: "builtin"
     argc: 3
@@ -637,6 +670,7 @@ module math {
   fn degToRad {
     signature: "(deg: float): float"
     doc: "Degrees to radians"
+    effect: "nothrow"
     vm: "math_degToRad"
     aot: "builtin"
     argc: 1
@@ -649,6 +683,7 @@ module math {
   fn radToDeg {
     signature: "(rad: float): float"
     doc: "Radians to degrees"
+    effect: "nothrow"
     vm: "math_radToDeg"
     aot: "builtin"
     argc: 1
@@ -661,6 +696,7 @@ module math {
   fn isNaN {
     signature: "(x: float): bool"
     doc: "Check if NaN"
+    effect: "nothrow"
     vm: "math_isNaN"
     aot: "builtin"
     argc: 1
@@ -673,6 +709,7 @@ module math {
   fn isFinite {
     signature: "(x: float): bool"
     doc: "Check if finite"
+    effect: "nothrow"
     vm: "math_isFinite"
     aot: "builtin"
     argc: 1

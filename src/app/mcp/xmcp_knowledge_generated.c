@@ -5513,7 +5513,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "functions",
         .title = "Functions",
-        .aliases_csv = "fn,function,arrow,closure,lambda,params",
+        .aliases_csv = "fn,function,arrow,closure,lambda,params,no_throw,no_suspend,zero_cost,no_alloc",
         .body =
             "[Language reference](#52-fn-\xe5\x87\xbd\xe6\x95\xb0\xe5\xa3\xb0\xe6\x98\x8e)\n"
             "\n"
@@ -5602,9 +5602,31 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var identity = fn<T>(x: T) -> T { return x }     // generic\n"
             "```\n"
             "\n"
+            "### Checked system assertions\n"
+            "- `@no_alloc`, `@no_throw`, and `@no_suspend` are analyzer-proven, fail-closed contracts\n"
+            "- `@zero_cost` is an AOT generated-shape contract; its optional allow list names explicit residue exemptions\n"
+            "- `@no_throw` and `@no_suspend` may prefix function types to constrain callbacks\n"
+            "```xray\n"
+            "@no_throw\n"
+            "@no_suspend\n"
+            "fn addOne(x: int) -> int {\n"
+            "    return x + 1\n"
+            "}\n"
+            "\n"
+            "fn applySync(f: @no_throw @no_suspend (int) -> int, x: int) -> int {\n"
+            "    return f(x)\n"
+            "}\n"
+            "\n"
+            "@zero_cost\n"
+            "fn hotAdd(x: int, y: int) -> int {\n"
+            "    return x + y\n"
+            "}\n"
+            "```\n"
+            "\n"
             "### Higher-order functions\n"
-            "- Function types use `fn(T1, T2) -> R` in type position\n"
+            "- Function types use `(T1, T2) -> R` in type position, optionally prefixed by `@no_throw` and/or `@no_suspend`\n"
             "- Function values can be passed to callbacks such as `map`, `filter`, and `reduce`\n"
+            "- Unconstrained callback parameters are effect-polymorphic; explicit effect prefixes are fixed constraints\n"
             "- Closure capture rules are described in the scoping and concurrency sections\n"
             "",
     },
@@ -5884,7 +5906,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Design principles\n"
             "- Errors are values (enum variants), not exceptions\n"
             "- No PanicInfo allocation or stack unwinding; only a predictable branch at call boundaries that may propagate or catch errors\n"
-            "- No `throws` in function signatures \xe2\x80\x94 errors are implicit\n"
+            "- No `throws` in function signatures \xe2\x80\x94 errors are inferred; `@no_throw` optionally freezes a checked contract\n"
+            "- Concrete error sets stay in the analyzer database; only a three-state throw-effect bit enters internal function types\n"
             "- Use ADT enums for structured error causes with exhaustive `match`\n"
             "",
     },

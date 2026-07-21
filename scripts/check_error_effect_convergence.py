@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""Inventory task-205 unchecked error-effect convergence residue.
+"""Inventory task-205/216 unchecked error-effect convergence residue.
 
 This is a P0 inventory gate, not a final blocker. By default it prints
 classified hits and exits successfully. Later 205 phases can add stricter
 category-specific failure modes as XrErrorSet, function-type-owned error sets,
 and MAY_THROW naming are replaced by XaEffectDatabase.
+
+Task 216 additionally makes ``XrFnThrowEffect`` a frontend-owned typed bit.
+The backend may fold already-emitted checks as defense-in-depth, but it must
+not inspect or independently reconstruct that source-level bit.  The
+``THROW_BIT_RECOMPUTE`` category is therefore a fail-closed zero gate over
+typed-bit consumers below lowering.
 """
 
 from __future__ import annotations
@@ -73,6 +79,10 @@ NATIVE_ERROR_RE = re.compile(
     re.IGNORECASE,
 )
 TASK_ERROR_RE = re.compile(r"\b(?:TaskOutcome|TaskResult|Failed\(unknown\)|Task<[^>]*,\s*[^>]*>)\b")
+THROW_BIT_RE = re.compile(
+    r"\b(?:XrFnThrowEffect|XR_FN_EFFECT_(?:NO_THROW|MAY_THROW|POLY)|"
+    r"function\.throw_effect|xr_type_function_(?:throw_effect|is_no_throw|set_throw_effect))\b"
+)
 
 XR_ERROR_SET_NEEDLES = ("XrErrorSet", "xr_error_set_")
 FUNCTION_ERROR_SET_NEEDLES = ("function.error_set", "xr_type_", "XrType.function.error_set")
@@ -111,6 +121,7 @@ CATEGORIES = (
     "XRD_METADATA_GENERATOR_OR_LOADER",
     "NATIVE_ERROR_CONTRACT_SURFACE",
     "TASK_TYPED_ERROR_RESIDUE",
+    "THROW_BIT_RECOMPUTE",
 )
 
 
@@ -190,6 +201,12 @@ def classify_line(rel_path: str, line: str) -> list[str]:
         categories.append("NATIVE_ERROR_CONTRACT_SURFACE")
     if any(needle in line for needle in TASK_ERROR_NEEDLES) and TASK_ERROR_RE.search(line):
         categories.append("TASK_TYPED_ERROR_RESIDUE")
+    if (
+        (rel_path.startswith("src/aot/") or rel_path.startswith("src/ir/"))
+        and rel_path != "src/ir/xi_lower_expr.c"
+        and THROW_BIT_RE.search(line)
+    ):
+        categories.append("THROW_BIT_RECOMPUTE")
     return categories
 
 
@@ -219,7 +236,7 @@ def build_inventory(root: Path) -> dict[str, list[Hit]]:
 
 
 def print_text_inventory(inventory: dict[str, list[Hit]], max_per_category: int) -> None:
-    print("Task 205 unchecked error-effect convergence inventory")
+    print("Task 205/216 unchecked error-effect convergence inventory")
     for category, hits in inventory.items():
         print(f"{category}: {len(hits)}")
         shown = hits if max_per_category <= 0 else hits[:max_per_category]
@@ -227,6 +244,25 @@ def print_text_inventory(inventory: dict[str, list[Hit]], max_per_category: int)
             print(f"  {hit.path}:{hit.line}: {hit.text}")
         if max_per_category > 0 and len(hits) > max_per_category:
             print(f"  ... {len(hits) - max_per_category} more")
+
+
+def parse_max_category(values: list[str]) -> dict[str, int]:
+    maxima: dict[str, int] = {}
+    for raw in values:
+        if "=" not in raw:
+            raise SystemExit(f"--max-category expects NAME=N, got {raw!r}")
+        name, _, value = raw.partition("=")
+        name = name.strip()
+        if name not in CATEGORIES:
+            raise SystemExit(f"unknown category {name!r}; valid: {', '.join(CATEGORIES)}")
+        try:
+            maximum = int(value)
+        except ValueError as exc:
+            raise SystemExit(f"--max-category expects integer N, got {raw!r}") from exc
+        if maximum < 0:
+            raise SystemExit(f"--max-category expects N >= 0, got {raw!r}")
+        maxima[name] = maximum
+    return maxima
 
 
 def main() -> int:
@@ -238,6 +274,13 @@ def main() -> int:
         type=int,
         default=20,
         help="text output limit per category; 0 prints all hits",
+    )
+    parser.add_argument(
+        "--max-category",
+        action="append",
+        default=[],
+        metavar="NAME=N",
+        help="fail if category NAME exceeds N (task 216 fail-closed mode)",
     )
     args = parser.parse_args()
 
@@ -254,6 +297,14 @@ def main() -> int:
         )
     else:
         print_text_inventory(inventory, args.max_per_category)
+    failed = False
+    for category, maximum in parse_max_category(args.max_category).items():
+        count = len(inventory[category])
+        if count > maximum:
+            print(f"ERROR: {category}: {count} exceeds max {maximum}")
+            failed = True
+    if failed:
+        return 1
     return 0
 
 

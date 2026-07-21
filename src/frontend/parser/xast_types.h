@@ -256,6 +256,14 @@ typedef enum {
     ATTR_NAKED,         // @naked — freestanding AOT naked extern symbol declaration
     ATTR_INTERRUPT,     // @interrupt("abi") — freestanding AOT interrupt extern declaration
     ATTR_NO_ALLOC,      // @no_alloc — AOT function must not perform heap/runtime allocation
+    ATTR_NO_THROW,      // @no_throw — asserted non-throwing: body (incl. transitive calls)
+                        //             must be proven to raise no error (task 216)
+    ATTR_NO_SUSPEND,    // @no_suspend — asserted non-suspending: body (incl. transitive calls)
+                        //               must be proven to reach no suspend point (task 217)
+    ATTR_ZERO_COST,     // @zero_cost — AOT generated code must carry no forbidden abstraction-cost
+                        //              residue (task 217); verified at the AOT backend stage only.
+                        //              The VM is a semantics reference and never consumes it (it
+                        //              makes no shape promise); it changes no code generation.
     ATTR_INTRINSIC,     // compiler-owned @intrinsic("canonical.id") declaration metadata
     ATTR_DERIVE,        // @derive(...) — opt-in generated capability metadata
 } AttributeKind;

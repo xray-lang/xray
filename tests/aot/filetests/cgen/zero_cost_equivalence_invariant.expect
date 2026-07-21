@@ -1,0 +1,4 @@
+c_contains=int64_t call_plain(int64_t p0)
+c_contains=int64_t call_gated(int64_t p0)
+c_count=2:(uint64_t)(v0) * (uint64_t)(v0)
+c_count=2:(uint64_t)(v4) + (uint64_t)(v5)

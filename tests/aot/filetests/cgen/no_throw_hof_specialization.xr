@@ -1,0 +1,26 @@
+enum HofError { Negative }
+
+fn apply<T>(callback: (T) -> T, value: T) -> T {
+    return callback(value)
+}
+
+fn increment(value: int) -> int {
+    return value + 1
+}
+
+fn checked(value: int) -> int {
+    if (value < 0) {
+        throw HofError.Negative
+    }
+    return value + 1
+}
+
+@c_export("xray_apply_pure")
+fn xray_apply_pure(value: int) -> int {
+    return apply<int>(increment, value)
+}
+
+@c_export("xray_apply_checked")
+fn xray_apply_checked(value: int) -> int {
+    return apply<int>(checked, value)
+}

@@ -1911,6 +1911,9 @@ static bool prepare_span_access_kind_for_value(const XiValue *value, uint8_t *ou
         case XI_VEC_STORE:
             *out_kind = XAOT_SPAN_ACCESS_VEC_STORE;
             return true;
+        case XI_SPAN_WINDOW:
+            *out_kind = XAOT_SPAN_ACCESS_WINDOW;
+            return true;
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
             if (value->nargs != 2)
@@ -2096,6 +2099,174 @@ static bool prepare_span_access_is_write(uint8_t kind) {
            kind == XAOT_SPAN_ACCESS_BYTE_FILL || kind == XAOT_SPAN_ACCESS_BYTE_COPY ||
            kind == XAOT_SPAN_ACCESS_BYTE_REPEAT || kind == XAOT_SPAN_ACCESS_SPAN_FILL ||
            kind == XAOT_SPAN_ACCESS_SPAN_COPY || kind == XAOT_SPAN_ACCESS_VEC_STORE;
+}
+
+static bool prepare_span_int_expr_equal(const XiValue *lhs, const XiValue *rhs) {
+    lhs = unwrap_identity_value(lhs);
+    rhs = unwrap_identity_value(rhs);
+    if (lhs == rhs)
+        return lhs != NULL;
+    return lhs && rhs && lhs->op == XI_CONST && rhs->op == XI_CONST && lhs->type && rhs->type &&
+           lhs->type->kind == XR_KIND_INT && rhs->type->kind == XR_KIND_INT &&
+           lhs->aux_int == rhs->aux_int;
+}
+
+static bool prepare_span_len_matches_source(const XiValue *value, const XiValue *source) {
+    value = unwrap_identity_value(value);
+    return value && value->op == XI_LEN && value->nargs == 1 && same_value(value->args[0], source);
+}
+
+static bool prepare_span_len_minus_count_matches(const XiValue *value, const XiValue *source,
+                                                 const XiValue *count) {
+    value = unwrap_identity_value(value);
+    if (!value || value->nargs < 2)
+        return false;
+    if (value->op == XI_SUB && prepare_span_len_matches_source(value->args[0], source) &&
+        prepare_span_int_expr_equal(value->args[1], count))
+        return true;
+    if (value->op == XI_ADD && prepare_span_len_matches_source(value->args[0], source)) {
+        const XiValue *rhs = unwrap_identity_value(value->args[1]);
+        const XiValue *count_value = unwrap_identity_value(count);
+        return rhs && count_value && rhs->op == XI_CONST && count_value->op == XI_CONST &&
+               rhs->type && count_value->type && rhs->type->kind == XR_KIND_INT &&
+               count_value->type->kind == XR_KIND_INT && count_value->aux_int >= 0 &&
+               rhs->aux_int == -count_value->aux_int;
+    }
+    return false;
+}
+
+static uint16_t prepare_span_negated_cmp_op(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_EQ:
+            return XI_NE;
+        case XI_NE:
+            return XI_EQ;
+        case XI_LT:
+            return XI_GE;
+        case XI_LE:
+            return XI_GT;
+        case XI_GT:
+            return XI_LE;
+        case XI_GE:
+            return XI_LT;
+        default:
+            return XI_OP_COUNT;
+    }
+}
+
+static bool prepare_span_condition_proves_start_nonnegative(const XiValue *condition,
+                                                            const XiValue *start, bool truth) {
+    condition = unwrap_identity_value(condition);
+    if (!condition)
+        return false;
+    if (condition->op == XI_NOT && condition->nargs >= 1)
+        return prepare_span_condition_proves_start_nonnegative(condition->args[0], start, !truth);
+    if (((truth && condition->op == XI_BAND) || (!truth && condition->op == XI_BOR)) &&
+        condition->nargs >= 2)
+        return prepare_span_condition_proves_start_nonnegative(condition->args[0], start, truth) ||
+               prepare_span_condition_proves_start_nonnegative(condition->args[1], start, truth);
+    if (condition->nargs < 2)
+        return false;
+
+    uint16_t op = truth ? condition->op : prepare_span_negated_cmp_op(condition->op);
+    const XiValue *lhs = unwrap_identity_value(condition->args[0]);
+    const XiValue *rhs = unwrap_identity_value(condition->args[1]);
+    if (op == XI_OP_COUNT || !lhs || !rhs)
+        return false;
+    if (prepare_span_int_expr_equal(lhs, start) && prepare_array_const_int_value(rhs, 0))
+        return op == XI_GE || op == XI_EQ || op == XI_GT;
+    if (prepare_array_const_int_value(lhs, 0) && prepare_span_int_expr_equal(rhs, start))
+        return op == XI_LE || op == XI_EQ || op == XI_LT;
+    return false;
+}
+
+static bool prepare_span_condition_proves_window_upper(const XiValue *condition,
+                                                       const XiValue *source, const XiValue *start,
+                                                       const XiValue *count, bool truth) {
+    condition = unwrap_identity_value(condition);
+    if (!condition)
+        return false;
+    if (condition->op == XI_NOT && condition->nargs >= 1)
+        return prepare_span_condition_proves_window_upper(condition->args[0], source, start, count,
+                                                          !truth);
+    if (((truth && condition->op == XI_BAND) || (!truth && condition->op == XI_BOR)) &&
+        condition->nargs >= 2)
+        return prepare_span_condition_proves_window_upper(condition->args[0], source, start, count,
+                                                          truth) ||
+               prepare_span_condition_proves_window_upper(condition->args[1], source, start, count,
+                                                          truth);
+    if (condition->nargs < 2)
+        return false;
+
+    uint16_t op = truth ? condition->op : prepare_span_negated_cmp_op(condition->op);
+    const XiValue *lhs = unwrap_identity_value(condition->args[0]);
+    const XiValue *rhs = unwrap_identity_value(condition->args[1]);
+    if (op == XI_OP_COUNT || !lhs || !rhs)
+        return false;
+    if (prepare_span_int_expr_equal(lhs, start) &&
+        prepare_span_len_minus_count_matches(rhs, source, count))
+        return op == XI_LE || op == XI_LT || op == XI_EQ;
+    if (prepare_span_len_minus_count_matches(lhs, source, count) &&
+        prepare_span_int_expr_equal(rhs, start))
+        return op == XI_GE || op == XI_GT || op == XI_EQ;
+
+    if (prepare_array_const_int_value(start, 0)) {
+        if (prepare_span_len_matches_source(lhs, source) && prepare_span_int_expr_equal(rhs, count))
+            return op == XI_GE || op == XI_GT || op == XI_EQ;
+        if (prepare_span_int_expr_equal(lhs, count) && prepare_span_len_matches_source(rhs, source))
+            return op == XI_LE || op == XI_LT || op == XI_EQ;
+    }
+    return false;
+}
+
+static bool prepare_span_assert_precedes_window(const XiValue *assertion, const XiValue *window) {
+    if (!assertion || !window || !assertion->block || !window->block)
+        return false;
+    if (assertion->block != window->block)
+        return xi_dominates(assertion->block, window->block);
+    for (uint32_t i = 0; i < window->block->nvalues; i++) {
+        const XiValue *value = window->block->values[i];
+        if (value == assertion)
+            return true;
+        if (value == window)
+            return false;
+    }
+    return false;
+}
+
+/* A successful XI_ASSERT is a checked capability boundary: code after it may
+ * consume the asserted relation without repeating the same bounds branch.
+ * The proof stays deliberately narrow (start >= 0 and start <= len-count), is
+ * recorded in the AOT plan, and is independently re-derived by the verifier. */
+static bool prepare_span_window_assert_bounds_proven(const XiFunc *func, const XiValue *window) {
+    if (!func || !window || window->op != XI_SPAN_WINDOW || window->nargs != 3 || !window->block)
+        return false;
+    const XiValue *source = window->args[0];
+    const XiValue *start = window->args[1];
+    const XiValue *count = window->args[2];
+    bool start_nonnegative = prepare_array_value_known_nonnegative(start, NULL, 0);
+    bool count_nonnegative = prepare_array_value_known_nonnegative(count, NULL, 0);
+    bool upper_proven = false;
+
+    xi_ensure_dominators((XiFunc *) func);
+    for (uint32_t bi = 0; bi < func->nblocks && (!start_nonnegative || !upper_proven); bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues && (!start_nonnegative || !upper_proven); vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op != XI_ASSERT || value->nargs < 1 || value->aux_int != 0 ||
+                !prepare_span_assert_precedes_window(value, window))
+                continue;
+            if (!start_nonnegative)
+                start_nonnegative =
+                    prepare_span_condition_proves_start_nonnegative(value->args[0], start, true);
+            if (!upper_proven)
+                upper_proven = prepare_span_condition_proves_window_upper(value->args[0], source,
+                                                                          start, count, true);
+        }
+    }
+    return start_nonnegative && count_nonnegative && upper_proven;
 }
 
 static const XiValue *prepare_span_access_receiver(const XiValue *value, uint8_t kind) {
@@ -2320,6 +2491,15 @@ XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, c
         case XAOT_SPAN_ACCESS_VEC_STORE:
             if (prepare_vector_window_bounds_proven(value, kind)) {
                 evidence |= XAOT_SPAN_EV_RANGE_PROVEN | XAOT_SPAN_EV_NO_CLOBBER;
+                drop |= XAOT_SPAN_DROP_BOUNDS;
+            } else {
+                reason = XAOT_SPAN_UNPROVEN_RANGE;
+            }
+            break;
+        case XAOT_SPAN_ACCESS_WINDOW:
+            if (prepare_span_window_assert_bounds_proven(func, value)) {
+                evidence |=
+                    XAOT_SPAN_EV_RANGE_PROVEN | XAOT_SPAN_EV_NO_CLOBBER | XAOT_SPAN_EV_ASSERT_GUARD;
                 drop |= XAOT_SPAN_DROP_BOUNDS;
             } else {
                 reason = XAOT_SPAN_UNPROVEN_RANGE;
@@ -4304,6 +4484,34 @@ static bool prepare_func_extern_decls(XaotBundle *bundle, const XiFunc *func) {
     return true;
 }
 
+/* Task 216: constructive error-check generation lets tail-call optimization
+ * fire on calls that previously carried a mandatory error check (the check node
+ * sat between the call and its return, so the call was never in tail position).
+ * The AOT C backend expresses a tail call as an ordinary call and returns its
+ * result — the host C compiler performs the actual tail jump — so it has no
+ * XI_TAIL_CALL emitter. Normalize XI_TAIL_CALL back to XI_CALL for every
+ * function reached by C generation. The VM keeps its XI_TAIL_CALL handling; this
+ * only rewrites the AOT bundle's IR, after all prepare-time analyses (which are
+ * already XI_TAIL_CALL-aware) have run. */
+static void xaot_normalize_tail_calls(XiFunc *f) {
+    if (!f)
+        return;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (v && v->op == XI_TAIL_CALL)
+                v->op = XI_CALL;
+        }
+        if (blk->control && blk->control->op == XI_TAIL_CALL)
+            blk->control->op = XI_CALL;
+    }
+    for (uint16_t c = 0; c < f->nchildren; c++)
+        xaot_normalize_tail_calls(f->children[c]);
+}
+
 XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats) {
     uint32_t mi;
     if (!bundle || !bundle->modules)
@@ -4311,6 +4519,16 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
 
     memset(&bundle->stats, 0, sizeof(bundle->stats));
     bundle->error_msg = NULL;
+
+    /* Task 216: normalize tail calls to ordinary calls before any prepare-time
+     * analysis or boundary/conversion planning, so those steps build the call
+     * argument/return plans the C backend needs (it has no XI_TAIL_CALL
+     * emitter; the host C compiler performs the tail jump). */
+    for (mi = 0; mi < bundle->nmodules; mi++) {
+        XiModule *mod = bundle->modules[mi];
+        if (mod && mod->init)
+            xaot_normalize_tail_calls(mod->init);
+    }
 
     for (mi = 0; mi < bundle->nmodules; mi++) {
         XiModule *mod = bundle->modules[mi];

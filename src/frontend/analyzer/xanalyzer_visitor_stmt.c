@@ -5667,7 +5667,7 @@ static bool xa_function_assignment_mismatch(XrType *target_type, XrType *value_t
         return true;
     if (target_type->is_nullable || value_type->is_nullable)
         return !xa_typecheck_assignable(target_type, value_type);
-    return !xr_type_equals(target_type, value_type);
+    return !xr_type_function_signature_assignable(target_type, value_type);
 }
 
 XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *target_type,
@@ -8487,7 +8487,10 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
             }
             var_type = links->declared_type;
         } else {
-            var_type = init_type;
+            /* Unannotated stored function values are a merge boundary. Keep
+             * the initializer node's precise bit for direct evidence, but give
+             * the binding an independent fail-closed MAY_THROW function type. */
+            var_type = xa_function_value_storage_type(ctx, init_type);
             // Empty array literal without type annotation: require explicit type
             if (var->initializer && var->initializer->type == AST_ARRAY_LITERAL &&
                 var->initializer->as.array_literal.count == 0 && XR_TYPE_IS_ARRAY(init_type) &&
