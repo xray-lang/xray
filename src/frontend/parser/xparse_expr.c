@@ -880,6 +880,25 @@ AstNode *xr_parse_grouping(Parser *parser) {
     return xr_ast_tuple_literal(parser->compiler_session, elems, count, line);
 }
 
+// Parse a bare single-parameter lambda after Pratt consumed `->`.
+// Giving `->` assignment-level precedence lets arrow-delimited constructs
+// such as `select { value from channel -> ... }` stop at the delimiter by
+// parsing their head with PREC_CALL, while ordinary expressions accept the
+// same `parameter -> body` form in any position.
+AstNode *xr_parse_bare_lambda(Parser *parser, AstNode *parameter) {
+    if (!parameter || parameter->type != AST_VARIABLE) {
+        xr_parser_error_at_previous(
+            parser, "bare lambda parameter must be one identifier; use `(params) -> body`");
+        return NULL;
+    }
+
+    XrParamNode **params =
+        (XrParamNode **) ast_alloc_array(parser->compiler_session, sizeof(XrParamNode *), 1);
+    params[0] = xr_param_node_new(parser->compiler_session, parameter->as.variable.name,
+                                  parameter->line, parameter->column);
+    return xr_parse_arrow_function_body(parser, params, 1, parameter->line);
+}
+
 // Parse arrow function body
 // Supports: -> expr (auto return) or -> { ... } (block)
 AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int param_count,

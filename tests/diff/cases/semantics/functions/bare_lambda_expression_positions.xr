@@ -1,0 +1,15 @@
+type IntFn = (int) -> int
+
+var double: IntFn = x -> x * 2
+print(double(21))
+
+var fns = Array<IntFn>(100)
+for (i in 1..100) {
+    fns[i] = y -> i + y
+}
+print(fns[10](300))
+
+fn offsetter(offset: int) -> IntFn {
+    return value -> offset + value
+}
+print(offsetter(7)(35))

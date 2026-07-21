@@ -121,6 +121,7 @@ XR_FUNC AstNode *xr_parse_grouping(Parser *parser);
 XR_FUNC AstNode *xr_parse_unary(Parser *parser);
 XR_FUNC AstNode *xr_parse_binary(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_variable(Parser *parser);
+XR_FUNC AstNode *xr_parse_bare_lambda(Parser *parser, AstNode *parameter);
 XR_FUNC AstNode *xr_parse_assignment(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee);

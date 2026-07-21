@@ -138,7 +138,7 @@ var t = go fetch(url)
 if (!t.done) { /* 还在跑 */ }
 var r = await t
 
-match t.poll() {
+match (t.poll()) {
     TaskResult.Pending -> print("running")
     TaskResult.Success(value) -> print(value)
     TaskResult.Failed(err) -> print(err)
@@ -185,14 +185,14 @@ shared cha = Channel(3)          // 元素类型从首次 send 推断
 ```xray @id=channel-basic-ops
 shared ch = Channel<int>(10)
 ch.send(42)                             // 阻塞发送
-var v = match ch.recv() {
+var v = match (ch.recv()) {
     Recv.Value(value) -> value
     Recv.Closed -> -1
     _ -> -1
 }
 
 var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
-match ch.tryRecv() {
+match (ch.tryRecv()) {
     Recv.Value(next) -> print(next)
     Recv.Empty -> print("empty")
     Recv.Closed -> print("closed")
@@ -307,12 +307,16 @@ try {
     print("caught:", e)              // 命中此分支
 }
 
-// supervisor scope：收集每个子协程的 outcome
-var outcomes = supervisor scope {
-    go failing("error1")
-    go failing("error2")
-    go ok()
+// supervisor scope：保留 task handle，块退出后逐个观察 outcome
+var first: Task<int>?
+var second: Task<int>?
+var third: Task<int>?
+supervisor scope {
+    first = go failing("error1")
+    second = go failing("error2")
+    third = go ok()
 }
+var outcomes = [first!.awaitResult(), second!.awaitResult(), third!.awaitResult()]
 print(len(outcomes))                 // 3（每个子协程一个 outcome）
 ```
 
@@ -587,7 +591,7 @@ var t = go fetch(url)
 if (!t.done) { /* still running */ }
 var r = await t
 
-match t.poll() {
+match (t.poll()) {
     TaskResult.Pending -> print("running")
     TaskResult.Success(value) -> print(value)
     TaskResult.Failed(err) -> print(err)
@@ -634,14 +638,14 @@ shared cha = Channel(3)          // element type inferred from the first send
 ```xray @id=channel-basic-ops
 shared ch = Channel<int>(10)
 ch.send(42)                             // blocking send
-var v = match ch.recv() {
+var v = match (ch.recv()) {
     Recv.Value(value) -> value
     Recv.Closed -> -1
     _ -> -1
 }
 
 var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
-match ch.tryRecv() {
+match (ch.tryRecv()) {
     Recv.Value(next) -> print(next)
     Recv.Empty -> print("empty")
     Recv.Closed -> print("closed")
@@ -756,12 +760,16 @@ try {
     print("caught:", e)              // hits this branch
 }
 
-// supervisor scope: collect every child outcome
-var outcomes = supervisor scope {
-    go failing("error1")
-    go failing("error2")
-    go ok()
+// supervisor scope: keep task handles and inspect each outcome after the block
+var first: Task<int>?
+var second: Task<int>?
+var third: Task<int>?
+supervisor scope {
+    first = go failing("error1")
+    second = go failing("error2")
+    third = go ok()
 }
+var outcomes = [first!.awaitResult(), second!.awaitResult(), third!.awaitResult()]
 print(len(outcomes))                 // 3 (one outcome per child)
 ```
 

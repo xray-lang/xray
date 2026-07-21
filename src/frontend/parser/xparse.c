@@ -51,6 +51,7 @@ static ParseRule rules[] = {
     [TK_RANGE_INCLUSIVE] = {NULL, xr_parse_range, PREC_FACTOR},  // ..= (inclusive range)
     [TK_COLON] = {NULL, NULL, PREC_NONE},
     [TK_SEMICOLON] = {NULL, NULL, PREC_NONE},
+    [TK_ARROW] = {NULL, xr_parse_bare_lambda, PREC_ASSIGNMENT},
 
     // Arithmetic operators
     [TK_PLUS] = {NULL, xr_parse_binary, PREC_TERM},

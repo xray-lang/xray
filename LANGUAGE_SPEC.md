@@ -1662,13 +1662,14 @@ FnExpression ::= 'fn' GenericParams? '(' Params ')' ('->' Type)? Block
 ```
 
 ```xray
-// ── Bare lambda: most concise, restricted to call-argument position ──
+// ── Bare lambda: unparenthesized single parameter, usable in any expression position ──
 arr.map(x -> x * 2)
 arr.filter(x -> x % 2 == 0)
+var double: (int) -> int = x -> x * 2
 
-// ── Arrow lambda: any position, supports multi-param and parameter type annotation ──
+// ── Arrow lambda: supports multiple parameters and parameter type annotations ──
 var sum = arr.reduce((acc, x) -> acc + x, 0)    // no type
-var double = (x: int) -> x * 2                   // typed
+var typedDouble = (x: int) -> x * 2              // typed
 var add = (a: int, b: int) -> a + b              // multi-param
 
 // ── fn expression: multi-statement body, return-type annotation, generics ──
@@ -1683,12 +1684,12 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 
 | Form | Syntax | Suitable for |
 |------|------|----------|
-| Bare lambda | `x -> expr` | single-parameter callbacks, most concise |
-| Arrow lambda | `(x, y) -> expr` | multi-param, parameter type annotation, or non-call positions |
+| Bare lambda | `x -> expr` | untyped single-parameter functions in any position |
+| Arrow lambda | `(x, y) -> expr` | multiple parameters or parameter type annotations |
 | fn expression | `fn(x: T) -> R { ... }` | multi-statement body, return-type annotation, generics |
 
 **Key rules**:
-- **Bare lambda** (`x -> expr`): restricted to **call-argument position**; the single parameter is unparenthesized. The parameter type is inferred from the callee signature or the container element type.
+- **Bare lambda** (`x -> expr`): usable in any expression position, with exactly one untyped, unparenthesized parameter. Its type is inferred from context such as the assignment target, return type, callee signature, or container element type.
 - **Arrow lambda** (`(x) -> expr`, `(x, y) -> expr`): usable in any position. Parameter types may be omitted and inferred from context; inference failure raises `E0365`. Arrow lambdas **do not support return-type annotations**; use `fn(x: T) -> R { ... }`, or annotate the binding as a function type: `var f: (T) -> R = (x) -> ...`.
 - **fn expression** (`fn(x: T) { ... }`): usable in any position. Supports generic parameters `fn<T>(...)`, return-type annotation `-> T`, and a multi-statement body.
 - Single-expression form `-> expr` implicitly `return`s.
@@ -4373,7 +4374,7 @@ var t = go fetch(url)
 if (!t.done) { /* still running */ }
 var r = await t
 
-match t.poll() {
+match (t.poll()) {
     TaskResult.Pending -> print("running")
     TaskResult.Success(value) -> print(value)
     TaskResult.Failed(err) -> print(err)
@@ -4420,14 +4421,14 @@ shared cha = Channel(3)          // element type inferred from the first send
 ```xray
 shared ch = Channel<int>(10)
 ch.send(42)                             // blocking send
-var v = match ch.recv() {
+var v = match (ch.recv()) {
     Recv.Value(value) -> value
     Recv.Closed -> -1
     _ -> -1
 }
 
 var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
-match ch.tryRecv() {
+match (ch.tryRecv()) {
     Recv.Value(next) -> print(next)
     Recv.Empty -> print("empty")
     Recv.Closed -> print("closed")
@@ -4542,12 +4543,16 @@ try {
     print("caught:", e)              // hits this branch
 }
 
-// supervisor scope: collect every child outcome
-var outcomes = supervisor scope {
-    go failing("error1")
-    go failing("error2")
-    go ok()
+// supervisor scope: keep task handles and inspect each outcome after the block
+var first: Task<int>?
+var second: Task<int>?
+var third: Task<int>?
+supervisor scope {
+    first = go failing("error1")
+    second = go failing("error2")
+    third = go ok()
 }
+var outcomes = [first!.awaitResult(), second!.awaitResult(), third!.awaitResult()]
 print(len(outcomes))                 // 3 (one outcome per child)
 ```
 
@@ -5911,6 +5916,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  BareLambda
          |  ArrowFunction
          |  ComptimeExpr
          |  MatchExpr
@@ -5925,6 +5931,7 @@ SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
 
+BareLambda ::= Identifier '->' (Expression | Block)
 ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)*
 ArrowParam  ::= Identifier ':' Type
@@ -5939,7 +5946,6 @@ MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
 ArgList ::= CallArg (',' CallArg)* ','?
 CallArg ::= ('ref' | 'out') Expression
           | '...' Expression
-          | Identifier '->' (Expression | Block)
           | '_'
           | Expression
 ```

@@ -310,9 +310,14 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
         xr_free(owned_source);
 
         if (!ast) {
-            xr_log_warning("module_graph", "parse failed: %s",
-                           spec->source_path ? spec->source_path : entry_canonical);
-            continue;
+            const char *failed_path = spec->source_path ? spec->source_path : entry_canonical;
+            xr_log_warning("module_graph", "parse failed: %s", failed_path);
+            if (out_err) {
+                char buf[1024];
+                snprintf(buf, sizeof(buf), "failed to parse module: %s", failed_path);
+                *out_err = xr_strdup(buf);
+            }
+            return -1;
         }
 
         spec->ast = ast;
