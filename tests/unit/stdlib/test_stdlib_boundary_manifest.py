@@ -57,21 +57,14 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
                 {"symbol", "direction", "domain", "reason", "owner", "review_task"},
                 set(entry),
             )
-        self.assertGreater(report["migration_debt_count"], 0)
+        self.assertEqual(0, report["migration_debt_count"])
 
-    def test_consistency_is_not_reported_as_completion(self) -> None:
+    def test_completion_is_reported_after_all_blockers_clear(self) -> None:
         errors, report = build_report(ROOT)
         self.assertEqual([], errors)
         self.assertTrue(report["status"]["consistent"])
-        self.assertFalse(report["status"]["complete"])
-        kinds = {item["kind"] for item in report["status"]["completion_blockers"]}
-        # Source consistency must never be reported as completion while blockers
-        # remain. missing_active_benchmarks was cleared by task-221 benchmark
-        # activation; the remaining blockers still gate completion.
-        self.assertTrue(kinds, "consistency must not imply completion while blockers remain")
-        self.assertIn("dynamic_migration_debt", kinds)
-        self.assertIn("missing_correctness_contracts", kinds)
-        self.assertIn("non_executable_legacy_oracles", kinds)
+        self.assertTrue(report["status"]["complete"])
+        self.assertEqual([], report["status"]["completion_blockers"])
 
 
 if __name__ == "__main__":
