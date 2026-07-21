@@ -8837,14 +8837,21 @@ static bool xicgen_emit_static_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     const char *sprefix = NULL;
     const XiFunc *sfunc =
         recv_class ? cg_lookup_static_method(ctx, recv_class, method, &sprefix) : NULL;
+    uint16_t call_argc = v->nargs > 0 ? (uint16_t) (v->nargs - 1) : 0;
+    if (sfunc && !sfunc->is_vararg && sfunc->nparams != call_argc)
+        sfunc = NULL;
     /* An imported class receiver loads from a slot the importer does not map to
      * the class, so when the class name is unresolved, search the imported
      * classes for the one declaring this static method. */
-    if (!sfunc) {
+    if (!recv_class && !sfunc) {
         for (int i = 0; i < ctx->nimports && !sfunc; i++) {
             const XiClassData *cd = ctx->imports[i].target_class;
-            if (cd && cd->class_name)
-                sfunc = cg_lookup_static_method(ctx, cd->class_name, method, &sprefix);
+            if (cd && cd->class_name) {
+                const XiFunc *candidate =
+                    cg_lookup_static_method(ctx, cd->class_name, method, &sprefix);
+                if (candidate && (candidate->is_vararg || candidate->nparams == call_argc))
+                    sfunc = candidate;
+            }
         }
     }
     if (!sfunc)
