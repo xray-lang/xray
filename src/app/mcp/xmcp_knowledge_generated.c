@@ -1698,11 +1698,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "h2Request",
-        .signature = "(options: Json): Json",
-        .summary = "Generic HTTP/2 request",
-    },
-    {
         .name = "isRedirectStatus",
         .signature = "(status: int): bool",
         .summary = "",
@@ -7632,7 +7627,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
-            "| `http.h2Request` | `(options: Json): Json` | Generic HTTP/2 request |\n"
             "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
             "| `http.jsonResponse` | `(value: T, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
             "| `http.listen` | `(port: int): bool` |  |\n"
