@@ -31,7 +31,7 @@ enum {
     XG_DENSE_ENUM_MEMBER_MAX = 256
 };
 
-#define XG_COMPILER_SEMVER_HASH UINT64_C(0x0000017200000004)
+#define XG_COMPILER_SEMVER_HASH UINT64_C(0x0000017200000005)
 
 typedef struct XgClassNameRow {
     XgModuleId module_id;

@@ -1,5 +1,5 @@
 test1: Coro.stats()
-stats keys: 5
+stats total: 1
 test2: Coro.dump()
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                     Coroutine Status Snapshot                           │
