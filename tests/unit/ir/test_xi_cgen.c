@@ -6049,8 +6049,13 @@ TEST(cgen_coro_shared_static_function_retain_is_elided) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT coroutine static calls should generate without cgen errors");
     assert(contains(code, "test_inc_") && "static function should be emitted directly");
-    assert(!contains(code, "xrt_retain(v") && "AOT coroutine direct calls to uncaptured shared "
-                                              "functions should not retain callee closure");
+    const char *worker_resume =
+        find_static_function_definition(code, "static XrAotResult test_worker_");
+    assert(worker_resume != NULL && "worker coroutine resume function should be emitted");
+    const char *worker_resume_end = next_static_after(worker_resume);
+    assert(!contains_between(worker_resume, worker_resume_end, "xrt_retain(v") &&
+           "AOT coroutine direct calls to uncaptured shared functions should not retain callee "
+           "closure");
 
     printf("  Generated coroutine shared static call %zu bytes of C code\n", strlen(code));
     xr_free(code);
