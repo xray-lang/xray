@@ -4,6 +4,7 @@ contract_revision = 1
 legacy_commit = "5ba146f59ba3f2518e457ea9ac2dd0f7b246d5ee"
 legacy_oracle = "classification_only"
 legacy_public_surface = [
+  "RuntimeInfo",
   "collectCycles",
   "disableCycleCollection",
   "enableCycleCollection",

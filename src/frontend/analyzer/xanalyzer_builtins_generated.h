@@ -580,6 +580,24 @@ static const XaBuiltinMember g_gen_regex_functions[] = {
 };
 #define GEN_REGEX_FUNCTION_COUNT 13
 
+// runtime.RuntimeInfo record fields
+static const XaBuiltinRecordField g_gen_runtime_runtimeinfo_record_fields[] = {
+    {"liveBytes", "int"},
+    {"liveKB", "float"},
+    {"liveObjects", "int"},
+    {"cycleCollectionEnabled", "bool"},
+    {"cycleCollections", "int"},
+    {"finalizerCount", "int"},
+    {"blocks", "int"},
+    {"freeBlocks", "int"},
+    {"fullBlocks", "int"},
+};
+
+static const XaBuiltinRecord g_gen_runtime_records[] = {
+    {"RuntimeInfo", "Typed snapshot of the current coroutine heap and cycle collector", g_gen_runtime_runtimeinfo_record_fields, 9, true},
+};
+#define GEN_RUNTIME_RECORD_COUNT 1
+
 // runtime module functions
 static const XaBuiltinMember g_gen_runtime_functions[] = {
     {"collectCycles", "(): int", "Run cycle collection + whole-block reclaim, return cycle collection count", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
@@ -588,7 +606,7 @@ static const XaBuiltinMember g_gen_runtime_functions[] = {
     {"isCycleCollectionEnabled", "(): bool", "Check if automatic cycle collection is enabled", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"liveBytes", "(): int", "Get live memory usage in bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"liveObjects", "(): int", "Get live object count", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
-    {"info", "(): Map", "Get memory-model runtime info as Map", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"info", "(): RuntimeInfo", "Get a typed snapshot of the current coroutine heap and cycle collector", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
 };
 #define GEN_RUNTIME_FUNCTION_COUNT 7
 
@@ -693,7 +711,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT, g_gen_net_records, GEN_NET_RECORD_COUNT, g_gen_net_enums, GEN_NET_ENUM_COUNT},
     {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT, NULL, 0, NULL, 0},
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
+    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, g_gen_runtime_records, GEN_RUNTIME_RECORD_COUNT, NULL, 0},
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT, g_gen_ws_records, GEN_WS_RECORD_COUNT, NULL, 0},
