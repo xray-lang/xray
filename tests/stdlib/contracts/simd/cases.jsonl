@@ -1,0 +1,1 @@
+{"case":"simd-contract","probe":"tests/diff/cases/semantics/stdlib/simd_portable_integer_vectors.xr","equivalence":["value","error","effect","complexity"],"oracle":"simd public surface behaves identically on VM and AOT for the covered cases"}

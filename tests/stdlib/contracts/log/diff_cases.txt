@@ -1,0 +1,2 @@
+tests/diff/cases/semantics/stdlib/log_level_enum_direct.xr
+tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr

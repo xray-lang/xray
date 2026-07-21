@@ -1,0 +1,1 @@
+tests/diff/cases/semantics/stdlib/sys_barrier_direct.xr

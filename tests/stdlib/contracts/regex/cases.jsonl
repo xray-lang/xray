@@ -1,0 +1,1 @@
+{"case":"regex-contract","probe":"tests/diff/cases/semantics/stdlib/regex_escape_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"regex public surface behaves identically on VM and AOT for the covered cases"}

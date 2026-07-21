@@ -1,0 +1,1 @@
+{"case":"probe-contract","probe":"tests/diff/cases/semantics/stdlib/probe_module_shapes.xr","equivalence":["value","error","effect","complexity"],"oracle":"_probe public surface behaves identically on VM and AOT for the covered cases"}

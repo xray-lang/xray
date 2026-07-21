@@ -1,0 +1,35 @@
+schema = 1
+module = "regex"
+contract_revision = 1
+legacy_commit = "971205b8e773e1d3eeaeafb9432355cf8be038e6"
+legacy_oracle = "classification_only"
+legacy_public_surface = [
+  "Regex",
+  "compile",
+  "find",
+  "findAll",
+  "replace",
+  "split",
+  "test",
+  "escape",
+]
+intentional_semantic_changes = [
+  "regex is a permanent L3 native library (mature automata); the .def signatures are the typed contract",
+  "this contract is a behavior baseline lock, not a migration",
+]
+known_legacy_bugs = [
+  "none recorded for the native baseline",
+]
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/regex/diff_cases.txt"
+benchmark_suite = "stdlib/regex"
+
+[[legacy_behavior]]
+id = "match-semantics"
+classification = "required"
+new_behavior = "find/findAll/replace/split/test produce identical matches on VM and AOT"
+
+[[legacy_behavior]]
+id = "escape-safety"
+classification = "required"
+new_behavior = "escape neutralizes metacharacters identically on VM and AOT"

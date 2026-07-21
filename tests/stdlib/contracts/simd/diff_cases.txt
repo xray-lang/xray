@@ -1,0 +1,1 @@
+tests/diff/cases/semantics/stdlib/simd_portable_integer_vectors.xr

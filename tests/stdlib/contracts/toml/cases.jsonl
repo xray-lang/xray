@@ -1,0 +1,1 @@
+{"case":"toml-typed-module","probe":"tests/diff/cases/semantics/stdlib/toml_pure_module_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"typed TomlValue parse/get/stringify plus TomlDiagnostic parseReport behave identically on VM and AOT"}

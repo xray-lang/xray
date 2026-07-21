@@ -1,0 +1,38 @@
+schema = 1
+module = "datetime"
+contract_revision = 1
+legacy_commit = "971205b8e773e1d3eeaeafb9432355cf8be038e6"
+legacy_oracle = "classification_only"
+legacy_public_surface = [
+  "DateTime",
+  "parse",
+  "format",
+  "add",
+  "diff",
+  "toISOString",
+]
+intentional_semantic_changes = [
+  "calendar parse/format/add/diff semantics are owned by stdlib/datetime/datetime.xr as the sole source",
+  "the DateTime value is a pure-Xray class; system clock queries stay in the L2 time shell",
+]
+known_legacy_bugs = [
+  "the pre-migration C DateTime carried a light-object AOT representation separate from the class",
+]
+equivalence = ["value", "error", "effect", "complexity"]
+diff_cases_manifest = "tests/stdlib/contracts/datetime/diff_cases.txt"
+benchmark_suite = "stdlib/datetime"
+
+[[legacy_behavior]]
+id = "calendar-algebra"
+classification = "required"
+new_behavior = "parse/format/add/diff produce identical civil-date results on VM and AOT"
+
+[[legacy_behavior]]
+id = "iso-roundtrip"
+classification = "required"
+new_behavior = "toISOString/parse round-trip preserves the instant for the covered range"
+
+[[legacy_behavior]]
+id = "c-datetime-core-removed"
+classification = "removed"
+new_behavior = "the shared C datetime core and light-object AOT tag are removed; the .xr class is the only source"

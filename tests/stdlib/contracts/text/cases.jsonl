@@ -1,0 +1,1 @@
+{"case":"text-contract","probe":"tests/diff/cases/semantics/stdlib/text_contract_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"text public surface behaves identically on VM and AOT for the covered cases"}

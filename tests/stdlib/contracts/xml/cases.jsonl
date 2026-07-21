@@ -1,0 +1,1 @@
+{"case":"xml-typed-module","probe":"tests/diff/cases/semantics/stdlib/xml_pure_module_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"typed XmlNode parse/access/stringify plus typed diagnostics behave identically on VM and AOT"}

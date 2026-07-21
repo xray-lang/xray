@@ -1,0 +1,1 @@
+{"case":"sys-contract","probe":"tests/diff/cases/semantics/stdlib/sys_barrier_direct.xr","equivalence":["value","error","effect","complexity"],"oracle":"sys public surface behaves identically on VM and AOT for the covered cases"}
