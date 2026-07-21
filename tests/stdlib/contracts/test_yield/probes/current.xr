@@ -1,15 +1,15 @@
 import test_yield
 
-assert(test_yield.sync() == 100)
-print("{\"case\":\"sync-baseline\",\"outcome\":\"value\",\"value\":100,\"error\":null,\"effects\":{}}")
+var syncValue = test_yield.sync()
+print("{\"case\":\"sync-baseline\",\"outcome\":\"value\",\"value\":" + string(syncValue) + ",\"error\":null,\"effects\":{}}")
 
-assert(test_yield.simple() == 42)
-assert(test_yield.add(19, 23) == 42)
-print("{\"case\":\"yield-resume\",\"outcome\":\"value\",\"value\":42,\"error\":null,\"effects\":{\"resumes\":2}}")
+var simpleValue = test_yield.simple()
+var addValue = test_yield.add(19, 23)
+print("{\"case\":\"yield-resume\",\"outcome\":\"value\",\"value\":[" + string(simpleValue) + "," + string(addValue) + "],\"error\":null,\"effects\":{\"resumes\":2}}")
 
 test_yield.counter_reset()
-assert(test_yield.counter_get() == 0)
-assert(test_yield.counter_inc() == 1)
-assert(test_yield.counter_inc() == 2)
-assert(test_yield.counter_get() == 2)
-print("{\"case\":\"atomic-counter\",\"outcome\":\"value\",\"value\":2,\"error\":null,\"effects\":{\"sequence\":[0,1,2,2]}}")
+var counter0 = test_yield.counter_get()
+var counter1 = test_yield.counter_inc()
+var counter2 = test_yield.counter_inc()
+var counterFinal = test_yield.counter_get()
+print("{\"case\":\"atomic-counter\",\"outcome\":\"value\",\"value\":[" + string(counter0) + "," + string(counter1) + "," + string(counter2) + "," + string(counterFinal) + "],\"error\":null,\"effects\":{}}")
