@@ -140,12 +140,15 @@ struct XrAotValueOps {
     XrValue (*map_new)(int64_t capacity);
     void (*map_set)(XrValue map, XrValue key, XrValue value);
     XrValue (*map_get)(XrValue map, XrValue key, bool *found);
+    bool (*map_delete)(XrValue map, XrValue key);
     XrValue (*array_new)(int64_t length);
     void (*array_push)(XrValue array, XrValue value);
     XrValue (*record_new)(int64_t field_count, const char *const *field_names);
     void (*record_set)(XrValue record, int64_t field_index, XrValue value);
     XrValue (*enum_new)(const char *enum_name, const char *member_name, int64_t member_index);
     int64_t (*enum_ordinal)(XrValue value, int64_t fallback);
+    void (*retain)(XrValue value);
+    void (*release)(XrValue value);
 };
 
 typedef struct XrAotContext {

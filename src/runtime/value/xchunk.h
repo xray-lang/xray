@@ -111,7 +111,7 @@ _Static_assert(NUM_OPCODES <= 65536, "Opcode count exceeds 16-bit encoding limit
 // OP_CORO_CTRL sub-opcodes (C field)
 #define CORO_CTRL_STATS 0
 #define CORO_CTRL_LIST 1
-#define CORO_CTRL_INFO 2
+#define CORO_CTRL_LOCAL_NEW 2
 #define CORO_CTRL_DUMP 3
 #define CORO_CTRL_STALLED 4
 #define CORO_CTRL_DEADLOCKS 5

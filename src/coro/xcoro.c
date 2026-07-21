@@ -41,6 +41,12 @@
 
 // Note: blocked queue moved to XrRuntime, see xworker.c
 
+static _Atomic int64_t g_coro_local_next_id = 1;
+
+XR_FUNC int64_t xr_coro_local_token_new(void) {
+    return atomic_fetch_add_explicit(&g_coro_local_next_id, 1, memory_order_relaxed);
+}
+
 // ========== Scheduling / Cancellation Safepoint ==========
 
 // Legacy-named safepoint helper: resets the scheduling reduction budget and
@@ -885,7 +891,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     // the dirty-path ext resets — so the per-lifetime ext fields must be
     // dropped here. locals lives in this coroutine's heap, which
     // xr_coro_heap_reset above just released: a stale pointer would be a UAF
-    // for the next lifetime's Coro.setLocal.
+    // for the next lifetime's Coro.Local<T>.set.
     if (coro->ext) {
         coro->ext->locals = NULL;
         coro->ext->watched_by = NULL;

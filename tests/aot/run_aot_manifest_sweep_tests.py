@@ -64,6 +64,10 @@ ALLOWED_RUNTIME_CASES = {
     # Typed Coro diagnostics lower directly to XI_CORO_OP and therefore need
     # the coroutine runtime that produces their record and enum values.
     "tests/diff/cases/semantics/stdlib/coro_typed_diagnostics_direct.xr",
+    # Typed coroutine-local slots and CoroPool.submit are explicit wrappers
+    # around coroutine runtime storage and task scheduling.
+    "tests/diff/cases/semantics/stdlib/coro_typed_local_pool.xr",
+    "tests/diff/cases/semantics/stdlib/coro_typed_local_sync.xr",
     # `sync.fence` itself lowers to the freestanding mem.fence helper, but the
     # hosted `sync` module is a pure-Xray script module that also exports
     # coroutine-aware Mutex/RwLock/Once/Barrier/Condvar. Current AOT compiles

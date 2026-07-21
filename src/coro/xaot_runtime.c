@@ -43,6 +43,19 @@ static XrAotCoroState *aot_state_from_coro(XrCoroutine *coro) {
     return (XrAotCoroState *) coro->backend_state;
 }
 
+static void aot_drop_coro_locals(XrCoroutine *coro, XrAotRuntime *runtime) {
+    if (!coro || !runtime || xr_coro_flags_has(coro, XR_CORO_FLG_MAIN) ||
+        XR_IS_NULL(runtime->coro_locals) || !runtime->value_ops ||
+        !runtime->value_ops->map_delete) {
+        return;
+    }
+    XrValue owner_key = xr_int((int64_t) coro->id + 1);
+    while (atomic_flag_test_and_set_explicit(&runtime->coro_locals_lock, memory_order_acquire))
+        ;
+    runtime->value_ops->map_delete(runtime->coro_locals, owner_key);
+    atomic_flag_clear_explicit(&runtime->coro_locals_lock, memory_order_release);
+}
+
 static void aot_release_frame(const XrAotCoroDesc *desc, void *frame, XrCoroHeap *heap) {
     if (!frame)
         return;
@@ -58,6 +71,7 @@ static void aot_release_state(XrCoroutine *coro) {
     if (!state)
         return;
 
+    aot_drop_coro_locals(coro, state->runtime);
     aot_release_frame(state->desc, state->frame, coro ? coro->heap : NULL);
     xr_free(state);
     coro->backend_state = NULL;
@@ -69,6 +83,7 @@ static void aot_clear_reusable_state(XrCoroutine *coro, XrAotCoroState *state) {
     if (!state)
         return;
 
+    aot_drop_coro_locals(coro, state->runtime);
     aot_release_frame(state->desc, state->frame, coro ? coro->heap : NULL);
     state->desc = NULL;
     state->frame = NULL;
@@ -660,6 +675,8 @@ XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
         return NULL;
     runtime->caps = local_cfg.caps;
     runtime->value_ops = local_cfg.value_ops;
+    runtime->coro_locals = XR_NULL_VAL;
+    atomic_flag_clear_explicit(&runtime->coro_locals_lock, memory_order_relaxed);
     for (int i = 0; i < XR_USER_GLOBALS_START; i++)
         runtime->builtins[i] = XR_NULL_VAL;
 
@@ -705,6 +722,10 @@ void xr_aot_runtime_delete(XrAotRuntime *runtime) {
     if (runtime->root_scope) {
         xr_free(runtime->root_scope);
         runtime->root_scope = NULL;
+    }
+    if (!XR_IS_NULL(runtime->coro_locals) && runtime->value_ops && runtime->value_ops->release) {
+        runtime->value_ops->release(runtime->coro_locals);
+        runtime->coro_locals = XR_NULL_VAL;
     }
     if (runtime->core) {
         xr_runtime_core_delete(runtime->core);

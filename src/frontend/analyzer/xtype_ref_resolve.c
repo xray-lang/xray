@@ -1032,8 +1032,8 @@ static int known_type_head_arity(XrVMRuntime *X, const char *name) {
         return -1;
     if (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SPAN) == 0 ||
         strcmp(name, "Set") == 0 || strcmp(name, "WeakSet") == 0 || strcmp(name, "Channel") == 0 ||
-        strcmp(name, "Task") == 0 || strcmp(name, "Ptr") == 0 || strcmp(name, "MutPtr") == 0 ||
-        strcmp(name, "CFn") == 0)
+        strcmp(name, "Task") == 0 || strcmp(name, "CoroLocal") == 0 || strcmp(name, "Ptr") == 0 ||
+        strcmp(name, "MutPtr") == 0 || strcmp(name, "CFn") == 0)
         return 1;
     if (strcmp(name, "Map") == 0 || strcmp(name, "WeakMap") == 0)
         return 2;

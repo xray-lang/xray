@@ -79,6 +79,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
 
 // Get built-in type info by XrType (O(1) via enum index)
 const XaBuiltinType *xa_builtin_get_type_info(XrType *type) {
+    if (xr_type_is_named_class(type, "CoroLocal"))
+        return xa_native_get_compiler_builtin_type("CoroLocal");
     XrTypeId id = xr_type_to_builtin_id(type);
     if (id == XR_TID_NULL)
         return NULL;
@@ -90,6 +92,9 @@ const XaBuiltinType *xa_builtin_get_type_info(XrType *type) {
 const XaBuiltinType *xa_builtin_get_by_name(const char *name) {
     if (!name)
         return NULL;
+    const XaBuiltinType *compiler_type = xa_native_get_compiler_builtin_type(name);
+    if (compiler_type)
+        return compiler_type;
     const XaBuiltinType *table = get_builtin_types();
     for (int i = 0; i < XR_TID_COUNT; i++) {
         if (table[i].name && strcmp(table[i].name, name) == 0) {
@@ -762,10 +767,8 @@ static const XaBuiltinMember g_rt_coro_functions[] = {
      true, false, false, false},
     {"groupBy", "(field: CoroGroupKey): Map<string, int>", "Group coroutines by field", true, true,
      false, false, false},
-    {"setLocal", "(key: string, value: Json): ()", "Set coroutine-local storage", true, true, false,
+    {"Local", "<T>(): CoroLocal<T>", "Create a typed coroutine-local slot", true, true, false,
      false, false},
-    {"getLocal", "(key: string): Json", "Get coroutine-local storage", true, true, false, false,
-     false},
     {"lockThread", "(): ()", "Lock current thread", true, true, false, false, false},
     {"unlockThread", "(): ()", "Unlock current thread", true, true, false, false, false},
     {"dump", "(limit?: int): ()", "Dump coroutine state", true, true, false, false, false},
@@ -785,8 +788,7 @@ static const XaBuiltinMember g_rt_coro_functions[] = {
     ((int) (sizeof(g_rt_coro_functions) / sizeof(g_rt_coro_functions[0])))
 
 static const XaBuiltinMember g_rt_coropool_functions[] = {
-    {"submit", "(fn: function): Json", "Submit task to pool", true, false, false, false, false},
-    {"close", "(): ()", "Close the pool", true, false, false, false, false},
+    {"submit", "(fn: fn(): T): Task<T>", "Submit a typed task", true, false, false, false, false},
 };
 #define RT_COROPOOL_FUNCTION_COUNT                                                                 \
     ((int) (sizeof(g_rt_coropool_functions) / sizeof(g_rt_coropool_functions[0])))

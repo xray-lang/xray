@@ -2361,6 +2361,106 @@ static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object,
     return links && links->module_name && strcmp(links->module_name, module_name) == 0;
 }
 
+static bool xa_runtime_module_call_matches(XaInferContext *ctx, CallExprNode *call,
+                                           const char *module_name, const char *member_name) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *member = &call->callee->as.member_access;
+    return member->name && strcmp(member->name, member_name) == 0 &&
+           xa_call_object_is_module(ctx, member->object, module_name);
+}
+
+static XrType *xa_visit_coro_local_constructor(XaInferContext *ctx, AstNode *node,
+                                               CallExprNode *call, bool *handled) {
+    if (handled)
+        *handled = false;
+    if (!xa_runtime_module_call_matches(ctx, call, "Coro", "Local"))
+        return NULL;
+    if (handled)
+        *handled = true;
+
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    if (call->arg_count != 0) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   "Coro.Local<T>() expects no value arguments", &loc);
+        for (int i = 0; i < call->arg_count; i++)
+            xa_visit_infer_expr(ctx, call->arguments[i]);
+    }
+
+    XrType *value_type = NULL;
+    if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   "Coro.Local<T>() expects exactly one type argument", &loc);
+        value_type = xr_type_new_unknown(ctx->analyzer->isolate);
+    } else {
+        value_type = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+        if (xa_reject_error_type_success_type(ctx->analyzer, value_type, "generic type argument",
+                                              "Coro.Local<T>()", node ? node->line : 0,
+                                              node ? node->column : 0))
+            value_type = xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+
+    XrType **type_args = (XrType **) xr_malloc(sizeof(XrType *));
+    if (!type_args)
+        return xr_type_new_error(ctx->analyzer->isolate);
+    type_args[0] = value_type ? value_type : xr_type_new_unknown(ctx->analyzer->isolate);
+    return xr_type_new_generic_instance(ctx->analyzer->isolate, "CoroLocal", NULL, type_args, 1);
+}
+
+static XrType *xa_visit_coro_pool_submit(XaInferContext *ctx, AstNode *node, CallExprNode *call,
+                                         bool *handled) {
+    if (handled)
+        *handled = false;
+    if (!xa_runtime_module_call_matches(ctx, call, "CoroPool", "submit"))
+        return NULL;
+    if (handled)
+        *handled = true;
+
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    if (call->type_arg_count != 0) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   "CoroPool.submit infers T and takes no explicit type arguments",
+                                   &loc);
+    }
+    if (call->arg_count != 1) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   "CoroPool.submit expects exactly one zero-argument function",
+                                   &loc);
+    }
+
+    XrType *fn_type = NULL;
+    if (call->arg_count > 0 && call->arguments && call->arguments[0]) {
+        XrType *saved_expected = ctx->expected_type;
+        ctx->expected_type = xr_type_new_function(
+            ctx->analyzer->isolate, NULL, 0, xr_type_new_unknown(ctx->analyzer->isolate), false);
+        fn_type = xa_visit_infer_expr(ctx, call->arguments[0]);
+        ctx->expected_type = saved_expected;
+    }
+    for (int i = 1; i < call->arg_count; i++)
+        xa_visit_infer_expr(ctx, call->arguments[i]);
+
+    XrType *result_type = xr_type_new_unknown(ctx->analyzer->isolate);
+    if (!fn_type || !XR_TYPE_IS_FUNCTION(fn_type)) {
+        if (call->arg_count > 0) {
+            char msg[224];
+            snprintf(msg, sizeof(msg), "CoroPool.submit expects fn(): T, got '%s'",
+                     fn_type ? xr_type_to_string(fn_type) : "unknown");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
+        }
+    } else {
+        if (fn_type->function.param_count != 0) {
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       "CoroPool.submit function must take no arguments", &loc);
+        }
+        if (fn_type->function.return_type)
+            result_type = fn_type->function.return_type;
+    }
+    return xr_type_new_task(ctx->analyzer->isolate, result_type);
+}
+
 static bool xa_intrinsic_is_parallel_plan_method(XaIntrinsicId intrinsic_id) {
     const XaIntrinsicDesc *desc = xa_intrinsic_by_id(intrinsic_id);
     return desc && desc->family == XA_INTRINSIC_FAMILY_PARALLEL &&
@@ -4631,6 +4731,15 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
         return xr_type_new_int(ctx->analyzer->isolate);
     }
+
+    bool runtime_intrinsic_handled = false;
+    XrType *runtime_intrinsic_type =
+        xa_visit_coro_local_constructor(ctx, node, call, &runtime_intrinsic_handled);
+    if (runtime_intrinsic_handled)
+        return runtime_intrinsic_type;
+    runtime_intrinsic_type = xa_visit_coro_pool_submit(ctx, node, call, &runtime_intrinsic_handled);
+    if (runtime_intrinsic_handled)
+        return runtime_intrinsic_type;
 
     if (xa_call_is_sys_thread_spawn(call))
         return xa_visit_sys_thread_spawn_call(ctx, node, call);

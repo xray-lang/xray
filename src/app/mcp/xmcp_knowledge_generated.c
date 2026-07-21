@@ -146,6 +146,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
         .summary = "Record field",
     },
     {
+        .name = "Local",
+        .signature = "<T>(): CoroLocal<T>",
+        .summary = "Create a typed coroutine-local slot",
+    },
+    {
         .name = "deadlocks",
         .signature = "(): Array<CoroDeadlock>",
         .summary = "Detect deadlocked coroutines",
@@ -159,11 +164,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
         .name = "dump",
         .signature = "(limit?: int): ()",
         .summary = "Dump coroutine state",
-    },
-    {
-        .name = "getLocal",
-        .signature = "(key: string): Json",
-        .summary = "Get coroutine-local storage",
     },
     {
         .name = "groupBy",
@@ -194,11 +194,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
         .name = "self",
         .signature = "(): string?",
         .summary = "Get current coroutine name",
-    },
-    {
-        .name = "setLocal",
-        .signature = "(key: string, value: Json): ()",
-        .summary = "Set coroutine-local storage",
     },
     {
         .name = "stalled",
@@ -234,14 +229,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_CoroPool[] = {
     {
-        .name = "close",
-        .signature = "(): ()",
-        .summary = "Close the pool",
-    },
-    {
         .name = "submit",
-        .signature = "(fn: function): Json",
-        .summary = "Submit task to pool",
+        .signature = "(fn: fn(): T): Task<T>",
+        .summary = "Submit a typed task",
     },
 };
 
@@ -7295,17 +7285,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Coro.CoroStats.created` | `const int` | Record field |\n"
             "| `Coro.CoroStats.ready` | `const int` | Record field |\n"
             "| `Coro.CoroStats.total` | `const int` | Record field |\n"
+            "| `Coro.Local` | `<T>(): CoroLocal<T>` | Create a typed coroutine-local slot |\n"
             "| `Coro.deadlocks` | `(): Array<CoroDeadlock>` | Detect deadlocked coroutines |\n"
             "| `Coro.demonitor` | `(ch: Channel<string>): ()` | Cancel coroutine monitor |\n"
             "| `Coro.dump` | `(limit?: int): ()` | Dump coroutine state |\n"
-            "| `Coro.getLocal` | `(key: string): Json` | Get coroutine-local storage |\n"
             "| `Coro.groupBy` | `(field: CoroGroupKey): Map<string, int>` | Group coroutines by field |\n"
             "| `Coro.kill` | `(name: string, reason?: string): bool` | Kill named coroutine |\n"
             "| `Coro.list` | `(limit?: int, state?: CoroState): Array<CoroInfo>` | List coroutines |\n"
             "| `Coro.lockThread` | `(): ()` | Lock current thread |\n"
             "| `Coro.monitor` | `(name: string): Channel<string>` | Monitor named coroutine, returns Channel |\n"
             "| `Coro.self` | `(): string?` | Get current coroutine name |\n"
-            "| `Coro.setLocal` | `(key: string, value: Json): ()` | Set coroutine-local storage |\n"
             "| `Coro.stalled` | `(timeout_ms?: int): Array<CoroInfo>` | Detect stalled coroutines |\n"
             "| `Coro.stats` | `(): CoroStats` | Get coroutine statistics |\n"
             "| `Coro.top` | `(n: int, metric?: CoroMetric): Array<CoroInfo>` | Top N coroutines by metric |\n"
@@ -7330,8 +7319,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `CoroPool.close` | `(): ()` | Close the pool |\n"
-            "| `CoroPool.submit` | `(fn: function): Json` | Submit task to pool |\n"
+            "| `CoroPool.submit` | `(fn: fn(): T): Task<T>` | Submit a typed task |\n"
             "",
         .symbols = _symbols_CoroPool,
         .symbol_count = (int)(sizeof(_symbols_CoroPool) / sizeof(_symbols_CoroPool[0])),

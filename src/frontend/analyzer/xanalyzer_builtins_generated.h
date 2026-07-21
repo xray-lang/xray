@@ -24,6 +24,13 @@ static const XaBuiltinMember g_gen_buffer_members[] = {
 };
 #define GEN_BUFFER_MEMBER_COUNT 4
 
+// CoroLocal methods
+static const XaBuiltinMember g_gen_corolocal_members[] = {
+    {"set", "(value: T): ()", "Set this typed coroutine-local slot for the current coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP},
+    {"get", "(): T?", "Get this typed coroutine-local slot for the current coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP},
+};
+#define GEN_COROLOCAL_MEMBER_COUNT 2
+
 // OsBarrier methods
 static const XaBuiltinMember g_gen_osbarrier_members[] = {
     {"wait", "(): bool", "Wait until all parties have arrived", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
