@@ -30,6 +30,27 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
     if (assertion) {
         xfmt_write_char(ctx, '@');
         xfmt_write_str(ctx, assertion->name);
+        if (attr->kind == ATTR_ZERO_COST && attr->derive_flags != 0) {
+            static const struct {
+                uint32_t bit;
+                const char *name;
+            } categories[] = {
+                {XA_ZERO_COST_ALLOW_RUNTIME, "runtime"}, {XA_ZERO_COST_ALLOW_ALLOC, "alloc"},
+                {XA_ZERO_COST_ALLOW_ERROR, "error"},     {XA_ZERO_COST_ALLOW_BOUNDS, "bounds"},
+                {XA_ZERO_COST_ALLOW_BOX, "box"},         {XA_ZERO_COST_ALLOW_LANES, "lanes"},
+            };
+            bool first = true;
+            xfmt_write_str(ctx, "(allow: ");
+            for (size_t i = 0; i < sizeof(categories) / sizeof(categories[0]); i++) {
+                if ((attr->derive_flags & categories[i].bit) == 0)
+                    continue;
+                if (!first)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_write_str(ctx, categories[i].name);
+                first = false;
+            }
+            xfmt_write_char(ctx, ')');
+        }
         return;
     }
     switch (attr->kind) {
