@@ -2760,6 +2760,14 @@ static bool body_call_is_coro_local_new(XgBodyCollect *bc, const CallExprNode *c
     return member->name && strcmp(member->name, "Local") == 0;
 }
 
+static bool body_call_is_coro_local_set(XgBodyCollect *bc, const CallExprNode *call) {
+    if (!bc || !call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    const MemberAccessNode *member = &call->callee->as.member_access;
+    return member->name && strcmp(member->name, "set") == 0 &&
+           body_resolve_expr_nominal_name_id(bc, member->object) == hash_name32("CoroLocal");
+}
+
 static bool body_call_is_coro_pool_submit(XgBodyCollect *bc, const CallExprNode *call) {
     if (!bc || !call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return false;
@@ -8786,7 +8794,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             bool intrinsic_sequence_len = body_add_sequence_len_call(bc, node);
             if (body_call_uses_coro_runtime(bc, &node->as.call_expr))
                 bc->capability_bits |= XG_CAP_COROUTINE;
-            if (body_call_is_coro_local_new(bc, &node->as.call_expr)) {
+            if (body_call_is_coro_local_set(bc, &node->as.call_expr)) {
                 bc->effect_bits |= XG_BODY_MAY_ALLOC;
                 bc->capability_bits |= XG_CAP_OBJECTS;
             }
@@ -8960,11 +8968,15 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 type_key = hash_named_type_key32("Json", NULL, 0);
             if (record_literal && type_key == 0)
                 type_key = body_record_type_key(record_literal);
-            (void) body_push_local(
-                bc, node->as.var_decl.name, node->as.var_decl.symbol_id, class_id, interface_id,
-                type_key,
-                node->as.var_decl.type_annotation ? node->as.var_decl.type_annotation->name : NULL,
-                inferred);
+            const char *nominal_name =
+                node->as.var_decl.type_annotation ? node->as.var_decl.type_annotation->name : NULL;
+            if (!nominal_name && node->as.var_decl.initializer &&
+                node->as.var_decl.initializer->type == AST_CALL_EXPR &&
+                body_call_is_coro_local_new(bc, &node->as.var_decl.initializer->as.call_expr)) {
+                nominal_name = "CoroLocal";
+            }
+            (void) body_push_local(bc, node->as.var_decl.name, node->as.var_decl.symbol_id,
+                                   class_id, interface_id, type_key, nominal_name, inferred);
             body_bind_record_bridge_shapes_for_type_key(bc, node->as.var_decl.name, type_key);
             if (json_literal) {
                 json_shape_id = body_add_json_shape_for_literal(bc, json_literal,
