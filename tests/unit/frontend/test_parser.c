@@ -402,6 +402,20 @@ TEST(parser_select_wildcard_default_arm) {
     teardown();
 }
 
+TEST(parser_select_channel_arrow_remains_arm_delimiter) {
+    setup();
+    AstNode *stmt = parse_first("select {\n  value from ch -> { print(value) }\n}");
+    ASSERT_EQ_INT(stmt->type, AST_SELECT_STMT);
+    ASSERT_EQ_INT(stmt->as.select_stmt.case_count, 1);
+    AstNode *case_node = stmt->as.select_stmt.cases[0];
+    ASSERT_NOT_NULL(case_node);
+    ASSERT_EQ_INT(case_node->type, AST_SELECT_CASE);
+    ASSERT_NOT_NULL(case_node->as.select_case.channel);
+    ASSERT_EQ_INT(case_node->as.select_case.channel->type, AST_VARIABLE);
+    ASSERT_STR_EQ(case_node->as.select_case.channel->as.variable.name, "ch");
+    teardown();
+}
+
 TEST(parser_select_default_keyword_rejected) {
     setup();
     AstNode *ast = xr_parse(xr_compiler_session_current_for_isolate(X),
@@ -1049,6 +1063,16 @@ TEST(parser_arrow_fn_not_tuple) {
     teardown();
 }
 
+TEST(parser_bare_lambda_in_expression_position) {
+    setup();
+    AstNode *stmt = parse_first("var f: (int) -> int = x -> x * 2");
+    AstNode *init = stmt->as.var_decl.initializer;
+    ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
+    ASSERT_EQ_INT(init->as.function_expr.param_count, 1);
+    ASSERT_STR_EQ(init->as.function_expr.params[0]->name, "x");
+    teardown();
+}
+
 TEST(parser_tuple_field_access) {
     setup();
     /* `t.0` parses as AST_MEMBER_ACCESS with member name "0" -- the
@@ -1223,6 +1247,7 @@ int main(void) {
     RUN_TEST(parser_while_stmt);
     RUN_TEST(parser_for_stmt);
     RUN_TEST(parser_select_wildcard_default_arm);
+    RUN_TEST(parser_select_channel_arrow_remains_arm_delimiter);
     RUN_TEST(parser_select_default_keyword_rejected);
 
     // Functions
@@ -1264,6 +1289,7 @@ int main(void) {
     RUN_TEST(parser_tuple_type_over_16_elements);
     RUN_TEST(parser_grouping_still_works);
     RUN_TEST(parser_arrow_fn_not_tuple);
+    RUN_TEST(parser_bare_lambda_in_expression_position);
     RUN_TEST(parser_tuple_field_access);
     RUN_TEST(parser_tuple_field_access_chained);
     RUN_TEST(parser_tuple_destructure_let);

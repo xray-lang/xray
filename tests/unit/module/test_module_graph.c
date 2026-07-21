@@ -298,6 +298,27 @@ TEST(graph_entry_not_found) {
     xr_module_resolver_free(r);
 }
 
+TEST(graph_parse_failure_is_build_failure) {
+    setup();
+    create_file("invalid.xr", "var value =\n");
+
+    XrModuleResolverConfig cfg = {0};
+    XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    XrModuleGraph *g = xr_module_graph_new(g_session, r);
+
+    char *err = NULL;
+    int rc = xr_module_graph_build(g, abs_path("invalid.xr"), &err);
+    ASSERT_EQ_INT(rc, -1);
+    ASSERT_NOT_NULL(err);
+    ASSERT_NOT_NULL(strstr(err, "failed to parse module"));
+    ASSERT_NOT_NULL(strstr(err, "invalid.xr"));
+    xr_free(err);
+
+    xr_module_graph_free(g);
+    xr_module_resolver_free(r);
+    teardown();
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -324,6 +345,7 @@ RUN_TEST(graph_cycle_three);
 RUN_TEST_SUITE("Lookup");
 RUN_TEST(graph_find_by_canonical);
 RUN_TEST(graph_entry_not_found);
+RUN_TEST(graph_parse_failure_is_build_failure);
 
 if (g_session) {
     xr_compiler_session_delete(g_session);

@@ -1657,13 +1657,14 @@ FnExpression ::= 'fn' GenericParams? '(' Params ')' ('->' Type)? Block
 ```
 
 ```xray
-// ── 裸 lambda：最简洁，仅限调用参数位置 ──
+// ── 裸 lambda：单参数无括号，可用于任意表达式位置 ──
 arr.map(x -> x * 2)
 arr.filter(x -> x % 2 == 0)
+var double: (int) -> int = x -> x * 2
 
-// ── 箭头 lambda：任意位置，支持多参数和参数类型注解 ──
+// ── 箭头 lambda：支持多参数和参数类型注解 ──
 var sum = arr.reduce((acc, x) -> acc + x, 0)    // 无类型
-var double = (x: int) -> x * 2                   // 有类型
+var typedDouble = (x: int) -> x * 2              // 有类型
 var add = (a: int, b: int) -> a + b              // 多参数
 
 // ── fn 表达式：多语句体、返回类型注解、泛型参数 ──
@@ -1678,12 +1679,12 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 
 | 形式 | 语法 | 适用场景 |
 |------|------|----------|
-| 裸 lambda | `x -> expr` | 单参数回调，最简洁 |
-| 箭头 lambda | `(x, y) -> expr` | 多参数、需参数类型注解、或非调用参数位置 |
+| 裸 lambda | `x -> expr` | 任意位置的无类型单参数函数 |
+| 箭头 lambda | `(x, y) -> expr` | 多参数或需要参数类型注解 |
 | fn 表达式 | `fn(x: T) -> R { ... }` | 多语句体、返回类型注解、泛型参数 |
 
 **关键规则**：
-- **裸 lambda**（`x -> expr`）：仅限**调用参数位置**，单参数无括号。参数类型由被调函数签名或容器元素类型推断。
+- **裸 lambda**（`x -> expr`）：可用于任意表达式位置，限单参数且不写参数类型。参数类型由赋值目标、返回类型、被调函数签名或容器元素类型等上下文推断。
 - **箭头 lambda**（`(x) -> expr`、`(x, y) -> expr`）：任意位置可用。参数类型可省略，由上下文推断；推断失败时报 E0365。箭头 lambda **不支持返回类型注解**；需要显式返回类型时，用 `fn(x: T) -> R { ... }`，或给绑定写函数类型：`var f: (T) -> R = (x) -> ...`。
 - **fn 表达式**（`fn(x: T) { ... }`）：任意位置可用。支持泛型参数 `fn<T>(...)`、返回类型注解 `-> T`、多语句体。
 - 单表达式形式 `-> expr` 自动 `return`。
@@ -4326,7 +4327,7 @@ var t = go fetch(url)
 if (!t.done) { /* 还在跑 */ }
 var r = await t
 
-match t.poll() {
+match (t.poll()) {
     TaskResult.Pending -> print("running")
     TaskResult.Success(value) -> print(value)
     TaskResult.Failed(err) -> print(err)
@@ -4373,14 +4374,14 @@ shared cha = Channel(3)          // 元素类型从首次 send 推断
 ```xray
 shared ch = Channel<int>(10)
 ch.send(42)                             // 阻塞发送
-var v = match ch.recv() {
+var v = match (ch.recv()) {
     Recv.Value(value) -> value
     Recv.Closed -> -1
     _ -> -1
 }
 
 var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
-match ch.tryRecv() {
+match (ch.tryRecv()) {
     Recv.Value(next) -> print(next)
     Recv.Empty -> print("empty")
     Recv.Closed -> print("closed")
@@ -4495,12 +4496,16 @@ try {
     print("caught:", e)              // 命中此分支
 }
 
-// supervisor scope：收集每个子协程的 outcome
-var outcomes = supervisor scope {
-    go failing("error1")
-    go failing("error2")
-    go ok()
+// supervisor scope：保留 task handle，块退出后逐个观察 outcome
+var first: Task<int>?
+var second: Task<int>?
+var third: Task<int>?
+supervisor scope {
+    first = go failing("error1")
+    second = go failing("error2")
+    third = go ok()
 }
+var outcomes = [first!.awaitResult(), second!.awaitResult(), third!.awaitResult()]
 print(len(outcomes))                 // 3（每个子协程一个 outcome）
 ```
 
@@ -5861,6 +5866,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  BareLambda
          |  ArrowFunction
          |  ComptimeExpr
          |  MatchExpr
@@ -5875,6 +5881,7 @@ SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
 
+BareLambda ::= Identifier '->' (Expression | Block)
 ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)*
 ArrowParam  ::= Identifier ':' Type
@@ -5889,7 +5896,6 @@ MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
 ArgList ::= CallArg (',' CallArg)* ','?
 CallArg ::= ('ref' | 'out') Expression
           | '...' Expression
-          | Identifier '->' (Expression | Block)
           | '_'
           | Expression
 ```
