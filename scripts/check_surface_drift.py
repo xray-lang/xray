@@ -14,9 +14,9 @@ By default this is an inventory tool: it prints classified hits and exits 0
 
 Scan targets: ``tests/``, ``stdlib/``, ``docs/knowledge/`` (in-repo) and, when
 present, ``xray-docs/knowledge/`` (cross-repo, read-only). Negative/rejection
-fixtures and fuzzer corpus legitimately embed removed forms; they are excluded
-(see :func:`is_excluded`) because cleaning them would break the very tests that
-assert removal or exercise the parser against legacy input.
+fixtures, fuzzer corpus, and fixed legacy-oracle probes legitimately embed
+removed forms; they are excluded (see :func:`is_excluded`) because cleaning
+them would break the tests or historical compiler input they preserve.
 
 The removed-form list grows with every surface-deletion task.
 """
@@ -128,11 +128,22 @@ class Hit:
 
 
 def is_excluded(path: Path) -> bool:
-    """True for fuzz corpus / negative-rejection fixtures (intentional forms)."""
+    """True for fixtures that intentionally preserve removed surface forms."""
     parts = path.parts
     if any(part in SKIP_DIR_NAMES for part in parts):
         return True
     if any(part in NEGATIVE_PATH_SEGMENTS for part in parts):
+        return True
+    # Legacy-oracle probes are compiled by the historical toolchain recorded in
+    # contract.toml. Their removed syntax is evidence, not live source drift.
+    if (
+        len(parts) >= 6
+        and parts[-6] == "tests"
+        and parts[-5] == "stdlib"
+        and parts[-4] == "contracts"
+        and parts[-2] == "probes"
+        and parts[-1] == "legacy.xr"
+    ):
         return True
     # Logical stem, ignoring compound suffixes like `.xr.expected`.
     stem = path.name.split(".", 1)[0]

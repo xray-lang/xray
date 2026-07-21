@@ -2158,7 +2158,11 @@ if(BUILD_TESTS)
     # ratio/audit gate is meaningless there. Drop --gate under sanitizers to keep
     # the correctness checks without the (impossible) perf gate; normal builds
     # keep the full gate as a real perf guard.
-    set(BYTE_ARRAY_C90_ARGS --samples 3)
+    # This gate measures millisecond-scale binaries, so three process-launch
+    # samples are too sensitive to scheduler and loader jitter. Keep the same
+    # alternating C/AOT median protocol, but use enough samples for a stable
+    # comparison without materially extending the suite.
+    set(BYTE_ARRAY_C90_ARGS --samples 11)
     if(NOT (ENABLE_SANITIZERS OR ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR ENABLE_MSAN))
         list(APPEND BYTE_ARRAY_C90_ARGS --gate)
     endif()
