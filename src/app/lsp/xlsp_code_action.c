@@ -18,116 +18,6 @@ static const char *STDLIB_MODULES[] = {"time",    "json",   "http",  "log",    "
                                        "math",    "crypto", "regex", "base64", "url", "path",
                                        "strings", "bytes",  "fmt",   NULL};
 
-/*
- * Find the declaration of `name` as a `var NAME = ...` or `const NAME = ...`
- * (not `shared` prefixed) inside `content`. On success returns true and
- * fills the 0-indexed line plus the column range covering just the
- * `var`/`const` keyword so the caller can rewrite it.
- */
-static bool find_plain_decl_keyword(const char *content, const char *name, int *out_line,
-                                    int *out_start_col, int *out_end_col) {
-    if (!content || !name || !*name)
-        return false;
-    size_t name_len = strlen(name);
-    int line = 0;
-    const char *p = content;
-    while (*p) {
-        const char *line_start = p;
-        const char *t = p;
-        while (*t == ' ' || *t == '\t')
-            t++;
-        int col = (int) (t - line_start);
-        const char *kw_end = NULL;
-        int kw_len = 0;
-        if (strncmp(t, "var ", 4) == 0) {
-            kw_len = 3;
-            kw_end = t + 3;
-        } else if (strncmp(t, "const ", 6) == 0) {
-            kw_len = 5;
-            kw_end = t + 5;
-        }
-        if (kw_end) {
-            const char *n = kw_end;
-            while (*n == ' ' || *n == '\t')
-                n++;
-            if (strncmp(n, name, name_len) == 0) {
-                char after = n[name_len];
-                if (after == ' ' || after == '\t' || after == ':' || after == '=') {
-                    if (out_line)
-                        *out_line = line;
-                    if (out_start_col)
-                        *out_start_col = col;
-                    if (out_end_col)
-                        *out_end_col = col + kw_len;
-                    return true;
-                }
-            }
-        }
-        while (*p && *p != '\n')
-            p++;
-        if (*p == '\n') {
-            p++;
-            line++;
-        }
-    }
-    return false;
-}
-
-/*
- * Extract the first single-quoted identifier from `msg` after the phrase
- * `after`. Writes up to buf_size-1 chars of the name into `buf`. Returns
- * true if a non-empty name was captured.
- */
-static bool extract_quoted_name_after(const char *msg, const char *after, char *buf,
-                                      size_t buf_size) {
-    if (!msg || !after || !buf || buf_size < 2)
-        return false;
-    const char *marker = strstr(msg, after);
-    if (!marker)
-        return false;
-    const char *start = marker + strlen(after);
-    const char *end = strchr(start, '\'');
-    if (!end || end == start)
-        return false;
-    size_t n = (size_t) (end - start);
-    if (n >= buf_size)
-        n = buf_size - 1;
-    memcpy(buf, start, n);
-    buf[n] = '\0';
-    return n > 0;
-}
-
-/*
- * Emit a quick-fix action that replaces the `var`/`const` keyword of a
- * variable declaration with `new_prefix`. No-op if the declaration
- * cannot be located in the document text.
- */
-static void push_decl_rewrite_action(XrJsonValue *actions, const char *uri, const char *content,
-                                     const char *var_name, const char *new_prefix,
-                                     const char *title) {
-    int dline = 0, dsc = 0, dec = 0;
-    if (!find_plain_decl_keyword(content, var_name, &dline, &dsc, &dec))
-        return;
-
-    XrJsonValue *action = xjson_new_object();
-    xjson_object_set(action, "title", xjson_new_string(title));
-    xjson_object_set(action, "kind", xjson_new_string("quickfix"));
-
-    XrJsonValue *edit = xjson_new_object();
-    XrJsonValue *changes = xjson_new_object();
-    XrJsonValue *edits = xjson_new_array();
-
-    XrJsonValue *text_edit = xjson_new_object();
-    xjson_object_set(text_edit, "newText", xjson_new_string(new_prefix));
-    xjson_object_set(text_edit, "range", xjson_make_range(dline, dsc, dline, dec));
-
-    xjson_array_push(edits, text_edit);
-    xjson_object_set(changes, uri, edits);
-    xjson_object_set(edit, "changes", changes);
-    xjson_object_set(action, "edit", edit);
-    xjson_array_push(actions, action);
-}
-
 static bool extract_enum_variants_target(const char *message, char *buf, size_t buf_size) {
     if (!message || !buf || buf_size < 2)
         return false;
@@ -302,19 +192,6 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                         xjson_array_push(actions, action);
                         break;
                     }
-                }
-            }
-
-            // QuickFix: E0363 go closure captures mutable variable -> shared
-            // Matches: "go closure cannot capture mutable variable 'NAME'"
-            if (msg && strstr(msg, "go closure cannot capture mutable variable '")) {
-                char var_name[128];
-                if (extract_quoted_name_after(msg, "go closure cannot capture mutable variable '",
-                                              var_name, sizeof(var_name))) {
-                    char title[192];
-                    snprintf(title, sizeof(title),
-                             "Declare '%s' as 'shared' (allow concurrent access)", var_name);
-                    push_decl_rewrite_action(actions, uri, doc->content, var_name, "shared", title);
                 }
             }
 

@@ -1077,7 +1077,7 @@ TEST(code_action_payload_enum_iteration_to_variants) {
     xlsp_server_free(server);
 }
 
-TEST(code_action_go_capture_to_shared) {
+TEST(code_action_go_capture_has_no_keyword_rewrite) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
@@ -1092,43 +1092,17 @@ TEST(code_action_go_capture_to_shared) {
     XrLspDocument *doc = xlsp_document_open(server, "file:///t.xr", content, 1);
     ASSERT(doc != NULL);
 
-    XrJsonValue *params =
-        make_code_action_params("file:///t.xr", 2, 21, 28,
-                                "go closure cannot capture mutable variable 'counter'\n"
-                                "hint: use one of the following:\n"
-                                "  1. pass through argument: go worker(counter)\n"
-                                "  2. declare as 'shared counter = ...' for concurrent reads");
-
-    XrJsonValue *actions = xlsp_handle_code_action(server, params);
-    ASSERT(actions != NULL);
-    ASSERT(actions_contain_title_with(actions, "shared", "counter"));
-
-    xjson_free(params);
-    xjson_free(actions);
-    xlsp_server_free(server);
-}
-
-TEST(code_action_quickfix_skips_when_decl_missing) {
-    // If the declaration line cannot be located (e.g. variable declared in
-    // another file), the quick-fix helper should simply not emit an action
-    // rather than produce a broken text edit.
-    XrLspServer *server = xlsp_server_new();
-    ASSERT(server != NULL);
-
-    // Content deliberately does NOT contain `var counter`.
-    const char *content = "fn t() {\n"
-                          "    print(counter)\n"
-                          "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///n.xr", content, 1);
-    ASSERT(doc != NULL);
-
     XrJsonValue *params = make_code_action_params(
-        "file:///n.xr", 1, 10, 17, "go closure cannot capture mutable variable 'counter'");
+        "file:///t.xr", 2, 21, 28,
+        "go closure cannot capture mutable variable 'counter'\n"
+        "hint: route shared updates through Channel/Atomic/Mutex, or transfer one owner with "
+        "go worker(move counter)");
 
     XrJsonValue *actions = xlsp_handle_code_action(server, params);
     ASSERT(actions != NULL);
-    // Must not include a quick-fix title pointing at 'counter' since the
-    // declaration was not found.
+    // Concurrent ownership cannot be repaired by replacing `var` with a
+    // keyword. The user must choose a state-owner channel, a synchronized
+    // handle, or an explicit single-owner transfer.
     ASSERT(!actions_contain_title_with(actions, "shared", "counter"));
 
     xjson_free(params);
@@ -1188,8 +1162,7 @@ int main(int argc, char **argv) {
 
     printf("\nCode action concurrency quick-fix tests:\n");
     RUN_TEST(code_action_payload_enum_iteration_to_variants);
-    RUN_TEST(code_action_go_capture_to_shared);
-    RUN_TEST(code_action_quickfix_skips_when_decl_missing);
+    RUN_TEST(code_action_go_capture_has_no_keyword_rewrite);
 
     printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);
 

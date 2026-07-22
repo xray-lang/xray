@@ -14,12 +14,13 @@
  *
  * RULES ENFORCED:
  *   - Plain local `var x` captured by a go closure     -> ERROR
- *     (must be passed via argument, copied/moved, or declared `shared`)
- *   - `shared x` captured by a go closure              -> allowed
- *     (`shared` is a stable shared identity)
+ *     (route shared updates through Channel/Atomic/Mutex, or transfer one
+ *      owner through an explicit go argument)
+ *   - Audited synchronization handles captured by go   -> allowed
+ *     (mutable state remains accessible only through their synchronized API)
  *   - `move x` for a mutable local                     -> allowed
  *     (source invalidation is handled by the type checker)
- *   - `move x` where `x` is `const` / `shared`         -> handled by
+ *   - `move x` where `x` is `const` / synchronized     -> handled by
  *     xa_visit_move_expr in the type checker
  *
  * Function-local analysis only (no cross-function inference).

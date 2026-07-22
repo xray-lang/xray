@@ -40,6 +40,7 @@ typedef struct {
     const char *name;
     AstNode *decl_node;  // AST_VAR_DECL or AST_CONST_DECL node
     bool is_param;
+    bool is_const_binding;
     XrParamMode param_passing_mode;
     // If this variable was initialized with a function-expression literal
     // (`var f = fn() {...}`), points to that FUNCTION_EXPR node. Lets
@@ -117,7 +118,7 @@ static void ea_pop_scope(EaContext *ctx) {
 }
 
 static void ea_register_var_entry(EaContext *ctx, const char *name, AstNode *decl, bool is_param,
-                                  XrParamMode param_passing_mode) {
+                                  bool is_const_binding, XrParamMode param_passing_mode) {
     if (ctx->depth >= ctx->scopes_capacity)
         return;  // defensive: only reachable if a push was OOM-skipped
     EaScope *scope = &ctx->scopes[ctx->depth];
@@ -133,20 +134,46 @@ static void ea_register_var_entry(EaContext *ctx, const char *name, AstNode *dec
     scope->vars[scope->count].name = name;
     scope->vars[scope->count].decl_node = decl;
     scope->vars[scope->count].is_param = is_param;
+    scope->vars[scope->count].is_const_binding = is_const_binding;
     scope->vars[scope->count].param_passing_mode = param_passing_mode;
     scope->vars[scope->count].bound_fn_expr = NULL;
     scope->count++;
 }
 
 static void ea_register_var(EaContext *ctx, const char *name, AstNode *decl) {
-    ea_register_var_entry(ctx, name, decl, false, XR_PARAM_READ);
+    ea_register_var_entry(ctx, name, decl, false, false, XR_PARAM_READ);
+}
+
+static void ea_register_destructure_pattern(EaContext *ctx, XrDestructurePattern *pattern,
+                                            AstNode *decl, bool is_const) {
+    if (!pattern)
+        return;
+    switch (pattern->type) {
+        case PATTERN_IDENTIFIER:
+            if (pattern->as.identifier.name)
+                ea_register_var_entry(ctx, pattern->as.identifier.name, decl, false, is_const,
+                                      XR_PARAM_READ);
+            break;
+        case PATTERN_ARRAY:
+        case PATTERN_TUPLE:
+            for (int i = 0; i < pattern->as.array.element_count; i++)
+                ea_register_destructure_pattern(ctx, pattern->as.array.elements[i], decl, is_const);
+            break;
+        case PATTERN_OBJECT:
+            for (int i = 0; i < pattern->as.object.field_count; i++)
+                ea_register_destructure_pattern(ctx, pattern->as.object.patterns[i], decl,
+                                                is_const);
+            break;
+        case PATTERN_SKIP:
+            break;
+    }
 }
 
 // Register a variable that is bound to a function-expression literal, so a
 // later `go var()` can enforce the same capture rules as an inline closure.
 static void ea_register_var_with_fn(EaContext *ctx, const char *name, AstNode *decl,
-                                    AstNode *bound_fn) {
-    ea_register_var_entry(ctx, name, decl, false, XR_PARAM_READ);
+                                    AstNode *bound_fn, bool is_const) {
+    ea_register_var_entry(ctx, name, decl, false, is_const, XR_PARAM_READ);
     if (bound_fn) {
         EaScope *scope = &ctx->scopes[ctx->depth];
         if (scope->count > 0)
@@ -193,7 +220,7 @@ static bool ea_is_local_name(EaContext *ctx, const char *name) {
 static void ea_register_params(EaContext *ctx, FunctionDeclNode *fn) {
     for (int i = 0; i < fn->param_count; i++) {
         if (fn->params[i] && fn->params[i]->name) {
-            ea_register_var_entry(ctx, fn->params[i]->name, NULL, true,
+            ea_register_var_entry(ctx, fn->params[i]->name, NULL, true, false,
                                   fn->params[i]->passing_mode);
         }
     }
@@ -201,7 +228,9 @@ static void ea_register_params(EaContext *ctx, FunctionDeclNode *fn) {
 
 /*
  * Look up a variable captured by a go closure and enforce the explicit
- * sharing model: non-shared captures are rejected (no auto-promote).
+ * sharing model. Ordinary mutable bindings are rejected even when the
+ * closure only reads them: the rule cannot depend on scheduler topology or
+ * a whole-program count of spawned coroutines.
  *
  *   - shared          -> allowed (user declared shared identity)
  *   - function parameter -> ERROR (must pass via explicit go argument)
@@ -230,19 +259,13 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
                     }
                     return;
                 }
-                AstNode *decl = scope->vars[i].decl_node;
-                if (!decl)
-                    return;  // param or loop var — always safe (arg-passed/local)
-                if (decl->type != AST_VAR_DECL && decl->type != AST_CONST_DECL)
-                    return;
-                VarDeclNode *vd = &decl->as.var_decl;
-                if (vd->is_const) {
+                if (entry->is_const_binding) {
                     return;
                 }
                 ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
                               "go closure cannot capture mutable variable '%s'\n"
-                              "hint: pass copy(%s) or move %s through an explicit go argument, or "
-                              "bind an immutable value with const",
+                              "hint: route shared updates through Channel/Atomic/Mutex, or "
+                              "transfer one owner with go worker(move %s)",
                               name);
                 return;
             }
@@ -269,6 +292,37 @@ static void ea_mark_borrowed_capture_for_closure(EaContext *ctx, AstNode *ref_no
             }
             return;
         }
+    }
+}
+
+static void ea_mark_named_access(EaContext *ctx, AstNode *node, const char *name) {
+    if ((!ctx->in_go_closure && !ctx->in_fn_closure) || !name || ea_is_local_name(ctx, name))
+        return;
+    if (ctx->in_go_closure)
+        ea_mark_capture_for_go(ctx, node, name);
+    else if (ctx->in_fn_closure)
+        ea_mark_borrowed_capture_for_closure(ctx, node, name);
+}
+
+static void ea_mark_destructure_targets(EaContext *ctx, AstNode *node,
+                                        XrDestructurePattern *pattern) {
+    if (!pattern)
+        return;
+    switch (pattern->type) {
+        case PATTERN_IDENTIFIER:
+            ea_mark_named_access(ctx, node, pattern->as.identifier.name);
+            break;
+        case PATTERN_ARRAY:
+        case PATTERN_TUPLE:
+            for (int i = 0; i < pattern->as.array.element_count; i++)
+                ea_mark_destructure_targets(ctx, node, pattern->as.array.elements[i]);
+            break;
+        case PATTERN_OBJECT:
+            for (int i = 0; i < pattern->as.object.field_count; i++)
+                ea_mark_destructure_targets(ctx, node, pattern->as.object.patterns[i]);
+            break;
+        case PATTERN_SKIP:
+            break;
     }
 }
 
@@ -456,12 +510,19 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             AstNode *init = node->as.var_decl.initializer;
             // Track closure literals bound to a name so `go f()` can be checked.
             AstNode *bound_fn = (init && init->type == AST_FUNCTION_EXPR) ? init : NULL;
-            ea_register_var_with_fn(ctx, node->as.var_decl.name, node, bound_fn);
+            ea_register_var_with_fn(ctx, node->as.var_decl.name, node, bound_fn,
+                                    node->as.var_decl.is_const);
             if (init) {
                 ea_walk(ctx, init);
             }
             break;
         }
+
+        case AST_DESTRUCTURE_DECL:
+            ea_register_destructure_pattern(ctx, node->as.destructure_decl.pattern, node,
+                                            node->as.destructure_decl.is_const);
+            ea_walk(ctx, node->as.destructure_decl.initializer);
+            break;
 
         // ---- Function declarations: new function boundary ----
         case AST_FUNCTION_DECL: {
@@ -593,11 +654,21 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             break;
 
         case AST_ASSIGNMENT:
+            ea_mark_named_access(ctx, node, node->as.assignment.name);
             ea_walk(ctx, node->as.assignment.value);
             break;
 
         case AST_COMPOUND_ASSIGNMENT:
+            if (node->as.compound_assignment.object)
+                ea_walk(ctx, node->as.compound_assignment.object);
+            else
+                ea_mark_named_access(ctx, node, node->as.compound_assignment.name);
             ea_walk(ctx, node->as.compound_assignment.value);
+            break;
+
+        case AST_DESTRUCTURE_ASSIGN:
+            ea_mark_destructure_targets(ctx, node, node->as.destructure_assign.pattern);
+            ea_walk(ctx, node->as.destructure_assign.value);
             break;
 
         case AST_MEMBER_ACCESS:
@@ -761,7 +832,8 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
                 if (m->params) {
                     for (int i = 0; i < m->param_count; i++) {
                         if (m->params[i] && m->params[i]->name)
-                            ea_register_var(ctx, m->params[i]->name, NULL);
+                            ea_register_var_entry(ctx, m->params[i]->name, NULL, true, false,
+                                                  m->params[i]->passing_mode);
                     }
                 }
                 ea_walk(ctx, m->body);
@@ -802,8 +874,12 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
         case AST_THIS_EXPR:
         case AST_CANCELLED_EXPR:
         case AST_CHANNEL_NEW:
+            break;
         case AST_INC:
+            ea_mark_named_access(ctx, node, node->as.inc.name);
+            break;
         case AST_DEC:
+            ea_mark_named_access(ctx, node, node->as.dec.name);
             break;
         case AST_YIELD_STMT:
             ea_walk(ctx, node->as.yield_stmt.value);
