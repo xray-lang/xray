@@ -164,16 +164,14 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 ### 1.5 Keywords
 
-Xray has **66 reserved keywords** in total, grouped by purpose below:
+Xray has **64 reserved keywords** in total, grouped by purpose below:
 
 #### 1.5.1 Declarations and Control Flow
 
 | Keyword | Purpose |
 |--|--|
 | `var` | mutable variable declaration |
-| `const` | immutable variable declaration |
-| `shared` | shared identity binding (owned by the shared/system owner, ordinary lexical scope) |
-| `owned` | unique system-owned mutable identity binding; transfer with `move` |
+| `const` | stable binding declaration; deep-read-only capability in type position |
 | `comptime` | expression prefix that forces compile-time evaluation |
 | `fn` | function declaration |
 | `return` | function return |
@@ -656,7 +654,7 @@ if (len(s) != 0) { }     // OK
 
 Immutable strings that always contain valid UTF-8. `len(s)` returns the Unicode scalar count in O(1), and `len(s.bytes())` returns the UTF-8 byte count in O(1). Default iteration yields `rune`; integer indexing and the slice operator do not apply to strings. See §14.5 for explicit access.
 
-Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool, with strings promoted to shared on demand when crossing coroutine boundaries.
+Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool. Cross-execution strings consume a verified storage plan; the boundary does not promote or copy them implicitly.
 
 #### 2.3.5 `rune`
 
@@ -819,10 +817,10 @@ var s: Set<int> = #[1, 2, 3]
 
 #### 2.4.4 `Channel<T>`
 
-Inter-coroutine communication channel. Named channel handles **must** be created with `shared` (see §10.5).
+Inter-coroutine communication channel. A named channel uses a stable `const` binding; its synchronized interior-mutation capability comes from the audited registry (see §10.5).
 
 ```xray
-shared ch: Channel<int> = Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Array<byte>`
@@ -1365,10 +1363,9 @@ AssignOp ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
 - Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`).
 - `x op= y` is equivalent to `x = x op y`, but `x` is evaluated only once (important: `obj.f += 1` does not call `f`'s getter twice).
 - Cannot assign to a `const` (compile error `E0303`).
-- Cannot assign to `shared` (same as above).
 
 **Special cases**:
-- A function parameter with the `in T` modifier is read-only; assignment is a compile error.
+- A default parameter is a read-only borrow; only `ref` permits mutation through a place, while `move` consumes source ownership.
 - Array/Map field assignment: `a[i] = v` calls `operator[]=` or the built-in setter.
 
 ### 3.5 Ternary `? :`
@@ -1571,7 +1568,7 @@ See §2.4.5 and §14.5.
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-shared ch: Channel<int> = Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 See §10.5.
@@ -1693,7 +1690,7 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 - **fn expression** (`fn(x: T) { ... }`): usable in any position. Supports generic parameters `fn<T>(...)`, return-type annotation `-> T`, and a multi-statement body.
 - Single-expression form `-> expr` implicitly `return`s.
 - Block form `-> { ... }` or `{ ... }` uses an explicit `return`.
-- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline, module-readonly, and shared identities may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments or through `shared`.
+- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline values, published const values, and audited synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments.
 
 ### 3.13 `match` Expression
 
@@ -1731,7 +1728,7 @@ Construction has the same form as a function call: `TypeName(args)`. `new` is re
 ```xray
 var p = Point(1.0, 2.0)
 var arr = Array<int>()
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 var m = Map<string, int>()
 ```
 
@@ -2128,13 +2125,11 @@ large
 
 > Source of truth: `src/frontend/parser/xparse_decl.c`, `src/frontend/parser/xast_nodes_decl.h`, `src/frontend/analyzer/xanalyzer_visitor.c`.
 
-### 5.1 `var` / `const` / `shared` / `owned`
+### 5.1 `var` / `const`
 
 ```ebnf
 VarDecl ::= 'var' Binding
 ConstDecl ::= 'const' Binding
-SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
-OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -2169,39 +2164,25 @@ const MAX_LEN: int = 1024
 - Cannot be reassigned (compile error `E0303`).
 - The type may be inferred or annotated explicitly.
 - Like `var`, each `const` declaration binds one name or destructuring pattern. Use separate declarations for independent names, or destructure related values with `const (a, b) = pair`.
-
-#### 5.1.3 `shared` — shared identity binding
+- For managed/aggregate values, `const name: T` infers and holds the `const T` capability: fields, indexes, and nested projections are deeply read-only. `var name: const T` permits rebinding the name without granting graph mutation.
+- `const T` is accepted in every type position. `const` on an immutable scalar is identical to the base type; `const T` on a managed/aggregate value is a distinct type identity.
+- Fresh construction may target either a mutable `var` domain or a read-only `const` domain. An existing mutable unique graph entering `const` requires explicit `move` or `copy`; there is no implicit freeze or hidden copy.
+- Audited synchronization handles such as `Channel`, `Atomic`, and `Mutex` are named with `const`. The compiler normalizes them to an internal synchronized shared capability whose audited methods may still mutate protected internal state.
+- The compiler infers unique ownership for fresh mutable graphs; no storage modifier is required. `move` requires a unique root with no live alias/loan and invalidates the source binding on success; `copy` preserves the source and explicitly constructs an independent graph.
 
 ```xray
-shared CONFIG = { host: "localhost", port: 8080 }
-shared PRIMES = [2, 3, 5, 7, 11]
-shared counter = Atomic(0)
-```
+const channel = Channel<int>(16)
+const counter = Atomic(0)
 
-- Materialized directly under the **shared/system owner** as a stable shared identity; the concrete heap layout is not language semantics.
-- The binding name cannot be reassigned and cannot be used as a `move` source.
-- It may be captured by `go` closures and passed across coroutine boundaries directly; concurrent mutation safety comes from the value's own type semantics.
-- Synchronization/concurrency handles such as `Atomic`, `Channel`, `Semaphore`, and `WorkQueue` must be created with `shared`.
+var source = [1, 2, 3]
+var moved = move source       // transfer the same root; source is now invalid
+const snapshot = copy(moved)  // explicitly construct an independent read-only graph
+var current: const Config = loadConfig()
+```
 
 See [§10.11](#1011-concurrency-safety-model).
 
-#### 5.1.4 `owned` — unique-ownership identity binding
-
-```xray
-owned buffer = Array<byte>(1024)
-
-var source = [1, 2, 3]
-owned moved = move source       // transfer an existing reference graph
-owned cloned = copy(moved)      // or make an explicit deep copy
-```
-
-- `owned` is a local, single-name declaration and requires an initializer; module-level and destructuring `owned` declarations are rejected.
-- The system owner records the binding as a unique mutable identity. The name itself is not reassignable, while the owned object may be mutated according to its type.
-- A freshly constructed reference value may initialize it directly. A value taken from an existing reference binding must be written as `move source` or `copy(source)` so that no undeclared alias is created.
-- Ownership may be transferred with `move` to another `owned`/`shared` binding, across an execution boundary, or through a return value. The source cannot be used after the move, and borrows such as slices/raw pointers must have ended first.
-- `owned` is a storage declaration, not a type modifier, and it cannot carry declaration attributes.
-
-#### 5.1.5 Destructuring bindings
+#### 5.1.3 Destructuring bindings
 
 ```xray
 // array destructuring
@@ -3448,7 +3429,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 
 | Scope | Triggered by | Example |
 |--|--|--|
-| Module | Each `.xr` file | top-level `var` `const` `shared` `fn` `class` (module-level `owned` is rejected) |
+| Module | Each `.xr` file | top-level `var` `const` `fn` `class` |
 | Function / closure | Entering `fn` / arrow function | parameters + function body |
 | Block | `{...}` | `if` `while` `for` `match` arm body |
 | `scope` block | `scope { ... }` keyword | explicit lexical scope + structured concurrency (see §10.7) |
@@ -3459,7 +3440,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 **Hoisting rules**:
 
 - Top-level `fn` `class` `struct` `interface` `enum` `type` are **hoisted** to the top of the current scope — they may be referenced before their textual definition.
-- `var` / `const` / `shared` / local `owned` are **not hoisted** — they must appear before any use.
+- `var` / `const` are **not hoisted** — they must appear before any use.
 - Duplicate names: declaring two same-named variables in the same scope is a compile error (nested scopes may shadow).
 
 ```xray
@@ -3524,7 +3505,7 @@ var big_buffer = Array<byte>(1024 * 1024)
 
 var t = go fn(b: Array<byte>) -> int {
     return process(b)
-}(big_buffer)             // compile error: owned heap value cannot cross bare
+}(big_buffer)             // compile error: an execution-local heap value cannot cross bare
 
 var t2 = go fn(b: Array<byte>) -> int {
     return process(b)
@@ -3538,7 +3519,7 @@ print(len(big_buffer))    // compile error: accessed after move
 - `go f(move x)`, `go fn(...){...}(move x)`: transfer ownership to the coroutine.
 - `ch.send(move data)`: transfer ownership when sending across coroutines (avoiding a copy).
 - Plain function call `f(move x)`: transfer ownership into the function (which becomes the sole owner).
-- `owned dst = move src` / `shared dst = move src` / `return move src`: transfer a local `var` or `owned` identity to a new owner or to the caller.
+- `var dst = move src` / `const dst = move src` / `return move src`: transfer a verifier-proven unique local `var` root to a new owner, const capability, or caller.
 
 ### 7.4 Cross-Coroutine Data Transfer Rules (Race Avoidance)
 
@@ -3549,13 +3530,13 @@ Every cross-execution boundary (`go` closure, `go` argument, Channel send, defer
 | Capture action | Values | Boundary behavior |
 |---|---|---|
 | inline value | scalars and small immutable values | copy the bits directly |
-| deep copy | owned graph under explicit `copy(x)` | materialize an independent graph in the destination execution owner |
-| move | transferable local `var` or `owned` under explicit `move x` | transfer ownership and statically invalidate the source binding |
-| module readonly | frozen and published module values | retain the module-readonly owner; do not copy into a root/task heap |
-| shared ref | `shared`, Channel, Task, Atomic, and other stable shared identities | retain a reference owned by the shared/system owner |
+| deep copy | execution-local graph under explicit `copy(x)` | materialize an independent graph in the destination storage domain |
+| move | inferred-unique local `var` under explicit `move x` | transfer ownership and statically invalidate the source binding |
+| module readonly | sealed and published module values | retain the module-readonly owner; do not copy into a root/task heap |
+| synchronized ref | audited stable identities such as Channel, Task, and Atomic | retain a reference in the verified synchronized domain |
 | reject | execution-local graphs, mutable module state, dangling slices/pointers/upvalues | compile error reporting the owner/provenance and required explicit action |
 
-Consequently, a local `const` containing only inline values may cross directly. If it still points at an execution-local graph, it requires explicit `copy(...)`; because a `const` cannot be a move source, `move constValue` is invalid. A module-level `const` becomes module-readonly only after freeze-and-publish. A module-level `var` is module-mutable and is not made thread-safe merely by being globally visible.
+Consequently, a local `const` containing only inline values may cross directly. A managed/aggregate const graph may cross only when StoragePlan proves direct construction or O(1) publication seal; the boundary never copies implicitly. A module-level `const` becomes module-readonly only after seal-and-publish. A module-level `var` is module-mutable and is not made thread-safe merely by being globally visible.
 
 ```xray
 var local = 0
@@ -3565,7 +3546,7 @@ go { local += 1 }                        // ❌ compile error: cannot capture mu
 #### Recommended patterns
 
 ```xray
-// Pattern 1: explicitly copy an owned graph
+// Pattern 1: explicitly copy an execution-local graph
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // mutates the copy, original is unaffected
@@ -3573,8 +3554,8 @@ var t = go fn(data: Array<int>) -> int {
 }(copy(arr))
 print(arr)                  // [1, 2, 3] unchanged
 
-// Pattern 2: shared, zero-copy read-only (capturable)
-shared config = { rate: 100 }
+// Pattern 2: const, zero-copy read-only (capturable)
+const config = { rate: 100 }
 var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
@@ -3587,7 +3568,7 @@ var t3 = go fn(b: Array<byte>) -> int {
 // big is inaccessible from this point
 
 // Pattern 4: Channel communication (capturable)
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 var t4 = go fn(c: Channel<int>) -> int {
     return match (c.recv()) {
         Recv.Value(v) -> v
@@ -3603,9 +3584,9 @@ Xray uses a layered memory management strategy:
 
 | Storage | Mechanism | Reclamation |
 |--|--|--|
-| Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by freeze + publish | at module unload |
+| Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by seal + publish | at module unload |
 | Module-mutable storage (top-level `var`) | module owner; not concurrency-safe by default | at module unload |
-| Shared storage (`shared`) | shared/system owner + atomic reference counting | when the last shared reference is released |
+| Const/synchronized shared domain | verified const root or synchronized handle with root-only atomic reference counting | when the last cross-execution strong reference is released |
 | Coroutine-local heap (ordinary local objects) | per-coroutine heap + compiler-inserted reference counting + Bacon–Rajan cycle collector | immediately when the last strong reference is released; strong cycles are reclaimed by the cycle collector; remaining Region blocks and large objects are freed in bulk when the coroutine ends |
 | Stack (`struct` values, locals) | lexical storage duration | scope exit; the language exposes no deterministic destructor / `Drop` hook |
 | Arena (low-level temporary allocations) | bulk free | at arena end |
@@ -3774,7 +3755,7 @@ Ways to pass child coroutine errors:
 
 ```xray
 enum WorkerErr { Failed(string) }
-shared err_ch = Channel<string>(1)
+const err_ch = Channel<string>(1)
 
 go {
     try {
@@ -4344,7 +4325,7 @@ var t3 = go {
 var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**`move` lives in argument position**: ownership transfer of ordinary locals goes through the argument prefix `move`, **not** through a `go` option; `shared` bindings are stable shared identities and cannot be moved:
+**`move` marks the source expression**: ownership transfer of an inferred-unique local root uses `move`, **not** a `go` option; a `const` capability is not a mutable-owner move source:
 
 ```xray
 var data = { value: 10 }
@@ -4353,7 +4334,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
 
-**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass the unified capture plan. Inline values, published module-readonly values, and shared/system-owned identities may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected. To copy or transfer local data across the boundary, use the lambda-call or function-call form with explicit `copy(...)` / `move`:
+**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass the unified capture plan. Inline values, published const values, and verified synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected. To copy or transfer local data across the boundary, use the lambda-call or function-call form with explicit `copy(...)` / `move`:
 
 ```xray
 var n = 10
@@ -4367,7 +4348,7 @@ var task = go fn(x: int) -> int {
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
-- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared`; **passing them bare is a compile error**. Scalars, `string`, `shared`, and Channel / Task / Atomic pass directly. `move` only applies to rebindable local `var` values; `shared` bindings cannot be moved. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or shared.
+- Execution-local heap values (`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)` or `move x`; **passing them bare is a compile error**. Scalars, `string`, published const values, and audited Channel / Task / Atomic handles pass directly. `move` requires a rebindable local `var` root proven unique with no live alias/loan. `go` arguments share the same transfer plan as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or capability-shared.
 - The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
 
 ### 10.3 `await` — wait for a result
@@ -4410,7 +4391,7 @@ var firstOk = await anySuccess [t1, t2, t3]
   - `await any` throws only when **every** task fails; if any one completes, its result is returned.
   - `await anySuccess` is similar to `await any` but **skips** throwing tasks, awaiting only the first successful one.
 - `all` / `any` / `anySuccess` are **contextual keywords** after `await`; they apply only in this position.
-- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<int>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a shared enum / union / Json result type.
+- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<int>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a common enum / union / Json result type.
 
 ### 10.4 `Task<T>` handle
 
@@ -4452,12 +4433,12 @@ ChannelType ::= 'Channel' '<' Type '>'
 ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
-Channels are usually declared as `shared` (cross-coroutine lifetime, reference semantics):
+Channels use stable `const` bindings. Their audited synchronization capability permits `send`/`recv` to mutate protected internal state:
 
 ```xray
-shared ch  = Channel<int>(10)    // buffered, capacity = 10
-shared ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
-shared cha = Channel(3)          // element type inferred from the first send
+const ch  = Channel<int>(10)    // buffered, capacity = 10
+const ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
+const cha = Channel(3)          // element type inferred from the first send
 ```
 
 **API** (note that all method names are **camelCase**):
@@ -4475,7 +4456,7 @@ shared cha = Channel(3)          // element type inferred from the first send
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
 ```xray
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 ch.send(42)                             // blocking send
 var v = match (ch.recv()) {
     Recv.Value(value) -> value
@@ -4531,8 +4512,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray
-shared ch1 = Channel<int>(2)
-shared ch2 = Channel<int>(2)
+const ch1 = Channel<int>(2)
+const ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
@@ -4544,7 +4525,7 @@ select {
 
 **Semantics**:
 - Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value(name)` payload to `name`.
-- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same explicit-transfer rule as `ch.send` — a bare owned heap value must be written as `copy(v)`, `move v`, or `shared`.
+- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same transfer plan as `ch.send` — an execution-local heap value must be written as explicit `copy(v)` or `move v`.
 - Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
 - When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
 
@@ -4619,10 +4600,10 @@ print(len(outcomes))                 // 3 (one outcome per child)
 ### 10.8 `move` — cross-coroutine ownership transfer
 
 ```ebnf
-MoveExpr ::= 'move' Identifier        // only at call-argument position
+MoveExpr ::= 'move' Identifier
 ```
 
-`move` is an **argument-prefix modifier** (not a `go` option). It transfers ownership of a rebindable local `var` value from the current scope to the callee (including coroutines started by `go`, `ch.send()`, etc.). After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error. `const` and `shared` bindings cannot be used as `move` sources.
+`move` is a consuming source action (not a `go` option) accepted in initializers, assignments, returns, and call arguments. It requires a rebindable local `var` root proven unique with no live alias/loan. After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error; a rejected move does not poison the source state. A `const` capability is not a mutable-owner move source.
 
 ```xray
 var buf = Array<byte>(1024 * 1024)
@@ -4635,40 +4616,40 @@ var t = go fn(b: Array<byte>) -> int {
 // print(len(buf))
 
 // hand off to a channel
-shared ch = Channel<Array<byte>>(1)
+const ch = Channel<Array<byte>>(1)
 var payload = Array<byte>(4096)
 ch.send(move payload)
 // compile error: payload has been moved
 ```
 
-See §7.3 and §7.4 for the coroutine transfer rules of `var` and `shared`.
+See §7.3 and §7.4 for the coroutine transfer rules of `var` and `const` capabilities.
 
 ### 10.9 Synchronisation primitives
 
-xray's default concurrency model favours **message passing + explicit shared identity + explicit ownership transfer**: `shared`, `Channel`, `move`, and `scope` make cross-coroutine data boundaries visible in source, so raw mutexes/locks are **discouraged**.
+xray's default concurrency model favours **message passing + verified capability sharing + explicit ownership transfer**: `const`/synchronization capabilities, `Channel`, `move`, and `scope` make cross-coroutine data boundaries visible in source, so raw mutexes/locks are **discouraged**.
 
 When mutual exclusion or atomic operations are unavoidable, the runtime provides:
 
 | Primitive | Form | Description |
 |---|---|---|
 | Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
-| `shared` | Stable shared identity | Owned by the shared/system owner while retaining lexical scope; concurrent mutation safety comes from the value's own type semantics |
+| `const`/synchronized capability | Stable read-only value or synchronized identity | Ordinary graphs are deeply read-only; audited handles expose only capability-approved interior mutation |
 | `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `int`/`float`/`bool` |
 | `sync.Mutex<T>` / `sync.RwLock<T>` | Coroutine-domain locks | Require explicit `import sync`; wait by suspending a coroutine, not by blocking a worker; not allowed in `sys.Thread` bodies |
 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar`, etc. | OS-thread-domain locks | Require explicit `import sys`; block the current OS thread, suitable for `sys.Thread`, runtime components, and short critical sections |
 
-> **Design note**: xray does not expose bare `Mutex`/`RwLock` in the prelude. Prefer `Channel`, `shared`, `move`, and `Atomic<T>` by default. When a lock is required, choose the execution domain explicitly through `sync` or `sys` so coroutine-suspending locks are not confused with OS-thread-blocking locks.
+> **Design note**: xray does not expose bare `Mutex`/`RwLock` in the prelude. Prefer `Channel`, stable `const` synchronization handles, `move`, and `Atomic<T>` by default. When a lock is required, choose the execution domain explicitly through `sync` or `sys` so coroutine-suspending locks are not confused with OS-thread-blocking locks.
 
 #### `Atomic<T>` — lock-free atomic type
 
 `Atomic<T>` wraps `int`, `float`, or `bool`, allocated on the system heap, using C11 atomic instructions for lock-free cross-coroutine reads and writes.
 
-**Declaration constraint**: `Atomic<T>` variables must be declared as `shared`; `move` is prohibited.
+**Declaration constraint**: name an `Atomic<T>` handle with `const`; its atomic methods come from an audited synchronized interior-mutation capability.
 
 ```xray
-shared counter = Atomic(0)         // Atomic<int>
-shared flag = Atomic(false)        // Atomic<bool>
-shared rate = Atomic(3.14)         // Atomic<float>
+const counter = Atomic(0)         // Atomic<int>
+const flag = Atomic(false)        // Atomic<bool>
+const rate = Atomic(3.14)         // Atomic<float>
 ```
 
 **Method overview** (full signatures in §14.19):
@@ -4701,7 +4682,7 @@ enum Ordering {
 The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed. Low-level intrinsics read the declaration-order tag and do not rely on user-visible backing values.
 
 ```xray
-shared counter = Atomic(0)
+const counter = Atomic(0)
 counter.store(42, Ordering.Release)
 var val = counter.load(Ordering.Acquire)
 ```
@@ -4731,13 +4712,13 @@ xray uses the type system to **eliminate most data races at compile time**:
 | Every cross-execution boundary consumes the same provenance-based capture plan | ✅ |
 | An execution-local graph requires explicit `copy`, or `move` from a local `var` | ✅ |
 | Module-readonly values may retain the module owner; module-mutable state may not cross directly | ✅ |
-| `shared` bindings may cross coroutine boundaries directly and cannot be reassigned or moved | ✅ |
+| Published `const` values and audited synchronization handles may cross through a verified plan | ✅ |
 | `move` only applies to explicit ownership transfer of ordinary local `var` values | ✅ |
 | Channels for cross-coroutine values | ✅ |
-| `Atomic<T>` must be declared as `shared`; `move` prohibited | ✅ |
+| `Atomic<T>` uses a stable `const` binding and only audited methods mutate internal state | ✅ |
 
 **Residual data-race risk** (detected at runtime, not compile time):
-- Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared` / `Array<byte>` / immutable objects, or transfer ownership via `move`.
+- Channels never copy a mutable class reference implicitly. If uniqueness transfer or const publication cannot be proven, compilation fails; use explicit `copy` or `move`.
 
 ### 10.12 Logical root task and reachable runtime capabilities
 
@@ -5065,7 +5046,7 @@ These global functions and built-in constructor/static functions are usable with
 | `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
 | `rune(n)` | `(int) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
 | `chr(n)` | `(int) -> string` | Unicode code point → one-scalar string |
-| `copy(x)` | `(value) -> owned value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
+| `copy(x)` | `(value) -> fresh value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
 
 ### 13.3 Type Checking
 
@@ -5200,7 +5181,7 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | Member | Type / Description |
 |--|--|
 | `len(s)` | O(1) Unicode scalar count |
-| `bytes()` / `copyBytes()` | borrowed `Slice<byte>` / owned `Array<byte>` |
+| `bytes()` / `copyBytes()` | borrowed `Slice<byte>` / independent `Array<byte>` |
 | `runes()` | `Iterator<rune>`; bare `for (r in s)` has the same semantics |
 | `string.fromRune(r)` | constructs a string from one Unicode scalar |
 | `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<byte>`; invalid UTF-8 throws `Utf8Error.InvalidUtf8` |
@@ -5208,7 +5189,7 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | `string.join(parts, separator?)` | joins an `Array<string>` |
 | `contains(s)` | substring containment test |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | return rune ordinals |
-| `slice(start, end?)` | owned rune-ordinal slice; the range must be valid |
+| `slice(start, end?)` | independent rune-ordinal slice; the range must be valid |
 | `sliceBytes(start, end)` | slice by byte offset; invalid boundaries throw `StringSliceError.InvalidByteRange` |
 | `split(sep, limit?)` | split into `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | replacement |
@@ -5242,7 +5223,7 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 | `toString()` | container representation |
 | `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
 
-Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow; use `copy(arr[start:end])` for independent owned data.
+Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow; use `copy(arr[start:end])` for independent data.
 
 ### 14.8 `Map<K, V>` Methods
 
@@ -5378,7 +5359,7 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.19 `Atomic<T>` Methods
 
-`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Must be declared as `shared`; `move` is prohibited.
+`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Name the handle with `const`; audited atomic methods provide synchronized interior mutation.
 
 | Method | Signature | Description |
 |--|--|--|
@@ -5544,7 +5525,7 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 - **Descriptor (8 bytes)**: `tag: byte`, `flags: byte`, `heap_type: uint16`, and `ext: uint32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
 - **Payload (8 bytes)**: one of `int64`, `double`, or pointer, interpreted by the tag.
 - **No NaN-boxing / no low-bit pointer tagging**: integers keep the full 64-bit payload; object references are ordinary heap pointers, with type metadata in the descriptor.
-- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Runtime short strings are coroutine-local with lock-free allocation by default; only literals/symbols, explicit `intern()`, and map/set keys are interned in the global pool, and strings are promoted to shared (atomic RC) on demand when crossing coroutine boundaries (channel send, `go` arguments, task/scope results). These are object-storage policies and do not change the `XrValue` representation.
+- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Runtime short strings are coroutine-local with lock-free allocation by default; literals/symbols, explicit `intern()`, and map/set keys use the global pool. Cross-execution storage is selected from verified context at construction/publication time; a boundary never copies or promotes the payload implicitly. These are object-storage policies and do not change the `XrValue` representation.
 
 | Value type | Internal representation |
 |--|--|
@@ -5564,9 +5545,9 @@ Typed-array element layout is part of the container metadata. `Array<rune>` uses
 | Region | Use |
 |--|--|
 | **System owner** | runtime/native data structures; hosted targets may use the C allocator, while freestanding targets supply hooks |
-| **Module-readonly owner** | consteval rodata, or top-level `const` initialized by the module allocator and then frozen + published |
+| **Module-readonly owner** | consteval rodata, or top-level `const` initialized by the module allocator and then sealed + published |
 | **Module-mutable owner** | top-level `var`; module lifetime, not concurrency-safe by default |
-| **Shared/system owner** | stable `shared` identities and explicit concurrency handles, atomically reference-counted |
+| **Const/synchronized shared domain** | published const roots and audited concurrency handles, with root-only atomic reference counting |
 | **Coroutine owner** | ordinary local objects, allocated and reference-counted by the current coroutine's `XrCoroHeap` |
 | **Stack** | `struct` values, local immediates, function frames |
 | **Arena** | parser temporary allocation, frame allocation |
@@ -5575,7 +5556,7 @@ Typed-array element layout is part of the container metadata. `Array<rune>` uses
 
 - Ordinary local objects use compiler-inserted **per-coroutine reference counting** and enter the RC destruction path as soon as their last strong reference is released. Shared objects use atomic RC; module and runtime objects follow their respective owners' lifetimes.
 - **Cycle collection**: the compiler marks types that may form cycles, and a Bacon–Rajan trial-deletion collector handles the corresponding coroutine-local strong-reference cycles. The explicit entrypoint is `runtime.collectCycles()`; collection also starts automatically when the potential-root count reaches an adaptive threshold.
-- **Collector boundary**: the cycle collector skips shared/atomic, runtime-managed, and Region objects. The former tracing-GC hooks at function calls and backward branches are currently no-ops; Xray has no concurrent tracing GC.
+- **Collector boundary**: the cycle collector skips the const/synchronized shared domain, runtime-managed, and Region objects. The former tracing-GC hooks at function calls and backward branches are currently no-ops; Xray has no concurrent tracing GC.
 - **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view, falling back to the main coroutine when no coroutine is current (`import runtime`; the `mem` module carries raw-memory capabilities only).
 
 See `src/runtime/mem/` for details.
@@ -5913,7 +5894,8 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= ConstType | FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+ConstType ::= 'const' PrimaryType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -6034,8 +6016,6 @@ Statement ::= ExprStmt
            |  IncDecStmt
            |  VarDecl
            |  ConstDecl
-           |  SharedDecl
-           |  OwnedDecl
            |  FnDecl
            |  ExternBlock
            |  ClassDecl
@@ -6107,8 +6087,6 @@ YieldStmt ::= 'yield' Expression
 Visibility ::= 'export'
 VarDecl ::= 'var' Binding
 ConstDecl ::= AttrList? Visibility? 'const' Binding
-SharedDecl ::= Visibility? 'shared' Identifier (':' Type)? '=' Expression
-OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
@@ -6235,7 +6213,6 @@ These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `owned` | §5.1 |
 | `packed` | §5.2.9 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
@@ -6243,7 +6220,6 @@ These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.
 | `rune` | §2.3.5 |
 | `scope` | §10.7 |
 | `select` | §10.6 |
-| `shared` | §5.1 / §10.11 |
 | `static` | §5.3 |
 | `string` | §2.3.4 |
 | `struct` | §5.4 |
@@ -6345,7 +6321,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Awaiting | no direct equivalent (channels/WaitGroup) | `await t`, `await all [...]`, `await any [...]` |
 | Channels | built-in `chan T`, `<-` operator | `Channel<T>` class with `send`/`recv`/`trySend`/`tryRecv` methods |
 | `select` arms | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
-| Memory management | concurrent tri-color tracing GC | coroutine-local reference counting + Bacon–Rajan cycle collector; shared/system objects use atomic reference counting |
+| Memory management | concurrent tri-color tracing GC | coroutine-local reference counting + Bacon–Rajan cycle collector; published const roots and synchronized handles use a verified shared domain |
 | Classes / inheritance | none (struct + interface only) | classes with inheritance |
 | Generics | since 1.18 | yes; monomorphized by concrete type or backend representation |
 
@@ -6353,7 +6329,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 
 | Dimension | Rust | xray |
 |--|--|--|
-| Memory safety | full borrow checker | owned/shared/move rules across execution boundaries; borrowed views such as `Slice` have static lifetime restrictions |
+| Memory safety | full borrow checker | inferred uniqueness, `move`, and const/synchronized capabilities across execution boundaries; borrowed views such as `Slice` have static lifetime restrictions |
 | Errors | `Result<T, E>` | value-return error channel (`throw` / `catch`) |
 | Type inference | strong Hindley-Milner | bidirectional inference |
 | Traits | full | similar to `interface`, fewer features |
@@ -6407,11 +6383,11 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **JIT** | Just-In-Time compilation; Xray does not currently implement a JIT |
 | **lvalue / rvalue** | Assignable left-hand-side value vs. value-only right-hand-side |
 | **monomorphization** | Build-time specialization of generics into concrete type/representation versions; generic functions may share I64 / F64 / PTR / BOOL representation versions, while generic classes / structs are fully specialized by concrete type |
-| **move** | Ownership transfer: enforced when crossing coroutine boundaries (see §7.3) |
+| **move** | Ownership transfer for an inferred-unique root with no live alias/loan (see §7.3) |
 | **nullable** | A nullable type `T?` whose value may be `null` |
 | **pattern** | A pattern used in `match` and destructuring (see §6) |
 | **scope** | Lexical scope |
-| **shared** | Storage class for cross-coroutine sharing (see §5.1.3) |
+| **synchronized shared capability** | Internal compiler-granted capability for audited handles such as Channel/Atomic/Mutex; not a public storage modifier |
 | **SSA** | Static Single Assignment: IR where each variable is assigned only once |
 | **struct** | Value-type class (see §5.4) |
 | **TCO** | Tail-Call Optimization |

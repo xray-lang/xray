@@ -37,9 +37,9 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 | 区域 | 用途 |
 |--|--|
 | **系统 owner** | runtime/native 数据结构；hosted 可使用 C allocator，freestanding 由 target hooks 提供 |
-| **模块只读 owner** | consteval rodata，或 module allocator 初始化后 freeze + publish 的顶层 `const` |
+| **模块只读 owner** | consteval rodata，或 module allocator 初始化后 seal + publish 的顶层 `const` |
 | **模块可变 owner** | 顶层 `var`；生命周期属于模块，默认不提供并发安全性 |
-| **shared/system owner** | `shared` 稳定共享身份与显式并发句柄，原子引用计数 |
+| **const/sync shared domain** | 已发布 const 根与受审计并发句柄，root-only 原子引用计数 |
 | **coroutine owner** | 普通局部对象；由当前 coroutine 的 `XrCoroHeap` 分配并执行引用计数回收 |
 | **栈** | `struct` 值、局部 immediate、函数帧 |
 | **Arena** | parser 临时分配、frame allocation |
@@ -48,7 +48,7 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 
 - 默认由编译器插入的 **per-coroutine reference counting** 回收普通局部对象；最后一个强引用释放时立即进入 RC 销毁路径。共享对象使用 atomic RC，模块/运行时对象按各自 owner 的生命周期管理。
 - **循环引用回收**：编译器标记可能形成环的类型；Bacon–Rajan trial-deletion collector 处理相应的 coroutine-local 强引用环。显式入口是 `runtime.collectCycles()`，候选根数量达到自适应阈值时也会自动触发。
-- **collector 边界**：cycle collector 跳过 shared/atomic、runtime-managed 和 Region 对象。函数调用与后向跳转处保留的 tracing-GC hook 当前为空操作；Xray 没有并发 tracing GC。
+- **collector 边界**：cycle collector 跳过 const/sync shared domain、runtime-managed 和 Region 对象。函数调用与后向跳转处保留的 tracing-GC hook 当前为空操作；Xray 没有并发 tracing GC。
 - **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 coroutine heap（无当前 coroutine 时回退到 main coroutine）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 
 详见 `src/runtime/mem/`。
@@ -146,7 +146,7 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 - **Descriptor (8 bytes)**: `tag: byte`, `flags: byte`, `heap_type: uint16`, and `ext: uint32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
 - **Payload (8 bytes)**: one of `int64`, `double`, or pointer, interpreted by the tag.
 - **No NaN-boxing / no low-bit pointer tagging**: integers keep the full 64-bit payload; object references are ordinary heap pointers, with type metadata in the descriptor.
-- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Runtime short strings are coroutine-local with lock-free allocation by default; only literals/symbols, explicit `intern()`, and map/set keys are interned in the global pool, and strings are promoted to shared (atomic RC) on demand when crossing coroutine boundaries (channel send, `go` arguments, task/scope results). These are object-storage policies and do not change the `XrValue` representation.
+- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Runtime short strings are coroutine-local with lock-free allocation by default; literals/symbols, explicit `intern()`, and map/set keys use the global pool. Cross-execution storage is selected from verified context at construction/publication time; a boundary never copies or promotes the payload implicitly. These are object-storage policies and do not change the `XrValue` representation.
 
 | Value type | Internal representation |
 |--|--|
@@ -166,9 +166,9 @@ Typed-array element layout is part of the container metadata. `Array<rune>` uses
 | Region | Use |
 |--|--|
 | **System owner** | runtime/native data structures; hosted targets may use the C allocator, while freestanding targets supply hooks |
-| **Module-readonly owner** | consteval rodata, or top-level `const` initialized by the module allocator and then frozen + published |
+| **Module-readonly owner** | consteval rodata, or top-level `const` initialized by the module allocator and then sealed + published |
 | **Module-mutable owner** | top-level `var`; module lifetime, not concurrency-safe by default |
-| **Shared/system owner** | stable `shared` identities and explicit concurrency handles, atomically reference-counted |
+| **Const/synchronized shared domain** | published const roots and audited concurrency handles, with root-only atomic reference counting |
 | **Coroutine owner** | ordinary local objects, allocated and reference-counted by the current coroutine's `XrCoroHeap` |
 | **Stack** | `struct` values, local immediates, function frames |
 | **Arena** | parser temporary allocation, frame allocation |
@@ -177,7 +177,7 @@ Typed-array element layout is part of the container metadata. `Array<rune>` uses
 
 - Ordinary local objects use compiler-inserted **per-coroutine reference counting** and enter the RC destruction path as soon as their last strong reference is released. Shared objects use atomic RC; module and runtime objects follow their respective owners' lifetimes.
 - **Cycle collection**: the compiler marks types that may form cycles, and a Bacon–Rajan trial-deletion collector handles the corresponding coroutine-local strong-reference cycles. The explicit entrypoint is `runtime.collectCycles()`; collection also starts automatically when the potential-root count reaches an adaptive threshold.
-- **Collector boundary**: the cycle collector skips shared/atomic, runtime-managed, and Region objects. The former tracing-GC hooks at function calls and backward branches are currently no-ops; Xray has no concurrent tracing GC.
+- **Collector boundary**: the cycle collector skips the const/synchronized shared domain, runtime-managed, and Region objects. The former tracing-GC hooks at function calls and backward branches are currently no-ops; Xray has no concurrent tracing GC.
 - **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current coroutine heap's live-memory view, falling back to the main coroutine when no coroutine is current (`import runtime`; the `mem` module carries raw-memory capabilities only).
 
 See `src/runtime/mem/` for details.

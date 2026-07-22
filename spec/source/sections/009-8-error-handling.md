@@ -162,7 +162,7 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 
 ```xray
 enum WorkerErr { Failed(string) }
-shared err_ch = Channel<string>(1)
+const err_ch = Channel<string>(1)
 
 go {
     try {
@@ -644,7 +644,7 @@ Ways to pass child coroutine errors:
 
 ```xray
 enum WorkerErr { Failed(string) }
-shared err_ch = Channel<string>(1)
+const err_ch = Channel<string>(1)
 
 go {
     try {

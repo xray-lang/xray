@@ -16,7 +16,7 @@ fn recv_ok(r: Recv<int>) -> bool {
 
 @test
 fn test_select_send() {
-    shared ch = Channel(2)
+    const ch = Channel(2)
     
     // 发送分支：val to ch -> ...
     select {

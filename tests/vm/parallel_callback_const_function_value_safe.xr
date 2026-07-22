@@ -1,6 +1,6 @@
 import parallel
 
-shared total = Atomic<int>(0)
+const total = Atomic<int>(0)
 
 parallel.forEach(0..4, (i) -> {
     const addOne = fn(x: int) -> int {

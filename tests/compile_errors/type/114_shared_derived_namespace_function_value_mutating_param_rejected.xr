@@ -1,7 +1,7 @@
 import "../../fixtures/shared_mutation_lib" as mut
 
 fn main() {
-    shared bytes = Array<byte>(4, 0)
+    const bytes = Array<byte>(4, 0)
     var view: Slice<byte> = bytes[:]
     const f = mut.overwrite
     f(view)

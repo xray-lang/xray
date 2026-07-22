@@ -1,14 +1,14 @@
 import parallel
 
-shared touched = Atomic<int>(0)
-shared lane0 = Atomic<int>(0)
-shared lane1 = Atomic<int>(0)
-shared lane2 = Atomic<int>(0)
-shared lane3 = Atomic<int>(0)
-shared lane4 = Atomic<int>(0)
-shared lane5 = Atomic<int>(0)
-shared lane6 = Atomic<int>(0)
-shared lane7 = Atomic<int>(0)
+const touched = Atomic<int>(0)
+const lane0 = Atomic<int>(0)
+const lane1 = Atomic<int>(0)
+const lane2 = Atomic<int>(0)
+const lane3 = Atomic<int>(0)
+const lane4 = Atomic<int>(0)
+const lane5 = Atomic<int>(0)
+const lane6 = Atomic<int>(0)
+const lane7 = Atomic<int>(0)
 
 fn reset() {
     touched.store(0, Ordering.Relaxed)

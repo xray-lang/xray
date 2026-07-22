@@ -3,7 +3,7 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 
 import time
 
-shared q: WorkQueue<int> = WorkQueue<int>(2, 2)
+const q: WorkQueue<int> = WorkQueue<int>(2, 2)
 
 fn pop_or_sentinel() -> int {
     var value = q.pop(0)

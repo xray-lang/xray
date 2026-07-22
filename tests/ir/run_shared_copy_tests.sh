@@ -37,26 +37,26 @@ trap cleanup EXIT
 
 "$XRAY" "$SRC" >"$WORK/run.out" 2>"$WORK/run.err"
 if [ "$(cat "$WORK/run.out")" = "2" ]; then
-    record_pass "shared copy: program output"
+    record_pass "const copy: program output"
 else
-    record_fail "shared copy: unexpected output"
+    record_fail "const copy: unexpected output"
     sed 's/^/      stdout: /' "$WORK/run.out" | sed -n '1,40p'
     sed 's/^/      stderr: /' "$WORK/run.err" | sed -n '1,40p'
 fi
 
 "$XRAY" run --dump-bytecode "$SRC" >"$WORK/dump.out" 2>"$WORK/dump.err"
 if grep -Eq '^[0-9]+.*[[:space:]]COPY[[:space:]]+R\[[0-9]+\][[:space:]]+R\[[0-9]+\][[:space:]]+R\[1\]([[:space:]]|$)' "$WORK/dump.out"; then
-    record_pass "shared copy: bytecode targets shared storage"
+    record_pass "const copy: bytecode targets shared storage"
 else
-    record_fail "shared copy: missing shared-target COPY bytecode"
+    record_fail "const copy: missing shared-target COPY bytecode"
     sed 's/^/      /' "$WORK/dump.out" | sed -n '1,120p'
 fi
 
 if grep -Eq '^[0-9]+.*[[:space:]]TO_SHARED[[:space:]]' "$WORK/dump.out"; then
-    record_fail "shared copy: bytecode still wraps copy in TO_SHARED"
+    record_fail "const copy: bytecode still wraps copy in TO_SHARED"
     sed 's/^/      /' "$WORK/dump.out" | sed -n '1,120p'
 else
-    record_pass "shared copy: bytecode avoids TO_SHARED wrapper"
+    record_pass "const copy: bytecode avoids TO_SHARED wrapper"
 fi
 
 echo ""

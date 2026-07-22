@@ -254,7 +254,7 @@ static XlspSemanticTokenType get_var_token_type(SemanticTokenContext *ctx, const
     }
 
     // Set modifiers
-    if (sym->is_const || sym->is_readonly_binding || sym->is_shared)
+    if (sym->is_const || sym->is_readonly_binding)
         *out_mods |= XLSP_MOD_READONLY;
     if (sym->is_static)
         *out_mods |= XLSP_MOD_STATIC;
@@ -270,7 +270,7 @@ static XlspSemanticTokenType get_var_token_type(SemanticTokenContext *ctx, const
         case XA_SYM_PARAMETER:
             return XLSP_TOKEN_PARAMETER;
         case XA_SYM_VARIABLE:
-            if (sym->is_const || sym->is_readonly_binding || sym->is_shared)
+            if (sym->is_const || sym->is_readonly_binding)
                 *out_mods |= XLSP_MOD_READONLY;
             return XLSP_TOKEN_VARIABLE;
         case XA_SYM_FIELD:
@@ -332,14 +332,11 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
         }
 
         case AST_VAR_DECL:
-        case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL: {
+        case AST_CONST_DECL: {
             const char *name = node->as.var_decl.name;
             if (name) {
                 int mods = XLSP_MOD_DECLARATION;
-                if (node->type == AST_CONST_DECL || node->as.var_decl.is_const ||
-                    node->type == AST_SHARED_DECL) {
+                if (node->type == AST_CONST_DECL || node->as.var_decl.is_const) {
                     mods |= XLSP_MOD_READONLY;
                 }
                 int col = node->column > 0 ? node->column - 1 : 0;

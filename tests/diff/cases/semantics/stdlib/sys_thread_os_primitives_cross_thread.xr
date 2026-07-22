@@ -4,8 +4,8 @@
 
 import sys
 
-shared m = sys.OsMutex()
-shared guarded = Atomic<int>(0)
+const m = sys.OsMutex()
+const guarded = Atomic<int>(0)
 
 fn bumpMany(n: int) -> int {
     for (var i = 0; i < n; i++) {
@@ -24,9 +24,9 @@ var t4 = sys.Thread.spawn(bumpMany(200))
 print(t1.join() + t2.join() + t3.join() + t4.join())
 print(guarded.load(Ordering.Relaxed))
 
-shared cm = sys.OsMutex()
-shared cv = sys.OsCondvar()
-shared state = Atomic<int>(0)
+const cm = sys.OsMutex()
+const cv = sys.OsCondvar()
+const state = Atomic<int>(0)
 
 cm.lock()
 var producer = sys.Thread.spawn(fn() -> int {
@@ -43,8 +43,8 @@ print(state.load(Ordering.Acquire))
 cm.unlock()
 print(producer.join())
 
-shared barrier = sys.OsBarrier(3)
-shared arrived = Atomic<int>(0)
+const barrier = sys.OsBarrier(3)
+const arrived = Atomic<int>(0)
 
 var b1 = sys.Thread.spawn(fn() -> int {
     arrived.fetchAdd(1, Ordering.AcquireRelease)
@@ -60,8 +60,8 @@ arrived.fetchAdd(1, Ordering.AcquireRelease)
 print(barrier.wait())
 print(b1.join() + b2.join() + arrived.load(Ordering.Acquire))
 
-shared once = sys.OsOnce()
-shared onceCount = Atomic<int>(0)
+const once = sys.OsOnce()
+const onceCount = Atomic<int>(0)
 
 fn runOnce() -> int {
     once.call(fn() {

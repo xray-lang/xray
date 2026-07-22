@@ -1,6 +1,6 @@
 fn buildConfig() -> Array<byte> {
-    owned result = Array<byte>(1, 0)
-    shared frozen = move result
+    var result = Array<byte>(1, 0)
+    const frozen = move result
     return frozen
 }
 

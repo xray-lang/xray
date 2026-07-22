@@ -1,7 +1,7 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 @test
 fn test_event_count_epoch_wait_and_close() {
-    shared event = EventCount(0)
+    const event = EventCount(0)
 
     assert_eq(event.epoch, 0)
     assert_false(event.isClosed)
@@ -10,7 +10,7 @@ fn test_event_count_epoch_wait_and_close() {
     assert_eq(event.epoch, 1)
     assert_eq(event.wait(0), 1)
 
-    shared ready = CountdownLatch(1)
+    const ready = CountdownLatch(1)
     var t = go fn() -> int {
         ready.done()
         return event.wait(1, 0)
@@ -20,8 +20,8 @@ fn test_event_count_epoch_wait_and_close() {
     assert_eq(event.advance(), 2)
     assert_eq(await t, 2)
 
-    shared closed = EventCount(7)
-    shared closeReady = CountdownLatch(1)
+    const closed = EventCount(7)
+    const closeReady = CountdownLatch(1)
     var closeTask = go fn() -> int {
         closeReady.done()
         return closed.wait(7)

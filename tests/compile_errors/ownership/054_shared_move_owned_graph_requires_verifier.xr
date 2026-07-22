@@ -1,2 +1,2 @@
-owned nested: Array<Array<int>> = [[1]]
-shared frozen = move nested
+var nested: Array<Array<int>> = [[1]]
+const frozen = move nested

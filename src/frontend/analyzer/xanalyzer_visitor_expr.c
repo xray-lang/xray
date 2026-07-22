@@ -5287,13 +5287,10 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     }
 
     // Check: variable must exist and be a movable var binding.
-    if (move_sym && (move_sym->is_const || move_sym->is_shared)) {
+    if (move_sym && move_sym->is_const) {
         const char *name = inner->as.variable.name;
         char msg[128];
-        snprintf(msg, sizeof(msg),
-                 move_sym->is_shared ? "cannot move shared binding '%s'"
-                                     : "cannot move const value '%s'",
-                 name);
+        snprintf(msg, sizeof(msg), "cannot move const value '%s'", name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
     }

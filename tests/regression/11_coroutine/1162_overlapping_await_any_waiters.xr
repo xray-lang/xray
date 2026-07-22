@@ -22,8 +22,8 @@ fn recv_int(ch: Channel<int>) -> int {
 
 @test
 fn test_overlapping_await_any_waiters() {
-    shared ready = Channel<int>(2)
-    shared out = Channel<int>(2)
+    const ready = Channel<int>(2)
+    const out = Channel<int>(2)
 
     var task = go delayed_value()
     var a = go await_any_report(1, task, ready, out)

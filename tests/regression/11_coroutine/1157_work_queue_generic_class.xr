@@ -9,7 +9,7 @@ class GenericQueue<T> {
         this.workers = count
         this.shards = []
         for (var i = 0; i < count; i++) {
-            shared ch: Channel<T> = Channel(capacity)
+            const ch: Channel<T> = Channel(capacity)
             this.shards.push(ch)
         }
     }

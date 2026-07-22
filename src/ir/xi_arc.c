@@ -486,10 +486,7 @@ static bool arc_raw_pointer_borrow_flows_to_user(const XiValue *member, const Xi
         case XI_CALL_BUILTIN:
             if (user->nargs < 1 || user->args[0] != member || !user->aux)
                 return false;
-            return strcmp((const char *) user->aux, "copy") == 0 ||
-                   strcmp((const char *) user->aux, "copy_shared") == 0 ||
-                   strcmp((const char *) user->aux, "copy_owned") == 0 ||
-                   strcmp((const char *) user->aux, "to_shared") == 0;
+            return strcmp((const char *) user->aux, "copy") == 0;
         case XI_PHI:
         case XI_SELECT:
         case XI_CLOSURE_NEW:

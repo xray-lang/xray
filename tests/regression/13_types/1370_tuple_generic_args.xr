@@ -4,7 +4,7 @@
 // ===== Channel<(T, U)>: tuple payload through coroutine channel =====
 @test
 fn test_channel_tuple_send_recv() {
-    shared ch: Channel<(int, string)> = Channel(2)
+    const ch: Channel<(int, string)> = Channel(2)
     ch.send((1, "hello"))
     ch.send((2, "world"))
     var t1 = match (ch.recv()) {

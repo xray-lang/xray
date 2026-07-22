@@ -38,7 +38,7 @@ fn isSent(r: SendResult) -> bool {
 
 // 测试1：使用超时接收避免永久阻塞
 fn test_channel_timeout_prevention() {
-    shared ch = Channel()
+    const ch = Channel()
     // 无缓冲 Channel
     // 测试超时接收（无发送者）
     var received = recvTimeoutValue(ch, 100)
@@ -51,7 +51,7 @@ fn test_channel_timeout_prevention() {
 
 // 测试2：使用 tryRecv/trySend 避免阻塞
 fn test_non_blocking_operations() {
-    shared ch = Channel(1)
+    const ch = Channel(1)
     // 非阻塞发送
     var sent1 = ch.trySend(1)
     var sent2 = ch.trySend(2)
@@ -73,9 +73,9 @@ fn test_non_blocking_operations() {
 
 // 测试3：多生产者竞争有限缓冲区
 fn test_producer_competition() {
-    shared ch = Channel(5)
+    const ch = Channel(5)
     // 只有 5 个槽位
-    shared results = Channel(10)
+    const results = Channel(10)
     fn producer(id) {
         var sent_count = 0
         for (var i = 0; i < 10; i++) {
@@ -107,8 +107,8 @@ fn test_producer_competition() {
 
 // 测试4：消费者-生产者平衡
 fn test_balanced_producer_consumer() {
-    shared ch = Channel(3)
-    shared done = Channel(1)
+    const ch = Channel(3)
+    const done = Channel(1)
     fn producer() {
         for (var i = 0; i < 20; i++) {
             ch.send(i)
@@ -136,12 +136,12 @@ fn test_balanced_producer_consumer() {
 // 测试5：模拟资源锁（使用 Channel 作为信号量）
 fn test_semaphore_pattern() {
     // 用 Channel 实现信号量（最多 2 个并发）
-    shared sem = Channel(2)
+    const sem = Channel(2)
     sem.send(1)
     sem.send(1)
     // 初始化 2 个令牌
-    shared results = Channel(10)
-    shared active_count = Channel(1)
+    const results = Channel(10)
+    const active_count = Channel(1)
     active_count.send(0)
     // 当前活跃数
     fn worker(id) {
@@ -179,8 +179,8 @@ fn test_semaphore_pattern() {
 
 // 测试6：检测潜在死锁模式（通过超时）
 fn test_deadlock_pattern_detection() {
-    shared ch1 = Channel()
-    shared ch2 = Channel()
+    const ch1 = Channel()
+    const ch2 = Channel()
     // 可能导致死锁的模式：两个协程互相等待
     fn task_a() {
         // 先发 ch1，再收 ch2（但使用超时）
@@ -221,8 +221,8 @@ fn test_deadlock_pattern_detection() {
 
 // 测试7：正确的双向通信模式
 fn test_bidirectional_communication() {
-    shared request = Channel(1)
-    shared response = Channel(1)
+    const request = Channel(1)
+    const response = Channel(1)
     fn server() {
         var req = recvValue(request)
         var resp = req * 2

@@ -182,8 +182,6 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
 
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL:
             check_node(ctx, node->as.var_decl.initializer);
             break;
 
@@ -782,7 +780,7 @@ TEST(throw_stmt) {
 }
 
 TEST(channel_and_go) {
-    return assert_all_typed("shared ch = Channel(1)\n"
+    return assert_all_typed("const ch = Channel(1)\n"
                             "go fn() {\n"
                             "    ch.send(42)\n"
                             "}\n"

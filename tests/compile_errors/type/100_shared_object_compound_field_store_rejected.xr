@@ -6,5 +6,5 @@ class Counter {
     }
 }
 
-shared counter = Counter(1)
+const counter = Counter(1)
 counter.value += 1

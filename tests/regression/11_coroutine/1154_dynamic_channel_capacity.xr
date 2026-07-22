@@ -22,7 +22,7 @@ fn recv_ok(r: Recv<int>) -> bool {
 @test
 fn test_dynamic_channel_capacity() {
     var n = 3
-    shared ch = Channel<int>(n)
+    const ch = Channel<int>(n)
     assert_eq(ch.capacity, 3)
     assert_eq(sent(ch.trySend(1)), true)
     assert_eq(sent(ch.trySend(2)), true)
@@ -43,7 +43,7 @@ fn test_dynamic_channel_capacity() {
 @test
 fn test_bare_dynamic_channel_capacity() {
     var n = 2
-    shared ch: Channel<int> = Channel(n)
+    const ch: Channel<int> = Channel(n)
     assert_eq(ch.capacity, 2)
     assert_eq(sent(ch.trySend(4)), true)
     assert_eq(sent(ch.trySend(5)), true)

@@ -3,7 +3,7 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 
 import time
 
-shared q: WorkQueue<int> = WorkQueue<int>(2, 2)
+const q: WorkQueue<int> = WorkQueue<int>(2, 2)
 
 fn delayed_push(value: int) -> int {
     assert_true(q.push(value, 0))

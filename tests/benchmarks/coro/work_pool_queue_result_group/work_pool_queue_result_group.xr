@@ -25,8 +25,8 @@ if (BATCH < 1) {
     BATCH = 1
 }
 
-shared work_queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
-shared result_group: ResultGroup = ResultGroup(BATCH)
+const work_queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
+const result_group: ResultGroup = ResultGroup(BATCH)
 
 print("=== Work Queue Pool ResultGroup 测试 ===")
 print("Worker数:", WORKERS)

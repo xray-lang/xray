@@ -510,7 +510,6 @@ typedef enum XaotTransferSiteKind {
     XAOT_TRANSFER_CHAN_SEND = 3,
     XAOT_TRANSFER_CHAN_TRY_SEND = 4,
     XAOT_TRANSFER_CHAN_SEND_TIMEOUT = 5,
-    XAOT_TRANSFER_SHARED_INIT = 6,
 } XaotTransferSiteKind;
 
 enum {

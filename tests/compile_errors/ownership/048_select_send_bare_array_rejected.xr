@@ -1,6 +1,6 @@
 // select send arms cross a coroutine boundary, so a bare owned-heap payload
 // must use explicit copy(...) / move / shared, just like ch.send and go.
-shared ch: Channel<Array<int>> = Channel(1)
+const ch: Channel<Array<int>> = Channel(1)
 var xs = [1, 2, 3]
 select {
     xs to ch -> { print("sent") }

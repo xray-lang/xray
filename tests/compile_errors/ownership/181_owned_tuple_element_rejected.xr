@@ -1,5 +1,5 @@
 fn main() {
-    owned bytes = Array<int>(2, 0)
+    var bytes = Array<int>(2, 0)
     var pair = (bytes, 1)
     print(pair.1)
 }

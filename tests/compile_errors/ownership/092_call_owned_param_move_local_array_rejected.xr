@@ -3,7 +3,7 @@ fn forward_array(ch: Channel<Array<int>>, data: Array<int>) {
 }
 
 fn main() {
-    shared ch: Channel<Array<int>> = Channel(1)
+    const ch: Channel<Array<int>> = Channel(1)
     var xs = [1, 2, 3]
     forward_array(ch, move xs)
     ch.close()

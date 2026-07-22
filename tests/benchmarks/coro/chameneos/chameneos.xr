@@ -35,8 +35,8 @@ fn complement(c1: int, c2: int) -> int {
 // Meeting place: first chameneo sends its color, gets partner's color back.
 // The request channel can hold one pending request per participant so the
 // broker can stop everyone without depending on close waking blocked senders.
-shared request_ch = Channel(N_CHAMENEOS)   // chameneo sends: [id, color, reply]
-shared done_ch: Channel<int> = Channel(100)    // report results
+const request_ch = Channel(N_CHAMENEOS)   // chameneo sends: [id, color, reply]
+const done_ch: Channel<int> = Channel(100)    // report results
 
 fn recv_int(ch: Channel<int>, fallback: int) -> int {
     return match (ch.recv()) {
@@ -79,7 +79,7 @@ fn broker(meetings: int, participants: int) {
 fn chameneo(id: int, initial_color: int) {
     var color = initial_color
     var meetings = 0
-    shared reply_ch: Channel<int> = Channel(1)
+    const reply_ch: Channel<int> = Channel(1)
 
     while (true) {
         try {

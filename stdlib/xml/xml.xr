@@ -80,8 +80,8 @@ export fn qualifiedName(node: XmlNode) -> XmlName? {
 // Ordered attributes of an Element (empty for other node kinds).
 export fn attributes(node: XmlNode) -> Array<XmlAttribute> {
     return match (node) {
-        XmlNode.Element(name, attrs, kids) -> attrs,
-        _                                  -> _emptyAttrs()
+        XmlNode.Element(name, attrs, kids) -> copy(attrs),
+        _                                  -> copy(_emptyAttrs())
     }
 }
 
@@ -111,9 +111,9 @@ export fn namespace(node: XmlNode, prefix: string) -> string? {
 // Direct children of a Document or Element (empty otherwise).
 export fn children(node: XmlNode) -> Array<XmlNode> {
     return match (node) {
-        XmlNode.Document(kids)             -> kids,
-        XmlNode.Element(name, attrs, kids) -> kids,
-        _                                  -> _emptyNodes()
+        XmlNode.Document(kids)             -> copy(kids),
+        XmlNode.Element(name, attrs, kids) -> copy(kids),
+        _                                  -> copy(_emptyNodes())
     }
 }
 
@@ -213,12 +213,12 @@ fn _defaultWriteOptions() -> XmlWriteOptions {
 // public API takes nullable options and falls back to the defaults here.
 fn _resolveOptions(options: XmlOptions?) -> XmlOptions {
     if (options == null) { return _defaultOptions() }
-    return options!
+    return copy(options!)
 }
 
 fn _resolveWriteOptions(options: XmlWriteOptions?) -> XmlWriteOptions {
     if (options == null) { return _defaultWriteOptions() }
-    return options!
+    return copy(options!)
 }
 
 export class XmlParseReport {

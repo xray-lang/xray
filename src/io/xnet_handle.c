@@ -189,7 +189,6 @@ static XrNativeBodyDesc g_netconn_body_desc = {
     .init = NULL,
     .destroy = netconn_body_destroy,
     .deep_copy = NULL,
-    .to_shared = NULL,
 };
 
 static XrNativeBodyDesc g_netlistener_body_desc = {
@@ -199,7 +198,6 @@ static XrNativeBodyDesc g_netlistener_body_desc = {
     .init = NULL,
     .destroy = netlistener_body_destroy,
     .deep_copy = NULL,
-    .to_shared = NULL,
 };
 
 XrNativeBodyDesc *xr_netconn_body_desc(void) {

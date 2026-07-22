@@ -3,7 +3,7 @@ fn worker(src: Array<byte>) -> int {
 }
 
 fn child(src: Array<byte>) {
-    shared alias = copy(src)
+    const alias = copy(src)
     var task = go worker(alias)
     print(await task)
 }

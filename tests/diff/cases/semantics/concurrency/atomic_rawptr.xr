@@ -13,7 +13,7 @@ var p2 = unsafe { malloc(4) }
 unsafe { p1[0] = 11 }
 unsafe { p2[0] = 22 }
 
-shared a = Atomic<MutPtr<byte>>(p1)
+const a = Atomic<MutPtr<byte>>(p1)
 
 // load: read data behind the stored pointer
 unsafe { print(a.load()[0]) }        // 11

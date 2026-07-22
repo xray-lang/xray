@@ -17652,7 +17652,7 @@ TEST(global_evidence_composes_field_receiver_runtime_wait_effects) {
 TEST(global_evidence_producer_marks_module_init_body) {
     setup_parser_session();
     const char *source = "fn inc(x: int) -> int { return x + 1 }\n"
-                         "shared ch = Channel<int>(1)\n"
+                         "const ch = Channel<int>(1)\n"
                          "var task = go inc(41)\n"
                          "print(await task)\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -17913,7 +17913,7 @@ TEST(storage_and_capture_plans_close_owner_actions) {
     child.captures[0].capture_kind = XI_CAPTURE_MODULE_LIVE;
     child.captures[1].name = "shared_state";
     child.captures[1].capture_kind = XI_CAPTURE_SHARED;
-    child.captures[1].is_shared = true;
+    child.captures[1].capture_kind = XI_CAPTURE_SHARED;
     child.captures[2].name = "local_limit";
     child.captures[2].capture_kind = XI_CAPTURE_BY_COPY;
     child.captures[2].type = &stub_int_type;
@@ -18006,7 +18006,7 @@ TEST(global_evidence_producer_records_storage_provenance) {
     setup_parser_session();
     const char *source = "const frozen = 1\n"
                          "var module_state = 2\n"
-                         "shared shared_state = 3\n";
+                         "const shared_state = 3\n";
     AstNode *ast = xr_parse(g_session, source);
     XrModuleSpec spec;
     XrModuleGraph graph;
@@ -18044,9 +18044,9 @@ TEST(global_evidence_producer_records_storage_provenance) {
     ASSERT_EQ_UINT(module_state->storage_domain, XR_STORAGE_MODULE_STATIC);
     ASSERT_EQ_UINT(module_state->storage_mutability, XR_STORAGE_MUTABLE);
     ASSERT_EQ_UINT(module_state->materialization_kind, XR_MATERIALIZE_STATIC_DATA);
-    ASSERT_EQ_UINT(shared_state->storage_domain, XR_STORAGE_SYNC_SHARED);
-    ASSERT_EQ_UINT(shared_state->storage_mutability, XR_STORAGE_INTERIOR_MUTABLE);
-    ASSERT_EQ_UINT(shared_state->materialization_kind, XR_MATERIALIZE_SYSTEM_HEAP);
+    ASSERT_EQ_UINT(shared_state->storage_domain, XR_STORAGE_MODULE_STATIC);
+    ASSERT_EQ_UINT(shared_state->storage_mutability, XR_STORAGE_READONLY);
+    ASSERT_EQ_UINT(shared_state->materialization_kind, XR_MATERIALIZE_STATIC_DATA);
     xg_global_evidence_free(&ev);
     teardown_parser_session();
 }

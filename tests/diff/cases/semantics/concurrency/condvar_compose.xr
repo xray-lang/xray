@@ -68,9 +68,9 @@ class Condvar {
 // the same monitor lock and signals. Output is deterministic regardless of which
 // coroutine is scheduled first, because the consumer checks the predicate first.
 
-shared cv = Condvar()
-shared box = Atomic<int>(-1)   // -1 = empty; guarded by cv's monitor lock
-shared consumed = CountdownLatch(1)
+const cv = Condvar()
+const box = Atomic<int>(-1)   // -1 = empty; guarded by cv's monitor lock
+const consumed = CountdownLatch(1)
 
 go {
     cv.lock()
@@ -92,10 +92,10 @@ consumed.wait()
 // Three consumers park until a flag flips; one broadcast must release all of
 // them. The observable result (count of woken consumers) is order-independent.
 
-shared cv2 = Condvar()
-shared ready = Atomic<bool>(false)
-shared woke = Atomic<int>(0)
-shared all = CountdownLatch(3)
+const cv2 = Condvar()
+const ready = Atomic<bool>(false)
+const woke = Atomic<int>(0)
+const all = CountdownLatch(3)
 
 for (i in 0..3) {
     go {

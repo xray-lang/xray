@@ -7338,7 +7338,6 @@ static XiValue *lower_parallel_plan_end_defer_closure(XiLower *l, AstNode *node,
     cap->cell_index = -1;
     cap->env_offset = -1;
     cap->is_reassigned = false;
-    cap->is_shared = false;
     cap->needs_cell = false;
     child_l.func->ncaptures = 1;
 

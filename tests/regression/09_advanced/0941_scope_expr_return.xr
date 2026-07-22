@@ -25,7 +25,7 @@ fn recv_sum(ch: Channel<int>, count: int) -> int {
 
 @test
 fn test_supervisor_scope_statement_waits_for_children() {
-    shared ch = Channel<int>(3)
+    const ch = Channel<int>(3)
     supervisor scope {
         go send_value(ch, 1)
         go fail_after_send(ch, 2)

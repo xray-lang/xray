@@ -1,6 +1,6 @@
 import parallel
 
-shared ch: Channel<int> = Channel<int>(4)
+const ch: Channel<int> = Channel<int>(4)
 
 parallel.forEach(0..4, (i) -> {
     ch.send(i)

@@ -15,9 +15,9 @@ fn recv_int(ch: Channel<int>) -> int {
 
 @test
 fn test_select_wakes_on_channel_close() {
-    shared ch = Channel<int>(0)
-    shared ready = Channel<int>(0)
-    shared done = Channel<int>(1)
+    const ch = Channel<int>(0)
+    const ready = Channel<int>(0)
+    const done = Channel<int>(1)
 
     go wait_select_close(ch, ready, done)
     assert_eq(recv_int(ready), 1)

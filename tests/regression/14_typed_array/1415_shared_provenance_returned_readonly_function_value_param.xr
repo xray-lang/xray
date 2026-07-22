@@ -8,7 +8,7 @@ fn choose() -> (Slice<byte>) -> int {
 
 @test
 fn test_shared_provenance_returned_readonly_function_value_param() {
-    shared bytes = Array<byte>(2, 5)
+    const bytes = Array<byte>(2, 5)
     var view: Slice<byte> = bytes[:]
     const f = choose()
     assert_eq(f(view), 7)

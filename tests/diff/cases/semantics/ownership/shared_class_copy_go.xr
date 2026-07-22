@@ -16,6 +16,6 @@ fn serve(c: Config) -> int {
 }
 
 var cfg = Config("localhost", 8080)
-shared ro = copy(cfg)
+const ro = copy(cfg)
 var t = go serve(ro)
 print(await t)

@@ -2,6 +2,6 @@ class Box {
     items: Array<int> = Array<int>(1, 0)
 }
 
-shared box = Box()
+const box = Box()
 var items = box.items
 items[0] = 1

@@ -30,7 +30,7 @@ var total_woken = 0
 
 for (var r = 0; r < ROUNDS; r++) {
     // 创建 channel 和 N 个等待者
-    shared signal_ch = Channel(N)
+    const signal_ch = Channel(N)
     var tasks: Array<Task> = []
     for (var i = 0; i < N; i++) {
         tasks.push(go waiter(signal_ch))

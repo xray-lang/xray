@@ -29,14 +29,6 @@ XR_FUNC XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC XaSymbol *xa_lookup_visible_symbol(XaInferContext *ctx, const char *name);
 
-// Task 203 owned second-owning-root store gate (defined in
-// xanalyzer_visitor_stmt.c).  Rejects persisting a bare owned root into an
-// aggregate/container element or object field without move/copy.
-XR_FUNC bool xa_check_owned_second_root_stored_value(XaInferContext *ctx, AstNode *value_expr,
-                                                     AstNode *loc_node, const char *dest_desc);
-XR_FUNC void xa_check_owned_second_root_store(XaInferContext *ctx, AstNode *value_expr,
-                                              AstNode *loc_node, const char *dest_desc);
-
 // Utility functions (defined in xanalyzer_visitor.c)
 XR_FUNC bool xa_check_null_safety(XaAnalyzer *analyzer, XrType *target, XrType *source,
                                   const char *context_msg, XrLocation *loc);

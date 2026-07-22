@@ -17,7 +17,7 @@ var original = Box(42)
 var duplicate = copy(original)
 print(readValue(duplicate))
 
-shared frozen = copy(original)
+const frozen = copy(original)
 print(readValue(frozen))
 
 fn total(a: Array<int>) -> int {

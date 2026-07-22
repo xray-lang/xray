@@ -59,9 +59,6 @@ XR_FUNC AstNode *xr_ast_var_decl(XrCompilerSession *session, const char *name, A
                                  bool is_const, int line);
 
 // Create binding declaration with storage mode (owned/shared)
-XR_FUNC AstNode *xr_ast_var_decl_with_mode(XrCompilerSession *session, const char *name,
-                                           AstNode *initializer, bool is_const,
-                                           uint8_t storage_mode, int line);
 
 // Create variable reference node
 XR_FUNC AstNode *xr_ast_variable(XrCompilerSession *session, const char *name, int line);

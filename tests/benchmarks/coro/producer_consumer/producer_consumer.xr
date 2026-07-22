@@ -21,8 +21,8 @@ print("=== 生产者消费者测试 ===")
 print("生产者:", PRODUCERS)
 print("消费者:", CONSUMERS)
 print("总数量:", ITEMS)
-shared queue = Channel(100)
-shared done_ch = Channel(CONSUMERS)
+const queue = Channel(100)
+const done_ch = Channel(CONSUMERS)
 
 fn recv_int(ch: Channel<int>, fallback: int) -> int {
     return match (ch.recv()) {

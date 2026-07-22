@@ -12,7 +12,7 @@ fn tick() -> int {
     return 1
 }
 
-shared proc = sys.Process.spawn("sh", ["-c", "sleep 0.05; exit 7"])!
+const proc = sys.Process.spawn("sh", ["-c", "sleep 0.05; exit 7"])!
 
 var waiter = go waitProcess(proc)
 Coro.yield()

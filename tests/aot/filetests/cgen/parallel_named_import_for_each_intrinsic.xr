@@ -1,6 +1,6 @@
 import { forEach, Options } from parallel
 
-shared seen: Atomic<int> = Atomic<int>(0)
+const seen: Atomic<int> = Atomic<int>(0)
 
 forEach(0..5, (i) -> {
     seen.add(i, Ordering.Relaxed)

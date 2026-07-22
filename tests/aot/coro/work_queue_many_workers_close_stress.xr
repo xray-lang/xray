@@ -13,7 +13,7 @@ if (ITERS < 0) {
     ITERS = 0
 }
 
-shared queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 64)
+const queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 64)
 
 fn worker(id: int) -> int {
     var sum = 0

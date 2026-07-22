@@ -1,31 +1,31 @@
 import sys
 
-shared mutex = sys.OsMutex()
+const mutex = sys.OsMutex()
 assert(mutex.tryLock())
 mutex.unlock()
 mutex.lock()
 mutex.unlock()
 
-shared rwlock = sys.OsRwLock()
+const rwlock = sys.OsRwLock()
 rwlock.rdlock()
 rwlock.rdunlock()
 rwlock.wrlock()
 rwlock.wrunlock()
 
-shared condvarMutex = sys.OsMutex()
-shared condvar = sys.OsCondvar()
+const condvarMutex = sys.OsMutex()
+const condvar = sys.OsCondvar()
 condvarMutex.lock()
 assert(!condvar.waitFor(condvarMutex, 1000000))
 condvarMutex.unlock()
 condvar.signal()
 condvar.broadcast()
 
-shared barrier = sys.OsBarrier(1)
+const barrier = sys.OsBarrier(1)
 assert(barrier.wait())
 assert(barrier.wait())
 
 var counter = 0
-shared once = sys.OsOnce()
+const once = sys.OsOnce()
 once.call(() -> { counter = counter + 1 })
 once.call(() -> { counter = counter + 10 })
 assert(counter == 1)

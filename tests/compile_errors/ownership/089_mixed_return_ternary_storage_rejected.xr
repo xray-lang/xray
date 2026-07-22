@@ -1,11 +1,11 @@
 fn makeOwned() -> Array<byte> {
-    owned a = Array<byte>(1, 0)
+    var a = Array<byte>(1, 0)
     return move a
 }
 
 fn makeShared() -> Array<byte> {
-    owned b = Array<byte>(2, 0)
-    shared frozen = move b
+    var b = Array<byte>(2, 0)
+    const frozen = move b
     return frozen
 }
 

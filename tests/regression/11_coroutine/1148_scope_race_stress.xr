@@ -57,7 +57,7 @@ fn drain_counts(ch: Channel<int>, expected: int) -> Array<int> {
 @test
 fn test_supervisor_statement_no_lost_children() {
     for (var iter = 0; iter < ITERATIONS; iter++) {
-        shared ch = Channel<int>(FAILING_PER_SCOPE + SUCCEEDING_PER_SCOPE)
+        const ch = Channel<int>(FAILING_PER_SCOPE + SUCCEEDING_PER_SCOPE)
         supervisor scope {
             for (var i = 0; i < FAILING_PER_SCOPE; i++) {
                 go make_failing_report(ch, i)
@@ -76,7 +76,7 @@ fn test_supervisor_statement_no_lost_children() {
 @test
 fn test_supervisor_statement_all_success() {
     for (var iter = 0; iter < 5; iter++) {
-        shared ch = Channel<int>(FAILING_PER_SCOPE)
+        const ch = Channel<int>(FAILING_PER_SCOPE)
         supervisor scope {
             for (var i = 0; i < FAILING_PER_SCOPE; i++) {
                 go make_ok_report(ch, i)

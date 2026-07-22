@@ -1,1 +1,1 @@
-owned cache = Array<int>()
+var cache = Array<int>()

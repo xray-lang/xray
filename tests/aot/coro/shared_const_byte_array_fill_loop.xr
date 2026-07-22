@@ -8,7 +8,7 @@ fn makeSample(n: int) -> Array<byte> {
     return out
 }
 
-shared data = makeSample(1024)
+const data = makeSample(1024)
 
 fn worker(offset: int) -> int {
     return int(data[offset])

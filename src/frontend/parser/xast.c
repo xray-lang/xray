@@ -350,29 +350,6 @@ AstNode *xr_ast_var_decl(XrCompilerSession *session, const char *name, AstNode *
     node->as.var_decl.name = ast_strdup(session, name);
     node->as.var_decl.initializer = initializer;
     node->as.var_decl.is_const = is_const;
-    node->as.var_decl.storage_mode = XR_STORAGE_NORMAL;
-    node->as.var_decl.type_annotation = NULL;
-    node->as.var_decl.attributes = NULL;
-    node->as.var_decl.attr_count = 0;
-    return node;
-}
-
-// Create variable declaration node with storage mode.
-AstNode *xr_ast_var_decl_with_mode(XrCompilerSession *session, const char *name,
-                                   AstNode *initializer, bool is_const, uint8_t storage_mode,
-                                   int line) {
-    AstNodeType type = AST_VAR_DECL;
-    if (storage_mode == XR_STORAGE_SHARED)
-        type = AST_SHARED_DECL;
-    else if (storage_mode == XR_STORAGE_OWNED)
-        type = AST_OWNED_DECL;
-    else if (is_const)
-        type = AST_CONST_DECL;
-    AstNode *node = alloc_node(session, type, line);
-    node->as.var_decl.name = ast_strdup(session, name);
-    node->as.var_decl.initializer = initializer;
-    node->as.var_decl.is_const = type == AST_CONST_DECL;
-    node->as.var_decl.storage_mode = storage_mode;
     node->as.var_decl.type_annotation = NULL;
     node->as.var_decl.attributes = NULL;
     node->as.var_decl.attr_count = 0;
@@ -1540,9 +1517,7 @@ const char *xr_ast_typename(AstNodeType type) {
             return "VarDecl";
         case AST_CONST_DECL:
             return "ConstDecl";
-        case AST_SHARED_DECL:
             return "SharedDecl";
-        case AST_OWNED_DECL:
             return "OwnedDecl";
         case AST_VARIABLE:
             return "Variable";
@@ -1771,8 +1746,6 @@ void xr_ast_print(AstNode *node, int indent) {
 
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL:
             printf("%*s  name: %s\n", indent * 2, "", node->as.var_decl.name);
             if (node->as.var_decl.initializer != NULL) {
                 printf("%*s  initializer:\n", indent * 2, "");

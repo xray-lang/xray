@@ -89,8 +89,8 @@ fn worker(src: Array<byte>, queue: WorkQueue<int>, id: int, blockSize: int) -> i
 
 var src = makeByteArray(SIZE)
 var blocks = blockCountFor(len(src), BLOCK)
-shared sharedSrc = copy(src)
-shared queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
+const sharedSrc = copy(src)
+const queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
 
 var tasks: Array<Task> = []
 var w = 0

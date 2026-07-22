@@ -15,7 +15,7 @@ try {
     print(p.message.contains("division by zero"))
 }
 
-shared touched = Atomic<int>(0)
+const touched = Atomic<int>(0)
 plan.forEach(0..4, (state, i) -> {
     touched.add(1, Ordering.Relaxed)
 })

@@ -1,7 +1,7 @@
 import { Options, ParallelError, Plan } from parallel
 
 var mapPlan = Plan<int>(Options(2), lane -> lane + 1)
-shared mapTouched = Atomic<int>(0)
+const mapTouched = Atomic<int>(0)
 
 fn closeMapPlan() {
     mapPlan.close()
@@ -40,7 +40,7 @@ try {
 }
 
 var intoPlan = Plan<int>(Options(2), lane -> lane + 3)
-shared intoTouched = Atomic<int>(0)
+const intoTouched = Atomic<int>(0)
 
 fn closeIntoPlan() {
     intoPlan.close()
@@ -77,7 +77,7 @@ try {
 }
 
 var fresh = Plan<int>(Options(2), lane -> lane)
-shared freshTouched = Atomic<int>(0)
+const freshTouched = Atomic<int>(0)
 fresh.forEach(0..4, (state, i) -> {
     freshTouched.add(1, Ordering.Relaxed)
 })

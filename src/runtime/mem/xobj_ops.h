@@ -28,15 +28,14 @@ struct XrCopyContext;
 
 typedef void (*XrObjDestroyFn)(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 typedef XrValue (*XrObjDeepCopyFn)(struct XrCopyContext *ctx, XrObjHeader *obj);
-typedef XrValue (*XrObjToSharedFn)(struct XrVMRuntime *X, XrObjHeader *obj);
 typedef struct XrObjHeader **(*XrObjGetRefListFn)(XrObjHeader *obj);
 
 /* Per-type capability tables.
  *
  * Each capability is intentionally stored in its own table. RC/fixed heap
- * cleanup only needs destroy callbacks, while cross-coroutine transfer needs
- * deep-copy and to-shared callbacks. Keeping the tables split prevents the
- * minimal AOT runtime from pulling deep-copy/share code merely because it can
+ * cleanup only needs destroy callbacks, while explicit copy needs deep-copy
+ * callbacks. Keeping the tables split prevents the minimal AOT runtime from pulling
+ * deep-copy code merely because it can
  * destroy an object.
  *
  * Extension types (registered via xr_register_extension_destroy) live in the
@@ -45,7 +44,6 @@ typedef struct XrObjHeader **(*XrObjGetRefListFn)(XrObjHeader *obj);
 
 // Transfer tables: defined in xdeep_copy.c and only pulled when transfer logic is linked.
 extern const XrObjDeepCopyFn xr_obj_deep_copy_ops[XR_OBJ_TYPE_MAX];
-extern const XrObjToSharedFn xr_obj_to_shared_ops[XR_OBJ_TYPE_MAX];
 
 // Destroy functions (non-static, referenced by const tables).
 XR_FUNC void xr_obj_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap);

@@ -3,7 +3,7 @@ class Box {
 }
 
 fn main() {
-    shared box = Box()
+    const box = Box()
     var items = box.items
     const overwrite = fn() {
         items[0] = 9

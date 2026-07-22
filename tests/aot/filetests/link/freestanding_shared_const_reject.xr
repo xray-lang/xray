@@ -2,7 +2,7 @@ fn runtimeOnly() -> int {
     return 41
 }
 
-shared MAGIC: int = runtimeOnly()
+const MAGIC: int = runtimeOnly()
 
 @c_export("xray_magic")
 fn xray_magic() -> int {

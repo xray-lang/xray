@@ -4,8 +4,8 @@
 // Run: xray demos/05-concurrency/atomic.xr
 
 // === Basic load / store / add / sub ===
-// Atomic<T> must be declared `shared` so coroutines can capture it.
-shared counter = Atomic(0)
+// Atomic<T> uses a stable const binding and an audited synchronization capability.
+const counter = Atomic(0)
 
 counter.store(10)
 print("initial: ${counter.load()}")        // 10
@@ -33,13 +33,13 @@ var (was2, ok2) = counter.compareExchange(42, 0)
 print("CAS ok=${ok2} was=${was2} now=${counter.load()}")  // false, 99, 99
 
 // === Atomic<bool> toggle ===
-shared flag = Atomic(false)
+const flag = Atomic(false)
 print("flag before: ${flag.load()}")       // false
 var wasFalse = flag.toggle()
 print("toggle old=${wasFalse} now=${flag.load()}")    // false, true
 
 // === Concurrent counter — the typical use case ===
-shared total = Atomic(0)
+const total = Atomic(0)
 
 scope {
     for (i in 0..10) {
@@ -51,13 +51,13 @@ scope {
 print("concurrent total: ${total.load()}")            // 10
 
 // === Atomic<float> ===
-shared rate = Atomic(1.0)
+const rate = Atomic(1.0)
 rate.add(0.5)
 print("rate: ${rate.load()}")              // 1.5
 
 // === Memory ordering (default: SeqCst) ===
 // All methods accept an optional Ordering enum.
-shared data = Atomic(0)
+const data = Atomic(0)
 data.store(42, Ordering.Release)
 var val = data.load(Ordering.Acquire)
 print("ordered load: ${val}")              // 42

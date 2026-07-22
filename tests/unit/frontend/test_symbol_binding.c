@@ -88,8 +88,6 @@ static int count_unresolved_vars(AstNode *node) {
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL:
             count += count_unresolved_vars(node->as.var_decl.initializer);
             break;
         case AST_ASSIGNMENT:

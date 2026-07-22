@@ -45,7 +45,7 @@ fn test_lazy_string_map_set_content_keys() {
 
 @test
 fn test_lazy_string_channel_and_task_publish() {
-    shared ch: Channel<string> = Channel(1)
+    const ch: Channel<string> = Channel(1)
     var msg = build_message("msg", 4)
     ch.send(msg)
     assert_eq(recv_string(ch), "msg_4")

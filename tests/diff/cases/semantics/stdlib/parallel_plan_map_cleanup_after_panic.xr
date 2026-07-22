@@ -14,7 +14,7 @@ try {
     print(p.code == 420)
     print(p.message.contains("division by zero"))
 }
-shared afterMap = Atomic<int>(0)
+const afterMap = Atomic<int>(0)
 plan.forEach(0..4, (state, i) -> {
     afterMap.add(1, Ordering.Relaxed)
 })
@@ -33,7 +33,7 @@ try {
     print(p.code == 420)
     print(p.message.contains("division by zero"))
 }
-shared afterMapInto = Atomic<int>(0)
+const afterMapInto = Atomic<int>(0)
 plan.forEach(0..4, (state, i) -> {
     afterMapInto.add(1, Ordering.Relaxed)
 })

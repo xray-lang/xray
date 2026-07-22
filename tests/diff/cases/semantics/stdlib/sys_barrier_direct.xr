@@ -3,6 +3,6 @@
 
 import sys
 
-shared b = sys.OsBarrier(1)
+const b = sys.OsBarrier(1)
 print(b.wait())
 print(b.wait())

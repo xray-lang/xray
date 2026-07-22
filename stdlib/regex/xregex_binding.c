@@ -656,7 +656,6 @@ static XrNativeBodyDesc g_regex_body_desc = {
     .init = NULL,
     .destroy = regex_body_destroy,
     .deep_copy = NULL,
-    .to_shared = NULL,
 };
 
 #define XR_STDLIB_VM_BIND_CLASS_REGEX 1

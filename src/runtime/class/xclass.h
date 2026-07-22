@@ -48,8 +48,7 @@ typedef struct XrCopyContext XrCopyContext;
 
 typedef enum XrNativeBodyCopyPolicy {
     XR_NATIVE_BODY_COPY_DEEP,    // deep_copy clones internal state
-    XR_NATIVE_BODY_COPY_SHARED,  // to_shared freezes / COWs internal state
-    XR_NATIVE_BODY_COPY_FORBID,  // cross-coro send / to_shared must fail
+    XR_NATIVE_BODY_COPY_FORBID,  // explicit copy is not supported
 } XrNativeBodyCopyPolicy;
 
 typedef struct XrNativeBodyDesc {
@@ -59,7 +58,6 @@ typedef struct XrNativeBodyDesc {
     void (*init)(XrInstance *inst, void *body);
     void (*destroy)(void *body);
     bool (*deep_copy)(XrCopyContext *ctx, XrInstance *src, XrInstance *dst);
-    bool (*to_shared)(XrVMRuntime *X, XrInstance *src, XrInstance *dst);
 } XrNativeBodyDesc;
 
 /* ========== Field Access Kind ========== */

@@ -2181,8 +2181,6 @@ static void capture_scan_node(XgCaptureScan *scan, const AstNode *node) {
             break;
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL:
             capture_scan_node(scan, node->as.var_decl.initializer);
             (void) capture_push_local(scan, node->as.var_decl.name, node->as.var_decl.symbol_id);
             break;
@@ -4383,9 +4381,7 @@ static bool return_literal_scan_node(XgReturnObjectLiteralScan *scan, const AstN
         case AST_EXPR_STMT:
             return return_literal_scan_node(scan, node->as.expr_stmt);
         case AST_VAR_DECL:
-        case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL: {
+        case AST_CONST_DECL: {
             const AstNode *initializer = node->as.var_decl.initializer;
             const ObjectLiteralNode *literal = return_literal_static_literal(scan, initializer);
             if (literal)
@@ -5013,8 +5009,6 @@ static bool ctor_scan_node_for_json_field_assignment(XgJsonCtorFieldAssignScan *
             return ctor_scan_member_set_json_field_assignment(scan, node);
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL:
             return ctor_scan_node_for_json_field_assignment(scan, node->as.var_decl.initializer);
         case AST_ASSIGNMENT:
             return ctor_scan_node_for_json_field_assignment(scan, node->as.assignment.value);
@@ -9009,9 +9003,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 walk_body_for_calls(bc, node->as.print_stmt.exprs[i]);
             break;
         case AST_VAR_DECL:
-        case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL: {
+        case AST_CONST_DECL: {
             uint32_t type_key = node->as.var_decl.type_annotation
                                     ? hash_tref32(node->as.var_decl.type_annotation)
                                     : 0;
@@ -10332,8 +10324,7 @@ static bool add_module_storage_decl(XgProducer *p, XgModuleId module_id, const A
             }
             return true;
         }
-    } else if (stmt->type == AST_VAR_DECL || stmt->type == AST_CONST_DECL ||
-               stmt->type == AST_SHARED_DECL) {
+    } else if (stmt->type == AST_VAR_DECL || stmt->type == AST_CONST_DECL) {
         name = stmt->as.var_decl.name;
     } else {
         return true;
@@ -10347,22 +10338,13 @@ static bool add_module_storage_decl(XgProducer *p, XgModuleId module_id, const A
     decl.type_key =
         stmt->type == AST_IMPORT_STMT ? 0 : hash_tref32(stmt->as.var_decl.type_annotation);
     decl.source_span_id = (uint32_t) stmt->line;
-    if (stmt->type == AST_SHARED_DECL) {
-        decl.storage_domain = XR_STORAGE_SYNC_SHARED;
-        decl.storage_mutability = XR_STORAGE_INTERIOR_MUTABLE;
-        decl.address_identity = XR_ADDRESS_SYSTEM_STABLE;
-        decl.materialization_kind = XR_MATERIALIZE_SYSTEM_HEAP;
-    } else {
-        decl.storage_domain = XR_STORAGE_MODULE_STATIC;
-        decl.storage_mutability =
-            stmt->type == AST_CONST_DECL ? XR_STORAGE_READONLY : XR_STORAGE_MUTABLE;
-        if (stmt->type == AST_IMPORT_STMT)
-            decl.storage_mutability = XR_STORAGE_READONLY;
-        decl.address_identity = XR_ADDRESS_MODULE_STABLE;
-        decl.materialization_kind = (stmt->type == AST_CONST_DECL || stmt->type == AST_IMPORT_STMT)
-                                        ? XR_MATERIALIZE_STATIC_DATA
-                                        : XR_MATERIALIZE_STATIC_DATA;
-    }
+    decl.storage_domain = XR_STORAGE_MODULE_STATIC;
+    decl.storage_mutability =
+        stmt->type == AST_CONST_DECL ? XR_STORAGE_READONLY : XR_STORAGE_MUTABLE;
+    if (stmt->type == AST_IMPORT_STMT)
+        decl.storage_mutability = XR_STORAGE_READONLY;
+    decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+    decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
     return xg_global_evidence_add_decl(p->evidence, &decl) != NULL;
 }
 

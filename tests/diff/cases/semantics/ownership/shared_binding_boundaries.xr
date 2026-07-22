@@ -1,8 +1,8 @@
 // anchor: ownership-shared-binding-boundaries
-shared base: Array<int> = [1, 2]
-shared alias = base
+const base: Array<int> = [1, 2]
+const alias = base
 print(len(alias))
 
-shared owner: Array<int> = [3, 4]
-shared frozen = owner
+const owner: Array<int> = [3, 4]
+const frozen = owner
 print(frozen[1])

@@ -32,8 +32,8 @@ fn fast_worker(id: int, ch: Channel<string>) {
 @test
 fn test_syscall_handoff() {
 
-    shared FAST_COUNT = 8
-    shared resultCh = Channel(9)
+    const FAST_COUNT = 8
+    const resultCh = Channel(9)
 
 
 

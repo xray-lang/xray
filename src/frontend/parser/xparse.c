@@ -117,7 +117,6 @@ static ParseRule rules[] = {
     [TK_VAR] = {NULL, NULL, PREC_NONE},
     [TK_CONST] = {NULL, NULL, PREC_NONE},
     [TK_COMPTIME] = {xr_parse_comptime_expr, NULL, PREC_NONE},
-    [TK_OWNED] = {NULL, NULL, PREC_NONE},
     [TK_IF] = {NULL, NULL, PREC_NONE},
     [TK_ELSE] = {NULL, NULL, PREC_NONE},
     [TK_WHILE] = {NULL, NULL, PREC_NONE},
@@ -484,8 +483,6 @@ void xr_parser_synchronize(Parser *parser) {
                 case TK_GO:
                 case TK_DEFER:
                 case TK_SELECT:
-                case TK_SHARED:
-                case TK_OWNED:
                 // Attribute
                 case TK_AT:
                     return;
@@ -1920,70 +1917,6 @@ AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
     AstNode *node = xr_ast_var_decl(parser->compiler_session, name, initializer, is_const, line);
     node->column = column;
     // End span extends to the initializer when present; otherwise just the name.
-    if (initializer && initializer->end_line > 0) {
-        node->end_line = initializer->end_line;
-        node->end_column = initializer->end_column;
-    } else {
-        node->end_line = line;
-        node->end_column = column + name_length;
-    }
-    node->as.var_decl.type_annotation = type_annotation;
-    return node;
-}
-
-// Parse shared declaration after the `shared` keyword has been consumed.
-AstNode *xr_parse_shared_declaration(Parser *parser) {
-    xr_parser_consume(parser, TK_NAME, "expected shared binding name");
-    char *name = (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
-    memcpy(name, parser->previous.start, parser->previous.length);
-    name[parser->previous.length] = '\0';
-    int line = parser->previous.line;
-    int column = parser->previous.column;
-    int name_length = parser->previous.length;
-
-    XrTypeRef *type_annotation = NULL;
-    if (xr_parser_match(parser, TK_COLON)) {
-        type_annotation = xr_parse_type_annotation(parser);
-    }
-
-    xr_parser_consume(parser, TK_ASSIGN, "shared variable must have initializer");
-    AstNode *initializer = xr_parse_precedence(parser, PREC_TERNARY);
-
-    AstNode *node = xr_ast_var_decl_with_mode(parser->compiler_session, name, initializer, false,
-                                              XR_STORAGE_SHARED, line);
-    node->column = column;
-    if (initializer && initializer->end_line > 0) {
-        node->end_line = initializer->end_line;
-        node->end_column = initializer->end_column;
-    } else {
-        node->end_line = line;
-        node->end_column = column + name_length;
-    }
-    node->as.var_decl.type_annotation = type_annotation;
-    return node;
-}
-
-// Parse owned declaration after the `owned` keyword has been consumed.
-AstNode *xr_parse_owned_declaration(Parser *parser) {
-    xr_parser_consume(parser, TK_NAME, "expected owned binding name");
-    char *name = (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
-    memcpy(name, parser->previous.start, parser->previous.length);
-    name[parser->previous.length] = '\0';
-    int line = parser->previous.line;
-    int column = parser->previous.column;
-    int name_length = parser->previous.length;
-
-    XrTypeRef *type_annotation = NULL;
-    if (xr_parser_match(parser, TK_COLON)) {
-        type_annotation = xr_parse_type_annotation(parser);
-    }
-
-    xr_parser_consume(parser, TK_ASSIGN, "owned binding must have initializer");
-    AstNode *initializer = xr_parse_precedence(parser, PREC_TERNARY);
-
-    AstNode *node = xr_ast_var_decl_with_mode(parser->compiler_session, name, initializer, false,
-                                              XR_STORAGE_OWNED, line);
-    node->column = column;
     if (initializer && initializer->end_line > 0) {
         node->end_line = initializer->end_line;
         node->end_column = initializer->end_column;

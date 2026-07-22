@@ -36,7 +36,7 @@ try {
 }
 
 var fresh = Plan<int>(Options(2), lane -> lane)
-shared touched = Atomic<int>(0)
+const touched = Atomic<int>(0)
 fresh.forEach(0..4, (state, i) -> {
     touched.add(1, Ordering.Relaxed)
 })

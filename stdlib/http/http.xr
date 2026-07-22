@@ -524,7 +524,7 @@ fn _routeSegments(path: string) -> Array<string> {
     var clean = _routePathOnly(path)
     if (clean == "/" || len(clean) == 0) { return [] }
     if (clean.runes().nth(0) == '/') { clean = clean.slice(1) }
-    return clean.split("/")
+    return copy(clean.split("/"))
 }
 
 fn _routeWildcardName(seg: string) -> string? {
@@ -1782,11 +1782,13 @@ fn _requestFollowRedirects(options: HttpRequestOptions) -> bool {
 }
 
 fn _requestBody(options: HttpRequestOptions) -> Array<byte> {
-    return options.body ?? Array<byte>(0)
+    if (options.body != null) { return copy(options.body!) }
+    return Array<byte>(0)
 }
 
 fn _requestHeaders(options: HttpRequestOptions) -> Headers {
-    return options.headers ?? Headers()
+    if (options.headers != null) { return copy(options.headers!) }
+    return Headers()
 }
 
 fn _requestWireHeaders(headers: Headers, stripSensitive: bool = false) -> Headers {

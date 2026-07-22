@@ -22,8 +22,8 @@ fn spin_until_value(ch: Channel<int>, out: Channel<int>) {
     out.send(got)
 }
 
-shared data: Channel<int> = Channel(0)
-shared out: Channel<int> = Channel(1)
+const data: Channel<int> = Channel(0)
+const out: Channel<int> = Channel(1)
 
 go spin_until_value(data, out)
 go producer(data)

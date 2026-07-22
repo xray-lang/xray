@@ -1,5 +1,5 @@
-shared maps = Channel(256)
-shared done = Channel(8)
+const maps = Channel(256)
+const done = Channel(8)
 
 var PRODUCERS = 4
 var SENDS_PER_PRODUCER = 5000

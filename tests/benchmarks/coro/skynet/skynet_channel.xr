@@ -18,7 +18,7 @@ fn skynet(result_ch: Channel<int>, num: int, size: int, div: int) {
         return
     }
     const child_size = int(size / div)
-    shared ch = Channel(10)
+    const ch = Channel(10)
     var sum = 0
     scope {
         for (var i = 0; i < div; i++) {
@@ -60,7 +60,7 @@ for (var i = 0; i < depth; i++) {
 }
 const start = time.monotonic()
 const final_size = size
-shared result_ch = Channel(1)
+const result_ch = Channel(1)
 var root = go skynet_child(result_ch, 0, final_size, 10)
 const result = recv_int(result_ch, 0)
 await root

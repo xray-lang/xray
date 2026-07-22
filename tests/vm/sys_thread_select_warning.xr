@@ -1,6 +1,6 @@
 import sys
 
-shared ch = Channel<int>(1)
+const ch = Channel<int>(1)
 
 fn closeOnlyInOneSelectCase() {
     var t = sys.Thread.spawn(fn() -> int {

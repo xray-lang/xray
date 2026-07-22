@@ -329,7 +329,7 @@ static void test_cross_execution_capture_actions(void) {
               "read-only forward cell without const proof is rejected");
 
     capture.needs_cell = false;
-    capture.is_shared = true;
+    capture.capture_kind = XI_CAPTURE_SHARED;
     capture.capture_kind = XI_CAPTURE_SHARED;
     ASSERT_EQ(xi_capture_cross_execution_action(&capture), XR_TRANSFER_SYNC_SHARE,
               "shared capture keeps stable identity");

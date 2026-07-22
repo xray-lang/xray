@@ -1893,6 +1893,18 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME language_surface_convergence
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_language_surface_convergence.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(language_surface_convergence PROPERTIES
+        LABELS "frontend;syntax;metadata;task-231"
+        PROCESSORS 1
+        TIMEOUT 90
+    )
+
+    add_test(
         NAME error_effect_convergence_inventory
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_error_effect_convergence.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}

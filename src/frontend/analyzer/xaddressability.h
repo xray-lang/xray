@@ -62,7 +62,6 @@ typedef struct XaAddressability {
     bool native_layout_ok;
     bool mutable_ok;
     bool is_imported;
-    bool is_shared;
 } XaAddressability;
 
 typedef struct XaPointerProvenance {

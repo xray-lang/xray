@@ -71,19 +71,19 @@ fn test_reified_generics() {
     var typed_set: Set<string> = Set()
     assert_eq(typeName(typed_set), "Set")
 
-    shared typed_channel = Channel<int>(1)
+    const typed_channel = Channel<int>(1)
     assert_eq(typeName(typed_channel), "Channel")
     typed_channel.close()
 
-    shared annotated_channel: Channel<string> = Channel(1)
+    const annotated_channel: Channel<string> = Channel(1)
     assert_eq(typeName(annotated_channel), "Channel")
     annotated_channel.close()
 
-    shared zero_channel = Channel<bool>()
+    const zero_channel = Channel<bool>()
     assert_eq(typeName(zero_channel), "Channel")
     zero_channel.close()
 
-    shared annotated_zero: Channel<float> = Channel()
+    const annotated_zero: Channel<float> = Channel()
     assert_eq(typeName(annotated_zero), "Channel")
     annotated_zero.close()
 

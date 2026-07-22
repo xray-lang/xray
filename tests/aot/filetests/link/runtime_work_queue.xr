@@ -1,5 +1,5 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-shared queue: WorkQueue<int> = WorkQueue<int>(4, 2)
+const queue: WorkQueue<int> = WorkQueue<int>(4, 2)
 
 assert_true(queue.push(1, 0))
 var (value, ok) = queue.tryPop(0)

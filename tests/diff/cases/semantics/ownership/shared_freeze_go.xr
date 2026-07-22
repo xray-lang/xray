@@ -7,8 +7,8 @@ fn reader(t: Map<int, int>) -> int {
 var local: Map<int, int> = #{}
 local.set(1, 10)
 local.set(2, 20)
-shared table: Map<int, int> = copy(local)
-shared ro = table
+const table: Map<int, int> = copy(local)
+const ro = table
 var a = go reader(ro)
 var b = go reader(ro)
 print(await a)

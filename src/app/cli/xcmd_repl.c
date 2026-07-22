@@ -328,8 +328,8 @@ static void print_help_coro(ReplState *state) {
     printf("  yield                  // yield execution\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Channel:\n");
-    printf("  shared ch = new Channel<int>()\n");
-    printf("  shared ch = new Channel<int>(10)\n");
+    printf("  const ch = new Channel<int>()\n");
+    printf("  const ch = new Channel<int>(10)\n");
     printf("  ch.send(value)         // blocking send\n");
     printf("  match (ch.recv()) { Recv.Value(v) -> print(v); _ -> {} }\n");
     printf("  ch.close()             // close channel\n");
@@ -343,8 +343,8 @@ static void print_help_coro(ReplState *state) {
     printf("  }\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Shared Variables:\n");
-    printf("  shared CFG = {...}  // read-only sharing\n");
-    printf("  shared data = [...]   // shared identity\n");
+    printf("  const CFG = {...}  // read-only sharing\n");
+    printf("  const data = [...]   // shared identity\n");
     printf("\n");
 }
 

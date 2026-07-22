@@ -1,7 +1,7 @@
 import parallel
 import { Options, Plan } from parallel
 
-shared seen: Atomic<int> = Atomic<int>(0)
+const seen: Atomic<int> = Atomic<int>(0)
 parallel.forEach(0..5, (i) -> {
     seen.add(i, Ordering.Relaxed)
 }, Options(2))
@@ -21,7 +21,7 @@ print(out[2])
 var total = parallel.reduce(0..5, 10, (i) -> i, (a, b) -> a + b, Options(1))
 print(total)
 
-shared initSum = Atomic<int>(0)
+const initSum = Atomic<int>(0)
 var plan = Plan<int>(Options(3), (lane) -> {
     initSum.add(lane, Ordering.Relaxed)
     return 100 + lane

@@ -6,7 +6,7 @@ fn appendOne(items: Array<int>) {
     items.push(3)
 }
 
-shared box = Box()
+const box = Box()
 
 fn main() {
     var items = box.items

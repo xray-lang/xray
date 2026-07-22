@@ -1,28 +1,28 @@
 fn publish_len() -> int {
-    owned bytes = Array<byte>(3, 0)
+    var bytes = Array<byte>(3, 0)
     bytes[0] = 1
     bytes[1] = 2
     bytes[2] = 3
 
-    shared frozen = move bytes
+    const frozen = move bytes
     return len(frozen)
 }
 
 fn publish_grouped_len() -> int {
-    owned bytes = Array<byte>(2, 0)
+    var bytes = Array<byte>(2, 0)
     bytes[0] = 4
     bytes[1] = 5
 
-    shared frozen = (move bytes)
+    const frozen = (move bytes)
     return len(frozen)
 }
 
 fn publish_cast_len() -> int {
-    owned bytes = Array<byte>(2, 0)
+    var bytes = Array<byte>(2, 0)
     bytes[0] = 6
     bytes[1] = 7
 
-    shared frozen = move bytes as Array<byte>
+    const frozen = move bytes as Array<byte>
     return len(frozen)
 }
 

@@ -272,10 +272,10 @@ var s: Set<int> = #[1, 2, 3]
 
 #### 2.4.4 `Channel<T>`
 
-协程间通信通道。命名通道句柄**必须**用 `shared` 创建（见 §10.5）。
+协程间通信通道。命名通道句柄使用稳定 `const` 绑定；其同步内部可变能力来自受审计 registry（见 §10.5）。
 
 ```xray @id=types-channel
-shared ch: Channel<int> = Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Array<byte>`
@@ -742,7 +742,7 @@ if (len(s) != 0) { }     // OK
 
 Immutable strings that always contain valid UTF-8. `len(s)` returns the Unicode scalar count in O(1), and `len(s.bytes())` returns the UTF-8 byte count in O(1). Default iteration yields `rune`; integer indexing and the slice operator do not apply to strings. See §14.5 for explicit access.
 
-Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool, with strings promoted to shared on demand when crossing coroutine boundaries.
+Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool. Cross-execution strings consume a verified storage plan; the boundary does not promote or copy them implicitly.
 
 #### 2.3.5 `rune`
 
@@ -905,10 +905,10 @@ var s: Set<int> = #[1, 2, 3]
 
 #### 2.4.4 `Channel<T>`
 
-Inter-coroutine communication channel. Named channel handles **must** be created with `shared` (see §10.5).
+Inter-coroutine communication channel. A named channel uses a stable `const` binding; its synchronized interior-mutation capability comes from the audited registry (see §10.5).
 
 ```xray @id=types-channel
-shared ch: Channel<int> = Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Array<byte>`

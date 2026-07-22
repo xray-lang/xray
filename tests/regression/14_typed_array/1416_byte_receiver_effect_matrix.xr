@@ -15,7 +15,7 @@ fn test_byte_receiver_effect_matrix_var_owned_const_shared() {
     assert_eq(local[1], 9)
     assert_eq(local[2], 9)
 
-    owned ownedBuf = Array<byte>(0)
+    var ownedBuf = Array<byte>(0)
     ownedBuf.appendFrom(seed[1:3])
     ownedBuf.repeatFrom(2, 2)
     assert_eq(len(ownedBuf), 4)
@@ -28,7 +28,7 @@ fn test_byte_receiver_effect_matrix_var_owned_const_shared() {
     assert_eq(readonlyView[2], 3)
     assert_eq(int(readonlyView.load<uint16>(0, Endian.LE)), 513)
 
-    shared frozen = copy(seed)
+    const frozen = copy(seed)
     var sharedView: Slice<byte> = frozen[:]
     assert_eq(len(sharedView), 3)
     assert_eq(sharedView[0], 1)

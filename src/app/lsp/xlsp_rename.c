@@ -185,9 +185,7 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
         }
 
         case AST_VAR_DECL:
-        case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL: {
+        case AST_CONST_DECL: {
             VarDeclNode *var = &node->as.var_decl;
             if (var->name && strcmp(var->name, ctx->target_name) == 0 &&
                 is_cursor_on_identifier(ctx, node->line, node->column, (int) strlen(var->name))) {
@@ -578,9 +576,7 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
         }
 
         case AST_VAR_DECL:
-        case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL: {
+        case AST_CONST_DECL: {
             VarDeclNode *var = &node->as.var_decl;
             if (var->name && strcmp(var->name, ctx->target_name) == 0 && should_rename(ctx)) {
                 add_rename_edit(ctx, node->line, node->column > 0 ? node->column : 1,

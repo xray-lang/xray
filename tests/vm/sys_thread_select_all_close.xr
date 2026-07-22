@@ -1,6 +1,6 @@
 import sys
 
-shared ch = Channel<int>(1)
+const ch = Channel<int>(1)
 ch.trySend(1)
 
 fn closeInSelect() {

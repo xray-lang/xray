@@ -30,8 +30,8 @@ print("Worker数:", WORKERS)
 print("任务总数:", TASKS)
 print("Result batch:", BATCH)
 
-shared task_ch = Channel(1000)
-shared result_group: ResultGroup = ResultGroup(BATCH)
+const task_ch = Channel(1000)
+const result_group: ResultGroup = ResultGroup(BATCH)
 
 fn recv_int(ch: Channel<int>, fallback: int) -> int {
     return match (ch.recv()) {

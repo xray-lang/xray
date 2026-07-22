@@ -51,7 +51,7 @@ Xray's core differentiator. **If it compiles, it's concurrency-safe.**
 | [goroutines.xr](05-concurrency/goroutines.xr) | go, await, await all, await any, Task |
 | [channels.xr](05-concurrency/channels.xr) | Channel, send/recv, producer-consumer, fan-out |
 | [select_and_scope.xr](05-concurrency/select_and_scope.xr) | select, defer, scope (structured concurrency) |
-| [shared_data.xr](05-concurrency/shared_data.xr) | shared, Channel, parameter passing — the 3 sharing rules |
+| [shared_data.xr](05-concurrency/shared_data.xr) | const/sync capability, Channel, explicit move/copy |
 | [atomic.xr](05-concurrency/atomic.xr) | Atomic&lt;T&gt; for int/float/bool — load, store, add, CAS, toggle |
 
 ### 06 — Networking
@@ -91,20 +91,20 @@ var combined = (...p, true)         // spread → (1, "hi", true)
 // Concurrency
 var task = go compute(42)      // spawn coroutine
 var result = await task         // wait for result
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 ch.send(val); match (ch.recv()) { Recv.Value(v) -> use(v); _ -> {} }
-shared CFG = { ... }     // immutable cross-coroutine data
+const CFG = { ... }     // immutable cross-coroutine data
 ```
 
-## `owned` Bindings
+## Inferred Ownership and Explicit Transfer
 
-`owned` is a **local storage declaration**, not a type modifier. For example, the type of `payload` below is still `Array<byte>`; `owned` states that this binding holds a unique, mutable reference identity.
+Fresh mutable reference graphs bound to `var` are inferred as unique. No storage modifier is needed.
 
-- An `owned` declaration must be a local, single-name declaration with an initializer. Module-level and destructuring `owned` declarations are rejected.
-- The binding name cannot be reassigned, but the owned object can be mutated according to its type.
-- A freshly constructed reference value can initialize an `owned` binding directly. An existing reference binding must be transferred with `move source` or duplicated with `copy(source)`.
-- `move` can transfer the identity to another `owned` or `shared` binding, a function or coroutine, a Channel, or a return value. The source binding is invalid after the move.
-- A `Slice` or raw pointer borrowed from an owned object must not remain live when that object is moved.
+- A local alias temporarily removes uniqueness; the verifier may recover it after every alias and borrow is dead.
+- `move source` transfers the same root without copying and invalidates the source binding.
+- `copy(source)` preserves the source and explicitly creates an independent graph.
+- A `Slice`, `ref`, or raw pointer borrowed from a graph must not remain live when that graph is moved.
+- Stable `const` data and audited synchronization handles such as `Channel` may cross execution boundaries through their verified capability.
 
 ```xray
 fn byteCount(data: Array<byte>) -> int {
@@ -112,9 +112,9 @@ fn byteCount(data: Array<byte>) -> int {
 }
 
 fn ownedExample() {
-    owned payload = Array<byte>(4, 0)
+    var payload = Array<byte>(4, 0)
     payload[0] = 7
-    owned snapshot = copy(payload)
+    var snapshot = copy(payload)
     var task = go byteCount(move payload)
     var count = await task
     print("moved length: ${count}")
@@ -128,10 +128,10 @@ ownedExample()
 
 | Mechanism | Purpose | How it works |
 |-----------|---------|-------------|
-| `owned` | Unique local identity | Creates a non-rebindable local owner that can be transferred with `move` |
-| `shared` | Stable shared identity | Crosses execution boundaries directly; mutation is limited by the shared type's API |
-| `Channel` | Boundary communication | Uses the same explicit `copy` / `move` / `shared` transfer rules as `go` |
+| `var` + inferred uniqueness | Mutable local identity | Fresh roots are movable after aliases and loans end |
+| `const T` | Stable read-only capability | Deep-read-only data may be published after verification |
+| `Channel` | Audited synchronization handle | Uses the same verified transfer plan as `go` |
 | `copy(value)` | Independent data | Deep-copies an execution-local reference graph; the source remains usable |
-| `move value` | Ownership transfer | Transfers a local `var` or `owned` identity and invalidates the source |
+| `move value` | Ownership transfer | Transfers an inferred-unique local `var` identity and invalidates the source |
 
-Every `go` argument, `go` closure capture, and Channel send uses the same transfer plan. Inline values, published module-readonly values, and shared identities may cross directly. Execution-local reference graphs require explicit `copy(value)` or `move value`, while mutable captured locals and borrowed views or pointers that cannot outlive the boundary are rejected.
+Every `go` argument, `go` closure capture, and Channel send uses the same transfer plan. Inline values, published const values, and verified synchronization handles may cross directly. Execution-local reference graphs require explicit `copy(value)` or `move value`, while module-mutable state and borrowed views or pointers that cannot outlive the boundary are rejected.

@@ -30,7 +30,7 @@ order: 014
 | `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
 | `rune(n)` | `(int) -> rune` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
 | `chr(n)` | `(int) -> string` | Unicode 码点转单 scalar 字符串 |
-| `copy(x)` | `(value) -> owned value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
+| `copy(x)` | `(value) -> fresh value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
 
 ### 13.3 类型检查
 
@@ -113,7 +113,7 @@ These global functions and built-in constructor/static functions are usable with
 | `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
 | `rune(n)` | `(int) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
 | `chr(n)` | `(int) -> string` | Unicode code point → one-scalar string |
-| `copy(x)` | `(value) -> owned value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
+| `copy(x)` | `(value) -> fresh value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
 
 ### 13.3 Type Checking
 

@@ -3,7 +3,7 @@ fn sender(ch: Channel<int>) -> int {
     return 1
 }
 
-shared ch = Channel<int>(0)
+const ch = Channel<int>(0)
 const task = go sender(ch)
 var v = ch.recv()
 var done = await task

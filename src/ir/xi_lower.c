@@ -94,18 +94,6 @@ XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer
     func->has_no_alloc_contract = links && links->has_no_alloc_contract;
 }
 
-static bool xi_lower_is_builtin_call(const XiValue *v, const char *name) {
-    return v && v->op == XI_CALL_BUILTIN && v->aux && name &&
-           strcmp((const char *) v->aux, name) == 0;
-}
-
-static XiValue *xi_lower_wrap_shared_store_copy(XiLower *l, XiValue *val) {
-    if (!l || !val || !xi_lower_is_builtin_call(val, "copy"))
-        return val;
-    val->aux = (void *) "copy_shared";
-    return val;
-}
-
 XR_FUNC bool xi_lower_reject_error_type(XiLower *l, const struct XrType *type, const char *context,
                                         int line) {
     if (!xr_type_contains_error(type))
@@ -337,7 +325,6 @@ XR_FUNC XiValue *xi_lower_emit_top_store(XiLower *l, XiTopBinding binding, XiVal
             store->flags |= XI_FLAG_SIDE_EFFECT;
         }
     } else {
-        val = xi_lower_wrap_shared_store_copy(l, val);
         store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
         if (store) {
             store->args[0] = val;
@@ -408,7 +395,6 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
         l->func->captures[idx].env_offset = -1;
         l->func->captures[idx].is_mutable = false;
         l->func->captures[idx].is_reassigned = false;
-        l->func->captures[idx].is_shared = false;
         /* Cell indirection is needed when the capture cannot see the final
          * value at closure creation time:
          *  - Hoisted function variables: initially null, replaced by the
@@ -447,7 +433,6 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
         l->func->captures[idx].env_offset = -1;
         l->func->captures[idx].is_mutable = parent->func->captures[parent_upval].is_mutable;
         l->func->captures[idx].is_reassigned = parent->func->captures[parent_upval].is_reassigned;
-        l->func->captures[idx].is_shared = false;
         /* Inherit needs_cell from the parent capture so CELL_GET is emitted
          * at every level in the transitive capture chain. */
         if (parent_upval < (int) parent->func->ncaptures)
@@ -1840,8 +1825,6 @@ static AstNode *prescan_extract_decl(XiLower *l, AstNode *s, const char **out_na
             *out_is_const = true;
             /* fall through */
         case AST_VAR_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL:
             *out_name = s->as.var_decl.name;
             *out_sid = s->as.var_decl.symbol_id;
             *out_type = xi_lower_node_type(l, s);
@@ -2023,10 +2006,9 @@ static void const_literal_normalize_for_static_slot_type(XiConstLiteral *lit, st
     lit->type = type;
 }
 
-static bool shared_static_initializer_from_decl(XiLower *l, AstNode *s, struct XrType *type,
+static bool module_static_initializer_from_decl(XiLower *l, AstNode *s, struct XrType *type,
                                                 XiConstLiteral *out) {
-    if (!l || !s || (s->type != AST_SHARED_DECL && s->type != AST_VAR_DECL) ||
-        !s->as.var_decl.initializer || !out)
+    if (!l || !s || s->type != AST_VAR_DECL || !s->as.var_decl.initializer || !out)
         return false;
     XiConstLiteral lit;
     if (!const_literal_from_ast(l, s->as.var_decl.initializer, type, &lit)) {
@@ -2394,10 +2376,9 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                 prescan_apply_static_data_attrs(l, &s->as.var_decl, &lit);
                 slot_meta.const_literals[next_shared] = lit;
             }
-        } else if (s && (s->type == AST_SHARED_DECL || s->type == AST_VAR_DECL) &&
-                   s->as.var_decl.initializer) {
+        } else if (s && s->type == AST_VAR_DECL && s->as.var_decl.initializer) {
             XiConstLiteral lit;
-            if (shared_static_initializer_from_decl(l, s, type, &lit))
+            if (module_static_initializer_from_decl(l, s, type, &lit))
                 slot_meta.shared_initializers[next_shared] = lit;
         } else if (s && s->type == AST_VAR_DECL && !s->as.var_decl.initializer) {
             XiConstLiteral lit;
@@ -2504,7 +2485,7 @@ static void finalize_capture_metadata(XiFunc *f) {
 
     for (uint16_t i = 0; i < f->ncaptures; i++) {
         XiCapture *cap = &f->captures[i];
-        if (cap->is_shared) {
+        if (cap->capture_kind == XI_CAPTURE_SHARED) {
             cap->capture_kind = (uint8_t) XI_CAPTURE_SHARED;
         } else if (cap->is_mutable || cap->is_reassigned) {
             cap->capture_kind = (uint8_t) XI_CAPTURE_BY_MUT_CELL;

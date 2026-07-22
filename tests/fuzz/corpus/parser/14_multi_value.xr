@@ -20,7 +20,7 @@ let (_, important) = getTwoValues()
 let (val, _) = getTwoValues()
 
 // Channel tryRecv now produces Recv<T>
-shared const ch = new Channel(1)
+const ch = new Channel(1)
 ch.send(42)
 match (ch.tryRecv()) {
     Recv.Value(value) -> {

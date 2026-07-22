@@ -4011,8 +4011,6 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
                                              node->as.destructure_decl.initializer);
             es_walk_expr(ctx, node->as.destructure_decl.initializer);
             break;
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL:
             es_walk_expr(ctx, node->as.var_decl.initializer);
             break;
 
@@ -4698,8 +4696,7 @@ static void no_throw_constraint_scan_pre(AstNode *node, void *userdata) {
         }
         return;
     }
-    if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL ||
-        node->type == AST_OWNED_DECL || node->type == AST_SHARED_DECL) {
+    if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
         VarDeclNode *decl = &node->as.var_decl;
         if (decl->initializer && no_throw_tref_requires_constraint(decl->type_annotation))
             report_no_throw_value_constraint(ctx, node, decl->name, decl->initializer);

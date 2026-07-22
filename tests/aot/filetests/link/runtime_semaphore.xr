@@ -1,5 +1,5 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-shared sem = Semaphore(1)
+const sem = Semaphore(1)
 
 print(sem.tryAcquire())
 print(sem.available)

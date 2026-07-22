@@ -1,7 +1,7 @@
 import parallel
 
 var plan = parallel.Plan<int>(parallel.Options(4), (lane) -> lane)
-shared touched = Atomic<int>(0)
+const touched = Atomic<int>(0)
 
 try {
     var failed = plan.reduce(
@@ -35,7 +35,7 @@ var after = plan.reduce(
 
 print(len(after))
 
-shared reused = Atomic<int>(0)
+const reused = Atomic<int>(0)
 plan.forEach(0..4, (state, i) -> {
     reused.add(1, Ordering.Relaxed)
 })

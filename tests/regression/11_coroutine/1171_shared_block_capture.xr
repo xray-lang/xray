@@ -1,6 +1,6 @@
 @test
 fn test_shared_block_capture() {
-    shared payload = Atomic<int>(3)
+    const payload = Atomic<int>(3)
     var t = go fn() -> int {
         payload.fetchAdd(1)
         return payload.load()

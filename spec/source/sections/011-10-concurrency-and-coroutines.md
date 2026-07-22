@@ -52,7 +52,7 @@ var t3 = go {
 var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**move 在参数位置**：跨协程转移普通局部所有权通过参数前缀 `move` 实现，**不是** `go` 的选项；`shared` 绑定是稳定共享身份，不能 `move`：
+**move 在源表达式位置**：跨协程转移推断为唯一的局部根通过 `move` 实现，**不是** `go` 的选项；`const` 能力不能作为可变 owner 的 `move` 源：
 
 ```xray @id=coro-move-argument
 var data = { value: 10 }
@@ -61,7 +61,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
-**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。inline 值、已发布的 module-readonly 值和 shared/system owner 身份可直接捕获；execution-local graph、module-mutable 状态及生命周期不足的 view/pointer 会被拒绝。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
+**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。inline 值、已发布的 const 值和受验证同步句柄可直接捕获；execution-local graph、module-mutable 状态及生命周期不足的 view/pointer 会被拒绝。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
 
 ```xray
 var n = 10
@@ -75,7 +75,7 @@ var task = go fn(x: int) -> int {
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
-- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared`，**裸传是编译错误**；标量、`string`、`shared`、Channel / Task / Atomic 等可直接传。`move` 只适用于可重新绑定的局部 `var` 值，`shared` 绑定不能被 move。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，每次边界传递都能从源码看出复制、转移或共享语义。
+- 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
 - `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
 
 ### 10.3 `await` — 等待结果
@@ -160,12 +160,12 @@ ChannelType ::= 'Channel' '<' Type '>'
 ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
-Channel 通常以 `shared` 声明（生命周期跨协程，引用语义）：
+Channel 以稳定的 `const` 绑定命名；其类型来自受审计的同步能力 registry，因此 `send`/`recv` 可修改受保护的内部状态：
 
 ```xray @id=channel-decl-variants
-shared ch  = Channel<int>(10)    // 有缓冲，capacity = 10
-shared ch0 = Channel<int>(0)     // 无缓冲（同步握手）
-shared cha = Channel(3)          // 元素类型从首次 send 推断
+const ch  = Channel<int>(10)    // 有缓冲，capacity = 10
+const ch0 = Channel<int>(0)     // 无缓冲（同步握手）
+const cha = Channel(3)          // 元素类型从首次 send 推断
 ```
 
 **API**（注意全部为 **camelCase**）：
@@ -183,7 +183,7 @@ shared cha = Channel(3)          // 元素类型从首次 send 推断
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
 ```xray @id=channel-basic-ops
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 ch.send(42)                             // 阻塞发送
 var v = match (ch.recv()) {
     Recv.Value(value) -> value
@@ -239,8 +239,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray @id=coro-select
-shared ch1 = Channel<int>(2)
-shared ch2 = Channel<int>(2)
+const ch1 = Channel<int>(2)
+const ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
@@ -252,7 +252,7 @@ select {
 
 **语义**：
 - 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value(name)` 的 payload 绑定到 `name`。
-- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一显式 transfer 规则——裸 owned heap 值必须写成 `copy(v)` / `move v` 或 `shared`。
+- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一 transfer plan——execution-local heap 值必须显式写成 `copy(v)` 或 `move v`。
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
 
@@ -327,10 +327,10 @@ print(len(outcomes))                 // 3（每个子协程一个 outcome）
 ### 10.8 `move` — 跨协程所有权转移
 
 ```ebnf
-MoveExpr ::= 'move' Identifier        // 仅出现在调用参数位置
+MoveExpr ::= 'move' Identifier
 ```
 
-`move` 是**实参修饰前缀**（不是 `go` 的选项）。它把可重新绑定的局部 `var` 值所有权从当前作用域转移到被调函数（包括 `go` 启动的协程、`ch.send()` 等）。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误。`const` 和 `shared` 绑定都不能作为 `move` 源。
+`move` 是消费源动作（不是 `go` 的选项），可用于初始化、赋值、返回和调用实参。它要求可重新绑定的局部 `var` 根经 verifier 证明为唯一且没有存活 alias/loan。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误；非法 move 不会污染源状态。`const` 能力不能作为可变 owner 的 `move` 源。
 
 ```xray @id=coro-move-transfer
 var buf = Array<byte>(1024 * 1024)
@@ -343,40 +343,40 @@ var t = go fn(b: Array<byte>) -> int {
 // print(len(buf))
 
 // 移交给 channel
-shared ch = Channel<Array<byte>>(1)
+const ch = Channel<Array<byte>>(1)
 var payload = Array<byte>(4096)
 ch.send(move payload)
 // 编译错误：payload has been moved
 ```
 
-详见 §7.3、§7.4 关于 `var` / `shared` 的协程传递规则。
+详见 §7.3、§7.4 关于 `var` / `const` 能力的协程传递规则。
 
 ### 10.9 同步原语
 
-xray 的默认并发模型偏向**消息传递 + 显式共享身份 + 显式所有权转移**——通过 `shared`、`Channel`、`move`、`scope` 把跨协程数据边界写在源码里，因此**不**鼓励使用裸 Mutex/锁。
+xray 的默认并发模型偏向**消息传递 + 验证后能力共享 + 显式所有权转移**——通过 `const`/同步能力、`Channel`、`move`、`scope` 把跨协程数据边界写在源码里，因此**不**鼓励使用裸 Mutex/锁。
 
 如确需互斥锁/原子操作，运行时层面提供：
 
 | 原语 | 形态 | 说明 |
 |---|---|---|
 | Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
-| `shared` | 稳定共享身份 | 由 shared/system owner 持有，作用域仍按词法规则；并发可变安全由值的类型语义决定 |
+| `const`/同步能力 | 稳定只读值或同步身份 | 普通图深只读；受审计同步句柄只允许其能力方法修改内部状态 |
 | `Atomic<T>` | 无锁原子包装 | 对 `int`/`float`/`bool` 提供 C11 原子操作 |
 | `sync.Mutex<T>` / `sync.RwLock<T>` | 协程域锁 | 需显式 `import sync`；等待时挂起协程，不阻塞 worker；不得在 `sys.Thread` 线程体中使用 |
 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` 等 | OS 线程域锁 | 需显式 `import sys`；阻塞当前 OS 线程，适合 `sys.Thread`、运行时组件和短临界区 |
 
-> **设计说明**：xray 不在 prelude 暴露裸 `Mutex`/`RwLock`。默认推荐 `Channel`、`shared`、`move` 与 `Atomic<T>`；确需锁时必须通过 `sync` 或 `sys` 显式选定执行域，避免把协程挂起锁和 OS 阻塞锁混用。
+> **设计说明**：xray 不在 prelude 暴露裸 `Mutex`/`RwLock`。默认推荐 `Channel`、`const` 同步句柄、`move` 与 `Atomic<T>`；确需锁时必须通过 `sync` 或 `sys` 显式选定执行域，避免把协程挂起锁和 OS 阻塞锁混用。
 
 #### `Atomic<T>` — 无锁原子类型
 
 `Atomic<T>` 包装 `int`、`float` 或 `bool`，在系统堆上分配，底层使用 C11 原子指令，无需锁即可跨协程安全读写。
 
-**声明约束**：`Atomic<T>` 变量必须声明为 `shared`，禁止 `move`。
+**声明约束**：`Atomic<T>` 句柄以 `const` 命名；其原子方法来自受审计的同步内部可变能力。
 
 ```xray
-shared counter = Atomic(0)         // Atomic<int>
-shared flag = Atomic(false)        // Atomic<bool>
-shared rate = Atomic(3.14)         // Atomic<float>
+const counter = Atomic(0)         // Atomic<int>
+const flag = Atomic(false)        // Atomic<bool>
+const rate = Atomic(3.14)         // Atomic<float>
 ```
 
 **方法一览**（完整签名见 §14.19）：
@@ -409,7 +409,7 @@ enum Ordering {
 `Ordering` 枚举由编译器自动注入（prelude），无需 import；底层 intrinsic 读取声明顺序 tag，不依赖用户可见 backing value。
 
 ```xray
-shared counter = Atomic(0)
+const counter = Atomic(0)
 counter.store(42, Ordering.Release)
 var val = counter.load(Ordering.Acquire)
 ```
@@ -439,13 +439,13 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 | 所有跨 execution 边界消费同一个 provenance-based capture plan | ✅ |
 | execution-local graph 必须显式 `copy` 或从局部 `var` 执行 `move` | ✅ |
 | 模块只读值可保留 module owner；模块可变状态不得直接跨界 | ✅ |
-| `shared` 绑定可直接跨协程传递/捕获，且不能重新赋值或 `move` | ✅ |
+| 已发布 `const` 值与受审计同步句柄可按 verified plan 跨协程传递/捕获 | ✅ |
 | `move` 只适用于普通局部 `var` 的显式所有权转移 | ✅ |
 | Channel 跨协程传值 | ✅ |
-| `Atomic<T>` 必须声明为 `shared`，禁止 `move` | ✅ |
+| `Atomic<T>` 以 `const` 命名，只有受审计方法可执行同步内部修改 | ✅ |
 
 **仍可能存在数据竞争**（运行时检测，非编译期）：
-- 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared` / `Array<byte>` / 不可变对象 / `move` 移交。
+- Channel 不会隐式复制可变 class 引用；无法证明唯一转移或 const 发布时编译失败，应显式 `copy` 或 `move`。
 
 ### 10.12 逻辑根任务与可达运行时能力
 
@@ -505,7 +505,7 @@ var t3 = go {
 var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**`move` lives in argument position**: ownership transfer of ordinary locals goes through the argument prefix `move`, **not** through a `go` option; `shared` bindings are stable shared identities and cannot be moved:
+**`move` marks the source expression**: ownership transfer of an inferred-unique local root uses `move`, **not** a `go` option; a `const` capability is not a mutable-owner move source:
 
 ```xray @id=coro-move-argument
 var data = { value: 10 }
@@ -514,7 +514,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
 
-**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass the unified capture plan. Inline values, published module-readonly values, and shared/system-owned identities may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected. To copy or transfer local data across the boundary, use the lambda-call or function-call form with explicit `copy(...)` / `move`:
+**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass the unified capture plan. Inline values, published const values, and verified synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected. To copy or transfer local data across the boundary, use the lambda-call or function-call form with explicit `copy(...)` / `move`:
 
 ```xray
 var n = 10
@@ -528,7 +528,7 @@ var task = go fn(x: int) -> int {
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
-- Owned heap values that need isolation (`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)`, `move x`, or be declared `shared`; **passing them bare is a compile error**. Scalars, `string`, `shared`, and Channel / Task / Atomic pass directly. `move` only applies to rebindable local `var` values; `shared` bindings cannot be moved. `go` arguments share the same explicit-transfer rule as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or shared.
+- Execution-local heap values (`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)` or `move x`; **passing them bare is a compile error**. Scalars, `string`, published const values, and audited Channel / Task / Atomic handles pass directly. `move` requires a rebindable local `var` root proven unique with no live alias/loan. `go` arguments share the same transfer plan as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or capability-shared.
 - The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
 
 ### 10.3 `await` — wait for a result
@@ -571,7 +571,7 @@ var firstOk = await anySuccess [t1, t2, t3]
   - `await any` throws only when **every** task fails; if any one completes, its result is returned.
   - `await anySuccess` is similar to `await any` but **skips** throwing tasks, awaiting only the first successful one.
 - `all` / `any` / `anySuccess` are **contextual keywords** after `await`; they apply only in this position.
-- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<int>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a shared enum / union / Json result type.
+- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<int>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a common enum / union / Json result type.
 
 ### 10.4 `Task<T>` handle
 
@@ -613,12 +613,12 @@ ChannelType ::= 'Channel' '<' Type '>'
 ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
-Channels are usually declared as `shared` (cross-coroutine lifetime, reference semantics):
+Channels use stable `const` bindings. Their audited synchronization capability permits `send`/`recv` to mutate protected internal state:
 
 ```xray @id=channel-decl-variants
-shared ch  = Channel<int>(10)    // buffered, capacity = 10
-shared ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
-shared cha = Channel(3)          // element type inferred from the first send
+const ch  = Channel<int>(10)    // buffered, capacity = 10
+const ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
+const cha = Channel(3)          // element type inferred from the first send
 ```
 
 **API** (note that all method names are **camelCase**):
@@ -636,7 +636,7 @@ shared cha = Channel(3)          // element type inferred from the first send
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
 ```xray @id=channel-basic-ops
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 ch.send(42)                             // blocking send
 var v = match (ch.recv()) {
     Recv.Value(value) -> value
@@ -692,8 +692,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray @id=coro-select
-shared ch1 = Channel<int>(2)
-shared ch2 = Channel<int>(2)
+const ch1 = Channel<int>(2)
+const ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
@@ -705,7 +705,7 @@ select {
 
 **Semantics**:
 - Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value(name)` payload to `name`.
-- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same explicit-transfer rule as `ch.send` — a bare owned heap value must be written as `copy(v)`, `move v`, or `shared`.
+- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same transfer plan as `ch.send` — an execution-local heap value must be written as explicit `copy(v)` or `move v`.
 - Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
 - When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
 
@@ -780,10 +780,10 @@ print(len(outcomes))                 // 3 (one outcome per child)
 ### 10.8 `move` — cross-coroutine ownership transfer
 
 ```ebnf
-MoveExpr ::= 'move' Identifier        // only at call-argument position
+MoveExpr ::= 'move' Identifier
 ```
 
-`move` is an **argument-prefix modifier** (not a `go` option). It transfers ownership of a rebindable local `var` value from the current scope to the callee (including coroutines started by `go`, `ch.send()`, etc.). After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error. `const` and `shared` bindings cannot be used as `move` sources.
+`move` is a consuming source action (not a `go` option) accepted in initializers, assignments, returns, and call arguments. It requires a rebindable local `var` root proven unique with no live alias/loan. After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error; a rejected move does not poison the source state. A `const` capability is not a mutable-owner move source.
 
 ```xray @id=coro-move-transfer
 var buf = Array<byte>(1024 * 1024)
@@ -796,40 +796,40 @@ var t = go fn(b: Array<byte>) -> int {
 // print(len(buf))
 
 // hand off to a channel
-shared ch = Channel<Array<byte>>(1)
+const ch = Channel<Array<byte>>(1)
 var payload = Array<byte>(4096)
 ch.send(move payload)
 // compile error: payload has been moved
 ```
 
-See §7.3 and §7.4 for the coroutine transfer rules of `var` and `shared`.
+See §7.3 and §7.4 for the coroutine transfer rules of `var` and `const` capabilities.
 
 ### 10.9 Synchronisation primitives
 
-xray's default concurrency model favours **message passing + explicit shared identity + explicit ownership transfer**: `shared`, `Channel`, `move`, and `scope` make cross-coroutine data boundaries visible in source, so raw mutexes/locks are **discouraged**.
+xray's default concurrency model favours **message passing + verified capability sharing + explicit ownership transfer**: `const`/synchronization capabilities, `Channel`, `move`, and `scope` make cross-coroutine data boundaries visible in source, so raw mutexes/locks are **discouraged**.
 
 When mutual exclusion or atomic operations are unavoidable, the runtime provides:
 
 | Primitive | Form | Description |
 |---|---|---|
 | Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
-| `shared` | Stable shared identity | Owned by the shared/system owner while retaining lexical scope; concurrent mutation safety comes from the value's own type semantics |
+| `const`/synchronized capability | Stable read-only value or synchronized identity | Ordinary graphs are deeply read-only; audited handles expose only capability-approved interior mutation |
 | `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `int`/`float`/`bool` |
 | `sync.Mutex<T>` / `sync.RwLock<T>` | Coroutine-domain locks | Require explicit `import sync`; wait by suspending a coroutine, not by blocking a worker; not allowed in `sys.Thread` bodies |
 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar`, etc. | OS-thread-domain locks | Require explicit `import sys`; block the current OS thread, suitable for `sys.Thread`, runtime components, and short critical sections |
 
-> **Design note**: xray does not expose bare `Mutex`/`RwLock` in the prelude. Prefer `Channel`, `shared`, `move`, and `Atomic<T>` by default. When a lock is required, choose the execution domain explicitly through `sync` or `sys` so coroutine-suspending locks are not confused with OS-thread-blocking locks.
+> **Design note**: xray does not expose bare `Mutex`/`RwLock` in the prelude. Prefer `Channel`, stable `const` synchronization handles, `move`, and `Atomic<T>` by default. When a lock is required, choose the execution domain explicitly through `sync` or `sys` so coroutine-suspending locks are not confused with OS-thread-blocking locks.
 
 #### `Atomic<T>` — lock-free atomic type
 
 `Atomic<T>` wraps `int`, `float`, or `bool`, allocated on the system heap, using C11 atomic instructions for lock-free cross-coroutine reads and writes.
 
-**Declaration constraint**: `Atomic<T>` variables must be declared as `shared`; `move` is prohibited.
+**Declaration constraint**: name an `Atomic<T>` handle with `const`; its atomic methods come from an audited synchronized interior-mutation capability.
 
 ```xray
-shared counter = Atomic(0)         // Atomic<int>
-shared flag = Atomic(false)        // Atomic<bool>
-shared rate = Atomic(3.14)         // Atomic<float>
+const counter = Atomic(0)         // Atomic<int>
+const flag = Atomic(false)        // Atomic<bool>
+const rate = Atomic(3.14)         // Atomic<float>
 ```
 
 **Method overview** (full signatures in §14.19):
@@ -862,7 +862,7 @@ enum Ordering {
 The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed. Low-level intrinsics read the declaration-order tag and do not rely on user-visible backing values.
 
 ```xray
-shared counter = Atomic(0)
+const counter = Atomic(0)
 counter.store(42, Ordering.Release)
 var val = counter.load(Ordering.Acquire)
 ```
@@ -892,13 +892,13 @@ xray uses the type system to **eliminate most data races at compile time**:
 | Every cross-execution boundary consumes the same provenance-based capture plan | ✅ |
 | An execution-local graph requires explicit `copy`, or `move` from a local `var` | ✅ |
 | Module-readonly values may retain the module owner; module-mutable state may not cross directly | ✅ |
-| `shared` bindings may cross coroutine boundaries directly and cannot be reassigned or moved | ✅ |
+| Published `const` values and audited synchronization handles may cross through a verified plan | ✅ |
 | `move` only applies to explicit ownership transfer of ordinary local `var` values | ✅ |
 | Channels for cross-coroutine values | ✅ |
-| `Atomic<T>` must be declared as `shared`; `move` prohibited | ✅ |
+| `Atomic<T>` uses a stable `const` binding and only audited methods mutate internal state | ✅ |
 
 **Residual data-race risk** (detected at runtime, not compile time):
-- Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared` / `Array<byte>` / immutable objects, or transfer ownership via `move`.
+- Channels never copy a mutable class reference implicitly. If uniqueness transfer or const publication cannot be proven, compilation fails; use explicit `copy` or `move`.
 
 ### 10.12 Logical root task and reachable runtime capabilities
 

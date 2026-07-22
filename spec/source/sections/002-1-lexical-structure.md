@@ -59,16 +59,14 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 ### 1.5 关键字
 
-xray 共 **66 个保留关键字**，按用途分组如下：
+xray 共 **64 个保留关键字**，按用途分组如下：
 
 #### 1.5.1 声明与流程控制
 
 | 关键字 | 用途 |
 |--|--|
 | `var` | 可变变量声明 |
-| `const` | 不可变变量声明 |
-| `shared` | 共享身份绑定（由 shared/system owner 持有，词法作用域照常） |
-| `owned` | 唯一的 system-owned 可变身份绑定；转移使用 `move` |
+| `const` | 稳定绑定声明；在类型位置表达深只读能力 |
 | `comptime` | 强制编译期求值的表达式前缀 |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
@@ -503,16 +501,14 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 ### 1.5 Keywords
 
-Xray has **66 reserved keywords** in total, grouped by purpose below:
+Xray has **64 reserved keywords** in total, grouped by purpose below:
 
 #### 1.5.1 Declarations and Control Flow
 
 | Keyword | Purpose |
 |--|--|
 | `var` | mutable variable declaration |
-| `const` | immutable variable declaration |
-| `shared` | shared identity binding (owned by the shared/system owner, ordinary lexical scope) |
-| `owned` | unique system-owned mutable identity binding; transfer with `move` |
+| `const` | stable binding declaration; deep-read-only capability in type position |
 | `comptime` | expression prefix that forces compile-time evaluation |
 | `fn` | function declaration |
 | `return` | function return |

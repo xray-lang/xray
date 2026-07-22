@@ -100,7 +100,7 @@ fn recvValue(ch) {
 }
 
 fn processItems(items: Array<any>) {
-    shared const results = new Channel(len(items))
+    const results = new Channel(len(items))
     for (item in items) {
         go fn(data) {
             let result = processItem(data)
@@ -117,9 +117,9 @@ fn processItems(items: Array<any>) {
 
 // Pipeline pattern
 fn pipeline(input: Array<any>) {
-    shared const stage1 = new Channel(10)
-    shared const stage2 = new Channel(10)
-    shared const output = new Channel(10)
+    const stage1 = new Channel(10)
+    const stage2 = new Channel(10)
+    const output = new Channel(10)
     // Stage 1: Transform
     go fn() {
         for (item in input) {

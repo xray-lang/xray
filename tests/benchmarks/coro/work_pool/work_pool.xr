@@ -17,8 +17,8 @@ print("=== Work Pool 测试 ===")
 print("Worker数:", WORKERS)
 print("任务总数:", TASKS)
 
-shared task_ch = Channel(1000)
-shared result_ch = Channel(1000)
+const task_ch = Channel(1000)
+const result_ch = Channel(1000)
 
 fn recv_int(ch: Channel<int>, fallback: int) -> int {
     return match (ch.recv()) {

@@ -13,11 +13,11 @@
   "sections": [
     {
       "heading": "Sharing model",
-      "markdown": "- `shared` creates a stable, non-rebindable identity owned by the shared/system owner\n- every cross-execution boundary consumes the same provenance-based capture plan\n- inline values, published module-readonly values, and shared identities may cross directly\n- execution-local graphs require explicit `copy(...)` or `move` from a rebindable local `var`; module-mutable state and short-lived views/pointers are rejected\n- `go { ... }` is a zero-argument block form; pass owned local data with `go fn(x: T) -> R { ... }(copy(arg))`, `move arg`, or `go worker(arg)` as appropriate"
+      "markdown": "- `const T` is the ordinary deep-read-only capability; audited synchronization handles normalize to an internal synchronized shared capability\n- every cross-execution boundary consumes the same provenance-based capture plan\n- inline values, published const values, and verified synchronization handles may cross directly\n- execution-local graphs require explicit `copy(...)` or `move` from a unique rebindable local `var`; module-mutable state and short-lived views/pointers are rejected\n- `go { ... }` is a zero-argument block form; pass local data with `go fn(x: T) -> R { ... }(copy(arg))`, `move arg`, or `go worker(arg)` as appropriate"
     },
     {
       "heading": "await all",
-      "markdown": "`await all` requires a homogeneous collection of tasks: every element must have the same static `Task<T>` type, and the result is `Array<T>`. Await heterogeneous tasks individually, or convert each task to a shared enum / union / Json result type."
+      "markdown": "`await all` requires a homogeneous collection of tasks: every element must have the same static `Task<T>` type, and the result is `Array<T>`. Await heterogeneous tasks individually, or convert each task to a common enum / union / Json result type."
     },
     {
       "heading": "Move into coroutine",
@@ -39,11 +39,11 @@
     },
     {
       "heading": "Atomic",
-      "markdown": "`Atomic<T>` wraps `int`/`float`/`bool` with lock-free atomic operations. Must be `shared`; `move` prohibited. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`)."
+      "markdown": "`Atomic<T>` wraps `int`/`float`/`bool` with lock-free atomic operations. Name it with `const`; its audited methods provide synchronized interior mutation. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`)."
     },
     {
       "heading": "Synchronization handles",
-      "markdown": "`Channel`, `Atomic`, coroutine-domain `sync.*` handles, and OS-thread-domain `sys.Os*` handles must be created with `shared` when named. Use `sync.*` inside coroutine code; use `sys.Os*` inside `sys.Thread` or other blocking OS-thread contexts."
+      "markdown": "Name `Channel`, `Atomic`, coroutine-domain `sync.*` handles, and OS-thread-domain `sys.Os*` handles with `const`. Use `sync.*` inside coroutine code; use `sys.Os*` inside `sys.Thread` or other blocking OS-thread contexts."
     }
   ]
 }

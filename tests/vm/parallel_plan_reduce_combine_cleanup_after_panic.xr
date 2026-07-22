@@ -21,7 +21,7 @@ try {
     print("caught")
 }
 
-shared afterReduce = Atomic<int>(0)
+const afterReduce = Atomic<int>(0)
 plan.forEach(0..4, (state, i) -> {
     afterReduce.add(1, Ordering.Relaxed)
 })

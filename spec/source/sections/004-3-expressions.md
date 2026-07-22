@@ -182,10 +182,9 @@ AssignOp ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
 - 赋值是**表达式**，结果是赋值后的值（可链式：`a = b = 0`）。
 - `x op= y` 等价于 `x = x op y`，但 `x` 只求值一次（重要：`obj.f += 1` 不会调用 `f` 的 getter 两次）。
 - 不能赋值给 `const`（编译错误 `E0303`）。
-- 不能赋值给 `shared`（同上）。
 
 **特殊**：
-- 函数参数中的 `in T` 修饰符使参数变只读，对其赋值是编译错误。
+- 默认参数是只读借用；`ref` 参数才允许通过 place 修改，`move` 参数消费源所有权。
 - 数组/Map 字面量字段：`a[i] = v` 调用 `operator[]=` 或内置 setter。
 
 ### 3.5 三元 `? :`
@@ -388,7 +387,7 @@ var obj = { users }              // shorthand
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-shared ch: Channel<int> = Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 详见 §10.5。
@@ -510,7 +509,7 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 - **fn 表达式**（`fn(x: T) { ... }`）：任意位置可用。支持泛型参数 `fn<T>(...)`、返回类型注解 `-> T`、多语句体。
 - 单表达式形式 `-> expr` 自动 `return`。
 - 块形式 `-> { ... }` 或 `{ ... }` 用显式 `return`。
-- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、module-readonly 与 shared identity 可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy(...)` / `move` 或改用 `shared`。
+- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、已发布 const 值与受审计同步句柄可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy(...)` / `move`。
 
 ### 3.13 `match` 表达式
 
@@ -548,7 +547,7 @@ ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```xray @id=expr-new
 var p = Point(1.0, 2.0)
 var arr = Array<int>()
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 var m = Map<string, int>()
 ```
 
@@ -766,10 +765,9 @@ AssignOp ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
 - Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`).
 - `x op= y` is equivalent to `x = x op y`, but `x` is evaluated only once (important: `obj.f += 1` does not call `f`'s getter twice).
 - Cannot assign to a `const` (compile error `E0303`).
-- Cannot assign to `shared` (same as above).
 
 **Special cases**:
-- A function parameter with the `in T` modifier is read-only; assignment is a compile error.
+- A default parameter is a read-only borrow; only `ref` permits mutation through a place, while `move` consumes source ownership.
 - Array/Map field assignment: `a[i] = v` calls `operator[]=` or the built-in setter.
 
 ### 3.5 Ternary `? :`
@@ -972,7 +970,7 @@ See §2.4.5 and §14.5.
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-shared ch: Channel<int> = Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 See §10.5.
@@ -1094,7 +1092,7 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 - **fn expression** (`fn(x: T) { ... }`): usable in any position. Supports generic parameters `fn<T>(...)`, return-type annotation `-> T`, and a multi-statement body.
 - Single-expression form `-> expr` implicitly `return`s.
 - Block form `-> { ... }` or `{ ... }` uses an explicit `return`.
-- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline, module-readonly, and shared identities may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments or through `shared`.
+- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline values, published const values, and audited synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments.
 
 ### 3.13 `match` Expression
 
@@ -1132,7 +1130,7 @@ Construction has the same form as a function call: `TypeName(args)`. `new` is re
 ```xray @id=expr-new
 var p = Point(1.0, 2.0)
 var arr = Array<int>()
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 var m = Map<string, int>()
 ```
 

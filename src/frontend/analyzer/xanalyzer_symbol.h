@@ -291,21 +291,18 @@ struct XaSymbol {
     XrLocation location;  // Definition location
 
     // Modifiers
-    bool is_const;              // const declaration / immutable field
-    bool is_rebindable;         // binding name may be assigned again
-    bool is_readonly_binding;   // binding exposes deep-readonly semantics
-    bool is_exported;           // export modifier
-    bool is_static;             // static member
-    bool is_private;            // private member (class-only visibility)
-    bool is_protected;          // protected member (class + subclass visibility)
-    bool is_override;           // analyzer-inferred exact-signature method override
-    bool is_shared;             // shared variable
-    bool is_shared_provenance;  // current value derives from a shared root
-    bool is_owned;              // owned unique-root variable
-    bool is_imported;           // selective import binding; kind remains the exported semantic kind
-    bool is_builtin;            // built-in type member (Array.push, etc.)
-    bool mutates_receiver;      // method body writes through `this`
-    XrParamMode passing_mode;   // read / ref / move parameter contract
+    bool is_const;             // const declaration / immutable field
+    bool is_rebindable;        // binding name may be assigned again
+    bool is_readonly_binding;  // binding exposes deep-readonly semantics
+    bool is_exported;          // export modifier
+    bool is_static;            // static member
+    bool is_private;           // private member (class-only visibility)
+    bool is_protected;         // protected member (class + subclass visibility)
+    bool is_override;          // analyzer-inferred exact-signature method override
+    bool is_imported;          // selective import binding; kind remains the exported semantic kind
+    bool is_builtin;           // built-in type member (Array.push, etc.)
+    bool mutates_receiver;     // method body writes through `this`
+    XrParamMode passing_mode;  // read / ref / move parameter contract
     uint32_t borrowed_root_symbol_id;  // local alias root for read/ref parameter borrowing
 
     // Parent references
@@ -320,6 +317,20 @@ struct XaSymbol {
     // Inline type information (replaces separate XaSymbolLinks + intmap lookup)
     XaSymbolLinks links;
 };
+
+static inline bool xa_symbol_has_shared_storage(const XaSymbol *symbol) {
+    return symbol && (symbol->links.storage_domain == XR_STORAGE_CONST_SHARED ||
+                      symbol->links.storage_domain == XR_STORAGE_SYNC_SHARED);
+}
+
+static inline bool xa_symbol_has_sync_capability(const XaSymbol *symbol) {
+    return symbol && (symbol->links.value_capability == XA_CAP_SYNC_INTERIOR_MUTABLE ||
+                      symbol->links.storage_domain == XR_STORAGE_SYNC_SHARED);
+}
+
+static inline bool xa_symbol_has_unique_root(const XaSymbol *symbol) {
+    return symbol && symbol->links.root_id != 0 && symbol->links.root_alias == XA_ROOT_UNIQUE;
+}
 
 // Scope kinds
 typedef enum XaScopeKind {

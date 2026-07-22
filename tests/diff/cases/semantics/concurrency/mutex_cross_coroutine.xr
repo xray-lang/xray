@@ -25,8 +25,8 @@ class Mutex<T> {
     }
 }
 
-shared m = Mutex<int>(0)
-shared done = CountdownLatch(1)
+const m = Mutex<int>(0)
+const done = CountdownLatch(1)
 
 go {
     m.replace((v) -> v + 100)

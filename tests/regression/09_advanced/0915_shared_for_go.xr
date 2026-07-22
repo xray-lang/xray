@@ -5,7 +5,7 @@
 
 @test
 fn test_shared_atomic_for_go() {
-    shared counter = Atomic(0)
+    const counter = Atomic(0)
     scope {
         for (i in 0..3) {
             go fn() {
@@ -18,8 +18,8 @@ fn test_shared_atomic_for_go() {
 
 @test
 fn test_shared_typeof_for_go() {
-    shared counter = Atomic(0)
-    shared ok_count = Atomic(0)
+    const counter = Atomic(0)
+    const ok_count = Atomic(0)
     scope {
         for (i in 0..3) {
             go fn() {
@@ -34,7 +34,7 @@ fn test_shared_typeof_for_go() {
 
 @test
 fn test_shared_channel_for_go() {
-    shared ch = Channel<int>(3)
+    const ch = Channel<int>(3)
     scope {
         for (i in 0..3) {
             go fn() {
@@ -54,7 +54,7 @@ fn test_shared_channel_for_go() {
 
 @test
 fn test_shared_no_for_baseline() {
-    shared counter = Atomic(0)
+    const counter = Atomic(0)
     scope {
         go fn() { counter.add(1) }()
         go fn() { counter.add(1) }()

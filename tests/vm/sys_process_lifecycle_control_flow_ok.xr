@@ -4,7 +4,7 @@ enum ProcessLintErr {
     Msg(s: string)
 }
 
-shared processLintCh = Channel<int>(1)
+const processLintCh = Channel<int>(1)
 processLintCh.trySend(1)
 
 fn closeProcessInTryOrCatch(throwNow: bool) {

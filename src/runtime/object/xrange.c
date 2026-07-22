@@ -208,7 +208,6 @@ static XrNativeBodyDesc g_range_body_desc = {
     .init = range_body_init,
     .destroy = NULL,
     .deep_copy = NULL, /* memcpy suffices (pure values, no pointers) */
-    .to_shared = NULL, /* memcpy suffices */
 };
 
 /* ========== Class Registration ========== */

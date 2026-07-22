@@ -60,7 +60,8 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= ConstType | FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+ConstType ::= 'const' PrimaryType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -181,8 +182,6 @@ Statement ::= ExprStmt
            |  IncDecStmt
            |  VarDecl
            |  ConstDecl
-           |  SharedDecl
-           |  OwnedDecl
            |  FnDecl
            |  ExternBlock
            |  ClassDecl
@@ -254,8 +253,6 @@ YieldStmt ::= 'yield' Expression
 Visibility ::= 'export'
 VarDecl ::= 'var' Binding
 ConstDecl ::= AttrList? Visibility? 'const' Binding
-SharedDecl ::= Visibility? 'shared' Identifier (':' Type)? '=' Expression
-OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
@@ -393,7 +390,8 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= ConstType | FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+ConstType ::= 'const' PrimaryType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -514,8 +512,6 @@ Statement ::= ExprStmt
            |  IncDecStmt
            |  VarDecl
            |  ConstDecl
-           |  SharedDecl
-           |  OwnedDecl
            |  FnDecl
            |  ExternBlock
            |  ClassDecl
@@ -587,8 +583,6 @@ YieldStmt ::= 'yield' Expression
 Visibility ::= 'export'
 VarDecl ::= 'var' Binding
 ConstDecl ::= AttrList? Visibility? 'const' Binding
-SharedDecl ::= Visibility? 'shared' Identifier (':' Type)? '=' Expression
-OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'

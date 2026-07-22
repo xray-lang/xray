@@ -1,9 +1,9 @@
 import parallel
 import sys
 
-shared initCount = Atomic<int>(0)
-shared tls = sys.ThreadLocal<int>(() -> initCount.fetchAdd(1, Ordering.AcquireRelease))
-shared touched = Atomic<int>(0)
+const initCount = Atomic<int>(0)
+const tls = sys.ThreadLocal<int>(() -> initCount.fetchAdd(1, Ordering.AcquireRelease))
+const touched = Atomic<int>(0)
 
 parallel.forEach(0..20000, (i) -> {
     var token = tls.get()

@@ -13,8 +13,8 @@ struct Holder {
     base: int
 }
 
-shared PAIR = Pair{left: 1, right: 2}
-shared HOLDER = Holder{bits: I32Bits{u: 33}, base: 4}
+const PAIR = Pair{left: 1, right: 2}
+const HOLDER = Holder{bits: I32Bits{u: 33}, base: 4}
 
 @c_export("xray_shared_aggregate_static")
 fn xray_shared_aggregate_static() -> int {

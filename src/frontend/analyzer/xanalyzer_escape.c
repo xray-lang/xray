@@ -233,25 +233,16 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
                 AstNode *decl = scope->vars[i].decl_node;
                 if (!decl)
                     return;  // param or loop var — always safe (arg-passed/local)
-                if (decl->type != AST_VAR_DECL && decl->type != AST_CONST_DECL &&
-                    decl->type != AST_SHARED_DECL && decl->type != AST_OWNED_DECL)
+                if (decl->type != AST_VAR_DECL && decl->type != AST_CONST_DECL)
                     return;
                 VarDeclNode *vd = &decl->as.var_decl;
-                if (decl->type == AST_SHARED_DECL) {
-                    return;
-                }
                 if (vd->is_const) {
-                    ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
-                                  "go closure cannot capture const variable '%s'\n"
-                                  "hint: pass copy(%s) through an explicit go argument, or declare "
-                                  "shared for shared identity",
-                                  name);
                     return;
                 }
                 ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
                               "go closure cannot capture mutable variable '%s'\n"
                               "hint: pass copy(%s) or move %s through an explicit go argument, or "
-                              "declare shared for shared identity",
+                              "bind an immutable value with const",
                               name);
                 return;
             }

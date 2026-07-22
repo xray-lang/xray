@@ -125,9 +125,9 @@ static void pointer_set_owner(XaInferContext *ctx, XaPointerProvenance *out, XaS
         out->address.origin = XR_POINTER_ORIGIN_MODULE;
         out->address.escape = XR_POINTER_ESCAPE_STABLE;
     } else {
-        out->address.domain = owner && owner->is_shared  ? XR_STORAGE_SYNC_SHARED
-                              : owner && owner->is_owned ? XR_STORAGE_TRANSFERABLE
-                                                         : XR_STORAGE_EXEC_LOCAL;
+        out->address.domain = owner && owner->links.storage_domain != XR_STORAGE_DOMAIN_UNKNOWN
+                                  ? owner->links.storage_domain
+                                  : XR_STORAGE_EXEC_LOCAL;
         out->address.address_identity = XR_ADDRESS_LEXICAL;
         out->address.origin = owner_type && owner_type->kind == XR_KIND_FIXED_ARRAY
                                   ? XR_POINTER_ORIGIN_STACK_BORROW
@@ -387,7 +387,6 @@ static XaAddressability classify_variable(XaInferContext *ctx, AstNode *expr, bo
     result.native_layout_ok = address_type_has_native_layout(ctx, result.pointee_type);
     result.mutable_ok = !symbol->is_const && !symbol->is_readonly_binding;
     result.is_imported = symbol->is_imported;
-    result.is_shared = symbol->is_shared;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
 
     if (symbol->scope && symbol->scope->kind == XA_SCOPE_GLOBAL) {
@@ -396,8 +395,8 @@ static XaAddressability classify_variable(XaInferContext *ctx, AstNode *expr, bo
         result.storage_domain = links && links->storage_domain != XR_STORAGE_DOMAIN_UNKNOWN
                                     ? links->storage_domain
                                     : XR_STORAGE_MODULE_STATIC;
-        result.address_identity =
-            symbol->is_shared ? XR_ADDRESS_SYSTEM_STABLE : XR_ADDRESS_MODULE_STABLE;
+        result.address_identity = xa_symbol_has_shared_storage(symbol) ? XR_ADDRESS_SYSTEM_STABLE
+                                                                       : XR_ADDRESS_MODULE_STABLE;
     } else if (symbol->kind == XA_SYM_PARAMETER) {
         result.kind = XA_ADDRESS_PARAMETER;
         result.lifetime = XA_ADDRESS_LIFETIME_CALL;

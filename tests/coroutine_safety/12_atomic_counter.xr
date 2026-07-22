@@ -9,7 +9,7 @@
 print("========== Test 12: Atomic Counter ==========")
 
 // --- Test 1: Concurrent counter ---
-shared counter = Atomic(0)
+const counter = Atomic(0)
 
 scope {
     for (i in 0..10) {
@@ -25,7 +25,7 @@ assert_eq(total, 10)
 print("✓ Concurrent counter test passed")
 
 // --- Test 2: CAS claim (exactly one winner) ---
-shared slot = Atomic(0)
+const slot = Atomic(0)
 
 scope {
     var t1 = go fn() -> bool {
@@ -43,8 +43,8 @@ scope {
 }
 
 // --- Test 3: Shutdown flag ---
-shared shutdown = Atomic(false)
-shared work_count = Atomic(0)
+const shutdown = Atomic(false)
+const work_count = Atomic(0)
 
 scope {
     for (i in 0..3) {

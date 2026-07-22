@@ -236,7 +236,6 @@ TEST(ast_clone_with_type_substitution) {
     node.as.var_decl.name = "result";
     node.as.var_decl.initializer = NULL;
     node.as.var_decl.is_const = false;
-    node.as.var_decl.storage_mode = 0;
     node.as.var_decl.type_annotation = &param_tref;
 
     XrTypeRef int_t = {.kind = XR_TREF_INT};

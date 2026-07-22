@@ -85,8 +85,8 @@ class Stack<T> {
 }
 
 // Generic Channel
-shared const intChannel: Channel<int> = Channel<int>(10)
-shared const stringChannel: Channel<string> = Channel<string>(5)
+const intChannel: Channel<int> = Channel<int>(10)
+const stringChannel: Channel<string> = Channel<string>(5)
 
 // Usage
 let intBox = new Box<int>(42)

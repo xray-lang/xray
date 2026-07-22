@@ -1,4 +1,4 @@
-shared reply = Channel(1)
+const reply = Channel(1)
 var packet = [7, reply]
 
 packet[1].send(42)

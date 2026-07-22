@@ -51,7 +51,6 @@ order: 021
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `owned` | §5.1 |
 | `packed` | §5.2.9 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
@@ -59,7 +58,6 @@ order: 021
 | `rune` | §2.3.5 |
 | `scope` | §10.7 |
 | `select` | §10.6 |
-| `shared` | §5.1 / §10.11 |
 | `static` | §5.3 |
 | `string` | §2.3.4 |
 | `struct` | §5.4 |
@@ -128,7 +126,6 @@ These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `owned` | §5.1 |
 | `packed` | §5.2.9 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
@@ -136,7 +133,6 @@ These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.
 | `rune` | §2.3.5 |
 | `scope` | §10.7 |
 | `select` | §10.6 |
-| `shared` | §5.1 / §10.11 |
 | `static` | §5.3 |
 | `string` | §2.3.4 |
 | `struct` | §5.4 |

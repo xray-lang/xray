@@ -1,4 +1,4 @@
-shared ch = Channel<int>(1)
+const ch = Channel<int>(1)
 
 print(ch.trySend(7))
 print(ch.trySend(8))

@@ -1,4 +1,4 @@
-shared COUNTER: int = 41
+const COUNTER: int = 41
 
 @c_export("xray_shared_magic")
 fn xray_shared_magic() -> int {

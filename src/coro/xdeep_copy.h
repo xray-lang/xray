@@ -146,17 +146,7 @@ XR_FUNC XrValue xr_deep_copy_to_transit_core(struct XrRuntimeCore *core, XrValue
 XR_FUNC XrValue xr_deep_copy_to_transit(struct XrVMRuntime *X, XrValue value);
 XR_FUNC void xr_chan_transit_release_core(struct XrRuntimeCore *core, XrValue value);
 
-XR_FUNC bool xr_can_relocate(XrValue value);
-XR_FUNC XrValue xr_to_shared(struct XrVMRuntime *X, XrValue value);
-
-/* ========== Per-Type Transfer Hooks ==========
- *
- * One pair of callbacks per deep-copyable / shareable type, all sharing
- * the XrObjDeepCopyFn / XrObjToSharedFn signatures so the split transfer
- * tables can dispatch directly without casts. The dispatchers above
- * (xr_deep_copy_with_ctx, xr_to_shared) consult these slots; any object
- * type without a hook is simply not deep-copyable / not shareable
- * across coroutines and the dispatcher returns the value unchanged. */
+/* ========== Per-Type Explicit-Copy Hooks ========== */
 
 #include "../runtime/mem/xobj_header.h"
 
@@ -169,12 +159,5 @@ XR_FUNC XrValue xr_deep_copy_closure_with_ctx(struct XrCopyContext *ctx, struct 
 XR_FUNC XrValue xr_deep_copy_cell_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_deep_copy_enum_descriptor_with_ctx(struct XrCopyContext *ctx,
                                                       struct XrObjHeader *obj);
-
-XR_FUNC XrValue xr_to_shared_array(struct XrVMRuntime *X, struct XrObjHeader *obj);
-XR_FUNC XrValue xr_to_shared_map(struct XrVMRuntime *X, struct XrObjHeader *obj);
-XR_FUNC XrValue xr_to_shared_set(struct XrVMRuntime *X, struct XrObjHeader *obj);
-XR_FUNC XrValue xr_to_shared_instance(struct XrVMRuntime *X, struct XrObjHeader *obj);
-XR_FUNC XrValue xr_to_shared_closure(struct XrVMRuntime *X, struct XrObjHeader *obj);
-XR_FUNC XrValue xr_to_shared_enum_descriptor(struct XrVMRuntime *X, struct XrObjHeader *obj);
 
 #endif  // XDEEP_COPY_H

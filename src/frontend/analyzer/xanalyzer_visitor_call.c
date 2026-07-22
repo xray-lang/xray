@@ -1687,8 +1687,7 @@ static void xa_thread_spawn_sync_scan_pre(AstNode *node, void *ud) {
     if (node->type == AST_BLOCK)
         scan->block_depth++;
 
-    if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL ||
-        node->type == AST_SHARED_DECL || node->type == AST_OWNED_DECL) {
+    if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
         VarDeclNode *var = &node->as.var_decl;
         const char *class_name =
             xa_thread_spawn_expr_sync_ctor_class(scan->ctx, var ? var->initializer : NULL);
@@ -3493,7 +3492,7 @@ static bool xa_call_arg_is_mutable_place(XaInferContext *ctx, AstNode *arg_node,
             *reason = "readonly storage";
         return false;
     }
-    if (root && (root->is_shared || xa_symbol_has_shared_provenance(root))) {
+    if (root && xa_symbol_has_shared_provenance(root)) {
         if (reason)
             *reason = "shared storage";
         return false;

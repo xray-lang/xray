@@ -11,8 +11,8 @@ const PRODUCER_COUNT = 2
 const CONSUMER_COUNT = 2
 const ITEMS_PER_PRODUCER = 20
 /* Channel（shared 声明用于跨协程共享）*/
-shared data_ch = Channel(100)
-shared done_ch = Channel(10)
+const data_ch = Channel(100)
+const done_ch = Channel(10)
 
 fn tryRecvValue(ch) {
     return match (ch.tryRecv()) {

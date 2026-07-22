@@ -148,12 +148,12 @@ export class Utf16EncodeOptions {
 
 fn _utf16EncodeOptions(options: Utf16EncodeOptions?) -> Utf16EncodeOptions {
     if (options == null) { return Utf16EncodeOptions() }
-    return options!
+    return copy(options!)
 }
 
 fn _utf16DecodeOptions(options: Utf16DecodeOptions?) -> Utf16DecodeOptions {
     if (options == null) { return Utf16DecodeOptions() }
-    return options!
+    return copy(options!)
 }
 
 // Write a 16-bit code unit into Array<byte> in the requested endianness.

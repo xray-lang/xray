@@ -6,9 +6,9 @@
   "lead": "Channels are the primary inter-coroutine communication mechanism.",
   "sections": [
     {
-      "heading": "Declaration (MUST be shared)",
+      "heading": "Declaration",
       "fences": ["channel-decl-variants"],
-      "after_text": "`var ch = Channel<int>(10)` is a **compile error** for coroutine sharing; channel handles must be declared with `shared`."
+      "after_text": "Name a channel with `const`. `Channel<T>` is an audited synchronization handle: its binding is stable while `send`/`recv` mutate protected runtime state."
     },
     {
       "heading": "Operations",
@@ -21,9 +21,9 @@
     {
       "heading": "Concurrency rules",
       "bullets": [
-        "Channels can be captured by `go` closures (exception to shared rule)",
-        "Values sent through channel are deep-copied (pointer types)",
-        "Channel is reference-counted on system heap"
+        "Channels can be captured by `go` closures through their verified synchronization capability",
+        "Execution-local graphs require an explicit `move` or `copy` at send sites",
+        "Channel payload transfer never performs an implicit deep copy"
       ]
     }
   ]

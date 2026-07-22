@@ -5759,27 +5759,9 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         fprintf(out, "xrt_json_get_field(");
         emit_vref(out, v->args[0]);
         fprintf(out, ", %d)", (int) v->aux_int);
-    } else if (strcmp(bn, "copy") == 0 || strcmp(bn, "copy_shared") == 0 ||
-               strcmp(bn, "copy_owned") == 0 || strcmp(bn, "to_shared") == 0) {
-        /* copy(x): explicit deep copy. A source-level move-owned to_shared is a
-         * transfer identity; other internal copy/shared forms still clone in
-         * standalone AOT's single RC heap. */
+    } else if (strcmp(bn, "copy") == 0) {
+        /* copy(x): the sole explicit deep-copy operation. */
         XR_DCHECK(v->nargs >= 1, "builtin copy: need arg");
-        if (strcmp(bn, "to_shared") == 0 && v->aux_int == XI_TO_SHARED_KIND_SOURCE_MOVE_OWNED) {
-            const XaotTransferPlan *transfer_plan =
-                cg_required_transfer_plan(ctx, v, 0, v->args[0], "shared initializer");
-            if (!transfer_plan || transfer_plan->site_kind != XAOT_TRANSFER_SHARED_INIT ||
-                transfer_plan->mode != XR_TRANSFER_MOVE ||
-                transfer_plan->action != XR_TRANSFER_MOVE_UNIQUE) {
-                emit_codegen_abort_expr(out);
-                return;
-            }
-            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
-                                                             cg_value_plan_storage_rep(ctx, v));
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-            emit_conversion_suffix(out, conv_suffix);
-            return;
-        }
         if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
             if (cg_value_plan_is_span_aggregate(ctx, v)) {
                 fprintf(out, "xrt_span_to_owned_span(");
@@ -6233,7 +6215,7 @@ static const XiClassData *xicgen_parallel_plan_ctor_result_class(XiCgenCtx *ctx,
         return NULL;
     const XiValue *v = cg_unwrap_identity_value(value);
     while (v && ((xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op) ||
-                  v->op == XI_BOX || v->op == XI_UNBOX || cg_class_native_shared_copy_wrapper(v)) &&
+                  v->op == XI_BOX || v->op == XI_UNBOX || cg_class_native_copy_wrapper(v)) &&
                  v->nargs >= 1)) {
         if (++depth > 8)
             return NULL;

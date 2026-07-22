@@ -165,16 +165,14 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 ### 1.5 关键字
 
-xray 共 **66 个保留关键字**，按用途分组如下：
+xray 共 **64 个保留关键字**，按用途分组如下：
 
 #### 1.5.1 声明与流程控制
 
 | 关键字 | 用途 |
 |--|--|
 | `var` | 可变变量声明 |
-| `const` | 不可变变量声明 |
-| `shared` | 共享身份绑定（由 shared/system owner 持有，词法作用域照常） |
-| `owned` | 唯一的 system-owned 可变身份绑定；转移使用 `move` |
+| `const` | 稳定绑定声明；在类型位置表达深只读能力 |
 | `comptime` | 强制编译期求值的表达式前缀 |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
@@ -820,10 +818,10 @@ var s: Set<int> = #[1, 2, 3]
 
 #### 2.4.4 `Channel<T>`
 
-协程间通信通道。命名通道句柄**必须**用 `shared` 创建（见 §10.5）。
+协程间通信通道。命名通道句柄使用稳定 `const` 绑定；其同步内部可变能力来自受审计 registry（见 §10.5）。
 
 ```xray
-shared ch: Channel<int> = Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Array<byte>`
@@ -1360,10 +1358,9 @@ AssignOp ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
 - 赋值是**表达式**，结果是赋值后的值（可链式：`a = b = 0`）。
 - `x op= y` 等价于 `x = x op y`，但 `x` 只求值一次（重要：`obj.f += 1` 不会调用 `f` 的 getter 两次）。
 - 不能赋值给 `const`（编译错误 `E0303`）。
-- 不能赋值给 `shared`（同上）。
 
 **特殊**：
-- 函数参数中的 `in T` 修饰符使参数变只读，对其赋值是编译错误。
+- 默认参数是只读借用；`ref` 参数才允许通过 place 修改，`move` 参数消费源所有权。
 - 数组/Map 字面量字段：`a[i] = v` 调用 `operator[]=` 或内置 setter。
 
 ### 3.5 三元 `? :`
@@ -1566,7 +1563,7 @@ var obj = { users }              // shorthand
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-shared ch: Channel<int> = Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 详见 §10.5。
@@ -1688,7 +1685,7 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 - **fn 表达式**（`fn(x: T) { ... }`）：任意位置可用。支持泛型参数 `fn<T>(...)`、返回类型注解 `-> T`、多语句体。
 - 单表达式形式 `-> expr` 自动 `return`。
 - 块形式 `-> { ... }` 或 `{ ... }` 用显式 `return`。
-- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、module-readonly 与 shared identity 可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy(...)` / `move` 或改用 `shared`。
+- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、已发布 const 值与受审计同步句柄可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy(...)` / `move`。
 
 ### 3.13 `match` 表达式
 
@@ -1726,7 +1723,7 @@ ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```xray
 var p = Point(1.0, 2.0)
 var arr = Array<int>()
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 var m = Map<string, int>()
 ```
 
@@ -2121,13 +2118,11 @@ large
 
 > 真值源：`src/frontend/parser/xparse_decl.c`、`src/frontend/parser/xast_nodes_decl.h`、`src/frontend/analyzer/xanalyzer_visitor.c`。
 
-### 5.1 `var` / `const` / `shared` / `owned`
+### 5.1 `var` / `const`
 
 ```ebnf
 VarDecl ::= 'var' Binding
 ConstDecl ::= 'const' Binding
-SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
-OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -2162,39 +2157,25 @@ const MAX_LEN: int = 1024
 - 不能重新赋值（编译错误 `E0303`）。
 - 类型可推断或显式标注。
 - `const` 和 `var` 一样，每条声明绑定一个名字或解构模式。多个独立名字使用多条声明；相关值可用 `const (a, b) = pair` 解构。
-
-#### 5.1.3 `shared` — 共享身份绑定
+- 对 managed/aggregate 值，`const name: T` 推导并持有 `const T` 能力：字段、索引和嵌套投影深只读；`var name: const T` 则允许名字重绑，但不开放图内修改。
+- `const T` 可用于任意 type position。不可变标量上的 `const` 与原类型等价；managed/aggregate 上的 `const T` 是独立 type identity。
+- 新鲜构造可直接进入 `var` 的可变域或 `const` 的只读域。已有可变唯一图进入 `const` 必须显式 `move` 或 `copy`，不存在隐式冻结或隐藏复制。
+- `Channel`、`Atomic`、`Mutex` 等受审计同步句柄以 `const` 命名；编译器把它们规范化为内部同步共享能力，其受审计方法仍可改变同步保护的内部状态。
+- 新鲜可变图由编译器推断唯一所有权，不需要存储修饰符。`move` 要求源根唯一且无存活 alias/loan，成功后使源绑定失效；`copy` 保留源并显式构造独立图。
 
 ```xray
-shared CONFIG = { host: "localhost", port: 8080 }
-shared PRIMES = [2, 3, 5, 7, 11]
-shared counter = Atomic(0)
-```
+const channel = Channel<int>(16)
+const counter = Atomic(0)
 
-- 由 **shared/system owner** 直接物化并持有稳定共享身份；具体堆布局不是语言语义。
-- 绑定名不可重新赋值，也不能作为 `move` 源。
-- 可被 `go` 闭包捕获，也可作为实参跨协程传递；对象本身是否可安全并发修改由类型语义决定。
-- `Atomic`、`Channel`、`Semaphore`、`WorkQueue` 等同步/并发句柄必须通过 `shared` 创建命名。
+var source = [1, 2, 3]
+var moved = move source       // 转移同一根；source 此后不可用
+const snapshot = copy(moved)  // 显式构造深只读独立图
+var current: const Config = loadConfig()
+```
 
 详见 [§10.11](#1011-并发安全模型)。
 
-#### 5.1.4 `owned` — 唯一所有身份绑定
-
-```xray
-owned buffer = Array<byte>(1024)
-
-var source = [1, 2, 3]
-owned moved = move source       // 转移现有引用图
-owned cloned = copy(moved)      // 或显式深拷贝
-```
-
-- `owned` 只能声明局部单名绑定，必须带初始化器；模块级 `owned` 和解构 `owned` 均被拒绝。
-- 绑定由 system owner 记录为唯一可变身份；绑定名本身不可重新赋值，但所拥有对象可以按类型规则原地修改。
-- 新构造的引用值可直接初始化。来自已有引用绑定的值必须显式写 `move source` 或 `copy(source)`，避免产生未声明的别名。
-- 所有权可通过 `move` 转给另一个 `owned`/`shared` 绑定、协程边界或返回值；移动后原绑定不可再使用。切片、裸指针等借用必须在移动前结束。
-- `owned` 是存储声明，不是类型修饰符，也不能带声明 attribute。
-
-#### 5.1.5 解构绑定
+#### 5.1.3 解构绑定
 
 ```xray
 // 数组解构
@@ -3441,7 +3422,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 
 | 作用域 | 触发 | 示例 |
 |--|--|--|
-| 模块 | 每个 `.xr` 文件 | 顶层 `var` `const` `shared` `fn` `class`（模块级 `owned` 被拒绝） |
+| 模块 | 每个 `.xr` 文件 | 顶层 `var` `const` `fn` `class` |
 | 函数 / 闭包 | `fn` / 箭头函数进入 | 参数 + 函数体 |
 | 块 | `{...}` | `if` `while` `for` `match` 分支体 |
 | `scope` 块 | `scope { ... }` 关键字 | 显式词法作用域 + 结构化并发（见 §10.7） |
@@ -3452,7 +3433,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 **提升规则**：
 
 - 顶层 `fn` `class` `struct` `interface` `enum` `type` **提升**至当前作用域顶部——可在定义前引用。
-- `var` / `const` / `shared` / 局部 `owned` **不提升**——必须在定义后使用。
+- `var` / `const` **不提升**——必须在定义后使用。
 - 同名重复声明：同作用域内 2 个同名变量 → 编译错误（嵌套作用域可 shadow）。
 
 ```xray
@@ -3517,7 +3498,7 @@ var big_buffer = Array<byte>(1024 * 1024)
 
 var t = go fn(b: Array<byte>) -> int {
     return process(b)
-}(big_buffer)             // 编译错误：owned heap 值不能裸跨协程传递
+}(big_buffer)             // 编译错误：execution-local heap 值不能裸跨协程传递
 
 var t2 = go fn(b: Array<byte>) -> int {
     return process(b)
@@ -3531,7 +3512,7 @@ print(len(big_buffer))    // 编译错误：move 后访问
 - `go f(move x)`、`go fn(...){...}(move x)`：把所有权转给协程。
 - `ch.send(move data)`：跨协程发送时转移所有权（避免拷贝）。
 - 普通函数调用 `f(move x)`：把所有权传入函数（被调函数独占）。
-- `owned dst = move src` / `shared dst = move src` / `return move src`：把局部 `var` 或 `owned` 身份转给新的 owner 或调用方。
+- `var dst = move src` / `const dst = move src` / `return move src`：把 verifier 证明为唯一的局部 `var` 根转给新的 owner、const 能力或调用方。
 
 ### 7.4 协程数据传递规则（避免数据竞争）
 
@@ -3542,13 +3523,13 @@ print(len(big_buffer))    // 编译错误：move 后访问
 | Capture action | 适用值 | 边界行为 |
 |---|---|---|
 | inline value | 标量、不可变小值 | 直接复制位表示 |
-| deep copy | 显式 `copy(x)` 的 owned graph | 在目标 execution owner 中物化独立图 |
-| move | 显式 `move x` 的可转移局部 `var` 或 `owned` | 转移所有权并静态废弃源绑定 |
-| module readonly | 已冻结并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
-| shared ref | `shared`、Channel、Task、Atomic 等稳定共享身份 | 保留 shared/system owner 的引用 |
+| deep copy | 显式 `copy(x)` 的 execution-local graph | 在目标 storage domain 中物化独立图 |
+| move | 显式 `move x` 的推断唯一局部 `var` | 转移所有权并静态废弃源绑定 |
+| module readonly | 已 seal 并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
+| synchronized ref | Channel、Task、Atomic 等受审计稳定身份 | 保留 verified synchronized domain 的引用 |
 | reject | execution-local graph、可变 module state、悬垂 slice/pointer/upvalue | 编译错误并报告 owner/provenance 与所需显式动作 |
 
-因此，局部 `const` 若只含 inline 值可以直接跨界；若它仍指向 execution-local graph，则仍需显式 `copy(...)`，且因为 `const` 不能作为 move 源，不能写成 `move constValue`。模块级 `const` 只有在完成冻结与发布后才属于 module readonly；模块级 `var` 属于 module mutable，并不因“全局可见”而自动线程安全。
+因此，局部 `const` 若只含 inline 值可以直接跨界；managed/aggregate const 图只有在 StoragePlan 证明其直接构造或 O(1) seal 可发布时才能跨界，不存在边界隐式复制。模块级 `const` 只有在完成 seal 与发布后才属于 module readonly；模块级 `var` 属于 module mutable，并不因“全局可见”而自动线程安全。
 
 ```xray
 var local = 0
@@ -3558,7 +3539,7 @@ go { local += 1 }                        // ❌ 编译错误：不能捕获可�
 #### 正确姿势
 
 ```xray
-// 方法 1：显式复制 owned graph
+// 方法 1：显式复制 execution-local graph
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // 拷贝上修改，不影响原值
@@ -3566,8 +3547,8 @@ var t = go fn(data: Array<int>) -> int {
 }(copy(arr))
 print(arr)                  // [1, 2, 3] 未变
 
-// 方法 2：shared 零拷贝只读（可被捕获）
-shared config = { rate: 100 }
+// 方法 2：const 零拷贝只读（可被捕获）
+const config = { rate: 100 }
 var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
@@ -3580,7 +3561,7 @@ var t3 = go fn(b: Array<byte>) -> int {
 // big 在此处不可访问
 
 // 方法 4：Channel 通信（可被捕获）
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 var t4 = go fn(c: Channel<int>) -> int {
     return match (c.recv()) {
         Recv.Value(v) -> v
@@ -3596,9 +3577,9 @@ Xray 采用多层内存管理：
 
 | 存储 | 机制 | 释放时机 |
 |--|--|--|
-| 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 freeze + publish | 模块卸载 |
+| 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 seal + publish | 模块卸载 |
 | 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
-| 共享存储（`shared`） | shared/system owner + 原子引用计数 | 最后共享引用释放 |
+| const/sync 共享域 | verified const root 或同步句柄的 root-only 原子引用计数 | 最后跨执行强引用释放 |
 | coroutine-local heap（一般局部对象） | per-coroutine heap + 编译器插入的引用计数 + Bacon–Rajan cycle collector | 最后强引用释放时立即回收；强引用环由 cycle collector 回收；coroutine 结束时批量释放剩余 Region 块和大对象 |
 | 栈（`struct` 值、本地） | 词法存储期 | 作用域退出；语言没有用户可见的确定性析构 / `Drop` hook |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
@@ -3767,7 +3748,7 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 
 ```xray
 enum WorkerErr { Failed(string) }
-shared err_ch = Channel<string>(1)
+const err_ch = Channel<string>(1)
 
 go {
     try {
@@ -4333,7 +4314,7 @@ var t3 = go {
 var named = go(name: "worker-1") worker(1, channel)
 ```
 
-**move 在参数位置**：跨协程转移普通局部所有权通过参数前缀 `move` 实现，**不是** `go` 的选项；`shared` 绑定是稳定共享身份，不能 `move`：
+**move 在源表达式位置**：跨协程转移推断为唯一的局部根通过 `move` 实现，**不是** `go` 的选项；`const` 能力不能作为可变 owner 的 `move` 源：
 
 ```xray
 var data = { value: 10 }
@@ -4342,7 +4323,7 @@ var task = go fn(d: Json) -> int {
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
-**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。inline 值、已发布的 module-readonly 值和 shared/system owner 身份可直接捕获；execution-local graph、module-mutable 状态及生命周期不足的 view/pointer 会被拒绝。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
+**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过统一 capture plan。inline 值、已发布的 const 值和受验证同步句柄可直接捕获；execution-local graph、module-mutable 状态及生命周期不足的 view/pointer 会被拒绝。需要跨界复制或转移局部数据时，使用带参数的 lambda / 函数调用形式并显式写出 `copy(...)` / `move`：
 
 ```xray
 var n = 10
@@ -4356,7 +4337,7 @@ var task = go fn(x: int) -> int {
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
-- 跨协程传递需要隔离的 owned heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)`、`move x` 或声明 `shared`，**裸传是编译错误**；标量、`string`、`shared`、Channel / Task / Atomic 等可直接传。`move` 只适用于可重新绑定的局部 `var` 值，`shared` 绑定不能被 move。`go` 实参与 `ch.send`、`select` 发送分支共用同一显式 transfer 规则，每次边界传递都能从源码看出复制、转移或共享语义。
+- 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
 - `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
 
 ### 10.3 `await` — 等待结果
@@ -4441,12 +4422,12 @@ ChannelType ::= 'Channel' '<' Type '>'
 ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
-Channel 通常以 `shared` 声明（生命周期跨协程，引用语义）：
+Channel 以稳定的 `const` 绑定命名；其类型来自受审计的同步能力 registry，因此 `send`/`recv` 可修改受保护的内部状态：
 
 ```xray
-shared ch  = Channel<int>(10)    // 有缓冲，capacity = 10
-shared ch0 = Channel<int>(0)     // 无缓冲（同步握手）
-shared cha = Channel(3)          // 元素类型从首次 send 推断
+const ch  = Channel<int>(10)    // 有缓冲，capacity = 10
+const ch0 = Channel<int>(0)     // 无缓冲（同步握手）
+const cha = Channel(3)          // 元素类型从首次 send 推断
 ```
 
 **API**（注意全部为 **camelCase**）：
@@ -4464,7 +4445,7 @@ shared cha = Channel(3)          // 元素类型从首次 send 推断
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
 ```xray
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 ch.send(42)                             // 阻塞发送
 var v = match (ch.recv()) {
     Recv.Value(value) -> value
@@ -4520,8 +4501,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray
-shared ch1 = Channel<int>(2)
-shared ch2 = Channel<int>(2)
+const ch1 = Channel<int>(2)
+const ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
@@ -4533,7 +4514,7 @@ select {
 
 **语义**：
 - 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value(name)` 的 payload 绑定到 `name`。
-- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一显式 transfer 规则——裸 owned heap 值必须写成 `copy(v)` / `move v` 或 `shared`。
+- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一 transfer plan——execution-local heap 值必须显式写成 `copy(v)` 或 `move v`。
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
 
@@ -4608,10 +4589,10 @@ print(len(outcomes))                 // 3（每个子协程一个 outcome）
 ### 10.8 `move` — 跨协程所有权转移
 
 ```ebnf
-MoveExpr ::= 'move' Identifier        // 仅出现在调用参数位置
+MoveExpr ::= 'move' Identifier
 ```
 
-`move` 是**实参修饰前缀**（不是 `go` 的选项）。它把可重新绑定的局部 `var` 值所有权从当前作用域转移到被调函数（包括 `go` 启动的协程、`ch.send()` 等）。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误。`const` 和 `shared` 绑定都不能作为 `move` 源。
+`move` 是消费源动作（不是 `go` 的选项），可用于初始化、赋值、返回和调用实参。它要求可重新绑定的局部 `var` 根经 verifier 证明为唯一且没有存活 alias/loan。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误；非法 move 不会污染源状态。`const` 能力不能作为可变 owner 的 `move` 源。
 
 ```xray
 var buf = Array<byte>(1024 * 1024)
@@ -4624,40 +4605,40 @@ var t = go fn(b: Array<byte>) -> int {
 // print(len(buf))
 
 // 移交给 channel
-shared ch = Channel<Array<byte>>(1)
+const ch = Channel<Array<byte>>(1)
 var payload = Array<byte>(4096)
 ch.send(move payload)
 // 编译错误：payload has been moved
 ```
 
-详见 §7.3、§7.4 关于 `var` / `shared` 的协程传递规则。
+详见 §7.3、§7.4 关于 `var` / `const` 能力的协程传递规则。
 
 ### 10.9 同步原语
 
-xray 的默认并发模型偏向**消息传递 + 显式共享身份 + 显式所有权转移**——通过 `shared`、`Channel`、`move`、`scope` 把跨协程数据边界写在源码里，因此**不**鼓励使用裸 Mutex/锁。
+xray 的默认并发模型偏向**消息传递 + 验证后能力共享 + 显式所有权转移**——通过 `const`/同步能力、`Channel`、`move`、`scope` 把跨协程数据边界写在源码里，因此**不**鼓励使用裸 Mutex/锁。
 
 如确需互斥锁/原子操作，运行时层面提供：
 
 | 原语 | 形态 | 说明 |
 |---|---|---|
 | Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
-| `shared` | 稳定共享身份 | 由 shared/system owner 持有，作用域仍按词法规则；并发可变安全由值的类型语义决定 |
+| `const`/同步能力 | 稳定只读值或同步身份 | 普通图深只读；受审计同步句柄只允许其能力方法修改内部状态 |
 | `Atomic<T>` | 无锁原子包装 | 对 `int`/`float`/`bool` 提供 C11 原子操作 |
 | `sync.Mutex<T>` / `sync.RwLock<T>` | 协程域锁 | 需显式 `import sync`；等待时挂起协程，不阻塞 worker；不得在 `sys.Thread` 线程体中使用 |
 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` 等 | OS 线程域锁 | 需显式 `import sys`；阻塞当前 OS 线程，适合 `sys.Thread`、运行时组件和短临界区 |
 
-> **设计说明**：xray 不在 prelude 暴露裸 `Mutex`/`RwLock`。默认推荐 `Channel`、`shared`、`move` 与 `Atomic<T>`；确需锁时必须通过 `sync` 或 `sys` 显式选定执行域，避免把协程挂起锁和 OS 阻塞锁混用。
+> **设计说明**：xray 不在 prelude 暴露裸 `Mutex`/`RwLock`。默认推荐 `Channel`、`const` 同步句柄、`move` 与 `Atomic<T>`；确需锁时必须通过 `sync` 或 `sys` 显式选定执行域，避免把协程挂起锁和 OS 阻塞锁混用。
 
 #### `Atomic<T>` — 无锁原子类型
 
 `Atomic<T>` 包装 `int`、`float` 或 `bool`，在系统堆上分配，底层使用 C11 原子指令，无需锁即可跨协程安全读写。
 
-**声明约束**：`Atomic<T>` 变量必须声明为 `shared`，禁止 `move`。
+**声明约束**：`Atomic<T>` 句柄以 `const` 命名；其原子方法来自受审计的同步内部可变能力。
 
 ```xray
-shared counter = Atomic(0)         // Atomic<int>
-shared flag = Atomic(false)        // Atomic<bool>
-shared rate = Atomic(3.14)         // Atomic<float>
+const counter = Atomic(0)         // Atomic<int>
+const flag = Atomic(false)        // Atomic<bool>
+const rate = Atomic(3.14)         // Atomic<float>
 ```
 
 **方法一览**（完整签名见 §14.19）：
@@ -4690,7 +4671,7 @@ enum Ordering {
 `Ordering` 枚举由编译器自动注入（prelude），无需 import；底层 intrinsic 读取声明顺序 tag，不依赖用户可见 backing value。
 
 ```xray
-shared counter = Atomic(0)
+const counter = Atomic(0)
 counter.store(42, Ordering.Release)
 var val = counter.load(Ordering.Acquire)
 ```
@@ -4720,13 +4701,13 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 | 所有跨 execution 边界消费同一个 provenance-based capture plan | ✅ |
 | execution-local graph 必须显式 `copy` 或从局部 `var` 执行 `move` | ✅ |
 | 模块只读值可保留 module owner；模块可变状态不得直接跨界 | ✅ |
-| `shared` 绑定可直接跨协程传递/捕获，且不能重新赋值或 `move` | ✅ |
+| 已发布 `const` 值与受审计同步句柄可按 verified plan 跨协程传递/捕获 | ✅ |
 | `move` 只适用于普通局部 `var` 的显式所有权转移 | ✅ |
 | Channel 跨协程传值 | ✅ |
-| `Atomic<T>` 必须声明为 `shared`，禁止 `move` | ✅ |
+| `Atomic<T>` 以 `const` 命名，只有受审计方法可执行同步内部修改 | ✅ |
 
 **仍可能存在数据竞争**（运行时检测，非编译期）：
-- 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared` / `Array<byte>` / 不可变对象 / `move` 移交。
+- Channel 不会隐式复制可变 class 引用；无法证明唯一转移或 const 发布时编译失败，应显式 `copy` 或 `move`。
 
 ### 10.12 逻辑根任务与可达运行时能力
 
@@ -5052,7 +5033,7 @@ fn oldAPI() { return }
 | `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
 | `rune(n)` | `(int) -> rune` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
 | `chr(n)` | `(int) -> string` | Unicode 码点转单 scalar 字符串 |
-| `copy(x)` | `(value) -> owned value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
+| `copy(x)` | `(value) -> fresh value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
 
 ### 13.3 类型检查
 
@@ -5195,7 +5176,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `string.join(parts, separator?)` | 拼接 `Array<string>` |
 | `contains(s)` | 是否包含子串 |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | 返回 rune ordinal |
-| `slice(start, end?)` | 按 rune ordinal 取得 owned string；范围必须合法 |
+| `slice(start, end?)` | 按 rune ordinal 取得独立 string；范围必须合法 |
 | `sliceBytes(start, end)` | 按 byte offset 切片；边界非法时抛 `StringSliceError.InvalidByteRange` |
 | `split(sep, limit?)` | 分割为 `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | 替换 |
@@ -5229,7 +5210,7 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 | `toString()` | 容器字符串表示 |
 | `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
 
-Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守借用生命周期；需要独立 owned 数据时使用 `copy(arr[start:end])`。
+Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守借用生命周期；需要独立数据时使用 `copy(arr[start:end])`。
 
 ### 14.8 `Map<K, V>` 方法
 
@@ -5365,7 +5346,7 @@ print(len(empty))           // 0
 
 ### 14.19 `Atomic<T>` 方法
 
-`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。必须声明为 `shared`，禁止 `move`。
+`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。句柄以 `const` 命名；受审计原子方法提供同步内部修改。
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
@@ -5551,9 +5532,9 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 | 区域 | 用途 |
 |--|--|
 | **系统 owner** | runtime/native 数据结构；hosted 可使用 C allocator，freestanding 由 target hooks 提供 |
-| **模块只读 owner** | consteval rodata，或 module allocator 初始化后 freeze + publish 的顶层 `const` |
+| **模块只读 owner** | consteval rodata，或 module allocator 初始化后 seal + publish 的顶层 `const` |
 | **模块可变 owner** | 顶层 `var`；生命周期属于模块，默认不提供并发安全性 |
-| **shared/system owner** | `shared` 稳定共享身份与显式并发句柄，原子引用计数 |
+| **const/sync shared domain** | 已发布 const 根与受审计并发句柄，root-only 原子引用计数 |
 | **coroutine owner** | 普通局部对象；由当前 coroutine 的 `XrCoroHeap` 分配并执行引用计数回收 |
 | **栈** | `struct` 值、局部 immediate、函数帧 |
 | **Arena** | parser 临时分配、frame allocation |
@@ -5562,7 +5543,7 @@ Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `X
 
 - 默认由编译器插入的 **per-coroutine reference counting** 回收普通局部对象；最后一个强引用释放时立即进入 RC 销毁路径。共享对象使用 atomic RC，模块/运行时对象按各自 owner 的生命周期管理。
 - **循环引用回收**：编译器标记可能形成环的类型；Bacon–Rajan trial-deletion collector 处理相应的 coroutine-local 强引用环。显式入口是 `runtime.collectCycles()`，候选根数量达到自适应阈值时也会自动触发。
-- **collector 边界**：cycle collector 跳过 shared/atomic、runtime-managed 和 Region 对象。函数调用与后向跳转处保留的 tracing-GC hook 当前为空操作；Xray 没有并发 tracing GC。
+- **collector 边界**：cycle collector 跳过 const/sync shared domain、runtime-managed 和 Region 对象。函数调用与后向跳转处保留的 tracing-GC hook 当前为空操作；Xray 没有并发 tracing GC。
 - **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前 coroutine heap（无当前 coroutine 时回退到 main coroutine）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
 
 详见 `src/runtime/mem/`。
@@ -5900,7 +5881,8 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= ConstType | FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+ConstType ::= 'const' PrimaryType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -6021,8 +6003,6 @@ Statement ::= ExprStmt
            |  IncDecStmt
            |  VarDecl
            |  ConstDecl
-           |  SharedDecl
-           |  OwnedDecl
            |  FnDecl
            |  ExternBlock
            |  ClassDecl
@@ -6094,8 +6074,6 @@ YieldStmt ::= 'yield' Expression
 Visibility ::= 'export'
 VarDecl ::= 'var' Binding
 ConstDecl ::= AttrList? Visibility? 'const' Binding
-SharedDecl ::= Visibility? 'shared' Identifier (':' Type)? '=' Expression
-OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
@@ -6222,7 +6200,6 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `new` | §3.14 |
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
-| `owned` | §5.1 |
 | `packed` | §5.2.9 |
 | `private` | §5.3 |
 | `protected` | §5.3 |
@@ -6230,7 +6207,6 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `rune` | §2.3.5 |
 | `scope` | §10.7 |
 | `select` | §10.6 |
-| `shared` | §5.1 / §10.11 |
 | `static` | §5.3 |
 | `string` | §2.3.4 |
 | `struct` | §5.4 |
@@ -6332,7 +6308,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 等待结果 | 无直接等价（通过 channel/WaitGroup） | `await t`、`await all [...]`、`await any [...]` |
 | Channel | 内置 `chan T`，`<-` 操作符 | `Channel<T>` 类，方法 `send`/`recv`/`trySend`/`tryRecv` |
 | select 分支 | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
-| 内存管理 | 三色并发 tracing GC | coroutine-local 引用计数 + Bacon–Rajan cycle collector；shared/system 对象使用原子引用计数 |
+| 内存管理 | 三色并发 tracing GC | coroutine-local 引用计数 + Bacon–Rajan cycle collector；已发布 const 根与同步句柄使用 verified shared domain |
 | 类与继承 | 无（仅 struct + interface） | class 支持继承 |
 | 泛型 | 1.18+ 有 | 有；按具体类型或后端表示单态化 |
 
@@ -6340,7 +6316,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 
 | 维度 | Rust | xray |
 |--|--|--|
-| 内存安全 | borrow checker 全面 | owned/shared/move 约束跨执行边界；`Slice` 等借用视图受静态生命周期限制 |
+| 内存安全 | borrow checker 全面 | 推断唯一性、`move` 与 `const`/同步能力约束跨执行边界；`Slice` 等借用视图受静态生命周期限制 |
 | 错误 | `Result<T, E>` | 值返回错误通道（`throw` / `catch`）|
 | 类型推断 | Hindley-Milner 强 | 双向推断 |
 | trait | 完整 | 类似 `interface`，少功能 |
@@ -6394,11 +6370,11 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **JIT** | Just-In-Time 编译；Xray 当前未实现 JIT |
 | **lvalue / rvalue** | 左值（可赋值）/ 右值（仅值） |
 | **monomorphization** | 单态化：泛型在构建期按具体类型/表示生成专门版本；函数泛型可按 I64 / F64 / PTR / BOOL 表示共享，class / struct 泛型按具体类型完整单态化 |
-| **move** | 所有权转移：跨协程时强制（见 §7.3） |
+| **move** | 对推断为唯一且无存活 alias/loan 的根执行所有权转移（见 §7.3） |
 | **nullable** | 可空类型 `T?`：值可以为 null |
 | **pattern** | 模式：用于 `match` 与解构（见 §6） |
 | **scope** | 作用域 |
-| **shared** | 跨协程共享的存储类（见 §5.1.3） |
+| **同步共享能力** | 编译器授予 Channel/Atomic/Mutex 等受审计句柄的内部能力；不是公开存储修饰符 |
 | **SSA** | Static Single Assignment：每个变量只赋值一次的 IR |
 | **struct** | 值类型类（见 §5.4） |
 | **TCO** | Tail-Call Optimization：尾调用优化 |

@@ -169,9 +169,7 @@ static void collect_hints(XrJsonValue *hints, AstNode *node, AstNode *root, XrLs
             break;
         }
         case AST_VAR_DECL:
-        case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL: {
+        case AST_CONST_DECL: {
             // Show type hint if no type annotation and has initializer
             if (show_types && in_range(line, range) && !node->as.var_decl.type_annotation &&
                 node->as.var_decl.initializer) {

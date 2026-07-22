@@ -20,7 +20,7 @@
  *   Class / instance setup:
  *     - OP_CLASS_CREATE_FROM_DESCRIPTOR
  *     - OP_CLINIT_CALL
- *     - OP_SET_STORAGE_CTX / OP_TO_SHARED
+ *     - OP_SET_STORAGE_CTX
  *     - OP_MAP_SETKS  (descriptor literal helper)
  *
  *   Field R/W (with field IC):
@@ -127,21 +127,6 @@ vmcase(OP_SET_STORAGE_CTX) {
     int storage_mode = GETARG_A(i);
     atomic_store_explicit(&isolate->current_storage_mode, (uint8_t) storage_mode,
                           memory_order_relaxed);
-    vmbreak;
-}
-
-vmcase(OP_TO_SHARED) {
-    /* OP_TO_SHARED: convert to shared object
-    ** A = destination register
-    ** B = source register
-    **
-    ** If already shared, increment reference count
-    ** Otherwise deep copy to system heap
-    */
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    XrValue src = R(b);
-    R(a) = xr_to_shared(isolate, src);
     vmbreak;
 }
 

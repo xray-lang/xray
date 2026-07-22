@@ -1,7 +1,7 @@
 fn main() {
-    owned bytes = Array<byte>(1, 0)
+    var bytes = Array<byte>(1, 0)
     var view: Slice<byte> = bytes[:]
-    shared frozen = move bytes
+    const frozen = move bytes
     print(len(view))
 }
 

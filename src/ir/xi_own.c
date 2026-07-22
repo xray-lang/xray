@@ -72,7 +72,7 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
 XR_FUNC XrTransferAction xi_capture_cross_execution_action(const XiCapture *capture) {
     if (!capture)
         return XR_TRANSFER_REJECT;
-    if (capture->capture_kind == XI_CAPTURE_SHARED || capture->is_shared)
+    if (capture->capture_kind == XI_CAPTURE_SHARED)
         return XR_TRANSFER_SYNC_SHARE;
     if (capture->capture_kind == XI_CAPTURE_MODULE_LIVE)
         return capture->is_mutable ? XR_TRANSFER_REJECT : XR_TRANSFER_MODULE_READ;

@@ -92,7 +92,6 @@ static XrNativeBodyDesc g_sys_mutex_body_desc = {
     .init = sys_mutex_body_init,
     .destroy = sys_mutex_body_destroy,
     .deep_copy = NULL,
-    .to_shared = NULL,
 };
 
 static void sys_rwlock_body_init(XrInstance *instance, void *body_ptr) {
@@ -117,7 +116,6 @@ static XrNativeBodyDesc g_sys_rwlock_body_desc = {
     .init = sys_rwlock_body_init,
     .destroy = sys_rwlock_body_destroy,
     .deep_copy = NULL,
-    .to_shared = NULL,
 };
 
 static void sys_condvar_body_init(XrInstance *instance, void *body_ptr) {
@@ -142,7 +140,6 @@ static XrNativeBodyDesc g_sys_condvar_body_desc = {
     .init = sys_condvar_body_init,
     .destroy = sys_condvar_body_destroy,
     .deep_copy = NULL,
-    .to_shared = NULL,
 };
 
 static void sys_barrier_body_init(XrInstance *instance, void *body_ptr) {
@@ -172,7 +169,6 @@ static XrNativeBodyDesc g_sys_barrier_body_desc = {
     .init = sys_barrier_body_init,
     .destroy = sys_barrier_body_destroy,
     .deep_copy = NULL,
-    .to_shared = NULL,
 };
 
 static void sys_once_body_init(XrInstance *instance, void *body_ptr) {
@@ -196,7 +192,6 @@ static XrNativeBodyDesc g_sys_once_body_desc = {
     .init = sys_once_body_init,
     .destroy = sys_once_body_destroy,
     .deep_copy = NULL,
-    .to_shared = NULL,
 };
 
 static XrClass *sys_mutex_class(XrVMRuntime *isolate) {

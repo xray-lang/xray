@@ -49,7 +49,7 @@ static const XmcpPromptDef PROMPTS[] = {
       {"sourceLanguage", "Original language (e.g., Python, JavaScript, Go)", false}}},
     {"concurrency-pattern",
      "Recommend the best Xray concurrency pattern for a given task. "
-     "Covers channels, go/await, scope, select, and shared.",
+     "Covers channels, go/await, scope, select, const capabilities, and explicit transfer.",
      1,
      {{"description", "Description of what the concurrent code should do", true}}},
     {"write-test",
@@ -79,8 +79,7 @@ static const char SYSTEM_PREAMBLE[] =
     "Key features:\n"
     "- Types: int, float, string, bool, Array<T>, Map<K,V>, Set<T>, "
     "Channel<T>, Json\n"
-    "- Concurrency: go/await, shared Channel, scope, select, "
-    "shared\n"
+    "- Concurrency: go/await, const Channel, scope, select, explicit move/copy\n"
     "- Safety: if it compiles, it's concurrency-safe\n"
     "- OOP: class (extends), struct (value type), interface (implements), "
     "enum\n"
@@ -102,7 +101,7 @@ static const char EXPLAIN_ERROR_SYSTEM[] =
     "2. Common causes\n"
     "3. How to fix it with a corrected code example\n"
     "Important Xray rules:\n"
-    "- Channel must be declared with shared\n"
+    "- Named Channel handles use a stable const binding\n"
     "- go closures cannot capture ordinary local var/const reference values (pass as params)\n"
     "- Arrow function params MUST have type annotations\n"
     "- Quotes inside ${} interpolation are allowed; nested strings are scanned as expressions\n";
@@ -123,11 +122,12 @@ static const char CONCURRENCY_SYSTEM[] =
     "2. Channel: producer-consumer, pipeline\n"
     "3. scope: structured concurrency (wait for all)\n"
     "4. select: multiplex channels with timeout\n"
-    "5. shared: stable shared identity\n"
+    "5. const/synchronized capability: verified cross-execution sharing\n"
     "6. await all / await any: fan-out patterns\n"
-    "Rules: Channel handles must be declared with shared. go arguments that transfer heap values "
+    "Rules: named Channel handles use const. go arguments that transfer execution-local heap "
+    "values "
     "must use "
-    "copy(...), move, or shared. Cannot capture ordinary local var reference values in go "
+    "copy(...) or move. Cannot capture ordinary local var reference values in go "
     "closures.\n";
 
 static const char WRITE_TEST_SYSTEM[] =

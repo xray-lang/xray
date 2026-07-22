@@ -7601,8 +7601,6 @@ static const char *transfer_site_kind_name(uint8_t kind) {
             return "chan_try_send";
         case XAOT_TRANSFER_CHAN_SEND_TIMEOUT:
             return "chan_send_timeout";
-        case XAOT_TRANSFER_SHARED_INIT:
-            return "shared_init";
         default:
             return "unknown";
     }

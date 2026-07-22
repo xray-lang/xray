@@ -16,7 +16,7 @@ let r3 = await t3
 let tasks = [go compute(1), go compute(2), go compute(3)]
 let results = await tasks
 // Channel
-shared const ch = new Channel(3)
+const ch = new Channel(3)
 go fn() {
     ch.send(1)
     ch.send(2)
@@ -34,8 +34,8 @@ while (true) {
     }
 }
 // Select statement
-shared const ch1 = new Channel(1)
-shared const ch2 = new Channel(1)
+const ch1 = new Channel(1)
+const ch2 = new Channel(1)
 go fn() {
     ch1.send("from ch1")
 }()
@@ -64,7 +64,7 @@ fn processFile(path) {
 }
 
 // Shared variables
-shared const config = { "name": "test", "value": 42, "settings": [1, 2, 3] }
+const config = { "name": "test", "value": 42, "settings": [1, 2, 3] }
 // Coroutine with closure (parameter passing)
 let arr = [1, 2, 3]
 let task = go fn(data) {
@@ -76,7 +76,7 @@ let task = go fn(data) {
 }(arr)
 let sum = await task
 // Producer-consumer pattern
-shared const queue = new Channel(10)
+const queue = new Channel(10)
 // Producer
 go fn() {
     for (i in 0..10) {

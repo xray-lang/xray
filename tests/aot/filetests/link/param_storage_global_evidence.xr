@@ -3,8 +3,8 @@ fn consume(ch: Channel<Array<int>>, data: Array<int>) {
 }
 
 fn main_value() -> int {
-    shared ch: Channel<Array<int>> = Channel(1)
-    owned data = Array<int>(2, 0)
+    const ch: Channel<Array<int>> = Channel(1)
+    var data = Array<int>(2, 0)
     data[0] = 41
     data[1] = 1
     consume(ch, move data)

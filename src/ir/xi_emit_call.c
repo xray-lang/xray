@@ -858,18 +858,6 @@ static void emit_builtin_unary_opcode(EmitCtx *ctx, XiValue *v, XiEmitReg dst, i
     emit_inst(ctx, CREATE_ABC(opcode, dst, src, 0));
 }
 
-static void emit_builtin_unary_opcode_c(EmitCtx *ctx, XiValue *v, XiEmitReg dst, int opcode,
-                                        uint8_t c) {
-    if (v->nargs < 1) {
-        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-        return;
-    }
-    XiEmitReg src = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-    emit_inst(ctx, CREATE_ABC(opcode, dst, src, c));
-}
-
 /* Builtin call: aux_int=builtin_id or aux=name string */
 /* Array capacity/length builtins (name-based), split from
  * xi_emit_call_builtin. Returns false when `bname` is not one of them. */
@@ -959,18 +947,6 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
     if (bname && strcmp(bname, "copy") == 0) {
         emit_builtin_unary_opcode(ctx, v, dst, OP_COPY);
-        return;
-    }
-    if (bname && strcmp(bname, "copy_shared") == 0) {
-        emit_builtin_unary_opcode_c(ctx, v, dst, OP_COPY, XR_OBJ_STORAGE_SHARED);
-        return;
-    }
-    if (bname && strcmp(bname, "copy_owned") == 0) {
-        emit_builtin_unary_opcode_c(ctx, v, dst, OP_COPY, XR_OBJ_STORAGE_TRANSFER);
-        return;
-    }
-    if (bname && strcmp(bname, "to_shared") == 0) {
-        emit_builtin_unary_opcode(ctx, v, dst, OP_TO_SHARED);
         return;
     }
     if (bname && strcmp(bname, "chr") == 0) {

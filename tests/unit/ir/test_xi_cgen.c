@@ -1962,7 +1962,7 @@ TEST(cgen_coro_syncs_helper_result_debug_source_vars) {
                       "    var received = ch.recv()\n"
                       "    return received + 1\n"
                       "}\n"
-                      "shared ch: Channel<int> = Channel(1)\n"
+                      "const ch: Channel<int> = Channel(1)\n"
                       "var task = go worker(ch)\n"
                       "print(await task)\n";
 
@@ -2222,7 +2222,7 @@ TEST(cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime) {
 TEST(lower_parallel_call_plan_resolves_selective_aliases) {
     const char *src = "import { forEach as each, map as parMap, reduce as fold, "
                       "Options as ParOptions } from parallel\n"
-                      "shared total = Atomic(0)\n"
+                      "const total = Atomic(0)\n"
                       "each(0..4, (i) -> {\n"
                       "    total.fetchAdd(i, Ordering.Relaxed)\n"
                       "}, ParOptions(2))\n"
@@ -2280,7 +2280,7 @@ TEST(lower_parallel_plan_methods_preserve_intrinsic_identity) {
 
 TEST(cgen_parallel_for_each_allows_atomic_i64_direct_body) {
     const char *src = "import parallel\n"
-                      "shared total = Atomic(0)\n"
+                      "const total = Atomic(0)\n"
                       "fn run(n: int) {\n"
                       "    parallel.forEach(0..n, (i) -> {\n"
                       "        total.fetchAdd(i, Ordering.Relaxed)\n"
@@ -6161,7 +6161,7 @@ TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
                       "    }\n"
                       "}\n"
                       "fn run_once(count: int, timeout_ms: int) -> int {\n"
-                      "    shared ch = Channel<int>(1)\n"
+                      "    const ch = Channel<int>(1)\n"
                       "    ch.send(1)\n"
                       "    var tasks: Array<Task<bool>> = []\n"
                       "    for (var i = 0; i < count; i++) {\n"
@@ -6224,7 +6224,7 @@ TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
 
 TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
     const char *src = "import { EventCount } from sync\n"
-                      "shared signal: EventCount = EventCount(0)\n"
+                      "const signal: EventCount = EventCount(0)\n"
                       "fn worker(workerId: int) -> int {\n"
                       "    var seen = 0\n"
                       "    while (true) {\n"
@@ -6262,7 +6262,7 @@ TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
 
 TEST(cgen_event_count_advance_uses_i64_helper) {
     const char *src = "import { EventCount } from sync\n"
-                      "shared signal: EventCount = EventCount(1)\n"
+                      "const signal: EventCount = EventCount(1)\n"
                       "fn tick() -> int {\n"
                       "    var next = signal.advance(1)\n"
                       "    signal.close()\n"
@@ -6314,7 +6314,7 @@ TEST(cgen_event_count_advance_uses_i64_helper) {
 
 TEST(cgen_countdown_latch_methods_use_native_helpers) {
     const char *src = "import { CountdownLatch } from sync\n"
-                      "shared latch: CountdownLatch = CountdownLatch(0)\n"
+                      "const latch: CountdownLatch = CountdownLatch(0)\n"
                       "fn syncUse() -> int {\n"
                       "    var ok = latch.reset(2)\n"
                       "    var left = latch.done()\n"
@@ -6382,7 +6382,7 @@ TEST(cgen_countdown_latch_methods_use_native_helpers) {
 
 TEST(cgen_semaphore_methods_use_native_helpers) {
     const char *src = "import { Semaphore } from sync\n"
-                      "shared sem: Semaphore = Semaphore(0)\n"
+                      "const sem: Semaphore = Semaphore(0)\n"
                       "fn syncUse() -> int {\n"
                       "    var released = sem.release(2)\n"
                       "    var ok = sem.tryAcquire()\n"
@@ -6442,8 +6442,8 @@ TEST(cgen_semaphore_methods_use_native_helpers) {
 
 TEST(cgen_sync_blocking_direct_methods_mark_aot_coroutines) {
     const char *src = "import { CountdownLatch, Semaphore } from sync\n"
-                      "shared sem: Semaphore = Semaphore(0)\n"
-                      "shared latch: CountdownLatch = CountdownLatch(1)\n"
+                      "const sem: Semaphore = Semaphore(0)\n"
+                      "const latch: CountdownLatch = CountdownLatch(1)\n"
                       "fn worker() -> int {\n"
                       "    if (!sem.acquire()) {\n"
                       "        return -1\n"
@@ -6833,7 +6833,7 @@ TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
 }
 
 TEST(cgen_coro_channel_send_copy_uses_transfer_helper) {
-    const char *src = "shared ch: Channel<Array<int>> = Channel(1)\n"
+    const char *src = "const ch: Channel<Array<int>> = Channel(1)\n"
                       "var xs = [1, 2]\n"
                       "ch.send(copy(xs))\n";
 
@@ -6864,7 +6864,7 @@ TEST(cgen_coro_channel_send_copy_uses_transfer_helper) {
 }
 
 TEST(cgen_coro_scalar_channel_send_skips_clone) {
-    const char *src = "shared ch = Channel<int>(1)\n"
+    const char *src = "const ch = Channel<int>(1)\n"
                       "ch.send(42)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6899,8 +6899,8 @@ TEST(cgen_coro_unit_match_send_omits_void_phi) {
                       "        _ -> done.send(-1)\n"
                       "    }\n"
                       "}\n"
-                      "shared ch = Channel<int>(0)\n"
-                      "shared done = Channel<int>(1)\n"
+                      "const ch = Channel<int>(0)\n"
+                      "const done = Channel<int>(1)\n"
                       "go recv_timeout_until_close(ch, done)\n"
                       "ch.close()\n";
 
@@ -6921,7 +6921,7 @@ TEST(cgen_coro_unit_match_send_omits_void_phi) {
 }
 
 TEST(cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge) {
-    const char *src = "shared ch = Channel<int>(1)\n"
+    const char *src = "const ch = Channel<int>(1)\n"
                       "var ok = ch.trySend(42)\n"
                       "print(ok)\n";
 
@@ -7169,7 +7169,7 @@ TEST(cgen_coro_await_timeout_passes_deadline) {
                       "        _ -> { return -1 }\n"
                       "    }\n"
                       "}\n"
-                      "shared ch = Channel<int>(0)\n"
+                      "const ch = Channel<int>(0)\n"
                       "var task = go worker(ch)\n"
                       "var result = task.awaitTimeout(25)\n"
                       "print(result)\n";
@@ -7230,7 +7230,7 @@ TEST(cgen_tagged_null_equality_keeps_null_literal) {
 }
 
 TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
-    const char *src = "shared ch = Channel<int>(0)\n"
+    const char *src = "const ch = Channel<int>(0)\n"
                       "var value = ch.recv()\n"
                       "print(value)\n";
 
@@ -7260,7 +7260,7 @@ TEST(cgen_coro_discarded_recv_does_not_materialize_result) {
                       "    ch.recv()\n"
                       "    return 7\n"
                       "}\n"
-                      "shared ch: Channel<int> = Channel(0)\n"
+                      "const ch: Channel<int> = Channel(0)\n"
                       "var task = go wait_then_return(ch)\n"
                       "ch.send(1)\n"
                       "print(await task)\n";
@@ -7293,7 +7293,7 @@ TEST(cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge) {
                       "        _ -> fallback\n"
                       "    }\n"
                       "}\n"
-                      "shared ch = Channel<int>(1)\n"
+                      "const ch = Channel<int>(1)\n"
                       "ch.send(9)\n"
                       "var task = go recv_or(ch, -1)\n"
                       "var result = await task\n"
@@ -7326,7 +7326,7 @@ TEST(cgen_coro_scalar_channel_recv_uses_tagged_slot) {
                       "        _ -> -1\n"
                       "    }\n"
                       "}\n"
-                      "shared ch = Channel<int>(1)\n"
+                      "const ch = Channel<int>(1)\n"
                       "ch.send(9)\n"
                       "var task = go recv_plus(ch)\n"
                       "var result = await task\n"
@@ -7379,7 +7379,7 @@ TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
                       "        _ -> { print(\"other\") }\n"
                       "    }\n"
                       "}\n"
-                      "shared ch = Channel<int>(1)\n"
+                      "const ch = Channel<int>(1)\n"
                       "ch.send(0)\n"
                       "var task = go read_or_stop(ch)\n"
                       "await task\n";
@@ -7411,7 +7411,7 @@ TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
 }
 
 TEST(cgen_descriptor_scalar_channel_try_recv_returns_recv_enum) {
-    const char *src = "shared ch = Channel<int>(1)\n"
+    const char *src = "const ch = Channel<int>(1)\n"
                       "var recv = ch.tryRecv()\n"
                       "print(recv)\n";
 
@@ -7438,7 +7438,7 @@ TEST(cgen_descriptor_scalar_channel_try_recv_returns_recv_enum) {
 }
 
 TEST(cgen_descriptor_select_try_recv_uses_ready_bit) {
-    const char *src = "shared ch = Channel<int>(0)\n"
+    const char *src = "const ch = Channel<int>(0)\n"
                       "select {\n"
                       "    value from ch -> { print(value) }\n"
                       "    _ -> { print(0) }\n"
@@ -7552,7 +7552,7 @@ TEST(cgen_runtime_needed_main_uses_aot_runtime) {
 }
 
 TEST(cgen_coro_select_publishes_state_before_block) {
-    const char *src = "shared ch = Channel<int>(0)\n"
+    const char *src = "const ch = Channel<int>(0)\n"
                       "select {\n"
                       "    value from ch -> { print(value) }\n"
                       "}\n";
@@ -7574,7 +7574,7 @@ TEST(cgen_coro_select_publishes_state_before_block) {
 }
 
 TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
-    const char *src = "shared ch = Channel<int>(0)\n"
+    const char *src = "const ch = Channel<int>(0)\n"
                       "var sent = ch.sendTimeout(7, 10)\n"
                       "var recv = ch.recvTimeout(10)\n"
                       "print(sent)\n"
@@ -7608,7 +7608,7 @@ TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
 }
 
 TEST(cgen_coro_recv_slot_is_traced_as_frame_root) {
-    const char *src = "shared ch = Channel<string>(0)\n"
+    const char *src = "const ch = Channel<string>(0)\n"
                       "var value = ch.recv()\n"
                       "print(value)\n";
 
@@ -7926,7 +7926,7 @@ TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
                       "    }\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    shared group: ResultGroup = ResultGroup(4)\n"
+                      "    const group: ResultGroup = ResultGroup(4)\n"
                       "    var i = 0\n"
                       "    while (i < 4) {\n"
                       "        go worker(group, i)\n"
@@ -7970,7 +7970,7 @@ TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
 TEST(cgen_coro_result_group_reset_uses_native_helper) {
     const char *src = "import { ResultGroup } from sync\n"
                       "fn run(n: int) -> bool {\n"
-                      "    shared group: ResultGroup = ResultGroup(n)\n"
+                      "    const group: ResultGroup = ResultGroup(n)\n"
                       "    group.add(1)\n"
                       "    group.add(2)\n"
                       "    group.flush()\n"
@@ -8020,7 +8020,7 @@ TEST(cgen_result_group_sync_methods_elide_dead_err_checks) {
                       "    return 0\n"
                       "}\n"
                       "fn run() -> int {\n"
-                      "    shared group: ResultGroup = ResultGroup(1)\n"
+                      "    const group: ResultGroup = ResultGroup(1)\n"
                       "    return useGroup(group, 1)\n"
                       "}\n"
                       "print(run())\n";
@@ -8066,8 +8066,8 @@ TEST(cgen_coro_await_any_uses_typed_aggregate_bridge) {
                       "    ch.recv()\n"
                       "    return n\n"
                       "}\n"
-                      "shared ch1 = Channel<int>(0)\n"
-                      "shared ch2 = Channel<int>(1)\n"
+                      "const ch1 = Channel<int>(0)\n"
+                      "const ch2 = Channel<int>(1)\n"
                       "var t1 = go delayed(ch1, 1)\n"
                       "var t2 = go delayed(ch2, 2)\n"
                       "ch2.send(9)\n"
@@ -8100,7 +8100,7 @@ TEST(cgen_coro_scope_exit_publishes_state_before_block) {
                       "    ch.recv()\n"
                       "}\n"
                       "fn scoped() {\n"
-                      "    shared ch = Channel<int>(0)\n"
+                      "    const ch = Channel<int>(0)\n"
                       "    scope {\n"
                       "        go child(ch)\n"
                       "    }\n"
@@ -8124,7 +8124,7 @@ TEST(cgen_coro_scope_exit_publishes_state_before_block) {
 }
 
 TEST(cgen_channel_fields_use_aot_helpers) {
-    const char *src = "shared ch = Channel<int>(2)\n"
+    const char *src = "const ch = Channel<int>(2)\n"
                       "print(len(ch))\n"
                       "print(ch.capacity)\n"
                       "print(ch.isClosed)\n";
@@ -8169,7 +8169,7 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
                       "    ch.close()\n"
                       "    return ch.isClosed()\n"
                       "}\n"
-                      "shared ch = Channel<int>(2)\n"
+                      "const ch = Channel<int>(2)\n"
                       "var p = go producer(ch)\n"
                       "print(await p)\n"
                       "var c = go consumer(ch)\n"
@@ -8201,7 +8201,7 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
 }
 
 TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
-    const char *src = "shared queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
+    const char *src = "const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
                       "fn consumer() -> int {\n"
                       "    var item = queue.pop(0)\n"
                       "    return item ?? 0\n"
@@ -8243,7 +8243,7 @@ TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
 }
 
 TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
-    const char *src = "shared queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
+    const char *src = "const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
                       "fn consumer() -> int {\n"
                       "    var item = queue.pop(0)\n"
                       "    if (item == null) { return -1 }\n"
@@ -8295,7 +8295,7 @@ TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
 TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
     const char *src = "import { ResultGroup } from sync\n"
                       "fn consumer() -> int {\n"
-                      "    shared group: ResultGroup = ResultGroup(1)\n"
+                      "    const group: ResultGroup = ResultGroup(1)\n"
                       "    group.add(21)\n"
                       "    var item = group.recv()\n"
                       "    if (item == null) { return -1 }\n"
@@ -8331,7 +8331,7 @@ TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
 }
 
 TEST(cgen_work_queue_native_methods_use_aot_helpers) {
-    const char *src = "shared queue: WorkQueue<int> = WorkQueue<int>(4, 2)\n"
+    const char *src = "const queue: WorkQueue<int> = WorkQueue<int>(4, 2)\n"
                       "fn use_queue() -> int {\n"
                       "    assert_true(queue.push(1, 0))\n"
                       "    assert_eq(queue.pushRange(2, 2, 0), 2)\n"
@@ -8403,7 +8403,7 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
                       "fn task_poll(task: ref Task<int>) -> TaskResult<int> {\n"
                       "    return task.poll()\n"
                       "}\n"
-                      "shared ch = Channel<int>(0)\n"
+                      "const ch = Channel<int>(0)\n"
                       "var blocked = go wait_for_value(ch)\n"
                       "blocked.cancel()\n"
                       "var cancelled_result = blocked.awaitResult()\n"

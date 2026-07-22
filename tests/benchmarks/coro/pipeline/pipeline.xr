@@ -38,7 +38,7 @@ fn stage(in_ch: Channel<int>, out_ch: Channel<int>, stage_id: int) {
 var start = time.monotonic()
 
 // 构建管道：创建 STAGES+1 个 channel，STAGES 个协程
-shared chs = [Channel(10)]
+const chs = [Channel(10)]
 var tasks: Array<Task> = []
 
 for (var i = 0; i < STAGES; i++) {

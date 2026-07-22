@@ -1,6 +1,6 @@
 import parallel
 
-shared parallel_vm_batch_counter: Atomic<int> = Atomic<int>(0)
+const parallel_vm_batch_counter: Atomic<int> = Atomic<int>(0)
 
 parallel.forEach(0..1000, (i) -> {
     parallel_vm_batch_counter.add(1, Ordering.Relaxed)

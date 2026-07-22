@@ -7,7 +7,7 @@ fn runtimeOnly() -> int {
     return 1
 }
 
-shared PAIR = Pair{left: runtimeOnly(), right: 2}
+const PAIR = Pair{left: runtimeOnly(), right: 2}
 
 @c_export("xray_shared_aggregate_reject")
 fn xray_shared_aggregate_reject() -> int {

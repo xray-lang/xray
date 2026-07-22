@@ -1,6 +1,6 @@
 import parallel
 
-shared touched = Atomic<int>(0)
+const touched = Atomic<int>(0)
 
 try {
     var failed = parallel.reduce(

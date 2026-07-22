@@ -4,7 +4,7 @@ enum ThreadAliasMergeErr {
     Msg(s: string)
 }
 
-shared aliasMergeCh = Channel<int>(1)
+const aliasMergeCh = Channel<int>(1)
 aliasMergeCh.trySend(1)
 
 fn mergeInTry() {

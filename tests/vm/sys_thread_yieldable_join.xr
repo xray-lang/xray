@@ -11,7 +11,7 @@ fn tick() -> int {
     return 1
 }
 
-shared thread = sys.Thread.spawn(fn() -> int {
+const thread = sys.Thread.spawn(fn() -> int {
     sys.sleepMs(40)
     return 7
 })

@@ -1,5 +1,5 @@
 fn main() {
-    shared arrays = copy(Array<Array<byte>>(1, Array<byte>(2, 0)))
+    const arrays = copy(Array<Array<byte>>(1, Array<byte>(2, 0)))
     for (idx, item in arrays) {
         item.appendFrom(item[:])
     }

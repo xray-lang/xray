@@ -131,10 +131,10 @@ Quoted literals use one quote for single-line inline text, two quotes for an emp
 
 ### Concurrency and data transfer
 
-Heap-backed execution-local values do not cross a coroutine or channel boundary implicitly. Use `copy(value)` for an independent graph, `move value` to transfer an owned source, or `shared` for shared identity. Scalars, strings, channels, tasks, atomics, and already-shared identities can cross directly.
+Heap-backed execution-local values do not cross a coroutine or channel boundary implicitly. Use `copy(value)` for an independent graph or `move value` to transfer an inferred-unique root. Inline values, published `const` data, and audited synchronization handles such as channels, tasks, and atomics can cross directly.
 
 ```xray
-shared ch = Channel<int>(2)
+const ch = Channel<int>(2)
 go fn() {
     ch.send(42)
 }()
@@ -153,7 +153,7 @@ In a `select`, `value from ch` receives, `value to ch` sends, `after millisecond
 
 ### Memory management
 
-Xray does not use a concurrent tracing garbage collector. Ordinary execution-local reference values use compiler-inserted, per-coroutine reference counting; `shared` and system-owned values use atomic reference counting. Eligible coroutine-local reference cycles are reclaimed by a Bacon–Rajan trial-deletion cycle collector, which can run automatically or through `runtime.collectCycles()`. Resource cleanup is expressed explicitly with `defer`.
+Xray does not use a concurrent tracing garbage collector. Ordinary execution-local reference values use compiler-inserted, per-coroutine reference counting; published const roots and audited synchronization/runtime handles use their verified shared storage plan. Eligible coroutine-local reference cycles are reclaimed by a Bacon–Rajan trial-deletion cycle collector, which can run automatically or through `runtime.collectCycles()`. Resource cleanup is expressed explicitly with `defer`.
 
 ## Standard library
 

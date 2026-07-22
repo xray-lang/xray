@@ -1,3 +1,3 @@
 var source: Array<int> = [1, 2]
-shared snapshot = move source
+const snapshot = move source
 print(len(snapshot))

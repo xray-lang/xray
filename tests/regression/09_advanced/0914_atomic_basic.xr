@@ -4,7 +4,7 @@
 
 @test
 fn test_atomic_int_load_store() {
-    shared a = Atomic(0)
+    const a = Atomic(0)
     assert_eq(a.load(), 0)
     a.store(42)
     assert_eq(a.load(), 42)
@@ -12,7 +12,7 @@ fn test_atomic_int_load_store() {
 
 @test
 fn test_atomic_int_add_sub() {
-    shared a = Atomic(10)
+    const a = Atomic(10)
     a.add(5)
     assert_eq(a.load(), 15)
     a.sub(3)
@@ -21,7 +21,7 @@ fn test_atomic_int_add_sub() {
 
 @test
 fn test_atomic_int_fetch_add_sub() {
-    shared a = Atomic(10)
+    const a = Atomic(10)
     var old1 = a.fetchAdd(5)
     assert_eq(old1, 10)
     assert_eq(a.load(), 15)
@@ -32,7 +32,7 @@ fn test_atomic_int_fetch_add_sub() {
 
 @test
 fn test_atomic_int_swap() {
-    shared a = Atomic(1)
+    const a = Atomic(1)
     var old = a.swap(99)
     assert_eq(old, 1)
     assert_eq(a.load(), 99)
@@ -40,7 +40,7 @@ fn test_atomic_int_swap() {
 
 @test
 fn test_atomic_int_compare_exchange_success() {
-    shared a = Atomic(0)
+    const a = Atomic(0)
     var (prev, ok) = a.compareExchange(0, 1)
     assert_eq(prev, 0)
     assert_eq(ok, true)
@@ -49,7 +49,7 @@ fn test_atomic_int_compare_exchange_success() {
 
 @test
 fn test_atomic_int_compare_exchange_failure() {
-    shared a = Atomic(5)
+    const a = Atomic(5)
     var (prev, ok) = a.compareExchange(0, 1)
     assert_eq(ok, false)
     assert_eq(prev, 5)
@@ -58,7 +58,7 @@ fn test_atomic_int_compare_exchange_failure() {
 
 @test
 fn test_atomic_bool_load_store() {
-    shared flag = Atomic(false)
+    const flag = Atomic(false)
     assert_eq(flag.load(), false)
     flag.store(true)
     assert_eq(flag.load(), true)
@@ -66,7 +66,7 @@ fn test_atomic_bool_load_store() {
 
 @test
 fn test_atomic_bool_toggle() {
-    shared flag = Atomic(false)
+    const flag = Atomic(false)
     var was = flag.toggle()
     assert_eq(was, false)
     assert_eq(flag.load(), true)
@@ -77,7 +77,7 @@ fn test_atomic_bool_toggle() {
 
 @test
 fn test_atomic_float_load_store() {
-    shared rate = Atomic(0.0)
+    const rate = Atomic(0.0)
     assert_eq(rate.load(), 0.0)
     rate.store(3.14)
     assert_eq(rate.load(), 3.14)
@@ -85,7 +85,7 @@ fn test_atomic_float_load_store() {
 
 @test
 fn test_atomic_float_add_sub() {
-    shared rate = Atomic(1.0)
+    const rate = Atomic(1.0)
     rate.add(0.5)
     assert_eq(rate.load(), 1.5)
     rate.sub(0.25)
@@ -94,14 +94,14 @@ fn test_atomic_float_add_sub() {
 
 @test
 fn test_atomic_to_string() {
-    shared a = Atomic(42)
+    const a = Atomic(42)
     var s = a.toString()
     assert_eq(s, "42")
 }
 
 @test
 fn test_atomic_ordering_enum() {
-    shared a = Atomic(0)
+    const a = Atomic(0)
     a.store(1, Ordering.Relaxed)
     var v = a.load(Ordering.Relaxed)
     assert_eq(v, 1)

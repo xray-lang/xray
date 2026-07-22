@@ -33,7 +33,7 @@ fn recv_sum(ch: Channel<int>, count: int) -> int {
 }
 
 fn test_statement_waits_for_success_and_failure() {
-    shared ch = Channel<int>(3)
+    const ch = Channel<int>(3)
     supervisor scope {
         go ok_report(ch, 1)
         go fail_report(ch, 10)
@@ -44,7 +44,7 @@ fn test_statement_waits_for_success_and_failure() {
 }
 
 fn test_explicit_task_handle_observes_failure() {
-    shared ch = Channel<int>(1)
+    const ch = Channel<int>(1)
     supervisor scope {
         var task = go fail_report(ch, 5)
         var result = task.awaitResult()

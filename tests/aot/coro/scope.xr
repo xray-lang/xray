@@ -34,7 +34,7 @@ fn recv_sum(ch: Channel<int>, count: int) -> int {
     return sum
 }
 
-shared ch = Channel<int>(2)
+const ch = Channel<int>(2)
 scope {
     go send_after_yield(ch, 1)
     go send_after_yield(ch, 2)
@@ -57,7 +57,7 @@ linked scope {
     print(value + 1)
 }
 
-shared supervisor_ch = Channel<int>(2)
+const supervisor_ch = Channel<int>(2)
 supervisor scope {
     go supervisor_ok(supervisor_ch)
     go supervisor_fail(supervisor_ch)

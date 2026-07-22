@@ -1,13 +1,14 @@
 {
   "id": "variables",
   "title": "Variables",
-  "spec_anchor": "#51-var-const-shared-owned",
+  "spec_anchor": "#51-var-const",
   "aliases": [
     "var",
     "const",
     "binding",
-    "shared",
-    "owned",
+    "capability",
+    "move",
+    "copy",
     "declaration"
   ],
   "sections": [
@@ -24,15 +25,9 @@
       ]
     },
     {
-      "heading": "shared",
+      "heading": "Capabilities, move, and copy",
       "fences": [
-        "decl-shared"
-      ]
-    },
-    {
-      "heading": "owned",
-      "fences": [
-        "decl-owned"
+        "decl-capability"
       ]
     },
     {

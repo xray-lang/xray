@@ -1,8 +1,8 @@
 import sys
 import { ProcessOptions } from sys
 
-shared pipe = sys.Pipe.open()!
-shared proc = sys.Process.spawn("sh", ["-c", "sleep 0.05; printf ok"],
+const pipe = sys.Pipe.open()!
+const proc = sys.Process.spawn("sh", ["-c", "sleep 0.05; printf ok"],
     ProcessOptions(null, null, null, pipe.writeEnd()))!
 pipe.closeWrite()
 

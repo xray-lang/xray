@@ -21,7 +21,7 @@ class Once {
     }
 }
 
-shared counter = Atomic<int>(0)
+const counter = Atomic<int>(0)
 var once = Once()
 once.call(() -> { counter.fetchAdd(1) })
 once.call(() -> { counter.fetchAdd(1) })

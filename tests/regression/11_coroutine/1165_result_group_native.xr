@@ -1,5 +1,5 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-shared rg: ResultGroup = ResultGroup(2)
+const rg: ResultGroup = ResultGroup(2)
 
 @test
 fn test_result_group_native() {

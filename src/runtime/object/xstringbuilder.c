@@ -174,9 +174,9 @@ static void stringbuilder_body_destroy(void *body) {
     }
 }
 
-// to_shared hook: allocate a fresh buffer on the shared heap and copy content
-static bool stringbuilder_body_to_shared(XrVMRuntime *X, XrInstance *src, XrInstance *dst) {
-    (void) X;
+// Explicit copy hook: allocate an independent buffer and copy content.
+static bool stringbuilder_body_deep_copy(XrCopyContext *ctx, XrInstance *src, XrInstance *dst) {
+    (void) ctx;
     XrStringBuilder *src_sb = (XrStringBuilder *) src;
     XrStringBuilder *dst_sb = (XrStringBuilder *) dst;
     xr_stringbuilder_init_inplace(dst_sb);
@@ -187,14 +187,13 @@ static bool stringbuilder_body_to_shared(XrVMRuntime *X, XrInstance *src, XrInst
     return true;
 }
 
-// Shared descriptor for all StringBuilder instances.
+// Descriptor for all StringBuilder instances.
 static XrNativeBodyDesc sb_native_body_desc = {
     .body_size = sizeof(XrStringBuilder) - offsetof(XrStringBuilder, buffer),
     .body_align = _Alignof(XrStrBuf *),
-    .copy_policy = XR_NATIVE_BODY_COPY_SHARED,
+    .copy_policy = XR_NATIVE_BODY_COPY_DEEP,
     .destroy = stringbuilder_body_destroy,
-    .deep_copy = NULL,
-    .to_shared = stringbuilder_body_to_shared,
+    .deep_copy = stringbuilder_body_deep_copy,
 };
 
 XrNativeBodyDesc *xr_stringbuilder_native_body_desc(void) {

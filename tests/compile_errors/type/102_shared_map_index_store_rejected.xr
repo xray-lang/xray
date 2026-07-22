@@ -1,3 +1,3 @@
 var local = #{"a": 1}
-shared m = copy(local)
+const m = copy(local)
 m["b"] = 2

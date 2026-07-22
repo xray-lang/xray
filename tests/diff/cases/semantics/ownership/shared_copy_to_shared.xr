@@ -1,5 +1,5 @@
 var xs: Array<int> = [1, 2]
-shared ys = copy(xs)
+const ys = copy(xs)
 xs.push(3)
 print(len(xs))
 print(len(ys))

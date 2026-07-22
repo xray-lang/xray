@@ -26,7 +26,7 @@ fn send_timeout_worker(ch: Channel<int>, timeout_ms: int, value: int) -> bool {
 }
 
 fn run_recv_storm(count: int, timeout_ms: int) -> int {
-    shared ch = Channel(1)
+    const ch = Channel(1)
     var tasks: Array<Task> = []
     for (var i = 0; i < count; i++) {
         tasks.push(go recv_timeout_worker(ch, timeout_ms))
@@ -43,7 +43,7 @@ fn run_recv_storm(count: int, timeout_ms: int) -> int {
 }
 
 fn run_send_storm(count: int, timeout_ms: int) -> int {
-    shared ch = Channel(1)
+    const ch = Channel(1)
     ch.send(1)
 
     var tasks: Array<Task> = []

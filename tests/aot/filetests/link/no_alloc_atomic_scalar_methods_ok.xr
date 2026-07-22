@@ -1,5 +1,5 @@
-shared xray_no_alloc_atomic_scalar_int = Atomic(10)
-shared xray_no_alloc_atomic_scalar_flag = Atomic(false)
+const xray_no_alloc_atomic_scalar_int = Atomic(10)
+const xray_no_alloc_atomic_scalar_flag = Atomic(false)
 
 @no_alloc
 fn xray_no_alloc_atomic_scalar_methods_ok(counter: Atomic<int>, flag: Atomic<bool>) -> int {

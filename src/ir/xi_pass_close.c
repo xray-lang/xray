@@ -33,7 +33,7 @@
 static void resolve_capture_kind(XiCapture *cap) {
     XR_DCHECK(cap != NULL, "resolve_capture_kind: NULL capture");
 
-    if (cap->is_shared) {
+    if (cap->capture_kind == XI_CAPTURE_SHARED) {
         cap->capture_kind = XI_CAPTURE_SHARED;
         cap->needs_cell = true;
     } else if (cap->is_mutable || cap->is_reassigned) {

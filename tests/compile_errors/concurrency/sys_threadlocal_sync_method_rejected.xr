@@ -1,7 +1,7 @@
 import sys
 import sync
 
-shared local = sys.ThreadLocal<int>(fn() -> int {
+const local = sys.ThreadLocal<int>(fn() -> int {
     return 1
 })
 

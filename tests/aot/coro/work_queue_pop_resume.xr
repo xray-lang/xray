@@ -1,5 +1,5 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-shared queue: WorkQueue<int> = WorkQueue<int>(1, 4)
+const queue: WorkQueue<int> = WorkQueue<int>(1, 4)
 
 fn consumer() -> int {
     var first = queue.pop(0)

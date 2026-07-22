@@ -7,7 +7,7 @@ fn callIt(f: (Slice<byte>) -> (), view: Slice<byte>) {
 }
 
 fn main() {
-    shared bytes = Array<byte>(4, 0)
+    const bytes = Array<byte>(4, 0)
     var view: Slice<byte> = bytes[:]
     callIt(overwrite, view)
 }

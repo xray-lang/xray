@@ -13,9 +13,9 @@ fn recvValue(ch) {
 
 fn test_simple_pipeline() {
     // stage1 -> stage2 -> stage3
-    shared ch1 = Channel(5)
-    shared ch2 = Channel(5)
-    shared ch3 = Channel(5)
+    const ch1 = Channel(5)
+    const ch2 = Channel(5)
+    const ch3 = Channel(5)
     fn stage1(input, output) {
         for (var i = 0; i < 10; i++) {
             output.send(i)
@@ -47,10 +47,10 @@ fn test_simple_pipeline() {
 }
 
 fn test_transform_pipeline() {
-    shared input = Channel(10)
-    shared filtered = Channel(10)
-    shared transformed = Channel(10)
-    shared result = Channel(1)
+    const input = Channel(10)
+    const filtered = Channel(10)
+    const transformed = Channel(10)
+    const result = Channel(1)
     // 过滤偶数
     fn filter_even(inp, out) {
         for (var i = 0; i < 20; i++) {
@@ -98,8 +98,8 @@ fn test_transform_pipeline() {
 
 fn test_parallel_pipeline() {
     // 并行处理阶段
-    shared input = Channel(20)
-    shared output = Channel(20)
+    const input = Channel(20)
+    const output = Channel(20)
     fn worker(inp, out, id) {
         for (var i = 0; i < 5; i++) {
             var val = recvValue(inp)

@@ -1,7 +1,7 @@
 import parallel
 import { Options } from parallel
 
-shared seen = Atomic<int>(0)
+const seen = Atomic<int>(0)
 parallel.forEach(0..5, (i) -> { seen.add(i, Ordering.Relaxed) }, Options(2))
 var mapped = parallel.map(0..4, (i) -> i * i, Options(2))
 var total = parallel.reduce(0..5, 10, (i) -> i, (a, b) -> a + b, Options(2))

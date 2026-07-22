@@ -29,10 +29,10 @@ fn producer(ch: Channel<int>, id: int, count: int) {
 
 var start = time.monotonic()
 
-shared ch0 = Channel(10)
-shared ch1 = Channel(10)
-shared ch2 = Channel(10)
-shared ch3 = Channel(10)
+const ch0 = Channel(10)
+const ch1 = Channel(10)
+const ch2 = Channel(10)
+const ch3 = Channel(10)
 
 var t0 = go producer(ch0, 0, MSGS)
 var t1 = go producer(ch1, 1, MSGS)

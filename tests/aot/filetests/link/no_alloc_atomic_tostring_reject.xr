@@ -1,4 +1,4 @@
-shared xray_no_alloc_atomic_value = Atomic(42)
+const xray_no_alloc_atomic_value = Atomic(42)
 
 @no_alloc
 fn xray_no_alloc_atomic_tostring_reject(value: Atomic<int>) -> string {

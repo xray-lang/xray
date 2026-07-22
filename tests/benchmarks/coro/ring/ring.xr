@@ -24,7 +24,7 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 }
 
 // 创建 N 个 channel（存入数组自动共享）
-shared channels: Array<Channel<int>> = []
+const channels: Array<Channel<int>> = []
 for (var i = 0; i < N; i++) {
     channels.push(Channel(1))
 }

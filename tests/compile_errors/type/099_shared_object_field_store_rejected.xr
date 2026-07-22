@@ -6,5 +6,5 @@ class Box {
     }
 }
 
-shared b = Box(1)
+const b = Box(1)
 b.value = 2

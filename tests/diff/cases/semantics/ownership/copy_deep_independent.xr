@@ -15,7 +15,7 @@ m.set("b", 2)
 print(len(m))
 print(len(mcopy))
 
-shared ro = copy(nums)
+const ro = copy(nums)
 nums.push(5)
 print(len(nums))
 print(len(ro))

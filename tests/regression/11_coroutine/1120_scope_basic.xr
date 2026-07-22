@@ -28,7 +28,7 @@ fn nested_task(counter: Atomic<int>) {
 
 @test
 fn test_scope_basic() {
-    shared results: Atomic<int> = Atomic<int>(0)
+    const results: Atomic<int> = Atomic<int>(0)
 
 
 
@@ -56,7 +56,7 @@ fn test_scope_basic() {
 
     print("=== 嵌套 scope 测试 ===")
 
-    shared outer_results: Atomic<int> = Atomic<int>(0)
+    const outer_results: Atomic<int> = Atomic<int>(0)
 
 
 

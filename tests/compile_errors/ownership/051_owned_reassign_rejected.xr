@@ -1,5 +1,5 @@
 fn main() {
-    owned buffer = Array<int>()
+    var buffer = Array<int>()
     buffer = Array<int>()
 }
 

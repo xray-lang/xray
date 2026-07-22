@@ -22,7 +22,7 @@ fn recv_variant(ch: Channel<EnumVariant<TransferHue> | EnumVariant<TransferState
     }
 }
 
-shared descriptorChannel: Channel<EnumVariant<TransferHue> | EnumVariant<TransferState>> = Channel(2)
+const descriptorChannel: Channel<EnumVariant<TransferHue> | EnumVariant<TransferState>> = Channel(2)
 var hueTask = go recv_variant(descriptorChannel)
 descriptorChannel.send(TransferHue.variants[1])
 print(await hueTask)

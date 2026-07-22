@@ -72,7 +72,7 @@ fn test_tostring() {
     assert_eq(string(binary), "[65, 66, 0, 255]")
 
     // === 9. Channel toString ===
-    shared ch = Channel(5)
+    const ch = Channel(5)
     var cs = string(ch)
     assert(cs.indexOf("Channel") == 0)
 

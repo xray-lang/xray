@@ -2925,15 +2925,6 @@ static uint8_t prepare_transfer_channel_site_kind(const XiValue *site) {
     return 0;
 }
 
-static bool prepare_transfer_site_is_source_move_to_shared(const XiValue *site) {
-    const char *builtin;
-    if (!site || site->op != XI_CALL_BUILTIN || site->nargs != 1)
-        return false;
-    builtin = (const char *) site->aux;
-    return builtin && strcmp(builtin, "to_shared") == 0 &&
-           site->aux_int == XI_TO_SHARED_KIND_SOURCE_MOVE_OWNED;
-}
-
 static const XiValue *prepare_transfer_source_move(const XiValue *value) {
     const XiValue *v = value;
     while (v && v->nargs >= 1 &&
@@ -3030,12 +3021,6 @@ XR_FUNC bool xaot_prepare_transfer_plan_for_site(const XiFunc *func, const XiVal
         site_kind = site->op == XI_GO ? XAOT_TRANSFER_GO_ARG : XAOT_TRANSFER_THREAD_ARG;
         value = site->args[transfer_index + 1u];
         mode = xi_go_arg_transfer_mode(site, transfer_index);
-    } else if (prepare_transfer_site_is_source_move_to_shared(site)) {
-        if (transfer_index != 0)
-            return false;
-        site_kind = XAOT_TRANSFER_SHARED_INIT;
-        value = site->args[0];
-        mode = XR_TRANSFER_MOVE;
     } else {
         site_kind = prepare_transfer_channel_site_kind(site);
         if (site_kind == 0 || transfer_index != 0)
@@ -3052,8 +3037,7 @@ XR_FUNC bool xaot_prepare_transfer_plan_for_site(const XiFunc *func, const XiVal
     out->site_kind = site_kind;
     out->mode = mode;
     out->transfer_plan_id = (site->id << 8u) ^ ((uint32_t) transfer_index + 1u);
-    out->target_domain =
-        site_kind == XAOT_TRANSFER_SHARED_INIT ? XR_STORAGE_CONST_SHARED : XR_STORAGE_TRANSFERABLE;
+    out->target_domain = XR_STORAGE_TRANSFERABLE;
     out->cost_class = XAOT_TRANSFER_COST_REJECTED;
 
     if (!value) {
@@ -3161,8 +3145,7 @@ static bool prepare_func_transfer_plans(XaotBundle *bundle, const XiFunc *func) 
                         return false;
                     }
                 }
-            } else if (prepare_transfer_channel_site_kind(site) != 0 ||
-                       prepare_transfer_site_is_source_move_to_shared(site)) {
+            } else if (prepare_transfer_channel_site_kind(site) != 0) {
                 XaotTransferPlan derived;
                 if (!xaot_prepare_transfer_plan_for_site(func, site, 0, &derived))
                     continue;

@@ -12,7 +12,7 @@ fn recv_array(ch: Channel<Array<int>>) -> Array<int> {
     }
 }
 
-shared send_ch: Channel<Array<int>> = Channel(1)
+const send_ch: Channel<Array<int>> = Channel(1)
 var xs = [1, 2]
 send_ch.send(copy(xs))
 xs.push(3)
@@ -22,7 +22,7 @@ print(len(xs))
 print(len(got_send))
 send_ch.close()
 
-shared try_ch: Channel<Array<int>> = Channel(1)
+const try_ch: Channel<Array<int>> = Channel(1)
 var ys = [4, 5]
 print(sent(try_ch.trySend(copy(ys))))
 ys.push(6)
@@ -31,7 +31,7 @@ print(len(ys))
 print(len(got_try))
 try_ch.close()
 
-shared timeout_ch: Channel<Array<int>> = Channel(1)
+const timeout_ch: Channel<Array<int>> = Channel(1)
 var zs = [7, 8]
 print(sent(timeout_ch.sendTimeout(copy(zs), 0)))
 zs.push(9)
@@ -40,7 +40,7 @@ print(len(zs))
 print(len(got_timeout))
 timeout_ch.close()
 
-shared move_ch: Channel<Array<int>> = Channel(1)
+const move_ch: Channel<Array<int>> = Channel(1)
 var moved = [10, 11]
 move_ch.send(copy(moved))
 var got_move = recv_array(move_ch)

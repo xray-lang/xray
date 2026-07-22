@@ -7,7 +7,7 @@ fn holdBoth(a: Semaphore, b: Semaphore) -> int {
     return 7
 }
 
-shared a = Semaphore(1)
-shared b = Semaphore(1)
+const a = Semaphore(1)
+const b = Semaphore(1)
 print(holdBoth(a, b))
 print(a.release())

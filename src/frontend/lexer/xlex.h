@@ -92,41 +92,39 @@ typedef enum {
     TK_VAR = TK_FIRST_KEYWORD,  // var
     TK_CONST,                   // const
     TK_COMPTIME,                // comptime - force compile-time expression evaluation
-    TK_SHARED,       // shared - stable shared/system-owned identity with lexical visibility
-    TK_OWNED,        // owned - unique mutable system-owned identity with move transfer
-    TK_IF,           // if
-    TK_ELSE,         // else
-    TK_WHILE,        // while
-    TK_FOR,          // for
-    TK_IN,           // in (for for-in loop)
-    TK_IS,           // is (runtime type check)
-    TK_BREAK,        // break
-    TK_CONTINUE,     // continue
-    TK_RETURN,       // return
-    TK_YIELD,        // yield (cooperative coroutine yield, statement form)
-    TK_NULL,         // null
-    TK_TRUE,         // true
-    TK_FALSE,        // false
-    TK_CLASS,        // class
-    TK_STRUCT,       // struct
-    TK_UNION,        // union
-    TK_PACKED,       // packed
-    TK_EXTENDS,      // extends
-    TK_INTERFACE,    // interface
-    TK_IMPLEMENTS,   // implements
-    TK_FN,           // fn (unified function keyword)
-    TK_NEW,          // new
-    TK_THIS,         // this
-    TK_SUPER,        // super
-    TK_CONSTRUCTOR,  // constructor
-    TK_STATIC,       // static
-    TK_PRIVATE,      // private
-    TK_PROTECTED,    // protected
-    TK_OPERATOR,     // operator
-    TK_FINAL,        // final
-    TK_ENUM,         // enum
-    TK_MATCH,        // match
-    TK_TYPE_ALIAS,   // type (type alias definition)
+    TK_IF,                      // if
+    TK_ELSE,                    // else
+    TK_WHILE,                   // while
+    TK_FOR,                     // for
+    TK_IN,                      // in (for for-in loop)
+    TK_IS,                      // is (runtime type check)
+    TK_BREAK,                   // break
+    TK_CONTINUE,                // continue
+    TK_RETURN,                  // return
+    TK_YIELD,                   // yield (cooperative coroutine yield, statement form)
+    TK_NULL,                    // null
+    TK_TRUE,                    // true
+    TK_FALSE,                   // false
+    TK_CLASS,                   // class
+    TK_STRUCT,                  // struct
+    TK_UNION,                   // union
+    TK_PACKED,                  // packed
+    TK_EXTENDS,                 // extends
+    TK_INTERFACE,               // interface
+    TK_IMPLEMENTS,              // implements
+    TK_FN,                      // fn (unified function keyword)
+    TK_NEW,                     // new
+    TK_THIS,                    // this
+    TK_SUPER,                   // super
+    TK_CONSTRUCTOR,             // constructor
+    TK_STATIC,                  // static
+    TK_PRIVATE,                 // private
+    TK_PROTECTED,               // protected
+    TK_OPERATOR,                // operator
+    TK_FINAL,                   // final
+    TK_ENUM,                    // enum
+    TK_MATCH,                   // match
+    TK_TYPE_ALIAS,              // type (type alias definition)
 
     // Exception handling keywords
     TK_TRY,    // try

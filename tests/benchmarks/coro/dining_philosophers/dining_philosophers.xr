@@ -18,7 +18,7 @@ print("哲学家数:", N)
 print("每人进餐:", MEALS)
 
 // Fork = buffered channel(1) used as mutex: value present = available
-shared forks: Array<Channel<int>> = []
+const forks: Array<Channel<int>> = []
 for (var i = 0; i < N; i++) {
     forks.push(Channel(1))
 }
@@ -26,7 +26,7 @@ for (var i = 0; i < N; i++) {
     forks[i].send(1)
 }
 
-shared result_ch: Channel<int> = Channel(100)
+const result_ch: Channel<int> = Channel(100)
 
 fn recv_int(ch: Channel<int>, fallback: int) -> int {
     return match (ch.recv()) {

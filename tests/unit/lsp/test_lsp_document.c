@@ -365,7 +365,7 @@ TEST(completion_shared_channel_member) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "shared ch = Channel<int>(1)\n"
+    const char *content = "const ch = Channel<int>(1)\n"
                           "ch.\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///completion.xr", content, 1);
     ASSERT(doc != NULL);

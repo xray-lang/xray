@@ -1,10 +1,10 @@
 fn makeA() -> Array<byte> {
-    owned a = Array<byte>(1, 0)
+    var a = Array<byte>(1, 0)
     return move a
 }
 
 fn makeB() -> Array<byte> {
-    owned b = Array<byte>(2, 0)
+    var b = Array<byte>(2, 0)
     return move b
 }
 

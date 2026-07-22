@@ -242,9 +242,7 @@ static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
         }
 
         case AST_VAR_DECL:
-        case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL: {
+        case AST_CONST_DECL: {
             VarDeclNode *var = &node->as.var_decl;
             if (var->name && strcmp(var->name, ctx->target_name) == 0) {
                 add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,

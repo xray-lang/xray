@@ -129,10 +129,10 @@ print(greet(user.name))
 
 ### 并发与数据传递
 
-由堆对象组成的 execution-local 值不会隐式跨越协程或 Channel 边界。需要独立引用图时使用 `copy(value)`，需要转移 owned 源时使用 `move value`，需要共享同一身份时声明 `shared`。标量、字符串、Channel、Task、Atomic 和已经共享的身份可以直接跨越边界。
+由堆对象组成的 execution-local 值不会隐式跨越协程或 Channel 边界。需要独立引用图时使用 `copy(value)`，需要转移推断为唯一的根时使用 `move value`。内联值、已发布的 `const` 数据，以及 Channel、Task、Atomic 等受审计同步句柄可以直接跨越边界。
 
 ```xray
-shared ch = Channel<int>(2)
+const ch = Channel<int>(2)
 go fn() {
     ch.send(42)
 }()
@@ -151,7 +151,7 @@ ch.close()
 
 ### 内存管理
 
-Xray 不使用并发 tracing GC。普通 execution-local 引用值使用编译器插入的、按协程归属的引用计数；`shared` 和 system-owned 值使用原子引用计数。符合条件的协程局部强引用环由 Bacon–Rajan trial-deletion cycle collector 回收，它既可自动触发，也可通过 `runtime.collectCycles()` 显式触发。资源清理由 `defer` 显式表达。
+Xray 不使用并发 tracing GC。普通 execution-local 引用值使用编译器插入的、按协程归属的引用计数；已发布的 const 根与受审计同步/运行时句柄使用其验证后的共享存储计划。符合条件的协程局部强引用环由 Bacon–Rajan trial-deletion cycle collector 回收，它既可自动触发，也可通过 `runtime.collectCycles()` 显式触发。资源清理由 `defer` 显式表达。
 
 ## 标准库
 

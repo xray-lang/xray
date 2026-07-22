@@ -483,7 +483,6 @@ static XrNativeBodyDesc g_iterator_body_desc = {
     .init = NULL,
     .destroy = iterator_body_destroy,
     .deep_copy = NULL,
-    .to_shared = NULL,
 };
 
 XrNativeBodyDesc *xr_iterator_native_body_desc(void) {

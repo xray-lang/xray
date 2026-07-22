@@ -39,8 +39,8 @@ fn recv_opt_int(ch: Channel<int?>) -> int? {
 
 @test
 fn test_generic_channel() {
-    shared intCh: Channel<int> = Channel(5)
-    shared strCh: Channel<string> = Channel(5)
+    const intCh: Channel<int> = Channel(5)
+    const strCh: Channel<string> = Channel(5)
     // Send and receive int
     intCh.send(42)
     intCh.send(100)
@@ -56,7 +56,7 @@ fn test_generic_channel() {
     assert_eq(s1, "hello")
     assert_eq(s2, "world")
     // Channel with Array
-    shared arrCh: Channel<Array<int>> = Channel(2)
+    const arrCh: Channel<Array<int>> = Channel(2)
     arrCh.send(copy([1, 2, 3]))
     arrCh.send(copy([4, 5, 6]))
     var arr1 = recv_array(arrCh)
@@ -64,7 +64,7 @@ fn test_generic_channel() {
     assert_eq(arr1[0], 1)
     assert_eq(arr2[2], 6)
     // tryRecv with generic channel
-    shared tryCh: Channel<int> = Channel(1)
+    const tryCh: Channel<int> = Channel(1)
     // Empty channel
     var r1 = tryCh.tryRecv()
     var ok1 = match (r1) {
@@ -86,7 +86,7 @@ fn test_generic_channel() {
     assert(ok2)
     assert_eq(val2, 999)
     // trySend with generic channel
-    shared smallCh: Channel<string> = Channel(1)
+    const smallCh: Channel<string> = Channel(1)
     var sent1 = smallCh.trySend("first")
     assert(sent(sent1))
     // Channel is full
@@ -96,7 +96,7 @@ fn test_generic_channel() {
     var recv = recv_string(smallCh)
     assert_eq(recv, "first")
     // Optional value in channel
-    shared optCh: Channel<int?> = Channel(3)
+    const optCh: Channel<int?> = Channel(3)
     optCh.send(42)
     optCh.send(null)
     optCh.send(100)

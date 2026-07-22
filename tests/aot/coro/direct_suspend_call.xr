@@ -10,7 +10,7 @@ fn caller(ch: Channel<int>) -> int {
     return value + 1
 }
 
-shared ch = Channel(1)
+const ch = Channel(1)
 ch.send(41)
 var task = go caller(ch)
 print(await task)

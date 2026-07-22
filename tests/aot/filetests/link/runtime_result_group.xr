@@ -1,5 +1,5 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-shared rg: ResultGroup = ResultGroup(2)
+const rg: ResultGroup = ResultGroup(2)
 
 assert_true(rg.add(4))
 assert_true(rg.add(5))

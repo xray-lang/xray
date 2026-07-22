@@ -10,13 +10,11 @@ order: 006
 
 > 真值源：`src/frontend/parser/xparse_decl.c`、`src/frontend/parser/xast_nodes_decl.h`、`src/frontend/analyzer/xanalyzer_visitor.c`。
 
-### 5.1 `var` / `const` / `shared` / `owned`
+### 5.1 `var` / `const`
 
 ```ebnf
 VarDecl ::= 'var' Binding
 ConstDecl ::= 'const' Binding
-SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
-OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -51,39 +49,25 @@ const MAX_LEN: int = 1024
 - 不能重新赋值（编译错误 `E0303`）。
 - 类型可推断或显式标注。
 - `const` 和 `var` 一样，每条声明绑定一个名字或解构模式。多个独立名字使用多条声明；相关值可用 `const (a, b) = pair` 解构。
+- 对 managed/aggregate 值，`const name: T` 推导并持有 `const T` 能力：字段、索引和嵌套投影深只读；`var name: const T` 则允许名字重绑，但不开放图内修改。
+- `const T` 可用于任意 type position。不可变标量上的 `const` 与原类型等价；managed/aggregate 上的 `const T` 是独立 type identity。
+- 新鲜构造可直接进入 `var` 的可变域或 `const` 的只读域。已有可变唯一图进入 `const` 必须显式 `move` 或 `copy`，不存在隐式冻结或隐藏复制。
+- `Channel`、`Atomic`、`Mutex` 等受审计同步句柄以 `const` 命名；编译器把它们规范化为内部同步共享能力，其受审计方法仍可改变同步保护的内部状态。
+- 新鲜可变图由编译器推断唯一所有权，不需要存储修饰符。`move` 要求源根唯一且无存活 alias/loan，成功后使源绑定失效；`copy` 保留源并显式构造独立图。
 
-#### 5.1.3 `shared` — 共享身份绑定
+```xray @id=decl-capability
+const channel = Channel<int>(16)
+const counter = Atomic(0)
 
-```xray @id=decl-shared
-shared CONFIG = { host: "localhost", port: 8080 }
-shared PRIMES = [2, 3, 5, 7, 11]
-shared counter = Atomic(0)
+var source = [1, 2, 3]
+var moved = move source       // 转移同一根；source 此后不可用
+const snapshot = copy(moved)  // 显式构造深只读独立图
+var current: const Config = loadConfig()
 ```
-
-- 由 **shared/system owner** 直接物化并持有稳定共享身份；具体堆布局不是语言语义。
-- 绑定名不可重新赋值，也不能作为 `move` 源。
-- 可被 `go` 闭包捕获，也可作为实参跨协程传递；对象本身是否可安全并发修改由类型语义决定。
-- `Atomic`、`Channel`、`Semaphore`、`WorkQueue` 等同步/并发句柄必须通过 `shared` 创建命名。
 
 详见 [§10.11](#1011-并发安全模型)。
 
-#### 5.1.4 `owned` — 唯一所有身份绑定
-
-```xray @id=decl-owned
-owned buffer = Array<byte>(1024)
-
-var source = [1, 2, 3]
-owned moved = move source       // 转移现有引用图
-owned cloned = copy(moved)      // 或显式深拷贝
-```
-
-- `owned` 只能声明局部单名绑定，必须带初始化器；模块级 `owned` 和解构 `owned` 均被拒绝。
-- 绑定由 system owner 记录为唯一可变身份；绑定名本身不可重新赋值，但所拥有对象可以按类型规则原地修改。
-- 新构造的引用值可直接初始化。来自已有引用绑定的值必须显式写 `move source` 或 `copy(source)`，避免产生未声明的别名。
-- 所有权可通过 `move` 转给另一个 `owned`/`shared` 绑定、协程边界或返回值；移动后原绑定不可再使用。切片、裸指针等借用必须在移动前结束。
-- `owned` 是存储声明，不是类型修饰符，也不能带声明 attribute。
-
-#### 5.1.5 解构绑定
+#### 5.1.3 解构绑定
 
 ```xray @id=decl-destructuring
 // 数组解构
@@ -1130,13 +1114,11 @@ export * from "./other"
 
 > Source of truth: `src/frontend/parser/xparse_decl.c`, `src/frontend/parser/xast_nodes_decl.h`, `src/frontend/analyzer/xanalyzer_visitor.c`.
 
-### 5.1 `var` / `const` / `shared` / `owned`
+### 5.1 `var` / `const`
 
 ```ebnf
 VarDecl ::= 'var' Binding
 ConstDecl ::= 'const' Binding
-SharedDecl ::= 'shared' Identifier (':' Type)? '=' Expression
-OwnedDecl ::= 'owned' Identifier (':' Type)? '=' Expression
 Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
@@ -1171,39 +1153,25 @@ const MAX_LEN: int = 1024
 - Cannot be reassigned (compile error `E0303`).
 - The type may be inferred or annotated explicitly.
 - Like `var`, each `const` declaration binds one name or destructuring pattern. Use separate declarations for independent names, or destructure related values with `const (a, b) = pair`.
+- For managed/aggregate values, `const name: T` infers and holds the `const T` capability: fields, indexes, and nested projections are deeply read-only. `var name: const T` permits rebinding the name without granting graph mutation.
+- `const T` is accepted in every type position. `const` on an immutable scalar is identical to the base type; `const T` on a managed/aggregate value is a distinct type identity.
+- Fresh construction may target either a mutable `var` domain or a read-only `const` domain. An existing mutable unique graph entering `const` requires explicit `move` or `copy`; there is no implicit freeze or hidden copy.
+- Audited synchronization handles such as `Channel`, `Atomic`, and `Mutex` are named with `const`. The compiler normalizes them to an internal synchronized shared capability whose audited methods may still mutate protected internal state.
+- The compiler infers unique ownership for fresh mutable graphs; no storage modifier is required. `move` requires a unique root with no live alias/loan and invalidates the source binding on success; `copy` preserves the source and explicitly constructs an independent graph.
 
-#### 5.1.3 `shared` — shared identity binding
+```xray @id=decl-capability
+const channel = Channel<int>(16)
+const counter = Atomic(0)
 
-```xray @id=decl-shared
-shared CONFIG = { host: "localhost", port: 8080 }
-shared PRIMES = [2, 3, 5, 7, 11]
-shared counter = Atomic(0)
+var source = [1, 2, 3]
+var moved = move source       // transfer the same root; source is now invalid
+const snapshot = copy(moved)  // explicitly construct an independent read-only graph
+var current: const Config = loadConfig()
 ```
-
-- Materialized directly under the **shared/system owner** as a stable shared identity; the concrete heap layout is not language semantics.
-- The binding name cannot be reassigned and cannot be used as a `move` source.
-- It may be captured by `go` closures and passed across coroutine boundaries directly; concurrent mutation safety comes from the value's own type semantics.
-- Synchronization/concurrency handles such as `Atomic`, `Channel`, `Semaphore`, and `WorkQueue` must be created with `shared`.
 
 See [§10.11](#1011-concurrency-safety-model).
 
-#### 5.1.4 `owned` — unique-ownership identity binding
-
-```xray @id=decl-owned
-owned buffer = Array<byte>(1024)
-
-var source = [1, 2, 3]
-owned moved = move source       // transfer an existing reference graph
-owned cloned = copy(moved)      // or make an explicit deep copy
-```
-
-- `owned` is a local, single-name declaration and requires an initializer; module-level and destructuring `owned` declarations are rejected.
-- The system owner records the binding as a unique mutable identity. The name itself is not reassignable, while the owned object may be mutated according to its type.
-- A freshly constructed reference value may initialize it directly. A value taken from an existing reference binding must be written as `move source` or `copy(source)` so that no undeclared alias is created.
-- Ownership may be transferred with `move` to another `owned`/`shared` binding, across an execution boundary, or through a return value. The source cannot be used after the move, and borrows such as slices/raw pointers must have ended first.
-- `owned` is a storage declaration, not a type modifier, and it cannot carry declaration attributes.
-
-#### 5.1.5 Destructuring bindings
+#### 5.1.3 Destructuring bindings
 
 ```xray @id=decl-destructuring
 // array destructuring

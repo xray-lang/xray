@@ -51,7 +51,7 @@ fn estimate_limit(n: int) -> int {
 var limit = estimate_limit(N)
 var start = time.monotonic()
 
-shared channels: Array<Channel<int>> = [Channel(100)]
+const channels: Array<Channel<int>> = [Channel(100)]
 var tasks: Array<Task> = []
 tasks.push(go generate(channels[0], limit))
 

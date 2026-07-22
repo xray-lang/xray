@@ -1,11 +1,11 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-shared event = EventCount(0)
+const event = EventCount(0)
 
 print(event.epoch)
 print(event.advance())
 print(event.wait(0))
 
-shared ready = CountdownLatch(1)
+const ready = CountdownLatch(1)
 var t = go fn() -> int {
     ready.done()
     return event.wait(1, 0)
@@ -15,8 +15,8 @@ print(ready.wait())
 print(event.advance())
 print(await t)
 
-shared closed = EventCount(3)
-shared closeReady = CountdownLatch(1)
+const closed = EventCount(3)
+const closeReady = CountdownLatch(1)
 var closeTask = go fn() -> int {
     closeReady.done()
     return closed.wait(3)

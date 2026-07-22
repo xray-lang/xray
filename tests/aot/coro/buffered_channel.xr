@@ -1,4 +1,4 @@
-shared ch = Channel<int>(1)
+const ch = Channel<int>(1)
 ch.send(41)
 var v = ch.recv()
 print(match (v) {

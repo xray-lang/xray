@@ -61,7 +61,7 @@ fn cancellableWork() {
 
 // Select with timeout
 fn selectWithTimeout() {
-    shared const ch = new Channel(1)
+    const ch = new Channel(1)
 
     select {
         msg from ch -> {
@@ -75,7 +75,7 @@ fn selectWithTimeout() {
 
 // Channel iteration
 fn consumeChannel() {
-    shared const ch = new Channel(10)
+    const ch = new Channel(10)
 
     // Producer
     go fn() {
@@ -93,8 +93,8 @@ fn consumeChannel() {
 
 // Coordinated shutdown
 fn coordinatedShutdown() {
-    shared const done = new Channel(1)
-    shared const workers = new Channel(3)
+    const done = new Channel(1)
+    const workers = new Channel(3)
 
     // Start workers
     for (i in 0..3) {

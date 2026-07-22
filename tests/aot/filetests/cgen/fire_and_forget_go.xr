@@ -1,5 +1,5 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-shared results: ResultGroup = ResultGroup(1)
+const results: ResultGroup = ResultGroup(1)
 
 fn worker() {
     results.add(42)

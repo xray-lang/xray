@@ -9,8 +9,8 @@ if (len(process.args) > 0) {
 }
 print("=== Pingpong 测试 ===")
 print("消息次数:", N)
-shared ch1 = Channel(1)
-shared ch2 = Channel(1)
+const ch1 = Channel(1)
+const ch2 = Channel(1)
 
 fn recv_int(ch: Channel<int>, fallback: int) -> int {
     return match (ch.recv()) {

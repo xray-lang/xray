@@ -1,4 +1,4 @@
-shared xray_no_alloc_atomic_compare_exchange_value = Atomic(10)
+const xray_no_alloc_atomic_compare_exchange_value = Atomic(10)
 
 @no_alloc
 fn xray_no_alloc_atomic_compare_exchange_ok(counter: Atomic<int>) -> bool {

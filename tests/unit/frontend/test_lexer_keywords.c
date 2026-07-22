@@ -119,7 +119,6 @@ static const KwExpect kKnownKeywords[] = {
     {"new", TK_NEW},
     {"null", TK_NULL},
     {"operator", TK_OPERATOR},
-    {"owned", TK_OWNED},
     {"packed", TK_PACKED},
     {"private", TK_PRIVATE},
     {"protected", TK_PROTECTED},
@@ -127,7 +126,6 @@ static const KwExpect kKnownKeywords[] = {
     {"rune", TK_RUNE},
     {"scope", TK_SCOPE},
     {"select", TK_SELECT},
-    {"shared", TK_SHARED},
     {"static", TK_STATIC},
     {"string", TK_STRING},
     {"struct", TK_STRUCT},
@@ -161,7 +159,7 @@ TEST(every_keyword_recognised) {
 }
 
 TEST(removed_keywords_are_identifiers) {
-    static const char *removed[] = {"abstract", "char", "override"};
+    static const char *removed[] = {"abstract", "char", "override", "owned", "shared"};
     int n = (int) (sizeof(removed) / sizeof(removed[0]));
     for (int i = 0; i < n; i++) {
         Token t = scan_one(removed[i]);

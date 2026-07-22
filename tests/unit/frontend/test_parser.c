@@ -843,6 +843,13 @@ TEST(parser_error_returns_null) {
     teardown();
 }
 
+TEST(parser_rejects_retired_storage_declarations) {
+    setup();
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "shared value = 1"));
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "owned value = [1]"));
+    teardown();
+}
+
 TEST(parser_empty_source) {
     setup();
     AstNode *ast = xr_parse(xr_compiler_session_current_for_isolate(X), "");
@@ -1325,6 +1332,7 @@ int main(void) {
 
     // Error handling
     RUN_TEST(parser_error_returns_null);
+    RUN_TEST(parser_rejects_retired_storage_declarations);
     RUN_TEST(parser_empty_source);
     RUN_TEST(parser_multiple_stmts);
 

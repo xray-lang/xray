@@ -160,7 +160,7 @@ fn test_request_preserves_custom_method_token() {
     var maybeLst = net.listen(0, 1)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    shared lines: Channel<string> = Channel(1)
+    const lines: Channel<string> = Channel(1)
     go capture_request_line(lst, lines)
 
     var resp = http.request({
@@ -178,7 +178,7 @@ fn test_request_defaults_identity_accept_encoding() {
     var maybeLst = net.listen(0, 1)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    shared requests: Channel<string> = Channel(1)
+    const requests: Channel<string> = Channel(1)
     go capture_request_raw(lst, requests)
 
     var resp = http.request({
@@ -230,7 +230,7 @@ fn test_request_body_is_written_as_bytes() {
     var maybeLst = net.listen(0, 1)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    shared requests: Channel<string> = Channel(1)
+    const requests: Channel<string> = Channel(1)
     go capture_request_raw(lst, requests)
 
     var headers = Headers()

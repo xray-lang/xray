@@ -1,6 +1,6 @@
 fn main() {
     var source = Array<int>()
-    owned buffer = source
+    var buffer = source
 }
 
 main()

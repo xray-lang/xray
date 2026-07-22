@@ -5,6 +5,6 @@ fn suspends() -> int {
     return 1
 }
 
-shared local = sys.ThreadLocal<int>(fn() -> int {
+const local = sys.ThreadLocal<int>(fn() -> int {
     return suspends()
 })

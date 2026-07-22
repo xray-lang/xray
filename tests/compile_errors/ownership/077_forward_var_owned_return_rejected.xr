@@ -3,7 +3,7 @@ fn main() {
 }
 
 fn buildBuffer() -> Array<byte> {
-    owned result = Array<byte>(1, 0)
+    var result = Array<byte>(1, 0)
     return move result
 }
 

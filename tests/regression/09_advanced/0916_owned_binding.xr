@@ -3,7 +3,7 @@
 
 @test
 fn test_owned_fresh_array() {
-    owned buffer = Array<int>()
+    var buffer = Array<int>()
     buffer.push(1)
     buffer.push(2)
     assert_eq(len(buffer), 2)
@@ -15,7 +15,7 @@ fn test_owned_fresh_array() {
 fn test_owned_move_initializer() {
     var source = Array<int>()
     source.push(7)
-    owned buffer = move source
+    var buffer = move source
     buffer.push(8)
     assert_eq(len(buffer), 2)
     assert_eq(buffer[0], 7)
@@ -26,7 +26,7 @@ fn test_owned_move_initializer() {
 fn test_owned_copy_initializer() {
     var source = Array<int>()
     source.push(3)
-    owned buffer = copy(source)
+    var buffer = copy(source)
     source.push(4)
     assert_eq(len(source), 2)
     assert_eq(len(buffer), 1)
@@ -39,7 +39,7 @@ fn test_shared_copy_initializer() {
     source[0] = 1
     source[1] = 2
 
-    shared frozen = copy(source)
+    const frozen = copy(source)
     source[0] = 9
 
     assert_eq(len(frozen), 2)
@@ -49,12 +49,12 @@ fn test_shared_copy_initializer() {
 
 @test
 fn test_owned_move_to_shared_ref_free_array() {
-    owned bytes = Array<byte>(3, 0)
+    var bytes = Array<byte>(3, 0)
     bytes[0] = 10
     bytes[1] = 20
     bytes[2] = 30
 
-    shared frozen = move bytes
+    const frozen = move bytes
 
     assert_eq(len(frozen), 3)
     assert_eq(frozen[0], 10)
@@ -64,13 +64,13 @@ fn test_owned_move_to_shared_ref_free_array() {
 
 @test
 fn test_owned_move_to_shared_after_slice_last_use() {
-    owned bytes = Array<byte>(2, 0)
+    var bytes = Array<byte>(2, 0)
     bytes[0] = 41
     bytes[1] = 42
     var view: Slice<byte> = bytes[:]
     assert_eq(len(view), 2)
 
-    shared frozen = move bytes
+    const frozen = move bytes
 
     assert_eq(len(frozen), 2)
     assert_eq(frozen[0], 41)
@@ -78,14 +78,14 @@ fn test_owned_move_to_shared_after_slice_last_use() {
 }
 
 fn make_owned_return_buffer() -> Array<byte> {
-    owned bytes = Array<byte>(2, 0)
+    var bytes = Array<byte>(2, 0)
     bytes[0] = 11
     bytes[1] = 12
     return move bytes
 }
 
 fn make_owned_return_buffer_alt() -> Array<byte> {
-    owned bytes = Array<byte>(2, 0)
+    var bytes = Array<byte>(2, 0)
     bytes[0] = 31
     bytes[1] = 32
     return move bytes
@@ -96,16 +96,16 @@ fn choose_owned_return_buffer(flag: bool) -> Array<byte> {
 }
 
 fn make_shared_return_buffer() -> Array<byte> {
-    owned bytes = Array<byte>(2, 0)
+    var bytes = Array<byte>(2, 0)
     bytes[0] = 21
     bytes[1] = 22
-    shared frozen = move bytes
+    const frozen = move bytes
     return frozen
 }
 
 @test
 fn test_owned_return_to_owned_binding() {
-    owned bytes = make_owned_return_buffer()
+    var bytes = make_owned_return_buffer()
     assert_eq(len(bytes), 2)
     assert_eq(bytes[0], 11)
     assert_eq(bytes[1], 12)
@@ -113,7 +113,7 @@ fn test_owned_return_to_owned_binding() {
 
 @test
 fn test_shared_return_to_shared_binding() {
-    shared bytes = make_shared_return_buffer()
+    const bytes = make_shared_return_buffer()
     assert_eq(len(bytes), 2)
     assert_eq(bytes[0], 21)
     assert_eq(bytes[1], 22)
@@ -130,7 +130,7 @@ fn test_copy_owned_return_to_var_binding() {
 @test
 fn test_owned_return_through_const_function_alias() {
     const build = make_owned_return_buffer
-    owned bytes = build()
+    var bytes = build()
     assert_eq(len(bytes), 2)
     assert_eq(bytes[0], 11)
     assert_eq(bytes[1], 12)
@@ -138,7 +138,7 @@ fn test_owned_return_through_const_function_alias() {
 
 @test
 fn test_owned_return_through_ternary_summary() {
-    owned bytes = choose_owned_return_buffer(false)
+    var bytes = choose_owned_return_buffer(false)
     assert_eq(len(bytes), 2)
     assert_eq(bytes[0], 31)
     assert_eq(bytes[1], 32)

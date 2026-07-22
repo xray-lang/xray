@@ -4,8 +4,8 @@
 
 import sys
 
-shared calls = Atomic<int>(0)
-shared local = sys.ThreadLocal<int?>(fn() -> int? {
+const calls = Atomic<int>(0)
+const local = sys.ThreadLocal<int?>(fn() -> int? {
     calls.fetchAdd(1, Ordering.AcquireRelease)
     return null
 })

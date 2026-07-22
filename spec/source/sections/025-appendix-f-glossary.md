@@ -29,11 +29,11 @@ order: 025
 | **JIT** | Just-In-Time 编译；Xray 当前未实现 JIT |
 | **lvalue / rvalue** | 左值（可赋值）/ 右值（仅值） |
 | **monomorphization** | 单态化：泛型在构建期按具体类型/表示生成专门版本；函数泛型可按 I64 / F64 / PTR / BOOL 表示共享，class / struct 泛型按具体类型完整单态化 |
-| **move** | 所有权转移：跨协程时强制（见 §7.3） |
+| **move** | 对推断为唯一且无存活 alias/loan 的根执行所有权转移（见 §7.3） |
 | **nullable** | 可空类型 `T?`：值可以为 null |
 | **pattern** | 模式：用于 `match` 与解构（见 §6） |
 | **scope** | 作用域 |
-| **shared** | 跨协程共享的存储类（见 §5.1.3） |
+| **同步共享能力** | 编译器授予 Channel/Atomic/Mutex 等受审计句柄的内部能力；不是公开存储修饰符 |
 | **SSA** | Static Single Assignment：每个变量只赋值一次的 IR |
 | **struct** | 值类型类（见 §5.4） |
 | **TCO** | Tail-Call Optimization：尾调用优化 |
@@ -73,11 +73,11 @@ order: 025
 | **JIT** | Just-In-Time compilation; Xray does not currently implement a JIT |
 | **lvalue / rvalue** | Assignable left-hand-side value vs. value-only right-hand-side |
 | **monomorphization** | Build-time specialization of generics into concrete type/representation versions; generic functions may share I64 / F64 / PTR / BOOL representation versions, while generic classes / structs are fully specialized by concrete type |
-| **move** | Ownership transfer: enforced when crossing coroutine boundaries (see §7.3) |
+| **move** | Ownership transfer for an inferred-unique root with no live alias/loan (see §7.3) |
 | **nullable** | A nullable type `T?` whose value may be `null` |
 | **pattern** | A pattern used in `match` and destructuring (see §6) |
 | **scope** | Lexical scope |
-| **shared** | Storage class for cross-coroutine sharing (see §5.1.3) |
+| **synchronized shared capability** | Internal compiler-granted capability for audited handles such as Channel/Atomic/Mutex; not a public storage modifier |
 | **SSA** | Static Single Assignment: IR where each variable is assigned only once |
 | **struct** | Value-type class (see §5.4) |
 | **TCO** | Tail-Call Optimization |

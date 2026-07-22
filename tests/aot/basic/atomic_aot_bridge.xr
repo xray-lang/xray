@@ -7,7 +7,7 @@ fn bump(counter: Atomic<int>, times: int) -> int {
     return seen
 }
 
-shared counter = Atomic(0)
+const counter = Atomic(0)
 counter.store(10, Ordering.Relaxed)
 print(counter.load(Ordering.Relaxed))
 print(counter.fetchAdd(5, Ordering.Relaxed))
@@ -19,11 +19,11 @@ print(ok)
 print(counter.swap(7))
 print(counter.load())
 
-shared flag = Atomic(false)
+const flag = Atomic(false)
 print(flag.toggle())
 print(flag.load())
 
-shared rate = Atomic(1.0)
+const rate = Atomic(1.0)
 rate.add(0.5)
 print(rate.fetchSub(0.25))
 print(rate.load())

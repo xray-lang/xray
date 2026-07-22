@@ -1961,7 +1961,7 @@ TEST(cmp_yield_basic) {
 TEST(cmp_chan_new_unbuf) {
     /* Channel() creates an unbuffered channel; just type-check */
     run_compare((CompareSpec) {
-        .source = "shared ch = Channel()\nprint(typeName(ch))",
+        .source = "const ch = Channel()\nprint(typeName(ch))",
         .label = "Channel() -> unbuffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1971,7 +1971,7 @@ TEST(cmp_chan_new_unbuf) {
 
 TEST(cmp_chan_new_buffered) {
     run_compare((CompareSpec) {
-        .source = "shared ch: Channel<int> = Channel(4)\nprint(typeName(ch))",
+        .source = "const ch: Channel<int> = Channel(4)\nprint(typeName(ch))",
         .label = "Channel(N) -> buffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1982,7 +1982,7 @@ TEST(cmp_chan_new_buffered) {
 TEST(cmp_chan_send_recv_buffered) {
     /* Buffered channel: send then recv on same coro works without scheduling */
     run_compare((CompareSpec) {
-        .source = "shared ch: Channel<int> = Channel(2)\n"
+        .source = "const ch: Channel<int> = Channel(2)\n"
                   "ch.send(10)\n"
                   "ch.send(20)\n"
                   "print(ch.recv())\n"
@@ -1995,7 +1995,7 @@ TEST(cmp_chan_send_recv_buffered) {
 }
 
 TEST(cmp_chan_recv_match_uses_raw_opcode) {
-    const char *src = "shared ch: Channel<int?> = Channel(2)\n"
+    const char *src = "const ch: Channel<int?> = Channel(2)\n"
                       "ch.send(0)\n"
                       "ch.send(null)\n"
                       "var zero = match (ch.recv()) {\n"
@@ -2040,7 +2040,7 @@ TEST(cmp_go_with_chan) {
     /* go + channel: producer/consumer pattern */
     run_compare((CompareSpec) {
         .source = "fn producer(ch: Channel<int>) { ch.send(42) }\n"
-                  "shared ch: Channel<int> = Channel(1)\n"
+                  "const ch: Channel<int> = Channel(1)\n"
                   "var task = go producer(ch)\n"
                   "print(ch.recv())\n"
                   "await task",
@@ -2082,7 +2082,7 @@ TEST(cmp_select_recv) {
         .source = "fn producer(ch: Channel<int>) {\n"
                   "  ch.send(42)\n"
                   "}\n"
-                  "shared ch: Channel<int> = Channel(1)\n"
+                  "const ch: Channel<int> = Channel(1)\n"
                   "go producer(ch)\n"
                   "select {\n"
                   "  msg from ch -> {\n"

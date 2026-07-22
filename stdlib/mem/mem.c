@@ -129,7 +129,6 @@ static XrNativeBodyDesc g_mem_buffer_body_desc = {
     .init = mem_buffer_body_init,
     .destroy = mem_buffer_body_destroy,
     .deep_copy = NULL,
-    .to_shared = NULL,
 };
 
 static XrClass *mem_buffer_class(XrVMRuntime *isolate) {

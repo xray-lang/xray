@@ -8,9 +8,9 @@ fn wait_select_close(ch: Channel<int>, ready: Channel<int>, done: Channel<int>) 
     return 1
 }
 
-shared ch = Channel<int>(0)
-shared ready = Channel<int>(0)
-shared done = Channel<int>(1)
+const ch = Channel<int>(0)
+const ready = Channel<int>(0)
+const done = Channel<int>(1)
 
 go wait_select_close(ch, ready, done)
 print(match (ready.recv()) {

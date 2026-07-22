@@ -1,4 +1,4 @@
-shared counter: Atomic<int> = Atomic<int>(0)
+const counter: Atomic<int> = Atomic<int>(0)
 
 fn bump(counter: Atomic<int>) -> int {
     return counter.fetchAdd(1, Ordering.Relaxed)

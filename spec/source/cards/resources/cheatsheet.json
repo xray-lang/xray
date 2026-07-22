@@ -65,9 +65,9 @@
       "heading_level": 2,
       "heading": "Safety: compile pass = concurrency safe",
       "bullets": [
-        "`shared`: stable shared identity owned by the shared/system owner",
+        "`const T`: stable deep-read-only capability; audited synchronization handles retain synchronized interior mutation",
         "`Channel<T>`: communication with well-defined ownership semantics",
-        "`Atomic<T>`: lock-free atomic ops for `int`/`float`/`bool` (must be `shared`)",
+        "`Atomic<T>`: lock-free atomic ops for `int`/`float`/`bool` (name with `const`)",
         "`move`: explicit ownership transfer for rebindable local `var` values",
         "execution-local graphs require explicit `copy(...)` or `move`; module-mutable state and short-lived views/pointers cannot cross execution boundaries"
       ]
@@ -93,7 +93,7 @@
       "bullets": [
         "`print()` outputs with newline; there is no `println`",
         "arrow function parameter types may be inferred only when the context is known",
-        "`shared ch = Channel<T>(n)` creates a named channel handle; `Channel<T>` is used in type position",
+        "`const ch = Channel<T>(n)` creates a stable named channel handle; `Channel<T>` is used in type position",
         "field increment such as `this.x++` is not supported; assign explicitly",
         "same-quote strings are allowed inside `${...}` interpolation"
       ]

@@ -15,9 +15,9 @@ if (len(process.args) > 1) {
 print("=== Fanout 测试 ===")
 print("工作协程:", N)
 print("任务数量:", TASKS)
-shared task_ch = Channel(100)
+const task_ch = Channel(100)
 // 任务队列
-shared result_ch = Channel(100)
+const result_ch = Channel(100)
 
 fn recv_int(ch: Channel<int>, fallback: int) -> int {
     return match (ch.recv()) {

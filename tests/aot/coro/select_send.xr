@@ -1,4 +1,4 @@
-shared ch = Channel<int>(2)
+const ch = Channel<int>(2)
 
 select {
     100 to ch -> { print("sent 100") }

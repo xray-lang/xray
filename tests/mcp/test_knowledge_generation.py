@@ -360,7 +360,7 @@ def check_prompt_smoke_examples(root: Path, xray: Path) -> list[str]:
     examples = {
         "code-review": "fn add(a: int, b: int) -> int {\n    return a + b\n}\nprint(add(1, 2))\n",
         "explain-error": (
-            "shared ch = Channel<int>(1)\n"
+            "const ch = Channel<int>(1)\n"
             "ch.send(42)\n"
             "var value = ch.recv()\n"
         ),

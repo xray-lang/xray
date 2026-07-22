@@ -466,10 +466,6 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
         xr_parser_error(parser, "mutable export is not supported; use 'export const' instead");
         return NULL;
     }
-    if (xr_parser_check(parser, TK_OWNED)) {
-        xr_parser_error(parser, "module owned declaration is not supported");
-        return NULL;
-    }
     switch (parser->current.type) {
         case TK_FN:
         case TK_CLASS:
@@ -480,12 +476,11 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
         case TK_INTERFACE:
         case TK_ENUM:
         case TK_CONST:
-        case TK_SHARED:
         case TK_TYPE_ALIAS:
             break;
         default:
             xr_parser_error_at_current(
-                parser, "expected a function, type, const, or shared declaration after 'export'");
+                parser, "expected a function, type, or const declaration after 'export'");
             return NULL;
     }
 

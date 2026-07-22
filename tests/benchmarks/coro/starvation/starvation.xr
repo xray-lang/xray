@@ -18,7 +18,7 @@ print("=== Starvation 测试 ===")
 print("短任务数:", SHORT_TASKS)
 print("最长持续时间:", DURATION_MS, "ms")
 
-shared result_ch = Channel(SHORT_TASKS)
+const result_ch = Channel(SHORT_TASKS)
 
 fn recv_int(ch: Channel<int>, fallback: int) -> int {
     return match (ch.recv()) {

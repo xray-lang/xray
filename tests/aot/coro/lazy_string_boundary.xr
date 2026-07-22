@@ -41,7 +41,7 @@ print(s.contains(glue("t", "ag")))
 print(s.delete("tag"))
 print(s.contains(glue("t", "ag")))
 
-shared ch: Channel<string> = Channel(1)
+const ch: Channel<string> = Channel(1)
 ch.send(glue("chan_", string(2)))
 print(recv_string(ch))
 ch.close()

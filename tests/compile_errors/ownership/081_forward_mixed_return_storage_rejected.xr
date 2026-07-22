@@ -4,8 +4,8 @@ fn main() {
 }
 
 fn choose(flag: bool) -> Array<byte> {
-    owned ownedBuf = Array<byte>(1, 1)
-    shared sharedBuf = copy(ownedBuf)
+    var ownedBuf = Array<byte>(1, 1)
+    const sharedBuf = copy(ownedBuf)
     if (flag) {
         return move ownedBuf
     }

@@ -1,5 +1,5 @@
 fn main() {
-    owned bytes = Array<int>(2, 0)
+    var bytes = Array<int>(2, 0)
     var m = Map<string, Array<int>>()
     m["k"] = bytes
     print(len(m))

@@ -3,7 +3,7 @@ class Holder {
 }
 
 fn main() {
-    owned payload = Array<int>(2, 0)
+    var payload = Array<int>(2, 0)
     var h = Holder()
     h.data = payload
     print(len(h.data))

@@ -92,7 +92,7 @@ order: 015
 | `string.join(parts, separator?)` | 拼接 `Array<string>` |
 | `contains(s)` | 是否包含子串 |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | 返回 rune ordinal |
-| `slice(start, end?)` | 按 rune ordinal 取得 owned string；范围必须合法 |
+| `slice(start, end?)` | 按 rune ordinal 取得独立 string；范围必须合法 |
 | `sliceBytes(start, end)` | 按 byte offset 切片；边界非法时抛 `StringSliceError.InvalidByteRange` |
 | `split(sep, limit?)` | 分割为 `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | 替换 |
@@ -126,7 +126,7 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 | `toString()` | 容器字符串表示 |
 | `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
 
-Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守借用生命周期；需要独立 owned 数据时使用 `copy(arr[start:end])`。
+Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守借用生命周期；需要独立数据时使用 `copy(arr[start:end])`。
 
 ### 14.8 `Map<K, V>` 方法
 
@@ -262,7 +262,7 @@ print(len(empty))           // 0
 
 ### 14.19 `Atomic<T>` 方法
 
-`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。必须声明为 `shared`，禁止 `move`。
+`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。句柄以 `const` 命名；受审计原子方法提供同步内部修改。
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
@@ -361,7 +361,7 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | Member | Type / Description |
 |--|--|
 | `len(s)` | O(1) Unicode scalar count |
-| `bytes()` / `copyBytes()` | borrowed `Slice<byte>` / owned `Array<byte>` |
+| `bytes()` / `copyBytes()` | borrowed `Slice<byte>` / independent `Array<byte>` |
 | `runes()` | `Iterator<rune>`; bare `for (r in s)` has the same semantics |
 | `string.fromRune(r)` | constructs a string from one Unicode scalar |
 | `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<byte>`; invalid UTF-8 throws `Utf8Error.InvalidUtf8` |
@@ -369,7 +369,7 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | `string.join(parts, separator?)` | joins an `Array<string>` |
 | `contains(s)` | substring containment test |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | return rune ordinals |
-| `slice(start, end?)` | owned rune-ordinal slice; the range must be valid |
+| `slice(start, end?)` | independent rune-ordinal slice; the range must be valid |
 | `sliceBytes(start, end)` | slice by byte offset; invalid boundaries throw `StringSliceError.InvalidByteRange` |
 | `split(sep, limit?)` | split into `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | replacement |
@@ -403,7 +403,7 @@ Strings do not support integer indexing or the slice operator; use `s.runes().nt
 | `toString()` | container representation |
 | `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
 
-Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow; use `copy(arr[start:end])` for independent owned data.
+Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow; use `copy(arr[start:end])` for independent data.
 
 ### 14.8 `Map<K, V>` Methods
 
@@ -539,7 +539,7 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.19 `Atomic<T>` Methods
 
-`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Must be declared as `shared`; `move` is prohibited.
+`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Name the handle with `const`; audited atomic methods provide synchronized interior mutation.
 
 | Method | Signature | Description |
 |--|--|--|

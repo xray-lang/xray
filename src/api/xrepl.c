@@ -513,8 +513,6 @@ static bool repl_stmt_declares_it(const AstNode *stmt) {
     switch (stmt->type) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-        case AST_SHARED_DECL:
-        case AST_OWNED_DECL:
             name = stmt->as.var_decl.name;
             break;
         case AST_FUNCTION_DECL:

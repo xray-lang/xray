@@ -177,12 +177,12 @@ fn _defaultWriteOptions() -> YamlWriteOptions {
 // public API takes nullable options and falls back to the defaults here.
 fn _resolveOptions(options: YamlOptions?) -> YamlOptions {
     if (options == null) { return _defaultOptions() }
-    return options!
+    return copy(options!)
 }
 
 fn _resolveWriteOptions(options: YamlWriteOptions?) -> YamlWriteOptions {
     if (options == null) { return _defaultWriteOptions() }
-    return options!
+    return copy(options!)
 }
 
 fn _isFatalKind(kind: YamlErrorKind) -> bool {
@@ -254,8 +254,8 @@ export fn asString(value: YamlValue) -> string? {
 // Ordered sequence elements (empty for non-sequence values).
 fn _sequenceItems(value: YamlValue) -> Array<YamlValue> {
     return match (value) {
-        YamlValue.Sequence(items) -> items,
-        _                         -> _emptyValues()
+        YamlValue.Sequence(items) -> copy(items),
+        _                         -> copy(_emptyValues())
     }
 }
 
@@ -307,10 +307,10 @@ export fn length(value: YamlValue) -> int {
 // Ordered keys of a Mapping (empty otherwise).
 export fn keys(value: YamlValue) -> Array<string> {
     match (value) {
-        YamlValue.Mapping(m) -> { return m.keys }
-        _                    -> { return _emptyStrings() }
+        YamlValue.Mapping(m) -> { return copy(m.keys) }
+        _                    -> { return copy(_emptyStrings()) }
     }
-    return _emptyStrings()
+    return copy(_emptyStrings())
 }
 
 // ===== Builders =====

@@ -18,7 +18,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 
 | 作用域 | 触发 | 示例 |
 |--|--|--|
-| 模块 | 每个 `.xr` 文件 | 顶层 `var` `const` `shared` `fn` `class`（模块级 `owned` 被拒绝） |
+| 模块 | 每个 `.xr` 文件 | 顶层 `var` `const` `fn` `class` |
 | 函数 / 闭包 | `fn` / 箭头函数进入 | 参数 + 函数体 |
 | 块 | `{...}` | `if` `while` `for` `match` 分支体 |
 | `scope` 块 | `scope { ... }` 关键字 | 显式词法作用域 + 结构化并发（见 §10.7） |
@@ -29,7 +29,7 @@ Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
 **提升规则**：
 
 - 顶层 `fn` `class` `struct` `interface` `enum` `type` **提升**至当前作用域顶部——可在定义前引用。
-- `var` / `const` / `shared` / 局部 `owned` **不提升**——必须在定义后使用。
+- `var` / `const` **不提升**——必须在定义后使用。
 - 同名重复声明：同作用域内 2 个同名变量 → 编译错误（嵌套作用域可 shadow）。
 
 ```xray
@@ -94,7 +94,7 @@ var big_buffer = Array<byte>(1024 * 1024)
 
 var t = go fn(b: Array<byte>) -> int {
     return process(b)
-}(big_buffer)             // 编译错误：owned heap 值不能裸跨协程传递
+}(big_buffer)             // 编译错误：execution-local heap 值不能裸跨协程传递
 
 var t2 = go fn(b: Array<byte>) -> int {
     return process(b)
@@ -108,7 +108,7 @@ print(len(big_buffer))    // 编译错误：move 后访问
 - `go f(move x)`、`go fn(...){...}(move x)`：把所有权转给协程。
 - `ch.send(move data)`：跨协程发送时转移所有权（避免拷贝）。
 - 普通函数调用 `f(move x)`：把所有权传入函数（被调函数独占）。
-- `owned dst = move src` / `shared dst = move src` / `return move src`：把局部 `var` 或 `owned` 身份转给新的 owner 或调用方。
+- `var dst = move src` / `const dst = move src` / `return move src`：把 verifier 证明为唯一的局部 `var` 根转给新的 owner、const 能力或调用方。
 
 ### 7.4 协程数据传递规则（避免数据竞争）
 
@@ -119,13 +119,13 @@ print(len(big_buffer))    // 编译错误：move 后访问
 | Capture action | 适用值 | 边界行为 |
 |---|---|---|
 | inline value | 标量、不可变小值 | 直接复制位表示 |
-| deep copy | 显式 `copy(x)` 的 owned graph | 在目标 execution owner 中物化独立图 |
-| move | 显式 `move x` 的可转移局部 `var` 或 `owned` | 转移所有权并静态废弃源绑定 |
-| module readonly | 已冻结并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
-| shared ref | `shared`、Channel、Task、Atomic 等稳定共享身份 | 保留 shared/system owner 的引用 |
+| deep copy | 显式 `copy(x)` 的 execution-local graph | 在目标 storage domain 中物化独立图 |
+| move | 显式 `move x` 的推断唯一局部 `var` | 转移所有权并静态废弃源绑定 |
+| module readonly | 已 seal 并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
+| synchronized ref | Channel、Task、Atomic 等受审计稳定身份 | 保留 verified synchronized domain 的引用 |
 | reject | execution-local graph、可变 module state、悬垂 slice/pointer/upvalue | 编译错误并报告 owner/provenance 与所需显式动作 |
 
-因此，局部 `const` 若只含 inline 值可以直接跨界；若它仍指向 execution-local graph，则仍需显式 `copy(...)`，且因为 `const` 不能作为 move 源，不能写成 `move constValue`。模块级 `const` 只有在完成冻结与发布后才属于 module readonly；模块级 `var` 属于 module mutable，并不因“全局可见”而自动线程安全。
+因此，局部 `const` 若只含 inline 值可以直接跨界；managed/aggregate const 图只有在 StoragePlan 证明其直接构造或 O(1) seal 可发布时才能跨界，不存在边界隐式复制。模块级 `const` 只有在完成 seal 与发布后才属于 module readonly；模块级 `var` 属于 module mutable，并不因“全局可见”而自动线程安全。
 
 ```xray
 var local = 0
@@ -135,7 +135,7 @@ go { local += 1 }                        // ❌ 编译错误：不能捕获可�
 #### 正确姿势
 
 ```xray
-// 方法 1：显式复制 owned graph
+// 方法 1：显式复制 execution-local graph
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // 拷贝上修改，不影响原值
@@ -143,8 +143,8 @@ var t = go fn(data: Array<int>) -> int {
 }(copy(arr))
 print(arr)                  // [1, 2, 3] 未变
 
-// 方法 2：shared 零拷贝只读（可被捕获）
-shared config = { rate: 100 }
+// 方法 2：const 零拷贝只读（可被捕获）
+const config = { rate: 100 }
 var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
@@ -157,7 +157,7 @@ var t3 = go fn(b: Array<byte>) -> int {
 // big 在此处不可访问
 
 // 方法 4：Channel 通信（可被捕获）
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 var t4 = go fn(c: Channel<int>) -> int {
     return match (c.recv()) {
         Recv.Value(v) -> v
@@ -173,9 +173,9 @@ Xray 采用多层内存管理：
 
 | 存储 | 机制 | 释放时机 |
 |--|--|--|
-| 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 freeze + publish | 模块卸载 |
+| 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 seal + publish | 模块卸载 |
 | 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
-| 共享存储（`shared`） | shared/system owner + 原子引用计数 | 最后共享引用释放 |
+| const/sync 共享域 | verified const root 或同步句柄的 root-only 原子引用计数 | 最后跨执行强引用释放 |
 | coroutine-local heap（一般局部对象） | per-coroutine heap + 编译器插入的引用计数 + Bacon–Rajan cycle collector | 最后强引用释放时立即回收；强引用环由 cycle collector 回收；coroutine 结束时批量释放剩余 Region 块和大对象 |
 | 栈（`struct` 值、本地） | 词法存储期 | 作用域退出；语言没有用户可见的确定性析构 / `Drop` hook |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
@@ -203,7 +203,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 
 | Scope | Triggered by | Example |
 |--|--|--|
-| Module | Each `.xr` file | top-level `var` `const` `shared` `fn` `class` (module-level `owned` is rejected) |
+| Module | Each `.xr` file | top-level `var` `const` `fn` `class` |
 | Function / closure | Entering `fn` / arrow function | parameters + function body |
 | Block | `{...}` | `if` `while` `for` `match` arm body |
 | `scope` block | `scope { ... }` keyword | explicit lexical scope + structured concurrency (see §10.7) |
@@ -214,7 +214,7 @@ Xray uses **lexical scoping**: a name's visibility is determined entirely by the
 **Hoisting rules**:
 
 - Top-level `fn` `class` `struct` `interface` `enum` `type` are **hoisted** to the top of the current scope — they may be referenced before their textual definition.
-- `var` / `const` / `shared` / local `owned` are **not hoisted** — they must appear before any use.
+- `var` / `const` are **not hoisted** — they must appear before any use.
 - Duplicate names: declaring two same-named variables in the same scope is a compile error (nested scopes may shadow).
 
 ```xray
@@ -279,7 +279,7 @@ var big_buffer = Array<byte>(1024 * 1024)
 
 var t = go fn(b: Array<byte>) -> int {
     return process(b)
-}(big_buffer)             // compile error: owned heap value cannot cross bare
+}(big_buffer)             // compile error: an execution-local heap value cannot cross bare
 
 var t2 = go fn(b: Array<byte>) -> int {
     return process(b)
@@ -293,7 +293,7 @@ print(len(big_buffer))    // compile error: accessed after move
 - `go f(move x)`, `go fn(...){...}(move x)`: transfer ownership to the coroutine.
 - `ch.send(move data)`: transfer ownership when sending across coroutines (avoiding a copy).
 - Plain function call `f(move x)`: transfer ownership into the function (which becomes the sole owner).
-- `owned dst = move src` / `shared dst = move src` / `return move src`: transfer a local `var` or `owned` identity to a new owner or to the caller.
+- `var dst = move src` / `const dst = move src` / `return move src`: transfer a verifier-proven unique local `var` root to a new owner, const capability, or caller.
 
 ### 7.4 Cross-Coroutine Data Transfer Rules (Race Avoidance)
 
@@ -304,13 +304,13 @@ Every cross-execution boundary (`go` closure, `go` argument, Channel send, defer
 | Capture action | Values | Boundary behavior |
 |---|---|---|
 | inline value | scalars and small immutable values | copy the bits directly |
-| deep copy | owned graph under explicit `copy(x)` | materialize an independent graph in the destination execution owner |
-| move | transferable local `var` or `owned` under explicit `move x` | transfer ownership and statically invalidate the source binding |
-| module readonly | frozen and published module values | retain the module-readonly owner; do not copy into a root/task heap |
-| shared ref | `shared`, Channel, Task, Atomic, and other stable shared identities | retain a reference owned by the shared/system owner |
+| deep copy | execution-local graph under explicit `copy(x)` | materialize an independent graph in the destination storage domain |
+| move | inferred-unique local `var` under explicit `move x` | transfer ownership and statically invalidate the source binding |
+| module readonly | sealed and published module values | retain the module-readonly owner; do not copy into a root/task heap |
+| synchronized ref | audited stable identities such as Channel, Task, and Atomic | retain a reference in the verified synchronized domain |
 | reject | execution-local graphs, mutable module state, dangling slices/pointers/upvalues | compile error reporting the owner/provenance and required explicit action |
 
-Consequently, a local `const` containing only inline values may cross directly. If it still points at an execution-local graph, it requires explicit `copy(...)`; because a `const` cannot be a move source, `move constValue` is invalid. A module-level `const` becomes module-readonly only after freeze-and-publish. A module-level `var` is module-mutable and is not made thread-safe merely by being globally visible.
+Consequently, a local `const` containing only inline values may cross directly. A managed/aggregate const graph may cross only when StoragePlan proves direct construction or O(1) publication seal; the boundary never copies implicitly. A module-level `const` becomes module-readonly only after seal-and-publish. A module-level `var` is module-mutable and is not made thread-safe merely by being globally visible.
 
 ```xray
 var local = 0
@@ -320,7 +320,7 @@ go { local += 1 }                        // ❌ compile error: cannot capture mu
 #### Recommended patterns
 
 ```xray
-// Pattern 1: explicitly copy an owned graph
+// Pattern 1: explicitly copy an execution-local graph
 var arr = [1, 2, 3]
 var t = go fn(data: Array<int>) -> int {
     data.push(4)            // mutates the copy, original is unaffected
@@ -328,8 +328,8 @@ var t = go fn(data: Array<int>) -> int {
 }(copy(arr))
 print(arr)                  // [1, 2, 3] unchanged
 
-// Pattern 2: shared, zero-copy read-only (capturable)
-shared config = { rate: 100 }
+// Pattern 2: const, zero-copy read-only (capturable)
+const config = { rate: 100 }
 var t2 = go fn(c: Json) -> int {
     return c.rate
 }(config)
@@ -342,7 +342,7 @@ var t3 = go fn(b: Array<byte>) -> int {
 // big is inaccessible from this point
 
 // Pattern 4: Channel communication (capturable)
-shared ch = Channel<int>(10)
+const ch = Channel<int>(10)
 var t4 = go fn(c: Channel<int>) -> int {
     return match (c.recv()) {
         Recv.Value(v) -> v
@@ -358,9 +358,9 @@ Xray uses a layered memory management strategy:
 
 | Storage | Mechanism | Reclamation |
 |--|--|--|
-| Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by freeze + publish | at module unload |
+| Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by seal + publish | at module unload |
 | Module-mutable storage (top-level `var`) | module owner; not concurrency-safe by default | at module unload |
-| Shared storage (`shared`) | shared/system owner + atomic reference counting | when the last shared reference is released |
+| Const/synchronized shared domain | verified const root or synchronized handle with root-only atomic reference counting | when the last cross-execution strong reference is released |
 | Coroutine-local heap (ordinary local objects) | per-coroutine heap + compiler-inserted reference counting + Bacon–Rajan cycle collector | immediately when the last strong reference is released; strong cycles are reclaimed by the cycle collector; remaining Region blocks and large objects are freed in bulk when the coroutine ends |
 | Stack (`struct` values, locals) | lexical storage duration | scope exit; the language exposes no deterministic destructor / `Drop` hook |
 | Arena (low-level temporary allocations) | bulk free | at arena end |

@@ -11,7 +11,7 @@ fn worker(ch: Channel<int>, value: int) -> int {
 }
 
 fn run() -> int {
-    shared ch: Channel<int> = Channel(1)
+    const ch: Channel<int> = Channel(1)
     var tasks: Array<Task<int>> = []
     tasks.push(go worker(ch, 41))
     var received = recvInt(ch)

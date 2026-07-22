@@ -4,6 +4,6 @@ var t = sys.Thread.spawn(fn() -> int {
     return 1
 })
 
-shared ch: Channel<int> = Channel(t.join())
+const ch: Channel<int> = Channel(t.join())
 ch.close()
 print("channel")
