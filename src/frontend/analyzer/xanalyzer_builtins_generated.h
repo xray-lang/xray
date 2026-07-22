@@ -403,7 +403,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"sizeOf", "(): int", "Compile-time size in bytes of a statically laid out type T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"alignOf", "(): int", "Compile-time alignment in bytes of a statically laid out type T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"offsetOf", "(field: string): int", "Compile-time byte offset of a field in a fixed-layout struct T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
-    {"slice", "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>", "Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"slice", "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>", "Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP},
     {"alloc", "(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP},
     {"allocZeroed", "(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP},
     {"allocAligned", "(n: int, align: int): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP},

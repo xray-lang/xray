@@ -2777,6 +2777,7 @@ module mem {
     aot_direct: false
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   const PROT_NONE {

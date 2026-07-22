@@ -1189,7 +1189,8 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
 
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "@no_alloc\n"
+    const char *source = "import mem\n"
+                         "@no_alloc\n"
                          "fn scalar(x: int) -> int { return x + 1 }\n"
                          "fn cycleA(n: int) -> int {\n"
                          "  if (n <= 0) { return 0 }\n"
@@ -1221,6 +1222,10 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
                          "    var writePtr = data.mutPtr()\n"
                          "  }\n"
                          "}\n"
+                         "@no_alloc\n"
+                         "fn rawSliceProjection(data: Ptr<byte>, count: int) -> Slice<byte> {\n"
+                         "  return unsafe { mem.slice<byte>(data, count, data) }\n"
+                         "}\n"
                          "enum ValueError { Bad(actual: int, minimum: int) }\n"
                          "@no_alloc\n"
                          "fn fixedValueCopy(data: [byte; 4]) -> [byte; 4] {\n"
@@ -1242,6 +1247,8 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     xa_analyzer_analyze(a, "allocation_effect_contracts.xr", program);
 
     const XaAllocationSummary *scalar = analyzer_function_allocation_summary(a, "scalar");
+    const XaAllocationSummary *raw_slice =
+        analyzer_function_allocation_summary(a, "rawSliceProjection");
     const XaAllocationSummary *cycle_entry = analyzer_function_allocation_summary(a, "cycleEntry");
     const XaAllocationSummary *leaf = analyzer_function_allocation_summary(a, "allocateLeaf");
     const XaAllocationSummary *two_hop = analyzer_function_allocation_summary(a, "twoHop");
@@ -1259,6 +1266,7 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     const XaEffectSummary *two_hop_effect = analyzer_function_effect_summary(a, "twoHop");
     const XaEffectSummary *unknown_effect = analyzer_function_effect_summary(a, "unknownCall");
     ASSERT(scalar && scalar->state == XA_ALLOC_PROVEN_NONE);
+    ASSERT(raw_slice && raw_slice->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(cycle_entry && cycle_entry->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(leaf && leaf->state == XA_ALLOC_MAY);
     ASSERT(two_hop && two_hop->state == XA_ALLOC_MAY);
