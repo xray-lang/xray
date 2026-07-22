@@ -50,6 +50,8 @@ typedef struct FunctionDeclNode {
     XrTypeRef *return_type;
     AstNode *body;
     bool is_generator;
+    bool is_extern;          // bodyless declaration from an extern "C" block
+    const char *extern_abi;  // dedicated ABI metadata; never an attribute
     XrAttribute **attributes;
     int attr_count;
     XrGenericParam **type_params;
@@ -74,7 +76,6 @@ typedef struct ClassDeclNode {
     bool explicit_final;       // User-visible final class contract; not inferred-final evidence
     bool is_native;            // @native: C runtime provides implementation
     bool is_packed;            // struct-only: `packed struct`
-    bool is_extern_layout;     // struct/union declared inside an extern "C" block
     uint32_t explicit_align;   // struct-only: `struct S align(N)`, 0 = natural
     XrAttribute **attributes;  // Declaration attributes
     int attr_count;

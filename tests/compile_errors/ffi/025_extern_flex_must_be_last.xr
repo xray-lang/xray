@@ -1,6 +1,0 @@
-extern "C" {
-    struct BadTail {
-        bytes: flex uint8
-        count: uint32
-    }
-}

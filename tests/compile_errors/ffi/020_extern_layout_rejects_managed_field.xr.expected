@@ -1,1 +1,1 @@
-extern layout field 'text' has non-native type 'string'
+extern blocks contain only bodyless fn declarations

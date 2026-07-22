@@ -66,6 +66,10 @@ static bool native_key_is(const char *key, const char *const *allowed, size_t co
     return false;
 }
 
+static bool native_text_is(const char *text, const char *const *allowed, size_t count) {
+    return native_key_is(text, allowed, count);
+}
+
 static bool native_validate_keys(XrNativePackagePlan *plan, XrTomlValue *table, const char *where,
                                  const char *const *allowed, size_t allowed_count) {
     if (!table || table->type != XR_TOML_TABLE)
@@ -529,6 +533,82 @@ static bool native_parse_return_contract(XrNativePackagePlan *plan, XrTomlValue 
     return true;
 }
 
+static bool native_parse_callback_contracts(XrNativePackagePlan *plan, XrTomlValue *table,
+                                            XrNativeSymbolContract *contract, uint32_t param_count,
+                                            const char *where) {
+    static const char *const keys[] = {
+        "index", "context_index", "escape", "thread", "lifetime", "runtime_attach", "reentrant",
+    };
+    XrTomlValue *array = xtoml_get_array(table, "callbacks");
+    if (!array)
+        return true;
+    int count = xtoml_array_len(array);
+    if (count <= 0)
+        return true;
+    contract->callbacks =
+        (XrNativeCallbackContract *) xr_calloc((size_t) count, sizeof(XrNativeCallbackContract));
+    if (!contract->callbacks)
+        return native_fail(plan, "E-NATIVE-RESOURCE: cannot allocate %s.callbacks", where);
+    contract->callback_count = (uint32_t) count;
+    for (int i = 0; i < count; i++) {
+        XrTomlValue *entry = xtoml_array_get(array, i);
+        XrNativeCallbackContract *callback = &contract->callbacks[i];
+        char callback_where[128];
+        snprintf(callback_where, sizeof(callback_where), "%s.callbacks[%d]", where, i);
+        if (!native_validate_keys(plan, entry, callback_where, keys,
+                                  sizeof(keys) / sizeof(keys[0])))
+            return false;
+        int64_t index = xtoml_get_int_or(entry, "index", -1);
+        int64_t context_index = xtoml_get_int_or(entry, "context_index", -1);
+        XrTomlValue *reentrant = xtoml_get(entry, "reentrant");
+        const char *thread = xtoml_get_string(entry, "thread");
+        const char *lifetime = xtoml_get_string(entry, "lifetime");
+        const char *attach = xtoml_get_string(entry, "runtime_attach");
+        callback->escape = native_escape(xtoml_get_string(entry, "escape"));
+        if (index < 0 || (uint64_t) index >= param_count || context_index < -1 ||
+            (context_index >= 0 && (uint64_t) context_index >= param_count) || !callback->escape ||
+            !reentrant || reentrant->type != XR_TOML_BOOL)
+            return native_fail(plan, "E-NATIVE-CONTRACT: %s is incomplete", callback_where);
+        callback->index = (uint32_t) index;
+        callback->context_index = (int32_t) context_index;
+        callback->reentrant = reentrant->as.boolean;
+        if (thread && strcmp(thread, "caller") == 0)
+            callback->thread = XR_NATIVE_CALLBACK_CALLER_THREAD;
+        else if (thread && strcmp(thread, "foreign") == 0)
+            callback->thread = XR_NATIVE_CALLBACK_FOREIGN_THREAD;
+        else
+            return native_fail(plan, "E-NATIVE-CONTRACT: %s.thread must be caller or foreign",
+                               callback_where);
+        if (lifetime && strcmp(lifetime, "call") == 0)
+            callback->lifetime = XR_NATIVE_CALLBACK_CALL_ONLY;
+        else if (lifetime && strcmp(lifetime, "retained") == 0)
+            callback->lifetime = XR_NATIVE_CALLBACK_RETAINED;
+        else
+            return native_fail(plan, "E-NATIVE-CONTRACT: %s.lifetime must be call or retained",
+                               callback_where);
+        if (attach && strcmp(attach, "not-required") == 0)
+            callback->runtime_attach = XR_NATIVE_RUNTIME_ATTACH_NOT_REQUIRED;
+        else if (attach && strcmp(attach, "attach-detach") == 0)
+            callback->runtime_attach = XR_NATIVE_RUNTIME_ATTACH_DETACH;
+        else
+            return native_fail(
+                plan, "E-NATIVE-CONTRACT: %s.runtime_attach must be not-required or attach-detach",
+                callback_where);
+        if (callback->thread == XR_NATIVE_CALLBACK_FOREIGN_THREAD &&
+            callback->runtime_attach != XR_NATIVE_RUNTIME_ATTACH_DETACH)
+            return native_fail(plan,
+                               "E-NATIVE-CONTRACT: foreign-thread callback %u requires an "
+                               "attach-detach runtime plan",
+                               callback->index);
+        if (callback->lifetime == XR_NATIVE_CALLBACK_RETAINED &&
+            callback->escape != XR_NATIVE_ESCAPE_RETAIN)
+            return native_fail(plan,
+                               "E-NATIVE-CONTRACT: retained callback %u requires escape=retain",
+                               callback->index);
+    }
+    return true;
+}
+
 static bool native_parse_symbol_contract(XrNativePackagePlan *plan, XrTomlValue *table,
                                          XrNativeSymbolContract *contract, const char *where) {
     static const char *const keys[] = {
@@ -556,15 +636,43 @@ static bool native_parse_symbol_contract(XrNativePackagePlan *plan, XrTomlValue 
                                          (uint32_t) i, param_where))
             return false;
     }
+    for (int i = 0; i < count; i++) {
+        XrNativeParamContract *param = &contract->params[i];
+        if (param->length_from >= count || param->length_from == i)
+            return native_fail(plan,
+                               "E-NATIVE-CONTRACT: %s.params[%d].length_from must name another "
+                               "parameter or be omitted",
+                               where, i);
+        if (param->output != XR_NATIVE_OUTPUT_NONE && param->access != XR_NATIVE_ACCESS_WRITE &&
+            param->access != XR_NATIVE_ACCESS_READWRITE)
+            return native_fail(plan,
+                               "E-NATIVE-CONTRACT: %s.params[%d] output requires write or "
+                               "readwrite access",
+                               where, i);
+        if (param->output == XR_NATIVE_OUTPUT_PARTIAL &&
+            plan->audit_mode == XR_NATIVE_AUDIT_SHIPPING)
+            return native_fail(plan,
+                               "E-NATIVE-CONTRACT: shipping output parameter %d is partial; "
+                               "typed materialization requires complete validity evidence",
+                               i);
+    }
     char return_where[112];
     snprintf(return_where, sizeof(return_where), "%s.return", where);
     if (!native_parse_return_contract(plan, result, &contract->result, return_where))
         return false;
     if (!native_parse_string_array(plan, table, "effects", true, &contract->effects,
                                    &contract->effect_count, where) ||
-        !native_parse_string_array(plan, table, "callbacks", false, &contract->callbacks,
-                                   &contract->callback_count, where))
+        !native_parse_callback_contracts(plan, table, contract, (uint32_t) count, where))
         return false;
+    static const char *const allowed_effects[] = {
+        "foreign", "alloc", "may_block", "suspend", "io", "sync", "panic", "abort",
+    };
+    for (uint32_t i = 0; i < contract->effect_count; i++) {
+        if (!native_text_is(contract->effects[i], allowed_effects,
+                            sizeof(allowed_effects) / sizeof(allowed_effects[0])))
+            return native_fail(plan, "E-NATIVE-CONTRACT: %s.effects[%u] is not a sealed effect",
+                               where, i);
+    }
     contract->failure = native_dup_string(table, "failure");
     contract->allocation = native_dup_string(table, "allocation");
     contract->blocking = native_dup_string(table, "blocking");
@@ -578,6 +686,30 @@ static bool native_parse_symbol_contract(XrNativePackagePlan *plan, XrTomlValue 
         return native_fail(plan,
                            "E-NATIVE-CONTRACT: %s requires failure/allocation/blocking/suspend/"
                            "io/sync/panic/error",
+                           where);
+    static const char *const failure_values[] = {"none", "status_nonzero", "null", "errno"};
+    static const char *const allocation_values[] = {"none", "may"};
+    static const char *const binary_values[] = {"never", "may"};
+    static const char *const io_values[] = {"none", "read", "write", "readwrite"};
+    static const char *const sync_values[] = {"none", "internal", "external"};
+    static const char *const panic_values[] = {"never", "abort"};
+    static const char *const error_values[] = {"none", "status", "errno", "result"};
+    if (!native_text_is(contract->failure, failure_values,
+                        sizeof(failure_values) / sizeof(failure_values[0])) ||
+        !native_text_is(contract->allocation, allocation_values,
+                        sizeof(allocation_values) / sizeof(allocation_values[0])) ||
+        !native_text_is(contract->blocking, binary_values,
+                        sizeof(binary_values) / sizeof(binary_values[0])) ||
+        !native_text_is(contract->suspend, binary_values,
+                        sizeof(binary_values) / sizeof(binary_values[0])) ||
+        !native_text_is(contract->io, io_values, sizeof(io_values) / sizeof(io_values[0])) ||
+        !native_text_is(contract->sync, sync_values,
+                        sizeof(sync_values) / sizeof(sync_values[0])) ||
+        !native_text_is(contract->panic, panic_values,
+                        sizeof(panic_values) / sizeof(panic_values[0])) ||
+        !native_text_is(contract->error, error_values,
+                        sizeof(error_values) / sizeof(error_values[0])))
+        return native_fail(plan, "E-NATIVE-CONTRACT: %s contains an unknown typed contract value",
                            where);
     contract->complete = true;
     return true;
@@ -729,6 +861,77 @@ static bool native_parse_capabilities(XrNativePackagePlan *plan, XrTomlValue *na
     return true;
 }
 
+static bool native_valid_target_triple(const char *triple) {
+    if (!triple || !triple[0])
+        return false;
+    for (const unsigned char *p = (const unsigned char *) triple; *p; p++) {
+        if (!isalnum(*p) && *p != '-' && *p != '_' && *p != '.')
+            return false;
+    }
+    return strstr(triple, "..") == NULL;
+}
+
+static bool native_parse_targets(XrNativePackagePlan *plan, XrTomlValue *native) {
+    static const char *const keys[] = {
+        "profile", "visibility", "cpu_feature", "system_links", "vm",
+    };
+    XrTomlValue *targets = xtoml_get_table(native, "target");
+    if (!targets)
+        return true;
+    if (targets->as.table.count <= 0)
+        return native_fail(plan, "E-NATIVE-SCHEMA: native.target cannot be empty");
+    plan->targets = (XrNativeTargetPlan *) xr_calloc((size_t) targets->as.table.count,
+                                                     sizeof(XrNativeTargetPlan));
+    if (!plan->targets)
+        return native_fail(plan, "E-NATIVE-RESOURCE: cannot allocate native target plans");
+    plan->target_count = (uint32_t) targets->as.table.count;
+    for (int i = 0; i < targets->as.table.count; i++) {
+        const char *triple = targets->as.table.members[i].key;
+        XrTomlValue *table = targets->as.table.members[i].value;
+        XrNativeTargetPlan *target = &plan->targets[i];
+        char where[192];
+        snprintf(where, sizeof(where), "native.target.%s", triple ? triple : "?");
+        if (!native_valid_target_triple(triple))
+            return native_fail(plan, "E-NATIVE-TARGET: invalid canonical target triple '%s'",
+                               triple ? triple : "");
+        if (!native_validate_keys(plan, table, where, keys, sizeof(keys) / sizeof(keys[0])))
+            return false;
+        target->triple = xr_strdup(triple);
+        target->profile = native_dup_string(table, "profile");
+        target->visibility = native_dup_string(table, "visibility");
+        target->cpu_feature = native_dup_string(table, "cpu_feature");
+        if (!target->triple || !target->profile ||
+            (strcmp(target->profile, "debug") != 0 && strcmp(target->profile, "release") != 0 &&
+             strcmp(target->profile, "freestanding") != 0))
+            return native_fail(plan,
+                               "E-NATIVE-TARGET: %s.profile must be debug, release, or "
+                               "freestanding",
+                               where);
+        if (target->visibility && strcmp(target->visibility, "hidden") != 0 &&
+            strcmp(target->visibility, "default") != 0)
+            return native_fail(plan, "E-NATIVE-TARGET: %s.visibility must be hidden or default",
+                               where);
+        if (!native_parse_string_array(plan, table, "system_links", false, &target->system_links,
+                                       &target->system_link_count, where))
+            return false;
+        const char *vm = xtoml_get_string(table, "vm");
+        if (vm) {
+            if (strcmp(vm, "verified-dynamic") == 0)
+                target->vm_policy = XR_NATIVE_VM_VERIFIED_DYNAMIC;
+            else if (strcmp(vm, "unsupported") == 0)
+                target->vm_policy = XR_NATIVE_VM_UNSUPPORTED;
+            else
+                return native_fail(plan,
+                                   "E-NATIVE-TARGET: %s.vm must be verified-dynamic or "
+                                   "unsupported",
+                                   where);
+        } else {
+            target->vm_policy = plan->vm_policy;
+        }
+    }
+    return true;
+}
+
 XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
                                                   const char *project_root) {
     static const char *const native_keys[] = {
@@ -763,7 +966,8 @@ XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
         return plan;
     }
     if (!native_parse_units(plan, native) || !native_parse_symbols(plan, native) ||
-        !native_parse_layouts(plan, native) || !native_parse_capabilities(plan, native))
+        !native_parse_layouts(plan, native) || !native_parse_capabilities(plan, native) ||
+        !native_parse_targets(plan, native))
         return plan;
     if (plan->audit_mode == XR_NATIVE_AUDIT_SHIPPING &&
         (plan->unit_count == 0 || plan->symbol_count == 0)) {
@@ -786,6 +990,16 @@ XrNativePackagePlan *xr_native_package_plan_parse(XrTomlValue *toml_root,
         fingerprint = native_hash_text(fingerprint, plan->symbols[i].xray_name);
         fingerprint = native_hash_text(fingerprint, plan->symbols[i].native_name);
     }
+    for (uint32_t i = 0; i < plan->target_count; i++) {
+        fingerprint = native_hash_text(fingerprint, plan->targets[i].triple);
+        fingerprint = native_hash_text(fingerprint, plan->targets[i].profile);
+        fingerprint = native_hash_text(fingerprint, plan->targets[i].visibility);
+        fingerprint = native_hash_text(fingerprint, plan->targets[i].cpu_feature);
+        for (uint32_t j = 0; j < plan->targets[i].system_link_count; j++)
+            fingerprint = native_hash_text(fingerprint, plan->targets[i].system_links[j]);
+        fingerprint = native_hash_bytes(fingerprint, &plan->targets[i].vm_policy,
+                                        sizeof(plan->targets[i].vm_policy));
+    }
     plan->fingerprint = fingerprint ? fingerprint : 1;
     return plan;
 }
@@ -797,7 +1011,7 @@ static void native_symbol_contract_free(XrNativeSymbolContract *contract) {
     xr_free(contract->result.validity);
     xr_free(contract->result.drop_function);
     native_free_string_array(contract->effects, contract->effect_count);
-    native_free_string_array(contract->callbacks, contract->callback_count);
+    xr_free(contract->callbacks);
     xr_free(contract->failure);
     xr_free(contract->allocation);
     xr_free(contract->blocking);
@@ -857,6 +1071,14 @@ void xr_native_package_plan_free(XrNativePackagePlan *plan) {
         xr_free(plan->capabilities[i].scope);
     }
     xr_free(plan->capabilities);
+    for (uint32_t i = 0; i < plan->target_count; i++) {
+        xr_free(plan->targets[i].triple);
+        xr_free(plan->targets[i].profile);
+        xr_free(plan->targets[i].visibility);
+        xr_free(plan->targets[i].cpu_feature);
+        native_free_string_array(plan->targets[i].system_links, plan->targets[i].system_link_count);
+    }
+    xr_free(plan->targets);
     xr_free(plan);
 }
 
@@ -1003,5 +1225,13 @@ void xr_native_package_explain(const XrNativePackagePlan *plan, FILE *out) {
                     param->descriptor_rebind, param->may_relocate, param->may_shorten,
                     param->invalidates_views);
         }
+    }
+    for (uint32_t i = 0; i < plan->target_count; i++) {
+        const XrNativeTargetPlan *target = &plan->targets[i];
+        fprintf(out, "target %s profile=%s visibility=%s vm=%s cpu=%s\n", target->triple,
+                target->profile, target->visibility ? target->visibility : "unit-default",
+                target->vm_policy == XR_NATIVE_VM_VERIFIED_DYNAMIC ? "verified-dynamic"
+                                                                   : "unsupported",
+                target->cpu_feature ? target->cpu_feature : "baseline");
     }
 }

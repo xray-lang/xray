@@ -648,18 +648,6 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
     if (!ctx || !ctx->analyzer || !class_info)
         return xr_type_new_error(NULL);
 
-    if (class_info->is_extern_layout) {
-        XrLocation loc = {.file = ctx->file_path,
-                          .line = node ? node->line : 0,
-                          .column = node ? node->column : 0};
-        xa_analyzer_add_diagnostic(
-            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-            "extern layout types cannot be constructed as Xray values; obtain a typed view from "
-            "raw memory instead",
-            &loc);
-        return xr_type_new_error(NULL);
-    }
-
     xa_check_constructor_visibility(ctx, node, class_info);
     XaSemanticTypeId semantic_type_id =
         xa_class_constructor_semantic_type(call, class_name, class_links);

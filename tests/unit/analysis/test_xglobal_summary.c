@@ -7495,7 +7495,7 @@ TEST(global_evidence_composes_recursive_direct_call_effects) {
 
 TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls) {
     setup_parser_session();
-    const char *source = "extern \"C\" dylib(\"m\") { fn cos(x: float64) -> float64 }\n"
+    const char *source = "extern \"C\" { fn cos(x: float64) -> float64 }\n"
                          "fn useCos() -> float64 { return cos(0.0) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -17436,47 +17436,6 @@ TEST(global_evidence_producer_marks_sys_thread_spawn_capability) {
     teardown_parser_session();
 }
 
-TEST(global_evidence_producer_marks_extern_dylib_link_dependency) {
-    setup_parser_session();
-    const char *source = "extern \"C\" dylib(\"m\") { fn cos(x: float64) -> float64 }\n"
-                         "extern \"C\" dylib(\"unusedffi\") { fn unused(x: float64) -> float64 }\n"
-                         "fn useCos() -> float64 { return cos(0.0) }\n";
-    AstNode *ast = xr_parse(g_session, source);
-    ASSERT_NOT_NULL(ast);
-
-    XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
-    spec.ast = ast;
-    int topo_order[1] = {0};
-    XrModuleGraph graph;
-    memset(&graph, 0, sizeof(graph));
-    graph.specs = &spec;
-    graph.spec_count = 1;
-    graph.topo_order = topo_order;
-    graph.topo_count = 1;
-    graph.entry_index = 0;
-
-    XgGlobalEvidence ev;
-    ASSERT_TRUE(
-        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.nlink_deps, 1);
-    ASSERT_TRUE((ev.decls[0].flags & XG_DECL_EXTERN) != 0);
-    ASSERT_TRUE((ev.decls[1].flags & XG_DECL_EXTERN) != 0);
-    ASSERT_TRUE((ev.decls[2].flags & XG_DECL_EXTERN) == 0);
-    ASSERT_EQ_UINT(ev.link_deps[0].kind, XG_LINK_DEP_EXTERN_DYLIB);
-    ASSERT_STR_EQ(ev.link_deps[0].name, "m");
-
-    XaotBundle bundle;
-    memset(&bundle, 0, sizeof(bundle));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.nlink_dependency_plans, 1);
-    ASSERT_NOT_NULL(xaot_bundle_find_link_dependency_plan(&bundle, ev.link_deps[0].link_id));
-    xaot_bundle_free(&bundle);
-
-    xg_global_evidence_free(&ev);
-    teardown_parser_session();
-}
-
 TEST(global_evidence_producer_marks_stdlib_link_dependencies) {
     setup_parser_session();
     const char *source = "import path\n"
@@ -18403,7 +18362,6 @@ RUN_TEST(global_evidence_producer_marks_typed_coro_local_and_pool_submit);
 RUN_TEST(global_evidence_producer_keeps_runtime_control_plane_on_coro_root);
 RUN_TEST(global_evidence_producer_marks_internal_yield_module_suspendable);
 RUN_TEST(global_evidence_producer_marks_sys_thread_spawn_capability);
-RUN_TEST(global_evidence_producer_marks_extern_dylib_link_dependency);
 RUN_TEST(global_evidence_producer_marks_stdlib_link_dependencies);
 RUN_TEST(global_evidence_producer_keeps_vm_control_calls_out_of_stdlib_links);
 RUN_TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities);

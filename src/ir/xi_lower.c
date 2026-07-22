@@ -1644,14 +1644,8 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
             XrAttribute *a = fdecl->attributes[i];
             if (!a)
                 continue;
-            if (a->kind == ATTR_EXTERN) {
-                l.func->is_extern = true;
-                if (!l.func->extern_symbol)
-                    l.func->extern_symbol = l.func->name;
-            } else if (a->kind == ATTR_LINK_NAME) {
+            if (a->kind == ATTR_LINK_NAME) {
                 l.func->extern_symbol = arena_strdup(l.func, a->str_arg);
-            } else if (a->kind == ATTR_DYLIB || a->kind == ATTR_LINK) {
-                l.func->extern_dylib = arena_strdup(l.func, a->str_arg);
             } else if (a->kind == ATTR_C_EXPORT) {
                 l.func->c_export = true;
                 l.func->c_export_symbol =
@@ -1675,6 +1669,9 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
             }
         }
     }
+    l.func->is_extern = fdecl->is_extern;
+    if (l.func->is_extern && !l.func->extern_symbol)
+        l.func->extern_symbol = l.func->name;
     if (l.func->is_extern) {
         const XrNativePackagePlan *native_plan =
             xr_compiler_session_native_package_plan(analyzer->compiler_session);

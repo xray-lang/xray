@@ -531,6 +531,8 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->return_type = sub_tref(src->return_type, map, mc);
             dst->body = xr_ast_clone_ctx(src->body, map, mc, clone_ctx);
             dst->is_generator = src->is_generator;
+            dst->is_extern = src->is_extern;
+            dst->extern_abi = clone_str(src->extern_abi);
             dst->attributes = NULL;  // Attributes not cloned for mono
             dst->attr_count = 0;
             dst->type_params = NULL;  // Cleared: mono version has no type params
@@ -882,7 +884,6 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->explicit_final = src->explicit_final;
             dst->is_native = src->is_native;
             dst->is_packed = src->is_packed;
-            dst->is_extern_layout = src->is_extern_layout;
             dst->explicit_align = src->explicit_align;
             dst->attributes = src->attributes;
             dst->attr_count = src->attr_count;

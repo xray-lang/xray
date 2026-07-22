@@ -140,6 +140,12 @@ TEST(load_verified_native_package_plan) {
         "audit_mode = \"shipping\"\n"
         "vm = \"verified-dynamic\"\n"
         "\n"
+        "[native.target.aarch64-apple-darwin]\n"
+        "profile = \"release\"\n"
+        "visibility = \"hidden\"\n"
+        "system_links = [\"pthread\"]\n"
+        "vm = \"verified-dynamic\"\n"
+        "\n"
         "[[native.unit]]\n"
         "name = \"oracle\"\n"
         "kind = \"c\"\n"
@@ -183,11 +189,32 @@ TEST(load_verified_native_package_plan) {
     ASSERT_TRUE(project->native_plan->valid);
     ASSERT_EQ_INT(project->native_plan->unit_count, 1);
     ASSERT_EQ_INT(project->native_plan->symbol_count, 1);
+    ASSERT_EQ_INT(project->native_plan->target_count, 1);
+    ASSERT_STR_EQ(project->native_plan->targets[0].triple, "aarch64-apple-darwin");
+    ASSERT_STR_EQ(project->native_plan->targets[0].profile, "release");
+    ASSERT_EQ_INT(project->native_plan->targets[0].system_link_count, 1);
     const XrNativeSymbol *symbol = xr_native_package_find_symbol(project->native_plan, "x");
     ASSERT_NOT_NULL(symbol);
     ASSERT_STR_EQ(symbol->native_name, "x");
     ASSERT_TRUE(symbol->contract.complete);
     ASSERT_TRUE(strstr(xr_native_symbol_library(symbol), "liboracle.dylib") != NULL);
+    xr_project_free(project);
+    teardown_tmpdir();
+}
+
+TEST(native_package_unknown_target_policy_fails_closed) {
+    setup_tmpdir();
+    write_project_file("[project]\nname = \"bad-target\"\n"
+                       "[native]\nname = \"bad-native\"\nversion = \"1\"\nlicense = \"MIT\"\n"
+                       "source = \"fixture\"\naudit_mode = \"exploratory\"\nvm = \"unsupported\"\n"
+                       "[native.target.aarch64-apple-darwin]\nprofile = \"release\"\n"
+                       "shell = \"cc surprise.c\"\n");
+    XrProject *project = xr_project_load(NULL, g_tmpdir);
+    ASSERT_NOT_NULL(project);
+    ASSERT_FALSE(project->initialized);
+    ASSERT_NOT_NULL(project->native_plan);
+    ASSERT_FALSE(project->native_plan->valid);
+    ASSERT_TRUE(strstr(project->native_plan->error, "unsupported field") != NULL);
     xr_project_free(project);
     teardown_tmpdir();
 }
@@ -218,4 +245,5 @@ RUN_TEST_SUITE("Project Configuration");
 RUN_TEST(load_target_config);
 RUN_TEST(load_verified_native_package_plan);
 RUN_TEST(native_package_hash_mismatch_fails_closed);
+RUN_TEST(native_package_unknown_target_policy_fails_closed);
 TEST_MAIN_END()

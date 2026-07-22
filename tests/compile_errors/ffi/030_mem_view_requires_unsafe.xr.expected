@@ -1,1 +1,0 @@
-mem.slice<T>() must be inside an unsafe block

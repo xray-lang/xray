@@ -1,6 +1,0 @@
-extern "C" {
-    union BadOverlay {
-        tag: uint32
-        bytes: flex uint8
-    }
-}

@@ -480,38 +480,16 @@ TEST(no_throw_function_type_roundtrip) {
 
 TEST(extern_block_roundtrip) {
     setup();
-    const char *src = "extern \"C\" link(\"m\") {\n"
+    const char *src = "extern \"C\" {\n"
                       "  export fn cos(x: float64) -> float64\n"
                       "  fn clear(value: MutPtr<int32>)\n"
                       "}\n";
     char *fmt1 = parse_and_format(src, "extern-block.xr");
     ASSERT_NOT_NULL(fmt1);
-    ASSERT_TRUE(contains(fmt1, "extern \"C\" link(\"m\")"));
+    ASSERT_TRUE(contains(fmt1, "extern \"C\""));
     ASSERT_TRUE(contains(fmt1, "export fn cos"));
     ASSERT_TRUE(!contains(fmt1, "@extern"));
     char *fmt2 = parse_and_format(fmt1, "extern-block-formatted.xr");
-    ASSERT_NOT_NULL(fmt2);
-    ASSERT_STR_EQ(fmt1, fmt2);
-    free(fmt1);
-    free(fmt2);
-    teardown();
-}
-
-TEST(extern_layout_roundtrip) {
-    setup();
-    const char *src = "extern \"C\" {\n"
-                      "  export struct Header { tag: uint8 next: Ptr<byte> tail: flex uint8 }\n"
-                      "  export packed struct Packed align(8) { tag: uint8 count: uint32 }\n"
-                      "  union Word { bits: uint32 bytes: [uint8; 4] }\n"
-                      "}\n";
-    char *fmt1 = parse_and_format(src, "extern-layout.xr");
-    ASSERT_NOT_NULL(fmt1);
-    ASSERT_TRUE(contains(fmt1, "extern \"C\""));
-    ASSERT_TRUE(contains(fmt1, "export struct Header"));
-    ASSERT_TRUE(contains(fmt1, "tail: flex byte"));
-    ASSERT_TRUE(contains(fmt1, "export packed struct Packed align(8)"));
-    ASSERT_TRUE(contains(fmt1, "union Word"));
-    char *fmt2 = parse_and_format(fmt1, "extern-layout-formatted.xr");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
     free(fmt1);
@@ -966,7 +944,6 @@ RUN_TEST(object_destructure_rename_roundtrip);
 RUN_TEST(parameter_modes_roundtrip);
 RUN_TEST(no_throw_function_type_roundtrip);
 RUN_TEST(extern_block_roundtrip);
-RUN_TEST(extern_layout_roundtrip);
 RUN_TEST(parameter_modes_comments_roundtrip);
 
 RUN_TEST(branch_arrows_default_aligned);

@@ -982,7 +982,6 @@ AstNode *xr_ast_class_decl(XrCompilerSession *session, const char *name, const c
     node->as.class_decl.methods = methods;
     node->as.class_decl.method_count = method_count;
     node->as.class_decl.is_packed = false;
-    node->as.class_decl.is_extern_layout = false;
     node->as.class_decl.explicit_align = 0;
     node->as.class_decl.attributes = NULL;
     node->as.class_decl.attr_count = 0;
@@ -1004,7 +1003,6 @@ AstNode *xr_ast_struct_decl(XrCompilerSession *session, const char *name, AstNod
     node->as.struct_decl.method_count = method_count;
     node->as.struct_decl.explicit_final = true;  // fixed-layout aggregates cannot be extended
     node->as.struct_decl.is_packed = false;
-    node->as.struct_decl.is_extern_layout = false;
     node->as.struct_decl.explicit_align = 0;
     node->as.struct_decl.attributes = NULL;
     node->as.struct_decl.attr_count = 0;
@@ -1028,7 +1026,6 @@ AstNode *xr_ast_union_decl(XrCompilerSession *session, const char *name, AstNode
     node->as.union_decl.method_count = 0;
     node->as.union_decl.explicit_final = true;
     node->as.union_decl.is_packed = false;
-    node->as.union_decl.is_extern_layout = false;
     node->as.union_decl.explicit_align = 0;
     node->as.union_decl.attributes = NULL;
     node->as.union_decl.attr_count = 0;

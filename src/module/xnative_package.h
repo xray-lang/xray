@@ -98,13 +98,38 @@ typedef struct XrNativeReturnContract {
     char *drop_function;
 } XrNativeReturnContract;
 
+typedef enum XrNativeCallbackThread {
+    XR_NATIVE_CALLBACK_CALLER_THREAD = 1,
+    XR_NATIVE_CALLBACK_FOREIGN_THREAD,
+} XrNativeCallbackThread;
+
+typedef enum XrNativeCallbackLifetime {
+    XR_NATIVE_CALLBACK_CALL_ONLY = 1,
+    XR_NATIVE_CALLBACK_RETAINED,
+} XrNativeCallbackLifetime;
+
+typedef enum XrNativeRuntimeAttach {
+    XR_NATIVE_RUNTIME_ATTACH_NOT_REQUIRED = 1,
+    XR_NATIVE_RUNTIME_ATTACH_DETACH,
+} XrNativeRuntimeAttach;
+
+typedef struct XrNativeCallbackContract {
+    uint32_t index;
+    int32_t context_index;
+    XrNativeEscape escape;
+    XrNativeCallbackThread thread;
+    XrNativeCallbackLifetime lifetime;
+    XrNativeRuntimeAttach runtime_attach;
+    bool reentrant;
+} XrNativeCallbackContract;
+
 typedef struct XrNativeSymbolContract {
     XrNativeParamContract *params;
     uint32_t param_count;
     XrNativeReturnContract result;
     char **effects;
     uint32_t effect_count;
-    char **callbacks;
+    XrNativeCallbackContract *callbacks;
     uint32_t callback_count;
     char *failure;
     char *allocation;
@@ -167,6 +192,16 @@ typedef struct XrNativeCapability {
     bool verified;
 } XrNativeCapability;
 
+typedef struct XrNativeTargetPlan {
+    char *triple;
+    char *profile;
+    char *visibility;
+    char *cpu_feature;
+    char **system_links;
+    uint32_t system_link_count;
+    XrNativeVmPolicy vm_policy;
+} XrNativeTargetPlan;
+
 typedef struct XrNativePackagePlan {
     char *root;
     char *name;
@@ -183,6 +218,8 @@ typedef struct XrNativePackagePlan {
     uint32_t layout_count;
     XrNativeCapability *capabilities;
     uint32_t capability_count;
+    XrNativeTargetPlan *targets;
+    uint32_t target_count;
     uint64_t fingerprint;
     bool valid;
     char *error;

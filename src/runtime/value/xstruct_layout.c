@@ -162,7 +162,6 @@ static uint64_t aggregate_layout_stable_key_depth(const XrAggregateLayout *layou
         return layout_hash_word(hash, UINT64_C(0xffffffffffffffff));
     hash = layout_hash_word(hash, layout->target_abi_hash);
     hash = layout_hash_word(hash, layout->kind);
-    hash = layout_hash_word(hash, layout->is_extern_layout ? 1u : 0u);
     hash = layout_hash_word(hash, layout->explicit_align);
     hash = layout_hash_word(hash, layout->total_size);
     hash = layout_hash_word(hash, layout->alignment);
@@ -192,10 +191,9 @@ static bool aggregate_layout_equal_depth(const XrAggregateLayout *left,
     if (left == right)
         return true;
     if (!left || !right || depth > 16 || left->target_abi_hash != right->target_abi_hash ||
-        left->kind != right->kind || left->is_extern_layout != right->is_extern_layout ||
-        left->explicit_align != right->explicit_align || left->total_size != right->total_size ||
-        left->alignment != right->alignment || left->field_count != right->field_count ||
-        left->field_count > XR_MAX_AGG_FIELDS)
+        left->kind != right->kind || left->explicit_align != right->explicit_align ||
+        left->total_size != right->total_size || left->alignment != right->alignment ||
+        left->field_count != right->field_count || left->field_count > XR_MAX_AGG_FIELDS)
         return false;
     for (uint16_t i = 0; i < left->field_count; i++) {
         const XrAggregateFieldLayout *lf = &left->fields[i];

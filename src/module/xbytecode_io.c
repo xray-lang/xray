@@ -305,7 +305,7 @@ static char *bc_read_optional_string(BcReader *r);
 
 /* ========== Canonical Aggregate Layout Table ========== */
 
-#define BC_LAYOUT_FORMAT_VERSION 1u
+#define BC_LAYOUT_FORMAT_VERSION 2u
 #define BC_MAX_LAYOUTS 4096u
 #define BC_MAX_LAYOUT_DEPTH 16u
 
@@ -401,9 +401,8 @@ static bool bc_write_layout_table(BcWriter *w) {
         const XrAggregateLayout *layout = entry->layout;
         if (!bc_put_u32(w, BC_LAYOUT_FORMAT_VERSION) || !bc_put_u64(w, entry->key) ||
             !bc_put_u64(w, layout->target_abi_hash) || !bc_put_u8(w, layout->kind) ||
-            !bc_put_u8(w, layout->is_extern_layout ? 1 : 0) || !bc_put_u32(w, layout->total_size) ||
-            !bc_put_u32(w, layout->alignment) || !bc_put_u32(w, layout->explicit_align) ||
-            !bc_put_u16(w, layout->field_count))
+            !bc_put_u32(w, layout->total_size) || !bc_put_u32(w, layout->alignment) ||
+            !bc_put_u32(w, layout->explicit_align) || !bc_put_u16(w, layout->field_count))
             return false;
         for (uint16_t fi = 0; fi < layout->field_count; fi++) {
             const XrAggregateFieldLayout *field = &layout->fields[fi];
@@ -571,7 +570,6 @@ static bool bc_read_layout_table(BcReader *r) {
         entry->key = bc_get_u64(r);
         uint64_t target_hash = bc_get_u64(r);
         uint8_t kind = bc_get_u8(r);
-        uint8_t is_extern = bc_get_u8(r);
         uint32_t total_size = bc_get_u32(r);
         uint32_t alignment = bc_get_u32(r);
         uint32_t explicit_align = bc_get_u32(r);
@@ -579,7 +577,7 @@ static bool bc_read_layout_table(BcReader *r) {
         if (r->error != XR_BC_OK)
             return false;
         if (format != BC_LAYOUT_FORMAT_VERSION || entry->key == 0 ||
-            (li > 0 && entry->key <= previous_key) || kind > XR_AGG_LAYOUT_UNION || is_extern > 1 ||
+            (li > 0 && entry->key <= previous_key) || kind > XR_AGG_LAYOUT_UNION ||
             total_size > UINT16_MAX || alignment == 0 || alignment > UINT16_MAX ||
             field_count > XR_MAX_AGG_FIELDS) {
             r->error = XR_BC_ERR_CORRUPT;
@@ -598,7 +596,6 @@ static bool bc_read_layout_table(BcReader *r) {
         entry->layout = layout;
         layout->target_abi_hash = target_hash;
         layout->kind = kind;
-        layout->is_extern_layout = is_extern != 0;
         layout->total_size = (uint16_t) total_size;
         layout->alignment = alignment;
         layout->explicit_align = explicit_align;

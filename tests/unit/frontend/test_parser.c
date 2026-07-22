@@ -461,7 +461,7 @@ TEST(parser_const_type_qualifier_is_canonical_in_every_position) {
 
 TEST(parser_extern_block_flattens_typed_descriptors) {
     setup();
-    AstNode *program = parse_ok("extern \"C\" dylib(\"m\") {\n"
+    AstNode *program = parse_ok("extern \"C\" {\n"
                                 "  export fn cos(x: float64) -> float64\n"
                                 "  fn clear(value: int32)\n"
                                 "}");
@@ -470,11 +470,9 @@ TEST(parser_extern_block_flattens_typed_descriptors) {
         AstNode *decl = program->as.program.statements[i];
         ASSERT_EQ_INT(decl->type, AST_FUNCTION_DECL);
         ASSERT_NULL(decl->as.function_decl.body);
-        ASSERT_EQ_INT(decl->as.function_decl.attr_count, 2);
-        ASSERT_EQ_INT(decl->as.function_decl.attributes[0]->kind, ATTR_EXTERN);
-        ASSERT_STR_EQ(decl->as.function_decl.attributes[0]->str_arg, "C");
-        ASSERT_EQ_INT(decl->as.function_decl.attributes[1]->kind, ATTR_DYLIB);
-        ASSERT_STR_EQ(decl->as.function_decl.attributes[1]->str_arg, "m");
+        ASSERT_TRUE(decl->as.function_decl.is_extern);
+        ASSERT_STR_EQ(decl->as.function_decl.extern_abi, "C");
+        ASSERT_EQ_INT(decl->as.function_decl.attr_count, 0);
     }
     ASSERT_TRUE(program->as.program.statements[0]->is_exported);
     ASSERT_FALSE(program->as.program.statements[1]->is_exported);
@@ -483,28 +481,12 @@ TEST(parser_extern_block_flattens_typed_descriptors) {
     teardown();
 }
 
-TEST(parser_extern_block_flattens_layout_declarations) {
+TEST(parser_extern_block_rejects_layout_declarations) {
     setup();
-    AstNode *program =
-        parse_ok("extern \"C\" {\n"
-                 "  export struct Header { tag: uint8 next: Ptr<byte> tail: flex uint8 }\n"
-                 "  export packed struct Packed { tag: uint8 count: uint32 }\n"
-                 "  union Word { bits: uint32 bytes: [uint8; 4] }\n"
-                 "}");
-    ASSERT_EQ_INT(program->as.program.count, 3);
-    ASSERT_EQ_INT(program->as.program.statements[0]->type, AST_STRUCT_DECL);
-    ASSERT_TRUE(program->as.program.statements[0]->is_exported);
-    ASSERT_TRUE(program->as.program.statements[0]->as.struct_decl.is_extern_layout);
-    ASSERT_FALSE(program->as.program.statements[0]->as.struct_decl.is_packed);
-    ASSERT_TRUE(
-        program->as.program.statements[0]->as.struct_decl.fields[2]->as.field_decl.is_flexible);
-    ASSERT_EQ_INT(program->as.program.statements[1]->type, AST_STRUCT_DECL);
-    ASSERT_TRUE(program->as.program.statements[1]->is_exported);
-    ASSERT_TRUE(program->as.program.statements[1]->as.struct_decl.is_extern_layout);
-    ASSERT_TRUE(program->as.program.statements[1]->as.struct_decl.is_packed);
-    ASSERT_EQ_INT(program->as.program.statements[2]->type, AST_UNION_DECL);
-    ASSERT_FALSE(program->as.program.statements[2]->is_exported);
-    ASSERT_TRUE(program->as.program.statements[2]->as.union_decl.is_extern_layout);
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+                         "extern \"C\" { struct Header { tag: uint8 } }"));
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+                         "extern \"C\" dylib(\"m\") { fn cos(x: float64) -> float64 }"));
     teardown();
 }
 
@@ -1292,7 +1274,7 @@ int main(void) {
     RUN_TEST(parser_function_decl);
     RUN_TEST(parser_const_type_qualifier_is_canonical_in_every_position);
     RUN_TEST(parser_extern_block_flattens_typed_descriptors);
-    RUN_TEST(parser_extern_block_flattens_layout_declarations);
+    RUN_TEST(parser_extern_block_rejects_layout_declarations);
     RUN_TEST(parser_parameter_modes_share_annotation_parser);
     RUN_TEST(parser_oop_parameter_modes_share_annotation_parser);
     RUN_TEST(parser_function_type_param_modes);

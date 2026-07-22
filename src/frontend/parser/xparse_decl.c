@@ -797,7 +797,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
             return NULL;
         }
         bool saved_extern_context = parser->parsing_extern_fn;
-        bool is_extern = saved_extern_context || attrs_has(attributes, attr_count, ATTR_EXTERN);
+        bool is_extern = saved_extern_context;
         parser->parsing_extern_fn = is_extern;
         AstNode *func = xr_parse_function_declaration(parser);
         parser->parsing_extern_fn = saved_extern_context;
@@ -815,39 +815,15 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     return NULL;
 }
 
-static XrAttribute *xr_make_string_attribute(Parser *parser, AttributeKind kind,
-                                             const char *value) {
-    XrAttribute *attr = (XrAttribute *) ast_alloc(parser->compiler_session, sizeof(XrAttribute));
-    attr->kind = kind;
-    attr->timeout = 0;
-    attr->str_arg = value;
-    attr->derive_flags = 0;
-    return attr;
-}
-
-static void xr_function_append_attribute(Parser *parser, AstNode *node, XrAttribute *attr) {
-    XR_DCHECK(node && node->type == AST_FUNCTION_DECL,
-              "function_append_attribute: expected function declaration");
-    FunctionDeclNode *fn = &node->as.function_decl;
-    XrAttribute **attrs = (XrAttribute **) ast_alloc_array(
-        parser->compiler_session, sizeof(XrAttribute *), (size_t) fn->attr_count + 1);
-    if (fn->attr_count > 0 && fn->attributes)
-        memcpy(attrs, fn->attributes, sizeof(XrAttribute *) * (size_t) fn->attr_count);
-    attrs[fn->attr_count++] = attr;
-    fn->attributes = attrs;
-}
-
 /* Parse the canonical foreign-declaration surface:
  *
- *   extern "C" dylib("m") {
+ *   extern "C" {
  *       fn cos(x: float64) -> float64
- *       struct Header { tag: uint8 size: uint32 }
  *   }
  *
- * `link("m")` shares the existing descriptor field with `dylib("m")`:
- * AOT already distinguishes a link name from a concrete library path, while
- * VM resolves both through the same typed FFI descriptor.  The transient
- * AST_PROGRAM is flattened by xr_ast_program_add. */
+ * Library selection, symbol mapping, layout assertions, and native units live
+ * in NativePackagePlan.  The transient AST_PROGRAM is flattened by
+ * xr_ast_program_add. */
 static AstNode *xr_parse_extern_block_declaration(Parser *parser) {
     int line = parser->previous.line;
     if (parser->scope_depth > 0) {
@@ -861,39 +837,22 @@ static AstNode *xr_parse_extern_block_declaration(Parser *parser) {
     if (strcmp(abi, "C") != 0)
         xr_parser_error(parser, "only extern \"C\" is supported");
 
-    const char *library = NULL;
-    bool library_is_link = false;
-    if (xr_parser_check(parser, TK_NAME)) {
-        bool is_dylib = xr_parser_check_name(parser, "dylib");
-        bool is_link = xr_parser_check_name(parser, "link");
-        if (is_dylib || is_link) {
-            library_is_link = is_link;
-            xr_parser_advance(parser);
-            xr_parser_consume(parser, TK_LPAREN,
-                              is_dylib ? "expected '(' after dylib" : "expected '(' after link");
-            xr_parser_consume(parser, TK_LITERAL_STRING,
-                              is_dylib ? "dylib requires a library string"
-                                       : "link requires a library string");
-            library = xr_attr_string_arg(parser);
-            xr_parser_consume(parser, TK_RPAREN,
-                              is_dylib ? "expected ')' after dylib" : "expected ')' after link");
-        }
+    if (xr_parser_check_name(parser, "dylib") || xr_parser_check_name(parser, "link")) {
+        xr_parser_error_at_current(
+            parser,
+            "extern dylib/link clauses were removed; declare the library and symbol mapping in "
+            "the native package manifest");
+        return NULL;
     }
 
     xr_parser_consume(parser, TK_LBRACE, "expected '{' to open extern block");
     AstNode *group = xr_ast_program(parser->compiler_session);
-    XrAttribute *extern_attr = xr_make_string_attribute(parser, ATTR_EXTERN, abi);
-    XrAttribute *library_attr =
-        library
-            ? xr_make_string_attribute(parser, library_is_link ? ATTR_LINK : ATTR_DYLIB, library)
-            : NULL;
 
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         bool saved_extern_context = parser->parsing_extern_fn;
         parser->parsing_extern_fn = true;
 
         AstNode *decl = NULL;
-        bool is_extern_layout = false;
         bool is_exported = xr_parser_match(parser, TK_EXPORT);
         if (is_exported && xr_parser_check(parser, TK_AT)) {
             xr_parser_error_at_current(parser,
@@ -901,25 +860,15 @@ static AstNode *xr_parse_extern_block_declaration(Parser *parser) {
             return NULL;
         }
         if (xr_parser_check(parser, TK_AT)) {
-            decl = xr_parse_attributed_declaration(parser);
+            xr_parser_error_at_current(
+                parser,
+                "extern declarations do not accept source attributes; use NativePackagePlan");
         } else if (xr_parser_match(parser, TK_FN)) {
             decl = xr_parse_function_declaration(parser);
-        } else if (xr_parser_match(parser, TK_STRUCT)) {
-            decl = xr_parse_struct_declaration(parser);
-            is_extern_layout = true;
-        } else if (xr_parser_match(parser, TK_UNION)) {
-            decl = xr_parse_union_declaration(parser);
-            is_extern_layout = true;
-        } else if (xr_parser_match(parser, TK_PACKED)) {
-            xr_parser_consume(parser, TK_STRUCT,
-                              "expected 'struct' after 'packed' in extern block");
-            decl = xr_parse_struct_declaration(parser);
-            if (decl && decl->type == AST_STRUCT_DECL)
-                decl->as.struct_decl.is_packed = true;
-            is_extern_layout = true;
         } else {
             xr_parser_error_at_current(
-                parser, "extern blocks contain fn, struct, union, or packed struct declarations");
+                parser, "extern blocks contain only bodyless fn declarations; use ordinary Xray "
+                        "aggregates plus native manifest layout assertions");
         }
         parser->parsing_extern_fn = saved_extern_context;
 
@@ -933,16 +882,11 @@ static AstNode *xr_parse_extern_block_declaration(Parser *parser) {
                     parser, "extern function declarations cannot have a function body");
                 return NULL;
             }
-            xr_function_append_attribute(parser, decl, extern_attr);
-            if (library_attr)
-                xr_function_append_attribute(parser, decl, library_attr);
-        } else if (is_extern_layout && decl->type == AST_STRUCT_DECL) {
-            decl->as.struct_decl.is_extern_layout = true;
-        } else if (is_extern_layout && decl->type == AST_UNION_DECL) {
-            decl->as.union_decl.is_extern_layout = true;
+            decl->as.function_decl.is_extern = true;
+            decl->as.function_decl.extern_abi = abi;
         } else {
-            xr_parser_error_at_current(
-                parser, "extern blocks contain fn, struct, union, or packed struct declarations");
+            xr_parser_error_at_current(parser,
+                                       "extern blocks contain only bodyless fn declarations");
             return NULL;
         }
         xr_ast_program_add(parser->compiler_session, group, decl);

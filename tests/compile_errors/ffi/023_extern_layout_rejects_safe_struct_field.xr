@@ -1,9 +1,0 @@
-struct SafeValue {
-    value: uint32
-}
-
-extern "C" {
-    struct BadLayout {
-        value: SafeValue
-    }
-}

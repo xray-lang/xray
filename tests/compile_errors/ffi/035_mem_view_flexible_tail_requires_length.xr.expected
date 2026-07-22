@@ -1,1 +1,0 @@
-mem.slice<T>() requires T to have a verified static layout

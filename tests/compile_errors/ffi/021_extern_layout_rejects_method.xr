@@ -1,6 +1,0 @@
-extern "C" {
-    struct BadLayout {
-        value: uint32
-        read() -> uint32 { return value }
-    }
-}

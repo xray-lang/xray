@@ -1,6 +1,0 @@
-extern "C" {
-    struct BadElement {
-        count: uint32
-        values: flex string
-    }
-}

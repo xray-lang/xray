@@ -67,7 +67,6 @@ static XrAggregateLayout test_layout(uint8_t kind, uint16_t field_count) {
     XrAggregateLayout layout;
     memset(&layout, 0, sizeof(layout));
     layout.kind = kind;
-    layout.is_extern_layout = true;
     layout.field_count = field_count;
     return layout;
 }
@@ -102,11 +101,11 @@ static bool find_nested_key_offset(const uint8_t *bytes, size_t size, size_t *ou
     uint32_t count = read_le32(bytes + 20);
     size_t pos = 24;
     for (uint32_t li = 0; li < count; li++) {
-        if (pos > size || size - pos < 36)
+        if (pos > size || size - pos < 35)
             return false;
         uint64_t owner_key = read_le64(bytes + pos + 4);
-        uint16_t field_count = read_le16(bytes + pos + 34);
-        pos += 36;
+        uint16_t field_count = read_le16(bytes + pos + 33);
+        pos += 35;
         for (uint16_t fi = 0; fi < field_count; fi++) {
             if (pos >= size)
                 return false;
@@ -548,7 +547,7 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     xray_vm_delete(writer);
 }
 
-TEST(bytecode_roundtrips_canonical_extern_layout_matrix_deterministically) {
+TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically) {
     XrVMRuntime *writer = new_test_isolate();
     ASSERT_NOT_NULL(writer);
     XrVMRuntime *reader = new_test_isolate();
@@ -574,7 +573,7 @@ TEST(bytecode_roundtrips_canonical_extern_layout_matrix_deterministically) {
     outer.fields[2].native_type = XR_NATIVE_USIZE;
     outer.fields[3].native_type = XR_NATIVE_ARRAY;
     outer.fields[3].elem_native_type = XR_NATIVE_U8;
-    outer.fields[3].is_flexible = true;
+    outer.fields[3].elem_count = 5;
     ASSERT_TRUE(xr_aggregate_layout_compute(&outer, target));
 
     /* A separately allocated but semantically equal graph must serialize once
@@ -594,7 +593,7 @@ TEST(bytecode_roundtrips_canonical_extern_layout_matrix_deterministically) {
     outer_copy.fields[2].native_type = XR_NATIVE_USIZE;
     outer_copy.fields[3].native_type = XR_NATIVE_ARRAY;
     outer_copy.fields[3].elem_native_type = XR_NATIVE_U8;
-    outer_copy.fields[3].is_flexible = true;
+    outer_copy.fields[3].elem_count = 5;
     ASSERT_TRUE(xr_aggregate_layout_compute(&outer_copy, target));
     ASSERT_TRUE(xr_aggregate_layout_semantically_equal(&outer, &outer_copy));
 
@@ -650,7 +649,7 @@ TEST(bytecode_roundtrips_canonical_extern_layout_matrix_deterministically) {
     ASSERT_STR_EQ(read_outer->struct_layout->field_names[0], "header");
     ASSERT_EQ_UINT(read_outer->struct_layout->fields[1].native_type, XR_NATIVE_ARRAY);
     ASSERT_EQ_UINT(read_outer->struct_layout->fields[1].elem_count, 3);
-    ASSERT_TRUE(read_outer->struct_layout->fields[3].is_flexible);
+    ASSERT_EQ_UINT(read_outer->struct_layout->fields[3].elem_count, 5);
     ASSERT_NOT_NULL(read_outer->struct_layout->fields[0].sub_layout);
     ASSERT_EQ_UINT(read_outer->struct_layout->fields[0].sub_layout->kind,
                    XR_AGG_LAYOUT_PACKED_STRUCT);
@@ -702,17 +701,17 @@ TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corrup
     ASSERT_EQ_INT(error, XR_BC_ERR_TARGET_ABI);
     bytes[36] ^= 1u;
 
-    write_le16(bytes + 58, XR_MAX_AGG_FIELDS + 1);
+    write_le16(bytes + 57, XR_MAX_AGG_FIELDS + 1);
     ASSERT_NULL(xr_bytecode_read(iso, bytes, size, &error));
     ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
-    write_le16(bytes + 58, 1);
+    write_le16(bytes + 57, 1);
 
-    write_le32(bytes + 61, 1);
+    write_le32(bytes + 60, 1);
     ASSERT_NULL(xr_bytecode_read(iso, bytes, size, &error));
     ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
-    write_le32(bytes + 61, 0);
+    write_le32(bytes + 60, 0);
 
-    ASSERT_NULL(xr_bytecode_read(iso, bytes, 61, &error));
+    ASSERT_NULL(xr_bytecode_read(iso, bytes, 60, &error));
     ASSERT_EQ_INT(error, XR_BC_ERR_TRUNCATED);
     ASSERT_NULL(xr_bytecode_read(iso, bytes, 3, &error));
     ASSERT_EQ_INT(error, XR_BC_ERR_TRUNCATED);
@@ -1111,7 +1110,7 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);
     RUN_TEST(bytecode_roundtrips_typed_record_decode_shape);
     RUN_TEST(bytecode_roundtrips_class_descriptor_constants);
-    RUN_TEST(bytecode_roundtrips_canonical_extern_layout_matrix_deterministically);
+    RUN_TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically);
     RUN_TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corruption);
     RUN_TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth);
     RUN_TEST(bytecode_roundtrips_enum_type_constants);

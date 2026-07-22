@@ -9901,12 +9901,8 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     XgDeclSummary decl;
     XgDeclId decl_id = (XgDeclId) (p->evidence->ndecls + 1);
     XgFuncId func_id = producer_next_func_id(p);
-    XrAttribute *extern_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_EXTERN);
     XrAttribute *native_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_NATIVE);
     XrAttribute *c_export_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_C_EXPORT);
-    XrAttribute *dylib_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_DYLIB);
-    if (!dylib_attr)
-        dylib_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_LINK);
     XrAttribute *naked_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_NAKED);
     XrAttribute *interrupt_attr = attrs_find(fn->attributes, fn->attr_count, ATTR_INTERRUPT);
     memset(&decl, 0, sizeof(decl));
@@ -9925,7 +9921,7 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
     decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
     if (native_attr)
         decl.flags |= XG_DECL_NATIVE;
-    if (extern_attr)
+    if (fn->is_extern)
         decl.flags |= XG_DECL_EXTERN;
     if (c_export_attr)
         decl.flags |= XG_DECL_C_EXPORT;
@@ -9937,9 +9933,7 @@ static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode
         decl.flags |= XG_DECL_GENERIC_TEMPLATE;
     if (!xg_global_evidence_add_decl(p->evidence, &decl))
         return false;
-    if (!producer_register_func(p, module_id, fn->name,
-                                extern_attr && dylib_attr ? dylib_attr->str_arg : NULL, func_id,
-                                decl_id, decl.flags))
+    if (!producer_register_func(p, module_id, fn->name, NULL, func_id, decl_id, decl.flags))
         return false;
     return producer_enqueue_body(p, func_id, module_id, decl_id, XG_NO_ID, XG_NO_ID,
                                  hash_name32(fn->name), decl.signature_key, decl.source_node_id,

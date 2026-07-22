@@ -67,62 +67,6 @@ static int xa_fixed_array_elem_native_lane(XrType *elem) {
     return XR_NATIVE_VALUE;
 }
 
-static bool xa_extern_layout_pointer_pointee_supported(const XrType *type, int depth) {
-    if (!type || type->is_nullable || depth > 16)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_BOOL:
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-            return true;
-        case XR_KIND_POINTER:
-            return xa_extern_layout_pointer_pointee_supported(type->container.element_type,
-                                                              depth + 1);
-        case XR_KIND_CLASS:
-        case XR_KIND_INSTANCE:
-            return type->instance.class_ref && type->instance.class_ref->is_extern_layout;
-        default:
-            return false;
-    }
-}
-
-static bool xa_extern_layout_field_type_supported(const XrType *type) {
-    if (!type || type->is_nullable)
-        return false;
-    switch (type->kind) {
-        case XR_KIND_BOOL:
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-            return true;
-        case XR_KIND_POINTER:
-            return xa_extern_layout_pointer_pointee_supported(type->container.element_type, 0);
-        case XR_KIND_FIXED_ARRAY:
-            return type->fixed_array.length > 0 && type->fixed_array.element_type &&
-                   !type->fixed_array.element_type->is_nullable &&
-                   (type->fixed_array.element_type->kind == XR_KIND_BOOL ||
-                    type->fixed_array.element_type->kind == XR_KIND_INT ||
-                    type->fixed_array.element_type->kind == XR_KIND_FLOAT);
-        case XR_KIND_CLASS:
-        case XR_KIND_INSTANCE:
-            return type->instance.class_ref && type->instance.class_ref->is_extern_layout;
-        default:
-            return false;
-    }
-}
-
-static int xa_extern_flexible_elem_native_lane(const XrType *type) {
-    if (!type || type->is_nullable)
-        return -1;
-    int native = xr_type_kind_to_native(type->kind, type->native_width);
-    if (native >= 0 &&
-        (type->kind == XR_KIND_BOOL || type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT))
-        return native;
-    if (type->kind == XR_KIND_POINTER &&
-        xa_extern_layout_pointer_pointee_supported(type->container.element_type, 0))
-        return XR_NATIVE_POINTER;
-    return -1;
-}
-
 static XrAttribute *xa_function_attr(const FunctionDeclNode *fn, AttributeKind kind) {
     if (!fn || !fn->attributes)
         return NULL;
@@ -2540,14 +2484,10 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     XrAttribute *c_export_attr = xa_function_attr(fn, ATTR_C_EXPORT);
     XrAttribute *section_attr = xa_function_attr(fn, ATTR_SECTION);
     XrAttribute *weak_attr = xa_function_attr(fn, ATTR_WEAK);
-    XrAttribute *extern_attr = xa_function_attr(fn, ATTR_EXTERN);
     XrAttribute *link_name_attr = xa_function_attr(fn, ATTR_LINK_NAME);
-    XrAttribute *dylib_attr = xa_function_attr(fn, ATTR_DYLIB);
-    if (!dylib_attr)
-        dylib_attr = xa_function_attr(fn, ATTR_LINK);
     XrAttribute *naked_attr = xa_function_attr(fn, ATTR_NAKED);
     XrAttribute *interrupt_attr = xa_function_attr(fn, ATTR_INTERRUPT);
-    links->is_extern = extern_attr != NULL;
+    links->is_extern = fn->is_extern;
     links->is_c_export = c_export_attr != NULL;
     links->c_export_symbol =
         c_export_attr && c_export_attr->str_arg ? xr_strdup(c_export_attr->str_arg) : NULL;
@@ -2586,9 +2526,10 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         xa_validate_c_export_function_abi(ctx, node, fn, sym, param_types, return_type,
                                           c_export_attr, links->is_extern);
     xa_validate_aot_symbol_attrs(ctx, node, section_attr, weak_attr, c_export_attr);
-    xa_validate_aot_naked_attr(ctx, node, naked_attr, extern_attr, dylib_attr, c_export_attr);
-    xa_validate_aot_interrupt_attr(ctx, node, interrupt_attr, extern_attr, dylib_attr,
-                                   c_export_attr, naked_attr);
+    xa_validate_aot_naked_attr(ctx, node, naked_attr, fn->is_extern ? naked_attr : NULL, NULL,
+                               c_export_attr);
+    xa_validate_aot_interrupt_attr(ctx, node, interrupt_attr, fn->is_extern ? interrupt_attr : NULL,
+                                   NULL, c_export_attr, naked_attr);
 
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);
@@ -3610,7 +3551,6 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     ClassDeclNode *cls = (node->type == AST_CLASS_DECL) ? &node->as.class_decl
                          : is_struct_decl               ? &node->as.struct_decl
                                                         : &node->as.union_decl;
-    bool is_extern_layout = is_aggregate_decl && cls->is_extern_layout;
 
     // @native class is reserved for builtin type declarations embedded at
     // compile time.  User code cannot bind C implementations, so reject early.
@@ -3691,7 +3631,6 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     if (!info) {
         info = xa_class_info_new(cls->name);
         info->explicit_final = cls->explicit_final;
-        info->is_extern_layout = is_extern_layout;
         info->derive_flags = xa_class_decl_derive_flags(cls->attributes, cls->attr_count);
         info->capability_flags = xa_declared_type_capability_flags(ctx->file_path, capability_name);
         info->location =
@@ -3702,7 +3641,6 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         links->class_info = info;
     } else {
         info->explicit_final = cls->explicit_final;
-        info->is_extern_layout = is_extern_layout;
         info->derive_flags = xa_class_decl_derive_flags(cls->attributes, cls->attr_count);
         info->capability_flags = xa_declared_type_capability_flags(ctx->file_path, capability_name);
         info->location =
@@ -3716,26 +3654,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         links->type->is_value_type = true;
     }
 
-    if (is_extern_layout) {
-        XrLocation loc = {.file = ctx->file_path, .line = node->line};
-        if (cls->type_param_count > 0) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                       "extern layout declarations cannot be generic", &loc);
-        }
-        if (cls->interface_count > 0) {
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                "extern layout declarations cannot implement interfaces", &loc);
-        }
-        if (cls->method_count > 0) {
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                       "extern layout declarations cannot declare methods", &loc);
-        }
-    }
-
-    if (is_union_decl && !is_extern_layout) {
+    if (is_union_decl) {
         if (cls->type_param_count > 0) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line};
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
@@ -3893,47 +3812,11 @@ skip_interfaces:
                                             : NULL;
             if (field_decl && field_decl->is_flexible) {
                 XrLocation loc = {.file = ctx->file_path, .line = field_node->line};
-                const char *message = NULL;
-                if (!is_extern_layout)
-                    message = "flexible array fields are allowed only in extern layouts";
-                else if (is_union_decl)
-                    message = "extern unions cannot contain a flexible array field";
-                else if (i != info->field_count - 1)
-                    message = "a flexible array must be the last field of an extern struct";
-                else if (i == 0)
-                    message = "a flexible array requires at least one preceding field";
-                else if (xa_extern_flexible_elem_native_lane(ft) < 0)
-                    message = "a flexible array element must have a native scalar or pointer type";
-                if (message) {
-                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                               XR_ERR_ANALYZE_TYPE_MISMATCH, message, &loc);
-                    struct_field_types_valid = false;
-                    continue;
-                }
-            }
-            if (is_extern_layout && field_decl &&
-                (field_decl->is_private || field_decl->is_protected || field_decl->is_static ||
-                 field_decl->is_const || field_decl->initializer)) {
-                XrLocation loc = {.file = ctx->file_path, .line = field_node->line};
-                char msg[256];
-                snprintf(msg, sizeof(msg),
-                         "extern layout field '%s' cannot have modifiers or an initializer",
-                         fs->name ? fs->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-                struct_field_types_valid = false;
-                continue;
-            }
-
-            if (is_extern_layout && !xa_extern_layout_field_type_supported(ft)) {
-                XrLocation loc = {.file = ctx->file_path, .line = fs->location.line};
-                char msg[320];
-                snprintf(msg, sizeof(msg),
-                         "extern layout field '%s' has non-native type '%s'; use a native scalar, "
-                         "Ptr/MutPtr, fixed array, or another extern layout type",
-                         fs->name ? fs->name : "?", xr_type_to_string(ft));
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                           "flexible array fields were removed; use a byte "
+                                           "accessor or a manifest-declared mechanical ABI shim",
+                                           &loc);
                 struct_field_types_valid = false;
                 continue;
             }
@@ -4006,7 +3889,6 @@ skip_interfaces:
             layout->kind = XR_AGG_LAYOUT_STRUCT;
         }
         layout->explicit_align = st->explicit_align;
-        layout->is_extern_layout = is_extern_layout;
         bool layout_valid = true;
         if (layout->explicit_align != 0 &&
             (layout->explicit_align & (layout->explicit_align - 1)) != 0) {
@@ -4035,11 +3917,6 @@ skip_interfaces:
             }
             XaSymbolLinks *fl = xa_analyzer_get_links(ctx->analyzer, fs);
             XrType *ft = (fl && fl->type) ? fl->type : NULL;
-            AstNode *field_node = (i < cls->field_count) ? cls->fields[i] : NULL;
-            FieldDeclNode *field_decl = field_node && field_node->type == AST_FIELD_DECL
-                                            ? &field_node->as.field_decl
-                                            : NULL;
-
             if (!ft || ft->kind == XR_KIND_UNKNOWN) {
                 // Phase 1: struct fields must have explicit type annotations
                 XrLocation loc = {.file = ctx->file_path, .line = node->line};
@@ -4054,22 +3931,7 @@ skip_interfaces:
                 break;
             }
 
-            if (field_decl && field_decl->is_flexible) {
-                int elem_native = xa_extern_flexible_elem_native_lane(ft);
-                if (elem_native < 0) {
-                    layout_valid = false;
-                    break;
-                }
-                layout->fields[i].native_type = XR_NATIVE_ARRAY;
-                layout->fields[i].elem_native_type = (uint8_t) elem_native;
-                layout->fields[i].elem_count = 0;
-                layout->fields[i].is_flexible = true;
-                continue;
-            }
-
             int native = xr_type_kind_to_native(ft->kind, ft->native_width);
-            if (native < 0 && is_extern_layout && ft->kind == XR_KIND_POINTER)
-                native = XR_NATIVE_POINTER;
             if (native < 0) {
                 // Fixed-size array field: [T; N]
                 if (ft->kind == XR_KIND_FIXED_ARRAY && ft->fixed_array.element_type) {
@@ -4139,7 +4001,7 @@ skip_interfaces:
                         }
                     }
                 }
-                if (sub_layout && (!is_extern_layout || sub_layout->is_extern_layout)) {
+                if (sub_layout) {
                     layout->fields[i].native_type = XR_NATIVE_NESTED_AGGREGATE;
                     layout->fields[i].size =
                         (uint16_t) xr_aggregate_layout_storage_size(sub_layout);

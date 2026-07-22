@@ -172,25 +172,6 @@ static void xfmt_emit_attributes(XrFmtContext *ctx, XrAttribute **attrs, int cou
     }
 }
 
-static const XrAttribute *xfmt_find_attribute(XrAttribute **attrs, int count, AttributeKind kind) {
-    for (int i = 0; i < count; i++) {
-        if (attrs[i] && attrs[i]->kind == kind)
-            return attrs[i];
-    }
-    return NULL;
-}
-
-static void xfmt_emit_attributes_except_extern(XrFmtContext *ctx, XrAttribute **attrs, int count) {
-    for (int i = 0; i < count; i++) {
-        if (!attrs[i] || attrs[i]->kind == ATTR_EXTERN || attrs[i]->kind == ATTR_DYLIB ||
-            attrs[i]->kind == ATTR_LINK)
-            continue;
-        xfmt_write_indent(ctx);
-        xfmt_emit_attribute(ctx, attrs[i]);
-        xfmt_write_newline(ctx);
-    }
-}
-
 void xfmt_emit_var_decl(XrFmtContext *ctx, AstNode *node) {
     VarDeclNode *decl = &node->as.var_decl;
     xfmt_emit_attributes(ctx, decl->attributes, decl->attr_count);
@@ -242,26 +223,15 @@ static void xfmt_emit_param(XrFmtContext *ctx, const XrParamNode *param) {
 
 void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
     FunctionDeclNode *fn = &node->as.function_decl;
-    const XrAttribute *extern_attr =
-        xfmt_find_attribute(fn->attributes, fn->attr_count, ATTR_EXTERN);
-    const XrAttribute *dylib_attr = xfmt_find_attribute(fn->attributes, fn->attr_count, ATTR_DYLIB);
-    const XrAttribute *link_attr = xfmt_find_attribute(fn->attributes, fn->attr_count, ATTR_LINK);
-    if (extern_attr) {
+    if (fn->is_extern) {
         xfmt_write_indent(ctx);
         xfmt_write_str(ctx, "extern ");
-        const char *abi = extern_attr->str_arg ? extern_attr->str_arg : "C";
+        const char *abi = fn->extern_abi ? fn->extern_abi : "C";
         xfmt_emit_escaped_inline_string(ctx, abi, (int) strlen(abi));
-        const XrAttribute *library_attr = link_attr ? link_attr : dylib_attr;
-        if (library_attr) {
-            xfmt_write_str(ctx, link_attr ? " link(" : " dylib(");
-            const char *library = library_attr->str_arg ? library_attr->str_arg : "";
-            xfmt_emit_escaped_inline_string(ctx, library, (int) strlen(library));
-            xfmt_write_char(ctx, ')');
-        }
         xfmt_write_str(ctx, " {");
         xfmt_write_newline(ctx);
         ctx->indent_level++;
-        xfmt_emit_attributes_except_extern(ctx, fn->attributes, fn->attr_count);
+        xfmt_emit_attributes(ctx, fn->attributes, fn->attr_count);
     } else {
         xfmt_emit_attributes(ctx, fn->attributes, fn->attr_count);
     }
@@ -292,7 +262,7 @@ void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_emit_block(ctx, fn->body);
     }
     xfmt_write_newline(ctx);
-    if (extern_attr) {
+    if (fn->is_extern) {
         ctx->indent_level--;
         xfmt_write_indent(ctx);
         xfmt_write_char(ctx, '}');
@@ -306,13 +276,6 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     ClassDeclNode *cls = is_union    ? &node->as.union_decl
                          : is_struct ? &node->as.struct_decl
                                      : &node->as.class_decl;
-    bool is_extern_layout = (is_struct || is_union) && cls->is_extern_layout;
-    if (is_extern_layout) {
-        xfmt_write_indent(ctx);
-        xfmt_write_str(ctx, "extern \"C\" {");
-        xfmt_write_newline(ctx);
-        ctx->indent_level++;
-    }
     xfmt_emit_attributes(ctx, cls->attributes, cls->attr_count);
     xfmt_write_indent(ctx);
 
@@ -605,12 +568,6 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     xfmt_write_char(ctx, '}');
     xfmt_write_newline(ctx);
-    if (is_extern_layout) {
-        ctx->indent_level--;
-        xfmt_write_indent(ctx);
-        xfmt_write_char(ctx, '}');
-        xfmt_write_newline(ctx);
-    }
 }
 
 void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
