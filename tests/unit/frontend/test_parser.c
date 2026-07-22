@@ -850,6 +850,15 @@ TEST(parser_rejects_retired_storage_declarations) {
     teardown();
 }
 
+TEST(parser_rejects_move_const_parameter_capability) {
+    setup();
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+                         "class Config {}\nfn publish(config: move const Config) {}"));
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
+                         "type Publisher = (move const int) -> ()"));
+    teardown();
+}
+
 TEST(parser_empty_source) {
     setup();
     AstNode *ast = xr_parse(xr_compiler_session_current_for_isolate(X), "");
@@ -1333,6 +1342,7 @@ int main(void) {
     // Error handling
     RUN_TEST(parser_error_returns_null);
     RUN_TEST(parser_rejects_retired_storage_declarations);
+    RUN_TEST(parser_rejects_move_const_parameter_capability);
     RUN_TEST(parser_empty_source);
     RUN_TEST(parser_multiple_stmts);
 

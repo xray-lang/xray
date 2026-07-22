@@ -1,0 +1,1 @@
+MOVE parameter mode is not allowed with const capability; use READ const T

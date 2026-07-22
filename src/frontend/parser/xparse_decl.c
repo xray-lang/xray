@@ -36,6 +36,16 @@ static bool current_can_start_top_level_after_recovery(Parser *parser) {
            xr_parser_check_name(parser, "asm") || xr_parser_check_name(parser, "extern");
 }
 
+static bool current_starts_removed_binding_declaration(Parser *parser, const char *spelling) {
+    Scanner scanner;
+    Token next;
+    if (!xr_parser_check_name(parser, spelling))
+        return false;
+    scanner = parser->scanner;
+    next = xr_scanner_scan(&scanner);
+    return next.type == TK_NAME;
+}
+
 /* ========== Function Parsing ========== */
 
 // Extract the content of the just-consumed string-literal token (quotes
@@ -1998,6 +2008,24 @@ AstNode *xr_parse_declaration(Parser *parser) {
     if (xr_parser_check_name(parser, "extern")) {
         xr_parser_advance(parser);
         return xr_parse_extern_block_declaration(parser);
+    }
+
+    if (current_starts_removed_binding_declaration(parser, "owned") ||
+        current_starts_removed_binding_declaration(parser, "shared")) {
+        Token removed = parser->current;
+        const char *spelling =
+            current_starts_removed_binding_declaration(parser, "owned") ? "owned" : "shared";
+        char title[128];
+        snprintf(title, sizeof(title), "'%s' binding syntax was removed; use var or const",
+                 spelling);
+        xr_parser_emit_removed_syntax(
+            parser, &removed, XR_ERR_SYN_BINDING_CAPABILITY_REMOVED, title,
+            "ownership, sharing, and storage are inferred from value capability and explicit "
+            "copy/move boundaries");
+        xr_parser_advance(parser);
+        xr_parser_skip_invalid_construct(parser, removed.line,
+                                         current_can_start_top_level_after_recovery, false);
+        return NULL;
     }
 
     if (xr_is_global_asm_start(parser)) {

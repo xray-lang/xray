@@ -431,6 +431,14 @@ static bool xr_parse_optional_param_mode(Parser *parser, bool allow_mode, XrPara
     return false;
 }
 
+static void xr_parse_reject_move_const_parameter(Parser *parser, XrParamMode mode,
+                                                 const XrTypeRef *type) {
+    if (mode != XR_PARAM_MOVE || !type || type->kind != XR_TREF_CONST)
+        return;
+    xr_parser_error(parser,
+                    "MOVE parameter mode is not allowed with const capability; use READ const T");
+}
+
 static void xr_parse_reject_postfix_param_mode(Parser *parser) {
     if (xr_parser_check(parser, TK_REF) || xr_parser_check_name(parser, "ref") ||
         xr_parser_check(parser, TK_MOVE) || xr_parser_check_name(parser, "move")) {
@@ -467,6 +475,7 @@ XR_FUNC bool xr_parse_optional_param_type_annotation(Parser *parser, bool allow_
     }
 
     XrTypeRef *type = xr_parse_type_annotation(parser);
+    xr_parse_reject_move_const_parameter(parser, mode, type);
     xr_parse_reject_postfix_param_mode(parser);
     if (out_mode)
         *out_mode = mode;
@@ -786,7 +795,9 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             param_modes[count] = XR_PARAM_READ;
             if (xr_parse_optional_param_mode(parser, true, &param_modes[count]))
                 saw_param_mode = true;
-            elems[count++] = xr_parse_type_annotation(parser);
+            elems[count] = xr_parse_type_annotation(parser);
+            xr_parse_reject_move_const_parameter(parser, param_modes[count], elems[count]);
+            count++;
         }
         xr_parser_consume(parser, TK_RPAREN, "expected ')'");
         if (xr_parser_match(parser, TK_ARROW)) {
