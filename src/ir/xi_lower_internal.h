@@ -110,8 +110,8 @@ static inline bool xi_top_binding_valid(XiTopBinding b) {
 XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrVMRuntime *isolate);
 XR_FUNC void xi_lower_cleanup(XiLower *l);
 XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent);
-XR_FUNC void xi_lower_publish_allocation_effect(XiFunc *func, struct XaAnalyzer *analyzer,
-                                                struct XaSymbol *symbol);
+XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, struct XaAnalyzer *analyzer,
+                                              struct XaSymbol *symbol);
 XR_FUNC bool xi_lower_reject_error_type(XiLower *l, const struct XrType *type, const char *context,
                                         int line);
 XR_FUNC struct XrType *xi_lower_type_or_any(XiLower *l, struct XrType *type, const char *context,

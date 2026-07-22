@@ -18,6 +18,7 @@
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_errorset.h"
 #include "xanalyzer_allocation.h"
+#include "xanalyzer_memory_effect.h"
 #include "xanalyzer_suspend.h"
 #include "xanalyzer_xrd.h"
 #include "xconsteval.h"
@@ -7825,6 +7826,10 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     // Pass 4: Infer allocation effects from the typed, symbol-resolved AST.
     // This runs for check, VM and AOT; backends only consume the result.
     xa_infer_allocation_effects(analyzer, ast);
+
+    // Pass 4b: Infer canonical root-relative memory effects.  View/borrow
+    // legality consumes this sidecar instead of method-name heuristics.
+    xa_infer_memory_effects(analyzer, ast);
 
     // Pass 5: Validate @no_suspend assertions (and the implicit @interrupt /
     // @c_export boundaries) against the task-212 suspend effect. Fail-closed.

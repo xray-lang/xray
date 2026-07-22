@@ -896,6 +896,56 @@ static bool alloc_summary_same(const XaAllocationSummary *a, const XaAllocationS
            a->column == b->column && a->stable_fingerprint == b->stable_fingerprint;
 }
 
+static XaUnknownReason alloc_effect_unknown_reason(XaAllocReasonSet reasons) {
+    if (reasons & XA_ALLOC_REASON_OPEN_DISPATCH)
+        return XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH;
+    if (reasons & XA_ALLOC_REASON_NATIVE_CONTRACT_MISSING)
+        return XA_UNKNOWN_NATIVE_CONTRACT_MISSING;
+    if (reasons & XA_ALLOC_REASON_DYNAMIC_CALL)
+        return XA_UNKNOWN_DYNAMIC_CALL_TARGET;
+    if (reasons & XA_ALLOC_REASON_INVALID_PROGRAM)
+        return XA_UNKNOWN_INVALID_PROGRAM;
+    return XA_UNKNOWN_UNRESOLVED_CALLEE;
+}
+
+/* Publish allocation into the analyzer's canonical product summary.  The
+ * allocation database remains the detailed witness store during the staged
+ * convergence, but it is no longer a competing semantic truth source. */
+static bool alloc_publish_canonical_effect(XaAllocPass *pass, XaAllocFunctionRow *row) {
+    if (!pass || !pass->analyzer || !row || !row->symbol)
+        return false;
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    const XaEffectSummary *current =
+        xa_effect_db_get(pass->analyzer->effect_db, row->symbol->links.effect_id);
+    bool ok =
+        !current || xa_effect_summary_add_summary(pass->analyzer->effect_db, &summary, current);
+    if (row->result.state == XA_ALLOC_MAY)
+        xa_effect_summary_add_semantic_effects(&summary, XA_SEM_EFFECT_ALLOC);
+    else if (row->result.state == XA_ALLOC_UNKNOWN)
+        xa_effect_summary_mark_semantic_incomplete(
+            &summary, XA_SEM_EFFECT_ALLOC, alloc_effect_unknown_reason(row->result.reason_bits));
+
+    XaEffectId effect_id =
+        ok ? xa_effect_db_intern(pass->analyzer->effect_db, &summary) : XA_EFFECT_NONE;
+    xa_effect_summary_clear(&summary);
+    if (effect_id != XA_EFFECT_NONE) {
+        row->symbol->links.effect_id = effect_id;
+        return true;
+    }
+
+    char message[256];
+    snprintf(message, sizeof(message),
+             "analysis resource failure while publishing allocation effect for '%s'",
+             alloc_function_name(row->node, row->symbol));
+    XrLocation location = {.file = row->symbol->links.file_path,
+                           .line = (uint32_t) row->node->line,
+                           .column = (uint32_t) row->node->column};
+    xa_analyzer_add_diagnostic(pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, message,
+                               &location);
+    return false;
+}
+
 static void alloc_publish_summaries(XaAllocPass *pass) {
     if (!pass)
         return;
@@ -920,6 +970,7 @@ static void alloc_publish_summaries(XaAllocPass *pass) {
         row->symbol->links.alloc_fingerprint = row->result.stable_fingerprint;
         row->symbol->links.alloc_effect_complete = true;
         row->symbol->links.has_no_alloc_contract = alloc_function_has_contract(row->node);
+        alloc_publish_canonical_effect(pass, row);
     }
 }
 

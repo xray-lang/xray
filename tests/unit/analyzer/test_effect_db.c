@@ -3,6 +3,7 @@
  */
 
 #include "xa_effect_db.h"
+#include "xa_memory_effect_db.h"
 #include "xmalloc.h"
 #include <stdio.h>
 #include <string.h>
@@ -554,7 +555,7 @@ TEST(json_empty_complete_summary_is_canonical) {
 
     char *json = xa_effect_summary_to_json(db, &summary, "app::boot");
     ASSERT(json != NULL);
-    ASSERT(strstr(json, "\"schema\":\"xray.error-effect.v1\"") != NULL);
+    ASSERT(strstr(json, "\"schema\":\"xray.effect-summary.v3\"") != NULL);
     ASSERT(strstr(json, "\"symbol\":\"app::boot\"") != NULL);
     ASSERT(strstr(json, "\"complete\":true") != NULL);
     ASSERT(strstr(json, "\"errors\":[]") != NULL);
@@ -668,6 +669,143 @@ TEST(json_sorts_variants_by_stable_key) {
     xa_effect_db_free(db);
 }
 
+TEST(semantic_product_participates_in_identity_join_and_json) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+
+    XaEffectSummary base;
+    XaEffectSummary semantic;
+    xa_effect_summary_init(&base);
+    xa_effect_summary_init(&semantic);
+    xa_effect_summary_add_semantic_effects(&semantic, XA_SEM_EFFECT_ALLOC | XA_SEM_EFFECT_SUSPEND |
+                                                          XA_SEM_EFFECT_IO);
+    xa_effect_summary_mark_contains_unsafe(&semantic);
+    xa_effect_summary_mark_requires_unsafe(&semantic);
+    xa_effect_summary_mark_semantic_incomplete(&semantic, XA_SEM_EFFECT_MAY_BLOCK,
+                                               XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+
+    XaEffectId base_id = xa_effect_db_intern(db, &base);
+    XaEffectId semantic_id = xa_effect_db_intern(db, &semantic);
+    ASSERT(base_id != XA_EFFECT_NONE);
+    ASSERT(semantic_id != XA_EFFECT_NONE);
+    ASSERT(base_id != semantic_id);
+
+    ASSERT(xa_effect_summary_add_summary(db, &base, &semantic));
+    ASSERT(xa_effect_summary_has_semantic_effect(&base, XA_SEM_EFFECT_ALLOC));
+    ASSERT(xa_effect_summary_has_semantic_effect(&base, XA_SEM_EFFECT_SUSPEND));
+    ASSERT(!xa_effect_summary_has_semantic_effect(&base, XA_SEM_EFFECT_PANIC));
+    ASSERT(base.contains_unsafe_op);
+    ASSERT(base.requires_unsafe_at_call);
+
+    char *json = xa_effect_summary_to_json(db, &base, "app::run");
+    ASSERT(json != NULL);
+    ASSERT(strstr(json, "\"schema\":\"xray.effect-summary.v3\"") != NULL);
+    ASSERT(strstr(json, "\"semanticAlloc\"") != NULL);
+    ASSERT(strstr(json, "\"suspend\"") != NULL);
+    ASSERT(strstr(json, "\"io\"") != NULL);
+    ASSERT(strstr(json, "\"unknownSemanticEffects\":[\"mayBlock\"]") != NULL);
+    ASSERT(strstr(json, "\"errorSetComplete\":true") != NULL);
+    ASSERT(strstr(json, "\"containsUnsafeOp\":true") != NULL);
+    ASSERT(strstr(json, "\"requiresUnsafeAtCall\":true") != NULL);
+
+    xr_free(json);
+    xa_effect_summary_clear(&semantic);
+    xa_effect_summary_clear(&base);
+    xa_effect_db_free(db);
+}
+
+TEST(semantic_effect_diff_is_directional) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaEffectSummary before;
+    XaEffectSummary after;
+    xa_effect_summary_init(&before);
+    xa_effect_summary_init(&after);
+    xa_effect_summary_add_semantic_effects(&after, XA_SEM_EFFECT_MAY_BLOCK);
+
+    XaEffectDiff diff;
+    ASSERT(xa_effect_summary_diff(db, &before, &after, &diff) == XA_EFFECT_DIFF_BREAKING);
+    ASSERT(diff.added_semantic_effects == XA_SEM_EFFECT_MAY_BLOCK);
+    ASSERT(diff.removed_semantic_effects == XA_SEM_EFFECT_NONE);
+    ASSERT(xa_effect_summary_diff(db, &after, &before, &diff) == XA_EFFECT_DIFF_IMPROVEMENT);
+    ASSERT(diff.removed_semantic_effects == XA_SEM_EFFECT_MAY_BLOCK);
+
+    xa_effect_summary_clear(&after);
+    xa_effect_summary_clear(&before);
+    xa_effect_db_free(db);
+}
+
+TEST(analysis_resource_failure_is_never_complete) {
+    XaEffectDatabase *db = xa_effect_db_new();
+    ASSERT(db != NULL);
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    xa_effect_summary_mark_incomplete(&summary, XA_UNKNOWN_ANALYSIS_RESOURCE_FAILURE);
+    ASSERT(!xa_effect_summary_is_complete(&summary));
+    ASSERT(xa_effect_summary_has_resource_failure(&summary));
+    ASSERT(!xa_effect_summary_is_nothrow(&summary));
+    ASSERT(xa_effect_db_intern(db, &summary) == XA_EFFECT_NONE);
+    xa_effect_summary_clear(&summary);
+    xa_effect_db_free(db);
+}
+
+TEST(memory_effect_identity_is_order_independent) {
+    XaMemoryEffectDatabase *db = xa_memory_effect_db_new();
+    ASSERT(db != NULL);
+    XaMemoryEffectSummary first;
+    XaMemoryEffectSummary second;
+    xa_memory_effect_summary_init(&first);
+    xa_memory_effect_summary_init(&second);
+    XaMemoryRootRef receiver = {.kind = XA_MEMORY_ROOT_RECEIVER, .index = 0};
+    XaMemoryRootRef param = {.kind = XA_MEMORY_ROOT_PARAM, .index = 1};
+
+    ASSERT(xa_memory_effect_summary_add_write(&first, receiver, 9));
+    ASSERT(xa_memory_effect_summary_add_write(&first, receiver, 3));
+    ASSERT(xa_memory_effect_summary_mark_relocation(&first, param));
+    ASSERT(xa_memory_effect_summary_mark_descriptor_rebind(&first, receiver));
+
+    ASSERT(xa_memory_effect_summary_mark_descriptor_rebind(&second, receiver));
+    ASSERT(xa_memory_effect_summary_mark_relocation(&second, param));
+    ASSERT(xa_memory_effect_summary_add_write(&second, receiver, 3));
+    ASSERT(xa_memory_effect_summary_add_write(&second, receiver, 9));
+
+    XaMemoryEffectId first_id = xa_memory_effect_db_intern(db, &first);
+    XaMemoryEffectId second_id = xa_memory_effect_db_intern(db, &second);
+    ASSERT(first_id != XA_MEMORY_EFFECT_NONE);
+    ASSERT(first_id == second_id);
+    ASSERT(xa_memory_effect_db_summary_count(db) == 1);
+    ASSERT(xa_memory_effect_summary_invalidates_live_view(xa_memory_effect_db_get(db, first_id),
+                                                          param));
+    ASSERT(!xa_memory_effect_summary_invalidates_live_view(xa_memory_effect_db_get(db, first_id),
+                                                           receiver));
+
+    xa_memory_effect_summary_clear(&second);
+    xa_memory_effect_summary_clear(&first);
+    xa_memory_effect_db_free(db);
+}
+
+TEST(memory_effect_unknown_and_resource_failure_fail_closed) {
+    XaMemoryEffectDatabase *db = xa_memory_effect_db_new();
+    ASSERT(db != NULL);
+    XaMemoryRootRef param = {.kind = XA_MEMORY_ROOT_PARAM, .index = 0};
+    XaMemoryEffectSummary unknown;
+    xa_memory_effect_summary_init(&unknown);
+    xa_memory_effect_summary_mark_incomplete(&unknown, XA_UNKNOWN_VIEW_INVALIDATION);
+    ASSERT(!xa_memory_effect_summary_is_complete(&unknown));
+    ASSERT(xa_memory_effect_summary_invalidates_live_view(&unknown, param));
+    ASSERT(xa_memory_effect_db_intern(db, &unknown) != XA_MEMORY_EFFECT_NONE);
+
+    XaMemoryEffectSummary failed;
+    xa_memory_effect_summary_init(&failed);
+    xa_memory_effect_summary_mark_incomplete(&failed, XA_UNKNOWN_ANALYSIS_RESOURCE_FAILURE);
+    ASSERT(xa_memory_effect_summary_has_resource_failure(&failed));
+    ASSERT(xa_memory_effect_db_intern(db, &failed) == XA_MEMORY_EFFECT_NONE);
+
+    xa_memory_effect_summary_clear(&failed);
+    xa_memory_effect_summary_clear(&unknown);
+    xa_memory_effect_db_free(db);
+}
+
 int main(void) {
     printf("Running effect database tests...\n");
     RUN_TEST(empty_complete_is_real_summary);
@@ -693,6 +831,11 @@ int main(void) {
     RUN_TEST(json_all_variants_marks_all);
     RUN_TEST(json_incomplete_lists_reasons_in_fixed_order);
     RUN_TEST(json_sorts_variants_by_stable_key);
+    RUN_TEST(semantic_product_participates_in_identity_join_and_json);
+    RUN_TEST(semantic_effect_diff_is_directional);
+    RUN_TEST(analysis_resource_failure_is_never_complete);
+    RUN_TEST(memory_effect_identity_is_order_independent);
+    RUN_TEST(memory_effect_unknown_and_resource_failure_fail_closed);
 
     printf("\n%d tests passed, %d failed\n", tests_passed, tests_failed);
     return tests_failed ? 1 : 0;

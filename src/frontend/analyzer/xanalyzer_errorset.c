@@ -1051,8 +1051,13 @@ static bool bitset_equal(const XaBitSet *a, const XaBitSet *b) {
 
 static bool effect_summary_equal(const XaEffectSummary *a, const XaEffectSummary *b) {
     if (!a || !b || a->completeness != b->completeness ||
-        a->unknown_reasons != b->unknown_reasons || a->escaping.count != b->escaping.count ||
-        a->root_count != b->root_count)
+        a->unknown_reasons != b->unknown_reasons || a->semantic_effects != b->semantic_effects ||
+        a->unknown_semantic_effects != b->unknown_semantic_effects ||
+        a->error_set_completeness != b->error_set_completeness ||
+        a->error_unknown_reasons != b->error_unknown_reasons ||
+        a->contains_unsafe_op != b->contains_unsafe_op ||
+        a->requires_unsafe_at_call != b->requires_unsafe_at_call ||
+        a->escaping.count != b->escaping.count || a->root_count != b->root_count)
         return false;
     for (uint32_t i = 0; i < a->escaping.count; i++) {
         const XaErrorTypeSet *lhs = &a->escaping.types[i];

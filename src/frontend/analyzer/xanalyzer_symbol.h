@@ -22,6 +22,7 @@
 
 #include "xconsteval.h"
 #include "xa_effect_db.h"
+#include "xa_memory_effect_db.h"
 #include "xa_alloc_effect.h"
 #include "xa_intrinsic_registry.h"
 #include "../../runtime/value/xtype.h"
@@ -152,6 +153,7 @@ struct XaSymbolLinks {
     bool is_c_export;  // @c_export AOT C ABI wrapper
     const char *c_export_symbol;
     XaEffectId effect_id;  // Canonical analyzer-owned effect summary id (0 = not inferred yet)
+    XaMemoryEffectId memory_effect_id;  // Canonical root-relative memory effect summary id
     // Error-effect "may-throw" bit (task 216), derived from the effect summary
     // after the effect-DB fixpoint: NO_THROW iff the summary is complete AND its
     // escaping error set is empty; MAY_THROW otherwise (fail-closed default).

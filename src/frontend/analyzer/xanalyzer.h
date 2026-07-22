@@ -26,6 +26,7 @@
 #include "../../base/xtarget_data_layout.h"
 #include "xanalyzer_symbol.h"
 #include "xa_parallel_call_plan.h"
+#include "xa_memory_effect_db.h"
 #include "xa_resolved_call.h"
 #include "../../runtime/value/xtype_pool.h"
 #include "../../runtime/xerror.h"
@@ -164,6 +165,10 @@ struct XaAnalyzer {
     // Canonical analyzer-owned typed-error effect database. Function symbols
     // hold only non-owning XaEffectId values into this session-local store.
     XaEffectDatabase *effect_db;
+
+    // Canonical root-relative relocation/invalidation summaries. Function
+    // symbols hold only non-owning XaMemoryEffectId values into this store.
+    XaMemoryEffectDatabase *memory_effect_db;
 
     // Canonical analyzer-owned allocation effects. Function symbols hold only
     // non-owning XaAllocEffectId values into this session-local store.

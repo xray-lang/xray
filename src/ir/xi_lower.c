@@ -51,11 +51,31 @@ static XaSymbol *xi_lower_function_symbol(XaAnalyzer *analyzer, AstNode *node) {
     return scope ? scope->function_symbol : NULL;
 }
 
-XR_FUNC void xi_lower_publish_allocation_effect(XiFunc *func, XaAnalyzer *analyzer,
-                                                XaSymbol *symbol) {
+XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer,
+                                              XaSymbol *symbol) {
     if (!func || !analyzer || !symbol)
         return;
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, symbol);
+    const XaEffectSummary *effect =
+        links ? xa_effect_db_get(analyzer->effect_db, links->effect_id) : NULL;
+    const XaMemoryEffectSummary *memory =
+        links ? xa_memory_effect_db_get(analyzer->memory_effect_db, links->memory_effect_id) : NULL;
+    if (effect) {
+        func->analyzer_effect_id = links->effect_id;
+        func->semantic_effects = effect->semantic_effects;
+        func->unknown_semantic_effects = effect->unknown_semantic_effects;
+        func->effect_unknown_reasons = effect->unknown_reasons;
+        func->analyzer_effect_fingerprint =
+            xa_effect_summary_fingerprint(analyzer->effect_db, effect);
+        func->analyzer_effect_complete = xa_effect_summary_is_complete(effect);
+        func->contains_unsafe_op = effect->contains_unsafe_op;
+        func->requires_unsafe_at_call = effect->requires_unsafe_at_call;
+    }
+    if (memory) {
+        func->analyzer_memory_effect_id = links->memory_effect_id;
+        func->analyzer_memory_effect_fingerprint = xa_memory_effect_summary_fingerprint(memory);
+        func->analyzer_memory_effect_complete = xa_memory_effect_summary_is_complete(memory);
+    }
     const XaAllocationSummary *summary =
         links && links->alloc_effect_id != XA_ALLOC_EFFECT_NONE
             ? xa_allocation_db_get(analyzer->allocation_db, links->alloc_effect_id)
@@ -1585,8 +1605,8 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
      * must be selected through a concrete generic-body plan. */
     l.func->is_generic_template =
         parent_ctx && parent_ctx->func && parent_ctx->func->is_generic_template;
-    xi_lower_publish_allocation_effect(l.func, analyzer,
-                                       xi_lower_function_symbol(analyzer, func_node));
+    xi_lower_publish_effect_sidecars(l.func, analyzer,
+                                     xi_lower_function_symbol(analyzer, func_node));
     xi_lower_bind_function_body_id(&l,
                                    xi_lower_function_evidence_source_node_id(&l, func_node, fdecl),
                                    func_node->line > 0 ? (uint32_t) func_node->line : 0);

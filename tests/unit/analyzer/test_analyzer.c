@@ -909,6 +909,97 @@ static const XaAllocationSummary *analyzer_function_allocation_summary(XaAnalyze
     return xa_allocation_db_get(analyzer->allocation_db, sym->links.alloc_effect_id);
 }
 
+static const XaMemoryEffectSummary *analyzer_function_memory_effect_summary(XaAnalyzer *analyzer,
+                                                                            const char *name) {
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, name);
+    if (!sym)
+        sym = xa_analyzer_lookup_in_scope(analyzer, name, analyzer->global_scope);
+    if (!sym)
+        sym = xa_analyzer_lookup_deep(analyzer, name);
+    if (!sym || sym->links.memory_effect_id == XA_MEMORY_EFFECT_NONE)
+        return NULL;
+    return xa_memory_effect_db_get(analyzer->memory_effect_db, sym->links.memory_effect_id);
+}
+
+static const XaMemoryRootEffect *memory_effect_root(const XaMemoryEffectSummary *summary,
+                                                    XaMemoryRootKind kind, uint32_t index) {
+    if (!summary)
+        return NULL;
+    for (uint32_t i = 0; i < summary->root_count; i++) {
+        if (summary->roots[i].root.kind == kind && summary->roots[i].root.index == index)
+            return &summary->roots[i];
+    }
+    return NULL;
+}
+
+TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source =
+        "fn grow(data: ref Array<int>) { data.push(1) }\n"
+        "fn growViaCall(data: ref Array<int>) { grow(data) }\n"
+        "fn shrink(data: ref Array<int>) { data.pop() }\n"
+        "fn rebind(data: ref Array<int>) { data = [1, 2] }\n"
+        "fn dynamic(cb: (ref Array<int>) -> (), data: ref Array<int>) { cb(data) }\n"
+        "fn readOnly(data: ref Array<int>) -> int { return data.length }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "memory_effect_summary.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "analysis resource failure"));
+
+    const XaMemoryEffectSummary *grow = analyzer_function_memory_effect_summary(a, "grow");
+    const XaMemoryEffectSummary *via = analyzer_function_memory_effect_summary(a, "growViaCall");
+    const XaMemoryEffectSummary *shrink = analyzer_function_memory_effect_summary(a, "shrink");
+    const XaMemoryEffectSummary *rebind = analyzer_function_memory_effect_summary(a, "rebind");
+    const XaMemoryEffectSummary *dynamic = analyzer_function_memory_effect_summary(a, "dynamic");
+    const XaMemoryEffectSummary *read_only = analyzer_function_memory_effect_summary(a, "readOnly");
+    ASSERT(grow && via && shrink && rebind && dynamic && read_only);
+
+    const XaMemoryRootEffect *grow_root = memory_effect_root(grow, XA_MEMORY_ROOT_PARAM, 0);
+    const XaMemoryRootEffect *via_root = memory_effect_root(via, XA_MEMORY_ROOT_PARAM, 0);
+    const XaMemoryRootEffect *shrink_root = memory_effect_root(shrink, XA_MEMORY_ROOT_PARAM, 0);
+    const XaMemoryRootEffect *rebind_root = memory_effect_root(rebind, XA_MEMORY_ROOT_PARAM, 0);
+    ASSERT(grow_root && grow_root->write_count == 1);
+    ASSERT(grow_root->relocation == XA_MEMORY_MAY_RELOCATE);
+    ASSERT(via_root && via_root->relocation == XA_MEMORY_MAY_RELOCATE);
+    ASSERT(shrink_root && shrink_root->shortening == XA_MEMORY_MAY_SHORTEN);
+    ASSERT(rebind_root && rebind_root->descriptor_rebind);
+    ASSERT(!xa_memory_effect_summary_is_complete(dynamic));
+    ASSERT((dynamic->unknown_reasons & XA_UNKNOWN_VIEW_INVALIDATION) != 0);
+    ASSERT(read_only->root_count == 0);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "fn worker() -> int { return 1 }\n"
+                         "fn suspends() { var task = go worker(); await task }\n"
+                         "fn transitive() { suspends() }\n"
+                         "fn dynamic(cb: () -> ()) { cb() }\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "canonical_suspend_effect.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "analysis resource failure"));
+
+    const XaEffectSummary *worker = analyzer_function_effect_summary(a, "worker");
+    const XaEffectSummary *suspends = analyzer_function_effect_summary(a, "suspends");
+    const XaEffectSummary *transitive = analyzer_function_effect_summary(a, "transitive");
+    const XaEffectSummary *dynamic = analyzer_function_effect_summary(a, "dynamic");
+    ASSERT(worker && suspends && transitive && dynamic);
+    ASSERT(!xa_effect_summary_has_semantic_effect(worker, XA_SEM_EFFECT_SUSPEND));
+    ASSERT(xa_effect_summary_has_semantic_effect(suspends, XA_SEM_EFFECT_SUSPEND));
+    ASSERT(xa_effect_summary_has_semantic_effect(transitive, XA_SEM_EFFECT_SUSPEND));
+    ASSERT((dynamic->unknown_semantic_effects & XA_SEM_EFFECT_SUSPEND) != 0);
+    ASSERT(dynamic->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((dynamic->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     XaAllocationSummary fingerprint_a = {
         .state = XA_ALLOC_MAY,
@@ -999,6 +1090,10 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     const XaAllocationSummary *fixed_value_copy =
         analyzer_function_allocation_summary(a, "fixedValueCopy");
     const XaAllocationSummary *value_error = analyzer_function_allocation_summary(a, "valueError");
+    const XaEffectSummary *scalar_effect = analyzer_function_effect_summary(a, "scalar");
+    const XaEffectSummary *leaf_effect = analyzer_function_effect_summary(a, "allocateLeaf");
+    const XaEffectSummary *two_hop_effect = analyzer_function_effect_summary(a, "twoHop");
+    const XaEffectSummary *unknown_effect = analyzer_function_effect_summary(a, "unknownCall");
     ASSERT(scalar && scalar->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(cycle_entry && cycle_entry->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(leaf && leaf->state == XA_ALLOC_MAY);
@@ -1009,6 +1104,11 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     ASSERT(slice_pointer_views && slice_pointer_views->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(fixed_value_copy && fixed_value_copy->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(value_error && value_error->state == XA_ALLOC_PROVEN_NONE);
+    ASSERT(scalar_effect && leaf_effect && two_hop_effect && unknown_effect);
+    ASSERT(!xa_effect_summary_has_semantic_effect(scalar_effect, XA_SEM_EFFECT_ALLOC));
+    ASSERT(xa_effect_summary_has_semantic_effect(leaf_effect, XA_SEM_EFFECT_ALLOC));
+    ASSERT(xa_effect_summary_has_semantic_effect(two_hop_effect, XA_SEM_EFFECT_ALLOC));
+    ASSERT((unknown_effect->unknown_semantic_effects & XA_SEM_EFFECT_ALLOC) != 0);
     ASSERT(scalar->stable_fingerprint != 0);
     ASSERT(analyzer_diag_contains(a, "allocates via call 'allocateLeaf'"));
     ASSERT(analyzer_diag_contains(a, "'allocateLeaf' allocates via literal 'Array'"));
@@ -1616,103 +1716,107 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
     ASSERT(const_alias != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, stable_var, "DynamicErr"));
-    ASSERT((stable_var->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((stable_var->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, stable_chain, "DynamicErr"));
-    ASSERT((stable_chain->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT(rebound_var->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((rebound_var->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((stable_chain->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(rebound_var->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((rebound_var->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(!effect_summary_has_enum_named(a, rebound_var, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, rebound_to_throwing, "DynamicErr"));
-    ASSERT((rebound_to_throwing->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT(unknown_rebound->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((unknown_rebound->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT((rebound_to_throwing->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(unknown_rebound->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((unknown_rebound->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(!effect_summary_has_enum_named(a, unknown_rebound, "DynamicErr"));
-    ASSERT(conditional_rebound->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((conditional_rebound->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(conditional_rebound->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((conditional_rebound->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, conditional_rebound, "DynamicErr"));
-    ASSERT(if_else_union->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((if_else_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(if_else_union->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((if_else_union->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, if_else_union, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, if_else_union, "OtherDynamicErr"));
-    ASSERT(conditional_unknown->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((conditional_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
-    ASSERT(while_union->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((while_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(conditional_unknown->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((conditional_unknown->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(while_union->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((while_union->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, while_union, "DynamicErr"));
-    ASSERT(for_union->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((for_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(for_union->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((for_union->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, for_union, "DynamicErr"));
-    ASSERT(for_increment_union->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((for_increment_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(for_increment_union->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((for_increment_union->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(!effect_summary_has_enum_named(a, for_increment_union, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, for_increment_union, "OtherDynamicErr"));
-    ASSERT(for_in_union->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((for_in_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(for_in_union->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((for_in_union->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, for_in_union, "DynamicErr"));
-    ASSERT(loop_unknown->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((loop_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
-    ASSERT(try_catch_union->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((try_catch_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(loop_unknown->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((loop_unknown->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(try_catch_union->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((try_catch_union->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, try_catch_union, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, try_catch_union, "OtherDynamicErr"));
-    ASSERT(try_catch_base_union->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((try_catch_base_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(try_catch_base_union->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((try_catch_base_union->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, try_catch_base_union, "DynamicErr"));
-    ASSERT(try_catch_unknown->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((try_catch_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
-    ASSERT(try_mutated_catch_read->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((try_mutated_catch_read->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
-    ASSERT(returned_function_value->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((returned_function_value->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(try_catch_unknown->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((try_catch_unknown->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(try_mutated_catch_read->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((try_mutated_catch_read->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(returned_function_value->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((returned_function_value->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, returned_function_value, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, returned_function_value, "OtherDynamicErr"));
-    ASSERT(returned_function_value_direct->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((returned_function_value_direct->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(returned_function_value_direct->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((returned_function_value_direct->error_unknown_reasons &
+            XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, returned_function_value_direct, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, returned_function_value_direct, "OtherDynamicErr"));
-    ASSERT(returned_function_value_base->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((returned_function_value_base->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(returned_function_value_base->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((returned_function_value_base->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) ==
+           0);
     ASSERT(effect_summary_has_enum_named(a, returned_function_value_base, "DynamicErr"));
     ASSERT(!effect_summary_has_enum_named(a, returned_function_value_base, "OtherDynamicErr"));
-    ASSERT(returned_function_value_unknown->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((returned_function_value_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) !=
-           0);
-    ASSERT(captured_function_value->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((captured_function_value->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(returned_function_value_unknown->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((returned_function_value_unknown->error_unknown_reasons &
+            XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(captured_function_value->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((captured_function_value->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, captured_function_value, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, captured_function_value, "OtherDynamicErr"));
-    ASSERT(captured_function_value_direct->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((captured_function_value_direct->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(captured_function_value_direct->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((captured_function_value_direct->error_unknown_reasons &
+            XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, captured_function_value_direct, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, captured_function_value_direct, "OtherDynamicErr"));
-    ASSERT(captured_function_value_unknown->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((captured_function_value_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) !=
-           0);
+    ASSERT(captured_function_value_unknown->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((captured_function_value_unknown->error_unknown_reasons &
+            XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(!effect_summary_has_enum_named(a, captured_function_value_unknown, "DynamicErr"));
-    ASSERT(captured_function_value_current_rebound->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((captured_function_value_current_rebound->unknown_reasons &
+    ASSERT(captured_function_value_current_rebound->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((captured_function_value_current_rebound->error_unknown_reasons &
             XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(
         !effect_summary_has_enum_named(a, captured_function_value_current_rebound, "DynamicErr"));
     ASSERT(!effect_summary_has_enum_named(a, captured_function_value_current_rebound,
                                           "OtherDynamicErr"));
-    ASSERT(higher_order_callback->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((higher_order_callback->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(higher_order_callback->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((higher_order_callback->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, higher_order_callback, "DynamicErr"));
     ASSERT(!effect_summary_has_enum_named(a, higher_order_callback, "OtherDynamicErr"));
-    ASSERT(higher_order_function_expr->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((higher_order_function_expr->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(higher_order_function_expr->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((higher_order_function_expr->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) ==
+           0);
     ASSERT(!effect_summary_has_enum_named(a, higher_order_function_expr, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, higher_order_function_expr, "OtherDynamicErr"));
-    ASSERT(higher_order_union->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((higher_order_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(higher_order_union->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((higher_order_union->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, higher_order_union, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, higher_order_union, "OtherDynamicErr"));
-    ASSERT(higher_order_unknown->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((higher_order_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(higher_order_unknown->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((higher_order_unknown->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(!effect_summary_has_enum_named(a, higher_order_unknown, "DynamicErr"));
     ASSERT(effect_summary_has_enum_named(a, const_alias, "DynamicErr"));
-    ASSERT((const_alias->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((const_alias->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 
     xa_analyzer_free(a);
     setup_pool();
@@ -1763,28 +1867,28 @@ TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
     ASSERT(specialized_int != NULL);
     ASSERT(specialized_string != NULL);
 
-    ASSERT(generic_int->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((generic_int->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(generic_int->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((generic_int->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, generic_int, "GenericIntErr"));
     ASSERT(!effect_summary_has_enum_named(a, generic_int, "GenericOtherIntErr"));
     ASSERT(!effect_summary_has_enum_named(a, generic_int, "GenericStringErr"));
-    ASSERT(generic_int_other->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((generic_int_other->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(generic_int_other->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((generic_int_other->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(!effect_summary_has_enum_named(a, generic_int_other, "GenericIntErr"));
     ASSERT(effect_summary_has_enum_named(a, generic_int_other, "GenericOtherIntErr"));
     ASSERT(!effect_summary_has_enum_named(a, generic_int_other, "GenericStringErr"));
-    ASSERT(generic_string->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((generic_string->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(generic_string->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((generic_string->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(!effect_summary_has_enum_named(a, generic_string, "GenericIntErr"));
     ASSERT(!effect_summary_has_enum_named(a, generic_string, "GenericOtherIntErr"));
     ASSERT(effect_summary_has_enum_named(a, generic_string, "GenericStringErr"));
-    ASSERT(specialized_int->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((specialized_int->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(specialized_int->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((specialized_int->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, specialized_int, "GenericIntErr"));
     ASSERT(effect_summary_has_enum_named(a, specialized_int, "GenericOtherIntErr"));
     ASSERT(!effect_summary_has_enum_named(a, specialized_int, "GenericStringErr"));
-    ASSERT(specialized_string->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((specialized_string->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(specialized_string->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((specialized_string->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(!effect_summary_has_enum_named(a, specialized_string, "GenericIntErr"));
     ASSERT(!effect_summary_has_enum_named(a, specialized_string, "GenericOtherIntErr"));
     ASSERT(effect_summary_has_enum_named(a, specialized_string, "GenericStringErr"));
@@ -1878,27 +1982,27 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
     ASSERT(conditional_rebound != NULL);
 
     ASSERT(effect_summary_has_enum_named(a, immediate_throw, "LambdaErr"));
-    ASSERT((immediate_throw->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((immediate_throw->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, immediate_call, "LambdaErr"));
-    ASSERT((immediate_call->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((immediate_call->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, const_stored, "LambdaErr"));
-    ASSERT((const_stored->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((const_stored->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, const_chain, "LambdaErr"));
-    ASSERT((const_chain->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((const_chain->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, stable_stored, "LambdaErr"));
-    ASSERT((stable_stored->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((stable_stored->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, stable_chain, "LambdaErr"));
-    ASSERT((stable_chain->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT(rebound->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((rebound->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((stable_chain->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(rebound->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((rebound->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(!effect_summary_has_enum_named(a, rebound, "LambdaErr"));
     ASSERT(effect_summary_has_enum_named(a, rebound_to_throwing, "LambdaErr"));
-    ASSERT((rebound_to_throwing->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT(unknown_rebound->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((unknown_rebound->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT((rebound_to_throwing->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(unknown_rebound->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((unknown_rebound->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(!effect_summary_has_enum_named(a, unknown_rebound, "LambdaErr"));
-    ASSERT(conditional_rebound->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((conditional_rebound->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(conditional_rebound->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((conditional_rebound->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, conditional_rebound, "LambdaErr"));
 
     xa_analyzer_free(a);
@@ -1934,9 +2038,9 @@ TEST(analyzer_error_effect_handles_recursive_function_expr_cycles) {
         analyzer_function_effect_summary(a, "viaRecursiveLambdaThrow");
     ASSERT(no_throw != NULL);
     ASSERT(throwing != NULL);
-    ASSERT(no_throw->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(no_throw->error_set_completeness == XA_EFFECT_COMPLETE);
     ASSERT(no_throw->escaping.count == 0);
-    ASSERT(throwing->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(throwing->error_set_completeness == XA_EFFECT_COMPLETE);
     ASSERT(effect_summary_has_enum_named(a, throwing, "RecursiveLambdaErr"));
 
     xa_analyzer_free(a);
@@ -2046,29 +2150,29 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
     ASSERT(effect_summary_has_enum_named(a, temporary, "MethodErr"));
     ASSERT(effect_summary_has_enum_named(a, static_method, "MethodErr"));
     ASSERT(effect_summary_has_enum_named(a, final_method, "MethodErr"));
-    ASSERT(final_method->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((final_method->unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) == 0);
-    ASSERT(method_hof->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((method_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(final_method->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((final_method->error_unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) == 0);
+    ASSERT(method_hof->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((method_hof->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, method_hof, "MethodErr"));
     ASSERT(!effect_summary_has_enum_named(a, method_hof, "OtherMethodErr"));
-    ASSERT(static_method_hof->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((static_method_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(static_method_hof->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((static_method_hof->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(!effect_summary_has_enum_named(a, static_method_hof, "MethodErr"));
     ASSERT(effect_summary_has_enum_named(a, static_method_hof, "OtherMethodErr"));
-    ASSERT(method_hof_union->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((method_hof_union->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(method_hof_union->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((method_hof_union->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
     ASSERT(effect_summary_has_enum_named(a, method_hof_union, "MethodErr"));
     ASSERT(effect_summary_has_enum_named(a, method_hof_union, "OtherMethodErr"));
-    ASSERT(method_hof_unknown->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((method_hof_unknown->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
+    ASSERT(method_hof_unknown->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((method_hof_unknown->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) != 0);
     ASSERT(!effect_summary_has_enum_named(a, method_hof_unknown, "MethodErr"));
-    ASSERT(open_base->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((open_base->unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) == 0);
+    ASSERT(open_base->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((open_base->error_unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) == 0);
     ASSERT(effect_summary_has_enum_named(a, open_base, "MethodErr"));
     ASSERT(effect_summary_has_enum_named(a, open_base, "OtherMethodErr"));
-    ASSERT(interface_method->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((interface_method->unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) == 0);
+    ASSERT(interface_method->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((interface_method->error_unknown_reasons & XA_UNKNOWN_OPEN_VIRTUAL_DISPATCH) == 0);
     ASSERT(effect_summary_has_enum_named(a, interface_method, "MethodErr"));
     ASSERT(effect_summary_has_enum_named(a, interface_method, "OtherMethodErr"));
 
@@ -2317,42 +2421,44 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(imported_noalloc && imported_noalloc->state == XA_ALLOC_PROVEN_NONE);
     ASSERT(imported_alloc && imported_alloc->state == XA_ALLOC_MAY);
 
-    ASSERT(selective->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(ns->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(reexported->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(reexported_ns->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(star_selective->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(star_ns->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(imported_hof->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(namespace_hof->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(reexported_hof->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(reexported_namespace_hof->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(star_hof->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(local_callback_hof->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(foreign_callback_hof->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(namespace_callback_hof->completeness == XA_EFFECT_COMPLETE);
-    ASSERT((selective->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((ns->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((reexported->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((reexported_ns->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((star_selective->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((star_ns->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((imported_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((namespace_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((reexported_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((reexported_namespace_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((star_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((local_callback_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((foreign_callback_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((namespace_callback_hof->unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
-    ASSERT((imported_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT((namespace_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT((reexported_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT((reexported_namespace_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT((star_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT((local_callback_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT((foreign_callback_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
-    ASSERT((namespace_callback_hof->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(selective->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(ns->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(reexported->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(reexported_ns->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(star_selective->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(star_ns->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(imported_hof->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(namespace_hof->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(reexported_hof->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(reexported_namespace_hof->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(star_hof->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(local_callback_hof->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(foreign_callback_hof->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(namespace_callback_hof->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT((selective->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((ns->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((reexported->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((reexported_ns->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((star_selective->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((star_ns->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((imported_hof->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((namespace_hof->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((reexported_hof->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((reexported_namespace_hof->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) ==
+           0);
+    ASSERT((star_hof->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((local_callback_hof->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((foreign_callback_hof->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) == 0);
+    ASSERT((namespace_callback_hof->error_unknown_reasons & XA_UNKNOWN_MISSING_IMPORTED_EFFECT) ==
+           0);
+    ASSERT((imported_hof->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((namespace_hof->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((reexported_hof->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((reexported_namespace_hof->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((star_hof->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((local_callback_hof->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((foreign_callback_hof->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT((namespace_callback_hof->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 
     const XaErrorTypeSet *selective_set =
         effect_summary_enum_set_named(a, selective, "ImportedErr");
@@ -2513,13 +2619,13 @@ TEST(analyzer_error_effect_consumes_xrd_native_contracts) {
     ASSERT(nothrow_call != NULL);
     ASSERT(missing_call != NULL);
     ASSERT(handle_call != NULL);
-    ASSERT(namespace_call->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(selective_call->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(handle_call->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(namespace_call->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(selective_call->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(handle_call->error_set_completeness == XA_EFFECT_COMPLETE);
     ASSERT(xa_effect_summary_is_nothrow(nothrow_call));
-    ASSERT(missing_call->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((missing_call->unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
-    ASSERT((missing_call->unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
+    ASSERT(missing_call->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((missing_call->error_unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
+    ASSERT((missing_call->error_unknown_reasons & XA_UNKNOWN_DYNAMIC_CALL_TARGET) == 0);
 
     const XaErrorTypeSet *namespace_set =
         effect_summary_enum_set_named(a, namespace_call, "NativeErr");
@@ -2603,7 +2709,7 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     ASSERT(!analyzer_diag_contains(ok, "error"));
     const XaEffectSummary *ok_effect = analyzer_function_effect_summary(ok, "viaNative");
     ASSERT(ok_effect != NULL);
-    ASSERT(ok_effect->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(ok_effect->error_set_completeness == XA_EFFECT_COMPLETE);
     const XaErrorTypeSet *ok_set = effect_summary_enum_set_named(ok, ok_effect, "NativeByteErr");
     ASSERT(ok_set != NULL);
     ASSERT(!ok_set->all_variants);
@@ -2815,9 +2921,9 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
     ASSERT(current_instance != NULL);
     ASSERT(current_decrypt != NULL);
     ASSERT(current_lossy != NULL);
-    ASSERT(current_static->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(current_instance->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(current_decrypt->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(current_static->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(current_instance->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(current_decrypt->error_set_completeness == XA_EFFECT_COMPLETE);
     const XaErrorTypeSet *current_static_set =
         effect_summary_enum_set_named(current, current_static, "Utf8Error");
     const XaErrorTypeSet *current_instance_set =
@@ -2849,8 +2955,8 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
     const XaEffectSummary *instance_call = analyzer_function_effect_summary(a, "viaInstance");
     ASSERT(static_call != NULL);
     ASSERT(instance_call != NULL);
-    ASSERT(static_call->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(instance_call->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(static_call->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(instance_call->error_set_completeness == XA_EFFECT_COMPLETE);
 
     const XaErrorTypeSet *static_set = effect_summary_enum_set_named(a, static_call, "Utf8Error");
     const XaErrorTypeSet *instance_set =
@@ -3455,18 +3561,18 @@ TEST(analyzer_error_effect_marks_invalid_program_partial_facts) {
     ASSERT(partial != NULL);
     ASSERT(empty != NULL);
     ASSERT(caller != NULL);
-    ASSERT(partial->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((partial->unknown_reasons & XA_UNKNOWN_INVALID_PROGRAM) != 0);
+    ASSERT(partial->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((partial->error_unknown_reasons & XA_UNKNOWN_INVALID_PROGRAM) != 0);
     const XaErrorTypeSet *partial_set = effect_summary_enum_set_named(a, partial, "PartialErr");
     ASSERT(partial_set != NULL);
     ASSERT(!partial_set->all_variants);
     ASSERT(xa_bitset_test(&partial_set->variants, 0));
     ASSERT(!xa_bitset_test(&partial_set->variants, 1));
-    ASSERT(empty->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((empty->unknown_reasons & XA_UNKNOWN_INVALID_PROGRAM) != 0);
+    ASSERT(empty->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((empty->error_unknown_reasons & XA_UNKNOWN_INVALID_PROGRAM) != 0);
     ASSERT(!xa_effect_summary_is_nothrow(empty));
-    ASSERT(caller->completeness == XA_EFFECT_INCOMPLETE);
-    ASSERT((caller->unknown_reasons & XA_UNKNOWN_INVALID_PROGRAM) != 0);
+    ASSERT(caller->error_set_completeness == XA_EFFECT_INCOMPLETE);
+    ASSERT((caller->error_unknown_reasons & XA_UNKNOWN_INVALID_PROGRAM) != 0);
     ASSERT(!xa_effect_summary_is_nothrow(caller));
 
     xa_analyzer_free(a);
@@ -4944,10 +5050,10 @@ TEST(analyzer_error_effect_converges_recursive_components) {
     ASSERT(cycle_c != NULL);
     ASSERT(caught_a != NULL);
     ASSERT(caught_b != NULL);
-    ASSERT(direct->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(cycle_a->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(cycle_b->completeness == XA_EFFECT_COMPLETE);
-    ASSERT(cycle_c->completeness == XA_EFFECT_COMPLETE);
+    ASSERT(direct->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(cycle_a->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(cycle_b->error_set_completeness == XA_EFFECT_COMPLETE);
+    ASSERT(cycle_c->error_set_completeness == XA_EFFECT_COMPLETE);
     const XaErrorTypeSet *direct_set = effect_summary_enum_set_named(a, direct, "RecursiveErr");
     const XaErrorTypeSet *cycle_a_set = effect_summary_enum_set_named(a, cycle_a, "RecursiveErr");
     const XaErrorTypeSet *cycle_b_set = effect_summary_enum_set_named(a, cycle_b, "RecursiveErr");
@@ -5740,6 +5846,8 @@ int main(void) {
     RUN_TEST(analyzer_diagnostics);
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
+    RUN_TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts);
+    RUN_TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint);
     RUN_TEST(analyzer_allocation_effect_propagates_and_validates_contracts);
     RUN_TEST(analyzer_throw_effect_bit_matches_effect_summary);
     RUN_TEST(analyzer_no_throw_constraints_accept_proven_callbacks);

@@ -1390,6 +1390,21 @@ typedef struct XiFunc {
     bool allocation_effect_complete;
     bool has_no_alloc_contract;
 
+    /* Canonical analyzer effect sidecars.  IDs are scoped to `analyzer`; the
+     * stable fingerprints are the cache/verifier identity that survives
+     * serialization and cross-stage comparison. */
+    uint32_t analyzer_effect_id;
+    uint32_t analyzer_memory_effect_id;
+    uint32_t semantic_effects;
+    uint32_t unknown_semantic_effects;
+    uint32_t effect_unknown_reasons;
+    uint64_t analyzer_effect_fingerprint;
+    uint64_t analyzer_memory_effect_fingerprint;
+    bool analyzer_effect_complete;
+    bool analyzer_memory_effect_complete;
+    bool contains_unsafe_op;
+    bool requires_unsafe_at_call;
+
     /* Task 217 @zero_cost shape contract (verified at the AOT backend stage:
      * the generated code must carry no forbidden residue category).  The allow
      * mask exempts individual categories via `@zero_cost(allow: ...)`; a zeroed

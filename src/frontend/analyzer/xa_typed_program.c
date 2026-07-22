@@ -8,6 +8,7 @@
 
 #include "xa_typed_program.h"
 #include "xanalyzer.h"
+#include "xanalyzer_symbol.h"
 #include "../../base/xmalloc.h"
 
 struct XaTypedProgram {
@@ -108,6 +109,23 @@ const struct XaResolvedCall *xa_typed_program_resolved_call(const XaTypedProgram
     if (!xa_typed_program_is_current(program) || !call_node)
         return NULL;
     return xa_analyzer_get_resolved_call(program->semantics, call_node);
+}
+
+const XaEffectSummary *xa_typed_program_effect_summary(const XaTypedProgram *program,
+                                                       const XaSymbol *symbol) {
+    if (!xa_typed_program_is_current(program) || !symbol ||
+        symbol->links.effect_id == XA_EFFECT_NONE)
+        return NULL;
+    return xa_effect_db_get(program->semantics->effect_db, symbol->links.effect_id);
+}
+
+const XaMemoryEffectSummary *xa_typed_program_memory_effect_summary(const XaTypedProgram *program,
+                                                                    const XaSymbol *symbol) {
+    if (!xa_typed_program_is_current(program) || !symbol ||
+        symbol->links.memory_effect_id == XA_MEMORY_EFFECT_NONE)
+        return NULL;
+    return xa_memory_effect_db_get(program->semantics->memory_effect_db,
+                                   symbol->links.memory_effect_id);
 }
 
 const char *xa_typed_program_reason_name(XaTypedProgramReason reason) {

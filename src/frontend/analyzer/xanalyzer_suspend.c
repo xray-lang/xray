@@ -585,6 +585,38 @@ static void sus_publish_summaries(XaSuspendPass *pass) {
         if (!changed)
             break;
     }
+    for (int i = 0; i < pass->row_count; i++) {
+        XaSuspendRow *row = &pass->rows[i];
+        if (!row->symbol)
+            continue;
+        XaEffectSummary summary;
+        xa_effect_summary_init(&summary);
+        const XaEffectSummary *current =
+            xa_effect_db_get(pass->analyzer->effect_db, row->symbol->links.effect_id);
+        bool ok =
+            !current || xa_effect_summary_add_summary(pass->analyzer->effect_db, &summary, current);
+        if (row->result == XA_SUSPEND_MAY)
+            xa_effect_summary_add_semantic_effects(&summary, XA_SEM_EFFECT_SUSPEND);
+        else if (row->result == XA_SUSPEND_INCOMPLETE)
+            xa_effect_summary_mark_semantic_incomplete(&summary, XA_SEM_EFFECT_SUSPEND,
+                                                       XA_UNKNOWN_DYNAMIC_CALL_TARGET);
+        XaEffectId effect_id =
+            ok ? xa_effect_db_intern(pass->analyzer->effect_db, &summary) : XA_EFFECT_NONE;
+        xa_effect_summary_clear(&summary);
+        if (effect_id != XA_EFFECT_NONE) {
+            row->symbol->links.effect_id = effect_id;
+            continue;
+        }
+        char message[256];
+        snprintf(message, sizeof(message),
+                 "analysis resource failure while publishing suspend effect for '%s'",
+                 sus_function_name(row->node, row->symbol));
+        XrLocation location = {.file = row->symbol->links.file_path,
+                               .line = (uint32_t) row->node->line,
+                               .column = (uint32_t) row->node->column};
+        xa_analyzer_add_diagnostic(pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, message,
+                                   &location);
+    }
 }
 
 static void sus_validate_contract(XaSuspendPass *pass, XaSuspendRow *row) {

@@ -344,6 +344,7 @@ void xa_effect_summary_init(XaEffectSummary *summary) {
     if (!summary)
         return;
     memset(summary, 0, sizeof(*summary));
+    summary->error_set_completeness = XA_EFFECT_COMPLETE;
     summary->completeness = XA_EFFECT_COMPLETE;
 }
 
@@ -482,6 +483,14 @@ bool xa_effect_summary_add_summary(XaEffectDatabase *db, XaEffectSummary *summar
         summary->completeness = XA_EFFECT_INCOMPLETE;
         summary->unknown_reasons |= src->unknown_reasons;
     }
+    summary->semantic_effects |= src->semantic_effects;
+    summary->unknown_semantic_effects |= src->unknown_semantic_effects;
+    if (src->error_set_completeness == XA_EFFECT_INCOMPLETE) {
+        summary->error_set_completeness = XA_EFFECT_INCOMPLETE;
+        summary->error_unknown_reasons |= src->error_unknown_reasons;
+    }
+    summary->contains_unsafe_op |= src->contains_unsafe_op;
+    summary->requires_unsafe_at_call |= src->requires_unsafe_at_call;
     for (uint32_t i = 0; i < src->escaping.count; i++) {
         const XaErrorTypeSet *type_set = &src->escaping.types[i];
         if (type_set->all_variants) {
@@ -501,6 +510,33 @@ bool xa_effect_summary_add_summary(XaEffectDatabase *db, XaEffectSummary *summar
     }
     ok = summary_add_roots(summary, src, NULL) && ok;
     return ok;
+}
+
+void xa_effect_summary_add_semantic_effects(XaEffectSummary *summary, XaSemanticEffectSet effects) {
+    if (!summary)
+        return;
+    summary->semantic_effects |= effects;
+    summary->fingerprint = 0;
+}
+
+bool xa_effect_summary_has_semantic_effect(const XaEffectSummary *summary,
+                                           XaSemanticEffect effect) {
+    return summary && effect != XA_SEM_EFFECT_NONE &&
+           (summary->semantic_effects & (XaSemanticEffectSet) effect) != 0;
+}
+
+void xa_effect_summary_mark_contains_unsafe(XaEffectSummary *summary) {
+    if (!summary)
+        return;
+    summary->contains_unsafe_op = true;
+    summary->fingerprint = 0;
+}
+
+void xa_effect_summary_mark_requires_unsafe(XaEffectSummary *summary) {
+    if (!summary)
+        return;
+    summary->requires_unsafe_at_call = true;
+    summary->fingerprint = 0;
 }
 
 bool xa_effect_summary_add_type_from_summary(XaEffectDatabase *db, XaEffectSummary *summary,
@@ -619,12 +655,35 @@ void xa_effect_summary_mark_incomplete(XaEffectSummary *summary, XaUnknownReason
     if (!summary || reason == XA_UNKNOWN_NONE)
         return;
     summary->completeness = XA_EFFECT_INCOMPLETE;
+    summary->error_set_completeness = XA_EFFECT_INCOMPLETE;
     summary->unknown_reasons |= (XaUnknownReasonSet) reason;
+    summary->error_unknown_reasons |= (XaUnknownReasonSet) reason;
+}
+
+void xa_effect_summary_mark_semantic_incomplete(XaEffectSummary *summary, XaSemanticEffect effect,
+                                                XaUnknownReason reason) {
+    if (!summary || effect == XA_SEM_EFFECT_NONE || reason == XA_UNKNOWN_NONE)
+        return;
+    summary->completeness = XA_EFFECT_INCOMPLETE;
+    summary->unknown_semantic_effects |= (XaSemanticEffectSet) effect;
+    summary->unknown_reasons |= (XaUnknownReasonSet) reason;
+    summary->fingerprint = 0;
+}
+
+bool xa_effect_summary_is_complete(const XaEffectSummary *summary) {
+    return summary && summary->completeness == XA_EFFECT_COMPLETE &&
+           summary->error_set_completeness == XA_EFFECT_COMPLETE &&
+           summary->unknown_semantic_effects == XA_SEM_EFFECT_NONE &&
+           summary->unknown_reasons == XA_UNKNOWN_NONE;
+}
+
+bool xa_effect_summary_has_resource_failure(const XaEffectSummary *summary) {
+    return summary && (summary->unknown_reasons & XA_UNKNOWN_ANALYSIS_RESOURCE_FAILURE) != 0;
 }
 
 bool xa_effect_summary_is_nothrow(const XaEffectSummary *summary) {
-    return summary && summary->completeness == XA_EFFECT_COMPLETE &&
-           summary->unknown_reasons == XA_UNKNOWN_NONE && summary->escaping.count == 0;
+    return summary && summary->error_set_completeness == XA_EFFECT_COMPLETE &&
+           !xa_effect_summary_has_resource_failure(summary) && summary->escaping.count == 0;
 }
 
 static uint64_t hash_u64(uint64_t h, uint64_t value) {
@@ -706,9 +765,15 @@ uint64_t xa_effect_summary_fingerprint(const XaEffectDatabase *db, const XaEffec
     if (!summary)
         return 0;
     uint64_t h = UINT64_C(14695981039346656037);
-    h = hash_u64(h, UINT64_C(0x7861656666646231)); /* "xaeffdb1" */
+    h = hash_u64(h, UINT64_C(0x7861656666646233)); /* "xaeffdb3" */
+    h = hash_u64(h, (uint64_t) summary->semantic_effects);
+    h = hash_u64(h, (uint64_t) summary->unknown_semantic_effects);
+    h = hash_u64(h, (uint64_t) summary->error_set_completeness);
+    h = hash_u64(h, (uint64_t) summary->error_unknown_reasons);
     h = hash_u64(h, (uint64_t) summary->completeness);
     h = hash_u64(h, (uint64_t) summary->unknown_reasons);
+    h = hash_u64(h, summary->contains_unsafe_op ? 1u : 0u);
+    h = hash_u64(h, summary->requires_unsafe_at_call ? 1u : 0u);
     h = hash_u64(h, (uint64_t) summary->escaping.count);
     for (uint32_t i = 0; i < summary->escaping.count; i++) {
         const XaErrorTypeSet *set = &summary->escaping.types[i];
@@ -845,9 +910,22 @@ XaEffectDiffKind xa_effect_summary_diff(const XaEffectDatabase *db, const XaEffe
     if ((before->unknown_reasons & ~after->unknown_reasons) != 0)
         diff.narrowed_unknown = true;
 
-    if (diff.added_escaping || diff.became_incomplete || diff.widened_unknown)
+    diff.added_semantic_effects = after->semantic_effects & ~before->semantic_effects;
+    diff.removed_semantic_effects = before->semantic_effects & ~after->semantic_effects;
+    diff.added_unsafe_operation = !before->contains_unsafe_op && after->contains_unsafe_op;
+    diff.removed_unsafe_operation = before->contains_unsafe_op && !after->contains_unsafe_op;
+    diff.added_unsafe_call_requirement =
+        !before->requires_unsafe_at_call && after->requires_unsafe_at_call;
+    diff.removed_unsafe_call_requirement =
+        before->requires_unsafe_at_call && !after->requires_unsafe_at_call;
+
+    if (diff.added_escaping || diff.became_incomplete || diff.widened_unknown ||
+        diff.added_semantic_effects != XA_SEM_EFFECT_NONE || diff.added_unsafe_operation ||
+        diff.added_unsafe_call_requirement)
         diff.kind = XA_EFFECT_DIFF_BREAKING;
-    else if (diff.removed_escaping || diff.became_complete || diff.narrowed_unknown)
+    else if (diff.removed_escaping || diff.became_complete || diff.narrowed_unknown ||
+             diff.removed_semantic_effects != XA_SEM_EFFECT_NONE || diff.removed_unsafe_operation ||
+             diff.removed_unsafe_call_requirement)
         diff.kind = XA_EFFECT_DIFF_IMPROVEMENT;
     else
         diff.kind = XA_EFFECT_DIFF_COMPATIBLE;
@@ -1005,6 +1083,8 @@ char *xa_effect_summary_to_json(const XaEffectDatabase *db, const XaEffectSummar
         {XA_UNKNOWN_NATIVE_CONTRACT_MISSING, "nativeContractMissing"},
         {XA_UNKNOWN_ANALYSIS_LIMIT, "analysisLimit"},
         {XA_UNKNOWN_INVALID_PROGRAM, "invalidProgram"},
+        {XA_UNKNOWN_VIEW_INVALIDATION, "viewInvalidationUnknown"},
+        {XA_UNKNOWN_ANALYSIS_RESOURCE_FAILURE, "analysisResourceFailure"},
     };
 
     XaJsonBuf b;
@@ -1013,13 +1093,57 @@ char *xa_effect_summary_to_json(const XaEffectDatabase *db, const XaEffectSummar
     b.cap = 0;
     b.ok = true;
 
-    xa_json_raw(&b, "{\"schema\":\"xray.error-effect.v1\"");
+    xa_json_raw(&b, "{\"schema\":\"xray.effect-summary.v3\"");
     if (symbol_qualified_name) {
         xa_json_raw(&b, ",\"symbol\":");
         xa_json_string(&b, symbol_qualified_name);
     }
     xa_json_raw(&b, ",\"complete\":");
-    xa_json_raw(&b, summary->completeness == XA_EFFECT_COMPLETE ? "true" : "false");
+    xa_json_raw(&b, xa_effect_summary_is_complete(summary) ? "true" : "false");
+    xa_json_raw(&b, ",\"errorSetComplete\":");
+    xa_json_raw(&b, summary->error_set_completeness == XA_EFFECT_COMPLETE ? "true" : "false");
+
+    xa_json_raw(&b, ",\"semanticEffects\":[");
+    static const struct {
+        XaSemanticEffect bit;
+        const char *name;
+    } semantic_effect_names[] = {
+        {XA_SEM_EFFECT_ALLOC, "semanticAlloc"},
+        {XA_SEM_EFFECT_SUSPEND, "suspend"},
+        {XA_SEM_EFFECT_MAY_BLOCK, "mayBlock"},
+        {XA_SEM_EFFECT_THREAD_BLOCK, "threadBlock"},
+        {XA_SEM_EFFECT_PANIC, "panic"},
+        {XA_SEM_EFFECT_ABORT, "abort"},
+        {XA_SEM_EFFECT_IO, "io"},
+        {XA_SEM_EFFECT_FOREIGN, "foreign"},
+        {XA_SEM_EFFECT_SYNC, "sync"},
+    };
+    bool first_semantic = true;
+    for (size_t i = 0; i < sizeof(semantic_effect_names) / sizeof(semantic_effect_names[0]); i++) {
+        if (!xa_effect_summary_has_semantic_effect(summary, semantic_effect_names[i].bit))
+            continue;
+        if (!first_semantic)
+            xa_json_raw(&b, ",");
+        first_semantic = false;
+        xa_json_string(&b, semantic_effect_names[i].name);
+    }
+    xa_json_raw(&b, "]");
+    xa_json_raw(&b, ",\"unknownSemanticEffects\":[");
+    bool first_unknown_semantic = true;
+    for (size_t i = 0; i < sizeof(semantic_effect_names) / sizeof(semantic_effect_names[0]); i++) {
+        if ((summary->unknown_semantic_effects &
+             (XaSemanticEffectSet) semantic_effect_names[i].bit) == 0)
+            continue;
+        if (!first_unknown_semantic)
+            xa_json_raw(&b, ",");
+        first_unknown_semantic = false;
+        xa_json_string(&b, semantic_effect_names[i].name);
+    }
+    xa_json_raw(&b, "]");
+    xa_json_raw(&b, ",\"containsUnsafeOp\":");
+    xa_json_raw(&b, summary->contains_unsafe_op ? "true" : "false");
+    xa_json_raw(&b, ",\"requiresUnsafeAtCall\":");
+    xa_json_raw(&b, summary->requires_unsafe_at_call ? "true" : "false");
 
     xa_json_raw(&b, ",\"errors\":[");
     bool first_error = true;
@@ -1048,6 +1172,19 @@ char *xa_effect_summary_to_json(const XaEffectDatabase *db, const XaEffectSummar
     }
     xa_json_raw(&b, "]");
 
+    xa_json_raw(&b, ",\"errorUnknownReasons\":[");
+    bool first_error_reason = true;
+    for (size_t i = 0; i < sizeof(unknown_reason_names) / sizeof(unknown_reason_names[0]); i++) {
+        if ((summary->error_unknown_reasons & (XaUnknownReasonSet) unknown_reason_names[i].bit) ==
+            0)
+            continue;
+        if (!first_error_reason)
+            xa_json_raw(&b, ",");
+        first_error_reason = false;
+        xa_json_string(&b, unknown_reason_names[i].name);
+    }
+    xa_json_raw(&b, "]");
+
     xa_json_raw(&b, ",\"unknownReasons\":[");
     bool first_reason = true;
     for (size_t i = 0; i < sizeof(unknown_reason_names) / sizeof(unknown_reason_names[0]); i++) {
@@ -1073,8 +1210,14 @@ char *xa_effect_summary_to_json(const XaEffectDatabase *db, const XaEffectSummar
 
 static bool summary_copy(XaEffectSummary *dst, const XaEffectSummary *src) {
     xa_effect_summary_init(dst);
+    dst->semantic_effects = src->semantic_effects;
+    dst->unknown_semantic_effects = src->unknown_semantic_effects;
+    dst->error_set_completeness = src->error_set_completeness;
+    dst->error_unknown_reasons = src->error_unknown_reasons;
     dst->completeness = src->completeness;
     dst->unknown_reasons = src->unknown_reasons;
+    dst->contains_unsafe_op = src->contains_unsafe_op;
+    dst->requires_unsafe_at_call = src->requires_unsafe_at_call;
     dst->fingerprint = src->fingerprint;
     dst->revision = src->revision;
     if (src->escaping.count > 0) {
@@ -1108,7 +1251,13 @@ static bool summary_equals(const XaEffectSummary *a, const XaEffectSummary *b) {
         return true;
     if (!a || !b)
         return false;
-    if (a->completeness != b->completeness || a->unknown_reasons != b->unknown_reasons ||
+    if (a->semantic_effects != b->semantic_effects ||
+        a->unknown_semantic_effects != b->unknown_semantic_effects ||
+        a->error_set_completeness != b->error_set_completeness ||
+        a->error_unknown_reasons != b->error_unknown_reasons ||
+        a->completeness != b->completeness || a->unknown_reasons != b->unknown_reasons ||
+        a->contains_unsafe_op != b->contains_unsafe_op ||
+        a->requires_unsafe_at_call != b->requires_unsafe_at_call ||
         a->escaping.count != b->escaping.count)
         return false;
     for (uint32_t i = 0; i < a->escaping.count; i++) {
@@ -1124,7 +1273,7 @@ static bool summary_equals(const XaEffectSummary *a, const XaEffectSummary *b) {
 }
 
 XaEffectId xa_effect_db_intern(XaEffectDatabase *db, const XaEffectSummary *summary) {
-    if (!db || !summary)
+    if (!db || !summary || xa_effect_summary_has_resource_failure(summary))
         return XA_EFFECT_NONE;
     XaEffectSummary normalized;
     if (!summary_copy(&normalized, summary))

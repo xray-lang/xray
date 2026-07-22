@@ -13,6 +13,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef enum {
     XA_BUILTIN_RECEIVER_EXACT_INTEGER,
@@ -73,6 +74,16 @@ typedef enum {
     XA_BUILTIN_UNSAFE_NONE,
     XA_BUILTIN_UNSAFE_REQUIRED,
 } XaBuiltinMethodUnsafeRequirement;
+
+typedef enum XaBuiltinMethodMemoryEffect {
+    XA_BUILTIN_MEMORY_STABLE_READ = 0,
+    XA_BUILTIN_MEMORY_WRITE = 1u << 0,
+    XA_BUILTIN_MEMORY_MAY_RELOCATE = 1u << 1,
+    XA_BUILTIN_MEMORY_MAY_SHORTEN = 1u << 2,
+    XA_BUILTIN_MEMORY_INVALIDATES_VIEWS = 1u << 3,
+} XaBuiltinMethodMemoryEffect;
+
+typedef uint32_t XaBuiltinMethodMemoryEffectSet;
 
 typedef enum {
     XA_BUILTIN_PROFILE_ALL,
@@ -168,6 +179,37 @@ xa_builtin_receiver_method_by_id(XaBuiltinReceiverMethodId method_id) {
         return NULL;
     const XaBuiltinReceiverMethodSpec *spec = &xa_builtin_receiver_methods[method_id];
     return spec->method_id == method_id ? spec : NULL;
+}
+
+/* Root-relative memory effects are keyed by the sealed receiver-method ID,
+ * never by a parallel method-name whitelist. */
+static inline XaBuiltinMethodMemoryEffectSet
+xa_builtin_receiver_method_memory_effect(const XaBuiltinReceiverMethodSpec *spec) {
+    if (!spec)
+        return XA_BUILTIN_MEMORY_STABLE_READ;
+    XaBuiltinMethodMemoryEffectSet result = spec->effect == XA_BUILTIN_EFFECT_MUTATES_RECEIVER
+                                                ? XA_BUILTIN_MEMORY_WRITE
+                                                : XA_BUILTIN_MEMORY_STABLE_READ;
+    switch (spec->method_id) {
+        case XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM:
+        case XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_REPEAT_FROM:
+        case XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH:
+        case XA_BUILTIN_RECEIVER_METHOD_ARRAY_UNSHIFT:
+        case XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESERVE:
+            result |= XA_BUILTIN_MEMORY_MAY_RELOCATE;
+            break;
+        case XA_BUILTIN_RECEIVER_METHOD_ARRAY_RESIZE:
+            result |= XA_BUILTIN_MEMORY_MAY_RELOCATE | XA_BUILTIN_MEMORY_MAY_SHORTEN;
+            break;
+        case XA_BUILTIN_RECEIVER_METHOD_ARRAY_POP:
+        case XA_BUILTIN_RECEIVER_METHOD_ARRAY_SHIFT:
+        case XA_BUILTIN_RECEIVER_METHOD_ARRAY_CLEAR:
+            result |= XA_BUILTIN_MEMORY_MAY_SHORTEN;
+            break;
+        default:
+            break;
+    }
+    return result;
 }
 
 static inline XaBuiltinMethodProfileAvailability

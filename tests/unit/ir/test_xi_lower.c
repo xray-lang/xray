@@ -2671,6 +2671,20 @@ TEST(yield_stmt) {
     xi_func_free(f);
 }
 
+TEST(canonical_effect_sidecars_reach_xi) {
+    XiFunc *f = lower_source("fn grow(data: ref Array<int>) { data.push(1) }\n");
+    assert(f != NULL);
+    XiFunc *grow = func_tree_find_func_name(f, "grow");
+    assert(grow != NULL);
+    assert(grow->analyzer_effect_id != 0);
+    assert(grow->analyzer_memory_effect_id != 0);
+    assert(grow->analyzer_effect_fingerprint != 0);
+    assert(grow->analyzer_memory_effect_fingerprint != 0);
+    assert((grow->semantic_effects & XA_SEM_EFFECT_ALLOC) != 0);
+    assert(grow->analyzer_memory_effect_complete);
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -2757,6 +2771,7 @@ int main(void) {
     run_import_export_skip();
     run_class_decl_skip();
     run_yield_stmt();
+    run_canonical_effect_sidecars_reach_xi();
 
     teardown();
 

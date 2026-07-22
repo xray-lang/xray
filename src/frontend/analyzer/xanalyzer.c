@@ -17,6 +17,7 @@
 #include "xanalyzer_builtin_interfaces.h"
 #include "xa_node_table.h"
 #include "xa_effect_db.h"
+#include "xa_memory_effect_db.h"
 #include "xa_alloc_effect.h"
 #include "xa_parallel_call_plan.h"
 #include "xa_resolved_call.h"
@@ -442,8 +443,16 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     // Canonical typed-error effect summaries.
     analyzer->effect_db = xa_effect_db_new();
 
+    // Canonical root-relative memory effects.
+    analyzer->memory_effect_db = xa_memory_effect_db_new();
+
     // Canonical allocation-effect summaries.
     analyzer->allocation_db = xa_allocation_db_new();
+
+    if (!analyzer->effect_db || !analyzer->memory_effect_db || !analyzer->allocation_db) {
+        xa_analyzer_free(analyzer);
+        return NULL;
+    }
 
     return analyzer;
 }
@@ -503,6 +512,11 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
     if (analyzer->effect_db) {
         xa_effect_db_free(analyzer->effect_db);
         analyzer->effect_db = NULL;
+    }
+
+    if (analyzer->memory_effect_db) {
+        xa_memory_effect_db_free(analyzer->memory_effect_db);
+        analyzer->memory_effect_db = NULL;
     }
 
     if (analyzer->allocation_db) {

@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xa_effect_db.h - Canonical analyzer-owned error effect summaries
+ * xa_effect_db.h - Canonical analyzer-owned semantic effect summaries
  */
 
 #ifndef XA_EFFECT_DB_H
@@ -45,6 +45,24 @@ typedef struct XaErrorSet {
     uint32_t capacity;
 } XaErrorSet;
 
+/* Source-semantic effects are a product, not a mutually exclusive state.
+ * Backend residue such as a release-AOT heap allocation is intentionally not
+ * represented here; it belongs to the target/profile shape plan. */
+typedef enum XaSemanticEffect {
+    XA_SEM_EFFECT_NONE = 0,
+    XA_SEM_EFFECT_ALLOC = 1u << 0,
+    XA_SEM_EFFECT_SUSPEND = 1u << 1,
+    XA_SEM_EFFECT_MAY_BLOCK = 1u << 2,
+    XA_SEM_EFFECT_THREAD_BLOCK = 1u << 3,
+    XA_SEM_EFFECT_PANIC = 1u << 4,
+    XA_SEM_EFFECT_ABORT = 1u << 5,
+    XA_SEM_EFFECT_IO = 1u << 6,
+    XA_SEM_EFFECT_FOREIGN = 1u << 7,
+    XA_SEM_EFFECT_SYNC = 1u << 8,
+} XaSemanticEffect;
+
+typedef uint32_t XaSemanticEffectSet;
+
 typedef enum XaEffectCompleteness {
     XA_EFFECT_COMPLETE = 0,
     XA_EFFECT_INCOMPLETE = 1,
@@ -59,6 +77,11 @@ typedef enum XaUnknownReason {
     XA_UNKNOWN_NATIVE_CONTRACT_MISSING = 1u << 4,
     XA_UNKNOWN_ANALYSIS_LIMIT = 1u << 5,
     XA_UNKNOWN_INVALID_PROGRAM = 1u << 6,
+    XA_UNKNOWN_VIEW_INVALIDATION = 1u << 7,
+    /* Resource exhaustion is not a semantic unknown. Callers must turn this
+     * into a compiler error and must never consume the summary as permission
+     * to optimize, move, share, borrow, or call a strong boundary. */
+    XA_UNKNOWN_ANALYSIS_RESOURCE_FAILURE = 1u << 8,
 } XaUnknownReason;
 
 typedef uint32_t XaUnknownReasonSet;
@@ -76,9 +99,15 @@ typedef struct XaEffectContract {
 } XaEffectContract;
 
 typedef struct XaEffectSummary {
+    XaSemanticEffectSet semantic_effects;
+    XaSemanticEffectSet unknown_semantic_effects;
     XaErrorSet escaping;
+    XaEffectCompleteness error_set_completeness;
+    XaUnknownReasonSet error_unknown_reasons;
     XaEffectCompleteness completeness;
     XaUnknownReasonSet unknown_reasons;
+    bool contains_unsafe_op;
+    bool requires_unsafe_at_call;
     XaEffectEdgeId *roots;
     uint32_t root_count;
     uint32_t root_capacity;
@@ -124,6 +153,12 @@ XR_FUNC bool xa_effect_summary_add_all_variants(XaEffectDatabase *db, XaEffectSu
                                                 XaErrorTypeId type_id);
 XR_FUNC bool xa_effect_summary_add_summary(XaEffectDatabase *db, XaEffectSummary *summary,
                                            const XaEffectSummary *src);
+XR_FUNC void xa_effect_summary_add_semantic_effects(XaEffectSummary *summary,
+                                                    XaSemanticEffectSet effects);
+XR_FUNC bool xa_effect_summary_has_semantic_effect(const XaEffectSummary *summary,
+                                                   XaSemanticEffect effect);
+XR_FUNC void xa_effect_summary_mark_contains_unsafe(XaEffectSummary *summary);
+XR_FUNC void xa_effect_summary_mark_requires_unsafe(XaEffectSummary *summary);
 XR_FUNC bool xa_effect_summary_add_type_from_summary(XaEffectDatabase *db, XaEffectSummary *summary,
                                                      const XaEffectSummary *src,
                                                      XaErrorTypeId type_id);
@@ -137,6 +172,11 @@ XR_FUNC bool xa_effect_summary_subtract_type(XaEffectSummary *summary, XaErrorTy
 XR_FUNC bool xa_effect_summary_subtract_variant(XaEffectDatabase *db, XaEffectSummary *summary,
                                                 XaErrorTypeId type_id, XaErrorVariantId variant_id);
 XR_FUNC void xa_effect_summary_mark_incomplete(XaEffectSummary *summary, XaUnknownReason reason);
+XR_FUNC void xa_effect_summary_mark_semantic_incomplete(XaEffectSummary *summary,
+                                                        XaSemanticEffect effect,
+                                                        XaUnknownReason reason);
+XR_FUNC bool xa_effect_summary_is_complete(const XaEffectSummary *summary);
+XR_FUNC bool xa_effect_summary_has_resource_failure(const XaEffectSummary *summary);
 XR_FUNC bool xa_effect_summary_is_nothrow(const XaEffectSummary *summary);
 XR_FUNC uint64_t xa_effect_summary_fingerprint(const XaEffectDatabase *db,
                                                const XaEffectSummary *summary);
@@ -158,6 +198,12 @@ typedef struct XaEffectDiff {
     bool became_complete;
     bool widened_unknown;  /* after has unknown reasons absent from before */
     bool narrowed_unknown; /* before has unknown reasons absent from after */
+    XaSemanticEffectSet added_semantic_effects;
+    XaSemanticEffectSet removed_semantic_effects;
+    bool added_unsafe_operation;
+    bool removed_unsafe_operation;
+    bool added_unsafe_call_requirement;
+    bool removed_unsafe_call_requirement;
 } XaEffectDiff;
 
 XR_FUNC XaEffectDiffKind xa_effect_summary_diff(const XaEffectDatabase *db,
