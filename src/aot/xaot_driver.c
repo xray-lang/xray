@@ -37,6 +37,7 @@
 #include "../os/os_dir.h"
 #include "../ir/xi.h"
 #include "../ir/xi_evidence.h"
+#include "../ir/xi_op_name.h"
 #include "../ir/xi_pipeline.h"
 #include "../ir/xi_import_resolve.h"
 #include "xi_cgen.h"
@@ -97,6 +98,79 @@ static bool xaot_bundle_has_explicit_vector_ops(XiModule **modules, int nmodules
     return false;
 }
 
+static const char *xaot_view_origin_name(uint8_t origin) {
+    switch (origin) {
+        case XI_VIEW_ORIGIN_PARAM:
+            return "param";
+        case XI_VIEW_ORIGIN_RECEIVER:
+            return "receiver";
+        case XI_VIEW_ORIGIN_STATIC:
+            return "static";
+        case XI_VIEW_ORIGIN_LOCAL:
+            return "local";
+        case XI_VIEW_ORIGIN_MULTI:
+            return "multi";
+        case XI_VIEW_ORIGIN_FOREIGN:
+            return "foreign";
+        case XI_VIEW_ORIGIN_ALLOCATION:
+            return "allocation";
+        case XI_VIEW_ORIGIN_UNKNOWN:
+            return "unknown";
+        case XI_VIEW_ORIGIN_NONE:
+        default:
+            return "none";
+    }
+}
+
+static void xaot_dump_value_view_evidence(FILE *out, const XiFunc *func, const XiValue *value) {
+    const XiViewEvidence *view;
+    if (!out || !func || !value || !value->view_evidence.complete)
+        return;
+    view = &value->view_evidence;
+    fprintf(out,
+            "view-evidence function=%s value=v%u op=%s origin=%s source-param=%d "
+            "source-operand=%d root=v%u element=%u capability=%s lifetime=%s "
+            "invalidation=%u complete=yes\n",
+            func->name ? func->name : "<anonymous>", value->id, xi_op_name(value->op),
+            xaot_view_origin_name(view->origin), (int) view->source_param,
+            (int) view->source_operand, view->root_value_id, view->element_type_id,
+            view->capability == 2 ? "write" : "read", view->lifetime == 2 ? "static" : "caller",
+            view->invalidation_set_id);
+}
+
+static void xaot_dump_func_view_evidence(FILE *out, const XiFunc *func) {
+    if (!out || !func)
+        return;
+    for (uint16_t pi = 0; pi < func->nparams; pi++) {
+        const XiValue *param = func->params[pi];
+        if (!param || !param->type || !XR_TYPE_IS_SLICE(param->type))
+            continue;
+        fprintf(out,
+                "view-param function=%s param=%u value=v%u origin=caller element=%u "
+                "capability=%s lifetime=caller complete=yes\n",
+                func->name ? func->name : "<anonymous>", (unsigned) pi, param->id,
+                param->type->container.element_type
+                    ? param->type->container.element_type->semantic_type_id
+                    : 0,
+                param->param_mode == XR_PARAM_REF ? "write" : "read");
+    }
+    if (func->view_return_complete) {
+        fprintf(out, "view-return function=%s origin=%s source-param=%d complete=yes\n",
+                func->name ? func->name : "<anonymous>",
+                xaot_view_origin_name(func->view_return_source), (int) func->view_return_param);
+    }
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next)
+            xaot_dump_value_view_evidence(out, func, &phi->value);
+        for (uint32_t vi = 0; vi < block->nvalues; vi++)
+            xaot_dump_value_view_evidence(out, func, block->values[vi]);
+        xaot_dump_value_view_evidence(out, func, block->control);
+    }
+}
+
 static void xaot_dump_func_local_evidence(FILE *out, const XiFunc *func, uint32_t depth) {
     if (!out || !func)
         return;
@@ -105,6 +179,7 @@ static void xaot_dump_func_local_evidence(FILE *out, const XiFunc *func, uint32_
             (unsigned long long) func->ir_revision, (unsigned long long) func->cfg_version,
             (unsigned long long) func->memory_revision, (unsigned long long) func->call_revision);
     xi_evidence_dump(func, out);
+    xaot_dump_func_view_evidence(out, func);
     for (uint16_t i = 0; i < func->nchildren; i++)
         xaot_dump_func_local_evidence(out, func->children[i], depth + 1);
 }
@@ -1388,6 +1463,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     bool emit_program_main;
     bool emit_global_evidence_dump;
     bool emit_local_evidence_dump;
+    bool quiet;
     const char *evidence_cache_dir;
     bool evidence_cache_rebuild;
     bool evidence_cache_verbose;
@@ -1419,6 +1495,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     emit_program_main = options->emit_program_main;
     emit_global_evidence_dump = options->emit_global_evidence_dump;
     emit_local_evidence_dump = options->emit_local_evidence_dump;
+    quiet = options->quiet;
     evidence_cache_dir = options->evidence_cache_dir;
     evidence_cache_rebuild = options->evidence_cache_rebuild;
     evidence_cache_verbose = options->evidence_cache_verbose;
@@ -1435,7 +1512,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     memset(&pre_mono_generic_evidence, 0, sizeof(pre_mono_generic_evidence));
     memset(&cached_global_evidence, 0, sizeof(cached_global_evidence));
 
-    printf("[xi-native] Building: %s\n", input_path);
+    if (!quiet)
+        printf("[xi-native] Building: %s\n", input_path);
 
     /* --- Build module graph (topo order, entry last) --- */
     XrVMRuntime *X = create_isolate();
@@ -1567,7 +1645,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     if (entry_index < 0)
         entry_index = nmodules - 1;
 
-    if (nmodules > 1) {
+    if (!quiet && nmodules > 1) {
         printf("[xi-native] %d modules (topo order):\n", nmodules);
         for (int i = 0; i < nmodules; i++)
             printf("  [%d] %s%s\n", i, paths[i], i == entry_index ? " (entry)" : "");
@@ -2087,8 +2165,10 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     xray_vm_delete(X);
     X = NULL;
 
-    printf("[xi-native] Generated %zu bytes of C (%d functions, %d modules in %d unit%s)\n",
-           total_c_bytes, total_funcs, nmodules, n_sources, n_sources == 1 ? "" : "s");
+    if (!quiet) {
+        printf("[xi-native] Generated %zu bytes of C (%d functions, %d modules in %d unit%s)\n",
+               total_c_bytes, total_funcs, nmodules, n_sources, n_sources == 1 ? "" : "s");
+    }
 
     /* Each source buffer is xr_malloc-owned (xr_close_memstream guarantees this
      * on every platform); ownership transfers into the result. */

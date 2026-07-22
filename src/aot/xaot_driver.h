@@ -147,6 +147,7 @@ typedef struct XaotBuildOptions {
     bool emit_global_evidence_dump;
     bool emit_local_evidence_dump;
     bool emit_residue_dump; /* task 217 --dump-residue */
+    bool quiet;             /* suppress progress banners for diagnostic consumers */
     const char *evidence_cache_dir;
     bool evidence_cache_rebuild;
     bool evidence_cache_verbose;

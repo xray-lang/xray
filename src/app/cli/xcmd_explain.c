@@ -25,6 +25,7 @@
 #include "../../base/xfileio.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../aot/xaot_driver.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -62,6 +63,160 @@ static int explain_native(const XrCliInvocation *inv, const char *input) {
 static const char *explain_final_component(const char *name) {
     const char *dot = name ? strrchr(name, '.') : NULL;
     return dot ? dot + 1 : name;
+}
+
+static bool explain_symbol_name_matches(const char *subject, const char *candidate) {
+    const char *component;
+    size_t subject_len;
+    if (!subject || !candidate)
+        return false;
+    if (strcmp(subject, candidate) == 0)
+        return true;
+    component = explain_final_component(candidate);
+    if (strcmp(subject, component) == 0)
+        return true;
+    subject_len = strlen(subject);
+    return strncmp(component, subject, subject_len) == 0 &&
+           (component[subject_len] == '$' || component[subject_len] == '#');
+}
+
+static bool explain_line_has_prefix(const char *line, size_t line_len, const char *prefix) {
+    size_t prefix_len = strlen(prefix);
+    return line_len >= prefix_len && memcmp(line, prefix, prefix_len) == 0;
+}
+
+static bool explain_line_field(const char *line, size_t line_len, const char *field, char *out,
+                               size_t out_size) {
+    size_t field_len = strlen(field);
+    const char *limit = line + line_len;
+    const char *match = line;
+    if (!out || out_size < 2)
+        return false;
+    while (match + field_len <= limit) {
+        match = strstr(match, field);
+        if (!match || match + field_len > limit)
+            return false;
+        if (match == line || match[-1] == ' ') {
+            const char *start = match + field_len;
+            const char *end = start;
+            while (end < limit && *end != ' ' && *end != '\t' && *end != '\r')
+                end++;
+            size_t len = (size_t) (end - start);
+            if (len == 0 || len >= out_size)
+                return false;
+            memcpy(out, start, len);
+            out[len] = '\0';
+            return true;
+        }
+        match += field_len;
+    }
+    return false;
+}
+
+static bool explain_dump_has_function(const char *dump, const char *subject) {
+    const char *line = dump;
+    while (line && *line) {
+        const char *end = strchr(line, '\n');
+        size_t line_len = end ? (size_t) (end - line) : strlen(line);
+        char function[256];
+        if (explain_line_has_prefix(line, line_len, "xi-evidence ") &&
+            explain_line_field(line, line_len, "function=", function, sizeof(function)) &&
+            explain_symbol_name_matches(subject, function)) {
+            return true;
+        }
+        line = end ? end + 1 : NULL;
+    }
+    return false;
+}
+
+static bool explain_record_prefix_matches(const char *topic, const char *line, size_t line_len) {
+    if (strcmp(topic, "view") == 0)
+        return explain_line_has_prefix(line, line_len, "view-param ") ||
+               explain_line_has_prefix(line, line_len, "view-return ") ||
+               explain_line_has_prefix(line, line_len, "view-evidence ");
+    if (strcmp(topic, "bounds") == 0) {
+        return explain_line_has_prefix(line, line_len, "bounds ") ||
+               explain_line_has_prefix(line, line_len, "bounds-unproven ") ||
+               explain_line_has_prefix(line, line_len, "span-access ") ||
+               explain_line_has_prefix(line, line_len, "span-access-unproven ");
+    }
+    return strcmp(topic, "alias") == 0 && explain_line_has_prefix(line, line_len, "alias ");
+}
+
+static uint32_t explain_print_records(const char *topic, const char *subject, const char *dump) {
+    const char *line = dump;
+    uint32_t count = 0;
+    const char *field = strcmp(topic, "view") == 0 ? "function=" : "func=";
+    while (line && *line) {
+        const char *end = strchr(line, '\n');
+        size_t line_len = end ? (size_t) (end - line) : strlen(line);
+        char function[256];
+        if (explain_record_prefix_matches(topic, line, line_len) &&
+            explain_line_field(line, line_len, field, function, sizeof(function)) &&
+            explain_symbol_name_matches(subject, function)) {
+            fwrite(line, 1, line_len, stdout);
+            fputc('\n', stdout);
+            count++;
+        }
+        line = end ? end + 1 : NULL;
+    }
+    return count;
+}
+
+static int explain_backend_topic(const char *topic, const char *subject) {
+    char root[XR_CLI_PATH_MAX];
+    XrProject *project = NULL;
+    char *entry = NULL;
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    const char *records = NULL;
+    uint32_t count;
+    int rc = XR_CLI_EXIT_FAIL;
+    if (!xr_cli_find_project_root(".", root, sizeof(root))) {
+        xr_cli_error("explain", "%s explanation requires a project xray.toml", topic);
+        return XR_CLI_EXIT_USAGE;
+    }
+    project = xr_project_load(NULL, root);
+    if (!project || !project->initialized || !project->main) {
+        xr_cli_error("explain", "project has no valid main entry");
+        goto cleanup;
+    }
+    entry = xr_path_join(root, project->main);
+    if (!entry || !xaot_target_init(&target, "native-c90")) {
+        rc = XR_CLI_EXIT_INTERNAL;
+        goto cleanup;
+    }
+    options.target = &target;
+    options.native_package_plan = project->native_plan;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.type_name_profile = XI_CGEN_TYPE_NAMES_ALL;
+    options.emit_plan_dump = true;
+    options.emit_local_evidence_dump = true;
+    options.quiet = true;
+    if (xaot_build(entry, &options, &result) != 0) {
+        xr_cli_error("explain", "could not build evidence for '%s'", subject);
+        goto cleanup;
+    }
+    if (!explain_dump_has_function(result.local_evidence_dump, subject)) {
+        xr_cli_error("explain", "function '%s' is missing", subject);
+        goto cleanup_result;
+    }
+    records = strcmp(topic, "view") == 0 ? result.local_evidence_dump : result.plan_dump;
+    printf("%s subject=%s\n", topic, subject);
+    count = explain_print_records(topic, subject, records);
+    if (count == 0)
+        printf("%s-evidence: none\n", topic);
+    rc = XR_CLI_EXIT_OK;
+
+cleanup_result:
+    xaot_build_result_free(&result);
+cleanup:
+    if (target.name)
+        xaot_target_free(&target);
+    xr_free(entry);
+    xr_project_free(project);
+    return rc;
 }
 
 static XaSymbol *explain_find_export(XrModuleGraph *graph, const char *subject) {
@@ -237,8 +392,20 @@ XR_FUNC int cmd_explain(const XrCliInvocation *inv) {
     const char *input = inv->positional_count > 1 ? inv->positionals[1] : ".";
     if (strcmp(topic, "native") == 0)
         return explain_native(inv, input);
-    if (strcmp(topic, "effect") == 0)
+    if (strcmp(topic, "effect") == 0) {
+        if (inv->positional_count < 2) {
+            xr_cli_error("explain", "effect requires a symbol");
+            return XR_CLI_EXIT_USAGE;
+        }
         return explain_effect(input);
+    }
+    if (strcmp(topic, "view") == 0 || strcmp(topic, "bounds") == 0 || strcmp(topic, "alias") == 0) {
+        if (inv->positional_count < 2) {
+            xr_cli_error("explain", "%s requires a function symbol", topic);
+            return XR_CLI_EXIT_USAGE;
+        }
+        return explain_backend_topic(topic, input);
+    }
     xr_cli_error("explain",
                  "unknown evidence topic '%s' (expected native, storage, transfer, ownership, "
                  "view, bounds, alias, effect, or residue)",

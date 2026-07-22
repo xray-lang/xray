@@ -478,6 +478,9 @@ static void test_driver_dumps_subject_bound_local_evidence(void) {
 
     memset(&result, 0, sizeof(result));
     ASSERT_TRUE(write_temp_source(source_path, sizeof(source_path)));
+    ASSERT_TRUE(write_file_text(source_path, "fn first(input: Slice<byte>) -> byte {\n"
+                                             "    return input[0]\n"
+                                             "}\n"));
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
@@ -490,6 +493,9 @@ static void test_driver_dumps_subject_bound_local_evidence(void) {
     ASSERT_TRUE(strstr(result.local_evidence_dump, "subject=") != NULL);
     ASSERT_TRUE(strstr(result.local_evidence_dump, "producer=") != NULL);
     ASSERT_TRUE(strstr(result.local_evidence_dump, "source=") != NULL);
+    ASSERT_TRUE(strstr(result.local_evidence_dump, "view-param function=first param=0") != NULL);
+    ASSERT_TRUE(
+        strstr(result.local_evidence_dump, "capability=read lifetime=caller complete=yes") != NULL);
 
     xaot_build_result_free(&result);
     xaot_target_free(&target);
