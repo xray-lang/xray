@@ -286,7 +286,7 @@ static bool semantic_intrinsic_operand_is_readonly_place(const XaIntrinsicDesc *
     if (operand_index != 1)
         return false;
     switch (desc->lowering) {
-        case XA_INTRINSIC_LOWERING_VEC_LOAD:
+        case XA_INTRINSIC_LOWERING_VEC_STORE:
         case XA_INTRINSIC_LOWERING_VEC_ADD:
         case XA_INTRINSIC_LOWERING_VEC_SUB:
         case XA_INTRINSIC_LOWERING_VEC_MUL:
@@ -567,7 +567,7 @@ XR_FUNC void xi_emit_span_window(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
     uint16_t span_slot = 0;
-    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSpanView), &span_slot))
+    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSliceView), &span_slot))
         return;
     if (ctx->next_reg + 3 > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
@@ -580,7 +580,46 @@ XR_FUNC void xi_emit_span_window(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_MOVE, base, start_src, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (base + 1), count_src, 0));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 2), span_slot));
-    emit_inst(ctx, CREATE_ABC(OP_SPAN_WINDOW, dst, src, base));
+    emit_inst(ctx, CREATE_ABC(OP_SLICE_WINDOW, dst, src, base));
+}
+
+XR_FUNC void xi_emit_slice_from_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs != 3) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg ptr = reg_of(ctx, v->args[0]);
+    XiEmitReg count = reg_of(ctx, v->args[1]);
+    (void) reg_of(ctx, v->args[2]); /* owner is compile-time lifetime evidence */
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint16_t slice_slot = 0;
+    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSliceView), &slice_slot))
+        return;
+    if (ctx->next_reg + 7 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg = (XiEmitReg) (base + 7);
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    uint8_t elem_type = (uint8_t) (v->aux_int & 0xff);
+    uint16_t elem_size = (uint16_t) ((v->aux_int >> 8) & 0xffff);
+    uint8_t elem_tid = (uint8_t) ((v->aux_int >> 24) & 0xff);
+    uint16_t alignment = (uint16_t) ((v->aux_int >> 32) & 0xffff);
+    uint16_t alignment_flags =
+        (uint16_t) (alignment | ((v->aux_int & XI_SLICE_FROM_PTR_AUX_MUTABLE) ? 0x8000u : 0u));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, base, count, 0));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 1), slice_slot));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 2), elem_type));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 3), elem_size));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 4), elem_tid));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 5), alignment_flags));
+    uint64_t layout_key =
+        v->aux ? xr_aggregate_layout_stable_key((const XrAggregateLayout *) v->aux) : 0;
+    xi_emit_i64_const_reg(ctx, (XiEmitReg) (base + 6), (int64_t) layout_key);
+    emit_inst(ctx, CREATE_ABC(OP_SLICE_FROM_PTR, dst, ptr, base));
 }
 
 XR_FUNC void xi_emit_span_as_bytes(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
@@ -592,7 +631,7 @@ XR_FUNC void xi_emit_span_as_bytes(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
     uint16_t span_slot = 0;
-    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSpanView), &span_slot))
+    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSliceView), &span_slot))
         return;
     if (ctx->next_reg + 1 > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
@@ -602,19 +641,19 @@ XR_FUNC void xi_emit_span_as_bytes(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, slot_reg, span_slot));
-    emit_inst(ctx, CREATE_ABC(OP_SPAN_AS_BYTES, dst, src, slot_reg));
+    emit_inst(ctx, CREATE_ABC(OP_SLICE_AS_BYTES, dst, src, slot_reg));
 }
 
 XR_FUNC void xi_emit_span_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_builtin_contiguous_window_op(ctx, v, dst, OP_SPAN_COPY, 2);
+    emit_builtin_contiguous_window_op(ctx, v, dst, OP_SLICE_COPY, 2);
 }
 
 XR_FUNC void xi_emit_span_fill(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_builtin_contiguous_window_op(ctx, v, dst, OP_SPAN_FILL, 2);
+    emit_builtin_contiguous_window_op(ctx, v, dst, OP_SLICE_FILL, 2);
 }
 
 XR_FUNC void xi_emit_span_compare(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_builtin_contiguous_window_op(ctx, v, dst, OP_SPAN_COMPARE, 2);
+    emit_builtin_contiguous_window_op(ctx, v, dst, OP_SLICE_COMPARE, 2);
 }
 
 XR_FUNC void xi_emit_span_reinterpret(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
@@ -626,27 +665,32 @@ XR_FUNC void xi_emit_span_reinterpret(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
     uint16_t span_slot = 0;
-    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSpanView), &span_slot))
+    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSliceView), &span_slot))
         return;
-    if (ctx->next_reg + 4 > MAX_REGS) {
+    if (ctx->next_reg + 6 > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
     XiEmitReg base = (XiEmitReg) ctx->next_reg;
-    ctx->next_reg = (XiEmitReg) (base + 4);
+    ctx->next_reg = (XiEmitReg) (base + 6);
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
     uint8_t elem_type = (uint8_t) (v->aux_int & 0xff);
-    uint8_t elem_size = (uint8_t) ((v->aux_int >> 8) & 0xff);
-    uint8_t elem_tid = (uint8_t) ((v->aux_int >> 16) & 0xff);
+    uint16_t elem_size = (uint16_t) ((v->aux_int >> 8) & 0xffff);
+    uint8_t elem_tid = (uint8_t) ((v->aux_int >> 24) & 0xff);
+    uint16_t alignment = (uint16_t) ((v->aux_int >> 32) & 0xffff);
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, base, span_slot));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 1), elem_type));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 2), elem_size));
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 3), elem_tid));
-    emit_inst(ctx, CREATE_ABC(OP_SPAN_REINTERPRET, dst, src, base));
+    emit_inst(ctx, CREATE_AsBx(OP_LOADI, (XiEmitReg) (base + 4), alignment));
+    uint64_t layout_key =
+        v->aux ? xr_aggregate_layout_stable_key((const XrAggregateLayout *) v->aux) : 0;
+    xi_emit_i64_const_reg(ctx, (XiEmitReg) (base + 5), (int64_t) layout_key);
+    emit_inst(ctx, CREATE_ABC(OP_SLICE_REINTERPRET, dst, src, base));
 }
 
-/* Unsafe container data pointer: R[dst] = (uintptr_t)Array/Span.data. */
+/* Unsafe container data pointer: R[dst] = (uintptr_t)Array/Slice.data. */
 XR_FUNC void xi_emit_array_data_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs != 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -685,7 +729,7 @@ static void emit_builtin_string_byte_slice(EmitCtx *ctx, XiValue *v, XiEmitReg d
     if (ctx->status != XI_EMIT_OK)
         return;
     uint16_t span_slot = 0;
-    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSpanView), &span_slot))
+    if (!xi_emit_alloc_struct_area_bytes(ctx, (uint32_t) sizeof(XrSliceView), &span_slot))
         return;
     if (ctx->next_reg + 1 > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
@@ -695,7 +739,7 @@ static void emit_builtin_string_byte_slice(EmitCtx *ctx, XiValue *v, XiEmitReg d
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
     emit_inst(ctx, CREATE_AsBx(OP_LOADI, slot_reg, span_slot));
-    emit_inst(ctx, CREATE_ABC(OP_STRING_BYTES_SPAN, dst, str, slot_reg));
+    emit_inst(ctx, CREATE_ABC(OP_STRING_BYTES_SLICE, dst, str, slot_reg));
 }
 
 /* FFI raw-pointer load. The VM consumes a compact contiguous argument window:

@@ -2768,12 +2768,12 @@ module mem {
     layer: "core"
   }
 
-  fn view {
-    signature: "(ptr: Ptr<byte>): Ptr<byte>"
-    doc: "Unsafe zero-cost typed projection of a raw pointer onto an extern C struct or union T"
-    vm: "mem_view_intrinsic"
-    argc: 1
-    arg_spec: "v"
+  fn slice {
+    signature: "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>"
+    doc: "Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner"
+    vm: "mem_slice_intrinsic"
+    argc: 3
+    arg_spec: "vvv"
     aot_direct: false
     link_object: false
     layer: "core"
@@ -2916,6 +2916,18 @@ module mem {
     argc: 1
     arg_spec: "v"
     aot_direct: true
+    link_object: false
+    layer: "core"
+    allocation: "no_heap"
+  }
+
+  fn withSliceMut {
+    signature: "(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any"
+    doc: "Unsafe compiler-verified exclusive mutable Slice loan scoped to a no-suspend callback"
+    vm: "mem_with_slice_mut_intrinsic"
+    argc: 4
+    arg_spec: "vvvv"
+    aot_direct: false
     link_object: false
     layer: "core"
     allocation: "no_heap"

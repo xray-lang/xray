@@ -1,0 +1,10 @@
+fn choose(left: Slice<byte>, right: Slice<byte>, useLeft: bool) -> Slice<byte> {
+    if (useLeft) {
+        return left
+    }
+    return right
+}
+
+fn main() {}
+
+main()

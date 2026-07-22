@@ -5719,8 +5719,7 @@ XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type) {
         return false;
     }
     switch (type->kind) {
-        case XR_KIND_SPAN:
-        case XR_KIND_VIEW:
+        case XR_KIND_SLICE:
         case XR_KIND_ARRAY:
         case XR_KIND_MAP:
         case XR_KIND_SET:
@@ -5862,7 +5861,7 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
 XR_FUNC bool xa_type_contains_span_view(XrType *type) {
     if (!type || XR_TYPE_IS_UNKNOWN(type) || XR_TYPE_IS_NULL(type))
         return false;
-    if (XR_TYPE_IS_SPAN(type))
+    if (XR_TYPE_IS_SLICE(type))
         return true;
     if (XR_TYPE_IS_UNION(type)) {
         int n = xr_type_union_count(type);
@@ -5879,7 +5878,7 @@ XR_FUNC bool xa_type_contains_span_view(XrType *type) {
         }
         return false;
     }
-    if (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || type->kind == XR_KIND_SET ||
+    if (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type) || type->kind == XR_KIND_SET ||
         type->kind == XR_KIND_CHANNEL) {
         return xa_type_contains_span_view(type->container.element_type);
     }
@@ -5918,30 +5917,30 @@ static bool xa_call_expr_is_borrowed_view(AstNode *expr) {
                     strcmp(name, "asMutBytes") == 0 || strcmp(name, "reinterpret") == 0);
 }
 
-static bool xa_call_expr_is_mem_view_syntax(AstNode *expr) {
+static bool xa_call_expr_is_mem_slice_syntax(AstNode *expr) {
     if (!expr || expr->type != AST_CALL_EXPR)
         return false;
     CallExprNode *call = &expr->as.call_expr;
-    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS || call->arg_count != 1 ||
-        !call->arguments || !call->arguments[0])
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS || call->arg_count != 3 ||
+        !call->arguments || !call->arguments[2])
         return false;
     MemberAccessNode *member = &call->callee->as.member_access;
-    return member->name && strcmp(member->name, "view") == 0 && member->object &&
+    return member->name && strcmp(member->name, "slice") == 0 && member->object &&
            member->object->type == AST_VARIABLE && member->object->as.variable.name &&
            strcmp(member->object->as.variable.name, "mem") == 0;
 }
 
-static bool xa_call_expr_is_mem_view(XaInferContext *ctx, AstNode *expr) {
-    if (xa_call_expr_is_mem_view_syntax(expr))
+static bool xa_call_expr_is_mem_slice(XaInferContext *ctx, AstNode *expr) {
+    if (xa_call_expr_is_mem_slice_syntax(expr))
         return true;
     if (!ctx || !ctx->analyzer || !expr || expr->type != AST_CALL_EXPR)
         return false;
     CallExprNode *call = &expr->as.call_expr;
-    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS || call->arg_count != 1 ||
-        !call->arguments || !call->arguments[0])
+    if (!call->callee || call->callee->type != AST_MEMBER_ACCESS || call->arg_count != 3 ||
+        !call->arguments || !call->arguments[2])
         return false;
     MemberAccessNode *member = &call->callee->as.member_access;
-    if (!member->name || strcmp(member->name, "view") != 0 || !member->object ||
+    if (!member->name || strcmp(member->name, "slice") != 0 || !member->object ||
         member->object->type != AST_VARIABLE || !member->object->as.variable.name)
         return false;
     XaSymbol *symbol = xa_lookup_visible_symbol(ctx, member->object->as.variable.name);
@@ -5968,9 +5967,7 @@ static bool xa_call_expr_preserves_owner_borrow(XaInferContext *ctx, AstNode *ex
         *out_pointer_borrow = false;
     if (xa_call_expr_is_borrowed_view(expr))
         return true;
-    if (xa_call_expr_is_mem_view(ctx, expr)) {
-        if (out_pointer_borrow)
-            *out_pointer_borrow = true;
+    if (xa_call_expr_is_mem_slice(ctx, expr)) {
         return true;
     }
     if (!ctx || !ctx->analyzer || !expr || expr->type != AST_CALL_EXPR)
@@ -5985,7 +5982,7 @@ static bool xa_call_expr_preserves_owner_borrow(XaInferContext *ctx, AstNode *ex
     bool preserves = false;
     if ((strcmp(member->name, "ptr") == 0 || strcmp(member->name, "mutPtr") == 0) &&
         receiver_type &&
-        (XR_TYPE_IS_ARRAY(receiver_type) || XR_TYPE_IS_SPAN(receiver_type) ||
+        (XR_TYPE_IS_ARRAY(receiver_type) || XR_TYPE_IS_SLICE(receiver_type) ||
          receiver_type->kind == XR_KIND_FIXED_ARRAY)) {
         preserves = true;
     } else if (strcmp(member->name, "borrowPtr") == 0 && receiver_type &&
@@ -6028,8 +6025,8 @@ XR_FUNC bool xa_expr_has_stable_borrow_owner(AstNode *expr) {
                 expr = xa_unsafe_expr_result(expr);
                 break;
             case AST_CALL_EXPR:
-                if (xa_call_expr_is_mem_view_syntax(expr)) {
-                    expr = expr->as.call_expr.arguments[0];
+                if (xa_call_expr_is_mem_slice_syntax(expr)) {
+                    expr = expr->as.call_expr.arguments[2];
                     break;
                 }
                 if (!xa_call_expr_is_borrowed_view(expr))
@@ -6126,10 +6123,11 @@ XR_FUNC bool xa_expr_yields_shared_provenance(XaInferContext *ctx, AstNode *expr
     return xa_symbol_has_shared_provenance(root);
 }
 
-static XaActiveSpanBorrow *xa_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol *view_sym) {
+static XaActiveSliceBorrow *xa_active_span_borrow_for_view(XaInferContext *ctx,
+                                                           XaSymbol *view_sym) {
     if (!ctx || !view_sym)
         return NULL;
-    for (XaActiveSpanBorrow *b = ctx->active_span_borrows; b; b = b->next) {
+    for (XaActiveSliceBorrow *b = ctx->active_span_borrows; b; b = b->next) {
         if (b->view_symbol == view_sym)
             return b;
     }
@@ -6165,20 +6163,13 @@ static bool xa_pointer_expr_has_owner_borrow(XaInferContext *ctx, AstNode *expr)
     if (expr->type == AST_VARIABLE) {
         XaSymbol *sym =
             expr->as.variable.name ? xa_lookup_visible_symbol(ctx, expr->as.variable.name) : NULL;
-        XaActiveSpanBorrow *borrow = xa_active_span_borrow_for_view(ctx, sym);
+        XaActiveSliceBorrow *borrow = xa_active_span_borrow_for_view(ctx, sym);
         return borrow && borrow->is_pointer_borrow;
-    }
-    if (expr->type == AST_MEMBER_ACCESS) {
-        XrType *type = xa_analyzer_get_node_type(ctx->analyzer, expr);
-        return type && XR_TYPE_IS_POINTER(type) && type->ptr_is_c_view &&
-               xa_pointer_expr_has_owner_borrow(ctx, expr->as.member_access.object);
     }
     if (expr->type != AST_CALL_EXPR || !expr->as.call_expr.callee ||
         expr->as.call_expr.callee->type != AST_MEMBER_ACCESS)
         return false;
     MemberAccessNode *member = &expr->as.call_expr.callee->as.member_access;
-    if (xa_call_expr_is_mem_view(ctx, expr))
-        return xa_pointer_expr_has_owner_borrow(ctx, expr->as.call_expr.arguments[0]);
     return member->name && strcmp(member->name, "offset") == 0 &&
            xa_pointer_expr_has_owner_borrow(ctx, member->object);
 }
@@ -6245,7 +6236,7 @@ static XaSymbol *xa_root_path_for_expr(XaInferContext *ctx, AstNode *expr, char 
             XaSymbol *sym = expr->as.variable.name
                                 ? xa_lookup_visible_symbol(ctx, expr->as.variable.name)
                                 : NULL;
-            XaActiveSpanBorrow *active =
+            XaActiveSliceBorrow *active =
                 follow_active_view ? xa_active_span_borrow_for_view(ctx, sym) : NULL;
             if (active) {
                 if (active->owner_path) {
@@ -6309,8 +6300,8 @@ static XaSymbol *xa_root_path_for_expr(XaInferContext *ctx, AstNode *expr, char 
             if (xa_call_expr_preserves_owner_borrow(ctx, expr, NULL) && expr->as.call_expr.callee &&
                 expr->as.call_expr.callee->type == AST_MEMBER_ACCESS) {
                 MemberAccessNode *member = &expr->as.call_expr.callee->as.member_access;
-                if (xa_call_expr_is_mem_view(ctx, expr))
-                    return xa_root_path_for_expr(ctx, expr->as.call_expr.arguments[0], path_buf,
+                if (xa_call_expr_is_mem_slice(ctx, expr))
+                    return xa_root_path_for_expr(ctx, expr->as.call_expr.arguments[2], path_buf,
                                                  path_buf_size, out_precise, follow_active_view);
                 if (member->name && strcmp(member->name, "offset") == 0 &&
                     !xa_pointer_expr_has_owner_borrow(ctx, member->object))
@@ -6664,7 +6655,7 @@ static bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
 }
 
 static bool xa_active_span_borrow_may_be_live_after_mutation(XaInferContext *ctx,
-                                                             XaActiveSpanBorrow *borrow) {
+                                                             XaActiveSliceBorrow *borrow) {
     if (!ctx || !ctx->analyzer || !borrow || !borrow->view_symbol || !borrow->view_symbol->name)
         return true;
     if (ctx->loop_depth > 0 && borrow->loop_depth_at_creation < ctx->loop_depth)
@@ -6853,9 +6844,9 @@ XR_FUNC XaSymbol *xa_span_borrow_owner_receiver_symbol(XaInferContext *ctx, AstN
 XR_FUNC void xa_clear_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol *view_sym) {
     if (!ctx || !view_sym)
         return;
-    XaActiveSpanBorrow **link = &ctx->active_span_borrows;
+    XaActiveSliceBorrow **link = &ctx->active_span_borrows;
     while (*link) {
-        XaActiveSpanBorrow *cur = *link;
+        XaActiveSliceBorrow *cur = *link;
         if (cur->view_symbol == view_sym) {
             *link = cur->next;
             xr_free(cur->owner_path);
@@ -6869,9 +6860,9 @@ XR_FUNC void xa_clear_active_span_borrow_for_view(XaInferContext *ctx, XaSymbol 
 XR_FUNC void xa_clear_active_span_borrows_in_scope(XaInferContext *ctx, XaScope *scope) {
     if (!ctx || !scope)
         return;
-    XaActiveSpanBorrow **link = &ctx->active_span_borrows;
+    XaActiveSliceBorrow **link = &ctx->active_span_borrows;
     while (*link) {
-        XaActiveSpanBorrow *cur = *link;
+        XaActiveSliceBorrow *cur = *link;
         if (cur->view_scope == scope) {
             *link = cur->next;
             xr_free(cur->owner_path);
@@ -6994,7 +6985,7 @@ XR_FUNC void xa_register_active_span_borrow(XaInferContext *ctx, XaSymbol *view_
         xa_span_borrow_owner_path_for_expr(ctx, value, owner_path, sizeof(owner_path));
     if (!owner || owner == view_sym)
         return;
-    XaActiveSpanBorrow *borrow = xr_calloc(1, sizeof(XaActiveSpanBorrow));
+    XaActiveSliceBorrow *borrow = xr_calloc(1, sizeof(XaActiveSliceBorrow));
     if (!borrow) {
         XrLocation loc = {.file = ctx->file_path,
                           .line = value ? value->line : 0,
@@ -7034,7 +7025,7 @@ XR_FUNC void xa_check_active_span_borrow_owner_path_mutation(XaInferContext *ctx
                                                              const char *operation) {
     if (!ctx || !ctx->analyzer || !owner_sym || !loc_node)
         return;
-    for (XaActiveSpanBorrow *b = ctx->active_span_borrows; b; b = b->next) {
+    for (XaActiveSliceBorrow *b = ctx->active_span_borrows; b; b = b->next) {
         if (b->owner_symbol != owner_sym)
             continue;
         if (!xa_owner_paths_may_overlap(b->owner_path, owner_path))
@@ -7157,10 +7148,16 @@ static XaSymbol *xa_whole_binding_symbol(XaInferContext *ctx, AstNode *value) {
                : NULL;
 }
 
-static bool xa_type_has_movable_root(XrType *type) {
+bool xa_type_has_movable_root(XrType *type) {
     if (!type || XR_TYPE_IS_UNKNOWN_OR_ERROR(type) || xr_kind_is_primitive(type->kind) ||
-        XR_TYPE_IS_POINTER(type) || XR_TYPE_IS_SPAN(type) || XR_TYPE_IS_VIEW(type))
+        XR_TYPE_IS_POINTER(type) || XR_TYPE_IS_SLICE(type))
         return type && XR_TYPE_IS_TUPLE(type);
+    /* Structs are source-level value types: assignment/return copies their
+     * inline value and no ownership root crosses the boundary.  Treating a
+     * struct as a heap owner makes equivalent literal/local/call return paths
+     * appear to have mixed storage domains. */
+    if (type->is_value_type || xa_type_has_fixed_layout_data_object(type))
+        return false;
     if (xr_type_is_runtime_managed(type))
         return xa_task_type_requires_consuming_await(type);
     switch (type->kind) {
@@ -7316,6 +7313,17 @@ static void xa_check_borrowed_return_escape(XaInferContext *ctx, AstNode *return
 static void xa_check_span_return_escape(XaInferContext *ctx, AstNode *return_node,
                                         XrType *value_type) {
     if (!ctx || !return_node || !xa_type_contains_span_view(value_type))
+        return;
+
+    XaSymbol *function_symbol = ctx->current_function;
+    for (XaScope *scope = ctx->analyzer ? ctx->analyzer->current_scope : NULL;
+         !function_symbol && scope; scope = scope->parent) {
+        if (scope->function_symbol)
+            function_symbol = scope->function_symbol;
+    }
+    XaSymbolLinks *function_links =
+        function_symbol ? xa_analyzer_get_links(ctx->analyzer, function_symbol) : NULL;
+    if (function_links && function_links->return_view.complete)
         return;
 
     XrLocation loc = {

@@ -123,6 +123,9 @@ XR_FUNC void xr_aggregate_layout_free_owned(XrAggregateLayout *layout);
  */
 XR_FUNC bool xr_type_has_static_layout(const XrTargetDataLayout *target_layout, const XrType *type,
                                        uint32_t *out_size, uint32_t *out_align);
+/* True only when every possible byte pattern denotes a valid value of `type` and the type has
+ * no managed-reference, drop, or pointer-provenance obligation. */
+XR_FUNC bool xr_type_all_bit_patterns_valid(const XrType *type);
 XR_FUNC bool xr_type_has_static_field_offset(const XrTargetDataLayout *target_layout,
                                              const XrType *type, const char *field_name,
                                              uint32_t *out_offset);

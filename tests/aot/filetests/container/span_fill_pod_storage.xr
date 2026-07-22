@@ -1,13 +1,17 @@
-fn fill_words(dst: Slice<uint32>, value: uint32) -> int {
+fn fill_words(dst: ref Slice<uint32>, value: uint32) -> int {
     var filled: Slice<uint32> = dst.fill(value)
     return len(filled)
 }
 
-fn zero_words(dst: Slice<uint32>) -> int {
+fn zero_words(dst: ref Slice<uint32>) -> int {
     dst.fill(0)
     return len(dst)
 }
 
-var words = Array<uint32>(4, 0)
-print(fill_words(words[:], 7))
-print(zero_words(words[:]))
+fn runFill() -> int {
+    var words = Array<uint32>(4, 0)
+    var wordsView: Slice<uint32> = words[:]
+    return fill_words(ref wordsView, 7) + zero_words(ref wordsView)
+}
+
+print(runFill())

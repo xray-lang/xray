@@ -380,7 +380,7 @@ XR_FUNC void xa_register_pattern_bindings(XaInferContext *ctx, AstNode *pattern,
     }
 
     /* Array pattern: bind positional element sub-patterns with the array's
-     * element type, and the optional rest binding as a borrowed Span<element>. */
+     * element type, and the optional rest binding as a borrowed Slice<element>. */
     if (pattern->type == AST_PATTERN_ARRAY) {
         PatternArrayNode *ap = &pattern->as.pattern_array;
         XrType *elem_type = NULL;
@@ -397,7 +397,7 @@ XR_FUNC void xa_register_pattern_bindings(XaInferContext *ctx, AstNode *pattern,
             ap->rest_symbol_id = rest_sym->id;
             XaSymbolLinks *rest_links = xa_analyzer_get_links(ctx->analyzer, rest_sym);
             if (rest_links) {
-                rest_links->type = xr_type_new_span(
+                rest_links->type = xr_type_new_slice(
                     ctx->analyzer->isolate, elem_type ? elem_type : xr_type_new_unknown(NULL));
                 rest_links->is_definitely_assigned = true;
             }

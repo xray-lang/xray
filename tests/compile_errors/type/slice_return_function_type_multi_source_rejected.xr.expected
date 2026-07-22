@@ -1,0 +1,2 @@
+borrow-return function type has multiple possible Slice sources
+use a single Slice parameter or return an owned value

@@ -25,7 +25,7 @@ fn make(values: Array<int>) -> Bag {
     return Bag(values)
 }
 
-fn swap(b: Bag, next: Array<int>) -> int {
+fn swap(b: ref Bag, next: Array<int>) -> int {
     b.values = next
     return b.sum()
 }
@@ -36,5 +36,5 @@ var bag = make(first)
 
 print(bag.sum())
 print(bag.replace(second))
-print(swap(bag, first))
+print(swap(ref bag, first))
 print(bag.sum())

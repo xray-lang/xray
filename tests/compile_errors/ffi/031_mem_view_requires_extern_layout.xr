@@ -1,9 +1,6 @@
 import mem
 
-struct Header {
-    value: uint32
-}
-
-var p = mem.mutPtr<Header>(0)
-var view = unsafe { mem.view<Header>(p) }
-print(view.value)
+var owner = Array<uint8>(8)
+var p = mem.mutPtr<Json>(0)
+var view = unsafe { mem.slice<Json>(p, 1, owner) }
+print(len(view))

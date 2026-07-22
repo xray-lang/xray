@@ -192,12 +192,13 @@
     X(BYTE_SLICE_COMPARE, xi_emit_byte_slice_compare) \
     X(BYTE_SLICE_COMMON_PREFIX, xi_emit_byte_slice_common_prefix) \
     X(BYTE_SLICE_REPEAT, xi_emit_byte_slice_repeat) \
-    X(SPAN_WINDOW, xi_emit_span_window) \
-    X(SPAN_AS_BYTES, xi_emit_span_as_bytes) \
-    X(SPAN_FILL, xi_emit_span_fill) \
-    X(SPAN_COPY, xi_emit_span_copy) \
-    X(SPAN_COMPARE, xi_emit_span_compare) \
-    X(SPAN_REINTERPRET, xi_emit_span_reinterpret) \
+    X(SLICE_WINDOW, xi_emit_span_window) \
+    X(SLICE_FROM_PTR, xi_emit_slice_from_ptr) \
+    X(SLICE_AS_BYTES, xi_emit_span_as_bytes) \
+    X(SLICE_FILL, xi_emit_span_fill) \
+    X(SLICE_COPY, xi_emit_span_copy) \
+    X(SLICE_COMPARE, xi_emit_span_compare) \
+    X(SLICE_REINTERPRET, xi_emit_span_reinterpret) \
     X(BYTE_ARRAY_COPY_WITHIN, xi_emit_byte_array_copy_within) \
     X(BYTE_ARRAY_COPY_FROM, xi_emit_byte_array_copy_from) \
     X(BYTE_ARRAY_APPEND_FROM, xi_emit_byte_array_append_from) \

@@ -109,14 +109,11 @@ static uint64_t type_hash_depth(const XrType *type, int depth) {
     h *= UINT64_C(1099511628211);
     h ^= type->ptr_is_mut ? UINT64_C(0x200) : UINT64_C(0);
     h *= UINT64_C(1099511628211);
-    h ^= type->ptr_is_c_view ? UINT64_C(0x400) : UINT64_C(0);
-    h *= UINT64_C(1099511628211);
     switch ((XrTypeKind) type->kind) {
         case XR_KIND_ARRAY:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
-        case XR_KIND_SPAN:
-        case XR_KIND_VIEW:
+        case XR_KIND_SLICE:
         case XR_KIND_POINTER:
             h ^= type_hash_depth(type->container.element_type, depth + 1);
             h *= UINT64_C(1099511628211);

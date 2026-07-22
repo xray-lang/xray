@@ -199,8 +199,7 @@ uint8_t xr_type_to_tid(const XrType *type) {
         case XR_KIND_RUNE:
             return XR_TID_RUNE;
         case XR_KIND_ARRAY:
-        case XR_KIND_VIEW:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
             return XR_TID_ARRAY;
         case XR_KIND_MAP:
             return XR_TID_MAP;

@@ -1,8 +1,8 @@
 @no_alloc
-fn xray_no_alloc_array_sort_default(values: Array<int>) -> int {
+fn xray_no_alloc_array_sort_default(values: ref Array<int>) -> int {
     values.sort()
     return values[0]
 }
 
 var xray_no_alloc_array_sort_default_values: Array<int> = [3, 1, 2]
-print(xray_no_alloc_array_sort_default(xray_no_alloc_array_sort_default_values))
+print(xray_no_alloc_array_sort_default(ref xray_no_alloc_array_sort_default_values))

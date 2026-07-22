@@ -137,10 +137,10 @@ static void pointer_set_owner(XaInferContext *ctx, XaPointerProvenance *out, XaS
     pointer_set_mutability(out, pointer_type);
 }
 
-static XaActiveSpanBorrow *pointer_active_borrow(XaInferContext *ctx, XaSymbol *symbol) {
+static XaActiveSliceBorrow *pointer_active_borrow(XaInferContext *ctx, XaSymbol *symbol) {
     if (!ctx || !symbol)
         return NULL;
-    for (XaActiveSpanBorrow *borrow = ctx->active_span_borrows; borrow; borrow = borrow->next) {
+    for (XaActiveSliceBorrow *borrow = ctx->active_span_borrows; borrow; borrow = borrow->next) {
         if (borrow->view_symbol == symbol && borrow->is_pointer_borrow)
             return borrow;
     }
@@ -163,7 +163,7 @@ static bool pointer_projection_receiver(XaInferContext *ctx, AstNode *call_expr,
     bool projection = false;
     if ((strcmp(member->name, "ptr") == 0 || strcmp(member->name, "mutPtr") == 0) &&
         receiver_type &&
-        (XR_TYPE_IS_ARRAY(receiver_type) || XR_TYPE_IS_SPAN(receiver_type) ||
+        (XR_TYPE_IS_ARRAY(receiver_type) || XR_TYPE_IS_SLICE(receiver_type) ||
          receiver_type->kind == XR_KIND_FIXED_ARRAY)) {
         projection = true;
     } else if (strcmp(member->name, "borrowPtr") == 0 && receiver_type &&
@@ -227,7 +227,7 @@ bool xa_pointer_provenance_for_expr(XaInferContext *ctx, AstNode *expr, XaPointe
             pointer_set_mutability(out, pointer_type);
             return true;
         }
-        XaActiveSpanBorrow *borrow = pointer_active_borrow(ctx, symbol);
+        XaActiveSliceBorrow *borrow = pointer_active_borrow(ctx, symbol);
         if (borrow) {
             pointer_set_owner(ctx, out, borrow->owner_symbol, pointer_type);
             return true;
@@ -299,10 +299,6 @@ bool xa_pointer_provenance_for_expr(XaInferContext *ctx, AstNode *expr, XaPointe
         pointer_set_foreign(out, pointer_type);
         return true;
     }
-    if (direct->type == AST_MEMBER_ACCESS && pointer_type && XR_TYPE_IS_POINTER(pointer_type) &&
-        pointer_type->ptr_is_c_view && direct->as.member_access.object)
-        return xa_pointer_provenance_for_expr(ctx, direct->as.member_access.object, out);
-
     if (pointer_type && XR_TYPE_IS_POINTER(pointer_type)) {
         pointer_set_foreign(out, pointer_type);
         return true;

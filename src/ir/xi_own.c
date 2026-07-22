@@ -158,7 +158,7 @@ static bool type_is_u8_contiguous_view(const XrType *type) {
         }
         return false;
     }
-    if (type->kind != XR_KIND_ARRAY && type->kind != XR_KIND_VIEW && type->kind != XR_KIND_SPAN)
+    if (type->kind != XR_KIND_ARRAY && type->kind != XR_KIND_SLICE && type->kind != XR_KIND_SLICE)
         return false;
     const XrType *elem = xr_type_contiguous_element_type(type);
     return elem && xr_type_is_exact_u8(elem) && !elem->is_nullable;
@@ -193,7 +193,7 @@ static bool own_builtin_receiver_registry_matches(const XrType *receiver_type,
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return xr_type_is_u8_slice(receiver_type);
         case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver_type && receiver_type->kind == XR_KIND_SPAN &&
+            return receiver_type && receiver_type->kind == XR_KIND_SLICE &&
                    own_type_is_pod_span_elem(receiver_type->container.element_type);
     }
     return false;
@@ -290,7 +290,11 @@ XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx
         return xi_go_arg_transfer_mode(user, (uint16_t) (arg_idx - 1)) == XR_TRANSFER_MOVE;
     if ((user->op == XI_CALL || user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
         user->call_plan && arg_idx > 0 && arg_idx <= user->call_plan->nargs &&
-        user->call_plan->args[arg_idx - 1].param_mode == XR_PARAM_REF)
+        user->call_plan->args[arg_idx - 1].place == user->args[arg_idx])
+        /* Both writable `ref` and compiler-inferred readonly aggregate places
+         * are borrowed for the duration of the call.  The latter remains a
+         * semantic READ argument and must never acquire ARC ownership of the
+         * place descriptor itself. */
         return false;
     if (low_level_byte_method_arg_is_borrowed(user, arg_idx))
         return false;

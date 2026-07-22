@@ -273,18 +273,9 @@ XrType *xr_type_new_array(XrVMRuntime *X, XrType *element_type) {
     return type;
 }
 
-XrType *xr_type_new_span(XrVMRuntime *X, XrType *element_type) {
-    XR_DCHECK(element_type != NULL, "type_new_span: NULL element_type");
-    XrType *type = type_alloc(X, XR_KIND_SPAN);
-    if (!type)
-        return NULL;
-    type->container.element_type = element_type;
-    return type;
-}
-
-XrType *xr_type_new_view(XrVMRuntime *X, XrType *element_type) {
-    XR_DCHECK(element_type != NULL, "type_new_view: NULL element_type");
-    XrType *type = type_alloc(X, XR_KIND_VIEW);
+XrType *xr_type_new_slice(XrVMRuntime *X, XrType *element_type) {
+    XR_DCHECK(element_type != NULL, "type_new_slice: NULL element_type");
+    XrType *type = type_alloc(X, XR_KIND_SLICE);
     if (!type)
         return NULL;
     type->container.element_type = element_type;
@@ -445,8 +436,7 @@ static bool xr_type_contains_error_impl(const XrType *type, int depth) {
         case XR_KIND_ARRAY:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
-        case XR_KIND_SPAN:
-        case XR_KIND_VIEW:
+        case XR_KIND_SLICE:
         case XR_KIND_POINTER:
             return xr_type_contains_error_impl(type->container.element_type, depth + 1);
         case XR_KIND_FIXED_ARRAY:
@@ -621,14 +611,7 @@ XrType *xr_type_new_u8_slice(XrVMRuntime *X) {
     XrType *elem = xr_type_new_int_width(X, XR_NATIVE_U8);
     if (!elem)
         return NULL;
-    return xr_type_new_span(X, elem);
-}
-
-XrType *xr_type_new_u8_view(XrVMRuntime *X) {
-    XrType *elem = xr_type_new_int_width(X, XR_NATIVE_U8);
-    if (!elem)
-        return NULL;
-    return xr_type_new_view(X, elem);
+    return xr_type_new_slice(X, elem);
 }
 
 XrType *xr_type_new_regex(XrVMRuntime *X) {
@@ -780,6 +763,33 @@ XrType *xr_type_new_function(XrVMRuntime *X, XrType **param_types, int param_cou
     // Fail-closed default (task 216): a function type is assumed to possibly
     // throw until the analyzer proves otherwise after the effect-DB fixpoint.
     type->function.throw_effect = XR_FN_EFFECT_MAY_THROW;
+    type->function.view_return_source = XR_VIEW_RETURN_NONE;
+    type->function.view_return_param = -1;
+    type->function.view_return_complete = true;
+    if (return_type && XR_TYPE_IS_SLICE(return_type)) {
+        int borrowed_candidate = -1;
+        bool multiple = false;
+        for (int i = 0; i < param_count; i++) {
+            XrType *param = param_types ? param_types[i] : NULL;
+            if (!param || !XR_TYPE_IS_SLICE(param))
+                continue;
+            if (borrowed_candidate >= 0) {
+                multiple = true;
+                break;
+            }
+            borrowed_candidate = i;
+        }
+        if (multiple) {
+            type->function.view_return_source = XR_VIEW_RETURN_MULTI;
+            type->function.view_return_complete = false;
+        } else if (borrowed_candidate >= 0) {
+            type->function.view_return_source = XR_VIEW_RETURN_PARAM;
+            type->function.view_return_param = (int16_t) borrowed_candidate;
+        } else {
+            type->function.view_return_source = XR_VIEW_RETURN_UNKNOWN;
+            type->function.view_return_complete = false;
+        }
+    }
     return type;
 }
 
@@ -1149,14 +1159,12 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
 
     switch (type->kind) {
         case XR_KIND_ARRAY:
-        case XR_KIND_SPAN:
-        case XR_KIND_VIEW:
+        case XR_KIND_SLICE:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
         case XR_KIND_POINTER:
             copy->container.element_type = type->container.element_type;
             copy->ptr_is_mut = type->ptr_is_mut;  // harmless for non-pointer container kinds
-            copy->ptr_is_c_view = type->ptr_is_c_view;
             break;
         case XR_KIND_MAP:
             copy->map.key_type = type->map.key_type;
@@ -1217,6 +1225,9 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
             copy->function.is_variadic = type->function.is_variadic;
             copy->function.is_c_abi = type->function.is_c_abi;
             copy->function.throw_effect = type->function.throw_effect;  // task 216
+            copy->function.view_return_source = type->function.view_return_source;
+            copy->function.view_return_param = type->function.view_return_param;
+            copy->function.view_return_complete = type->function.view_return_complete;
             if (type->function.type_param_count > 0 && type->function.type_param_names) {
                 xr_type_set_function_type_params(
                     X, copy, type->function.type_param_names, type->function.type_param_constraints,
@@ -1568,22 +1579,10 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                xr_type_assignable(source->container.element_type, target->container.element_type);
     }
 
-    // Span compatibility is explicit and target-typed: only Span<T> flows into
-    // Span<T>. Array<T>/Array<byte> owner-to-view conversion is produced by slice or a
-    // typed view-producing expression, not by general assignment.
-    if (XR_TYPE_IS_SPAN(target) && XR_TYPE_IS_SPAN(source)) {
-        if (!target->container.element_type || !source->container.element_type)
-            return true;
-        if (XR_TYPE_IS_UNKNOWN(target->container.element_type) ||
-            XR_TYPE_IS_UNKNOWN(source->container.element_type))
-            return true;
-        return xr_type_assignable(target->container.element_type, source->container.element_type) &&
-               xr_type_assignable(source->container.element_type, target->container.element_type);
-    }
-
-    // View compatibility is explicit and target-typed: only View<T> flows into
-    // View<T>. Array<T>/Array<byte> owner-to-view conversion is produced by slice.
-    if (XR_TYPE_IS_VIEW(target) && XR_TYPE_IS_VIEW(source)) {
+    // Slice compatibility is explicit and target-typed. Owner-to-view
+    // conversion is produced by slice syntax or another proven view source,
+    // not by general assignment.
+    if (XR_TYPE_IS_SLICE(target) && XR_TYPE_IS_SLICE(source)) {
         if (!target->container.element_type || !source->container.element_type)
             return true;
         if (XR_TYPE_IS_UNKNOWN(target->container.element_type) ||
@@ -1657,8 +1656,6 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     // (mut -> const), not the reverse; pointee types are invariant. A null
     // raw pointer (Ptr.null()) is modelled as POINTER and assignable either way.
     if (target->kind == XR_KIND_POINTER && source->kind == XR_KIND_POINTER) {
-        if (target->ptr_is_c_view && !source->ptr_is_c_view)
-            return false;  // only mem.view may introduce the field-projection capability
         if (source->ptr_is_mut == false && target->ptr_is_mut == true)
             return false;  // const -> mut is not allowed
         XrType *te = target->container.element_type;
@@ -1687,6 +1684,13 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     // declare *more* parameters than target, since those would never get
     // a value.
     if (XR_TYPE_IS_FUNCTION(target) && XR_TYPE_IS_FUNCTION(source)) {
+        /* A borrowed Slice return is only sound when callers and callees agree
+         * on the unique backing source.  This contract is invariant: ordinary
+         * callback arity/return covariance must not erase or rewrite it. */
+        if (target->function.view_return_source != source->function.view_return_source ||
+            target->function.view_return_param != source->function.view_return_param ||
+            target->function.view_return_complete != source->function.view_return_complete)
+            return false;
         /* Effect covariance. POLY is an inference variable at this stage: a
          * target POLY accepts either concrete effect, while a source POLY is
          * provisionally accepted and resolved/rechecked after effect fixpoint. */
@@ -1833,6 +1837,9 @@ bool xr_type_function_signature_assignable(XrType *target, XrType *source) {
         target->function.min_params != source->function.min_params ||
         target->function.is_variadic != source->function.is_variadic ||
         target->function.is_c_abi != source->function.is_c_abi ||
+        target->function.view_return_source != source->function.view_return_source ||
+        target->function.view_return_param != source->function.view_return_param ||
+        target->function.view_return_complete != source->function.view_return_complete ||
         !function_type_params_equal(target, source))
         return false;
     if (target->function.throw_effect == XR_FN_EFFECT_NO_THROW &&
@@ -1868,12 +1875,12 @@ bool xr_type_equals(XrType *a, XrType *b) {
         return true;
 
     // Check type-specific data
-    if (a->kind == XR_KIND_ARRAY || a->kind == XR_KIND_SPAN || a->kind == XR_KIND_VIEW ||
-        a->kind == XR_KIND_SET || a->kind == XR_KIND_CHANNEL) {
+    if (a->kind == XR_KIND_ARRAY || a->kind == XR_KIND_SLICE || a->kind == XR_KIND_SET ||
+        a->kind == XR_KIND_CHANNEL) {
         return xr_type_equals(a->container.element_type, b->container.element_type);
     }
     if (a->kind == XR_KIND_POINTER) {
-        return a->ptr_is_mut == b->ptr_is_mut && a->ptr_is_c_view == b->ptr_is_c_view &&
+        return a->ptr_is_mut == b->ptr_is_mut &&
                xr_type_equals(a->container.element_type, b->container.element_type);
     }
     if (a->kind == XR_KIND_MAP) {
@@ -1937,6 +1944,10 @@ bool xr_type_equals(XrType *a, XrType *b) {
         if (a->function.is_c_abi != b->function.is_c_abi)
             return false;
         if (a->function.throw_effect != b->function.throw_effect)
+            return false;
+        if (a->function.view_return_source != b->function.view_return_source ||
+            a->function.view_return_param != b->function.view_return_param ||
+            a->function.view_return_complete != b->function.view_return_complete)
             return false;
         if (!function_type_params_equal(a, b))
             return false;

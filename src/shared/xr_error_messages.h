@@ -118,6 +118,8 @@
     "Slice<byte>.reinterpret<T>() byte length overflow"
 #define XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG                                         \
     "Slice<byte>.reinterpret<T>() length is not divisible by target size"
+#define XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_MISALIGNED_MSG                                        \
+    "Slice<byte>.reinterpret<T>() source address is not aligned for target type"
 #define XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_EXPECTS_MSG                                           \
     "Array<byte> copy-within expects integer offsets and count"
 #define XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_RECEIVER_MSG                                          \

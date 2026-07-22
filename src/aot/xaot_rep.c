@@ -52,8 +52,8 @@ static XaotValueRep value_rep_make(const XrType *type, XaotRep rep) {
     }
     if (info->dynamic_kind == XAOT_DYNAMIC_AGGREGATE) {
         out.kind = XAOT_VALUE_AGGREGATE;
-        if (type && type->kind == XR_KIND_SPAN)
-            out.flags |= XAOT_VALUE_FLAG_SPAN;
+        if (type && type->kind == XR_KIND_SLICE)
+            out.flags |= XAOT_VALUE_FLAG_SLICE;
         return out;
     }
     out.kind = XAOT_VALUE_SCALAR;
@@ -249,8 +249,8 @@ XR_FUNC XaotValueRep xaot_value_rep_for_value(const XiValue *value) {
         return value_rep_make(value->type, XAOT_REP_VOID);
     if (value->op == XI_LOCAL_ADDR)
         return call_bound_raw_view_rep(value);
-    if (value->type && value->type->kind == XR_KIND_SPAN)
-        return value_rep_make(value->type, XAOT_REP_SPAN);
+    if (value->type && value->type->kind == XR_KIND_SLICE)
+        return value_rep_make(value->type, XAOT_REP_SLICE);
     if (trace_fixed_array_field_ref(value))
         return fixed_array_view_rep(value);
     if (fixed_array_elem_rep_for_value(value, &rep))

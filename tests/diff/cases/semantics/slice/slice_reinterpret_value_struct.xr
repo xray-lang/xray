@@ -1,0 +1,15 @@
+struct Pair {
+    first: uint32
+    second: uint32
+}
+
+fn main() {
+    var storage: Array<byte> = [1, 0, 0, 0, 2, 0, 0, 0]
+    var bytes: Slice<byte> = storage[:]
+    var pairs: Slice<Pair> = bytes.reinterpret<Pair>()
+    print(len(pairs))
+    print(pairs[0].first)
+    print(pairs[0].second)
+}
+
+main()

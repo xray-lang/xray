@@ -160,12 +160,13 @@
     X(BYTE_SLICE_COMPARE, "xi.byte.slice.compare", xicgen_byte_slice_compare) \
     X(BYTE_SLICE_COMMON_PREFIX, "xi.byte.slice.common.prefix", xicgen_byte_slice_common_prefix) \
     X(BYTE_SLICE_REPEAT, "xi.byte.slice.repeat", xicgen_byte_slice_repeat) \
-    X(SPAN_WINDOW, "xi.span.window", xicgen_span_window) \
-    X(SPAN_AS_BYTES, "xi.span.as.bytes", xicgen_span_as_bytes) \
-    X(SPAN_FILL, "xi.span.fill", xicgen_span_fill) \
-    X(SPAN_COPY, "xi.span.copy", xicgen_span_copy) \
-    X(SPAN_COMPARE, "xi.span.compare", xicgen_span_compare) \
-    X(SPAN_REINTERPRET, "xi.span.reinterpret", xicgen_span_reinterpret) \
+    X(SLICE_WINDOW, "xi.slice.window", xicgen_span_window) \
+    X(SLICE_FROM_PTR, "xi.slice.from.ptr", xicgen_slice_from_ptr) \
+    X(SLICE_AS_BYTES, "xi.slice.as.bytes", xicgen_span_as_bytes) \
+    X(SLICE_FILL, "xi.slice.fill", xicgen_span_fill) \
+    X(SLICE_COPY, "xi.slice.copy", xicgen_span_copy) \
+    X(SLICE_COMPARE, "xi.slice.compare", xicgen_span_compare) \
+    X(SLICE_REINTERPRET, "xi.slice.reinterpret", xicgen_span_reinterpret) \
     X(BYTE_ARRAY_COPY_WITHIN, "xi.byte.array.copy.within", xicgen_byte_array_copy_within) \
     X(BYTE_ARRAY_COPY_FROM, "xi.byte.array.copy.from", xicgen_byte_array_copy_from) \
     X(BYTE_ARRAY_APPEND_FROM, "xi.byte.array.append.from", xicgen_byte_array_append_from) \

@@ -4,7 +4,8 @@ fn appendThenRead(src: Array<byte>) -> int {
 
     var tail: byte = 0
     unsafe {
-        tail = src.get(2)
+        var readable = src
+        tail = readable.get(2)
     }
     return int(tail) + len(out)
 }

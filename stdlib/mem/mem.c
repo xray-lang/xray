@@ -89,8 +89,8 @@ typedef struct XrMemBufferBody {
     void *data;
     int64_t length;
     size_t align;
-    XrSpanView readonly_span_cache;
-    XrSpanView mutable_span_cache;
+    XrSliceView readonly_span_cache;
+    XrSliceView mutable_span_cache;
 } XrMemBufferBody;
 
 int64_t xr_mem_buffer_length(XrValue value) {
@@ -296,14 +296,15 @@ static XrValue mem_buffer_bytes_view(XrVMRuntime *isolate, XrValue self, bool re
     XrMemBufferBody *buf = mem_buffer_body(isolate, self);
     if (!buf)
         return xr_span_ref(NULL);
-    XrSpanView *span = readonly ? &buf->readonly_span_cache : &buf->mutable_span_cache;
+    XrSliceView *span = readonly ? &buf->readonly_span_cache : &buf->mutable_span_cache;
     span->data = buf->data;
     span->length = buf->length;
     span->elem_type = XR_ELEM_U8;
     span->elem_size = 1;
     span->elem_tid = 0;
     span->contains_refs = 0;
-    span->reserved = readonly ? XR_SPAN_VIEW_READONLY : 0;
+    span->layout_id = 0;
+    span->reserved = readonly ? XR_SLICE_VIEW_READONLY : 0;
     span->guard = XR_TO_PTR(self);
     return xr_span_ref(span);
 }
@@ -432,10 +433,18 @@ static XrValue mem_store_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc
     return xr_null();
 }
 
-/* mem.view<T> is erased to an identity pointer conversion before bytecode or
- * AOT emission. This export exists only so native stdlib metadata has a
- * complete module surface; dynamic invocation cannot carry T and is invalid. */
-static XrValue mem_view_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
+/* mem.slice<T> is lowered with static element layout and owner evidence before
+ * bytecode/AOT emission. Dynamic invocation cannot carry those proofs. */
+static XrValue mem_slice_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
+    return xr_null();
+}
+
+/* mem.withSliceMut<T> is likewise compiler-only: lowering creates a writable
+ * call-bound Slice place and invokes the proven noescape callback directly. */
+static XrValue mem_with_slice_mut_intrinsic(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     (void) args;
     (void) argc;

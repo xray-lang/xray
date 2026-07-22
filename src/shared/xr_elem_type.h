@@ -92,7 +92,7 @@ static inline uint8_t xr_tid_to_elem_size(uint8_t tid) {
     return XR_ELEM_SIZES[xr_tid_to_elem_type(tid)];
 }
 
-/* Map native fixed-array lane tags to Span/Array element storage tags.
+/* Map native fixed-array lane tags to Slice/Array element storage tags.
  * Non-scalar lanes use XR_ELEM_ANY because their storage is full XrValue slots. */
 static inline XrArrayElemType xr_native_type_to_elem_type(uint8_t native_type) {
     switch (native_type) {

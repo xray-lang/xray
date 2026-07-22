@@ -1,0 +1,3 @@
+export fn grow(data: ref Array<byte>) {
+    data.push(99)
+}

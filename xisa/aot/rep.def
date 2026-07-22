@@ -188,7 +188,7 @@
   :native-type XR_NATIVE_POINTER
   :storage-rep XR_REP_RAWPTR)
 
-(define-aot-rep span
+(define-aot-rep slice
   :c-type "xr_span_t"
   :size 32
   :align 8

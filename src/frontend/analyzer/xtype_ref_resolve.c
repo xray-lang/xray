@@ -1030,7 +1030,7 @@ static int builtin_interface_type_arity(const char *name) {
 static int known_type_head_arity(XrVMRuntime *X, const char *name) {
     if (!name)
         return -1;
-    if (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SPAN) == 0 ||
+    if (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SLICE) == 0 ||
         strcmp(name, "Set") == 0 || strcmp(name, "WeakSet") == 0 || strcmp(name, "Channel") == 0 ||
         strcmp(name, "Task") == 0 || strcmp(name, "CoroLocal") == 0 || strcmp(name, "Ptr") == 0 ||
         strcmp(name, "MutPtr") == 0 || strcmp(name, "CFn") == 0 ||
@@ -1076,7 +1076,7 @@ static XrType *resolve_known_named(XrVMRuntime *X, const char *name) {
     if (xa_is_builtin_interface_name(name))
         return xr_type_new_interface(X, name);
 
-    if (strcmp(name, TYPE_NAME_SPAN) == 0)
+    if (strcmp(name, TYPE_NAME_SLICE) == 0)
         return xr_type_new_error(NULL);
     /* Prelude lookup (Array, Map, Set, Channel, Json, ...) */
     const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
@@ -1139,10 +1139,10 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
         result = xr_type_new_error(NULL);
     } else if (strcmp(name, "Array") == 0 && nargs == 1) {
         result = xr_type_new_array(X, args[0]);
-    } else if (strcmp(name, TYPE_NAME_SPAN) == 0 && nargs == 1) {
-        result = xr_type_new_span(X, args[0]);
+    } else if (strcmp(name, TYPE_NAME_SLICE) == 0 && nargs == 1) {
+        result = xr_type_new_slice(X, args[0]);
     } else if (false && nargs >= 1) {
-        result = xr_type_new_view(X, args[0]);
+        result = xr_type_new_slice(X, args[0]);
     } else if (strcmp(name, "Set") == 0 && nargs == 1) {
         result = xr_type_new_set(X, args[0]);
     } else if (strcmp(name, "WeakSet") == 0 && nargs == 1) {
@@ -1576,7 +1576,7 @@ static bool is_known_generic_head(XrVMRuntime *X, const char *name) {
 }
 
 static bool generic_head_is_container_like(const char *name) {
-    return name && (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SPAN) == 0 ||
+    return name && (strcmp(name, "Array") == 0 || strcmp(name, TYPE_NAME_SLICE) == 0 ||
                     strcmp(name, "Set") == 0 || strcmp(name, "WeakSet") == 0 ||
                     strcmp(name, "Channel") == 0);
 }
@@ -1626,8 +1626,8 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
     XrType *result = NULL;
     if (strcmp(name, "Array") == 0 && nargs == 1) {
         result = xr_type_new_array(X, args[0]);
-    } else if (strcmp(name, TYPE_NAME_SPAN) == 0 && nargs == 1) {
-        result = xr_type_new_span(X, args[0]);
+    } else if (strcmp(name, TYPE_NAME_SLICE) == 0 && nargs == 1) {
+        result = xr_type_new_slice(X, args[0]);
     } else if (strcmp(name, "Set") == 0 && nargs == 1) {
         result = xr_type_new_set(X, args[0]);
     } else if (strcmp(name, "WeakSet") == 0 && nargs == 1) {

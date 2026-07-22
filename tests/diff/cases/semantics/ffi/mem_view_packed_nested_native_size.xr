@@ -17,20 +17,24 @@ extern "C" {
     fn free(p: MutPtr<byte>)
 }
 
-var raw = unsafe { malloc(mem.sizeOf<NativeSizeEnvelope>()) }
-var envelope = unsafe { mem.view<NativeSizeEnvelope>(raw) }
-var payload = envelope.payload
+fn main() {
+    var raw = unsafe { malloc(mem.sizeOf<NativeSizeEnvelope>()) }
+    unsafe {
+        mem.withSliceMut<NativeSizeEnvelope>(raw, 1, ref raw,
+            fn(envelopes: ref Slice<NativeSizeEnvelope>) {
+                envelopes[0].payload.tag = 7
+                envelopes[0].payload.length = 37
+                envelopes[0].payload.delta = -37
+                print(envelopes[0].payload.tag)
+                print(envelopes[0].payload.length)
+                print(envelopes[0].payload.delta)
+                envelopes[0].payload.length = 91
+                envelopes[0].payload.delta = -91
+                print(envelopes[0].payload.length)
+                print(envelopes[0].payload.delta)
+            })
+        free(raw)
+    }
+}
 
-payload.tag = 7
-payload.length = 37
-payload.delta = -37
-print(payload.tag)
-print(payload.length)
-print(payload.delta)
-
-payload.length = 91
-payload.delta = -91
-print(payload.length)
-print(payload.delta)
-
-unsafe { free(raw) }
+main()

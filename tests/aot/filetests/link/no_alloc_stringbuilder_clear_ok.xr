@@ -1,9 +1,9 @@
 @no_alloc
-fn xray_no_alloc_stringbuilder_clear_ok(sb: StringBuilder) -> int {
+fn xray_no_alloc_stringbuilder_clear_ok(sb: ref StringBuilder) -> int {
     sb.clear()
     return len(sb)
 }
 
 var xray_no_alloc_stringbuilder_clear_value = StringBuilder()
 xray_no_alloc_stringbuilder_clear_value.append("edge")
-print(xray_no_alloc_stringbuilder_clear_ok(xray_no_alloc_stringbuilder_clear_value))
+print(xray_no_alloc_stringbuilder_clear_ok(ref xray_no_alloc_stringbuilder_clear_value))

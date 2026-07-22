@@ -1,5 +1,5 @@
 fn readSlot(outputs: Array<Array<byte>>, index: int) -> int {
-    const sharedOutputs = copy(outputs)
+    var sharedOutputs = copy(outputs)
     unsafe {
         var block = sharedOutputs.get(index)
         return len(block)

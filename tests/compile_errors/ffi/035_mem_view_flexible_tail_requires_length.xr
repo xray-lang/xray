@@ -7,6 +7,11 @@ extern "C" {
     }
 }
 
-var p = mem.mutPtr<Packet>(0)
-var view = unsafe { mem.view<Packet>(p) }
-print(view.data)
+fn main() {
+    var p = mem.mutPtr<Packet>(0)
+    var owner = Array<uint8>(8)
+    var view = unsafe { mem.slice<Packet>(p, 1, owner) }
+    print(view[0].data)
+}
+
+main()

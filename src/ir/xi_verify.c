@@ -306,6 +306,28 @@ static bool verify_type_reject_error(VerifyCtx *ctx, const XiFunc *f, const char
     return true;
 }
 
+static bool verify_view_root_matches(const XiValue *value, uint32_t root_value_id) {
+    for (uint8_t depth = 0; value && depth < 16; depth++) {
+        if (value->id == root_value_id)
+            return true;
+        if (value->nargs != 1 || !value->args[0])
+            return false;
+        switch ((XiOp) value->op) {
+            case XI_BOX:
+            case XI_UNBOX:
+            case XI_COPY:
+            case XI_CONVERT:
+            case XI_SOURCE_MOVE:
+            case XI_OWNER_FORWARD:
+                value = value->args[0];
+                break;
+            default:
+                return false;
+        }
+    }
+    return false;
+}
+
 /* Check 4: value-level invariants */
 static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, const XiValue *v) {
     if (ctx->failed)
@@ -364,6 +386,49 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
         }
         if (verify_type_reject_error(ctx, f, "value arg", v->args[a]->id, v->args[a]->type))
             return;
+    }
+
+    if (v->view_evidence.complete) {
+        const XiViewEvidence *view = &v->view_evidence;
+        if (!XR_TYPE_IS_SLICE(v->type)) {
+            verr(ctx, "func '%s': non-Slice v%u carries ViewEvidence", f->name, v->id);
+            return;
+        }
+        if (view->origin == XI_VIEW_ORIGIN_NONE || view->origin == XI_VIEW_ORIGIN_MULTI ||
+            view->origin == XI_VIEW_ORIGIN_UNKNOWN) {
+            verr(ctx, "func '%s': Slice v%u has incomplete ViewEvidence origin=%u", f->name, v->id,
+                 (unsigned) view->origin);
+            return;
+        }
+        if (view->capability != 1 && view->capability != 2) {
+            verr(ctx, "func '%s': Slice v%u has invalid ViewEvidence capability=%u", f->name, v->id,
+                 (unsigned) view->capability);
+            return;
+        }
+        if (view->origin == XI_VIEW_ORIGIN_STATIC) {
+            if (view->source_operand != -1 || view->root_value_id != 0) {
+                verr(ctx, "func '%s': static Slice v%u names a caller-local root", f->name, v->id);
+                return;
+            }
+        } else {
+            if (view->source_operand < 0 || view->source_operand >= (int16_t) v->nargs ||
+                !v->args[view->source_operand] ||
+                !verify_view_root_matches(v->args[view->source_operand], view->root_value_id)) {
+                verr(ctx, "func '%s': Slice v%u has stale/invalid ViewEvidence root operand",
+                     f->name, v->id);
+                return;
+            }
+        }
+    }
+    if (v->op == XI_SLICE_FROM_PTR && !v->view_evidence.complete) {
+        verr(ctx, "func '%s': raw-to-Slice v%u lacks complete ViewEvidence", f->name, v->id);
+        return;
+    }
+    if ((v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) &&
+        XR_TYPE_IS_SLICE(v->type) && !v->view_evidence.complete) {
+        verr(ctx, "func '%s': Slice-returning call v%u lacks complete ViewEvidence", f->name,
+             v->id);
+        return;
     }
 }
 
@@ -1015,6 +1080,8 @@ static bool verify_is_call_bound_place(const XiValue *v) {
     XrParamMode mode = xi_func_param_passing_mode(v->block->func, (uint16_t) v->aux_int);
     if (mode == XR_PARAM_REF)
         return true;
+    if (xi_value_is_read_place_param(v))
+        return true;
     const XiFunc *func = v->block->func;
     return mode == XR_PARAM_READ && v->aux_int == 0 && func->receiver_call_place && func->params &&
            func->params[0] == v;
@@ -1159,20 +1226,26 @@ static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
                 }
 
                 if (arg_plan->param_mode == XR_PARAM_READ) {
-                    if (arg_plan->place || arg_plan->addressable ||
-                        arg_plan->origin != XI_PLACE_ORIGIN_NONE ||
-                        arg_plan->lifetime != XI_PLACE_LIFETIME_NONE ||
-                        arg_plan->escape != XI_PLACE_ESCAPE_NONE ||
-                        arg_plan->origin_var_id != XI_NO_VAR_ID) {
-                        verr(ctx, "func '%s': call v%u value arg %u carries place-only metadata",
-                             f->name, v->id, (unsigned) a + 1);
-                        return;
+                    if (!arg_plan->place) {
+                        if (arg_plan->addressable || arg_plan->origin != XI_PLACE_ORIGIN_NONE ||
+                            arg_plan->lifetime != XI_PLACE_LIFETIME_NONE ||
+                            arg_plan->escape != XI_PLACE_ESCAPE_NONE ||
+                            arg_plan->origin_var_id != XI_NO_VAR_ID) {
+                            verr(ctx,
+                                 "func '%s': call v%u read arg %u has incomplete place metadata",
+                                 f->name, v->id, (unsigned) a + 1);
+                            return;
+                        }
+                        continue;
                     }
-                    continue;
+                    /* A read aggregate may carry a verified internal place
+                     * strategy.  It is still a semantic read argument: the
+                     * place is call-bound, nonescaping, and has no writeback. */
+                    saw_contract = true;
                 }
 
-                saw_contract = true;
                 if (arg_plan->param_mode == XR_PARAM_MOVE) {
+                    saw_contract = true;
                     if (arg_plan->place || arg_plan->addressable ||
                         arg_plan->origin != XI_PLACE_ORIGIN_NONE ||
                         arg_plan->lifetime != XI_PLACE_LIFETIME_NONE ||
@@ -1190,6 +1263,8 @@ static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
                     }
                     continue;
                 }
+
+                saw_contract = true;
 
                 XiValue *place = arg_plan->place;
                 if (!arg_plan->addressable || arg_plan->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
@@ -1227,7 +1302,8 @@ static void verify_call_plans(VerifyCtx *ctx, const XiFunc *f) {
                 }
             }
             if (!saw_contract) {
-                verr(ctx, "func '%s': call v%u in b%u has a call plan with no non-read contract",
+                verr(ctx,
+                     "func '%s': call v%u in b%u has a call plan with no place/ref/move contract",
                      f->name, v->id, blk->id);
                 return;
             }
@@ -1240,13 +1316,15 @@ static bool verify_call_plan_accepts_place_at(const XiValue *user, uint16_t arg_
     if (!user || !user->call_plan || arg_index >= user->nargs)
         return false;
     if (arg_index == 0)
-        return user->call_plan->has_receiver &&
-               user->call_plan->receiver.param_mode != XR_PARAM_READ &&
-               user->call_plan->receiver.place == place;
+        /* Read receivers are also represented by a call-bound place so the
+         * callee can borrow a stable address without copying a large value.
+         * The receiver plan already proves addressability and noescape. */
+        return user->call_plan->has_receiver && user->call_plan->receiver.place == place;
     if (arg_index > user->call_plan->nargs)
         return false;
     const XiCallArgPlan *arg_plan = &user->call_plan->args[arg_index - 1];
-    return arg_plan->param_mode == XR_PARAM_REF && arg_plan->place == place;
+    return (arg_plan->param_mode == XR_PARAM_REF || arg_plan->param_mode == XR_PARAM_READ) &&
+           arg_plan->place == place;
 }
 
 static void verify_place_uses(VerifyCtx *ctx, const XiFunc *f) {
@@ -1784,8 +1862,9 @@ static void verify_narrow_before_typed_store(VerifyCtx *ctx, const XiFunc *f) {
 
             /* Check if the collection is a typed array */
             struct XrType *coll_type = v->args[0]->type;
-            if (!coll_type || (coll_type->kind != XR_KIND_ARRAY &&
-                               coll_type->kind != XR_KIND_VIEW && coll_type->kind != XR_KIND_SPAN))
+            if (!coll_type ||
+                (coll_type->kind != XR_KIND_ARRAY && coll_type->kind != XR_KIND_SLICE &&
+                 coll_type->kind != XR_KIND_SLICE))
                 continue;
 
             struct XrType *elem = coll_type->container.element_type;

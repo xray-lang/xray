@@ -8,8 +8,9 @@ type Op = CFn<(int, MutPtr<int32>, int) -> int>
 var IMM: Array<int32> = [10, 20, 0, 0]
 
 fn opConst(pc: int, stack: MutPtr<int32>, sp: int) -> int {
-    unsafe { stack[sp] = IMM[pc] }
-    return OPS[pc + 1](pc + 1, stack, sp + 1)
+    var target = stack
+    unsafe { target[sp] = IMM[pc] }
+    return OPS[pc + 1](pc + 1, target, sp + 1)
 }
 
 fn opReturn(pc: int, stack: MutPtr<int32>, sp: int) -> int {

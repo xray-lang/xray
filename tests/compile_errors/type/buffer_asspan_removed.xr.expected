@@ -1,1 +1,1 @@
-Buffer has no member 'asSpan'
+Buffer has no member 'asSlice'

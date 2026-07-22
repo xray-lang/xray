@@ -1,0 +1,35 @@
+fn tail(data: Slice<byte>, start: int) -> Slice<byte> {
+    return data[start:]
+}
+
+fn forward(data: Slice<byte>, start: int) -> Slice<byte> {
+    return tail(data, start)
+}
+
+class Window {
+    bytes: Array<byte>
+    start: int
+
+    constructor(bytes: Array<byte>, start: int) {
+        this.bytes = bytes
+        this.start = start
+    }
+
+    tail() -> Slice<byte> {
+        return this.bytes[this.start:]
+    }
+}
+
+fn main() {
+    var bytes: Array<byte> = [10, 20, 30, 40]
+    var source: Slice<byte> = bytes[:]
+    var result: Slice<byte> = forward(source, 2)
+    print(len(result))
+    print(result[0])
+    print(result[1])
+    var window = Window(bytes, 1)
+    var receiverResult: Slice<byte> = window.tail()
+    print(receiverResult[0])
+}
+
+main()

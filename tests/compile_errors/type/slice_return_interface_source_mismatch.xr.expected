@@ -1,0 +1,2 @@
+method 'view' returns Slice borrowed from receiver
+interface 'SourceView' requires parameter 1

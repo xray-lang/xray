@@ -16,19 +16,21 @@ extern "C" {
     fn free(p: MutPtr<byte>)
 }
 
-var raw = unsafe { malloc(mem.sizeOf<Header>()) }
-var header = unsafe { mem.view<Header>(raw) }
+fn main() {
+    var raw = unsafe { malloc(mem.sizeOf<Header>()) }
+    unsafe {
+        mem.withSliceMut<Header>(raw, 1, ref raw, fn(headers: ref Slice<Header>) {
+            headers[0].tag = 7
+            headers[0].count = 4099
+            headers[0].count += 1
+            headers[0].child.code = 91
+            print(headers[0].tag)
+            print(headers[0].count)
+            print(headers[0].child.code)
+            print(headers[0].child.code)
+        })
+        free(raw)
+    }
+}
 
-header.tag = 7
-header.count = 4099
-header.count += 1
-var child = header.child
-child.code = 91
-header.next = child
-
-print(header.tag)
-print(header.count)
-print(child.code)
-print(header.next.code)
-
-unsafe { free(raw) }
+main()

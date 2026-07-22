@@ -1,4 +1,4 @@
-fn consume(ch: Channel<Array<int>>, data: Array<int>) {
+fn consume(ch: Channel<Array<int>>, data: move Array<int>) {
     ch.send(move data)
 }
 

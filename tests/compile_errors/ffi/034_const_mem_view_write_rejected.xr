@@ -6,6 +6,11 @@ extern "C" {
     }
 }
 
-var p = mem.ptr<Header>(0)
-var view = unsafe { mem.view<Header>(p) }
-view.value = 1
+fn main() {
+    var p = mem.ptr<Header>(0)
+    var owner = Array<uint8>(4)
+    var view = unsafe { mem.slice<Header>(p, 1, owner) }
+    view[0].value = 1
+}
+
+main()

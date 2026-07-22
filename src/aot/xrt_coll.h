@@ -572,22 +572,57 @@ static inline int64_t xrt_array_len(XrValue arr) {
 static inline void xrt_array_normalize_slice(int64_t len, int64_t *start, int64_t *end);
 
 enum {
-    XRT_SPAN_FLAG_READONLY = 1u << 0,
+    XRT_SLICE_FLAG_READONLY = 1u << 0,
 };
 
 typedef struct {
     void *data;
     int64_t length;
     void *guard;
+    uint16_t elem_size;
+    uint16_t layout_id;
     uint8_t elem_type;
-    uint8_t elem_size;
     uint8_t elem_tid;
     uint8_t contains_refs;
-    uint32_t flags;
+    uint8_t flags;
 } xr_span_t;
 
+/* Box a frame-local Slice descriptor for a typed dynamic-call boundary.  Safe Xray code cannot
+ * retain a Slice, so the aggregate reference is valid for the duration of the call and does not
+ * allocate or transfer ownership. */
+static inline XrValue xrt_span_to_value_ref(xr_span_t *span) {
+    XrValue out = {0};
+    out.tag = XR_TAG_AGG_REF;
+    out.heap_type = UINT16_MAX;
+    out.ptr = span;
+    return out;
+}
+
+static inline XrValue xrt_span_box_value(xr_span_t span) {
+    static _Thread_local xr_span_t slots[8];
+    static _Thread_local unsigned cursor;
+    xr_span_t *slot = &slots[cursor++ & 7u];
+    *slot = span;
+    return xrt_span_to_value_ref(slot);
+}
+
 static inline xr_span_t xrt_span_empty(void) {
-    return (xr_span_t) {NULL, 0, NULL, XR_ELEM_ANY, (uint8_t) sizeof(XrValue), 0, 0, 0};
+    return (xr_span_t) {.data = NULL,
+                        .length = 0,
+                        .guard = NULL,
+                        .elem_size = (uint16_t) sizeof(XrValue),
+                        .layout_id = 0,
+                        .elem_type = XR_ELEM_ANY,
+                        .elem_tid = 0,
+                        .contains_refs = 0,
+                        .flags = 0};
+}
+
+static inline xr_span_t xrt_span_from_value_ref(XrValue value) {
+    if (value.tag == XR_TAG_AGG_REF && value.ext == 0 && value.heap_type == UINT16_MAX && value.ptr)
+        return *(const xr_span_t *) value.ptr;
+    xrt_throw_error(XR_ERR_TYPE_MISMATCH, "expected Slice value");
+    return xrt_span_empty();
 }
 
 static inline xr_span_t xrt_span_from_array_slice(XrValue arr, int64_t start, int64_t end) {
@@ -655,51 +690,52 @@ static inline xr_span_t xrt_span_from_string_bytes(XrValue str) {
     out.guard = str.ptr;
     out.elem_type = XR_ELEM_U8;
     out.elem_size = 1;
+    out.layout_id = 0;
     out.elem_tid = 0;
     out.contains_refs = 0;
-    out.flags = XRT_SPAN_FLAG_READONLY;
+    out.flags = XRT_SLICE_FLAG_READONLY;
     return out;
 }
 
 static inline bool xrt_span_is_readonly(xr_span_t span) {
-    return (span.flags & XRT_SPAN_FLAG_READONLY) != 0;
+    return (span.flags & XRT_SLICE_FLAG_READONLY) != 0;
 }
 
 static inline xr_span_t xrt_span_as_bytes_checked_raw(xr_span_t span) {
     if (span.elem_type == XR_ELEM_ANY || span.elem_type >= XR_ELEM_COUNT || span.elem_size == 0)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.asBytes() requires POD Span element type");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.asBytes() requires POD Slice element type");
     if (span.length < 0 ||
         (span.elem_size > 0 && span.length > INT64_MAX / (int64_t) span.elem_size))
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.asBytes() byte length overflow");
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.asBytes() byte length overflow");
     xr_span_t out = span;
     out.length = span.length * (int64_t) span.elem_size;
     out.elem_type = XR_ELEM_U8;
     out.elem_size = 1;
     out.elem_tid = 0;
     out.contains_refs = 0;
-    out.flags = span.flags & XRT_SPAN_FLAG_READONLY;
+    out.flags = span.flags & XRT_SLICE_FLAG_READONLY;
     return out;
 }
 
 static inline xr_span_t xrt_span_copy_checked_raw(xr_span_t dst, xr_span_t src) {
     if (dst.elem_type == XR_ELEM_ANY || dst.elem_type >= XR_ELEM_COUNT || dst.elem_size == 0)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.copyFrom(src) receiver must be POD Span");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.copyFrom(src) receiver must be POD Slice");
     if (src.elem_type == XR_ELEM_ANY || src.elem_type >= XR_ELEM_COUNT || src.elem_size == 0)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.copyFrom(src) source must be POD Span");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.copyFrom(src) source must be POD Slice");
     if (dst.elem_type != src.elem_type || dst.elem_size != src.elem_size)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.copyFrom(src) element type mismatch");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.copyFrom(src) element type mismatch");
     if (xrt_span_is_readonly(dst))
-        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+        xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Slice");
     if (dst.length < 0 || src.length < 0 || dst.length > INT64_MAX / (int64_t) dst.elem_size ||
         src.length > INT64_MAX / (int64_t) src.elem_size)
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.copyFrom(src) byte length overflow");
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) byte length overflow");
     int64_t dst_bytes = dst.length * (int64_t) dst.elem_size;
     int64_t src_bytes = src.length * (int64_t) src.elem_size;
     if (src_bytes > dst_bytes)
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.copyFrom(src) range out of bounds");
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) range out of bounds");
     if (src_bytes > 0) {
         if (!dst.data || !src.data)
-            xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.copyFrom(src) range out of bounds");
+            xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) range out of bounds");
         memmove(dst.data, src.data, (size_t) src_bytes);
     }
     return dst;
@@ -707,21 +743,21 @@ static inline xr_span_t xrt_span_copy_checked_raw(xr_span_t dst, xr_span_t src) 
 
 static inline int64_t xrt_span_compare_checked_raw(xr_span_t left, xr_span_t right) {
     if (left.elem_type == XR_ELEM_ANY || left.elem_type >= XR_ELEM_COUNT || left.elem_size == 0)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.compare(other) receiver must be POD Span");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) receiver must be POD Slice");
     if (right.elem_type == XR_ELEM_ANY || right.elem_type >= XR_ELEM_COUNT || right.elem_size == 0)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.compare(other) operand must be POD Span");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) operand must be POD Slice");
     if (left.elem_type != right.elem_type || left.elem_size != right.elem_size)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.compare(other) element type mismatch");
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) element type mismatch");
     if (left.length < 0 || right.length < 0 || left.length > INT64_MAX / (int64_t) left.elem_size ||
         right.length > INT64_MAX / (int64_t) right.elem_size)
-        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.compare(other) byte length overflow");
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.compare(other) byte length overflow");
     int64_t left_bytes = left.length * (int64_t) left.elem_size;
     int64_t right_bytes = right.length * (int64_t) right.elem_size;
     int64_t n = left_bytes < right_bytes ? left_bytes : right_bytes;
     int cmp = 0;
     if (n > 0) {
         if (!left.data || !right.data)
-            xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Span.compare(other) span has no data");
+            xrt_throw_error(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) span has no data");
         cmp = memcmp(left.data, right.data, (size_t) n);
     }
     if (cmp < 0)
@@ -736,11 +772,15 @@ static inline int64_t xrt_span_compare_checked_raw(xr_span_t left, xr_span_t rig
 }
 
 static inline xr_span_t xrt_span_reinterpret_checked_raw(xr_span_t span, uint8_t elem_type,
-                                                         uint8_t elem_size, uint8_t elem_tid) {
-    if (elem_type == XR_ELEM_ANY || elem_type >= XR_ELEM_COUNT || elem_size == 0)
+                                                         uint16_t elem_size, uint8_t elem_tid,
+                                                         uint16_t alignment,
+                                                         uint16_t layout_marker) {
+    bool is_aggregate = elem_type == XR_ELEM_ANY && layout_marker != 0;
+    if (elem_type >= XR_ELEM_COUNT || elem_size == 0 || alignment == 0 ||
+        (elem_type == XR_ELEM_ANY && !is_aggregate))
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
                         XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_REQUIRES_POD_MSG);
-    if (XR_ELEM_SIZES[elem_type] != elem_size)
+    if (!is_aggregate && XR_ELEM_SIZES[elem_type] != elem_size)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH,
                         XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_METADATA_MISMATCH_MSG);
     if (span.elem_type != XR_ELEM_U8 || span.elem_size != 1)
@@ -751,13 +791,16 @@ static inline xr_span_t xrt_span_reinterpret_checked_raw(xr_span_t span, uint8_t
     if (span.length % (int64_t) elem_size != 0)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS,
                         XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG);
+    if (span.length > 0 && (!span.data || ((uintptr_t) span.data % (uintptr_t) alignment) != 0))
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_MISALIGNED_MSG);
     xr_span_t out = span;
     out.length = span.length / (int64_t) elem_size;
     out.elem_type = elem_type;
     out.elem_size = elem_size;
+    out.layout_id = layout_marker;
     out.elem_tid = elem_tid;
     out.contains_refs = 0;
-    out.flags = span.flags & XRT_SPAN_FLAG_READONLY;
+    out.flags = span.flags & XRT_SLICE_FLAG_READONLY;
     return out;
 }
 
@@ -926,7 +969,11 @@ static inline void xrt_array_stack_borrow_span_view_init(xrt_array_t *view, xr_s
         fprintf(stderr, "xrt_array_stack_borrow_span_view_init: NULL view\n");
         abort();
     }
-    uint8_t elem_size = span.elem_size ? span.elem_size : (uint8_t) sizeof(XrValue);
+    if (XR_UNLIKELY(span.layout_id != 0 || span.elem_size > UINT8_MAX)) {
+        fprintf(stderr, "aggregate Slice cannot be materialized as an Array view\n");
+        abort();
+    }
+    uint8_t elem_size = span.elem_size ? (uint8_t) span.elem_size : (uint8_t) sizeof(XrValue);
     int64_t len = span.length < 0 ? 0 : span.length;
     xrt_array_init_header(view, len, span.elem_type, elem_size);
     view->data = span.data;

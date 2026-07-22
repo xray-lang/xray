@@ -1825,8 +1825,7 @@ static XrRep sr_type_native_boundary_rep(const struct XrType *type) {
             return XR_REP_RAWPTR;
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
-        case XR_KIND_VIEW:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_TUPLE:
@@ -1850,7 +1849,7 @@ static XrRep sr_type_call_place_pointee_rep(const struct XrType *type) {
         return XR_REP_TAGGED;
     switch (type->kind) {
         case XR_KIND_FIXED_ARRAY:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
             return XR_REP_PTR;
         default:
             return XR_REP_TAGGED;
@@ -1924,7 +1923,7 @@ static bool sr_field_receiver_uses_native_rep(const XiValue *receiver) {
 static const XrType *sr_array_elem_type(const XrType *type) {
     if (!type)
         return NULL;
-    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW || type->kind == XR_KIND_SPAN)
+    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE)
         return type->container.element_type;
     if (type->kind == XR_KIND_FIXED_ARRAY)
         return type->fixed_array.element_type;
@@ -1954,7 +1953,7 @@ static XrRep sr_typed_array_elem_rep(const XrType *type) {
 static bool sr_type_has_static_typed_array_storage(const XrType *type) {
     if (!type || type->is_nullable)
         return false;
-    if (type->kind != XR_KIND_ARRAY && type->kind != XR_KIND_VIEW && type->kind != XR_KIND_SPAN)
+    if (type->kind != XR_KIND_ARRAY && type->kind != XR_KIND_SLICE && type->kind != XR_KIND_SLICE)
         return false;
     return sr_typed_array_elem_rep(type) != XR_REP_TAGGED;
 }
@@ -2014,7 +2013,7 @@ static bool sr_value_has_static_typed_array_storage_depth(const XiValue *value, 
     if (!v || depth > 8)
         return false;
 
-    /* Array<T>/Span<T> with a native element type is a language-level typed
+    /* Array<T>/Slice<T> with a native element type is a language-level typed
      * storage invariant.  The value may come from a param, local constructor,
      * method result, import, or direct call.  AOT prepare/cgen still decides
      * whether a particular access can use raw storage; select_rep only keeps
@@ -2067,9 +2066,9 @@ static bool sr_value_is_typed_array_field_ref(const XiValue *value) {
 
 static bool sr_value_has_static_index_storage(const XiValue *value) {
     const XiValue *v = sr_unwrap_identity_value(value);
-    bool uniform_array_container = v && v->type && !v->type->is_nullable &&
-                                   (v->type->kind == XR_KIND_ARRAY ||
-                                    v->type->kind == XR_KIND_VIEW || v->type->kind == XR_KIND_SPAN);
+    bool uniform_array_container =
+        v && v->type && !v->type->is_nullable &&
+        (v->type->kind == XR_KIND_ARRAY || v->type->kind == XR_KIND_SLICE);
     return uniform_array_container || sr_value_has_static_typed_array_storage(value) ||
            sr_value_is_typed_array_field_ref(value) || sr_value_is_fixed_array_field_ref(value);
 }
@@ -2093,8 +2092,8 @@ static bool sr_is_static_collection_length_field(const XiValue *v) {
     const XiValue *receiver = sr_unwrap_identity_value(v->args[0]);
     if (!receiver || !receiver->type)
         return false;
-    return receiver->type->kind == XR_KIND_ARRAY || receiver->type->kind == XR_KIND_VIEW ||
-           receiver->type->kind == XR_KIND_SPAN || receiver->type->kind == XR_KIND_MAP ||
+    return receiver->type->kind == XR_KIND_ARRAY || receiver->type->kind == XR_KIND_SLICE ||
+           receiver->type->kind == XR_KIND_SLICE || receiver->type->kind == XR_KIND_MAP ||
            receiver->type->kind == XR_KIND_SET;
 }
 
@@ -2165,7 +2164,7 @@ static bool sr_builtin_receiver_registry_matches(const XrType *receiver_type,
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return xr_type_is_u8_slice(receiver_type);
         case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver_type && receiver_type->kind == XR_KIND_SPAN &&
+            return receiver_type && receiver_type->kind == XR_KIND_SLICE &&
                    sr_type_is_pod_span_elem(receiver_type->container.element_type);
     }
     return false;
@@ -2404,6 +2403,8 @@ static bool sr_param_is_call_bound_place(const XiValue *v) {
     XrParamMode mode = xi_func_param_passing_mode(v->block->func, (uint16_t) v->aux_int);
     if (mode == XR_PARAM_REF)
         return true;
+    if (xi_value_is_read_place_param(v))
+        return true;
     const XiFunc *func = v->block->func;
     return mode == XR_PARAM_READ && v->aux_int == 0 && func->receiver_call_place && func->params &&
            func->params[0] == v;
@@ -2443,7 +2444,7 @@ static bool sr_def_rep_memory_op(const XiValue *v, XrRep *out) {
                        ? XR_REP_F64
                        : XR_REP_I64;
             return true;
-        case XI_SPAN_COMPARE:
+        case XI_SLICE_COMPARE:
         case XI_BYTE_SLICE_COMPARE:
         case XI_BYTE_SLICE_COMMON_PREFIX:
             *out = XR_REP_I64;
@@ -2451,10 +2452,10 @@ static bool sr_def_rep_memory_op(const XiValue *v, XrRep *out) {
         case XI_BYTE_SLICE_FILL:
         case XI_BYTE_SLICE_COPY:
         case XI_BYTE_SLICE_REPEAT:
-        case XI_SPAN_AS_BYTES:
-        case XI_SPAN_FILL:
-        case XI_SPAN_COPY:
-        case XI_SPAN_REINTERPRET:
+        case XI_SLICE_AS_BYTES:
+        case XI_SLICE_FILL:
+        case XI_SLICE_COPY:
+        case XI_SLICE_REINTERPRET:
             *out = sr_type_native_boundary_rep(v->type);
             return true;
         case XI_ARRAY_DATA_PTR:
@@ -2848,7 +2849,7 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
                        ? sr_type_native_boundary_rep(user->args[0]->type)
                        : XR_REP_I64;
             return true;
-        case XI_SPAN_FILL:
+        case XI_SLICE_FILL:
             if (arg_idx == 0 && user->nargs >= 1 && user->args[0]) {
                 *out = sr_type_native_boundary_rep(user->args[0]->type);
                 return true;
@@ -2859,14 +2860,14 @@ static bool sr_use_rep_memory_op(const XiValue *user, uint16_t arg_idx, const Xi
             }
             *out = XR_REP_TAGGED;
             return true;
-        case XI_SPAN_AS_BYTES:
-        case XI_SPAN_REINTERPRET:
+        case XI_SLICE_AS_BYTES:
+        case XI_SLICE_REINTERPRET:
             *out = arg_idx == 0 && user->nargs >= 1 && user->args[0]
                        ? sr_type_native_boundary_rep(user->args[0]->type)
                        : XR_REP_TAGGED;
             return true;
-        case XI_SPAN_COPY:
-        case XI_SPAN_COMPARE:
+        case XI_SLICE_COPY:
+        case XI_SLICE_COMPARE:
         case XI_BYTE_SLICE_COPY:
         case XI_BYTE_SLICE_COMPARE:
         case XI_BYTE_SLICE_COMMON_PREFIX:
@@ -3415,8 +3416,7 @@ static XrType *sr_enum_erasure_container_element(XrType *type) {
         return NULL;
     switch (type->kind) {
         case XR_KIND_ARRAY:
-        case XR_KIND_VIEW:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
             return type->container.element_type;

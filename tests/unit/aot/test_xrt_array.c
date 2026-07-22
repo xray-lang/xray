@@ -584,7 +584,7 @@ static void test_byte_slice_readonly_mutators_throw_before_write(void) {
         xrt_array_push(value, XR_FROM_INT(10 + i));
 
     xr_span_t readonly = xrt_span_from_array_slice(value, 0, 8);
-    readonly.flags |= XRT_SPAN_FLAG_READONLY;
+    readonly.flags |= XRT_SLICE_FLAG_READONLY;
     xr_span_t src = xrt_span_from_array_slice(value, 0, 4);
 
     EXPECT_READONLY_BYTE_SLICE_THROW(xrt_byte_slice_fill_checked_raw(readonly, 0xff),

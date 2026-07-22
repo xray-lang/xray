@@ -26,7 +26,7 @@ typedef enum {
     XAOT_REP_TAGGED = 14,
     XAOT_REP_PTR = 15,
     XAOT_REP_RAWPTR = 16,
-    XAOT_REP_SPAN = 17,
+    XAOT_REP_SLICE = 17,
     XAOT_REP_VOID = 18,
     XAOT_REP_COUNT
 } XaotRep;
@@ -72,7 +72,7 @@ typedef struct {
     X(TAGGED, "tagged", "XrValue", 16, 8, false, false, true, XAOT_DYNAMIC_TAGGED, true, XR_NATIVE_VALUE, XR_REP_TAGGED) \
     X(PTR, "ptr", "void *", 8, 8, false, false, false, XAOT_DYNAMIC_POINTER, false, 0, XR_REP_PTR) \
     X(RAWPTR, "rawptr", "void *", 8, 8, false, false, false, XAOT_DYNAMIC_POINTER, true, XR_NATIVE_POINTER, XR_REP_RAWPTR) \
-    X(SPAN, "span", "xr_span_t", 32, 8, false, false, false, XAOT_DYNAMIC_AGGREGATE, false, 0, XR_REP_TAGGED) \
+    X(SLICE, "slice", "xr_span_t", 32, 8, false, false, false, XAOT_DYNAMIC_AGGREGATE, false, 0, XR_REP_TAGGED) \
     X(VOID, "void", "void", 0, 1, false, false, false, XAOT_DYNAMIC_VOID, false, 0, XR_REP_VOID)
 
 
@@ -197,7 +197,7 @@ static inline const XaotRepInfo *xaot_rep_info(XaotRep rep) {
                                       XAOT_DYNAMIC_POINTER,
                                       true, XR_NATIVE_POINTER,
                                       XR_REP_RAWPTR},
-        [XAOT_REP_SPAN] = {"span", "xr_span_t",
+        [XAOT_REP_SLICE] = {"slice", "xr_span_t",
                                       32, 8,
                                       false, false,
                                       false,

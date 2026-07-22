@@ -163,7 +163,7 @@ static bool xrd_signature_contains_token(const char *signature, const char *toke
 }
 
 static bool xrd_validate_signature_types(const char *signature) {
-    static const char *const removed_byte_aliases[] = {"Bytes", "ByteSpan", "ByteView"};
+    static const char *const removed_byte_aliases[] = {"Bytes", "ByteSlice", "ByteView"};
     if (!signature)
         return true;
     for (size_t i = 0; i < sizeof(removed_byte_aliases) / sizeof(removed_byte_aliases[0]); i++) {

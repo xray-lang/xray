@@ -1,0 +1,7 @@
+import mem
+
+var guard = 0
+var p = mem.mutPtr<byte>(0)
+unsafe {
+    mem.withSliceMut<byte>(p, 0, guard, fn(view: ref Slice<byte>) { print(len(view)) })
+}

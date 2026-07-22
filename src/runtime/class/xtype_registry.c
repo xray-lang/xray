@@ -456,10 +456,8 @@ const char *xr_xr_type_kind_name(struct XrType *xa_type) {
             return "null";
         case XR_KIND_ARRAY:
             return "Array";
-        case XR_KIND_VIEW:
-            return "View";
-        case XR_KIND_SPAN:
-            return "Span";
+        case XR_KIND_SLICE:
+            return "Slice";
         case XR_KIND_MAP:
             return "Map";
         case XR_KIND_RECORD:
@@ -500,9 +498,7 @@ XrTypeMetadata *xr_registry_from_xa_type(XrVMRuntime *X, struct XrType *xa_type)
         case XR_KIND_NULL:
             return registry->null_type;
         case XR_KIND_ARRAY:
-        case XR_KIND_VIEW:
-            return registry->array_type;
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
             return registry->array_type;
         case XR_KIND_MAP:
             return registry->map_type;

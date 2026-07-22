@@ -442,6 +442,15 @@ static int sus_hof_callback_index(const XrType *receiver, const char *method) {
     return -1;
 }
 
+static bool sus_call_is_mem_with_slice_mut(const CallExprNode *call) {
+    if (!call || call->arg_count != 4 || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    const MemberAccessNode *member = &call->callee->as.member_access;
+    return member->name && strcmp(member->name, "withSliceMut") == 0 && member->object &&
+           member->object->type == AST_VARIABLE && member->object->as.variable.name &&
+           strcmp(member->object->as.variable.name, "mem") == 0;
+}
+
 static void sus_scan_call(XaSuspendScan *scan, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
     AstNode *callee = sus_identity_expr(call->callee);
@@ -491,6 +500,8 @@ static void sus_scan_call(XaSuspendScan *scan, AstNode *node) {
         int callback_index = sus_hof_callback_index(receiver, member->name);
         if (callback_index >= 0 && callback_index < call->arg_count)
             sus_scan_callback(scan, call->arguments[callback_index], node);
+        if (sus_call_is_mem_with_slice_mut(call))
+            sus_scan_callback(scan, call->arguments[3], node);
         return;
     }
     sus_mark_direct(scan->row, XA_SUSPEND_INCOMPLETE, node, "dynamic call", NULL);
@@ -709,6 +720,29 @@ static AstNode *sus_call_target_decl(XaSuspendPass *pass, AstNode *callee) {
  * function passed for such a parameter must be proven non-suspending. */
 static void sus_check_call_constraints(XaSuspendPass *pass, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
+    if (sus_call_is_mem_with_slice_mut(call)) {
+        const char *arg_name = "callback";
+        XaSuspendState state = sus_argument_state(pass, call->arguments[3], &arg_name);
+        if (state != XA_SUSPEND_NONE) {
+            AstNode *arg = call->arguments[3];
+            char message[512];
+            if (state == XA_SUSPEND_MAY)
+                snprintf(message, sizeof(message),
+                         "mem.withSliceMut callback rejects argument '%s': it may suspend",
+                         arg_name);
+            else
+                snprintf(message, sizeof(message),
+                         "mem.withSliceMut callback rejects argument '%s': it cannot be proven "
+                         "non-suspending",
+                         arg_name);
+            XrLocation location = {.file = pass->analyzer->current_file,
+                                   .line = arg ? (uint32_t) arg->line : (uint32_t) node->line,
+                                   .column = arg ? (uint32_t) arg->column : 0};
+            xa_analyzer_add_diagnostic(pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, message,
+                                       &location);
+        }
+        return;
+    }
     AstNode *fn_decl = sus_call_target_decl(pass, call->callee);
     XrParamNode **params = NULL;
     int param_count = 0;

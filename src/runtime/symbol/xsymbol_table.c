@@ -278,7 +278,7 @@ static const char *xr_builtin_symbol_names[] = {
     "addOverflows",
     "subOverflows",
     "mulOverflows",
-    "asSpan",
+    "asSlice",
     "ptr",
     "appendFrom",
     "containsKey",

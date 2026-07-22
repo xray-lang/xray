@@ -1,0 +1,15 @@
+interface SourceView {
+    view(data: Slice<byte>) -> Slice<byte>
+}
+
+class WrongSource implements SourceView {
+    bytes: Array<byte> = [9, 8]
+
+    view(data: Slice<byte>) -> Slice<byte> {
+        return this.bytes[:]
+    }
+}
+
+fn main() {}
+
+main()

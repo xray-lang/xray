@@ -142,11 +142,11 @@ static bool cg_value_rep_is_struct_aggregate(XaotValueRep rep) {
 }
 
 static bool cg_value_rep_is_span_aggregate(XaotValueRep rep) {
-    return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_SPAN) != 0;
+    return rep.kind == XAOT_VALUE_AGGREGATE && (rep.flags & XAOT_VALUE_FLAG_SLICE) != 0;
 }
 
 static bool cg_type_is_byte_slice(const XrType *type) {
-    return xr_type_is_u8_span(type);
+    return xr_type_is_u8_slice(type);
 }
 
 static bool cg_fixed_array_type_info(const XrType *type, uint8_t *native_out, uint32_t *count_out) {
@@ -466,7 +466,7 @@ static const char *cg_ptr_box_suffix_for_type(const XrType *type) {
         return ", XR_TAG_PTR)";
     switch (type->kind) {
         case XR_KIND_ARRAY:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
             return ", XR_TAG_ARRAY)";
         case XR_KIND_MAP:
             return ", XR_TAG_MAP)";
@@ -706,13 +706,6 @@ static XaotValueRep cg_func_param_abi_value_rep(XiCgenCtx *ctx, const XiFunc *f,
     return xaot_abi_slot_value_rep(&plan->abi.params[param_idx]);
 }
 
-static bool cg_func_param_abi_is_byte_slice_aggregate(XiCgenCtx *ctx, const XiFunc *f,
-                                                      uint16_t param_idx) {
-    XaotValueRep rep = cg_func_param_abi_value_rep(ctx, f, param_idx);
-    return cg_value_rep_is_span_aggregate(rep) &&
-           cg_type_is_byte_slice(cg_func_param_type(f, param_idx));
-}
-
 static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                uint16_t param_idx, const char *boxed_expr) {
     const XrType *param_type = cg_func_param_type(f, param_idx);
@@ -721,9 +714,9 @@ static void emit_boxed_value_as_func_param_abi(XiCgenCtx *ctx, FILE *out, const 
         func_plan && func_plan->abi.params && param_idx < func_plan->abi.nparams
             ? &func_plan->abi.params[param_idx]
             : NULL;
-    if (cg_func_param_abi_is_byte_slice_aggregate(ctx, f, param_idx)) {
-        fprintf(out, "xrt_byte_slice_from_value(%s, XR_ERROR_CORE_BYTE_SLICE_ARG_EXPECTS_MSG)",
-                boxed_expr ? boxed_expr : "XR_NULL_VAL");
+    XaotValueRep param_value_rep = cg_func_param_abi_value_rep(ctx, f, param_idx);
+    if (cg_value_rep_is_span_aggregate(param_value_rep)) {
+        fprintf(out, "xrt_span_from_value_ref(%s)", boxed_expr ? boxed_expr : "XR_NULL_VAL");
         return;
     }
     if (slot && (slot->flags & XAOT_ABI_SLOT_BORROWED_PLACE) != 0 &&
@@ -844,6 +837,12 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
         return;
     }
     if (plan && plan->rep.kind == XAOT_VALUE_AGGREGATE) {
+        if (target_rep == XR_REP_TAGGED && cg_value_rep_is_span_aggregate(plan->rep)) {
+            fprintf(out, "xrt_span_to_value_ref((xr_span_t *)&");
+            emit_vref(out, v);
+            fprintf(out, ")");
+            return;
+        }
         if (target_rep == XR_REP_TAGGED && cg_value_rep_is_adt_aggregate(plan->rep)) {
             fprintf(out, "xrt_enum_aggregate_box(");
             emit_adt_aggregate_as_base_expr(ctx, out, v);
@@ -860,9 +859,13 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
         if (ctx) {
             const XiFunc *vf = (v && v->block) ? v->block->func : NULL;
             fprintf(stderr,
-                    "[xi_cgen] ERROR: cannot convert aggregate v%u (%s in %s) to storage rep %d\n",
+                    "[xi_cgen] ERROR: cannot convert aggregate v%u (%s in %s, kind=%d, "
+                    "flags=0x%x, c_type=%s, semantic_kind=%d) to storage rep %d\n",
                     v ? v->id : 0, v ? xi_op_name((XiOp) v->op) : "?",
-                    vf && vf->name ? vf->name : "?", (int) target_rep);
+                    vf && vf->name ? vf->name : "?", plan ? (int) plan->rep.kind : -1,
+                    plan ? (unsigned) plan->rep.flags : 0,
+                    plan && plan->rep.c_type ? plan->rep.c_type : "?",
+                    v && v->type ? (int) v->type->kind : -1, (int) target_rep);
             ctx->error = true;
         }
         emit_codegen_abort_expr(out);
@@ -1068,9 +1071,15 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
         }
         fprintf(stderr,
                 "[xi_cgen] ERROR: cannot pass aggregate v%u from '%s' to non-tagged ABI "
-                "slot %u of '%s'\n",
+                "slot %u of '%s' (arg_kind=%d param_kind=%d slot_kind=%u slot_flags=0x%x)\n",
                 arg ? arg->id : 0, f && f->name ? f->name : "?", (unsigned) arg_index,
-                target && target->name ? target->name : "?");
+                target && target->name ? target->name : "?",
+                arg && arg->type ? (int) arg->type->kind : -1,
+                target && arg_index < target->nparams && target->params &&
+                        target->params[arg_index] && target->params[arg_index]->type
+                    ? (int) target->params[arg_index]->type->kind
+                    : -1,
+                (unsigned) slot_rep.kind, (unsigned) slot->flags);
         ctx->error = true;
         emit_codegen_abort_expr(out);
         return;

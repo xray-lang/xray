@@ -62,7 +62,7 @@ static int g_failed = 0;
 static XrType t_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType t_array = {.kind = XR_KIND_ARRAY, .id = 2, .frozen = true};
 static XrType t_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
-static XrType t_span = {.kind = XR_KIND_SPAN, .id = 4, .frozen = true};
+static XrType t_span = {.kind = XR_KIND_SLICE, .id = 4, .frozen = true};
 
 static XiFunc *make_func(const char *name, XrType *ret) {
     XiFunc *f = xi_func_new(name, ret);
@@ -95,12 +95,12 @@ static XiValue *index_get(XiFunc *f, XiBlock *b, XiValue *base) {
     return g;
 }
 
-/* A borrow view (Span) of `base`: result-ownership is BORROWED, so the verifier
+/* A borrow view (Slice) of `base`: result-ownership is BORROWED, so the verifier
  * records base as the view's owner (C3). */
 static XiValue *span_view(XiFunc *f, XiBlock *b, XiValue *base) {
     XiValue *s = xi_const_int(f, b, 0, &t_int);
     XiValue *e = xi_const_int(f, b, 1, &t_int);
-    XiValue *v = xi_value_new(f, b, XI_SPAN_WINDOW, &t_span, 3);
+    XiValue *v = xi_value_new(f, b, XI_SLICE_WINDOW, &t_span, 3);
     v->args[0] = base;
     v->args[1] = s;
     v->args[2] = e;
@@ -178,7 +178,7 @@ static void test_incident5_rc_op_metadata(void) {
 
 /* ========== Incident 2 (C3): borrow view outlives released owner ========== */
 
-/* base owner released before a loop; a Span borrow of base is merged by the
+/* base owner released before a loop; a Slice borrow of base is merged by the
  * loop-header phi and read inside the loop → the owner is gone under the view. */
 static void test_incident2_borrow_view_owner_released(void) {
     XiFunc *f = make_func("incident2_c3", &t_int);

@@ -403,7 +403,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"sizeOf", "(): int", "Compile-time size in bytes of a statically laid out type T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"alignOf", "(): int", "Compile-time alignment in bytes of a statically laid out type T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"offsetOf", "(field: string): int", "Compile-time byte offset of a field in a fixed-layout struct T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
-    {"view", "(ptr: Ptr<byte>): Ptr<byte>", "Unsafe zero-cost typed projection of a raw pointer onto an extern C struct or union T", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
+    {"slice", "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>", "Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"alloc", "(n: int): Buffer", "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP},
     {"allocZeroed", "(n: int): Buffer", "Allocate n zero-initialized bytes as a managed Buffer", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP},
     {"allocAligned", "(n: int, align: int): Buffer", "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP},
@@ -411,6 +411,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"pageProtect", "(ptr: MutPtr<byte>, bytes: int, prot: int): bool", "Change anonymous page protection bits; returns false on OS failure", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"pageFree", "(ptr: MutPtr<byte>, bytes: int): bool", "Release anonymous pages from mem.pageAlloc; returns false on OS failure", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"ptr", "(addr: int): Ptr<byte>", "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP},
+    {"withSliceMut", "(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any", "Unsafe compiler-verified exclusive mutable Slice loan scoped to a no-suspend callback", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP},
     {"mutPtr", "(addr: int): MutPtr<byte>", "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP},
     {"addr", "(ptr: Ptr<byte>): int", "Numeric address of any Ptr<T> or MutPtr<T>", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP},
     {"load", "(ptr: Ptr<byte>, offset?: int, endian?: Endian): int", "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP},
@@ -427,7 +428,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"PROT_WRITE", ": int", "Writable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
     {"PROT_EXEC", ": int", "Executable page protection bit for mem.pageAlloc/pageProtect", false, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING},
 };
-#define GEN_MEM_FUNCTION_COUNT 31
+#define GEN_MEM_FUNCTION_COUNT 32
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {

@@ -48,26 +48,29 @@
         }                                                                                          \
     } while (0)
 
-#define VM_SPAN_CHECK_STORABLE(span, val)                                                          \
+#define VM_SLICE_CHECK_STORABLE(span, val)                                                         \
     do {                                                                                           \
         if (!xr_typed_value_is_storable((val), (span)->elem_type)) {                               \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (span)->elem_type == XR_ELEM_RUNE               \
-                                                       ? "Span<char> element must be char"         \
+                                                       ? "Slice<char> element must be char"        \
                                                        : "typed span element must be numeric");    \
         }                                                                                          \
     } while (0)
 
-#define VM_SPAN_SLOT(slot_value)                                                                   \
-    ((XrSpanView *) (vm_ctx->struct_areas[VM_FRAME_COUNT - 1] +                                    \
-                     (uint16_t) (XR_TO_INT(slot_value)) * 16u))
+#define VM_SLICE_SLOT(slot_value)                                                                  \
+    ((XrSliceView *) (vm_ctx->struct_areas[VM_FRAME_COUNT - 1] +                                   \
+                      (uint16_t) (XR_TO_INT(slot_value)) * 16u))
 
-#define VM_SPAN_GET_ELEMENT(span, idx)                                                             \
-    xr_typed_get((span)->data, (int32_t) (idx), (span)->elem_type)
+#define VM_SLICE_GET_ELEMENT(span, idx)                                                            \
+    ((span)->layout_id != 0                                                                        \
+         ? xr_aggregate_ref((uint8_t *) (span)->data + (size_t) (idx) * (span)->elem_size,         \
+                            (span)->layout_id)                                                     \
+         : xr_typed_get((span)->data, (int32_t) (idx), (span)->elem_type))
 
-#define VM_SPAN_SET_ELEMENT(span, idx, val)                                                        \
+#define VM_SLICE_SET_ELEMENT(span, idx, val)                                                       \
     do {                                                                                           \
-        if (((span)->reserved & XR_SPAN_VIEW_READONLY) != 0) {                                     \
-            VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");       \
+        if (((span)->reserved & XR_SLICE_VIEW_READONLY) != 0) {                                    \
+            VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Slice");      \
         }                                                                                          \
         if (xr_typed_set((span)->data, (int32_t) (idx), (val), (span)->elem_type) &&               \
             (span)->contains_refs && (span)->guard) {                                              \
@@ -969,8 +972,8 @@ vmcase(OP_ARRAY_LEN) {
     // OP_ARRAY_LEN: array length
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-    if (XR_IS_SPAN_REF(R(b))) {
-        XrSpanView *span = XR_TO_SPAN_REF(R(b));
+    if (XR_IS_SLICE_REF(R(b))) {
+        XrSliceView *span = XR_TO_SLICE_REF(R(b));
         R(a) = xr_int((xr_Integer) (span ? span->length : 0));
         vmbreak;
     }
@@ -988,8 +991,8 @@ vmcase(OP_LEN) {
         R(a) = xr_int((xr_Integer) XR_TO_ARRAY(value)->length);
         vmbreak;
     }
-    if (XR_IS_SPAN_REF(value)) {
-        XrSpanView *span = XR_TO_SPAN_REF(value);
+    if (XR_IS_SLICE_REF(value)) {
+        XrSliceView *span = XR_TO_SLICE_REF(value);
         R(a) = xr_int((xr_Integer) (span ? span->length : 0));
         vmbreak;
     }
@@ -1052,8 +1055,8 @@ vmcase(OP_ARRAY_DATA_PTR) {
         R(a) = xr_int((xr_Integer) (intptr_t) R(b).ptr);
         vmbreak;
     }
-    if (XR_IS_SPAN_REF(R(b))) {
-        XrSpanView *span = XR_TO_SPAN_REF(R(b));
+    if (XR_IS_SLICE_REF(R(b))) {
+        XrSliceView *span = XR_TO_SLICE_REF(R(b));
         R(a) = xr_int((xr_Integer) (intptr_t) (span ? span->data : NULL));
         vmbreak;
     }
@@ -1066,7 +1069,7 @@ vmcase(OP_ARRAY_DATA_PTR) {
     vmbreak;
 }
 
-vmcase(OP_STRING_BYTES_SPAN) {
+vmcase(OP_STRING_BYTES_SLICE) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
@@ -1074,25 +1077,26 @@ vmcase(OP_STRING_BYTES_SPAN) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "string.bytes() expects a string receiver");
     }
     XrString *str = XR_TO_STRING(R(b));
-    XrSpanView *span = VM_SPAN_SLOT(R(c));
+    XrSliceView *span = VM_SLICE_SLOT(R(c));
     span->data = str ? (void *) str->data : NULL;
     span->length = str ? str->length : 0;
     span->elem_type = XR_ELEM_U8;
     span->elem_size = 1;
     span->elem_tid = 0;
     span->contains_refs = 0;
-    span->reserved = XR_SPAN_VIEW_READONLY;
+    span->layout_id = 0;
+    span->reserved = XR_SLICE_VIEW_READONLY;
     span->guard = str;
     R(a) = xr_span_ref(span);
     vmbreak;
 }
 
-#define VM_SPAN_VIEW(value, out_data, out_length, out_elem_type, out_elem_size, out_elem_tid,      \
-                     out_contains_refs, out_reserved, out_guard, message)                          \
+#define VM_SLICE_VIEW(value, out_data, out_length, out_elem_type, out_elem_size, out_elem_tid,     \
+                      out_contains_refs, out_reserved, out_guard, message)                         \
     do {                                                                                           \
         XrValue _span_value = (value);                                                             \
-        if (XR_IS_SPAN_REF(_span_value)) {                                                         \
-            XrSpanView *_span = XR_TO_SPAN_REF(_span_value);                                       \
+        if (XR_IS_SLICE_REF(_span_value)) {                                                        \
+            XrSliceView *_span = XR_TO_SLICE_REF(_span_value);                                     \
             if (!_span) {                                                                          \
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                 \
             }                                                                                      \
@@ -1122,46 +1126,50 @@ vmcase(OP_STRING_BYTES_SPAN) {
         }                                                                                          \
     } while (0)
 
-vmcase(OP_SPAN_AS_BYTES) {
+vmcase(OP_SLICE_AS_BYTES) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     if (!XR_IS_INT(R(c))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.asArray<byte>() missing Span frame slot");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.asArray<byte>() missing Slice frame slot");
     }
     void *data = NULL;
     int64_t length = 0;
     uint8_t elem_type = XR_ELEM_ANY;
-    uint8_t elem_size = 0;
+    uint16_t elem_size = 0;
     uint8_t elem_tid = 0;
     uint8_t contains_refs = 0;
     uint32_t reserved = 0;
     void *guard = NULL;
-    VM_SPAN_VIEW(R(b), data, length, elem_type, elem_size, elem_tid, contains_refs, reserved, guard,
-                 "Span.asArray<byte>() expects Span");
+    VM_SLICE_VIEW(R(b), data, length, elem_type, elem_size, elem_tid, contains_refs, reserved,
+                  guard, "Slice.asArray<byte>() expects Slice");
     (void) elem_tid;
     (void) contains_refs;
-    if (elem_type == XR_ELEM_ANY || elem_type >= XR_ELEM_COUNT || elem_size == 0) {
+    uint16_t layout_id =
+        XR_IS_SLICE_REF(R(b)) && XR_TO_SLICE_REF(R(b)) ? XR_TO_SLICE_REF(R(b))->layout_id : 0;
+    if ((elem_type == XR_ELEM_ANY && layout_id == 0) || elem_type >= XR_ELEM_COUNT ||
+        elem_size == 0) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Span.asArray<byte>() requires POD Span element type");
+                         "Slice.asArray<byte>() requires POD Slice element type");
     }
     if (length < 0 || (elem_size > 0 && length > INT64_MAX / (int64_t) elem_size)) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.asArray<byte>() byte length overflow");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.asArray<byte>() byte length overflow");
     }
-    XrSpanView *span = VM_SPAN_SLOT(R(c));
+    XrSliceView *span = VM_SLICE_SLOT(R(c));
     span->data = data;
     span->length = length * (int64_t) elem_size;
     span->elem_type = XR_ELEM_U8;
     span->elem_size = 1;
     span->elem_tid = 0;
     span->contains_refs = 0;
-    span->reserved = reserved & XR_SPAN_VIEW_READONLY;
+    span->layout_id = 0;
+    span->reserved = reserved & XR_SLICE_VIEW_READONLY;
     span->guard = guard;
     R(a) = xr_span_ref(span);
     vmbreak;
 }
 
-vmcase(OP_SPAN_COPY) {
+vmcase(OP_SLICE_COPY) {
     int a = GETARG_A(i);
     void *dst_data = NULL;
     void *src_data = NULL;
@@ -1169,8 +1177,8 @@ vmcase(OP_SPAN_COPY) {
     int64_t src_length = 0;
     uint8_t dst_elem_type = XR_ELEM_ANY;
     uint8_t src_elem_type = XR_ELEM_ANY;
-    uint8_t dst_elem_size = 0;
-    uint8_t src_elem_size = 0;
+    uint16_t dst_elem_size = 0;
+    uint16_t src_elem_size = 0;
     uint8_t dst_elem_tid = 0;
     uint8_t src_elem_tid = 0;
     uint8_t dst_contains_refs = 0;
@@ -1179,12 +1187,12 @@ vmcase(OP_SPAN_COPY) {
     uint32_t src_reserved = 0;
     void *dst_guard = NULL;
     void *src_guard = NULL;
-    VM_SPAN_VIEW(R(a), dst_data, dst_length, dst_elem_type, dst_elem_size, dst_elem_tid,
-                 dst_contains_refs, dst_reserved, dst_guard,
-                 "Span.copyFrom(src) receiver must be Span");
-    VM_SPAN_VIEW(R(a + 1), src_data, src_length, src_elem_type, src_elem_size, src_elem_tid,
-                 src_contains_refs, src_reserved, src_guard,
-                 "Span.copyFrom(src) source must be Span");
+    VM_SLICE_VIEW(R(a), dst_data, dst_length, dst_elem_type, dst_elem_size, dst_elem_tid,
+                  dst_contains_refs, dst_reserved, dst_guard,
+                  "Slice.copyFrom(src) receiver must be Slice");
+    VM_SLICE_VIEW(R(a + 1), src_data, src_length, src_elem_type, src_elem_size, src_elem_tid,
+                  src_contains_refs, src_reserved, src_guard,
+                  "Slice.copyFrom(src) source must be Slice");
     (void) dst_elem_tid;
     (void) src_elem_tid;
     (void) dst_contains_refs;
@@ -1193,71 +1201,71 @@ vmcase(OP_SPAN_COPY) {
     (void) dst_guard;
     (void) src_guard;
     if (dst_elem_type == XR_ELEM_ANY || dst_elem_type >= XR_ELEM_COUNT || dst_elem_size == 0) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.copyFrom(src) receiver must be POD Span");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.copyFrom(src) receiver must be POD Slice");
     }
     if (src_elem_type == XR_ELEM_ANY || src_elem_type >= XR_ELEM_COUNT || src_elem_size == 0) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.copyFrom(src) source must be POD Span");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.copyFrom(src) source must be POD Slice");
     }
     if (dst_elem_type != src_elem_type || dst_elem_size != src_elem_size) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.copyFrom(src) element type mismatch");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.copyFrom(src) element type mismatch");
     }
-    if (dst_reserved & XR_SPAN_VIEW_READONLY) {
-        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+    if (dst_reserved & XR_SLICE_VIEW_READONLY) {
+        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Slice");
     }
     if (dst_length < 0 || src_length < 0 || dst_length > INT64_MAX / (int64_t) dst_elem_size ||
         src_length > INT64_MAX / (int64_t) src_elem_size) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.copyFrom(src) byte length overflow");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) byte length overflow");
     }
     int64_t dst_bytes = dst_length * (int64_t) dst_elem_size;
     int64_t src_bytes = src_length * (int64_t) src_elem_size;
     if (src_bytes > dst_bytes) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.copyFrom(src) range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) range out of bounds");
     }
     if (src_bytes > 0) {
         if (!dst_data || !src_data) {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.copyFrom(src) range out of bounds");
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.copyFrom(src) range out of bounds");
         }
         memmove(dst_data, src_data, (size_t) src_bytes);
     }
     vmbreak;
 }
 
-vmcase(OP_SPAN_FILL) {
+vmcase(OP_SLICE_FILL) {
     int a = GETARG_A(i);
     void *span_data = NULL;
     int64_t span_length = 0;
     uint8_t span_elem_type = XR_ELEM_ANY;
-    uint8_t span_elem_size = 0;
+    uint16_t span_elem_size = 0;
     uint8_t span_elem_tid = 0;
     uint8_t span_contains_refs = 0;
     uint32_t span_reserved = 0;
     void *span_guard = NULL;
     XrValue fill_value = R(a + 1);
-    VM_SPAN_VIEW(R(a), span_data, span_length, span_elem_type, span_elem_size, span_elem_tid,
-                 span_contains_refs, span_reserved, span_guard,
-                 "Span.fill(value) receiver must be Span");
+    VM_SLICE_VIEW(R(a), span_data, span_length, span_elem_type, span_elem_size, span_elem_tid,
+                  span_contains_refs, span_reserved, span_guard,
+                  "Slice.fill(value) receiver must be Slice");
     (void) span_elem_tid;
     (void) span_contains_refs;
     (void) span_guard;
     if (span_elem_type == XR_ELEM_ANY || span_elem_type >= XR_ELEM_COUNT || span_elem_size == 0) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.fill(value) receiver must be POD Span");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.fill(value) receiver must be POD Slice");
     }
-    if (span_reserved & XR_SPAN_VIEW_READONLY) {
-        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Span");
+    if (span_reserved & XR_SLICE_VIEW_READONLY) {
+        VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, "cannot write through readonly Slice");
     }
     if (span_length < 0 || span_length > INT64_MAX / (int64_t) span_elem_size) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.fill(value) byte length overflow");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.fill(value) byte length overflow");
     }
     if (span_length > 0 && !span_data) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.fill(value) range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.fill(value) range out of bounds");
     }
     if (!xr_typed_fill(span_data, span_length, fill_value, span_elem_type)) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.fill(value) value type mismatch");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.fill(value) value type mismatch");
     }
     vmbreak;
 }
 
-vmcase(OP_SPAN_COMPARE) {
+vmcase(OP_SLICE_COMPARE) {
     int a = GETARG_A(i);
     void *left_data = NULL;
     void *right_data = NULL;
@@ -1265,8 +1273,8 @@ vmcase(OP_SPAN_COMPARE) {
     int64_t right_length = 0;
     uint8_t left_elem_type = XR_ELEM_ANY;
     uint8_t right_elem_type = XR_ELEM_ANY;
-    uint8_t left_elem_size = 0;
-    uint8_t right_elem_size = 0;
+    uint16_t left_elem_size = 0;
+    uint16_t right_elem_size = 0;
     uint8_t left_elem_tid = 0;
     uint8_t right_elem_tid = 0;
     uint8_t left_contains_refs = 0;
@@ -1275,12 +1283,12 @@ vmcase(OP_SPAN_COMPARE) {
     uint32_t right_reserved = 0;
     void *left_guard = NULL;
     void *right_guard = NULL;
-    VM_SPAN_VIEW(R(a), left_data, left_length, left_elem_type, left_elem_size, left_elem_tid,
-                 left_contains_refs, left_reserved, left_guard,
-                 "Span.compare(other) receiver must be Span");
-    VM_SPAN_VIEW(R(a + 1), right_data, right_length, right_elem_type, right_elem_size,
-                 right_elem_tid, right_contains_refs, right_reserved, right_guard,
-                 "Span.compare(other) operand must be Span");
+    VM_SLICE_VIEW(R(a), left_data, left_length, left_elem_type, left_elem_size, left_elem_tid,
+                  left_contains_refs, left_reserved, left_guard,
+                  "Slice.compare(other) receiver must be Slice");
+    VM_SLICE_VIEW(R(a + 1), right_data, right_length, right_elem_type, right_elem_size,
+                  right_elem_tid, right_contains_refs, right_reserved, right_guard,
+                  "Slice.compare(other) operand must be Slice");
     (void) left_elem_tid;
     (void) right_elem_tid;
     (void) left_contains_refs;
@@ -1290,18 +1298,18 @@ vmcase(OP_SPAN_COMPARE) {
     (void) left_guard;
     (void) right_guard;
     if (left_elem_type == XR_ELEM_ANY || left_elem_type >= XR_ELEM_COUNT || left_elem_size == 0) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.compare(other) receiver must be POD Span");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) receiver must be POD Slice");
     }
     if (right_elem_type == XR_ELEM_ANY || right_elem_type >= XR_ELEM_COUNT ||
         right_elem_size == 0) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.compare(other) operand must be POD Span");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) operand must be POD Slice");
     }
     if (left_elem_type != right_elem_type || left_elem_size != right_elem_size) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.compare(other) element type mismatch");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) element type mismatch");
     }
     if (left_length < 0 || right_length < 0 || left_length > INT64_MAX / (int64_t) left_elem_size ||
         right_length > INT64_MAX / (int64_t) right_elem_size) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Span.compare(other) byte length overflow");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.compare(other) byte length overflow");
     }
     int64_t left_bytes = left_length * (int64_t) left_elem_size;
     int64_t right_bytes = right_length * (int64_t) right_elem_size;
@@ -1309,7 +1317,7 @@ vmcase(OP_SPAN_COMPARE) {
     int cmp = 0;
     if (n > 0) {
         if (!left_data || !right_data) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Span.compare(other) span has no data");
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.compare(other) span has no data");
         }
         cmp = memcmp(left_data, right_data, (size_t) n);
     }
@@ -1325,36 +1333,42 @@ vmcase(OP_SPAN_COMPARE) {
     vmbreak;
 }
 
-vmcase(OP_SPAN_REINTERPRET) {
+vmcase(OP_SLICE_REINTERPRET) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    if (!XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1)) || !XR_IS_INT(R(c + 2)) || !XR_IS_INT(R(c + 3))) {
+    if (!XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1)) || !XR_IS_INT(R(c + 2)) || !XR_IS_INT(R(c + 3)) ||
+        !XR_IS_INT(R(c + 4)) || !XR_IS_INT(R(c + 5))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                          XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_MISSING_METADATA_MSG);
     }
     uint8_t target_elem_type = (uint8_t) XR_TO_INT(R(c + 1));
-    uint8_t target_elem_size = (uint8_t) XR_TO_INT(R(c + 2));
+    uint16_t target_elem_size = (uint16_t) XR_TO_INT(R(c + 2));
     uint8_t target_elem_tid = (uint8_t) XR_TO_INT(R(c + 3));
-    if (target_elem_type == XR_ELEM_ANY || target_elem_type >= XR_ELEM_COUNT ||
-        target_elem_size == 0) {
+    uint16_t target_alignment = (uint16_t) XR_TO_INT(R(c + 4));
+    uint64_t target_layout_key = (uint64_t) XR_TO_INT(R(c + 5));
+    XrAggregateLayout *target_layout =
+        xr_vm_struct_layout_lookup_stable_key(&isolate->vm, target_layout_key);
+    bool target_is_aggregate = target_elem_type == XR_ELEM_ANY && target_layout != NULL;
+    if (target_elem_type >= XR_ELEM_COUNT || target_elem_size == 0 || target_alignment == 0 ||
+        (target_elem_type == XR_ELEM_ANY && !target_is_aggregate)) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                          XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_REQUIRES_POD_MSG);
     }
-    if (XR_ELEM_SIZES[target_elem_type] != target_elem_size) {
+    if (!target_is_aggregate && XR_ELEM_SIZES[target_elem_type] != target_elem_size) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                          XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_METADATA_MISMATCH_MSG);
     }
     void *data = NULL;
     int64_t length = 0;
     uint8_t elem_type = XR_ELEM_ANY;
-    uint8_t elem_size = 0;
+    uint16_t elem_size = 0;
     uint8_t elem_tid = 0;
     uint8_t contains_refs = 0;
     uint32_t reserved = 0;
     void *guard = NULL;
-    VM_SPAN_VIEW(R(b), data, length, elem_type, elem_size, elem_tid, contains_refs, reserved, guard,
-                 XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_EXPECTS_MSG);
+    VM_SLICE_VIEW(R(b), data, length, elem_type, elem_size, elem_tid, contains_refs, reserved,
+                  guard, XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_EXPECTS_MSG);
     (void) elem_tid;
     (void) contains_refs;
     if (elem_type != XR_ELEM_U8 || elem_size != 1) {
@@ -1368,14 +1382,18 @@ vmcase(OP_SPAN_REINTERPRET) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
                          XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_DIVISIBLE_MSG);
     }
-    XrSpanView *span = VM_SPAN_SLOT(R(c));
+    if (length > 0 && (!data || ((uintptr_t) data % (uintptr_t) target_alignment) != 0)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REINTERPRET_MISALIGNED_MSG);
+    }
+    XrSliceView *span = VM_SLICE_SLOT(R(c));
     span->data = data;
     span->length = length / (int64_t) target_elem_size;
     span->elem_type = target_elem_type;
     span->elem_size = target_elem_size;
     span->elem_tid = target_elem_tid;
     span->contains_refs = 0;
-    span->reserved = reserved & XR_SPAN_VIEW_READONLY;
+    span->layout_id = target_layout ? target_layout->layout_id : 0;
+    span->reserved = reserved & XR_SLICE_VIEW_READONLY;
     span->guard = guard;
     R(a) = xr_span_ref(span);
     vmbreak;
@@ -1390,14 +1408,14 @@ vmcase(OP_BYTE_ARRAY_APPEND_FROM) {
     void *src_data = NULL;
     int64_t src_length = 0;
     uint8_t src_elem_type = XR_ELEM_ANY;
-    uint8_t src_elem_size = 0;
+    uint16_t src_elem_size = 0;
     uint8_t src_elem_tid = 0;
     uint8_t src_contains_refs = 0;
     uint32_t src_reserved = 0;
     void *src_guard = NULL;
-    VM_SPAN_VIEW(R(a + 1), src_data, src_length, src_elem_type, src_elem_size, src_elem_tid,
-                 src_contains_refs, src_reserved, src_guard,
-                 XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_EXPECTS_MSG);
+    VM_SLICE_VIEW(R(a + 1), src_data, src_length, src_elem_type, src_elem_size, src_elem_tid,
+                  src_contains_refs, src_reserved, src_guard,
+                  XR_ERROR_CORE_BYTE_ARRAY_APPEND_FROM_EXPECTS_MSG);
     (void) src_elem_size;
     (void) src_elem_tid;
     (void) src_contains_refs;
@@ -1411,7 +1429,7 @@ vmcase(OP_BYTE_ARRAY_APPEND_FROM) {
     vmbreak;
 }
 
-#undef VM_SPAN_VIEW
+#undef VM_SLICE_VIEW
 
 vmcase(OP_ARRAY_CLEAR) {
     int a = GETARG_A(i);
@@ -1480,14 +1498,14 @@ vmcase(OP_ARRAY_RESIZE) {
 #define VM_BYTE_SLICE_VIEW(value, out_data, out_length, out_readonly, out_elem_type, message)      \
     do {                                                                                           \
         XrValue _span_value = (value);                                                             \
-        if (XR_IS_SPAN_REF(_span_value)) {                                                         \
-            XrSpanView *_span = XR_TO_SPAN_REF(_span_value);                                       \
+        if (XR_IS_SLICE_REF(_span_value)) {                                                        \
+            XrSliceView *_span = XR_TO_SLICE_REF(_span_value);                                     \
             if (!_span || _span->elem_type != XR_ELEM_U8) {                                        \
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, (message));                                 \
             }                                                                                      \
             (out_data) = _span->data;                                                              \
             (out_length) = _span->length;                                                          \
-            (out_readonly) = ((_span->reserved & XR_SPAN_VIEW_READONLY) != 0);                     \
+            (out_readonly) = ((_span->reserved & XR_SLICE_VIEW_READONLY) != 0);                    \
             (out_elem_type) = _span->elem_type;                                                    \
         } else if (XR_IS_ARRAY(_span_value)) {                                                     \
             XrArray *_arr = XR_TO_ARRAY(_span_value);                                              \
@@ -2170,12 +2188,12 @@ vmcase(OP_INDEX_GET) {
         }
         vmbreak;
     }
-    // Fast path: frame-local Span value
-    if (XR_IS_SPAN_REF(obj_val) && XR_IS_INT(key_val)) {
-        XrSpanView *span = XR_TO_SPAN_REF(obj_val);
+    // Fast path: frame-local Slice value
+    if (XR_IS_SLICE_REF(obj_val) && XR_IS_INT(key_val)) {
+        XrSliceView *span = XR_TO_SLICE_REF(obj_val);
         int64_t idx = XR_TO_INT(key_val);
         if (span && (uint64_t) idx < (uint64_t) span->length) {
-            R(a) = VM_SPAN_GET_ELEMENT(span, idx);
+            R(a) = VM_SLICE_GET_ELEMENT(span, idx);
         } else {
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
                              "span index out of range: %lld (length %d)", (long long) idx,
@@ -2345,17 +2363,17 @@ vmcase(OP_INDEX_SET) {
         }
         vmbreak;
     }
-    // Fast path: frame-local Span value
-    if (XR_IS_SPAN_REF(obj_val) && XR_IS_INT(key_val)) {
-        XrSpanView *span = XR_TO_SPAN_REF(obj_val);
+    // Fast path: frame-local Slice value
+    if (XR_IS_SLICE_REF(obj_val) && XR_IS_INT(key_val)) {
+        XrSliceView *span = XR_TO_SLICE_REF(obj_val);
         int64_t idx = XR_TO_INT(key_val);
         if (!span || (uint64_t) idx >= (uint64_t) span->length) {
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
                              "span index out of range: %lld (length %d)", (long long) idx,
                              (int) (span ? span->length : 0));
         }
-        VM_SPAN_CHECK_STORABLE(span, val);
-        VM_SPAN_SET_ELEMENT(span, idx, val);
+        VM_SLICE_CHECK_STORABLE(span, val);
+        VM_SLICE_SET_ELEMENT(span, idx, val);
         vmbreak;
     }
     // Fast path: Array (includes slices — capacity==0 && source!=NULL)
@@ -2443,20 +2461,14 @@ vmcase(OP_SLICE) {
     int64_t start = XR_TO_INT(R(c));
     int64_t end = XR_TO_INT(R(c + 1));
 
-    // Array slice: either frame-local borrowed Span value (R[C+2] is a span
-    // slot), or storage-backed heap View (R[C+2] is null).
+    // Array slice: frame-local borrowed Slice value (R[C+2] is a slice slot).
     if (XR_IS_ARRAY(source)) {
         XrArray *arr = XR_TO_ARRAY(source);
         if (!XR_IS_INT(R(c + 2))) {
-            XrArray *slice = xr_array_slice(VM_CURRENT_CORO, arr, start, end);
-            if (!slice) {
-                VM_RUNTIME_ERROR(XR_ERR_RUNTIME, "array view slice allocation failed");
-            }
-            R(a) = XR_FROM_PTR(slice);
-            vmbreak;
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "array slice missing Slice frame slot");
         }
         xr_array_normalize_slice(arr->length, &start, &end);
-        XrSpanView *span = VM_SPAN_SLOT(R(c + 2));
+        XrSliceView *span = VM_SLICE_SLOT(R(c + 2));
         span->data = (arr->data && end > start)
                          ? (uint8_t *) arr->data + (size_t) start * arr->elem_size
                          : (uint8_t *) arr->data;
@@ -2465,23 +2477,24 @@ vmcase(OP_SLICE) {
         span->elem_size = arr->elem_size;
         span->elem_tid = arr->elem_tid;
         span->contains_refs = arr->contains_refs;
+        span->layout_id = 0;
         span->reserved = 0;
         span->guard = arr;
         R(a) = xr_span_ref(span);
         vmbreak;
     }
 
-    // Frame-local fixed array slice: only target-typed Span<T> is supported.
+    // Frame-local fixed array slice: only target-typed Slice<T> is supported.
     if (XR_IS_ARRAY_REF(source)) {
         if (!XR_IS_INT(R(c + 2))) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                             "fixed array slices can only produce Span views");
+                             "fixed array slices can only produce Slice views");
         }
         uint8_t native_type = XR_ARRAY_REF_ELEM_TYPE(source);
         uint32_t elem_count = XR_ARRAY_REF_ELEM_COUNT(source);
         xr_array_normalize_slice(elem_count, &start, &end);
         uint8_t elem_size = xr_native_type_size(xr_target_data_layout_host(), native_type);
-        XrSpanView *span = VM_SPAN_SLOT(R(c + 2));
+        XrSliceView *span = VM_SLICE_SLOT(R(c + 2));
         span->data = (source.ptr && end > start)
                          ? (uint8_t *) source.ptr + (size_t) start * (size_t) elem_size
                          : (uint8_t *) source.ptr;
@@ -2490,20 +2503,21 @@ vmcase(OP_SLICE) {
         span->elem_size = elem_size ? elem_size : (uint8_t) sizeof(XrValue);
         span->elem_tid = 0;
         span->contains_refs = span->elem_type == XR_ELEM_ANY;
+        span->layout_id = 0;
         span->reserved = 0;
         span->guard = NULL;
         R(a) = xr_span_ref(span);
         vmbreak;
     }
 
-    // Span slice-of-slice: pure pointer arithmetic into another frame-local Span.
-    if (XR_IS_SPAN_REF(source)) {
-        XrSpanView *src_span = XR_TO_SPAN_REF(source);
+    // Slice slice-of-slice: pure pointer arithmetic into another frame-local Slice.
+    if (XR_IS_SLICE_REF(source)) {
+        XrSliceView *src_span = XR_TO_SLICE_REF(source);
         if (!src_span || !XR_IS_INT(R(c + 2))) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "span slice missing Span frame slot");
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "slice-of-slice missing Slice frame slot");
         }
         xr_array_normalize_slice(src_span->length, &start, &end);
-        XrSpanView *span = VM_SPAN_SLOT(R(c + 2));
+        XrSliceView *span = VM_SLICE_SLOT(R(c + 2));
         span->data = (src_span->data && end > start)
                          ? (uint8_t *) src_span->data + (size_t) start * src_span->elem_size
                          : (uint8_t *) src_span->data;
@@ -2512,6 +2526,7 @@ vmcase(OP_SLICE) {
         span->elem_size = src_span->elem_size;
         span->elem_tid = src_span->elem_tid;
         span->contains_refs = src_span->contains_refs;
+        span->layout_id = src_span->layout_id;
         span->reserved = src_span->reserved;
         span->guard = src_span->guard;
         R(a) = xr_span_ref(span);
@@ -2529,29 +2544,80 @@ vmcase(OP_SLICE) {
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "this type does not support slicing");
 }
 
-vmcase(OP_SPAN_WINDOW) {
+vmcase(OP_SLICE_WINDOW) {
     /* Strict count-based borrowed view. Unlike slice syntax this operation
      * never clamps and never interprets negative values from the end. One
      * successful check proves every access inside [0, count). */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    if (!XR_IS_SPAN_REF(R(b)) || !XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1)) || !XR_IS_INT(R(c + 2))) {
+    if (!XR_IS_SLICE_REF(R(b)) || !XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1)) ||
+        !XR_IS_INT(R(c + 2))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Slice.window(start, count) expects a Span and integer bounds");
+                         "Slice.window(start, count) expects a Slice and integer bounds");
     }
-    XrSpanView *src = XR_TO_SPAN_REF(R(b));
+    XrSliceView *src = XR_TO_SLICE_REF(R(b));
     int64_t start = XR_TO_INT(R(c));
     int64_t count = XR_TO_INT(R(c + 1));
     if (!src || start < 0 || count < 0 || start > src->length || count > src->length - start) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                         "Slice.window(start, count) is outside the source Span");
+                         "Slice.window(start, count) is outside the source Slice");
     }
-    XrSpanView *span = VM_SPAN_SLOT(R(c + 2));
+    XrSliceView *span = VM_SLICE_SLOT(R(c + 2));
     *span = *src;
     span->data = (src->data && count > 0) ? (uint8_t *) src->data + (size_t) start * src->elem_size
                                           : (uint8_t *) src->data;
     span->length = count;
     R(a) = xr_span_ref(span);
+    vmbreak;
+}
+
+vmcase(OP_SLICE_FROM_PTR) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    if (!XR_IS_INT(R(b)) || !XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1)) || !XR_IS_INT(R(c + 2)) ||
+        !XR_IS_INT(R(c + 3)) || !XR_IS_INT(R(c + 4)) || !XR_IS_INT(R(c + 5)) ||
+        !XR_IS_INT(R(c + 6))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "mem.slice<T>() is missing pointer/count/layout evidence");
+    }
+    uintptr_t address = (uintptr_t) XR_TO_INT(R(b));
+    int64_t count = XR_TO_INT(R(c));
+    uint8_t elem_type = (uint8_t) XR_TO_INT(R(c + 2));
+    uint16_t elem_size = (uint16_t) XR_TO_INT(R(c + 3));
+    uint8_t elem_tid = (uint8_t) XR_TO_INT(R(c + 4));
+    uint16_t alignment_flags = (uint16_t) XR_TO_INT(R(c + 5));
+    bool writable = (alignment_flags & 0x8000u) != 0;
+    uint16_t alignment = (uint16_t) (alignment_flags & 0x7fffu);
+    uint64_t layout_key = (uint64_t) XR_TO_INT(R(c + 6));
+    XrAggregateLayout *layout = xr_vm_struct_layout_lookup_stable_key(&isolate->vm, layout_key);
+    if (count < 0)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "mem.slice<T>() count must be non-negative");
+    if (elem_size == 0 || alignment == 0 || elem_type >= XR_ELEM_COUNT)
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "mem.slice<T>() has invalid static layout evidence");
+    if (count > 0 && address == 0)
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "mem.slice<T>() requires a non-null pointer for non-zero count");
+    if (count > 0 && address % alignment != 0)
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "mem.slice<T>() pointer does not satisfy T alignment");
+    if (count > 0 && (uint64_t) count > UINTPTR_MAX / (uint64_t) elem_size)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                         "mem.slice<T>() byte range overflows address space");
+    XrSliceView *slice = VM_SLICE_SLOT(R(c + 1));
+    slice->data = (void *) address;
+    slice->length = count;
+    slice->elem_type = elem_type;
+    slice->elem_size = elem_size;
+    slice->elem_tid = elem_tid;
+    slice->contains_refs = 0;
+    slice->layout_id = layout ? layout->layout_id : 0;
+    if (layout_key != 0 && slice->layout_id == 0)
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                         "mem.slice<T>() could not resolve canonical aggregate layout");
+    slice->reserved = writable ? 0 : XR_SLICE_VIEW_READONLY;
+    slice->guard = NULL;
+    R(a) = xr_span_ref(slice);
     vmbreak;
 }

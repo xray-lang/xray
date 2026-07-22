@@ -7,12 +7,20 @@ extern "C" {
     fn free(p: MutPtr<byte>)
 }
 
-var raw = unsafe { malloc(mem.sizeOf<BytecodeHeader>()) }
-var header = unsafe { mem.view<BytecodeHeader>(raw) }
-header.tag = 7
-header.length = 37
-header.delta = -37
-print(header.tag)
-print(header.length)
-print(header.delta)
-unsafe { free(raw) }
+fn main() {
+    var raw = unsafe { malloc(mem.sizeOf<BytecodeHeader>()) }
+    unsafe {
+        mem.withSliceMut<BytecodeHeader>(raw, 1, ref raw,
+            fn(headers: ref Slice<BytecodeHeader>) {
+                headers[0].tag = 7
+                headers[0].length = 37
+                headers[0].delta = -37
+                print(headers[0].tag)
+                print(headers[0].length)
+                print(headers[0].delta)
+            })
+        free(raw)
+    }
+}
+
+main()

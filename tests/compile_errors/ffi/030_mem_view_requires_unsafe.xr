@@ -7,5 +7,6 @@ extern "C" {
 }
 
 var p = mem.mutPtr<Header>(0)
-var view = mem.view<Header>(p)
-print(view.value)
+var owner = Array<uint8>(4)
+var view = mem.slice<Header>(p, 1, owner)
+print(view[0].value)

@@ -23,7 +23,7 @@ XR_FUNC void xr_vm_grapheme_iterator_dispose(XrVmGraphemeIterator *iterator,
 
 /* Fill a caller-owned frame-local span slot. No iterator, substring, span, or
  * owner object is allocated. out_range may be NULL. */
-XR_FUNC bool xr_vm_grapheme_iterator_next(XrVmGraphemeIterator *iterator, XrSpanView *out_span,
+XR_FUNC bool xr_vm_grapheme_iterator_next(XrVmGraphemeIterator *iterator, XrSliceView *out_span,
                                           XrByteRange *out_range);
 
 #endif /* XVM_GRAPHEME_ITERATOR_H */

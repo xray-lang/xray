@@ -1,0 +1,2 @@
+interface method 'choose' has multiple possible Slice return sources
+use a single Slice parameter or return an owned value

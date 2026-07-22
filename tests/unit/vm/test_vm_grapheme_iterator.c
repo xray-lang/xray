@@ -29,7 +29,7 @@ TEST(vm_grapheme_iterator_keeps_source_alive_without_slice_owner) {
     static const char text[] = "a\xcc\x88"
                                "b";
     XrVmGraphemeIterator iterator = {0};
-    XrSpanView span = {0};
+    XrSliceView span = {0};
     XrByteRange range = {0};
     XrCoroHeap *heap;
     XrString *source;
@@ -58,7 +58,7 @@ TEST(vm_grapheme_iterator_keeps_source_alive_without_slice_owner) {
     ASSERT_EQ_PTR(span.data, source->data);
     ASSERT_EQ_INT(span.length, 3);
     ASSERT_EQ_INT(span.elem_type, XR_ELEM_U8);
-    ASSERT_TRUE((span.reserved & XR_SPAN_VIEW_READONLY) != 0);
+    ASSERT_TRUE((span.reserved & XR_SLICE_VIEW_READONLY) != 0);
     ASSERT_EQ_PTR(span.guard, NULL);
     ASSERT_TRUE(memcmp(span.data, text, 3) == 0);
     ASSERT_EQ_UINT(heap->object_count, object_count);
@@ -78,7 +78,7 @@ TEST(vm_grapheme_iterator_keeps_source_alive_without_slice_owner) {
 
 TEST(vm_grapheme_iterator_empty_source) {
     XrVmGraphemeIterator iterator = {0};
-    XrSpanView span = {0};
+    XrSliceView span = {0};
     XrCoroHeap *heap;
     XrString *source;
 

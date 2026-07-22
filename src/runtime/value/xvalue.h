@@ -199,41 +199,42 @@ XR_FUNC bool xr_value_is_bigint(XrValue v);
  * Callers that have already established is_tuple may cast the
  * instance pointer directly. */
 
-/* ========== Struct Ref / Frame-Local Span Ref ========== */
+/* ========== Struct Ref / Frame-Local Slice Ref ========== */
 
-/* Reserved aggregate layout id for frame-local Span values.
- * Real aggregate layout ids are allocated by the VM layout registry. Span is
+/* Reserved aggregate layout id for frame-local Slice values.
+ * Real aggregate layout ids are allocated by the VM layout registry. Slice is
  * not a user aggregate: it reuses the aggregate-ref tag only to point at frame-owned
  * bytes without adding another XrValue tag. */
-#define XR_AGG_REF_SPAN_LAYOUT_ID UINT16_MAX
+#define XR_AGG_REF_SLICE_LAYOUT_ID UINT16_MAX
 
-typedef struct XrSpanView {
+typedef struct XrSliceView {
     void *data;
     int64_t length;
+    void *guard;
+    uint16_t elem_size;
+    uint16_t layout_id;
     uint8_t elem_type;
-    uint8_t elem_size;
     uint8_t elem_tid;
     uint8_t contains_refs;
-    uint32_t reserved;
-    void *guard;
-} XrSpanView;
+    uint8_t reserved;
+} XrSliceView;
 
-#define XR_SPAN_VIEW_READONLY (1u << 0)
+#define XR_SLICE_VIEW_READONLY (1u << 0)
 
 static inline bool xr_value_is_span_ref(XrValue v) {
-    return v.tag == XR_TAG_AGG_REF && v.ext == 0 && v.heap_type == XR_AGG_REF_SPAN_LAYOUT_ID;
+    return v.tag == XR_TAG_AGG_REF && v.ext == 0 && v.heap_type == XR_AGG_REF_SLICE_LAYOUT_ID;
 }
 
-static inline XrValue xr_span_ref(XrSpanView *span) {
+static inline XrValue xr_span_ref(XrSliceView *span) {
     XrValue v = {0};
     v.tag = XR_TAG_AGG_REF;
-    v.heap_type = XR_AGG_REF_SPAN_LAYOUT_ID;
+    v.heap_type = XR_AGG_REF_SLICE_LAYOUT_ID;
     v.ptr = span;
     return v;
 }
 
-#define XR_IS_SPAN_REF(v) xr_value_is_span_ref(v)
-#define XR_TO_SPAN_REF(v) ((XrSpanView *) ((v).ptr))
+#define XR_IS_SLICE_REF(v) xr_value_is_span_ref(v)
+#define XR_TO_SLICE_REF(v) ((XrSliceView *) ((v).ptr))
 
 /* Construct an aggregate ref: ptr points into frame struct_area,
  * heap_type is repurposed as layout_id. */

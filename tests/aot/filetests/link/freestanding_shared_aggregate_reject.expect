@@ -1,6 +1,6 @@
 args=--profile freestanding
 status=fail
-contains=freestanding profile rejects shared declaration
-contains=only int/float/bool/char/string/null consteval initializers or recursively scalar struct/union consteval initializers are supported as static shared storage
+contains=freestanding profile rejects top-level const declaration
+contains=only int/float/bool/char/string/null consteval scalars, static string fixed-array lanes, and recursively scalar fixed-array/tuple/struct initializers are allowed
 not_contains=xrt_shared
 not_contains=CRASH

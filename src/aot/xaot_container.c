@@ -113,7 +113,7 @@ XR_FUNC bool xaot_container_elem_plan_for_type(const XrType *type, XaotContainer
 static const XrType *array_elem_type_from_type(const XrType *type) {
     if (!type)
         return NULL;
-    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW || type->kind == XR_KIND_SPAN)
+    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE)
         return type->container.element_type;
     if (type->kind == XR_KIND_FIXED_ARRAY)
         return type->fixed_array.element_type;
@@ -131,8 +131,7 @@ static bool type_contains_unresolved_type_param_depth(const XrType *type, uint8_
         return true;
     switch (type->kind) {
         case XR_KIND_ARRAY:
-        case XR_KIND_VIEW:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
             return type_contains_unresolved_type_param_depth(type->container.element_type,

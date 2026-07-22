@@ -1,0 +1,10 @@
+import { grow } from "../../fixtures/slice/_slice_memory_effect_lib"
+
+fn main() {
+    var owner: Array<byte> = [1, 2]
+    var view: Slice<byte> = owner[:]
+    grow(ref owner)
+    print(view[0])
+}
+
+main()

@@ -6,9 +6,9 @@ extern "C" {
     }
 }
 
-fn leak() -> MutPtr<Header> {
+fn leak() -> Slice<Header> {
     var buffer = mem.alloc(mem.sizeOf<Header>())
-    return unsafe { mem.view<Header>(buffer.borrowPtr()) }
+    return unsafe { mem.slice<Header>(buffer.borrowPtr(), 1, buffer) }
 }
 
-print(leak().isNull())
+print(len(leak()))

@@ -56,6 +56,8 @@ static void xa_check_call_arg_access_authorization(XaInferContext *ctx, AstNode 
                                                    const CallExprNode *call, AstNode *arg_node,
                                                    int arg_index, int slot, XrParamMode param_mode);
 static XrCallArgAccess xa_call_arg_access(const CallExprNode *call, int index);
+static void xa_check_ref_argument_not_readonly(XaInferContext *ctx, AstNode *call_node,
+                                               AstNode *arg_node, int slot, XrParamMode mode);
 static bool xa_class_name_matches_mono_base(const char *class_name, const char *base);
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object, const char *module_name);
 static bool xa_type_is_pod_span_elem(XrType *type);
@@ -158,7 +160,7 @@ static bool xa_builtin_receiver_intrinsic_matches(XrType *receiver, XaBuiltinRec
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return xr_type_is_u8_slice(receiver);
         case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver && XR_TYPE_IS_SPAN(receiver) && receiver->container.element_type &&
+            return receiver && XR_TYPE_IS_SLICE(receiver) && receiver->container.element_type &&
                    xa_type_is_pod_span_elem(receiver->container.element_type);
     }
     return false;
@@ -2050,7 +2052,7 @@ static XrType *xa_visit_sys_thread_spawn_call(XaInferContext *ctx, AstNode *node
 }
 
 static bool xa_type_is_byte_slice_view(XrType *type) {
-    return xr_type_is_u8_span(type);
+    return xr_type_is_u8_slice(type);
 }
 
 static bool xa_call_is_byte_slice_typed_load(CallExprNode *call, XrType *receiver_type) {
@@ -2343,13 +2345,19 @@ static XrType *xa_byte_slice_reinterpret_return_type(XaInferContext *ctx, AstNod
                                           "Slice<byte>.reinterpret<T>()", node ? node->line : 0,
                                           node ? node->column : 0))
         return xr_type_new_error(NULL);
-    if (!xa_type_is_pod_span_elem(target)) {
+    uint32_t target_size = 0;
+    uint32_t target_align = 0;
+    if (!xr_type_has_static_layout(xa_analyzer_target_data_layout(ctx->analyzer), target,
+                                   &target_size, &target_align) ||
+        !xr_type_all_bit_patterns_valid(target)) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
-                                   "Slice<byte>.reinterpret<T>() requires POD T", &loc);
+                                   "Slice<byte>.reinterpret<T>() requires a statically laid out "
+                                   "target for which every bit pattern is valid",
+                                   &loc);
         return xr_type_new_error(ctx->analyzer->isolate);
     }
-    return xr_type_new_span(ctx->analyzer->isolate, target);
+    return xr_type_new_slice(ctx->analyzer->isolate, target);
 }
 
 static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object,
@@ -2816,63 +2824,247 @@ static const char *xa_mem_pointer_constructor_member(XaInferContext *ctx, CallEx
     return ma->name;
 }
 
-static bool xa_mem_view_call(XaInferContext *ctx, CallExprNode *call) {
+static bool xa_mem_slice_call(XaInferContext *ctx, CallExprNode *call) {
     if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
         return false;
     MemberAccessNode *ma = &call->callee->as.member_access;
-    return ma->name && strcmp(ma->name, "view") == 0 &&
+    return ma->name && strcmp(ma->name, "slice") == 0 &&
            xa_call_object_is_module(ctx, ma->object, "mem");
 }
 
-static XrType *xa_mem_view_return_type(XaInferContext *ctx, AstNode *node, CallExprNode *call) {
+static bool xa_mem_with_slice_mut_call(XaInferContext *ctx, CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    return ma->name && strcmp(ma->name, "withSliceMut") == 0 &&
+           xa_call_object_is_module(ctx, ma->object, "mem");
+}
+
+typedef struct XaWithSliceMutRebindScan {
+    uint32_t symbol_id;
+    const char *name;
+    bool found;
+} XaWithSliceMutRebindScan;
+
+static void xa_with_slice_mut_rebind_scan_pre(AstNode *node, void *userdata) {
+    XaWithSliceMutRebindScan *scan = (XaWithSliceMutRebindScan *) userdata;
+    if (!scan || scan->found || !node || node->type != AST_ASSIGNMENT)
+        return;
+    AssignmentNode *assign = &node->as.assignment;
+    if ((scan->symbol_id && assign->symbol_id == scan->symbol_id) ||
+        (!scan->symbol_id && scan->name && assign->name && strcmp(scan->name, assign->name) == 0))
+        scan->found = true;
+}
+
+static bool xa_with_slice_mut_callback_rebinds_view(AstNode *callback) {
+    while (callback && callback->type == AST_GROUPING)
+        callback = callback->as.grouping;
+    if (!callback || callback->type != AST_FUNCTION_EXPR ||
+        callback->as.function_expr.param_count != 1 || !callback->as.function_expr.params ||
+        !callback->as.function_expr.params[0] || !callback->as.function_expr.body)
+        return false;
+    XrParamNode *param = callback->as.function_expr.params[0];
+    XaWithSliceMutRebindScan scan = {.symbol_id = param->symbol_id, .name = param->name};
+    xa_ast_walk(callback->as.function_expr.body, xa_with_slice_mut_rebind_scan_pre, NULL, &scan);
+    return scan.found;
+}
+
+static bool xa_layout_has_flexible_tail_depth(const XrAggregateLayout *layout, unsigned depth) {
+    if (!layout || depth > 8)
+        return false;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const XrAggregateFieldLayout *field = &layout->fields[i];
+        if (field->is_flexible)
+            return true;
+        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE && field->sub_layout &&
+            xa_layout_has_flexible_tail_depth(field->sub_layout, depth + 1))
+            return true;
+    }
+    return false;
+}
+
+static bool xa_type_layout_has_flexible_tail(const XrType *type) {
+    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
+        !type->instance.class_ref)
+        return false;
+    return xa_layout_has_flexible_tail_depth(type->instance.class_ref->struct_layout, 0);
+}
+
+static XrType *xa_mem_slice_return_type(XaInferContext *ctx, AstNode *node, CallExprNode *call) {
     XrLocation loc = {
         .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
     if (ctx->unsafe_depth == 0) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
-                                   "mem.view<T>() must be inside an unsafe block", &loc);
+                                   "mem.slice<T>() must be inside an unsafe block", &loc);
     }
-    if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
+    if (call->type_arg_count > 1) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
-                                   "mem.view<T>() expects exactly one type argument", &loc);
+                                   "mem.slice<T>() accepts at most one explicit type argument",
+                                   &loc);
         return xr_type_new_unknown(ctx->analyzer->isolate);
     }
-    if (call->arg_count != 1 || !call->arguments || !call->arguments[0]) {
+    if (call->arg_count != 3 || !call->arguments || !call->arguments[0] || !call->arguments[1] ||
+        !call->arguments[2]) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
-                                   "mem.view<T>() expects exactly one raw pointer argument", &loc);
+                                   "mem.slice<T>() expects (pointer, count, owner)", &loc);
         return xr_type_new_unknown(ctx->analyzer->isolate);
     }
 
-    XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
+    XrType *source = xa_visit_infer_expr(ctx, call->arguments[0]);
+    XrType *count = xa_visit_infer_expr(ctx, call->arguments[1]);
+    (void) xa_visit_infer_expr(ctx, call->arguments[2]);
+    XrType *target =
+        call->type_arg_count == 1 && call->type_args && call->type_args[0]
+            ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0])
+            : (source && XR_TYPE_IS_POINTER(source) ? source->container.element_type
+                                                    : xr_type_new_unknown(ctx->analyzer->isolate));
     if (xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument",
-                                          "mem.view", node ? node->line : 0,
+                                          "mem.slice", node ? node->line : 0,
                                           node ? node->column : 0))
         return xr_type_new_error(NULL);
-    XrClassInfo *info = target && XR_TYPE_IS_INSTANCE(target) ? target->instance.class_ref : NULL;
-    if (!info || !info->is_extern_layout || !info->struct_layout ||
-        !info->struct_layout->is_extern_layout) {
+    uint32_t size = 0;
+    uint32_t align = 0;
+    if (!target || XR_TYPE_IS_UNKNOWN(target) ||
+        !xr_type_has_static_layout(xa_analyzer_target_data_layout(ctx->analyzer), target, &size,
+                                   &align) ||
+        xa_type_layout_has_flexible_tail(target) || size == 0 || size > INT16_MAX || align == 0 ||
+        align > INT16_MAX) {
         char msg[256];
         snprintf(msg, sizeof(msg),
-                 "mem.view<T>() requires T to be an extern C struct or union, got '%s'",
+                 "mem.slice<T>() requires T to have a verified static layout, got '%s'",
                  target ? xr_type_to_string(target) : "unknown");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
     }
 
-    XrType *source = xa_visit_infer_expr(ctx, call->arguments[0]);
     if (!source || !XR_TYPE_IS_POINTER(source)) {
         char msg[224];
-        snprintf(msg, sizeof(msg), "mem.view<T>() expects Ptr<U> or MutPtr<U>, got '%s'",
+        snprintf(msg, sizeof(msg), "mem.slice<T>() expects Ptr<U> or MutPtr<U>, got '%s'",
                  source ? xr_type_to_string(source) : "unknown");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+    if (!count || !XR_TYPE_IS_INT(count)) {
+        char msg[224];
+        snprintf(msg, sizeof(msg), "mem.slice<T>() count must be an integer, got '%s'",
+                 count ? xr_type_to_string(count) : "unknown");
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                    &loc);
     }
 
     if (!target)
         target = xr_type_new_unknown(ctx->analyzer->isolate);
-    XrType *result = xr_type_new_pointer(
-        ctx->analyzer->isolate, target, source && XR_TYPE_IS_POINTER(source) && source->ptr_is_mut);
-    if (result)
-        result->ptr_is_c_view = true;
+    XrType *result = xr_type_new_slice(ctx->analyzer->isolate, target);
+    return xr_type_make_const(ctx->analyzer->isolate, result);
+}
+
+static XrType *xa_mem_with_slice_mut_return_type(XaInferContext *ctx, AstNode *node,
+                                                 CallExprNode *call) {
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    if (ctx->unsafe_depth == 0) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                                   "mem.withSliceMut<T>() must be inside an unsafe block", &loc);
+    }
+    if (call->type_arg_count > 1) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+            "mem.withSliceMut<T>() accepts at most one explicit type argument", &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+    if (call->arg_count != 4 || !call->arguments || !call->arguments[0] || !call->arguments[1] ||
+        !call->arguments[2] || !call->arguments[3]) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+            "mem.withSliceMut<T>() expects (mutPointer, count, ref guard, callback)", &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+
+    XrType *source = xa_visit_infer_expr(ctx, call->arguments[0]);
+    XrType *count = xa_visit_infer_expr(ctx, call->arguments[1]);
+    XrType *guard = xa_visit_infer_expr(ctx, call->arguments[2]);
+    XrType *target =
+        call->type_arg_count == 1 && call->type_args && call->type_args[0]
+            ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0])
+            : (source && XR_TYPE_IS_POINTER(source) ? source->container.element_type
+                                                    : xr_type_new_unknown(ctx->analyzer->isolate));
+    uint32_t size = 0;
+    uint32_t align = 0;
+    if (!source || !XR_TYPE_IS_POINTER(source) || !source->ptr_is_mut) {
+        char msg[224];
+        snprintf(msg, sizeof(msg), "mem.withSliceMut<T>() expects MutPtr<U>, got '%s'",
+                 source ? xr_type_to_string(source) : "unknown");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+    if (!count || !XR_TYPE_IS_INT(count)) {
+        char msg[224];
+        snprintf(msg, sizeof(msg), "mem.withSliceMut<T>() count must be an integer, got '%s'",
+                 count ? xr_type_to_string(count) : "unknown");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+    if (!target || XR_TYPE_IS_UNKNOWN(target) ||
+        !xr_type_has_static_layout(xa_analyzer_target_data_layout(ctx->analyzer), target, &size,
+                                   &align) ||
+        xa_type_layout_has_flexible_tail(target) || size == 0 || size > INT16_MAX || align == 0 ||
+        align > INT16_MAX) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "mem.withSliceMut<T>() requires T to have a verified static layout, got '%s'",
+                 target ? xr_type_to_string(target) : "unknown");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+    }
+
+    XrCallArgAccess guard_access = xa_call_arg_access(call, 2);
+    xa_check_arg_access_authorization(ctx, node, call->arguments[2], guard_access, 2, XR_PARAM_REF);
+    xa_check_ref_argument_not_readonly(ctx, node, call->arguments[2], 2, XR_PARAM_REF);
+
+    XrType *slice_type = xr_type_new_slice(
+        ctx->analyzer->isolate, target ? target : xr_type_new_unknown(ctx->analyzer->isolate));
+    XrType *callback_params[1] = {slice_type};
+    XrType *expected_callback =
+        xr_type_new_function(ctx->analyzer->isolate, callback_params, 1,
+                             xr_type_new_unknown(ctx->analyzer->isolate), false);
+    if (expected_callback)
+        xr_type_function_set_param_mode(expected_callback, 0, XR_PARAM_REF);
+    XrType *saved_expected = ctx->expected_type;
+    ctx->expected_type = expected_callback;
+    XrType *callback = xa_visit_infer_expr(ctx, call->arguments[3]);
+    ctx->expected_type = saved_expected;
+    if (!callback || callback->kind != XR_KIND_FUNCTION || callback->function.param_count != 1) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "mem.withSliceMut<T>() callback must have signature (ref Slice<T>) -> R, got '%s'",
+                 callback ? xr_type_to_string(callback) : "unknown");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+        return xr_type_new_unknown(ctx->analyzer->isolate);
+    }
+    XrType *callback_param = xr_type_function_param_type(callback, 0);
+    if (xr_type_function_param_mode(callback, 0) != XR_PARAM_REF || !callback_param ||
+        !XR_TYPE_IS_SLICE(callback_param) ||
+        !xr_type_equals(callback_param->container.element_type, target)) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "mem.withSliceMut<T>() callback parameter must be `ref Slice<T>`", &loc);
+    }
+    XrType *result = callback->function.return_type;
+    if (result && XR_TYPE_IS_SLICE(result)) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "mem.withSliceMut<T>() callback cannot return its borrowed Slice", &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+    if (xa_with_slice_mut_callback_rebinds_view(call->arguments[3])) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
+            "mem.withSliceMut<T>() callback may mutate elements but cannot rebind its temporary "
+            "Slice descriptor",
+            &loc);
+    }
+    (void) guard;
     return result ? result : xr_type_new_unknown(ctx->analyzer->isolate);
 }
 
@@ -3322,18 +3514,13 @@ static bool xa_call_alias_paths_may_overlap(const char *a, bool a_precise, const
     return xa_call_alias_path_is_same_or_nested(a, b) || xa_call_alias_path_is_same_or_nested(b, a);
 }
 
-static bool xa_method_call_creates_span_borrow(XrType *receiver_type, const char *method_name) {
-    if (!receiver_type || !method_name)
+static bool xa_method_call_creates_span_borrow(XaInferContext *ctx, XrType *receiver_type,
+                                               const char *method_name) {
+    if (!ctx || !ctx->analyzer || !receiver_type || !method_name)
         return false;
-    if (XR_TYPE_IS_STRING(receiver_type) && strcmp(method_name, "bytes") == 0)
-        return true;
-    if (xr_type_is_named_class(receiver_type, "Buffer") &&
-        (strcmp(method_name, "asBytes") == 0 || strcmp(method_name, "asMutBytes") == 0))
-        return true;
-    if (XR_TYPE_IS_SPAN(receiver_type) &&
-        (strcmp(method_name, "asBytes") == 0 || strcmp(method_name, "reinterpret") == 0))
-        return true;
-    return false;
+    XrType *result =
+        xa_builtin_get_method_return_type(ctx->analyzer->isolate, receiver_type, method_name);
+    return result && XR_TYPE_IS_SLICE(result);
 }
 
 static bool xa_call_is_copy_builtin(const CallExprNode *call) {
@@ -3423,7 +3610,7 @@ static XrType *xa_copy_owned_return_type(XaInferContext *ctx, XrType *arg_type) 
     if (!ctx || !ctx->analyzer || !arg_type)
         return NULL;
     XrType *result = NULL;
-    if (XR_TYPE_IS_SPAN(arg_type) || XR_TYPE_IS_VIEW(arg_type)) {
+    if (XR_TYPE_IS_SLICE(arg_type)) {
         if (xa_type_is_u8_view_or_owner(arg_type)) {
             result = xr_type_new_u8_array(ctx->analyzer->isolate);
         } else {
@@ -3479,6 +3666,7 @@ static bool xa_call_arg_is_mutable_place(XaInferContext *ctx, AstNode *arg_node,
         case AST_VARIABLE:
         case AST_MEMBER_ACCESS:
         case AST_INDEX_GET:
+        case AST_SLICE_EXPR:
             break;
         default:
             if (reason)
@@ -3498,6 +3686,66 @@ static bool xa_call_arg_is_mutable_place(XaInferContext *ctx, AstNode *arg_node,
         return false;
     }
     return true;
+}
+
+static const XaMemoryRootEffect *xa_call_memory_root_effect(const XaMemoryEffectSummary *summary,
+                                                            XaMemoryRootKind kind, uint32_t index) {
+    if (!summary)
+        return NULL;
+    for (uint32_t i = 0; i < summary->root_count; i++) {
+        const XaMemoryRootEffect *effect = &summary->roots[i];
+        if (effect->root.kind == kind && effect->root.index == index)
+            return effect;
+    }
+    return NULL;
+}
+
+static void xa_check_call_memory_effect_actual(XaInferContext *ctx, AstNode *call_node,
+                                               const XaMemoryEffectSummary *summary,
+                                               XaMemoryRootKind kind, uint32_t index,
+                                               AstNode *actual, const char *callee_name) {
+    if (!ctx || !ctx->analyzer || !call_node || !actual)
+        return;
+    if (!summary)
+        return;
+    const XaMemoryRootEffect *effect = xa_call_memory_root_effect(summary, kind, index);
+    bool incomplete = !xa_memory_effect_summary_is_complete(summary);
+    bool conflicts =
+        incomplete || (effect && (effect->write_count > 0 || effect->descriptor_rebind ||
+                                  effect->relocation == XA_MEMORY_MAY_RELOCATE ||
+                                  effect->shortening == XA_MEMORY_MAY_SHORTEN ||
+                                  effect->invalidation == XA_MEMORY_INVALIDATES_VIEWS));
+    if (!conflicts)
+        return;
+
+    char owner_path[512] = {0};
+    XaSymbol *owner =
+        xa_span_borrow_owner_path_for_owner_expr(ctx, actual, owner_path, sizeof(owner_path));
+    if (!owner)
+        owner = xa_span_borrow_owner_path_for_expr(ctx, actual, owner_path, sizeof(owner_path));
+    if (!owner)
+        return;
+
+    char operation[256];
+    if (incomplete) {
+        snprintf(operation, sizeof(operation),
+                 "calling '%s' with incomplete view-invalidation effects",
+                 callee_name ? callee_name : "callee");
+    } else if (effect->invalidation == XA_MEMORY_INVALIDATES_VIEWS) {
+        snprintf(operation, sizeof(operation), "calling '%s' which invalidates views",
+                 callee_name ? callee_name : "callee");
+    } else if (effect->relocation == XA_MEMORY_MAY_RELOCATE) {
+        snprintf(operation, sizeof(operation), "calling '%s' which may relocate the owner",
+                 callee_name ? callee_name : "callee");
+    } else if (effect->shortening == XA_MEMORY_MAY_SHORTEN) {
+        snprintf(operation, sizeof(operation), "calling '%s' which may shorten the owner",
+                 callee_name ? callee_name : "callee");
+    } else {
+        snprintf(operation, sizeof(operation), "calling mutating function '%s'",
+                 callee_name ? callee_name : "callee");
+    }
+    xa_check_active_span_borrow_owner_path_mutation(ctx, call_node, owner,
+                                                    owner_path[0] ? owner_path : NULL, operation);
 }
 
 XR_FUNC void xa_check_arg_access_authorization(XaInferContext *ctx, AstNode *call_node,
@@ -4325,6 +4573,10 @@ static bool xa_call_mutates_receiver(XaInferContext *ctx, XrType *receiver_type,
         return true;
 
     const char *class_name = xr_type_get_class_name(receiver_type);
+    XaBuiltinMethodMemoryEffectSet named_effects = XA_BUILTIN_MEMORY_STABLE_READ;
+    if (xa_builtin_named_receiver_memory_effect(class_name, method_name, &named_effects) &&
+        (named_effects & XA_BUILTIN_MEMORY_WRITE) != 0)
+        return true;
     XrClassInfo *class_info =
         XR_TYPE_IS_INSTANCE(receiver_type) ? receiver_type->instance.class_ref : NULL;
     if (class_name) {
@@ -4351,9 +4603,17 @@ static bool xa_class_name_matches_mono_base(const char *class_name, const char *
     return class_name[n] == '\0' || class_name[n] == '$';
 }
 
-static bool xa_type_allows_shared_interior_mutation(XrType *type) {
+static bool xa_type_allows_shared_interior_mutation(XaInferContext *ctx, XrType *type) {
     const uint32_t required = XA_TYPE_CAP_INTERIOR_MUTABLE | XA_TYPE_CAP_SYNC_SHAREABLE;
-    return xa_type_has_capabilities(type, required);
+    if (xa_type_has_capabilities(type, required) || xa_type_is_sys_threadlocal(ctx, type))
+        return true;
+    const char *class_name = xr_type_get_class_name(type);
+    XaSymbol *class_sym = class_name ? xa_lookup_visible_class_symbol(ctx, class_name) : NULL;
+    XaSymbolLinks *class_links = class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+    return class_links &&
+           ((class_links->type && xa_type_has_capabilities(class_links->type, required)) ||
+            (class_links->class_info &&
+             (class_links->class_info->capability_flags & required) == required));
 }
 
 static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *call_node,
@@ -4373,6 +4633,14 @@ static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *c
         return;
     }
     if (xa_type_contains_span_view(arg_type)) {
+        XaEscapeDestinationSet nonlocal_escape =
+            effect ? (XaEscapeDestinationSet) (effect->escapes & ~XA_ESCAPE_LOCAL_STORAGE)
+                   : XA_ESCAPE_NONE;
+        if (callee_links && callee_links->return_view.complete &&
+            callee_links->return_view.origin == XR_VIEW_RETURN_PARAM &&
+            callee_links->return_view.param_index == slot && effect &&
+            effect->returns != XA_RETURN_PROVENANCE_NONE && nonlocal_escape == XA_ESCAPE_NONE)
+            return;
         char context[160];
         snprintf(context, sizeof(context), "pass Slice view to escaping parameter %d of '%s'",
                  slot + 1, callee_name ? callee_name : "callee");
@@ -4407,7 +4675,7 @@ static void xa_check_shared_mutating_param_arg(XaInferContext *ctx, AstNode *cal
         return;
     if (!xa_type_needs_borrow_escape_guard(arg_type))
         return;
-    if (xa_type_allows_shared_interior_mutation(arg_type))
+    if (xa_type_allows_shared_interior_mutation(ctx, arg_type))
         return;
     if (!xa_expr_yields_shared_provenance(ctx, arg_node ? arg_node : call_node, arg_type))
         return;
@@ -4455,6 +4723,22 @@ static bool xa_call_has_unknown_function_value_escape(CallExprNode *call, XaSymb
     return !effect || !effect->complete;
 }
 
+static void xa_check_unknown_function_value_memory_effect_actual(
+    XaInferContext *ctx, AstNode *call_node, CallExprNode *call, XaSymbol *fn_sym,
+    XaSymbolLinks *fn_links, XrType *callee_type, AstNode *actual, int slot,
+    const char *callee_name) {
+    if (!ctx || !call_node || !actual ||
+        !xa_call_is_unknown_function_value_callee(call, fn_sym, fn_links, callee_type, slot) ||
+        xa_call_param_mode(callee_type, slot) != XR_PARAM_REF)
+        return;
+    XaMemoryEffectSummary unknown;
+    xa_memory_effect_summary_init(&unknown);
+    xa_memory_effect_summary_mark_incomplete(&unknown, XA_UNKNOWN_VIEW_INVALIDATION);
+    xa_check_call_memory_effect_actual(ctx, call_node, &unknown, XA_MEMORY_ROOT_PARAM,
+                                       (uint32_t) slot, actual, callee_name);
+    xa_memory_effect_summary_clear(&unknown);
+}
+
 static void xa_check_pointer_unknown_function_value_arg(XaInferContext *ctx, AstNode *call_node,
                                                         CallExprNode *call, XaSymbol *fn_sym,
                                                         XaSymbolLinks *fn_links,
@@ -4484,7 +4768,7 @@ static void xa_check_shared_unknown_function_value_arg(XaInferContext *ctx, AstN
         return;
     if (!xa_type_needs_borrow_escape_guard(arg_type))
         return;
-    if (xa_type_allows_shared_interior_mutation(arg_type))
+    if (xa_type_allows_shared_interior_mutation(ctx, arg_type))
         return;
     if (!xa_expr_yields_shared_provenance(ctx, arg_node ? arg_node : call_node, arg_type))
         return;
@@ -4578,8 +4862,7 @@ static bool xa_len_type_supported(XrType *type) {
     switch (type->kind) {
         case XR_KIND_ARRAY:
         case XR_KIND_FIXED_ARRAY:
-        case XR_KIND_VIEW:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
         case XR_KIND_STRING:
         case XR_KIND_MAP:
         case XR_KIND_SET:
@@ -4732,8 +5015,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 strcmp(operand->as.call_expr.callee->as.member_access.name, "bytes") == 0;
             ctx->expected_type =
                 is_string_bytes ? xr_type_new_u8_slice(ctx->analyzer->isolate)
-                                : xr_type_new_span(ctx->analyzer->isolate,
-                                                   xr_type_new_unknown(ctx->analyzer->isolate));
+                                : xr_type_new_slice(ctx->analyzer->isolate,
+                                                    xr_type_new_unknown(ctx->analyzer->isolate));
             ctx->allow_view_expr_for_copy = true;
         }
         XrType *operand_type = xa_visit_infer_expr(ctx, call->arguments[0]);
@@ -4842,8 +5125,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     const char *mem_pointer_member = xa_mem_pointer_constructor_member(ctx, call);
     if (mem_pointer_member)
         return xa_mem_pointer_constructor_return_type(ctx, node, call, mem_pointer_member);
-    if (xa_mem_view_call(ctx, call))
-        return xa_mem_view_return_type(ctx, node, call);
+    if (xa_mem_slice_call(ctx, call))
+        return xa_mem_slice_return_type(ctx, node, call);
+    if (xa_mem_with_slice_mut_call(ctx, call))
+        return xa_mem_with_slice_mut_return_type(ctx, node, call);
     const char *mem_access = xa_mem_access_member(ctx, call);
     if (mem_access)
         return xa_mem_access_return_type(ctx, node, call, mem_access);
@@ -5098,7 +5383,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
         }
 
-        if (xa_method_call_creates_span_borrow(callee_obj_type, method_name) &&
+        if (xa_method_call_creates_span_borrow(ctx, callee_obj_type, method_name) &&
             !ctx->allow_view_expr_for_copy) {
             xa_check_span_borrow_source_stable(ctx, call->callee, ma->object, method_name);
         }
@@ -5134,7 +5419,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (read_param && method_name) {
             bool call_mutates_receiver =
                 xa_call_mutates_receiver(ctx, callee_obj_type, method_name);
-            bool sync_interior_mutation = xa_type_allows_shared_interior_mutation(callee_obj_type);
+            bool sync_interior_mutation =
+                xa_type_allows_shared_interior_mutation(ctx, callee_obj_type);
             if (call_mutates_receiver && !sync_interior_mutation) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
@@ -5147,16 +5433,17 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
             }
         }
-        if (method_name && callee_obj_type &&
-            !(XR_TYPE_IS_SPAN(callee_obj_type) || XR_TYPE_IS_VIEW(callee_obj_type)) &&
+        if (method_name && callee_obj_type && !XR_TYPE_IS_SLICE(callee_obj_type) &&
             xa_call_mutates_receiver(ctx, callee_obj_type, method_name)) {
             XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
             bool readonly_receiver = xr_type_is_const(callee_obj_type);
-            bool sync_interior_mutation = xa_type_allows_shared_interior_mutation(callee_obj_type);
+            bool sync_interior_mutation =
+                xa_type_allows_shared_interior_mutation(ctx, callee_obj_type) ||
+                (root && root->links.storage_domain == XR_STORAGE_SYNC_SHARED);
             bool shared_receiver = xa_symbol_has_shared_provenance(root);
             bool shared_interior_mutation =
-                shared_receiver && (xa_type_allows_shared_interior_mutation(callee_obj_type) ||
-                                    xa_type_allows_shared_interior_mutation(root->links.type));
+                shared_receiver && (xa_type_allows_shared_interior_mutation(ctx, callee_obj_type) ||
+                                    xa_type_allows_shared_interior_mutation(ctx, root->links.type));
             if (!sync_interior_mutation &&
                 ((root &&
                   (root->is_readonly_binding || (shared_receiver && !shared_interior_mutation))) ||
@@ -5173,8 +5460,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
             }
         }
-        if (method_name && callee_obj_type &&
-            (XR_TYPE_IS_SPAN(callee_obj_type) || XR_TYPE_IS_VIEW(callee_obj_type)) &&
+        if (method_name && callee_obj_type && XR_TYPE_IS_SLICE(callee_obj_type) &&
             xa_call_mutates_receiver(ctx, callee_obj_type, method_name)) {
             XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, ma->object);
             if (root && (root->is_const || root->is_readonly_binding ||
@@ -5882,6 +6168,15 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             escape_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
         escape_name = method_name;
     }
+    const XaMemoryEffectSummary *call_memory_effects =
+        escape_links && escape_links->memory_effect_id != XA_MEMORY_EFFECT_NONE
+            ? xa_memory_effect_db_get(ctx->analyzer->memory_effect_db,
+                                      escape_links->memory_effect_id)
+            : NULL;
+    if (method_name && call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+        xa_check_call_memory_effect_actual(ctx, node, call_memory_effects, XA_MEMORY_ROOT_RECEIVER,
+                                           0, call->callee->as.member_access.object, escape_name);
+    }
     if (escape_links && call->arg_count > 0) {
         int direct_slot = 0;
         for (int i = 0; i < call->arg_count; i++) {
@@ -5912,6 +6207,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                                  arg_type, direct_slot);
             xa_check_shared_mutating_param_arg(ctx, node, escape_links, escape_name, arg_node,
                                                arg_type, direct_slot);
+            xa_check_call_memory_effect_actual(ctx, node, call_memory_effects, XA_MEMORY_ROOT_PARAM,
+                                               (uint32_t) direct_slot, arg_node, escape_name);
+            if (!call_memory_effects) {
+                xa_check_unknown_function_value_memory_effect_actual(
+                    ctx, node, call, fn_sym, fn_links, callee_type, arg_node, direct_slot,
+                    escape_name);
+            }
             direct_slot++;
         }
     }

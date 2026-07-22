@@ -15,11 +15,11 @@ fn echo_text(text: string) -> string {
 }
 
 @used
-fn same_items(items: Array<int>) -> Array<int> {
+fn same_items(items: move Array<int>) -> Array<int> {
     return items
 }
 
 print(choose(true, add_i64(21, 21)))
 print(echo_text("ptr"))
 var items: Array<int> = [1, 2, 3]
-print(len(same_items(items)))
+print(len(same_items(move items)))

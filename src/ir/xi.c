@@ -111,8 +111,7 @@ bool xi_value_clone_call_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
             return false;
         memcpy(plan->args, src->call_plan->args, (size_t) plan->nargs * sizeof(*plan->args));
         for (uint16_t i = 0; i < plan->nargs; i++) {
-            plan->args[i].place =
-                plan->args[i].param_mode == XR_PARAM_REF ? dst->args[i + 1] : NULL;
+            plan->args[i].place = src->call_plan->args[i].place ? dst->args[i + 1] : NULL;
         }
     }
     dst->call_plan = plan;
@@ -211,6 +210,7 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
         return NULL;
 
     f->return_type = return_type;
+    f->view_return_param = -1;
     f->stage = XI_STAGE_RAW;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
     /* Start cfg_version at 1 so the calloc-zeroed rpo/dom versions

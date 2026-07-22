@@ -247,8 +247,8 @@ static bool string_bytes_arg(XrValue *args, int argc, const uint8_t **data, size
     if (argc != 1)
         return false;
     *owned = NULL;
-    if (XR_IS_SPAN_REF(args[0])) {
-        XrSpanView *span = XR_TO_SPAN_REF(args[0]);
+    if (XR_IS_SLICE_REF(args[0])) {
+        XrSliceView *span = XR_TO_SLICE_REF(args[0]);
         if (!span)
             return false;
         return string_materialize_bytes(span->data, span->length, span->elem_type, data, len,

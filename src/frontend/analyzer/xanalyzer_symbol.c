@@ -912,6 +912,7 @@ void xa_symbol_links_copy_export_metadata(XaSymbolLinks *dst, const XaSymbolLink
     dst->return_storage_mixed = src->return_storage_mixed;
     dst->return_storage_scanned = src->return_storage_scanned;
     dst->return_storage_scan_in_progress = false;
+    dst->return_view = src->return_view;
     xa_symbol_links_copy_return_function_effect_summary(dst, src);
     dst->function_decl_node = src->function_decl_node;
     dst->is_extern = src->is_extern;

@@ -215,16 +215,16 @@
     _(BYTE_SLICE_COMPARE, FMT_A, KOP_A_USE, "R[A] = R[A].compare(R[A+1])")                         \
     _(BYTE_SLICE_COMMON_PREFIX, FMT_A, KOP_A_USE, "R[A] = R[A].commonPrefix(R[A+1])")              \
     _(BYTE_SLICE_REPEAT, FMT_A, KOP_A_INOUT, "R[A].repeatFrom(R[A+1], R[A+2], R[A+3])")            \
-    _(SPAN_AS_BYTES, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].asArray<byte>(), C=slot")                  \
-    _(SPAN_FILL, FMT_A, KOP_A_INOUT, "R[A].fill(R[A+1])")                                          \
-    _(SPAN_COPY, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1])")                                      \
-    _(SPAN_COMPARE, FMT_A, KOP_A_USE, "R[A] = R[A].compare(R[A+1])")                               \
-    _(SPAN_REINTERPRET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].reinterpret<T>(), C=slot/meta")         \
-    _(ARRAY_DATA_PTR, FMT_ABC, KOP_ABC_BIN, "R[A] = raw data pointer of Array/Span R[B]")          \
+    _(SLICE_AS_BYTES, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].asArray<byte>(), C=slot")                 \
+    _(SLICE_FILL, FMT_A, KOP_A_INOUT, "R[A].fill(R[A+1])")                                         \
+    _(SLICE_COPY, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1])")                                     \
+    _(SLICE_COMPARE, FMT_A, KOP_A_USE, "R[A] = R[A].compare(R[A+1])")                              \
+    _(SLICE_REINTERPRET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].reinterpret<T>(), C=slot/meta")        \
+    _(ARRAY_DATA_PTR, FMT_ABC, KOP_ABC_BIN, "R[A] = raw data pointer of Array/Slice R[B]")         \
     _(LOCAL_ADDR, FMT_AB, KOP_AB_UNARY, "R[A] = call-bound address of R[B]")                       \
     _(PLACE_LOAD, FMT_AB, KOP_AB_UNARY, "R[A] = load call-bound place R[B]")                       \
     _(PLACE_STORE, FMT_AB, KOP_AB_STORE, "store R[B] through call-bound place R[A]")               \
-    _(STRING_BYTES_SPAN, FMT_ABC, KOP_ABC_BIN,                                                     \
+    _(STRING_BYTES_SLICE, FMT_ABC, KOP_ABC_BIN,                                                    \
       "R[A] = borrowed Slice<byte> of string R[B], C=slot")                                        \
     _(BYTE_ARRAY_COPY_WITHIN, FMT_A, KOP_A_INOUT, "R[A].copyWithin(R[A+1], R[A+2], R[A+3])")       \
     _(BYTE_ARRAY_COPY_FROM, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1], R[A+2], R[A+3], R[A+4])")   \
@@ -411,8 +411,10 @@
       "R[A] = VM internal parallel map over R[B..B+5], C=flags")                                   \
     _(PAR_REDUCE, FMT_ABC, KOP_ABC_BIN_LIT,                                                        \
       "R[A] = VM internal parallel reduce over R[B..B+7], C=flags")                                \
-    _(SPAN_WINDOW, FMT_ABC, KOP_ABC_BIN,                                                           \
-      "R[A] = strict Span window R[B], start=R[C], count=R[C+1], slot=R[C+2]")                     \
+    _(SLICE_WINDOW, FMT_ABC, KOP_ABC_BIN,                                                          \
+      "R[A] = strict Slice window R[B], start=R[C], count=R[C+1], slot=R[C+2]")                    \
+    _(SLICE_FROM_PTR, FMT_ABC, KOP_ABC_BIN,                                                        \
+      "R[A] = raw pointer Slice R[B], count=R[C], metadata/slot=R[C+1..C+5]")                      \
     _(DIV_U, FMT_ABC, KOP_ABC_BIN, "R[A] = (uint64)R[B] / R[C]  (statically-unsigned divide)")     \
     _(MOD_U, FMT_ABC, KOP_ABC_BIN, "R[A] = (uint64)R[B] % R[C]  (statically-unsigned modulo)")     \
     _(NOP, FMT_SPECIAL, KOP_SPECIAL, "no-op / spawn metadata")

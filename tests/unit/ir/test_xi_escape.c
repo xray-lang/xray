@@ -45,7 +45,7 @@ static XrType t_map = {.kind = XR_KIND_MAP, .id = 3, .frozen = true};
 static XrType t_any = {.kind = XR_KIND_UNKNOWN, .id = 4, .frozen = true};
 static XrType t_set = {.kind = XR_KIND_SET, .id = 5, .frozen = true};
 static XrType t_func = {.kind = XR_KIND_FUNCTION, .id = 6, .frozen = true};
-static XrType t_span = {.kind = XR_KIND_SPAN, .id = 7, .frozen = true};
+static XrType t_span = {.kind = XR_KIND_SLICE, .id = 7, .frozen = true};
 static XrType t_bool = {.kind = XR_KIND_BOOL, .id = 8, .frozen = true};
 
 /* Helper: create function with sealed entry block */
@@ -511,7 +511,7 @@ static void test_arc_many_consume_sites(void) {
     xi_func_free(f);
 }
 
-/* ========== Test: borrowed Span lifetime flows through a phi ========== */
+/* ========== Test: borrowed Slice lifetime flows through a phi ========== */
 
 static void test_arc_span_borrow_flows_through_phi(void) {
     XiFunc *f = make_func("arc_span_phi_borrow", &t_int);
@@ -546,11 +546,11 @@ static void test_arc_span_borrow_flows_through_phi(void) {
     (void) get;
     XiArcVerifyReport rep;
     ASSERT_EQ(xi_arc_verify(f, &rep), true,
-              "Span phi keeps its array owner alive into the consuming block (C3)");
+              "Slice phi keeps its array owner alive into the consuming block (C3)");
     xi_func_free(f);
 }
 
-/* A branch-local Span can be one incoming owner of a join phi. The phi is an
+/* A branch-local Slice can be one incoming owner of a join phi. The phi is an
  * ownership-transfer boundary: uses after the join cannot extend that one
  * branch owner's liveness into a block the owner definition does not
  * dominate. ARC must keep the incoming transfer on the branch edge rather
@@ -603,15 +603,15 @@ static void test_arc_branch_local_span_phi_stays_in_dominance_region(void) {
 
     char err[512] = {0};
     ASSERT_EQ(xi_verify(f, err, sizeof(err)), true,
-              "ARC releases for branch-local Span phi remain SSA-dominated");
+              "ARC releases for branch-local Slice phi remain SSA-dominated");
     /* C4 (dominance boundary) generalizes the hand-checked invariant that a
-     * branch-local Span owner is released only within its dominance region; the
+     * branch-local Slice owner is released only within its dominance region; the
      * per-release dominance scan below is subsumed by the general verifier. */
     (void) right;
     (void) right_span;
     XiArcVerifyReport rep;
     ASSERT_EQ(xi_arc_verify(f, &rep), true,
-              "branch-local Span phi releases stay in the owner's dominance region (C4)");
+              "branch-local Slice phi releases stay in the owner's dominance region (C4)");
     xi_func_free(f);
 }
 
@@ -745,6 +745,38 @@ static void test_stack_alloc_direct_closure(void) {
     xi_func_free(f);
 }
 
+static void test_stack_alloc_closure_through_read_copy(void) {
+    XiFunc *f = make_func("stack_closure_read_copy", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiFunc *child = make_func("child", &t_int);
+    child->parent_func = f;
+    XiValue *one = xi_const_int(child, child->entry, 1, &t_int);
+    xi_block_set_return(child->entry, one);
+
+    f->children = (XiFunc **) xr_calloc(1, sizeof(XiFunc *));
+    XR_CHECK(f->children != NULL,
+             "test_stack_alloc_closure_through_read_copy: child allocation failed");
+    f->children[0] = child;
+    f->children_cap = 1;
+    f->nchildren = 1;
+
+    XiValue *closure = xi_value_new(f, b0, XI_CLOSURE_NEW, &t_func, 0);
+    closure->aux = child;
+    XiValue *read_copy = xi_value_new(f, b0, XI_COPY, &t_func, 1);
+    read_copy->args[0] = closure;
+    XiValue *call = xi_value_new(f, b0, XI_CALL, &t_int, 1);
+    call->args[0] = read_copy;
+    xi_block_set_return(b0, call);
+
+    xi_escape_analyze(f);
+    ASSERT_EQ(closure->escape, XI_ESC_NONE, "closure reached through read COPY should not escape");
+    xi_stack_alloc_rewrite(f);
+    ASSERT_EQ(closure->op, XI_STACK_ALLOC,
+              "closure reached through read COPY should become STACK_ALLOC");
+    xi_func_free(f);
+}
+
 static void test_stack_alloc_direct_closure_in_resumable_function_stays_heap(void) {
     XiFunc *f = make_func("resumable_stack_closure", &t_int);
     XiBlock *b0 = f->entry;
@@ -821,6 +853,7 @@ int main(void) {
     test_stack_alloc_local_plain_map_set();
     test_stack_alloc_skips_metadata_or_dynamic_capacity();
     test_stack_alloc_direct_closure();
+    test_stack_alloc_closure_through_read_copy();
     test_stack_alloc_direct_closure_in_resumable_function_stays_heap();
     test_stack_alloc_escaping_stays();
 

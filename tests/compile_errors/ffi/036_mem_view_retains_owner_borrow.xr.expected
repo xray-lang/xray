@@ -1,1 +1,1 @@
-cannot mutate owner 'buffer' while raw pointer borrow 'view' is active
+cannot mutate owner 'buffer' while Slice view 'view' is active

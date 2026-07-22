@@ -292,8 +292,8 @@ static bool verify_container_plan(const XaotContainerTypePlan *type_plan, char *
     if ((plan->flags & XAOT_CONTAINER_TYPED_STORAGE) == 0)
         return set_error(errbuf, errbuf_len, "AOT container plan lacks typed storage flag");
     if (plan->kind == XAOT_CONTAINER_ARRAY) {
-        if (plan->type->kind != XR_KIND_ARRAY && plan->type->kind != XR_KIND_VIEW &&
-            plan->type->kind != XR_KIND_SPAN && plan->type->kind != XR_KIND_FIXED_ARRAY)
+        if (plan->type->kind != XR_KIND_ARRAY && plan->type->kind != XR_KIND_SLICE &&
+            plan->type->kind != XR_KIND_SLICE && plan->type->kind != XR_KIND_FIXED_ARRAY)
             return set_error(errbuf, errbuf_len, "AOT array container plan has wrong type");
         if ((plan->flags & XAOT_CONTAINER_RAW_DATA) == 0)
             return set_error(errbuf, errbuf_len, "AOT array container plan lacks raw data flag");
@@ -804,32 +804,32 @@ static bool verify_bounds_plan(const XaotBundle *bundle, const XaotBoundsPlan *p
     return true;
 }
 
-static bool verify_span_access_plan(const XaotBundle *bundle, const XaotSpanAccessPlan *plan,
+static bool verify_span_access_plan(const XaotBundle *bundle, const XaotSliceAccessPlan *plan,
                                     char *errbuf, size_t errbuf_len) {
-    XaotSpanAccessPlan derived;
+    XaotSliceAccessPlan derived;
 
     if (!bundle || !plan)
-        return set_error(errbuf, errbuf_len, "AOT Span access plan is NULL");
+        return set_error(errbuf, errbuf_len, "AOT Slice access plan is NULL");
     if (!plan->func || !plan->value)
-        return set_error(errbuf, errbuf_len, "AOT Span access plan lacks func or value");
+        return set_error(errbuf, errbuf_len, "AOT Slice access plan lacks func or value");
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
-        return set_error(errbuf, errbuf_len, "AOT Span access plan func has no func plan");
+        return set_error(errbuf, errbuf_len, "AOT Slice access plan func has no func plan");
     if (!verify_body_summary_anchor(bundle, plan->func, plan->body_func_id, plan->body_effect_bits,
-                                    plan->body_escape_bits, plan->body_evidence, "Span access",
+                                    plan->body_escape_bits, plan->body_evidence, "Slice access",
                                     errbuf, errbuf_len))
         return false;
-    if ((plan->eliminated_checks == 0) == (plan->unproven_reason == XAOT_SPAN_UNPROVEN_NONE))
-        return set_error(errbuf, errbuf_len, "AOT Span access plan drop/reason are inconsistent");
+    if ((plan->eliminated_checks == 0) == (plan->unproven_reason == XAOT_SLICE_UNPROVEN_NONE))
+        return set_error(errbuf, errbuf_len, "AOT Slice access plan drop/reason are inconsistent");
     if (!xaot_prepare_span_access_plan_for_value(bundle, plan->func, plan->value, &derived))
-        return set_error(errbuf, errbuf_len, "AOT Span access plan value no longer re-derives");
+        return set_error(errbuf, errbuf_len, "AOT Slice access plan value no longer re-derives");
     if (plan->kind != derived.kind)
-        return set_error(errbuf, errbuf_len, "AOT Span access plan kind does not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT Slice access plan kind does not re-derive");
     if (plan->evidence != derived.evidence)
-        return set_error(errbuf, errbuf_len, "AOT Span access plan evidence does not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT Slice access plan evidence does not re-derive");
     if (plan->eliminated_checks != derived.eliminated_checks)
-        return set_error(errbuf, errbuf_len, "AOT Span access plan drops do not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT Slice access plan drops do not re-derive");
     if (plan->unproven_reason != derived.unproven_reason)
-        return set_error(errbuf, errbuf_len, "AOT Span access plan reason does not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT Slice access plan reason does not re-derive");
     return true;
 }
 
@@ -5605,7 +5605,7 @@ static bool verify_sequence_kind_valid(uint8_t kind) {
         case XG_SEQ_ARRAY:
         case XG_SEQ_BYTES:
         case XG_SEQ_STRING:
-        case XG_SEQ_SPAN:
+        case XG_SEQ_SLICE:
         case XG_SEQ_BYTE_SLICE:
         case XG_SEQ_STRING_BUILDER:
             return true;

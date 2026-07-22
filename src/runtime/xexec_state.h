@@ -190,6 +190,8 @@ typedef struct XrVMState {
 
 XR_FUNC uint16_t xr_vm_struct_layout_register(XrVMState *vm, struct XrAggregateLayout *layout);
 XR_FUNC struct XrAggregateLayout *xr_vm_struct_layout_lookup(XrVMState *vm, uint16_t layout_id);
+XR_FUNC struct XrAggregateLayout *xr_vm_struct_layout_lookup_stable_key(XrVMState *vm,
+                                                                        uint64_t stable_key);
 /* Intern a validated heap-materialized layout by stable semantic identity.
  * Ownership transfers on success; an equal duplicate is released. */
 XR_FUNC struct XrAggregateLayout *

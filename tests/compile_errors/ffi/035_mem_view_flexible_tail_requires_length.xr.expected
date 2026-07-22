@@ -1,1 +1,1 @@
-flexible field 'Packet.data' requires an explicit validated length projection
+mem.slice<T>() requires T to have a verified static layout

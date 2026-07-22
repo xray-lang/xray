@@ -1355,23 +1355,23 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "xr_array_core_bytes_repeat_copy" \
             "freestanding-profile/fixed-array: Slice<byte>.repeatFrom uses freestanding bytes helper"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "Span.fill(value) byte length overflow" \
-            "freestanding-profile/fixed-array: Span.fill uses freestanding POD path"
+            "Slice.fill(value) byte length overflow" \
+            "freestanding-profile/fixed-array: Slice.fill uses freestanding POD path"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "for (int64_t _i = 0; _i < _s.length; _i++)" \
-            "freestanding-profile/fixed-array: Span.fill lowers to local POD loop"
+            "freestanding-profile/fixed-array: Slice.fill lowers to local POD loop"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "memmove(_dst.data, _src.data" \
-            "freestanding-profile/fixed-array: Span.copyFrom lowers to no-libc memmove"
+            "freestanding-profile/fixed-array: Slice.copyFrom lowers to no-libc memmove"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "Span.asArray<byte>() byte length overflow" \
-            "freestanding-profile/fixed-array: Span.asArray<byte> uses local metadata rewrite"
+            "Slice.asArray<byte>() byte length overflow" \
+            "freestanding-profile/fixed-array: Slice.asArray<byte> uses local metadata rewrite"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "_out.length = _s.length / (int64_t)2; _out.elem_type =" \
             "freestanding-profile/fixed-array: Slice<byte>.reinterpret uses local metadata rewrite"
         expect_log_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
-            "Span.compare(other) byte length overflow" \
-            "freestanding-profile/fixed-array: Span.compare uses freestanding POD path"
+            "Slice.compare(other) byte length overflow" \
+            "freestanding-profile/fixed-array: Slice.compare uses freestanding POD path"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "#include \"xrt.h\"" \
             "freestanding-profile/fixed-array: generated C avoids hosted umbrella"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" "xrt_throw_exc" \
@@ -1395,16 +1395,16 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
             "freestanding-profile/fixed-array: generated C avoids hosted checked Slice<byte>.repeatFrom"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_fill_checked_raw" \
-            "freestanding-profile/fixed-array: generated C avoids hosted checked Span.fill"
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Slice.fill"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_copy_checked_raw" \
-            "freestanding-profile/fixed-array: generated C avoids hosted checked Span.copyFrom"
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Slice.copyFrom"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_compare_checked_raw" \
-            "freestanding-profile/fixed-array: generated C avoids hosted checked Span.compare"
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Slice.compare"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_as_bytes_checked_raw" \
-            "freestanding-profile/fixed-array: generated C avoids hosted checked Span.asArray<byte>"
+            "freestanding-profile/fixed-array: generated C avoids hosted checked Slice.asArray<byte>"
         expect_log_not_contains "$FREESTANDING_FIXED_ARRAY_KEPT_C" \
             "xrt_span_reinterpret_checked_raw" \
             "freestanding-profile/fixed-array: generated C avoids hosted checked Slice<byte>.reinterpret"
@@ -4087,7 +4087,7 @@ if "$XRAY" build --native --profile freestanding --shared --keep-c --rebuild \
     FREESTANDING_NO_ALLOC_STACK_C="$(sed -n 's/^Kept C source: //p' "$FREESTANDING_NO_ALLOC_STACK_LOG" | tail -n 1)"
     if [ -f "$FREESTANDING_NO_ALLOC_STACK_C" ]; then
         expect_log_not_contains "$FREESTANDING_NO_ALLOC_STACK_C" "xrt_span_from_array_slice" \
-            "freestanding-profile/no-alloc: fixed-array Span path lowers directly"
+            "freestanding-profile/no-alloc: fixed-array Slice path lowers directly"
         expect_log_not_contains "$FREESTANDING_NO_ALLOC_STACK_C" "xrt_mem_alloc" \
             "freestanding-profile/no-alloc: fixed-array path avoids allocator hook"
         expect_log_not_contains "$FREESTANDING_NO_ALLOC_STACK_C" "xrt_arc_alloc" \

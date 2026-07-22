@@ -2404,12 +2404,16 @@ print(mem.alignOf<CHeader>())
 print(mem.offsetOf<CHeader>("next"))
 ```
 
-Inside `unsafe`, an external address can be projected with `mem.view<T>(ptr)` as a typed C-layout view. The projection allocates and copies nothing and does not create an xray object; field reads and writes directly access foreign storage while preserving the readonly/mutable distinction of `Ptr` and `MutPtr`:
+Inside `unsafe`, an external address can only be projected with `mem.slice<T>(ptr, count, owner)` as a readonly `Slice<T>`. `owner` binds the returned Slice lifetime to a live backing owner. The projection allocates and copies nothing and creates no xray object. Writable foreign access uses `mem.withSliceMut<T>(mutPtr, count, ref guard, callback)`; its writable Slice exists only for the callback's dynamic scope:
 
 ```xray
-var header = unsafe { mem.view<CHeader>(rawHeader) }
-print(header.count)
-unsafe { header.count = 4 }
+var headers = unsafe { mem.slice<CHeader>(rawHeader, 1, rawHeader) }
+print(headers[0].count)
+unsafe {
+    mem.withSliceMut<CHeader>(rawHeader, 1, ref rawHeader, fn(view: ref Slice<CHeader>) {
+        view[0].count = 4
+    })
+}
 ```
 
 Rules:
@@ -2421,7 +2425,7 @@ Rules:
 - Extern layouts cannot have generics, interfaces, methods, field modifiers, or field initializers. Any aggregate nested by value must itself be declared as an extern layout.
 - `flex T` is a real C flexible array member. It may appear only as the last field of an extern struct and requires at least one preceding fixed field; extern unions and ordinary xray structs reject `flex`. `sizeOf` returns the header size padded to the struct alignment, while `offsetOf` can query the flexible tail's starting offset. The tail carries no implicit length.
 - An extern layout cannot be constructed as an xray value with `T(...)` or a struct literal; it only describes native storage owned outside xray. `mem.sizeOf<T>()`, `mem.alignOf<T>()`, and `mem.offsetOf<T>(field)` consume the native layout table.
-- Each compilation target has one canonical target data layout. The analyzer, VM, AOT backend, `mem.view`, and layout introspection share the same size/alignment/field-offset results; nested, packed, union, fixed-array, and flexible-tail layouts are never re-derived by individual backends.
+- Each compilation target has one canonical target data layout. The analyzer, VM, AOT backend, `mem.slice` / `mem.withSliceMut`, and layout introspection share the same size/alignment/field-offset results; nested, packed, union, fixed-array, and flexible-tail layouts are never re-derived by individual backends.
 - Extern layouts are serialized deterministically with bytecode and bound to a target-ABI fingerprint. The loader rejects ABI mismatches and truncated, out-of-range, cyclic, or trailing-garbage layout payloads; it never falls back to host layout.
 - Boundary types that are aligned across the VM/AOT backends include `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
 - C callback parameters must use `CFn<(A, B) -> R>`, not the ordinary xray function type `(A, B) -> R`.

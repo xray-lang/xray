@@ -1,0 +1,1 @@
+cannot pass range projection as `ref` parameter 1 of 'rebind': the callee may rebind the Slice descriptor

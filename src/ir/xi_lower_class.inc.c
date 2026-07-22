@@ -183,8 +183,8 @@ static bool class_collect_native_fields_from_info(XiLower *l, XrClassInfo *info,
         if (!type || type->kind == XR_KIND_UNKNOWN || type->is_nullable)
             return false;
         int native = xr_type_kind_to_native(type->kind, type->native_width);
-        if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW ||
-                           type->kind == XR_KIND_SPAN))
+        if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE ||
+                           type->kind == XR_KIND_SLICE))
             native = XR_NATIVE_ARRAY_REF;
         if (native < 0 && type->kind == XR_KIND_MAP)
             native = XR_NATIVE_MAP_REF;
@@ -300,8 +300,8 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
         if (!type || type->kind == XR_KIND_UNKNOWN)
             return NULL;
         int native = xr_type_kind_to_native(type->kind, type->native_width);
-        if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW ||
-                           type->kind == XR_KIND_SPAN))
+        if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE ||
+                           type->kind == XR_KIND_SLICE))
             native = XR_NATIVE_ARRAY_REF;
         if (native < 0 && type->kind == XR_KIND_MAP)
             native = XR_NATIVE_MAP_REF;
@@ -464,9 +464,13 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
             xi_lower_cleanup(&ml);
             return NULL;
         }
+        bool read_place = (base + i) < fixed_params && mode == XR_PARAM_READ && pt &&
+                          xi_lower_type_uses_read_place(&ml, pt);
+        if (read_place)
+            p->lowering_flags |= XI_LOWERING_FLAG_PARAM_READ_PLACE;
         XR_DCHECK(param != NULL && param->name != NULL, "method param name must not be NULL");
         int param_var = xi_lower_var_create(&ml, param->symbol_id, param->name, pt);
-        if ((base + i) < fixed_params && mode == XR_PARAM_REF) {
+        if ((base + i) < fixed_params && (mode == XR_PARAM_REF || read_place)) {
             ml.vars[param_var].call_place = p;
             ml.vars[param_var].place_mode = mode;
         } else {

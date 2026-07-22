@@ -67,20 +67,20 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
         return type;
     }
 
-    if (type->kind == XR_KIND_SPAN) {
+    if (type->kind == XR_KIND_SLICE) {
         XrType *elem =
             xr_type_substitute(X, type->container.element_type, param_names, actual_types, count);
         if (elem != type->container.element_type) {
-            return xr_type_new_span(X, elem);
+            return xr_type_new_slice(X, elem);
         }
         return type;
     }
 
-    if (type->kind == XR_KIND_VIEW) {
+    if (type->kind == XR_KIND_SLICE) {
         XrType *elem =
             xr_type_substitute(X, type->container.element_type, param_names, actual_types, count);
         if (elem != type->container.element_type) {
-            return xr_type_new_view(X, elem);
+            return xr_type_new_slice(X, elem);
         }
         return type;
     }
@@ -107,10 +107,7 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
         XrType *elem =
             xr_type_substitute(X, type->container.element_type, param_names, actual_types, count);
         if (elem != type->container.element_type) {
-            XrType *result = xr_type_new_pointer(X, elem, type->ptr_is_mut);
-            if (result)
-                result->ptr_is_c_view = type->ptr_is_c_view;
-            return result;
+            return xr_type_new_pointer(X, elem, type->ptr_is_mut);
         }
         return type;
     }
@@ -160,6 +157,9 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
                 xr_type_new_function(X, new_params, pc, ret, type->function.is_variadic);
             if (result) {
                 result->function.min_params = type->function.min_params;
+                result->function.view_return_source = type->function.view_return_source;
+                result->function.view_return_param = type->function.view_return_param;
+                result->function.view_return_complete = type->function.view_return_complete;
                 for (int i = 0; i < pc; i++)
                     xr_type_function_set_param_mode(result, i,
                                                     xr_type_function_param_mode(type, i));
@@ -290,8 +290,7 @@ static XrType *iterable_element_of(XrType *type) {
         return NULL;
     switch (type->kind) {
         case XR_KIND_ARRAY:
-        case XR_KIND_VIEW:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
             return type->container.element_type;
@@ -313,8 +312,7 @@ static void indexable_kv_of(XrType *type, XrType **key_out, XrType **value_out) 
         return;
     switch (type->kind) {
         case XR_KIND_ARRAY:
-        case XR_KIND_VIEW:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
             *value_out = type->container.element_type;
             break;
         case XR_KIND_STRING:
@@ -410,14 +408,14 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
                 // Fall through to user-class check
             } else if (strcmp(iface_name, "Indexable") == 0) {
                 XrTypeKind k = type->kind;
-                if (k == XR_KIND_ARRAY || k == XR_KIND_VIEW || k == XR_KIND_SPAN ||
-                    k == XR_KIND_STRING || k == XR_KIND_MAP) {
+                if (k == XR_KIND_ARRAY || k == XR_KIND_SLICE || k == XR_KIND_STRING ||
+                    k == XR_KIND_MAP) {
                     if (targs >= 1 && args) {
                         XrType *kt = NULL;
                         XrType *vt = NULL;
                         indexable_kv_of(type, &kt, &vt);
-                        if (!kt && (k == XR_KIND_ARRAY || k == XR_KIND_VIEW || k == XR_KIND_SPAN ||
-                                    k == XR_KIND_STRING))
+                        if (!kt &&
+                            (k == XR_KIND_ARRAY || k == XR_KIND_SLICE || k == XR_KIND_STRING))
                             kt = xr_type_new_int(NULL);
                         if (args[0] && !type_arg_match(args[0], kt))
                             goto check_user_implements;
@@ -429,8 +427,8 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
                 // Not a builtin indexable — fall through to user-class check
             } else if (strcmp(iface_name, "Lengthable") == 0) {
                 XrTypeKind k = type->kind;
-                if (k == XR_KIND_ARRAY || k == XR_KIND_VIEW || k == XR_KIND_SPAN ||
-                    k == XR_KIND_STRING || k == XR_KIND_MAP || k == XR_KIND_SET)
+                if (k == XR_KIND_ARRAY || k == XR_KIND_SLICE || k == XR_KIND_STRING ||
+                    k == XR_KIND_MAP || k == XR_KIND_SET)
                     return true;
                 // Not a builtin lengthable — fall through to user-class check
             } else if (strcmp(iface_name, "Callable") == 0) {
@@ -477,7 +475,7 @@ bool xr_type_is_iterable(XrType *type, XrType **out_element_type) {
         return false;
 
     // Built-in iterable types
-    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW || type->kind == XR_KIND_SPAN) {
+    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE) {
         if (out_element_type) {
             *out_element_type = type->container.element_type ? type->container.element_type
                                                              : xr_type_new_unknown(NULL);

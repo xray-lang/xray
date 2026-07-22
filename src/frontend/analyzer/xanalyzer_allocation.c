@@ -293,7 +293,7 @@ static bool alloc_receiver_matches(const XrType *receiver, XaBuiltinReceiverKind
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return xr_type_is_u8_slice(receiver);
         case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver && receiver->kind == XR_KIND_SPAN &&
+            return receiver && receiver->kind == XR_KIND_SLICE &&
                    alloc_pod_span_element(receiver->container.element_type);
     }
     return false;
@@ -765,8 +765,7 @@ static void alloc_scan_node_pre(AstNode *node, void *userdata) {
             if (container) {
                 if (container->kind == XR_KIND_FIXED_ARRAY)
                     target = container->fixed_array.element_type;
-                else if (container->kind == XR_KIND_ARRAY || container->kind == XR_KIND_VIEW ||
-                         container->kind == XR_KIND_SPAN)
+                else if (container->kind == XR_KIND_ARRAY || container->kind == XR_KIND_SLICE)
                     target = container->container.element_type;
                 else if (container->kind == XR_KIND_MAP)
                     target = container->map.value_type;
@@ -784,7 +783,10 @@ static void alloc_scan_node_pre(AstNode *node, void *userdata) {
             break;
         }
         case AST_SLICE_EXPR:
-            if (node_type && (node_type->kind == XR_KIND_STRING || node_type->kind == XR_KIND_VIEW))
+            /* Slice<T> and fixed-array slicing only construct the canonical
+             * data+len borrowed descriptor.  They never allocate or retain a
+             * hidden owner.  String slicing still creates an owned string. */
+            if (node_type && node_type->kind == XR_KIND_STRING)
                 alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_CONTAINER, "method", "slice");
             break;
         case AST_MEMBER_ACCESS:

@@ -1336,11 +1336,11 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         const char *inner = s + 6;
         size_t inner_len = base_len - 7;  // strip "Array<" and ">"
         type = xr_type_new_array(X, parse_type_str(X, inner, inner_len));
-    } else if (base_len >= strlen(TYPE_NAME_SPAN) + 2 &&
-               strncmp(s, TYPE_NAME_SPAN "<", strlen(TYPE_NAME_SPAN) + 1) == 0) {
-        const char *inner = s + strlen(TYPE_NAME_SPAN) + 1;
-        size_t inner_len = base_len - strlen(TYPE_NAME_SPAN) - 2;
-        type = xr_type_new_span(X, parse_type_str(X, inner, inner_len));
+    } else if (base_len >= strlen(TYPE_NAME_SLICE) + 2 &&
+               strncmp(s, TYPE_NAME_SLICE "<", strlen(TYPE_NAME_SLICE) + 1) == 0) {
+        const char *inner = s + strlen(TYPE_NAME_SLICE) + 1;
+        size_t inner_len = base_len - strlen(TYPE_NAME_SLICE) - 2;
+        type = xr_type_new_slice(X, parse_type_str(X, inner, inner_len));
     } else if (base_len >= 4 && strncmp(s, TYPE_NAME_MAP "<", 4) == 0) {
         // Map<K, V>: find comma separator at depth 0
         const char *inner = s + 4;

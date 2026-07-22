@@ -170,7 +170,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
     }
 
     // Struct ref: stored field write or setter method
-    if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
+    if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SLICE_REF(obj)) {
         uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
         XrAggregateLayout *slayout = NULL;
         uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
@@ -831,7 +831,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
     }
 
     // Struct ref: getter/method lookup when field not found in layout
-    if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
+    if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SLICE_REF(obj)) {
         uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
         XrAggregateLayout *slayout = xr_vm_struct_ref_layout(isolate, obj);
         XrClass *scls =

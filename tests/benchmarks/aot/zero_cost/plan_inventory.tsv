@@ -11,9 +11,9 @@ closure_deobjectization|covered|repr=direct_symbol|tests/aot/filetests/cgen|Non-
 closure_noescape_stack|covered|repr=stack|tests/aot/filetests/cgen|Capturing noescape closure stack representation is covered.
 transfer_deep_copy_capability|covered|name=deep_copy|tests/aot/filetests/cgen|Transfer evidence drives deep-copy capability planning.
 transfer_backend_consumption|covered|xr_aot_chan_send_transfer|tests/aot/filetests/cgen|CGen consumes transfer plans instead of recomputing mode.
-bounds_span_elision|covered|span-access|tests/aot/filetests/container|Span and bounds plans have dump coverage.
+bounds_span_elision|covered|span-access|tests/aot/filetests/container|Slice and bounds plans have dump coverage.
 span_no_clobber|covered|no_clobber|tests/aot/filetests/container|Range proofs record no-clobber evidence.
-span_len_rel_no_overflow|covered|len_rel.*no_overflow|tests/aot/filetests/container|Span view conversion records length relation and overflow facts.
+span_len_rel_no_overflow|covered|len_rel.*no_overflow|tests/aot/filetests/container|Slice view conversion records length relation and overflow facts.
 function_attr_callee_effect|covered|fn-attr .*evidence=0x7|tests/aot/filetests/cgen|Closed-world callee-effect composition is visible in fn-attr plans.
 static_data_materialization|covered|static-data .*action=materialize|tests/aot/filetests/cgen|Static-data plans expose materialization actions.
 metadata_derive_reachability|covered|derive-plan|tests/aot/filetests/cgen|Derive metadata reachability has plan coverage.

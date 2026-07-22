@@ -1,5 +1,5 @@
 contains=function 1 name=readByteAsInt module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
-contains=  param 0 class=agg-by-value kind=aggregate rep=span c_type=xr_span_t
+contains=  param 0 class=agg-by-value kind=aggregate rep=slice c_type=xr_span_t
 contains=  param 1 class=scalar kind=scalar rep=i64 c_type=int64_t
 contains=  value v3 op=INDEX_GET kind=scalar rep=u8 c_type=uint8_t
 contains=  value v4 op=WIDEN_U8 kind=scalar rep=i64 c_type=int64_t

@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 typedef enum {
     XA_BUILTIN_RECEIVER_EXACT_INTEGER,
@@ -84,6 +85,40 @@ typedef enum XaBuiltinMethodMemoryEffect {
 } XaBuiltinMethodMemoryEffect;
 
 typedef uint32_t XaBuiltinMethodMemoryEffectSet;
+
+/* Native stdlib classes that are not language receiver intrinsics still need
+ * sealed root-relative invalidation contracts.  Keep those contracts in one
+ * registry instead of teaching the analyzer method-name exceptions. */
+typedef struct XaBuiltinNamedReceiverMemorySpec {
+    const char *type_name;
+    const char *method_name;
+    XaBuiltinMethodMemoryEffectSet effects;
+} XaBuiltinNamedReceiverMemorySpec;
+
+static const XaBuiltinNamedReceiverMemorySpec xa_builtin_named_receiver_memory_specs[] = {
+    {"Buffer", "resize",
+     XA_BUILTIN_MEMORY_WRITE | XA_BUILTIN_MEMORY_MAY_RELOCATE | XA_BUILTIN_MEMORY_MAY_SHORTEN |
+         XA_BUILTIN_MEMORY_INVALIDATES_VIEWS},
+};
+
+static inline bool
+xa_builtin_named_receiver_memory_effect(const char *type_name, const char *method_name,
+                                        XaBuiltinMethodMemoryEffectSet *out_effects) {
+    if (!type_name || !method_name)
+        return false;
+    for (size_t i = 0; i < sizeof(xa_builtin_named_receiver_memory_specs) /
+                               sizeof(xa_builtin_named_receiver_memory_specs[0]);
+         i++) {
+        const XaBuiltinNamedReceiverMemorySpec *spec = &xa_builtin_named_receiver_memory_specs[i];
+        if (strcmp(spec->type_name, type_name) == 0 &&
+            strcmp(spec->method_name, method_name) == 0) {
+            if (out_effects)
+                *out_effects = spec->effects;
+            return true;
+        }
+    }
+    return false;
+}
 
 typedef enum {
     XA_BUILTIN_PROFILE_ALL,

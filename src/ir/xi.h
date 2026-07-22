@@ -356,18 +356,19 @@ typedef enum {
     XI_BYTE_SLICE_COMPARE,
     XI_BYTE_SLICE_COMMON_PREFIX,
     XI_BYTE_SLICE_REPEAT,
-    XI_SPAN_WINDOW,      /* args[0]=Span<T>, args[1]=start, args[2]=count; strict borrowed span */
-    XI_SPAN_AS_BYTES,    /* args[0]=Span<T>; result Slice<byte>; aux unused */
-    XI_SPAN_FILL,        /* args[0]=Span<T> dst, args[1]=T value; result dst */
-    XI_SPAN_COPY,        /* args[0]=Span<T> dst, args[1]=Span<T> src; result dst */
-    XI_SPAN_COMPARE,     /* args[0]=Span<T> left, args[1]=Span<T> right; result int */
-    XI_SPAN_REINTERPRET, /* args[0]=Slice<byte>; result Span<T>; aux packs elem metadata */
+    XI_SLICE_WINDOW,   /* args[0]=Slice<T>, args[1]=start, args[2]=count; strict borrowed slice */
+    XI_SLICE_AS_BYTES, /* args[0]=Slice<T>; result Slice<byte>; aux unused */
+    XI_SLICE_FILL,     /* args[0]=Slice<T> dst, args[1]=T value; result dst */
+    XI_SLICE_COPY,     /* args[0]=Slice<T> dst, args[1]=Slice<T> src; result dst */
+    XI_SLICE_COMPARE,  /* args[0]=Slice<T> left, args[1]=Slice<T> right; result int */
+    XI_SLICE_REINTERPRET, /* args[0]=Slice<byte>; result Slice<T>; aux packs elem metadata */
+    XI_SLICE_FROM_PTR,    /* args[0]=Ptr<T>, args[1]=count, args[2]=owner; unsafe boundary */
     XI_BYTE_ARRAY_COPY_WITHIN,
     XI_BYTE_ARRAY_COPY_FROM,   /* args[0]=dst, args[1]=src, args[2]=src_off,
                                 * args[3]=dst_off, args[4]=count */
     XI_BYTE_ARRAY_APPEND_FROM, /* args[0]=dst Array<byte>, args[1]=src Slice<byte>; result dst */
     XI_BYTE_ARRAY_REPEAT_FROM, /* args[0]=dst Array<byte>, args[1]=distance, args[2]=count */
-    XI_ARRAY_DATA_PTR,         /* args[0]=Array<T>/Span<T>/[T;N]; result raw pointer borrow */
+    XI_ARRAY_DATA_PTR,         /* args[0]=Array<T>/Slice<T>/[T;N]; result raw pointer borrow */
     XI_STATIC_BYTES_PTR,       /* aux=exact bytes, aux_int=length; stable Ptr<byte> */
     XI_STATIC_ADDR,            /* aux_int=shared slot; result Ptr<T>/MutPtr<T> to static data */
     XI_LOCAL_ADDR,             /* args[0]=caller SSA slot; call-bound place address */
@@ -615,6 +616,8 @@ typedef enum {
     XI_OP_COUNT /* sentinel */
 } XiOp;
 
+#define XI_SLICE_FROM_PTR_AUX_MUTABLE (INT64_C(1) << 48)
+
 static inline bool xi_op_is_identity_forward(uint16_t op) {
     return op == XI_SOURCE_MOVE || op == XI_OWNER_FORWARD;
 }
@@ -743,6 +746,10 @@ typedef enum {
 #define XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE (1u << 0)
 #define XI_LOWERING_FLAG_ALLOCATION_STORAGE_SHIFT 1
 #define XI_LOWERING_FLAG_ALLOCATION_STORAGE_MASK (3u << XI_LOWERING_FLAG_ALLOCATION_STORAGE_SHIFT)
+/* Physical ABI strategy for a semantic `read` aggregate parameter.  This is
+ * deliberately not a fourth source parameter mode: callers still use an
+ * ordinary argument, while lowering proves a nonescaping call-bound place. */
+#define XI_LOWERING_FLAG_PARAM_READ_PLACE (1u << 3)
 
 /* XI_AWAIT aux_int bits. */
 #define XI_AWAIT_AUX_ANY (1 << 0)
@@ -812,6 +819,35 @@ typedef struct XiCapture {
     uint8_t value_capability; /* XaValueCapability published by analyzer */
 } XiCapture;
 
+typedef enum XiViewOrigin {
+    XI_VIEW_ORIGIN_NONE = 0,
+    XI_VIEW_ORIGIN_PARAM = 1,
+    XI_VIEW_ORIGIN_RECEIVER = 2,
+    XI_VIEW_ORIGIN_STATIC = 3,
+    XI_VIEW_ORIGIN_LOCAL = 4,
+    XI_VIEW_ORIGIN_MULTI = 5,
+    XI_VIEW_ORIGIN_UNKNOWN = 6,
+    XI_VIEW_ORIGIN_FOREIGN = 7,
+    XI_VIEW_ORIGIN_ALLOCATION = 8,
+} XiViewOrigin;
+
+/* Compiler-only proof attached to a Slice-producing Xi value.  Function
+ * summaries publish a symbolic PARAM/RECEIVER/STATIC template; lowering
+ * instantiates it at a call site by recording the actual Xi operand that is
+ * the backing root.  Backends and ARC consume this fact instead of recovering
+ * provenance from source syntax or callee names. */
+typedef struct XiViewEvidence {
+    uint32_t root_value_id;       /* caller-local XiValue id; 0 for STATIC/unknown */
+    uint32_t element_type_id;     /* canonical semantic element type, when known */
+    uint32_t invalidation_set_id; /* root-relative memory-effect set, 0 if absent */
+    int16_t source_operand;       /* operand in producer args[], -1 for STATIC */
+    int16_t source_param;         /* symbolic source parameter, -1 if not PARAM */
+    uint8_t origin;               /* XiViewOrigin */
+    uint8_t capability;           /* 1 = read, 2 = write-exclusive */
+    uint8_t lifetime;             /* 1 = caller source, 2 = static */
+    uint8_t complete;             /* proof is sufficient for safe consumption */
+} XiViewEvidence;
+
 /* Closure metadata: env layout and capture table for a single closure.
  * Built by xi_pass_close from XiFunc.captures[]; replaces ad-hoc
  * backend inspection of capture arrays.  All backends read this. */
@@ -835,34 +871,35 @@ typedef struct XiClosureMeta {
  * Size: ~72 bytes. Values are arena-allocated within XiFunc.
  */
 typedef struct XiValue {
-    uint32_t id;              /* dense SSA value ID (unique within function) */
-    uint16_t op;              /* XiOp */
-    XiVarId var_id;           /* source variable ID for coalescing (XI_NO_VAR_ID = none) */
-    uint8_t flags;            /* XI_FLAG_* */
-    uint8_t rep;              /* XrRep: machine representation (set by select_rep,
-                               * default XR_REP_TAGGED until STAGE_REPPED) */
-    uint8_t transfer_mode;    /* XrTransferMode for single-value coroutine boundaries.
-                               * Default 0 = SHARE. GO uses its per-arg aux table. */
-    uint8_t aux_kind;         /* XiAuxKind: disambiguates aux/aux_int layouts */
-    uint8_t escape;           /* XiEscapeLevel (2-bit): escape analysis result
-                               * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
-    uint8_t mem_group;        /* XiMemGroup (TBAA): memory group for alias analysis
-                               * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
-    uint8_t lowering_flags;   /* XI_LOWERING_FLAG_* */
-    uint8_t param_mode;       /* XrParamMode for XI_PARAM values (the single param
-                               * contract source; default XR_PARAM_READ). Occupies
-                               * struct padding, so it costs no extra memory. */
-    struct XrType *type;      /* authoritative compile-time type (never NULL) */
-    int64_t aux_int;          /* auxiliary integer: const value, symbol ID, etc. */
-    void *aux;                /* auxiliary pointer: proto, string literal, etc. */
-    XiCallPlan *call_plan;    /* verified read/ref/move call contract */
-    struct XiValue **args;    /* operand values (SSA uses) */
-    uint16_t nargs;           /* number of args */
-    int16_t uses;             /* use count (for DCE; -1 = not computed) */
-    uint32_t line;            /* source line number (0 = unknown) */
-    uint32_t xg_callsite_id;  /* stable XgCallsiteId for evidence-backed calls (0 = none) */
-    uint32_t xa_intrinsic_id; /* stable XaIntrinsicId for canonical semantic operations */
-    uint32_t xg_method_id;    /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
+    uint32_t id;                  /* dense SSA value ID (unique within function) */
+    uint16_t op;                  /* XiOp */
+    XiVarId var_id;               /* source variable ID for coalescing (XI_NO_VAR_ID = none) */
+    uint8_t flags;                /* XI_FLAG_* */
+    uint8_t rep;                  /* XrRep: machine representation (set by select_rep,
+                                   * default XR_REP_TAGGED until STAGE_REPPED) */
+    uint8_t transfer_mode;        /* XrTransferMode for single-value coroutine boundaries.
+                                   * Default 0 = SHARE. GO uses its per-arg aux table. */
+    uint8_t aux_kind;             /* XiAuxKind: disambiguates aux/aux_int layouts */
+    uint8_t escape;               /* XiEscapeLevel (2-bit): escape analysis result
+                                   * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
+    uint8_t mem_group;            /* XiMemGroup (TBAA): memory group for alias analysis
+                                   * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
+    uint8_t lowering_flags;       /* XI_LOWERING_FLAG_* */
+    uint8_t param_mode;           /* XrParamMode for XI_PARAM values (the single param
+                                   * contract source; default XR_PARAM_READ). Occupies
+                                   * struct padding, so it costs no extra memory. */
+    struct XrType *type;          /* authoritative compile-time type (never NULL) */
+    int64_t aux_int;              /* auxiliary integer: const value, symbol ID, etc. */
+    void *aux;                    /* auxiliary pointer: proto, string literal, etc. */
+    XiCallPlan *call_plan;        /* verified read/ref/move call contract */
+    XiViewEvidence view_evidence; /* Slice origin/range lifetime proof */
+    struct XiValue **args;        /* operand values (SSA uses) */
+    uint16_t nargs;               /* number of args */
+    int16_t uses;                 /* use count (for DCE; -1 = not computed) */
+    uint32_t line;                /* source line number (0 = unknown) */
+    uint32_t xg_callsite_id;      /* stable XgCallsiteId for evidence-backed calls (0 = none) */
+    uint32_t xa_intrinsic_id;     /* stable XaIntrinsicId for canonical semantic operations */
+    uint32_t xg_method_id;        /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     uint32_t xg_interface_dispatch_slot; /* interface slot; UINT32_MAX means none */
     uint32_t xg_json_access_id; /* stable XgJsonAccessId for evidence-backed Json slot access */
     uint32_t xg_json_codec_id;  /* stable XgJsonCodecId for evidence-backed Json codec calls */
@@ -913,6 +950,11 @@ static inline uint8_t xi_value_allocation_storage_mode(const XiValue *value) {
                  : 0;
 }
 
+static inline bool xi_value_is_read_place_param(const XiValue *value) {
+    return value && value->op == XI_PARAM && value->param_mode == XR_PARAM_READ &&
+           (value->lowering_flags & XI_LOWERING_FLAG_PARAM_READ_PLACE) != 0;
+}
+
 static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     if (!dst || !src)
         return;
@@ -927,6 +969,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->param_mode = src->param_mode;
     dst->aux_int = src->aux_int;
     dst->aux = src->aux;
+    dst->view_evidence = src->view_evidence;
     dst->line = src->line;
     dst->xg_callsite_id = src->xg_callsite_id;
     dst->xa_intrinsic_id = src->xa_intrinsic_id;
@@ -956,6 +999,20 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->enum_metadata_owner = src->enum_metadata_owner;
     dst->enum_metadata_field = src->enum_metadata_field;
     dst->enum_metadata_kind = src->enum_metadata_kind;
+}
+
+/* Clone passes remap a Slice producer's operands into a new SSA namespace.
+ * Rebase the subject-local ViewEvidence root after that remap so a callee or
+ * loop-local value id cannot leak into the cloned proof. */
+static inline void xi_value_rebase_view_evidence(XiValue *value) {
+    if (!value || !value->view_evidence.complete ||
+        value->view_evidence.origin == XI_VIEW_ORIGIN_STATIC)
+        return;
+    int16_t source_operand = value->view_evidence.source_operand;
+    if (source_operand < 0 || source_operand >= (int16_t) value->nargs ||
+        !value->args[source_operand])
+        return;
+    value->view_evidence.root_value_id = value->args[source_operand]->id;
 }
 
 typedef struct XiMapLiteralData {
@@ -1277,6 +1334,9 @@ typedef struct XiFunc {
     const char *source_file;    /* source path for VM/DAP debug hooks (not owned) */
     struct XrType *return_type; /* return type (from analyzer) */
     uint32_t xg_body_func_id;   /* stable global-evidence XgFuncId for this body (0 = none) */
+    uint8_t view_return_source; /* XrViewReturnSourceKind symbolic return template */
+    int16_t view_return_param;  /* valid only for PARAM */
+    uint8_t view_return_complete;
 
     /* Function parameters as SSA values (in entry block).  Each param XiValue
      * carries its own XrParamMode in XiValue::param_mode, so the parameter

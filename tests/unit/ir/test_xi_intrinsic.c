@@ -415,7 +415,7 @@ static void test_semantic_intrinsic_registry(void) {
 
     const XaIntrinsicDesc *pod_ptr = xa_intrinsic_by_id(XA_INTRINSIC_POD_SLICE_PTR);
     ASSERT_TRUE(pod_ptr && pod_ptr->family == XA_INTRINSIC_FAMILY_MEMORY &&
-                    pod_ptr->lowering == XA_INTRINSIC_LOWERING_SPAN_DATA_PTR &&
+                    pod_ptr->lowering == XA_INTRINSIC_LOWERING_SLICE_DATA_PTR &&
                     pod_ptr->effect == XA_INTRINSIC_EFFECT_PURE,
                 "Slice<POD>.ptr must be canonical before Xi construction");
 

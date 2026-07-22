@@ -7,14 +7,22 @@ extern "C" {
     fn free(p: MutPtr<byte>)
 }
 
-var raw = unsafe { malloc(mem.sizeOf<ImportedNativeSize>()) }
-var value = unsafe { mem.view<ImportedNativeSize>(raw) }
-value.length = 37
-value.delta = -37
-print(value.length)
-print(value.delta)
-value.length = 91
-value.delta = -91
-print(value.length)
-print(value.delta)
-unsafe { free(raw) }
+fn main() {
+    var raw = unsafe { malloc(mem.sizeOf<ImportedNativeSize>()) }
+    unsafe {
+        mem.withSliceMut<ImportedNativeSize>(raw, 1, ref raw,
+            fn(values: ref Slice<ImportedNativeSize>) {
+                values[0].length = 37
+                values[0].delta = -37
+                print(values[0].length)
+                print(values[0].delta)
+                values[0].length = 91
+                values[0].delta = -91
+                print(values[0].length)
+                print(values[0].delta)
+            })
+        free(raw)
+    }
+}
+
+main()

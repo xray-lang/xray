@@ -292,79 +292,79 @@ typedef struct XaotBoundsPlan {
     uint8_t unproven_reason; /* XAOT_BOUNDS_UNPROVEN_*; 0 = proven */
 } XaotBoundsPlan;
 
-typedef enum XaotSpanAccessKind {
-    XAOT_SPAN_ACCESS_INDEX_GET = 1,
-    XAOT_SPAN_ACCESS_INDEX_SET,
-    XAOT_SPAN_ACCESS_BYTE_LOAD,
-    XAOT_SPAN_ACCESS_BYTE_STORE,
-    XAOT_SPAN_ACCESS_BYTE_FILL,
-    XAOT_SPAN_ACCESS_BYTE_COPY,
-    XAOT_SPAN_ACCESS_BYTE_COMPARE,
-    XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX,
-    XAOT_SPAN_ACCESS_BYTE_REPEAT,
-    XAOT_SPAN_ACCESS_SPAN_AS_BYTES,
-    XAOT_SPAN_ACCESS_SPAN_FILL,
-    XAOT_SPAN_ACCESS_SPAN_COPY,
-    XAOT_SPAN_ACCESS_SPAN_COMPARE,
-    XAOT_SPAN_ACCESS_REINTERPRET,
-    XAOT_SPAN_ACCESS_VEC_LOAD,
-    XAOT_SPAN_ACCESS_VEC_STORE,
-    XAOT_SPAN_ACCESS_WINDOW,
-} XaotSpanAccessKind;
+typedef enum XaotSliceAccessKind {
+    XAOT_SLICE_ACCESS_INDEX_GET = 1,
+    XAOT_SLICE_ACCESS_INDEX_SET,
+    XAOT_SLICE_ACCESS_BYTE_LOAD,
+    XAOT_SLICE_ACCESS_BYTE_STORE,
+    XAOT_SLICE_ACCESS_BYTE_FILL,
+    XAOT_SLICE_ACCESS_BYTE_COPY,
+    XAOT_SLICE_ACCESS_BYTE_COMPARE,
+    XAOT_SLICE_ACCESS_BYTE_COMMON_PREFIX,
+    XAOT_SLICE_ACCESS_BYTE_REPEAT,
+    XAOT_SLICE_ACCESS_SLICE_AS_BYTES,
+    XAOT_SLICE_ACCESS_SLICE_FILL,
+    XAOT_SLICE_ACCESS_SLICE_COPY,
+    XAOT_SLICE_ACCESS_SLICE_COMPARE,
+    XAOT_SLICE_ACCESS_REINTERPRET,
+    XAOT_SLICE_ACCESS_VEC_LOAD,
+    XAOT_SLICE_ACCESS_VEC_STORE,
+    XAOT_SLICE_ACCESS_WINDOW,
+} XaotSliceAccessKind;
 
 enum {
-    XAOT_SPAN_EV_RECV_AGGREGATE = 1u << 0,
-    XAOT_SPAN_EV_RECV_BYTE_SLICE = 1u << 1,
-    XAOT_SPAN_EV_RECV_POD = 1u << 2,
-    XAOT_SPAN_EV_ELEM_MATCH = 1u << 3,
-    XAOT_SPAN_EV_WRITABLE = 1u << 4,
-    XAOT_SPAN_EV_RANGE_PROVEN = 1u << 5,
-    XAOT_SPAN_EV_LENGTH_REL_PROVEN = 1u << 6,
-    XAOT_SPAN_EV_BYTE_LEN_NO_OVERFLOW = 1u << 7,
-    XAOT_SPAN_EV_DATA_VALID = 1u << 8,
-    XAOT_SPAN_EV_ENDIAN_CONST = 1u << 9,
-    XAOT_SPAN_EV_NO_CLOBBER = 1u << 10,
-    XAOT_SPAN_EV_ASSERT_GUARD = 1u << 11,
+    XAOT_SLICE_EV_RECV_AGGREGATE = 1u << 0,
+    XAOT_SLICE_EV_RECV_BYTE_SLICE = 1u << 1,
+    XAOT_SLICE_EV_RECV_POD = 1u << 2,
+    XAOT_SLICE_EV_ELEM_MATCH = 1u << 3,
+    XAOT_SLICE_EV_WRITABLE = 1u << 4,
+    XAOT_SLICE_EV_RANGE_PROVEN = 1u << 5,
+    XAOT_SLICE_EV_LENGTH_REL_PROVEN = 1u << 6,
+    XAOT_SLICE_EV_BYTE_LEN_NO_OVERFLOW = 1u << 7,
+    XAOT_SLICE_EV_DATA_VALID = 1u << 8,
+    XAOT_SLICE_EV_ENDIAN_CONST = 1u << 9,
+    XAOT_SLICE_EV_NO_CLOBBER = 1u << 10,
+    XAOT_SLICE_EV_ASSERT_GUARD = 1u << 11,
 };
 
 enum {
-    XAOT_SPAN_DROP_BOUNDS = 1u << 0,
-    XAOT_SPAN_DROP_READONLY = 1u << 1,
-    XAOT_SPAN_DROP_TYPE = 1u << 2,
-    XAOT_SPAN_DROP_POD = 1u << 3,
-    XAOT_SPAN_DROP_NULL_DATA = 1u << 4,
-    XAOT_SPAN_DROP_OVERFLOW = 1u << 5,
-    XAOT_SPAN_DROP_HELPER = 1u << 6,
+    XAOT_SLICE_DROP_BOUNDS = 1u << 0,
+    XAOT_SLICE_DROP_READONLY = 1u << 1,
+    XAOT_SLICE_DROP_TYPE = 1u << 2,
+    XAOT_SLICE_DROP_POD = 1u << 3,
+    XAOT_SLICE_DROP_NULL_DATA = 1u << 4,
+    XAOT_SLICE_DROP_OVERFLOW = 1u << 5,
+    XAOT_SLICE_DROP_HELPER = 1u << 6,
 };
 
 enum {
-    XAOT_SPAN_UNPROVEN_NONE = 0,
-    XAOT_SPAN_UNPROVEN_DYNAMIC_RECV,
-    XAOT_SPAN_UNPROVEN_NOT_BYTE_SLICE,
-    XAOT_SPAN_UNPROVEN_NOT_POD,
-    XAOT_SPAN_UNPROVEN_READONLY_MAYBE,
-    XAOT_SPAN_UNPROVEN_RANGE,
-    XAOT_SPAN_UNPROVEN_LENGTH_REL,
-    XAOT_SPAN_UNPROVEN_OVERFLOW,
-    XAOT_SPAN_UNPROVEN_DATA_NULL,
-    XAOT_SPAN_UNPROVEN_ENDIAN_DYNAMIC,
-    XAOT_SPAN_UNPROVEN_CLOBBER,
-    XAOT_SPAN_UNPROVEN_DYNAMIC_BOUNDARY,
-    XAOT_SPAN_UNPROVEN_ELEM_MISMATCH,
+    XAOT_SLICE_UNPROVEN_NONE = 0,
+    XAOT_SLICE_UNPROVEN_DYNAMIC_RECV,
+    XAOT_SLICE_UNPROVEN_NOT_BYTE_SLICE,
+    XAOT_SLICE_UNPROVEN_NOT_POD,
+    XAOT_SLICE_UNPROVEN_READONLY_MAYBE,
+    XAOT_SLICE_UNPROVEN_RANGE,
+    XAOT_SLICE_UNPROVEN_LENGTH_REL,
+    XAOT_SLICE_UNPROVEN_OVERFLOW,
+    XAOT_SLICE_UNPROVEN_DATA_NULL,
+    XAOT_SLICE_UNPROVEN_ENDIAN_DYNAMIC,
+    XAOT_SLICE_UNPROVEN_CLOBBER,
+    XAOT_SLICE_UNPROVEN_DYNAMIC_BOUNDARY,
+    XAOT_SLICE_UNPROVEN_ELEM_MISMATCH,
 };
 
-typedef struct XaotSpanAccessPlan {
+typedef struct XaotSliceAccessPlan {
     const XiFunc *func;
     const XiValue *value;
     XgFuncId body_func_id;
     uint32_t body_effect_bits;
     uint32_t body_escape_bits;
     uint32_t body_evidence;
-    uint8_t kind;               /* XaotSpanAccessKind */
-    uint32_t evidence;          /* XAOT_SPAN_EV_* */
-    uint32_t eliminated_checks; /* XAOT_SPAN_DROP_*; 0 = stays on checked/fallback path */
-    uint8_t unproven_reason;    /* XAOT_SPAN_UNPROVEN_*; 0 = eliminated_checks != 0 */
-} XaotSpanAccessPlan;
+    uint8_t kind;               /* XaotSliceAccessKind */
+    uint32_t evidence;          /* XAOT_SLICE_EV_* */
+    uint32_t eliminated_checks; /* XAOT_SLICE_DROP_*; 0 = stays on checked/fallback path */
+    uint8_t unproven_reason;    /* XAOT_SLICE_UNPROVEN_*; 0 = eliminated_checks != 0 */
+} XaotSliceAccessPlan;
 
 /* Alias plan: prepare proves a pointer unique over its storage so Cgen can
  * emit `restrict` and the C compiler gets Rust-noalias-grade information.
@@ -1777,7 +1777,7 @@ typedef struct XaotBundle {
     XaotBoundsPlan *bounds_plans;
     uint32_t nbounds_plans;
     uint32_t bounds_plan_cap;
-    XaotSpanAccessPlan *span_access_plans;
+    XaotSliceAccessPlan *span_access_plans;
     uint32_t nspan_access_plans;
     uint32_t span_access_plan_cap;
     XaotAliasPlan *alias_plans;
@@ -2078,12 +2078,12 @@ XR_FUNC XaotBoundsPlan *xaot_bundle_add_bounds_plan(XaotBundle *bundle, const Xi
                                                     uint8_t unproven_reason);
 XR_FUNC const XaotBoundsPlan *xaot_bundle_find_bounds_plan(const XaotBundle *bundle,
                                                            const XiValue *access);
-XR_FUNC XaotSpanAccessPlan *
+XR_FUNC XaotSliceAccessPlan *
 xaot_bundle_add_span_access_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,
                                  const XgBodySummary *body, uint8_t kind, uint32_t evidence,
                                  uint32_t eliminated_checks, uint8_t unproven_reason);
-XR_FUNC const XaotSpanAccessPlan *xaot_bundle_find_span_access_plan(const XaotBundle *bundle,
-                                                                    const XiValue *value);
+XR_FUNC const XaotSliceAccessPlan *xaot_bundle_find_span_access_plan(const XaotBundle *bundle,
+                                                                     const XiValue *value);
 XR_FUNC XaotAliasPlan *xaot_bundle_add_alias_plan(XaotBundle *bundle, const XiFunc *func,
                                                   const XiValue *value, const XgBodySummary *body,
                                                   uint8_t kind, uint32_t evidence);

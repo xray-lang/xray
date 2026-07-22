@@ -1,7 +1,9 @@
 contains=xaot-plan v0
 regex=value v[0-9]+ op=PTR_STORE kind=void rep=void c_type=void
-regex=value v[0-9]+ op=PTR_LOAD kind=scalar rep=isize c_type=ptrdiff_t
+regex=value v[0-9]+ op=CONST kind=scalar rep=isize c_type=ptrdiff_t
+regex=value v[0-9]+ op=AGG_SET kind=void rep=void c_type=void
 regex=value v[0-9]+ op=PTR_LOAD kind=scalar rep=usize c_type=size_t
+c_regex=->delta = \(ptrdiff_t\)INT64_C\(-37\)
 c_contains=xr_raw_store_u64_unaligned(
 c_contains=xr_raw_load_u64_unaligned(
 c_regex=xr_raw_store_u64_unaligned\([^;]+\)

@@ -1,1 +1,1 @@
-mem.view<T>() requires T to be an extern C struct or union
+mem.slice<T>() requires T to have a verified static layout

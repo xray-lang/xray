@@ -226,6 +226,7 @@ static bool clone_header_values(XiFunc *f, const XiLoop *loop, XiBlock *guard,
                 return false;
             clone->args[a] = mapped;
         }
+        xi_value_rebase_view_evidence(clone);
         if (!xi_value_clone_call_plan(f, clone, orig))
             return false;
         if (!map_add(guard_map, orig, clone))

@@ -136,8 +136,7 @@ static inline bool xa_freestanding_type_requires_tagged_value(const XrType *type
             return false;
         case XR_KIND_FIXED_ARRAY:
             return xa_freestanding_type_requires_tagged_value(type->fixed_array.element_type);
-        case XR_KIND_SPAN:
-        case XR_KIND_VIEW:
+        case XR_KIND_SLICE:
         case XR_KIND_POINTER:
             return xa_freestanding_type_requires_tagged_value(type->container.element_type);
         default:
@@ -225,6 +224,7 @@ XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *ta
 XR_FUNC XaSymbol *xa_root_variable_symbol_for_expr(XaInferContext *ctx, AstNode *expr);
 XR_FUNC XaSymbol *xa_read_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr);
 XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type);
+XR_FUNC bool xa_type_has_movable_root(XrType *type);
 XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *expr);
 XR_FUNC bool xa_type_contains_span_view(XrType *type);
 XR_FUNC void xa_check_span_generic_class_type_args(XaInferContext *ctx, AstNode *loc_node,

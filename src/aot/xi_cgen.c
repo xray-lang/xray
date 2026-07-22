@@ -371,7 +371,7 @@ static bool cg_builtin_receiver_registry_matches(const XrType *receiver_type,
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return xr_type_is_u8_slice(receiver_type);
         case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver_type && receiver_type->kind == XR_KIND_SPAN &&
+            return receiver_type && receiver_type->kind == XR_KIND_SLICE &&
                    cg_builtin_receiver_pod_span_elem(receiver_type->container.element_type);
     }
     return false;
@@ -399,16 +399,16 @@ static bool cg_phi_has_storage(const XiPhi *phi) {
 static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx);
 static void cg_ctx_set_error(XiCgenCtx *ctx);
 
-static const XaotSpanAccessPlan *cg_span_access_plan(XiCgenCtx *ctx, const XiValue *value,
-                                                     uint8_t kind) {
+static const XaotSliceAccessPlan *cg_span_access_plan(XiCgenCtx *ctx, const XiValue *value,
+                                                      uint8_t kind) {
     const XiValue *origin = cg_unwrap_identity_value(value);
-    const XaotSpanAccessPlan *plan =
+    const XaotSliceAccessPlan *plan =
         xaot_bundle_find_span_access_plan(cg_ctx_aot_bundle(ctx), origin);
     return plan && plan->kind == kind ? plan : NULL;
 }
 
 static bool cg_span_plan_drops(XiCgenCtx *ctx, const XiValue *value, uint8_t kind, uint32_t drops) {
-    const XaotSpanAccessPlan *plan = cg_span_access_plan(ctx, value, kind);
+    const XaotSliceAccessPlan *plan = cg_span_access_plan(ctx, value, kind);
     return plan && (plan->eliminated_checks & drops) == drops;
 }
 
@@ -2071,6 +2071,9 @@ static bool cg_shared_static_function_get_is_elided(XiCgenCtx *ctx, const XiFunc
 
 static bool cg_shared_static_function_value_is_elided(XiCgenCtx *ctx, const XiFunc *current,
                                                       const XiValue *v) {
+    const XiValue *origin = cg_unwrap_identity_value(v);
+    if (origin && origin != v && cg_static_direct_function_closure_is_elided(ctx, current, origin))
+        return true;
     return cg_shared_static_function_get_is_elided(ctx, current, v) ||
            cg_shared_static_function_set_is_elided(ctx, current, v) ||
            cg_shared_static_function_closure_is_elided(ctx, current, v);
@@ -4453,12 +4456,12 @@ static bool cg_borrowed_array_slot_user_is_borrow(const XiCgenCtx *ctx_ro, const
         case XI_BYTE_SLICE_STORE_F64:
         case XI_BYTE_SLICE_FILL:
         case XI_BYTE_SLICE_REPEAT:
-        case XI_SPAN_AS_BYTES:
-        case XI_SPAN_FILL:
-        case XI_SPAN_REINTERPRET:
+        case XI_SLICE_AS_BYTES:
+        case XI_SLICE_FILL:
+        case XI_SLICE_REINTERPRET:
             return arg_index == 0;
-        case XI_SPAN_COPY:
-        case XI_SPAN_COMPARE:
+        case XI_SLICE_COPY:
+        case XI_SLICE_COMPARE:
         case XI_BYTE_SLICE_COPY:
         case XI_BYTE_SLICE_COMPARE:
         case XI_BYTE_SLICE_COMMON_PREFIX:
@@ -9255,6 +9258,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
             fprintf(out, ") {\n");
             bool ret_is_aggregate = cg_func_return_abi_is_aggregate(ctx, f);
             XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
+            XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
             bool ret_is_struct_aggregate =
                 ret_is_aggregate && cg_func_return_abi_is_struct_aggregate(ctx, f);
             if (ret_is_struct_aggregate) {
@@ -9283,9 +9287,10 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
                 fprintf(out, "    return ");
             }
             const char *conv_suffix = NULL;
-            if (ret_is_aggregate) {
+            if (ret_is_aggregate && cg_value_rep_is_span_aggregate(ret_value_rep)) {
+                fprintf(out, "xrt_span_box_value(");
+            } else if (ret_is_aggregate) {
                 fprintf(out, "xrt_enum_aggregate_box(");
-                XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
                 if (cg_value_rep_is_typed_adt_aggregate(ret_value_rep))
                     fprintf(out, "%s_to_base(", ret_value_rep.c_type);
             } else if (ret_rep != XR_REP_VOID)
@@ -9300,8 +9305,9 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
                 emit_boxed_value_as_func_param_abi(ctx, out, f, i, param_expr);
             }
             fprintf(out, ")");
-            if (ret_is_aggregate) {
-                XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
+            if (ret_is_aggregate && cg_value_rep_is_span_aggregate(ret_value_rep)) {
+                fprintf(out, ")");
+            } else if (ret_is_aggregate) {
                 if (cg_value_rep_is_typed_adt_aggregate(ret_value_rep))
                     fprintf(out, ")");
                 fprintf(out, ")");

@@ -169,7 +169,7 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "sizeOf", mem_size_of);
     XRS_EXPORT(module, isolate, "alignOf", mem_align_of);
     XRS_EXPORT(module, isolate, "offsetOf", mem_offset_of);
-    XRS_EXPORT(module, isolate, "view", mem_view_intrinsic);
+    XRS_EXPORT(module, isolate, "slice", mem_slice_intrinsic);
     XRS_EXPORT(module, isolate, "alloc", mem_alloc);
     XRS_EXPORT(module, isolate, "allocZeroed", mem_alloc_zeroed);
     XRS_EXPORT(module, isolate, "allocAligned", mem_alloc_aligned);
@@ -177,6 +177,7 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "pageProtect", mem_page_protect);
     XRS_EXPORT(module, isolate, "pageFree", mem_page_free);
     XRS_EXPORT(module, isolate, "ptr", mem_ptr);
+    XRS_EXPORT(module, isolate, "withSliceMut", mem_with_slice_mut_intrinsic);
     XRS_EXPORT(module, isolate, "mutPtr", mem_mut_ptr);
     XRS_EXPORT(module, isolate, "addr", mem_addr);
     XRS_EXPORT(module, isolate, "load", mem_load_intrinsic);

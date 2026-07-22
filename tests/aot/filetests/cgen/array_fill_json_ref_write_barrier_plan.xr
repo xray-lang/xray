@@ -1,7 +1,7 @@
-fn fillUsers(users: Array<Json>, replacement: Json) -> int {
+fn fillUsers(users: ref Array<Json>, replacement: Json) -> int {
     users.fill(replacement, 1, 3)
-    return users[1].age
+    return copy(users[1].age)
 }
 
 var users: Array<Json> = [{ name: "ada", age: 1 }, { name: "bob", age: 2 }, { name: "cy", age: 3 }]
-print(fillUsers(users, { name: "zoe", age: 9 }))
+print(fillUsers(ref users, { name: "zoe", age: 9 }))

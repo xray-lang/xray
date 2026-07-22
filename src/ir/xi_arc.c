@@ -100,8 +100,12 @@ static bool stack_alloc_closure_use_is_scoped_par_for_callback(const XiValue *us
     return false;
 }
 
-static bool stack_alloc_closure_uses_are_synchronous_callbacks(const XiFunc *f,
-                                                               const XiValue *target) {
+static bool stack_alloc_closure_value_uses_are_synchronous_callbacks(const XiFunc *f,
+                                                                     const XiValue *value,
+                                                                     const XiValue *closure,
+                                                                     uint8_t depth) {
+    if (!f || !value || !closure || depth > 8)
+        return false;
     bool saw_use = false;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         const XiBlock *blk = f->blocks[b];
@@ -112,23 +116,35 @@ static bool stack_alloc_closure_uses_are_synchronous_callbacks(const XiFunc *f,
             if (!user)
                 continue;
             for (uint16_t a = 0; a < user->nargs; a++) {
-                if (user->args[a] != target)
+                if (user->args[a] != value)
                     continue;
-                if (!stack_alloc_closure_use_is_synchronous_callback(user, a, target))
+                bool synchronous =
+                    stack_alloc_closure_use_is_synchronous_callback(user, a, closure);
+                if (!synchronous && a == 0 &&
+                    (user->op == XI_COPY || user->op == XI_SOURCE_MOVE ||
+                     user->op == XI_OWNER_FORWARD || user->op == XI_BOX || user->op == XI_UNBOX))
+                    synchronous = stack_alloc_closure_value_uses_are_synchronous_callbacks(
+                        f, user, closure, (uint8_t) (depth + 1));
+                if (!synchronous)
                     return false;
                 saw_use = true;
             }
         }
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
             for (uint16_t a = 0; a < phi->value.nargs; a++) {
-                if (phi->value.args[a] == target)
+                if (phi->value.args[a] == value)
                     return false;
             }
         }
-        if (blk->control == target)
+        if (blk->control == value)
             return false;
     }
     return saw_use;
+}
+
+static bool stack_alloc_closure_uses_are_synchronous_callbacks(const XiFunc *f,
+                                                               const XiValue *target) {
+    return stack_alloc_closure_value_uses_are_synchronous_callbacks(f, target, target, 0);
 }
 
 static bool stack_alloc_closure_uses_are_scoped_par_for_callbacks(const XiFunc *f,
@@ -502,7 +518,7 @@ static bool arc_raw_pointer_borrow_flows_to_user(const XiValue *member, const Xi
 }
 
 static bool arc_type_is_span_view(const XrType *type) {
-    return type && XR_TYPE_IS_SPAN(type);
+    return type && XR_TYPE_IS_SLICE(type);
 }
 
 static bool arc_value_is_span_view_carrier(const XiValue *v) {
@@ -539,12 +555,16 @@ static bool arc_span_view_borrow_flows_to_user(const XiValue *member, const XiVa
         return false;
     if (!arc_type_is_span_view(user->type))
         return false;
+    if ((user->op == XI_CALL || user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&
+        user->view_evidence.complete && user->view_evidence.source_operand >= 0 &&
+        user->view_evidence.source_operand < (int16_t) user->nargs)
+        return user->args[user->view_evidence.source_operand] == member;
     switch (user->op) {
-        case XI_SPAN_AS_BYTES:
-        case XI_SPAN_REINTERPRET:
-        case XI_SPAN_WINDOW:
-        case XI_SPAN_FILL:
-        case XI_SPAN_COPY:
+        case XI_SLICE_AS_BYTES:
+        case XI_SLICE_REINTERPRET:
+        case XI_SLICE_WINDOW:
+        case XI_SLICE_FILL:
+        case XI_SLICE_COPY:
         case XI_BYTE_SLICE_FILL:
         case XI_BYTE_SLICE_COPY:
         case XI_BYTE_SLICE_REPEAT:
@@ -983,7 +1003,7 @@ static XiBlock *arc_split_edge(XiFunc *f, XiBlock *pred, XiBlock *succ) {
 }
 
 /* Collect `target` plus the transitive closure of borrowed projections
- * (GETFIELD and friends, Ptr/MutPtr data-pointer borrows, and Span value
+ * (GETFIELD and friends, Ptr/MutPtr data-pointer borrows, and Slice value
  * views). A borrow reads through the owner without holding a reference, so the
  * owner must outlive the projection's last use — otherwise the release would
  * free storage a live borrow still points into. Returns a heap array (caller
@@ -1059,7 +1079,7 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                 tracked[ntracked++] = u;
             }
             /* Phi nodes are stored on blk->phis rather than blk->values[].
-             * They still propagate borrowed raw pointers and Span views. If
+             * They still propagate borrowed raw pointers and Slice views. If
              * they are omitted here, the incoming projection is counted only
              * as an edge use and its owner can be dropped before the phi's
              * downstream uses (most visibly at a loop header).

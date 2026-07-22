@@ -719,22 +719,54 @@ static inline size_t xrt_value_native_type_size(uint8_t native_type) {
 }
 
 enum {
-    XRT_SPAN_FLAG_READONLY = 1u << 0,
+    XRT_SLICE_FLAG_READONLY = 1u << 0,
 };
 
 typedef struct {
     void *data;
     int64_t length;
     void *guard;
+    uint16_t elem_size;
+    uint16_t layout_id;
     uint8_t elem_type;
-    uint8_t elem_size;
     uint8_t elem_tid;
     uint8_t contains_refs;
-    uint32_t flags;
+    uint8_t flags;
 } xr_span_t;
 
+static inline XrValue xrt_span_to_value_ref(xr_span_t *span) {
+    XrValue out = {0};
+    out.tag = XR_TAG_AGG_REF;
+    out.heap_type = UINT16_MAX;
+    out.ptr = span;
+    return out;
+}
+
+static inline XrValue xrt_span_box_value(xr_span_t span) {
+    static _Thread_local xr_span_t slots[8];
+    static _Thread_local unsigned cursor;
+    xr_span_t *slot = &slots[cursor++ & 7u];
+    *slot = span;
+    return xrt_span_to_value_ref(slot);
+}
+
 static inline xr_span_t xrt_span_empty(void) {
-    return (xr_span_t) {NULL, 0, NULL, XR_ELEM_ANY, (uint8_t) sizeof(XrValue), 0, 0, 0};
+    return (xr_span_t) {.data = NULL,
+                        .length = 0,
+                        .guard = NULL,
+                        .elem_size = (uint16_t) sizeof(XrValue),
+                        .layout_id = 0,
+                        .elem_type = XR_ELEM_ANY,
+                        .elem_tid = 0,
+                        .contains_refs = 0,
+                        .flags = 0};
+}
+
+static inline xr_span_t xrt_span_from_value_ref(XrValue value) {
+    if (value.tag == XR_TAG_AGG_REF && value.ext == 0 && value.heap_type == UINT16_MAX && value.ptr)
+        return *(const xr_span_t *) value.ptr;
+    xrt_throw_error(XR_ERR_TYPE_MISMATCH, "expected Slice value");
+    return xrt_span_empty();
 }
 
 static inline void xrt_array_normalize_slice(int64_t len, int64_t *start, int64_t *end) {
@@ -792,7 +824,7 @@ static inline xr_span_t xrt_span_from_span_slice(xr_span_t src, int64_t start, i
 }
 
 static inline bool xrt_span_is_readonly(xr_span_t span) {
-    return (span.flags & XRT_SPAN_FLAG_READONLY) != 0;
+    return (span.flags & XRT_SLICE_FLAG_READONLY) != 0;
 }
 
 typedef struct XrArrayCoreRange {
@@ -1696,7 +1728,7 @@ static inline xr_span_t xrt_buffer_bytes_view(XrValue value, int readonly) {
     out.elem_size = 1;
     out.elem_tid = 0;
     out.contains_refs = 0;
-    out.flags = readonly ? XRT_SPAN_FLAG_READONLY : 0;
+    out.flags = readonly ? XRT_SLICE_FLAG_READONLY : 0;
     return out;
 }
 

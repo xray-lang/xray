@@ -6,6 +6,13 @@ extern "C" {
     }
 }
 
-var view = unsafe { mem.view<Header>(mem.mutPtr<Header>(0)) }
-var plain = mem.mutPtr<Header>(0)
-view = plain
+fn leak() -> Slice<Header> {
+    var guard = Array<uint8>(4)
+    var p = mem.mutPtr<Header>(0)
+    return unsafe {
+        mem.withSliceMut<Header>(p, 1, ref guard,
+            fn(view: ref Slice<Header>) -> Slice<Header> { return view })
+    }
+}
+
+print(len(leak()))

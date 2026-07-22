@@ -6,5 +6,6 @@ extern "C" {
     }
 }
 
-var view = unsafe { mem.view<Header>(42) }
-print(view.value)
+var owner = Array<uint8>(4)
+var view = unsafe { mem.slice<Header>(42, 1, owner) }
+print(view[0].value)

@@ -171,7 +171,7 @@ static bool xlsp_receiver_matches(XrType *type, XlspReceiverKind receiver) {
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return xr_type_is_u8_slice(type);
         case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return type && XR_TYPE_IS_SPAN(type) && type->container.element_type &&
+            return type && XR_TYPE_IS_SLICE(type) && type->container.element_type &&
                    xlsp_type_is_pod_slice_elem(type->container.element_type);
     }
     return false;

@@ -209,7 +209,7 @@ typedef enum XgSequenceKind {
     XG_SEQ_ARRAY = 1,
     XG_SEQ_BYTES,
     XG_SEQ_STRING,
-    XG_SEQ_SPAN,
+    XG_SEQ_SLICE,
     XG_SEQ_BYTE_SLICE,
     XG_SEQ_STRING_BUILDER,
 } XgSequenceKind;
@@ -459,7 +459,7 @@ enum {
     XG_SEQ_ACCESS_MUTATING = 1u << 0,
     XG_SEQ_ACCESS_NEGATIVE_INDEX = 1u << 1,
     XG_SEQ_ACCESS_SLICE_NORMALIZED = 1u << 2,
-    XG_SEQ_ACCESS_FROM_SPAN = 1u << 3,
+    XG_SEQ_ACCESS_FROM_SLICE = 1u << 3,
     XG_SEQ_ACCESS_CONST_INDEX = 1u << 4,
 };
 

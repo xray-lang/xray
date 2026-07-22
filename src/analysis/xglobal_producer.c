@@ -3363,7 +3363,7 @@ static bool body_type_ref_sequence_parts(const XrTypeRef *type, uint8_t *out_seq
             uint32_t elem_key = hash_tref32(type->children[0]);
             if (out_sequence_kind)
                 *out_sequence_kind =
-                    elem_key == body_uint8_type_key() ? XG_SEQ_BYTE_SLICE : XG_SEQ_SPAN;
+                    elem_key == body_uint8_type_key() ? XG_SEQ_BYTE_SLICE : XG_SEQ_SLICE;
             if (out_elem_type_key)
                 *out_elem_type_key = elem_key;
             return true;
@@ -7837,7 +7837,7 @@ static uint32_t body_sequence_receiver_type_key(uint8_t sequence_kind, uint32_t 
             return hash_named_type_key32("Array", NULL, 0) ^ body_uint8_type_key();
         case XG_SEQ_STRING:
             return hash_synthetic_tref32(XR_TREF_STRING, NULL, NULL, 0);
-        case XG_SEQ_SPAN:
+        case XG_SEQ_SLICE:
             return hash_named_type_key32("Slice", NULL, 0) ^ elem_type_key;
         case XG_SEQ_BYTE_SLICE:
             return hash_named_type_key32("Slice", NULL, 0) ^ body_uint8_type_key();
@@ -7875,8 +7875,8 @@ static void body_add_sequence_access_row(XgBodyCollect *bc, const AstNode *node,
         row.flags |= XG_SEQ_ACCESS_CONST_INDEX;
     if (access_kind == XG_SEQ_ACCESS_SLICE)
         row.flags |= XG_SEQ_ACCESS_SLICE_NORMALIZED;
-    if (local->sequence_kind == XG_SEQ_SPAN || local->sequence_kind == XG_SEQ_BYTE_SLICE)
-        row.flags |= XG_SEQ_ACCESS_FROM_SPAN;
+    if (local->sequence_kind == XG_SEQ_SLICE || local->sequence_kind == XG_SEQ_BYTE_SLICE)
+        row.flags |= XG_SEQ_ACCESS_FROM_SLICE;
     (void) xg_global_evidence_add_sequence_access(bc->evidence, &row);
 }
 
@@ -8132,7 +8132,7 @@ static bool body_sequence_registry_receiver_matches(const XgLocalType *local,
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return local->sequence_kind == XG_SEQ_BYTE_SLICE;
         case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return (local->sequence_kind == XG_SEQ_SPAN ||
+            return (local->sequence_kind == XG_SEQ_SLICE ||
                     local->sequence_kind == XG_SEQ_BYTE_SLICE) &&
                    body_type_key_is_pod_array_lane(local->sequence_elem_type_key);
     }

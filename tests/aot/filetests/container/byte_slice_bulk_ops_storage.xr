@@ -1,4 +1,4 @@
-fn bulk(dst: Slice<byte>, src: Slice<byte>) -> int {
+fn bulk(dst: ref Slice<byte>, src: ref Slice<byte>) -> int {
     dst.fill(1)
     src.fill(7)
     var window: Slice<byte> = dst[2:6]
@@ -8,6 +8,12 @@ fn bulk(dst: Slice<byte>, src: Slice<byte>) -> int {
     return check.compare(src) + check.commonPrefix(src)
 }
 
-var dst = Array<byte>(8, 0)
-var src = Array<byte>(4, 0)
-print(bulk(dst[:], src[:]))
+fn runBulk() -> int {
+    var dst = Array<byte>(8, 0)
+    var src = Array<byte>(4, 0)
+    var dstView: Slice<byte> = dst[:]
+    var srcView: Slice<byte> = src[:]
+    return bulk(ref dstView, ref srcView)
+}
+
+print(runBulk())

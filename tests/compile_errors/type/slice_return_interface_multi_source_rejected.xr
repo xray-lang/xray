@@ -1,0 +1,7 @@
+interface AmbiguousBorrow {
+    choose(left: Slice<byte>, right: Slice<byte>) -> Slice<byte>
+}
+
+fn main() {}
+
+main()

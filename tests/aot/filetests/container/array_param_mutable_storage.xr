@@ -1,8 +1,8 @@
-fn store_bytes(out: Array<byte>) {
+fn store_bytes(out: ref Array<byte>) {
     out[0] = 7
     out[1] = 9
 }
 
 var out = Array<byte>(2)
-store_bytes(out)
+store_bytes(ref out)
 print(out[0] + out[1])

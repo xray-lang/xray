@@ -1,4 +1,4 @@
-fn patchHeader(out: Array<byte>) {
+fn patchHeader(out: ref Array<byte>) {
     unsafe {
         out.set(0, 0x04)
         out.set(1, 0x22)
@@ -14,5 +14,5 @@ unsafe {
     out.push(0)
     out.push(0)
 }
-patchHeader(out)
+patchHeader(ref out)
 print(out[0] + out[1] + out[2] + out[3])

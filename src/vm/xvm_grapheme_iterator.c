@@ -27,7 +27,7 @@ void xr_vm_grapheme_iterator_dispose(XrVmGraphemeIterator *iterator, XrCoroHeap 
     xr_rc_release(heap, (XrObjHeader *) source);
 }
 
-bool xr_vm_grapheme_iterator_next(XrVmGraphemeIterator *iterator, XrSpanView *out_span,
+bool xr_vm_grapheme_iterator_next(XrVmGraphemeIterator *iterator, XrSliceView *out_span,
                                   XrByteRange *out_range) {
     XrByteRange range;
     XrString *source;
@@ -44,7 +44,8 @@ bool xr_vm_grapheme_iterator_next(XrVmGraphemeIterator *iterator, XrSpanView *ou
     out_span->elem_size = 1;
     out_span->elem_tid = 0;
     out_span->contains_refs = 0;
-    out_span->reserved = XR_SPAN_VIEW_READONLY;
+    out_span->layout_id = 0;
+    out_span->reserved = XR_SLICE_VIEW_READONLY;
     /* The iterator, not the Slice value, owns the source root. */
     out_span->guard = NULL;
     if (out_range)

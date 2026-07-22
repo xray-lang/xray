@@ -371,7 +371,7 @@ XiValue *xi_lower_enum_namespace_value(XiLower *l, XaSymbol *enum_sym, const cha
                                     line);
 }
 
-static XrAggregateLayout *xi_lower_type_struct_layout(XiLower *l, struct XrType *type) {
+XR_FUNC XrAggregateLayout *xi_lower_type_struct_layout(XiLower *l, struct XrType *type) {
     XrAggregateLayout *layout = xi_lower_struct_layout_of(type);
     if (layout)
         return layout;
@@ -426,6 +426,15 @@ static XrAggregateLayout *xi_lower_value_struct_layout(XiLower *l, XiValue *v) {
 
 static bool xi_lower_type_needs_value_clone(XiLower *l, struct XrType *type) {
     return type && (type->is_value_type || xi_lower_type_struct_layout(l, type) != NULL);
+}
+
+XR_FUNC bool xi_lower_type_uses_read_place(XiLower *l, struct XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    if (type->kind == XR_KIND_FIXED_ARRAY)
+        return true;
+    return (type->kind == XR_KIND_INSTANCE || type->kind == XR_KIND_CLASS) &&
+           xi_lower_type_struct_layout(l, type) != NULL;
 }
 
 static bool xi_lower_value_needs_value_clone(XiLower *l, XiValue *v) {
@@ -518,6 +527,49 @@ static XiFunc *lower_resolve_static_callee_func(XiLower *l, XiValue *callee) {
     return lower_resolve_static_callee_func_in_scope(l ? l->func : NULL, callee);
 }
 
+static void lower_instantiate_call_view_evidence(XiValue *call, const XiFunc *static_callee,
+                                                 const struct XrType *callee_type,
+                                                 bool has_receiver) {
+    if (!call || !XR_TYPE_IS_SLICE(call->type))
+        return;
+
+    XrViewReturnSourceKind origin = XR_VIEW_RETURN_NONE;
+    int source_param = -1;
+    bool complete = false;
+    if (static_callee && static_callee->view_return_complete) {
+        origin = (XrViewReturnSourceKind) static_callee->view_return_source;
+        source_param = static_callee->view_return_param;
+        complete = true;
+    } else if (callee_type && callee_type->kind == XR_KIND_FUNCTION) {
+        origin = callee_type->function.view_return_source;
+        source_param = callee_type->function.view_return_param;
+        complete = callee_type->function.view_return_complete;
+    }
+    if (!complete)
+        return;
+
+    int source_operand = -1;
+    if (origin == XR_VIEW_RETURN_PARAM)
+        source_operand = source_param + 1; /* callee/receiver occupies args[0] */
+    else if (origin == XR_VIEW_RETURN_RECEIVER && has_receiver)
+        source_operand = 0;
+    else if (origin != XR_VIEW_RETURN_STATIC)
+        return;
+    if (source_operand >= (int) call->nargs)
+        return;
+
+    call->view_evidence.origin = (uint8_t) origin;
+    call->view_evidence.source_param = (int16_t) source_param;
+    call->view_evidence.source_operand = (int16_t) source_operand;
+    call->view_evidence.complete = 1;
+    call->view_evidence.capability = 1; /* borrowed returns are readonly by default */
+    call->view_evidence.lifetime = origin == XR_VIEW_RETURN_STATIC ? 2 : 1;
+    if (source_operand >= 0 && call->args[source_operand])
+        call->view_evidence.root_value_id = call->args[source_operand]->id;
+    if (call->type->container.element_type)
+        call->view_evidence.element_type_id = call->type->container.element_type->semantic_type_id;
+}
+
 /* Post-lowering rewrite: a direct call to a generator function does not run the
  * body — it constructs a coroutine-backed iterator. Rewrite XI_CALL -> XI_GEN_CALL
  * for every call whose static callee is a generator (entry_type == 2). This runs
@@ -550,78 +602,28 @@ XR_FUNC void xi_lower_rewrite_generator_calls(XiFunc *root) {
     xi_lower_rewrite_generator_calls_in(root);
 }
 
-static bool lower_value_param_is_readonly_depth(XiFunc *callee, uint16_t pidx, int depth);
-
-static bool lower_call_arg_is_readonly_forward(XiFunc *scope, XiValue *call, uint16_t arg_idx,
-                                               int depth) {
-    if (!scope || !call || call->op != XI_CALL || arg_idx == 0 || arg_idx >= call->nargs)
-        return false;
-    XiFunc *target = lower_resolve_static_callee_func_in_scope(scope, call->args[0]);
-    if (!target)
-        return false;
-    return lower_value_param_is_readonly_depth(target, (uint16_t) (arg_idx - 1), depth + 1);
-}
-
-static bool lower_value_param_is_readonly_depth(XiFunc *callee, uint16_t pidx, int depth) {
-    if (!callee || pidx >= callee->nparams)
-        return false;
-    if (depth > 32)
-        return false;
-    XiValue *param = callee->params[pidx];
-    if (!param)
-        return false;
-
-    for (uint32_t b = 0; b < callee->nblocks; b++) {
-        XiBlock *blk = callee->blocks[b];
-        if (!blk)
+static void lower_collect_read_place_params(XiLower *l, XiFunc *callee,
+                                            const struct XrType *function_type,
+                                            const XrParamMode *modes, int mode_count,
+                                            bool *out_read_places, int out_count) {
+    if (!out_read_places || out_count <= 0)
+        return;
+    memset(out_read_places, 0, (size_t) out_count * sizeof(*out_read_places));
+    for (int i = 0; i < out_count; i++) {
+        XrParamMode mode = modes && i < mode_count ? modes[i] : XR_PARAM_READ;
+        if (mode != XR_PARAM_READ)
             continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            XiValue *user = blk->values[i];
-            if (!user)
-                continue;
-            for (uint16_t a = 0; a < user->nargs; a++) {
-                if (user->args[a] != param)
-                    continue;
-                if (lower_call_arg_is_readonly_forward(callee, user, a, depth))
-                    continue;
-                if (xi_own_value_arg_is_consuming(user, a))
-                    return false;
-                if ((xi_op_default_effects(user->op) | user->flags) & XI_FLAG_WRITES_MEM)
-                    return false;
-            }
+
+        XiValue *param = callee && callee->params && i < callee->nparams ? callee->params[i] : NULL;
+        bool read_place = xi_value_is_read_place_param(param);
+        if (!read_place && function_type && function_type->kind == XR_KIND_FUNCTION &&
+            i < function_type->function.param_count) {
+            XrType *formal = xr_type_function_param_type(function_type, i);
+            read_place = xi_lower_type_uses_read_place(l, formal);
         }
-        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            for (uint16_t a = 0; a < phi->value.nargs; a++) {
-                if (phi->value.args[a] == param)
-                    return false;
-            }
-        }
-        if (blk->kind == XI_BLOCK_RETURN && blk->control == param)
-            return false;
-    }
-    return true;
-}
-
-static bool lower_value_param_is_readonly(XiFunc *callee, uint16_t pidx) {
-    return lower_value_param_is_readonly_depth(callee, pidx, 0);
-}
-
-static void lower_apply_auto_borrow_param_modes(XiLower *l, XiFunc *callee,
-                                                const XrParamMode *explicit_modes,
-                                                int explicit_count, XrParamMode *out_modes,
-                                                int mode_count) {
-    if (!out_modes || mode_count <= 0)
-        return;
-    for (int i = 0; i < mode_count; i++) {
-        out_modes[i] = (explicit_modes && i < explicit_count) ? explicit_modes[i] : XR_PARAM_READ;
-    }
-    if (!l || !callee || callee->nparams == 0)
-        return;
-
-    int n = callee->nparams < (uint16_t) mode_count ? (int) callee->nparams : mode_count;
-    for (int i = 0; i < n; i++) {
-        if (out_modes[i] == XR_PARAM_READ && lower_value_param_is_readonly(callee, (uint16_t) i))
-            out_modes[i] = XR_PARAM_READ;
+        out_read_places[i] = read_place;
+        if (read_place && param)
+            param->lowering_flags |= XI_LOWERING_FLAG_PARAM_READ_PLACE;
     }
 }
 
@@ -1552,22 +1554,123 @@ static XiValue *lower_mem_pointer_constructor_call(XiLower *l, AstNode *node, Ca
     return v;
 }
 
-static XiValue *lower_mem_view_call(XiLower *l, AstNode *node, CallExprNode *call,
-                                    const char *member) {
-    if (!l || !node || !call || !member || strcmp(member, "view") != 0 || call->arg_count != 1 ||
-        call->type_arg_count != 1 || !call->arguments || !call->arguments[0])
+static int64_t xi_pack_slice_from_ptr_aux(XiLower *l, struct XrType *type);
+
+static XiValue *lower_mem_slice_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                     const char *member) {
+    if (!l || !node || !call || !member || strcmp(member, "slice") != 0 || call->arg_count != 3 ||
+        call->type_arg_count > 1 || !call->arguments || !call->arguments[0] ||
+        !call->arguments[1] || !call->arguments[2])
         return NULL;
     XiValue *ptr = xi_lower_expr(l, call->arguments[0]);
+    XiValue *count = xi_lower_expr(l, call->arguments[1]);
+    XiValue *owner = xi_lower_expr(l, call->arguments[2]);
     struct XrType *result_type = xi_lower_node_type(l, node);
-    if (!ptr || !ptr->type || !XR_TYPE_IS_POINTER(ptr->type) || !result_type ||
-        !XR_TYPE_IS_POINTER(result_type) || !result_type->ptr_is_c_view)
+    struct XrType *elem_type =
+        result_type && XR_TYPE_IS_SLICE(result_type) ? result_type->container.element_type : NULL;
+    int64_t layout_aux = xi_pack_slice_from_ptr_aux(l, elem_type);
+    if (!ptr || !count || !owner || !ptr->type || !XR_TYPE_IS_POINTER(ptr->type) || !result_type ||
+        !XR_TYPE_IS_SLICE(result_type) || layout_aux == 0)
         return NULL;
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CONVERT, result_type, 1);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_SLICE_FROM_PTR, result_type, 3);
     if (!v)
         return NULL;
     v->args[0] = ptr;
+    v->args[1] = count;
+    v->args[2] = owner;
+    v->aux_int = layout_aux;
+    v->aux = xi_lower_type_struct_layout(l, elem_type);
+    v->flags |= XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM;
     v->line = (uint32_t) node->line;
+    v->view_evidence.origin = XI_VIEW_ORIGIN_FOREIGN;
+    v->view_evidence.source_operand = 2;
+    v->view_evidence.source_param = -1;
+    v->view_evidence.root_value_id = owner->id;
+    v->view_evidence.element_type_id = elem_type ? elem_type->semantic_type_id : 0;
+    v->view_evidence.capability = 1;
+    v->view_evidence.lifetime = 1;
+    v->view_evidence.complete = 1;
     return v;
+}
+
+static XiValue *lower_mem_with_slice_mut_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                              const char *member) {
+    if (!l || !node || !call || !member || strcmp(member, "withSliceMut") != 0 ||
+        call->arg_count != 4 || call->type_arg_count > 1 || !call->arguments ||
+        !call->arguments[0] || !call->arguments[1] || !call->arguments[2] || !call->arguments[3])
+        return NULL;
+
+    XiValue *ptr = xi_lower_expr(l, call->arguments[0]);
+    XiValue *count = xi_lower_expr(l, call->arguments[1]);
+    XiValue *guard = xi_lower_expr(l, call->arguments[2]);
+    XiValue *callback = xi_lower_expr(l, call->arguments[3]);
+    if (!ptr || !count || !guard || !callback || !ptr->type || !XR_TYPE_IS_POINTER(ptr->type))
+        return NULL;
+
+    struct XrType *elem_type = call->type_arg_count == 1 && call->type_args && call->type_args[0]
+                                   ? xr_tref_resolve_in_analyzer(l->analyzer, call->type_args[0])
+                                   : ptr->type->container.element_type;
+    struct XrType *slice_type = xr_type_new_slice(l->isolate, elem_type);
+    int64_t layout_aux = xi_pack_slice_from_ptr_aux(l, elem_type);
+    if (!slice_type || layout_aux == 0)
+        return NULL;
+
+    XiValue *slice = xi_value_new(l->func, l->cur_block, XI_SLICE_FROM_PTR, slice_type, 3);
+    if (!slice)
+        return NULL;
+    slice->args[0] = ptr;
+    slice->args[1] = count;
+    slice->args[2] = guard;
+    slice->aux_int = layout_aux | XI_SLICE_FROM_PTR_AUX_MUTABLE;
+    slice->aux = xi_lower_type_struct_layout(l, elem_type);
+    slice->flags |= XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+    slice->line = (uint32_t) node->line;
+    slice->view_evidence.origin = XI_VIEW_ORIGIN_FOREIGN;
+    slice->view_evidence.source_operand = 2;
+    slice->view_evidence.source_param = -1;
+    slice->view_evidence.root_value_id = guard->id;
+    slice->view_evidence.element_type_id = elem_type ? elem_type->semantic_type_id : 0;
+    slice->view_evidence.capability = 2;
+    slice->view_evidence.lifetime = 1;
+    slice->view_evidence.complete = 1;
+
+    XiValue *place = xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR, slice_type, 1);
+    if (!place)
+        return NULL;
+    place->args[0] = slice;
+    place->line = (uint32_t) node->line;
+
+    XiCallPlan *plan = (XiCallPlan *) xi_func_arena_alloc(l->func, sizeof(*plan));
+    XiCallArgPlan *arg_plan = (XiCallArgPlan *) xi_func_arena_alloc(l->func, sizeof(*arg_plan));
+    if (!plan || !arg_plan)
+        return NULL;
+    memset(plan, 0, sizeof(*plan));
+    memset(arg_plan, 0, sizeof(*arg_plan));
+    plan->args = arg_plan;
+    plan->nargs = 1;
+    plan->verified = true;
+    arg_plan->param_mode = XR_PARAM_REF;
+    arg_plan->access = XR_CALL_ARG_REF;
+    arg_plan->origin = XI_PLACE_ORIGIN_PROJECTION_TEMP;
+    arg_plan->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+    arg_plan->escape = XI_PLACE_ESCAPE_NONE;
+    arg_plan->addressable = true;
+    arg_plan->origin_var_id = XI_NO_VAR_ID;
+    arg_plan->place = place;
+
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    XiValue *invoke = xi_value_new(l->func, l->cur_block, XI_CALL, result_type, 2);
+    if (!invoke)
+        return NULL;
+    invoke->args[0] = callback;
+    invoke->args[1] = place;
+    invoke->call_plan = plan;
+    invoke->flags |=
+        XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+    invoke->line = (uint32_t) node->line;
+    xi_lower_bind_callsite_id(l, invoke, xi_lower_source_node_id(l, node));
+    xi_lower_insert_err_check(l, node, true);
+    return invoke;
 }
 
 static bool lower_math_constant(XiLower *l, const char *name, XiValue **out) {
@@ -1688,50 +1791,8 @@ static struct XrType *lower_math_call_result_type(XiLower *l, const char *member
 }
 
 static bool lower_type_has_sequence_evidence(const struct XrType *type) {
-    return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SPAN(type) || XR_TYPE_IS_STRING(type) ||
+    return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type) || XR_TYPE_IS_STRING(type) ||
                     xr_type_is_named_class(type, "StringBuilder"));
-}
-
-static bool lower_c_view_member_access(XiLower *l, AstNode *node, XiValue *obj,
-                                       struct XrType *result_type, XrAggregateLayout *layout,
-                                       XiValue **out) {
-    *out = NULL;
-    int field_index = xi_lower_struct_field_index(layout, node->as.member_access.name);
-    if (field_index < 0)
-        return false;
-
-    XrAggregateFieldLayout *field = &layout->fields[field_index];
-    if (field->is_flexible || field->native_type == XR_NATIVE_ARRAY)
-        return true;
-    XiValue *offset = xi_const_int(l->func, l->cur_block, (int64_t) field->offset, l->type_int);
-    struct XrType *address_type =
-        field->native_type == XR_NATIVE_NESTED_AGGREGATE ? result_type : obj->type;
-    XiValue *address = xi_value_new(l->func, l->cur_block, XI_ADD, address_type, 2);
-    if (!offset || !address)
-        return true;
-    address->args[0] = obj;
-    address->args[1] = offset;
-    address->line = (uint32_t) node->line;
-    if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
-        *out = address;
-        return true;
-    }
-
-    const XrAbiScalarDesc *scalar_desc = xr_abi_scalar_desc_for_native(field->native_type);
-    if (!scalar_desc || !scalar_desc->is_memory_scalar)
-        return true;
-    uint8_t code = (uint8_t) scalar_desc->ffi_type;
-    XiValue *endian = xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 2);
-    if (!endian || !v)
-        return true;
-    v->args[0] = address;
-    v->args[1] = endian;
-    v->aux_int = (int64_t) xr_ffi_ptr_aux(code, layout->kind == XR_AGG_LAYOUT_PACKED_STRUCT);
-    v->flags |= XI_FLAG_READS_MEM;
-    v->line = (uint32_t) node->line;
-    *out = v;
-    return true;
 }
 
 static XiValue *lower_type_namespace_member(XiLower *l, const MemberAccessNode *ma) {
@@ -2042,20 +2103,6 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         (!result_type || result_type->kind == XR_KIND_UNKNOWN))
         result_type = sel->result_type;
 
-    XrAggregateLayout *c_view_layout = NULL;
-    if (obj->type && XR_TYPE_IS_POINTER(obj->type) && obj->type->ptr_is_c_view &&
-        obj->type->container.element_type) {
-        XrType *pointee = obj->type->container.element_type;
-        XrClassInfo *info = XR_TYPE_IS_INSTANCE(pointee) ? pointee->instance.class_ref : NULL;
-        if (info && info->is_extern_layout && info->struct_layout &&
-            info->struct_layout->is_extern_layout)
-            c_view_layout = info->struct_layout;
-    }
-    XiValue *c_view_result = NULL;
-    if (c_view_layout &&
-        lower_c_view_member_access(l, node, obj, result_type, c_view_layout, &c_view_result))
-        return c_view_result;
-
     /* Struct with compile-time layout → XI_AGG_GET (emitter decides
      * whether to stack-allocate or fall back to OP_GETPROP) */
     XrAggregateLayout *slayout = xi_lower_value_struct_layout(l, obj);
@@ -2204,50 +2251,6 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
         return NULL;
 
     struct XrType *result_type = val->type;
-
-    XrAggregateLayout *c_view_layout = NULL;
-    if (obj->type && XR_TYPE_IS_POINTER(obj->type) && obj->type->ptr_is_c_view &&
-        obj->type->ptr_is_mut && obj->type->container.element_type) {
-        XrType *pointee = obj->type->container.element_type;
-        XrClassInfo *info = XR_TYPE_IS_INSTANCE(pointee) ? pointee->instance.class_ref : NULL;
-        if (info && info->is_extern_layout && info->struct_layout &&
-            info->struct_layout->is_extern_layout)
-            c_view_layout = info->struct_layout;
-    }
-    if (c_view_layout) {
-        int field_index = xi_lower_struct_field_index(c_view_layout, ms->member);
-        if (field_index >= 0) {
-            XrAggregateFieldLayout *field = &c_view_layout->fields[field_index];
-            if (field->is_flexible || field->native_type == XR_NATIVE_ARRAY ||
-                field->native_type == XR_NATIVE_NESTED_AGGREGATE)
-                return NULL;
-            val = xi_lower_narrow_for_native_field(l, node, val, field->native_type);
-            XiValue *offset =
-                xi_const_int(l->func, l->cur_block, (int64_t) field->offset, l->type_int);
-            XiValue *address = xi_value_new(l->func, l->cur_block, XI_ADD, obj->type, 2);
-            if (!offset || !address)
-                return NULL;
-            address->args[0] = obj;
-            address->args[1] = offset;
-            address->line = (uint32_t) node->line;
-            const XrAbiScalarDesc *scalar_desc = xr_abi_scalar_desc_for_native(field->native_type);
-            if (!scalar_desc || !scalar_desc->is_memory_scalar)
-                return NULL;
-            uint8_t code = (uint8_t) scalar_desc->ffi_type;
-            XiValue *endian = xi_const_int(l->func, l->cur_block, XR_ENDIAN_NATIVE, l->type_int);
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_STORE, l->type_unit, 3);
-            if (!endian || !v)
-                return NULL;
-            v->args[0] = address;
-            v->args[1] = val;
-            v->args[2] = endian;
-            v->aux_int =
-                (int64_t) xr_ffi_ptr_aux(code, c_view_layout->kind == XR_AGG_LAYOUT_PACKED_STRUCT);
-            v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
-            v->line = (uint32_t) node->line;
-            return v;
-        }
-    }
 
     /* Struct with compile-time layout → XI_AGG_SET */
     XrAggregateLayout *slayout = xi_lower_value_struct_layout(l, obj);
@@ -2438,7 +2441,7 @@ static bool xi_lower_builtin_receiver_registry_matches(struct XrType *receiver_t
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return xr_type_is_u8_slice(receiver_type);
         case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver_type && XR_TYPE_IS_SPAN(receiver_type) &&
+            return receiver_type && XR_TYPE_IS_SLICE(receiver_type) &&
                    xi_type_is_pod_span_elem(receiver_type->container.element_type);
     }
     return false;
@@ -2540,14 +2543,33 @@ static XrArrayElemType xi_pod_span_elem_type(struct XrType *type) {
     }
 }
 
-static int64_t xi_pack_span_elem_aux(struct XrType *type) {
-    XrArrayElemType elem_type = xi_pod_span_elem_type(type);
-    if (elem_type == XR_ELEM_ANY || elem_type >= XR_ELEM_COUNT)
+static int64_t xi_pack_span_elem_aux(XiLower *l, struct XrType *type) {
+    uint32_t elem_size = 0;
+    uint32_t alignment = 0;
+    if (!l || !type ||
+        !xr_type_has_static_layout(xi_lower_target_data_layout(l), type, &elem_size, &alignment) ||
+        !xr_type_all_bit_patterns_valid(type) || elem_size == 0 || elem_size > UINT16_MAX ||
+        alignment == 0 || alignment > UINT16_MAX)
         return 0;
-    uint8_t elem_size = XR_ELEM_SIZES[elem_type];
+    XrArrayElemType elem_type = xi_pod_span_elem_type(type);
+    if (elem_type >= XR_ELEM_COUNT)
+        elem_type = XR_ELEM_ANY;
     uint8_t elem_tid = xr_type_to_tid(type);
     return (int64_t) ((uint8_t) elem_type) | ((int64_t) elem_size << 8) |
-           ((int64_t) elem_tid << 16);
+           ((int64_t) elem_tid << 24) | ((int64_t) alignment << 32);
+}
+
+static int64_t xi_pack_slice_from_ptr_aux(XiLower *l, struct XrType *type) {
+    uint32_t elem_size = 0;
+    uint32_t alignment = 0;
+    if (!l || !type ||
+        !xr_type_has_static_layout(xi_lower_target_data_layout(l), type, &elem_size, &alignment) ||
+        elem_size == 0 || elem_size > INT16_MAX || alignment == 0 || alignment > INT16_MAX)
+        return 0;
+    XrArrayElemType elem_type = xi_pod_span_elem_type(type);
+    uint8_t elem_tid = xr_type_to_tid(type);
+    return (int64_t) ((uint8_t) elem_type) | ((int64_t) elem_size << 8) |
+           ((int64_t) elem_tid << 24) | ((int64_t) alignment << 32);
 }
 
 /* XrFFIType width code of a raw pointer's pointee (carried on PTR_LOAD/STORE). */
@@ -3569,9 +3591,8 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
     /* typeName(x) → cold/debug type display name string. */
     if (strcmp(fname, "typeName") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
-        if (arg && arg->type &&
-            (arg->type->kind == XR_KIND_SPAN || arg->type->kind == XR_KIND_VIEW)) {
-            return xi_const_str(l->func, l->cur_block, TYPE_NAME_SPAN, l->type_string);
+        if (arg && arg->type && arg->type->kind == XR_KIND_SLICE) {
+            return xi_const_str(l->func, l->cur_block, TYPE_NAME_SLICE, l->type_string);
         }
         if (arg && arg->type &&
             (arg->type->kind == XR_KIND_FIXED_ARRAY || arg->type->kind == XR_KIND_RUNE ||
@@ -4215,7 +4236,7 @@ static XiValue *lower_coro_pool_submit(XiLower *l, AstNode *node, CallExprNode *
  * (the source tuple already owns the element). */
 static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowerArgList *args,
                                           int max_args, const XrParamMode *pmodes, int pcount,
-                                          int line) {
+                                          const bool *read_places, int read_place_count, int line) {
     for (int i = 0; i < call->arg_count; i++) {
         AstNode *child = call->arguments[i];
         if (!child)
@@ -4244,8 +4265,9 @@ static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowe
         if (!a)
             return false;
         XrParamMode mode = (pmodes && args->count < pcount) ? pmodes[args->count] : XR_PARAM_READ;
+        bool read_place = read_places && args->count < read_place_count && read_places[args->count];
         if (xi_lower_value_needs_value_clone(l, a) && !xi_lower_value_is_fresh_value_struct(a) &&
-            mode == XR_PARAM_READ) {
+            mode == XR_PARAM_READ && !read_place) {
             XiValue *cpy = xi_value_new(l->func, l->cur_block, XI_COPY, a->type, 1);
             if (cpy) {
                 cpy->args[0] = a;
@@ -4372,15 +4394,38 @@ static bool lower_call_store_projection(XiLower *l, XiValue *source, XiValue *up
     return true;
 }
 
+static bool lower_call_slot_uses_read_place(XiLower *l, XrParamMode mode, int index,
+                                            const bool *read_places, int read_place_count,
+                                            const XrType *function_type, const XiValue *actual) {
+    if (mode != XR_PARAM_READ || index < 0)
+        return false;
+    bool requested = read_places && index < read_place_count && read_places[index];
+    if (!requested && function_type && function_type->kind == XR_KIND_FUNCTION &&
+        index < function_type->function.param_count) {
+        XrType *formal = xr_type_function_param_type(function_type, index);
+        requested = xi_lower_type_uses_read_place(l, formal);
+    }
+    /* A call-place ABI is valid only when both sides agree on a fixed-layout
+     * value aggregate.  This guards method signatures whose internal receiver
+     * slot is not part of the source argument list. */
+    if (!requested || !actual)
+        return false;
+    return xi_lower_type_uses_read_place(l, actual->type);
+}
+
 static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue **arg_vals, int n,
                                          const XrParamMode *pmodes, int pcount,
+                                         const bool *read_places, int read_place_count,
                                          const XrType *function_type,
                                          XiCallWriteback **out_writebacks, int line) {
     if (out_writebacks)
         *out_writebacks = NULL;
     bool needs_plan = false;
     for (int i = 0; i < n && i < pcount; i++) {
-        if (pmodes && pmodes[i] != XR_PARAM_READ) {
+        XrParamMode mode = pmodes ? pmodes[i] : XR_PARAM_READ;
+        if (mode != XR_PARAM_READ ||
+            lower_call_slot_uses_read_place(l, mode, i, read_places, read_place_count,
+                                            function_type, arg_vals ? arg_vals[i] : NULL)) {
             needs_plan = true;
             break;
         }
@@ -4415,7 +4460,10 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
         arg_plan->param_mode = mode;
         arg_plan->access = access;
         arg_plan->origin_var_id = XI_NO_VAR_ID;
-        if (mode == XR_PARAM_READ)
+        bool read_place =
+            lower_call_slot_uses_read_place(l, mode, i, read_places, read_place_count,
+                                            function_type, arg_vals ? arg_vals[i] : NULL);
+        if (mode == XR_PARAM_READ && !read_place)
             continue;
 
         bool access_ok =
@@ -4475,11 +4523,19 @@ static XiCallPlan *lower_build_call_plan(XiLower *l, CallExprNode *call, XiValue
                 var_id >= 0 ? XI_PLACE_ORIGIN_STACK_LOCAL : XI_PLACE_ORIGIN_PROJECTION_TEMP;
             if (var_id >= 0)
                 arg_plan->origin_var_id = (XiVarId) var_id;
-            writebacks[i].source = source;
-            writebacks[i].place = place;
-            writebacks[i].top_binding = top_binding;
-            writebacks[i].var_id = var_id;
-            writebacks[i].projection = var_id < 0 && !xi_top_binding_valid(top_binding);
+            if (mode == XR_PARAM_REF) {
+                /* `ref owner[a:b]` borrows the projected element range.  The
+                 * analyzer only authorizes it when the callee's canonical
+                 * memory summary proves that the Slice descriptor is not
+                 * rebound, so no projection writeback exists or is needed. */
+                if (!source || source->op != XI_SLICE) {
+                    writebacks[i].source = source;
+                    writebacks[i].place = place;
+                    writebacks[i].top_binding = top_binding;
+                    writebacks[i].var_id = var_id;
+                    writebacks[i].projection = var_id < 0 && !xi_top_binding_valid(top_binding);
+                }
+            }
         }
         arg_vals[i] = place;
         arg_plan->place = place;
@@ -4705,29 +4761,26 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
         pcount = static_callee->nparams;
     }
 
-    XrParamMode stack_auto_modes[64];
-    const XrParamMode *effective_pmodes = pmodes;
-    int effective_pcount = pcount;
-    int auto_count = pcount > 0 ? pcount : (static_callee ? (int) static_callee->nparams : 0);
-    if (static_callee && auto_count > 0) {
-        XrParamMode *auto_modes =
-            auto_count <= (int) (sizeof(stack_auto_modes) / sizeof(stack_auto_modes[0]))
-                ? stack_auto_modes
-                : (XrParamMode *) xi_func_arena_alloc(
-                      l->func, (uint32_t) ((size_t) auto_count * sizeof(XrParamMode)));
-        if (auto_modes) {
-            lower_apply_auto_borrow_param_modes(l, static_callee, pmodes, pcount, auto_modes,
-                                                auto_count);
-            effective_pmodes = auto_modes;
-            effective_pcount = auto_count;
-        }
+    bool stack_read_places[64];
+    bool *read_places = NULL;
+    int read_place_count = pcount > 0 ? pcount : (static_callee ? (int) static_callee->nparams : 0);
+    if (read_place_count > 0) {
+        read_places =
+            read_place_count <= (int) (sizeof(stack_read_places) / sizeof(stack_read_places[0]))
+                ? stack_read_places
+                : (bool *) xi_func_arena_alloc(
+                      l->func, (uint32_t) ((size_t) read_place_count * sizeof(bool)));
+        if (!read_places)
+            return NULL;
+        lower_collect_read_place_params(l, static_callee, callee_type, pmodes, pcount, read_places,
+                                        read_place_count);
     }
 
     XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
     XiLowerArgList args;
     xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
-    if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, effective_pmodes,
-                                       effective_pcount, (int) node->line))
+    if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, pmodes, pcount,
+                                       read_places, read_place_count, (int) node->line))
         return NULL;
     XiValue **arg_vals = args.items;
     int n = args.count;
@@ -4779,8 +4832,9 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     }
 
     XiCallWriteback *writebacks = NULL;
-    XiCallPlan *call_plan = lower_build_call_plan(l, call, arg_vals, n, pmodes, pcount, callee_type,
-                                                  &writebacks, (int) node->line);
+    XiCallPlan *call_plan =
+        lower_build_call_plan(l, call, arg_vals, n, pmodes, pcount, read_places, read_place_count,
+                              callee_type, &writebacks, (int) node->line);
     if (l->had_error)
         return NULL;
 
@@ -4832,6 +4886,7 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     if (is_self_call)
         v->aux_int = 1;
     v->call_plan = call_plan;
+    lower_instantiate_call_view_evidence(v, static_callee, callee_type, false);
 
     xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
     lower_call_emit_err_check(l, v, node, call, callee_type);
@@ -4920,8 +4975,8 @@ static XiValue *lower_enum_method_direct_call(XiLower *l, AstNode *node, CallExp
     XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
     XiLowerArgList args;
     xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
-    if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, pmodes, pcount,
-                                       (int) node->line))
+    if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, pmodes, pcount, NULL,
+                                       0, (int) node->line))
         return NULL;
 
     int extra = is_static ? 0 : 1;
@@ -5543,7 +5598,7 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     XiLowerArgList args;
     xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
     if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, param_modes,
-                                       param_count, (int) node->line))
+                                       param_count, NULL, 0, (int) node->line))
         return NULL;
 
     uint16_t nargs = (uint16_t) (args.count + 1);
@@ -5576,20 +5631,22 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     value->flags = xi_op_default_effects(op);
     value->line = (uint32_t) node->line;
     if (desc->family == XA_INTRINSIC_FAMILY_MEMORY) {
-        if (desc->lowering == XA_INTRINSIC_LOWERING_SPAN_REINTERPRET) {
+        if (desc->lowering == XA_INTRINSIC_LOWERING_SLICE_REINTERPRET) {
             if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
                 l->had_error = true;
                 return NULL;
             }
-            XrType *target = xr_tref_resolve(l->isolate, call->type_args[0]);
+            XrType *target = xr_tref_resolve_in_analyzer(l->analyzer, call->type_args[0]);
             target = xi_lower_type_or_any(l, target, "span reinterpret type argument",
                                           node ? node->line : 0);
-            if (!xi_type_is_pod_span_elem(target)) {
+            int64_t reinterpret_aux = xi_pack_span_elem_aux(l, target);
+            if (reinterpret_aux == 0) {
                 l->had_error = true;
                 return NULL;
             }
-            value->aux_int = xi_pack_span_elem_aux(target);
-        } else if (desc->lowering == XA_INTRINSIC_LOWERING_SPAN_GET) {
+            value->aux_int = reinterpret_aux;
+            value->aux = xi_lower_type_struct_layout(l, target);
+        } else if (desc->lowering == XA_INTRINSIC_LOWERING_SLICE_GET) {
             value->aux_int = 1;
         }
         XiSequenceEvidenceIds sequence_ids;
@@ -5621,6 +5678,19 @@ static XrType *lower_known_expr_type(XiLower *l, AstNode *node) {
 
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
+
+    if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *member = &call->callee->as.member_access;
+        bool mem_object = lower_call_object_is_module(l, member->object, "mem") ||
+                          (member->object && member->object->type == AST_VARIABLE &&
+                           member->object->as.variable.name &&
+                           strcmp(member->object->as.variable.name, "mem") == 0);
+        if (member->name && mem_object) {
+            XiValue *with_slice_mut = lower_mem_with_slice_mut_call(l, node, call, member->name);
+            if (with_slice_mut)
+                return with_slice_mut;
+        }
+    }
 
     const XaResolvedCall *resolved =
         l && l->typed_program ? xa_typed_program_resolved_call(l->typed_program, node) : NULL;
@@ -5816,9 +5886,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *pointer = lower_mem_pointer_constructor_call(l, node, call, ma->name);
             if (pointer)
                 return pointer;
-            XiValue *view = lower_mem_view_call(l, node, call, ma->name);
-            if (view)
-                return view;
+            XiValue *slice = lower_mem_slice_call(l, node, call, ma->name);
+            if (slice)
+                return slice;
+            XiValue *with_slice_mut = lower_mem_with_slice_mut_call(l, node, call, ma->name);
+            if (with_slice_mut)
+                return with_slice_mut;
             XiValue *addr = lower_mem_addr_pointer_call(l, node, call, ma->name);
             if (addr)
                 return addr;
@@ -5876,9 +5949,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             XiValue *pointer = lower_mem_pointer_constructor_call(l, node, call, ma->name);
             if (pointer)
                 return pointer;
-            XiValue *view = lower_mem_view_call(l, node, call, ma->name);
-            if (view)
-                return view;
+            XiValue *slice = lower_mem_slice_call(l, node, call, ma->name);
+            if (slice)
+                return slice;
+            XiValue *with_slice_mut = lower_mem_with_slice_mut_call(l, node, call, ma->name);
+            if (with_slice_mut)
+                return with_slice_mut;
             XiValue *addr = lower_mem_addr_pointer_call(l, node, call, ma->name);
             if (addr)
                 return addr;
@@ -5896,7 +5972,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
         XiLowerArgList args;
         xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
-        if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, NULL, 0,
+        if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, NULL, 0, NULL, 0,
                                            (int) node->line))
             return NULL;
         XiValue **arg_vals = args.items;
@@ -5954,7 +6030,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             if (!span_type || xi_lower_type_is_unknown(span_type)) {
                 XrType *elem = xi_get_container_elem_type(recv->type);
                 span_type =
-                    xr_type_new_span(l->isolate, elem ? elem : xr_type_new_unknown(l->isolate));
+                    xr_type_new_slice(l->isolate, elem ? elem : xr_type_new_unknown(l->isolate));
             }
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_SLICE, span_type, 3);
             if (!v)
@@ -6226,8 +6302,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
         XiCallWriteback *writebacks = NULL;
         XiCallPlan *call_plan =
-            lower_build_call_plan(l, call, arg_vals, n, method_modes, method_pcount, method_type,
-                                  &writebacks, (int) node->line);
+            lower_build_call_plan(l, call, arg_vals, n, method_modes, method_pcount, NULL, 0,
+                                  method_type, &writebacks, (int) node->line);
         if (l->had_error)
             return NULL;
 
@@ -6254,6 +6330,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         v->aux = (void *) arena_strdup(l->func, ma->name);
         v->aux_int = (int64_t) xi_lower_method_symbol(l, ma->name) << 1;
         v->call_plan = call_plan;
+        lower_instantiate_call_view_evidence(v, NULL, method_type, true);
         v->flags |= XI_FLAG_SIDE_EFFECT;
         if (xi_lower_method_may_suspend(recv->type, ma->name, n))
             v->flags |= XI_FLAG_MAY_SUSPEND;
@@ -6307,7 +6384,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
         XiLowerArgList args;
         xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
-        if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, NULL, 0,
+        if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, NULL, 0, NULL, 0,
                                            (int) node->line))
             return NULL;
         XiValue **arg_vals = args.items;
@@ -6327,6 +6404,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             mcall->args[i + 1] = arg_vals[i];
         mcall->aux = (void *) arena_strdup(l->func, oc->name);
         mcall->aux_int = (int64_t) xi_lower_method_symbol(l, oc->name) << 1;
+        XrType *optional_method_type =
+            xr_type_non_nullable(l->isolate, xi_lower_node_type(l, call->callee));
+        lower_instantiate_call_view_evidence(mcall, NULL, optional_method_type, true);
         mcall->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         mcall->line = (uint32_t) node->line;
         xi_lower_bind_callsite_id(l, mcall, xi_lower_source_node_id(l, node));
@@ -8114,7 +8194,7 @@ generic_constructor:;
     XiCallWriteback *writebacks = NULL;
     XiCallPlan *call_plan =
         lower_build_call_plan(l, &call_view, arg_vals, n, constructor_modes, constructor_pcount,
-                              constructor_type, &writebacks, (int) node->line);
+                              NULL, 0, constructor_type, &writebacks, (int) node->line);
     if (l->had_error)
         return NULL;
 
@@ -9160,8 +9240,8 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     };
     XiCallWriteback *writebacks = NULL;
     XiCallPlan *call_plan =
-        lower_build_call_plan(l, &call_view, arg_vals, n, method_modes, method_pcount, method_type,
-                              &writebacks, (int) node->line);
+        lower_build_call_plan(l, &call_view, arg_vals, n, method_modes, method_pcount, NULL, 0,
+                              method_type, &writebacks, (int) node->line);
     if (l->had_error)
         return NULL;
 

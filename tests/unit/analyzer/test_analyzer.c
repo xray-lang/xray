@@ -274,7 +274,7 @@ TEST(type_to_string) {
     XrType *t_u64 = xr_type_new_int_width(NULL, XR_NATIVE_U64);
     XrType *t_arr = xr_type_new_array(g_isolate, xr_type_new_string(NULL));
     XrType *t_byte_arr = xr_type_new_array(g_isolate, t_u8);
-    XrType *t_byte_slice = xr_type_new_span(g_isolate, t_u8);
+    XrType *t_byte_slice = xr_type_new_slice(g_isolate, t_u8);
     XrType *fn_params[] = {xr_type_new_int_width(NULL, XR_NATIVE_I32)};
     XrType *t_cfn = xr_type_new_function(g_isolate, fn_params, 1,
                                          xr_type_new_int_width(NULL, XR_NATIVE_I32), false);
@@ -1087,13 +1087,14 @@ TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
     const XaMemoryRootEffect *via_root = memory_effect_root(via, XA_MEMORY_ROOT_PARAM, 0);
     const XaMemoryRootEffect *shrink_root = memory_effect_root(shrink, XA_MEMORY_ROOT_PARAM, 0);
     const XaMemoryRootEffect *rebind_root = memory_effect_root(rebind, XA_MEMORY_ROOT_PARAM, 0);
+    const XaMemoryRootEffect *dynamic_root = memory_effect_root(dynamic, XA_MEMORY_ROOT_PARAM, 1);
     ASSERT(grow_root && grow_root->write_count == 1);
     ASSERT(grow_root->relocation == XA_MEMORY_MAY_RELOCATE);
     ASSERT(via_root && via_root->relocation == XA_MEMORY_MAY_RELOCATE);
     ASSERT(shrink_root && shrink_root->shortening == XA_MEMORY_MAY_SHORTEN);
     ASSERT(rebind_root && rebind_root->descriptor_rebind);
-    ASSERT(!xa_memory_effect_summary_is_complete(dynamic));
-    ASSERT((dynamic->unknown_reasons & XA_UNKNOWN_VIEW_INVALIDATION) != 0);
+    ASSERT(xa_memory_effect_summary_is_complete(dynamic));
+    ASSERT(dynamic_root && dynamic_root->invalidation == XA_MEMORY_INVALIDATES_VIEWS);
     ASSERT(read_only->root_count == 0);
 
     xa_analyzer_free(a);
@@ -2813,11 +2814,11 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     snprintf(view_only_path, sizeof(view_only_path), "%s/native_legacy_byteview_only.xrd", tmpdir);
     ASSERT(write_text_file(ok_path, "export fn decode(input: Slice<byte>): Array<byte> "
                                     "@errors(NativeByteErr.BadInput)\n"));
-    ASSERT(write_text_file(legacy_path, "export fn decodeOld(input: ByteSpan): Bytes "
+    ASSERT(write_text_file(legacy_path, "export fn decodeOld(input: ByteSlice): Bytes "
                                         "@errors(NativeByteErr.BadInput)\n"
                                         "export fn viewOld(input: ByteView): int @nothrow\n"));
     ASSERT(write_text_file(span_only_path, "export fn spanOnly(input: Byte"
-                                           "Span): int @nothrow\n"));
+                                           "Slice): int @nothrow\n"));
     ASSERT(write_text_file(view_only_path, "export fn viewOnly(input: Byte"
                                            "View): int @nothrow\n"));
 
@@ -2849,26 +2850,26 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     const char *legacy_source = "enum NativeByteErr { BadInput }\n"
                                 "import { decodeOld, viewOld } from "
                                 "\"native_legacy_byte_effects\"\n"
-                                "fn viaOld(input: ByteSpan) { decodeOld(input) }\n"
+                                "fn viaOld(input: ByteSlice) { decodeOld(input) }\n"
                                 "fn viaView(input: ByteView) { viewOld(input) }\n";
     AstNode *legacy_program = xr_parse(g_session, legacy_source);
     ASSERT(legacy_program != NULL);
     xa_analyzer_analyze(legacy, "effect_xrd_native_legacy_byte_contracts.xr", legacy_program);
     ASSERT(analyzer_diag_contains(legacy, "invalid XRD descriptor"));
     ASSERT(analyzer_diag_contains(legacy, "removed byte alias 'Bytes'"));
-    ASSERT(analyzer_diag_contains(legacy, "undefined type 'ByteSpan'"));
+    ASSERT(analyzer_diag_contains(legacy, "undefined type 'ByteSlice'"));
     ASSERT(analyzer_diag_contains(legacy, "undefined type 'ByteView'"));
     xa_analyzer_free(legacy);
 
     XaAnalyzer *span_only = xa_analyzer_new(g_session);
     ASSERT(span_only != NULL);
     const char *span_only_source = "import { spanOnly } from \"native_legacy_bytespan_only\"\n"
-                                   "fn viaSpan(input: Slice<byte>) { spanOnly(input) }\n";
+                                   "fn viaSlice(input: Slice<byte>) { spanOnly(input) }\n";
     AstNode *span_only_program = xr_parse(g_session, span_only_source);
     ASSERT(span_only_program != NULL);
     xa_analyzer_analyze(span_only, "effect_xrd_legacy_bytespan_only.xr", span_only_program);
     ASSERT(analyzer_diag_contains(span_only, "invalid XRD descriptor"));
-    ASSERT(analyzer_diag_contains(span_only, "removed byte alias 'ByteSpan'"));
+    ASSERT(analyzer_diag_contains(span_only, "removed byte alias 'ByteSlice'"));
     xa_analyzer_free(span_only);
 
     XaAnalyzer *view_only = xa_analyzer_new(g_session);

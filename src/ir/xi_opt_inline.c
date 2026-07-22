@@ -276,7 +276,7 @@ static const XiCallArgPlan *inline_outer_place_origin(const XiValue *outer_call,
         return NULL;
     for (uint16_t i = 0; i < plan->nargs; i++) {
         const XiCallArgPlan *arg = &plan->args[i];
-        if (arg->param_mode == XR_PARAM_REF && arg->place == place)
+        if (arg->place == place)
             return arg;
     }
     return NULL;
@@ -291,7 +291,7 @@ static void inline_remap_call_place_origins(XiFunc *caller, XiValue *cloned,
     for (uint16_t i = 0; i < plan->nargs; i++) {
         XiCallArgPlan *arg = &plan->args[i];
         XiValue *place = arg->place;
-        if (arg->param_mode != XR_PARAM_REF || !place)
+        if (!place)
             continue;
 
         const XiCallArgPlan *outer = inline_outer_place_origin(outer_call, place);
@@ -340,6 +340,7 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
         else
             cloned->args[a] = orig_arg; /* external reference (e.g. caller value) */
     }
+    xi_value_rebase_view_evidence(cloned);
     if (!xi_value_clone_call_plan(caller, cloned, src))
         return NULL;
     inline_remap_call_place_origins(caller, cloned, outer_call);

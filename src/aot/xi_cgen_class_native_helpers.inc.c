@@ -3891,8 +3891,12 @@ static void emit_class_native_boxed_adapter(XiCgenCtx *ctx, FILE *out, const cha
     /* Unit-returning methods have no C result to capture; call as a
      * statement and hand back null (ctype_str(VOID) would otherwise
      * mistype `XrValue _result = <void call>`). */
+    XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
+    bool ret_is_aggregate = ret_value_rep.kind == XAOT_VALUE_AGGREGATE;
     if (ret_rep == XR_REP_VOID) {
         fprintf(out, "    ");
+    } else if (ret_is_aggregate) {
+        fprintf(out, "    %s _result = ", cg_func_return_abi_c_type(ctx, f));
     } else if (ret_rep != XR_REP_TAGGED) {
         fprintf(out, "    %s _result = ", ctype_str(ret_rep));
     } else {
@@ -3904,16 +3908,18 @@ static void emit_class_native_boxed_adapter(XiCgenCtx *ctx, FILE *out, const cha
     fprintf(out, "*)p0.ptr");
     for (uint16_t i = 1; i < f->nparams; i++) {
         fprintf(out, ", ");
-        XrRep rep = cg_func_param_abi_rep(ctx, f, i);
-        const XrType *param_type = f->params && f->params[i] ? f->params[i]->type : NULL;
-        const char *param_suffix =
-            emit_conversion_prefix_ctx(ctx, out, param_type, XR_REP_TAGGED, rep);
-        fprintf(out, "p%u", (unsigned) i);
-        emit_conversion_suffix(out, param_suffix);
+        char param_expr[32];
+        snprintf(param_expr, sizeof(param_expr), "p%u", i);
+        emit_boxed_value_as_func_param_abi(ctx, out, f, i, param_expr);
     }
     fprintf(out, ");\n");
     if (ret_rep == XR_REP_VOID) {
         fprintf(out, "    return XR_NULL_VAL;\n");
+        fprintf(out, "}\n\n");
+        return;
+    }
+    if (ret_is_aggregate && cg_value_rep_is_span_aggregate(ret_value_rep)) {
+        fprintf(out, "    return xrt_span_box_value(_result);\n");
         fprintf(out, "}\n\n");
         return;
     }
@@ -3976,10 +3982,14 @@ static bool emit_class_native_typed_boxed_adapter(XiCgenCtx *ctx, FILE *out, con
     }
 
     XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
+    XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
+    bool ret_is_aggregate = ret_value_rep.kind == XAOT_VALUE_AGGREGATE;
     /* Unit-returning functions: call as a statement and return null —
      * ctype_str(VOID) would otherwise mistype `XrValue _result = <void>`. */
     if (ret_rep == XR_REP_VOID)
         fprintf(out, "    ");
+    else if (ret_is_aggregate)
+        fprintf(out, "    %s _result = ", cg_func_return_abi_c_type(ctx, f));
     else if (ret_rep != XR_REP_TAGGED)
         fprintf(out, "    %s _result = ", ctype_str(ret_rep));
     else
@@ -4001,6 +4011,11 @@ static bool emit_class_native_typed_boxed_adapter(XiCgenCtx *ctx, FILE *out, con
 
     if (ret_rep == XR_REP_VOID) {
         fprintf(out, "    return XR_NULL_VAL;\n");
+        fprintf(out, "}\n\n");
+        return true;
+    }
+    if (ret_is_aggregate && cg_value_rep_is_span_aggregate(ret_value_rep)) {
+        fprintf(out, "    return xrt_span_box_value(_result);\n");
         fprintf(out, "}\n\n");
         return true;
     }
@@ -4730,8 +4745,13 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
             emit_conversion_suffix(out, conv_suffix);
     } else {
         const XrType *ret_type = mfunc && mfunc->return_type ? mfunc->return_type : v->type;
-        const char *conv_suffix = emit_conversion_prefix_ctx(ctx, out, ret_type, XR_REP_TAGGED,
-                                                             cg_value_plan_storage_rep(ctx, v));
+        bool span_result = cg_value_plan_is_span_aggregate(ctx, v);
+        const char *conv_suffix =
+            span_result ? NULL
+                        : emit_conversion_prefix_ctx(ctx, out, ret_type, XR_REP_TAGGED,
+                                                     cg_value_plan_storage_rep(ctx, v));
+        if (span_result)
+            fprintf(out, "xrt_span_from_value_ref(");
         emit_typed_abi_fname(ctx, out, method_prefix ? method_prefix : prefix, mfunc);
         fprintf(out, "(NULL");
         for (uint16_t a = 0; a < v->nargs; a++) {
@@ -4739,6 +4759,8 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
             emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_TAGGED);
         }
         fprintf(out, ")");
+        if (span_result)
+            fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
     }
     return true;

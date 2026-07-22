@@ -1,0 +1,10 @@
+import mem
+
+var guard = 0
+var p = mem.mutPtr<byte>(0)
+unsafe {
+    mem.withSliceMut<byte>(p, 0, ref guard, fn(view: ref Slice<byte>) {
+        var escaped = Array<Slice<byte>>()
+        escaped.push(view)
+    })
+}

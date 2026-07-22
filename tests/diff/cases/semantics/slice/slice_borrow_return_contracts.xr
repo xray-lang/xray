@@ -1,0 +1,33 @@
+fn tail(data: Slice<byte>) -> Slice<byte> {
+    return data[1:]
+}
+
+fn throughValue(transform: (Slice<byte>) -> Slice<byte>, data: Slice<byte>) -> Slice<byte> {
+    return transform(data)
+}
+
+interface TailView {
+    tail(data: Slice<byte>) -> Slice<byte>
+}
+
+class TailImpl implements TailView {
+    tail(data: Slice<byte>) -> Slice<byte> {
+        return data[2:]
+    }
+}
+
+fn throughInterface(provider: TailView, data: Slice<byte>) -> Slice<byte> {
+    return provider.tail(data)
+}
+
+fn run() {
+    var owner: Array<byte> = [10, 20, 30, 40]
+    var source: Slice<byte> = owner[:]
+    var viaValue = throughValue(tail, source)
+    print(viaValue[0])
+    var provider = TailImpl()
+    var viaInterface = throughInterface(provider, source)
+    print(viaInterface[0])
+}
+
+run()

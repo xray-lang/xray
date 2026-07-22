@@ -1108,8 +1108,8 @@ static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *
 /* Read array element at index `idx` (caller must have verified bounds). */
 static XiValue *lower_match_elem_get(XiLower *l, XiValue *subject, int idx) {
     struct XrType *et =
-        (subject->type && (XR_TYPE_IS_ARRAY(subject->type) || XR_TYPE_IS_VIEW(subject->type) ||
-                           XR_TYPE_IS_SPAN(subject->type)))
+        (subject->type && (XR_TYPE_IS_ARRAY(subject->type) || XR_TYPE_IS_SLICE(subject->type) ||
+                           XR_TYPE_IS_SLICE(subject->type)))
             ? subject->type->container.element_type
             : NULL;
     XiValue *iv = xi_const_int(l->func, l->cur_block, idx, l->type_int);
@@ -1411,13 +1411,13 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
         }
         if (ap->rest_name) {
             struct XrType *rest_type = l->type_any;
-            if (subject->type && XR_TYPE_IS_SPAN(subject->type)) {
+            if (subject->type && XR_TYPE_IS_SLICE(subject->type)) {
                 rest_type = subject->type;
-            } else if (subject->type && XR_TYPE_IS_VIEW(subject->type)) {
+            } else if (subject->type && XR_TYPE_IS_SLICE(subject->type)) {
                 rest_type = subject->type;
             } else if (subject->type && XR_TYPE_IS_ARRAY(subject->type)) {
                 struct XrType *elem = subject->type->container.element_type;
-                rest_type = xr_type_new_span(l->isolate, elem ? elem : xr_type_new_unknown(NULL));
+                rest_type = xr_type_new_slice(l->isolate, elem ? elem : xr_type_new_unknown(NULL));
             }
             XiValue *start = xi_const_int(l->func, l->cur_block, ap->count, l->type_int);
             XiValue *end = lower_match_array_len(l, subject);
@@ -2263,7 +2263,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
 /* ========== For-In Dispatcher ========== */
 
 /* Whether the collection's static type is iterable via the fast
- * length + INDEX_GET path. Only Array, Span and Set qualify: those
+ * length + INDEX_GET path. Only Array, Slice and Set qualify: those
  * have integer indexable layouts that produce the loop variable's
  * canonical type directly. Map / Json instead route through the
  * iterator() / hasNext() / next() protocol, which lets `for (k in m)`
@@ -2273,8 +2273,7 @@ static bool is_index_iterable_collection(XiLower *l, AstNode *coll_node) {
     struct XrType *t = xi_lower_node_type(l, coll_node);
     if (!t || t->kind == XR_KIND_UNKNOWN)
         return true; /* unknown: assume builtin for backward compat */
-    return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_VIEW || t->kind == XR_KIND_SPAN ||
-           t->kind == XR_KIND_SET;
+    return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_SLICE || t->kind == XR_KIND_SET;
 }
 
 static void lower_for_in_channel_loop(XiLower *l, AstNode *node, XiValue *coll) {
@@ -3171,8 +3170,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
         bool is_array_factory = init_val->op == XI_CALL_BUILTIN && init_val->aux &&
                                 strcmp((const char *) init_val->aux, "array_with_capacity") == 0;
         if ((init_val->op == XI_ARRAY_NEW || is_array_factory) &&
-            (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type)) &&
-            type->container.element_type) {
+            (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type)) && type->container.element_type) {
             uint8_t tid = xr_type_to_tid(type->container.element_type);
             init_val->type = type;
             init_val->aux_int = (int64_t) (tid << 2);

@@ -6,10 +6,10 @@ class Box {
     }
 }
 
-fn fillBoxes(boxes: Array<Box>, replacement: Box) -> int {
+fn fillBoxes(boxes: ref Array<Box>, replacement: Box) -> int {
     boxes.fill(replacement, 1, 3)
     return boxes[0].value + boxes[1].value + boxes[2].value
 }
 
 var boxes: Array<Box> = [Box(1), Box(2), Box(3), Box(4)]
-print(fillBoxes(boxes, Box(9)))
+print(fillBoxes(ref boxes, Box(9)))

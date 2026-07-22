@@ -8,14 +8,16 @@ extern "C" { fn malloc(n: uintsize) -> MutPtr<int32> }
 type Op = CFn<(int, MutPtr<int32>, int) -> int>
 
 fn opConst(pc: int, stack: MutPtr<int32>, sp: int) -> int {
-    unsafe { stack[sp] = 42 }
+    var target = stack
+    unsafe { target[sp] = 42 }
     return sp + 1
 }
 
 fn opAdd(pc: int, stack: MutPtr<int32>, sp: int) -> int {
-    var b = unsafe { stack[sp - 1] }
-    var a = unsafe { stack[sp - 2] }
-    unsafe { stack[sp - 2] = a + b }
+    var target = stack
+    var b = unsafe { target[sp - 1] }
+    var a = unsafe { target[sp - 2] }
+    unsafe { target[sp - 2] = a + b }
     return sp - 1
 }
 

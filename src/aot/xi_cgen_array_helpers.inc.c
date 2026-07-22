@@ -23,7 +23,7 @@ static void cg_emit_static_fixed_array_name(XiCgenCtx *ctx, FILE *out, const XiM
 
 static bool cg_value_type_is_span(const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
-    return v && v->type && v->type->kind == XR_KIND_SPAN;
+    return v && v->type && v->type->kind == XR_KIND_SLICE;
 }
 
 static bool cg_value_type_is_fixed_array(const XiValue *value) {
@@ -2572,7 +2572,7 @@ static bool emit_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
 static bool cg_span_elem_info_from_value(XiCgenCtx *ctx, const XiValue *value,
                                          CgArrayElemInfo *out) {
     const XiValue *v = cg_unwrap_identity_value(value);
-    if (!v || !v->type || v->type->kind != XR_KIND_SPAN)
+    if (!v || !v->type || v->type->kind != XR_KIND_SLICE)
         return false;
     return cg_array_elem_info_from_type_ctx(ctx, v->type, out);
 }
@@ -3432,16 +3432,16 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
         case XI_BYTE_SLICE_STORE_F64:
         case XI_BYTE_SLICE_FILL:
         case XI_BYTE_SLICE_REPEAT:
-        case XI_SPAN_WINDOW:
-        case XI_SPAN_AS_BYTES:
-        case XI_SPAN_FILL:
-        case XI_SPAN_REINTERPRET:
+        case XI_SLICE_WINDOW:
+        case XI_SLICE_AS_BYTES:
+        case XI_SLICE_FILL:
+        case XI_SLICE_REINTERPRET:
         case XI_ARRAY_DATA_PTR:
         case XI_BYTE_ARRAY_COPY_WITHIN:
         case XI_BYTE_ARRAY_REPEAT_FROM:
             return arg_index == 0;
-        case XI_SPAN_COPY:
-        case XI_SPAN_COMPARE:
+        case XI_SLICE_COPY:
+        case XI_SLICE_COMPARE:
         case XI_BYTE_SLICE_COPY:
         case XI_BYTE_SLICE_COMPARE:
         case XI_BYTE_SLICE_COMMON_PREFIX:
@@ -3827,15 +3827,15 @@ static bool cg_array_index_access_bounds_proven(XiCgenCtx *ctx, const XiFunc *f,
     return plan != NULL && plan->evidence != 0;
 }
 
-static const XaotSpanAccessPlan *cg_span_index_access_plan(XiCgenCtx *ctx, const XiValue *v,
-                                                           uint8_t kind) {
-    const XaotSpanAccessPlan *plan = xaot_bundle_find_span_access_plan(cg_ctx_aot_bundle(ctx), v);
+static const XaotSliceAccessPlan *cg_span_index_access_plan(XiCgenCtx *ctx, const XiValue *v,
+                                                            uint8_t kind) {
+    const XaotSliceAccessPlan *plan = xaot_bundle_find_span_access_plan(cg_ctx_aot_bundle(ctx), v);
     return plan && plan->kind == kind ? plan : NULL;
 }
 
 static bool cg_span_index_plan_drops(XiCgenCtx *ctx, const XiValue *v, uint8_t kind,
                                      uint32_t drops) {
-    const XaotSpanAccessPlan *plan = cg_span_index_access_plan(ctx, v, kind);
+    const XaotSliceAccessPlan *plan = cg_span_index_access_plan(ctx, v, kind);
     return plan && (plan->eliminated_checks & drops) == drops;
 }
 
@@ -3844,7 +3844,7 @@ static bool cg_span_index_bounds_proven(XiCgenCtx *ctx, const XiFunc *f, const X
     (void) f;
     if (v && (v->op == XI_INDEX_GET || v->op == XI_INDEX_SET) && (v->aux_int & 1))
         return true;
-    return cg_span_index_plan_drops(ctx, v, kind, XAOT_SPAN_DROP_BOUNDS);
+    return cg_span_index_plan_drops(ctx, v, kind, XAOT_SLICE_DROP_BOUNDS);
 }
 
 static void emit_typed_array_store_value(XiCgenCtx *ctx, FILE *out, const CgArrayElemInfo *info,
@@ -4242,8 +4242,11 @@ static bool emit_span_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         return false;
 
     XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
-    bool unchecked = cg_span_index_bounds_proven(ctx, f, v, XAOT_SPAN_ACCESS_INDEX_GET);
+    bool unchecked = cg_span_index_bounds_proven(ctx, f, v, XAOT_SLICE_ACCESS_INDEX_GET);
     const XaotValuePlan *_v_plan = cg_value_plan(ctx, v);
+    bool struct_aggregate =
+        _v_plan && cg_value_rep_is_struct_aggregate(_v_plan->rep) && _v_plan->rep.c_type;
+    const XrAggregateLayout *borrowed_struct_layout = cg_type_struct_layout(v->type);
     bool _v_is_adt_agg = _v_plan && cg_value_rep_is_typed_adt_aggregate(_v_plan->rep);
     bool borrowed_tagged = !_v_is_adt_agg && target_rep == XR_REP_TAGGED &&
                            info.rep == XR_REP_TAGGED &&
@@ -4254,6 +4257,25 @@ static bool emit_span_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     fprintf(out, "; int64_t _idx = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     fprintf(out, "; ");
+    if (struct_aggregate) {
+        if (!unchecked)
+            fprintf(out, "if (XR_UNLIKELY(_idx < 0 || _idx >= _s.length)) "
+                         "xrt_index_oob(_idx, _s.length); ");
+        fprintf(out, "((%s*)_s.data)[_idx]; })", _v_plan->rep.c_type);
+        return true;
+    }
+    if (borrowed_struct_layout && cg_struct_native_heap_supported(borrowed_struct_layout)) {
+        char type_name[128];
+        cg_struct_heap_type_name(type_name, sizeof(type_name), NULL, borrowed_struct_layout);
+        if (!unchecked)
+            fprintf(out, "if (XR_UNLIKELY(_idx < 0 || _idx >= _s.length)) "
+                         "xrt_index_oob(_idx, _s.length); ");
+        fprintf(out,
+                "xr_aggregate_ref((void *)&((%s*)_s.data)[_idx], "
+                "(uint16_t)sizeof(%s)); })",
+                type_name, type_name);
+        return true;
+    }
     if (!unchecked)
         fprintf(out, "XR_LIKELY(_idx >= 0 && _idx < _s.length) ? ");
     if (info.rep == XR_REP_F64) {
@@ -4284,9 +4306,9 @@ static bool emit_span_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         !cg_span_elem_info_from_value(ctx, v->args[0], &info))
         return false;
 
-    bool unchecked = cg_span_index_bounds_proven(ctx, f, v, XAOT_SPAN_ACCESS_INDEX_SET);
+    bool unchecked = cg_span_index_bounds_proven(ctx, f, v, XAOT_SLICE_ACCESS_INDEX_SET);
     bool skip_readonly =
-        cg_span_index_plan_drops(ctx, v, XAOT_SPAN_ACCESS_INDEX_SET, XAOT_SPAN_DROP_READONLY);
+        cg_span_index_plan_drops(ctx, v, XAOT_SLICE_ACCESS_INDEX_SET, XAOT_SLICE_DROP_READONLY);
     fprintf(out, "({ xr_span_t _s = ");
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _idx = ");
@@ -4296,7 +4318,7 @@ static bool emit_span_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         fprintf(out, "if (XR_UNLIKELY(xrt_span_is_readonly(_s))) ");
         fprintf(
             out,
-            "xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Span\"); ");
+            "xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, \"cannot write through readonly Slice\"); ");
     }
     if (!unchecked)
         fprintf(out, "if (XR_LIKELY(_idx >= 0 && _idx < _s.length)) { ");
@@ -4305,7 +4327,7 @@ static bool emit_span_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     fprintf(out, "; ");
     if (info.rep == XR_REP_TAGGED)
         fprintf(out,
-                "/* Span writes through owner storage; owner barrier metadata is unchanged. */ ");
+                "/* Slice writes through owner storage; owner barrier metadata is unchanged. */ ");
     if (!unchecked)
         fprintf(out, "} else { xrt_index_oob(_idx, _s.length); } ");
     fprintf(out, "XR_NULL_VAL; })");
@@ -4789,7 +4811,7 @@ static bool cg_span_common_prefix_trusted_nothrow(XiCgenCtx *ctx, const XiValue 
     const XiValue *v = cg_unwrap_identity_value(value);
     if (!v || v->op != XI_BYTE_SLICE_COMMON_PREFIX || v->nargs != 2)
         return false;
-    return cg_span_plan_drops(ctx, v, XAOT_SPAN_ACCESS_BYTE_COMMON_PREFIX, XAOT_SPAN_DROP_HELPER);
+    return cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_COMMON_PREFIX, XAOT_SLICE_DROP_HELPER);
 }
 
 static bool cg_array_err_check_after_direct_byte_array_mutator_trusted(XiCgenCtx *ctx,

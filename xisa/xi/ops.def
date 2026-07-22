@@ -766,7 +766,7 @@
   :own-use borrow
   :effects (side-effect may-throw memory-write)
   :requires (byte-slice bounds)
-  :observable (span-fill)
+  :observable (slice-fill)
   :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.byte.slice.copy
@@ -776,7 +776,7 @@
   :own-use borrow
   :effects (side-effect may-throw memory-read memory-write)
   :requires (byte-slice bounds overlap-safe)
-  :observable (span-copy)
+  :observable (slice-copy)
   :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.byte.slice.compare
@@ -785,7 +785,7 @@
   :own-use borrow
   :effects (may-throw memory-read)
   :requires (byte-slice bounds)
-  :observable (span-compare)
+  :observable (slice-compare)
   :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.byte.slice.common.prefix
@@ -794,7 +794,7 @@
   :own-use borrow
   :effects (may-throw memory-read)
   :requires (byte-slice bounds)
-  :observable (span-common-prefix)
+  :observable (slice-common-prefix)
   :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.byte.slice.repeat
@@ -804,66 +804,76 @@
   :own-use borrow
   :effects (side-effect may-throw memory-read memory-write)
   :requires (byte-slice bounds overlap-repeat)
-  :observable (span-repeat)
+  :observable (slice-repeat)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.span.window
+(define-xi-op xi.slice.window
   :class memory-read
   :arity 3
   :result-ownership borrowed
   :own-use borrow
   :effects (may-throw memory-read)
-  :requires (span bounds)
-  :observable (span-window)
+  :requires (slice bounds)
+  :observable (slice-window)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.span.as.bytes
+(define-xi-op xi.slice.from.ptr
+  :class memory-read
+  :arity 3
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (may-throw memory-read)
+  :requires (unsafe-assumption pointer-layout owner-lifetime)
+  :observable (slice-from-pointer)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.slice.as.bytes
   :class memory-read
   :arity 1
   :result-ownership borrowed
   :own-use borrow
   :effects (may-throw)
-  :requires (span pod)
-  :observable (span-as-bytes)
+  :requires (slice pod)
+  :observable (slice-as-bytes)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.span.fill
+(define-xi-op xi.slice.fill
   :class memory-write
   :arity 2
   :result-ownership borrowed
   :own-use borrow
   :effects (side-effect may-throw memory-write)
-  :requires (span pod bounds)
-  :observable (span-fill)
+  :requires (slice pod bounds)
+  :observable (slice-fill)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.span.copy
+(define-xi-op xi.slice.copy
   :class memory-write
   :arity 2
   :result-ownership borrowed
   :own-use borrow
   :effects (side-effect may-throw memory-read memory-write)
-  :requires (span pod same-element bounds overlap-safe)
-  :observable (span-copy)
+  :requires (slice pod same-element bounds overlap-safe)
+  :observable (slice-copy)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.span.compare
+(define-xi-op xi.slice.compare
   :class memory-read
   :arity 2
   :own-use borrow
   :effects (may-throw memory-read)
-  :requires (span pod same-element bounds)
-  :observable (span-compare)
+  :requires (slice pod same-element bounds)
+  :observable (slice-compare)
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.span.reinterpret
+(define-xi-op xi.slice.reinterpret
   :class memory-read
   :arity 1
   :result-ownership borrowed
   :own-use borrow
   :effects (may-throw)
   :requires (byte-slice pod aligned-length)
-  :observable (span-reinterpret)
+  :observable (slice-reinterpret)
   :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.byte.array.copy.within

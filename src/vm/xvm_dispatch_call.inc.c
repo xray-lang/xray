@@ -943,7 +943,7 @@ vmcase(OP_RETURN1) {
         if (!vm_rescue_array_ref_to_ret_arena(vm_ctx, return_slot)) {
             VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to rescue fixed array return value");
         }
-    } else if (return_slot && XR_IS_AGG_REF(ret_val) && !XR_IS_SPAN_REF(ret_val)) {
+    } else if (return_slot && XR_IS_AGG_REF(ret_val) && !XR_IS_SLICE_REF(ret_val)) {
         int sa_idx = VM_FRAME_COUNT - 1;
         if (vm_ctx->struct_areas && sa_idx < vm_ctx->struct_areas_cap) {
             uint8_t *sa = vm_ctx->struct_areas[sa_idx];

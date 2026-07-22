@@ -301,6 +301,78 @@ bool xr_type_has_static_layout(const XrTargetDataLayout *target_layout, const Xr
     return false;
 }
 
+static bool native_all_bit_patterns_valid(uint8_t native_type, const XrAggregateFieldLayout *field,
+                                          uint32_t depth);
+
+static bool layout_all_bit_patterns_valid(const XrAggregateLayout *layout, uint32_t depth) {
+    if (!layout || depth > 16 || layout->field_count > XR_MAX_AGG_FIELDS)
+        return false;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const XrAggregateFieldLayout *field = &layout->fields[i];
+        if (field->is_flexible ||
+            !native_all_bit_patterns_valid(field->native_type, field, depth + 1))
+            return false;
+    }
+    return true;
+}
+
+static bool native_all_bit_patterns_valid(uint8_t native_type, const XrAggregateFieldLayout *field,
+                                          uint32_t depth) {
+    switch (native_type) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
+        case XR_NATIVE_ISIZE:
+        case XR_NATIVE_USIZE:
+        case XR_NATIVE_F32:
+        case XR_NATIVE_F64:
+            return true;
+        case XR_NATIVE_NESTED_AGGREGATE:
+            return field && layout_all_bit_patterns_valid(field->sub_layout, depth + 1);
+        case XR_NATIVE_ARRAY:
+            return field && field->elem_count > 0 &&
+                   native_all_bit_patterns_valid(field->elem_native_type, NULL, depth + 1);
+        case XR_NATIVE_BOOL:
+        case XR_NATIVE_POINTER:
+        case XR_NATIVE_STRING:
+        case XR_NATIVE_ARRAY_REF:
+        case XR_NATIVE_MAP_REF:
+        case XR_NATIVE_SET_REF:
+        case XR_NATIVE_VALUE:
+        default:
+            return false;
+    }
+}
+
+bool xr_type_all_bit_patterns_valid(const XrType *type) {
+    if (!type || type->is_nullable)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+            return true;
+        case XR_KIND_FIXED_ARRAY:
+            return type->fixed_array.length > 0 && type->fixed_array.element_type &&
+                   xr_type_all_bit_patterns_valid(type->fixed_array.element_type);
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE: {
+            const XrAggregateLayout *layout = static_layout_struct_from_type(type);
+            return layout_all_bit_patterns_valid(layout, 0);
+        }
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+        case XR_KIND_ENUM:
+        case XR_KIND_POINTER:
+        default:
+            return false;
+    }
+}
+
 bool xr_type_has_static_field_offset(const XrTargetDataLayout *target_layout, const XrType *type,
                                      const char *field_name, uint32_t *out_offset) {
     if (out_offset)

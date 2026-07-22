@@ -219,8 +219,7 @@ static void xa_warn_discarded_sys_os_resource_factory(XaInferContext *ctx, AstNo
 static XrType *xa_view_source_element_type(XrType *type) {
     if (!type)
         return NULL;
-    if ((XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type)) &&
-        type->container.element_type)
+    if ((XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type)) && type->container.element_type)
         return type->container.element_type;
     if (type->kind == XR_KIND_FIXED_ARRAY && type->fixed_array.element_type)
         return type->fixed_array.element_type;
@@ -229,20 +228,13 @@ static XrType *xa_view_source_element_type(XrType *type) {
 
 static bool xa_type_is_span_slice_source(XrType *type) {
     return type &&
-           (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SPAN(type) || type->kind == XR_KIND_FIXED_ARRAY);
+           (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type) || type->kind == XR_KIND_FIXED_ARRAY);
 }
 
 static bool xa_type_is_byte_array_or_span(XrType *type) {
     if (!xa_type_is_span_slice_source(type))
         return false;
     XrType *elem = xa_view_source_element_type(type);
-    return xr_type_is_exact_u8(elem);
-}
-
-static bool xa_type_is_byte_array_or_view(XrType *type) {
-    if (!type || (!XR_TYPE_IS_ARRAY(type) && !XR_TYPE_IS_VIEW(type)))
-        return false;
-    XrType *elem = type->container.element_type;
     return xr_type_is_exact_u8(elem);
 }
 
@@ -275,7 +267,7 @@ static bool xa_enum_payload_contains_by_value(XrType *type, const char *enum_nam
     }
 }
 
-static XrType *xa_span_type_from_view_source(XaInferContext *ctx, XrType *src) {
+static XrType *xa_slice_type_from_source(XaInferContext *ctx, XrType *src) {
     if (!ctx || !ctx->analyzer || !src)
         return xr_type_new_unknown(NULL);
     if (!xa_type_is_span_slice_source(src))
@@ -285,19 +277,7 @@ static XrType *xa_span_type_from_view_source(XaInferContext *ctx, XrType *src) {
         elem = xr_type_new_unknown(NULL);
     if (xa_type_is_byte_array_or_span(src))
         return xr_type_new_u8_slice(ctx->analyzer->isolate);
-    return xr_type_new_span(ctx->analyzer->isolate, elem);
-}
-
-static XrType *xa_storage_view_type_from_source(XaInferContext *ctx, XrType *src) {
-    if (!ctx || !ctx->analyzer || !src)
-        return xr_type_new_unknown(NULL);
-    if (!XR_TYPE_IS_ARRAY(src) && !XR_TYPE_IS_VIEW(src))
-        return xr_type_new_unknown(NULL);
-    XrType *elem =
-        src->container.element_type ? src->container.element_type : xr_type_new_unknown(NULL);
-    if (xa_type_is_byte_array_or_view(src))
-        return xr_type_new_u8_view(ctx->analyzer->isolate);
-    return xr_type_new_view(ctx->analyzer->isolate, elem);
+    return xr_type_new_slice(ctx->analyzer->isolate, elem);
 }
 
 XR_FUNC void xa_report_view_expr_requires_target(XaInferContext *ctx, AstNode *node,
@@ -331,26 +311,12 @@ static XrType *xa_report_invalid_slice_source(XaInferContext *ctx, AstNode *node
 }
 
 static bool xa_span_target_matches_source(XrType *target, XrType *src) {
-    if (!target || !src || !XR_TYPE_IS_SPAN(target))
+    if (!target || !src || !XR_TYPE_IS_SLICE(target))
         return false;
     if (!xa_type_is_span_slice_source(src))
         return false;
     XrType *target_elem = target->container.element_type;
     XrType *src_elem = xa_view_source_element_type(src);
-    if (!target_elem || !src_elem)
-        return true;
-    if (XR_TYPE_IS_UNKNOWN(target_elem) || XR_TYPE_IS_UNKNOWN(src_elem))
-        return true;
-    return xr_type_assignable(target_elem, src_elem) && xr_type_assignable(src_elem, target_elem);
-}
-
-static bool xa_view_target_matches_source(XrType *target, XrType *src) {
-    if (!target || !src || !XR_TYPE_IS_VIEW(target))
-        return false;
-    if (!XR_TYPE_IS_ARRAY(src) && !XR_TYPE_IS_VIEW(src))
-        return false;
-    XrType *target_elem = target->container.element_type;
-    XrType *src_elem = src->container.element_type;
     if (!target_elem || !src_elem)
         return true;
     if (XR_TYPE_IS_UNKNOWN(target_elem) || XR_TYPE_IS_UNKNOWN(src_elem))
@@ -1904,8 +1870,7 @@ XR_FUNC void xa_validate_hashable_key_type(XaInferContext *ctx, XrType *type,
                                           "Set element", loc);
             break;
         case XR_KIND_ARRAY:
-        case XR_KIND_SPAN:
-        case XR_KIND_VIEW:
+        case XR_KIND_SLICE:
         case XR_KIND_CHANNEL:
             xa_validate_hashable_key_type(ctx, type->container.element_type, generic_links, context,
                                           loc);
@@ -1983,8 +1948,6 @@ static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
         *out_links = NULL;
     if (!ctx || !ctx->analyzer || !type)
         return NULL;
-    if (XR_TYPE_IS_POINTER(type) && type->ptr_is_c_view)
-        type = type->container.element_type;
     if (!type || (!XR_TYPE_IS_INSTANCE(type) && !XR_TYPE_IS_CLASS(type)))
         return NULL;
 
@@ -2007,16 +1970,6 @@ static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
             info = links->class_info;
     }
     return info;
-}
-
-static int member_set_layout_field_index(const XrAggregateLayout *layout, const char *name) {
-    if (!layout || !layout->field_names || !name)
-        return -1;
-    for (uint16_t i = 0; i < layout->field_count; i++) {
-        if (layout->field_names[i] && strcmp(layout->field_names[i], name) == 0)
-            return (int) i;
-    }
-    return -1;
 }
 
 XR_FUNC XaSymbol *xa_read_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
@@ -2074,15 +2027,15 @@ XrType *resolve_class_to_type_param(XrVMRuntime *X, XrType *type, const char **t
     }
 
     // Recurse into containers
-    if ((type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW || type->kind == XR_KIND_SPAN) &&
+    if ((type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE) &&
         type->container.element_type) {
         XrType *e =
             resolve_class_to_type_param(X, type->container.element_type, tp_names, tp_count);
         if (e != type->container.element_type) {
-            if (type->kind == XR_KIND_SPAN)
-                return xr_type_new_span(X, e);
-            if (type->kind == XR_KIND_VIEW)
-                return xr_type_new_view(X, e);
+            if (type->kind == XR_KIND_SLICE)
+                return xr_type_new_slice(X, e);
+            if (type->kind == XR_KIND_SLICE)
+                return xr_type_new_slice(X, e);
             return xr_type_new_array(X, e);
         }
     }
@@ -2270,16 +2223,9 @@ XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_type, const
                                             arg_type->container.element_type, tp_name, depth + 1);
     }
 
-    // Span<T> vs Span<int> -> T = int. Owner-to-span conversion is produced
-    // only by target-typed slice/view-producing expressions.
-    if (XR_TYPE_IS_SPAN(param_type) && XR_TYPE_IS_SPAN(arg_type)) {
-        return xa_infer_type_param_from_arg(param_type->container.element_type,
-                                            arg_type->container.element_type, tp_name, depth + 1);
-    }
-
-    // View<T> vs View<int> -> T = int. Owner-to-view conversion is produced by
-    // target-typed slice expressions, not by generic argument matching.
-    if (XR_TYPE_IS_VIEW(param_type) && XR_TYPE_IS_VIEW(arg_type)) {
+    // Slice<T> vs Slice<int> -> T = int. Owner-to-slice conversion is produced
+    // only by target-typed slice-producing expressions.
+    if (XR_TYPE_IS_SLICE(param_type) && XR_TYPE_IS_SLICE(arg_type)) {
         return xa_infer_type_param_from_arg(param_type->container.element_type,
                                             arg_type->container.element_type, tp_name, depth + 1);
     }
@@ -3349,6 +3295,20 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 if (resolved) {
                     xa_analyzer_set_node_type(ctx->analyzer, node, resolved);
                 }
+                if (resolved && XR_TYPE_IS_FUNCTION(resolved) && resolved->function.return_type &&
+                    XR_TYPE_IS_SLICE(resolved->function.return_type) &&
+                    !resolved->function.view_return_complete) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    const char *reason =
+                        resolved->function.view_return_source == XR_VIEW_RETURN_MULTI
+                            ? "borrow-return function type has multiple possible Slice sources; "
+                              "use a single Slice parameter or return an owned value"
+                            : "borrow-return function type has no unique Slice source; use one "
+                              "Slice parameter or return an owned value";
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_MISSING_TYPE, reason, &loc);
+                }
                 sym->alias_type = resolved;
 
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -4367,8 +4327,8 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_in_stmt(XaInferContext *c
         if (collection_type->kind == XR_KIND_FIXED_ARRAY &&
             collection_type->fixed_array.element_type)
             element_type = collection_type->fixed_array.element_type;
-        else if ((XR_TYPE_IS_ARRAY(collection_type) || XR_TYPE_IS_VIEW(collection_type) ||
-                  XR_TYPE_IS_SPAN(collection_type)) &&
+        else if ((XR_TYPE_IS_ARRAY(collection_type) || XR_TYPE_IS_SLICE(collection_type) ||
+                  XR_TYPE_IS_SLICE(collection_type)) &&
                  collection_type->container.element_type)
             element_type = collection_type->container.element_type;
     }
@@ -4952,15 +4912,14 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_expr(ctx, sl->start);
             if (sl->end)
                 xa_visit_infer_expr(ctx, sl->end);
-            /* Array/Span slices are target-typed view-producing expressions.
-             * They no longer choose Span/View/owned semantics by themselves. */
-            if (src && (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_SPAN(src) || XR_TYPE_IS_VIEW(src) ||
+            /* Every safe contiguous view is a scoped Slice<T>. */
+            if (src && (XR_TYPE_IS_ARRAY(src) || XR_TYPE_IS_SLICE(src) ||
                         src->kind == XR_KIND_FIXED_ARRAY)) {
                 XrType *target = ctx->expected_type;
-                if (target && XR_TYPE_IS_SPAN(target)) {
+                if (target && XR_TYPE_IS_SLICE(target)) {
                     xa_check_span_borrow_source_stable(ctx, node, sl->source, "slice expression");
                     result = XR_TYPE_IS_UNKNOWN(target->container.element_type)
-                                 ? xa_span_type_from_view_source(ctx, src)
+                                 ? xa_slice_type_from_source(ctx, src)
                                  : target;
                     if (!xa_span_target_matches_source(result, src)) {
                         XrLocation loc = {
@@ -4973,31 +4932,9 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                     }
-                } else if (target && XR_TYPE_IS_VIEW(target) && src->kind != XR_KIND_FIXED_ARRAY) {
-                    result = XR_TYPE_IS_UNKNOWN(target->container.element_type)
-                                 ? xa_storage_view_type_from_source(ctx, src)
-                                 : target;
-                    if (!xa_view_target_matches_source(result, src)) {
-                        XrLocation loc = {
-                            .file = ctx->file_path, .line = node->line, .column = node->column};
-                        char msg[256];
-                        snprintf(
-                            msg, sizeof(msg),
-                            "slice source type '%s' is not compatible with target view type '%s'",
-                            xr_type_to_string(src), xr_type_to_string(result));
-                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                                   XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-                    }
-                } else if (target && XR_TYPE_IS_VIEW(target)) {
-                    XrLocation loc = {
-                        .file = ctx->file_path, .line = node->line, .column = node->column};
-                    xa_analyzer_add_diagnostic(
-                        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                        "fixed array slices can only produce scoped Span<T>, not View<T>", &loc);
-                    result = xr_type_new_unknown(NULL);
                 } else if (ctx->allow_view_expr_for_copy) {
                     xa_check_span_borrow_source_stable(ctx, node, sl->source, "slice expression");
-                    result = xa_span_type_from_view_source(ctx, src);
+                    result = xa_slice_type_from_source(ctx, src);
                 } else {
                     xa_report_view_expr_requires_target(ctx, node, "slice");
                     result = xr_type_new_unknown(NULL);
@@ -5082,7 +5019,7 @@ void xa_visit_function_body_unified(XaInferContext *ctx, AstNode *body) {
     xa_visit_collect(ctx, body);
 
     // Visit body statements directly (skip xa_visit_block_stmt) while still
-    // exposing a statement cursor for Span last-use analysis.
+    // exposing a statement cursor for Slice last-use analysis.
     xa_visit_inline_statement_sequence_with_cursor(ctx, body);
 }
 
@@ -5176,15 +5113,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType *ca_obj_type = NULL;
             if (ca->object)
                 ca_obj_type = xa_visit_infer_expr(ctx, ca->object);
-            if (ca_obj_type && XR_TYPE_IS_POINTER(ca_obj_type) && ca_obj_type->ptr_is_c_view &&
-                !ca_obj_type->ptr_is_mut) {
-                XrLocation loc = {
-                    .file = ctx->file_path, .line = node->line, .column = node->column};
-                xa_analyzer_add_diagnostic(
-                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
-                    "cannot assign through a const mem.view created from Ptr<T>; use MutPtr<T>",
-                    &loc);
-            }
             // Tuples are immutable: reject compound assignment on tuple fields
             if (ca_obj_type && XR_TYPE_IS_TUPLE(ca_obj_type)) {
                 XrLocation loc = {
@@ -5260,15 +5188,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Infer types for member set expression
             MemberSetNode *ms = &node->as.member_set;
             XrType *obj_type = xa_visit_infer_expr(ctx, ms->object);
-            bool is_c_view = obj_type && XR_TYPE_IS_POINTER(obj_type) && obj_type->ptr_is_c_view;
-            if (is_c_view && !obj_type->ptr_is_mut) {
-                XrLocation loc = {
-                    .file = ctx->file_path, .line = node->line, .column = node->column};
-                xa_analyzer_add_diagnostic(
-                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
-                    "cannot assign through a const mem.view created from Ptr<T>; use MutPtr<T>",
-                    &loc);
-            }
             XaSymbol *readonly_root = xa_root_variable_symbol_for_expr(ctx, ms->object);
             bool readonly_object = xr_type_is_const(obj_type);
             if ((readonly_root && (readonly_root->is_readonly_binding ||
@@ -5343,29 +5262,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                                                            class_links, fl->type);
                             if (member_type && !XR_TYPE_IS_UNKNOWN(member_type))
                                 ctx->expected_type = member_type;
-                        }
-                    }
-                    if (is_c_view && class_info->struct_layout) {
-                        int field_index =
-                            member_set_layout_field_index(class_info->struct_layout, ms->member);
-                        if (field_index >= 0) {
-                            XrAggregateFieldLayout *layout_field =
-                                &class_info->struct_layout->fields[field_index];
-                            if (layout_field->is_flexible ||
-                                layout_field->native_type == XR_NATIVE_ARRAY ||
-                                layout_field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
-                                XrLocation loc = {.file = ctx->file_path,
-                                                  .line = node->line,
-                                                  .column = node->column};
-                                char msg[256];
-                                snprintf(msg, sizeof(msg),
-                                         "C view field '%s.%s' cannot be assigned as a whole; "
-                                         "write through a validated element or nested projection",
-                                         class_info->name ? class_info->name : "?",
-                                         ms->member ? ms->member : "?");
-                                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                                           XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
-                            }
                         }
                     }
                 }
@@ -5662,13 +5558,23 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                               ? xa_analyzer_get_links(ctx->analyzer, fn_sym)
                                               : NULL;
                 if (fn_links) {
-                    fn_links->return_storage_domain = ctx->return_storage_domain;
-                    fn_links->return_storage_known = ctx->return_storage_known &&
-                                                     !ctx->return_storage_mixed &&
-                                                     !ctx->return_storage_unknown;
-                    fn_links->return_storage_mixed =
-                        ctx->return_storage_mixed ||
-                        (ctx->return_storage_known && ctx->return_storage_unknown);
+                    XrType *return_type = fn_links->return_type;
+                    if (!xa_type_has_movable_root(return_type)) {
+                        /* Inline/value returns have no storage owner to join.
+                         * Their literal/local/call paths are representation
+                         * choices, not mixed ownership domains. */
+                        fn_links->return_storage_domain = XR_STORAGE_DOMAIN_UNKNOWN;
+                        fn_links->return_storage_known = false;
+                        fn_links->return_storage_mixed = false;
+                    } else {
+                        fn_links->return_storage_domain = ctx->return_storage_domain;
+                        fn_links->return_storage_known = ctx->return_storage_known &&
+                                                         !ctx->return_storage_mixed &&
+                                                         !ctx->return_storage_unknown;
+                        fn_links->return_storage_mixed =
+                            ctx->return_storage_mixed ||
+                            (ctx->return_storage_known && ctx->return_storage_unknown);
+                    }
                     fn_links->return_storage_scanned = true;
                     fn_links->return_storage_scan_in_progress = false;
                 }
@@ -5907,7 +5813,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             /*
              * Unified for-in type inference rules:
              *   Array<T>   → item: T
-             *   Span<T>    → item: T
+             *   Slice<T>    → item: T
              *   Map<K,V>   → item: Json (entry), or k: K, v: V
              *   Set<T>     → item: T
              *   Range      → item: int
@@ -5979,8 +5885,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     fi->domain_kind = XR_FOR_IN_DOMAIN_ENUM_PAYLOADS;
                     item_type = xr_type_new_enum_metadata(ctx->analyzer->isolate,
                                                           XR_ENUM_PAYLOAD_FIELD_TYPE_NAME, owner);
-                } else if (XR_TYPE_IS_ARRAY(coll_type) || XR_TYPE_IS_VIEW(coll_type) ||
-                           XR_TYPE_IS_SPAN(coll_type)) {
+                } else if (XR_TYPE_IS_ARRAY(coll_type) || XR_TYPE_IS_SLICE(coll_type) ||
+                           XR_TYPE_IS_SLICE(coll_type)) {
                     if (coll_type->container.element_type) {
                         item_type = coll_type->container.element_type;
                     }
@@ -6257,8 +6163,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 index_type = xa_visit_infer_expr(ctx, is->index);
             XrType *value_expected = NULL;
             if (array_type) {
-                if ((XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_VIEW(array_type) ||
-                     XR_TYPE_IS_SPAN(array_type)) &&
+                if ((XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_SLICE(array_type) ||
+                     XR_TYPE_IS_SLICE(array_type)) &&
                     array_type->container.element_type) {
                     value_expected = array_type->container.element_type;
                 } else if (array_type->kind == XR_KIND_FIXED_ARRAY &&
@@ -6324,7 +6230,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
             }
-            if (array_type && (XR_TYPE_IS_SPAN(array_type) || XR_TYPE_IS_VIEW(array_type))) {
+            if (array_type && XR_TYPE_IS_SLICE(array_type)) {
                 XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, is->array);
                 if (root && (root->is_const || xa_symbol_has_shared_provenance(root))) {
                     XrLocation loc = {
@@ -6341,7 +6247,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                                XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                 }
             }
-            if (array_type && !(XR_TYPE_IS_SPAN(array_type) || XR_TYPE_IS_VIEW(array_type))) {
+            if (array_type && !XR_TYPE_IS_SLICE(array_type)) {
                 XaSymbol *root = xa_root_variable_symbol_for_expr(ctx, is->array);
                 bool readonly_array = xr_type_is_const(array_type);
                 if ((root &&
@@ -6429,8 +6335,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                            "literal key",
                                            &loc);
             } else if (array_type &&
-                       (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_VIEW(array_type) ||
-                        XR_TYPE_IS_SPAN(array_type) || array_type->kind == XR_KIND_FIXED_ARRAY)) {
+                       (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_SLICE(array_type) ||
+                        XR_TYPE_IS_SLICE(array_type) || array_type->kind == XR_KIND_FIXED_ARRAY)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type)) {
@@ -6442,8 +6348,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
                 XrType *elem_type = NULL;
-                if ((XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_VIEW(array_type) ||
-                     XR_TYPE_IS_SPAN(array_type)) &&
+                if ((XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_SLICE(array_type) ||
+                     XR_TYPE_IS_SLICE(array_type)) &&
                     array_type->container.element_type) {
                     elem_type = array_type->container.element_type;
                 } else if (array_type->kind == XR_KIND_FIXED_ARRAY) {

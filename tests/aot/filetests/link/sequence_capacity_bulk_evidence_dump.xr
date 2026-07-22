@@ -1,4 +1,5 @@
-fn touch(xs: Array<int>, b: Array<byte>, s: string, span: Slice<byte>, sb: StringBuilder) -> int {
+fn touch(xs: ref Array<int>, b: ref Array<byte>, s: string, span: Slice<byte>,
+         sb: ref StringBuilder) -> int {
     xs.push(1)
     var first = xs[0]
     var part: Slice<int> = xs[0:1]

@@ -8,9 +8,9 @@ extern "C" {
 
 fn run() {
     var buffer = mem.alloc(mem.sizeOf<Header>())
-    var view = unsafe { mem.view<Header>(buffer.borrowPtr()) }
+    var view = unsafe { mem.slice<Header>(buffer.borrowPtr(), 1, buffer) }
     buffer.resize(32)
-    print(view.value)
+    print(len(view))
 }
 
 run()

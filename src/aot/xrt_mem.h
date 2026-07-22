@@ -118,7 +118,7 @@ static inline xr_span_t xrt_buffer_bytes_view(XrValue value, int readonly) {
     out.elem_size = 1;
     out.elem_tid = 0;
     out.contains_refs = 0;
-    out.flags = readonly ? XRT_SPAN_FLAG_READONLY : 0;
+    out.flags = readonly ? XRT_SLICE_FLAG_READONLY : 0;
     return out;
 }
 

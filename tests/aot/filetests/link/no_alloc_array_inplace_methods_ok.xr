@@ -1,5 +1,5 @@
 @no_alloc
-fn xray_no_alloc_array_inplace_methods_ok(values: Array<int>) -> int {
+fn xray_no_alloc_array_inplace_methods_ok(values: ref Array<int>) -> int {
     values.reverse()
     values.fill(4, 1, 3)
     var first = values.shift() ?? 0
@@ -11,4 +11,4 @@ fn xray_no_alloc_array_inplace_methods_ok(values: Array<int>) -> int {
 }
 
 var xray_no_alloc_array_inplace_values: Array<int> = [3, 1, 2, 1]
-print(xray_no_alloc_array_inplace_methods_ok(xray_no_alloc_array_inplace_values))
+print(xray_no_alloc_array_inplace_methods_ok(ref xray_no_alloc_array_inplace_values))

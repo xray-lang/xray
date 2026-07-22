@@ -5,10 +5,8 @@ contains="stdlib_objects": []
 contains="system_libs": []
 contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
 c_contains=#include "xrt_core_freestanding.h"
-c_contains=static XrValue xrt_shared[2] = {
-c_contains=[0] = XR_FROM_INT(INT64_C(41)),
 c_contains=xray_shared_magic
-c_contains=xrt_shared[0]
-c_not_contains=xrt_shared[0] = XR_FROM_INT(INT64_C(41))
+c_contains=return INT64_C(42);
+c_not_contains=xrt_shared[
 not_contains=xray_rt_coro
 not_contains=xray_core

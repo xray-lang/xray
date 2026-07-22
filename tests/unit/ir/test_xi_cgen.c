@@ -3038,16 +3038,16 @@ TEST(cgen_verified_span_helper_drop_elides_pending_error_checks) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "verified Span helper-drop path should generate");
+    assert(!had_error && "verified Slice helper-drop path should generate");
 
     const char *fn = find_static_function_definition(code, "test_hot_");
     assert(fn != NULL && "hot definition should exist");
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "hot function body should be bounded");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "verified inline Span operations must not retain pending-error polls");
+           "verified inline Slice operations must not retain pending-error polls");
 
-    printf("  Generated verified Span helper-drop path %zu bytes of C code\n", strlen(code));
+    printf("  Generated verified Slice helper-drop path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }

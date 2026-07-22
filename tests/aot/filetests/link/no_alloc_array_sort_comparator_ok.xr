@@ -3,10 +3,10 @@ fn xray_no_alloc_array_sort_desc(a: int, b: int) -> int {
 }
 
 @no_alloc
-fn xray_no_alloc_array_sort_comparator_ok(values: Array<int>) -> int {
+fn xray_no_alloc_array_sort_comparator_ok(values: ref Array<int>) -> int {
     values.sort(xray_no_alloc_array_sort_desc)
     return values[0]
 }
 
 var xray_no_alloc_array_sort_values: Array<int> = [3, 1, 2]
-print(xray_no_alloc_array_sort_comparator_ok(xray_no_alloc_array_sort_values))
+print(xray_no_alloc_array_sort_comparator_ok(ref xray_no_alloc_array_sort_values))

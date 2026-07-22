@@ -80,8 +80,7 @@ typedef enum XrTypeKind {
     XR_KIND_RUNE,         // Unicode scalar value. Immediate value (tag XR_TAG_RUNE), not
                           // a uint32; appended last to keep existing kind values stable.
     XR_KIND_RECORD,       // Sealed/open structural record; shares ObjectShape metadata with Json.
-    XR_KIND_SPAN,         // Scoped borrowed value view over contiguous storage.
-    XR_KIND_VIEW,         // Long-lived storage-backed non-owning view.
+    XR_KIND_SLICE,        // Borrowed contiguous view; source surface: Slice<T>.
     XR_KIND_COUNT
 } XrTypeKind;
 
@@ -94,12 +93,11 @@ static inline bool xr_kind_is_primitive(XrTypeKind k) {
            k == XR_KIND_RUNE;
 }
 static inline bool xr_kind_is_container(XrTypeKind k) {
-    return k == XR_KIND_ARRAY || k == XR_KIND_VIEW || k == XR_KIND_MAP || k == XR_KIND_SET ||
-           k == XR_KIND_SPAN;
+    return k == XR_KIND_ARRAY || k == XR_KIND_SLICE || k == XR_KIND_MAP || k == XR_KIND_SET;
 }
 static inline bool xr_kind_is_builtin_iterable(XrTypeKind k) {
-    return k == XR_KIND_ARRAY || k == XR_KIND_VIEW || k == XR_KIND_MAP || k == XR_KIND_SET ||
-           k == XR_KIND_SPAN || k == XR_KIND_STRING;
+    return k == XR_KIND_ARRAY || k == XR_KIND_SLICE || k == XR_KIND_MAP || k == XR_KIND_SET ||
+           k == XR_KIND_STRING;
 }
 static inline bool xr_kind_has_object_shape(XrTypeKind k) {
     return k == XR_KIND_RECORD || k == XR_KIND_JSON;
@@ -153,6 +151,21 @@ typedef enum XrFnThrowEffect {
                                  // (rethrows — instantiated per call site by the
                                  // effect of the actual argument)
 } XrFnThrowEffect;
+
+/* Borrowed Slice return provenance is part of a function signature even
+ * though Xray deliberately has no lifetime-annotation syntax.  A definition
+ * may publish one parameter or the receiver as the unique backing source;
+ * UNKNOWN/MULTI are fail-closed states and are never usable as a safe return
+ * contract. */
+typedef enum XrViewReturnSourceKind {
+    XR_VIEW_RETURN_NONE = 0,
+    XR_VIEW_RETURN_PARAM,
+    XR_VIEW_RETURN_RECEIVER,
+    XR_VIEW_RETURN_STATIC,
+    XR_VIEW_RETURN_LOCAL,
+    XR_VIEW_RETURN_MULTI,
+    XR_VIEW_RETURN_UNKNOWN,
+} XrViewReturnSourceKind;
 
 // ObjectShape metadata shared by Record and Json object values.
 // is_sealed=true means fixed fields (no runtime extension).
@@ -208,6 +221,9 @@ struct XrType {
             // MAY_THROW; the analyzer proves NO_THROW after the effect-DB
             // fixpoint. POLY marks parameter-position (rethrows) function types.
             XrFnThrowEffect throw_effect;
+            XrViewReturnSourceKind view_return_source;
+            int16_t view_return_param;  // valid only for XR_VIEW_RETURN_PARAM
+            bool view_return_complete;
             const char **type_param_names;
             XrType ***type_param_constraints;
             int *type_param_constraint_counts;
@@ -267,7 +283,6 @@ struct XrType {
     bool is_weak;             // Weak variant: WeakMap (kind==MAP) / WeakSet (kind==SET)
     bool is_cycle_candidate;  // Class type graph forms a cycle (RC cycle collector)
     bool ptr_is_mut;          // POINTER only: MutPtr<T> (true) vs Ptr<T> (false, const)
-    bool ptr_is_c_view;       // POINTER only: compiler-issued mem.view projection capability
 
     // Native width for int/float types (XrSlotType value)
     // 0 = default (int=int64, float=float64), nonzero = specific width
@@ -364,10 +379,9 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_NUMERIC(t) (xr_kind_is_numeric((t)->kind))
 #define XR_TYPE_IS_PRIMITIVE(t) (xr_kind_is_primitive((t)->kind))
 #define XR_TYPE_IS_ARRAY(t) ((t)->kind == XR_KIND_ARRAY)
-#define XR_TYPE_IS_VIEW(t) ((t)->kind == XR_KIND_VIEW)
+#define XR_TYPE_IS_SLICE(t) ((t)->kind == XR_KIND_SLICE)
 #define XR_TYPE_IS_MAP(t) ((t)->kind == XR_KIND_MAP)
 #define XR_TYPE_IS_SET(t) ((t)->kind == XR_KIND_SET)
-#define XR_TYPE_IS_SPAN(t) ((t)->kind == XR_KIND_SPAN)
 #define XR_TYPE_IS_FUNCTION(t) ((t)->kind == XR_KIND_FUNCTION)
 #define XR_TYPE_IS_C_FUNCTION(t) ((t)->kind == XR_KIND_FUNCTION && (t)->function.is_c_abi)
 #define XR_TYPE_IS_INSTANCE(t) ((t)->kind == XR_KIND_INSTANCE)
@@ -416,7 +430,7 @@ static inline bool xr_type_is_exact_unsigned_integer(const XrType *type) {
 static inline const XrType *xr_type_contiguous_element_type(const XrType *type) {
     if (!type)
         return NULL;
-    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_VIEW || type->kind == XR_KIND_SPAN)
+    if (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE)
         return type->container.element_type;
     if (type->kind == XR_KIND_FIXED_ARRAY)
         return type->fixed_array.element_type;
@@ -427,16 +441,8 @@ static inline bool xr_type_is_u8_array(const XrType *type) {
     return type && type->kind == XR_KIND_ARRAY && xr_type_is_exact_u8(type->container.element_type);
 }
 
-static inline bool xr_type_is_u8_span(const XrType *type) {
-    return type && type->kind == XR_KIND_SPAN && xr_type_is_exact_u8(type->container.element_type);
-}
-
-static inline bool xr_type_is_u8_view(const XrType *type) {
-    return type && type->kind == XR_KIND_VIEW && xr_type_is_exact_u8(type->container.element_type);
-}
-
 static inline bool xr_type_is_u8_slice(const XrType *type) {
-    return xr_type_is_u8_span(type) || xr_type_is_u8_view(type);
+    return type && type->kind == XR_KIND_SLICE && xr_type_is_exact_u8(type->container.element_type);
 }
 
 static inline bool xr_type_is_u8_pointer(const XrType *type) {
@@ -472,8 +478,7 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
          * AOT optimization, not needed for correctness. */
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
-        case XR_KIND_VIEW:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_TUPLE:
@@ -584,8 +589,7 @@ static inline uint8_t xr_type_to_slot_type(XrType *type) {
             return XR_SLOT_BOOL;
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
-        case XR_KIND_VIEW:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_TUPLE:
@@ -642,8 +646,7 @@ static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
             return XR_TAG_NULL;
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
-        case XR_KIND_VIEW:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_JSON:
@@ -691,8 +694,7 @@ static inline uint8_t xr_type_element_gc_tag(XrType *type) {
         return XR_SLOT_ANY;
     switch (type->kind) {
         case XR_KIND_ARRAY:
-        case XR_KIND_VIEW:
-        case XR_KIND_SPAN:
+        case XR_KIND_SLICE:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
             return xr_type_to_slot_type(type->container.element_type);
@@ -705,10 +707,8 @@ static inline uint8_t xr_type_element_gc_tag(XrType *type) {
 
 // API: Container types
 XR_FUNC XrType *xr_type_new_array(XrVMRuntime *X, XrType *element_type);
-XR_FUNC XrType *xr_type_new_span(XrVMRuntime *X, XrType *element_type);
+XR_FUNC XrType *xr_type_new_slice(XrVMRuntime *X, XrType *element_type);
 XR_FUNC XrType *xr_type_new_u8_slice(XrVMRuntime *X);
-XR_FUNC XrType *xr_type_new_view(XrVMRuntime *X, XrType *element_type);
-XR_FUNC XrType *xr_type_new_u8_view(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_map(XrVMRuntime *X, XrType *key_type, XrType *value_type);
 XR_FUNC XrType *xr_type_new_set(XrVMRuntime *X, XrType *element_type);
 XR_FUNC XrType *xr_type_new_channel(XrVMRuntime *X, XrType *element_type);

@@ -49,19 +49,11 @@
   :native-width no
   :typed-boundary yes)
 
-(define-aot-abi view
-  :type-kind XR_KIND_VIEW
-  :nullable no
-  :abi-class pointer
-  :default-rep ptr
-  :native-width no
-  :typed-boundary yes)
-
-(define-aot-abi span
-  :type-kind XR_KIND_SPAN
+(define-aot-abi slice
+  :type-kind XR_KIND_SLICE
   :nullable no
   :abi-class aggregate
-  :default-rep span
+  :default-rep slice
   :native-width no
   :typed-boundary yes)
 

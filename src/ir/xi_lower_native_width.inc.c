@@ -213,7 +213,7 @@ static struct XrType *xi_get_container_elem_type(struct XrType *container_type) 
 }
 
 static int64_t xi_array_cfield_from_type(struct XrType *type) {
-    if (!type || !(XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_VIEW(type) || XR_TYPE_IS_SPAN(type)) ||
+    if (!type || !(XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type)) ||
         !type->container.element_type)
         return 0;
     uint8_t tid = xr_type_to_tid(type->container.element_type);

@@ -166,7 +166,7 @@ vmcase(OP_TYPENAME) {
             type_name = cls->name;
     }
     // For struct refs, extract class pointer from struct area header
-    if (type_name == NULL && XR_IS_SPAN_REF(val)) {
+    if (type_name == NULL && XR_IS_SLICE_REF(val)) {
         type_name = "Slice";
     }
     if (type_name == NULL && XR_IS_ARRAY_REF(val)) {
@@ -329,11 +329,11 @@ vmcase(OP_COPY) {
     int b = GETARG_B(i);
     int storage_mode = GETARG_C(i);
     XrValue _src = R(b);
-    if (XR_IS_SPAN_REF(_src)) {
-        XrSpanView *span = XR_TO_SPAN_REF(_src);
+    if (XR_IS_SLICE_REF(_src)) {
+        XrSliceView *span = XR_TO_SLICE_REF(_src);
         if (!span || span->length < 0 || span->length > INT32_MAX ||
             span->elem_type >= XR_ELEM_COUNT || (span->length > 0 && !span->data)) {
-            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Span copy length exceeds VM array limit");
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Slice copy length exceeds VM array limit");
         }
         XrArray *arr = NULL;
         if (storage_mode == XR_OBJ_STORAGE_SHARED || storage_mode == XR_OBJ_STORAGE_TRANSFER) {
@@ -352,7 +352,7 @@ vmcase(OP_COPY) {
                                                (XrArrayElemType) span->elem_type);
         }
         if (!arr)
-            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Span copy failed");
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Slice copy failed");
         arr->elem_tid = span->elem_tid;
         if (arr->elem_type == XR_ELEM_ANY) {
             XrValue *items = (XrValue *) span->data;
@@ -363,7 +363,7 @@ vmcase(OP_COPY) {
         } else {
             if (span->length > 0) {
                 if (!arr->data)
-                    VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Span copy failed");
+                    VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Slice copy failed");
                 memcpy(arr->data, span->data, (size_t) span->length * span->elem_size);
             }
             arr->length = span->length;

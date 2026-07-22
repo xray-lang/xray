@@ -2397,12 +2397,16 @@ print(mem.alignOf<CHeader>())
 print(mem.offsetOf<CHeader>("next"))
 ```
 
-外部地址可在 `unsafe` 中用 `mem.view<T>(ptr)` 投影为该 layout 的 typed C view。投影不分配、不复制，也不创建 xray 对象；字段读写直接作用于外部存储，并继续遵守 `Ptr` / `MutPtr` 的只读/可写区分：
+外部地址只能在 `unsafe` 中用 `mem.slice<T>(ptr, count, owner)` 投影为只读 `Slice<T>`。`owner` 把返回 Slice 的生命周期绑定到仍存活的 backing owner；投影不分配、不复制，也不创建 xray 对象。需要写外部内存时使用 `mem.withSliceMut<T>(mutPtr, count, ref guard, callback)`，可写 Slice 只能存在于 callback 动态作用域内：
 
 ```xray
-var header = unsafe { mem.view<CHeader>(rawHeader) }
-print(header.count)
-unsafe { header.count = 4 }
+var headers = unsafe { mem.slice<CHeader>(rawHeader, 1, rawHeader) }
+print(headers[0].count)
+unsafe {
+    mem.withSliceMut<CHeader>(rawHeader, 1, ref rawHeader, fn(view: ref Slice<CHeader>) {
+        view[0].count = 4
+    })
+}
 ```
 
 规则：
@@ -2414,7 +2418,7 @@ unsafe { header.count = 4 }
 - extern layout 不允许泛型、接口、方法、字段修饰符或字段初始化器；按值嵌套的聚合必须也在 extern 块中声明。
 - `flex T` 表示真正的 C flexible array member，只能出现在 extern struct 的最后一个字段，并且之前至少有一个固定字段；extern union 与普通 xray struct 均不允许 `flex`。`sizeOf` 返回已按 struct alignment 补齐的 header size，`offsetOf` 可查询 flexible tail 的起始偏移；tail 不携带隐式长度。
 - extern layout 不能用 `T(...)` 或 struct literal 构造为 xray 值；它只定义由外部内存承载的原生布局。`mem.sizeOf<T>()`、`mem.alignOf<T>()` 与 `mem.offsetOf<T>(field)` 使用该原生布局表。
-- 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、`mem.view` 和 layout introspection 共用同一份 size/alignment/field-offset 结果；嵌套、packed、union、fixed array 与 flexible tail 均不得由后端再次推导。
+- 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、`mem.slice` / `mem.withSliceMut` 和 layout introspection 共用同一份 size/alignment/field-offset 结果；嵌套、packed、union、fixed array 与 flexible tail 均不得由后端再次推导。
 - extern layout 随 bytecode 确定性序列化，并绑定目标 ABI fingerprint。加载器必须拒绝 ABI 不匹配、残缺、越界、循环或带尾随垃圾的 layout payload，不能回退到宿主机布局。
 - 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
 - C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。

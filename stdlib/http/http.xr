@@ -949,7 +949,7 @@ fn _serverDispatch(conn: NetConn, msg: RequestMessage) -> bool {
            msg.head.keepAlive
 }
 
-fn _serveHttpConnection(conn: NetConn) {
+fn _serveHttpConnection(conn: move NetConn) {
     var raw = ""
     while (_serverRunning) {
         var headEnd = _responseHeadEnd(raw)
@@ -1005,7 +1005,8 @@ export fn listen(port: int) -> bool {
         net.setAcceptDeadline(listener!, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
         var conn = net.accept(listener!)
         if (conn != null) {
-            go _serveHttpConnection(conn!)
+            var accepted = conn!
+            go _serveHttpConnection(move accepted)
             continue
         }
         var err = net.lastError(listener!)

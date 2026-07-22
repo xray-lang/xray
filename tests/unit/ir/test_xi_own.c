@@ -49,7 +49,7 @@ static XrType t_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType t_array = {.kind = XR_KIND_ARRAY, .id = 2, .frozen = true};
 static XrType t_str = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType t_any = {.kind = XR_KIND_UNKNOWN, .id = 4, .frozen = true};
-static XrType t_span = {.kind = XR_KIND_SPAN, .id = 5, .frozen = true};
+static XrType t_span = {.kind = XR_KIND_SLICE, .id = 5, .frozen = true};
 
 static XiFunc *make_func(const char *name, XrType *ret) {
     XiFunc *f = xi_func_new(name, ret);

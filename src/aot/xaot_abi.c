@@ -147,7 +147,7 @@ static bool param_uses_place_abi(const XiFunc *func, const XiValue *value, bool 
     XrParamMode mode = xi_func_param_passing_mode(func, index);
     bool receiver_read_place = mode == XR_PARAM_READ && index == 0 && func->receiver_call_place &&
                                func->params && func->params[0] == value;
-    if (mode != XR_PARAM_REF && !receiver_read_place)
+    if (mode != XR_PARAM_REF && !receiver_read_place && !xi_value_is_read_place_param(value))
         return false;
     if (mode_out)
         *mode_out = mode;
@@ -293,6 +293,12 @@ static const XrAggregateLayout *struct_layout_for_slot(const XaotBundle *bundle,
     const XrAggregateLayout *sl = struct_layout_for_type(bundle, type);
     if (sl)
         return sl;
+    /* AGG_GET is also used by tagged interface/method dispatch.  Use-based layout recovery is
+     * only valid when the semantic type can actually be a value struct; otherwise an interface
+     * parameter is accidentally assigned a concrete aggregate ABI from an unrelated aux
+     * payload. */
+    if (type && type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE)
+        return NULL;
     if (is_return)
         return struct_layout_for_return_value(func);
     return struct_layout_for_value_uses(func, value);
@@ -445,7 +451,7 @@ static XaotAbiSlot place_value_slot_for_type(const XaotBundle *bundle, const XiF
             case XR_KIND_BOOL:
             case XR_KIND_RUNE:
             case XR_KIND_POINTER:
-            case XR_KIND_SPAN:
+            case XR_KIND_SLICE:
                 return native_value_slot_for_type(bundle, func, type, value, false);
             default: {
                 bool native_aggregate_borrow =

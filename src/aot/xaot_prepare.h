@@ -24,12 +24,13 @@ XR_FUNC uint32_t xaot_prepare_array_access_bounds_evidence(const XaotBundle *bun
                                                            const XiValue *access,
                                                            uint8_t *out_reason);
 
-/* Static Span / Slice<byte> hot-path evidence for XI_BYTE_SLICE_* and XI_SPAN_* ops.
- * Returns false for non-Span ops. Recognized ops always fill `out` with either
+/* Static Slice / Slice<byte> hot-path evidence for XI_BYTE_SLICE_* and XI_SLICE_* ops.
+ * Returns false for non-Slice ops. Recognized ops always fill `out` with either
  * eliminated checks or an unproven reason; the verifier re-derives the same
  * row before CGen is allowed to consume it. */
 XR_FUNC bool xaot_prepare_span_access_plan_for_value(const XaotBundle *bundle, const XiFunc *func,
-                                                     const XiValue *value, XaotSpanAccessPlan *out);
+                                                     const XiValue *value,
+                                                     XaotSliceAccessPlan *out);
 
 /* Uniqueness proof for an array data cache (XAOT_ALIAS_UNIQUE_DATA).
  * Returns the XAOT_ALIAS_EV_* evidence bits when the cached data pointer is

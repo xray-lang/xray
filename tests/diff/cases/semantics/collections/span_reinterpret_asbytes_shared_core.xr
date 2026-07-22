@@ -1,8 +1,8 @@
 // anchor: span-reinterpret-asbytes-shared-core
 fn main() {
     var words = Array<uint32>(2, 0)
-    var wordSpan: Slice<uint32> = words[:]
-    var wordBytes: Slice<byte> = wordSpan.asBytes()
+    var wordSlice: Slice<uint32> = words[:]
+    var wordBytes: Slice<byte> = wordSlice.asBytes()
     print(len(wordBytes))
     wordBytes.fill(1)
     print(int(words[0]))
@@ -24,6 +24,14 @@ fn main() {
         var badRaw: Slice<byte> = raw[0:5]
         var bad: Slice<uint32> = badRaw.reinterpret<uint32>()
         print(len(bad))
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+    try {
+        var misalignedRaw: Slice<byte> = raw[1:5]
+        var misaligned: Slice<uint32> = misalignedRaw.reinterpret<uint32>()
+        print(len(misaligned))
     } catch panic (p) {
         print(p.message)
         print(p.code)

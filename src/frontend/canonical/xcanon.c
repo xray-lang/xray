@@ -73,6 +73,9 @@ static bool is_simple_expr(const AstNode *node) {
         case AST_LITERAL_FALSE:
         case AST_LITERAL_NULL:
             return true;
+        case AST_INDEX_GET:
+            return is_simple_expr(node->as.index_get.array) &&
+                   is_simple_expr(node->as.index_get.index);
         default:
             return false;
     }
@@ -306,20 +309,25 @@ static void canon_compound_member(XrCanonCtx *ctx, AstNode *node) {
         /* Complex receiver — extract into a temp. */
         char *tmp = canon_temp_name(ctx);
         XR_DCHECK(tmp != NULL, "canon_compound_member: temp name alloc");
+        XrType *object_type = canon_node_type(ctx, obj);
 
         /* var __canon_N = obj */
         AstNode *decl = xr_ast_var_decl(ctx->session, tmp, obj, false, line);
         XR_DCHECK(decl != NULL, "canon_compound_member: var_decl alloc");
+        canon_set_node_type(ctx, decl, object_type);
 
         /* __canon_N.field = __canon_N.field + rhs */
         AstNode *ref1 = xr_ast_variable(ctx->session, tmp, line);
         AstNode *ref2 = xr_ast_variable(ctx->session, tmp, line);
+        canon_set_node_type(ctx, ref1, object_type);
+        canon_set_node_type(ctx, ref2, object_type);
         AstNode *load = xr_ast_member_access(ctx->session, ref1, field, line);
         canon_set_node_type(ctx, load, target_type);
         AstNode *bin = xr_ast_binary(ctx->session, bin_type, load, rhs, line);
         canon_set_node_type(ctx, bin, target_type);
         AstNode *store = xr_ast_member_set(ctx->session, ref2, field, bin, line);
         XR_DCHECK(store != NULL, "canon_compound_member: member_set alloc");
+        canon_set_node_type(ctx, store, target_type);
 
         /* Wrap in block: { decl; store } */
         AstNode *blk = xr_ast_block(ctx->session, line);

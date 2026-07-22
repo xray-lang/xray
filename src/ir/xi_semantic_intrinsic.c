@@ -82,21 +82,21 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_BYTE_SLICE_COMMON_PREFIX;
         case XA_INTRINSIC_LOWERING_BYTE_SLICE_REPEAT:
             return XI_BYTE_SLICE_REPEAT;
-        case XA_INTRINSIC_LOWERING_SPAN_REINTERPRET:
-            return XI_SPAN_REINTERPRET;
-        case XA_INTRINSIC_LOWERING_SPAN_DATA_PTR:
+        case XA_INTRINSIC_LOWERING_SLICE_REINTERPRET:
+            return XI_SLICE_REINTERPRET;
+        case XA_INTRINSIC_LOWERING_SLICE_DATA_PTR:
             return XI_ARRAY_DATA_PTR;
-        case XA_INTRINSIC_LOWERING_SPAN_WINDOW:
-            return XI_SPAN_WINDOW;
-        case XA_INTRINSIC_LOWERING_SPAN_AS_BYTES:
-            return XI_SPAN_AS_BYTES;
-        case XA_INTRINSIC_LOWERING_SPAN_FILL:
-            return XI_SPAN_FILL;
-        case XA_INTRINSIC_LOWERING_SPAN_COPY:
-            return XI_SPAN_COPY;
-        case XA_INTRINSIC_LOWERING_SPAN_COMPARE:
-            return XI_SPAN_COMPARE;
-        case XA_INTRINSIC_LOWERING_SPAN_GET:
+        case XA_INTRINSIC_LOWERING_SLICE_WINDOW:
+            return XI_SLICE_WINDOW;
+        case XA_INTRINSIC_LOWERING_SLICE_AS_BYTES:
+            return XI_SLICE_AS_BYTES;
+        case XA_INTRINSIC_LOWERING_SLICE_FILL:
+            return XI_SLICE_FILL;
+        case XA_INTRINSIC_LOWERING_SLICE_COPY:
+            return XI_SLICE_COPY;
+        case XA_INTRINSIC_LOWERING_SLICE_COMPARE:
+            return XI_SLICE_COMPARE;
+        case XA_INTRINSIC_LOWERING_SLICE_GET:
             return XI_INDEX_GET;
         case XA_INTRINSIC_LOWERING_ATOMIC_LOAD:
             return XI_ATOMIC_LOAD;
@@ -232,7 +232,7 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
                              "canonical intrinsic id %u has invalid contiguous-half flag %u",
                              value->xa_intrinsic_id, has_half ? 1u : 0u);
     } else if (desc->family == XA_INTRINSIC_FAMILY_MEMORY) {
-        if (desc->lowering == XA_INTRINSIC_LOWERING_SPAN_REINTERPRET && value->aux_int == 0)
+        if (desc->lowering == XA_INTRINSIC_LOWERING_SLICE_REINTERPRET && value->aux_int == 0)
             return set_error(error, error_size,
                              "canonical intrinsic id %u lacks reinterpret element metadata",
                              value->xa_intrinsic_id);

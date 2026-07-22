@@ -2569,7 +2569,32 @@ TEST(struct_method_receivers_use_call_bound_places) {
     assert(read->call_plan && read->call_plan->verified && read->call_plan->has_receiver &&
            read->call_plan->receiver.param_mode == XR_PARAM_READ &&
            read->call_plan->receiver.place == read->args[0] && read->args[0]->op == XI_LOCAL_ADDR &&
-           "readonly struct receiver should use an in call-bound local place");
+           "readonly struct receiver should use a read call-bound local place");
+
+    xi_func_free(f);
+}
+
+TEST(read_value_struct_param_uses_internal_call_place) {
+    XiFunc *f = lower_source("struct Pair { a: int; b: int }\n"
+                             "fn sum(p: Pair) -> int {\n"
+                             "    return p.a + p.b\n"
+                             "}\n"
+                             "fn exercise() -> int {\n"
+                             "    var pair = Pair{a: 1, b: 2}\n"
+                             "    return sum(pair)\n"
+                             "}\n"
+                             "print(exercise())\n");
+    assert(f != NULL);
+
+    XiFunc *sum = func_tree_find_func_name(f, "sum");
+    XiFunc *exercise = func_tree_find_func_name(f, "exercise");
+    XiValue *call = func_tree_find_op(exercise, XI_CALL);
+    assert(sum && sum->nparams == 1 && xi_value_is_read_place_param(sum->params[0]) &&
+           "semantic read value-struct parameters should publish internal place ABI evidence");
+    assert(call && call->call_plan && call->call_plan->verified && call->call_plan->nargs == 1 &&
+           call->call_plan->args[0].param_mode == XR_PARAM_READ &&
+           call->call_plan->args[0].place == call->args[1] && call->args[1]->op == XI_LOCAL_ADDR &&
+           "ordinary calls should infer a nonescaping read place without source syntax");
 
     xi_func_free(f);
 }
@@ -2786,6 +2811,7 @@ int main(void) {
     run_unresolved_struct_literal_does_not_lower_to_json();
     run_struct_field_store_narrows_native_width();
     run_struct_method_receivers_use_call_bound_places();
+    run_read_value_struct_param_uses_internal_call_place();
     run_as_to_native_width_int_lowers_to_narrow();
     run_force_unwrap();
     run_destructure_decl();

@@ -236,7 +236,7 @@ static bool memory_receiver_matches(const XrType *receiver, XaBuiltinReceiverKin
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return xr_type_is_u8_slice(receiver);
         case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver && receiver->kind == XR_KIND_SPAN;
+            return receiver && receiver->kind == XR_KIND_SLICE;
     }
     return false;
 }
@@ -261,9 +261,8 @@ static void memory_mark_failure(XaMemoryScan *scan) {
     xa_memory_effect_summary_mark_incomplete(scan->summary, XA_UNKNOWN_ANALYSIS_RESOURCE_FAILURE);
 }
 
-static void memory_apply_builtin(XaMemoryScan *scan, XaMemoryRootRef root,
-                                 const XaBuiltinReceiverMethodSpec *spec) {
-    XaBuiltinMethodMemoryEffectSet effect = xa_builtin_receiver_method_memory_effect(spec);
+static void memory_apply_effect_set(XaMemoryScan *scan, XaMemoryRootRef root,
+                                    XaBuiltinMethodMemoryEffectSet effect) {
     bool ok = true;
     if (effect & XA_BUILTIN_MEMORY_WRITE)
         ok = xa_memory_effect_summary_add_write(scan->summary, root,
@@ -279,6 +278,11 @@ static void memory_apply_builtin(XaMemoryScan *scan, XaMemoryRootRef root,
         ok = xa_memory_effect_summary_mark_invalidation(scan->summary, root) && ok;
     if (!ok)
         memory_mark_failure(scan);
+}
+
+static void memory_apply_builtin(XaMemoryScan *scan, XaMemoryRootRef root,
+                                 const XaBuiltinReceiverMethodSpec *spec) {
+    memory_apply_effect_set(scan, root, xa_builtin_receiver_method_memory_effect(spec));
 }
 
 static XaSymbol *memory_call_symbol(XaMemoryPass *pass, AstNode *callee) {
@@ -349,10 +353,43 @@ static bool memory_call_has_visible_root(XaMemoryFunctionRow *row, CallExprNode 
     return false;
 }
 
+static XrCallArgAccess memory_call_arg_access(const CallExprNode *call, int index);
+
+static bool memory_dynamic_arg_is_stable_slice_read(XaMemoryPass *pass, CallExprNode *call,
+                                                    int arg_index) {
+    if (!pass || !call || !call->callee || arg_index < 0 || arg_index >= call->arg_count ||
+        !call->arguments)
+        return false;
+    XrType *function_type = xa_analyzer_get_node_type(pass->analyzer, call->callee);
+    XrType *arg_type = xa_analyzer_get_node_type(pass->analyzer, call->arguments[arg_index]);
+    return function_type && XR_TYPE_IS_FUNCTION(function_type) && arg_type &&
+           XR_TYPE_IS_SLICE(arg_type) &&
+           xr_type_function_param_mode(function_type, arg_index) == XR_PARAM_READ &&
+           memory_call_arg_access(call, arg_index) == XR_CALL_ARG_PLAIN;
+}
+
+static void memory_apply_unknown_call(XaMemoryScan *scan, CallExprNode *call, AstNode *receiver) {
+    if (!scan || !call)
+        return;
+    XaMemoryRootRef root;
+    if (receiver && memory_root_for_expr(scan->row, receiver, &root) &&
+        !xa_memory_effect_summary_mark_invalidation(scan->summary, root))
+        memory_mark_failure(scan);
+    for (int i = 0; i < call->arg_count; i++) {
+        AstNode *arg = call->arguments ? call->arguments[i] : NULL;
+        if (!arg || !memory_root_for_expr(scan->row, arg, &root) ||
+            memory_dynamic_arg_is_stable_slice_read(scan->pass, call, i))
+            continue;
+        if (!xa_memory_effect_summary_mark_invalidation(scan->summary, root))
+            memory_mark_failure(scan);
+    }
+}
+
 static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
     AstNode *receiver = NULL;
     const XaBuiltinReceiverMethodSpec *builtin = NULL;
+    bool named_contract = false;
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         receiver = call->callee->as.member_access.object;
         XrType *receiver_type = xa_analyzer_get_node_type(scan->pass->analyzer, receiver);
@@ -360,14 +397,27 @@ static void memory_scan_call(XaMemoryScan *scan, AstNode *node) {
         XaMemoryRootRef root;
         if (builtin && memory_root_for_expr(scan->row, receiver, &root))
             memory_apply_builtin(scan, root, builtin);
+        if (!builtin) {
+            XaBuiltinMethodMemoryEffectSet effects = XA_BUILTIN_MEMORY_STABLE_READ;
+            named_contract = xa_builtin_named_receiver_memory_effect(
+                xr_type_get_class_name(receiver_type), call->callee->as.member_access.name,
+                &effects);
+            if (named_contract && memory_root_for_expr(scan->row, receiver, &root))
+                memory_apply_effect_set(scan, root, effects);
+        }
     }
 
     XaSymbol *callee_symbol = memory_call_symbol(scan->pass, call->callee);
     const XaMemoryEffectSummary *callee = memory_callee_summary(scan->pass, callee_symbol);
     if (callee) {
         memory_instantiate_callee(scan, callee, call, receiver);
-    } else if (!builtin && memory_call_has_visible_root(scan->row, call, receiver)) {
-        xa_memory_effect_summary_mark_incomplete(scan->summary, XA_UNKNOWN_VIEW_INVALIDATION);
+    } else if (!builtin && !named_contract &&
+               memory_call_has_visible_root(scan->row, call, receiver)) {
+        /* Unknown dispatch is fail-closed per visible root.  A read Slice argument is the one
+         * exception: the function type itself forbids descriptor/owner mutation, and safe Slice
+         * values cannot be retained elsewhere.  Keeping this root-relative avoids poisoning an
+         * unrelated borrowed owner merely because another receiver is dynamically dispatched. */
+        memory_apply_unknown_call(scan, call, receiver);
     }
 }
 
@@ -464,6 +514,111 @@ static void memory_report_resource_failure(XaMemoryPass *pass, XaMemoryFunctionR
                                &location);
 }
 
+typedef struct XaMemoryContractValidation {
+    XaMemoryPass *pass;
+} XaMemoryContractValidation;
+
+static AstNode *memory_unwrap_ref_range(AstNode *node) {
+    while (node && node->type == AST_GROUPING)
+        node = node->as.grouping;
+    return node && node->type == AST_SLICE_EXPR ? node : NULL;
+}
+
+static const XaMemoryRootEffect *memory_summary_root_effect(const XaMemoryEffectSummary *summary,
+                                                            XaMemoryRootKind kind, uint32_t index) {
+    if (!summary)
+        return NULL;
+    for (uint32_t i = 0; i < summary->root_count; i++) {
+        const XaMemoryRootEffect *effect = &summary->roots[i];
+        if (effect->root.kind == kind && effect->root.index == index)
+            return effect;
+    }
+    return NULL;
+}
+
+static XrCallArgAccess memory_call_arg_access(const CallExprNode *call, int index) {
+    if (!call || index < 0 || index >= call->arg_count || !call->arg_accesses)
+        return XR_CALL_ARG_PLAIN;
+    XrCallArgAccess access = call->arg_accesses[index];
+    return xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_PLAIN;
+}
+
+static const char *memory_callee_name(const CallExprNode *call, const XaSymbol *symbol) {
+    if (symbol && symbol->name)
+        return symbol->name;
+    if (!call || !call->callee)
+        return "callee";
+    if (call->callee->type == AST_VARIABLE && call->callee->as.variable.name)
+        return call->callee->as.variable.name;
+    if (call->callee->type == AST_MEMBER_ACCESS && call->callee->as.member_access.name)
+        return call->callee->as.member_access.name;
+    return "callee";
+}
+
+static void memory_validate_ref_range_call(AstNode *node, void *userdata) {
+    XaMemoryContractValidation *validation = (XaMemoryContractValidation *) userdata;
+    if (!validation || !validation->pass || !node || node->type != AST_CALL_EXPR)
+        return;
+    XaMemoryPass *pass = validation->pass;
+    CallExprNode *call = &node->as.call_expr;
+    XaSymbol *callee_symbol = memory_call_symbol(pass, call->callee);
+    const XaMemoryEffectSummary *summary = memory_callee_summary(pass, callee_symbol);
+    XrType *function_type = callee_symbol ? callee_symbol->links.type : NULL;
+
+    int slot = 0;
+    for (int i = 0; i < call->arg_count; i++) {
+        AstNode *arg = call->arguments ? call->arguments[i] : NULL;
+        if (!arg)
+            continue;
+        if (arg->type == AST_SPREAD_EXPR) {
+            XrType *source_type =
+                xa_analyzer_get_node_type(pass->analyzer, arg->as.spread_expr.expr);
+            slot +=
+                source_type && XR_TYPE_IS_TUPLE(source_type) ? source_type->tuple.element_count : 0;
+            continue;
+        }
+        if (memory_call_arg_access(call, i) != XR_CALL_ARG_REF || !memory_unwrap_ref_range(arg)) {
+            slot++;
+            continue;
+        }
+
+        XrParamMode mode = function_type && XR_TYPE_IS_FUNCTION(function_type)
+                               ? xr_type_function_param_mode(function_type, slot)
+                               : XR_PARAM_READ;
+        if (mode != XR_PARAM_REF) {
+            slot++;
+            continue;
+        }
+        const XaMemoryRootEffect *effect =
+            memory_summary_root_effect(summary, XA_MEMORY_ROOT_PARAM, (uint32_t) slot);
+        bool complete = summary && xa_memory_effect_summary_is_complete(summary);
+        if (complete && (!effect || !effect->descriptor_rebind)) {
+            slot++;
+            continue;
+        }
+
+        XrLocation location = {.file = pass->analyzer->current_file,
+                               .line = arg->line ? (uint32_t) arg->line : (uint32_t) node->line,
+                               .column =
+                                   arg->column ? (uint32_t) arg->column : (uint32_t) node->column};
+        char message[320];
+        if (effect && effect->descriptor_rebind) {
+            snprintf(message, sizeof(message),
+                     "cannot pass range projection as `ref` parameter %d of '%s': the callee "
+                     "may rebind the Slice descriptor; bind the range to `var view` first",
+                     slot + 1, memory_callee_name(call, callee_symbol));
+        } else {
+            snprintf(message, sizeof(message),
+                     "cannot pass range projection as `ref` parameter %d of '%s': descriptor "
+                     "effects are incomplete (ViewInvalidationUnknown)",
+                     slot + 1, memory_callee_name(call, callee_symbol));
+        }
+        xa_analyzer_add_diagnostic(pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   message, &location);
+        slot++;
+    }
+}
+
 void xa_infer_memory_effects(XaAnalyzer *analyzer, AstNode *ast) {
     if (!analyzer || !analyzer->memory_effect_db || !ast)
         return;
@@ -495,8 +650,12 @@ void xa_infer_memory_effects(XaAnalyzer *analyzer, AstNode *ast) {
             for (int slot = 0; slot < row->symbol->links.param_effect_count; slot++)
                 row->symbol->links.param_effects[slot].memory_effects = id;
         }
-        xa_memory_effect_summary_clear(&row->direct);
-        xa_memory_effect_summary_clear(&row->result);
+    }
+    XaMemoryContractValidation validation = {.pass = &pass};
+    xa_ast_walk(ast, memory_validate_ref_range_call, NULL, &validation);
+    for (int i = 0; i < pass.row_count; i++) {
+        xa_memory_effect_summary_clear(&pass.rows[i].direct);
+        xa_memory_effect_summary_clear(&pass.rows[i].result);
     }
     xr_free(pass.rows);
 }

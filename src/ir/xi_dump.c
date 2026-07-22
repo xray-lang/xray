@@ -50,10 +50,8 @@ static const char *xi_type_name(const struct XrType *type) {
             return "void";
         case XR_KIND_ARRAY:
             return "array";
-        case XR_KIND_VIEW:
-            return "view";
-        case XR_KIND_SPAN:
-            return "span";
+        case XR_KIND_SLICE:
+            return "slice";
         case XR_KIND_MAP:
             return "map";
         case XR_KIND_FUNCTION:
@@ -227,6 +225,35 @@ static void dump_value(FILE *out, const XiValue *v) {
     if (v->line > 0)
         fprintf(out, " L%u", v->line);
 
+    if (v->view_evidence.complete) {
+        const char *origin = "unknown";
+        switch (v->view_evidence.origin) {
+            case XR_VIEW_RETURN_PARAM:
+                origin = "param";
+                break;
+            case XR_VIEW_RETURN_RECEIVER:
+                origin = "receiver";
+                break;
+            case XR_VIEW_RETURN_STATIC:
+                origin = "static";
+                break;
+            case XI_VIEW_ORIGIN_FOREIGN:
+                origin = "foreign";
+                break;
+            case XI_VIEW_ORIGIN_ALLOCATION:
+                origin = "allocation";
+                break;
+            default:
+                break;
+        }
+        fprintf(out, " view:%s", origin);
+        if (v->view_evidence.source_param >= 0)
+            fprintf(out, "(%d)", (int) v->view_evidence.source_param);
+        if (v->view_evidence.source_operand >= 0)
+            fprintf(out, " operand=%d root=v%u", (int) v->view_evidence.source_operand,
+                    v->view_evidence.root_value_id);
+    }
+
     fprintf(out, "\n");
 }
 
@@ -313,7 +340,16 @@ void xi_func_dump(const XiFunc *f, void *stream) {
         else
             fprintf(out, "?: ?");
     }
-    fprintf(out, ") -> %s {\n", xi_type_name(f->return_type));
+    fprintf(out, ") -> %s", xi_type_name(f->return_type));
+    if (f->view_return_complete) {
+        if (f->view_return_source == XR_VIEW_RETURN_PARAM)
+            fprintf(out, " [view_return=param(%d)]", (int) f->view_return_param);
+        else if (f->view_return_source == XR_VIEW_RETURN_RECEIVER)
+            fprintf(out, " [view_return=receiver]");
+        else if (f->view_return_source == XR_VIEW_RETURN_STATIC)
+            fprintf(out, " [view_return=static]");
+    }
+    fprintf(out, " {\n");
 
     /* Blocks */
     for (uint32_t i = 0; i < f->nblocks; i++)

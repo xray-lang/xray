@@ -9,10 +9,15 @@ extern "C" {
 
 @c_export("xray_native_size_fields")
 fn xray_native_size_fields(p: MutPtr<uint8>) -> intsize {
-    var pair = unsafe { mem.view<NativeSizePair>(p) }
-    pair.length = 37
-    pair.delta = -37
-    return pair.delta
+    var guard = p
+    return unsafe {
+        mem.withSliceMut<NativeSizePair>(p, 1, ref guard,
+            fn(pairs: ref Slice<NativeSizePair>) -> intsize {
+                pairs[0].length = 37
+                pairs[0].delta = -37
+                return pairs[0].delta
+            })
+    }
 }
 
 @c_export("xray_native_size_unaligned")

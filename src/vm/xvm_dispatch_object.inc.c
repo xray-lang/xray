@@ -459,15 +459,15 @@ vmcase(OP_GETPROP) {
         vmbreak;
     }
 
-    // Frame-local Span .length/.size
-    if (XR_IS_SPAN_REF(obj) && (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_SIZE)) {
-        XrSpanView *span = XR_TO_SPAN_REF(obj);
+    // Frame-local Slice .length/.size
+    if (XR_IS_SLICE_REF(obj) && (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_SIZE)) {
+        XrSliceView *span = XR_TO_SLICE_REF(obj);
         R(a) = XR_FROM_INT(span ? span->length : 0);
         vmbreak;
     }
 
     // Stack-allocated struct field access
-    if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SPAN_REF(obj)) {
+    if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SLICE_REF(obj)) {
         XrAggregateLayout *slayout = NULL;
         uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
         int fidx = xr_vm_struct_layout_field_index(isolate, slayout, prop_symbol);
@@ -477,67 +477,9 @@ vmcase(OP_GETPROP) {
                 R(a) = xr_null();
                 vmbreak;
             }
-            uint8_t *fp = payload + sf->offset;
-            switch (sf->native_type) {
-                case XR_NATIVE_I64:
-                    R(a) = XR_FROM_INT(*(int64_t *) fp);
-                    break;
-                case XR_NATIVE_U64:
-                    R(a) = XR_FROM_INT((int64_t) *(uint64_t *) fp);
-                    break;
-                case XR_NATIVE_ISIZE:
-                    R(a) = XR_FROM_INT((int64_t) *(ptrdiff_t *) fp);
-                    break;
-                case XR_NATIVE_USIZE:
-                    R(a) = XR_FROM_INT((int64_t) *(size_t *) fp);
-                    break;
-                case XR_NATIVE_POINTER:
-                    R(a) = XR_FROM_INT((int64_t) (uintptr_t) *(void **) fp);
-                    break;
-                case XR_NATIVE_F64:
-                    R(a) = XR_FROM_FLOAT(*(double *) fp);
-                    break;
-                case XR_NATIVE_BOOL:
-                    R(a).descriptor = 0;
-                    R(a).i = *(uint8_t *) fp ? 1 : 0;
-                    R(a).tag = XR_TAG_BOOL;
-                    break;
-                case XR_NATIVE_I32:
-                    R(a) = XR_FROM_INT((int64_t) *(int32_t *) fp);
-                    break;
-                case XR_NATIVE_U32:
-                    R(a) = XR_FROM_INT((int64_t) *(uint32_t *) fp);
-                    break;
-                case XR_NATIVE_I16:
-                    R(a) = XR_FROM_INT((int64_t) *(int16_t *) fp);
-                    break;
-                case XR_NATIVE_U16:
-                    R(a) = XR_FROM_INT((int64_t) *(uint16_t *) fp);
-                    break;
-                case XR_NATIVE_I8:
-                    R(a) = XR_FROM_INT((int64_t) *(int8_t *) fp);
-                    break;
-                case XR_NATIVE_U8:
-                    R(a) = XR_FROM_INT((int64_t) *(uint8_t *) fp);
-                    break;
-                case XR_NATIVE_F32:
-                    R(a) = XR_FROM_FLOAT((double) *(float *) fp);
-                    break;
-                case XR_NATIVE_STRING: {
-                    XrString *s = *(XrString **) fp;
-                    R(a) = s ? XR_FROM_STR(s) : xr_null();
-                    break;
-                }
-                case XR_NATIVE_ARRAY_REF:
-                case XR_NATIVE_MAP_REF:
-                case XR_NATIVE_SET_REF:
-                case XR_NATIVE_VALUE:
-                    R(a) = *(XrValue *) fp;
-                    break;
-                default:
-                    R(a) = xr_null();
-                    break;
-            }
+            uint8_t *fp = payload ? payload + sf->offset : NULL;
+            if (!xr_vm_struct_read_field_value(isolate, fp, sf, &R(a)))
+                R(a) = xr_null();
             vmbreak;
         }
         // Field not found: might be a method, fall through to type dispatch

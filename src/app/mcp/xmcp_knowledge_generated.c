@@ -2763,14 +2763,14 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .summary = "Compile-time size in bytes of a statically laid out type T",
     },
     {
+        .name = "slice",
+        .signature = "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>",
+        .summary = "Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner",
+    },
+    {
         .name = "store",
         .signature = "(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()",
         .summary = "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset",
-    },
-    {
-        .name = "view",
-        .signature = "(ptr: Ptr<byte>): Ptr<byte>",
-        .summary = "Unsafe zero-cost typed projection of a raw pointer onto an extern C struct or union T",
     },
     {
         .name = "volatileLoad",
@@ -2781,6 +2781,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
         .name = "volatileStore",
         .signature = "(ptr: MutPtr<byte>, v: int, size: int): ()",
         .summary = "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)",
+    },
+    {
+        .name = "withSliceMut",
+        .signature = "(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any",
+        .summary = "Unsafe compiler-verified exclusive mutable Slice loan scoped to a no-suspend callback",
     },
 };
 
@@ -8093,7 +8098,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .body =
             "# mem module\n"
             "\n"
-            "Raw-memory capabilities for explicit low-level work. `mem.view<T>` is a zero-copy typed projection over canonical target layouts, `mem.load/store<T>` use target-sized scalar descriptors, and `mem.alloc*` returns managed `Buffer`; GC and heap introspection lives in the `runtime` module.\n"
+            "Raw-memory capabilities for explicit low-level work. `mem.slice<T>(ptr, count, owner)` creates a readonly zero-copy Slice over a canonical target layout, while `mem.withSliceMut<T>` scopes writable access to a callback; `mem.load/store<T>` use target-sized scalar descriptors, and `mem.alloc*` returns managed `Buffer`.\n"
             "\n"
             "Usage: `import mem` then call `mem.function()`.\n"
             "\n"
@@ -8128,10 +8133,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `mem.ptr` | `(addr: int): Ptr<byte>` | Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
             "| `mem.set` | `(dst: MutPtr<byte>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
             "| `mem.sizeOf` | `(): int` | Compile-time size in bytes of a statically laid out type T |\n"
+            "| `mem.slice` | `(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>` | Unsafe compiler-verified borrowed Slice over raw memory, rooted in owner |\n"
             "| `mem.store` | `(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()` | Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset |\n"
-            "| `mem.view` | `(ptr: Ptr<byte>): Ptr<byte>` | Unsafe zero-cost typed projection of a raw pointer onto an extern C struct or union T |\n"
             "| `mem.volatileLoad` | `(ptr: Ptr<byte>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
             "| `mem.volatileStore` | `(ptr: MutPtr<byte>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
+            "| `mem.withSliceMut` | `(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any` | Unsafe compiler-verified exclusive mutable Slice loan scoped to a no-suspend callback |\n"
             "",
         .symbols = _symbols_mem,
         .symbol_count = (int)(sizeof(_symbols_mem) / sizeof(_symbols_mem[0])),

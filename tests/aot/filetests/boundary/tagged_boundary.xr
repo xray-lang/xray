@@ -15,9 +15,9 @@ fn make_counter(value: int) -> Counter {
     return Counter(value)
 }
 
-fn read_counter(c: Counter) -> int {
+fn read_counter(c: ref Counter) -> int {
     return c.bump()
 }
 
 var c = make_counter(41)
-print(read_counter(c))
+print(read_counter(ref c))

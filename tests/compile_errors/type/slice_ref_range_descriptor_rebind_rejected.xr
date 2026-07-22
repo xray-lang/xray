@@ -1,0 +1,9 @@
+fn rebind(view: ref Slice<int>) {
+    var replacement = [9, 8]
+    view = replacement[:]
+}
+
+fn run() {
+    var values = [1, 2, 3]
+    rebind(ref values[0:2])
+}

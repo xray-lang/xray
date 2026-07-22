@@ -461,8 +461,8 @@ static bool transfer_block(ArcVerify *av, XiBlock *blk, int16_t *work, bool repo
                     }
                 }
                 /* C3: the merged value is a borrow VIEW whose owner is
-                 * over-released on this edge (incident 2: string -> Span ->
-                 * phi<Span> -> loop read, string dropped before the loop). */
+                 * over-released on this edge (incident 2: string -> Slice ->
+                 * phi<Slice> -> loop read, string dropped before the loop). */
                 if (av->owner[in->id] >= 0 && av->track[av->owner[in->id]] >= 0) {
                     uint32_t o = (uint32_t) av->owner[in->id];
                     int16_t owner_delta =

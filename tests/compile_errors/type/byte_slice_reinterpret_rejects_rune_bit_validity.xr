@@ -1,0 +1,5 @@
+fn main() {
+    var bytes: Array<byte> = [0, 0, 0, 0]
+    var view: Slice<byte> = bytes[:]
+    var runes: Slice<rune> = view.reinterpret<rune>()
+}

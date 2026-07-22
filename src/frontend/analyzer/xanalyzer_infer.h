@@ -28,7 +28,7 @@ typedef struct XaLoopScope {
     struct XaLoopScope *prev;
 } XaLoopScope;
 
-typedef struct XaActiveSpanBorrow {
+typedef struct XaActiveSliceBorrow {
     XaLoan loan;
     struct XaSymbol *owner_symbol;
     char *owner_path;
@@ -36,8 +36,8 @@ typedef struct XaActiveSpanBorrow {
     struct XaScope *view_scope;
     int loop_depth_at_creation;
     bool is_pointer_borrow;
-    struct XaActiveSpanBorrow *next;
-} XaActiveSpanBorrow;
+    struct XaActiveSliceBorrow *next;
+} XaActiveSliceBorrow;
 
 typedef struct XaInferVar {
     uint32_t id;
@@ -103,7 +103,7 @@ typedef struct XaInferContext {
     int unresolved_infer_var_count;
 
     // `copy(view-producing-expr)` is the one context where a slice may first be
-    // typed as a Span without an explicit Span target; the copy result is owned.
+    // typed as a Slice without an explicit Slice target; the copy result is owned.
     bool allow_view_expr_for_copy;
 
     // Payload enum variants are constructors, not first-class values. The call
@@ -156,17 +156,17 @@ typedef struct XaInferContext {
     // thread domain, so ThreadLocal usage is intentional there.
     int os_thread_body_depth;
 
-    // Active local Span/Slice<byte> views keyed by the owning mutable container.
+    // Active local Slice/Slice<byte> views keyed by the owning mutable container.
     // Used to reject owner grow/free mutations while borrowed views are live.
-    XaActiveSpanBorrow *active_span_borrows;
+    XaActiveSliceBorrow *active_span_borrows;
 
-    // Current statement cursor inside xa_visit_block_stmt. Used by Span borrow
+    // Current statement cursor inside xa_visit_block_stmt. Used by Slice borrow
     // liveness to allow owner mutations after the borrowed view's last use in a
     // straight-line block.
     AstNode *current_block_node;
     int current_block_stmt_index;
 
-    // Stack of active statement cursors. This lets Span liveness look past an
+    // Stack of active statement cursors. This lets Slice liveness look past an
     // inner branch/block to the continuation of its parent blocks.
     AstNode *block_cursor_nodes[XA_BLOCK_CURSOR_MAX];
     int block_cursor_indices[XA_BLOCK_CURSOR_MAX];

@@ -2489,7 +2489,7 @@ AstNode *xr_parse_try_statement(Parser *parser) {
 
     AstNode *node =
         xr_ast_try_catch(parser->compiler_session, try_body, clauses, catch_count, line);
-    // Span ends at the last block present (last catch > try).
+    // Slice ends at the last block present (last catch > try).
     AstNode *last_block = clauses[catch_count - 1]->body;
     if (!last_block)
         last_block = try_body;

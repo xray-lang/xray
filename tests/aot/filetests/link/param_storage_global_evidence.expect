@@ -3,4 +3,4 @@ contains=xaot-plan v0
 contains=xglobal-evidence v1 profile=native_release
 regex=function [0-9]+ name=consume
 regex=body [0-9]+ .*kind=function .*param_storage=[1-9][0-9]*
-regex=param-storage [0-9]+ id=[0-9]+ owner=[0-9]+ index=1 storage=3
+regex=param-storage [0-9]+ id=[0-9]+ owner=[0-9]+ index=1 storage=2

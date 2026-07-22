@@ -1,0 +1,19 @@
+enum Failure { Broken }
+
+fn grow(data: ref Array<byte>) {
+    data.push(99)
+    throw Failure.Broken
+}
+
+fn main() {
+    var owner: Array<byte> = [1, 2]
+    var view: Slice<byte> = owner[:]
+    try {
+        grow(ref owner)
+    } catch (error: Failure) {
+        print(error)
+    }
+    print(view[0])
+}
+
+main()

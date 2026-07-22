@@ -109,6 +109,38 @@ typedef struct XaParamEffectSummary {
     XaUnknownReasonSet incomplete_reason;
 } XaParamEffectSummary;
 
+/* Compiler-owned Slice proof.  The template is the serializable function
+ * contract; an instantiated evidence record binds it to the caller's root.
+ * Neither form is constructible from source code. */
+typedef enum XaViewRangeTransform {
+    XA_VIEW_RANGE_IDENTITY = 0,
+    XA_VIEW_RANGE_SUBRANGE,
+    XA_VIEW_RANGE_AFFINE,
+    XA_VIEW_RANGE_UNKNOWN,
+} XaViewRangeTransform;
+
+typedef struct XaViewEvidenceTemplate {
+    XrViewReturnSourceKind origin;
+    int16_t param_index;
+    XaViewRangeTransform range_transform;
+    XaCapabilityRequirement required_capability;
+    uint32_t element_type_id;
+    uint32_t required_alignment;
+    bool complete;
+} XaViewEvidenceTemplate;
+
+typedef struct XaViewEvidence {
+    XaViewEvidenceTemplate contract;
+    XaRootId root;
+    uint64_t byte_offset;
+    uint64_t byte_length;
+    uint32_t alias_class;
+    uint32_t relocation_epoch;
+    bool range_known;
+    bool stable_address;
+    bool invalidation_summary_complete;
+} XaViewEvidence;
+
 // Forward declarations (XrLocation/XrClassInfo/XaMethodSlot live in base/runtime layers)
 typedef struct XaSymbol XaSymbol;
 typedef struct XaScope XaScope;
@@ -193,6 +225,7 @@ struct XaSymbolLinks {
     bool return_storage_mixed;
     bool return_storage_scanned;
     bool return_storage_scan_in_progress;
+    XaViewEvidenceTemplate return_view;
     XaParamEffectSummary *return_fn_param_effects;
     int return_fn_param_effect_count;
     bool return_fn_effect_mixed;

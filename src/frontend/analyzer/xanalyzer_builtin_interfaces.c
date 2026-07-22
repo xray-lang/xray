@@ -451,11 +451,11 @@ static bool is_array_type(XrType *type) {
 }
 
 static bool is_span_type(XrType *type) {
-    return type && (type->kind == XR_KIND_SPAN);
+    return type && (type->kind == XR_KIND_SLICE);
 }
 
 static bool is_view_type(XrType *type) {
-    return type && (type->kind == XR_KIND_VIEW);
+    return type && (type->kind == XR_KIND_SLICE);
 }
 
 static bool is_map_type(XrType *type) {
@@ -494,7 +494,7 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
 
     switch (iface) {
         case XA_IFACE_ITERABLE:
-            // Iterable: Array, View, Span, Map, Set, string
+            // Iterable: Array, View, Slice, Map, Set, string
             return is_array_type(type) || is_view_type(type) || is_span_type(type) ||
                    is_map_type(type) || is_set_type(type) || is_string_type(type);
 
@@ -517,7 +517,7 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
             return true;
 
         case XA_IFACE_INDEXABLE:
-            // Indexable: Array, View, Span, string, Map, Json
+            // Indexable: Array, View, Slice, string, Map, Json
             return is_array_type(type) || is_view_type(type) || is_span_type(type) ||
                    is_string_type(type) || is_map_type(type) || is_json_type(type);
 
@@ -526,7 +526,7 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
             return true;
 
         case XA_IFACE_LENGTHABLE:
-            // Lengthable: Array, View, Span, string, Map, Set, Json
+            // Lengthable: Array, View, Slice, string, Map, Set, Json
             return is_array_type(type) || is_view_type(type) || is_span_type(type) ||
                    is_string_type(type) || is_map_type(type) || is_set_type(type) ||
                    is_json_type(type);

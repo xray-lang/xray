@@ -1,1 +1,1 @@
-mem.view<T>() must be inside an unsafe block
+mem.slice<T>() must be inside an unsafe block

@@ -112,6 +112,11 @@ XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer
         func->return_storage_domain = links->return_storage_domain;
         func->return_storage_known = true;
     }
+    if (links) {
+        func->view_return_source = (uint8_t) links->return_view.origin;
+        func->view_return_param = links->return_view.param_index;
+        func->view_return_complete = links->return_view.complete ? 1u : 0u;
+    }
 }
 
 XR_FUNC bool xi_lower_reject_error_type(XiLower *l, const struct XrType *type, const char *context,
@@ -1730,9 +1735,18 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
             return NULL;
         }
 
+        /* `read` is the sole source-level readonly parameter contract.  A
+         * fixed-layout value aggregate therefore uses an internal borrowed
+         * place ABI automatically; this preserves value semantics without a
+         * deep copy and does not expose the retired `in` mode to users. */
+        bool read_place = i < l.func->nparams && pmode == XR_PARAM_READ && ptype &&
+                          xi_lower_type_uses_read_place(&l, ptype);
+        if (read_place)
+            param_val->lowering_flags |= XI_LOWERING_FLAG_PARAM_READ_PLACE;
+
         /* Register parameter in Braun SSA using analyzer-assigned symbol_id */
         int var_id = xi_lower_var_create(&l, p->symbol_id, p->name, ptype);
-        if (i < l.func->nparams && p && pmode == XR_PARAM_REF) {
+        if (i < l.func->nparams && p && (pmode == XR_PARAM_REF || read_place)) {
             l.vars[var_id].call_place = param_val;
             l.vars[var_id].place_mode = pmode;
         } else {

@@ -1,0 +1,3 @@
+export fn importedTail(data: Slice<byte>) -> Slice<byte> {
+    return data[2:]
+}

@@ -41,6 +41,8 @@ static XrType stub_array_i8 = {
     .kind = XR_KIND_ARRAY, .id = 7, .frozen = true, .container = {.element_type = &stub_i8}};
 static XrType stub_array_u64 = {
     .kind = XR_KIND_ARRAY, .id = 8, .frozen = true, .container = {.element_type = &stub_u64}};
+static XrType stub_slice_i8 = {
+    .kind = XR_KIND_SLICE, .id = 16, .frozen = true, .container = {.element_type = &stub_i8}};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -199,6 +201,58 @@ TEST(pointer_load_requires_native_endian) {
     xi_func_free(f);
 }
 
+TEST(raw_slice_requires_view_evidence) {
+    XiFunc *f = make_func("raw_slice_missing_evidence");
+    ASSERT(f != NULL);
+    f->return_type = &stub_slice_i8;
+    XiValue *slice = xi_value_new(f, f->entry, XI_SLICE_FROM_PTR, &stub_slice_i8, 3);
+    ASSERT(slice != NULL);
+    slice->args[0] = make_pointer_const(f);
+    slice->args[1] = xi_const_int(f, f->entry, 1, &stub_int);
+    slice->args[2] = slice->args[0];
+    slice->flags |= XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM;
+    xi_block_set_return(f->entry, slice);
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(raw_slice_accepts_complete_view_evidence) {
+    XiFunc *f = make_func("raw_slice_with_evidence");
+    ASSERT(f != NULL);
+    f->return_type = &stub_slice_i8;
+    XiValue *owner = make_pointer_const(f);
+    XiValue *slice = xi_value_new(f, f->entry, XI_SLICE_FROM_PTR, &stub_slice_i8, 3);
+    ASSERT(owner && slice);
+    slice->args[0] = owner;
+    slice->args[1] = xi_const_int(f, f->entry, 1, &stub_int);
+    slice->args[2] = owner;
+    slice->flags |= XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM;
+    slice->view_evidence.origin = XI_VIEW_ORIGIN_FOREIGN;
+    slice->view_evidence.source_operand = 2;
+    slice->view_evidence.source_param = -1;
+    slice->view_evidence.root_value_id = owner->id;
+    slice->view_evidence.capability = 1;
+    slice->view_evidence.lifetime = 1;
+    slice->view_evidence.complete = 1;
+    xi_block_set_return(f->entry, slice);
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(slice_call_requires_view_evidence) {
+    XiFunc *f = make_func("slice_call_missing_evidence");
+    ASSERT(f != NULL);
+    f->return_type = &stub_slice_i8;
+    XiValue *callee = xi_const_null(f, f->entry, &stub_func);
+    XiValue *call = xi_value_new(f, f->entry, XI_CALL, &stub_slice_i8, 1);
+    ASSERT(callee && call);
+    call->args[0] = callee;
+    call->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(f->entry, call);
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
 /* ========== Bounds check contracts ========== */
 
 TEST(bounds_check_valid) {
@@ -334,6 +388,30 @@ static XiValue *make_ref_call(XiFunc *f, XiBlock *entry, XiValue **place_out) {
     return call;
 }
 
+static XiValue *make_move_call(XiFunc *f, XiBlock *entry) {
+    XiValue *source = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *moved = xi_value_new(f, entry, XI_SOURCE_MOVE, &stub_int, 1);
+    XiValue *callee = xi_value_new(f, entry, XI_CLOSURE_NEW, &stub_func, 0);
+    XiValue *call = xi_value_new(f, entry, XI_CALL, &stub_int, 2);
+    XiCallPlan *plan = (XiCallPlan *) xi_func_arena_alloc(f, sizeof(*plan));
+    XiCallArgPlan *arg = (XiCallArgPlan *) xi_func_arena_alloc(f, sizeof(*arg));
+    if (!source || !moved || !callee || !call || !plan || !arg)
+        return NULL;
+    moved->args[0] = source;
+    call->args[0] = callee;
+    call->args[1] = moved;
+    memset(plan, 0, sizeof(*plan));
+    memset(arg, 0, sizeof(*arg));
+    arg->param_mode = XR_PARAM_MOVE;
+    arg->access = XR_CALL_ARG_MOVE;
+    arg->origin_var_id = XI_NO_VAR_ID;
+    plan->args = arg;
+    plan->nargs = 1;
+    plan->verified = true;
+    call->call_plan = plan;
+    return call;
+}
+
 static XiValue *make_place_receiver_call(XiFunc *f, XiBlock *entry, XrParamMode mode,
                                          XiValue **place_out) {
     f->source_var_count = 1;
@@ -374,6 +452,17 @@ TEST(call_plan_valid_ref_local_place_passes) {
     ASSERT(load != NULL);
     load->args[0] = place;
     xi_block_set_return(f->entry, load);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(call_plan_valid_explicit_move_passes) {
+    XiFunc *f = make_func("call_plan_move_valid");
+    ASSERT(f != NULL);
+    XiValue *call = make_move_call(f, f->entry);
+    ASSERT(call != NULL && call->call_plan != NULL);
+    xi_block_set_return(f->entry, call);
 
     ASSERT(verify_ok(f));
     xi_func_free(f);
@@ -1686,6 +1775,9 @@ int main(void) {
     run_ptr_load_rejects_result_scalar_mismatch();
     run_ptr_access_rejects_non_pointer_address();
     run_pointer_load_requires_native_endian();
+    run_raw_slice_requires_view_evidence();
+    run_raw_slice_accepts_complete_view_evidence();
+    run_slice_call_requires_view_evidence();
 
     run_bounds_check_valid();
     run_bounds_check_arity_failure();
@@ -1694,6 +1786,7 @@ int main(void) {
     run_tail_call_with_non_function_callee_fails();
     run_tail_call_with_function_callee_passes();
     run_call_plan_valid_ref_local_place_passes();
+    run_call_plan_valid_explicit_move_passes();
     run_call_plan_rejects_unverified_plan();
     run_call_plan_rejects_place_mismatch();
     run_call_plan_rejects_declared_escape();

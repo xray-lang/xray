@@ -12,20 +12,24 @@ extern "C" {
     fn free(p: MutPtr<byte>)
 }
 
-var raw = unsafe { malloc(mem.sizeOf<NativeSizeHeader>()) }
-var header = unsafe { mem.view<NativeSizeHeader>(raw) }
+fn main() {
+    var raw = unsafe { malloc(mem.sizeOf<NativeSizeHeader>()) }
+    var headers = unsafe { mem.slice<NativeSizeHeader>(raw, 1, raw) }
 
-unsafe {
-    mem.store<uint64>(raw, mem.offsetOf<NativeSizeHeader>("length"), 37, Endian.Native)
-    mem.store<int64>(raw, mem.offsetOf<NativeSizeHeader>("delta"), -37, Endian.Native)
-}
-print(header.length)
-print(header.delta)
+    unsafe {
+        mem.store<uint64>(raw, mem.offsetOf<NativeSizeHeader>("length"), 37, Endian.Native)
+        mem.store<int64>(raw, mem.offsetOf<NativeSizeHeader>("delta"), -37, Endian.Native)
+    }
+    print(headers[0].length)
+    print(headers[0].delta)
 
-header.length = 91
-header.delta = -91
-unsafe {
-    print(mem.load<uint64>(raw, mem.offsetOf<NativeSizeHeader>("length"), Endian.Native))
-    print(mem.load<int64>(raw, mem.offsetOf<NativeSizeHeader>("delta"), Endian.Native))
-    free(raw)
+    unsafe {
+        mem.store<uint64>(raw, mem.offsetOf<NativeSizeHeader>("length"), 91, Endian.Native)
+        mem.store<int64>(raw, mem.offsetOf<NativeSizeHeader>("delta"), -91, Endian.Native)
+        print(mem.load<uint64>(raw, mem.offsetOf<NativeSizeHeader>("length"), Endian.Native))
+        print(mem.load<int64>(raw, mem.offsetOf<NativeSizeHeader>("delta"), Endian.Native))
+        free(raw)
+    }
 }
+
+main()

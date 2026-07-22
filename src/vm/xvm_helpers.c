@@ -126,8 +126,19 @@ XrAggregateLayout *xr_vm_struct_layout_lookup(XrVMState *vm, uint16_t layout_id)
     return vm->struct_layouts[layout_id];
 }
 
+XrAggregateLayout *xr_vm_struct_layout_lookup_stable_key(XrVMState *vm, uint64_t stable_key) {
+    if (!vm || stable_key == 0 || !vm->struct_layouts)
+        return NULL;
+    for (uint16_t i = 1; i < vm->struct_layout_count; i++) {
+        XrAggregateLayout *layout = vm->struct_layouts[i];
+        if (layout && xr_aggregate_layout_stable_key(layout) == stable_key)
+            return layout;
+    }
+    return NULL;
+}
+
 XrAggregateLayout *xr_vm_struct_ref_layout(XrVMRuntime *isolate, XrValue ref) {
-    if (!XR_IS_AGG_REF(ref) || XR_IS_ARRAY_REF(ref) || XR_IS_SPAN_REF(ref) || !ref.ptr)
+    if (!XR_IS_AGG_REF(ref) || XR_IS_ARRAY_REF(ref) || XR_IS_SLICE_REF(ref) || !ref.ptr)
         return NULL;
 
     uint16_t layout_id = xr_aggregate_layout_id(ref);
