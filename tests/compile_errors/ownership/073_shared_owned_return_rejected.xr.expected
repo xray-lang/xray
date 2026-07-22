@@ -1,1 +1,1 @@
-shared binding 'frozen' cannot receive owned return from function 'buildBuffer'
+return move is not allowed; return the value directly

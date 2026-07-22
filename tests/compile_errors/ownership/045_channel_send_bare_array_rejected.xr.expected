@@ -1,1 +1,1 @@
-channel send argument transfer of type 'Array<int>' requires explicit copy(...) or move
+channel send argument transfer of type 'Array<int>' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value

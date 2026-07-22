@@ -1,1 +1,1 @@
-owned binding 'local' cannot receive shared return from function 'buildConfig'
+Return type mismatch: expected 'Array<byte>', got 'const Array<byte>'

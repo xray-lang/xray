@@ -11,7 +11,7 @@ fn choose(flag: bool) -> Array<byte> {
     var ownedBuf = Array<byte>(1, 1)
     const sharedBuf = copy(ownedBuf)
     if (flag) {
-        return move ownedBuf
+        return ownedBuf
     }
     return sharedBuf
 }

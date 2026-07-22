@@ -1,15 +1,15 @@
-fn overwrite(view: Slice<byte>) {
+fn overwrite(view: ref Slice<byte>) {
     view[0] = 1
 }
 
-fn callIt(f: (Slice<byte>) -> (), view: Slice<byte>) {
-    f(view)
+fn callIt(f: (ref Slice<byte>) -> (), view: ref Slice<byte>) {
+    f(ref view)
 }
 
 fn main() {
     const bytes = Array<byte>(4, 0)
-    var view: Slice<byte> = bytes[:]
-    callIt(overwrite, view)
+    var view: const Slice<byte> = bytes[:]
+    callIt(overwrite, ref view)
 }
 
 main()

@@ -5172,10 +5172,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = node->line, .column = node->column};
                     char msg[192];
-                    const char *label = root && xa_symbol_has_shared_provenance(root)
-                                            ? "shared binding"
-                                        : root && root->is_readonly_binding ? "const binding"
-                                                                            : "readonly value";
+                    const char *label =
+                        root && root->is_readonly_binding ? "const binding" : "readonly value";
                     snprintf(msg, sizeof(msg), "Cannot modify field '%s' of %s '%s'",
                              ca->name ? ca->name : "?", label,
                              root && root->name ? root->name : "?");
@@ -5197,9 +5195,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[192];
-                const char *label = readonly_root && xa_symbol_has_shared_provenance(readonly_root)
-                                        ? "shared binding"
-                                    : readonly_root && readonly_root->is_readonly_binding
+                const char *label = readonly_root && readonly_root->is_readonly_binding
                                         ? "const binding"
                                         : "readonly value";
                 snprintf(msg, sizeof(msg), "Cannot modify field '%s' of %s '%s'",
@@ -6237,11 +6233,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = node->line, .column = node->column};
                     char msg[192];
-                    if (xa_symbol_has_shared_provenance(root)) {
-                        snprintf(msg, sizeof(msg), "Cannot assign through shared binding '%s'",
+                    if (root->is_const || root->is_readonly_binding) {
+                        snprintf(msg, sizeof(msg), "Cannot assign through const view '%s'",
                                  root->name ? root->name : "?");
                     } else {
-                        snprintf(msg, sizeof(msg), "Cannot assign through const view '%s'",
+                        snprintf(msg, sizeof(msg), "Cannot assign through readonly view '%s'",
                                  root->name ? root->name : "?");
                     }
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
@@ -6257,10 +6253,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     XrLocation loc = {
                         .file = ctx->file_path, .line = node->line, .column = node->column};
                     char msg[192];
-                    const char *label = root && xa_symbol_has_shared_provenance(root)
-                                            ? "shared binding"
-                                        : root && root->is_readonly_binding ? "const binding"
-                                                                            : "readonly value";
+                    const char *label =
+                        root && root->is_readonly_binding ? "const binding" : "readonly value";
                     snprintf(msg, sizeof(msg), "Cannot assign through %s '%s'", label,
                              root && root->name ? root->name : "?");
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,

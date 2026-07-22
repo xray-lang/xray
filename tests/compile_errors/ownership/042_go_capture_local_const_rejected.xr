@@ -1,9 +1,0 @@
-fn launch() -> int {
-    const data = [1, 2, 3]
-    var task = go {
-        return len(data)
-    }
-    return await task
-}
-
-print(launch())

@@ -191,7 +191,8 @@ static void xa_report_view_member_error(XaInferContext *ctx, AstNode *node, XrTy
         return;
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     char msg[192];
-    snprintf(msg, sizeof(msg), "Slice has no member '%s'; use len(slice) or indexed access", name);
+    snprintf(msg, sizeof(msg), "Slice view has no member '%s'; use len(view) or indexed access",
+             name);
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                &loc);
 }

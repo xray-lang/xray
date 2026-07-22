@@ -1,1 +1,1 @@
-go argument transfer of type 'Json' requires explicit copy(...) or move
+go argument transfer of type 'Json' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value

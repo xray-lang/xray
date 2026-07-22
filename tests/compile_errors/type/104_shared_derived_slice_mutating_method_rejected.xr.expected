@@ -1,1 +1,1 @@
-Cannot call mutating method 'fill' on shared binding 'view'
+Cannot call mutating method 'fill' on readonly view 'view'

@@ -1,1 +1,1 @@
-function 'wrap' has mixed return storage
+Return type mismatch: expected 'Array<byte>', got 'const Array<byte>'

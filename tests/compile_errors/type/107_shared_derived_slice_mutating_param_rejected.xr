@@ -1,11 +1,11 @@
-fn overwrite(view: Slice<byte>) {
+fn overwrite(view: ref Slice<byte>) {
     view[0] = 1
 }
 
 fn main() {
     const bytes = Array<byte>(4, 0)
-    var view: Slice<byte> = bytes[:]
-    overwrite(view)
+    var view: const Slice<byte> = bytes[:]
+    overwrite(ref view)
 }
 
 main()

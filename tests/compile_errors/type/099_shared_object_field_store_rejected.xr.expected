@@ -1,1 +1,1 @@
-Cannot modify field 'value' of shared binding 'b'
+Cannot modify field 'value' of const binding 'b'

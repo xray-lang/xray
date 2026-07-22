@@ -1,5 +1,0 @@
-fn main() {
-    var owned = 1
-}
-
-main()

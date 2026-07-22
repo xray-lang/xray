@@ -1,7 +1,0 @@
-fn main() {
-    var bytes = Array<int>(2, 0)
-    var box = [bytes]
-    print(len(box))
-}
-
-main()

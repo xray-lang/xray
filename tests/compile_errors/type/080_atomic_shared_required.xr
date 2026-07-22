@@ -1,2 +1,0 @@
-const counter = Atomic<int>(0)
-

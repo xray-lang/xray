@@ -1,6 +1,0 @@
-import sys
-
-fn main() {
-    var m = sys.OsMutex()
-    print(m.tryLock())
-}

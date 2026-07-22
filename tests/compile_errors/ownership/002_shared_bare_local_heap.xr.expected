@@ -1,1 +1,1 @@
-shared binding from local reference value 'source' requires copy(source)
+const binding from mutable reference value 'source' requires copy(source)

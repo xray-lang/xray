@@ -1,3 +1,0 @@
-var source: Array<int> = [1, 2]
-const snapshot = move source
-print(len(snapshot))

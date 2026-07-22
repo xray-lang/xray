@@ -6061,6 +6061,9 @@ XR_FUNC XaSymbol *xa_root_variable_symbol_for_expr(XaInferContext *ctx, AstNode 
             case AST_INDEX_GET:
                 expr = expr->as.index_get.array;
                 break;
+            case AST_SLICE_EXPR:
+                expr = expr->as.slice_expr.source;
+                break;
             case AST_GROUPING:
                 expr = expr->as.grouping;
                 break;
@@ -7127,8 +7130,20 @@ static void xa_update_borrowed_alias_root(XaInferContext *ctx, XaSymbol *sym, As
     if (!value || !xa_type_needs_borrow_escape_guard(value_type))
         return;
     XaSymbol *root = xa_borrowed_param_root_symbol(ctx, value);
-    if (root)
+    if (!root && XR_TYPE_IS_SLICE(value_type))
+        root = xa_root_variable_symbol_for_expr(ctx, value);
+    if (root) {
         sym->borrowed_root_symbol_id = root->id;
+        /* A borrowed view cannot gain write authority merely because its local
+         * binding is spelled `var` or annotated as Slice<T>.  Preserve the
+         * owner's const/synchronized publication domain on the alias. */
+        if (xa_symbol_has_shared_storage(root)) {
+            sym->links.storage_domain = root->links.storage_domain;
+            sym->links.value_capability = XA_CAP_CONST;
+            sym->links.allocation_plan.domain = root->links.storage_domain;
+            sym->links.allocation_plan.capability = XA_CAP_CONST;
+        }
+    }
 }
 
 static AstNode *xa_whole_binding_value(AstNode *value) {
@@ -9064,6 +9079,18 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             bool return_is_explicit_move = false;
             AstNode *return_source_node =
                 xa_shared_boundary_source(ret->values[0], &return_is_explicit_move);
+            if (return_is_explicit_move) {
+                XrLocation loc = {.file = ctx->file_path,
+                                  .line = ret->values[0]->line ? ret->values[0]->line : node->line,
+                                  .column = ret->values[0]->column ? ret->values[0]->column
+                                                                   : node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                    "return move is not allowed; return the value directly because return is a "
+                    "terminal ownership edge",
+                    &loc);
+                return;
+            }
             XaSymbol *return_source = !return_is_explicit_move && return_source_node
                                           ? xa_lookup_shared_source_symbol(ctx, return_source_node)
                                           : NULL;

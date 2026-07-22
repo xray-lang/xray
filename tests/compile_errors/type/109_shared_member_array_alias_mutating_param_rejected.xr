@@ -2,7 +2,7 @@ class Box {
     items: Array<int> = Array<int>(1, 0)
 }
 
-fn appendOne(items: Array<int>) {
+fn appendOne(items: ref Array<int>) {
     items.push(3)
 }
 
@@ -10,7 +10,7 @@ const box = Box()
 
 fn main() {
     var items = box.items
-    appendOne(items)
+    appendOne(ref items)
 }
 
 main()

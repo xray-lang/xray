@@ -1,7 +1,0 @@
-fn main() {
-    var bytes = Array<int>(2, 0)
-    var pair = (bytes, 1)
-    print(pair.1)
-}
-
-main()

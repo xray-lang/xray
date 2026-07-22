@@ -1,1 +1,1 @@
-cannot pass shared-derived value 'view' to function value 'f' with unknown mutation summary
+cannot pass const-derived value 'view' to function value 'f' with unknown mutation summary

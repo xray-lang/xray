@@ -219,6 +219,11 @@ TEST(type_assignable) {
 
     // never assignable to anything
     ASSERT(xr_type_assignable(t_int, t_never));
+
+    XrType *mutable_array = xr_type_new_array(g_isolate, xr_type_new_int(g_isolate));
+    XrType *const_array = xr_type_make_const(g_isolate, mutable_array);
+    ASSERT(xr_type_assignable(const_array, mutable_array));
+    ASSERT(!xr_type_assignable(mutable_array, const_array));
 }
 
 TEST(record_nullable_field_accepts_explicit_null) {

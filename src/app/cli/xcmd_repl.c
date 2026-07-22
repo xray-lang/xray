@@ -344,7 +344,7 @@ static void print_help_coro(ReplState *state) {
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Shared Variables:\n");
     printf("  const CFG = {...}  // read-only sharing\n");
-    printf("  const data = [...]   // shared identity\n");
+    printf("  const data = [...]   // deep immutable identity\n");
     printf("\n");
 }
 

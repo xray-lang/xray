@@ -1395,6 +1395,12 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     if (XR_TYPE_IS_NEVER(source))
         return true;
 
+    /* Deep-readonly authority is directional.  A mutable value can be read
+     * through a const target, but a const source must never be stored in a
+     * mutable target and thereby regain write authority. */
+    if (source->is_const && !target->is_const)
+        return false;
+
     // Type parameter: check constraint if present, otherwise compatible
     if (target->kind == XR_KIND_TYPE_PARAM) {
         if (target->type_param.constraint)

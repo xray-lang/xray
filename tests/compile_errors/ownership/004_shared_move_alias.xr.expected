@@ -1,1 +1,1 @@
-shared binding 'source' is already a shared identity and must not be moved
+cannot move const value 'source'

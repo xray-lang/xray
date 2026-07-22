@@ -1,7 +1,0 @@
-fn main() {
-    var bytes = Array<byte>(2, 0)
-    const alias = move bytes as Array<byte>
-    print(len(alias))
-}
-
-main()

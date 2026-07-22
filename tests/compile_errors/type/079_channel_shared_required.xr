@@ -1,2 +1,0 @@
-var ch = Channel<int>(1)
-

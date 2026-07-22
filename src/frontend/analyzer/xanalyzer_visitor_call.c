@@ -3515,9 +3515,24 @@ static bool xa_call_alias_paths_may_overlap(const char *a, bool a_precise, const
 }
 
 static bool xa_method_call_creates_span_borrow(XaInferContext *ctx, XrType *receiver_type,
-                                               const char *method_name) {
+                                               const char *method_name,
+                                               const XaSymbolLinks *method_links) {
     if (!ctx || !ctx->analyzer || !receiver_type || !method_name)
         return false;
+    bool canonical_view_method =
+        (xr_type_is_named_class(receiver_type, "Buffer") &&
+         (strcmp(method_name, "asBytes") == 0 || strcmp(method_name, "asMutBytes") == 0)) ||
+        (XR_TYPE_IS_SLICE(receiver_type) &&
+         (strcmp(method_name, "asBytes") == 0 || strcmp(method_name, "reinterpret") == 0)) ||
+        (XR_TYPE_IS_STRING(receiver_type) && strcmp(method_name, "bytes") == 0);
+    if (canonical_view_method)
+        return true;
+    /* Native/user method metadata is the canonical source for non-container
+     * view-returning methods such as Buffer.asBytes().  The builtin helper
+     * below still covers compact container methods whose return type is
+     * synthesized rather than represented by a method symbol. */
+    if (method_links && method_links->return_type && XR_TYPE_IS_SLICE(method_links->return_type))
+        return true;
     XrType *result =
         xa_builtin_get_method_return_type(ctx->analyzer->isolate, receiver_type, method_name);
     return result && XR_TYPE_IS_SLICE(result);
@@ -3682,7 +3697,7 @@ static bool xa_call_arg_is_mutable_place(XaInferContext *ctx, AstNode *arg_node,
     }
     if (root && xa_symbol_has_shared_provenance(root)) {
         if (reason)
-            *reason = "shared storage";
+            *reason = "readonly published storage";
         return false;
     }
     return true;
@@ -4693,8 +4708,8 @@ static void xa_check_shared_mutating_param_arg(XaInferContext *ctx, AstNode *cal
                           arg_node && arg_node->column ? arg_node->column : call_node->column};
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "cannot pass shared-derived value '%s' to mutating parameter %d of '%s'; pass "
-             "copy(%s) or use an audited shared synchronization handle",
+             "cannot pass const-derived value '%s' to mutating parameter %d of '%s'; pass "
+             "copy(%s) or use an audited synchronization handle",
              root && root->name ? root->name : "?", slot + 1, callee_name ? callee_name : "callee",
              root && root->name ? root->name : "?");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
@@ -4789,7 +4804,7 @@ static void xa_check_shared_unknown_function_value_arg(XaInferContext *ctx, AstN
                           arg_node && arg_node->column ? arg_node->column : call_node->column};
     char msg[288];
     snprintf(msg, sizeof(msg),
-             "cannot pass shared-derived value '%s' to function value '%s' with unknown mutation "
+             "cannot pass const-derived value '%s' to function value '%s' with unknown mutation "
              "summary; pass copy(%s) or call a known function directly",
              root && root->name ? root->name : "?", callee_name ? callee_name : "?",
              root && root->name ? root->name : "?");
@@ -5389,7 +5404,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
         }
 
-        if (xa_method_call_creates_span_borrow(ctx, callee_obj_type, method_name) &&
+        if (xa_method_call_creates_span_borrow(ctx, callee_obj_type, method_name, fn_links) &&
             !ctx->allow_view_expr_for_copy) {
             xa_check_span_borrow_source_stable(ctx, call->callee, ma->object, method_name);
         }
@@ -5457,9 +5472,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[192];
-                const char *label = root && shared_receiver             ? "shared binding"
-                                    : root && root->is_readonly_binding ? "const binding"
-                                                                        : "readonly value";
+                const char *label =
+                    root && root->is_readonly_binding ? "const binding" : "readonly value";
                 snprintf(msg, sizeof(msg), "Cannot call mutating method '%s' on %s '%s'",
                          method_name, label, root && root->name ? root->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
@@ -5474,9 +5488,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[192];
-                const char *label = xa_symbol_has_shared_provenance(root) ? "shared binding"
-                                    : root->is_const                      ? "const view"
-                                                                          : "readonly view";
+                const char *label =
+                    root->is_const || root->is_readonly_binding ? "const view" : "readonly view";
                 snprintf(msg, sizeof(msg), "Cannot call mutating method '%s' on %s '%s'",
                          method_name, label, root->name ? root->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,

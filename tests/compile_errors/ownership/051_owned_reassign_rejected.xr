@@ -1,6 +1,0 @@
-fn main() {
-    var buffer = Array<int>()
-    buffer = Array<int>()
-}
-
-main()

@@ -1,1 +1,1 @@
-Cannot call mutating method 'appendFrom' on shared binding 'item'
+Cannot call mutating method 'appendFrom' on readonly value 'item'

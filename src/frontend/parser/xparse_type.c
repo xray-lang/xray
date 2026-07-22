@@ -97,6 +97,13 @@ static bool reject_removed_source_type_name(Parser *parser, const char *name) {
             "'Json' for JSON-domain values.");
         return true;
     }
+    if (strcmp(name, "owned") == 0 || strcmp(name, "shared") == 0) {
+        char message[160];
+        snprintf(message, sizeof(message),
+                 "'%s' type capability syntax was removed; use T or const T", name);
+        report_removed_source_type_name(parser, message);
+        return true;
+    }
     return false;
 }
 
