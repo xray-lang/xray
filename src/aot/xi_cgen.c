@@ -6707,7 +6707,7 @@ static bool cg_func_should_force_inline(const XiFunc *f) {
     enum {
         CG_FORCE_INLINE_VALUE_LIMIT = 48,
         CG_FORCE_INLINE_PROVEN_NOALLOC_VALUE_LIMIT = 128,
-        CG_FORCE_INLINE_VECTOR_LEAF_VALUE_LIMIT = 192
+        CG_FORCE_INLINE_VECTOR_LEAF_VALUE_LIMIT = 256
     };
     if (!f)
         return false;
@@ -6738,9 +6738,11 @@ static bool cg_func_should_force_inline(const XiFunc *f) {
      * useful as a verifier promise, but must not be required for optimization:
      * inferred proof carries the same semantic fact.
      * Native-vector Xi ops additionally represent whole-lane instructions,
-     * while their checked-span and VM bookkeeping expands to several IR
-     * values.  Use bounded budgets for both classes; unknown loops were
-     * rejected above, and neither decision relies on source names. */
+     * while their checked-span, error-edge, copy, and release bookkeeping can
+     * expand one straight-line lane operation to several IR values.  Keep a
+     * bounded 256-value budget so a complete 64-byte SIMD stripe remains one
+     * compiler-inlineable unit; unknown loops were rejected above, and neither
+     * decision relies on source names. */
     if (!proven_noalloc)
         return false;
     uint32_t limit = vector_kernel ? CG_FORCE_INLINE_VECTOR_LEAF_VALUE_LIMIT

@@ -1,5 +1,38 @@
+import { U8x16, U32x4, U64x2 } from simd
+
 fn small(x: int) -> int {
     return x + 1
+}
+
+// A checked 64-byte SIMD stripe expands past the ordinary scalar-helper
+// budget in Xi because each lane operation carries error/copy/release
+// bookkeeping.  It is nevertheless one straight-line, allocation-free native
+// kernel and must stay C-inlineable when called from a hot loop.
+fn vectorStripe(acc: Slice<uint64>, input: Slice<byte>, secret: Slice<byte>) {
+    assert(len(acc) >= 8)
+    assert(len(input) >= 64)
+    assert(len(secret) >= 64)
+    var accWindow = acc.window(0, 8)
+    var dataA0 = U8x16.load(input, 0)
+    var dataA1 = U8x16.load(input, 16)
+    var wordsA0: U32x4 = dataA0.bitXor(U8x16.load(secret, 0)).reinterpretU32()
+    var wordsA1: U32x4 = dataA1.bitXor(U8x16.load(secret, 16)).reinterpretU32()
+    var lowA = wordsA0.unzipEven(wordsA1)
+    var highA = wordsA0.unzipOdd(wordsA1)
+    var nextA0 = U64x2.load(accWindow, 0).add(dataA0.reinterpretU64().swapLanes()).add(lowA.widenMulLow(highA))
+    var nextA1 = U64x2.load(accWindow, 2).add(dataA1.reinterpretU64().swapLanes()).add(lowA.widenMulHigh(highA))
+    nextA0.store(ref accWindow, 0)
+    nextA1.store(ref accWindow, 2)
+    var dataB0 = U8x16.load(input, 32)
+    var dataB1 = U8x16.load(input, 48)
+    var wordsB0: U32x4 = dataB0.bitXor(U8x16.load(secret, 32)).reinterpretU32()
+    var wordsB1: U32x4 = dataB1.bitXor(U8x16.load(secret, 48)).reinterpretU32()
+    var lowB = wordsB0.unzipEven(wordsB1)
+    var highB = wordsB0.unzipOdd(wordsB1)
+    var nextB0 = U64x2.load(accWindow, 4).add(dataB0.reinterpretU64().swapLanes()).add(lowB.widenMulLow(highB))
+    var nextB1 = U64x2.load(accWindow, 6).add(dataB1.reinterpretU64().swapLanes()).add(lowB.widenMulHigh(highB))
+    nextB0.store(ref accWindow, 4)
+    nextB1.store(ref accWindow, 6)
 }
 
 fn looping(n: int) -> int {
@@ -25,4 +58,8 @@ fn stackAggregate(index: int) -> int {
 
 export fn runPolicy(n: int) -> int {
     return looping(n) + small(n) + stackAggregate(n)
+}
+
+export fn runVectorPolicy(acc: Slice<uint64>, input: Slice<byte>, secret: Slice<byte>) {
+    vectorStripe(acc, input, secret)
 }

@@ -5415,7 +5415,7 @@ static void xicgen_slice_from_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     XR_DCHECK(v && v->nargs == 3, "xicgen_slice_from_ptr: need pointer, count, owner");
     uint16_t elem_size = (uint16_t) ((v->aux_int >> 8) & 0xffff);
     uint16_t alignment = (uint16_t) ((v->aux_int >> 32) & 0xffff);
-    fprintf(out, "({ void *_p = ");
+    fprintf(out, "({ const void *_p = ");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
     fprintf(out, "; int64_t _n = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -5430,7 +5430,7 @@ static void xicgen_slice_from_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
             "if (XR_UNLIKELY(_n > 0 && (uint64_t)_n > UINTPTR_MAX / UINT16_C(%u))) "
             "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
             "\"mem.slice<T>() byte range overflows address space\"); "
-            "(xr_span_t){.data = _p, .length = _n}; })",
+            "(xr_span_t){.data = (void *)_p, .length = _n}; })",
             (unsigned) alignment, (unsigned) elem_size);
 }
 
